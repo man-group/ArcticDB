@@ -504,7 +504,8 @@ Column SortedSumAggregator::aggregate(const std::vector<std::shared_ptr<Column>>
         auto bucket_start_it = bucket_boundaries.begin();
         auto bucket_end_it = std::next(bucket_start_it);
         using IndexTDT = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
-        details::visit_type(res->type().data_type(), [&input_index_columns,
+        details::visit_type(res->type().data_type(), [this,
+                                                      &input_index_columns,
                                                       &input_agg_columns,
                                                       &bucket_boundaries,
                                                       &res,
@@ -517,7 +518,8 @@ Column SortedSumAggregator::aggregate(const std::vector<std::shared_ptr<Column>>
                 for (auto [idx, input_agg_column]: folly::enumerate(input_agg_columns)) {
                     if (input_agg_column.has_value()) {
                         details::visit_type(input_agg_column->column_->type().data_type(),
-                                [&res,
+                                [this,
+                                 &res,
                                  &current_agg_val,
                                  &agg_column = *input_agg_column,
                                  &input_index_column = input_index_columns.at(idx),
@@ -540,21 +542,33 @@ Column SortedSumAggregator::aggregate(const std::vector<std::shared_ptr<Column>>
                                     auto index_ptr = reinterpret_cast<const timestamp*>(opt_index_block->data());
                                     auto agg_ptr = reinterpret_cast<const InputRawType*>(opt_agg_block->data());
                                     for (auto i = 0u; i < row_count; ++i, ++index_ptr, ++agg_ptr) {
-                                        // TODO: Handle closed right boundaries
-                                        if (*index_ptr >= *bucket_end_it) {
+                                        if (closed_boundary_ == ResampleClosedBoundary::LEFT && *index_ptr >= *bucket_end_it) {
+                                            res->push_back(current_agg_val.value_or(0));
+                                            current_agg_val = std::nullopt;
+                                        } else if (closed_boundary_ == ResampleClosedBoundary::RIGHT && *index_ptr > *bucket_end_it) {
                                             res->push_back(current_agg_val.value_or(0));
                                             current_agg_val = std::nullopt;
                                         }
-                                        while (*index_ptr >= *bucket_end_it) {
-                                            ++bucket_start_it;
-                                            if (++bucket_end_it == bucket_boundaries.end()) {
-                                                break;
+                                        if (closed_boundary_ == ResampleClosedBoundary::LEFT) {
+                                            while (*index_ptr >= *bucket_end_it) {
+                                                ++bucket_start_it;
+                                                if (++bucket_end_it == bucket_boundaries.end()) {
+                                                    break;
+                                                }
+                                            }
+                                        } else { // closed_boundary_ == ResampleClosedBoundary::RIGHT
+                                            while (*index_ptr > *bucket_end_it) {
+                                                ++bucket_start_it;
+                                                if (++bucket_end_it == bucket_boundaries.end()) {
+                                                    break;
+                                                }
                                             }
                                         }
                                         if (bucket_end_it == bucket_boundaries.end()) {
                                             break;
                                         }
-                                        if (*index_ptr >= *bucket_start_it && *index_ptr < *bucket_end_it) {
+                                        if ((closed_boundary_ == ResampleClosedBoundary::LEFT && *index_ptr >= *bucket_start_it && *index_ptr < *bucket_end_it) ||
+                                            (closed_boundary_ == ResampleClosedBoundary::RIGHT && *index_ptr > *bucket_start_it && *index_ptr <= *bucket_end_it)) {
                                             if (LIKELY(current_agg_val.has_value())) {
                                                 if constexpr (is_floating_point_type(InputTDT::DataTypeTag::data_type)) {
                                                     if (!std::isnan(*agg_ptr)) {

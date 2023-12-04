@@ -516,7 +516,7 @@ void ResampleClause::set_aggregations(const std::unordered_map<std::string, std:
                                                               column_name);
         auto typed_column_name = ColumnName(column_name);
         if (aggregation_operator == "sum") {
-            aggregators_.emplace_back(SortedSumAggregator(typed_column_name, typed_column_name));
+            aggregators_.emplace_back(SortedSumAggregator(typed_column_name, typed_column_name, closed_boundary_));
         } else {
             user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Unknown aggregation operator provided to resample: {}", aggregation_operator);
         }

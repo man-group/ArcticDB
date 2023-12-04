@@ -398,11 +398,6 @@ struct AggregationClause {
     [[nodiscard]] std::string to_string() const;
 };
 
-enum class ResampleClosedBoundary {
-    LEFT,
-    RIGHT
-};
-
 struct ResampleClause {
     ClauseInfo clause_info_;
     std::shared_ptr<ComponentManager> component_manager_;
