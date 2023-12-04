@@ -14,7 +14,7 @@ import sys
 from arcticdb.util.test import assert_frame_equal, assert_series_equal
 from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor
-
+from tests.util.date import DateRange
 
 def test_read_keys(object_and_mem_and_lmdb_version_store_dynamic_schema):
     lib = object_and_mem_and_lmdb_version_store_dynamic_schema
@@ -302,3 +302,26 @@ def test_empty_column_handling(lmdb_version_store, input_empty_col_dtype, output
     assert symbol_type_info.size_bits == size_bits
     result = lib.read(symbol).data
     assert result.dtype == output_empty_col_dtype
+
+
+def test_date_range_multi_index(lmdb_version_store):
+    # Non-regression test for https://github.com/man-group/ArcticDB/issues/1122
+    lib = lmdb_version_store
+    sym = "test_date_range_multi_index"
+
+    existing_df = pd.DataFrame(
+        {"col": [1, 2, 3]},
+        index=pd.MultiIndex.from_arrays(
+            [pd.date_range("2023-11-28", "2023-11-30", freq="D"), ["a", "b", "c"]], names=["dt_level", "str_level"]
+        ),
+    )
+    lib.write(sym, existing_df)
+
+    expected_df = pd.DataFrame(
+        {"col": pd.Series([], dtype=np.int64)},
+        index=pd.MultiIndex.from_arrays([pd.DatetimeIndex([]), []], names=["dt_level", "str_level"]),
+    )
+    result_df = lib.read(
+        sym, date_range=DateRange(pd.Timestamp("2099-01-01"), pd.Timestamp("2099-01-02"))
+    ).data
+    assert_frame_equal(result_df, expected_df)

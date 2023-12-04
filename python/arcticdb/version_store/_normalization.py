@@ -715,7 +715,8 @@ class DataFrameNormalizer(_PandasNormalizer):
                     # See: https://github.com/pandas-dev/pandas/issues/17261
                     # EMPTY type column are returned as pandas.Series with "object" dtype to match Pandas 2.0 default.
                     # We cast it back to "float" so that it matches Pandas 1.0 default for empty series.
-                    df[column_name] = pd.Series([], dtype='float64')
+                    # Pandas 0.X overrides the index of df to a RangeIndex if the index isn't explicitly provided here
+                    df[column_name] = pd.Series([], index=index, dtype='float64')
                 else:
                     df[column_name] = df[column_name].astype(dtype, copy=False)
 
@@ -787,6 +788,13 @@ class DataFrameNormalizer(_PandasNormalizer):
                 tz = midx.timezone.get(index_level_num, "")
                 if tz != "":
                     index_col = index_col.dt.tz_localize(tz)
+
+                if not IS_PANDAS_TWO and index_col.dtype == "float":
+                    # In Pandas < 2, empty series dtype is `"float"`, but as of Pandas 2.0, empty series dtype
+                    # is `"object"`. We cast it back to "float" so that it matches Pandas 1.0 default for empty series.
+                    # See: https://github.com/man-group/ArcticDB/pull/1049
+                    # Yet for index columns, we need to cast it to "object" to preserve the index level dtype.
+                    index_col = index_col.astype("object")
 
                 levels.append(index_col)
             if pd.__version__.startswith("0"):
