@@ -567,6 +567,8 @@ Column SortedSumAggregator::aggregate(const std::vector<std::shared_ptr<Column>>
                                                 if constexpr (is_floating_point_type(InputTDT::DataTypeTag::data_type)) {
                                                     if (!std::isnan(*agg_ptr)) {
                                                         current_agg_val.emplace(static_cast<OutputRawType>(*agg_ptr));
+                                                    } else {
+                                                        current_agg_val.emplace(0);
                                                     }
                                                 } else {
                                                     current_agg_val.emplace(static_cast<OutputRawType>(*agg_ptr));
