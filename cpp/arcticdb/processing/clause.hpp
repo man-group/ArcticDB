@@ -407,6 +407,8 @@ struct ResampleClause {
     ResampleBoundary label_boundary_;
     // This will either hold the date range specified by the user, or the first and last timestamps present in the index column
     std::optional<TimestampRange> date_range_;
+    // Inject this as a callback in the ctor to avoid language-specific dependencies this low down in the codebase
+    std::function<std::vector<timestamp>(timestamp, timestamp, std::string_view)> generate_bucket_boundaries_;
     std::vector<timestamp> bucket_boundaries_;
     std::unordered_map<std::string, std::string> aggregation_map_;
     std::vector<SortedAggregator> aggregators_;
@@ -415,10 +417,14 @@ struct ResampleClause {
 
     ARCTICDB_MOVE_COPY_DEFAULT(ResampleClause)
 
-    ResampleClause(const std::string& rule, ResampleBoundary closed_boundary, ResampleBoundary label_boundary):
+    ResampleClause(const std::string& rule,
+                   ResampleBoundary closed_boundary,
+                   ResampleBoundary label_boundary,
+                   std::function<std::vector<timestamp>(timestamp, timestamp, std::string_view)>&& generate_bucket_boundaries):
     rule_(rule),
     closed_boundary_(closed_boundary),
-    label_boundary_(label_boundary){
+    label_boundary_(label_boundary),
+    generate_bucket_boundaries_(std::move(generate_bucket_boundaries)){
         clause_info_.can_combine_with_column_selection_ = false;
         clause_info_.modifies_output_descriptor_ = true;
     }

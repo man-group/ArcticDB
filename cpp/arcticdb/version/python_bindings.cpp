@@ -272,7 +272,25 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .value("RIGHT", ResampleBoundary::RIGHT);
 
     py::class_<ResampleClause, std::shared_ptr<ResampleClause>>(version, "ResampleClause")
-            .def(py::init<std::string, ResampleBoundary, ResampleBoundary>())
+            .def(py::init([](std::string rule, ResampleBoundary closed_boundary, ResampleBoundary label_boundary){
+                return ResampleClause(rule,
+                                      closed_boundary,
+                                      label_boundary,
+                                      [](timestamp start, timestamp end, std::string_view rule) -> std::vector<timestamp> {
+                    // TODO: Take the GIL for this?
+                    auto py_start = python_util::pd_Timestamp()(start).attr("floor")(rule);
+                    auto py_end = python_util::pd_Timestamp()(end).attr("ceil")(rule);
+                    static py::object date_range_function = py::module::import("pandas").attr("date_range");
+                    auto py_bucket_boundaries = date_range_function(py_start, py_end, nullptr, rule, nullptr, false).attr("values").cast<py::array_t<timestamp>>();
+                    // TODO: Can we use memcpy here?
+                    std::vector<timestamp> bucket_boundaries;
+                    bucket_boundaries.reserve(py_bucket_boundaries.size());
+                    for (py::ssize_t i = 0; i < py_bucket_boundaries.size(); i++) {
+                        bucket_boundaries.emplace_back(py_bucket_boundaries.at(i));
+                    }
+                    return bucket_boundaries;
+                });
+            }))
             .def_property_readonly("rule", &ResampleClause::rule)
             .def("set_aggregations", &ResampleClause::set_aggregations)
             .def("set_date_range", [](ResampleClause& self, timestamp date_range_start, timestamp date_range_end) {
