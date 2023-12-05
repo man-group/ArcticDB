@@ -1,8 +1,10 @@
 name: Build and Test
 on:
   push:
+    tags: ["v**"]
+    branches: ["master"]
+  pull_request:
     branches: ["**"]
-    tags: [v**]
     paths:
       - .github/workflows/*.yml
       - build_tooling/**
