@@ -282,13 +282,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                     auto py_end = python_util::pd_Timestamp()(end).attr("ceil")(rule);
                     static py::object date_range_function = py::module::import("pandas").attr("date_range");
                     auto py_bucket_boundaries = date_range_function(py_start, py_end, nullptr, rule, nullptr, false).attr("values").cast<py::array_t<timestamp>>();
-                    // TODO: Can we use memcpy here?
-                    std::vector<timestamp> bucket_boundaries;
-                    bucket_boundaries.reserve(py_bucket_boundaries.size());
-                    for (py::ssize_t i = 0; i < py_bucket_boundaries.size(); i++) {
-                        bucket_boundaries.emplace_back(py_bucket_boundaries.at(i));
-                    }
-                    return bucket_boundaries;
+                    return std::vector<timestamp>(py_bucket_boundaries.data(), py_bucket_boundaries.data() + py_bucket_boundaries.size());
                 });
             }))
             .def_property_readonly("rule", &ResampleClause::rule)
