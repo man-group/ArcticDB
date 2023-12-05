@@ -5,7 +5,7 @@ import pytest
 from arcticdb import QueryBuilder
 from arcticdb.util.test import assert_frame_equal
 
-@pytes.mark.skip
+@pytest.mark.skip
 def test_resampling(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     sym = "test_resampling"

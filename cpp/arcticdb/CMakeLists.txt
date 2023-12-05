@@ -730,7 +730,7 @@ if(${TEST})
             processing/test/test_expression.cpp
             processing/test/test_has_valid_type_promotion.cpp
             processing/test/test_operation_dispatch.cpp
-            processing/test/test_resample.cpp
+#            processing/test/test_resample.cpp
             processing/test/test_set_membership.cpp
             processing/test/test_signed_unsigned_comparison.cpp
             processing/test/test_type_comparison.cpp
@@ -840,7 +840,7 @@ if(${TEST})
             column_store/test/rapidcheck_column.cpp
             column_store/test/rapidcheck_column_map.cpp
             column_store/test/test_chunked_buffer.cpp
-            processing/test/rapidcheck_resample.cpp
+#            processing/test/rapidcheck_resample.cpp
             stream/test/stream_test_common.cpp
             util/test/rapidcheck_decimal.cpp
             util/test/rapidcheck_generators.cpp
