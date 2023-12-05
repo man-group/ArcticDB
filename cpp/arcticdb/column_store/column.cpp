@@ -75,6 +75,15 @@ bool Column::sparse_permitted() const {
     return allow_sparse_;
 }
 
+void Column::backfill_sparse_map(ssize_t to_row) {
+    ARCTICDB_TRACE(log::version(), "Backfilling sparse map to position {}", to_row);
+    sparse_map().set_range(0, bv_size(to_row), true);
+}
+
+std::optional<util::BitMagic>& Column::opt_sparse_map() {
+    return sparse_map_;
+}
+
 ssize_t Column::last_row() const {
     return last_logical_row_;
 }
@@ -153,6 +162,25 @@ void Column::set_string_list(ssize_t row_offset, const std::vector<std::string> 
         *data_ptr++ = off.offset();
     }
     string_array_epilogue(input.size());
+}
+
+shape_t *Column::allocate_shapes(std::size_t bytes) {
+    shapes_.ensure_bytes(bytes);
+    return reinterpret_cast<shape_t *>(shapes_.ptr());
+}
+
+uint8_t *Column::allocate_data(std::size_t bytes) {
+    util::check(bytes != 0, "Allocate data called with zero size");
+    data_.ensure_bytes(bytes);
+    return data_.ptr();
+}
+
+void Column::advance_data(std::size_t size) {
+    data_.advance(position_t(size));
+}
+
+void Column::advance_shapes(std::size_t size) {
+    shapes_.advance(position_t(size));
 }
 
 void Column::append_sparse_map(const util::BitMagic& bv, position_t at_row) {
@@ -441,6 +469,17 @@ bool Column::is_inflated() const {
     return inflated_;
 }
 
+std::optional<Column::StringArrayData> Column::string_array_at(position_t idx, const StringPool &string_pool) {
+    util::check_arg(idx < row_count(), "String array index out of bounds in column");
+    util::check_arg(type_.dimension() == Dimension::Dim1, "String array should always be one dimensional");
+    if (!inflated_)
+        inflate_string_arrays(string_pool);
+    const shape_t *shape_ptr = shape_index(idx);
+    auto num_strings = *shape_ptr;
+    ssize_t string_size = offsets_[idx] / num_strings;
+    return Column::StringArrayData{num_strings, string_size, data_.ptr_cast<char>(bytes_offset(idx), num_strings * string_size)};
+}
+
 void Column::change_type(DataType target_type) {
     util::check(shapes_.empty(), "Can't change type on multi-dimensional column with type {}", type_);
     if(type_.data_type() == target_type)
@@ -470,6 +509,69 @@ void Column::change_type(DataType target_type) {
     }
     type_ = TypeDescriptor{target_type, type_.dimension()};
     std::swap(data_, buf);
+}
+
+ChunkedBuffer::Iterator Column::get_iterator() const {
+    return {const_cast<ChunkedBuffer*>(&data_.buffer()), get_type_size(type_.data_type())};
+}
+
+size_t Column::bytes() const {
+    return data_.bytes();
+}
+
+ColumnData Column::data() const {
+    return ColumnData(&data_.buffer(), &shapes_.buffer(), type_, sparse_map_ ? &*sparse_map_ : nullptr);
+}
+
+const uint8_t* Column::ptr() const {
+    return data_.buffer().data();
+}
+
+uint8_t* Column::ptr() {
+    return data_.buffer().data();
+}
+
+TypeDescriptor Column::type() const { return type_; }
+
+size_t Column::num_blocks() const  {
+    return data_.buffer().num_blocks();
+}
+
+const shape_t* Column::shape_ptr() const {
+    return shapes_.ptr_cast<shape_t>(0, num_shapes());
+}
+
+void Column::set_orig_type(const TypeDescriptor& desc) {
+    orig_type_ = desc;
+}
+
+bool Column::has_orig_type() const {
+    return static_cast<bool>(orig_type_);
+}
+
+const TypeDescriptor& Column::orig_type() const  {
+    return orig_type_.value();
+}
+
+void Column::set_secondary_type(TypeDescriptor type) {
+    secondary_type_ = std::move(type);
+}
+
+bool Column::has_secondary_type() const {
+    return secondary_type_.has_value();
+}
+
+const TypeDescriptor& Column::secondary_type() const {
+    util::check(secondary_type_.has_value(), "Requesting secondary type in a column that does not have one");
+    return *secondary_type_;
+}
+
+void Column::compact_blocks() {
+    data_.compact_blocks();
+}
+
+const auto& Column::blocks() const {
+    return data_.buffer().blocks();
 }
 
 position_t Column::row_count() const {
