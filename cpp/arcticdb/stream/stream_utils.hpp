@@ -357,12 +357,15 @@ inline std::set<StreamId> filter_by_regex(const std::set<StreamId>& results, con
     util::RegexPattern pattern(*opt_regex);
     util::Regex regex{pattern};
 
-    for (auto &s_id: results) {
+    // Using std::copy_if because it builds the new std::set in O(n).
+    std::copy_if(results.begin(),
+                 results.end(),
+                 std::inserter(filtered_results, filtered_results.end()),
+                 [&regex](const StreamId& s_id){
         auto string_id = std::holds_alternative<StringId>(s_id) ? std::get<StringId>(s_id) : std::string();
-        if (regex.match(string_id)) {
-            filtered_results.insert(s_id);
-        }
-    }
+        return regex.match(string_id);
+    });
+
     return filtered_results;
 }
 
