@@ -1,14 +1,6 @@
-cmake_minimum_required(VERSION 3.12) # FindPython
+cmake_minimum_required(VERSION 3.21) # TARGET_RUNTIME_DLLS
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake" ${CMAKE_MODULE_PATH})
-# vcpkg variables must be defined before the first project statement
-# https://learn.microsoft.com/en-us/vcpkg/users/buildsystems/cmake-integration
-set(CMAKE_TOOLCHAIN_FILE
-    ${CMAKE_SOURCE_DIR}/vcpkg/scripts/buildsystems/vcpkg.cmake
-    CACHE
-    PATH
-    "Path to the vcpkg toolchain file used to setup vcpkg libraries"
-)
 cmake_policy(SET CMP0048 NEW)
 project(arcticdb VERSION 0.0.1)
 
