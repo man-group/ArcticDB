@@ -12,6 +12,7 @@ import os
 import pytest
 import numpy as np
 import pandas as pd
+import platform
 import random
 import re
 from datetime import datetime
@@ -41,6 +42,14 @@ configure_test_logger()
 
 # Use a smaller memory mapped limit for all tests
 MsgPackNormalizer.MMAP_DEFAULT_SIZE = 20 * (1 << 20)
+
+if platform.system() == "Linux":
+    try:
+        from ctypes import cdll
+
+        cdll.LoadLibrary("libSegFault.so")
+    except:
+        pass
 
 
 @pytest.fixture()

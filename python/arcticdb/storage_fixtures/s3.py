@@ -11,6 +11,8 @@ import multiprocessing
 import json
 import os
 import re
+import sys
+
 import requests
 from typing import NamedTuple, Optional, Any, Type
 
@@ -204,7 +206,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
             ssl_context=None,
         )
 
-    def _safe_enter(self):
+    def _start_server(self):
         port = self.port = get_ephemeral_port(2)
         self.endpoint = f"http://{self.host}:{port}"
         self._iam_endpoint = f"http://127.0.0.1:{port}"
@@ -212,6 +214,15 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         p = self._p = multiprocessing.Process(target=self.run_server, args=(port,))
         p.start()
         wait_for_server_to_come_up(self.endpoint, "moto", p)
+
+    def _safe_enter(self):
+        for attempt in range(3):  # For unknown reason, Moto, when running in pytest-xdist, will randomly fail to start
+            try:
+                self._start_server()
+                break
+            except AssertionError as e:  # Thrown by wait_for_server_to_come_up
+                sys.stderr.write(repr(e))
+                GracefulProcessUtils.terminate(self._p)
 
         self._s3_admin = self._boto("s3", self.default_key)
         return self
