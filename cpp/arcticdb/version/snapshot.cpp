@@ -89,7 +89,7 @@ void tombstone_snapshot(
     try {
         auto key_segment_pair = store->read_compressed(key).get();
         tombstone_snapshot(store, std::move(key_segment_pair), log_changes);
-    } catch (const storage::KeyNotFoundException& e) {
+    } catch (const storage::KeyNotFoundException&) {
         log::version().info("Cannot tombstone snapshot {}, key does not exist on the store", key);
     } catch (const std::exception& e) {
         log::version().error("Cannot tombstone snapshot {}: {}", key, e.what());
