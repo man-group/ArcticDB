@@ -441,9 +441,7 @@ struct ResampleClause {
         return clause_info_;
     }
 
-    void set_processing_config(const ProcessingConfig& processing_config) {
-        processing_config_ = processing_config;
-    }
+    void set_processing_config(const ProcessingConfig& processing_config);
 
     void set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
         component_manager_ = component_manager;
@@ -457,12 +455,9 @@ struct ResampleClause {
 
     void set_aggregations(const std::unordered_map<std::string, std::string>& aggregations);
 
-    void set_bucket_boundaries(timestamp date_range_start, timestamp date_range_end, std::vector<timestamp>&& bucket_boundaries) {
+    void set_date_range(timestamp date_range_start, timestamp date_range_end) {
         date_range_start_ = date_range_start;
         date_range_end_ = date_range_end;
-        bucket_boundaries_ = std::move(bucket_boundaries);
-        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(bucket_boundaries_.size() >= 2,
-                                                              "Resampling requires at least one bucket");
     }
 
     std::pair<std::vector<timestamp>::const_iterator, std::vector<timestamp>::const_iterator> find_buckets(

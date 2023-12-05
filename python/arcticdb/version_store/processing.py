@@ -530,9 +530,9 @@ class QueryBuilder:
         if self.is_resample() and date_range is not None:
             start, end = normalize_dt_range_to_ts(date_range)
             resample_clause = self.clauses[0]
-            rule = resample_clause.rule
-            bucket_boundaries = pd.date_range(start.floor(rule), end.ceil(rule), freq=rule, inclusive="both").values
-            resample_clause.set_bucket_boundaries(start.value, end.value, bucket_boundaries)
+            # rule = resample_clause.rule
+            # bucket_boundaries = pd.date_range(start.floor(rule), end.ceil(rule), freq=rule, inclusive="both").values
+            resample_clause.set_date_range(start.value, end.value)
 
     # TODO: specify type of other must be QueryBuilder with from __future__ import annotations once only Python 3.7+
     # supported

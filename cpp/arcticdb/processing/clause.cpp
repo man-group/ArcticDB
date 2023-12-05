@@ -14,6 +14,8 @@
 #include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/value_set.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
+// TODO: Remove this and inject bucket_boundaries_generator as callback
+#include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/stream/segment_aggregator.hpp>
 #ifdef ARCTICDB_USING_CONDA
     #include <robin_hood.h>
@@ -521,6 +523,11 @@ void ResampleClause::set_aggregations(const std::unordered_map<std::string, std:
             user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Unknown aggregation operator provided to resample: {}", aggregation_operator);
         }
     }
+}
+
+void ResampleClause::set_processing_config(const ProcessingConfig& processing_config) {
+    processing_config_ = processing_config;
+    bucket_boundaries_ = python_util::bucket_boundaries_generator(date_range_start_, date_range_end_, rule_);
 }
 
 std::vector<std::vector<size_t>> ResampleClause::structure_for_processing(
