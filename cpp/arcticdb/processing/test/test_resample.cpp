@@ -29,7 +29,7 @@ TEST(Resample, StructureForProcessingBasic) {
     std::vector<timestamp> bucket_boundaries{1, 500, 1500, 2500, 2999};
 
     ResampleClause resample_clause{"dummy rule", ResampleBoundary::LEFT, ResampleBoundary::LEFT};
-    resample_clause.set_bucket_boundaries(std::move(bucket_boundaries));
+    resample_clause.set_bucket_boundaries(1, 2999, std::move(bucket_boundaries));
     auto proc_unit_ids = resample_clause.structure_for_processing(ranges_and_keys, 0);
     ASSERT_EQ(ranges_and_keys.size(), 2);
     ASSERT_EQ(ranges_and_keys[0], top);
@@ -61,7 +61,7 @@ TEST(Resample, StructureForProcessingColumnSlicing) {
     std::vector<timestamp> bucket_boundaries{1, 500, 1500, 2500, 2999};
 
     ResampleClause resample_clause{"dummy rule", ResampleBoundary::LEFT, ResampleBoundary::LEFT};
-    resample_clause.set_bucket_boundaries(std::move(bucket_boundaries));
+    resample_clause.set_bucket_boundaries(1, 2999, std::move(bucket_boundaries));
     auto proc_unit_ids = resample_clause.structure_for_processing(ranges_and_keys, 0);
     ASSERT_EQ(ranges_and_keys.size(), 4);
     ASSERT_EQ(ranges_and_keys[0], top_left);
@@ -90,7 +90,7 @@ TEST(Resample, StructureForProcessingOverlap) {
     std::vector<timestamp> bucket_boundaries{1, 500, 2500, 2999};
 
     ResampleClause resample_clause{"dummy rule", ResampleBoundary::LEFT, ResampleBoundary::LEFT};
-    resample_clause.set_bucket_boundaries(std::move(bucket_boundaries));
+    resample_clause.set_bucket_boundaries(1, 2999, std::move(bucket_boundaries));
     auto proc_unit_ids = resample_clause.structure_for_processing(ranges_and_keys, 0);
     ASSERT_EQ(ranges_and_keys.size(), 2);
     ASSERT_EQ(ranges_and_keys[0], top);
@@ -121,7 +121,7 @@ TEST(Resample, StructureForProcessingSubsumed) {
     std::vector<timestamp> bucket_boundaries{1, 500, 4500};
 
     ResampleClause resample_clause{"dummy rule", ResampleBoundary::LEFT, ResampleBoundary::LEFT};
-    resample_clause.set_bucket_boundaries(std::move(bucket_boundaries));
+    resample_clause.set_bucket_boundaries(1, 4500, std::move(bucket_boundaries));
     auto proc_unit_ids = resample_clause.structure_for_processing(ranges_and_keys, 0);
     ASSERT_EQ(ranges_and_keys.size(), 3);
     ASSERT_EQ(ranges_and_keys[0], top);
@@ -150,7 +150,7 @@ TEST(Resample, StructureForProcessingExactBoundary) {
     std::vector<timestamp> bucket_boundaries{1, 500, 2000, 2500, 2999};
 
     ResampleClause resample_clause{"dummy rule", ResampleBoundary::LEFT, ResampleBoundary::LEFT};
-    resample_clause.set_bucket_boundaries(std::move(bucket_boundaries));
+    resample_clause.set_bucket_boundaries(1, 2999, std::move(bucket_boundaries));
     auto proc_unit_ids = resample_clause.structure_for_processing(ranges_and_keys, 0);
     ASSERT_EQ(ranges_and_keys.size(), 2);
     ASSERT_EQ(ranges_and_keys[0], top);
@@ -173,8 +173,8 @@ TEST(Resample, FindBuckets) {
     ResampleClause resample_left("left", ResampleBoundary::LEFT, ResampleBoundary::LEFT);
     ResampleClause resample_right("right", ResampleBoundary::RIGHT, ResampleBoundary::RIGHT);
     // Enough bucket boundaries to test all the interesting cases
-    resample_left.set_bucket_boundaries({0, 10, 20, 30, 40});
-    resample_right.set_bucket_boundaries({0, 10, 20, 30, 40});
+    resample_left.set_bucket_boundaries(0, 40, {0, 10, 20, 30, 40});
+    resample_right.set_bucket_boundaries(0, 40, {0, 10, 20, 30, 40});
     std::pair<std::vector<timestamp>::const_iterator, std::vector<timestamp>::const_iterator> left_res;
     std::pair<std::vector<timestamp>::const_iterator, std::vector<timestamp>::const_iterator> right_res;
 
@@ -238,7 +238,7 @@ TEST(Resample, ProcessOneSegment) {
     ResampleClause resample("dummy", ResampleBoundary::LEFT, ResampleBoundary::LEFT);
     resample.set_component_manager(component_manager);
     resample.set_aggregations({{"sum_column", "sum"}});
-    resample.set_bucket_boundaries({-1, 2, 5});
+    resample.set_bucket_boundaries(-1, 5, {-1, 2, 5});
 
     using index_TDT = TypeDescriptorTag<DataTypeTag<DataType::NANOSECONDS_UTC64>, DimensionTag<Dimension ::Dim0>>;
     auto index_column = std::make_shared<Column>(static_cast<TypeDescriptor>(index_TDT{}), 0, false, true);
@@ -284,7 +284,7 @@ TEST(Resample, ProcessMultipleSegments) {
     ResampleClause resample("dummy", ResampleBoundary::LEFT, ResampleBoundary::LEFT);
     resample.set_component_manager(component_manager);
     resample.set_aggregations({{"sum_column", "sum"}});
-    resample.set_bucket_boundaries({-15, -5, 5, 6, 25, 35, 45, 46, 55, 65});
+    resample.set_bucket_boundaries(-15, 65, {-15, -5, 5, 6, 25, 35, 45, 46, 55, 65});
     // Index values of segments will be as follows:
     // 0, 10
     // 20, 30, 40
