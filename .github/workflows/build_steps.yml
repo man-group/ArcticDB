@@ -11,11 +11,6 @@ on:
       python_deps_ids:   {default: '[""]', type: string, description: build-python-wheels test matrix parameter. JSON string.}
       python3:           {default: -1, type: number, description: Python 3 minor version}
       persistent_storage:      {default: "false", type: string, description: Specifies whether the python tests should tests against real storages e.g. AWS S3  }
-      # TODO: Maybe we should add these as GitHub variables
-      bucket:            {default: 'arcticdb-ci-test-bucket-01', type: string, description: The name of the S3 bucket that we will test against}
-      endpoint:          {default: 's3.eu-west-2.amazonaws.com', type: string, description: The address of the S3 endpoint}
-      region:            {default: 'eu-west-2', type: string, description: The S3 region of the bucket}
-      clear:             {default: 1, type: number, description: Controls wheather we will clear the libraries in the versions stores that we test against}
 jobs:
   start_ec2_runner:
     if: inputs.compile-override == 'compile-on-ec2'
