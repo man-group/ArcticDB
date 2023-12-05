@@ -30,8 +30,8 @@ protected:
 };
 
 auto write_version_frame(
-    const StreamId& stream_id,
-    VersionId v_id,
+    const arcticdb::StreamId& stream_id,
+    arcticdb::VersionId v_id,
     arcticdb::version_store::PythonVersionStore& pvs,
     size_t rows = 1000000,
     bool update_version_map = false,
