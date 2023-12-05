@@ -60,6 +60,9 @@ class MongoDatabase(StorageFixture):
 
         with handle_cleanup_exception(self, "prefix_mongo_database"):
             self.client.drop_database("arcticc_" + self.prefix[:-1])
+        with handle_cleanup_exception(self, "pymongo client", consequence="The test process may never exit"):
+            self.client.close()
+            self.client = None
 
         # With Mongo, the LibraryManager configuration database is global/reused across fixtures, so must delete the
         # library definitions
