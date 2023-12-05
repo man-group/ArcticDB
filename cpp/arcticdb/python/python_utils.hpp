@@ -138,6 +138,7 @@ inline py::object &pd_Timestamp() {
 }
 
 inline std::vector<timestamp> bucket_boundaries_generator(timestamp start, timestamp end, std::string_view rule) {
+    // TODO: Take the GIL for this?
     auto py_start = pd_Timestamp()(start).attr("floor")(rule);
     auto py_end = pd_Timestamp()(end).attr("ceil")(rule);
     static py::object date_range_function = py::module::import("pandas").attr("date_range");

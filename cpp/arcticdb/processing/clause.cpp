@@ -527,24 +527,41 @@ void ResampleClause::set_aggregations(const std::unordered_map<std::string, std:
 
 void ResampleClause::set_processing_config(const ProcessingConfig& processing_config) {
     processing_config_ = processing_config;
-    bucket_boundaries_ = python_util::bucket_boundaries_generator(date_range_start_, date_range_end_, rule_);
 }
 
 std::vector<std::vector<size_t>> ResampleClause::structure_for_processing(
         std::vector<RangesAndKey>& ranges_and_keys,
-        ARCTICDB_UNUSED size_t start_from) const {
-    ranges_and_keys.erase(std::remove_if(ranges_and_keys.begin(), ranges_and_keys.end(), [this](const RangesAndKey& ranges_and_key) {
-        auto [start_index, end_index] = ranges_and_key.key_.time_range();
-        // end_index from the key is 1 nanosecond larger than the index value of the last row in the row-slice
-        end_index--;
-        switch (closed_boundary_) {
-            case ResampleBoundary::LEFT:
-                return start_index >= bucket_boundaries_.back() || end_index < bucket_boundaries_.front();
-            case ResampleBoundary::RIGHT:
-            default:
-                return start_index > bucket_boundaries_.back() || end_index <= bucket_boundaries_.front();
-        }
-    }), ranges_and_keys.end());
+        ARCTICDB_UNUSED size_t start_from) {
+    if (date_range_.has_value()) {
+        bucket_boundaries_ = python_util::bucket_boundaries_generator(date_range_->first, date_range_->second, rule_);
+        ranges_and_keys.erase(std::remove_if(ranges_and_keys.begin(), ranges_and_keys.end(),
+                                             [this](const RangesAndKey &ranges_and_key) {
+                                                 auto [start_index, end_index] = ranges_and_key.key_.time_range();
+                                                 // end_index from the key is 1 nanosecond larger than the index value of the last row in the row-slice
+                                                 end_index--;
+                                                 switch (closed_boundary_) {
+                                                     case ResampleBoundary::LEFT:
+                                                         return start_index >= bucket_boundaries_.back() ||
+                                                                end_index < bucket_boundaries_.front();
+                                                     case ResampleBoundary::RIGHT:
+                                                     default:
+                                                         return start_index > bucket_boundaries_.back() ||
+                                                                end_index <= bucket_boundaries_.front();
+                                                 }
+                                             }), ranges_and_keys.end());
+    } else {
+        date_range_.emplace(
+                std::min_element(ranges_and_keys.begin(), ranges_and_keys.end(),
+                                 [](const RangesAndKey& left, const RangesAndKey& right) {
+                                     return left.key_.start_time() < right.key_.start_time();
+                                 })->key_.start_time(),
+                std::max_element(ranges_and_keys.begin(), ranges_and_keys.end(),
+                                 [](const RangesAndKey& left, const RangesAndKey& right) {
+                                     return left.key_.end_time() < right.key_.end_time();
+                                 })->key_.end_time()
+                );
+        bucket_boundaries_ = python_util::bucket_boundaries_generator(date_range_->first, date_range_->second, rule_);
+    }
     auto res = structure_by_row_slice(ranges_and_keys, 0);
     // Element i of res also needs the values from element i+1 if there is a bucket which incorporates the last index
     // value of row-slice i and the first value of row-slice i+1
@@ -736,11 +753,11 @@ std::pair<std::shared_ptr<Column>, std::vector<timestamp>> ResampleClause::gener
     }
 
     // Bucket boundaries can be wider than the date range specified by the user, narrow the first and last buckets here if necessary
-    bucket_boundaries.emplace_back(std::max(*first_it, date_range_start_));
+    bucket_boundaries.emplace_back(std::max(*first_it, date_range_->first));
     for (auto it = std::next(first_it); it != last_it; it++) {
         bucket_boundaries.emplace_back(*it);
     }
-    bucket_boundaries.emplace_back(std::min(*last_it, date_range_end_));
+    bucket_boundaries.emplace_back(std::min(*last_it, date_range_->second));
     return {output_index_column, bucket_boundaries};
 }
 
@@ -972,7 +989,7 @@ Composite<EntityIds> ColumnStatsGenerationClause::process(Composite<EntityIds>&&
 
 std::vector<std::vector<size_t>> RowRangeClause::structure_for_processing(
         std::vector<RangesAndKey>& ranges_and_keys,
-        ARCTICDB_UNUSED size_t start_from) const {
+        ARCTICDB_UNUSED size_t start_from) {
     ranges_and_keys.erase(std::remove_if(ranges_and_keys.begin(), ranges_and_keys.end(), [this](const RangesAndKey& ranges_and_key) {
         return ranges_and_key.row_range_.start() >= end_ || ranges_and_key.row_range_.end() <= start_;
     }), ranges_and_keys.end());
@@ -1058,7 +1075,7 @@ std::string RowRangeClause::to_string() const {
 
 std::vector<std::vector<size_t>> DateRangeClause::structure_for_processing(
         std::vector<RangesAndKey>& ranges_and_keys,
-        size_t start_from) const {
+        size_t start_from) {
     ranges_and_keys.erase(std::remove_if(ranges_and_keys.begin(), ranges_and_keys.end(), [this](const RangesAndKey& ranges_and_key) {
         auto [start_index, end_index] = ranges_and_key.key_.time_range();
         return start_index > end_ || end_index <= start_;

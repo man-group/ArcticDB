@@ -73,7 +73,7 @@ struct IClause {
         // TODO #732: Factor out start_from as part of https://github.com/man-group/ArcticDB/issues/732
         [[nodiscard]] std::vector<std::vector<size_t>>
         structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys,
-                                 size_t start_from) const {
+                                 size_t start_from) {
             return std::move(folly::poly_call<0>(*this, ranges_and_keys, start_from));
         }
 
@@ -129,7 +129,7 @@ struct PassthroughClause {
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
             std::vector<RangesAndKey>& ranges_and_keys,
-            size_t start_from) const {
+            size_t start_from) {
         return structure_by_row_slice(ranges_and_keys, start_from);
     }
 
@@ -171,7 +171,7 @@ struct FilterClause {
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
             std::vector<RangesAndKey>& ranges_and_keys,
-            size_t start_from) const {
+            size_t start_from) {
         return structure_by_row_slice(ranges_and_keys, start_from);
     }
 
@@ -224,7 +224,7 @@ struct ProjectClause {
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
             std::vector<RangesAndKey>& ranges_and_keys,
-            size_t start_from) const {
+            size_t start_from) {
         return structure_by_row_slice(ranges_and_keys, start_from);
     }
 
@@ -271,7 +271,7 @@ struct PartitionClause {
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
             std::vector<RangesAndKey>& ranges_and_keys,
-            size_t start_from) const {
+            size_t start_from) {
         return structure_by_row_slice(ranges_and_keys, start_from);
     }
 
@@ -369,7 +369,7 @@ struct AggregationClause {
 
     [[noreturn]] std::vector<std::vector<size_t>> structure_for_processing(
             ARCTICDB_UNUSED const std::vector<RangesAndKey>&,
-            ARCTICDB_UNUSED size_t) const {
+            ARCTICDB_UNUSED size_t) {
         internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
                 "AggregationClause::structure_for_processing should never be called"
                 );
@@ -405,10 +405,8 @@ struct ResampleClause {
     std::string rule_;
     ResampleBoundary closed_boundary_;
     ResampleBoundary label_boundary_;
-    // The date range specified by the user may be narrower than the bucket boundaries generated
-    // Use these values to adjust the first and last bucket boundaries if necessary after generating the output index column
-    timestamp date_range_start_;
-    timestamp date_range_end_;
+    // This will either hold the date range specified by the user, or the first and last timestamps present in the index column
+    std::optional<TimestampRange> date_range_;
     std::vector<timestamp> bucket_boundaries_;
     std::unordered_map<std::string, std::string> aggregation_map_;
     std::vector<SortedAggregator> aggregators_;
@@ -427,7 +425,7 @@ struct ResampleClause {
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
             std::vector<RangesAndKey>& ranges_and_keys,
-            size_t start_from) const;
+            size_t start_from);
 
     [[nodiscard]] Composite<EntityIds> process(Composite<EntityIds>&& entity_ids) const;
 
@@ -456,8 +454,7 @@ struct ResampleClause {
     void set_aggregations(const std::unordered_map<std::string, std::string>& aggregations);
 
     void set_date_range(timestamp date_range_start, timestamp date_range_end) {
-        date_range_start_ = date_range_start;
-        date_range_end_ = date_range_end;
+        date_range_.emplace(date_range_start, date_range_end);
     }
 
     std::pair<std::vector<timestamp>::const_iterator, std::vector<timestamp>::const_iterator> find_buckets(
@@ -482,7 +479,7 @@ struct RemoveColumnPartitioningClause {
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
             std::vector<RangesAndKey>& ranges_and_keys,
-            size_t start_from) const {
+            size_t start_from) {
         return structure_by_row_slice(ranges_and_keys, start_from);
     }
 
@@ -516,7 +513,7 @@ struct SplitClause {
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
             std::vector<RangesAndKey>& ranges_and_keys,
-            size_t start_from) const {
+            size_t start_from) {
         return structure_by_row_slice(ranges_and_keys, start_from);
     }
 
@@ -549,7 +546,7 @@ struct SortClause {
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
             std::vector<RangesAndKey>& ranges_and_keys,
-            size_t start_from) const {
+            size_t start_from) {
         return structure_by_row_slice(ranges_and_keys, start_from);
     }
 
@@ -595,7 +592,7 @@ struct MergeClause {
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
             std::vector<RangesAndKey>& ranges_and_keys,
-            size_t start_from) const {
+            size_t start_from) {
         return structure_by_row_slice(ranges_and_keys, start_from);
     }
 
@@ -636,7 +633,7 @@ struct ColumnStatsGenerationClause {
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
             std::vector<RangesAndKey>& ranges_and_keys,
-            size_t start_from) const {
+            size_t start_from) {
         return structure_by_row_slice(ranges_and_keys, start_from);
     }
 
@@ -704,7 +701,7 @@ struct RowRangeClause {
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
             std::vector<RangesAndKey>& ranges_and_keys,
-            ARCTICDB_UNUSED size_t start_from) const;
+            ARCTICDB_UNUSED size_t start_from);
 
     [[nodiscard]] Composite<EntityIds> process(Composite<EntityIds>&& entity_ids) const;
 
@@ -745,7 +742,7 @@ struct DateRangeClause {
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
             std::vector<RangesAndKey>& ranges_and_keys,
-            size_t start_from) const;
+            size_t start_from);
 
     [[nodiscard]] Composite<EntityIds> process(Composite<EntityIds>&& entity_ids) const;
 
