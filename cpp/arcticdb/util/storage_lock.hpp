@@ -137,6 +137,10 @@ class StorageLock {
         }
     }
 
+    void _test_release_local_lock() {
+        mutex_.unlock();
+    }
+
   private:
     void do_lock(const std::shared_ptr<Store>& store, std::optional<size_t> timeout_ms = std::nullopt) {
         mutex_.lock();

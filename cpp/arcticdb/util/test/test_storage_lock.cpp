@@ -52,10 +52,9 @@ struct LockData {
     std::shared_ptr<InMemoryStore> store_;
     volatile uint64_t vol_;
     std::atomic<uint64_t> atomic_;
-    std::mutex mutex_;
-    bool contended_;
+    std::atomic<bool> contended_;
     const size_t num_tests_;
-    bool timedout_;
+    std::atomic<bool> timedout_;
 
     LockData(size_t num_tests) :
     lock_name_("stress_test_lock"),
@@ -77,7 +76,6 @@ struct OptimisticLockTask {
     }
 
     folly::Future<folly::Unit> operator()() {
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
         StorageLock<> lock{data_->lock_name_};
 
         for (auto i = size_t(0); i < data_->num_tests_; ++i) {
@@ -86,8 +84,6 @@ struct OptimisticLockTask {
             }
             else {
                 ++data_->vol_;
-                // This should be unnecessary as we are already locked
-                std::lock_guard l{data_->mutex_};
                 ++data_->atomic_;
                 lock.unlock(data_->store_);
             }
@@ -108,7 +104,6 @@ TEST(StorageLock, Contention) {
     for(auto i = size_t{0}; i < 4; ++i) {
         futures.emplace_back(exec.addFuture(OptimisticLockTask{lock_data}));
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
     collect(futures).get();
 
     ASSERT_EQ(lock_data->atomic_, lock_data->vol_);
@@ -125,7 +120,6 @@ struct PessimisticLockTask {
     }
 
     folly::Future<folly::Unit> operator()() {
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
         StorageLock<> lock{data_->lock_name_};
 
         for (auto i = size_t(0); i < data_->num_tests_; ++i) {
@@ -136,8 +130,6 @@ struct PessimisticLockTask {
                     lock.lock(data_->store_);
 
                 ++data_->vol_;
-                // This should be unnecessary as we are already locked
-                std::lock_guard l{data_->mutex_};
                 ++data_->atomic_;
                 lock.unlock(data_->store_);
             }
@@ -160,14 +152,11 @@ struct ForceReleaseLockTask {
     }
 
     folly::Future<folly::Unit> operator()() {
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
         StorageLock<> lock{data_->lock_name_};
 
         try {
             lock.lock_timeout(data_->store_, timeout_ms_);
             ++data_->vol_;
-            // This should be unnecessary as we are already locked
-            std::lock_guard l{data_->mutex_};
             ++data_->atomic_;
             // Dont unlock
         }
@@ -175,9 +164,8 @@ struct ForceReleaseLockTask {
             data_->timedout_ = true;
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
         // Clean up locks to avoid "mutex destroyed while active" errors on Windows debug build
-        lock.unlock(data_->store_);
+        lock._test_release_local_lock();
         return makeFuture(Unit{});
     }
 };
@@ -195,7 +183,6 @@ struct OptimisticForceReleaseLockTask {
     }
 
     folly::Future<folly::Unit> operator()() {
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
         StorageLock<> lock{data_->lock_name_};
         bool contended = true;
         size_t total_wait = 0;
@@ -203,21 +190,17 @@ struct OptimisticForceReleaseLockTask {
             contended = !lock.try_lock(data_->store_);
             std::this_thread::sleep_for(std::chrono::milliseconds(retry_ms_));
             total_wait += retry_ms_;
-
         }
         if (contended) {
             data_->timedout_ = true;
             data_->contended_ = true;
         } else {
             ++data_->vol_;
-            // This should be unnecessary as we are already locked
-            std::lock_guard l{data_->mutex_};
             ++data_->atomic_;
             // Dont unlock
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
         // Clean up locks to avoid "mutex destroyed while active" errors on Windows debug build
-        lock.unlock(data_->store_);
+        lock._test_release_local_lock();
         return makeFuture(Unit{});
     }
 };
@@ -254,10 +237,22 @@ TEST(StorageLock, Timeouts) {
     ASSERT_TRUE(lock_data->timedout_);
 }
 
+int count_occurrences(std::string search, std::string pattern) {
+    if (search.size() < pattern.size()) return false;
+    int count = 0;
+    for (size_t pos = 0; pos <= search.size() - pattern.size(); pos++) {
+        if (search.substr(pos, pattern.size()) == pattern)
+            count++;
+    }
+    return count;
+}
+
 TEST(StorageLock, ForceReleaseLock) {
-    // This test spawns jobs to wait for the lock with a large timeout.
-    // The lock is never released, but the TTL is configured to something reasonable so that
-    // they will all eventually acquire the lock from successive TTL expirations.
+    // Verify that lock() will take the lock when the TTL has expired.
+    // Then each thread simulates forgetting to release the lock, so that other threads need to rely
+    // on the TTL expiring to be able to acquire the lock.
+    // Initially take the lock, so that the first thread also has to wait for the TTL of that lock
+    // to expire.
     SKIP_MAC("StorageLock is not supported");
     using namespace arcticdb;
 
@@ -272,6 +267,8 @@ TEST(StorageLock, ForceReleaseLock) {
     auto first_lock = StorageLock<>(lock_data->lock_name_);
     first_lock.lock(lock_data->store_);
 
+    testing::internal::CaptureStderr();
+    testing::internal::CaptureStdout();
     std::vector<Future<Unit>> futures;
     for(auto i = size_t{0}; i < 4; ++i) {
         futures.emplace_back(exec.addFuture(ForceReleaseLockTask{lock_data, 10 * 1000}));
@@ -282,15 +279,34 @@ TEST(StorageLock, ForceReleaseLock) {
     ASSERT_EQ(4u, lock_data->atomic_);
     ASSERT_EQ(4u, lock_data->vol_);
 
+    std::string stdout_str  = testing::internal::GetCapturedStdout();
+    std::string stderr_str = testing::internal::GetCapturedStderr();
+    std::string expected = "taken for more than TTL";
+
+    ASSERT_EQ(count_occurrences("abab", "ab"), 2u);
+    // If a lock is preempted, then it will still print the warning about having overridden the
+    // lock due to the TTL expiring, but will then have to retry, so there may be more than the expected
+    // number of log messages.
+    // Skip on Windows as capturing logs doesn't work. TODO: Configure the logger with the file output
+#ifndef _WIN32
+    ASSERT_TRUE(
+            count_occurrences(stdout_str, expected) >= 4 ||
+            count_occurrences(stderr_str, expected) >= 4
+    );
+#endif
+
     // Clean up locks to avoid "mutex destroyed while active" errors on Windows debug build
-    first_lock.unlock(lock_data->store_);
+    first_lock._test_release_local_lock();
 }
 
 TEST(StorageLock, OptimisticForceReleaseLock) {
-    // This test does the same as ForceReleaseLock, but testing the try_lock() method instead of lock()
-    // Since lock() implements the retry logic but try_lock doesn't, the OptimisticForceReleaseLockTask
-    // will call try_lock() repeatedly until the TTL expires and it can obtain the lock. A timeout is implemented
-    // in the task so this doesn't hang forever in case of an error.
+    // Verify that try_lock() will take the lock when the TTL has expired.
+    // Since this method does not retry automatically, the threads will retry periodically
+    // until the TTL expires, and then they should be able to take the lock. The threads
+    // will then simulate forgetting to release the lock, so that other threads need to rely
+    // on the TTL expiring to be able to acquire the lock.
+    // Initially take the lock using the lock() method, so that the first thread also has to
+    // wait for the TTL of that lock to expire.
     SKIP_MAC("StorageLock is not supported");
     using namespace arcticdb;
 
@@ -301,12 +317,12 @@ TEST(StorageLock, OptimisticForceReleaseLock) {
     // This is set in nanoseconds => 200ms for the TTL
     ConfigsMap::instance()->set_int("StorageLock.TTL", 200 * 1000 * 1000);
 
-    std::vector<std::shared_ptr<StorageLock<>>> locks;
-
     // Create a first lock that the others will have to force release
     auto first_lock = StorageLock<>(lock_data->lock_name_);
     first_lock.lock(lock_data->store_);
 
+    testing::internal::CaptureStderr();
+    testing::internal::CaptureStdout();
     std::vector<Future<Unit>> futures;
     for(auto i = size_t{0}; i < 4; ++i) {
         futures.emplace_back(exec.addFuture(OptimisticForceReleaseLockTask{lock_data, 10 * 1000, 100}));
@@ -318,6 +334,25 @@ TEST(StorageLock, OptimisticForceReleaseLock) {
     ASSERT_EQ(4u, lock_data->atomic_);
     ASSERT_EQ(4u, lock_data->vol_);
 
+    std::string stdout_str  = testing::internal::GetCapturedStdout();
+    std::string stderr_str = testing::internal::GetCapturedStderr();
+    std::string expected = "taken for more than TTL";
+
+    std::cout << stdout_str << std::endl;
+    std::cout << stderr_str << std::endl;
+
+    ASSERT_EQ(count_occurrences("abab", "ab"), 2u);
+    // If a lock is preempted, then it will still print the warning about having overridden the
+    // lock due to the TTL expiring, but will then have to retry, so there may be more than the expected
+    // number of log messages.
+    // Skip on Windows as capturing logs doesn't work. TODO: Configure the logger with the file output
+#ifndef _WIN32
+    ASSERT_TRUE(
+        count_occurrences(stdout_str, expected) >= 4 ||
+        count_occurrences(stderr_str, expected) >= 4
+    );
+#endif
+
     // Clean up locks to avoid "mutex destroyed while active" errors on Windows debug build
-    first_lock.unlock(lock_data->store_);
+    first_lock._test_release_local_lock();
 }
