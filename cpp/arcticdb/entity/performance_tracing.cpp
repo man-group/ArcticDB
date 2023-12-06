@@ -4,16 +4,14 @@
  *
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
+#if defined(USE_REMOTERY)
 
 #include <arcticdb/entity/performance_tracing.hpp>
-#include <folly/Singleton.h>
 #include <arcticdb/log/log.hpp>
 #include <folly/system/ThreadName.h>
 #include <folly/container/F14Map.h>
 #include <arcticdb/util/preprocess.hpp>
 #include <arcticdb/util/pb_util.hpp>
-
-#if defined(USE_REMOTERY)
 
 std::shared_ptr<RemoteryInstance> RemoteryInstance::instance(){
     std::call_once(RemoteryInstance::init_flag_, &RemoteryInstance::init);
@@ -61,8 +59,6 @@ RemoteryInstance::~RemoteryInstance() {
     }
 }
 
-#endif
-
 namespace arcticdb::detail {
     struct ThreadNameCache {
         folly::F14FastMap<const char *, std::string> fqn_by_task_name_;
@@ -79,8 +75,6 @@ namespace arcticdb::detail {
         }
     };
 }
-
-#ifdef USE_REMOTERY
 
 void set_remotery_thread_name(const char* task_name){
     static thread_local arcticdb::detail::ThreadNameCache tnc;

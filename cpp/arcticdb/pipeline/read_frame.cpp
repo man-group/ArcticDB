@@ -29,7 +29,6 @@
 #endif
 #include <arcticdb/codec/variant_encoded_field_collection.hpp>
 
-#include <google/protobuf/util/message_differencer.h>
 #include <folly/SpinLock.h>
 #include <folly/gen/Base.h>
 

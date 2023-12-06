@@ -26,7 +26,6 @@
 #include <aws/s3/model/ObjectIdentifier.h>
 
 #include <boost/interprocess/streams/bufferstream.hpp>
-#include <folly/ThreadLocal.h>
 
 #undef GetMessage
 

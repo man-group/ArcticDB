@@ -12,7 +12,6 @@
 #include <arcticdb/pipeline/pipeline_context.hpp>
 #include <arcticdb/pipeline/read_options.hpp>
 #include <arcticdb/util/bitset.hpp>
-#include <arcticdb/util/shared_future.hpp>
 #include <arcticdb/util/buffer_holder.hpp>
 
 #include <folly/futures/Future.h>

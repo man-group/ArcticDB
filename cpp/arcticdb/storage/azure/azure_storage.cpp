@@ -30,7 +30,6 @@
 #include <azure/storage/blobs.hpp>
 
 #include <boost/interprocess/streams/bufferstream.hpp>
-#include <folly/ThreadLocal.h>
 
 #undef GetMessage
 

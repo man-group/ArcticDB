@@ -33,8 +33,6 @@
 #include <arcticdb/entity/read_result.hpp>
 #include <arcticdb/version/version_log.hpp>
 
-#include <folly/futures/Barrier.h>
-
 #include <type_traits>
 #include <iostream>
 
@@ -324,15 +322,6 @@ class PythonVersionStore : public LocalVersionedEngine {
     void compact_library(size_t batch_size);
 
     void fix_symbol_trees(const std::vector<StreamId>& symbols);
-
-    /**
-     * Main business logic of the DeleteTombstonedData background job. Delete tombstoned versions and snapshots.
-     * @param limit_stream_id Test-specific. If non-empty, limit scope to tombstoned versions in the given stream.
-     * @param min_age_sec Minimum age of index keys that can be deleted in unit of seconds.
-     * @param stresser_sync Only used by stress tests to synchronise steps.
-     */
-    void delete_tombstones(const std::string& limit_stream_id, bool dry_run, uint64_t min_age_sec,
-            folly::futures::Barrier* stresser_sync = nullptr, size_t batch_size = 2000);
 
     std::unordered_map<VersionId, bool> get_all_tombstoned_versions(const StreamId &stream_id);
 
