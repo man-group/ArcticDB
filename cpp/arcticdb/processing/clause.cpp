@@ -531,7 +531,7 @@ std::vector<std::vector<size_t>> ResampleClause::structure_for_processing(
         std::vector<RangesAndKey>& ranges_and_keys,
         ARCTICDB_UNUSED size_t start_from) {
     if (date_range_.has_value()) {
-        bucket_boundaries_ = generate_bucket_boundaries_(date_range_->first, date_range_->second, rule_);
+        bucket_boundaries_ = generate_bucket_boundaries_(date_range_->first, date_range_->second, rule_, closed_boundary_);
         ranges_and_keys.erase(std::remove_if(ranges_and_keys.begin(), ranges_and_keys.end(),
                                              [this](const RangesAndKey &ranges_and_key) {
                                                  auto [start_index, end_index] = ranges_and_key.key_.time_range();
@@ -558,7 +558,7 @@ std::vector<std::vector<size_t>> ResampleClause::structure_for_processing(
                                      return left.key_.end_time() < right.key_.end_time();
                                  })->key_.end_time()
                 );
-        bucket_boundaries_ = generate_bucket_boundaries_(date_range_->first, date_range_->second, rule_);
+        bucket_boundaries_ = generate_bucket_boundaries_(date_range_->first, date_range_->second, rule_, closed_boundary_);
     }
     auto res = structure_by_row_slice(ranges_and_keys, 0);
     // Element i of res also needs the values from element i+1 if there is a bucket which incorporates the last index

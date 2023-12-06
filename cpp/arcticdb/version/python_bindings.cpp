@@ -276,7 +276,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                 return ResampleClause(rule,
                                       closed_boundary,
                                       label_boundary,
-                                      [closed_boundary](timestamp start, timestamp end, std::string_view rule) -> std::vector<timestamp> {
+                                      [](timestamp start, timestamp end, std::string_view rule, ResampleBoundary closed_boundary) -> std::vector<timestamp> {
                     // TODO: Take the GIL for this?
                     auto py_start = python_util::pd_Timestamp()(start - (closed_boundary == ResampleBoundary::RIGHT ? 1 : 0)).attr("floor")(rule);
                     auto py_end = python_util::pd_Timestamp()(end + (closed_boundary == ResampleBoundary::LEFT ? 1 : 0)).attr("ceil")(rule);
