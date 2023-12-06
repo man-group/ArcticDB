@@ -602,7 +602,7 @@ Column SortedSumAggregator::aggregate(const std::vector<std::shared_ptr<Column>>
                         // TODO: Handle this case
                     }
                 }
-                if (LIKELY(current_agg_val.has_value())) {
+                if (current_agg_val.has_value()) {
                     res->push_back(*current_agg_val);
                 }
             } else {

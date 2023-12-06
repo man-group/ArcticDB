@@ -276,10 +276,10 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                 return ResampleClause(rule,
                                       closed_boundary,
                                       label_boundary,
-                                      [](timestamp start, timestamp end, std::string_view rule) -> std::vector<timestamp> {
+                                      [closed_boundary](timestamp start, timestamp end, std::string_view rule) -> std::vector<timestamp> {
                     // TODO: Take the GIL for this?
-                    auto py_start = python_util::pd_Timestamp()(start).attr("floor")(rule);
-                    auto py_end = python_util::pd_Timestamp()(end).attr("ceil")(rule);
+                    auto py_start = python_util::pd_Timestamp()(start - (closed_boundary == ResampleBoundary::RIGHT ? 1 : 0)).attr("floor")(rule);
+                    auto py_end = python_util::pd_Timestamp()(end + (closed_boundary == ResampleBoundary::LEFT ? 1 : 0)).attr("ceil")(rule);
                     static py::object date_range_function = py::module::import("pandas").attr("date_range");
                     auto py_bucket_boundaries = date_range_function(py_start, py_end, nullptr, rule, nullptr, false).attr("values").cast<py::array_t<timestamp>>();
                     return std::vector<timestamp>(py_bucket_boundaries.data(), py_bucket_boundaries.data() + py_bucket_boundaries.size());

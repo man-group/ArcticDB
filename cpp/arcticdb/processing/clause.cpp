@@ -730,7 +730,7 @@ std::pair<std::shared_ptr<Column>, std::vector<timestamp>> ResampleClause::gener
                         break;
                     case ResampleBoundary::RIGHT:
                     default:
-                        while (*ptr > *bucket_end_it) {
+                        while (bucket_end_it != std::next(last_it) && *ptr > *bucket_end_it) {
                             ++bucket_start_it;
                             if (++bucket_end_it == std::next(last_it)) {
                                 break;
@@ -751,11 +751,11 @@ std::pair<std::shared_ptr<Column>, std::vector<timestamp>> ResampleClause::gener
     }
 
     // Bucket boundaries can be wider than the date range specified by the user, narrow the first and last buckets here if necessary
-    bucket_boundaries.emplace_back(std::max(*first_it, date_range_->first));
+    bucket_boundaries.emplace_back(std::max(*first_it, date_range_->first - (closed_boundary_ == ResampleBoundary::RIGHT ? 1 : 0)));
     for (auto it = std::next(first_it); it != last_it; it++) {
         bucket_boundaries.emplace_back(*it);
     }
-    bucket_boundaries.emplace_back(std::min(*last_it, date_range_->second));
+    bucket_boundaries.emplace_back(std::min(*last_it, date_range_->second + (closed_boundary_ == ResampleBoundary::LEFT ? 1 : 0)));
     return {output_index_column, bucket_boundaries};
 }
 
