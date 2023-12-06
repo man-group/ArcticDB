@@ -112,7 +112,7 @@ TEST(StorageLock, Contention) {
     collect(futures).get();
 
     ASSERT_EQ(lock_data->atomic_, lock_data->vol_);
-    //ASSERT_EQ(lock_data->contended_, true); Alas Jenkins is too rubbish for this, uncomment for tests on headnode
+    ASSERT_EQ(lock_data->contended_, true);
 }
 
 struct PessimisticLockTask {
@@ -182,6 +182,46 @@ struct ForceReleaseLockTask {
     }
 };
 
+struct OptimisticForceReleaseLockTask {
+    std::shared_ptr<LockData> data_;
+    size_t timeout_ms_;
+    size_t retry_ms_;
+
+    OptimisticForceReleaseLockTask(std::shared_ptr<LockData> data, size_t timeout_ms, size_t retry_ms) :
+            data_(std::move(data)),
+            timeout_ms_(timeout_ms),
+            retry_ms_(retry_ms)
+    {
+    }
+
+    folly::Future<folly::Unit> operator()() {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        StorageLock<> lock{data_->lock_name_};
+        bool contended = true;
+        size_t total_wait = 0;
+        while (contended && total_wait < timeout_ms_) {
+            contended = !lock.try_lock(data_->store_);
+            std::this_thread::sleep_for(std::chrono::milliseconds(retry_ms_));
+            total_wait += retry_ms_;
+
+        }
+        if (contended) {
+            data_->timedout_ = true;
+            data_->contended_ = true;
+        } else {
+            ++data_->vol_;
+            // This should be unnecessary as we are already locked
+            std::lock_guard l{data_->mutex_};
+            ++data_->atomic_;
+            // Dont unlock
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        // Clean up locks to avoid "mutex destroyed while active" errors on Windows debug build
+        lock.unlock(data_->store_);
+        return makeFuture(Unit{});
+    }
+};
+
 TEST(StorageLock, Wait) {
     SKIP_MAC("StorageLock is not supported");
     using namespace arcticdb;
@@ -215,15 +255,18 @@ TEST(StorageLock, Timeouts) {
 }
 
 TEST(StorageLock, ForceReleaseLock) {
+    // This test spawns jobs to wait for the lock with a large timeout.
+    // The lock is never released, but the TTL is configured to something reasonable so that
+    // they will all eventually acquire the lock from successive TTL expirations.
     SKIP_MAC("StorageLock is not supported");
     using namespace arcticdb;
 
     auto lock_data = std::make_shared<LockData>(4);
     folly::FutureExecutor<folly::CPUThreadPoolExecutor> exec{4};
-    // This is set in nanoseconds => 1ms
-    ConfigsMap::instance()->set_int("StorageLock.TTL", 1000 * 1000);
-
-    std::vector<std::shared_ptr<StorageLock<>>> locks;
+    // This is set in milliseconds => 50ms for the preempting check
+    ConfigsMap::instance()->set_int("StorageLock.WaitMs", 50);
+    // This is set in nanoseconds => 200ms for the TTL
+    ConfigsMap::instance()->set_int("StorageLock.TTL", 200 * 1000 * 1000);
 
     // Create a first lock that the others will have to force release
     auto first_lock = StorageLock<>(lock_data->lock_name_);
@@ -236,6 +279,42 @@ TEST(StorageLock, ForceReleaseLock) {
 
     collect(futures).get();
     ASSERT_FALSE(lock_data->timedout_);
+    ASSERT_EQ(4u, lock_data->atomic_);
+    ASSERT_EQ(4u, lock_data->vol_);
+
+    // Clean up locks to avoid "mutex destroyed while active" errors on Windows debug build
+    first_lock.unlock(lock_data->store_);
+}
+
+TEST(StorageLock, OptimisticForceReleaseLock) {
+    // This test does the same as ForceReleaseLock, but testing the try_lock() method instead of lock()
+    // Since lock() implements the retry logic but try_lock doesn't, the OptimisticForceReleaseLockTask
+    // will call try_lock() repeatedly until the TTL expires and it can obtain the lock. A timeout is implemented
+    // in the task so this doesn't hang forever in case of an error.
+    SKIP_MAC("StorageLock is not supported");
+    using namespace arcticdb;
+
+    auto lock_data = std::make_shared<LockData>(4);
+    folly::FutureExecutor<folly::CPUThreadPoolExecutor> exec{4};
+    // This is set in milliseconds => 50ms for the preempting check
+    ConfigsMap::instance()->set_int("StorageLock.WaitMs", 50);
+    // This is set in nanoseconds => 200ms for the TTL
+    ConfigsMap::instance()->set_int("StorageLock.TTL", 200 * 1000 * 1000);
+
+    std::vector<std::shared_ptr<StorageLock<>>> locks;
+
+    // Create a first lock that the others will have to force release
+    auto first_lock = StorageLock<>(lock_data->lock_name_);
+    first_lock.lock(lock_data->store_);
+
+    std::vector<Future<Unit>> futures;
+    for(auto i = size_t{0}; i < 4; ++i) {
+        futures.emplace_back(exec.addFuture(OptimisticForceReleaseLockTask{lock_data, 10 * 1000, 100}));
+    }
+
+    collect(futures).get();
+    ASSERT_FALSE(lock_data->timedout_);
+    ASSERT_FALSE(lock_data->contended_);
     ASSERT_EQ(4u, lock_data->atomic_);
     ASSERT_EQ(4u, lock_data->vol_);
 
