@@ -34,6 +34,8 @@
 #include <folly/portability/PThread.h>
 #include <mongocxx/exception/logic_error.hpp>
 
+#include <logger.pb.h>
+
 namespace py = pybind11;
 
 enum class LoggerId {

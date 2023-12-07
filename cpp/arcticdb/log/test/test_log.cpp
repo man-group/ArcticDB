@@ -7,6 +7,8 @@
 
 #include <arcticdb/log/log.hpp>
 
+#include <logger.pb.h>
+
 #include <gtest/gtest.h>
 #include <google/protobuf/text_format.h>
 #include <arcticdb/util/format_bytes.hpp>
