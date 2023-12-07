@@ -5,7 +5,6 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
-
 from typing import List, Optional
 
 from arcticdb.options import DEFAULT_ENCODING_VERSION, LibraryOptions
@@ -13,7 +12,6 @@ from arcticdb_ext.storage import LibraryManager
 from arcticdb.exceptions import LibraryNotFound, MismatchingLibraryOptions
 from arcticdb.version_store.library import ArcticInvalidApiUsageException, Library
 from arcticdb.version_store._store import NativeVersionStore
-from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter
 from arcticdb.adapters.s3_library_adapter import S3LibraryAdapter
 from arcticdb.adapters.lmdb_library_adapter import LMDBLibraryAdapter
 from arcticdb.adapters.azure_library_adapter import AzureLibraryAdapter
@@ -35,10 +33,6 @@ class Arctic:
         MongoLibraryAdapter,
         InMemoryLibraryAdapter,
     ]
-
-    # For test fixture clean up
-    _created_lib_names: Optional[List[str]] = None
-    _accessed_libs: Optional[List[NativeVersionStore]] = None
 
     def __init__(self, uri: str, encoding_version: EncodingVersion = DEFAULT_ENCODING_VERSION):
         """
@@ -183,23 +177,20 @@ class Arctic:
             )
 
         self._encoding_version = encoding_version
-        self._library_adapter: ArcticLibraryAdapter = _cls(uri, self._encoding_version)
+        self._library_adapter = _cls(uri, self._encoding_version)
         self._library_manager = LibraryManager(self._library_adapter.config_library)
         self._uri = uri
 
     def __getitem__(self, name: str) -> Library:
-        lib_mgr_name = self._library_adapter.get_name_for_library_manager(name)
-        if not self._library_manager.has_library(lib_mgr_name):
+        if not self._library_manager.has_library(name):
             raise LibraryNotFound(name)
 
         storage_override = self._library_adapter.get_storage_override()
         lib = NativeVersionStore(
-            self._library_manager.get_library(lib_mgr_name, storage_override),
+            self._library_manager.get_library(name, storage_override),
             repr(self._library_adapter),
-            lib_cfg=self._library_manager.get_library_config(lib_mgr_name, storage_override),
+            lib_cfg=self._library_manager.get_library_config(name, storage_override),
         )
-        if self._accessed_libs is not None:
-            self._accessed_libs.append(lib)
         return Library(repr(self), lib)
 
     def __repr__(self):
@@ -295,10 +286,7 @@ class Arctic:
             library_options = LibraryOptions()
 
         cfg = self._library_adapter.get_library_config(name, library_options)
-        lib_mgr_name = self._library_adapter.get_name_for_library_manager(name)
-        self._library_manager.write_library_config(cfg, lib_mgr_name, self._library_adapter.get_masking_override())
-        if self._created_lib_names is not None:
-            self._created_lib_names.append(name)
+        self._library_manager.write_library_config(cfg, name, self._library_adapter.get_masking_override())
         return self.get_library(name)
 
     def delete_library(self, name: str) -> None:
@@ -313,21 +301,14 @@ class Arctic:
         name: str
             Name of the library to delete.
         """
-        try:
-            lib = self[name]
-        except LibraryNotFound:
+        if not self._library_manager.has_library(name):
             return
-        lib._nvs.version_store.clear()
-        del lib
-        lib_mgr_name = self._library_adapter.get_name_for_library_manager(name)
-        self._library_manager.close_library_if_open(lib_mgr_name)
+        self[name]._nvs.version_store.clear()
+        self._library_manager.close_library_if_open(name)
         try:
             self._library_adapter.cleanup_library(name)
         finally:
-            self._library_manager.remove_library_config(lib_mgr_name)
-
-            if self._created_lib_names and name in self._created_lib_names:
-                self._created_lib_names.remove(name)
+            self._library_manager.remove_library_config(name)
 
     def has_library(self, name: str) -> bool:
         """
@@ -342,7 +323,7 @@ class Arctic:
         -------
         True if the library exists, False otherwise.
         """
-        return self._library_manager.has_library(self._library_adapter.get_name_for_library_manager(name))
+        return self._library_manager.has_library(name)
 
     def list_libraries(self) -> List[str]:
         """
@@ -358,8 +339,7 @@ class Arctic:
         -------
         A list of all library names that exist in this Arctic instance.
         """
-        raw_libs = self._library_manager.list_libraries()
-        return self._library_adapter.library_manager_names_to_user_facing(raw_libs)
+        return self._library_manager.list_libraries()
 
     def get_uri(self) -> str:
         """

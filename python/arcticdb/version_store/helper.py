@@ -295,6 +295,67 @@ def add_s3_library_to_env(
     _add_lib_desc_to_env(env, lib_name, sid, description)
 
 
+def create_test_lmdb_cfg(lib_name: str, db_dir: str, lmdb_config: Dict[str, Any] = {}):
+    cfg = EnvironmentConfigsMap()
+    add_lmdb_library_to_env(cfg, lib_name=lib_name, env_name=Defaults.ENV, db_dir=db_dir, lmdb_config=lmdb_config)
+    return cfg
+
+
+def create_test_s3_cfg(
+    lib_name: str,
+    credential_name: str,
+    credential_key: str,
+    bucket_name: str,
+    endpoint: str,
+    *,
+    is_https: bool = False,
+    with_prefix: Union[str, bool, None] = True,
+    region: str = None,
+) -> EnvironmentConfigsMap:
+    cfg = EnvironmentConfigsMap()
+    if with_prefix and isinstance(with_prefix, str):
+        with_prefix = f"{with_prefix}/{lib_name}"
+
+    add_s3_library_to_env(
+        cfg,
+        lib_name=lib_name,
+        env_name=Defaults.ENV,
+        credential_name=credential_name,
+        credential_key=credential_key,
+        bucket_name=bucket_name,
+        endpoint=endpoint,
+        with_prefix=with_prefix,
+        is_https=is_https,
+        region=region,
+    )
+    return cfg
+
+
+def create_test_azure_cfg(lib_name, credential_name, credential_key, container_name, endpoint, ca_cert_path):
+    cfg = EnvironmentConfigsMap()
+    add_azure_library_to_env(
+        cfg=cfg,
+        lib_name=lib_name,
+        env_name=Defaults.ENV,
+        container_name=container_name,
+        endpoint=endpoint,
+        ca_cert_path=ca_cert_path,
+    )
+    return cfg
+
+
+def create_test_memory_cfg(lib_name=Defaults.LIB, description=None):
+    cfg = EnvironmentConfigsMap()
+    add_memory_library_to_env(cfg, lib_name=lib_name, env_name=Defaults.ENV, description=description)
+    return cfg
+
+
+def create_test_mongo_cfg(lib_name=Defaults.LIB, uri="mongodb://localhost:27017", description=None):
+    cfg = EnvironmentConfigsMap()
+    add_mongo_library_to_env(cfg, lib_name=lib_name, env_name=Defaults.ENV, uri=uri, description=description)
+    return cfg
+
+
 def get_azure_proto(
     cfg,
     lib_name,
