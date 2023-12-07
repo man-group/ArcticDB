@@ -14,16 +14,13 @@
 #include <folly/concurrency/ConcurrentHashMap.h>
 #include <arcticdb/util/configs_map.hpp>
 #include <folly/ThreadCachedInt.h>
-#include <arcticdb/util/timer.hpp>
 
-#include <boost/interprocess/managed_shared_memory.hpp>
-#include <fmt/compile.h>
 
 #include <mutex>
-#include <unordered_set>
+#include <memory>
 
 // for malloc_trim on linux
-#if defined(__linux__) && defined(__GLIBC__) 
+#if defined(__linux__) && defined(__GLIBC__)
     #include <malloc.h>
 #endif
 
@@ -47,81 +44,6 @@ static const bool use_slab_allocator = ConfigsMap::instance()->get_int("Allocato
 
 static constexpr uint64_t ArcticNativeShmemSize = 30 * GIGABYTES;
 static const char *ArcticNativeShmemName = "arctic_native_temp";
-
-struct SharedMemorySegment {
-    void init() {
-        std::lock_guard lock(mutex_);
-        if(!initialized()) {
-            boost::interprocess::shared_memory_object::remove(ArcticNativeShmemName);
-            segment_ = std::make_unique<boost::interprocess::managed_shared_memory>(boost::interprocess::create_only,
-                                                                                    ArcticNativeShmemName,
-                                                                                    ArcticNativeShmemSize);
-        }
-    }
-
-    [[nodiscard]] bool initialized() const {
-        return static_cast<bool>(segment_);
-    }
-
-    uint8_t *allocate(size_t size) {
-        if(!initialized())
-            init();
-
-        return static_cast<uint8_t *>(segment_->allocate(size));
-    }
-
-    void deallocate(uint8_t* ptr) {
-        util::check(static_cast<bool>(segment_), "Cannot deallocate on uninitialized segment");
-        segment_->deallocate(ptr);
-    }
-
-    ~SharedMemorySegment() {
-        boost::interprocess::shared_memory_object::remove(ArcticNativeShmemName);
-    }
-
-private:
-    std::mutex mutex_;
-    std::unique_ptr<boost::interprocess::managed_shared_memory> segment_;
-};
-
-struct SharedMemoryAllocator {
-    static std::shared_ptr<SharedMemoryAllocator> instance_;
-    static std::once_flag init_flag_;
-    static void init();
-    static std::shared_ptr<SharedMemoryAllocator> instance();
-    static void destroy_instance();
-
-    bool is_mapped_ptr(uint8_t *const ptr) const {
-        return allocations_.find(ptr) != allocations_.end();
-    }
-
-    uint8_t *allocate(size_t size) {
-        ARCTICDB_TRACE(log::inmem(), "shared memory allocating massive block of size {}", util::MemBytes{size});
-        std::scoped_lock<std::mutex> lock(mutex_);
-        auto ptr =segment_.allocate(size);
-        if (!ptr)
-            return nullptr;
-
-        allocations_.try_emplace(ptr, size);
-        return ptr;
-    }
-
-    bool deallocate(uint8_t *ptr) {
-        std::scoped_lock<std::mutex> lock(mutex_);
-        if (is_mapped_ptr(ptr)) {
-            ARCTICDB_TRACE(arcticdb::log::inmem(), "shared memory de-allocating massive block of size {}",
-                                       util::MemBytes{allocations_[ptr]});
-            segment_.deallocate(ptr);
-            allocations_.erase(ptr);
-            return true;
-        }
-        return false;
-    }
-
-    SharedMemorySegment segment_;
-    std::mutex mutex_;
-    std::unordered_map<uint8_t *, size_t> allocations_;
-};
 
 typedef std::pair<uintptr_t, entity::timestamp> AddrIdentifier;
 
@@ -361,21 +283,11 @@ public:
     static std::pair<uint8_t*, entity::timestamp> alloc(size_t size, bool no_realloc ARCTICDB_UNUSED = false) {
         util::check(size != 0, "Should not allocate zero bytes");
         auto ts = current_timestamp();
-#ifdef SHMEM_ALLOC
-        if (no_realloc && (size > ArcticNativeMassiveAllocSize)) {
-            auto maybe_ptr = SharedMemoryAllocator::instance()->allocate(size);
-            if (maybe_ptr != nullptr)
-                return {maybe_ptr, ts};
-        }
-#endif
+
         uint8_t* ret = internal_alloc(size);
         util::check(ret != nullptr, "Failed to allocate {} bytes", size);
         TracingPolicy::track_alloc(std::make_pair(uintptr_t(ret), ts), size);
         return {ret, ts};
-    }
-
-    static bool is_mapped_ptr(uint8_t *const ptr) {
-        return SharedMemoryAllocator::instance()->is_mapped_ptr(ptr);
     }
 
     static void trim() {
@@ -383,7 +295,7 @@ public:
          * that we will end up with a larger memory footprint for not calling it, but
          * there are no windows alternatives.
          */
-#if defined(__linux__) && defined(__GLIBC__) 
+#if defined(__linux__) && defined(__GLIBC__)
         malloc_trim(0);
 #endif
     }
@@ -397,11 +309,6 @@ public:
     static std::pair<uint8_t*, entity::timestamp> aligned_alloc(size_t size, bool no_realloc = false) {
         util::check(size != 0, "Should not allocate zero bytes");
         auto ts = current_timestamp();
-        if (no_realloc && (size > ArcticNativeMassiveAllocSize)) {
-            auto maybe_ptr = SharedMemoryAllocator::instance()->allocate(size);
-            if (maybe_ptr != nullptr)
-                return {maybe_ptr, ts};
-        }
 
         util::check(size != 0, "Should not allocate zero bytes");
         auto ret = internal_alloc(size);
@@ -427,11 +334,6 @@ public:
     static void free(std::pair<uint8_t*, entity::timestamp> ptr) {
         if (ptr.first == nullptr)
             return;
-
-#ifdef SHMEM_ALLOC
-        if (SharedMemoryAllocator::instance()->deallocate(ptr.first))
-            return;
-#endif
 
         TracingPolicy::track_free(std::make_pair(uintptr_t(ptr.first), ptr.second));
         internal_free(ptr.first);

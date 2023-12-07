@@ -9,22 +9,6 @@
 
 namespace arcticdb {
 
-void SharedMemoryAllocator::init(){
-    SharedMemoryAllocator::instance_ = std::make_shared<SharedMemoryAllocator>();
-}
-
-std::shared_ptr<SharedMemoryAllocator> SharedMemoryAllocator::instance() {
-    std::call_once(SharedMemoryAllocator::init_flag_, &SharedMemoryAllocator::init);
-    return SharedMemoryAllocator::instance_;
-}
-
-void SharedMemoryAllocator::destroy_instance() {
-    SharedMemoryAllocator::instance_.reset();
-}
-
-std::shared_ptr<SharedMemoryAllocator> SharedMemoryAllocator::instance_;
-std::once_flag SharedMemoryAllocator::init_flag_;
-
 void TracingData::init() {
     TracingData::instance_ = std::make_shared<TracingData>();
 }
