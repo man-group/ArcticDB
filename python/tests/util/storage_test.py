@@ -1,10 +1,11 @@
-from arcticdb import Arctic
 import pandas as pd
 import os
 import numpy as np
 import argparse
 import re
 from datetime import datetime
+
+from arcticdb.storage_fixtures.s3 import real_s3_from_environment_variables
 
 
 def normalize_lib_name(lib_name):
@@ -14,39 +15,20 @@ def normalize_lib_name(lib_name):
     return lib_name
 
 
-def real_s3_credentials(shared_path: bool = True):
-    endpoint = os.getenv("ARCTICDB_REAL_S3_ENDPOINT")
-    bucket = os.getenv("ARCTICDB_REAL_S3_BUCKET")
-    region = os.getenv("ARCTICDB_REAL_S3_REGION")
-    access_key = os.getenv("ARCTICDB_REAL_S3_ACCESS_KEY")
-    secret_key = os.getenv("ARCTICDB_REAL_S3_SECRET_KEY")
-    if shared_path:
-        path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX")
-    else:
-        path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX")
-
-    clear = str(os.getenv("ARCTICDB_REAL_S3_CLEAR")).lower() in ("true", "1")
-
-    return endpoint, bucket, region, access_key, secret_key, path_prefix, clear
-
-
-def get_real_s3_uri(shared_path: bool = True):
-    endpoint, bucket, region, access_key, secret_key, path_prefix, _ = real_s3_credentials(shared_path)
-    aws_uri = (
-        f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix={path_prefix}"
-    )
-    return aws_uri
+def get_real_s3_arctic(shared_path=True):
+    factory = real_s3_from_environment_variables(shared_path=shared_path)
+    return factory.create_fixture().create_arctic()
 
 
 def get_seed_libraries(ac=None):
     if ac is None:
-        ac = Arctic(get_real_s3_uri())
+        ac = get_real_s3_arctic()
     return [lib for lib in ac.list_libraries() if lib.startswith("seed_")]
 
 
 def get_test_libraries(ac=None):
     if ac is None:
-        ac = Arctic(get_real_s3_uri())
+        ac = get_real_s3_arctic()
     return [lib for lib in ac.list_libraries() if lib.startswith("test_")]
 
 
@@ -234,9 +216,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     job_type = str(args.type).lower()
     # TODO: Add support for other storages
-    uri = get_real_s3_uri()
-    print(uri)
-    ac = Arctic(uri)
+    ac = get_real_s3_arctic()
 
     if "seed" == job_type:
         seed_library(ac, args.version)
