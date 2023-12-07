@@ -8,11 +8,12 @@ from arcticdb import Arctic
 from arcticdb.util.test import get_wide_dataframe
 from arcticdb.util.test import assert_frame_equal
 from arcticdb.exceptions import LmdbMapFullError
+from tests.util.mark import AZURE_TESTS_MARK
 
 
-def test_move_lmdb_library(tmpdir_factory):
+def test_move_lmdb_library(tmp_path_factory):
     # Given - any LMDB library
-    original = tmpdir_factory.mktemp("original")
+    original = tmp_path_factory.mktemp("original")
     ac = Arctic(f"lmdb://{original}")
     ac.create_library("lib")
     lib = ac["lib"]
@@ -25,7 +26,7 @@ def test_move_lmdb_library(tmpdir_factory):
     del ac
 
     # When - we move the data
-    dest = str(tmpdir_factory.mktemp("dest"))
+    dest = str(tmp_path_factory.mktemp("dest"))
     shutil.move(str(original / "_arctic_cfg"), dest)
     shutil.move(str(original / "lib"), dest)
 
@@ -39,9 +40,9 @@ def test_move_lmdb_library(tmpdir_factory):
     assert "original" not in lib.read("sym").host
 
 
-def test_move_lmdb_library_map_size_reduction(tmpdir_factory):
+def test_move_lmdb_library_map_size_reduction(tmp_path_factory):
     # Given - any LMDB library
-    original = tmpdir_factory.mktemp("original")
+    original = tmp_path_factory.mktemp("original")
     ac = Arctic(f"lmdb://{original}?map_size=1MB")
     ac.create_library("lib")
     lib = ac["lib"]
@@ -54,7 +55,7 @@ def test_move_lmdb_library_map_size_reduction(tmpdir_factory):
     del ac
 
     # When - we move the data
-    dest = str(tmpdir_factory.mktemp("dest"))
+    dest = str(tmp_path_factory.mktemp("dest"))
     shutil.move(str(original / "_arctic_cfg"), dest)
     shutil.move(str(original / "lib"), dest)
 
@@ -90,9 +91,9 @@ def test_move_lmdb_library_map_size_reduction(tmpdir_factory):
     assert_frame_equal(df, lib.read("sym").data)
 
 
-def test_move_lmdb_library_map_size_increase(tmpdir_factory):
+def test_move_lmdb_library_map_size_increase(tmp_path_factory):
     # Given - any LMDB library
-    original = tmpdir_factory.mktemp("original")
+    original = tmp_path_factory.mktemp("original")
     ac = Arctic(f"lmdb://{original}?map_size=500KB")
     ac.create_library("lib")
     lib = ac["lib"]
@@ -106,7 +107,7 @@ def test_move_lmdb_library_map_size_increase(tmpdir_factory):
     del ac
 
     # When - we move the data
-    dest = str(tmpdir_factory.mktemp("dest"))
+    dest = str(tmp_path_factory.mktemp("dest"))
     shutil.move(str(original / "_arctic_cfg"), dest)
     shutil.move(str(original / "lib"), dest)
 
@@ -122,7 +123,13 @@ def test_move_lmdb_library_map_size_increase(tmpdir_factory):
 
 def test_move_s3_library(moto_s3_endpoint_and_credentials):
     # Given - any S3 library
-    endpoint, port, bucket, aws_access_key, aws_secret_key = moto_s3_endpoint_and_credentials
+    (
+        endpoint,
+        port,
+        bucket,
+        aws_access_key,
+        aws_secret_key,
+    ) = moto_s3_endpoint_and_credentials
 
     original_uri = (
         endpoint.replace("http://", "s3://").rsplit(":", 1)[0]
@@ -155,7 +162,10 @@ def test_move_s3_library(moto_s3_endpoint_and_credentials):
     client.create_bucket(Bucket=new_bucket)
 
     s3 = boto3.resource(
-        service_name="s3", endpoint_url=endpoint, aws_access_key_id=aws_access_key, aws_secret_access_key=aws_secret_key
+        service_name="s3",
+        endpoint_url=endpoint,
+        aws_access_key_id=aws_access_key,
+        aws_secret_access_key=aws_secret_key,
     )
     source = s3.Bucket(bucket)
     dest = s3.Bucket(new_bucket)
@@ -173,7 +183,7 @@ def test_move_s3_library(moto_s3_endpoint_and_credentials):
     assert "dest" in lib.read("sym").host
 
 
-@pytest.mark.skipif(sys.platform == "darwin", reason="Test broken on MacOS (issue #909)")
+@AZURE_TESTS_MARK
 def test_move_azure_library(azure_client_and_create_container, azurite_azure_uri, azurite_container):
     # Given - any Azure library
     original_uri = azurite_azure_uri
