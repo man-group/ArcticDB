@@ -37,9 +37,6 @@ class Loggers : public std::enable_shared_from_this<Loggers> {
     Loggers();
     ~Loggers();
 
-    static std::shared_ptr<Loggers> instance_;
-    static std::once_flag init_flag_;
-
     static void init();
     static std::shared_ptr<Loggers> instance();
     static void destroy_instance();

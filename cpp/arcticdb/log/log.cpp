@@ -32,7 +32,6 @@ namespace arcticdb::log {
 
 static const char* DefaultLogPattern = "%Y%m%d %H:%M:%S.%f %t %L %n | %v";
 
-
 struct Loggers::Impl
 {
 
@@ -192,22 +191,23 @@ void Loggers::flush_all() {
 }
 
 
+static std::shared_ptr<Loggers> loggers_instance_;
+static std::once_flag loggers_init_flag_;
+
+
 std::shared_ptr<Loggers> Loggers::instance() {
-    std::call_once(Loggers::init_flag_, &Loggers::init);
-    return instance_;
+    std::call_once(loggers_init_flag_, &Loggers::init);
+    return loggers_instance_;
 }
 
 void Loggers::destroy_instance() {
-    Loggers::instance_.reset();
+    loggers_instance_.reset();
 }
 
 void Loggers::init() {
-    Loggers::instance_ = std::make_shared<Loggers>();
+    loggers_instance_ = std::make_shared<Loggers>();
 }
 
-
-std::shared_ptr<Loggers> Loggers::instance_;
-std::once_flag Loggers::init_flag_;
 
 namespace {
 std::string make_parent_dir(const std::string &p_str, std::string_view def_p_str) {
