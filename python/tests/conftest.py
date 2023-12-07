@@ -102,12 +102,17 @@ def s3_storage(s3_storage_factory):
 
 @pytest.fixture(scope="session")
 def real_s3_storage_factory():
-    return real_s3_from_environment_variables()
+    return real_s3_from_environment_variables(shared_path=False)
 
 
 @pytest.fixture(scope="session")
-def real_s3_storage_without_clean_up(real_s3_storage_factory):
-    return real_s3_storage_factory.create_fixture()
+def real_s3_shared_path_storage_factory():
+    return real_s3_from_environment_variables(shared_path=True)
+
+
+@pytest.fixture(scope="session")
+def real_s3_storage_without_clean_up(real_s3_shared_path_storage_factory):
+    return real_s3_shared_path_storage_factory.create_fixture()
 
 
 @pytest.fixture
