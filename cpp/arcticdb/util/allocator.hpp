@@ -7,16 +7,12 @@
 
 #pragma once
 
-#include <arcticdb/log/log.hpp>
 #include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/util/memory_tracing.hpp>
 #include <arcticdb/util/clock.hpp>
-#include <folly/concurrency/ConcurrentHashMap.h>
 #include <arcticdb/util/configs_map.hpp>
 #include <folly/ThreadCachedInt.h>
 
 
-#include <mutex>
 #include <memory>
 
 // for malloc_trim on linux
@@ -48,61 +44,27 @@ static const char *ArcticNativeShmemName = "arctic_native_temp";
 typedef std::pair<uintptr_t, entity::timestamp> AddrIdentifier;
 
 struct TracingData {
-    TracingData() : total_allocs_(0),  total_irregular_allocs_(0), total_allocs_calls_(0){}
+    TracingData();
+    ~TracingData();
+
     static std::shared_ptr<TracingData> instance_;
     static std::once_flag init_flag_;
     static std::shared_ptr<TracingData> instance();
     static void destroy_instance();
     static void init();
 
-    folly::ConcurrentHashMap<AddrIdentifier, size_t> allocs_;
-    std::atomic<uint64_t> total_allocs_;
-    std::atomic<uint64_t> total_irregular_allocs_;
-    std::atomic<uint64_t> total_allocs_calls_;
+    void track_alloc(AddrIdentifier addr_ts, size_t size);
+    void track_free(AddrIdentifier addr_ts);
+    void track_realloc(AddrIdentifier old_addr, AddrIdentifier new_addr, size_t size);
+    size_t total_bytes() const;
+    bool all_freed() const;
 
-    void track_alloc(AddrIdentifier addr_ts, size_t size) {
-        //util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
-        allocs_.insert(std::make_pair(addr_ts, size));
-        total_allocs_ += size;
-        total_allocs_calls_++;
-        if (size != page_size) {
-            total_irregular_allocs_++;
-        }
-        ARCTICDB_TRACE(log::codec(), "Allocated {} to {}:{}, total allocation size {}, total irregular allocs {}/{}",
-                            util::MemBytes{size},
-                            addr_ts.first,
-                            addr_ts.second,
-                            util::MemBytes{total_allocs_},
-                            total_irregular_allocs_,
-                            total_allocs_calls_);
+    void clear();
 
-    }
-
-    void track_free(AddrIdentifier addr_ts) {
-//        util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
-        auto it = allocs_.find(addr_ts);
-        util::check(it != allocs_.end(), "Unrecognized address in free {}:{}", addr_ts.first, addr_ts.second);
-        util::check(total_allocs_ >= it->second,
-                    "Request to free {}  from {}:{} when only {} remain",
-                    it->second,
-                    addr_ts.first,
-                    addr_ts.second,
-                    total_allocs_.load());
-        total_allocs_ -= it->second;
-        ARCTICDB_TRACE(log::codec(), "Freed {} at {}:{}, total allocation {}",
-                            util::MemBytes{it->second},
-                            addr_ts.first,
-                            addr_ts.second,
-                            util::MemBytes{total_allocs_.load()});
-        allocs_.erase(it);
-    }
-
-    void track_realloc(AddrIdentifier old_addr, AddrIdentifier new_addr, size_t size) {
-        if (old_addr.first != 0)
-            track_free(old_addr);
-
-        track_alloc(new_addr, size);
-    }
+private:
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
+    friend class InMemoryTracingPolicy;
 };
 
 class InMemoryTracingPolicy {
@@ -111,40 +73,15 @@ class InMemoryTracingPolicy {
     }
 
 public:
-    static void track_alloc(AddrIdentifier addr, size_t size) {
-        data().track_alloc(addr, size);
-    }
+    static void track_alloc(AddrIdentifier addr, size_t size);
+    static void track_free(AddrIdentifier addr);
+    static void track_realloc(AddrIdentifier old_addr, AddrIdentifier new_addr, size_t size);
 
-    static void track_free(AddrIdentifier addr) {
-        data().track_free(addr);
-    }
+    static size_t total_bytes();
 
-    static void track_realloc(AddrIdentifier old_addr, AddrIdentifier new_addr, size_t size) {
-        data().track_realloc(old_addr, new_addr, size);
-    }
+    static bool deallocated();
 
-    static size_t total_bytes() {
-        return data().total_allocs_;
-    }
-
-    static bool deallocated() {
-        auto &get_data = data();
-        bool all_freed = get_data.allocs_.empty() && data().total_allocs_ == 0;
-        if (!all_freed) {
-            log::memory().warn("Allocator has not freed all data, {} bytes counted", get_data.total_allocs_);
-
-            for (auto alloc : get_data.allocs_)
-                log::memory().warn("Unfreed allocation: {}", uintptr_t(alloc.first.first));
-        }
-        return get_data.allocs_.empty() && data().total_allocs_ == 0;
-    }
-
-    static void clear() {
-        data().total_allocs_ = 0;
-        data().total_irregular_allocs_ = 0;
-        data().total_allocs_calls_ = 0;
-        data().allocs_.clear();
-    }
+    static void clear();
 };
 
 class NullTracingPolicy {
