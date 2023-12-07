@@ -88,7 +88,6 @@ def test_hypothesis_mean_agg(lmdb_version_store, df):
         index=range_indexes(),
     )
 )
-@pytest.mark.xfail(reason="Needs to be fixed by issue #496")
 def test_hypothesis_sum_agg(lmdb_version_store, df):
     lib = lmdb_version_store
     assume(not df.empty)
