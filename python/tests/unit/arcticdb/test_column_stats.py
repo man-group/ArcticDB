@@ -39,9 +39,9 @@ def assert_stats_equal(received, expected):
     pd.testing.assert_index_equal(received.index, expected.index)
 
 
-def test_column_stats_basic_flow(lmdb_version_store_tiny_segment):
+def test_basic_flow(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
-    sym = "test_column_stats_basic_flow"
+    sym = "test_basic_flow"
     expected_column_stats = generate_symbol(lib, sym)
     expected_column_stats.drop(
         expected_column_stats.columns.difference(["start_index", "end_index", "v1.0_MIN(col_1)", "v1.0_MAX(col_1)"]),
@@ -68,9 +68,9 @@ def test_column_stats_basic_flow(lmdb_version_store_tiny_segment):
         lib.read_column_stats(sym)
 
 
-def test_column_stats_infinity(lmdb_version_store_tiny_segment):
+def test_infinity(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
-    sym = "test_column_stats_infinity"
+    sym = "test_infinity"
     df0 = pd.DataFrame({"col_1": [np.inf, 0.5]}, index=pd.date_range("2000-01-01", periods=2))
     df1 = pd.DataFrame({"col_1": [1.5, -np.inf]}, index=pd.date_range("2000-01-03", periods=2))
     df2 = pd.DataFrame({"col_1": [np.inf, -np.inf]}, index=pd.date_range("2000-01-05", periods=2))
@@ -94,9 +94,9 @@ def test_column_stats_infinity(lmdb_version_store_tiny_segment):
     assert_stats_equal(column_stats, expected_column_stats)
 
 
-def test_column_stats_as_of(lmdb_version_store_tiny_segment):
+def test_as_of(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
-    sym = "test_column_stats_as_of"
+    sym = "test_as_of"
     expected_column_stats = generate_symbol(lib, sym)
     expected_column_stats = expected_column_stats.iloc[[0]]
     expected_column_stats.drop(
@@ -122,9 +122,9 @@ def test_column_stats_as_of(lmdb_version_store_tiny_segment):
         lib.read_column_stats(sym, as_of=0)
 
 
-def test_column_stats_as_of_version_doesnt_exist(lmdb_version_store_tiny_segment):
+def test_as_of_version_doesnt_exist(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
-    sym = "test_column_stats_as_of_version_doesnt_exist"
+    sym = "test_as_of_version_doesnt_exist"
     generate_symbol(lib, sym)
 
     lib.delete_version(sym, 0)
@@ -139,9 +139,9 @@ def test_column_stats_as_of_version_doesnt_exist(lmdb_version_store_tiny_segment
 
 
 # TODO: When more than one column stat type is implemented, change this to add multiple indexes across multiple columns
-def test_column_stats_multiple_indexes_different_columns(lmdb_version_store_tiny_segment):
+def test_multiple_indexes_different_columns(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
-    sym = "test_column_stats_multiple_indexes"
+    sym = "test_multiple_indexes"
     expected_column_stats = generate_symbol(lib, sym)
 
     column_stats_dict = {"col_1": {"MINMAX"}, "col_2": {"MINMAX"}}
@@ -163,9 +163,9 @@ def test_column_stats_multiple_indexes_different_columns(lmdb_version_store_tiny
     assert_stats_equal(column_stats, expected_column_stats)
 
 
-def test_column_stats_empty_dict(lmdb_version_store_tiny_segment):
+def test_empty_dict(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
-    sym = "test_column_stats_empty_dict"
+    sym = "test_empty_dict"
     expected_column_stats = generate_symbol(lib, sym)
 
     column_stats_empty_dict = dict()
@@ -182,9 +182,9 @@ def test_column_stats_empty_dict(lmdb_version_store_tiny_segment):
     assert_stats_equal(lib.read_column_stats(sym), expected_column_stats)
 
 
-def test_column_stats_empty_set(lmdb_version_store_tiny_segment):
+def test_empty_set(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
-    sym = "test_column_stats_empty_set"
+    sym = "test_empty_set"
     expected_column_stats = generate_symbol(lib, sym)
 
     column_stats_empty_set = {"col_1": set()}
@@ -201,9 +201,9 @@ def test_column_stats_empty_set(lmdb_version_store_tiny_segment):
     assert_stats_equal(lib.read_column_stats(sym), expected_column_stats)
 
 
-def test_column_stats_non_existent_column(lmdb_version_store_tiny_segment):
+def test_non_existent_column(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
-    sym = "test_column_stats_non_existent_column"
+    sym = "test_non_existent_column"
     expected_column_stats = generate_symbol(lib, sym)
 
     column_stats_non_existent_column = {"non_existent_column": {"MINMAX"}}
@@ -217,9 +217,9 @@ def test_column_stats_non_existent_column(lmdb_version_store_tiny_segment):
     assert_stats_equal(lib.read_column_stats(sym), expected_column_stats)
 
 
-def test_column_stats_non_existent_stat_type(lmdb_version_store_tiny_segment):
+def test_non_existent_stat_type(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
-    sym = "test_column_stats_non_existent_stat_type"
+    sym = "test_non_existent_stat_type"
     expected_column_stats = generate_symbol(lib, sym)
 
     column_stats_non_existent_index_type = {"col_1": {"NON_EXISTENT_INDEX_TYPE"}}
@@ -234,9 +234,9 @@ def test_column_stats_non_existent_stat_type(lmdb_version_store_tiny_segment):
     assert_stats_equal(lib.read_column_stats(sym), expected_column_stats)
 
 
-def test_column_stats_pickled_symbol(lmdb_version_store_tiny_segment):
+def test_pickled_symbol(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
-    sym = "test_column_stats_pickled_symbol"
+    sym = "test_pickled_symbol"
     lib.write(sym, 1)
     assert lib.is_symbol_pickled(sym)
 
@@ -245,9 +245,9 @@ def test_column_stats_pickled_symbol(lmdb_version_store_tiny_segment):
         lib.create_column_stats(sym, column_stats_dict)
 
 
-def test_column_stats_multiple_creates(lmdb_version_store_tiny_segment):
+def test_multiple_creates(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
-    sym = "test_column_stats_multiple_creates"
+    sym = "test_multiple_creates"
     base_expected_column_stats = generate_symbol(lib, sym)
 
     column_stats_dict_1 = {"col_1": {"MINMAX"}}
@@ -279,9 +279,9 @@ def test_column_stats_multiple_creates(lmdb_version_store_tiny_segment):
     assert_stats_equal(column_stats, base_expected_column_stats)
 
 
-def test_column_stats_string_column_minmax(lmdb_version_store_tiny_segment):
+def test_string_column_minmax(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
-    sym = "test_column_stats_string_column_minmax"
+    sym = "test_string_column_minmax"
     generate_symbol(lib, sym)
 
     column_stats_dict = {"col_0": {"MINMAX"}}
@@ -289,9 +289,9 @@ def test_column_stats_string_column_minmax(lmdb_version_store_tiny_segment):
         lib.create_column_stats(sym, column_stats_dict)
 
 
-def test_column_stats_duplicated_primary_index(lmdb_version_store_tiny_segment):
+def test_duplicated_primary_index(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
-    sym = "test_column_stats_duplicated_primary_index"
+    sym = "test_duplicated_primary_index"
 
     total_df = pd.concat((df0, df1))
     lib.write(sym, total_df)
@@ -313,9 +313,9 @@ def test_column_stats_duplicated_primary_index(lmdb_version_store_tiny_segment):
     assert_stats_equal(column_stats, expected_column_stats)
 
 
-def test_column_stats_dynamic_schema_missing_data(lmdb_version_store_tiny_segment_dynamic):
+def test_dynamic_schema_missing_data(lmdb_version_store_tiny_segment_dynamic):
     lib = lmdb_version_store_tiny_segment_dynamic
-    sym = "test_column_stats_dynamic_schema_missing_data"
+    sym = "test_dynamic_schema_missing_data"
 
     df0 = pd.DataFrame({"col_1": [0.1, 0.2], "col_2": [0.3, 0.4]}, index=pd.date_range("2000-01-01", periods=2))
     df1 = pd.DataFrame({"col_2": [0.5, 0.6]}, index=pd.date_range("2000-01-03", periods=2))
@@ -376,9 +376,9 @@ def test_column_stats_dynamic_schema_missing_data(lmdb_version_store_tiny_segmen
     assert_stats_equal(column_stats, expected_column_stats)
 
 
-def test_column_stats_dynamic_schema_types_changing(lmdb_version_store_tiny_segment_dynamic):
+def test_dynamic_schema_types_changing(lmdb_version_store_tiny_segment_dynamic):
     lib = lmdb_version_store_tiny_segment_dynamic
-    sym = "test_column_stats_dynamic_schema_types_changing"
+    sym = "test_dynamic_schema_types_changing"
 
     df0 = pd.DataFrame(
         {
@@ -475,7 +475,7 @@ def test_column_stats_dynamic_schema_types_changing(lmdb_version_store_tiny_segm
     assert column_stats.dtypes["v1.0_MAX(float_to_int)"] == np.float64
 
 
-def test_column_stats_object_deleted_with_index_key(lmdb_version_store):
+def test_object_deleted_with_index_key(lmdb_version_store):
     def clear():
         nonlocal expected_count
         lib.version_store.clear()
@@ -584,7 +584,7 @@ def test_column_stats_object_deleted_with_index_key(lmdb_version_store):
 
     lib = lmdb_version_store
     lib_tool = lib.library_tool()
-    sym = "test_column_stats_object_deleted_with_index_key"
+    sym = "test_object_deleted_with_index_key"
     column_stats_dict = {"col_1": {"MINMAX"}}
     expected_count = 0
 
@@ -603,11 +603,11 @@ def test_column_stats_object_deleted_with_index_key(lmdb_version_store):
 
 @pytest.mark.xfail(
     reason=(
-        "ArcticDB/issues/230 This test can be folded in with test_column_stats_object_deleted_with_index_key once the"
+        "ArcticDB/issues/230 This test can be folded in with test_object_deleted_with_index_key once the"
         " issue is resolved"
     )
 )
-def test_column_stats_object_deleted_with_index_key_batch_methods(lmdb_version_store):
+def test_xfail_object_deleted_with_index_key_batch_methods(lmdb_version_store):
     def clear():
         nonlocal expected_count
         lib.version_store.clear()
@@ -634,7 +634,7 @@ def test_column_stats_object_deleted_with_index_key_batch_methods(lmdb_version_s
 
     lib = lmdb_version_store
     lib_tool = lib.library_tool()
-    sym = "test_column_stats_object_deleted_with_index_key_batch_methods"
+    sym = "test_xfail_object_deleted_with_index_key_batch_methods"
     column_stats_dict = {"col_1": {"MINMAX"}}
     expected_count = 0
 
