@@ -27,10 +27,18 @@
 
 #include <memory>
 #include <mutex>
+#include <optional>
 
 namespace arcticdb::log {
 
 static const char* DefaultLogPattern = "%Y%m%d %H:%M:%S.%f %t %L %n | %v";
+
+
+namespace {
+    std::shared_ptr<Loggers> loggers_instance_;
+    std::once_flag loggers_init_flag_;
+}
+
 
 struct Loggers::Impl
 {
@@ -52,7 +60,14 @@ struct Loggers::Impl
     std::unique_ptr<spdlog::logger> symbol_;
     std::unique_ptr<spdlog::logger> snapshot_;
     std::shared_ptr<spdlog::details::thread_pool> thread_pool_;
-    std::unique_ptr<spdlog::details::periodic_worker> periodic_worker_;
+    std::optional<spdlog::details::periodic_worker> periodic_worker_;
+
+
+    void configure_logger(const arcticdb::proto::logger::LoggerConfig& conf,
+        const std::string& name,
+        std::unique_ptr<spdlog::logger>& logger);
+
+    spdlog::logger& logger_ref(std::unique_ptr<spdlog::logger>& src);
 };
 
 
@@ -61,51 +76,51 @@ constexpr auto get_default_log_level() {
 }
 
 spdlog::logger &storage() {
-    return Loggers::instance()->storage();
+    return Loggers::instance().storage();
 }
 
 spdlog::logger &inmem() {
-    return Loggers::instance()->inmem();
+    return Loggers::instance().inmem();
 }
 
 spdlog::logger &codec() {
-    return Loggers::instance()->codec();
+    return Loggers::instance().codec();
 }
 
 spdlog::logger &root() {
-    return Loggers::instance()->root();
+    return Loggers::instance().root();
 }
 
 spdlog::logger &memory() {
-    return Loggers::instance()->memory();
+    return Loggers::instance().memory();
 }
 
 spdlog::logger &version() {
-    return Loggers::instance()->version();
+    return Loggers::instance().version();
 }
 
 spdlog::logger &timings() {
-    return Loggers::instance()->timings();
+    return Loggers::instance().timings();
 }
 
 spdlog::logger &lock() {
-    return Loggers::instance()->lock();
+    return Loggers::instance().lock();
 }
 
 spdlog::logger &schedule() {
-    return Loggers::instance()->schedule();
+    return Loggers::instance().schedule();
 }
 
 spdlog::logger &message() {
-    return Loggers::instance()->message();
+    return Loggers::instance().message();
 }
 
 spdlog::logger &symbol() {
-    return Loggers::instance()->symbol();
+    return Loggers::instance().symbol();
 }
 
 spdlog::logger &snapshot() {
-    return Loggers::instance()->snapshot();
+    return Loggers::instance().snapshot();
 }
 
 namespace fs = std::filesystem;
@@ -120,59 +135,58 @@ Loggers::Loggers()
 
 Loggers::~Loggers() = default;
 
-spdlog::logger &Loggers::logger_ref(std::unique_ptr<spdlog::logger> &src) {
-    if (ARCTICDB_LIKELY(bool(src)))
-        return *src;
-
-    return *impl_->unconfigured_;
+Loggers& Loggers::instance()
+{
+    std::call_once(loggers_init_flag_, &Loggers::init);
+    return *loggers_instance_;
 }
 
 spdlog::logger &Loggers::storage() {
-    return logger_ref(impl_->storage_);
+    return impl_->logger_ref(impl_->storage_);
 }
 
 spdlog::logger &Loggers::inmem() {
-    return logger_ref(impl_->inmem_);
+    return impl_->logger_ref(impl_->inmem_);
 }
 
 spdlog::logger &Loggers::codec() {
-    return logger_ref(impl_->codec_);
+    return impl_->logger_ref(impl_->codec_);
 }
 
 spdlog::logger &Loggers::version() {
-    return logger_ref(impl_->version_);
+    return impl_->logger_ref(impl_->version_);
 }
 
 spdlog::logger &Loggers::memory() {
-    return logger_ref(impl_->memory_);
+    return impl_->logger_ref(impl_->memory_);
 }
 
 spdlog::logger &Loggers::timings() {
-    return logger_ref(impl_->timings_);
+    return impl_->logger_ref(impl_->timings_);
 }
 
 spdlog::logger &Loggers::lock() {
-    return logger_ref(impl_->lock_);
+    return impl_->logger_ref(impl_->lock_);
 }
 
 spdlog::logger &Loggers::schedule() {
-    return logger_ref(impl_->schedule_);
+    return impl_->logger_ref(impl_->schedule_);
 }
 
 spdlog::logger &Loggers::message() {
-    return logger_ref(impl_->message_);
+    return impl_->logger_ref(impl_->message_);
 }
 
 spdlog::logger &Loggers::symbol() {
-    return logger_ref(impl_->symbol_);
+    return impl_->logger_ref(impl_->symbol_);
 }
 
 spdlog::logger &Loggers::snapshot() {
-    return logger_ref(impl_->snapshot_);
+    return impl_->logger_ref(impl_->snapshot_);
 }
 
 spdlog::logger &Loggers::root() {
-    return logger_ref(impl_->root_);
+    return impl_->logger_ref(impl_->root_);
 }
 
 void Loggers::flush_all() {
@@ -190,15 +204,6 @@ void Loggers::flush_all() {
     snapshot().flush();
 }
 
-
-static std::shared_ptr<Loggers> loggers_instance_;
-static std::once_flag loggers_init_flag_;
-
-
-std::shared_ptr<Loggers> Loggers::instance() {
-    std::call_once(loggers_init_flag_, &Loggers::init);
-    return loggers_instance_;
-}
 
 void Loggers::destroy_instance() {
     loggers_instance_.reset();
@@ -223,6 +228,15 @@ std::string make_parent_dir(const std::string &p_str, std::string_view def_p_str
     return p.generic_string();
 }
 }
+
+spdlog::logger& Loggers::Impl::logger_ref(std::unique_ptr<spdlog::logger>& src) {
+    if (ARCTICDB_LIKELY(bool(src)))
+        return *src;
+
+    return *unconfigured_;
+}
+
+
 bool Loggers::configure(const arcticdb::proto::logger::LoggersConfig &conf, bool force) {
     auto lock = std::scoped_lock(impl_->config_mutex_);
     if (!force && impl_->root_)
@@ -281,15 +295,15 @@ bool Loggers::configure(const arcticdb::proto::logger::LoggersConfig &conf, bool
     auto check_and_configure = [&](
         const std::string &name,
         const std::string &fallback,
-        std::unique_ptr<spdlog::logger> &logger) {
+        auto &logger) {
         const auto& logger_by_id = conf.logger_by_id();
         if (auto it = logger_by_id.find(name); it != logger_by_id.end()) {
-            configure_logger(it->second, name, logger);
+            impl_->configure_logger(it->second, name, logger);
         } else {
             if (fallback.empty())
                 throw std::invalid_argument(fmt::format(
                     "missing conf for logger {} without fallback", name));
-            configure_logger(logger_by_id.find(fallback)->second, name, logger);
+            impl_->configure_logger(logger_by_id.find(fallback)->second, name, logger);
         }
     };
 
@@ -308,8 +322,8 @@ bool Loggers::configure(const arcticdb::proto::logger::LoggersConfig &conf, bool
 
 
     if (auto flush_sec = util::as_opt(conf.flush_interval_seconds()).value_or(1); flush_sec != 0) {
-        impl_->periodic_worker_ = std::make_unique<typename decltype(impl_->periodic_worker_)::element_type>(
-            [loggers = weak_from_this()]() {
+        impl_->periodic_worker_.emplace(
+            [loggers = std::weak_ptr(loggers_instance_)]() {
                 if (auto l = loggers.lock()) {
                     l->flush_all();
                 }
@@ -318,23 +332,24 @@ bool Loggers::configure(const arcticdb::proto::logger::LoggersConfig &conf, bool
     return true;
 }
 
-void Loggers::configure_logger(
+
+void Loggers::Impl::configure_logger(
         const arcticdb::proto::logger::LoggerConfig &conf,
         const std::string &name,
         std::unique_ptr<spdlog::logger> &logger) {
     std::vector<spdlog::sink_ptr> sink_ptrs;
     for (const auto& sink_id : conf.sink_ids()) {
-        if (auto it = impl_->sink_by_id_.find(sink_id); it != impl_->sink_by_id_.end()) {
+        if (auto it = sink_by_id_.find(sink_id); it != sink_by_id_.end()) {
             sink_ptrs.push_back(it->second);
         } else {
             throw std::invalid_argument(fmt::format("invalid sink_id {} for logger {}", sink_id, name));
         }
     }
     auto fq_name = fmt::format("arcticdb.{}", name);
-    if (impl_->thread_pool_) {
+    if (thread_pool_) {
         // async logger
         logger = std::make_unique<spdlog::async_logger>(fq_name, sink_ptrs.begin(), sink_ptrs.end(),
-            impl_->thread_pool_, spdlog::async_overflow_policy::block);
+            thread_pool_, spdlog::async_overflow_policy::block);
     } else {
         logger = std::make_unique<spdlog::logger>(fq_name, sink_ptrs.begin(), sink_ptrs.end());
     }

@@ -62,7 +62,7 @@ void register_log(py::module && log) {
     log.def("configure", [](const py::object & py_log_conf, bool force=false){
         arcticdb::proto::logger::LoggersConfig config;
         arcticdb::python_util::pb_from_python(py_log_conf, config);
-        return arcticdb::log::Loggers::instance()->configure(config, force);
+        return arcticdb::log::Loggers::instance().configure(config, force);
     }, py::arg("py_log_conf"), py::arg("force")=false);
 
      py::enum_<spdlog::level::level_enum>(log, "LogLevel")
@@ -142,7 +142,7 @@ void register_log(py::module && log) {
     });
 
     log.def("flush_all", [](){
-        arcticdb::log::Loggers::instance()->flush_all();
+        arcticdb::log::Loggers::instance().flush_all();
     });
 }
 

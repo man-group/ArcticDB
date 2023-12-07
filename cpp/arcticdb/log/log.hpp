@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <memory>
 
 #include <spdlog/spdlog.h>
 
@@ -32,13 +33,13 @@ namespace arcticdb::proto {
 }
 
 namespace arcticdb::log {
-class Loggers : public std::enable_shared_from_this<Loggers> {
+class Loggers {
   public:
     Loggers();
     ~Loggers();
 
     static void init();
-    static std::shared_ptr<Loggers> instance();
+    static Loggers& instance();
     static void destroy_instance();
 
     /**
@@ -66,19 +67,13 @@ class Loggers : public std::enable_shared_from_this<Loggers> {
 
   private:
 
-    void configure_logger(const arcticdb::proto::logger::LoggerConfig &conf,
-                          const std::string &name,
-                          std::unique_ptr<spdlog::logger> &logger);
-
-    spdlog::logger &logger_ref(std::unique_ptr<spdlog::logger> &src);
 
     struct Impl;
     std::unique_ptr<Impl> impl_;
 
 };
 
-// N.B. If you add a new logger type here you need to add it to the dict of python loggers
-// in log.py
+
 spdlog::logger &storage();
 spdlog::logger &inmem();
 spdlog::logger &codec();

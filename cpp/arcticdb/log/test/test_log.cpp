@@ -38,7 +38,7 @@ logger_by_id {
     )pb";
     arcticdb::proto::logger::LoggersConfig cfg;
     google::protobuf::TextFormat::ParseFromString(txt_conf, &cfg);
-    arcticdb::log::Loggers::instance()->configure(cfg);
+    arcticdb::log::Loggers::instance().configure(cfg);
     arcticdb::log::root().info("Some msg");
 }
 
