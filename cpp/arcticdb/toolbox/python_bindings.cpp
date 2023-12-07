@@ -24,11 +24,6 @@ void register_bindings(py::module &m) {
     using namespace arcticdb::storage;
 
     tools.def("print_mem_usage", &util::print_total_mem_usage);
-#ifdef WIN32
-    // Manipulates the _environ in our statically linked msvcrt
-    tools.def("putenv_s", &::_putenv_s);
-#endif
-
 
     py::class_<LibraryTool, std::shared_ptr<LibraryTool>>(tools, "LibraryTool")
             .def(py::init<>([](std::shared_ptr<Library> lib) {

@@ -7,28 +7,48 @@ echo Saving results to ${TEST_OUTPUT_DIR:="$(realpath "$tooling_dir/../cpp/out")
 
 [[ -e ${PARALLEL_TEST_ROOT:=/tmp/parallel_test} ]] && rm -rf $PARALLEL_TEST_ROOT
 
-if [[ -n "${ARCTICDB_PERSISTENT_STORAGE_TESTS}" ]]; then
-  # We want to run the pytests sequentially to avoid races
-  splits=1
-elif [[ -n "$TEST_PARALLELISM" ]]; then
-  splits=${TEST_PARALLELISM}}
+# If the persistent storage tests are not enabled, we want to parallelise the pytests
+if [[ -z "${ARCTICDB_PERSISTENT_STORAGE_TESTS}" ]]; then
+  splits=${TEST_PARALLELISM:-${CMAKE_BUILD_PARALLEL_LEVEL:-`nproc || echo 2`}}
 else
-  cpus=${CMAKE_BUILD_PARALLEL_LEVEL:-`nproc || echo 2`}
-  splits=$(($cpus * 15 / 10))
+# If they are enabled, we want to run the pytests sequentially to avoid races
+  splits=1
 fi
 
 catch=`{ which catchsegv 2>/dev/null || echo ; } | tail -n 1`
 
+function worker() {
+    group=${1:?Must pass the group id argument}
+    shift
+    duration_file="$TEST_OUTPUT_DIR/pytest-durations.$group.json"
+    new_root=$PARALLEL_TEST_ROOT/$group
     set -o xtrace -o pipefail
 
+    cp "$tooling_dir/pytest-durations.json" "$duration_file"
+
     # Build a directory that's just the test assets, so can't access other Python source not in the wheel
-    mkdir -p $PARALLEL_TEST_ROOT
-    MSYS=winsymlinks:nativestrict ln -s "$(realpath "$tooling_dir/../python/tests")" $PARALLEL_TEST_ROOT/
-    cd $PARALLEL_TEST_ROOT
+    # Each test also get a separate directory since there's a mystery lock somewhere preventing concurrent runs (even)
+    # from different Python processes
+    mkdir -p $new_root
+    MSYS=winsymlinks:nativestrict ln -s "$(realpath "$tooling_dir/../python/tests")" $new_root/
+    cd $new_root
 
     export ARCTICDB_RAND_SEED=$RANDOM
-
-    $catch python -m pytest -n $splits -v --log-file="$TEST_OUTPUT_DIR/pytest-logger.$group.log" \
+    $catch python -m pytest -v -n $PYTEST_THREADS --show-capture=no --log-file="$TEST_OUTPUT_DIR/pytest-logger.$group.log" \
         --junitxml="$TEST_OUTPUT_DIR/pytest.$group.xml" \
-        --basetemp="$PARALLEL_TEST_ROOT/temp-pytest-output" \
-        "$@" 2>&1 | sed -ur "s#^(tests/.*/([^/]+\.py))?#\2#"
+        --splits $splits --group $group --durations-path="$duration_file" --store-durations \
+        --basetemp="$new_root/temp-pytest-output" \
+        "$@" 2>&1 | sed -ur "s#^(tests/.*/([^/]+\.py))?#$group: \2#"
+}
+
+for i in `seq $splits` ; do
+    worker $i "$@" &
+    pids[$i]=$!
+done
+
+err=0
+for pid in ${pids[*]} ; do
+    wait $pid || err=$?
+done
+
+exit $err

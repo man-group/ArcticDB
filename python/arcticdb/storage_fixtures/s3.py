@@ -6,7 +6,6 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-import logging
 import multiprocessing
 import json
 import os
@@ -23,8 +22,6 @@ from arcticdb.version_store.helper import add_s3_library_to_env
 
 Key = NamedTuple("Key", [("id", str), ("secret", str), ("user_name", str)])
 _PermissionCapableFactory: Type["MotoS3StorageFixtureFactory"] = None  # To be set later
-
-logging.getLogger("botocore").setLevel(logging.INFO)
 
 
 class S3Bucket(StorageFixture):

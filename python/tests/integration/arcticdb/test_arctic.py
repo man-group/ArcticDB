@@ -5,8 +5,8 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
-
 import sys
+import time
 import pytz
 import math
 import re
@@ -14,6 +14,7 @@ import pytest
 import pandas as pd
 import numpy as np
 from datetime import datetime, timezone
+from botocore.client import BaseClient as BotoClient
 
 from arcticdb_ext.exceptions import InternalException, UserInputException
 from arcticdb_ext.storage import NoDataFoundException
@@ -23,10 +24,7 @@ from arcticdb.options import LibraryOptions
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb import QueryBuilder
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
-from arcticdb.storage_fixtures.api import StorageFixture, ArcticUriFields, StorageFixtureFactory
-from arcticdb.storage_fixtures.mongo import MongoDatabase
 from arcticdb.util.test import assert_frame_equal
-from arcticdb.storage_fixtures.s3 import S3Bucket
 from arcticdb.version_store.library import (
     WritePayload,
     ArcticUnsupportedDataTypeException,
@@ -35,7 +33,7 @@ from arcticdb.version_store.library import (
     ArcticInvalidApiUsageException,
 )
 
-from tests.util.mark import AZURE_TESTS_MARK, MONGO_TESTS_MARK, REAL_S3_TESTS_MARK
+from tests.util.mark import AZURE_TESTS_MARK, MONGO_TESTS_MARK
 
 
 def test_library_creation_deletion(arctic_client):
@@ -47,11 +45,7 @@ def test_library_creation_deletion(arctic_client):
 
     assert ac.list_libraries() == ["pytest_test_lib"]
     assert ac.has_library("pytest_test_lib")
-    if "mongo" in arctic_client.get_uri():
-        # The mongo fixture uses PrefixingLibraryAdapterDecorator which leaks in this one case
-        assert ac["pytest_test_lib"].name.endswith(".pytest_test_lib")
-    else:
-        assert ac["pytest_test_lib"].name == "pytest_test_lib"
+    assert ac["pytest_test_lib"].name == "pytest_test_lib"
 
     ac.delete_library("pytest_test_lib")
     # Want this to be silent.
@@ -92,7 +86,7 @@ def test_get_library(arctic_client):
         _ = ac.get_library("pytest_test_lib", create_if_missing=False, library_options=library_options)
 
 
-def test_do_not_persist_s3_details(s3_storage):
+def test_do_not_persist_s3_details(moto_s3_endpoint_and_credentials):
     """We apply an in-memory overlay for these instead. In particular we should absolutely not persist credentials
     in the storage."""
 
@@ -103,8 +97,23 @@ def test_do_not_persist_s3_details(s3_storage):
         primary_any.config.Unpack(s3_config)
         return s3_config
 
-    ac = Arctic(s3_storage.arctic_uri)
-    lib = ac.create_library("test")
+    endpoint, port, bucket, aws_access_key, aws_secret_key = moto_s3_endpoint_and_credentials
+    uri = (
+        endpoint.replace("http://", "s3://").rsplit(":", 1)[0]
+        + ":"
+        + bucket
+        + "?access="
+        + aws_access_key
+        + "&secret="
+        + aws_secret_key
+        + "&port="
+        + port
+    )
+
+    ac = Arctic(uri)
+    ac.create_library("test")
+
+    lib = ac["test"]
     lib.write("sym", pd.DataFrame())
 
     config = ac._library_manager.get_library_config("test")
@@ -174,32 +183,36 @@ def test_separation_between_libraries(arctic_client):
     assert ac["pytest_test_lib_2"].list_symbols() == ["test_2"]
 
 
-def add_path_prefix(uri, prefix):
+def get_path_prefix_option(uri):
     if "azure" in uri:  # azure connection string has a different format
-        return f"{uri};Path_prefix={prefix}"
+        return ";Path_prefix"
     else:
-        return f"{uri}&path_prefix={prefix}"
+        return "&path_prefix"
 
 
-@pytest.mark.parametrize(
-    "fixture",
-    [
-        "s3_storage",
-        pytest.param("azurite_storage", marks=AZURE_TESTS_MARK),
-        pytest.param("real_s3_storage", marks=REAL_S3_TESTS_MARK),
-    ],
-)
-def test_separation_between_libraries_with_prefixes(fixture, request):
+def test_separation_between_libraries_with_prefixes(object_storage_uri_incl_bucket):
     """The motivation for the prefix feature is that separate users want to be able to create libraries
     with the same name in the same bucket without over-writing each other's work. This can be useful when
     creating a new bucket is time-consuming, for example due to organizational issues.
     """
-    storage_fixture: StorageFixture = request.getfixturevalue(fixture)
+    if "mongo" in object_storage_uri_incl_bucket:
+        pytest.skip("Mongo doesn't support path_prefix")
 
-    mercury_uri = add_path_prefix(storage_fixture.arctic_uri, "/planet/mercury")
+    option = get_path_prefix_option(object_storage_uri_incl_bucket)
+    if option not in object_storage_uri_incl_bucket:
+        mercury_uri = f"{object_storage_uri_incl_bucket}{option}=/planet_mercury"
+    else:
+        # if we have a path_prefix, we assume that it is at the end and we simply append to it
+        mercury_uri = f"{object_storage_uri_incl_bucket}/planet_mercury"
+
     ac_mercury = Arctic(mercury_uri)
 
-    mars_uri = add_path_prefix(storage_fixture.arctic_uri, "/planet/mars")
+    if option not in object_storage_uri_incl_bucket:
+        mars_uri = f"{object_storage_uri_incl_bucket}{option}=/planet_mars"
+    else:
+        # if we have a path_prefix, we assume that it is at the end and we simply append to it
+        mars_uri = f"{object_storage_uri_incl_bucket}/planet_mars"
+
     ac_mars = Arctic(mars_uri)
 
     assert ac_mars.list_libraries() == []
@@ -223,11 +236,27 @@ def test_separation_between_libraries_with_prefixes(fixture, request):
     ac_mars.delete_library("pytest_test_lib_2")
 
 
-@pytest.mark.parametrize("fixture", ["s3_storage", pytest.param("azurite_storage", marks=AZURE_TESTS_MARK)])
-def test_library_management_path_prefix(fixture, request):
-    storage_fixture: StorageFixture = request.getfixturevalue(fixture)
-    uri = add_path_prefix(storage_fixture.arctic_uri, "hello/world")
-    ac = Arctic(uri)
+OBJECT_STORAGE_URI_AND_CLIENT = [
+    ("moto_s3_uri_incl_bucket", "boto_client"),
+    pytest.param("azurite_azure_uri_incl_bucket", "azure_client_and_create_container", marks=AZURE_TESTS_MARK),
+]
+
+
+@pytest.mark.parametrize("connection_string, client", OBJECT_STORAGE_URI_AND_CLIENT)
+def test_library_management_path_prefix(connection_string, client, request):
+    connection_string = request.getfixturevalue(request.getfixturevalue("connection_string"))
+    client = request.getfixturevalue(request.getfixturevalue("client"))
+
+    if isinstance(client, BotoClient):
+        test_bucket = sorted(client.list_buckets()["Buckets"], key=lambda bucket_meta: bucket_meta["CreationDate"])[-1][
+            "Name"
+        ]
+    else:
+        time.sleep(1)  # Azurite is slow....
+        test_bucket = list(client.list_containers())
+
+    URI = f"{connection_string}{get_path_prefix_option(connection_string)}=hello/world"
+    ac = Arctic(URI)
     assert ac.list_libraries() == []
 
     ac.create_library("pytest_test_lib")
@@ -240,7 +269,13 @@ def test_library_management_path_prefix(fixture, request):
     ac["pytest_test_lib"].snapshot("test_snapshot")
     assert ac["pytest_test_lib"].list_snapshots() == {"test_snapshot": None}
 
-    keys = list(storage_fixture.iter_underlying_object_names())
+    if isinstance(client, BotoClient):
+        keys = [d["Key"] for d in client.list_objects(Bucket=test_bucket)["Contents"]]
+    else:
+        REGEX = r".*Container=(?P<container>[^;]+).*"
+        match = re.match(REGEX, connection_string)
+        container = match.groupdict()["container"]
+        keys = [blob["name"] for blob in client.get_container_client(container).list_blobs()]
     assert all(k.startswith("hello/world") for k in keys)
     assert any(k.startswith("hello/world/_arctic_cfg") for k in keys)
     assert any(k.startswith("hello/world/pytest_test_lib") for k in keys)
@@ -521,43 +556,55 @@ def test_delete_date_range(arctic_library):
     assert lib["symbol"].version == 1
 
 
-def _test_mongo_repr_body(mongo_storage: MongoDatabase):
-    # The arctic_uri has the PrefixingLibraryAdapterDecorator logic in it, so use mongo_uri
-    ac = Arctic(f"{mongo_storage.mongo_uri}/?maxPoolSize=10")
-    assert repr(ac) == f"Arctic(config=mongodb(endpoint={mongo_storage.mongo_uri[len('mongodb://'):]}))"
+@MONGO_TESTS_MARK
+def test_mongo_construction_with_pymongo(mongo_test_uri):
+    uri = f"{mongo_test_uri}/?maxPoolSize=10&minPoolSize=100&serverSelectionTimeoutMS=1000"
+    ac = Arctic(uri)
+    assert repr(ac) == f"Arctic(config=mongodb(endpoint={mongo_test_uri[len('mongodb://'):]}))"
 
     # With pymongo, exception thrown in the uri_parser;
     with pytest.raises(UserInputException):
-        uri = f"{mongo_storage.mongo_uri}//"
-        Arctic(uri)
+        uri = f"{mongo_test_uri}//"
+        ac = Arctic(uri)
 
 
 @MONGO_TESTS_MARK
-def test_mongo_construction_with_pymongo(mongo_storage):
-    _test_mongo_repr_body(mongo_storage)
-
-
-@MONGO_TESTS_MARK
-def test_mongo_construction_no_pymongo(monkeypatch, mongo_storage: MongoDatabase):
+def test_mongo_construction_no_pymongo(monkeypatch, mongo_test_uri):
     import arcticdb.adapters.mongo_library_adapter
 
     monkeypatch.setattr(arcticdb.adapters.mongo_library_adapter, "_HAVE_PYMONGO", False)
 
-    _test_mongo_repr_body(mongo_storage)
+    uri = f"{mongo_test_uri}/?maxPoolSize=10&minPoolSize=100&serverSelectionTimeoutMS=1000"
+    ac = Arctic(uri)
+    assert repr(ac) == f"Arctic(config=mongodb(endpoint={mongo_test_uri[len('mongodb://'):]}))"
+
+    # Without pymongo, it gets thrown in the mongo C++ library
+    with pytest.raises(UserInputException):
+        uri = f"{mongo_test_uri}//"
+        ac = Arctic(uri)
 
 
-def test_s3_repr(s3_storage: S3Bucket, one_col_df):
-    ac = s3_storage.create_arctic()
+def test_s3_repr(moto_s3_uri_incl_bucket):
+    ac = Arctic(moto_s3_uri_incl_bucket)
+
     assert ac.list_libraries() == []
-    lib = ac.create_library("pytest_test_lib")
+    ac.create_library("pytest_test_lib")
 
-    http_endpoint = s3_storage.factory.endpoint
-    s3_endpoint = http_endpoint[http_endpoint.index("//") + 2 :]
-    config = f"S3(endpoint={s3_endpoint}, bucket={s3_storage.bucket})"
-    assert repr(lib) == f"Library(Arctic(config={config}), path=pytest_test_lib, storage=s3_storage)"
+    lib = ac["pytest_test_lib"]
+    s3_endpoint = moto_s3_uri_incl_bucket.split("//")[1].split(":")[0]
+    port = moto_s3_uri_incl_bucket.split("port=")[1]
+    s3_endpoint += f":{port}"
+    bucket = moto_s3_uri_incl_bucket.split(":")[-1].split("?")[0]
+    assert (
+        repr(lib) == "Library("
+        "Arctic("
+        "config=S3("
+        f"endpoint={s3_endpoint}, bucket={bucket})), path=pytest_test_lib, storage=s3_storage)"
+    )
 
-    written_vi = lib.write("my_symbol", one_col_df())
-    assert written_vi.host == config
+    df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
+    written_vi = lib.write("my_symbol", df)
+    assert re.match(r"S3\(endpoint=localhost:\d+, bucket=test_bucket_\d+\)", written_vi.host)
 
 
 class A:
@@ -997,21 +1044,41 @@ def test_segment_slicing(arctic_client):
     assert num_data_segments == math.ceil(rows / rows_per_segment) * math.ceil(columns / columns_per_segment)
 
 
-@pytest.mark.parametrize("fixture", ["s3_storage", pytest.param("azurite_storage", marks=AZURE_TESTS_MARK)])
-def test_reload_symbol_list(fixture, request):
-    storage_fixture: StorageFixture = request.getfixturevalue(fixture)
+@pytest.mark.parametrize("connection_string, client", OBJECT_STORAGE_URI_AND_CLIENT)
+def test_reload_symbol_list(connection_string, client, request):
+    connection_string = request.getfixturevalue(request.getfixturevalue("connection_string"))
+    client = request.getfixturevalue(request.getfixturevalue("client"))
 
     def get_symbol_list_keys():
-        keys = storage_fixture.iter_underlying_object_names()
+        if isinstance(client, BotoClient):
+            keys = [
+                d["Key"] for d in client.list_objects(Bucket=test_bucket)["Contents"] if d["Key"].startswith(lib_name)
+            ]
+        else:
+            time.sleep(1)  # Azurite is slow....
+            REGEX = r".*Container=(?P<container>[^;]+).*"
+            match = re.match(REGEX, connection_string)
+            container = match.groupdict()["container"]
+            keys = [
+                blob["name"]
+                for blob in client.get_container_client(container).list_blobs()
+                if blob["name"].startswith(lib_name)
+            ]
         symbol_list_keys = []
         for key in keys:
-            if key.startswith(lib_name):
-                path_components = key.split("/")
-                if path_components[1] == "sl":
-                    symbol_list_keys.append(path_components[2])
+            path_components = key.split("/")
+            if path_components[1] == "sl":
+                symbol_list_keys.append(path_components[2])
         return symbol_list_keys
 
-    ac = Arctic(storage_fixture.arctic_uri)
+    if isinstance(client, BotoClient):
+        test_bucket = sorted(client.list_buckets()["Buckets"], key=lambda bucket_meta: bucket_meta["CreationDate"])[-1][
+            "Name"
+        ]
+    else:
+        test_bucket = list(client.list_containers())
+
+    ac = Arctic(connection_string)
     assert ac.list_libraries() == []
 
     lib_name = "pytest_test_lib"
@@ -1032,45 +1099,38 @@ def test_reload_symbol_list(fixture, request):
     assert len(get_symbol_list_keys()) == 1
 
 
-@pytest.mark.parametrize(
-    "fixture",
-    [
-        "s3_storage",
-        pytest.param("azurite_storage", marks=AZURE_TESTS_MARK),
-        pytest.param("mongo_storage", marks=MONGO_TESTS_MARK),
-        pytest.param("real_s3_storage", marks=REAL_S3_TESTS_MARK),
-    ],
-)
-def test_get_uri(fixture, request):
-    storage_fixture: StorageFixture = request.getfixturevalue(fixture)
-    ac = storage_fixture.create_arctic()
-    assert ac.get_uri() == storage_fixture.arctic_uri
+def test_get_uri(object_storage_uri_incl_bucket):
+    ac = Arctic(object_storage_uri_incl_bucket)
+    assert ac.get_uri() == object_storage_uri_incl_bucket
 
 
-@AZURE_TESTS_MARK  # GH issue #1060
-def test_azure_no_ca_path(azurite_storage: StorageFixture):
-    uri = azurite_storage.replace_uri_field(azurite_storage.arctic_uri, ArcticUriFields.CA_PATH, "", start=1, end=3)
-    assert "CA_cert_path" not in uri
-    ac = Arctic(uri.rstrip(";"))
-    ac.create_library("x")
+def test_azure_no_ca_path(azurite_azure_test_connection_setting):
+    endpoint, container, credential_name, credential_key, _ = azurite_azure_test_connection_setting
+    Arctic(
+        f"azure://DefaultEndpointsProtocol=http;AccountName={credential_name};AccountKey={credential_key};BlobEndpoint={endpoint}/{credential_name};Container={container}"
+    )
 
 
 @AZURE_TESTS_MARK
-def test_azure_sas_token(azurite_storage_factory: StorageFixtureFactory):
-    with azurite_storage_factory.enforcing_permissions_context():
-        # In the Azurite fixture implementation, enforcing permissions requires using SAS
-        with azurite_storage_factory.create_fixture() as f:
-            assert "SharedAccessSignature" in f.arctic_uri
-            f.set_permission(read=True, write=True)
-            ac = f.create_arctic()
-            ac.create_library("x")
+def test_azure_sas_token(azure_account_sas_token, azurite_azure_test_connection_setting):
+    endpoint, container, credential_name, _, _ = azurite_azure_test_connection_setting
+    ac = Arctic(
+        f"azure://DefaultEndpointsProtocol=http;SharedAccessSignature={azure_account_sas_token};BlobEndpoint={endpoint}/{credential_name};Container={container}"
+    )
+    expected = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
+    sym = "test"
+    lib = "lib"
+    ac.create_library(lib)
+    ac[lib].write(sym, expected)
+    assert_frame_equal(expected, ac[lib].read(sym).data)
+
+    assert ac.list_libraries() == [lib]
 
 
-def test_s3_force_uri_lib_config_handling(s3_storage):
-    # force_uri_lib_config is a obsolete configuration. However, user still includes this option in their setup.
-    # For backward compatibility, we need to make sure such setup will still work
+def test_s3_force_uri_lib_config_handling(moto_s3_uri_incl_bucket):
+    # force_uri_lib_config is a obsolete configuration. However, user still includes this option in their setup. For backward compatitbility, we need to make sure such setup will still work
     # Why it becomes obsolete: https://github.com/man-group/ArcticDB/pull/803
-    Arctic(s3_storage.arctic_uri + "&force_uri_lib_config=true")
+    Arctic(f"{moto_s3_uri_incl_bucket}&force_uri_lib_config=true)")
 
     with pytest.raises(ValueError):
-        Arctic(s3_storage.arctic_uri + "&force_uri_lib_config=false")
+        Arctic(f"{moto_s3_uri_incl_bucket}&force_uri_lib_config=false)")

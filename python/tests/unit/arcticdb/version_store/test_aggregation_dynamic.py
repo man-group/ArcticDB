@@ -5,7 +5,6 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
-
 import uuid
 from hypothesis import assume, given, settings
 from hypothesis.extra.pandas import column, data_frames, range_indexes
@@ -27,7 +26,6 @@ from arcticdb.util.hypothesis import (
     numeric_type_strategies,
     string_strategy,
 )
-from tests.util.mark import MACOS_CONDA_BUILD
 
 
 def assert_equal_value(data, expected):
@@ -37,7 +35,6 @@ def assert_equal_value(data, expected):
     assert_frame_equal(received.astype("float"), expected)
 
 
-@pytest.mark.xfail(MACOS_CONDA_BUILD, reason="Conda Pandas returns nan instead of inf like other platforms")
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(

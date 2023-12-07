@@ -78,7 +78,7 @@ jobs:
           npm install -g azurite
           cd python
           export ARCTICDB_RAND_SEED=$RANDOM
-          python -m pytest -n ${{ steps.cpu-cores.outputs.count }} tests
+          python -m pytest tests
         env:
           ARCTICDB_USING_CONDA: 1
 
