@@ -529,7 +529,7 @@ public:
         column_unchecked(col).set_scalar(row, ofstr.offset());
     }
 
-    void set_no_string_at(position_t col, position_t row, OffsetString::offset_t placeholder) {
+    void set_no_string_at(position_t col, position_t row, position_t placeholder) {
         column_unchecked(col).set_scalar(row, placeholder);
     }
 

@@ -11,7 +11,7 @@
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/util/offset_string.hpp>
 
-#include <string>
+#include <string_view>
 
 namespace arcticdb {
 

@@ -16,7 +16,6 @@
 #include <arcticdb/util/bitset.hpp>
 #include <arcticdb/util/cursored_buffer.hpp>
 #include <arcticdb/util/flatten_utils.hpp>
-#include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/sparse_utils.hpp>
 
@@ -420,7 +419,7 @@ public:
 
     // The following two methods inflate (reduplicate) numpy string arrays that are potentially multi-dimensional,
     // i.e where the value is not a string but an array of strings
-    void inflate_string_array(const TensorType<OffsetString::offset_t> &string_refs,
+    void inflate_string_array(const TensorType<position_t> &string_refs,
                               CursoredBuffer<ChunkedBuffer> &data,
                               CursoredBuffer<Buffer> &shapes,
                               std::vector<position_t> &offsets,

@@ -387,7 +387,7 @@ void Column::set_shapes_buffer(size_t row_count) {
 // The following two methods inflate (reduplicate) numpy string arrays that are potentially multi-dimensional,
 // i.e where the value is not a string but an array of strings
 void Column::inflate_string_array(
-        const TensorType<OffsetString::offset_t> &string_refs,
+        const TensorType<position_t> &string_refs,
         CursoredBuffer<ChunkedBuffer> &data,
         CursoredBuffer<Buffer> &shapes,
         std::vector<position_t> &offsets,
@@ -421,7 +421,7 @@ void Column::inflate_string_arrays(const StringPool &string_pool) {
     CursoredBuffer<Buffer> shapes;
     std::vector<position_t> offsets;
     for (position_t row = 0; row < row_count(); ++row) {
-        auto string_refs = tensor_at<OffsetString::offset_t>(row).value();
+        auto string_refs = tensor_at<position_t>(row).value();
         inflate_string_array(string_refs, data, shapes, offsets, string_pool);
     }
 
