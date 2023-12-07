@@ -14,7 +14,6 @@ from typing import Optional, Any, Mapping
 from itertools import chain
 
 from .api import *
-from .utils import safer_rmtree
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 from arcticdb.version_store.helper import add_lmdb_library_to_env
 
@@ -47,7 +46,7 @@ class LmdbStorageFixture(StorageFixture):
             a._library_manager = None
             pass
 
-        safer_rmtree(self, self.db_dir)
+        shutil.rmtree(self.db_dir)
 
     def create_test_cfg(
         self, lib_name: str, *, lmdb_config: Mapping[str, Any] = _DEFAULT_CONFIG

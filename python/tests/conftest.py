@@ -13,7 +13,6 @@ import pytest
 import numpy as np
 import pandas as pd
 import random
-import re
 from datetime import datetime
 
 from arcticdb.storage_fixtures.api import StorageFixture
@@ -44,14 +43,13 @@ MsgPackNormalizer.MMAP_DEFAULT_SIZE = 20 * (1 << 20)
 
 
 @pytest.fixture()
-def sym(request):
-    return request.node.name + datetime.utcnow().strftime("%Y-%m-%dT%H_%M_%S_%f")
+def sym():
+    return "test" + datetime.utcnow().strftime("%Y-%m-%dT%H_%M_%S_%f")
 
 
 @pytest.fixture()
-def lib_name(request):
-    name = re.sub(r"[^\w]", "_", request.node.name)[:30]
-    return f"{name}.{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
+def lib_name():
+    return f"local.test.{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
 
 
 @enum.unique
