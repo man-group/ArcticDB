@@ -2,8 +2,6 @@ name: Build and Test
 on:
   push:
     tags: ["v**"]
-    branches: ["master"]
-  pull_request:
     branches: ["**"]
     paths:
       - .github/workflows/*.yml
@@ -77,11 +75,17 @@ jobs:
       - run: |
           if ${{startsWith(github.ref, 'refs/tags/v')}}; then
             # Can only upload to Pypi once per version, so only auto upload on tag builds:
-            echo -e "PUBLISH_ENV=ProdPypi\nCMAKE_PRESET_TYPE=release\nPYPI_PUBLISH=1" | tee -a $GITHUB_ENV
+            echo -e "PUBLISH_ENV=ProdPypi\nCMAKE_PRESET_TYPE=release\nPYPI_PUBLISH=1\nFAST_BUILD=1" | tee -a $GITHUB_ENV
           elif $GITHUB_REF_PROTECTED || ${{github.ref == 'refs/heads/master'}} ; then
-            echo -e "PUBLISH_ENV=TestPypi\nCMAKE_PRESET_TYPE=release" | tee -a $GITHUB_ENV
+            echo -e "PUBLISH_ENV=TestPypi\nCMAKE_PRESET_TYPE=release\nFAST_BUILD=1" | tee -a $GITHUB_ENV
           else
             echo -e "PUBLISH_ENV=${{vars.DEFAULT_PUBLISH_ENV}}\nCMAKE_PRESET_TYPE=$DEFAULT_PRESET" | tee -a $GITHUB_ENV
+
+            # Check if this commit is part of a PR:
+            if out=$(gh api "/repos/man-group/arcticdb/commits/$GITHUB_SHA/pulls" --jq 'any(.state=="open")') && \
+                [[ "$out" = "true" ]] ; then
+              echo -e "FAST_BUILD=1" | tee -a $GITHUB_ENV
+            fi
           fi
         env:
           DEFAULT_PRESET: ${{startsWith(github.repository, 'man-group/ArcticDB') && 'release' || vars.DEFAULT_CMAKE_PRESET_TYPE || 'debug'}}
@@ -92,6 +96,7 @@ jobs:
       cmake_preset_type_resolved: ${{inputs.cmake_preset_type != '-' && inputs.cmake_preset_type || env.CMAKE_PRESET_TYPE}}
       linux_matrix: ${{toJson(matrix.linux_matrix)}}
       windows_matrix: ${{toJson(matrix.windows_matrix)}}
+      linux_compile_override: ${{env.FAST_BUILD && 'compile-on-ec2' || ''}}
 
   pre_seed_cleanup:
     if: inputs.persistent_storage == true
@@ -134,7 +139,7 @@ jobs:
         include:
           - python_deps_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.windows_matrix)}}
-    name: Seed Persistent Storage for 3.${{matrix.python3}} Windows with ${{ matrix.arcticdb_version }} ArcticDB package version 
+    name: Seed Persistent Storage for 3.${{matrix.python3}} Windows with ${{ matrix.arcticdb_version }} ArcticDB package version
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
     permissions: {packages: write}
@@ -155,7 +160,7 @@ jobs:
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
       cibw_image_tag: ${{needs.cibw_docker_image.outputs.tag}}
       matrix: ${{needs.common_config.outputs.linux_matrix}}
-      compile-override: compile-on-ec2
+      compile-override: ${{needs.common_config.outputs.linux_compile_override}}
 
   build-python-wheels-linux:
     # Then use the cached compilation artifacts to build other python versions concurrently in cibuildwheels
@@ -192,7 +197,7 @@ jobs:
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
       persistent_storage: ${{inputs.persistent_storage}}
-      compile-override: compile-on-ec2
+      compile-override: ${{needs.common_config.outputs.linux_compile_override}}
 
   cpp-test-windows:
     needs: [common_config]
@@ -233,7 +238,7 @@ jobs:
         include:
           - python_deps_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.linux_matrix)}}
-    name: Verify Persistent Storage for 3.${{matrix.python3}} Linux with ${{ matrix.arcticdb_version }} ArcticDB package version 
+    name: Verify Persistent Storage for 3.${{matrix.python3}} Linux with ${{ matrix.arcticdb_version }} ArcticDB package version
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
     permissions: {packages: write}
@@ -255,7 +260,7 @@ jobs:
         include:
           - python_deps_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.windows_matrix)}}
-    name: Verify Persistent Storage for 3.${{matrix.python3}} Windows with ${{ matrix.arcticdb_version }} ArcticDB package version 
+    name: Verify Persistent Storage for 3.${{matrix.python3}} Windows with ${{ matrix.arcticdb_version }} ArcticDB package version
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
     permissions: {packages: write}
@@ -265,7 +270,7 @@ jobs:
       arcticdb_version: ${{matrix.arcticdb_version}}
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
-    
+
   post_verify_cleanup:
     needs: [persistent_storage_verify_windows, persistent_storage_verify_linux]
     if: inputs.persistent_storage == true
