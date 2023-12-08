@@ -5,7 +5,43 @@ import argparse
 import re
 from datetime import datetime
 
-from arcticdb.storage_fixtures.s3 import real_s3_from_environment_variables
+from arcticdb import Arctic
+from arcticdb.util.test import create_df
+
+
+def real_s3_credentials(shared_path: bool = True):
+    endpoint = os.getenv("ARCTICDB_REAL_S3_ENDPOINT")
+    bucket = os.getenv("ARCTICDB_REAL_S3_BUCKET")
+    region = os.getenv("ARCTICDB_REAL_S3_REGION")
+    access_key = os.getenv("ARCTICDB_REAL_S3_ACCESS_KEY")
+    secret_key = os.getenv("ARCTICDB_REAL_S3_SECRET_KEY")
+    if shared_path:
+        path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX")
+    else:
+        path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX")
+
+    clear = str(os.getenv("ARCTICDB_REAL_S3_CLEAR")).lower() in ("true", "1")
+
+    return endpoint, bucket, region, access_key, secret_key, path_prefix, clear
+
+
+def get_real_s3_uri(shared_path: bool = True):
+    # TODO: Remove this when the latest version that we support
+    # contains the s3 fixture code as defined here:
+    # https://github.com/man-group/ArcticDB/blob/master/.github/workflows/persistent_storage.yml#L64
+    (
+        endpoint,
+        bucket,
+        region,
+        access_key,
+        secret_key,
+        path_prefix,
+        _,
+    ) = real_s3_credentials(shared_path)
+    aws_uri = (
+        f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix={path_prefix}"
+    )
+    return aws_uri
 
 
 def normalize_lib_name(lib_name):
@@ -15,20 +51,15 @@ def normalize_lib_name(lib_name):
     return lib_name
 
 
-def get_real_s3_arctic(shared_path=True):
-    factory = real_s3_from_environment_variables(shared_path=shared_path)
-    return factory.create_fixture().create_arctic()
-
-
 def get_seed_libraries(ac=None):
     if ac is None:
-        ac = get_real_s3_arctic()
+        ac = Arctic(get_real_s3_uri())
     return [lib for lib in ac.list_libraries() if lib.startswith("seed_")]
 
 
 def get_test_libraries(ac=None):
     if ac is None:
-        ac = get_real_s3_arctic()
+        ac = Arctic(get_real_s3_uri())
     return [lib for lib in ac.list_libraries() if lib.startswith("test_")]
 
 
@@ -60,17 +91,29 @@ def is_strategy_branch_valid_format(input_string):
     return bool(match)
 
 
+# TODO: Remove this when the latest version that we support
+# contains the create_df function from the arcticdb.util.test library
+def create_df(start=0, columns=1) -> pd.DataFrame:
+    data = {}
+    for i in range(columns):
+        col_name = chr(ord("x") + i)  # Generates column names like 'x', 'y', 'z', etc.
+        data[col_name] = np.arange(start + i * 10, start + (i + 1) * 10, dtype=np.int64)
+
+    index = np.arange(start, start + 10, dtype=np.int64)
+    return pd.DataFrame(data, index=index)
+
+
 def write_persistent_library(lib):
-    one_df = three_col_df()
+    one_df = create_df(0, 3)
     lib.write("one", one_df)
 
-    two_df = three_col_df(1)
+    two_df = create_df(1, 3)
     lib.write("two", two_df)
 
-    two_df = three_col_df(2)
+    two_df = create_df(2, 3)
     lib.append("two", two_df)
 
-    three_df = three_col_df(3)
+    three_df = create_df(3, 3)
     lib.append("three", three_df)
 
     sym = "empty_s"
@@ -216,7 +259,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     job_type = str(args.type).lower()
     # TODO: Add support for other storages
-    ac = get_real_s3_arctic()
+    ac = Arctic(get_real_s3_uri())
 
     if "seed" == job_type:
         seed_library(ac, args.version)
