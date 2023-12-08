@@ -36,6 +36,7 @@ std::vector<AtomKey> backwards_compat_write_and_prune_previous(std::shared_ptr<S
     auto old_entry = *entry;
     entry->clear();
     version_map->do_write(store, key, entry);
+    write_symbol_ref(store, key, std::nullopt, entry->head_.value());
     version_map->remove_entry_version_keys(store, old_entry, key.id());
     output = old_entry.get_indexes(false);
 
