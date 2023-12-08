@@ -15,6 +15,7 @@ import pandas as pd
 import platform
 import random
 import re
+import time
 from datetime import datetime
 
 from arcticdb.storage_fixtures.api import StorageFixture
@@ -61,6 +62,18 @@ def sym(request):
 def lib_name(request):
     name = re.sub(r"[^\w]", "_", request.node.name)[:30]
     return f"{name}.{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
+
+
+@pytest.fixture
+def get_stderr(capfd):
+    from arcticdb_ext.log import flush_all
+
+    def _get():
+        flush_all()
+        time.sleep(0.001)
+        return capfd.readouterr().err
+
+    return _get
 
 
 @enum.unique
@@ -431,7 +444,7 @@ def lmdb_version_store_dynamic_schema_v2(version_store_factory, lib_name):
 
 @pytest.fixture
 def lmdb_version_store_dynamic_schema(
-        lmdb_version_store_dynamic_schema_v1, lmdb_version_store_dynamic_schema_v2, encoding_version
+    lmdb_version_store_dynamic_schema_v1, lmdb_version_store_dynamic_schema_v2, encoding_version
 ):
     if encoding_version == EncodingVersion.V1:
         return lmdb_version_store_dynamic_schema_v1
@@ -668,14 +681,14 @@ def get_wide_df():
 @pytest.fixture(
     scope="function",
     params=(
-            "lmdb_version_store_v1",
-            "lmdb_version_store_v2",
-            "s3_version_store_v1",
-            "s3_version_store_v2",
-            "in_memory_version_store",
-            pytest.param("azure_version_store", marks=AZURE_TESTS_MARK),
-            pytest.param("mongo_version_store", marks=MONGO_TESTS_MARK),
-            pytest.param("real_s3_version_store", marks=REAL_S3_TESTS_MARK),
+        "lmdb_version_store_v1",
+        "lmdb_version_store_v2",
+        "s3_version_store_v1",
+        "s3_version_store_v2",
+        "in_memory_version_store",
+        pytest.param("azure_version_store", marks=AZURE_TESTS_MARK),
+        pytest.param("mongo_version_store", marks=MONGO_TESTS_MARK),
+        pytest.param("real_s3_version_store", marks=REAL_S3_TESTS_MARK),
     ),
 )
 def object_and_mem_and_lmdb_version_store(request):
@@ -688,13 +701,13 @@ def object_and_mem_and_lmdb_version_store(request):
 @pytest.fixture(
     scope="function",
     params=(
-            "lmdb_version_store_dynamic_schema_v1",
-            "lmdb_version_store_dynamic_schema_v2",
-            "s3_version_store_dynamic_schema_v1",
-            "s3_version_store_dynamic_schema_v2",
-            "in_memory_version_store_dynamic_schema",
-            pytest.param("azure_version_store_dynamic_schema", marks=AZURE_TESTS_MARK),
-            pytest.param("real_s3_version_store_dynamic_schema", marks=REAL_S3_TESTS_MARK),
+        "lmdb_version_store_dynamic_schema_v1",
+        "lmdb_version_store_dynamic_schema_v2",
+        "s3_version_store_dynamic_schema_v1",
+        "s3_version_store_dynamic_schema_v2",
+        "in_memory_version_store_dynamic_schema",
+        pytest.param("azure_version_store_dynamic_schema", marks=AZURE_TESTS_MARK),
+        pytest.param("real_s3_version_store_dynamic_schema", marks=REAL_S3_TESTS_MARK),
     ),
 )
 def object_and_mem_and_lmdb_version_store_dynamic_schema(request):
