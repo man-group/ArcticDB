@@ -225,8 +225,9 @@ public:
     }
 
     folly::Future<std::pair<VariantKey, TimeseriesDescriptor>> read_timeseries_descriptor(
-            const entity::VariantKey &key) override {
-        return read_and_continue(key, library_, storage::ReadKeyOpts{}, DecodeTimeseriesDescriptorTask{});
+            const entity::VariantKey &key,
+            storage::ReadKeyOpts opts = storage::ReadKeyOpts{}) override {
+        return read_and_continue(key, library_, opts, DecodeTimeseriesDescriptorTask{});
     }
 
     folly::Future<bool> key_exists(const entity::VariantKey &key) override {
