@@ -7,6 +7,8 @@
 
 #include <arcticdb/column_store/column.hpp>
 
+#include <arcticdb/util/offset_string.hpp>
+
 namespace arcticdb {
 
 // Column operators

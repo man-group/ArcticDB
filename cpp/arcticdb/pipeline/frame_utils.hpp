@@ -19,6 +19,7 @@
 #include <arcticdb/python/python_types.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
 #include <arcticdb/pipeline/string_pool_utils.hpp>
+#include <arcticdb/util/offset_string.hpp>
 #include <util/flatten_utils.hpp>
 #include <arcticdb/entity/timeseries_descriptor.hpp>
 #include <arcticdb/entity/type_utils.hpp>
