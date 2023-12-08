@@ -6,6 +6,7 @@ import argparse
 import re
 from datetime import datetime
 
+from arcticdb.util.test import create_df
 
 def normalize_lib_name(lib_name):
     lib_name = lib_name.replace(".", "_")
@@ -79,16 +80,16 @@ def is_strategy_branch_valid_format(input_string):
 
 
 def write_persistent_library(lib):
-    one_df = three_col_df()
+    one_df = create_df(0, 3)
     lib.write("one", one_df)
 
-    two_df = three_col_df(1)
+    two_df = create_df(1, 3)
     lib.write("two", two_df)
 
-    two_df = three_col_df(2)
+    two_df = create_df(2, 3)
     lib.append("two", two_df)
 
-    three_df = three_col_df(3)
+    three_df = create_df(3, 3)
     lib.append("three", three_df)
 
     sym = "empty_s"

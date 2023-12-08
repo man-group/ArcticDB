@@ -17,7 +17,6 @@ import time
 import attr
 from copy import deepcopy
 from functools import wraps
-import sys
 
 from arcticdb.config import Defaults
 from arcticdb.log import configure, logger_by_name
@@ -30,6 +29,16 @@ from arcticc.pb2.storage_pb2 import LibraryDescriptor, VersionStoreConfig
 from arcticdb.version_store.helper import ArcticFileConfig
 from arcticdb.config import _DEFAULT_ENVS_PATH
 from arcticdb_ext import set_config_int, get_config_int, unset_config_int
+
+
+def create_df(start=0, columns=1) -> pd.DataFrame:
+    data = {}
+    for i in range(columns):
+        col_name = chr(ord('x') + i)  # Generates column names like 'x', 'y', 'z', etc.
+        data[col_name] = np.arange(start + i * 10, start + (i + 1) * 10, dtype=np.int64)
+
+    index = np.arange(start, start + 10, dtype=np.int64)
+    return pd.DataFrame(data, index=index)
 
 
 def maybe_not_check_freq(f):

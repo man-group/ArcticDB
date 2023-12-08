@@ -46,7 +46,7 @@ from arcticdb.version_store.helper import (
     create_test_memory_cfg,
 )
 from arcticdb.config import Defaults
-from arcticdb.util.test import configure_test_logger, apply_lib_cfg
+from arcticdb.util.test import configure_test_logger, apply_lib_cfg, create_df
 from tests.util.storage_test import get_real_s3_uri, real_s3_credentials
 
 from arcticdb.version_store.helper import ArcticMemoryConfig
@@ -1002,35 +1002,17 @@ def basic_store_tiny_segment_dynamic(basic_store_factory):
 
 @pytest.fixture
 def one_col_df():
-    def create(start=0) -> pd.DataFrame:
-        return pd.DataFrame({"x": np.arange(start, start + 10, dtype=np.int64)})
-
-    return create
+    return functools.partial(create_df, columns=1)
 
 
 @pytest.fixture
 def two_col_df():
-    def create(start=0) -> pd.DataFrame:
-        return pd.DataFrame(
-            {"x": np.arange(start, start + 10, dtype=np.int64), "y": np.arange(start + 10, start + 20, dtype=np.int64)}
-        )
-
-    return create
+    return functools.partial(create_df, columns=2)
 
 
 @pytest.fixture
 def three_col_df():
-    def create(start=0) -> pd.DataFrame:
-        return pd.DataFrame(
-            {
-                "x": np.arange(start, start + 10, dtype=np.int64),
-                "y": np.arange(start + 10, start + 20, dtype=np.int64),
-                "z": np.arange(start + 20, start + 30, dtype=np.int64),
-            },
-            index=np.arange(start, start + 10, dtype=np.int64),
-        )
-
-    return create
+    return functools.partial(create_df, columns=3)
 
 
 def get_val(col):
