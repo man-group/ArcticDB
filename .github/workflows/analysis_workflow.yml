@@ -289,8 +289,8 @@ jobs:
         if: github.event_name != 'pull_request' 
         shell: bash -el {0}
         run: |
-          git config --global user.email "arcticdb@man.com"
-          git config --global user.name "arcticdb-service-user"
+          git config --global user.name "${GITHUB_ACTOR}"
+          git config --global user.email "${GITHUB_ACTOR_ID}+${GITHUB_ACTOR}@users.noreply.github.com"
 
           git pull
           git fetch --tags --all
