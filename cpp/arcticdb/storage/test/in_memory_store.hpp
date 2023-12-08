@@ -369,7 +369,8 @@ namespace arcticdb {
 
 
         folly::Future<std::pair<std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>, arcticdb::TimeseriesDescriptor>>
-        read_timeseries_descriptor(const entity::VariantKey& key) override {
+        read_timeseries_descriptor(const entity::VariantKey& key,
+                                   storage::ReadKeyOpts /*opts*/) override {
             return util::variant_match(key, [&](const AtomKey &ak) {
                 auto it = seg_by_atom_key_.find(ak);
                 if (it == seg_by_atom_key_.end())

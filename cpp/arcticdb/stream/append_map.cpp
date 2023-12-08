@@ -331,12 +331,13 @@ std::pair<std::optional<AtomKey>, size_t> read_head(const std::shared_ptr<Stream
 std::pair<TimeseriesDescriptor, std::optional<SegmentInMemory>> get_descriptor_and_data(
     const std::shared_ptr<StreamSource>& store,
     const AtomKey& k,
-    bool load_data) {
+    bool load_data,
+    storage::ReadKeyOpts opts = storage::ReadKeyOpts{}) {
     if(load_data) {
-        auto [key, seg] = store->read(k).get();
+        auto [key, seg] = store->read_sync(k, opts);
         return std::make_pair(TimeseriesDescriptor{seg.timeseries_proto(), seg.index_fields()}, std::make_optional<SegmentInMemory>(seg));
     } else {
-        auto [key, tsd] = store->read_timeseries_descriptor(k).get();
+        auto [key, tsd] = store->read_timeseries_descriptor(k, opts).get();
         return std::make_pair(std::move(tsd), std::nullopt);
     }
 }
@@ -352,7 +353,9 @@ AppendMapEntry create_entry(const arcticdb::proto::descriptors::TimeSeriesDescri
 }
 
 AppendMapEntry entry_from_key(const std::shared_ptr<StreamSource>& store, const AtomKey& key, bool load_data) {
-    auto [tsd, seg] = get_descriptor_and_data(store, key, load_data);
+    auto opts = storage::ReadKeyOpts{};
+    opts.dont_warn_about_missing_key = true;
+    auto [tsd, seg] = get_descriptor_and_data(store, key, load_data, opts);
     auto entry = create_entry(tsd.proto());
     auto descriptor = std::make_shared<StreamDescriptor>();
     auto desc = std::make_shared<StreamDescriptor>(tsd.as_stream_descriptor());
