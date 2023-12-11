@@ -367,8 +367,6 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
                   return left.row_ranges_->at(0)->start() < right.row_ranges_->at(0)->start();
     });
 
-    Composite<ProcessingUnit> procs(std::move(procs_as_range));
-
     std::vector<GroupingAggregatorData> aggregators_data;
     internal::check<ErrorCode::E_INVALID_ARGUMENT>(
             !aggregators_.empty(),
@@ -378,26 +376,27 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
     }
 
     // Work out the common type between the processing units for the columns being aggregated
-    procs.broadcast([&aggregators_data, &aggregators=aggregators_](auto& proc) {
+    for (auto& proc: procs_as_range) {
         for (auto agg_data: folly::enumerate(aggregators_data)) {
             // Check that segments row ranges are the same
             internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                 std::all_of(proc.row_ranges_->begin(), proc.row_ranges_->end(), [&] (const auto& row_range) {return row_range->start() == proc.row_ranges_->at(0)->start();}),
                 "Expected all data segments in one processing unit to have the same row ranges");
 
-            auto input_column_name = aggregators.at(agg_data.index).get_input_column_name();
+            auto input_column_name = aggregators_.at(agg_data.index).get_input_column_name();
             auto input_column = proc.get(input_column_name);
             if (std::holds_alternative<ColumnWithStrings>(input_column)) {
                 agg_data->add_data_type(std::get<ColumnWithStrings>(input_column).column_->type().data_type());
             }
         }
-    });
+    }
 
     size_t num_unique{0};
     size_t next_group_id{0};
     auto string_pool = std::make_shared<StringPool>();
     DataType grouping_data_type;
     GroupingMap grouping_map;
+    Composite<ProcessingUnit> procs(std::move(procs_as_range));
     procs.broadcast(
         [&num_unique, &grouping_data_type, &grouping_map, &next_group_id, &aggregators_data, &string_pool, this](auto &proc) {
             auto partitioning_column = proc.get(ColumnName(grouping_column_));

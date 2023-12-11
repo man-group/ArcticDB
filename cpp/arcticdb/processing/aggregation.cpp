@@ -543,7 +543,7 @@ void FirstAggregatorData::aggregate(const std::optional<ColumnWithStrings>& inpu
                 auto grp_idx = groups[0];
                 while (auto block = col_data.next<TypeDescriptorTag<ColumnTagType, DimensionTag<entity::Dimension::Dim0>>>()) {
                     auto ptr = reinterpret_cast<const ColumnType *>(block.value().data());
-                    for (auto i = 0u; i < block.value().row_count(); ++i, ++ptr) {
+                    for (auto i = 0u; i < block.value().row_count(); ++i, ++ptr, ++groups_pos) {
                         auto& val = out_ptr[groups[groups_pos]];
                         bool is_first_group_el = (groups_cache_.find(groups[groups_pos]) == groups_cache_.end());
                         if constexpr(std::is_floating_point_v<ColumnType>) {
@@ -578,7 +578,6 @@ void FirstAggregatorData::aggregate(const std::optional<ColumnWithStrings>& inpu
                                 grp_idx = groups[groups_pos];
                             }
                         }
-                        ++groups_pos;
                     }
                 }
             });
@@ -625,7 +624,7 @@ void LastAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input
                 auto grp_idx = groups[0];
                 while (auto block = col_data.next<TypeDescriptorTag<ColumnTagType, DimensionTag<entity::Dimension::Dim0>>>()) {
                     auto ptr = reinterpret_cast<const ColumnType *>(block.value().data());
-                    for (auto i = 0u; i < block.value().row_count(); ++i, ++ptr) {
+                    for (auto i = 0u; i < block.value().row_count(); ++i, ++ptr, ++groups_pos) {
                         auto& val = out_ptr[groups[groups_pos]];
                         bool is_first_group_el = (groups_cache_.find(groups[groups_pos]) == groups_cache_.end());
                         if constexpr(std::is_floating_point_v<ColumnType>) {
@@ -649,7 +648,6 @@ void LastAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input
                         } else {
                             val = GlobalRawType(*ptr);
                         }
-                        ++groups_pos;
                     }
                 }
             });
