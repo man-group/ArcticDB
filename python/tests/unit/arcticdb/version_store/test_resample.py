@@ -20,7 +20,7 @@ def generic_resample_test(lib, sym, rule, aggregations, date_range=None, closed=
 def test_resampling(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     sym = "test_resampling"
-    index=pd.date_range("2023-01-01", "2023-12-31T23:59:59", freq="S")
+    index = pd.date_range("2023-01-01", "2023-12-31T23:59:59", freq="S")
     rng = np.random.default_rng()
     df = pd.DataFrame(
         {
