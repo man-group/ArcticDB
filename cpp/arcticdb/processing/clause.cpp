@@ -531,6 +531,32 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
         seg.concatenate(agg_data->finalize(aggregators_.at(agg_data.index).get_output_column_name(), processing_config_.dynamic_schema_, num_unique));
     }
 
+    // Strings case: Add the string to the output string_pool
+    procs.broadcast([&grouping_data_type, &aggregators_data, &string_pool, this](auto &proc) {
+        entity::details::visit_type(grouping_data_type, [&aggregators_data, &proc, &string_pool, this](auto data_type_tag) {
+            using DataTypeTagType = decltype(data_type_tag);
+            for (auto agg_data: folly::enumerate(aggregators_data)) {
+                auto output_column_name = aggregators_.at(agg_data.index).get_output_column_name();
+                auto output_column = proc.get(output_column_name);
+                auto output_column_with_strings = std::get<ColumnWithStrings>(output_column);
+                if (is_sequence_type(output_column_with_strings.column_->type().data_type())) {
+                    auto output_data = output_column_with_strings.column_->data();
+                    while (auto out_block = output_data.template next<ScalarTagType<DataTypeTagType>>()) {
+                        const auto out_row_count = out_block->row_count();
+                        auto out_ptr = out_block->data();
+                        for (size_t orc = 0; orc < out_row_count; ++orc, ++out_ptr) {
+                            auto out_offset = *out_ptr;
+                            std::optional<std::string_view> str = output_column_with_strings.string_at_offset(out_offset);
+                            if (str.has_value()) {
+                                auto unused_offset = string_pool->get(*str, true).offset();
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    });
+
     seg.set_string_pool(string_pool);
     seg.set_row_id(num_unique - 1);
     return Composite<EntityIds>(push_entities(component_manager_, ProcessingUnit(std::move(seg))));
