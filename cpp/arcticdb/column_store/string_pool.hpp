@@ -36,7 +36,7 @@ class StringPool;
 class Column;
 
 
-static FieldRef string_pool_descriptor() {
+static FieldRef ARCTICDB_UNUSED string_pool_descriptor() {
     static TypeDescriptor type{ DataType::UINT8, Dimension::Dim1 };
     static std::string_view name{ "__string_pool__" };
     return FieldRef{type, name};

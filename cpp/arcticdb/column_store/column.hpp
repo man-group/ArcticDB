@@ -67,6 +67,7 @@ struct JiveTable {
 };
 
 class Column;
+class StringPool;
 
 template <typename T>
 JiveTable create_jive_table(const Column& col);
