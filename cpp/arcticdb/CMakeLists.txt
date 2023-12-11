@@ -365,6 +365,7 @@ set(arcticdb_srcs
         column_store/memory_segment_impl.cpp
         column_store/memory_segment_impl.cpp
         column_store/string_pool.cpp
+        entity/data_error.cpp
         entity/field_collection.cpp
         entity/key.cpp
         entity/merge_descriptors.cpp
