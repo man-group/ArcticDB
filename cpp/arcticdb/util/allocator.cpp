@@ -11,13 +11,18 @@
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/memory_tracing.hpp>
 #include <arcticdb/util/clock.hpp>
+#include <arcticdb/util/configs_map.hpp>
 #include <folly/concurrency/ConcurrentHashMap.h>
 #include <folly/ThreadCachedInt.h>
 
 
 namespace arcticdb {
 
-
+    bool use_slab_allocator()
+    {
+        static const bool use_it = ConfigsMap::instance()->get_int("Allocator.UseSlabAllocator", 1);
+        return use_it;
+    }
 
     void TracingData::init() {
         TracingData::instance_ = std::make_shared<TracingData>();
@@ -177,7 +182,7 @@ namespace arcticdb {
         uint8_t* ret;
 #ifdef USE_SLAB_ALLOCATOR
         std::call_once(slab_init_flag_, &init_slab);
-        if (size == page_size && use_slab_allocator) {
+        if (size == page_size && use_slab_allocator()) {
             ARCTICDB_TRACE(log::codec(), "Doing slab allocation of page size");
             ret = reinterpret_cast<uint8_t*>(page_size_slab_allocator_->allocate());
         }
@@ -196,7 +201,7 @@ namespace arcticdb {
 #ifdef USE_SLAB_ALLOCATOR
         std::call_once(slab_init_flag_, &init_slab);
         auto raw_pointer = reinterpret_cast<SlabAllocatorType::pointer>(p);
-        if (use_slab_allocator && page_size_slab_allocator_->is_addr_in_slab(raw_pointer)) {
+        if (use_slab_allocator() && page_size_slab_allocator_->is_addr_in_slab(raw_pointer)) {
             ARCTICDB_TRACE(log::codec(), "Doing slab free of address {}", uintptr_t(p));
             page_size_slab_allocator_->deallocate(raw_pointer);
         }
@@ -217,7 +222,7 @@ namespace arcticdb {
 #ifdef USE_SLAB_ALLOCATOR
         std::call_once(slab_init_flag_, &init_slab);
         auto raw_pointer = reinterpret_cast<SlabAllocatorType::pointer>(p);
-        if (use_slab_allocator && page_size_slab_allocator_->is_addr_in_slab(raw_pointer)) {
+        if (use_slab_allocator() && page_size_slab_allocator_->is_addr_in_slab(raw_pointer)) {
             ARCTICDB_TRACE(log::codec(), "Doing slab realloc of address {} and size {}", uintptr_t(p), size);
             if (size == page_size)
                 return p;

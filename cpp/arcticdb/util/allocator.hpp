@@ -8,7 +8,6 @@
 #pragma once
 
 #include <arcticdb/util/clock.hpp>
-#include <arcticdb/util/configs_map.hpp>
 
 
 #include <memory>
@@ -33,7 +32,7 @@ static constexpr uint64_t MEGABYTES = 1024 * KILOBYTES;
 static constexpr uint64_t GIGABYTES = 1024 * MEGABYTES;
 static constexpr uint64_t TERABYTES = 1024 * GIGABYTES;
 static constexpr uint64_t page_size = 4096; // 4KB
-static const bool use_slab_allocator = ConfigsMap::instance()->get_int("Allocator.UseSlabAllocator", 1);
+bool use_slab_allocator();
 
 
 static constexpr uint64_t ArcticNativeShmemSize = 30 * GIGABYTES;
@@ -127,7 +126,7 @@ private:
 
     static void init_slab() {
         static const size_t page_slab_capacity = ConfigsMap::instance()->get_int("Allocator.PageSlabCapacity", 1000 * 1000); // 4GB
-        if (use_slab_allocator) {
+        if (use_slab_allocator()) {
             page_size_slab_allocator_ = std::make_shared<SlabAllocatorType>(page_slab_capacity);
         }
     }
