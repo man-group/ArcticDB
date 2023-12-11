@@ -181,10 +181,10 @@ using Allocator = AllocatorImpl<NullTracingPolicy>;
 #endif
 
 
-extern template AllocatorImpl<InMemoryTracingPolicy, util::LinearClock>;
-extern template AllocatorImpl<InMemoryTracingPolicy, util::SysClock>;
-extern template AllocatorImpl<NullTracingPolicy, util::LinearClock>;
-extern template AllocatorImpl<NullTracingPolicy, util::SysClock>;
+extern template class AllocatorImpl<InMemoryTracingPolicy, util::LinearClock>;
+extern template class AllocatorImpl<InMemoryTracingPolicy, util::SysClock>;
+extern template class AllocatorImpl<NullTracingPolicy, util::LinearClock>;
+extern template class AllocatorImpl<NullTracingPolicy, util::SysClock>;
 
 
 } //namespace arcticdb

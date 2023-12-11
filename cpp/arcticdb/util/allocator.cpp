@@ -342,9 +342,9 @@ namespace arcticdb {
     }
 
 
-    template AllocatorImpl<InMemoryTracingPolicy, util::LinearClock>;
-    template AllocatorImpl<InMemoryTracingPolicy, util::SysClock>;
-    template AllocatorImpl<NullTracingPolicy, util::LinearClock>;
-    template AllocatorImpl<NullTracingPolicy, util::SysClock>;
+    template class AllocatorImpl<InMemoryTracingPolicy, util::LinearClock>;
+    template class AllocatorImpl<InMemoryTracingPolicy, util::SysClock>;
+    template class AllocatorImpl<NullTracingPolicy, util::LinearClock>;
+    template class AllocatorImpl<NullTracingPolicy, util::SysClock>;
 
 }
