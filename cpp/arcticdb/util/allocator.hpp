@@ -7,10 +7,8 @@
 
 #pragma once
 
-#include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/clock.hpp>
 #include <arcticdb/util/configs_map.hpp>
-#include <folly/ThreadCachedInt.h>
 
 
 #include <memory>
@@ -112,20 +110,13 @@ constexpr size_t round_to_alignment(size_t size) {
 
 constexpr size_t ArcticNativeMassiveAllocSize = 1000 * 1024 * 1024;
 
+
 template<class TracingPolicy = NullTracingPolicy, class ClockType = util::LinearClock>
 class AllocatorImpl {
 private:
-    static folly::ThreadCachedInt<uint32_t> free_count_;
-    static uint8_t *get_alignment(size_t size) {
-#ifdef _WIN32
-        return  static_cast<uint8_t*>(_aligned_malloc(size, alignment));
-#else
-        return static_cast<uint8_t *>(std::malloc(size));
-#endif
-    }
-    static entity::timestamp current_timestamp() {
-        return ClockType::nanos_since_epoch();
-    }
+
+    static uint8_t* get_alignment(size_t size);
+    static entity::timestamp current_timestamp();
 
 #ifdef USE_SLAB_ALLOCATOR
 
@@ -143,138 +134,23 @@ private:
     }
 #endif
 
-    static uint8_t* internal_alloc(size_t size) {
-        uint8_t* ret;
-#ifdef USE_SLAB_ALLOCATOR
-            std::call_once(slab_init_flag_, &init_slab);
-            if (size == page_size && use_slab_allocator) {
-                ARCTICDB_TRACE(log::codec(), "Doing slab allocation of page size");
-                ret = reinterpret_cast<uint8_t *>(page_size_slab_allocator_->allocate());
-            } else {
-                ARCTICDB_TRACE(log::codec(), "Doing normal allocation of size {}", size);
-                ret = static_cast<uint8_t *>(std::malloc(size));
-            }
-#else
-            ret = static_cast<uint8_t *>(std::malloc(size));
-#endif
-        return ret;
-    }
-
-    static void internal_free(uint8_t* p) {
-#ifdef USE_SLAB_ALLOCATOR
-        std::call_once(slab_init_flag_, &init_slab);
-        auto raw_pointer = reinterpret_cast<SlabAllocatorType::pointer>(p);
-        if (use_slab_allocator && page_size_slab_allocator_->is_addr_in_slab(raw_pointer)) {
-            ARCTICDB_TRACE(log::codec(), "Doing slab free of address {}", uintptr_t(p));
-            page_size_slab_allocator_->deallocate(raw_pointer);
-        } else {
-            ARCTICDB_TRACE(log::codec(), "Doing normal free of address {}", uintptr_t(p));
-            std::free(p);
-        }
-#else
-        std::free(p);
-        free_count_.increment(1);
-        maybe_trim();
-#endif
-    }
-
-    static uint8_t* internal_realloc(uint8_t* p, std::size_t size) {
-        uint8_t* ret;
-#ifdef USE_SLAB_ALLOCATOR
-        std::call_once(slab_init_flag_, &init_slab);
-        auto raw_pointer = reinterpret_cast<SlabAllocatorType::pointer>(p);
-        if (use_slab_allocator && page_size_slab_allocator_->is_addr_in_slab(raw_pointer)) {
-            ARCTICDB_TRACE(log::codec(), "Doing slab realloc of address {} and size {}", uintptr_t(p), size);
-            if (size == page_size)
-                return p;
-            else {
-                page_size_slab_allocator_->deallocate(raw_pointer);
-                ret = static_cast<uint8_t *>(std::malloc(size));
-            }
-        } else {
-            ARCTICDB_TRACE(log::codec(), "Doing normal realloc of address {} and size {}", uintptr_t(p), size);
-            if (use_slab_allocator && size == page_size) {
-                std::free(p);
-                ret = reinterpret_cast<uint8_t *>(page_size_slab_allocator_->allocate());
-            } else {
-                ret = static_cast<uint8_t *>(std::realloc(p, size));
-            }
-        }
-#else
-        ret = static_cast<uint8_t *>(std::realloc(p, size));
-#endif
-        return ret;
-    }
+    static uint8_t* internal_alloc(size_t size);
+    static void internal_free(uint8_t* p);
+    static uint8_t* internal_realloc(uint8_t* p, std::size_t size);
 
 public:
     static std::shared_ptr<AllocatorImpl> instance_;
     static std::once_flag init_flag_;
 
-    static void init(){
-        instance_ = std::make_shared<AllocatorImpl>();
-    }
-
+    static void init();
     static std::shared_ptr<AllocatorImpl> instance();
     static void destroy_instance();
-
-    static std::pair<uint8_t*, entity::timestamp> alloc(size_t size, bool no_realloc ARCTICDB_UNUSED = false) {
-        util::check(size != 0, "Should not allocate zero bytes");
-        auto ts = current_timestamp();
-
-        uint8_t* ret = internal_alloc(size);
-        util::check(ret != nullptr, "Failed to allocate {} bytes", size);
-        TracingPolicy::track_alloc(std::make_pair(uintptr_t(ret), ts), size);
-        return {ret, ts};
-    }
-
-    static void trim() {
-        /* malloc_trim is a glibc extension not available on Windows.It is possible
-         * that we will end up with a larger memory footprint for not calling it, but
-         * there are no windows alternatives.
-         */
-#if defined(__linux__) && defined(__GLIBC__)
-        malloc_trim(0);
-#endif
-    }
-
-    static void maybe_trim() {
-        static const uint32_t trim_count = ConfigsMap::instance()->get_int("Allocator.TrimCount", 250);
-        if(free_count_.readFast() > trim_count && free_count_.readFastAndReset() > trim_count)
-            trim();
-    }
-
-    static std::pair<uint8_t*, entity::timestamp> aligned_alloc(size_t size, bool no_realloc = false) {
-        util::check(size != 0, "Should not allocate zero bytes");
-        auto ts = current_timestamp();
-
-        util::check(size != 0, "Should not allocate zero bytes");
-        auto ret = internal_alloc(size);
-        util::check(ret != nullptr, "Failed to aligned allocate {} bytes", size);
-        TracingPolicy::track_alloc(std::make_pair(uintptr_t(ret), ts), size);
-        return std::make_pair(ret, ts);
-    }
-
-    static std::pair<uint8_t*, entity::timestamp> realloc(std::pair<uint8_t*, entity::timestamp> ptr, size_t size) {
-        auto ret = internal_realloc(ptr.first, size);
-
-        #ifdef ARCTICDB_TRACK_ALLOCS
-        ARCTICDB_TRACE(log::codec(), "Reallocating {} bytes from {} to {}",
-                            util::MemBytes{size},
-                            uintptr_t(ptr.first),
-                            uintptr_t(ret));
-        #endif
-        auto ts = current_timestamp();
-        TracingPolicy::track_realloc(std::make_pair(uintptr_t(ptr.first), ptr.second), std::make_pair(uintptr_t(ret), ts), size);
-        return {ret, ts};
-    }
-
-    static void free(std::pair<uint8_t*, entity::timestamp> ptr) {
-        if (ptr.first == nullptr)
-            return;
-
-        TracingPolicy::track_free(std::make_pair(uintptr_t(ptr.first), ptr.second));
-        internal_free(ptr.first);
-    }
+    static std::pair<uint8_t*, entity::timestamp> alloc(size_t size, bool no_realloc ARCTICDB_UNUSED = false);
+    static void trim();
+    static void maybe_trim();
+    static std::pair<uint8_t*, entity::timestamp> aligned_alloc(size_t size, bool no_realloc = false);
+    static std::pair<uint8_t*, entity::timestamp> realloc(std::pair<uint8_t*, entity::timestamp> ptr, size_t size);
+    static void free(std::pair<uint8_t*, entity::timestamp> ptr);
 
 #ifdef USE_SLAB_ALLOCATOR
     static size_t add_callback_when_slab_full(folly::Function<void()>&& func) {
@@ -292,42 +168,23 @@ public:
     }
 #endif
 
-    static size_t allocated_bytes() {
-        return TracingPolicy::total_bytes();
-    }
-
-    static size_t empty() {
-        return TracingPolicy::deallocated();
-    }
-
-    static void clear() {
-        TracingPolicy::clear();
-    }
+    static size_t allocated_bytes();
+    static size_t empty();
+    static void clear();
 };
 
-template<typename TracingPolicy, typename Clocktype>
-std::shared_ptr<AllocatorImpl<TracingPolicy, Clocktype>> AllocatorImpl<TracingPolicy, Clocktype>::instance_;
-
-template<typename TracingPolicy, typename Clocktype>
-std::once_flag AllocatorImpl<TracingPolicy, Clocktype>::init_flag_;
-
-template<typename TracingPolicy, typename Clocktype>
-std::shared_ptr< AllocatorImpl<TracingPolicy, Clocktype>>  AllocatorImpl<TracingPolicy, Clocktype>::instance() {
-    std::call_once( AllocatorImpl<TracingPolicy,Clocktype>::init_flag_, & AllocatorImpl<TracingPolicy, Clocktype>::init);
-    return instance_;
-}
-
-template<typename TracingPolicy, typename Clocktype>
-folly::ThreadCachedInt<uint32_t> AllocatorImpl<TracingPolicy, Clocktype>::free_count_;
-
-template<typename TracingPolicy, typename Clocktype>
-void AllocatorImpl<TracingPolicy, Clocktype>::destroy_instance() {
-    AllocatorImpl<TracingPolicy, Clocktype>::instance_.reset();
-}
 
 #ifdef ARCTICDB_TRACK_ALLOCS
 using Allocator = AllocatorImpl<InMemoryTracingPolicy>;
 #else
 using Allocator = AllocatorImpl<NullTracingPolicy>;
 #endif
+
+
+extern template AllocatorImpl<InMemoryTracingPolicy, util::LinearClock>;
+extern template AllocatorImpl<InMemoryTracingPolicy, util::SysClock>;
+extern template AllocatorImpl<NullTracingPolicy, util::LinearClock>;
+extern template AllocatorImpl<NullTracingPolicy, util::SysClock>;
+
+
 } //namespace arcticdb

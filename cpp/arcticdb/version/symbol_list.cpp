@@ -8,7 +8,6 @@
 #include <arcticdb/version/symbol_list.hpp>
 #include <arcticdb/version/version_map_batch_methods.hpp>
 #include <arcticdb/entity/atom_key.hpp>
-#include <arcticdb/entity/ref_key.hpp>
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/util/storage_lock.hpp>
