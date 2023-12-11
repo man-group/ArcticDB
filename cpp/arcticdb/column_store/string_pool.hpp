@@ -31,6 +31,7 @@ namespace py = pybind11;
 #endif
 
 namespace arcticdb {
+
 class StringPool;
 class Column;
 

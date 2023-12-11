@@ -9,7 +9,6 @@
 
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/column_store/column_data.hpp>
-#include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/entity/native_tensor.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/entity/types.hpp>

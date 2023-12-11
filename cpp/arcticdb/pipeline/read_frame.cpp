@@ -9,6 +9,7 @@
 
 #include <arcticdb/codec/encoding_sizes.hpp>
 #include <arcticdb/codec/codec.hpp>
+#include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/pipeline/index_segment_reader.hpp>
 #include <arcticdb/pipeline/read_frame.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
