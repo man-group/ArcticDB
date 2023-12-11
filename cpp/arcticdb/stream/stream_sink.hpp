@@ -15,6 +15,10 @@
 #include <arcticdb/version/de_dup_map.hpp>
 
 #include <folly/futures/Future.h>
+// FIXME: winnt.h is included by folly/futures/Future.h at some point and adds unwanted macros
+#ifdef DELETE
+#undef DELETE
+#endif
 
 namespace arcticdb::stream {
 
