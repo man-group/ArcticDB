@@ -65,9 +65,9 @@ namespace arcticdb {
             util::MemBytes{ size },
             addr_ts.first,
             addr_ts.second,
-            util::MemBytes{ total_allocs_ },
-            total_irregular_allocs_,
-            total_allocs_calls_);
+            util::MemBytes{ impl_->total_allocs_ },
+            impl_->total_irregular_allocs_,
+            impl_->total_allocs_calls_);
 
     }
 
