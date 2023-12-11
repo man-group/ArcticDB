@@ -37,7 +37,6 @@ static const bool use_slab_allocator = ConfigsMap::instance()->get_int("Allocato
 
 
 static constexpr uint64_t ArcticNativeShmemSize = 30 * GIGABYTES;
-static const char *ArcticNativeShmemName = "arctic_native_temp";
 
 typedef std::pair<uintptr_t, entity::timestamp> AddrIdentifier;
 
