@@ -2785,15 +2785,11 @@ class NativeVersionStore:
         if self._lib_cfg.lib_desc.version.write_options.bucketize_dynamic:
             raise ArcticDbNotYetImplemented(f"Support for library with 'bucketize_dynamic' ON is not implemented yet")
 
-        result = self.version_store.defragment_symbol_data(symbol, segment_size)
-        return VersionedItem(
-            symbol=result.symbol,
-            library=self._library.library_path,
-            version=result.version,
-            metadata=None,
-            data=None,
-            host=self.env,
-        )
+        proto_cfg = self._lib_cfg.lib_desc.version.write_options
+        if segment_size and segment_size != self.resolve_defaults("segment_row_size", proto_cfg):
+            raise ArcticDbNotYetImplemented(f"Support for segment_size parameter is not implemented yet")
+
+        return self.write(symbol, self.read(symbol).data)
 
     def library(self):
         return self._library
