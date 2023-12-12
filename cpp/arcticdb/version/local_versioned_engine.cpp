@@ -1031,7 +1031,7 @@ bool LocalVersionedEngine::is_symbol_fragmented(const StreamId& stream_id, std::
     auto update_info = get_latest_undeleted_version_and_next_version_id(
             store(), version_map(), stream_id, VersionQuery{}, ReadOptions{});
     auto pre_defragmentation_info = get_pre_defragmentation_info(
-        store(), stream_id, update_info, get_write_options(), segment_size.value_or(cfg_.write_options().segment_row_size()));
+        store(), stream_id, update_info, get_write_options(), segment_size);
     return is_symbol_fragmented_impl(pre_defragmentation_info.segments_need_compaction);
 }
 
@@ -1043,8 +1043,7 @@ VersionedItem LocalVersionedEngine::defragment_symbol_data(const StreamId& strea
         store(), version_map(), stream_id, VersionQuery{}, ReadOptions{});
 
     auto versioned_item = defragment_symbol_data_impl(
-            store(), stream_id, update_info, get_write_options(),
-            segment_size.has_value() ? *segment_size : cfg_.write_options().segment_row_size());
+            store(), stream_id, update_info, get_write_options(), segment_size);
 
     version_map_->write_version(store_, versioned_item.key_);
 

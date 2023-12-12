@@ -1307,7 +1307,9 @@ PredefragmentationInfo get_pre_defragmentation_info(
         const StreamId& stream_id,
         const UpdateInfo& update_info,
         const WriteOptions& options,
-        size_t segment_size) {
+        std::optional<size_t> segment_size) {
+    if (!segment_size)
+        segment_size = options.segment_row_size;
     util::check(update_info.previous_index_key_.has_value(), "No latest undeleted version found for data compaction");
 
     auto pipeline_context = std::make_shared<PipelineContext>();
@@ -1360,14 +1362,12 @@ VersionedItem defragment_symbol_data_impl(
         const StreamId& stream_id,
         const UpdateInfo& update_info,
         const WriteOptions& options,
-        size_t segment_size) {
+        std::optional<size_t> segment_size) {
+    if (!segment_size)
+        segment_size = options.segment_row_size;
     auto pre_defragmentation_info = get_pre_defragmentation_info(store, stream_id, update_info, options, segment_size);
     util::check(is_symbol_fragmented_impl(pre_defragmentation_info.segments_need_compaction) && pre_defragmentation_info.append_after.has_value(), "Nothing to compact in defragment_symbol_data");
     
-    std::vector<entity::VariantKey> delete_keys;
-    for(auto sk = std::next(pre_defragmentation_info.pipeline_context->begin(), pre_defragmentation_info.append_after.value()); sk != pre_defragmentation_info.pipeline_context->end(); ++sk) {
-        delete_keys.emplace_back(sk->slice_and_key().key());
-    }
     // in the new index segment, we will start appending after this value
     std::vector<folly::Future<VariantKey>> fut_vec;
     std::vector<FrameSlice> slices;
@@ -1402,7 +1402,6 @@ VersionedItem defragment_symbol_data_impl(
             pre_defragmentation_info.append_after.value(),
             std::nullopt);
     
-    store->remove_keys(delete_keys).get();
     return vit;
 }
 

@@ -141,7 +141,7 @@ PredefragmentationInfo get_pre_defragmentation_info(
         const StreamId& stream_id,
         const UpdateInfo& update_info,
         const WriteOptions& options,
-        size_t segment_size);
+        std::optional<size_t> segment_size);
 
 bool is_symbol_fragmented_impl(size_t segments_need_compaction);
 
@@ -150,7 +150,7 @@ VersionedItem defragment_symbol_data_impl(
         const StreamId& stream_id,
         const UpdateInfo& update_info,
         const WriteOptions& options,
-        size_t segment_size);
+        std::optional<size_t> segment_size);
         
 VersionedItem sort_merge_impl(
     const std::shared_ptr<Store>& store,
