@@ -20,7 +20,9 @@
 #include <cstdint>
 #include <mutex>
 
-#include <pybind11/pybind11.h>
+namespace pybind11 {
+    class buffer_info;
+}
 
 namespace py = pybind11;
 

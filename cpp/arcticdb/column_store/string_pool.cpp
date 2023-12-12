@@ -14,6 +14,8 @@
     #include <arcticdb/util/third_party/robin_hood.hpp>
 #endif
 
+#include <pybind11/pybind11.h>
+
 namespace arcticdb {
 py::buffer_info StringPool::as_buffer_info() const {
     return py::buffer_info{
