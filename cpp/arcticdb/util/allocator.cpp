@@ -295,7 +295,7 @@ namespace arcticdb {
     }
 
     template<typename TracingPolicy, typename ClockType>
-    std::pair<uint8_t*, entity::timestamp> AllocatorImpl<TracingPolicy, ClockType>::aligned_alloc(size_t size, bool no_realloc) {
+    std::pair<uint8_t*, entity::timestamp> AllocatorImpl<TracingPolicy, ClockType>::aligned_alloc(size_t size, bool no_realloc ARCTICDB_UNUSED) {
         util::check(size != 0, "Should not allocate zero bytes");
         auto ts = current_timestamp();
 
