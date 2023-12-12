@@ -21,7 +21,7 @@
 #include <mutex>
 
 namespace pybind11 {
-    class buffer_info;
+    struct buffer_info;
 }
 
 namespace py = pybind11;
