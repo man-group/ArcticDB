@@ -107,7 +107,10 @@ endif()
 
 # Libraries baked into the internal and external Linux images are found by searching various paths
 # On Windows, vcpkg will provide a "Config" which takes precedence
-find_library(Pcre_LIBRARY NAMES pcre PATHS /usr/local/lib/libpcre.a REQUIRED)
+if(NOT ${ARCTICDB_USING_CONDA} OR NOT WIN32)
+    find_library(Pcre_LIBRARY NAMES pcre PATHS /usr/local/lib/libpcre.a REQUIRED)
+endif()
+
 if (WIN32)
     find_package(Iconv)
 else ()
@@ -499,7 +502,7 @@ set (arcticdb_core_libraries
         prometheus-cpp::pull
         ${standard_libraries}
         fmt::fmt
-        ${Protobuf_lite_LIBRARY}
+	# ${Protobuf_lite_LIBRARY}
         ${Protobuf_LIBRARY}
         ${LZ4_LIBRARY}
         ${Zstd_LIBRARY}
@@ -517,7 +520,7 @@ if(${ARCTICDB_USING_CONDA})
     # We must use dynamic libraries.
     list (APPEND arcticdb_core_libraries
         xxHash::xxHash
-        pcre
+        ${PCRE_LIBRARIES}
         msgpack-c
         ${LMDB_LIBRARIES}
     )

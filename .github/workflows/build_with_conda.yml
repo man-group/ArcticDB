@@ -36,10 +36,10 @@ jobs:
         uses: SimenB/github-actions-cpu-cores@v1.1.0
         id: cpu-cores
 
-      - name: Install Conda environment from environment_unix.yml
+      - name: Install Conda environment from environment-dev.yml
         uses: mamba-org/setup-micromamba@v1.6.0
         with:
-          environment-file: environment_unix.yml
+          environment-file: environment-dev.yml
           init-shell: >-
             bash
           cache-environment: true
@@ -111,10 +111,10 @@ jobs:
         uses: SimenB/github-actions-cpu-cores@v1.1.0
         id: cpu-cores
 
-      - name: Install Conda environment from environment_unix.yml
+      - name: Install Conda environment from environment-dev.yml
         uses: mamba-org/setup-micromamba@v1.6.0
         with:
-          environment-file: environment_unix.yml
+          environment-file: environment-dev.yml
           environment-name: arcticdb
           init-shell: >-
             bash
@@ -158,3 +158,49 @@ jobs:
         env:
           ARCTICDB_USING_CONDA: 1
 
+  win:
+    strategy:
+      matrix:
+        include:
+         - os: windows-latest
+
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Install Conda environment from environment-dev.yml
+        uses: mamba-org/provision-with-micromamba@main
+        with:
+          environment-file: environment-dev.yml
+          environment-name: arcticdb
+
+      - name: micromamba shell hook
+        shell: powershell
+        run: |
+          micromamba shell hook -s cmd.exe -p C:\Users\runneradmin\micromamba-root
+
+      - name: Make build directory
+        run: mkdir build
+
+      - name: cmake configure
+        shell: cmd
+        run: |
+          call C:\Users\runneradmin\micromamba-root\condabin\micromamba.bat activate arcticdb
+          # Protocol buffers compilation require not using build isolation.
+          python -m pip install --no-build-isolation --no-deps -v -e .
+        env:
+          ARCTICDB_USING_CONDA: 1
+
+      - name: Test with pytest
+        shell: cmd
+        run: |
+          call C:\Users\runneradmin\micromamba-root\condabin\micromamba.bat activate arcticdb
+          cd python
+          export ARCTICDB_RAND_SEED=$RANDOM
+          python -m pytest -n ${{ steps.cpu-cores.outputs.count }} tests
+        env:
+          ARCTICDB_USING_CONDA: 1
