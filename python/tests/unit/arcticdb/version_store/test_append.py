@@ -8,6 +8,7 @@ from numpy.testing import assert_array_equal
 
 from pandas import MultiIndex
 from arcticdb.version_store import NativeVersionStore
+from arcticdb_ext.version_store import NoSuchVersionException
 from arcticdb_ext.exceptions import InternalException, NormalizationException, SortingException
 from arcticdb_ext import set_config_int
 from arcticdb.util.test import random_integers, assert_frame_equal
@@ -529,10 +530,20 @@ def test_defragment_read_prev_versions(sym, lmdb_version_store):
         assert_frame_equal(lmdb_version_store.read(sym, as_of=version_id).data, expected_df)
 
     assert lmdb_version_store.is_symbol_fragmented(sym)
-    lmdb_version_store.defragment_symbol_data(sym)
+    versioned_item = lmdb_version_store.defragment_symbol_data(sym)
+    assert versioned_item.data is None
     assert len(lmdb_version_store.list_versions(sym)) == 102
 
     assert_frame_equal(lmdb_version_store.read(sym).data, expected_dfs[-1])
     assert_frame_equal(lmdb_version_store.read(sym, as_of=0).data, expected_dfs[0])
     for version_id, expected_df in enumerate(expected_dfs):
         assert_frame_equal(lmdb_version_store.read(sym, as_of=version_id).data, expected_df)
+
+    assert lmdb_version_store.read_index(sym).shape[0] == 1
+
+
+def test_defragment_segment_size_deprecated(sym, lmdb_version_store, get_stderr):
+    get_stderr()  # Clear buffer
+    with pytest.raises(NoSuchVersionException):
+        lmdb_version_store.defragment_symbol_data(sym, segment_size=123)
+    assert "segment_size parameter has been deprecated" in get_stderr()

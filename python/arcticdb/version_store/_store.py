@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import datetime
 import os
 import sys
@@ -2785,11 +2786,18 @@ class NativeVersionStore:
         if self._lib_cfg.lib_desc.version.write_options.bucketize_dynamic:
             raise ArcticDbNotYetImplemented(f"Support for library with 'bucketize_dynamic' ON is not implemented yet")
 
-        proto_cfg = self._lib_cfg.lib_desc.version.write_options
-        if segment_size and segment_size != self.resolve_defaults("segment_row_size", proto_cfg):
-            raise ArcticDbNotYetImplemented(f"Support for segment_size parameter is not implemented yet")
+        if segment_size:
+            log.warning("The segment_size parameter has been deprecated. Specify using LibraryOptions instead.")
 
-        return self.write(symbol, self.read(symbol).data)
+        result = self.write(symbol, self.read(symbol).data)
+        return VersionedItem(
+            symbol=result.symbol,
+            library=self._library.library_path,
+            version=result.version,
+            metadata=None,
+            data=None,
+            host=self.env,
+        )
 
     def library(self):
         return self._library
