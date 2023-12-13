@@ -143,7 +143,7 @@ namespace aggregation_test
         auto column_index = segment.column_index(column_name);
         ASSERT_TRUE(column_index.has_value());
         auto& column = segment.column(*column_index);
-        DataType dt = arcticdb::data_type_from_raw_type<T>();
+        auto dt = arcticdb::data_type_from_raw_type<T>();
         ASSERT_EQ(dt, column.type().data_type());
         for(std::size_t idx = 0u; idx < ugv; ++idx)
         {

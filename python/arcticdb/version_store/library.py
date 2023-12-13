@@ -1362,12 +1362,15 @@ class Library:
         """
         return self._nvs.delete_snapshot(snapshot_name)
 
-    def list_symbols(self, snapshot_name: Optional[str] = None) -> List[str]:
+    def list_symbols(self, snapshot_name: Optional[str] = None, regex: Optional[str] = None) -> List[str]:
         """
         Return the symbols in this library.
 
         Parameters
         ----------
+        regex
+            If passed, returns only the symbols which match the regex.
+
         snapshot_name
             Return the symbols available under the snapshot. If None then considers symbols that are live in the
             library as of the current time.
@@ -1377,7 +1380,7 @@ class Library:
         List[str]
             Symbols in the library.
         """
-        return self._nvs.list_symbols(snapshot=snapshot_name)
+        return self._nvs.list_symbols(snapshot=snapshot_name, regex=regex)
 
     def has_symbol(self, symbol: str, as_of: Optional[AsOf] = None) -> bool:
         """

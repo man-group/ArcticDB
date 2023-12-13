@@ -20,6 +20,12 @@
 #include <cstdint>
 #include <mutex>
 
+namespace pybind11 {
+    struct buffer_info;
+}
+
+namespace py = pybind11;
+
 #ifdef ARCTICDB_USING_CONDA
     #include <robin_hood.h>
 #else
@@ -111,6 +117,8 @@ class StringBlock {
 
     [[nodiscard]] const StringHead* const_head_at(position_t pos) const {
         auto data = data_.buffer().internal_ptr_cast<uint8_t>(pos, sizeof(StringHead));
+        auto head = reinterpret_cast<const StringHead *>(data);
+        data_.buffer().assert_size(pos + StringHead::calc_size(head->size()));
         return reinterpret_cast<const StringHead *>(data);
     }
 

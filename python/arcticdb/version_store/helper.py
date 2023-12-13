@@ -301,7 +301,7 @@ def get_azure_proto(
     env_name,
     container_name,
     endpoint,
-    with_prefix: Optional[bool] = True,
+    with_prefix: Optional[Union[bool, str]] = True,
     ca_cert_path: str = "",
 ):
     env = cfg.env_by_id[env_name]
@@ -331,7 +331,7 @@ def add_azure_library_to_env(
     container_name,
     endpoint,
     description: Optional[bool] = None,
-    with_prefix: Optional[bool] = True,
+    with_prefix: Optional[Union[bool, str]] = True,
     ca_cert_path: str = "",
 ):
     env = cfg.env_by_id[env_name]

@@ -145,11 +145,6 @@ inline bool has_undeleted_version(
     version_query.set_skip_compat(true),
     version_query.set_iterate_on_failure(false);
     auto maybe_undeleted = get_latest_undeleted_version(store, version_map, id, version_query, ReadOptions{});
-    if(maybe_undeleted)
-        log::version().info("Found undeleted key {}", *maybe_undeleted);
-    else
-        log::version().info("No key for stream {}", id);
-
     return static_cast<bool>(maybe_undeleted);
 }
 

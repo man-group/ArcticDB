@@ -11,6 +11,8 @@ import multiprocessing
 import json
 import os
 import re
+import sys
+
 import requests
 from typing import NamedTuple, Optional, Any, Type
 
@@ -52,9 +54,12 @@ class S3Bucket(StorageFixture):
         self.arctic_uri = f"s3{secure or ''}://{host}:{self.bucket}?access={self.key.id}&secret={self.key.secret}"
         if port:
             self.arctic_uri += f"&port={port}"
+        if factory.default_prefix:
+            self.arctic_uri += f"&path_prefix={factory.default_prefix}"
 
     def __exit__(self, exc_type, exc_value, traceback):
-        self.factory.cleanup_bucket(self)
+        if self.factory.clean_bucket_on_fixture_exit:
+            self.factory.cleanup_bucket(self)
 
     def create_test_cfg(self, lib_name: str) -> EnvironmentConfigsMap:
         cfg = EnvironmentConfigsMap()
@@ -127,14 +132,14 @@ class BaseS3StorageFixtureFactory(StorageFixtureFactory):
         )
 
     def create_fixture(self) -> S3Bucket:
-        return S3Bucket(self)
+        return S3Bucket(self, self.default_bucket)
 
     def cleanup_bucket(self, b: S3Bucket):
         # When dealing with a potentially shared bucket, we only clear our the libs we know about:
         b.slow_cleanup(failure_consequence="We will be charged unless we manually delete it. ")
 
 
-def real_s3_from_environment_variables():
+def real_s3_from_environment_variables(*, shared_path: bool):
     out = BaseS3StorageFixtureFactory()
     out.endpoint = os.getenv("ARCTICDB_REAL_S3_ENDPOINT")
     out.region = os.getenv("ARCTICDB_REAL_S3_REGION")
@@ -143,6 +148,10 @@ def real_s3_from_environment_variables():
     secret_key = os.getenv("ARCTICDB_REAL_S3_SECRET_KEY")
     out.default_key = Key(access_key, secret_key, "unknown user")
     out.clean_bucket_on_fixture_exit = os.getenv("ARCTICDB_REAL_S3_CLEAR").lower() in ["true", "1"]
+    if shared_path:
+        out.default_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX")
+    else:
+        out.default_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX")
     return out
 
 
@@ -170,7 +179,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         class _HostDispatcherApplication(DomainDispatcherApplication):
             """The stand-alone server needs a way to distinguish between S3 and IAM. We use the host for that"""
 
-            _MAP = {"localhost": "s3", "127.0.0.1": "iam"}
+            _MAP = {"s3.us-east-1.amazonaws.com": "s3", "localhost": "s3", "127.0.0.1": "iam"}
 
             _reqs_till_rate_limit = -1
 
@@ -204,7 +213,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
             ssl_context=None,
         )
 
-    def _safe_enter(self):
+    def _start_server(self):
         port = self.port = get_ephemeral_port(2)
         self.endpoint = f"http://{self.host}:{port}"
         self._iam_endpoint = f"http://127.0.0.1:{port}"
@@ -212,6 +221,15 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         p = self._p = multiprocessing.Process(target=self.run_server, args=(port,))
         p.start()
         wait_for_server_to_come_up(self.endpoint, "moto", p)
+
+    def _safe_enter(self):
+        for attempt in range(3):  # For unknown reason, Moto, when running in pytest-xdist, will randomly fail to start
+            try:
+                self._start_server()
+                break
+            except AssertionError as e:  # Thrown by wait_for_server_to_come_up
+                sys.stderr.write(repr(e))
+                GracefulProcessUtils.terminate(self._p)
 
         self._s3_admin = self._boto("s3", self.default_key)
         return self

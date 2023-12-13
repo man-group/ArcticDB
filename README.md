@@ -171,7 +171,7 @@ page and feel free to open issues on GitHub.
 
 We are also always looking for feedback from our dedicated community! If you have used ArcticDB please let us know, we would love to hear about your experience!
 
-Our release process is [documented here](https://github.com/man-group/ArcticDB/blob/master/docs/mkdocs/docs/technical/releasing.md).
+Our release process is [documented here](https://github.com/man-group/ArcticDB/wiki/Releasing).
 
 ## Community
 

@@ -11,6 +11,8 @@ from arcticdb.version_store import NativeVersionStore
 from arcticdb_ext.exceptions import InternalException, NormalizationException, SortingException
 from arcticdb_ext import set_config_int
 from arcticdb.util.test import random_integers, assert_frame_equal
+from arcticdb.config import set_log_level
+
 
 def test_append_simple(lmdb_version_store):
     symbol = "test_append_simple"
@@ -479,3 +481,25 @@ def test_append_docs_example(lmdb_version_store):
     assert_frame_equal(lib.read("test_frame").data, expected)
 
     print(lib.tail("test_frame", 7, as_of=0).data)
+
+
+def test_read_incomplete_no_warning(s3_store_factory, sym, get_stderr):
+    pytest.skip("This test is flaky due to trying to retrieve the log messages")
+    lib = s3_store_factory(dynamic_strings=True, incomplete=True)
+    symbol = sym
+
+    write_df = pd.DataFrame({"a": [1, 2, 3]}, index=pd.DatetimeIndex([1, 2, 3]))
+    lib.append(symbol, write_df, incomplete=True)
+    # Need to compact so that the APPEND_REF points to a non-existent APPEND_DATA (intentionally)
+    lib.compact_incomplete(symbol, True, False, False, True)
+    set_log_level("DEBUG")
+
+    try:
+        read_df = lib.read(symbol, date_range=(pd.to_datetime(0), pd.to_datetime(10))).data
+        assert_frame_equal(read_df, write_df.tz_localize("UTC"))
+
+        err = get_stderr()
+        assert err.count("W arcticdb.storage | Failed to find segment for key") == 0
+        assert err.count("D arcticdb.storage | Failed to find segment for key") == 1
+    finally:
+        set_log_level()

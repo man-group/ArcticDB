@@ -238,7 +238,7 @@ namespace
         std::optional<DataType>& data_type_
     ) {
         if(data_type_.has_value() && *data_type_ != DataType::EMPTYVAL && input_column.has_value()) {
-            entity::details::visit_type(*data_type_, [&aggregated_, &data_type_, &input_column, unique_values, &groups] (auto global_type_desc_tag) {
+            entity::details::visit_type(*data_type_, [&aggregated_, &input_column, unique_values, &groups] (auto global_type_desc_tag) {
                 using GlobalInputType = decltype(global_type_desc_tag);
                 if constexpr(!is_sequence_type(GlobalInputType::DataTypeTag::data_type)) {
                     using GlobalTypeDescriptorTag =  typename OutputType<GlobalInputType>::type;
@@ -307,7 +307,7 @@ namespace
         SegmentInMemory res;
         if(!aggregated_.empty()) {
             if(dynamic_schema) {
-                entity::details::visit_type(*data_type_, [&aggregated_, &data_type_, &res, &output_column_name, unique_values] (auto type_desc_tag) {
+                entity::details::visit_type(*data_type_, [&aggregated_, &res, &output_column_name, unique_values] (auto type_desc_tag) {
                     using RawType = typename decltype(type_desc_tag)::DataTypeTag::raw_type;
                     using MaybeValueType = MaybeValue<RawType, T>;
                     auto prev_size = aggregated_.size() / sizeof(MaybeValueType);

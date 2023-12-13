@@ -49,6 +49,8 @@ logger_by_name = {
     "timings": _Logger(_LoggerId.TIMINGS),
     "lock": _Logger(_LoggerId.LOCK),
     "schedule": _Logger(_LoggerId.SCHEDULE),
+    "symbol": _Logger(_LoggerId.SYMBOL),
+    "snapshot": _Logger(_LoggerId.SNAPSHOT)
 }
 
 for key, value in logger_by_name.items():

@@ -12,8 +12,10 @@ import os
 import pytest
 import numpy as np
 import pandas as pd
+import platform
 import random
 import re
+import time
 from datetime import datetime
 
 from arcticdb.storage_fixtures.api import StorageFixture
@@ -42,6 +44,14 @@ configure_test_logger()
 # Use a smaller memory mapped limit for all tests
 MsgPackNormalizer.MMAP_DEFAULT_SIZE = 20 * (1 << 20)
 
+if platform.system() == "Linux":
+    try:
+        from ctypes import cdll
+
+        cdll.LoadLibrary("libSegFault.so")
+    except:
+        pass
+
 
 @pytest.fixture()
 def sym(request):
@@ -52,6 +62,18 @@ def sym(request):
 def lib_name(request):
     name = re.sub(r"[^\w]", "_", request.node.name)[:30]
     return f"{name}.{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
+
+
+@pytest.fixture
+def get_stderr(capfd):
+    from arcticdb_ext.log import flush_all
+
+    def _get():
+        flush_all()
+        time.sleep(0.001)
+        return capfd.readouterr().err
+
+    return _get
 
 
 @enum.unique
@@ -93,12 +115,17 @@ def s3_storage(s3_storage_factory):
 
 @pytest.fixture(scope="session")
 def real_s3_storage_factory():
-    return real_s3_from_environment_variables()
+    return real_s3_from_environment_variables(shared_path=False)
 
 
 @pytest.fixture(scope="session")
-def real_s3_storage_without_clean_up(real_s3_storage_factory):
-    return real_s3_storage_factory.create_fixture()
+def real_s3_shared_path_storage_factory():
+    return real_s3_from_environment_variables(shared_path=True)
+
+
+@pytest.fixture(scope="session")
+def real_s3_storage_without_clean_up(real_s3_shared_path_storage_factory):
+    return real_s3_shared_path_storage_factory.create_fixture()
 
 
 @pytest.fixture

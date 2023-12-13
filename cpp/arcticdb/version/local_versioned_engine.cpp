@@ -1011,7 +1011,7 @@ VersionedItem LocalVersionedEngine::compact_incomplete_dynamic(
     bool via_iteration,
     bool sparsify,
     bool prune_previous_versions) {
-    log::version().info("Compacting incomplete symbol {}", stream_id);
+    log::version().debug("Compacting incomplete symbol {}", stream_id);
 
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id, VersionQuery{}, ReadOptions{});
     auto versioned_item =  compact_incomplete_impl(

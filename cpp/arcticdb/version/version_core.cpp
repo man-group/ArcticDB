@@ -1079,6 +1079,11 @@ FrameAndDescriptor read_dataframe_impl(
             read_incompletes_to_pipeline(store, pipeline_context, read_query, read_options, false, false, false);
     }
 
+    if(std::holds_alternative<StreamId>(version_info) && !pipeline_context->incompletes_after_) {
+        missing_data::raise<ErrorCode::E_NO_SYMBOL_DATA>(
+                "read_dataframe_impl: read returned no data for symbol {} (found no versions or append data)", pipeline_context->stream_id_);
+    }
+
     modify_descriptor(pipeline_context, read_options);
     generate_filtered_field_descriptors(pipeline_context, read_query.columns);
     ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
