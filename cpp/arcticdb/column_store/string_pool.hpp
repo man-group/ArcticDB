@@ -20,6 +20,12 @@
 #include <cstdint>
 #include <mutex>
 
+namespace pybind11 {
+    struct buffer_info;
+}
+
+namespace py = pybind11;
+
 #ifdef ARCTICDB_USING_CONDA
     #include <robin_hood.h>
 #else

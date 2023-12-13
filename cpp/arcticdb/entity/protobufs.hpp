@@ -9,7 +9,6 @@
 
 #include <storage.pb.h>
 #include <encoding.pb.h>
-#include <descriptors.pb.h>
 #include <s3_storage.pb.h>
 #include <lmdb_storage.pb.h>
 #include <mongo_storage.pb.h>
@@ -23,7 +22,6 @@
 namespace arcticdb::proto {
     namespace encoding = arcticc::pb2::encoding_pb2;
     namespace storage = arcticc::pb2::storage_pb2;
-    namespace descriptors = arcticc::pb2::descriptors_pb2;
     namespace s3_storage = arcticc::pb2::s3_storage_pb2;
     namespace lmdb_storage = arcticc::pb2::lmdb_storage_pb2;
     namespace mongo_storage = arcticc::pb2::mongo_storage_pb2;
