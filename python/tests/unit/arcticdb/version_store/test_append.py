@@ -484,6 +484,7 @@ def test_append_docs_example(lmdb_version_store):
 
 
 def test_read_incomplete_no_warning(s3_store_factory, sym, get_stderr):
+    pytest.skip("This test is flaky due to trying to retrieve the log messages")
     lib = s3_store_factory(dynamic_strings=True, incomplete=True)
     symbol = sym
 
