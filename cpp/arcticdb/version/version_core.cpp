@@ -1362,8 +1362,10 @@ VersionedItem defragment_symbol_data_impl(
         const WriteOptions& options,
         size_t segment_size) {
     auto pre_defragmentation_info = get_pre_defragmentation_info(store, stream_id, update_info, options, segment_size);
-    util::check(is_symbol_fragmented_impl(pre_defragmentation_info.segments_need_compaction) && pre_defragmentation_info.append_after.has_value(), "Nothing to compact in defragment_symbol_data");
-
+    if (!(is_symbol_fragmented_impl(pre_defragmentation_info.segments_need_compaction) && pre_defragmentation_info.append_after.has_value())) {
+        log::version().info("Nothing to compact in defragment_symbol_data");
+        return update_info.previous_index_key_.value();
+    }
     // in the new index segment, we will start appending after this value
     std::vector<folly::Future<VariantKey>> fut_vec;
     std::vector<FrameSlice> slices;

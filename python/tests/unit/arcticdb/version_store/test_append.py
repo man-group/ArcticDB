@@ -544,5 +544,7 @@ def test_defragment_no_work_to_do(sym, lmdb_version_store):
     lmdb_version_store.write(sym, df)
     assert_frame_equal(lmdb_version_store.read(sym).data, df)
     assert list(lmdb_version_store.list_versions(sym))[0]["version"] == 0
-    with pytest.raises(InternalException):
-        lmdb_version_store.defragment_symbol_data(sym)
+    versioned_item = lmdb_version_store.defragment_symbol_data(sym)
+    assert_frame_equal(lmdb_version_store.read(sym).data, df)
+    assert versioned_item.version == 0
+    assert list(lmdb_version_store.list_versions(sym))[0]["version"] == 0
