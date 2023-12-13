@@ -4,22 +4,19 @@
  *
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
-
+#include <unordered_map>
 #include <vector>
 #include <variant>
 
 #include <folly/Poly.h>
 
 #include <arcticdb/processing/processing_unit.hpp>
-#include <arcticdb/column_store/string_pool.hpp>
-#include <arcticdb/util/composite.hpp>
-#include <arcticdb/util/offset_string.hpp>
-
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/value_set.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/stream/segment_aggregator.hpp>
+#include <arcticdb/util/composite.hpp>
 #include <ankerl/unordered_dense.h>
 
 namespace arcticdb {
@@ -527,13 +524,11 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
     });
     index_col->set_row_data(grouping_map.size() - 1);
 
-    for (auto agg_data: folly::enumerate(aggregators_data)) {
-        seg.concatenate(agg_data->finalize(aggregators_.at(agg_data.index).get_output_column_name(), processing_config_.dynamic_schema_, num_unique));
-    }
 
-    // Strings case: Add the string to the output string_pool
-    procs.broadcast([&grouping_data_type, &aggregators_data, &string_pool, this](auto &proc) {
-        entity::details::visit_type(grouping_data_type, [&aggregators_data, &proc, &string_pool, this](auto data_type_tag) {
+    // Strings case: Add the string to the output string_pool and set map of strings offsets
+    std::unordered_map<entity::position_t, entity::position_t> str_offset_mapping;
+    procs.broadcast([&grouping_data_type, &aggregators_data, &string_pool, this, &str_offset_mapping](auto &proc) {
+        entity::details::visit_type(grouping_data_type, [&aggregators_data, &proc, &string_pool, this, &str_offset_mapping](auto data_type_tag) {
             using DataTypeTagType = decltype(data_type_tag);
             for (auto agg_data: folly::enumerate(aggregators_data)) {
                 auto output_column_name = aggregators_.at(agg_data.index).get_output_column_name();
@@ -545,17 +540,23 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
                         const auto out_row_count = out_block->row_count();
                         auto out_ptr = out_block->data();
                         for (size_t orc = 0; orc < out_row_count; ++orc, ++out_ptr) {
-                            auto out_offset = *out_ptr;
-                            std::optional<std::string_view> str = output_column_with_strings.string_at_offset(out_offset);
+                            std::optional<std::string_view> str = output_column_with_strings.string_at_offset(*out_ptr);
                             if (str.has_value()) {
-                                auto unused_offset = string_pool->get(*str, true).offset();
+                                // Add the string view `*str` to the output `string_pool` and map the new offset to the old one
+                                str_offset_mapping[*out_ptr] = string_pool->get(*str, true).offset();
                             }
                         }
                     }
+                    // Set map of string offsets before calling finalize
+                    agg_data->set_string_offset_map(str_offset_mapping);
                 }
             }
         });
     });
+
+    for (auto agg_data: folly::enumerate(aggregators_data)) {
+        seg.concatenate(agg_data->finalize(aggregators_.at(agg_data.index).get_output_column_name(), processing_config_.dynamic_schema_, num_unique));
+    }
 
     seg.set_string_pool(string_pool);
     seg.set_row_id(num_unique - 1);

@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <unordered_map>
+
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/type_utils.hpp>
@@ -69,6 +71,7 @@ class SumAggregatorData : private AggregatorDataBase
 public:
 
     void add_data_type(DataType data_type);
+    void set_string_offset_map(const std::unordered_map<entity::position_t, entity::position_t>&) {}
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name,  bool dynamic_schema, size_t unique_values);
 
@@ -83,6 +86,7 @@ class MaxAggregatorData : private AggregatorDataBase
 public:
 
     void add_data_type(DataType data_type);
+    void set_string_offset_map(const std::unordered_map<entity::position_t, entity::position_t>&) {}
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values);
 
@@ -97,6 +101,7 @@ class MinAggregatorData : private AggregatorDataBase
 public:
 
     void add_data_type(DataType data_type);
+    void set_string_offset_map(const std::unordered_map<entity::position_t, entity::position_t>&) {}
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values);
 
@@ -112,6 +117,7 @@ public:
 
     // Mean values are always doubles so this is a no-op
     void add_data_type(DataType) {}
+    void set_string_offset_map(const std::unordered_map<entity::position_t, entity::position_t>&) {}
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name,  bool dynamic_schema, size_t unique_values);
 
@@ -134,6 +140,7 @@ public:
 
     // Count values are always integers so this is a no-op
     void add_data_type(DataType) {}
+    void set_string_offset_map(const std::unordered_map<entity::position_t, entity::position_t>&) {}
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name,  bool dynamic_schema, size_t unique_values);
 
@@ -147,6 +154,8 @@ class FirstAggregatorData : private AggregatorDataBase
 public:
 
     void add_data_type(DataType data_type);
+    // Needs to be called before finalize
+    void set_string_offset_map(const std::unordered_map<entity::position_t, entity::position_t>& offset_map);
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values);
 
@@ -155,6 +164,7 @@ private:
     std::vector<uint8_t> aggregated_;
     std::optional<DataType> data_type_;
 
+    std::unordered_map<entity::position_t, entity::position_t> str_offset_mapping_;
     std::unordered_set<size_t> groups_cache_;
 };
 
@@ -163,6 +173,8 @@ class LastAggregatorData : private AggregatorDataBase
 public:
 
     void add_data_type(DataType data_type);
+    // Needs to be called before finalize
+    void set_string_offset_map(const std::unordered_map<entity::position_t, entity::position_t>& offset_map);
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values);
 
@@ -171,6 +183,7 @@ private:
     std::vector<uint8_t> aggregated_;
     std::optional<DataType> data_type_;
 
+    std::unordered_map<entity::position_t, entity::position_t> str_offset_mapping_;
     std::unordered_set<size_t> groups_cache_;
 };
 

@@ -463,6 +463,10 @@ void FirstAggregatorData::add_data_type(DataType data_type) {
     add_data_type_impl(data_type, data_type_);
 }
 
+void FirstAggregatorData::set_string_offset_map(const std::unordered_map<entity::position_t, entity::position_t>& offset_map) {
+    str_offset_mapping_ = offset_map;
+}
+
 void FirstAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values) {
     if(data_type_.has_value() && *data_type_ != DataType::EMPTYVAL && input_column.has_value()) {
         details::visit_type(*data_type_, [&input_column, unique_values, &groups, this] (auto global_tag) {
@@ -503,10 +507,21 @@ SegmentInMemory FirstAggregatorData::finalize(const ColumnName& output_column_na
     SegmentInMemory res;
     if(!aggregated_.empty()) {
         details::visit_type(*data_type_, [that=this, &res, &output_column_name, unique_values] (auto col_tag) {
+            using InputType = decltype(col_tag);
             using RawType = typename decltype(col_tag)::DataTypeTag::raw_type;
             that->aggregated_.resize(sizeof(RawType)* unique_values);
             auto col = std::make_shared<Column>(make_scalar_type(that->data_type_.value()), unique_values, true, false);
             memcpy(col->ptr(), that->aggregated_.data(), that->aggregated_.size());
+            // In case of strings, we need to set the output column to the correct offset pointing to StringPool which contains the actual string
+            // This is done using `str_offset_mapping_` set in `AggregationClause::process`
+            if constexpr(is_sequence_type(InputType::DataTypeTag::data_type)) {
+                auto col_ptr = reinterpret_cast<RawType*>(col->ptr());
+                for (auto i = 0u; i < unique_values; ++i, ++col_ptr) {
+                    if(that->str_offset_mapping_.find(*col_ptr) != that->str_offset_mapping_.end()) {
+                        *col_ptr = that->str_offset_mapping_[*col_ptr];
+                    }
+                }
+            }
             res.add_column(scalar_field(that->data_type_.value(), output_column_name.value), col);
             col->set_row_data(unique_values - 1);
         });
@@ -520,6 +535,10 @@ SegmentInMemory FirstAggregatorData::finalize(const ColumnName& output_column_na
 
 void LastAggregatorData::add_data_type(DataType data_type) {
     add_data_type_impl(data_type, data_type_);
+}
+
+void LastAggregatorData::set_string_offset_map(const std::unordered_map<entity::position_t, entity::position_t>& offset_map) {
+    str_offset_mapping_ = offset_map;
 }
 
 void LastAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values) {
@@ -560,10 +579,21 @@ SegmentInMemory LastAggregatorData::finalize(const ColumnName& output_column_nam
     SegmentInMemory res;
     if(!aggregated_.empty()) {
         details::visit_type(*data_type_, [that=this, &res, &output_column_name, unique_values] (auto col_tag) {
+            using InputType = decltype(col_tag);
             using RawType = typename decltype(col_tag)::DataTypeTag::raw_type;
             that->aggregated_.resize(sizeof(RawType)* unique_values);
             auto col = std::make_shared<Column>(make_scalar_type(that->data_type_.value()), unique_values, true, false);
             memcpy(col->ptr(), that->aggregated_.data(), that->aggregated_.size());
+            // In case of strings, we need to set the output column to the correct offset pointing to StringPool which contains the actual string
+            // This is done using `str_offset_mapping_` set in `AggregationClause::process`
+            if constexpr(is_sequence_type(InputType::DataTypeTag::data_type)) {
+                auto col_ptr = reinterpret_cast<RawType*>(col->ptr());
+                for (auto i = 0u; i < unique_values; ++i, ++col_ptr) {
+                    if(that->str_offset_mapping_.find(*col_ptr) != that->str_offset_mapping_.end()) {
+                        *col_ptr = that->str_offset_mapping_[*col_ptr];
+                    }
+                }
+            }
             res.add_column(scalar_field(that->data_type_.value(), output_column_name.value), col);
             col->set_row_data(unique_values - 1);
         });
