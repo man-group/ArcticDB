@@ -506,23 +506,23 @@ void FirstAggregatorData::aggregate(const std::optional<ColumnWithStrings>& inpu
 SegmentInMemory FirstAggregatorData::finalize(const ColumnName& output_column_name, bool, size_t unique_values) {
     SegmentInMemory res;
     if(!aggregated_.empty()) {
-        details::visit_type(*data_type_, [that=this, &res, &output_column_name, unique_values] (auto col_tag) {
+        details::visit_type(*data_type_, [this, &res, &output_column_name, unique_values] (auto col_tag) {
             using InputType = decltype(col_tag);
             using RawType = typename decltype(col_tag)::DataTypeTag::raw_type;
-            that->aggregated_.resize(sizeof(RawType)* unique_values);
-            auto col = std::make_shared<Column>(make_scalar_type(that->data_type_.value()), unique_values, true, false);
-            memcpy(col->ptr(), that->aggregated_.data(), that->aggregated_.size());
+            aggregated_.resize(sizeof(RawType)* unique_values);
+            auto col = std::make_shared<Column>(make_scalar_type(data_type_.value()), unique_values, true, false);
+            memcpy(col->ptr(), aggregated_.data(), aggregated_.size());
             // In case of strings, we need to set the output column to the correct offset pointing to StringPool which contains the actual string
             // This is done using `str_offset_mapping_` set in `AggregationClause::process`
             if constexpr(is_sequence_type(InputType::DataTypeTag::data_type)) {
                 auto col_ptr = reinterpret_cast<RawType*>(col->ptr());
                 for (auto i = 0u; i < unique_values; ++i, ++col_ptr) {
-                    if(that->str_offset_mapping_.find(*col_ptr) != that->str_offset_mapping_.end()) {
-                        *col_ptr = that->str_offset_mapping_[*col_ptr];
+                    if(str_offset_mapping_.find(*col_ptr) != str_offset_mapping_.end()) {
+                        *col_ptr = str_offset_mapping_[*col_ptr];
                     }
                 }
             }
-            res.add_column(scalar_field(that->data_type_.value(), output_column_name.value), col);
+            res.add_column(scalar_field(data_type_.value(), output_column_name.value), col);
             col->set_row_data(unique_values - 1);
         });
     }
@@ -578,23 +578,23 @@ void LastAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input
 SegmentInMemory LastAggregatorData::finalize(const ColumnName& output_column_name, bool, size_t unique_values) {
     SegmentInMemory res;
     if(!aggregated_.empty()) {
-        details::visit_type(*data_type_, [that=this, &res, &output_column_name, unique_values] (auto col_tag) {
+        details::visit_type(*data_type_, [this, &res, &output_column_name, unique_values] (auto col_tag) {
             using InputType = decltype(col_tag);
             using RawType = typename decltype(col_tag)::DataTypeTag::raw_type;
-            that->aggregated_.resize(sizeof(RawType)* unique_values);
-            auto col = std::make_shared<Column>(make_scalar_type(that->data_type_.value()), unique_values, true, false);
-            memcpy(col->ptr(), that->aggregated_.data(), that->aggregated_.size());
+            aggregated_.resize(sizeof(RawType)* unique_values);
+            auto col = std::make_shared<Column>(make_scalar_type(data_type_.value()), unique_values, true, false);
+            memcpy(col->ptr(), aggregated_.data(), aggregated_.size());
             // In case of strings, we need to set the output column to the correct offset pointing to StringPool which contains the actual string
             // This is done using `str_offset_mapping_` set in `AggregationClause::process`
             if constexpr(is_sequence_type(InputType::DataTypeTag::data_type)) {
                 auto col_ptr = reinterpret_cast<RawType*>(col->ptr());
                 for (auto i = 0u; i < unique_values; ++i, ++col_ptr) {
-                    if(that->str_offset_mapping_.find(*col_ptr) != that->str_offset_mapping_.end()) {
-                        *col_ptr = that->str_offset_mapping_[*col_ptr];
+                    if(str_offset_mapping_.find(*col_ptr) != str_offset_mapping_.end()) {
+                        *col_ptr = str_offset_mapping_[*col_ptr];
                     }
                 }
             }
-            res.add_column(scalar_field(that->data_type_.value(), output_column_name.value), col);
+            res.add_column(scalar_field(data_type_.value(), output_column_name.value), col);
             col->set_row_data(unique_values - 1);
         });
     }

@@ -154,7 +154,7 @@ class FirstAggregatorData : private AggregatorDataBase
 public:
 
     void add_data_type(DataType data_type);
-    // Needs to be called before finalize
+    // Needs to be called before finalize - only used for strings columns case
     void set_string_offset_map(const std::unordered_map<entity::position_t, entity::position_t>& offset_map);
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values);
@@ -173,7 +173,7 @@ class LastAggregatorData : private AggregatorDataBase
 public:
 
     void add_data_type(DataType data_type);
-    // Needs to be called before finalize
+    // Needs to be called before finalize - only used for strings columns case
     void set_string_offset_map(const std::unordered_map<entity::position_t, entity::position_t>& offset_map);
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values);
