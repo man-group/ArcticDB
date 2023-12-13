@@ -10,6 +10,10 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/preconditions.hpp>
 
+#include <pybind11/numpy.h>
+
+namespace py = pybind11;
+
 namespace arcticdb::util {
 
 using namespace arcticdb::entity;
