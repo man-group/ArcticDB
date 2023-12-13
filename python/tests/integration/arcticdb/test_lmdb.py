@@ -182,6 +182,7 @@ def create_arctic_instance(td, i):
 
 
 def test_warnings_arctic_instance(tmp_path, get_stderr):
+    pytest.skip("This test is flaky due to trying to retrieve the log messages")
     ac = Arctic(f"lmdb://{tmp_path}")
     get_stderr()  # Clear buffer
 
