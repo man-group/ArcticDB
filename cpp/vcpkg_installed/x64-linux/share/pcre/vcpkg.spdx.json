@@ -1,0 +1,221 @@
+{
+  "$schema": "https://raw.githubusercontent.com/spdx/spdx-spec/v2.2.1/schemas/spdx-schema.json",
+  "spdxVersion": "SPDX-2.2",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "documentNamespace": "https://spdx.org/spdxdocs/pcre-x64-linux-8.45#5-1cc6cd72-99cb-45fb-a878-e79d93cb7e22",
+  "name": "pcre:x64-linux@8.45#5 ba6bda90440dcbc0ecf6e663c3edf7ec11ebdee27a60fab0686eb8c9393a12bb",
+  "creationInfo": {
+    "creators": [
+      "Tool: vcpkg-ac02a9f660977426b8ec6392919fbb1d51b10998"
+    ],
+    "created": "2023-12-08T10:29:24Z"
+  },
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "GENERATES",
+      "relatedSpdxElement": "SPDXRef-binary"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-0"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-1"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-2"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-3"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-4"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-5"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-6"
+    },
+    {
+      "spdxElementId": "SPDXRef-binary",
+      "relationshipType": "GENERATED_FROM",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-0",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-1",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-2",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-3",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-4",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-5",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-6",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    }
+  ],
+  "packages": [
+    {
+      "name": "pcre",
+      "SPDXID": "SPDXRef-port",
+      "versionInfo": "8.45#5",
+      "downloadLocation": "git+https://github.com/Microsoft/vcpkg@7c8089ce40f585844a2ae5b9c80ba095b172d53d",
+      "homepage": "https://www.pcre.org/",
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "description": "Perl Compatible Regular Expressions",
+      "comment": "This is the port (recipe) consumed by vcpkg."
+    },
+    {
+      "name": "pcre:x64-linux",
+      "SPDXID": "SPDXRef-binary",
+      "versionInfo": "ba6bda90440dcbc0ecf6e663c3edf7ec11ebdee27a60fab0686eb8c9393a12bb",
+      "downloadLocation": "NONE",
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "comment": "This is a binary package built by vcpkg."
+    },
+    {
+      "SPDXID": "SPDXRef-resource-1",
+      "name": "pcre-${PCRE_VERSION}.zip",
+      "packageFileName": "pcre-${PCRE_VERSION}.zip",
+      "downloadLocation": "https://sourceforge.net/projects/pcre/pcre/files/${PCRE_VERSION}/pcre-${PCRE_VERSION}.zip",
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "${expected_sha}"
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "fileName": ".//home/gpetrov/source/ArcticDB/cpp/vcpkg/buildtrees/versioning_/versions/pcre/7c8089ce40f585844a2ae5b9c80ba095b172d53d/pcre-8.45_fix_postfix_for_debug_Windows_builds.patch",
+      "SPDXID": "SPDXRef-file-0",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "c78d59b5fcff541727e5a963668a05935af0a6aa743b22090c9030ebcdc5deac"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "fileName": ".//home/gpetrov/source/ArcticDB/cpp/vcpkg/buildtrees/versioning_/versions/pcre/7c8089ce40f585844a2ae5b9c80ba095b172d53d/unofficial-pcre-config.cmake",
+      "SPDXID": "SPDXRef-file-1",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "573f812dbd5ddd5edca1653edb5ac75f7ef68c777b1ae0c3c2cb040d4b68f99c"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "fileName": ".//home/gpetrov/source/ArcticDB/cpp/vcpkg/buildtrees/versioning_/versions/pcre/7c8089ce40f585844a2ae5b9c80ba095b172d53d/portfile.cmake",
+      "SPDXID": "SPDXRef-file-2",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "b4c6c2242970e1caa9f1a52426be976b27933ccc98e5703eb907799e2fd24b4e"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "fileName": ".//home/gpetrov/source/ArcticDB/cpp/vcpkg/buildtrees/versioning_/versions/pcre/7c8089ce40f585844a2ae5b9c80ba095b172d53d/pcre-8.45_suppress_cmake_and_compiler_warnings-errors.patch",
+      "SPDXID": "SPDXRef-file-3",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "3b476723c4c5df2be1ba9dfe7349a213e8096f35c2d244581a9f6a5bea6ca24b"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "fileName": ".//home/gpetrov/source/ArcticDB/cpp/vcpkg/buildtrees/versioning_/versions/pcre/7c8089ce40f585844a2ae5b9c80ba095b172d53d/vcpkg.json",
+      "SPDXID": "SPDXRef-file-4",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "55575f98c7f24e81a5172d5e6abf38e62bb6fb8cc7632087b70ddd816726654e"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "fileName": ".//home/gpetrov/source/ArcticDB/cpp/vcpkg/buildtrees/versioning_/versions/pcre/7c8089ce40f585844a2ae5b9c80ba095b172d53d/export-cmake-targets.patch",
+      "SPDXID": "SPDXRef-file-5",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "bda17af90e4ce7a81c068a9d34b7f358896c029ca11147c769d23b0b7801aa89"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "fileName": ".//home/gpetrov/source/ArcticDB/cpp/vcpkg/buildtrees/versioning_/versions/pcre/7c8089ce40f585844a2ae5b9c80ba095b172d53d/pcre-8.4.5_fix_check_function_exists_for_arm-androi_builds.patch",
+      "SPDXID": "SPDXRef-file-6",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "bb53edd83ce1f0dc4f8b69e177d433b83f0d5bf15f405b2826e127dd166b111f"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    }
+  ]
+}

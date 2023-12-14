@@ -1,0 +1,309 @@
+{
+  "$schema": "https://raw.githubusercontent.com/spdx/spdx-spec/v2.2.1/schemas/spdx-schema.json",
+  "spdxVersion": "SPDX-2.2",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "documentNamespace": "https://spdx.org/spdxdocs/arrow-x64-linux-14.0.1#1-7c1029f8-8774-40d8-ba5b-27169b73e3f6",
+  "name": "arrow:x64-linux@14.0.1#1 f47318556c5f4a2d2695a746fc9334aa1b2d324edec66f6116243f8b31c66d6f",
+  "creationInfo": {
+    "creators": [
+      "Tool: vcpkg-ac02a9f660977426b8ec6392919fbb1d51b10998"
+    ],
+    "created": "2023-12-08T10:17:48Z"
+  },
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "GENERATES",
+      "relatedSpdxElement": "SPDXRef-binary"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-0"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-1"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-2"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-3"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-4"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-5"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-6"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-7"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-8"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-9"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-10"
+    },
+    {
+      "spdxElementId": "SPDXRef-binary",
+      "relationshipType": "GENERATED_FROM",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-0",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-1",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-2",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-3",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-4",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-5",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-6",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-7",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-8",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-9",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-10",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    }
+  ],
+  "packages": [
+    {
+      "name": "arrow",
+      "SPDXID": "SPDXRef-port",
+      "versionInfo": "14.0.1#1",
+      "downloadLocation": "git+https://github.com/Microsoft/vcpkg@f3517d0d8bf39d98d806b0c84eac2f5f1acbbf32",
+      "homepage": "https://arrow.apache.org",
+      "licenseConcluded": "Apache-2.0",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "description": "Cross-language development platform for in-memory analytics",
+      "comment": "This is the port (recipe) consumed by vcpkg."
+    },
+    {
+      "name": "arrow:x64-linux",
+      "SPDXID": "SPDXRef-binary",
+      "versionInfo": "f47318556c5f4a2d2695a746fc9334aa1b2d324edec66f6116243f8b31c66d6f",
+      "downloadLocation": "NONE",
+      "licenseConcluded": "Apache-2.0",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "comment": "This is a binary package built by vcpkg."
+    },
+    {
+      "SPDXID": "SPDXRef-resource-1",
+      "name": "apache-arrow-${VERSION}.tar.gz",
+      "packageFileName": "apache-arrow-${VERSION}.tar.gz",
+      "downloadLocation": "https://archive.apache.org/dist/arrow/arrow-${VERSION}/apache-arrow-${VERSION}.tar.gz",
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "31d19f0ca80349f63db74bae813256b47907f85725a9bf01ef6f32406e79828ebb4701faedb52696b6a5b3bb89ad4e136485fd5eb35d396dd42147c11d4d2713"
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "fileName": ".//home/gpetrov/source/ArcticDB/cpp/vcpkg/buildtrees/versioning_/versions/arrow/f3517d0d8bf39d98d806b0c84eac2f5f1acbbf32/usage-acero",
+      "SPDXID": "SPDXRef-file-0",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "e63f14df96a984c784e4e99019aabf53a1ddd8825062d076fe76a8d1c6f31bae"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "fileName": ".//home/gpetrov/source/ArcticDB/cpp/vcpkg/buildtrees/versioning_/versions/arrow/f3517d0d8bf39d98d806b0c84eac2f5f1acbbf32/thrift.patch",
+      "SPDXID": "SPDXRef-file-1",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "1346074f8d2412eab3d0053e35c60ab2e6a9b2f55907ee0d07f39e46aa1be7be"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "fileName": ".//home/gpetrov/source/ArcticDB/cpp/vcpkg/buildtrees/versioning_/versions/arrow/f3517d0d8bf39d98d806b0c84eac2f5f1acbbf32/portfile.cmake",
+      "SPDXID": "SPDXRef-file-2",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "9d044956cac3ae90eec5f0c99e3cb59a79d05ec80daa7882ab843e32aa728066"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "fileName": ".//home/gpetrov/source/ArcticDB/cpp/vcpkg/buildtrees/versioning_/versions/arrow/f3517d0d8bf39d98d806b0c84eac2f5f1acbbf32/utf8proc.patch",
+      "SPDXID": "SPDXRef-file-3",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "f10030ffbcb01e318b94084bfd91db45deb7b1ac3e2a86913c3b1b563834a81c"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "fileName": ".//home/gpetrov/source/ArcticDB/cpp/vcpkg/buildtrees/versioning_/versions/arrow/f3517d0d8bf39d98d806b0c84eac2f5f1acbbf32/vcpkg.json",
+      "SPDXID": "SPDXRef-file-4",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "72977ae9b2e1fd60d7ac377bb3e52638033cb515d6a4977f24f4ede6ed3e1987"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "fileName": ".//home/gpetrov/source/ArcticDB/cpp/vcpkg/buildtrees/versioning_/versions/arrow/f3517d0d8bf39d98d806b0c84eac2f5f1acbbf32/fix-ci-error.patch",
+      "SPDXID": "SPDXRef-file-5",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "e405c9619e339d2d89ee7bb28d3cee84ddc30da2bc4e52f3a63f021184758903"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "fileName": ".//home/gpetrov/source/ArcticDB/cpp/vcpkg/buildtrees/versioning_/versions/arrow/f3517d0d8bf39d98d806b0c84eac2f5f1acbbf32/usage",
+      "SPDXID": "SPDXRef-file-6",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "1aa96de8a844b502fac844a9bc24349c23c9bd8040f71f93d1e12cd7538b1c55"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "fileName": ".//home/gpetrov/source/ArcticDB/cpp/vcpkg/buildtrees/versioning_/versions/arrow/f3517d0d8bf39d98d806b0c84eac2f5f1acbbf32/usage-flight",
+      "SPDXID": "SPDXRef-file-7",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "e6df7c332362fcccd135b322cdb39d3d412c4be6da8d6f22b911eccc7bf3b982"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "fileName": ".//home/gpetrov/source/ArcticDB/cpp/vcpkg/buildtrees/versioning_/versions/arrow/f3517d0d8bf39d98d806b0c84eac2f5f1acbbf32/usage-parquet",
+      "SPDXID": "SPDXRef-file-8",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "b3c90cd9350bd2c0e5bcb658bf3416258ed50f6f068029888755cf18aab63a04"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "fileName": ".//home/gpetrov/source/ArcticDB/cpp/vcpkg/buildtrees/versioning_/versions/arrow/f3517d0d8bf39d98d806b0c84eac2f5f1acbbf32/msvc-static-name.patch",
+      "SPDXID": "SPDXRef-file-9",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "61334f14fca2f44555c6a5fe46633b2769f84a9c7fd623e9ca9daa7cddf7ae64"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "fileName": ".//home/gpetrov/source/ArcticDB/cpp/vcpkg/buildtrees/versioning_/versions/arrow/f3517d0d8bf39d98d806b0c84eac2f5f1acbbf32/usage-dataset",
+      "SPDXID": "SPDXRef-file-10",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "206a489ab0f05d50f20b3b40f3c8a81c58c98cb7dc5831e382c07a4825bf0407"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    }
+  ]
+}

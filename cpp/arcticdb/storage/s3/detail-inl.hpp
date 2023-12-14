@@ -51,7 +51,7 @@ namespace s3 {
                 const std::string &bucket_name,
                 S3ClientType &s3_client,
                 KeyBucketizer &&bucketizer) {
-            ARCTICDB_SAMPLE(S3StorageWrite, 0)
+            ARCTICDB_SAMPLE("S3StorageWrite", 0)
             auto fmt_db = [](auto &&kv) { return kv.key_type(); };
 
             (fg::from(kvs.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach(
@@ -235,7 +235,7 @@ namespace s3 {
                           S3ClientType &s3_client,
                           KeyBucketizer &&bucketizer,
                           ReadKeyOpts opts) {
-            ARCTICDB_SAMPLE(S3StorageRead, 0)
+            ARCTICDB_SAMPLE("S3StorageRead", 0)
             auto fmt_db = [](auto &&k) { return variant_key_type(k); };
             std::vector<VariantKey> failed_reads;
 
@@ -349,7 +349,7 @@ namespace s3 {
                                   PrefixHandler &&prefix_handler = default_prefix_handler(),
                                   const std::string &prefix = std::string{}
         ) {
-            ARCTICDB_SAMPLE(S3StorageIterateType, 0)
+            ARCTICDB_SAMPLE("S3StorageIterateType", 0)
             auto key_type_dir = key_type_folder(root_folder, key_type);
 
             // Generally we get the key descriptor from the AtomKey, but in the case of iterating version journals

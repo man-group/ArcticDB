@@ -34,6 +34,10 @@ dependencies:
   - azure-core-cpp
   - azure-identity-cpp
   - azure-storage-blobs-cpp
+  - libopentelemetry-cpp
+  - opentelemetry-api
+  - opentelemetry-sdk
+  - opentelemetry-exporter-otlp
   # RocksDB is not supported on the conda build at the moment
   #  - rocksdb
   # ArcticDB is currently incompatible with fmt 10

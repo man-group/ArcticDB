@@ -98,7 +98,7 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
 
 inline std::shared_ptr<pipelines::FrameDataWrapper> initialize_array(const SegmentInMemory& frame, py::object &ref) {
     auto output = std::make_shared<pipelines::FrameDataWrapper>(frame.fields().size());
-    ARCTICDB_SAMPLE(InitializeArrays, 0);
+    ARCTICDB_SAMPLE("InitializeArrays", 0);
     ARCTICDB_DEBUG(log::memory(), "Initializing arrays");
     util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
     for (std::size_t c = 0; c < static_cast<size_t>(frame.fields().size()); ++c) {

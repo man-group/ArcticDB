@@ -383,7 +383,7 @@ public:
             std::is_integral_v<T> || std::is_floating_point_v<T>,
             int> = 0>
     void set_array(ssize_t row_offset, Tensor<T> &val) {
-        ARCTICDB_SAMPLE(ColumnSetArray, RMTSF_Aggregate)
+        ARCTICDB_SAMPLE("ColumnSetArray", 0)
         magic_.check();
         util::check_arg(last_logical_row_ + 1 == row_offset, "set_array expected row {}, actual {} ", last_logical_row_ + 1, row_offset);
         data_.ensure_bytes(val.nbytes());
@@ -401,7 +401,7 @@ public:
 
     template<class T, std::enable_if_t< std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
     void set_array(ssize_t row_offset, py::array_t<T>& val) {
-        ARCTICDB_SAMPLE(ColumnSetArray, RMTSF_Aggregate)
+        ARCTICDB_SAMPLE("ColumnSetArray", 0)
             magic_.check();
         util::check_arg(last_logical_row_ + 1 == row_offset, "set_array expected row {}, actual {} ", last_logical_row_ + 1, row_offset);
         data_.ensure_bytes(val.nbytes());

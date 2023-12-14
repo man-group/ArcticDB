@@ -58,9 +58,11 @@
     },
     "azure-identity-cpp",
     "azure-storage-blobs-cpp",
-    "rocksdb"
+    "rocksdb",
+    "opentelemetry-cpp"
   ],
   "overrides": [
+    { "name": "opentelemetry-cpp", "version-string": "1.13.0" },
     { "name": "openssl", "version-string": "1.1.1n#1" },
     { "name": "aws-sdk-cpp", "version": "1.11.201" },
     { "name": "aws-c-s3", "version": "0.3.24" },

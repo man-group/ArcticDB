@@ -36,7 +36,7 @@ LocalVersionedEngine::LocalVersionedEngine(
     auto temp = RemoteryInstance::instance();
 #endif
     ARCTICDB_SAMPLE_THREAD();
-    ARCTICDB_SAMPLE(LocalVersionedEngine, 0)
+    ARCTICDB_SAMPLE("LocalVersionedEngine", 0)
     if(async::TaskScheduler::is_forked()) {
         async::TaskScheduler::set_forked(false);
         async::TaskScheduler::reattach_instance();
@@ -178,7 +178,7 @@ std::set<StreamId> LocalVersionedEngine::list_streams_internal(
     const std::optional<bool>& use_symbol_list,
     const std::optional<bool>& all_symbols
     ) {
-    ARCTICDB_SAMPLE(ListStreamsInternal, 0)
+    ARCTICDB_SAMPLE("ListStreamsInternal", 0)
     auto res = std::set<StreamId>();
 
     if (snap_name) {
@@ -429,7 +429,7 @@ DescriptorItem LocalVersionedEngine::read_descriptor_internal(
     const VersionQuery& version_query,
     const ReadOptions& read_options
     ) {
-    ARCTICDB_SAMPLE(ReadDescriptor, 0)
+    ARCTICDB_SAMPLE("ReadDescriptor", 0)
     auto version = get_version_to_read(stream_id, version_query, read_options);
     missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(version.has_value(),
         "Unable to retrieve descriptor data. {}@{}: version not found", stream_id, version_query);
@@ -713,7 +713,7 @@ VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
     bool allow_sparse,
     bool validate_index
     ) {
-    ARCTICDB_SAMPLE(WriteVersionedDataFrame, 0)
+    ARCTICDB_SAMPLE("WriteVersionedDataFrame", 0)
 
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write_versioned_dataframe");
     auto maybe_prev = ::arcticdb::get_latest_version(store(), version_map(), stream_id, VersionQuery{}, ReadOptions{});
@@ -756,7 +756,7 @@ VersionedItem LocalVersionedEngine::write_individual_segment(
     SegmentInMemory&& segment,
     bool prune_previous_versions
     ) {
-    ARCTICDB_SAMPLE(WriteVersionedDataFrame, 0)
+    ARCTICDB_SAMPLE("WriteVersionedDataFrame", 0)
 
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write_versioned_dataframe");
     auto maybe_prev = ::arcticdb::get_latest_version(store(), version_map(), stream_id, VersionQuery{}, ReadOptions{});
@@ -834,7 +834,7 @@ folly::Future<folly::Unit> LocalVersionedEngine::delete_trees_responsibly(
         const std::optional<SnapshotId>& snapshot_being_deleted,
         const PreDeleteChecks& check,
         const bool dry_run) {
-    ARCTICDB_SAMPLE(DeleteTree, 0)
+    ARCTICDB_SAMPLE("DeleteTree", 0)
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_tree");
 
     util::ContainerFilterWrapper keys_to_delete(orig_keys_to_delete);
@@ -1307,7 +1307,7 @@ std::vector<folly::Future<AtomKey>> LocalVersionedEngine::batch_write_internal(
     std::vector<std::shared_ptr<DeDupMap>> de_dup_maps,
     bool validate_index
 ) {
-    ARCTICDB_SAMPLE(WriteDataFrame, 0)
+    ARCTICDB_SAMPLE("WriteDataFrame", 0)
     ARCTICDB_DEBUG(log::version(), "Batch writing {} dataframes", stream_ids.size());
     std::vector<folly::Future<entity::AtomKey>> results_fut;
     for (size_t idx = 0; idx < stream_ids.size(); idx++) {
@@ -1359,7 +1359,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
             .thenValue([this, &stream_id = stream_ids[idx], &write_options, &validate_index, &frame = frames[idx]](
                 auto&& version_id_and_dedup_map){
                     auto& [version_id, de_dup_map, update_info] = version_id_and_dedup_map;
-                    ARCTICDB_SAMPLE(WriteDataFrame, 0)
+                    ARCTICDB_SAMPLE("WriteDataFrame", 0)
                     ARCTICDB_DEBUG(log::version(), "Writing dataframe for stream id {}", stream_id);
                     auto write_fut = async_write_dataframe_impl( store(),
                         version_id,

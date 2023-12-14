@@ -1,0 +1,110 @@
+{
+  "$schema": "https://raw.githubusercontent.com/spdx/spdx-spec/v2.2.1/schemas/spdx-schema.json",
+  "spdxVersion": "SPDX-2.2",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "documentNamespace": "https://spdx.org/spdxdocs/bitmagic-x64-linux-7.12.3-86197ce3-acb1-47af-8f91-d8c91b19538a",
+  "name": "bitmagic:x64-linux@7.12.3 554d1ff6667ebe3107d770fd5f31ef2f197d344934987e4f0c409bb33f16db9d",
+  "creationInfo": {
+    "creators": [
+      "Tool: vcpkg-ac02a9f660977426b8ec6392919fbb1d51b10998"
+    ],
+    "created": "2023-12-08T10:22:44Z"
+  },
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "GENERATES",
+      "relatedSpdxElement": "SPDXRef-binary"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-0"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-1"
+    },
+    {
+      "spdxElementId": "SPDXRef-binary",
+      "relationshipType": "GENERATED_FROM",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-0",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-1",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    }
+  ],
+  "packages": [
+    {
+      "name": "bitmagic",
+      "SPDXID": "SPDXRef-port",
+      "versionInfo": "7.12.3",
+      "downloadLocation": "git+https://github.com/Microsoft/vcpkg@d8f4a3a305e2872a295f493450a96b093ad39ef7",
+      "homepage": "http://bitmagic.io",
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "description": "Algorithms and tools for Algebra of Sets for information retrieval, indexing of databases, scientific algorithms, ranking, clustering, unsupervised machine learning and signal processing.",
+      "comment": "This is the port (recipe) consumed by vcpkg."
+    },
+    {
+      "name": "bitmagic:x64-linux",
+      "SPDXID": "SPDXRef-binary",
+      "versionInfo": "554d1ff6667ebe3107d770fd5f31ef2f197d344934987e4f0c409bb33f16db9d",
+      "downloadLocation": "NONE",
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "comment": "This is a binary package built by vcpkg."
+    },
+    {
+      "SPDXID": "SPDXRef-resource-1",
+      "name": "tlk00/BitMagic",
+      "downloadLocation": "git+https://github.com/tlk00/BitMagic@v7.12.3",
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "03b9261d102b3c610a4b284f74092feb451b7a5fe80d60002dd2a42e2eeae4b763d212d2647eeb1fc9a61c93500f006ab2bcc46598207903682b70b1e4336b6a"
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "fileName": ".//home/gpetrov/source/ArcticDB/cpp/vcpkg/buildtrees/versioning_/versions/bitmagic/d8f4a3a305e2872a295f493450a96b093ad39ef7/portfile.cmake",
+      "SPDXID": "SPDXRef-file-0",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "4137a21cd5bab6c673320c88a67474147bc9903c5fd4dc2f5b20a916c5b82b81"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "fileName": ".//home/gpetrov/source/ArcticDB/cpp/vcpkg/buildtrees/versioning_/versions/bitmagic/d8f4a3a305e2872a295f493450a96b093ad39ef7/vcpkg.json",
+      "SPDXID": "SPDXRef-file-1",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "1ead921592cdeb831a7a971cfa4c143120a406dbec12b1d90c7f66a4812cd679"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    }
+  ]
+}

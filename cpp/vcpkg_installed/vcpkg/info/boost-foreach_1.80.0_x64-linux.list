@@ -1,0 +1,11 @@
+x64-linux/
+x64-linux/include/
+x64-linux/include/boost/
+x64-linux/include/boost/foreach.hpp
+x64-linux/include/boost/foreach_fwd.hpp
+x64-linux/share/
+x64-linux/share/boost-foreach/
+x64-linux/share/boost-foreach/copyright
+x64-linux/share/boost-foreach/usage
+x64-linux/share/boost-foreach/vcpkg.spdx.json
+x64-linux/share/boost-foreach/vcpkg_abi_info.txt

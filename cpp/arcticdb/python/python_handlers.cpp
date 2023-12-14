@@ -18,7 +18,7 @@ void EmptyHandler::handle_type(
     size_t dest_bytes,
     std::shared_ptr<BufferHolder>
 ) {
-    ARCTICDB_SAMPLE(HandleEmpty, 0)
+    ARCTICDB_SAMPLE("HandleEmpty", 0)
     util::check(dest != nullptr, "Got null destination pointer");
     const size_t num_rows = dest_bytes / get_type_size(DataType::EMPTYVAL);
     static_assert(get_type_size(DataType::EMPTYVAL) == sizeof(PyObject *));

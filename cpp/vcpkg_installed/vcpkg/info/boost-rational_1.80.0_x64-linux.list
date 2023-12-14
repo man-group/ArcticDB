@@ -1,0 +1,10 @@
+x64-linux/
+x64-linux/include/
+x64-linux/include/boost/
+x64-linux/include/boost/rational.hpp
+x64-linux/share/
+x64-linux/share/boost-rational/
+x64-linux/share/boost-rational/copyright
+x64-linux/share/boost-rational/usage
+x64-linux/share/boost-rational/vcpkg.spdx.json
+x64-linux/share/boost-rational/vcpkg_abi_info.txt

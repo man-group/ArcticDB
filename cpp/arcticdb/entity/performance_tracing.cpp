@@ -13,52 +13,58 @@
 #include <arcticdb/util/preprocess.hpp>
 #include <arcticdb/util/pb_util.hpp>
 
-#if defined(USE_REMOTERY)
+#if defined(USE_OTEL_CPP)
+#include "opentelemetry/sdk/resource/resource.h"
+#include "opentelemetry/sdk/trace/batch_span_processor_factory.h"
+#include "opentelemetry/sdk/trace/batch_span_processor_options.h"
 
-std::shared_ptr<RemoteryInstance> RemoteryInstance::instance(){
-    std::call_once(RemoteryInstance::init_flag_, &RemoteryInstance::init);
-    return RemoteryInstance::instance_;
+namespace resource       = opentelemetry::sdk::resource;
+
+std::shared_ptr<OtelInstance> OtelInstance::instance(){
+    std::call_once(OtelInstance::init_flag_, &OtelInstance::init);
+    
+    return OtelInstance::instance_;
 }
 
-std::shared_ptr<RemoteryInstance> RemoteryInstance::instance_;
-std::once_flag RemoteryInstance::init_flag_;
+std::shared_ptr<OtelInstance> OtelInstance::instance_;
+std::once_flag OtelInstance::init_flag_;
 
-std::shared_ptr<RemoteryConfigInstance> RemoteryConfigInstance::instance(){
-    std::call_once(RemoteryConfigInstance::init_flag_, &RemoteryConfigInstance::init);
-    return RemoteryConfigInstance::instance_;
+OtelInstance::OtelInstance() {
+    // Create OTLP exporter instance
+    opentelemetry::exporter::otlp::OtlpGrpcExporterOptions opts;
+    constexpr int kNumSpans = 1000;
+
+    trace_sdk::BatchSpanProcessorOptions options{};
+    // We make the queue size `KNumSpans`*2+5 because when the queue is half full, a preemptive notif
+    // is sent to start an export call, which we want to avoid in this simple example.
+    options.max_queue_size = kNumSpans * 2 + 5;
+    // Time interval (in ms) between two consecutive exports.
+    options.schedule_delay_millis = std::chrono::milliseconds(30);
+    // We export `kNumSpans` after every `schedule_delay_millis` milliseconds.
+    options.max_export_batch_size = kNumSpans;
+
+
+
+    auto resource = resource::Resource::Create({{"service.name", "ArcticDB"}});
+    // TODO: Add an env var for these 
+    opts.endpoint = "localhost:4317";
+    opts.use_ssl_credentials = false;
+    auto exporter  = otlp::OtlpGrpcExporterFactory::Create(opts);
+    // auto processor = trace_sdk::SimpleSpanProcessorFactory::Create(std::move(exporter));
+    auto processor = trace_sdk::BatchSpanProcessorFactory::Create(std::move(exporter), options);
+
+    provider_ = trace_sdk::TracerProviderFactory::Create(std::move(processor), resource);
+    main_span_ = get_tracer()->StartSpan("ArcticDB");
+    // TODO: Maybe add a console exporter for debugging
+
+    // Set the global trace provider
+    // trace::Provider::SetTracerProvider(provider_);
 }
 
-std::shared_ptr<RemoteryConfigInstance> RemoteryConfigInstance::instance_;
-std::once_flag RemoteryConfigInstance::init_flag_;
-
-RemoteryInstance::RemoteryInstance() {
-    auto cfg = RemoteryConfigInstance::instance()->config;
-    auto * settings = rmt_Settings();
-    settings->port = cfg.port() ? cfg.port() : 17815;
-    settings->reuse_open_port = !cfg.do_not_reuse_open_port();
-    settings->limit_connections_to_localhost = cfg.limit_connections_to_localhost();
-    auto set_if = [](auto* dst, auto src){
-        if(src){
-            *dst = src;
-        }
-    };
-    set_if(&settings->msSleepBetweenServerUpdates, cfg.ms_sleep_btw_server_updates());
-    set_if(&settings->messageQueueSizeInBytes, cfg.message_queue_size_in_bytes());
-    set_if(&settings->maxNbMessagesPerUpdate, cfg.max_nb_messages_per_update());
-    auto rc = rmt_CreateGlobalInstance(&rmt_);
-    if(rc){
-        ARCTICDB_DEBUG(arcticdb:: log::version(), "Remotery creation with settings '{}' failed, rc={}", arcticdb::util::format(cfg), rc);
-        rmt_ = nullptr;
-    } else {
-        ARCTICDB_DEBUG(arcticdb::log::version(), "Remotery created with settings {}", arcticdb::util::format(cfg));
-    }
-}
-
-RemoteryInstance::~RemoteryInstance() {
-    if(rmt_) {
-        rmt_DestroyGlobalInstance(rmt_);
-        rmt_ = nullptr;
-    }
+OtelInstance::~OtelInstance() {
+    // std::shared_ptr<opentelemetry::trace::TracerProvider> none;
+    // trace::Provider::SetTracerProvider(none);
+    main_span_->End();
 }
 
 #endif
@@ -79,13 +85,3 @@ namespace arcticdb::detail {
         }
     };
 }
-
-#ifdef USE_REMOTERY
-
-void set_remotery_thread_name(const char* task_name){
-    static thread_local arcticdb::detail::ThreadNameCache tnc;
-    auto name = tnc.get_thread_name(task_name);
-    rmt_SetCurrentThreadName(name.data());
-}
-
-#endif

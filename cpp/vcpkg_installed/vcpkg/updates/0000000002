@@ -1,0 +1,10 @@
+Package: opentelemetry-cpp
+Version: 1.12.0
+Port-Version: 1
+Depends: abseil, curl, nlohmann-json, vcpkg-cmake, vcpkg-cmake-config
+Architecture: x64-linux
+Multi-Arch: same
+Abi: 22ad833704f0ab9d384b45f69c7f09b8432955118aa45abed6a8272a5f07652c
+Description: OpenTelemetry is a collection of tools, APIs, and SDKs.
+    You use it to instrument, generate, collect, and export telemetry data (metrics, logs, and traces) for analysis in order to understand your software's performance and behavior.
+Status: install ok half-installed

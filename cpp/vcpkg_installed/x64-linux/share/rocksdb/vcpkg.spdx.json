@@ -1,0 +1,132 @@
+{
+  "$schema": "https://raw.githubusercontent.com/spdx/spdx-spec/v2.2.1/schemas/spdx-schema.json",
+  "spdxVersion": "SPDX-2.2",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "documentNamespace": "https://spdx.org/spdxdocs/rocksdb-x64-linux-8.5.3-9e6ea65d-4972-4fd8-9787-d75e4821d7fc",
+  "name": "rocksdb:x64-linux@8.5.3 5dbdca3c5e55ec4198a90b17119a14e4c78ec963de52ac91157bccf97ceabb01",
+  "creationInfo": {
+    "creators": [
+      "Tool: vcpkg-ac02a9f660977426b8ec6392919fbb1d51b10998"
+    ],
+    "created": "2023-12-08T10:35:03Z"
+  },
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "GENERATES",
+      "relatedSpdxElement": "SPDXRef-binary"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-0"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-1"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-2"
+    },
+    {
+      "spdxElementId": "SPDXRef-binary",
+      "relationshipType": "GENERATED_FROM",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-0",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-1",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-2",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    }
+  ],
+  "packages": [
+    {
+      "name": "rocksdb",
+      "SPDXID": "SPDXRef-port",
+      "versionInfo": "8.5.3",
+      "downloadLocation": "git+https://github.com/Microsoft/vcpkg@caf00463e9aa52209110783d90fa39066eaa4249",
+      "homepage": "https://github.com/facebook/rocksdb",
+      "licenseConcluded": "GPL-2.0-only OR Apache-2.0",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "description": "A library that provides an embeddable, persistent key-value store for fast storage",
+      "comment": "This is the port (recipe) consumed by vcpkg."
+    },
+    {
+      "name": "rocksdb:x64-linux",
+      "SPDXID": "SPDXRef-binary",
+      "versionInfo": "5dbdca3c5e55ec4198a90b17119a14e4c78ec963de52ac91157bccf97ceabb01",
+      "downloadLocation": "NONE",
+      "licenseConcluded": "GPL-2.0-only OR Apache-2.0",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "comment": "This is a binary package built by vcpkg."
+    },
+    {
+      "SPDXID": "SPDXRef-resource-1",
+      "name": "facebook/rocksdb",
+      "downloadLocation": "git+https://github.com/facebook/rocksdb@v8.5.3",
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "2039a4afa9e6ee7d01aba3287f27f43cb48baf55be98b5be06f0b54982f7e28c1032ec1dbd1f10d946554c3c93a93686e7b51aab0d92f731ad4dd7d7c62bed74"
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "fileName": ".//home/gpetrov/source/ArcticDB/cpp/vcpkg/buildtrees/versioning_/versions/rocksdb/caf00463e9aa52209110783d90fa39066eaa4249/portfile.cmake",
+      "SPDXID": "SPDXRef-file-0",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "83b08b10a8ba7055c8a75835ee3c894ea09b37c69975637f5a9aa2d12371b384"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "fileName": ".//home/gpetrov/source/ArcticDB/cpp/vcpkg/buildtrees/versioning_/versions/rocksdb/caf00463e9aa52209110783d90fa39066eaa4249/0001-fix-dependencies.patch",
+      "SPDXID": "SPDXRef-file-1",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "c8272d9543f2dfea24b3c1cf849b8ee152d0966d39c706cdaf119d0ecc96c4fe"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "fileName": ".//home/gpetrov/source/ArcticDB/cpp/vcpkg/buildtrees/versioning_/versions/rocksdb/caf00463e9aa52209110783d90fa39066eaa4249/vcpkg.json",
+      "SPDXID": "SPDXRef-file-2",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "ab2ea651d50cfda4da7cca34a262b4e0ce0cf898291e65a7ea2a1cf907d320bc"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    }
+  ]
+}

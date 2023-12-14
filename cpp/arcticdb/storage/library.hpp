@@ -63,12 +63,12 @@ class Library {
      * @param visitor Takes one VariantKey which should be moved in but no guarantees
      */
     void iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix=std::string{}) {
-        ARCTICDB_SAMPLE(LibraryIterate, 0)
+        ARCTICDB_SAMPLE("LibraryIterate", 0)
         storages_->iterate_type(key_type, visitor, prefix);
     }
 
     void write(Composite<KeySegmentPair>&& kvs) {
-        ARCTICDB_SAMPLE(LibraryWrite, 0)
+        ARCTICDB_SAMPLE("LibraryWrite", 0)
         if (open_mode() < OpenMode::WRITE)
             throw PermissionException(library_path_, open_mode(), "write");
 
@@ -79,7 +79,7 @@ class Library {
     }
 
     void update(Composite<KeySegmentPair>&& kvs, storage::UpdateOpts opts) {
-        ARCTICDB_SAMPLE(LibraryUpdate, 0)
+        ARCTICDB_SAMPLE("LibraryUpdate", 0)
         if (open_mode() < OpenMode::WRITE)
             throw PermissionException(library_path_, open_mode(), "update");
 
@@ -90,7 +90,7 @@ class Library {
     }
 
     void read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
-        ARCTICDB_SAMPLE(LibraryRead, 0)
+        ARCTICDB_SAMPLE("LibraryRead", 0)
         storages_->read(std::move(ks), visitor, opts, !storage_fallthrough_);
     }
 
@@ -98,7 +98,7 @@ class Library {
         if (open_mode() < arcticdb::storage::OpenMode::DELETE)
             throw PermissionException(library_path_, open_mode(), "delete");
 
-        ARCTICDB_SAMPLE(LibraryRemove, 0)
+        ARCTICDB_SAMPLE("LibraryRemove", 0)
         storages_->remove(std::move(ks), opts);
     }
 

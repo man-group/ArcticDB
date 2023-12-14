@@ -30,7 +30,7 @@ void MongoStorage::do_write(Composite<KeySegmentPair>&& kvs) {
     namespace fg = folly::gen;
     auto fmt_db = [](auto &&kv) { return kv.key_type(); };
 
-    ARCTICDB_SAMPLE(MongoStorageWrite, 0)
+    ARCTICDB_SAMPLE("MongoStorageWrite", 0)
 
     (fg::from(kvs.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
         for (auto &kv : group.values()) {
@@ -44,7 +44,7 @@ void MongoStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) {
     namespace fg = folly::gen;
     auto fmt_db = [](auto &&kv) { return kv.key_type(); };
 
-    ARCTICDB_SAMPLE(MongoStorageWrite, 0)
+    ARCTICDB_SAMPLE("MongoStorageWrite", 0)
 
     (fg::from(kvs.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
         for (auto &kv : group.values()) {
@@ -57,7 +57,7 @@ void MongoStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) {
 void MongoStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts) {
     namespace fg = folly::gen;
     auto fmt_db = [](auto &&k) { return variant_key_type(k); };
-    ARCTICDB_SAMPLE(MongoStorageRead, 0)
+    ARCTICDB_SAMPLE("MongoStorageRead", 0)
     std::vector<VariantKey> failed_reads;
 
     (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
@@ -86,7 +86,7 @@ bool MongoStorage::do_fast_delete() {
 void MongoStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
     namespace fg = folly::gen;
     auto fmt_db = [](auto &&k) { return variant_key_type(k); };
-    ARCTICDB_SAMPLE(MongoStorageRemove, 0)
+    ARCTICDB_SAMPLE("MongoStorageRemove", 0)
 
     (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
         for (auto &k : group.values()) {
@@ -99,7 +99,7 @@ void MongoStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
 void MongoStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix) {
     auto collection = collection_name(key_type);
     auto func = folly::Function<void(entity::VariantKey&&)>(visitor);
-    ARCTICDB_SAMPLE(MongoStorageItType, 0)
+    ARCTICDB_SAMPLE("MongoStorageItType", 0)
     client_->iterate_type(db_, collection, key_type, std::move(func), prefix);
 }
 

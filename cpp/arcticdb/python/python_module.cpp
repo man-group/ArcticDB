@@ -255,16 +255,19 @@ void reinit_lmdb_warning() {
 }
 
 void register_instrumentation(py::module && m){
-    auto remotery = m.def_submodule("remotery");
-#if defined(USE_REMOTERY)
-    py::class_<RemoteryInstance, std::shared_ptr<RemoteryInstance>>(remotery, "Instance");
-    remotery.def("configure", [](const py::object & py_config){
-        arcticdb::proto::utils::RemoteryConfig config;
-        arcticdb::python_util::pb_from_python(py_config, config);
-        RemoteryConfigInstance::instance()->config.CopyFrom(config);
-    });
-    remotery.def("log", [](std::string s ARCTICDB_UNUSED){
-       ARCTICDB_SAMPLE_LOG(s.c_str())
+    auto otel = m.def_submodule("otel");
+#if defined(USE_OTEL_CPP)
+    py::class_<OtelInstance, std::shared_ptr<OtelInstance>>(otel, "Instance");
+    // otel.def("configure", [](const py::object & py_config){
+    //     arcticdb::proto::utils::RemoteryConfig config;
+    //     arcticdb::python_util::pb_from_python(py_config, config);
+    //     RemoteryConfigInstance::instance()->config.CopyFrom(config);
+    // });
+    // otel.def("log", [](std::string s ARCTICDB_UNUSED){
+    //    ARCTICDB_SAMPLE_LOG(s.c_str())
+    // });
+    otel.def("trace", [](std::string s ARCTICDB_UNUSED, const py::object & params ARCTICDB_UNUSED, int64_t trace_id ARCTICDB_UNUSED, int64_t span_id ARCTICDB_UNUSED){
+       ARCTICDB_START_TRACE(s.c_str(), 0, trace_id, span_id)
     });
 #endif
 }

@@ -171,6 +171,7 @@ public:
         const StreamId& stream_id,
         const LoadParameter& load_params,
         const std::shared_ptr<VersionMapEntry>& entry) {
+        ARCTICDB_SAMPLE("Loading via ref key", 0)
         load_params.validate();
         static const auto max_trial_config = ConfigsMap::instance()->get_int("VersionMap.MaxReadRefTrials", 2);
         auto max_trials = max_trial_config;
@@ -210,6 +211,7 @@ public:
         const StreamId& stream_id,
         std::shared_ptr<VersionMapEntry>& entry,
         bool use_index_keys_for_iteration=false) const {
+        ARCTICDB_SAMPLE("Load via iteration", 0)
         ARCTICDB_DEBUG(log::version(), "Attempting to iterate version keys");
         auto match_stream_id = [&stream_id](const AtomKey &k) { return k.id() == stream_id; };
         entry = build_version_map_entry_with_predicate_iteration(store, match_stream_id, stream_id,
@@ -352,7 +354,7 @@ public:
             std::shared_ptr<StreamSink> store,
             const AtomKey &key,
             std::optional<AtomKey> prev_journal_key) {
-        ARCTICDB_SAMPLE(WriteJournalEntry, 0)
+        ARCTICDB_SAMPLE("WriteJournalEntry", 0)
         ARCTICDB_DEBUG(log::version(), "Version map writing version for key {}", key);
 
         VariantKey journal_key;
@@ -594,6 +596,7 @@ private:
     }
 
     bool has_cached_entry(const StreamId &stream_id, const LoadParameter& load_param) const {
+        ARCTICDB_SAMPLE("Check for cacehd entry", 0)
         load_param.validate();
         MapType::const_iterator entry_it;
         if(!find_entry(entry_it, stream_id))
@@ -701,7 +704,7 @@ private:
          * structure, and if that fails it then goes and builds that from iterating all keys from storage which can
          * be much slower, though always consistent.
          */
-
+        ARCTICDB_SAMPLE("StorageReload", 0);
         auto entry = get_entry(stream_id);
         entry->clear();
         const auto clock_unsync_tolerance = ConfigsMap::instance()->get_int("VersionMap.UnsyncTolerance",

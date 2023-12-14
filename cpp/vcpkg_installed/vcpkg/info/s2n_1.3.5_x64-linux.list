@@ -1,0 +1,17 @@
+x64-linux/
+x64-linux/debug/
+x64-linux/debug/lib/
+x64-linux/debug/lib/libs2n.a
+x64-linux/include/
+x64-linux/include/s2n.h
+x64-linux/lib/
+x64-linux/lib/libs2n.a
+x64-linux/share/
+x64-linux/share/s2n/
+x64-linux/share/s2n/copyright
+x64-linux/share/s2n/s2n-config.cmake
+x64-linux/share/s2n/s2n-targets-debug.cmake
+x64-linux/share/s2n/s2n-targets-release.cmake
+x64-linux/share/s2n/s2n-targets.cmake
+x64-linux/share/s2n/vcpkg.spdx.json
+x64-linux/share/s2n/vcpkg_abi_info.txt

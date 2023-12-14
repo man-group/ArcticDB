@@ -30,7 +30,7 @@ inline entity::VariantKey write_multi_index_entry(
     const py::object &user_meta,
     VersionId version_id
 ) {
-    ARCTICDB_SAMPLE(WriteJournalEntry, 0)
+    ARCTICDB_SAMPLE("WriteJournalEntry", 0)
     ARCTICDB_DEBUG(log::version(), "Version map writing multi key");
     folly::Future<VariantKey> multi_key_fut = folly::Future<VariantKey>::makeEmpty();
 

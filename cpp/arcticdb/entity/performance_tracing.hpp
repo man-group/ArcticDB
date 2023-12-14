@@ -26,43 +26,75 @@ arcticdb::ScopedTimer runtime_sub_timer_##name = !_scoped_subtimer_##name_active
 });
 
 
-#ifdef USE_REMOTERY
+#ifdef USE_OTEL_CPP
+#include <array>
+#include <span>
+#include "opentelemetry/exporters/otlp/otlp_grpc_exporter_factory.h"
+#include "opentelemetry/sdk/trace/processor.h"
+#include "opentelemetry/sdk/trace/simple_processor_factory.h"
+#include "opentelemetry/sdk/trace/tracer_provider_factory.h"
+#include "opentelemetry/trace/provider.h"
 
-#ifdef ARCTICDB_USING_CONDA
-    #include <remotery/Remotery.h>
-#else
-    #include <Remotery.h>
-#endif
+namespace trace     = opentelemetry::trace;
+namespace nostd = opentelemetry::nostd;
+namespace trace_sdk = opentelemetry::sdk::trace;
+namespace otlp      = opentelemetry::exporter::otlp;
 
-class RemoteryInstance {
+class OtelInstance {
   public:
-    static std::shared_ptr<RemoteryInstance> instance();
-    RemoteryInstance();
-    ~RemoteryInstance();
-    static std::shared_ptr<RemoteryInstance> instance_;
+    static std::shared_ptr<OtelInstance> instance();
+    OtelInstance();
+    ~OtelInstance();
+    static std::shared_ptr<OtelInstance> instance_;
     static std::once_flag init_flag_;
     static void destroy_instance(){instance_.reset();}
-    Remotery *rmt_ = nullptr;
+    std::shared_ptr<trace::TracerProvider> provider_;
+    nostd::shared_ptr<trace::Span> main_span_;
+
+    nostd::shared_ptr<trace::Tracer> get_tracer()
+    {
+        return provider_->GetTracer("ArcticDB", OPENTELEMETRY_SDK_VERSION);
+    }
 
     static void init(){
-        instance_ = std::make_shared<RemoteryInstance>();
+        instance_ = std::make_shared<OtelInstance>();
     }
 };
 
-class RemoteryConfigInstance {
-  public:
-    static std::shared_ptr<RemoteryConfigInstance> instance();
-    arcticdb::proto::utils::RemoteryConfig config;
-    static std::shared_ptr<RemoteryConfigInstance> instance_;
-    static std::once_flag init_flag_;
+#define ARCTICDB_START_TRACE(msg, flags, trace_id, span_id) \
+        auto instance = OtelInstance::instance();  \
+        auto tracer = instance->get_tracer(); \
+        instance->main_span_->End(); \
+        auto trace_msg = std::string("MAIN TRACE: ") + msg; \
+        instance->main_span_ = tracer->StartSpan(trace_msg); \
+        if (flags != 0) instance->main_span_->SetAttribute("flags", flags); 
 
-    static void init(){
-        instance_ = std::make_shared<RemoteryConfigInstance>();
-    }
-};
+#define ARCTICDB_SAMPLE(msg, flags) \
+        auto instance = OtelInstance::instance();  \
+        auto tracer = instance->get_tracer(); \
+        auto active_span = tracer->WithActiveSpan(instance->main_span_); \
+        auto trace_msg = __PRETTY_FUNCTION__ + std::string(": ") + msg; \
+        auto span = tracer->StartSpan(trace_msg); \
+        if (flags != 0) span->SetAttribute("flags", flags); \
+        auto scoped_span = trace::Scope(span);
 
+#define ARCTICDB_SUBSAMPLE(name, flags)
+
+#define ARCTICDB_SAMPLE_DEFAULT(name)
+
+#define ARCTICDB_SUBSAMPLE_DEFAULT(name)
+
+#define ARCTICDB_SUBSAMPLE_AGG(name)
+
+inline void set_remotery_thread_name(const char* ) { }
+
+#define ARCTICDB_SAMPLE_THREAD() set_remotery_thread_name("Arcticdb")
+
+#define ARCTICDB_SAMPLE_LOG(task_name)
+
+#elif USE_REMOTERY
 #define ARCTICDB_SAMPLE(name, flags) \
-        auto instance = RemoteryInstance::instance();  \
+        auto instance = OtelInstance::instance();  \
         rmt_ScopedCPUSample(name, flags);
 
 #define ARCTICDB_SUBSAMPLE(name, flags) \

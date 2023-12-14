@@ -1,0 +1,58 @@
+
+BAD HASHING:
+block data: 0x7fd64c005950
+block data val: 1
+opt_group: 6813086400212450030
+
+
+block data: 0x7fd64c005958
+block data val: 2
+opt_group: 5610939650577021746
+
+
+block data: 0x7fd64c005960
+block data val: nan
+opt_group: 0
+block data: 0x7fd64c005968
+block data val: 1
+opt_group: 2722403084034012352
+
+
+block data: 0x7fd64c005970
+block data val: 2
+opt_group: 6813086400212450030
+
+
+block data: 0x7fd64c005978
+block data val: 2
+opt_group: 5610939650577021746
+
+GOOD HASHING:
+block data: 0x7f6fdc005c30
+block data val: 1
+opt_group: 17542758468195651689
+
+ 
+block data: 0x7f6fdc005c38
+block data val: 2
+opt_group: 8232454017614698829
+
+ 
+block data: 0x7f6fdc005c40
+block data val: nan
+opt_group: 0
+block data: 0x7f6fdc005c48
+block data val: 1
+opt_group: 17542758468195651689
+
+ 
+block data: 0x7f6fdc005c50
+block data val: 2
+opt_group: 8232454017614698829
+
+ 
+block data: 0x7f6fdc005c58
+block data val: 2
+opt_group: 8232454017614698829
+
+ 

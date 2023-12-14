@@ -59,7 +59,7 @@ inline size_t get_stream_length(std::iostream& src) {
 
 inline std::vector<char> stream_to_vector(std::iostream &src)
 {
-    ARCTICDB_SAMPLE(StreamToVector, 0)
+    ARCTICDB_SAMPLE("StreamToVector", 0)
     auto len = get_stream_length(src);
     std::vector<char> v(len);
     src.read(v.data(), len);

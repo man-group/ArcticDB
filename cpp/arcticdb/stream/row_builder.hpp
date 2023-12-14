@@ -97,7 +97,7 @@ class RowBuilder {
         std::enable_if_t< std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0
     >
     void set_array(std::size_t pos, py::array_t<T> &val) {
-        ARCTICDB_SAMPLE(RowBuilderSetArray, 0)
+        ARCTICDB_SAMPLE("RowBuilderSetArray", 0)
         magic_.check();
         auto info(val.request());
         auto td = get_type_descriptor(info);

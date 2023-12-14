@@ -39,7 +39,7 @@ inline std::optional<AtomKey> get_latest_version(
     const StreamId &stream_id,
     const pipelines::VersionQuery& version_query,
     const ReadOptions& read_options) {
-    ARCTICDB_SAMPLE(GetLatestVersion, 0)
+    ARCTICDB_SAMPLE("GetLatestVersion", 0)
     LoadParameter load_param{LoadType::LOAD_LATEST};
     set_load_param_options(load_param, version_query, read_options);
     auto entry = version_map->check_reload(store, stream_id, load_param, __FUNCTION__);
@@ -53,7 +53,7 @@ inline version_store::UpdateInfo get_latest_undeleted_version_and_next_version_i
         const StreamId &stream_id,
         const pipelines::VersionQuery& version_query,
         const ReadOptions& read_options) {
-    ARCTICDB_SAMPLE(GetLatestUndeletedVersionAndHighestVersionId, 0)
+    ARCTICDB_SAMPLE("GetLatestUndeletedVersionAndHighestVersionId", 0)
     LoadParameter load_param{LoadType::LOAD_LATEST_UNDELETED};
     set_load_param_options(load_param, version_query, read_options);
     auto entry = version_map->check_reload(store, stream_id, load_param, __FUNCTION__);
@@ -70,7 +70,7 @@ inline std::vector<AtomKey> get_all_versions(
     const pipelines::VersionQuery& version_query,
     const ReadOptions& read_option
     ) {
-    ARCTICDB_SAMPLE(GetAllVersions, 0)
+    ARCTICDB_SAMPLE("GetAllVersions", 0)
     LoadParameter load_param{LoadType::LOAD_UNDELETED};
     set_load_param_options(load_param, version_query, read_option);
     auto entry = version_map->check_reload(store, stream_id, load_param, __FUNCTION__);
@@ -285,7 +285,7 @@ inline std::set<StreamId> list_streams(
     const std::optional<std::string> &prefix,
     bool all_symbols
 ) {
-    ARCTICDB_SAMPLE(ListStreams, 0)
+    ARCTICDB_SAMPLE("ListStreams", 0)
     std::set<StreamId> res;
     if (prefix && store->supports_prefix_matching()) {
         ARCTICDB_DEBUG(log::version(), "Storage backend supports prefix matching");

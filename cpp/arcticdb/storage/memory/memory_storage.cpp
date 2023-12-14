@@ -19,7 +19,7 @@ namespace arcticdb::storage::memory {
     namespace fg = folly::gen;
 
     void MemoryStorage::do_write(Composite<KeySegmentPair>&& kvs) {
-        ARCTICDB_SAMPLE(MemoryStorageWrite, 0)
+        ARCTICDB_SAMPLE("MemoryStorageWrite", 0)
 
         auto fmt_db = [](auto &&k) { return variant_key_type(k.variant_key()); };
 
@@ -48,7 +48,7 @@ namespace arcticdb::storage::memory {
     }
 
     void MemoryStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) {
-        ARCTICDB_SAMPLE(MemoryStorageUpdate, 0)
+        ARCTICDB_SAMPLE("MemoryStorageUpdate", 0)
 
         auto fmt_db = [](auto &&k) { return variant_key_type(k.variant_key()); };
 
@@ -69,7 +69,7 @@ namespace arcticdb::storage::memory {
     }
 
     void MemoryStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts) {
-        ARCTICDB_SAMPLE(MemoryStorageRead, 0)
+        ARCTICDB_SAMPLE("MemoryStorageRead", 0)
         auto fmt_db = [](auto &&k) { return variant_key_type(k); };
 
         (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
@@ -89,7 +89,7 @@ namespace arcticdb::storage::memory {
     }
 
     bool MemoryStorage::do_key_exists(const VariantKey& key) {
-        ARCTICDB_SAMPLE(MemoryStorageKeyExists, 0)
+        ARCTICDB_SAMPLE("MemoryStorageKeyExists", 0)
         const auto& key_vec = data_[variant_key_type(key)];
         auto it = key_vec.find(key);
         return it != key_vec.end();
@@ -97,7 +97,7 @@ namespace arcticdb::storage::memory {
 
     void MemoryStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts opts)
     {
-        ARCTICDB_SAMPLE(MemoryStorageRemove, 0)
+        ARCTICDB_SAMPLE("MemoryStorageRemove", 0)
         auto fmt_db = [](auto &&k) { return variant_key_type(k); };
 
         (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
@@ -124,7 +124,7 @@ namespace arcticdb::storage::memory {
     }
 
     void MemoryStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string& prefix) {
-        ARCTICDB_SAMPLE(MemoryStorageItType, 0)
+        ARCTICDB_SAMPLE("MemoryStorageItType", 0)
         auto& key_vec = data_[key_type];
         auto prefix_matcher = stream_id_prefix_matcher(prefix);
 

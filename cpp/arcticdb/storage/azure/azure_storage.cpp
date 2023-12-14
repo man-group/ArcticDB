@@ -59,7 +59,7 @@ void do_write_impl(
     KeyBucketizer&& bucketizer,
     const Azure::Storage::Blobs::UploadBlockBlobFromOptions& upload_option,
     unsigned int request_timeout) {
-        ARCTICDB_SAMPLE(AzureStorageWrite, 0)
+        ARCTICDB_SAMPLE("AzureStorageWrite", 0)
         auto fmt_db = [](auto&& kv) { return kv.key_type(); };
 
         (fg::from(kvs.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach(
@@ -132,7 +132,7 @@ void do_read_impl(Composite<VariantKey> && ks,
     ReadKeyOpts opts,
     const Azure::Storage::Blobs::DownloadBlobToOptions& download_option,
     unsigned int request_timeout) {
-        ARCTICDB_SAMPLE(AzureStorageRead, 0)
+        ARCTICDB_SAMPLE("AzureStorageRead", 0)
         auto fmt_db = [](auto&& k) { return variant_key_type(k); };
         std::vector<VariantKey> failed_reads;
 
@@ -233,7 +233,7 @@ void do_iterate_type_impl(KeyType key_type,
     KeyBucketizer&& bucketizer,
     PrefixHandler&& prefix_handler = default_prefix_handler(),
     const std::string& prefix = std::string{}) {
-        ARCTICDB_SAMPLE(AzureStorageIterateType, 0)
+        ARCTICDB_SAMPLE("AzureStorageIterateType", 0)
         auto key_type_dir = key_type_folder(root_folder, key_type);
 
         KeyDescriptor key_descriptor(prefix,

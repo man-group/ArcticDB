@@ -79,7 +79,7 @@ std::optional<FieldCollection> decode_index_fields(
 }
 
 Segment Segment::from_bytes(const std::uint8_t* src, std::size_t readable_size, bool copy_data /* = false */) {
-    ARCTICDB_SAMPLE(SegmentFromBytes, 0)
+    ARCTICDB_SAMPLE("SegmentFromBytes", 0)
     auto* fixed_hdr = reinterpret_cast<const Segment::FixedHeader*>(src);
     util::check_arg(fixed_hdr->magic_number == MAGIC_NUMBER, "expected first 2 bytes: {}, actual {}", fixed_hdr->magic_number, MAGIC_NUMBER);
 
@@ -144,7 +144,7 @@ Segment Segment::from_bytes(const std::uint8_t* src, std::size_t readable_size, 
 
 
 Segment Segment::from_buffer(std::shared_ptr<Buffer>&& buffer) {
-    ARCTICDB_SAMPLE(SegmentFromBytes, 0)
+    ARCTICDB_SAMPLE("SegmentFromBytes", 0)
     auto* fixed_hdr = reinterpret_cast<Segment::FixedHeader*>(buffer->data());
     auto readable_size = buffer->bytes();
     util::check_arg(fixed_hdr->magic_number == MAGIC_NUMBER, "expected first 2 bytes: {}, actual {}",
@@ -235,10 +235,10 @@ std::pair<uint8_t*, size_t> Segment::try_internal_write(std::shared_ptr<Buffer>&
 }
 
 void Segment::write_to(std::uint8_t* dst, std::size_t hdr_sz) {
-    ARCTICDB_SAMPLE(SegmentWriteToStorage, RMTSF_Aggregate)
-    ARCTICDB_SUBSAMPLE(SegmentWriteHeader, RMTSF_Aggregate)
+    ARCTICDB_SAMPLE("SegmentWriteToStorage", 0)
+    ARCTICDB_SUBSAMPLE(SegmentWriteHeader, 0)
     write_header(dst, hdr_sz);
-    ARCTICDB_SUBSAMPLE(SegmentWriteBody, RMTSF_Aggregate)
+    ARCTICDB_SUBSAMPLE(SegmentWriteBody, 0)
     ARCTICDB_DEBUG(log::codec(), "Writing {} bytes to body at offset {}",
                        buffer().bytes(),
                        arcticdb::Segment::FIXED_HEADER_SIZE + hdr_sz);

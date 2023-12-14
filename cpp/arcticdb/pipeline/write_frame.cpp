@@ -41,7 +41,7 @@ folly::Future<std::vector<SliceAndKey>> write_slices(
         const std::shared_ptr<stream::StreamSink>& sink,
         const std::shared_ptr<DeDupMap>& de_dup_map,
         bool sparsify_floats) {
-    ARCTICDB_SAMPLE(WriteSlices, 0)
+    ARCTICDB_SAMPLE("WriteSlices", 0)
     std::vector<std::pair<stream::StreamSink::PartialKey, SegmentInMemory>> key_segs;
     key_segs.reserve(slices.size());
 

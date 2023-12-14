@@ -22,7 +22,7 @@ void write_snapshot_entry(
         bool log_changes,
         KeyType key_type
 ) {
-    ARCTICDB_SAMPLE(WriteJournalEntry, 0)
+    ARCTICDB_SAMPLE("WriteJournalEntry", 0)
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write snapshot entry");
     IndexAggregator <RowCountIndex> snapshot_agg(snapshot_id, [&](auto &&segment) {
         store->write(key_type, snapshot_id, std::move(segment)).get();
@@ -97,7 +97,7 @@ void tombstone_snapshot(
 }
 
 void iterate_snapshots(std::shared_ptr <Store> store, folly::Function<void(entity::VariantKey & )> visitor) {
-    ARCTICDB_SAMPLE(IterateSnapshots, 0)
+    ARCTICDB_SAMPLE("IterateSnapshots", 0)
 
     std::vector<VariantKey> snap_variant_keys;
     std::unordered_set<SnapshotId> seen;
@@ -158,7 +158,7 @@ std::optional<size_t> row_id_for_stream_in_snapshot_segment(SegmentInMemory &seg
 std::unordered_map<VariantKey, SnapshotRefData> get_snapshots_and_index_keys(
         const std::shared_ptr<Store>& store
         ) {
-    ARCTICDB_SAMPLE(GetSnapshotsAndIndexKeys, 0)
+    ARCTICDB_SAMPLE("GetSnapshotsAndIndexKeys", 0)
     std::unordered_map<VariantKey, SnapshotRefData> res;
     iterate_snapshots(store, [&store, &res](const VariantKey &vk) {
         try {
@@ -182,7 +182,7 @@ std::unordered_map<VariantKey, SnapshotRefData> get_snapshots_and_index_keys(
 std::unordered_set<entity::AtomKey> get_index_keys_in_snapshots(
         std::shared_ptr <Store> store,
         const StreamId &stream_id) {
-    ARCTICDB_SAMPLE(GetIndexKeysInSnapshot, 0)
+    ARCTICDB_SAMPLE("GetIndexKeysInSnapshot", 0)
 
     std::unordered_set<entity::AtomKey> index_keys_in_snapshots{};
 
@@ -214,7 +214,7 @@ std::pair<std::vector<AtomKey>, std::unordered_set<AtomKey>> get_index_keys_part
         const StreamId& stream_id,
         const std::vector<entity::AtomKey> &all_index_keys
 ) {
-    ARCTICDB_SAMPLE(GetIndexKeysPartitionedByInclusionInSnapshots, 0)
+    ARCTICDB_SAMPLE("GetIndexKeysPartitionedByInclusionInSnapshots", 0)
     auto index_keys_in_snapshot = get_index_keys_in_snapshots(store, stream_id);
 
     std::vector<entity::AtomKey> index_keys_not_in_snapshot;
@@ -228,7 +228,7 @@ std::pair<std::vector<AtomKey>, std::unordered_set<AtomKey>> get_index_keys_part
 }
 
 std::optional<VariantKey> get_snapshot_key(std::shared_ptr <Store> store, const SnapshotId &snap_name) {
-    ARCTICDB_SAMPLE(getSnapshot, 0)
+    ARCTICDB_SAMPLE("getSnapshot", 0)
 
     auto maybe_ref_key = RefKey{snap_name, KeyType::SNAPSHOT_REF};
     if(store->key_exists_sync(maybe_ref_key))
@@ -249,7 +249,7 @@ std::optional<VariantKey> get_snapshot_key(std::shared_ptr <Store> store, const 
 }
 
 std::optional<std::pair<VariantKey, SegmentInMemory>> get_snapshot(std::shared_ptr <Store> store, const SnapshotId &snap_name) {
-    ARCTICDB_SAMPLE(getSnapshot, 0)
+    ARCTICDB_SAMPLE("getSnapshot", 0)
     auto opt_snap_key = get_snapshot_key(store, snap_name);
     if(!opt_snap_key)
         return std::nullopt;
@@ -260,7 +260,7 @@ std::optional<std::pair<VariantKey, SegmentInMemory>> get_snapshot(std::shared_p
 std::set<StreamId> list_streams_in_snapshot(
         const std::shared_ptr<Store>& store,
         const SnapshotId& snap_name) {
-    ARCTICDB_SAMPLE(ListStreamsInSnapshot, 0)
+    ARCTICDB_SAMPLE("ListStreamsInSnapshot", 0)
     std::set<StreamId> res;
     auto opt_snap_key = get_snapshot(store, snap_name);
 
@@ -323,7 +323,7 @@ std::pair<std::vector<AtomKey>, py::object> get_versions_and_metadata_from_snaps
 SnapshotMap get_versions_from_snapshots(
         const std::shared_ptr<Store>& store
 ) {
-    ARCTICDB_SAMPLE(GetVersionsFromSnapshot, 0)
+    ARCTICDB_SAMPLE("GetVersionsFromSnapshot", 0)
     SnapshotMap res;
 
     iterate_snapshots(store, [&](VariantKey &vk) {

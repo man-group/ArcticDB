@@ -536,7 +536,7 @@ public:
         int> = 0>
             void set_array(position_t pos, Tensor<T> &val) {
         magic_.check();
-        ARCTICDB_SAMPLE(MemorySegmentSetArray, 0)
+        ARCTICDB_SAMPLE("MemorySegmentSetArray", 0)
         column_unchecked(pos).set_array(row_id_ + 1, val);
     }
 
@@ -545,7 +545,7 @@ public:
         int> = 0>
     void set_array(position_t pos, py::array_t<T>& val) {
         magic_.check();
-        ARCTICDB_SAMPLE(MemorySegmentSetArray, 0)
+        ARCTICDB_SAMPLE("MemorySegmentSetArray", 0)
         column_unchecked(pos).set_array(row_id_ + 1, val);
     }
 

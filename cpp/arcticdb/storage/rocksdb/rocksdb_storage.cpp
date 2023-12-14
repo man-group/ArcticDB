@@ -96,12 +96,12 @@ RocksDBStorage::~RocksDBStorage() {
 }
 
 void RocksDBStorage::do_write(Composite<KeySegmentPair>&& kvs) {
-    ARCTICDB_SAMPLE(RocksDBStorageWrite, 0)
+    ARCTICDB_SAMPLE("RocksDBStorageWrite", 0)
     do_write_internal(std::move(kvs));
 }
 
 void RocksDBStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) {
-    ARCTICDB_SAMPLE(RocksDBStorageUpdate, 0)
+    ARCTICDB_SAMPLE("RocksDBStorageUpdate", 0)
 
     auto keys = kvs.transform([](const auto& kv){return kv.variant_key();});
     // Deleting keys (no error is thrown if the keys already exist)
@@ -115,7 +115,7 @@ void RocksDBStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts)
 }
 
 void RocksDBStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts) {
-    ARCTICDB_SAMPLE(RocksDBStorageRead, 0)
+    ARCTICDB_SAMPLE("RocksDBStorageRead", 0)
     auto grouper = [](auto &&k) { return variant_key_type(k); };
 
     (fg::from(ks.as_range()) | fg::move | fg::groupBy(grouper)).foreach([&](auto &&group) {
@@ -132,7 +132,7 @@ void RocksDBStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visi
 }
 
 bool RocksDBStorage::do_key_exists(const VariantKey& key) {
-    ARCTICDB_SAMPLE(RocksDBStorageKeyExists, 0)
+    ARCTICDB_SAMPLE("RocksDBStorageKeyExists", 0)
     std::string value; // unused
     auto key_type_name = fmt::format("{}", variant_key_type(key));
     auto k_str = to_serialized_key(key);
@@ -146,7 +146,7 @@ bool RocksDBStorage::do_key_exists(const VariantKey& key) {
 }
 
 void RocksDBStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) {
-    ARCTICDB_SAMPLE(RocksDBStorageRemove, 0)
+    ARCTICDB_SAMPLE("RocksDBStorageRemove", 0)
 
     auto failed_deletes = do_remove_internal(std::move(ks), opts);
     if (!failed_deletes.empty()) {
@@ -169,7 +169,7 @@ bool RocksDBStorage::do_fast_delete() {
 }
 
 void RocksDBStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string& prefix) {
-    ARCTICDB_SAMPLE(RocksDBStorageItType, 0)
+    ARCTICDB_SAMPLE("RocksDBStorageItType", 0)
     auto prefix_matcher = stream_id_prefix_matcher(prefix);
 
     auto key_type_name = fmt::format("{}", key_type);

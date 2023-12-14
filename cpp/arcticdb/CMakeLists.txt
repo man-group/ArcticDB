@@ -1,6 +1,8 @@
 option(TEST "Build all tests." ON)
-option(BUILD_WITH_REMOTERY "Build ArcticDB with Remotery (used for performance analysis)" OFF)
+option(WITH_ABSEIL "Build with Abseil." OFF)
 option(SSL_LINK "Link against SSL libraries." ON)
+option(WITH_ABI_VERSION_1 "Use ABI version 1 for OpenTelemetry" OFF)
+option(WITH_ABI_VERSION_2 "Use ABI version 2 for OpenTelemetry" ON)
 option(HIDE_LINKED_SYMBOLS "Passed `exclude-libs` through to linker, ensuring linked library symbols are not exported. Shrinks binary size." ON)
 option(STATIC_LINK_STD_LIB "Statically link the C++ standard libraries" ON)
 
@@ -47,9 +49,8 @@ find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypasses our cpp/CMake/FindZstd.c
 find_package(azure-identity-cpp CONFIG REQUIRED)
 find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
 
-if(${BUILD_WITH_REMOTERY})
-    add_compile_definitions(USE_REMOTERY)
-endif()
+add_compile_definitions(USE_OTEL_CPP)
+find_package(opentelemetry-cpp CONFIG REQUIRED)
 
 if(NOT ${ARCTICDB_USING_CONDA})
     find_package(unofficial-pcre REQUIRED)
@@ -507,6 +508,7 @@ set (arcticdb_core_libraries
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
         Azure::azure-identity
         Azure::azure-storage-blobs
+        ${OPENTELEMETRY_CPP_LIBRARIES}
 )
 
 # Dependencies expose different names of their libraries depending
@@ -567,6 +569,7 @@ list (APPEND arcticdb_core_libraries Threads::Threads) # comes last for weakrefe
 
 set(arcticdb_core_includes
     ${BITMAGIC_INCLUDE_DIRS}
+    ${OPENTELEMETRY_CPP_INCLUDE_DIRS}
 )
 
 if (SSL_LINK)

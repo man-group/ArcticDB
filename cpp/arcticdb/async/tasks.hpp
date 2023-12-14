@@ -78,7 +78,7 @@ struct EncodeAtomTask : BaseTask {
     }
 
     storage::KeySegmentPair operator()() {
-        ARCTICDB_SAMPLE(EncodeAtomTask, 0)
+        ARCTICDB_SAMPLE("EncodeAtomTask", 0)
         return encode();
     }
 };
@@ -107,7 +107,7 @@ struct EncodeSegmentTask : BaseTask {
     }
 
     storage::KeySegmentPair operator()() {
-        ARCTICDB_SAMPLE(EncodeSegmentTask, 0)
+        ARCTICDB_SAMPLE("EncodeSegmentTask", 0)
         return encode();
     }
 };
@@ -142,7 +142,7 @@ struct EncodeRefTask : BaseTask {
     }
 
     storage::KeySegmentPair operator()() {
-        ARCTICDB_SAMPLE(EncodeAtomTask, 0)
+        ARCTICDB_SAMPLE("EncodeAtomTask", 0)
         return encode();
     }
 };
@@ -157,7 +157,7 @@ struct WriteSegmentTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(WriteSegmentTask)
 
     VariantKey operator()(storage::KeySegmentPair &&key_seg) const {
-        ARCTICDB_SAMPLE(WriteSegmentTask, 0)
+        ARCTICDB_SAMPLE("WriteSegmentTask", 0)
         auto k = key_seg.variant_key();
         lib_->write(Composite<storage::KeySegmentPair>(std::move(key_seg)));
         return k;
@@ -176,7 +176,7 @@ struct UpdateSegmentTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(UpdateSegmentTask)
 
     VariantKey operator()(storage::KeySegmentPair &&key_seg) const {
-        ARCTICDB_SAMPLE(UpdateSegmentTask, 0)
+        ARCTICDB_SAMPLE("UpdateSegmentTask", 0)
         auto k = key_seg.variant_key();
         lib_->update(Composite<storage::KeySegmentPair>(std::move(key_seg)), opts_);
         return k;
@@ -215,7 +215,7 @@ struct ReadCompressedTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(ReadCompressedTask)
 
     KeySegmentContinuation<ContinuationType> operator()() {
-        ARCTICDB_SAMPLE(ReadCompressed, 0)
+        ARCTICDB_SAMPLE("ReadCompressed", 0)
         return KeySegmentContinuation<decltype(continuation_)>{read_dispatch(key_, lib_, opts_), std::move(continuation_)};
     }
 };
@@ -249,7 +249,7 @@ struct ReadCompressedSlicesTask : BaseTask {
      }
 
     Composite<std::pair<Segment, pipelines::SliceAndKey>> operator()() {
-        ARCTICDB_SAMPLE(ReadCompressed, 0)
+        ARCTICDB_SAMPLE("ReadCompressed", 0)
         return read();
     }
 };
@@ -290,7 +290,7 @@ struct CopyCompressedTask : BaseTask {
     }
 
     VariantKey operator()() {
-        ARCTICDB_SAMPLE(CopyCompressed, 0)
+        ARCTICDB_SAMPLE("CopyCompressed", 0)
         return copy();
     }
 };
@@ -301,7 +301,7 @@ struct DecodeSegmentTask : BaseTask {
     DecodeSegmentTask() = default;
 
     std::pair<VariantKey, SegmentInMemory> operator()(storage::KeySegmentPair &&ks) const {
-        ARCTICDB_SAMPLE(DecodeAtomTask, 0)
+        ARCTICDB_SAMPLE("DecodeAtomTask", 0)
 
         auto key_seg = std::move(ks);
         ARCTICDB_DEBUG(log::storage(), "ReadAndDecodeAtomTask decoding segment of size {} with key {}",
@@ -326,7 +326,7 @@ struct DecodeSliceTask : BaseTask {
     }
 
     pipelines::SegmentAndSlice operator()(storage::KeySegmentPair&& key_segment_pair) {
-        ARCTICDB_SAMPLE(DecodeSliceTask, 0)
+        ARCTICDB_SAMPLE("DecodeSliceTask", 0)
         return decode_into_slice(std::move(key_segment_pair));
     }
 
@@ -345,7 +345,7 @@ struct DecodeSlicesTask : BaseTask {
             }
 
     Composite<pipelines::SliceAndKey> operator()(Composite<std::pair<Segment, pipelines::SliceAndKey>> && skp) const {
-        ARCTICDB_SAMPLE(DecodeSlicesTask, 0)
+        ARCTICDB_SAMPLE("DecodeSlicesTask", 0)
         auto sk_pairs = std::move(skp);
         return sk_pairs.transform([that=this] (auto&& ssp){
             auto seg_slice_pair = std::forward<decltype(ssp)>(ssp);
@@ -369,7 +369,7 @@ struct SegmentFunctionTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(SegmentFunctionTask)
 
      entity::VariantKey operator()(storage::KeySegmentPair &&key_seg) {
-        ARCTICDB_SAMPLE(SegmentFunctionTask, 0)
+        ARCTICDB_SAMPLE("SegmentFunctionTask", 0)
         return func_(std::move(key_seg));
     }
 };
@@ -421,7 +421,7 @@ struct DecodeMetadataTask : BaseTask {
     DecodeMetadataTask() = default;
 
     std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> operator()(storage::KeySegmentPair &&ks) const {
-        ARCTICDB_SAMPLE(ReadMetadataTask, 0)
+        ARCTICDB_SAMPLE("ReadMetadataTask", 0)
         auto key_seg = std::move(ks);
         ARCTICDB_DEBUG(log::storage(), "ReadAndDecodeMetadataTask decoding segment of size {} with key {}",
                              key_seg.segment().total_segment_size(), variant_key_view(key_seg.variant_key()));
@@ -442,7 +442,7 @@ struct DecodeTimeseriesDescriptorTask : BaseTask {
     DecodeTimeseriesDescriptorTask() = default;
 
     std::pair<VariantKey, TimeseriesDescriptor> operator()(storage::KeySegmentPair &&ks) const {
-        ARCTICDB_SAMPLE(DecodeTimeseriesDescriptorTask, 0)
+        ARCTICDB_SAMPLE("DecodeTimeseriesDescriptorTask", 0)
         auto key_seg = std::move(ks);
         ARCTICDB_DEBUG(log::storage(), "DecodeTimeseriesDescriptorTask decoding segment of size {} with key {}",
                       key_seg.segment().total_segment_size(), variant_key_view(key_seg.variant_key()));
@@ -465,7 +465,7 @@ struct DecodeMetadataAndDescriptorTask : BaseTask {
     DecodeMetadataAndDescriptorTask() = default;
 
     std::tuple<VariantKey, std::optional<google::protobuf::Any>, StreamDescriptor> operator()(storage::KeySegmentPair &&ks) const {
-        ARCTICDB_SAMPLE(ReadMetadataAndDescriptorTask, 0)
+        ARCTICDB_SAMPLE("ReadMetadataAndDescriptorTask", 0)
         auto key_seg = std::move(ks);
         ARCTICDB_DEBUG(log::storage(), "DecodeMetadataAndDescriptorTask decoding segment of size {} with key {}",
                       key_seg.segment().total_segment_size(), variant_key_view(key_seg.variant_key()));
@@ -494,7 +494,7 @@ struct KeyExistsTask : BaseTask {
     }
 
     bool operator()() {
-        ARCTICDB_SAMPLE(KeyExistsTask, 0)
+        ARCTICDB_SAMPLE("KeyExistsTask", 0)
         return lib_->key_exists(*key_);
     }
 };
@@ -516,7 +516,7 @@ struct WriteCompressedTask : BaseTask {
     }
 
     folly::Future<folly::Unit> operator()() {
-        ARCTICDB_SAMPLE(WriteCompressed, 0)
+        ARCTICDB_SAMPLE("WriteCompressed", 0)
         return write();
     }
 };
@@ -540,7 +540,7 @@ struct WriteCompressedBatchTask : BaseTask {
     }
 
     folly::Future<folly::Unit> operator()() {
-        ARCTICDB_SAMPLE(WriteCompressedBatch, 0)
+        ARCTICDB_SAMPLE("WriteCompressedBatch", 0)
         return write();
     }
 };

@@ -92,7 +92,7 @@ public:
     Storage& operator=(Storage&&) = delete;
 
     void write(Composite<KeySegmentPair> &&kvs) {
-        ARCTICDB_SAMPLE(StorageWrite, 0)
+        ARCTICDB_SAMPLE("StorageWrite", 0)
         return do_write(std::move(kvs));
     }
 
@@ -101,7 +101,7 @@ public:
     }
 
     void update(Composite<KeySegmentPair> &&kvs, UpdateOpts opts) {
-        ARCTICDB_SAMPLE(StorageUpdate, 0)
+        ARCTICDB_SAMPLE("StorageUpdate", 0)
         return do_update(std::move(kvs), opts);
     }
 

@@ -143,7 +143,7 @@ void calc_string_pool_size(
 }
 
 SizeResult max_compressed_size_v1(const SegmentInMemory &in_mem_seg, const arcticdb::proto::encoding::VariantCodec &codec_opts) {
-    ARCTICDB_SAMPLE(GetSegmentCompressedSize, 0)
+    ARCTICDB_SAMPLE("GetSegmentCompressedSize", 0)
     SizeResult result{};
     calc_metadata_size(in_mem_seg, codec_opts, result);
 
@@ -189,7 +189,7 @@ void calc_stream_descriptor_fields_size(
 }
 
 SizeResult max_compressed_size_v2(const SegmentInMemory &in_mem_seg, const arcticdb::proto::encoding::VariantCodec &codec_opts) {
-    ARCTICDB_SAMPLE(GetSegmentCompressedSize, 0)
+    ARCTICDB_SAMPLE("GetSegmentCompressedSize", 0)
     SizeResult result{};
     result.max_compressed_bytes_ += sizeof(MetadataMagic);
     calc_metadata_size(in_mem_seg, codec_opts, result);
@@ -323,7 +323,7 @@ void encode_encoded_fields(
 }
 
 Segment encode_v2(SegmentInMemory&& s, const arcticdb::proto::encoding::VariantCodec &codec_opts) {
-    ARCTICDB_SAMPLE(EncodeSegment, 0)
+    ARCTICDB_SAMPLE("EncodeSegment", 0)
 
     auto in_mem_seg = std::move(s);
     auto arena = std::make_unique<google::protobuf::Arena>();
@@ -389,7 +389,7 @@ Segment encode_v1(SegmentInMemory&& s, const arcticdb::proto::encoding::VariantC
      * This takes an in memory segment with all the metadata, column tensors etc., loops through each column
      * and based on the type of the column, calls the typed block encoder for that column.
      */
-    ARCTICDB_SAMPLE(EncodeSegment, 0)
+    ARCTICDB_SAMPLE("EncodeSegment", 0)
     auto in_mem_seg = std::move(s);
     auto arena = std::make_unique<google::protobuf::Arena>();
     auto segment_header = google::protobuf::Arena::CreateMessage<arcticdb::proto::encoding::SegmentHeader>(arena.get());
@@ -707,7 +707,7 @@ void decode_v2(const Segment& segment,
            SegmentInMemory& res,
            const StreamDescriptor& desc)
            {
-    ARCTICDB_SAMPLE(DecodeSegment, 0)
+    ARCTICDB_SAMPLE("DecodeSegment", 0)
     const auto [begin, end] = get_segment_begin_end(segment, hdr);
     auto encoded_fields_ptr = end;
     auto data = begin;
@@ -761,7 +761,7 @@ void decode_v1(const Segment& segment,
             SegmentInMemory& res,
             StreamDescriptor::Proto& desc)
 {
-    ARCTICDB_SAMPLE(DecodeSegment, 0)
+    ARCTICDB_SAMPLE("DecodeSegment", 0)
     const uint8_t* data = segment.buffer().data();
     util::check(data != nullptr, "Got null data ptr from segment");
     const uint8_t* begin = data;

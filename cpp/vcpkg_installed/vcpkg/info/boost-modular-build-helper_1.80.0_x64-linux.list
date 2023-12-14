@@ -1,0 +1,12 @@
+x64-linux/
+x64-linux/share/
+x64-linux/share/boost-build/
+x64-linux/share/boost-build/CMakeLists.txt
+x64-linux/share/boost-build/Jamroot.jam.in
+x64-linux/share/boost-build/boost-modular-build.cmake
+x64-linux/share/boost-build/nothing.bat
+x64-linux/share/boost-build/usage
+x64-linux/share/boost-build/user-config.jam.in
+x64-linux/share/boost-modular-build-helper/
+x64-linux/share/boost-modular-build-helper/vcpkg.spdx.json
+x64-linux/share/boost-modular-build-helper/vcpkg_abi_info.txt

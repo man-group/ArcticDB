@@ -94,7 +94,7 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
     bool sparsify_floats,
     bool validate_index
     ) {
-    ARCTICDB_SAMPLE(DoWrite, 0)
+    ARCTICDB_SAMPLE("DoWrite", 0)
     if (0 == version_id)
         verify_stream_id(frame.desc.id());
     // Slice the frame according to the write options
@@ -1084,13 +1084,13 @@ FrameAndDescriptor read_dataframe_impl(
     SegmentInMemory frame;
     auto buffers = std::make_shared<BufferHolder>();
     if(!read_query.clauses_.empty()) {
-        ARCTICDB_SAMPLE(RunPipelineAndOutput, 0)
+        ARCTICDB_SAMPLE("RunPipelineAndOutput", 0)
         util::check_rte(!pipeline_context->is_pickled(),"Cannot filter pickled data");
         auto segs = read_and_process(store, pipeline_context, read_query, read_options, 0u);
 
         frame = prepare_output_frame(std::move(segs), pipeline_context, store, read_options);
     } else {
-        ARCTICDB_SAMPLE(MarkAndReadDirect, 0)
+        ARCTICDB_SAMPLE("MarkAndReadDirect", 0)
         util::check_rte(!(pipeline_context->is_pickled() && std::holds_alternative<RowRange>(read_query.row_filter)), "Cannot use head/tail/row_range with pickled data, use plain read instead");
         mark_index_slices(pipeline_context, opt_false(read_options.dynamic_schema_), pipeline_context->bucketize_dynamic_);
         frame = read_direct(store, pipeline_context, buffers, read_options);

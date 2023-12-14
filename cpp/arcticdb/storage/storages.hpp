@@ -41,12 +41,12 @@ class Storages {
     }
 
     void write(Composite<KeySegmentPair>&& kvs) {
-        ARCTICDB_SAMPLE(StoragesWrite, 0)
+        ARCTICDB_SAMPLE("StoragesWrite", 0)
         primary().write(std::move(kvs));
     }
 
     void update(Composite<KeySegmentPair>&& kvs, storage::UpdateOpts opts) {
-        ARCTICDB_SAMPLE(StoragesUpdate, 0)
+        ARCTICDB_SAMPLE("StoragesUpdate", 0)
         primary().update(std::move(kvs), opts);
     }
 
@@ -85,7 +85,7 @@ class Storages {
     }
 
     void iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix=std::string{}, bool primary_only=true) {
-        ARCTICDB_SAMPLE(StoragesIterateType, RMTSF_Aggregate)
+        ARCTICDB_SAMPLE("StoragesIterateType", 0)
         if(primary_only) {
             primary().iterate_type(key_type, visitor, prefix);
         } else {

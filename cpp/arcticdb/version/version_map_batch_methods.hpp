@@ -33,7 +33,7 @@ inline std::shared_ptr<std::unordered_map<StreamId, SymbolStatus>> batch_check_l
     const std::shared_ptr<Store> &store,
     const std::shared_ptr<VersionMap> &version_map,
     std::shared_ptr<std::vector<StreamId>> &symbols) {
-    ARCTICDB_SAMPLE(BatchGetLatestVersion, 0)
+    ARCTICDB_SAMPLE("BatchGetLatestVersion", 0)
     const LoadParameter load_param{LoadType::LOAD_LATEST_UNDELETED};
     auto output = std::make_shared<std::unordered_map<StreamId, SymbolStatus>>();
 
@@ -65,7 +65,7 @@ inline std::shared_ptr<std::unordered_map<StreamId, AtomKey>> batch_get_latest_v
     const std::shared_ptr<VersionMap> &version_map,
     const std::vector<StreamId> &stream_ids,
     bool include_deleted) {
-    ARCTICDB_SAMPLE(BatchGetLatestVersion, 0)
+    ARCTICDB_SAMPLE("BatchGetLatestVersion", 0)
     const LoadParameter load_param{include_deleted ? LoadType::LOAD_LATEST : LoadType::LOAD_LATEST_UNDELETED};
     auto output = std::make_shared<std::unordered_map<StreamId, AtomKey>>();
 
@@ -86,7 +86,7 @@ inline std::vector<folly::Future<std::pair<std::optional<AtomKey>, std::optional
     const std::shared_ptr<Store> &store,
     const std::shared_ptr<VersionMap> &version_map,
     const std::vector<StreamId> &stream_ids) {
-    ARCTICDB_SAMPLE(BatchGetLatestUndeletedVersionAndNextVersionId, 0)
+    ARCTICDB_SAMPLE("BatchGetLatestUndeletedVersionAndNextVersionId", 0)
     std::vector<folly::Future<std::pair<std::optional<AtomKey>, std::optional<AtomKey>>>> vector_fut;
     for (auto& stream_id: stream_ids){
         vector_fut.push_back(async::submit_io_task(CheckReloadTask{store,
@@ -104,7 +104,7 @@ inline std::vector<folly::Future<version_store::UpdateInfo>> batch_get_latest_un
         const std::shared_ptr<Store> &store,
         const std::shared_ptr<VersionMap> &version_map,
         const std::vector<StreamId> &stream_ids) {
-    ARCTICDB_SAMPLE(BatchGetLatestUndeletedVersionAndNextVersionId, 0)
+    ARCTICDB_SAMPLE("BatchGetLatestUndeletedVersionAndNextVersionId", 0)
     std::vector<folly::Future<version_store::UpdateInfo>> vector_fut;
     for (auto& stream_id: stream_ids){
         vector_fut.push_back(async::submit_io_task(CheckReloadTask{store,
@@ -126,7 +126,7 @@ inline std::shared_ptr<std::unordered_map<StreamId, AtomKey>> batch_get_specific
     const std::shared_ptr<VersionMap>& version_map,
     std::map<StreamId, VersionId>& sym_versions,
     bool include_deleted = true) {
-    ARCTICDB_SAMPLE(BatchGetLatestVersion, 0)
+    ARCTICDB_SAMPLE("BatchGetLatestVersion", 0)
     auto output = std::make_shared<std::unordered_map<StreamId, AtomKey>>();
 
     async::submit_tasks_for_range(sym_versions,
@@ -155,7 +155,7 @@ inline std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKe
         const std::shared_ptr<VersionMap>& version_map,
         std::map<StreamId, VersionVectorType>& sym_versions,
         bool include_deleted = true) {
-    ARCTICDB_SAMPLE(BatchGetLatestVersion, 0)
+    ARCTICDB_SAMPLE("BatchGetLatestVersion", 0)
     auto output = std::make_shared<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>>();
 
     async::submit_tasks_for_range(sym_versions,
@@ -294,7 +294,7 @@ inline std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions_asy
     const std::vector<StreamId>& symbols,
     const std::vector<pipelines::VersionQuery>& version_queries,
     const std::optional<bool>& use_previous_on_error) {
-    ARCTICDB_SAMPLE(BatchGetVersion, 0)
+    ARCTICDB_SAMPLE("BatchGetVersion", 0)
     util::check(symbols.size() == version_queries.size(), "Symbol and version query list mismatch: {} != {}", symbols.size(), version_queries.size());
 
     robin_hood::unordered_flat_map<StreamId, StreamVersionData> version_data;

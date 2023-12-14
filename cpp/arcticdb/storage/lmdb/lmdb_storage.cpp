@@ -70,7 +70,7 @@ void LmdbStorage::do_write_internal(Composite<KeySegmentPair>&& kvs, ::lmdb::txn
 }
 
 void LmdbStorage::do_write(Composite<KeySegmentPair>&& kvs) {
-    ARCTICDB_SAMPLE(LmdbStorageWrite, 0)
+    ARCTICDB_SAMPLE("LmdbStorageWrite", 0)
     std::lock_guard<std::mutex> lock{*write_mutex_};
     auto txn = ::lmdb::txn::begin(env()); // scoped abort on exception, so no partial writes
     ARCTICDB_SUBSAMPLE(LmdbStorageInTransaction, 0)
@@ -80,7 +80,7 @@ void LmdbStorage::do_write(Composite<KeySegmentPair>&& kvs) {
 }
 
 void LmdbStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) {
-    ARCTICDB_SAMPLE(LmdbStorageUpdate, 0)
+    ARCTICDB_SAMPLE("LmdbStorageUpdate", 0)
     std::lock_guard<std::mutex> lock{*write_mutex_};
     auto txn = ::lmdb::txn::begin(env());
     ARCTICDB_SUBSAMPLE(LmdbStorageInTransaction, 0)
@@ -100,7 +100,7 @@ void LmdbStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) {
 }
 
 void LmdbStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, storage::ReadKeyOpts) {
-    ARCTICDB_SAMPLE(LmdbStorageRead, 0)
+    ARCTICDB_SAMPLE("LmdbStorageRead", 0)
     auto txn = std::make_shared<::lmdb::txn>(::lmdb::txn::begin(env(), nullptr, MDB_RDONLY));
 
     auto fmt_db = [](auto &&k) { return variant_key_type(k); };
@@ -137,7 +137,7 @@ void LmdbStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor
 }
 
 bool LmdbStorage::do_key_exists(const VariantKey&key) {
-    ARCTICDB_SAMPLE(LmdbStorageKeyExists, 0)
+    ARCTICDB_SAMPLE("LmdbStorageKeyExists", 0)
     auto txn = ::lmdb::txn::begin(env(), nullptr, MDB_RDONLY);
     ARCTICDB_SUBSAMPLE(LmdbStorageInTransaction, 0)
 
@@ -198,7 +198,7 @@ std::vector<VariantKey> LmdbStorage::do_remove_internal(Composite<VariantKey>&& 
 
 void LmdbStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts opts)
 {
-    ARCTICDB_SAMPLE(LmdbStorageRemove, 0)
+    ARCTICDB_SAMPLE("LmdbStorageRemove", 0)
     std::lock_guard<std::mutex> lock{*write_mutex_};
     auto txn = ::lmdb::txn::begin(env());
     ARCTICDB_SUBSAMPLE(LmdbStorageInTransaction, 0)
@@ -232,7 +232,7 @@ bool LmdbStorage::do_fast_delete() {
 }
 
 void LmdbStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix) {
-    ARCTICDB_SAMPLE(LmdbStorageItType, 0);
+    ARCTICDB_SAMPLE("LmdbStorageItType", 0);
     auto txn = ::lmdb::txn::begin(env(), nullptr, MDB_RDONLY); // scoped abort on
     std::string type_db = fmt::format("{}", key_type);
     ::lmdb::dbi& dbi = dbi_by_key_type_.at(type_db);

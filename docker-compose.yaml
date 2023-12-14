@@ -1,0 +1,15 @@
+version: "3.8"
+services:
+  jaeger:
+    image: jaegertracing/all-in-one:1.33
+    ports:
+    - 16686:16686    # frontend
+    - 14250:14250    # model.proto
+  collector:
+    image: otel/opentelemetry-collector-contrib:0.49.0
+    depends_on:
+    - jaeger
+    ports:
+    - 4317:4317      # OTLP (gRPC)
+    volumes:
+    - ./otelcol-config.yaml:/etc/otelcol-contrib/config.yaml:ro

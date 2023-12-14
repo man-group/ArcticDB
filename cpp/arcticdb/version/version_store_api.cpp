@@ -47,7 +47,7 @@ VersionedItem PythonVersionStore::write_dataframe_specific_version(
     const py::object& user_meta,
     VersionId version_id
     ) {
-    ARCTICDB_SAMPLE(WriteDataFrame, 0)
+    ARCTICDB_SAMPLE("WriteDataFrame", 0)
 
     ARCTICDB_DEBUG(log::version(), "write_dataframe_specific_version stream_id: {} , version_id: {}", stream_id, version_id);
     if (auto version_key = ::arcticdb::get_specific_version(store(), version_map(), stream_id, version_id, VersionQuery{}, ReadOptions{}); version_key) {
@@ -270,7 +270,7 @@ VersionResultVector PythonVersionStore::list_versions(
     const std::optional<bool>& latest_only,
     const std::optional<bool>& iterate_on_failure,
     const std::optional<bool>& skip_snapshots) {
-    ARCTICDB_SAMPLE(ListVersions, 0)
+    ARCTICDB_SAMPLE("ListVersions", 0)
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: list_versions");
     auto stream_ids = std::set<StreamId>();
 
@@ -414,7 +414,7 @@ void PythonVersionStore::snapshot(
     const std::vector<StreamId> &skip_symbols,
     std::map<StreamId, VersionId> &versions
     ) {
-    ARCTICDB_SAMPLE(CreateSnapshot, 0)
+    ARCTICDB_SAMPLE("CreateSnapshot", 0)
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: snapshot");
 
     util::check_arg(skip_symbols.empty() || versions.empty(), "Only one of skip_symbols and versions can be set");
@@ -474,7 +474,7 @@ VersionedItem PythonVersionStore::write_partitioned_dataframe(
     const py::object &norm_meta,
     const std::vector<std::string>& partition_value
     ) {
-    ARCTICDB_SAMPLE(WritePartitionedDataFrame, 0)
+    ARCTICDB_SAMPLE("WritePartitionedDataFrame", 0)
     auto maybe_prev = ::arcticdb::get_latest_version(store(), version_map(), stream_id, VersionQuery{}, ReadOptions{});
     auto version_id = get_next_version_from_key(maybe_prev);
 
@@ -525,7 +525,7 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
     const py::object &user_meta,
     bool prune_previous_versions
     ) {
-    ARCTICDB_SAMPLE(WriteVersionedMultiKey, 0)
+    ARCTICDB_SAMPLE("WriteVersionedMultiKey", 0)
 
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write_versioned_composite_data");
     auto maybe_prev = ::arcticdb::get_latest_version(store(), version_map(), stream_id, VersionQuery{}, ReadOptions{});
@@ -564,7 +564,7 @@ VersionedItem PythonVersionStore::write_versioned_dataframe(
     bool prune_previous_versions,
     bool sparsify_floats,
     bool validate_index) {
-    ARCTICDB_SAMPLE(WriteVersionedDataframe, 0)
+    ARCTICDB_SAMPLE("WriteVersionedDataframe", 0)
     auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta);
     auto versioned_item = write_versioned_dataframe_internal(stream_id, std::move(frame), prune_previous_versions, sparsify_floats, validate_index);
 
@@ -647,7 +647,7 @@ void PythonVersionStore::drop_column_stats_version(
 ReadResult PythonVersionStore::read_column_stats_version(
     const StreamId& stream_id,
     const VersionQuery& version_query) {
-    ARCTICDB_SAMPLE(ReadColumnStats, 0)
+    ARCTICDB_SAMPLE("ReadColumnStats", 0)
     auto [versioned_item, frame_and_descriptor] = read_column_stats_version_internal(stream_id, version_query);
     return make_read_result_from_frame(frame_and_descriptor, versioned_item.key_);
 }
@@ -655,7 +655,7 @@ ReadResult PythonVersionStore::read_column_stats_version(
 ColumnStats PythonVersionStore::get_column_stats_info_version(
     const StreamId& stream_id,
     const VersionQuery& version_query) {
-    ARCTICDB_SAMPLE(GetColumnStatsInfo, 0)
+    ARCTICDB_SAMPLE("GetColumnStatsInfo", 0)
     return get_column_stats_info_version_internal(stream_id, version_query);
 }
 
@@ -922,7 +922,7 @@ void PythonVersionStore::prune_previous_versions(const StreamId& stream_id) {
 }
 
 void PythonVersionStore::delete_all_versions(const StreamId& stream_id) {
-    ARCTICDB_SAMPLE(DeleteAllVersions, 0)
+    ARCTICDB_SAMPLE("DeleteAllVersions", 0)
 
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_all_versions");
     if (!has_stream(stream_id)) {
@@ -986,7 +986,7 @@ std::pair<VersionedItem, py::object> PythonVersionStore::read_metadata(
     const ReadOptions& read_options
     ) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: read_metadata");
-    ARCTICDB_SAMPLE(ReadMetadata, 0)
+    ARCTICDB_SAMPLE("ReadMetadata", 0)
 
     auto metadata = read_metadata_internal(stream_id, version_query, read_options);
     if(!metadata.first.has_value())
@@ -1023,7 +1023,7 @@ std::vector<std::variant<std::pair<VersionedItem, py::object>, DataError>> Pytho
     const std::vector<StreamId>& stream_ids,
     const std::vector<VersionQuery>& version_queries,
     const ReadOptions& read_options) {
-    ARCTICDB_SAMPLE(BatchReadMetadata, 0)
+    ARCTICDB_SAMPLE("BatchReadMetadata", 0)
     auto metadatas_or_errors = batch_read_metadata_internal(stream_ids, version_queries, read_options);
 
     std::vector<std::variant<std::pair<VersionedItem, py::object>, DataError>> results;
@@ -1065,7 +1065,7 @@ ReadResult PythonVersionStore::read_index(
     const StreamId& stream_id,
     const VersionQuery& version_query
     ) {
-    ARCTICDB_SAMPLE(ReadIndex, 0)
+    ARCTICDB_SAMPLE("ReadIndex", 0)
 
     auto version = get_version_to_read(stream_id, version_query, ReadOptions{});
     if(!version)
