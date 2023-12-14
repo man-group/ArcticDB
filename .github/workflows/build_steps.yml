@@ -11,6 +11,7 @@ on:
       python_deps_ids:   {default: '[""]', type: string, description: build-python-wheels test matrix parameter. JSON string.}
       python3:           {default: -1, type: number, description: Python 3 minor version}
       persistent_storage:      {default: "false", type: string, description: Specifies whether the python tests should tests against real storages e.g. AWS S3  }
+      pytest_xdist_mode: {default: "", type: string, description: additional argument to pass for pytest-xdist}
 jobs:
   start_ec2_runner:
     if: inputs.compile-override == 'compile-on-ec2'
@@ -314,6 +315,7 @@ jobs:
           # Use the Mongo created in the service container above to test against
           CI_MONGO_HOST: mongodb
           HYPOTHESIS_PROFILE: ci_${{matrix.os}}
+          PYTEST_XDIST_MODE: ${{inputs.pytest_xdist_mode}}
 
       - name: Collect crash dumps (Windows)
         if: matrix.os == 'windows' && failure()

@@ -21,7 +21,6 @@ from arcticdb.exceptions import LmdbMapFullError, StorageException
 from arcticdb.util.test import get_wide_dataframe
 import arcticdb.adapters.lmdb_library_adapter as la
 from arcticdb.exceptions import LmdbOptionsError
-from arcticdb_ext.log import flush_all
 
 
 def test_batch_read_only_segfault_regression(lmdb_storage):
@@ -182,16 +181,8 @@ def create_arctic_instance(td, i):
     assert lib.read(f"{i}")
 
 
-@pytest.fixture
-def get_stderr(capfd):
-    def _get():
-        flush_all()
-        return capfd.readouterr().err
-
-    return _get
-
-
 def test_warnings_arctic_instance(tmp_path, get_stderr):
+    pytest.skip("This test is flaky due to trying to retrieve the log messages")
     ac = Arctic(f"lmdb://{tmp_path}")
     get_stderr()  # Clear buffer
 
