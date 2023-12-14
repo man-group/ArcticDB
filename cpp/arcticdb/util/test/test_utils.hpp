@@ -108,7 +108,7 @@ struct TestValue {
         return check_impl(dimensions, 0, shapes, strides, data);
     }
 
-    bool check_impl(Dimension dim, int pos, const ssize_t *shapes, const ssize_t *strides, const raw_type *data) const {
+    bool check_impl(Dimension dim, int pos, const shape_t *shapes, const stride_t *strides, const raw_type *data) const {
         auto shape = shapes_[size_t(dim) - 1];
         auto stride = strides_[size_t(dim) - 1] / sizeof(raw_type);
         for (int i = 0; i < +shape; ++i) {
