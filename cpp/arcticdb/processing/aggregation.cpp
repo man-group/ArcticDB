@@ -540,42 +540,20 @@ void FirstAggregatorData::aggregate(const std::optional<ColumnWithStrings>& inpu
                 using ColumnTagType = std::decay_t<decltype(type_desc_tag)>;
                 using ColumnType =  typename ColumnTagType::raw_type;
                 auto groups_pos = 0;
-                auto grp_idx = groups[0];
                 while (auto block = col_data.next<TypeDescriptorTag<ColumnTagType, DimensionTag<entity::Dimension::Dim0>>>()) {
                     auto ptr = reinterpret_cast<const ColumnType *>(block.value().data());
                     for (auto i = 0u; i < block.value().row_count(); ++i, ++ptr, ++groups_pos) {
                         auto& val = out_ptr[groups[groups_pos]];
                         bool is_first_group_el = (groups_cache_.find(groups[groups_pos]) == groups_cache_.end());
                         if constexpr(std::is_floating_point_v<ColumnType>) {
-                            const auto& curr = GlobalRawType(*ptr);
-                            if ((grp_idx == groups[groups_pos]) && (is_first_group_el || std::isnan(static_cast<ColumnType>(val)))) {
+                            if (is_first_group_el || std::isnan(static_cast<ColumnType>(val))) {
                                 groups_cache_.insert(groups[groups_pos]);
-                                val = curr;
-                            }
-                            else if (grp_idx != groups[groups_pos]) { // Updating when changing group
-                                if (is_first_group_el) { // Group not seen yet
-                                    groups_cache_.insert(groups[groups_pos]);
-                                    val = curr;
-                                }
-                                else {
-                                    if (std::isnan(static_cast<ColumnType>(val))) {
-                                        val = curr;
-                                    }
-                                }
-                                grp_idx = groups[groups_pos];
+                                val = GlobalRawType(*ptr);
                             }
                         } else {
-                            const auto& curr = GlobalRawType(*ptr);
-                            if ((grp_idx == groups[groups_pos]) && is_first_group_el) {
+                            if (is_first_group_el) {
                                 groups_cache_.insert(groups[groups_pos]);
-                                val = curr;
-                            }
-                            else if (grp_idx != groups[groups_pos]) { // Updating when changing group
-                                if (is_first_group_el) { // Group not seen yet
-                                    groups_cache_.insert(groups[groups_pos]);
-                                    val = curr;
-                                }
-                                grp_idx = groups[groups_pos];
+                                val = GlobalRawType(*ptr);
                             }
                         }
                     }
@@ -621,29 +599,16 @@ void LastAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input
                 using ColumnTagType = std::decay_t<decltype(type_desc_tag)>;
                 using ColumnType =  typename ColumnTagType::raw_type;
                 auto groups_pos = 0;
-                auto grp_idx = groups[0];
                 while (auto block = col_data.next<TypeDescriptorTag<ColumnTagType, DimensionTag<entity::Dimension::Dim0>>>()) {
                     auto ptr = reinterpret_cast<const ColumnType *>(block.value().data());
                     for (auto i = 0u; i < block.value().row_count(); ++i, ++ptr, ++groups_pos) {
                         auto& val = out_ptr[groups[groups_pos]];
-                        bool is_first_group_el = (groups_cache_.find(groups[groups_pos]) == groups_cache_.end());
                         if constexpr(std::is_floating_point_v<ColumnType>) {
+                            bool is_first_group_el = (groups_cache_.find(groups[groups_pos]) == groups_cache_.end());
                             const auto& curr = GlobalRawType(*ptr);
-                            if ((grp_idx == groups[groups_pos]) && (is_first_group_el || !std::isnan(static_cast<ColumnType>(curr)))) {
+                            if (is_first_group_el || !std::isnan(static_cast<ColumnType>(curr))) {
                                 groups_cache_.insert(groups[groups_pos]);
                                 val = curr;
-                            }
-                            else if (grp_idx != groups[groups_pos]) { // Updating when changing group
-                                if (is_first_group_el) { // Group not seen yet
-                                    groups_cache_.insert(groups[groups_pos]);
-                                    val = curr;
-                                }
-                                else {
-                                    if (!std::isnan(static_cast<ColumnType>(curr))) {
-                                        val = curr;
-                                    }
-                                }
-                                grp_idx = groups[groups_pos];
                             }
                         } else {
                             val = GlobalRawType(*ptr);
