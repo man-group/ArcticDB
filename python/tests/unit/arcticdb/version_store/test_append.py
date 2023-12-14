@@ -503,3 +503,47 @@ def test_read_incomplete_no_warning(s3_store_factory, sym, get_stderr):
         assert err.count("D arcticdb.storage | Failed to find segment for key") == 1
     finally:
         set_log_level()
+
+
+def test_defragment_read_prev_versions(sym, lmdb_version_store):
+    start_time, end_time = pd.to_datetime(("1990-1-1", "1995-1-1"))
+    cols = ["a", "b", "c", "d"]
+    index = pd.date_range(start_time, end_time, freq="D")
+    original_df = pd.DataFrame(np.random.randn(len(index), len(cols)), index=index, columns=cols)
+    lmdb_version_store.write(sym, original_df)
+    expected_dfs = [original_df]
+
+    for idx in range(100):
+        update_start = end_time + pd.to_timedelta(idx, "days")
+        update_end = update_start + pd.to_timedelta(10, "days")
+        update_index = pd.date_range(update_start, update_end, freq="D")
+        update_df = pd.DataFrame(np.random.randn(len(update_index), len(cols)), index=update_index, columns=cols)
+        lmdb_version_store.update(sym, update_df)
+        next_expected_df = expected_dfs[-1].reindex(expected_dfs[-1].index.union(update_df.index))
+        next_expected_df.loc[update_df.index] = update_df
+        expected_dfs.append(next_expected_df)
+
+    assert_frame_equal(lmdb_version_store.read(sym).data, expected_dfs[-1])
+    assert len(lmdb_version_store.list_versions(sym)) == 101
+    assert len(expected_dfs) == 101
+    for version_id, expected_df in enumerate(expected_dfs):
+        assert_frame_equal(lmdb_version_store.read(sym, as_of=version_id).data, expected_df)
+
+    assert lmdb_version_store.is_symbol_fragmented(sym)
+    versioned_item = lmdb_version_store.defragment_symbol_data(sym)
+    assert versioned_item.version == 101
+    assert len(lmdb_version_store.list_versions(sym)) == 102
+
+    assert_frame_equal(lmdb_version_store.read(sym).data, expected_dfs[-1])
+    assert_frame_equal(lmdb_version_store.read(sym, as_of=0).data, expected_dfs[0])
+    for version_id, expected_df in enumerate(expected_dfs):
+        assert_frame_equal(lmdb_version_store.read(sym, as_of=version_id).data, expected_df)
+
+
+def test_defragment_no_work_to_do(sym, lmdb_version_store):
+    df = pd.DataFrame({"a": [1, 2, 3]})
+    lmdb_version_store.write(sym, df)
+    assert_frame_equal(lmdb_version_store.read(sym).data, df)
+    assert list(lmdb_version_store.list_versions(sym))[0]["version"] == 0
+    with pytest.raises(InternalException):
+        lmdb_version_store.defragment_symbol_data(sym)
