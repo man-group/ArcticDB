@@ -135,7 +135,7 @@ def test_(initial: InputFactories, append: InputFactories, match, swap, lmdb_ver
     df_in_str=st.booleans(),
 )
 @SLOW_TESTS_MARK
-@pytest.mark.xfail(reason="Needs to be fixed with issue #496")
+#@pytest.mark.xfail(reason="Needs to be fixed with issue #496")
 def test_append_with_defragmentation(
     sym,
     col_per_append_df,
@@ -180,6 +180,14 @@ def test_append_with_defragmentation(
         index_offset,
         num_of_rows,
     ):
+        original_df = before_compact.copy()
+        vers = lib.list_versions(sym, latest_only=True)
+        if len(vers):
+            starting_ver = vers[0]['version']
+        else:
+            starting_ver = 0
+
+        print("Starting now")
         for num_of_row in num_of_rows:
             start_index = index_offset
             index_offset += num_of_row
@@ -190,16 +198,20 @@ def test_append_with_defragmentation(
                 lib.write(sym, df)
             else:
                 lib.append(sym, df)
+            print("Write a version")
             segment_details = lib.read_index(sym)
             assert lib.is_symbol_fragmented(sym, None) is (
                 get_no_of_segments_after_defragmentation(segment_details, merged_segment_row_size)
                 != get_no_of_column_merged_segments(segment_details)
             )
+        num_versions_added = len(num_of_rows)
         if get_no_of_segments_after_defragmentation(
             segment_details, merged_segment_row_size
         ) != get_no_of_column_merged_segments(segment_details):
             seg_details_before_compaction = lib.read_index(sym)
-            lib.defragment_symbol_data(sym, None)
+            versioned_item = lib.defragment_symbol_data(sym, None)
+            assert versioned_item.version == starting_ver + num_versions_added + 1
+            assert_frame_equal(lib.read(sym).data, original_df)
             res = lib.read(sym).data
             res = res.reindex(sorted(list(res.columns)), axis=1)
             res = res.replace("", 0.0)
@@ -219,8 +231,10 @@ def test_append_with_defragmentation(
             )  # start_index and end_index got merged into one column
             assert np.array_equal(indexs.iloc[1:, 0].astype(str).values, indexs.iloc[:-1, 1].astype(str).values)
         else:
-            with pytest.raises(InternalException):
-                lib.defragment_symbol_data(sym, None)
+            versioned_item = lib.defragment_symbol_data(sym, None)
+            assert versioned_item.version == starting_ver + num_versions_added
+            assert_frame_equal(lib.read(sym).data, original_df)
+
         return before_compact, index_offset
 
     assume(col_per_append_df <= col_name_set)

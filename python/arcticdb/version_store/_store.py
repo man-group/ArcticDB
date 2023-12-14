@@ -2785,7 +2785,14 @@ class NativeVersionStore:
         if self._lib_cfg.lib_desc.version.write_options.bucketize_dynamic:
             raise ArcticDbNotYetImplemented(f"Support for library with 'bucketize_dynamic' ON is not implemented yet")
 
+        if segment_size is not None:
+            # TODO: Document this above and also in library.py
+            log.warn("The segment_size parameter is deprecated and will be removed in a future version."
+                     "Specify using LibraryOptions instead.")
+
         result = self.version_store.defragment_symbol_data(symbol, segment_size)
+        # TODO: We should consider returning a containing object to return whether defrag was carried out
+        # See https://github.com/man-group/ArcticDB/issues/699 for where this was suggested
         return VersionedItem(
             symbol=result.symbol,
             library=self._library.library_path,
