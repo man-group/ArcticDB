@@ -6,6 +6,7 @@
 */
 
 #include <arcticdb/util/sparse_utils.hpp>
+#include <pybind11/pybind11.h>
 
 namespace arcticdb::util {
 

@@ -548,7 +548,8 @@ public:
                 ndim,
                 type().data_type(),
                 get_type_size(type().data_type()),
-                reinterpret_cast<const T*>(data_.buffer().ptr_cast<uint8_t>(bytes_offset(idx), calc_elements(shape_ptr, ndim))));
+                reinterpret_cast<const T*>(data_.buffer().ptr_cast<uint8_t>(bytes_offset(idx), calc_elements(shape_ptr, ndim))),
+                ndim);
     }
 
     template<typename T>
