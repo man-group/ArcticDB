@@ -1,8 +1,10 @@
 name: Build and Test
 on:
   push:
+    tags: ["v**"]
+    branches: ["master"]
+  pull_request:
     branches: ["**"]
-    tags: [v**]
     paths:
       - .github/workflows/*.yml
       - build_tooling/**
@@ -55,8 +57,6 @@ jobs:
                 do_not_archive: ["*.so", "*.[ao]", "vcpkg_installed"]
                 test_services:
                   mongodb:
-                    image: "mongo:4.4"
-                  mongodb_2:
                     image: "mongo:4.4"
                 container:
                   image: ${{needs.cibw_docker_image.outputs.tag}}
@@ -167,12 +167,14 @@ jobs:
         include:
           - python_deps_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.linux_matrix)}}
+            pytest_xdist_mode: "--dist worksteal"
           - python3: 6
             python_deps_ids: ["", -compat36]
             matrix_override:
               - ${{fromJson(needs.common_config.outputs.linux_matrix)[0]}}
               - python_deps_id: -compat36
                 python_deps: requirements-compatibility-py36.txt
+            pytest_xdist_mode: ""  # worksteal Not supported on Python 3.6
           - python3: 8
             python_deps_ids: ["", -compat38]
             matrix_override:
@@ -193,6 +195,7 @@ jobs:
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
       persistent_storage: ${{inputs.persistent_storage}}
       compile-override: compile-on-ec2
+      pytest_xdist_mode: ${{matrix.pytest_xdist_mode}}
 
   cpp-test-windows:
     needs: [common_config]

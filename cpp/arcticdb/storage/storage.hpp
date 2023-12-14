@@ -14,14 +14,12 @@
 #include <arcticdb/util/composite.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <boost/callable_traits.hpp>
-#include <folly/Range.h>
 #include <type_traits>
 #include <iterator>
 #include <array>
 #include <string_view>
 #include <storage/key_segment_pair.hpp>
 #include <util/composite.hpp>
-#include <folly/futures/Future.h>
 
 namespace arcticdb::storage {
 

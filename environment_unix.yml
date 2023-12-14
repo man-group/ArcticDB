@@ -63,7 +63,7 @@ dependencies:
   - boto3
   - werkzeug
   - moto
-  - pytest-server-fixtures
+  - mock
   - msgpack-python
   # Pinned to avoid test disruption (in phase with the pin in setup.cfg)
   # See: https://github.com/man-group/ArcticDB/pull/291

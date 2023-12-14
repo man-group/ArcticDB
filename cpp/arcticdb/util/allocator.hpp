@@ -12,7 +12,6 @@
 #include <arcticdb/util/memory_tracing.hpp>
 #include <arcticdb/util/clock.hpp>
 #include <folly/concurrency/ConcurrentHashMap.h>
-#include <arcticdb/util/slab_allocator.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <folly/ThreadCachedInt.h>
 #include <arcticdb/util/timer.hpp>
@@ -26,6 +25,10 @@
 // for malloc_trim on linux
 #if defined(__linux__) && defined(__GLIBC__) 
     #include <malloc.h>
+#endif
+
+#if USE_SLAB_ALLOCATOR
+    #include <arcticdb/util/slab_allocator.hpp>
 #endif
 
 //#define ARCTICDB_TRACK_ALLOCS

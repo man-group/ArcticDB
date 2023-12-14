@@ -99,6 +99,14 @@ def test_interleaved_store_read(version_store_and_real_s3_basic_store_factory):
     assert vs1.list_symbols() == []
 
 
+def test_symbol_list_regex(basic_store):
+    for i in range(15):
+        basic_store.write(f"sym_{i}", pd.DataFrame())
+
+    assert set(basic_store.list_symbols(regex="1$")) == {"sym_1", "sym_11"}
+    assert set(basic_store.list_symbols(regex=".*1.*")) == {"sym_1", "sym_10", "sym_11", "sym_12", "sym_13", "sym_14"}
+
+
 @pytest.mark.parametrize("compact_first", [True, False])
 # Using S3 because LMDB does not allow OpenMode to be changed
 def test_symbol_list_read_only_compaction_needed(small_max_delta, object_version_store, compact_first):
@@ -201,16 +209,14 @@ def test_only_latest_compaction_key_is_used(basic_store):
 
 
 @pytest.mark.parametrize("write_another", [False, True])
-# TODO: look into why this doesn't work with azure
-# def test_turning_on_symbol_list_after_a_symbol_written(object_store_factory, write_another):
-def test_turning_on_symbol_list_after_a_symbol_written(s3_store_factory, write_another):
+def test_turning_on_symbol_list_after_a_symbol_written(object_store_factory, write_another):
     # The if(!maybe_last_compaction) case
-    lib: NativeVersionStore = s3_store_factory(symbol_list=False)
+    lib: NativeVersionStore = object_store_factory(symbol_list=False)
 
     lib.write("a", 1)
     assert not lib.library_tool().find_keys(KeyType.SYMBOL_LIST)
 
-    lib = s3_store_factory(reuse_name=True, symbol_list=True)
+    lib = object_store_factory(reuse_name=True, symbol_list=True)
     lt = lib.library_tool()
     if write_another:
         lib.write("b", 2)
@@ -301,12 +307,12 @@ class ScopedMaxDelta:
 @pytest.mark.parametrize("compaction_size", [2, 10, 200])
 @pytest.mark.parametrize("same_symbols", [True, False])
 def test_symbol_list_parallel_stress_with_delete(
-    s3_version_store_v1, list_freq, delete_freq, update_freq, compaction_size, same_symbols
+    lmdb_version_store_v1, list_freq, delete_freq, update_freq, compaction_size, same_symbols
 ):
     pd.set_option("display.max_rows", None)
     ScopedMaxDelta(compaction_size)
 
-    lib = s3_version_store_v1
+    lib = lmdb_version_store_v1
     num_pre_existing_symbols = 100
     num_symbols = 10
     num_workers = 5

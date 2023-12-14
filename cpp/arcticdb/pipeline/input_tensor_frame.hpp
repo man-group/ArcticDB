@@ -62,22 +62,22 @@ struct InputTensorFrame {
     void set_index_range() {
             // Fill index range
             // Note RowCountIndex will normally have an index field count of 0
-            if (desc.index().field_count() == 1) {
-                visit_field(desc.field(0), [&](auto tag) {
+            if(num_rows == 0) {
+                index_range.start_  = IndexValue{0};
+                index_range.end_ = IndexValue{0};
+            } else if (desc.index().field_count() == 1) {
+                visit_field(desc.field(0), [&](auto &&tag) {
                     using DT = std::decay_t<decltype(tag)>;
                     using RawType = typename DT::DataTypeTag::raw_type;
                     if constexpr (std::is_integral_v<RawType> || std::is_floating_point_v<RawType>) {
                         util::check(static_cast<bool>(index_tensor), "Got null index tensor in set_index_range");
-                        const auto &tensor = index_tensor.value();
-                        if(tensor.size() != 0) {
-                            auto start_t = tensor.ptr_cast<RawType>(0);
-                            auto end_t = tensor.ptr_cast<RawType>(static_cast<size_t>(tensor.shape(0) - 1));
-                            index_range.start_  = IndexValue(static_cast<timestamp>(*start_t));
-                            index_range.end_ = IndexValue(static_cast<timestamp>(*end_t));
-                        } else {
-                            index_range.start_ = index_range.start_ = IndexValue{0};
-                        }
-                    } else {
+                        util::check(index_tensor->nbytes() > 0, "Empty index tensor");
+                        auto &tensor = index_tensor.value();
+                        auto start_t = tensor.ptr_cast<RawType>(0);
+                        auto end_t = tensor.ptr_cast<RawType>(static_cast<size_t>(tensor.shape(0) - 1));
+                        index_range.start_  = IndexValue(static_cast<timestamp>(*start_t));
+                        index_range.end_ = IndexValue(static_cast<timestamp>(*end_t));
+                    } else
                         throw std::runtime_error("Unsupported non-integral index type");
                     }
                 });

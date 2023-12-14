@@ -153,7 +153,10 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
                 empty = true;
                 all_nans = true;
                 util::check(c_style, "Non contiguous columns with first element as None not supported yet.");
-                while(current_object < obj + element_count) {
+                PyObject** current_object = obj;
+                const auto* end = obj + size;
+                while(current_object < end) {
+
                     if(*current_object == none.ptr()) {
                         all_nans = false;
                     } else if(is_py_nan(*current_object)) {
@@ -165,9 +168,8 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
                     }
                     ++current_object;
                 }
-                if(!empty) {
+                if(current_object != end)
                     sample = *current_object;
-                }
             }
             if (empty && descr->kind == 'O') {
                 val_type = ValueType::EMPTY;

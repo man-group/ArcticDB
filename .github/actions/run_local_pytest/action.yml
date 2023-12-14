@@ -24,4 +24,3 @@ runs:
         ARCTICDB_FAST_TESTS_ONLY: ${{ inputs.fast_tests_only }}
         # Use the Mongo created in the service container above to test against
         CI_MONGO_HOST: mongodb
-        CI_MONGO_HOST_2: mongodb_2

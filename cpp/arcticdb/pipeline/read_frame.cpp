@@ -771,7 +771,12 @@ class DynamicStringReducer : public StringReducer {
 
     struct UnicodeFromUnicodeCreator {
         static PyObject* create(std::string_view sv, bool) {
-            const auto actual_length = std::min(sv.size() / UNICODE_WIDTH, wcslen(reinterpret_cast<const wchar_t *>(sv.data())));
+            const auto size = sv.size() + 4;
+            auto* buffer = reinterpret_cast<char*>(alloca(size));
+            memset(buffer, 0, size);
+            memcpy(buffer, sv.data(), sv.size());
+
+            const auto actual_length = std::min(sv.size() / UNICODE_WIDTH, wcslen(reinterpret_cast<const wchar_t *>(buffer)));
             return PyUnicode_FromKindAndData(PyUnicode_4BYTE_KIND, reinterpret_cast<const UnicodeType*>(sv.data()), actual_length);
         }
     };

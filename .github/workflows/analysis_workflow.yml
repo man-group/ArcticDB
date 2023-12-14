@@ -189,7 +189,6 @@ jobs:
   start_ec2_runner:
     uses: ./.github/workflows/ec2_runner_jobs.yml
     secrets: inherit
-    permissions: write-all
     with:
       job_type: start
 
@@ -200,12 +199,18 @@ jobs:
     container:
       image: ${{needs.cibw_docker_image.outputs.tag}}
     permissions:
-      contents: write
+      contents: write # Technically not necessary since the ARCTICDB_TEST_PAT token override exists
+    env:
+      # this is potentially overflowing the cache, so should be looked into after we address issue #1057
+      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
+      VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
+      VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
+      CMAKE_C_COMPILER_LAUNCHER: sccache
+      CMAKE_CXX_COMPILER_LAUNCHER: sccache
 
     steps:
       - uses: actions/checkout@v3.3.0
         with:
-          submodules: recursive
           fetch-depth: 0
           token: ${{ secrets.ARCTICDB_TEST_PAT }}
 
@@ -227,118 +232,62 @@ jobs:
           ls /opt/python  
           echo /opt/python/cp36-cp36m/bin >> $GITHUB_PATH
 
-      - name: Install local dependencies with pip
+      - name: Install ASV
         shell: bash
         run: |
+          git config --global --add safe.directory .
           python -m pip install --upgrade pip
-          ARCTIC_CMAKE_PRESET=skip pip install -ve .[Testing]
+          pip install asv virtualenv
+          python -m asv machine -v --yes --machine ArcticDB-Runner-Medium
 
       - name: Benchmark all commits
         if: inputs.run_all_benchmarks == true
         shell: bash -el {0}
         run: |
-          git config --global --add safe.directory .
-          python -m asv machine -v --yes --machine ArcticDB-Runner-Medium
           python -m asv run -v --show-stderr HASHFILE:python/hashes_to_benchmark.txt
-        env:
-          # this is potentially overflowing the cache, so should be looked into after we address issue #1057
-          SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
-          VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
-          VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
-          VCPKG_MAN_NUGET_USER: ${{secrets.VCPKG_MAN_NUGET_USER}} # For forks to download pre-compiled dependencies from the Man repo
-          VCPKG_MAN_NUGET_TOKEN: ${{secrets.VCPKG_MAN_NUGET_TOKEN}}
-          CMAKE_C_COMPILER_LAUNCHER: sccache
-          CMAKE_CXX_COMPILER_LAUNCHER: sccache
 
       - name: Benchmark only latest commit
         if: github.event_name != 'pull_request' && inputs.run_all_benchmarks == false
         shell: bash -el {0}
         run: |
-          git config --global --add safe.directory .  
-          python -m asv machine -v --yes --machine ArcticDB-Runner-Medium
           python -m asv run -v --show-stderr HEAD^!
           git log HEAD^..HEAD --oneline -n1 --decorate=no | awk '{print $1;}' >> python/hashes_to_benchmark.txt
-        env:
-          # this is potentially overflowing the cache, so should be looked into after we address issue #1057
-          SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
-          VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
-          VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
-          VCPKG_MAN_NUGET_USER: ${{secrets.VCPKG_MAN_NUGET_USER}} # For forks to download pre-compiled dependencies from the Man repo
-          VCPKG_MAN_NUGET_TOKEN: ${{secrets.VCPKG_MAN_NUGET_TOKEN}}
-          CMAKE_C_COMPILER_LAUNCHER: sccache
-          CMAKE_CXX_COMPILER_LAUNCHER: sccache
 
       - name: Benchmark against master
         if: github.event_name == 'pull_request' && inputs.run_all_benchmarks == false
         shell: bash -el {0}
         run: |
-          git config --global --add safe.directory .
-          python -m asv machine -v --yes --machine ArcticDB-Runner-Medium
           python -m asv continuous -v --show-stderr origin/master HEAD -f 1.15
-        env:
-          # this is potentially overflowing the cache, so should be looked into after we address issue #1057
-          SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
-          VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
-          VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
-          VCPKG_MAN_NUGET_USER: ${{secrets.VCPKG_MAN_NUGET_USER}} # For forks to download pre-compiled dependencies from the Man repo
-          VCPKG_MAN_NUGET_TOKEN: ${{secrets.VCPKG_MAN_NUGET_TOKEN}}
-          CMAKE_C_COMPILER_LAUNCHER: sccache
-          CMAKE_CXX_COMPILER_LAUNCHER: sccache
 
       - name: Publish results
-        if: github.event_name != 'pull_request' 
+        if: github.event_name != 'pull_request' || github.ref == 'refs/heads/master'
         shell: bash -el {0}
         run: |
           git config --global user.email "arcticdb@man.com"
           git config --global user.name "arcticdb-service-user"
 
-          git pull
           git fetch --tags --all
+          git pull
 
           python -m asv publish -v
 
-          git add python/.asv/results/*
-          git add python/hashes_to_benchmark.txt
-          git commit -m "Update ASV Results and hashes to test"
-          git push --force origin HEAD
-          
+          if ${{ github.event_name != 'pull_request' }} ; then
+            git add python/.asv/results/*
+            git add python/hashes_to_benchmark.txt
+            git commit -m "Update ASV Results and hashes to test"
+            git push origin HEAD
+          fi
+
+          if ${{ github.ref == 'refs/heads/master' }} ; then
+            python -m asv gh-pages -v --rewrite
+          fi
+
   stop-ec2-runner:
     needs: [start_ec2_runner, benchmark_linux_medium]
     if: ${{ always() }}
     uses: ./.github/workflows/ec2_runner_jobs.yml
     secrets: inherit
-    permissions: write-all
     with:
       job_type: stop
       label: ${{ needs.start_ec2_runner.outputs.label }}
       ec2-instance-id: ${{ needs.start_ec2_runner.outputs.ec2-instance-id }}
-
-  publish-results-to-gh-pages:
-    needs: [benchmark_linux_medium]
-    if: github.ref == 'refs/heads/master'
-    runs-on: "ubuntu-latest"
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v3.3.0
-        with:
-          submodules: recursive
-          fetch-depth: 0
-          token: ${{ secrets.ARCTICDB_TEST_PAT }}
-
-      - name: Install Conda environment from environment_unix.yml
-        uses: mamba-org/setup-micromamba@v1.6.0
-        with:
-          environment-file: environment_unix.yml
-          init-shell: >-
-            bash
-          cache-environment: true
-          post-cleanup: 'all'
-
-      - name: Run all version benchmarks
-        shell: bash -el {0}
-        run: |
-            git config --global user.email "arcticdb@man.com"
-            git config --global user.name "arcticdb-service-user"
-            python -m asv publish -v
-            python -m asv gh-pages -v --rewrite
