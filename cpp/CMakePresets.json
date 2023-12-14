@@ -86,6 +86,17 @@
       "inherits": ["common_conda", "windows"]
     },
 
+    {
+      "name": "windows-vs-2022",
+      "generator": "Visual Studio 17 2022",
+      "toolchainFile": "vcpkg/scripts/buildsystems/vcpkg.cmake",
+      "binaryDir": "${sourceDir}/out/${presetName}-build",
+      "installDir": "${sourceDir}/out/install",
+      "cacheVariables": {
+        "CMAKE_CXX_FLAGS": "/MP",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static"
+      }
+    },
 
     {
       "name": "linux",

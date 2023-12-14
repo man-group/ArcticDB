@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.12) # FindPython
+cmake_minimum_required(VERSION 3.21) # TARGET_RUNTIME_DLLS
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake" ${CMAKE_MODULE_PATH})
 cmake_policy(SET CMP0048 NEW)
@@ -17,17 +17,19 @@ option(
 
 
 if(WIN32)
-    add_compile_definitions(NOGDI)
-    add_compile_definitions(WIN32_LEAN_AND_MEAN)
-    add_compile_definitions(HAVE_SNPRINTF)
-    add_compile_definitions(NOMINMAX)
+    add_compile_definitions(
+        NOGDI WIN32_LEAN_AND_MEAN HAVE_SNPRINTF NOMINMAX
+        "$<$<CONFIG:Debug>:DEBUG_BUILD>"
+    )
 
     # We always generate the debug info on Windows since those are not in the final .dll.
     # sccache needs the /Z7 format, but the linker will still produce .pdb files.
     # Guide to MSVC compilation warnings https://learn.microsoft.com/en-us/cpp/error-messages/compiler-warnings/compiler-warnings-c4000-through-c4199?view=msvc-170
-    set(CMAKE_CXX_FLAGS "/DWIN32 /D_WINDOWS /GR /EHsc /bigobj /Z7 /w /wd4244 /wd4267")
-    set(CMAKE_CXX_FLAGS_RELEASE "/MT /DNDEBUG /O2")
-    set(CMAKE_CXX_FLAGS_DEBUG "/MTd /RTC1 /Od")
+    add_compile_options(
+        /DWIN32 /D_WINDOWS /GR /EHsc /bigobj /Z7 /wd4244 /wd4267
+        "$<$<CONFIG:Debug>:/RTC1;/Od;/MTd>"
+        "$<$<CONFIG:Release>:/MT;/Ox>"
+    )
 else()
     if(${ARCTICDB_USING_CONDA})
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wextra")
@@ -42,10 +44,10 @@ else()
     set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -ggdb")
 endif()
 
-IF(DEFINED ENV{CMAKE_BUILD_TYPE})
+if(DEFINED ENV{CMAKE_BUILD_TYPE})
     message(STATUS "Setting CMAKE_BUILD_TYPE to $ENV{CMAKE_BUILD_TYPE}")
     set(CMAKE_BUILD_TYPE $ENV{CMAKE_BUILD_TYPE})
-ENDIF()
+endif()
 
 if(NOT CMAKE_BUILD_TYPE)
     message(STATUS "Setting CMAKE_BUILD_TYPE to Release")
