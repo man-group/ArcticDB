@@ -528,6 +528,27 @@ public:
         return *data_.buffer().ptr_cast<T>(bytes_offset(*physical_row), sizeof(T));
     }
 
+    template<typename T>
+    std::vector<std::optional<T>> clone_scalars_to_vector() const {
+        std::vector<std::optional<T>> values(row_count(), std::nullopt);
+        if (!is_sparse()){
+            const auto& buffer = data_.buffer();
+            for (auto i=0u; i<row_count(); ++i){
+                values[i] = std::optional<T>(*buffer.ptr_cast<T>(i*item_size(), sizeof(T)));
+            }
+        }
+        else{
+            const auto& buffer = data_.buffer();
+            const auto& sm = sparse_map();
+            auto en = sm.first();
+            auto en_end = sm.end();
+            for (auto i=0u; en < en_end; ++en, ++i){
+                values[*en] = std::optional<T>(*buffer.ptr_cast<T>(i*item_size(), sizeof(T)));
+            }
+        }
+        return values;
+    }
+
     // N.B. returning a value not a reference here, so it will need to be pre-checked when data is sparse or it
     // will likely 'splode.
     template<typename T>
@@ -678,8 +699,10 @@ JiveTable create_jive_table(const Column& col) {
     std::iota(std::begin(output.orig_pos_), std::end(output.orig_pos_), 0);
     std::iota(std::begin(output.sorted_pos_), std::end(output.sorted_pos_), 0);
 
+    // Calls to scalar_at are expensive, so we precompute them to speed up the sort compare function.
+    auto values = col.template clone_scalars_to_vector<T>();
     std::sort(std::begin(output.orig_pos_), std::end(output.orig_pos_),[&](const auto& a, const auto& b) -> bool {
-        return col.template scalar_at<T>(a) < col.template scalar_at<T>(b);
+        return values[a] < values[b];
     });
 
     std::sort(std::begin(output.sorted_pos_), std::end(output.sorted_pos_),[&](const auto& a, const auto& b) -> bool {
