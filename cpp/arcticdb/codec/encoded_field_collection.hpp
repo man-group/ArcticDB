@@ -7,11 +7,8 @@
 
 #pragma once
 
-#include <column_store/chunked_buffer.hpp>
-#include <util/cursored_buffer.hpp>
-#include <util/buffer.hpp>
-#include <column_store/column_data.hpp>
-#include <codec/encoded_field.hpp>
+#include <arcticdb/codec/encoded_field.hpp>
+#include <arcticdb/util/buffer.hpp>
 
 namespace arcticdb {
 

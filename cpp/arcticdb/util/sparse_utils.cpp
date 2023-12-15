@@ -6,18 +6,17 @@
 */
 
 #include <arcticdb/util/sparse_utils.hpp>
-#include <arcticdb/python/python_to_tensor_frame.hpp>
+#include <pybind11/pybind11.h>
 
 namespace arcticdb::util {
 
-void scan_object_type_to_sparse(
+util::BitSet scan_object_type_to_sparse(
     const PyObject* const* ptr,
-    size_t rows_to_write,
-    util::BitMagic& bitset) {
-
-    namespace py = pybind11;
+    size_t rows_to_write
+) {
+    util::BitSet bitset;
     auto scan_ptr = ptr;
-    py::none none;
+    pybind11::none none;
     util::BitSet::bulk_insert_iterator inserter(bitset);
     for (size_t idx = 0; idx < rows_to_write; ++idx, ++scan_ptr) {
         if(*scan_ptr != none.ptr())
@@ -25,7 +24,7 @@ void scan_object_type_to_sparse(
     }
     inserter.flush();
     bitset.resize(bv_size(rows_to_write));
+    return bitset;
 }
 
 } //namespace arcticdb::util
-
