@@ -697,7 +697,6 @@ template <typename T>
 JiveTable create_jive_table(const Column& col) {
     JiveTable output(col.row_count());
     std::iota(std::begin(output.orig_pos_), std::end(output.orig_pos_), 0);
-    std::iota(std::begin(output.sorted_pos_), std::end(output.sorted_pos_), 0);
 
     // Calls to scalar_at are expensive, so we precompute them to speed up the sort compare function.
     auto values = col.template clone_scalars_to_vector<T>();
@@ -705,9 +704,10 @@ JiveTable create_jive_table(const Column& col) {
         return values[a] < values[b];
     });
 
-    std::sort(std::begin(output.sorted_pos_), std::end(output.sorted_pos_),[&](const auto& a, const auto& b) -> bool {
-        return output.orig_pos_[a] < output.orig_pos_[b];
-    });
+    // Obtain the sorted_pos_ by reversing the orig_pos_ permutation
+    for (auto i=0u; i<output.orig_pos_.size(); ++i){
+        output.sorted_pos_[output.orig_pos_[i]] = i;
+    }
 
     for(auto pos : folly::enumerate(output.sorted_pos_)) {
         if(pos.index != *pos) {
