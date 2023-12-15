@@ -49,6 +49,8 @@ class ChunkedBufferImpl {
     static_assert(DefaultBlockSize >= BlockType::MinSize);
 
   public:
+    constexpr static size_t block_size = DefaultBlockSize;
+
     struct Iterator {
         ChunkedBufferImpl* parent_;
         BlockType* block_ = nullptr;

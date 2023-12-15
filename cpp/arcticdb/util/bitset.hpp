@@ -22,6 +22,11 @@ using BitMagicEnd = SmallMagicNum<'M', 'e'>;
 using BitSetSizeType = bm::bvector<>::size_type;
 using BitIndex = bm::bvector<>::rs_index_type;
 
+/// @brief Get the combined size of the magic words used as delimiters for the sparse bitmaps
+/// When sparse bitmaps are encoded we use two different magic words to mark the start and the end of the bitmap
+[[nodiscard]] inline constexpr size_t combined_bit_magic_delimiters_size() {
+    return sizeof(BitMagicStart) + sizeof(BitMagicEnd);
+}
 } // namespace util
 
 constexpr bm::bvector<>::size_type bv_size(uint64_t val) {

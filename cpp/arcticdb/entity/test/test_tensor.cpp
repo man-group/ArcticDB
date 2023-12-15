@@ -28,7 +28,7 @@ auto get_f_tensor(size_t num_rows) {
     const auto ndim = 2;
     const DataType dt = DataType::UINT32;
 
-    NativeTensor tensor{nbytes, ndim, strides.data(), shapes.data(), dt, get_type_size(dt), static_cast<const void*>(data->data())};
+    NativeTensor tensor{nbytes, ndim, strides.data(), shapes.data(), dt, get_type_size(dt), static_cast<const void*>(data->data()), ndim};
     return std::make_pair(data, tensor);
 }
 
@@ -46,7 +46,7 @@ auto get_c_tensor(size_t num_rows) {
     const auto ndim = 2;
     const DataType dt = DataType::UINT32;
 
-    NativeTensor tensor{nbytes, ndim, strides.data(), shapes.data(), dt, get_type_size(dt), static_cast<const void*>(data->data())};
+    NativeTensor tensor{nbytes, ndim, strides.data(), shapes.data(), dt, get_type_size(dt), static_cast<const void*>(data->data()), ndim};
     return std::make_pair(data, tensor);
 }
 
@@ -159,7 +159,7 @@ auto get_sparse_array(size_t num_rows) {
     const auto ndim = 1;
     const DataType dt = DataType::UINT32;
 
-    NativeTensor tensor{nbytes, ndim, strides.data(), shapes.data(), dt, get_type_size(dt), static_cast<const void*>(data->data())};
+    NativeTensor tensor{nbytes, ndim, strides.data(), shapes.data(), dt, get_type_size(dt), static_cast<const void*>(data->data()), ndim};
     return std::make_pair(data, tensor);
 }
 
@@ -225,7 +225,7 @@ auto get_sparse_array_funky_strides() {
     const auto ndim = 1;
     const DataType dt = DataType::UINT32;
 
-    NativeTensor tensor{nbytes, ndim, strides.data(), shapes.data(), dt, get_type_size(dt), static_cast<const void*>(data->data())};
+    NativeTensor tensor{nbytes, ndim, strides.data(), shapes.data(), dt, get_type_size(dt), static_cast<const void*>(data->data()), ndim};
     return std::make_pair(data, tensor);
 }
 
@@ -290,7 +290,7 @@ auto get_sparse_array_uneven(size_t num_rows) {
     const auto ndim = 1;
     const DataType dt = DataType::UINT32;
 
-    NativeTensor tensor{nbytes, ndim, strides.data(), shapes.data(), dt, get_type_size(dt), static_cast<const void*>(data->data())};
+    NativeTensor tensor{nbytes, ndim, strides.data(), shapes.data(), dt, get_type_size(dt), static_cast<const void*>(data->data()), ndim};
     return std::make_pair(data, tensor);
 }
 

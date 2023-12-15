@@ -289,7 +289,14 @@ void register_metrics(py::module && m){
 /// Register handling of non-trivial types. For more information @see arcticdb::TypeHandlerRegistry and
 /// @see arcticdb::ITypeHandler
 void register_type_handlers() {
-    arcticdb::TypeHandlerRegistry::instance()->register_handler(arcticdb::DataType::EMPTYVAL, arcticdb::EmptyHandler());
+    using namespace arcticdb;
+    TypeHandlerRegistry::instance()->register_handler(TypeDescriptor{DataType::EMPTYVAL, Dimension::Dim0}, arcticdb::EmptyHandler());
+    constexpr std::array<DataType, 5> allowed_array_types = {DataType::INT64, DataType::FLOAT64, DataType::EMPTYVAL, DataType::FLOAT32, DataType::INT32};
+    for(const DataType& data_type : allowed_array_types) {
+        TypeHandlerRegistry::instance()->register_handler(TypeDescriptor{data_type, Dimension::Dim1}, arcticdb::ArrayHandler());
+    }
+    TypeHandlerRegistry::instance()->register_handler(TypeDescriptor{DataType::PYBOOL64, Dimension::Dim0}, arcticdb::BoolHandler());
+    TypeHandlerRegistry::instance()->register_handler(TypeDescriptor{DataType::PYBOOL8, Dimension::Dim0}, arcticdb::BoolHandler());
 }
 
 PYBIND11_MODULE(arcticdb_ext, m) {

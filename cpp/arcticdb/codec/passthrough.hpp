@@ -18,7 +18,9 @@
 namespace arcticdb::detail {
 
 template<template<typename> class BlockType, class TD>
-struct PassthroughEncoder {
+struct PassthroughEncoderV1 {
+
+    using Opts = arcticdb::proto::encoding::VariantCodec::Passthrough;
 
     static size_t max_compressed_size(const BlockType<TD> &block ) {
         using Helper = CodecHelper<TD>;
@@ -33,7 +35,7 @@ struct PassthroughEncoder {
     }
 
     template <typename EncodedFieldType>
-    static void encode(BlockType<TD> &block, EncodedFieldType &field, Buffer &out, std::ptrdiff_t &pos) {
+    static void encode(const Opts&, const BlockType<TD>& block, EncodedFieldType& field, Buffer& out, std::ptrdiff_t& pos) {
         using namespace arcticdb::entity;
         using Helper = CodecHelper<TD>;
         using T = typename Helper::T;
@@ -70,19 +72,78 @@ struct PassthroughEncoder {
             T *t_out = out.ptr_cast<T>(pos, helper_array_block.values_.bytes_);
             encode_block(d, helper_array_block.values_, helper.hasher_, t_out, pos);
             auto field_nd_array = field.mutable_ndarray();
-            auto values_pb = field_nd_array->add_values();
+            // Important: In case V2 EncodedField is used shapes must be added before values.
             auto shapes_pb = field_nd_array->add_shapes();
+            auto values_pb = field_nd_array->add_values();
             helper_array_block.update_field_size(*field_nd_array);
-            helper_array_block.set_block_data(shapes_pb, values_pb, shape_hash, helper_array_block.shapes_.bytes_,
-                                      helper.hasher_.digest(), helper_array_block.values_.bytes_);
+            helper_array_block.set_block_data(
+				shapes_pb,
+				values_pb,
+				shape_hash,
+				helper_array_block.shapes_.bytes_,
+				helper.hasher_.digest(),
+				helper_array_block.values_.bytes_);
         }
     }
-
+private:
     template<class T>
     static void encode_block(const T *in, BlockProtobufHelper &block_utils, HashAccum &hasher, T *out, std::ptrdiff_t &pos) {
         memcpy(out, in, block_utils.bytes_);
         hasher(in, block_utils.bytes_ / sizeof(T));
         pos += static_cast<ssize_t>(block_utils.bytes_);
+    }
+};
+
+/// @brief "Encoder" which stores the input in the output buffer without performing any transformation
+/// @note The difference between arcticdb::detail::PassthroughEncoder and arcticdb::detail::PassthroughEncoder2 is that
+/// the latter does not care about the shapes array.
+/// @see arcticdb::ColumnEncoder2 arcticdb::detail::GenericBlockEncoder2
+template<template<typename> class BlockType, class TD>
+struct PassthroughEncoderV2 {
+
+    using Opts = arcticdb::proto::encoding::VariantCodec::Passthrough;
+
+    static size_t max_compressed_size(const BlockType<TD> &block) {
+        return block.nbytes();
+    }
+
+    template <typename EncodedBlockType>
+    static void encode(
+        const Opts&,
+        const BlockType<TD> &block,
+        Buffer &out,
+        std::ptrdiff_t &pos,
+        EncodedBlockType* encoded_block
+    ) {
+        using namespace arcticdb::entity;
+        using Helper = CodecHelper<TD>;
+        using T = typename Helper::T;
+        Helper helper;
+        helper.hasher_.reset(helper.seed);
+        const T* d = block.data();
+        const size_t data_byte_size = block.nbytes();
+        helper.ensure_buffer(out, pos, data_byte_size);
+
+        // doing copy + hash in one pass, this might have a negative effect on perf
+        // since the hashing is path dependent. This is a toy example though so not critical
+        T *t_out = out.ptr_cast<T>(pos, data_byte_size);
+        encode_block(d, data_byte_size, helper.hasher_, t_out, pos);
+        encoded_block->set_in_bytes(data_byte_size);
+        encoded_block->set_out_bytes(data_byte_size);
+        encoded_block->set_hash(helper.hasher_.digest());
+    }
+private:
+    template<class T>
+    static void encode_block(
+        const T* in,
+        size_t in_byte_size,
+        HashAccum& hasher,
+        T* out,
+        std::ptrdiff_t& pos
+    ) {
+        memcpy(out, in, in_byte_size);
+        hasher(in, in_byte_size / sizeof(T));
+        pos += static_cast<ssize_t>(in_byte_size);
     }
 };
 
