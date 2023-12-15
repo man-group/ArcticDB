@@ -5,6 +5,7 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
+#include <arcticdb/arrow/python_bindings.hpp>
 #include <arcticdb/async/python_bindings.hpp>
 #include <arcticdb/codec/python_bindings.hpp>
 #include <arcticdb/column_store/python_bindings.hpp>
@@ -311,6 +312,7 @@ PYBIND11_MODULE(arcticdb_ext, m) {
             exceptions, "ArcticException", PyExc_RuntimeError);
     register_error_code_ecosystem(exceptions, base_exception);
 
+    arcticdb::arrow::register_bindings(m);
     arcticdb::async::register_bindings(m);
     arcticdb::codec::register_bindings(m);
     arcticdb::column_store::register_bindings(m);
