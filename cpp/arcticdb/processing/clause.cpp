@@ -532,23 +532,25 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
             for (auto agg_data: folly::enumerate(aggregators_data)) {
                 auto output_column_name = aggregators_.at(agg_data.index).get_output_column_name();
                 auto output_column = proc.get(output_column_name);
-                auto output_column_with_strings = std::get<ColumnWithStrings>(output_column);
-                if (is_sequence_type(output_column_with_strings.column_->type().data_type())) {
-                    std::unordered_map<entity::position_t, entity::position_t> str_offset_mapping;
-                    auto output_data = output_column_with_strings.column_->data();
-                    while (auto out_block = output_data.template next<ScalarTagType<DataTypeTagType>>()) {
-                        const auto out_row_count = out_block->row_count();
-                        auto out_ptr = out_block->data();
-                        for (size_t orc = 0; orc < out_row_count; ++orc, ++out_ptr) {
-                            std::optional<std::string_view> str = output_column_with_strings.string_at_offset(*out_ptr);
-                            if (str.has_value()) {
-                                // Add the string view `*str` to the output `string_pool` and map the new offset to the old one
-                                str_offset_mapping[*out_ptr] = string_pool->get(*str, true).offset();
+                if (std::holds_alternative<ColumnWithStrings>(output_column)) {
+                    auto output_column_with_strings = std::get<ColumnWithStrings>(output_column);
+                    if (is_sequence_type(output_column_with_strings.column_->type().data_type())) {
+                        std::unordered_map<entity::position_t, entity::position_t> str_offset_mapping;
+                        auto output_data = output_column_with_strings.column_->data();
+                        while (auto out_block = output_data.template next<ScalarTagType<DataTypeTagType>>()) {
+                            const auto out_row_count = out_block->row_count();
+                            auto out_ptr = out_block->data();
+                            for (size_t orc = 0; orc < out_row_count; ++orc, ++out_ptr) {
+                                std::optional<std::string_view> str = output_column_with_strings.string_at_offset(*out_ptr);
+                                if (str.has_value()) {
+                                    // Add the string view `*str` to the output `string_pool` and map the new offset to the old one
+                                    str_offset_mapping[*out_ptr] = string_pool->get(*str, true).offset();
+                                }
                             }
                         }
+                        // Set map of string offsets before calling finalize
+                        agg_data->set_string_offset_map(str_offset_mapping);
                     }
-                    // Set map of string offsets before calling finalize
-                    agg_data->set_string_offset_map(str_offset_mapping);
                 }
             }
         });
