@@ -374,7 +374,8 @@ inline NativeTensor tensor_from_column(const Column &column) {
             shape_ptr,
             data_type,
             get_type_size(data_type),
-            column.ptr()
+            column.ptr(),
+            to_tensor_dim(dim)
         };
         return tensor;
     });

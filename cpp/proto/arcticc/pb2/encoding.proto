@@ -116,6 +116,3 @@ message DictionaryEncodedField {
     NDArrayEncodedField values = 1; // aka level in pandas multi index
     NDArrayEncodedField positions = 2; // aka label in pandas multi index
 }
-
-
-

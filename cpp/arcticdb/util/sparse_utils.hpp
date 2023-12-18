@@ -86,10 +86,9 @@ void default_initialize(uint8_t* data, size_t bytes) {
     }
 }
 
-void scan_object_type_to_sparse(
+[[nodiscard]] util::BitSet scan_object_type_to_sparse(
     const PyObject* const* ptr,
-    size_t rows_to_write,
-    util::BitMagic& bitset);
+    size_t rows_to_write);
 
 template <typename RawType>
 ChunkedBuffer scan_floating_point_to_sparse(

@@ -25,7 +25,10 @@ struct MagicNum {
         magic_ = ~magic_;
     }
 
-    void check() const { util::check(magic_ == Magic, "Magic number failure, expected {} got {}", Magic, magic_); }
+    void check() const {
+        std::string_view expected(reinterpret_cast<const char*>(&Magic), 4);
+        util::check(magic_ == Magic, "Magic number failure, expected {}({}) got {}({})", Magic, expected, magic_);
+    }
 
   private:
     volatile uint64_t magic_ = Magic;
@@ -43,16 +46,24 @@ struct SmallMagicNum {
 
     [[nodiscard]] uint16_t magic() const { return magic_; }
 
-    void check() const { util::check(magic_ == Magic, "Magic number failure, expected {} got {}", Magic, magic_); }
+    void check() const {
+        std::string_view expected(reinterpret_cast<const char*>(&Magic), 2);
+        util::check(magic_ == Magic, "Magic number failure, expected {}({}) got {}", Magic, expected, magic_);
+    }
 
 private:
     volatile uint16_t magic_ = Magic;
 };
 
 template <typename MagicNumType>
-void check_magic(const uint8_t*& pos) {
+void check_magic_in_place(const uint8_t*& pos) {
     const auto magic_num = reinterpret_cast<const MagicNumType*>(pos);
     magic_num->check();
+}
+
+template <typename MagicNumType>
+void check_magic(const uint8_t*& pos) {
+    check_magic_in_place<MagicNumType>(pos);
     pos += sizeof(MagicNumType);
 }
 
@@ -65,4 +76,3 @@ void write_magic(uint8_t*& pos) {
 
 
 } // namespace arcticdb
-

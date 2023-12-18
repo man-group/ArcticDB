@@ -39,11 +39,21 @@ PythonOutputFrame::~PythonOutputFrame() {
             auto column_data = column->data();
             column_data.type().visit_tag([&](auto type_desc_tag) {
                 using TDT = decltype(type_desc_tag);
-                if constexpr (is_dynamic_string_type(TDT::DataTypeTag::data_type)) {
-                    while (auto block = column_data.next<TDT>()) {
-                        for (auto item : *block) {
-                          util::check(reinterpret_cast<PyObject *>(item) != nullptr, "Can't delete null item");
-                          Py_DECREF(reinterpret_cast<PyObject *>(item));
+                constexpr auto td = TypeDescriptor(type_desc_tag);
+                if constexpr (is_pyobject_type(TypeDescriptor(type_desc_tag))) {
+                    if constexpr(is_numpy_array(td)) {
+                        auto it = column_data.buffer().iterator(sizeof(PyObject*));
+                        while(!it.finished()) {
+                            util::check(reinterpret_cast<PyObject*>(it.value()) != nullptr, "Can't delete null item");
+                            Py_DECREF(reinterpret_cast<PyObject*>(it.value()));
+                            it.next();
+                        }
+                    } else {
+                        while (auto block = column_data.next<TDT>()) {
+                            for (auto item : *block) {
+                                util::check(reinterpret_cast<PyObject *>(item) != nullptr, "Can't delete null item");
+                                Py_DECREF(reinterpret_cast<PyObject *>(item));
+                            }
                         }
                     }
                 }
