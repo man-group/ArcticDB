@@ -61,14 +61,11 @@ constexpr bool is_narrowing_conversion() {
 struct JiveTable {
     explicit JiveTable(size_t num_rows) :
         orig_pos_(num_rows),
-        sorted_pos_(num_rows),
-        unsorted_rows_(bv_size(num_rows)) {
+        sorted_pos_(num_rows) {
     }
 
     std::vector<uint32_t> orig_pos_;
     std::vector<uint32_t> sorted_pos_;
-    util::BitSet unsorted_rows_;
-    size_t num_unsorted_ = 0;
 };
 
 class Column;
@@ -707,13 +704,6 @@ JiveTable create_jive_table(const Column& col) {
     // Obtain the sorted_pos_ by reversing the orig_pos_ permutation
     for (auto i=0u; i<output.orig_pos_.size(); ++i){
         output.sorted_pos_[output.orig_pos_[i]] = i;
-    }
-
-    for(auto pos : folly::enumerate(output.sorted_pos_)) {
-        if(pos.index != *pos) {
-            output.unsorted_rows_.set(bv_size(pos.index), true);
-            ++output.num_unsorted_;
-        }
     }
 
     return output;
