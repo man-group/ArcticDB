@@ -9,12 +9,12 @@
 
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/buffer.hpp>
+#include <arcticdb/util/bitset.hpp>
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/column_store/block.hpp>
 
 #include <boost/iterator/iterator_facade.hpp>
 
-#include <cstdint>
 
 namespace arcticdb {
 using namespace arcticdb::entity;

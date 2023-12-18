@@ -9,17 +9,8 @@
 
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/magic_num.hpp>
-#include <arcticdb/util/allocator.hpp>
-#include <arcticdb/util/bitset.hpp>
 
-#include <cstdlib>
 #include <cstdint>
-#include <memory>
-#include <algorithm>
-#include <cassert>
-#include <cstring>
-#include <vector>
-#include <numeric>
 
 
 namespace arcticdb {

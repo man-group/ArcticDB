@@ -9,6 +9,9 @@
 
 #include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/util/preprocess.hpp>
+
+#include <arcticdb/util/bitset.hpp>
+
 #include <arcticdb/column_store/chunked_buffer.hpp>
 
 #include <bitmagic/bm.h>
