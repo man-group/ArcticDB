@@ -61,10 +61,22 @@ def test_hypothesis_mean_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df):
     try:
         q = QueryBuilder()
         q = q.groupby("grouping_column").agg({"a": "mean"})
-        expected = expected.groupby("grouping_column").agg({"a": "mean"})
+        expected_df = expected.groupby("grouping_column").agg({"a": "mean"})
 
         vit = lib.read(symbol, query_builder=q)
-        assert_equal_value(vit.data, expected)
+        received_df = vit.data
+
+        # Older versions of Pandas treat values which exceeds limits as `np.inf` or `-np.inf`.
+        # ArcticDB adopted this behaviour.
+        #
+        # Yet, new version of Pandas treats values which exceeds limits as `np.nan` instead.
+        # To be able to compare the results, we need to replace `np.inf` and `-np.inf` with `np.nan`.
+        received_df.replace(-np.inf, np.nan, inplace=True)
+        received_df.replace(np.inf, np.nan, inplace=True)
+
+        expected_df.replace(-np.inf, np.nan, inplace=True)
+        expected_df.replace(np.inf, np.nan, inplace=True)
+        assert_equal_value(received_df, expected_df)
     # pandas 1.0 raises SpecificationError rather than KeyError if the column in "agg" doesn't exist
     except (KeyError, SpecificationError):
         pass
@@ -93,10 +105,22 @@ def test_hypothesis_sum_agg_dynamic(s3_version_store_dynamic_schema_v2, df):
     try:
         q = QueryBuilder()
         q = q.groupby("grouping_column").agg({"a": "sum"})
-        expected = expected.groupby("grouping_column").agg({"a": "sum"})
+        expected_df = expected.groupby("grouping_column").agg({"a": "sum"})
 
         vit = lib.read(symbol, query_builder=q)
-        assert_equal_value(vit.data, expected)
+        received_df = vit.data
+
+        # Older versions of Pandas treat values which exceeds limits as `np.inf` or `-np.inf`.
+        # ArcticDB adopted this behaviour.
+        #
+        # Yet, new version of Pandas treats values which exceeds limits as `np.nan` instead.
+        # To be able to compare the results, we need to replace `np.inf` and `-np.inf` with `np.nan`.
+        received_df.replace(-np.inf, np.nan, inplace=True)
+        received_df.replace(np.inf, np.nan, inplace=True)
+
+        expected_df.replace(-np.inf, np.nan, inplace=True)
+        expected_df.replace(np.inf, np.nan, inplace=True)
+        assert_equal_value(received_df, expected_df)
     # pandas 1.0 raises SpecificationError rather than KeyError if the column in "agg" doesn't exist
     except (KeyError, SpecificationError):
         pass

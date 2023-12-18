@@ -121,7 +121,6 @@ def test_(initial: InputFactories, append: InputFactories, match, swap, lmdb_ver
         lib.append("s", to_append, match=match)
 
 
-
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
@@ -249,4 +248,3 @@ def test_append_with_defragmentation(
             index_offset,
             num_of_rows,
         )
-

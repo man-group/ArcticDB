@@ -16,7 +16,7 @@ import pytz
 from numpy.testing import assert_equal, assert_array_equal
 from arcticdb_ext.version_store import SortedValue as _SortedValue
 
-from arcticdb.exceptions import ArcticDbNotYetImplemented
+from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticException
 from arcticdb.version_store._custom_normalizers import (
     register_normalizer,
     get_custom_normalizer,
@@ -476,6 +476,61 @@ def test_no_inplace_index_array_modification(lmdb_version_store, sym, datetime64
     lmdb_version_store.write(sym, pandas_container)
     assert pandas_container.index is original_index_array
     assert pandas_container.index.dtype == datetime64_dtype
+
+
+def test_index_names_datetime_support(lmdb_version_store, sym):
+    df = pd.DataFrame(data={"a": [1, 2, 3]}, index=pd.DatetimeIndex(["2020-01-01", "2020-01-02", "2020-01-03"]))
+    new_index = pd.Timestamp("2020-01-01")
+    df.index.rename(new_index, inplace=True)
+    with pytest.raises(ArcticException):
+        lmdb_version_store.write(sym, df)
+
+
+def test_index_names_tuple_support(lmdb_version_store, sym):
+    df = pd.DataFrame(data={"a": [1, 2, 3]}, index=pd.DatetimeIndex(["2020-01-01", "2020-01-02", "2020-01-03"]))
+    new_index = tuple([1, 2, 3])
+    df.index.rename(new_index, inplace=True)
+    with pytest.raises(ArcticException):
+        lmdb_version_store.write(sym, df)
+
+
+def test_index_names_roundtrip_csv(lmdb_version_store, sym):
+    import io
+
+    buf = io.StringIO("2023-11-27 00:00:00,0.73260,0.73260,0.73260,0.73260,7")
+    df = pd.read_csv(buf, parse_dates=[0], index_col=0, header=None)
+    df.index = pd.to_datetime(df.index)
+
+    lmdb_version_store.write(sym, df)
+    assert_frame_equal(lmdb_version_store.read(sym).data, df)
+    assert df.index.names[0] == 0
+
+
+def test_column_names_datetime_support(lmdb_version_store, sym):
+    df = pd.DataFrame(data={"a": [1, 2, 3]}, index=pd.DatetimeIndex(["2020-01-01", "2020-01-02", "2020-01-03"]))
+    new_index = pd.Timestamp("2020-01-01")
+    df.rename(columns={"a": new_index}, inplace=True)
+    with pytest.raises(ArcticException):
+        lmdb_version_store.write(sym, df)
+
+
+def test_column_names_mixed_types(lmdb_version_store, sym):
+    import io
+
+    buf = io.StringIO("2023-11-27 00:00:00,0.73260,0.73260,0.73260,0.73260,7")
+    df = pd.read_csv(buf, parse_dates=[0], index_col=0, header=None)
+    df_to_write = df.rename(columns={1: 1, 2: pd.Timestamp("2020-01-01"), 3: tuple([1, 2, 3]), 4: "test", 5: 5.5})
+    with pytest.raises(ArcticException):
+        lmdb_version_store.write(sym, df_to_write)
+
+
+def test_column_names_roundtrip_csv(lmdb_version_store, sym):
+    import io
+
+    buf = io.StringIO("2023-11-27 00:00:00,0.73260,0.73260,0.73260,0.73260,7")
+    df = pd.read_csv(buf, parse_dates=[0], index_col=0, header=None)
+    lmdb_version_store.write(sym, df)
+    assert_frame_equal(lmdb_version_store.read(sym).data, df)
 
 
 @pytest.mark.skipif(
