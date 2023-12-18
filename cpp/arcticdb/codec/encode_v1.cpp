@@ -7,6 +7,7 @@
 #include <arcticdb/codec/encode_common.hpp>
 #include <arcticdb/codec/typed_block_encoder_impl.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
+#include <arcticdb/util/configs_map.hpp>
 
 namespace arcticdb {
     void add_bitmagic_compressed_size(
