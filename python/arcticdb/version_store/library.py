@@ -106,7 +106,7 @@ class NameWithDType(NamedTuple):
     """A named tuple. A name and dtype description pair."""
 
     name: Union[Optional[str], List[Optional[str]]]
-    dtype: TypeDescriptor
+    dtype: Union[TypeDescriptor, List[TypeDescriptor]]
 
 
 class SymbolDescription(NamedTuple):
