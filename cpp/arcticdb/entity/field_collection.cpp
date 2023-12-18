@@ -5,10 +5,7 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/util/cursored_buffer.hpp>
-#include <arcticdb/util/buffer.hpp>
-#include <arcticdb/column_store/column_data.hpp>
 #include <arcticdb/entity/field_collection.hpp>
 
 namespace arcticdb {

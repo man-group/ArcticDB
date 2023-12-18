@@ -16,14 +16,7 @@
 
 #include <boost/container/small_vector.hpp>
 
-#include <cstdlib>
 #include <cstdint>
-#include <memory>
-#include <algorithm>
-#include <cassert>
-#include <cstring>
-#include <vector>
-#include <numeric>
 
 namespace arcticdb {
 

@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <algorithm>
 #include <random>
+#include <array>
 #include <arcticdb/util/preconditions.hpp>
 
 /* The state must be seeded so that it is not all zero */
