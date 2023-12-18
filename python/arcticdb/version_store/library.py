@@ -105,7 +105,7 @@ class VersionInfo(NamedTuple):
 class NameWithDType(NamedTuple):
     """A named tuple. A name and dtype description pair."""
 
-    name: str
+    name: Union[Optional[str], List[Optional[str]]]
     dtype: TypeDescriptor
 
 
