@@ -223,26 +223,24 @@ void Column::append(const Column& other, position_t at_row) {
 void Column::sort_external(const JiveTable& jive_table) {
     auto rows = row_count();
     if(!is_sparse()) {
-        auto unsorted = jive_table.unsorted_rows_;
+        auto sorted_pos = jive_table.sorted_pos_;
         auto& buffer = data_.buffer();
-        type().visit_tag([&jive_table, &buffer, &unsorted] (auto tdt) {
+        type().visit_tag([&buffer, &sorted_pos, &rows] (auto tdt) {
             using TagType = decltype(tdt);
             using RawType = typename TagType::DataTypeTag::raw_type;
 
-            auto loc = unsorted.get_first();
-            auto tmp =  buffer.cast<RawType>(jive_table.orig_pos_[loc]);
-            for(auto i = 0u; i < jive_table.num_unsorted_; ++i) {
-                std::swap(tmp, buffer.cast<RawType>(loc));
-                unsorted.set(loc, false);
-                const auto next_pos = jive_table.sorted_pos_[loc];
-                if(unsorted[next_pos]) {
-                    loc = next_pos;
-                } else {
-                   loc =  unsorted.get_first();
-                   tmp = buffer.cast<RawType>(jive_table.orig_pos_[loc]);
+            for (auto i=0u; i<rows; ++i){
+                if (i != sorted_pos[i]){
+                    auto& current = buffer.cast<RawType>(i);
+                    // Amortized O(1) complexity, because each iteration places an element where it's supposed to go
+                    // and once an element is in it's sorted position we never move it.
+                    while (i != sorted_pos[i]){
+                        auto move_to = sorted_pos[i];
+                        std::swap(sorted_pos[i], sorted_pos[move_to]);
+                        std::swap(current, buffer.cast<RawType>(move_to));
+                    }
                 }
             }
-            util::check(!unsorted.any(), "Did not sort all possible values, still have {} unsorted", unsorted.count());
         });
     } else {
         const auto& sm = sparse_map();
@@ -263,7 +261,7 @@ void Column::sort_external(const JiveTable& jive_table) {
         auto new_buf = ChunkedBuffer::presized_in_blocks(data_.bytes());
         en = new_map.first();
         auto& buffer = data_.buffer();
-        auto rs= std::make_unique<util::BitIndex>();
+        auto rs = std::make_unique<util::BitIndex>();
         sm.build_rs_index(rs.get());
 
         type().visit_tag([&jive_table, &sm, &rs, &buffer, rows, &en, &new_buf] (auto tdt) {
