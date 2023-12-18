@@ -10,6 +10,7 @@
 #include <arcticdb/codec/typed_block_encoder_impl.hpp>
 #include <arcticdb/codec/magic_words.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
+#include <arcticdb/util/configs_map.hpp>
 
 
 namespace arcticdb {

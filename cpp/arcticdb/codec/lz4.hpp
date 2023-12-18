@@ -10,9 +10,7 @@
 #include <arcticdb/codec/core.hpp>
 #include <arcticdb/util/preconditions.hpp>
 
-#include <arcticdb/util/buffer.hpp>
 #include <arcticdb/util/hash.hpp>
-#include <arcticdb/util/dump_bytes.hpp>
 
 #include <lz4.h>
 #include <type_traits>

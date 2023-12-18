@@ -12,6 +12,11 @@
  */
 #pragma once
 
+#include <shared_mutex>
+#include <unordered_set>
+#include <map>
+#include <deque>
+
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/stream/index.hpp>
@@ -19,7 +24,6 @@
 #include <arcticdb/stream/stream_writer.hpp>
 #include <arcticdb/stream/stream_source.hpp>
 #include <arcticdb/stream/stream_reader.hpp>
-#include <shared_mutex>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/storage/store.hpp>
@@ -31,9 +35,6 @@
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/util/lock_table.hpp>
 
-#include <unordered_set>
-#include <map>
-#include <deque>
 
 namespace arcticdb {
 

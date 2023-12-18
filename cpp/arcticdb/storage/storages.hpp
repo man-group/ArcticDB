@@ -9,9 +9,9 @@
 
 #include <arcticdb/storage/storage_factory.hpp>
 #include <arcticdb/storage/open_mode.hpp>
-#include <arcticdb/storage/failure_simulation.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/util/composite.hpp>
+#include <arcticdb/util/configs_map.hpp>
 
 #include <memory>
 #include <vector>

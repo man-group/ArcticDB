@@ -3,6 +3,7 @@
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
+#include <arcticdb/util/memory_tracing.hpp>
 
 namespace arcticdb {
 inline void merge_string_column(
