@@ -17,21 +17,57 @@ using namespace arcticdb;
 
 // run like: --benchmark_time_unit=ms --benchmark_filter=.* --benchmark_min_time=5x
 
-SegmentInMemory get_segment_for_bm(const StreamId &id, size_t num_rows, size_t num_columns){
-    auto fields = std::vector<FieldRef>(num_columns);
-    auto data_types = std::vector<DataType>{DataType::UINT8, DataType::UINT64, DataType::FLOAT64, DataType::ASCII_FIXED64};
-    for (size_t i=0; i<num_columns; ++i){
-        fields[i] = scalar_field(data_types[i%data_types.size()], "column_"+std::to_string(i));
-    }
-    auto test_frame = get_test_frame<stream::TimeseriesIndex>(id, fields, num_rows, 0, 0);
-    return test_frame.segment_;
+std::vector<bool> get_sparse_bits(size_t num_rows, size_t num_set){
+    auto sparse_bits = std::vector<bool>(num_rows, false);
+    std::fill(sparse_bits.begin(), sparse_bits.begin()+num_set, true);
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(sparse_bits.begin(), sparse_bits.end(), g);
+    return sparse_bits;
 }
 
-static void BM_sort(benchmark::State& state) {
-    auto segment = get_segment_for_bm("test", state.range(0), state.range(1));
-    std::random_device rng;
-    std::mt19937 urng(rng());
-    std::shuffle(segment.begin(), segment.end(), urng);
+std::vector<uint64_t> get_random_permutation(size_t num_rows){
+    auto result = std::vector<uint64_t>(num_rows);
+    std::iota(result.begin(), result.end(), 1);
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(result.begin(), result.end(), g);
+    return result;
+}
+
+SegmentInMemory get_shuffled_segment(const StreamId &id, size_t num_rows, size_t num_columns, std::optional<float> non_index_sparse_percent = std::nullopt){
+    auto fields = std::vector<FieldRef>(num_columns);
+    for (auto i=0u; i<num_columns; ++i){
+        fields[i] = scalar_field(DataType::UINT64, "column_"+std::to_string(i));
+    }
+    auto segment = SegmentInMemory{
+        get_test_descriptor<stream::TimeseriesIndex>(id, fields),
+        num_rows,
+        false,
+        non_index_sparse_percent.has_value()
+    };
+
+    for (auto i=0u; i<=num_columns; ++i){
+        auto& column = segment.column(i);
+        auto values = get_random_permutation(num_rows);
+        // We ensure the column we're sorting by is NOT sparse. As of 2023/12 sorting by sparse columns is not supported.
+        auto num_set = non_index_sparse_percent.has_value() && i!=0 ?
+                        size_t(num_rows * (1-non_index_sparse_percent.value())) :
+                        num_rows;
+        auto has_value = get_sparse_bits(num_rows, num_set);
+        for (auto j=0u; j<num_rows; ++j){
+            if (has_value[j]){
+                column.set_scalar(j, values[j]);
+            }
+        }
+    }
+    segment.set_row_data(num_rows-1);
+
+    return segment;
+}
+
+static void BM_sort_shuffled(benchmark::State& state) {
+    auto segment = get_shuffled_segment("test", state.range(0), state.range(1));
     for (auto _ : state) {
         state.PauseTiming();
         auto temp = segment.clone();
@@ -40,4 +76,29 @@ static void BM_sort(benchmark::State& state) {
     }
 }
 
-BENCHMARK(BM_sort)->Args({100'000, 100})->Args({1'000'000, 1});
+static void BM_sort_ordered(benchmark::State& state) {
+    auto segment = get_shuffled_segment("test", state.range(0), state.range(1));
+    segment.sort("time");
+    for (auto _ : state) {
+        state.PauseTiming();
+        auto temp = segment.clone();
+        state.ResumeTiming();
+        temp.sort("time");
+    }
+}
+
+static void BM_sort_sparse(benchmark::State& state) {
+    auto segment = get_shuffled_segment("test", state.range(0), state.range(1), 0.5);
+    for (auto _ : state) {
+        state.PauseTiming();
+        auto temp = segment.clone();
+        state.ResumeTiming();
+        temp.sort("time");
+    }
+}
+
+// The {100k, 100} puts more weight on the sort_external part of the sort
+// where the {1M, 1} puts more weight on the create_jive_table part.
+BENCHMARK(BM_sort_shuffled)->Args({100'000, 100})->Args({1'000'000, 1});
+BENCHMARK(BM_sort_ordered)->Args({100'000, 100});
+BENCHMARK(BM_sort_sparse)->Args({100'000, 100});
