@@ -11,6 +11,10 @@
 #include <arcticdb/util/preprocess.hpp>
 #include <arcticdb/util/pb_util.hpp>
 
+#ifdef _WIN32
+#    include <Winsock.h> // for gethostname
+#endif
+
 using namespace prometheus;
 
 namespace arcticdb {
