@@ -871,6 +871,7 @@ if(${TEST})
             ${COMMON_PUBLIC_TEST_LIBRARIES}
             PRIVATE
             ${AWSSDK_LINK_LIBRARIES}
+            arcticdb_core_static
             )
 
     set(rapidcheck_srcs
