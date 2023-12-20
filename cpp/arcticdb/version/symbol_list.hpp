@@ -149,8 +149,9 @@ ProblematicResult is_problematic(const std::vector<SymbolEntryData>& updated, ti
 class SymbolList {
     SymbolListData data_;
   public:
-    explicit SymbolList(std::shared_ptr<VersionMap> version_map, entity::StreamId type_indicator = entity::StringId()) :
-        data_(std::move(version_map), std::move(type_indicator)) {
+    explicit SymbolList(std::shared_ptr<VersionMap> version_map, entity::StreamId type_indicator = entity::StringId(),
+                        uint32_t seed = 0) :
+        data_(std::move(version_map), std::move(type_indicator), seed) {
     }
 
     std::set<entity::StreamId> load(const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store, bool no_compaction);
