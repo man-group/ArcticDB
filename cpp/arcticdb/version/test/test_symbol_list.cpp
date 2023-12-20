@@ -199,6 +199,7 @@ struct SymbolListWithWriteFailures : SymbolListSuite, testing::WithParamInterfac
 };
 
 TEST_P(SymbolListWithWriteFailures, SubsequentCompaction) {
+    override_max_delta(500);
     write_initial_compaction_key();
 
     std::vector<StreamId> expected;
@@ -704,7 +705,7 @@ struct TestSymbolListTask {
 };
 
 TEST_F(SymbolListSuite, MultiThreadStress) {
-    ConfigsMap::instance()->set_int("SymbolList.MaxDelta", 10);
+    ScopedConfig max_delta("SymbolList.MaxDelta", 10);
     log::version().set_pattern("%Y%m%d %H:%M:%S.%f %t %L %n | %v");
     std::vector<Future<Unit>> futures;
     auto state = std::make_shared<SymbolListState>(store, version_map);
@@ -715,6 +716,85 @@ TEST_F(SymbolListSuite, MultiThreadStress) {
         futures.emplace_back(exec.addFuture(TestSymbolListTask{state, store, symbol_list}));
     }
     collect(futures).get();
+}
+
+TEST_F(SymbolListSuite, CompactionThreshold) {
+    // given
+    ScopedConfig min("SymbolList.MinCompactionThreshold", 2);
+    ScopedConfig max("SymbolList.MaxCompactionThreshold", 2);
+    std::shared_ptr<InMemoryStore> store = std::make_shared<InMemoryStore>();
+    std::shared_ptr<VersionMap> version_map = std::make_shared<VersionMap>();
+    auto symbol_list = SymbolList{version_map};
+    auto state = std::make_shared<SymbolListState>(store, version_map);
+    symbol_list.load(store, false);
+
+    // when
+    symbol_list.add_symbol(store, "1");
+    symbol_list.add_symbol(store, "2");
+    symbol_list.add_symbol(store, "3");
+
+    // then
+    auto symbols = symbol_list.get_symbol_set(store);
+    std::set<StreamId> expected_symbols = {"1", "2", "3"};
+    ASSERT_EQ(symbols, expected_symbols);
+    std::vector<VariantKey> keys;
+    store->iterate_type(entity::KeyType::SYMBOL_LIST, [&keys](auto&& k){keys.push_back(k);});
+    ASSERT_EQ(keys.size(), 1);
+}
+
+TEST_F(SymbolListSuite, CompactionThresholdMaxDeltaWins) {
+    // given
+    ScopedConfig min("SymbolList.MinCompactionThreshold", 1);
+    ScopedConfig max("SymbolList.MaxCompactionThreshold", 1);
+    ScopedConfig max_delta("SymbolList.MaxDelta", 2);
+    std::shared_ptr<InMemoryStore> store = std::make_shared<InMemoryStore>();
+    std::shared_ptr<VersionMap> version_map = std::make_shared<VersionMap>();
+    auto symbol_list = SymbolList{version_map};
+    symbol_list.load(store, false);
+
+    // when
+    symbol_list.add_symbol(store, "1");
+
+    // then
+    symbol_list.load(store, false);
+    {
+        std::vector<VariantKey> keys;
+        store->iterate_type(entity::KeyType::SYMBOL_LIST, [&keys](auto &&k) { keys.push_back(k); });
+        ASSERT_EQ(keys.size(), 2);  // should be no compaction yet
+    }
+
+    // when
+    symbol_list.add_symbol(store, "2");
+
+    // then
+    symbol_list.load(store, false);
+    {
+        std::vector<VariantKey> keys;
+        store->iterate_type(entity::KeyType::SYMBOL_LIST, [&keys](auto &&k) { keys.push_back(k); });
+        ASSERT_EQ(keys.size(), 1);  // should be compacted now
+    }
+}
+
+TEST_F(SymbolListSuite, CompactionThresholdRandomChoice) {
+    // given
+    // Compaction thresholds [1, 10] form random choice, seeded with value 1 => choice of threshold is 5
+    ScopedConfig min("SymbolList.MinCompactionThreshold", 1);
+    ScopedConfig max("SymbolList.MaxCompactionThreshold", 10);
+    std::shared_ptr<InMemoryStore> store = std::make_shared<InMemoryStore>();
+    std::shared_ptr<VersionMap> version_map = std::make_shared<VersionMap>();
+    auto symbol_list = SymbolList{version_map, StringId(), 1};
+    symbol_list.load(store, false);
+
+    // when
+    for (int i = 0; i < 5; i++) {
+    symbol_list.add_symbol(store, fmt::format("sym{}", i));
+    }
+    symbol_list.load(store, false);
+
+    // then
+    std::vector<VariantKey> keys;
+    store->iterate_type(entity::KeyType::SYMBOL_LIST, [&keys](auto &&k) { keys.push_back(k); });
+    ASSERT_EQ(keys.size(), 1);  // should be compacted
 }
 
 TEST_F(SymbolListSuite, KeyHashIsDifferent) {
