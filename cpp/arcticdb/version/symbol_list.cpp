@@ -32,9 +32,9 @@ using CollectionType = std::vector<SymbolListEntry>;
 constexpr std::string_view version_string = "_v2_";
 constexpr NumericIndex version_identifier = std::numeric_limits<NumericIndex>::max();
 
-SymbolListData::SymbolListData(std::shared_ptr<VersionMap> version_map, entity::StreamId type_indicator) :
+SymbolListData::SymbolListData(std::shared_ptr<VersionMap> version_map, entity::StreamId type_indicator, uint32_t seed) :
     type_holder_(std::move(type_indicator)),
-    max_delta_(ConfigsMap::instance()->get_int("SymbolList.MaxDelta", 500)),
+    seed_(seed),
     version_map_(std::move(version_map)){
 }
 
@@ -556,7 +556,37 @@ StreamDescriptor delete_symbol_stream_descriptor(const StreamId& stream_id, cons
 }
 
 bool SymbolList::needs_compaction(const LoadResult& load_result) const {
-    return load_result.symbol_list_keys_.size() > data_.max_delta_ || !load_result.maybe_previous_compaction;
+    if (!load_result.maybe_previous_compaction) {
+        log::version().debug("Symbol list: needs_compaction=[true] as no previous compaction");
+        return true;
+    }
+
+    uint64_t n_keys = load_result.symbol_list_keys_.size();
+    if (auto fixed = ConfigsMap::instance()->get_int("SymbolList.MaxDelta")) {
+        auto result = n_keys > fixed.value();
+        log::version().debug("Symbol list: Fixed draw for compaction. needs_compaction=[{}] n_keys=[{}], MaxDelta=[{}]",
+                             result, n_keys, fixed.value());
+        return result;
+    }
+
+    int64_t min = ConfigsMap::instance()->get_int("SymbolList.MinCompactionThreshold", 300);
+    int64_t max = ConfigsMap::instance()->get_int("SymbolList.MaxCompactionThreshold", 700);
+    util::check(max >= min, "Bad configuration, min compaction threshold=[{}] > max compaction threshold=[{}]", min, max);
+
+    uint32_t seed;
+    if (data_.seed_ == 0) {
+        seed = std::random_device{}();
+    } else {
+        seed = data_.seed_;
+    }
+
+    std::mt19937 gen = std::mt19937{seed};
+    std::uniform_int_distribution<int64_t> distrib(min, max);
+    auto draw = distrib(gen);
+    auto result = n_keys > draw;
+    log::version().debug("Symbol list: Random draw for compaction. needs_compaction=[{}] n_keys=[{}], draw=[{}]",
+                         result, n_keys, draw);
+    return result;
 }
 
 void write_symbol_at(
