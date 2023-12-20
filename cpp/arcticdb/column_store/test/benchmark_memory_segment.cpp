@@ -17,25 +17,23 @@ using namespace arcticdb;
 
 // run like: --benchmark_time_unit=ms --benchmark_filter=.* --benchmark_min_time=5x
 
-std::vector<bool> get_sparse_bits(size_t num_rows, size_t num_set){
+std::vector<bool> get_sparse_bits(size_t num_rows, size_t num_set, std::mt19937 g){
     auto sparse_bits = std::vector<bool>(num_rows, false);
     std::fill(sparse_bits.begin(), sparse_bits.begin()+num_set, true);
-    std::random_device rd;
-    std::mt19937 g(rd());
     std::shuffle(sparse_bits.begin(), sparse_bits.end(), g);
     return sparse_bits;
 }
 
-std::vector<uint64_t> get_random_permutation(size_t num_rows){
+std::vector<uint64_t> get_random_permutation(size_t num_rows, std::mt19937 g){
     auto result = std::vector<uint64_t>(num_rows);
     std::iota(result.begin(), result.end(), 1);
-    std::random_device rd;
-    std::mt19937 g(rd());
     std::shuffle(result.begin(), result.end(), g);
     return result;
 }
 
-SegmentInMemory get_shuffled_segment(const StreamId &id, size_t num_rows, size_t num_columns, std::optional<float> non_index_sparse_percent = std::nullopt){
+SegmentInMemory get_shuffled_segment(const StreamId& id, size_t num_rows, size_t num_columns, std::optional<float> sparsity_percentage = std::nullopt){
+    // We use a seed to get the same shuffled segment for given arguments.
+    std::mt19937 g(0);
     auto fields = std::vector<FieldRef>(num_columns);
     for (auto i=0u; i<num_columns; ++i){
         fields[i] = scalar_field(DataType::UINT64, "column_"+std::to_string(i));
@@ -44,17 +42,18 @@ SegmentInMemory get_shuffled_segment(const StreamId &id, size_t num_rows, size_t
         get_test_descriptor<stream::TimeseriesIndex>(id, fields),
         num_rows,
         false,
-        non_index_sparse_percent.has_value()
+        sparsity_percentage.has_value()
     };
 
     for (auto i=0u; i<=num_columns; ++i){
         auto& column = segment.column(i);
-        auto values = get_random_permutation(num_rows);
+        auto values = get_random_permutation(num_rows, g);
         // We ensure the column we're sorting by is NOT sparse. As of 2023/12 sorting by sparse columns is not supported.
-        auto num_set = non_index_sparse_percent.has_value() && i!=0 ?
-                        size_t(num_rows * (1-non_index_sparse_percent.value())) :
-                        num_rows;
-        auto has_value = get_sparse_bits(num_rows, num_set);
+        auto num_set = num_rows;
+        if (i!=0 && sparsity_percentage.has_value()){
+            num_set = size_t(num_rows * (1-sparsity_percentage.value()));
+        }
+        auto has_value = get_sparse_bits(num_rows, num_set, g);
         for (auto j=0u; j<num_rows; ++j){
             if (has_value[j]){
                 column.set_scalar(j, values[j]);
