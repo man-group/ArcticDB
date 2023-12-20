@@ -480,6 +480,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("update",
              &PythonVersionStore::update,
              py::call_guard<SingleThreadMutexHolder>(), "Update the most recent version of a dataframe")
+       .def("indexes_sorted",
+             &PythonVersionStore::indexes_sorted,
+             py::call_guard<SingleThreadMutexHolder>(), "Returns the sorted indexes of a symbol")
         .def("snapshot",
              &PythonVersionStore::snapshot,
              py::call_guard<SingleThreadMutexHolder>(), "Create a snapshot")
@@ -680,6 +683,10 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                Allocator::instance()->trim();
               },
              py::call_guard<SingleThreadMutexHolder>(), "Call trim on the native store's underlining memory allocator")
+        .def_static("reuse_storage_for_testing",
+            [](PythonVersionStore& from, PythonVersionStore& to) {
+                to._test_set_store(from._test_get_store());
+            })
         ;
 
     py::class_<ManualClockVersionStore, PythonVersionStore>(version, "ManualClockVersionStore")

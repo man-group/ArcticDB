@@ -16,14 +16,7 @@
 
 #include <boost/container/small_vector.hpp>
 
-#include <cstdlib>
 #include <cstdint>
-#include <memory>
-#include <algorithm>
-#include <cassert>
-#include <cstring>
-#include <vector>
-#include <numeric>
 
 namespace arcticdb {
 
@@ -49,6 +42,8 @@ class ChunkedBufferImpl {
     static_assert(DefaultBlockSize >= BlockType::MinSize);
 
   public:
+    constexpr static size_t block_size = DefaultBlockSize;
+
     struct Iterator {
         ChunkedBufferImpl* parent_;
         BlockType* block_ = nullptr;

@@ -12,6 +12,11 @@
  */
 #pragma once
 
+#include <shared_mutex>
+#include <unordered_set>
+#include <map>
+#include <deque>
+
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/stream/index.hpp>
@@ -19,7 +24,6 @@
 #include <arcticdb/stream/stream_writer.hpp>
 #include <arcticdb/stream/stream_source.hpp>
 #include <arcticdb/stream/stream_reader.hpp>
-#include <shared_mutex>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/storage/store.hpp>
@@ -31,9 +35,6 @@
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/util/lock_table.hpp>
 
-#include <unordered_set>
-#include <map>
-#include <deque>
 
 namespace arcticdb {
 
@@ -227,6 +228,7 @@ public:
         auto entry = check_reload(store, key.id(), load_param,  __FUNCTION__);
 
         do_write(store, key, entry);
+        write_symbol_ref(store, key, std::nullopt, entry->head_.value());
         if (validate_)
             entry->validate();
         if(log_changes_)
@@ -237,9 +239,8 @@ public:
             const std::shared_ptr<Store>& store,
             const AtomKey& previous_key,
             const std::shared_ptr<VersionMapEntry>& entry) {
-        auto tombstone_key = get_tombstone_all_key(previous_key, store->current_timestamp());
-        entry->try_set_tombstone_all(tombstone_key);
-        do_write(store, tombstone_key, entry);
+        auto tombstone_key = write_tombstone_all_key_internal(store, previous_key, entry);
+        write_symbol_ref(store, tombstone_key, std::nullopt, entry->head_.value());
         return tombstone_key;
     }
 
@@ -253,7 +254,20 @@ public:
             const StreamId& stream_id,
             std::optional<AtomKey> first_key_to_tombstone = std::nullopt
             ) {
-        return tombstone_from_key_or_all_internal(store, stream_id, first_key_to_tombstone);
+        auto entry = check_reload(
+            store,
+            stream_id,
+            LoadParameter{LoadType::LOAD_UNDELETED},
+            __FUNCTION__);
+        auto output = tombstone_from_key_or_all_internal(store, stream_id, first_key_to_tombstone, entry);
+
+        if (validate_)
+            entry->validate();
+
+        if (entry->head_)
+            write_symbol_ref(store, *entry->keys_.cbegin(), std::nullopt, entry->head_.value());
+
+        return output;
     }
 
     std::string dump_entry(const std::shared_ptr<Store>& store, const StreamId& stream_id) {
@@ -263,8 +277,8 @@ public:
 
     std::vector<AtomKey> write_and_prune_previous(
         std::shared_ptr<Store> store,
-        const AtomKey &key, const
-        std::optional<AtomKey>& previous_key) {
+        const AtomKey &key,
+        const std::optional<AtomKey>& previous_key) {
         ARCTICDB_DEBUG(log::version(), "Version map pruning previous versions for stream {}", key.id());
         auto entry = check_reload(
                 store,
@@ -274,6 +288,7 @@ public:
         auto [_, result] = tombstone_from_key_or_all_internal(store, key.id(), previous_key, entry);
 
         do_write(store, key, entry);
+        write_symbol_ref(store, *entry->keys_.cbegin(), std::nullopt, entry->head_.value());
 
         if (log_changes_)
             log_write(store, key.id(), key.version_id());
@@ -304,6 +319,8 @@ public:
     }
 
     void compact_and_remove_deleted_indexes(std::shared_ptr<Store> store, const StreamId& stream_id) {
+        // This method has no API, and is not tested in the rapidcheck tests, but could easily be enabled there.
+        // It compacts the version map but skips any keys which have been deleted (to free up space).
         ARCTICDB_DEBUG(log::version(), "Version map compacting versions for stream {}", stream_id);
         auto entry = check_reload(store, stream_id, LoadParameter{LoadType::LOAD_ALL}, __FUNCTION__);
         if (!requires_compaction(entry))
@@ -316,14 +333,14 @@ public:
         auto new_entry = std::make_shared<VersionMapEntry>();
         new_entry->keys_.push_front(*latest_version);
 
-        if (const auto first_is_tombstone = entry->get_tombstone_if_any(new_version_id); first_is_tombstone)
+        if (const auto first_is_tombstone = entry->get_tombstone(new_version_id); first_is_tombstone)
             new_entry->keys_.emplace_front(std::move(*first_is_tombstone));
 
         std::advance(latest_version, 1);
 
         for (const auto &key : folly::Range{latest_version, entry->keys_.end()}) {
             if (is_index_key_type(key.type())) {
-                const auto tombstone = entry->is_tombstoned(key);
+                const auto tombstone = entry->get_tombstone(key.version_id());
                 if (tombstone) {
                     if (!store->key_exists(key).get())
                         ARCTICDB_DEBUG(log::version(), "Removing deleted key {}", key);
@@ -341,6 +358,7 @@ public:
             }
         }
         new_entry->head_ = write_entry_to_storage(store, stream_id, new_version_id, new_entry);
+        write_symbol_ref(store, *new_entry->keys_.cbegin(), std::nullopt, new_entry->head_.value());
         remove_entry_version_keys(store, entry, stream_id);
         if (validate_)
             new_entry->validate();
@@ -392,44 +410,6 @@ public:
 
         version_agg.commit();
         return to_atom(std::move(journal_key_fut).get());
-    }
-
-    std::shared_ptr<VersionMapEntry> compact_entry(
-        std::shared_ptr<Store> store,
-        const StreamId& stream_id,
-        const std::shared_ptr<VersionMapEntry>& entry) {
-        // For compacting an entry, we compact from the second version key in the chain
-        // This makes it concurrent safe (when use_tombstones is enabled)
-        // The first version key is in head and the second version key is first in entry.keys_
-        if (validate_)
-            entry->validate();
-        util::check(entry->head_.value().type() == KeyType::VERSION, "Type of head must be version");
-        auto new_entry = std::make_shared<VersionMapEntry>(*entry);
-
-        auto parent = std::find_if(std::begin(new_entry->keys_), std::end(new_entry->keys_),
-                [](const auto& k){return k.type() == KeyType ::VERSION;});
-
-        // Copy version keys to be removed
-        std::vector<VariantKey> version_keys_compacted;
-        std::copy_if(parent + 1, std::end(new_entry->keys_), std::back_inserter(version_keys_compacted),
-                [](const auto& k){return k.type() == KeyType::VERSION;});
-
-        // Copy index keys to be compacted
-        std::vector<AtomKey> index_keys_compacted;
-        std::copy_if(parent + 1, std::end(new_entry->keys_), std::back_inserter(index_keys_compacted),
-                     [](const auto& k){return is_index_or_tombstone(k);});
-
-        update_version_key(store, *parent, index_keys_compacted, stream_id);
-        store->remove_keys(version_keys_compacted).get();
-
-        new_entry->keys_.erase(std::remove_if(parent + 1,
-                std::end(new_entry->keys_),
-                [](const auto& k){return k.type() == KeyType::VERSION;}),
-            std::end(new_entry->keys_));
-
-        if (validate_)
-            new_entry->validate();
-        return new_entry;
     }
 
     /** To be run as a stand-alone job only because it calls flush(). */
@@ -486,6 +466,7 @@ public:
             entry->keys_.assign(std::begin(index_keys), std::end(index_keys));
             auto new_version_id = index_keys[0].version_id();
             entry->head_ = write_entry_to_storage(store, stream_id, new_version_id, entry);
+            write_symbol_ref(store, *entry->keys_.cbegin(), std::nullopt, entry->head_.value());
             if (validate_)
                 entry->validate();
         }
@@ -522,7 +503,6 @@ public:
 
         auto journal_key = to_atom(std::move(journal_single_key(store, key, entry->head_)));
         write_to_entry(entry, key, journal_key);
-        write_symbol_ref(store, key, std::nullopt, journal_key);
     }
 
     AtomKey write_tombstone(
@@ -531,16 +511,8 @@ public:
         const StreamId& stream_id,
         const std::shared_ptr<VersionMapEntry>& entry,
         const std::optional<timestamp>& creation_ts=std::nullopt) {
-        if (validate_)
-            entry->validate();
-
-        auto tombstone = util::variant_match(key, [&stream_id, store, &creation_ts](const auto &k){
-            return index_to_tombstone(k, stream_id, creation_ts.value_or(store->current_timestamp()));
-        });
-        do_write(store, tombstone,  entry);
-        if(log_changes_)
-            log_tombstone(store, tombstone.id(), tombstone.version_id());
-
+        auto tombstone = write_tombstone_internal(store, key, stream_id, entry, creation_ts);
+        write_symbol_ref(store, tombstone, std::nullopt, entry->head_.value());
         return tombstone;
     }
 
@@ -570,6 +542,44 @@ public:
     }
 
 private:
+    std::shared_ptr<VersionMapEntry> compact_entry(
+            std::shared_ptr<Store> store,
+            const StreamId& stream_id,
+            const std::shared_ptr<VersionMapEntry>& entry) {
+        // For compacting an entry, we compact from the second version key in the chain
+        // This makes it concurrent safe (when use_tombstones is enabled)
+        // The first version key is in head and the second version key is first in entry.keys_
+        if (validate_)
+            entry->validate();
+        util::check(entry->head_.value().type() == KeyType::VERSION, "Type of head must be version");
+        auto new_entry = std::make_shared<VersionMapEntry>(*entry);
+
+        auto parent = std::find_if(std::begin(new_entry->keys_), std::end(new_entry->keys_),
+                                   [](const auto& k){return k.type() == KeyType ::VERSION;});
+
+        // Copy version keys to be removed
+        std::vector<VariantKey> version_keys_compacted;
+        std::copy_if(parent + 1, std::end(new_entry->keys_), std::back_inserter(version_keys_compacted),
+                     [](const auto& k){return k.type() == KeyType::VERSION;});
+
+        // Copy index keys to be compacted
+        std::vector<AtomKey> index_keys_compacted;
+        std::copy_if(parent + 1, std::end(new_entry->keys_), std::back_inserter(index_keys_compacted),
+                     [](const auto& k){return is_index_or_tombstone(k);});
+
+        update_version_key(store, *parent, index_keys_compacted, stream_id);
+        store->remove_keys(version_keys_compacted).get();
+
+        new_entry->keys_.erase(std::remove_if(parent + 1,
+                                              std::end(new_entry->keys_),
+                                              [](const auto& k){return k.type() == KeyType::VERSION;}),
+                               std::end(new_entry->keys_));
+
+        if (validate_)
+            new_entry->validate();
+        return new_entry;
+    }
+
     void write_to_entry(
         const std::shared_ptr<VersionMapEntry>& entry,
         const AtomKey& key,
@@ -684,7 +694,6 @@ private:
         }
 
         version_agg.commit();
-        write_symbol_ref(store, *entry->keys_.cbegin(), std::nullopt, journal_key);
         return journal_key;
     }
 
@@ -819,7 +828,8 @@ public:
         entry->clear();
         load_via_iteration(store, stream_id, entry, false);
         remove_duplicate_index_keys(entry);
-        (void)rewrite_entry(store, stream_id, entry);
+        auto new_entry = rewrite_entry(store, stream_id, entry);
+        write_symbol_ref(store, *new_entry->keys_.cbegin(), std::nullopt, new_entry->head_.value());
     }
 
     void remove_and_rewrite_version_keys(std::shared_ptr<Store> store, const StreamId& stream_id) {
@@ -829,8 +839,9 @@ public:
         entry->clear();
         load_via_iteration(store, stream_id, entry, true);
         remove_duplicate_index_keys(entry);
-        (void)rewrite_entry(store, stream_id, entry);
+        auto new_entry = rewrite_entry(store, stream_id, entry);
         remove_entry_version_keys(store, old_entry, stream_id);
+        write_symbol_ref(store, *new_entry->keys_.cbegin(), std::nullopt, new_entry->head_.value());
     }
 
     void fix_ref_key(std::shared_ptr<Store> store, const StreamId& stream_id) {
@@ -879,7 +890,8 @@ public:
 
         entry->keys_.insert(std::begin(entry->keys_), std::begin(missing_versions), std::end(missing_versions));
         entry->sort();
-        rewrite_entry(store, stream_id, entry);
+        auto new_entry = rewrite_entry(store, stream_id, entry);
+        write_symbol_ref(store, *new_entry->keys_.cbegin(), std::nullopt, new_entry->head_.value());
     }
 
     std::shared_ptr<Lock> get_lock_object(const StreamId& stream_id) const {
@@ -892,6 +904,7 @@ private:
         util::check(!entry->keys_.empty(), "Can't rewrite empty version journal entry");
         auto version_id = entry->keys_[0].version_id();
         entry->head_ = std::make_optional(write_entry_to_storage(store, stream_id, version_id, entry));
+        write_symbol_ref(store, *entry->keys_.cbegin(), std::nullopt, entry->head_.value());
         return entry->head_.value();
     }
 
@@ -945,13 +958,42 @@ private:
         const VersionId version_id = latest_version ? latest_version->version_id() : 0;
 
         if (!output.empty()) {
-            auto tombstone_key = write_tombstone_all_key(store, first_key_to_tombstone.value(), entry);
+            auto tombstone_key = write_tombstone_all_key_internal(store, first_key_to_tombstone.value(), entry);
             if(log_changes_) {
                 log_tombstone_all(store, stream_id, tombstone_key.version_id());
             }
         }
 
         return {version_id, std::move(output)};
+    }
+
+    AtomKey write_tombstone_all_key_internal(
+            const std::shared_ptr<Store>& store,
+            const AtomKey& previous_key,
+            const std::shared_ptr<VersionMapEntry>& entry) {
+        auto tombstone_key = get_tombstone_all_key(previous_key, store->current_timestamp());
+        entry->try_set_tombstone_all(tombstone_key);
+        do_write(store, tombstone_key, entry);
+        return tombstone_key;
+    }
+
+    AtomKey write_tombstone_internal(
+            std::shared_ptr<Store> store,
+            const std::variant<AtomKey, VersionId>& key,
+            const StreamId& stream_id,
+            const std::shared_ptr<VersionMapEntry>& entry,
+            const std::optional<timestamp>& creation_ts=std::nullopt) {
+        if (validate_)
+            entry->validate();
+
+        auto tombstone = util::variant_match(key, [&stream_id, store, &creation_ts](const auto &k){
+            return index_to_tombstone(k, stream_id, creation_ts.value_or(store->current_timestamp()));
+        });
+        do_write(store, tombstone,  entry);
+        if(log_changes_)
+            log_tombstone(store, tombstone.id(), tombstone.version_id());
+
+        return tombstone;
     }
 };
 

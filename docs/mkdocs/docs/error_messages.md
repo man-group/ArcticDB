@@ -36,6 +36,7 @@ For legacy reasons, the terms `symbol`, `stream`, and `stream ID` are used inter
 | Error Code | Cause                                             | Resolution                                                                                                            |
 |------------|---------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------|
 | 3000       | A missing version has been requested of a symbol. | Please request a valid version - see the documentation for the `list_versions` method to enumerate existing versions. |
+| 3001       | A symbol from an incomplete library without any versions was requested and no incomplete segments were found. | Append incomplete data to the symbol. |
 
 ### Schema Error
 

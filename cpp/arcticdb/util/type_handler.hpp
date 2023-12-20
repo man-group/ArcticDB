@@ -34,8 +34,9 @@ struct ITypeHandler {
             const VariantField& encoded_field_info,
             const entity::TypeDescriptor& type_descriptor,
             size_t dest_bytes,
-            std::shared_ptr<BufferHolder> buffers) {
-            folly::poly_call<0>(*this, source, dest, encoded_field_info, type_descriptor, dest_bytes, buffers);
+            std::shared_ptr<BufferHolder> buffers,
+            EncodingVersion encoding_version) {
+            folly::poly_call<0>(*this, source, dest, encoded_field_info, type_descriptor, dest_bytes, buffers, encoding_version);
         }
     };
 
@@ -55,10 +56,13 @@ public:
     static void init();
     static std::shared_ptr<TypeHandlerRegistry> instance();
 
-    std::shared_ptr<TypeHandler> get_handler(entity::DataType data_type) const;
-    void register_handler(entity::DataType data_type, TypeHandler&& handler);
+    std::shared_ptr<TypeHandler> get_handler(const util::TypeDescriptor& type_descriptor) const;
+    void register_handler(const util::TypeDescriptor& type_descriptor, TypeHandler&& handler);
 private:
-    std::unordered_map<entity::DataType, std::shared_ptr<TypeHandler>> handlers_;
+    struct Hasher {
+        size_t operator()(const util::TypeDescriptor val) const;
+    };
+    std::unordered_map<util::TypeDescriptor, std::shared_ptr<TypeHandler>, Hasher> handlers_;
 };
 
 }

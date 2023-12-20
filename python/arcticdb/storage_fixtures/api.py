@@ -91,7 +91,10 @@ class StorageFixture(_SaferContextManager):
         lib.version.symbol_list = True
         apply_lib_cfg(lib, kwargs)
         out = ArcticMemoryConfig(cfg, Defaults.ENV)[name]
-        libs_from_factory[name] = out
+        suffix = 0
+        while f"{name}{suffix or ''}" in libs_from_factory:
+            suffix += 1
+        libs_from_factory[f"{name}{suffix or ''}"] = out
         return out
 
     def create_version_store_factory(self, default_lib_name: str, **defaults) -> Callable[..., NativeVersionStore]:

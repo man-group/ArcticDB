@@ -12,8 +12,6 @@ import subprocess
 import os
 import platform
 import sys
-from types import TracebackType
-
 import requests
 import signal
 import socketserver

@@ -1,4 +1,3 @@
-from arcticdb import Arctic
 import pandas as pd
 import os
 import numpy as np
@@ -6,12 +5,7 @@ import argparse
 import re
 from datetime import datetime
 
-
-def normalize_lib_name(lib_name):
-    lib_name = lib_name.replace(".", "_")
-    lib_name = lib_name.replace("-", "_")
-
-    return lib_name
+from arcticdb import Arctic
 
 
 def real_s3_credentials(shared_path: bool = True):
@@ -31,11 +25,29 @@ def real_s3_credentials(shared_path: bool = True):
 
 
 def get_real_s3_uri(shared_path: bool = True):
-    endpoint, bucket, region, access_key, secret_key, path_prefix, _ = real_s3_credentials(shared_path)
+    # TODO: Remove this when the latest version that we support
+    # contains the s3 fixture code as defined here:
+    # https://github.com/man-group/ArcticDB/blob/master/.github/workflows/persistent_storage.yml#L64
+    (
+        endpoint,
+        bucket,
+        region,
+        access_key,
+        secret_key,
+        path_prefix,
+        _,
+    ) = real_s3_credentials(shared_path)
     aws_uri = (
         f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix={path_prefix}"
     )
     return aws_uri
+
+
+def normalize_lib_name(lib_name):
+    lib_name = lib_name.replace(".", "_")
+    lib_name = lib_name.replace("-", "_")
+
+    return lib_name
 
 
 def get_seed_libraries(ac=None):
@@ -78,17 +90,29 @@ def is_strategy_branch_valid_format(input_string):
     return bool(match)
 
 
+# TODO: Remove this when the latest version that we support
+# contains the create_df function from the arcticdb.util.test library
+def create_df(start=0, columns=1) -> pd.DataFrame:
+    data = {}
+    for i in range(columns):
+        col_name = chr(ord("x") + i)  # Generates column names like 'x', 'y', 'z', etc.
+        data[col_name] = np.arange(start + i * 10, start + (i + 1) * 10, dtype=np.int64)
+
+    index = np.arange(start, start + 10, dtype=np.int64)
+    return pd.DataFrame(data, index=index)
+
+
 def write_persistent_library(lib):
-    one_df = three_col_df()
+    one_df = create_df(0, 3)
     lib.write("one", one_df)
 
-    two_df = three_col_df(1)
+    two_df = create_df(1, 3)
     lib.write("two", two_df)
 
-    two_df = three_col_df(2)
+    two_df = create_df(2, 3)
     lib.append("two", two_df)
 
-    three_df = three_col_df(3)
+    three_df = create_df(3, 3)
     lib.append("three", three_df)
 
     sym = "empty_s"
@@ -234,9 +258,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     job_type = str(args.type).lower()
     # TODO: Add support for other storages
-    uri = get_real_s3_uri()
-    print(uri)
-    ac = Arctic(uri)
+    ac = Arctic(get_real_s3_uri())
 
     if "seed" == job_type:
         seed_library(ac, args.version)

@@ -12,9 +12,12 @@ import os
 import pytest
 import numpy as np
 import pandas as pd
+import platform
 import random
 import re
+import time
 from datetime import datetime
+from functools import partial
 
 from arcticdb.storage_fixtures.api import StorageFixture
 from arcticdb.storage_fixtures.azure import AzuriteStorageFixtureFactory
@@ -23,7 +26,7 @@ from arcticdb.storage_fixtures.s3 import MotoS3StorageFixtureFactory, real_s3_fr
 from arcticdb.storage_fixtures.mongo import auto_detect_server
 from arcticdb.storage_fixtures.in_memory import InMemoryStorageFixture
 from arcticdb.version_store._normalization import MsgPackNormalizer
-from arcticdb.util.test import configure_test_logger
+from arcticdb.util.test import configure_test_logger, create_df
 from tests.util.mark import (
     AZURE_TESTS_MARK,
     MONGO_TESTS_MARK,
@@ -42,6 +45,14 @@ configure_test_logger()
 # Use a smaller memory mapped limit for all tests
 MsgPackNormalizer.MMAP_DEFAULT_SIZE = 20 * (1 << 20)
 
+if platform.system() == "Linux":
+    try:
+        from ctypes import cdll
+
+        cdll.LoadLibrary("libSegFault.so")
+    except:
+        pass
+
 
 @pytest.fixture()
 def sym(request):
@@ -52,6 +63,18 @@ def sym(request):
 def lib_name(request):
     name = re.sub(r"[^\w]", "_", request.node.name)[:30]
     return f"{name}.{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
+
+
+@pytest.fixture
+def get_stderr(capfd):
+    from arcticdb_ext.log import flush_all
+
+    def _get():
+        flush_all()
+        time.sleep(0.001)
+        return capfd.readouterr().err
+
+    return _get
 
 
 @enum.unique
@@ -93,12 +116,17 @@ def s3_storage(s3_storage_factory):
 
 @pytest.fixture(scope="session")
 def real_s3_storage_factory():
-    return real_s3_from_environment_variables()
+    return real_s3_from_environment_variables(shared_path=False)
 
 
 @pytest.fixture(scope="session")
-def real_s3_storage_without_clean_up(real_s3_storage_factory):
-    return real_s3_storage_factory.create_fixture()
+def real_s3_shared_path_storage_factory():
+    return real_s3_from_environment_variables(shared_path=True)
+
+
+@pytest.fixture(scope="session")
+def real_s3_storage_without_clean_up(real_s3_shared_path_storage_factory):
+    return real_s3_shared_path_storage_factory.create_fixture()
 
 
 @pytest.fixture
@@ -417,7 +445,7 @@ def lmdb_version_store_dynamic_schema_v2(version_store_factory, lib_name):
 
 @pytest.fixture
 def lmdb_version_store_dynamic_schema(
-        lmdb_version_store_dynamic_schema_v1, lmdb_version_store_dynamic_schema_v2, encoding_version
+    lmdb_version_store_dynamic_schema_v1, lmdb_version_store_dynamic_schema_v2, encoding_version
 ):
     if encoding_version == EncodingVersion.V1:
         return lmdb_version_store_dynamic_schema_v1
@@ -597,39 +625,19 @@ def basic_store_tiny_segment_dynamic(basic_store_factory):
 
 
 # endregion
-
-
 @pytest.fixture
 def one_col_df():
-    def create(start=0) -> pd.DataFrame:
-        return pd.DataFrame({"x": np.arange(start, start + 10, dtype=np.int64)})
-
-    return create
+    return partial(create_df, columns=1)
 
 
 @pytest.fixture
 def two_col_df():
-    def create(start=0) -> pd.DataFrame:
-        return pd.DataFrame(
-            {"x": np.arange(start, start + 10, dtype=np.int64), "y": np.arange(start + 10, start + 20, dtype=np.int64)}
-        )
-
-    return create
+    return partial(create_df, columns=2)
 
 
 @pytest.fixture
 def three_col_df():
-    def create(start=0) -> pd.DataFrame:
-        return pd.DataFrame(
-            {
-                "x": np.arange(start, start + 10, dtype=np.int64),
-                "y": np.arange(start + 10, start + 20, dtype=np.int64),
-                "z": np.arange(start + 20, start + 30, dtype=np.int64),
-            },
-            index=np.arange(start, start + 10, dtype=np.int64),
-        )
-
-    return create
+    return partial(create_df, columns=3)
 
 
 def get_val(col):
@@ -654,14 +662,14 @@ def get_wide_df():
 @pytest.fixture(
     scope="function",
     params=(
-            "lmdb_version_store_v1",
-            "lmdb_version_store_v2",
-            "s3_version_store_v1",
-            "s3_version_store_v2",
-            "in_memory_version_store",
-            pytest.param("azure_version_store", marks=AZURE_TESTS_MARK),
-            pytest.param("mongo_version_store", marks=MONGO_TESTS_MARK),
-            pytest.param("real_s3_version_store", marks=REAL_S3_TESTS_MARK),
+        "lmdb_version_store_v1",
+        "lmdb_version_store_v2",
+        "s3_version_store_v1",
+        "s3_version_store_v2",
+        "in_memory_version_store",
+        pytest.param("azure_version_store", marks=AZURE_TESTS_MARK),
+        pytest.param("mongo_version_store", marks=MONGO_TESTS_MARK),
+        pytest.param("real_s3_version_store", marks=REAL_S3_TESTS_MARK),
     ),
 )
 def object_and_mem_and_lmdb_version_store(request):
@@ -674,13 +682,13 @@ def object_and_mem_and_lmdb_version_store(request):
 @pytest.fixture(
     scope="function",
     params=(
-            "lmdb_version_store_dynamic_schema_v1",
-            "lmdb_version_store_dynamic_schema_v2",
-            "s3_version_store_dynamic_schema_v1",
-            "s3_version_store_dynamic_schema_v2",
-            "in_memory_version_store_dynamic_schema",
-            pytest.param("azure_version_store_dynamic_schema", marks=AZURE_TESTS_MARK),
-            pytest.param("real_s3_version_store_dynamic_schema", marks=REAL_S3_TESTS_MARK),
+        "lmdb_version_store_dynamic_schema_v1",
+        "lmdb_version_store_dynamic_schema_v2",
+        "s3_version_store_dynamic_schema_v1",
+        "s3_version_store_dynamic_schema_v2",
+        "in_memory_version_store_dynamic_schema",
+        pytest.param("azure_version_store_dynamic_schema", marks=AZURE_TESTS_MARK),
+        pytest.param("real_s3_version_store_dynamic_schema", marks=REAL_S3_TESTS_MARK),
     ),
 )
 def object_and_mem_and_lmdb_version_store_dynamic_schema(request):

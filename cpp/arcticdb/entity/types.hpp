@@ -11,12 +11,9 @@
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/log/log.hpp>
-#include <arcticdb/entity/protobufs.hpp>
 #include <google/protobuf/util/message_differencer.h>
 
 #include <fmt/format.h>
-#include <pybind11/pybind11.h>
-#include <pybind11/numpy.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -36,35 +33,42 @@
 using ssize_t = SSIZE_T;
 #endif
 
+// TODO: Forward declare further and move the inclusion of `descriptors.pb.h` in `types.cpp`.
+#include <descriptors.pb.h>
+
+namespace arcticdb::proto {
+    namespace descriptors = arcticc::pb2::descriptors_pb2;
+}
+
 namespace arcticdb::entity {
 
- enum class SortedValue : uint8_t {
+enum class SortedValue : uint8_t {
     UNKNOWN = 0,
     UNSORTED = 1,
     ASCENDING = 2,
     DESCENDING = 3,
 };
 
-inline arcticc::pb2::descriptors_pb2::SortedValue sorted_value_to_proto(SortedValue sorted) {
+inline arcticdb::proto::descriptors::SortedValue sorted_value_to_proto(SortedValue sorted) {
     switch (sorted) {
     case SortedValue::UNSORTED:
-        return arcticc::pb2::descriptors_pb2::SortedValue::UNSORTED;
+        return arcticdb::proto::descriptors::SortedValue::UNSORTED;
     case SortedValue::DESCENDING:
-        return arcticc::pb2::descriptors_pb2::SortedValue::DESCENDING;
+        return arcticdb::proto::descriptors::SortedValue::DESCENDING;
     case SortedValue::ASCENDING:
-        return arcticc::pb2::descriptors_pb2::SortedValue::ASCENDING;
+        return arcticdb::proto::descriptors::SortedValue::ASCENDING;
     default:
-        return arcticc::pb2::descriptors_pb2::SortedValue::UNKNOWN;
+        return arcticdb::proto::descriptors::SortedValue::UNKNOWN;
     }
 }
 
-inline SortedValue sorted_value_from_proto(arcticc::pb2::descriptors_pb2::SortedValue sorted_proto) {
+inline SortedValue sorted_value_from_proto(arcticdb::proto::descriptors::SortedValue sorted_proto) {
     switch (sorted_proto) {
-    case arcticc::pb2::descriptors_pb2::SortedValue::UNSORTED:
+    case arcticdb::proto::descriptors::SortedValue::UNSORTED:
         return SortedValue::UNSORTED;
-    case arcticc::pb2::descriptors_pb2::SortedValue::DESCENDING:
+    case arcticdb::proto::descriptors::SortedValue::DESCENDING:
         return SortedValue::DESCENDING;
-    case arcticc::pb2::descriptors_pb2::SortedValue::ASCENDING:
+    case arcticdb::proto::descriptors::SortedValue::ASCENDING:
         return SortedValue::ASCENDING;
     default:
         return SortedValue::UNKNOWN;
@@ -80,9 +84,9 @@ using VersionId = uint64_t;
 using SignedVersionId = int64_t;
 using GenerationId = VersionId;
 using timestamp = int64_t;
-using shape_t = ssize_t;
-using stride_t = ssize_t;
-using position_t = ssize_t;
+using shape_t = int64_t;
+using stride_t = int64_t;
+using position_t = int64_t;
 
 /** The VariantId holds int64 (NumericId) but is also used to store sizes up to uint64, so needs safe conversion */
 inline NumericId safe_convert_to_numeric_id(uint64_t input) {
@@ -90,11 +94,11 @@ inline NumericId safe_convert_to_numeric_id(uint64_t input) {
     return static_cast<NumericId>(input);
 }
 
-namespace py = pybind11;
 
-
-// See https://sourceforge.net/p/numpy/mailman/numpy-discussion/thread/1139250278.7538.52.camel%40localhost.localdomain/#msg11998404
-constexpr size_t UNICODE_WIDTH = sizeof(Py_UNICODE);
+// See: https://github.com/python/cpython/issues/105156
+// See: https://peps.python.org/pep-0393/
+using UnicodeType = wchar_t;
+constexpr size_t UNICODE_WIDTH = sizeof(UnicodeType);
 constexpr size_t ASCII_WIDTH = 1;
 //TODO: Fix unicode width for windows
 #ifndef _WIN32
@@ -129,7 +133,9 @@ enum class ValueType : uint8_t {
     // For instance, Pandas empty series whose types has not been specified is mapping to EMPTY.
     // When data is appended, the column type is inferred from the data and the column is promoted to the inferred type.
     EMPTY = 13,
-    COUNT = 14 // Not a real value type, should not be added to proto descriptor. Used to count the number of items in the enum
+    /// Nullable booleans
+    PYBOOL = 14,
+    COUNT // Not a real value type, should not be added to proto descriptor. Used to count the number of items in the enum
 };
 
 // Sequence types are composed of more than one element
@@ -189,6 +195,16 @@ constexpr SizeBits get_size_bits(uint8_t size) {
     }
 }
 
+[[nodiscard]] constexpr int get_byte_count(SizeBits size_bits) {
+    switch(size_bits) {
+        case SizeBits::S8: return 1;
+        case SizeBits::S16: return 2;
+        case SizeBits::S32: return 4;
+        case SizeBits::S64: return 8;
+        default: util::raise_rte("Unknown size bits");
+    }
+}
+
 namespace detail{
 
 constexpr uint8_t combine_val_bits(ValueType v, SizeBits b = SizeBits::UNKNOWN_SIZE_BITS) {
@@ -215,6 +231,8 @@ enum class DataType : uint8_t {
     UTF_FIXED64 = detail::combine_val_bits(ValueType::UTF8_FIXED, SizeBits::S64),
     UTF_DYNAMIC64 = detail::combine_val_bits(ValueType::UTF_DYNAMIC, SizeBits::S64),
     EMPTYVAL = detail::combine_val_bits(ValueType::EMPTY, SizeBits::S64),
+    PYBOOL8 = detail::combine_val_bits(ValueType::PYBOOL, SizeBits::S8),
+    PYBOOL64 = detail::combine_val_bits(ValueType::PYBOOL, SizeBits::S64),
     UNKNOWN = 0,
 };
 
@@ -266,6 +284,10 @@ constexpr bool is_numeric_type(DataType v){
 
 constexpr bool is_bool_type(DataType dt) {
     return slice_value_type(dt) == ValueType::BOOL;
+}
+
+constexpr bool is_py_bool_type(DataType dt) {
+    return slice_value_type(dt) == ValueType::PYBOOL;
 }
 
 constexpr bool is_unsigned_type(DataType dt) {
@@ -395,6 +417,8 @@ DATA_TYPE_TAG(ASCII_DYNAMIC64, std::uint64_t)
 DATA_TYPE_TAG(UTF_FIXED64, std::uint64_t)
 DATA_TYPE_TAG(UTF_DYNAMIC64, std::uint64_t)
 DATA_TYPE_TAG(EMPTYVAL, std::uint64_t)
+DATA_TYPE_TAG(PYBOOL8, uint8_t)
+DATA_TYPE_TAG(PYBOOL64, std::uint64_t)
 #undef DATA_TYPE_TAG
 
 enum class Dimension : uint8_t {
@@ -460,11 +484,11 @@ struct TypeDescriptor {
         return !(*this == o);
     }
 
-    [[nodiscard]] DataType data_type() const {
+    [[nodiscard]] constexpr DataType data_type() const {
         return data_type_;
     }
 
-    [[nodiscard]] Dimension dimension() const {
+    [[nodiscard]] constexpr Dimension dimension() const {
         return dimension_;
     }
 
@@ -479,7 +503,37 @@ struct TypeDescriptor {
 
         return output;
     }
+
+    void set_size_bits(SizeBits new_size_bits) {
+        data_type_ = combine_data_type(slice_value_type(data_type_), new_size_bits);
+    }
+
+    [[nodiscard]] constexpr int get_type_byte_size() const {
+        return get_byte_count(slice_bit_size(data_type_));
+    }
 };
+
+/// @brief Check if the type must contain data
+/// Some types are allowed not to have any data, e.g. empty arrays or the empty type (which by design denotes the
+/// lack of data).
+/// @return true if the type must contain data, false it it's allowed for the type to have 0 bytes of data
+constexpr bool must_contain_data(TypeDescriptor td) {
+    return !(is_empty_type(td.data_type()) || td.dimension() > Dimension::Dim0);
+}
+
+/// @biref Check if type descriptor corresponds to numpy array type
+/// @important Be sure to match this with the type handler registry in: cpp/arcticdb/python/python_module.cpp#register_type_handlers
+constexpr bool is_numpy_array(TypeDescriptor td) {
+    return (is_numeric_type(td.data_type()) || is_bool_type(td.data_type()) || is_empty_type(td.data_type())) &&
+           (td.dimension() == Dimension::Dim1);
+}
+
+constexpr bool is_pyobject_type(TypeDescriptor td) {
+    return is_dynamic_string_type(slice_value_type(td.data_type())) ||
+           slice_value_type(td.data_type()) == ValueType::PYBOOL ||
+           is_numpy_array(td);
+}
+
 
 inline void set_data_type(DataType data_type, TypeDescriptor& type_desc) {
     type_desc.data_type_ = data_type;
@@ -497,6 +551,14 @@ struct TypeDescriptorTag {
     using DimensionTag = D;
     explicit constexpr operator TypeDescriptor() const {
         return TypeDescriptor{DataTypeTag::data_type, DimensionTag::value};
+    }
+
+    [[nodiscard]] constexpr Dimension dimension() const {
+        return DimensionTag::value;
+    }
+
+    [[nodiscard]] constexpr DataType data_type() const {
+        return DataTypeTag::data_type;
     }
 };
 
@@ -675,6 +737,10 @@ public:
         return type_;
     }
 
+    [[nodiscard]] TypeDescriptor* mutable_type_desc() {
+        return &type_;
+    }
+
     TypeDescriptor& mutable_type() {
         return type_;
     }
@@ -736,9 +802,7 @@ inline bool operator!=(const Field& l, const Field& r) {
     return !(l == r);
 }
 
-using UnicodeType = Py_UNICODE;
-
-} // namespace arcticdb
+} // namespace arcticdb::entity
 
 // StreamId ordering - numbers before strings
 namespace std {

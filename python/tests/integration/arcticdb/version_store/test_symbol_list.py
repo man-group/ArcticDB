@@ -307,12 +307,12 @@ class ScopedMaxDelta:
 @pytest.mark.parametrize("compaction_size", [2, 10, 200])
 @pytest.mark.parametrize("same_symbols", [True, False])
 def test_symbol_list_parallel_stress_with_delete(
-    s3_version_store_v1, list_freq, delete_freq, update_freq, compaction_size, same_symbols
+    lmdb_version_store_v1, list_freq, delete_freq, update_freq, compaction_size, same_symbols
 ):
     pd.set_option("display.max_rows", None)
     ScopedMaxDelta(compaction_size)
 
-    lib = s3_version_store_v1
+    lib = lmdb_version_store_v1
     num_pre_existing_symbols = 100
     num_symbols = 10
     num_workers = 5

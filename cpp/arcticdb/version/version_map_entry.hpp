@@ -178,7 +178,7 @@ struct VersionMapEntry {
     }
 
     // Below four functions used to return optional<AtomKey> of the tombstone, but copying keys is expensive and only
-    // one function was actually interested in the key, so they now return bool. See get_tombstone_if_any().
+    // one function was actually interested in the key, so they now return bool. See get_tombstone().
     bool has_individual_tombstone(VersionId version_id) const {
         return tombstones_.count(version_id) != 0;
     }
@@ -195,7 +195,7 @@ struct VersionMapEntry {
         return is_tombstoned_via_tombstone_all(version_id) || has_individual_tombstone(version_id);
     }
 
-    std::optional<AtomKey> get_tombstone_if_any(VersionId version_id) {
+    std::optional<AtomKey> get_tombstone(VersionId version_id) {
         if (tombstone_all_ && tombstone_all_->version_id() >= version_id) {
             return tombstone_all_;
         }
