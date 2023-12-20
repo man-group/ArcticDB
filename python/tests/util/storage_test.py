@@ -6,7 +6,6 @@ import re
 from datetime import datetime
 
 from arcticdb import Arctic
-from arcticdb.util.test import create_df
 
 
 def real_s3_credentials(shared_path: bool = True):
