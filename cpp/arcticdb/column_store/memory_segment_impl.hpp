@@ -10,7 +10,6 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/cursor.hpp>
 #include <arcticdb/column_store/column.hpp>
-#include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/util/preconditions.hpp>
 

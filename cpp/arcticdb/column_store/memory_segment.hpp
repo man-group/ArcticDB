@@ -11,7 +11,6 @@
 #include <arcticdb/util/cursor.hpp>
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/util/magic_num.hpp>
 #include <arcticdb/util/constructors.hpp>
