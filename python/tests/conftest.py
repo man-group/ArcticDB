@@ -17,6 +17,7 @@ import random
 import re
 import time
 from datetime import datetime
+from functools import partial
 
 from arcticdb.storage_fixtures.api import StorageFixture
 from arcticdb.storage_fixtures.azure import AzuriteStorageFixtureFactory
@@ -25,7 +26,7 @@ from arcticdb.storage_fixtures.s3 import MotoS3StorageFixtureFactory, real_s3_fr
 from arcticdb.storage_fixtures.mongo import auto_detect_server
 from arcticdb.storage_fixtures.in_memory import InMemoryStorageFixture
 from arcticdb.version_store._normalization import MsgPackNormalizer
-from arcticdb.util.test import configure_test_logger
+from arcticdb.util.test import configure_test_logger, create_df
 from tests.util.mark import (
     AZURE_TESTS_MARK,
     MONGO_TESTS_MARK,
@@ -624,39 +625,19 @@ def basic_store_tiny_segment_dynamic(basic_store_factory):
 
 
 # endregion
-
-
 @pytest.fixture
 def one_col_df():
-    def create(start=0) -> pd.DataFrame:
-        return pd.DataFrame({"x": np.arange(start, start + 10, dtype=np.int64)})
-
-    return create
+    return partial(create_df, columns=1)
 
 
 @pytest.fixture
 def two_col_df():
-    def create(start=0) -> pd.DataFrame:
-        return pd.DataFrame(
-            {"x": np.arange(start, start + 10, dtype=np.int64), "y": np.arange(start + 10, start + 20, dtype=np.int64)}
-        )
-
-    return create
+    return partial(create_df, columns=2)
 
 
 @pytest.fixture
 def three_col_df():
-    def create(start=0) -> pd.DataFrame:
-        return pd.DataFrame(
-            {
-                "x": np.arange(start, start + 10, dtype=np.int64),
-                "y": np.arange(start + 10, start + 20, dtype=np.int64),
-                "z": np.arange(start + 20, start + 30, dtype=np.int64),
-            },
-            index=np.arange(start, start + 10, dtype=np.int64),
-        )
-
-    return create
+    return partial(create_df, columns=3)
 
 
 def get_val(col):
