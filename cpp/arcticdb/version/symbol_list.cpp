@@ -47,6 +47,11 @@ struct LoadResult {
     std::vector<AtomKey>&& detach_symbol_list_keys() { return std::move(symbol_list_keys_); }
 };
 
+auto warning_threshold() {
+    return 2 * static_cast<size_t>(ConfigsMap::instance()->get_int("SymbolList.MaxDelta")
+            .value_or( ConfigsMap::instance()->get_int("SymbolList.MaxCompactionThreshold", 700)));
+}
+
 std::vector<SymbolListEntry> load_previous_from_version_keys(
         const std::shared_ptr<Store>& store,
         SymbolListData& data) {
@@ -55,7 +60,7 @@ std::vector<SymbolListEntry> load_previous_from_version_keys(
         auto id = variant_key_id(key);
         stream_ids.push_back(id);
 
-        if (stream_ids.size() == data.max_delta_ * 2 && !data.warned_expected_slowdown_) {
+        if (stream_ids.size() == warning_threshold() && !data.warned_expected_slowdown_) {
             log::symbol().warn(
                 "No compacted symbol list cache found. "
                 "`list_symbols` may take longer than expected. \n\n"
@@ -92,7 +97,7 @@ std::vector<AtomKey> get_all_symbol_list_keys(
         if(atom_key.id() != compaction_id) {
             uncompacted_keys_found++;
         }
-        if (uncompacted_keys_found == data.max_delta_ * 2 && !data.warned_expected_slowdown_) {
+        if (uncompacted_keys_found == warning_threshold() && !data.warned_expected_slowdown_) {
             log::symbol().warn(
                 "`list_symbols` may take longer than expected as there have been many modifications since `list_symbols` was last called. \n\n"
                 "See here for more information: https://docs.arcticdb.io/technical/on_disk_storage/#symbol-list-caching\n\n"
@@ -561,7 +566,7 @@ bool SymbolList::needs_compaction(const LoadResult& load_result) const {
         return true;
     }
 
-    uint64_t n_keys = load_result.symbol_list_keys_.size();
+    auto n_keys = static_cast<int64_t>(load_result.symbol_list_keys_.size());
     if (auto fixed = ConfigsMap::instance()->get_int("SymbolList.MaxDelta")) {
         auto result = n_keys > fixed.value();
         log::version().debug("Symbol list: Fixed draw for compaction. needs_compaction=[{}] n_keys=[{}], MaxDelta=[{}]",

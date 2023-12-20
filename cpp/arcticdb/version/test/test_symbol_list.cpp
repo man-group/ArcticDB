@@ -726,12 +726,12 @@ TEST_F(SymbolListSuite, CompactionThreshold) {
     std::shared_ptr<VersionMap> version_map = std::make_shared<VersionMap>();
     auto symbol_list = SymbolList{version_map};
     auto state = std::make_shared<SymbolListState>(store, version_map);
-    symbol_list.load(store, false);
+    symbol_list.get_symbols(store, false);
 
     // when
-    symbol_list.add_symbol(store, "1");
-    symbol_list.add_symbol(store, "2");
-    symbol_list.add_symbol(store, "3");
+    SymbolList::add_symbol(store, "1", 0);
+    SymbolList::add_symbol(store, "2", 0);
+    SymbolList::add_symbol(store, "3", 0);
 
     // then
     auto symbols = symbol_list.get_symbol_set(store);
@@ -750,13 +750,13 @@ TEST_F(SymbolListSuite, CompactionThresholdMaxDeltaWins) {
     std::shared_ptr<InMemoryStore> store = std::make_shared<InMemoryStore>();
     std::shared_ptr<VersionMap> version_map = std::make_shared<VersionMap>();
     auto symbol_list = SymbolList{version_map};
-    symbol_list.load(store, false);
+    symbol_list.get_symbols(store, false);
 
     // when
-    symbol_list.add_symbol(store, "1");
+    SymbolList::add_symbol(store, "1", 0);
 
     // then
-    symbol_list.load(store, false);
+    symbol_list.get_symbols(store, false);
     {
         std::vector<VariantKey> keys;
         store->iterate_type(entity::KeyType::SYMBOL_LIST, [&keys](auto &&k) { keys.push_back(k); });
@@ -764,10 +764,10 @@ TEST_F(SymbolListSuite, CompactionThresholdMaxDeltaWins) {
     }
 
     // when
-    symbol_list.add_symbol(store, "2");
+    SymbolList::add_symbol(store, "2", 0);
 
     // then
-    symbol_list.load(store, false);
+    symbol_list.get_symbols(store, false);
     {
         std::vector<VariantKey> keys;
         store->iterate_type(entity::KeyType::SYMBOL_LIST, [&keys](auto &&k) { keys.push_back(k); });
@@ -783,13 +783,13 @@ TEST_F(SymbolListSuite, CompactionThresholdRandomChoice) {
     std::shared_ptr<InMemoryStore> store = std::make_shared<InMemoryStore>();
     std::shared_ptr<VersionMap> version_map = std::make_shared<VersionMap>();
     auto symbol_list = SymbolList{version_map, StringId(), 1};
-    symbol_list.load(store, false);
+    symbol_list.get_symbols(store, false);
 
     // when
     for (int i = 0; i < 5; i++) {
-    symbol_list.add_symbol(store, fmt::format("sym{}", i));
+      SymbolList::add_symbol(store, fmt::format("sym{}", i), 0);
     }
-    symbol_list.load(store, false);
+    symbol_list.get_symbols(store, false);
 
     // then
     std::vector<VariantKey> keys;
