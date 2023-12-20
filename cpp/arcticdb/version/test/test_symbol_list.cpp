@@ -777,7 +777,7 @@ TEST_F(SymbolListSuite, CompactionThresholdMaxDeltaWins) {
 
 TEST_F(SymbolListSuite, CompactionThresholdRandomChoice) {
     // given
-    // Compaction thresholds [1, 10] form random choice, seeded with value 1 => choice of threshold is 5
+    // Compaction thresholds [1, 10] form random choice, seeded with value 1 => choice of threshold is 5 (or 6 on Mac)
     ScopedConfig min("SymbolList.MinCompactionThreshold", 1);
     ScopedConfig max("SymbolList.MaxCompactionThreshold", 10);
     std::shared_ptr<InMemoryStore> store = std::make_shared<InMemoryStore>();
@@ -786,7 +786,7 @@ TEST_F(SymbolListSuite, CompactionThresholdRandomChoice) {
     symbol_list.get_symbols(store, false);
 
     // when
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 6; i++) {
       SymbolList::add_symbol(store, fmt::format("sym{}", i), 0);
     }
     symbol_list.get_symbols(store, false);
