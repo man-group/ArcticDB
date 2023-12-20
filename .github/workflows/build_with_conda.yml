@@ -65,7 +65,7 @@ jobs:
         shell: bash -l {0}
         run: |
           cd cpp/out/linux-conda-release-build/
-          make test
+          CTEST_OUTPUT_ON_FAILURE=1 make test
 
       - name: Install npm # Linux github runner image does not come with npm
         uses: actions/setup-node@v3.3.0
@@ -141,7 +141,7 @@ jobs:
         shell: bash -l {0}
         run: |
           cd cpp/out/darwin-conda-release-build/
-          make test
+          CTEST_OUTPUT_ON_FAILURE=1 make test
 
       - name: Install npm
         uses: actions/setup-node@v3.3.0
