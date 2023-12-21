@@ -123,13 +123,13 @@ void Column::string_array_prologue(ssize_t row_offset, size_t num_strings) {
     shapes_.ensure<shape_t>();
     auto shape_cursor = reinterpret_cast<shape_t *>(shapes_.ptr());
     *shape_cursor = shape_t(num_strings);
-    data_.ensure<StringPool::offset_t>(num_strings);
+    data_.ensure<entity::position_t>(num_strings);
 }
 
 void Column::string_array_epilogue(size_t num_strings) {
     data_.commit();
     shapes_.commit();
-    update_offsets(num_strings * sizeof(StringPool::offset_t));
+    update_offsets(num_strings * sizeof(entity::position_t));
     ++last_logical_row_;
 }
 
@@ -139,7 +139,7 @@ void Column::set_string_array(ssize_t row_offset,
                         char *input,
                         StringPool &string_pool) {
     string_array_prologue(row_offset, num_strings);
-    auto data_ptr = reinterpret_cast<StringPool::offset_t*>(data_.ptr());
+    auto data_ptr = reinterpret_cast<entity::position_t*>(data_.ptr());
     for (size_t i = 0; i < num_strings; ++i) {
         auto off = string_pool.get(std::string_view(input, string_size));
         *data_ptr++ = off.offset();
@@ -150,7 +150,7 @@ void Column::set_string_array(ssize_t row_offset,
 
 void Column::set_string_list(ssize_t row_offset, const std::vector<std::string> &input, StringPool &string_pool) {
     string_array_prologue(row_offset, input.size());
-    auto data_ptr = reinterpret_cast<StringPool::offset_t *>(data_.ptr());
+    auto data_ptr = reinterpret_cast<entity::position_t*>(data_.ptr());
     for (const auto &str : input) {
         auto off = string_pool.get(str.data());
         *data_ptr++ = off.offset();

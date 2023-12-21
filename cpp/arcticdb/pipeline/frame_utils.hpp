@@ -143,8 +143,8 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
                 // been processed, on the assumption that if a column has one such string it will probably have many.
                 std::optional<ScopedGILLock> scoped_gil_lock;
                 auto& column = agg.segment().column(col);
-                column.allocate_data(rows_to_write * sizeof(StringPool::offset_t));
-                auto out_ptr = reinterpret_cast<StringPool::offset_t*>(column.buffer().data());
+                column.allocate_data(rows_to_write * sizeof(entity::position_t));
+                auto out_ptr = reinterpret_cast<entity::position_t*>(column.buffer().data());
                 auto& string_pool = agg.segment().string_pool();
                 for (size_t s = 0; s < rows_to_write; ++s, ++ptr_data) {
                     if (*ptr_data == none.ptr()) {

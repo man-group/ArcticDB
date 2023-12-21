@@ -222,7 +222,7 @@ void update_string_columns(const SegmentInMemory& original, SegmentInMemory outp
                                         auto off_str = output.string_pool().get(sv);
                                         set_offset_string_at(row, target, off_str.offset());
                                     },
-                                    [&] (StringPool::offset_t offset) {
+                                    [&] (entity::position_t offset) {
                                         set_offset_string_at(row, target, offset);
                                     });
 
