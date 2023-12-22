@@ -27,8 +27,15 @@ std::tuple<size_t, size_t> compressed(const arcticdb::proto::encoding::SegmentHe
 
 enum class EncodingVersion : uint16_t {
     V1 = 0,
-    V2 = 1
+    V2 = 1,
+    COUNT
 };
+
+template<typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+inline constexpr EncodingVersion to_encoding_version(T encoding_version) {
+    util::check(encoding_version >= 0 && encoding_version < uint16_t(EncodingVersion::COUNT), "Invalid encoding version");
+    return static_cast<EncodingVersion>(encoding_version);
+}
 
 static constexpr uint16_t HEADER_VERSION_V1 = 1;
 
@@ -231,6 +238,7 @@ class Segment {
             std::get<BufferView>(buffer_).copy_to(*b);
             buffer_ = std::move(b);
         }
+        keepalive_.reset();
     }
 
     void set_keepalive(std::any&& keepalive) {
@@ -283,6 +291,7 @@ struct formatter<arcticdb::EncodingVersion> {
             break;
         case arcticdb::EncodingVersion::V2:c = '2';
             break;
+        default:break;
         }
         return format_to(ctx.out(), "{:c}", c);
     }

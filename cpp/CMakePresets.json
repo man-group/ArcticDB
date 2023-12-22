@@ -86,6 +86,17 @@
       "inherits": ["common_conda", "windows"]
     },
 
+    {
+      "name": "windows-vs-2022",
+      "generator": "Visual Studio 17 2022",
+      "toolchainFile": "vcpkg/scripts/buildsystems/vcpkg.cmake",
+      "binaryDir": "${sourceDir}/out/${presetName}-build",
+      "installDir": "${sourceDir}/out/install",
+      "cacheVariables": {
+        "CMAKE_CXX_FLAGS": "/MP",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static"
+      }
+    },
 
     {
       "name": "linux",
@@ -99,6 +110,15 @@
     {
       "name": "linux-debug",
       "inherits": ["common_vcpkg", "linux"]
+    },
+    {
+      "name": "linux-debug-clang",
+      "inherits": ["common_vcpkg", "linux"],
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "STATIC_LINK_STD_LIB": "OFF"
+      }
     },
     {
       "name": "linux-conda-debug",
@@ -134,6 +154,7 @@
     {"name": "windows-cl-conda-debug",    "configurePreset": "windows-cl-conda-debug",    "targets": "arcticdb_ext" },
     {"name": "windows-cl-conda-release",  "configurePreset": "windows-cl-conda-release",  "targets": "arcticdb_ext" },
     {"name": "linux-debug",               "configurePreset": "linux-debug",               "targets": "arcticdb_ext" },
+    {"name": "linux-debug-clang",         "configurePreset": "linux-debug-clang",         "targets": "arcticdb_ext" },
     {"name": "linux-release",             "configurePreset": "linux-release",             "targets": "arcticdb_ext" },
     {"name": "linux-conda-debug",         "configurePreset": "linux-conda-debug",         "targets": "arcticdb_ext" },
     {"name": "linux-conda-release",       "configurePreset": "linux-conda-release",       "targets": "arcticdb_ext" },

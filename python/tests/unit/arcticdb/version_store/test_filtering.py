@@ -5,7 +5,6 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
-
 import copy
 import pickle
 import math
@@ -27,11 +26,7 @@ import string
 from arcticdb.exceptions import ArcticNativeException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb_ext.exceptions import (
-    InternalException,
-    StorageException,
-    UserInputException,
-)
+from arcticdb_ext.exceptions import InternalException, StorageException, UserInputException
 from arcticdb.util.test import assert_frame_equal, PANDAS_VERSION
 from arcticdb.util._versions import PANDAS_VERSION
 from arcticdb.util.hypothesis import (
@@ -46,7 +41,7 @@ from arcticdb.util.hypothesis import (
 )
 from arcticdb_ext import set_config_int
 
-from tests.util.mark import AZURE_TESTS_MARK
+from tests.util.mark import MACOS_CONDA_BUILD
 
 
 def generic_filter_test(version_store, symbol, df, arctic_query, pandas_query, dynamic_strings=True):
@@ -280,10 +275,7 @@ def test_filter_clashing_values(lmdb_version_store):
 def test_filter_bool_nonbool_comparison(lmdb_version_store):
     symbol = "test_filter_bool_nonbool_comparison"
     lib = lmdb_version_store
-    df = DataFrame(
-        {"string": ["True", "False"], "numeric": [1, 0], "bool": [True, False]},
-        index=np.arange(2),
-    )
+    df = DataFrame({"string": ["True", "False"], "numeric": [1, 0], "bool": [True, False]}, index=np.arange(2))
     lib.write(symbol, df)
 
     # bool column to string column
@@ -335,20 +327,11 @@ def test_filter_bool_column_not(lmdb_version_store):
 
 
 def test_filter_bool_column_binary_boolean(lmdb_version_store):
-    df = DataFrame(
-        {"a": [True, True, False, False], "b": [True, False, True, False]},
-        index=np.arange(4),
-    )
+    df = DataFrame({"a": [True, True, False, False], "b": [True, False, True, False]}, index=np.arange(4))
     q = QueryBuilder()
     q = q[q["a"] & q["b"]]
     pandas_query = "a & b"
-    generic_filter_test(
-        lmdb_version_store,
-        "test_filter_bool_column_binary_boolean",
-        df,
-        q,
-        pandas_query,
-    )
+    generic_filter_test(lmdb_version_store, "test_filter_bool_column_binary_boolean", df, q, pandas_query)
 
 
 def test_filter_bool_column_comparison(lmdb_version_store):
@@ -370,13 +353,7 @@ def test_filter_bool_column_comparison(lmdb_version_store):
                 q = q[q["a"] > bool_value]
             elif comparator == ">=":
                 q = q[q["a"] >= bool_value]
-            generic_filter_test(
-                lmdb_version_store,
-                "test_filter_bool_column_comparison",
-                df,
-                q,
-                pandas_query,
-            )
+            generic_filter_test(lmdb_version_store, "test_filter_bool_column_comparison", df, q, pandas_query)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -411,10 +388,7 @@ def test_filter_less_than_val_col(lmdb_version_store, df, val):
 @settings(deadline=None)
 @given(
     df=data_frames(
-        [
-            column("a", elements=numeric_type_strategies()),
-            column("b", elements=numeric_type_strategies()),
-        ],
+        [column("a", elements=numeric_type_strategies()), column("b", elements=numeric_type_strategies())],
         index=range_indexes(),
     )
 )
@@ -458,10 +432,7 @@ def test_filter_less_than_equals_val_col(lmdb_version_store, df, val):
 @settings(deadline=None)
 @given(
     df=data_frames(
-        [
-            column("a", elements=numeric_type_strategies()),
-            column("b", elements=numeric_type_strategies()),
-        ],
+        [column("a", elements=numeric_type_strategies()), column("b", elements=numeric_type_strategies())],
         index=range_indexes(),
     )
 )
@@ -505,10 +476,7 @@ def test_filter_greater_than_val_col(lmdb_version_store, df, val):
 @settings(deadline=None)
 @given(
     df=data_frames(
-        [
-            column("a", elements=numeric_type_strategies()),
-            column("b", elements=numeric_type_strategies()),
-        ],
+        [column("a", elements=numeric_type_strategies()), column("b", elements=numeric_type_strategies())],
         index=range_indexes(),
     )
 )
@@ -531,13 +499,7 @@ def test_filter_greater_than_equals_col_val(lmdb_version_store, df, val):
     q = QueryBuilder()
     q = q[q["a"] >= val]
     pandas_query = "a >= {}".format(val)
-    generic_filter_test(
-        lmdb_version_store,
-        "test_filter_greater_than_equals_col_val",
-        df,
-        q,
-        pandas_query,
-    )
+    generic_filter_test(lmdb_version_store, "test_filter_greater_than_equals_col_val", df, q, pandas_query)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -551,23 +513,14 @@ def test_filter_greater_than_equals_val_col(lmdb_version_store, df, val):
     q = QueryBuilder()
     q = q[val >= q["a"]]
     pandas_query = "{} >= a".format(val)
-    generic_filter_test(
-        lmdb_version_store,
-        "test_filter_greater_than_equals_val_col",
-        df,
-        q,
-        pandas_query,
-    )
+    generic_filter_test(lmdb_version_store, "test_filter_greater_than_equals_val_col", df, q, pandas_query)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
-        [
-            column("a", elements=numeric_type_strategies()),
-            column("b", elements=numeric_type_strategies()),
-        ],
+        [column("a", elements=numeric_type_strategies()), column("b", elements=numeric_type_strategies())],
         index=range_indexes(),
     )
 )
@@ -576,13 +529,7 @@ def test_filter_greater_than_equals_col_col(lmdb_version_store, df):
     q = QueryBuilder()
     q = q[q["a"] >= q["b"]]
     pandas_query = "a >= b"
-    generic_filter_test(
-        lmdb_version_store,
-        "test_filter_greater_than_equals_col_col",
-        df,
-        q,
-        pandas_query,
-    )
+    generic_filter_test(lmdb_version_store, "test_filter_greater_than_equals_col_col", df, q, pandas_query)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -617,10 +564,7 @@ def test_filter_equals_val_col(lmdb_version_store, df, val):
 @settings(deadline=None)
 @given(
     df=data_frames(
-        [
-            column("a", elements=integral_type_strategies()),
-            column("b", elements=integral_type_strategies()),
-        ],
+        [column("a", elements=integral_type_strategies()), column("b", elements=integral_type_strategies())],
         index=range_indexes(),
     )
 )
@@ -664,10 +608,7 @@ def test_filter_not_equals_val_col(lmdb_version_store, df, val):
 @settings(deadline=None)
 @given(
     df=data_frames(
-        [
-            column("a", elements=integral_type_strategies()),
-            column("b", elements=integral_type_strategies()),
-        ],
+        [column("a", elements=integral_type_strategies()), column("b", elements=integral_type_strategies())],
         index=range_indexes(),
     )
 )
@@ -773,16 +714,8 @@ def test_filter_datetime_timezone_aware(lmdb_version_store):
 # Restrict datetime range to a couple of years, as this should be sufficient to catch most weird corner cases
 @settings(deadline=None)
 @given(
-    df_dt=st.datetimes(
-        min_value=datetime(2020, 1, 1),
-        max_value=datetime(2022, 1, 1),
-        timezones=timezone_st(),
-    ),
-    comparison_dt=st.datetimes(
-        min_value=datetime(2020, 1, 1),
-        max_value=datetime(2022, 1, 1),
-        timezones=timezone_st(),
-    ),
+    df_dt=st.datetimes(min_value=datetime(2020, 1, 1), max_value=datetime(2022, 1, 1), timezones=timezone_st()),
+    comparison_dt=st.datetimes(min_value=datetime(2020, 1, 1), max_value=datetime(2022, 1, 1), timezones=timezone_st()),
 )
 def test_filter_datetime_timezone_aware_hypothesis(version_store_factory, df_dt, comparison_dt):
     lmdb_version_store = version_store_factory(name="_unique_")
@@ -849,10 +782,7 @@ def test_filter_datetime_nanoseconds(lmdb_version_store):
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
-@given(
-    df=data_frames([column("a", elements=string_strategy)], index=range_indexes()),
-    val=numeric_type_strategies(),
-)
+@given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()), val=numeric_type_strategies())
 def test_filter_compare_string_number_col_val(lmdb_version_store, df, val):
     assume(not df.empty)
     q = QueryBuilder()
@@ -869,10 +799,7 @@ def test_filter_compare_string_number_col_val(lmdb_version_store, df, val):
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
-@given(
-    df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
-    val=string_strategy,
-)
+@given(df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()), val=string_strategy)
 def test_filter_compare_string_number_val_col(lmdb_version_store, df, val):
     assume(not df.empty)
     q = QueryBuilder()
@@ -891,11 +818,7 @@ def test_filter_compare_string_number_val_col(lmdb_version_store, df, val):
 @settings(deadline=None)
 @given(
     df=data_frames(
-        [
-            column("a", elements=string_strategy),
-            column("b", elements=numeric_type_strategies()),
-        ],
-        index=range_indexes(),
+        [column("a", elements=string_strategy), column("b", elements=numeric_type_strategies())], index=range_indexes()
     )
 )
 def test_filter_compare_string_number_col_col(lmdb_version_store, df):
@@ -1120,10 +1043,7 @@ def test_filter_numeric_isnotin_empty_set(lmdb_version_store, df):
 def test_filter_nones_and_nans_retained_in_string_column(lmdb_version_store):
     lib = lmdb_version_store
     sym = "test_filter_nones_and_nans_retained_in_string_column"
-    df = pd.DataFrame({
-        "filter_column": [1, 2, 1, 2, 1, 2],
-        "string_column": ["1", "2", np.nan, "4", None, "6"],
-    })
+    df = pd.DataFrame({"filter_column": [1, 2, 1, 2, 1, 2], "string_column": ["1", "2", np.nan, "4", None, "6"]})
     lib.write(sym, df)
     q = QueryBuilder()
     q = q[q["filter_column"] == 1]
@@ -1158,12 +1078,7 @@ def test_filter_fixed_width_string_isin_truncation(lmdb_version_store):
     q = q[q["a"].isin(vals)]
     pandas_query = "a in {}".format(list(vals))
     generic_filter_test(
-        lmdb_version_store,
-        "test_filter_fixed_width_string_isin_truncation",
-        df,
-        q,
-        pandas_query,
-        dynamic_strings=False,
+        lmdb_version_store, "test_filter_fixed_width_string_isin_truncation", df, q, pandas_query, dynamic_strings=False
     )
 
 
@@ -1213,22 +1128,20 @@ def test_filter_stringpool_shrinking_basic(lmdb_version_store_tiny_segment):
     # - at least one segment will need all of the strings in it's pool after filtering
     # - at least one segment will need none of the strings in it's pool after filtering
     # - at least one segment will need some, but not all of the strings in it's pool after filtering
-    df = DataFrame({
-        "a": ["a1", "a2", "a3", "a4", "a5"],
-        "b": ["b11", "b22", "b3", "b4", "b5"],
-        "c": ["c1", "c2", "c3", "c4", "c5"],
-        "d": ["d11", "d2", "d3", "d4", "d5"],
-    })
+    df = DataFrame(
+        {
+            "a": ["a1", "a2", "a3", "a4", "a5"],
+            "b": ["b11", "b22", "b3", "b4", "b5"],
+            "c": ["c1", "c2", "c3", "c4", "c5"],
+            "d": ["d11", "d2", "d3", "d4", "d5"],
+        }
+    )
     q = QueryBuilder()
     q = q[q["a"] != "a1"]
     q.optimise_for_memory()
     pandas_query = "a != 'a1'"
     generic_filter_test_strings(
-        lmdb_version_store_tiny_segment,
-        "test_filter_stringpool_shrinking_1",
-        df,
-        q,
-        pandas_query,
+        lmdb_version_store_tiny_segment, "test_filter_stringpool_shrinking_1", df, q, pandas_query
     )
 
 
@@ -1243,11 +1156,7 @@ def test_filter_stringpool_shrinking_block_alignment(lmdb_version_store):
     q = q[q["a"] == string_to_find]
     pandas_query = f"a == '{string_to_find}'"
     generic_filter_test_strings(
-        lmdb_version_store,
-        "test_filter_stringpool_shrinking_block_alignment",
-        df,
-        q,
-        pandas_query,
+        lmdb_version_store, "test_filter_stringpool_shrinking_block_alignment", df, q, pandas_query
     )
 
 
@@ -1255,10 +1164,7 @@ def test_filter_stringpool_shrinking_block_alignment(lmdb_version_store):
 @settings(deadline=None)
 @given(
     df=data_frames(
-        [
-            column("a", elements=numeric_type_strategies()),
-            column("b", elements=numeric_type_strategies()),
-        ],
+        [column("a", elements=numeric_type_strategies()), column("b", elements=numeric_type_strategies())],
         index=range_indexes(),
     )
 )
@@ -1274,10 +1180,7 @@ def test_filter_and(lmdb_version_store, df):
 @settings(deadline=None)
 @given(
     df=data_frames(
-        [
-            column("a", elements=numeric_type_strategies()),
-            column("b", elements=numeric_type_strategies()),
-        ],
+        [column("a", elements=numeric_type_strategies()), column("b", elements=numeric_type_strategies())],
         index=range_indexes(),
     )
 )
@@ -1293,10 +1196,7 @@ def test_filter_or(lmdb_version_store, df):
 @settings(deadline=None)
 @given(
     df=data_frames(
-        [
-            column("a", elements=numeric_type_strategies()),
-            column("b", elements=numeric_type_strategies()),
-        ],
+        [column("a", elements=numeric_type_strategies()), column("b", elements=numeric_type_strategies())],
         index=range_indexes(),
     )
 )
@@ -1341,10 +1241,7 @@ def test_filter_add_val_col(lmdb_version_store, df, val):
 @settings(deadline=None)
 @given(
     df=data_frames(
-        [
-            column("a", elements=numeric_type_strategies()),
-            column("b", elements=numeric_type_strategies()),
-        ],
+        [column("a", elements=numeric_type_strategies()), column("b", elements=numeric_type_strategies())],
         index=range_indexes(),
     )
 )
@@ -1388,10 +1285,7 @@ def test_filter_sub_val_col(lmdb_version_store, df, val):
 @settings(deadline=None)
 @given(
     df=data_frames(
-        [
-            column("a", elements=numeric_type_strategies()),
-            column("b", elements=numeric_type_strategies()),
-        ],
+        [column("a", elements=numeric_type_strategies()), column("b", elements=numeric_type_strategies())],
         index=range_indexes(),
     )
 )
@@ -1435,10 +1329,7 @@ def test_filter_times_val_col(lmdb_version_store, df, val):
 @settings(deadline=None)
 @given(
     df=data_frames(
-        [
-            column("a", elements=numeric_type_strategies()),
-            column("b", elements=numeric_type_strategies()),
-        ],
+        [column("a", elements=numeric_type_strategies()), column("b", elements=numeric_type_strategies())],
         index=range_indexes(),
     )
 )
@@ -1467,10 +1358,7 @@ def test_filter_divide_col_val(lmdb_version_store, df, val):
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
-    df=data_frames(
-        [column("a", elements=non_zero_numeric_type_strategies())],
-        index=range_indexes(),
-    ),
+    df=data_frames([column("a", elements=non_zero_numeric_type_strategies())], index=range_indexes()),
     val=numeric_type_strategies(),
 )
 def test_filter_divide_val_col(lmdb_version_store, df, val):
@@ -1485,10 +1373,7 @@ def test_filter_divide_val_col(lmdb_version_store, df, val):
 @settings(deadline=None)
 @given(
     df=data_frames(
-        [
-            column("a", elements=numeric_type_strategies()),
-            column("b", elements=non_zero_numeric_type_strategies()),
-        ],
+        [column("a", elements=numeric_type_strategies()), column("b", elements=non_zero_numeric_type_strategies())],
         index=range_indexes(),
     )
 )
@@ -1502,10 +1387,7 @@ def test_filter_divide_col_col(lmdb_version_store, df):
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
-@given(
-    df=data_frames([column("a", elements=string_strategy)], index=range_indexes()),
-    val=numeric_type_strategies(),
-)
+@given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()), val=numeric_type_strategies())
 def test_filter_arithmetic_string_number_col_val(lmdb_version_store, df, val):
     assume(not df.empty)
     q = QueryBuilder()
@@ -1522,10 +1404,7 @@ def test_filter_arithmetic_string_number_col_val(lmdb_version_store, df, val):
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
-@given(
-    df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
-    val=string_strategy,
-)
+@given(df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()), val=string_strategy)
 def test_filter_arithmetic_string_number_val_col(lmdb_version_store, df, val):
     assume(not df.empty)
     q = QueryBuilder()
@@ -1544,11 +1423,7 @@ def test_filter_arithmetic_string_number_val_col(lmdb_version_store, df, val):
 @settings(deadline=None)
 @given(
     df=data_frames(
-        [
-            column("a", elements=string_strategy),
-            column("b", elements=numeric_type_strategies()),
-        ],
-        index=range_indexes(),
+        [column("a", elements=string_strategy), column("b", elements=numeric_type_strategies())], index=range_indexes()
     )
 )
 def test_filter_arithmetic_string_number_col_col(lmdb_version_store, df):
@@ -1567,10 +1442,7 @@ def test_filter_arithmetic_string_number_col_col(lmdb_version_store, df):
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
-@given(
-    df=data_frames([column("a", elements=string_strategy)], index=range_indexes()),
-    val=string_strategy,
-)
+@given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()), val=string_strategy)
 def test_filter_arithmetic_string_string_col_val(lmdb_version_store, df, val):
     assume(not df.empty)
     q = QueryBuilder()
@@ -1587,10 +1459,7 @@ def test_filter_arithmetic_string_string_col_val(lmdb_version_store, df, val):
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
-@given(
-    df=data_frames([column("a", elements=string_strategy)], index=range_indexes()),
-    val=string_strategy,
-)
+@given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()), val=string_strategy)
 def test_filter_arithmetic_string_string_val_col(lmdb_version_store, df, val):
     assume(not df.empty)
     q = QueryBuilder()
@@ -1609,8 +1478,7 @@ def test_filter_arithmetic_string_string_val_col(lmdb_version_store, df, val):
 @settings(deadline=None)
 @given(
     df=data_frames(
-        [column("a", elements=string_strategy), column("b", elements=string_strategy)],
-        index=range_indexes(),
+        [column("a", elements=string_strategy), column("b", elements=string_strategy)], index=range_indexes()
     )
 )
 def test_filter_arithmetic_string_string_col_col(lmdb_version_store, df):
@@ -1643,10 +1511,7 @@ def test_filter_abs(lmdb_version_store, df, val):
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
-@given(
-    df=data_frames([column("a", elements=string_strategy)], index=range_indexes()),
-    val=string_strategy,
-)
+@given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()), val=string_strategy)
 def test_filter_abs_string(lmdb_version_store, df, val):
     assume(not df.empty)
     q = QueryBuilder()
@@ -1673,10 +1538,7 @@ def test_filter_neg(lmdb_version_store, df, val):
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
-@given(
-    df=data_frames([column("a", elements=string_strategy)], index=range_indexes()),
-    val=string_strategy,
-)
+@given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()), val=string_strategy)
 def test_filter_neg_string(lmdb_version_store, df, val):
     assume(not df.empty)
     q = QueryBuilder()
@@ -1787,11 +1649,7 @@ def test_filter_more_columns_than_fit_in_one_segment(lmdb_version_store_tiny_seg
     q = q[(q["a"] < q["c"]) | (q["a"] < q["b"]) | (q["b"] < q["c"])]
     pandas_query = "(a < c) | (a < b) | (b < c)"
     generic_filter_test(
-        lmdb_version_store_tiny_segment,
-        "test_filter_more_columns_than_fit_in_one_segment",
-        df,
-        q,
-        pandas_query,
+        lmdb_version_store_tiny_segment, "test_filter_more_columns_than_fit_in_one_segment", df, q, pandas_query
     )
 
 
@@ -1820,10 +1678,7 @@ def test_filter_with_column_slicing(lmdb_version_store_tiny_segment, df):
 
 
 def test_filter_column_slicing_different_segments(lmdb_version_store_tiny_segment):
-    df = DataFrame(
-        {"a": np.arange(0, 10), "b": np.arange(10, 20), "c": np.arange(20, 30)},
-        index=np.arange(10),
-    )
+    df = DataFrame({"a": np.arange(0, 10), "b": np.arange(10, 20), "c": np.arange(20, 30)}, index=np.arange(10))
     symbol = "test_filter_column_slicing_different_segments"
     lmdb_version_store_tiny_segment.write(symbol, df)
     # Filter on column c (in second column slice), but only display column a (in first column slice)
@@ -1855,8 +1710,7 @@ def test_filter_with_multi_index(lmdb_version_store):
     arr1 = [dt1, dt1, dt2, dt2]
     arr2 = [0, 1, 0, 1]
     df = DataFrame(
-        data={"a": np.arange(10, 14)},
-        index=pd.MultiIndex.from_arrays([arr1, arr2], names=["datetime", "level"]),
+        data={"a": np.arange(10, 14)}, index=pd.MultiIndex.from_arrays([arr1, arr2], names=["datetime", "level"])
     )
     q = QueryBuilder()
     q = q[(q["a"] == 11) | (q["a"] == 13)]
@@ -1870,8 +1724,7 @@ def test_filter_on_multi_index(lmdb_version_store):
     arr1 = [dt1, dt1, dt2, dt2]
     arr2 = [0, 1, 0, 1]
     df = DataFrame(
-        data={"a": np.arange(10, 14)},
-        index=pd.MultiIndex.from_arrays([arr1, arr2], names=["datetime", "level"]),
+        data={"a": np.arange(10, 14)}, index=pd.MultiIndex.from_arrays([arr1, arr2], names=["datetime", "level"])
     )
     q = QueryBuilder()
     q = q[(q["level"] == 1)]
@@ -1905,13 +1758,7 @@ def test_filter_complex_expression(lmdb_version_store_tiny_segment):
     q = QueryBuilder()
     q = q[(((q["a"] * q["b"]) / 5) < (0.7 * q["c"])) & (q["b"] != 12)]
     pandas_query = "(((a * b) / 5) < (0.7 * c)) & (b != 12)"
-    generic_filter_test(
-        lmdb_version_store_tiny_segment,
-        "test_filter_complex_expression",
-        df,
-        q,
-        pandas_query,
-    )
+    generic_filter_test(lmdb_version_store_tiny_segment, "test_filter_complex_expression", df, q, pandas_query)
 
 
 def test_filter_string_backslash(lmdb_version_store):
@@ -1938,11 +1785,8 @@ def test_filter_string_single_quote(lmdb_version_store):
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
-@given(
-    df=data_frames([column("a", elements=string_strategy)], index=range_indexes()),
-    val=string_strategy,
-)
-@AZURE_TESTS_MARK
+@given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()), val=string_strategy)
+@pytest.mark.skipif(MACOS_CONDA_BUILD, reason="This test might segfault on MacOS conda-forge builds. GH#1048")
 def test_filter_string_equals_col_val(lmdb_version_store, df, val):
     assume(not df.empty)
     q = QueryBuilder()
@@ -1953,11 +1797,8 @@ def test_filter_string_equals_col_val(lmdb_version_store, df, val):
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
-@given(
-    df=data_frames([column("a", elements=string_strategy)], index=range_indexes()),
-    val=string_strategy,
-)
-@AZURE_TESTS_MARK
+@given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()), val=string_strategy)
+@pytest.mark.skipif(MACOS_CONDA_BUILD, reason="This test might segfault on MacOS conda-forge builds. GH#1048")
 def test_filter_string_equals_val_col(lmdb_version_store, df, val):
     assume(not df.empty)
     q = QueryBuilder()
@@ -1970,11 +1811,10 @@ def test_filter_string_equals_val_col(lmdb_version_store, df, val):
 @settings(deadline=None)
 @given(
     df=data_frames(
-        [column("a", elements=string_strategy), column("b", elements=string_strategy)],
-        index=range_indexes(),
+        [column("a", elements=string_strategy), column("b", elements=string_strategy)], index=range_indexes()
     )
 )
-@AZURE_TESTS_MARK
+@pytest.mark.skipif(MACOS_CONDA_BUILD, reason="This test might segfault on MacOS conda-forge builds. GH#1048")
 def test_filter_string_equals_col_col(lmdb_version_store, df):
     assume(not df.empty)
     q = QueryBuilder()
@@ -1985,11 +1825,8 @@ def test_filter_string_equals_col_col(lmdb_version_store, df):
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
-@given(
-    df=data_frames([column("a", elements=string_strategy)], index=range_indexes()),
-    val=string_strategy,
-)
-@AZURE_TESTS_MARK
+@given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()), val=string_strategy)
+@pytest.mark.skipif(MACOS_CONDA_BUILD, reason="This test might segfault on MacOS conda-forge builds. GH#1048")
 def test_filter_string_not_equals_col_val(lmdb_version_store, df, val):
     assume(not df.empty)
     q = QueryBuilder()
@@ -2000,11 +1837,8 @@ def test_filter_string_not_equals_col_val(lmdb_version_store, df, val):
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
-@given(
-    df=data_frames([column("a", elements=string_strategy)], index=range_indexes()),
-    val=string_strategy,
-)
-@AZURE_TESTS_MARK
+@given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()), val=string_strategy)
+@pytest.mark.skipif(MACOS_CONDA_BUILD, reason="This test might segfault on MacOS conda-forge builds. GH#1048")
 def test_filter_string_not_equals_val_col(lmdb_version_store, df, val):
     assume(not df.empty)
     q = QueryBuilder()
@@ -2017,11 +1851,10 @@ def test_filter_string_not_equals_val_col(lmdb_version_store, df, val):
 @settings(deadline=None)
 @given(
     df=data_frames(
-        [column("a", elements=string_strategy), column("b", elements=string_strategy)],
-        index=range_indexes(),
+        [column("a", elements=string_strategy), column("b", elements=string_strategy)], index=range_indexes()
     )
 )
-@AZURE_TESTS_MARK
+@pytest.mark.skipif(MACOS_CONDA_BUILD, reason="This test might segfault on MacOS conda-forge builds. GH#1048")
 def test_filter_string_not_equals_col_col(lmdb_version_store, df):
     assume(not df.empty)
     q = QueryBuilder()
@@ -2045,13 +1878,7 @@ def test_filter_string_less_than_equal(lmdb_version_store):
     q = q[q["a"] <= "row2"]
     pandas_query = "a <= 'row2'"
     with pytest.raises(InternalException) as e_info:
-        generic_filter_test(
-            lmdb_version_store,
-            "test_filter_string_less_than_equal",
-            df,
-            q,
-            pandas_query,
-        )
+        generic_filter_test(lmdb_version_store, "test_filter_string_less_than_equal", df, q, pandas_query)
 
 
 def test_filter_string_greater_than(lmdb_version_store):
@@ -2069,13 +1896,7 @@ def test_filter_string_greater_than_equal(lmdb_version_store):
     q = q[q["a"] >= "row2"]
     pandas_query = "a >= 'row2'"
     with pytest.raises(InternalException) as e_info:
-        generic_filter_test(
-            lmdb_version_store,
-            "test_filter_string_greater_than_equal",
-            df,
-            q,
-            pandas_query,
-        )
+        generic_filter_test(lmdb_version_store, "test_filter_string_greater_than_equal", df, q, pandas_query)
 
 
 # TODO: Replace with np.array_equal with equal_nan argument (added in 1.19.0)
@@ -2137,30 +1958,8 @@ def test_filter_string_nans_col_col(lmdb_version_store):
     # Compare all combinations of string, None, np.nan, and math.nan to one another
     df = pd.DataFrame(
         {
-            "a": [
-                "row1",
-                "row2",
-                "row3",
-                "row4",
-                None,
-                None,
-                None,
-                np.nan,
-                np.nan,
-                math.nan,
-            ],
-            "b": [
-                "row1",
-                None,
-                np.nan,
-                math.nan,
-                None,
-                np.nan,
-                math.nan,
-                np.nan,
-                math.nan,
-                math.nan,
-            ],
+            "a": ["row1", "row2", "row3", "row4", None, None, None, np.nan, np.nan, math.nan],
+            "b": ["row1", None, np.nan, math.nan, None, np.nan, math.nan, np.nan, math.nan, math.nan],
         },
         index=np.arange(10),
     )

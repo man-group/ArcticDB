@@ -8,9 +8,9 @@ on:
       python3:           {default: -1, type: number, description: Python 3 minor version}
       arcticdb_version:  {default: "", type: string, description: The version of ArcticDB that will be installed and used for seed/verify }
       # TODO: Maybe we should add these as GitHub variables
-      bucket:            {default: 'arcticdb-ci-test-bucket-01', type: string, description: The name of the S3 bucket that we will test against}
-      endpoint:          {default: 's3.eu-west-2.amazonaws.com', type: string, description: The address of the S3 endpoint}
-      region:            {default: 'eu-west-2', type: string, description: The S3 region of the bucket}
+      bucket:            {default: 'arcticdb-ci-test-bucket-02', type: string, description: The name of the S3 bucket that we will test against}
+      endpoint:          {default: 's3.eu-west-1.amazonaws.com', type: string, description: The address of the S3 endpoint}
+      region:            {default: 'eu-west-1', type: string, description: The S3 region of the bucket}
       clear:             {default: 0, type: number, description: Controls wheather we will clear the libraries in the versions stores that we test against}      
 jobs:
   setup:
@@ -53,7 +53,7 @@ jobs:
       - name: Install latest release
         if: inputs.arcticdb_version == 'latest'
         run: |
-          pip install arcticdb
+          pip install pytest arcticdb
       
       # Currently, the oldest "supported" release is 3.0.0
       # We use this version to test forwards/barwards compatibility 
@@ -61,7 +61,7 @@ jobs:
       # Change this value, if we need to support a newer one in the future
       - name: Install oldest supported release
         run: |
-          pip install arcticdb=="3.0.0"
+          pip install pytest arcticdb=="3.0.0"
 
       - name: Set persistent storage variables
         uses: ./.github/actions/set_persistent_storage_env_vars
@@ -96,7 +96,7 @@ jobs:
 
       - name: Install latest release
         run: |
-          pip install arcticdb
+          pip install pytest arcticdb
 
       - name: Set persistent storage variables
         uses: ./.github/actions/set_persistent_storage_env_vars

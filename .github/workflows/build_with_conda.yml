@@ -65,7 +65,7 @@ jobs:
         shell: bash -l {0}
         run: |
           cd cpp/out/linux-conda-release-build/
-          make test
+          CTEST_OUTPUT_ON_FAILURE=1 make test
 
       - name: Install npm # Linux github runner image does not come with npm
         uses: actions/setup-node@v3.3.0
@@ -78,7 +78,7 @@ jobs:
           npm install -g azurite
           cd python
           export ARCTICDB_RAND_SEED=$RANDOM
-          python -m pytest tests
+          python -m pytest -n ${{ steps.cpu-cores.outputs.count }} tests
         env:
           ARCTICDB_USING_CONDA: 1
 
@@ -141,7 +141,7 @@ jobs:
         shell: bash -l {0}
         run: |
           cd cpp/out/darwin-conda-release-build/
-          make test
+          CTEST_OUTPUT_ON_FAILURE=1 make test
 
       - name: Install npm
         uses: actions/setup-node@v3.3.0

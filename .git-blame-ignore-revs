@@ -1,0 +1,8 @@
+# .git-blame-ignore-revs
+
+# Moving implementation from column.hpp to column.cpp
+# Reordering/removing some inclusions
+801cf4b6f0f9ec0a997311fbdc14639537d3bbb6
+
+# Moving implementation from data_error.hpp to data_error.cpp
+9e10e4b129eadba325db50ec1c683f3aeca1d6ea

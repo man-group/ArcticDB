@@ -21,13 +21,21 @@ void TypeHandlerRegistry::init() {
 std::shared_ptr<TypeHandlerRegistry> TypeHandlerRegistry::instance_;
 std::once_flag TypeHandlerRegistry::init_flag_;
 
-std::shared_ptr<TypeHandler> TypeHandlerRegistry::get_handler(entity::DataType data_type) const {
-    auto it = handlers_.find(data_type);
+std::shared_ptr<TypeHandler> TypeHandlerRegistry::get_handler(const util::TypeDescriptor& type_descriptor) const {
+    auto it = handlers_.find(type_descriptor);
     return it == std::end(handlers_) ? std::shared_ptr<TypeHandler>{} : it->second;
 }
 
-void TypeHandlerRegistry::register_handler(entity::DataType data_type, TypeHandler&& handler) {
-     handlers_.try_emplace(data_type, std::make_shared<TypeHandler>(std::move(handler)));
+void TypeHandlerRegistry::register_handler(const util::TypeDescriptor& type_descriptor, TypeHandler&& handler) {
+     handlers_.try_emplace(type_descriptor, std::make_shared<TypeHandler>(std::move(handler)));
 }
 
-} //namespace arcticc
+size_t TypeHandlerRegistry::Hasher::operator()(const util::TypeDescriptor descriptor) const {
+    static_assert(sizeof(descriptor) == sizeof(uint16_t), "Cannot compute util::TypeDescriptor's hash. The size is wrong.");
+    static_assert(sizeof(decltype(descriptor.data_type())) == 1);
+    static_assert(sizeof(decltype(descriptor.dimension())) == 1);
+    const std::hash<uint16_t> hasher;
+    return hasher(uint16_t(descriptor.data_type()) << 8 | uint16_t(descriptor.dimension()));
+}
+
+} //namespace arcticdb

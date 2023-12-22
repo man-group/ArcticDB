@@ -6,6 +6,8 @@
  */
 
 #include <gtest/gtest.h>
+
+#include <array>
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/util/cursored_buffer.hpp>
 

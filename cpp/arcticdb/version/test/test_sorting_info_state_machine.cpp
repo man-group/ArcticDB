@@ -7,13 +7,8 @@
 
 #include <gtest/gtest.h>
 
-#include <bitmagic/bm.h>
-#include <bitmagic/bmserial.h>
-#include <arcticdb/util/buffer.hpp>
-#include <arcticdb/util/bitset.hpp>
-
-#include <arcticdb/util/test/generators.hpp>
-#include <arcticdb/version/version_store_api.hpp>
+#include <arcticdb/entity/types.hpp>
+#include <arcticdb/version/version_utils.hpp>
 
 using namespace arcticdb;
 constexpr auto UNKNOWN = SortedValue::UNKNOWN;

@@ -8,7 +8,6 @@
 #pragma once
 
 #include <string>
-#include <string_view>
 #include <arcticdb/util/preconditions.hpp>
 #include <limits>
 #include <arcticdb/entity/types.hpp>
@@ -16,10 +15,8 @@
 #include <arcticdb/entity/ref_key.hpp>
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/stream/index.hpp>
-#include <arcticdb/util/cursor.hpp>
 #include <arcticdb/util/buffer.hpp>
 #include <arcticdb/util/cursored_buffer.hpp>
-#include <arcticdb/util/variant.hpp>
 
 namespace arcticdb::entity {
 

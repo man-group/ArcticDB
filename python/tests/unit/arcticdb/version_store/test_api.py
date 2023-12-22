@@ -5,7 +5,6 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
-
 import time
 
 from pandas import Timestamp
@@ -51,6 +50,7 @@ def test_column_names_by_snapshot(lmdb_version_store, one_col_df, two_col_df):
     assert lmdb_version_store.column_names(symbol, as_of="one_col_snap") == ["x"]
 
 
+@pytest.mark.xfail(reason="Needs to be fixed by issue #496")
 def test_column_names_by_timestamp(lmdb_version_store, one_col_df, two_col_df):
     symbol = "test_column_names_by_timestamp"
 

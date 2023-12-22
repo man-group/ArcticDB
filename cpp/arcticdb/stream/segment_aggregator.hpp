@@ -10,6 +10,7 @@
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/util/format_date.hpp>
+#include <arcticdb/util/memory_tracing.hpp>
 #include <arcticdb/pipeline/filter_segment.hpp>
 #include <arcticdb/stream/merge_utils.hpp>
 

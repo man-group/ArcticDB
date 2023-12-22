@@ -202,3 +202,12 @@ def test_string_encoding_error_message(lmdb_version_store_tiny_segment):
         lib.update("sym_update", df, dynamic_strings=True)
     exception_message = str(e.value)
     assert all(string in exception_message for string in ["broken_column", "row 2", "float"])
+
+
+def test_write_dynamic_simple(lmdb_version_store_v2):
+    row = pd.Series(["Aaba", "A", "B", "C", "Baca", "CABA", "dog", "cat", "here is a very long one"])
+    df = pd.DataFrame({"x": row})
+    lmdb_version_store_v2.write("strings", df, dynamic_strings=True)
+    vit = lmdb_version_store_v2.read("strings")
+    assert_frame_equal(df, vit.data)
+

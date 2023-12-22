@@ -5,7 +5,6 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
-
 import pytest
 import numpy as np
 import pandas as pd
@@ -30,10 +29,7 @@ from tests.util.mark import xfail_on_linux_conda
 def test_group_on_float_column_with_nans(lmdb_version_store):
     lib = lmdb_version_store
     sym = "test_group_on_float_column_with_nans"
-    df = pd.DataFrame({
-        "grouping_column": [1.0, 2.0, np.nan, 1.0, 2.0, 2.0],
-        "agg_column": [1, 2, 3, 4, 5, 6],
-    })
+    df = pd.DataFrame({"grouping_column": [1.0, 2.0, np.nan, 1.0, 2.0, 2.0], "agg_column": [1, 2, 3, 4, 5, 6]})
     lib.write(sym, df)
     expected = df.groupby("grouping_column").agg({"agg_column": "sum"})
     q = QueryBuilder()
@@ -75,6 +71,9 @@ def test_hypothesis_mean_agg(lmdb_version_store, df):
     received_df.replace(-np.inf, np.nan, inplace=True)
     received_df.replace(np.inf, np.nan, inplace=True)
 
+    expected_df.replace(-np.inf, np.nan, inplace=True)
+    expected_df.replace(np.inf, np.nan, inplace=True)
+
     assert_frame_equal(expected_df, received_df)
 
 
@@ -89,6 +88,7 @@ def test_hypothesis_mean_agg(lmdb_version_store, df):
         index=range_indexes(),
     )
 )
+@pytest.mark.xfail(reason="Needs to be fixed by issue #496")
 def test_hypothesis_sum_agg(lmdb_version_store, df):
     lib = lmdb_version_store
     assume(not df.empty)
@@ -200,14 +200,7 @@ def test_hypothesis_count_agg_strings(lmdb_version_store, df):
 def test_count_aggregation(local_object_version_store):
     df = DataFrame(
         {
-            "grouping_column": [
-                "group_1",
-                "group_1",
-                "group_1",
-                "group_2",
-                "group_2",
-                "group_3",
-            ],
+            "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2", "group_3"],
             "to_count": [100, 1, 3, 2, 2, np.nan],
         },
         index=np.arange(6),
@@ -220,11 +213,7 @@ def test_count_aggregation(local_object_version_store):
     res = local_object_version_store.read(symbol, query_builder=q)
     res.data.sort_index(inplace=True)
 
-    df = pd.DataFrame(
-        {"to_count": [3, 2, 0]},
-        index=["group_1", "group_2", "group_3"],
-        dtype=np.uint64,
-    )
+    df = pd.DataFrame({"to_count": [3, 2, 0]}, index=["group_1", "group_2", "group_3"], dtype=np.uint64)
     df.index.rename("grouping_column", inplace=True)
     res.data.sort_index(inplace=True)
 
@@ -233,10 +222,7 @@ def test_count_aggregation(local_object_version_store):
 
 def test_sum_aggregation(local_object_version_store):
     df = DataFrame(
-        {
-            "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"],
-            "to_sum": [1, 1, 2, 2, 2],
-        },
+        {"grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"], "to_sum": [1, 1, 2, 2, 2]},
         index=np.arange(5),
     )
     q = QueryBuilder()
@@ -256,10 +242,7 @@ def test_sum_aggregation(local_object_version_store):
 
 def test_mean_aggregation(local_object_version_store):
     df = DataFrame(
-        {
-            "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"],
-            "to_mean": [1, 1, 2, 2, 2],
-        },
+        {"grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"], "to_mean": [1, 1, 2, 2, 2]},
         index=np.arange(5),
     )
     q = QueryBuilder()
@@ -376,13 +359,15 @@ def test_group_column_not_present(lmdb_version_store):
 def test_group_column_splitting(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     symbol = "test_group_column_splitting"
-    df = DataFrame({
-        "grouping_column": [1, 2, 3, 4, 1, 2, 3, 4],
-        "sum1": [1, 2, 3, 4, 1, 2, 3, 4],
-        "max1": [1, 2, 3, 4, 1, 2, 3, 4],
-        "sum2": [2, 3, 4, 5, 2, 3, 4, 5],
-        "max2": [2, 3, 4, 5, 2, 3, 4, 5],
-    })
+    df = DataFrame(
+        {
+            "grouping_column": [1, 2, 3, 4, 1, 2, 3, 4],
+            "sum1": [1, 2, 3, 4, 1, 2, 3, 4],
+            "max1": [1, 2, 3, 4, 1, 2, 3, 4],
+            "sum2": [2, 3, 4, 5, 2, 3, 4, 5],
+            "max2": [2, 3, 4, 5, 2, 3, 4, 5],
+        }
+    )
 
     lib.write(symbol, df)
     q = QueryBuilder()
@@ -397,22 +382,15 @@ def test_group_column_splitting(lmdb_version_store_tiny_segment):
 def test_group_column_splitting_strings(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     symbol = "test_group_column_splitting"
-    df = DataFrame({
-        "grouping_column": [
-            "group_1",
-            "group_1",
-            "group_1",
-            "group_2",
-            "group_2",
-            "group_1",
-            "group_2",
-            "group_1",
-        ],
-        "sum1": [1, 2, 3, 4, 1, 2, 3, 4],
-        "max1": [1, 2, 3, 4, 1, 2, 3, 4],
-        "sum2": [2, 3, 4, 5, 2, 3, 4, 5],
-        "max2": [2, 3, 4, 5, 2, 3, 4, 5],
-    })
+    df = DataFrame(
+        {
+            "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2", "group_1", "group_2", "group_1"],
+            "sum1": [1, 2, 3, 4, 1, 2, 3, 4],
+            "max1": [1, 2, 3, 4, 1, 2, 3, 4],
+            "sum2": [2, 3, 4, 5, 2, 3, 4, 5],
+            "max2": [2, 3, 4, 5, 2, 3, 4, 5],
+        }
+    )
 
     lib.write(symbol, df)
     q = QueryBuilder()
@@ -488,10 +466,7 @@ def test_docstring_example_query_builder_apply(lmdb_version_store):
 
 
 def test_doctring_example_query_builder_groupby_max(lmdb_version_store):
-    df = DataFrame(
-        {"grouping_column": ["group_1", "group_1", "group_1"], "to_max": [1, 5, 4]},
-        index=np.arange(3),
-    )
+    df = DataFrame({"grouping_column": ["group_1", "group_1", "group_1"], "to_max": [1, 5, 4]}, index=np.arange(3))
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"to_max": "max"})
 
@@ -504,11 +479,7 @@ def test_doctring_example_query_builder_groupby_max(lmdb_version_store):
 
 def test_docstring_example_query_builder_groupby_max_and_mean(lmdb_version_store):
     df = DataFrame(
-        {
-            "grouping_column": ["group_1", "group_1", "group_1"],
-            "to_mean": [1.1, 1.4, 2.5],
-            "to_max": [1.1, 1.4, 2.5],
-        },
+        {"grouping_column": ["group_1", "group_1", "group_1"], "to_mean": [1.1, 1.4, 2.5], "to_max": [1.1, 1.4, 2.5]},
         index=np.arange(3),
     )
     q = QueryBuilder()

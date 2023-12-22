@@ -21,21 +21,22 @@
     // Customizable commands for building the project.
     // See asv.conf.json documentation.
     // To build the package using pyproject.toml (PEP518), uncomment the following lines
-    // "build_command": [
-    //     "python -m pip install build",
-    //     "python -m build",
-    //     "PIP_NO_BUILD_ISOLATION=false python -mpip wheel --no-deps --no-index -w {build_cache_dir} {build_dir}"
-    // ],
-    // To build the package using setuptools and a setup.py file, uncomment the following lines
     "build_command": [
+        //"python -m pip install build",
+        //"python -m build --wheel",
+        "PIP_NO_BUILD_ISOLATION=false python -m pip wheel --no-deps --no-index -w {build_cache_dir} {build_dir}"
+    ],
+    // To build the package using setuptools and a setup.py file, uncomment the following lines
+    //"build_command": [
         // "python setup.py develop",
         // "PIP_NO_BUILD_ISOLATION=false python -mpip wheel --no-deps --no-index -w {build_cache_dir} {build_dir}"
-    ],
+    //],
 
     // Customizable commands for installing and uninstalling the project.
     // See asv.conf.json documentation.
     "install_command": [
-        "python setup.py develop"
+        "python -m pip install {wheel_file}",
+        "python -m pip install arcticdb[Testing]" // Note: change this if the "matrix" feature below is used
     ],
     // "uninstall_command": ["return-code=any python -mpip uninstall -y {project}"],
 
@@ -98,14 +99,6 @@
     //
     "matrix": {
         "req": {
-            "numpy": [""],
-            "pandas": [""],
-            "attrs": [""],
-            "dataclasses": [""],
-            "protobuf": [""],
-            "msgpack": [""],
-            "packaging": [""],
-            "pymongo": [""],
             // "six": ["", null],  // test with and without six installed
             // "pip+emcee": [""]   // emcee is only available for install with pip.
         },

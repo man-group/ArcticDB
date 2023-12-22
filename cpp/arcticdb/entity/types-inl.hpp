@@ -39,8 +39,10 @@ auto visit_dim(DataType dt, Callable &&c) {
         DT_CASE(UTF_FIXED64)
         DT_CASE(UTF_DYNAMIC64)
         DT_CASE(EMPTYVAL)
+        DT_CASE(PYBOOL8)
+        DT_CASE(PYBOOL64)
 #undef DT_CASE
-    default: util::raise_rte("Invalid dtype '{}' in visit dim", datatype_to_str(dt));
+        default: util::raise_rte("Invalid dtype '{}' in visit dim", datatype_to_str(dt));
     }
 }
 
@@ -66,6 +68,7 @@ auto visit_type(DataType dt, Callable &&c) {
         DT_CASE(UTF_FIXED64)
         DT_CASE(UTF_DYNAMIC64)
         DT_CASE(EMPTYVAL)
+        DT_CASE(PYBOOL8)
 #undef DT_CASE
     default: util::raise_rte("Invalid dtype '{}' in visit type", datatype_to_str(dt));
     }
@@ -76,13 +79,10 @@ auto visit_type(DataType dt, Callable &&c) {
 template<class Callable>
 auto TypeDescriptor::visit_tag(Callable &&callable) const {
     switch (dimension_) {
-#define DIM_CASE(__D__) case Dimension::__D__: \
-    return details::visit_dim<DimensionTag<Dimension::__D__>>(data_type_, callable)
-        DIM_CASE(Dim0);
-        DIM_CASE(Dim1);
-        DIM_CASE(Dim2);
-#undef DIM_CASE
-        default:throw std::invalid_argument(fmt::format("Invalid dimension %d", static_cast<uint32_t>(dimension_)));
+        case Dimension::Dim0: return details::visit_dim<DimensionTag<Dimension::Dim0>>(data_type_, callable);
+        case Dimension::Dim1: return details::visit_dim<DimensionTag<Dimension::Dim1>>(data_type_, callable);
+        case Dimension::Dim2: return details::visit_dim<DimensionTag<Dimension::Dim2>>(data_type_, callable);
+        default: throw std::invalid_argument(fmt::format("Invalid dimension %d", static_cast<uint32_t>(dimension_)));
     }
 }
 

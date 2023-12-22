@@ -76,7 +76,7 @@ struct ReadQuery {
 };
 
 struct SnapshotVersionQuery {
-    std::string name_;
+    SnapshotId name_;
 };
 
 struct TimestampVersionQuery {
