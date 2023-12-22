@@ -670,6 +670,7 @@ private:
     void set_sparse_bit_for_row(size_t sparse_location);
     bool empty() const;
     void regenerate_offsets() const;
+    void physical_sort_external(std::vector<uint32_t> &&sorted_pos, size_t physical_rows);
 
     [[nodiscard]] util::BitMagic& sparse_map();
     const util::BitMagic& sparse_map() const;
