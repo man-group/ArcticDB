@@ -13,6 +13,11 @@ using namespace arcticdb::stream;
 
 static const StreamId compaction_id {CompactionId};
 
+auto warning_threshold() {
+    return 2 * static_cast<size_t>(ConfigsMap::instance()->get_int("SymbolList.MaxDelta")
+            .value_or( ConfigsMap::instance()->get_int("SymbolList.MaxCompactionThreshold", 700)));
+}
+
 struct SymbolList::LoadResult {
     mutable KeyVector symbol_list_keys;
     /** The last CompactionId key in symbol_list_keys, if any. */
@@ -46,7 +51,7 @@ SymbolList::CollectionType SymbolList::load(const std::shared_ptr<Store>& store,
     const LoadResult load_result = ExponentialBackoff<std::runtime_error>(100, 2000)
             .go([this, &store]() { return attempt_load(store); });
 
-    if (!no_compaction && (load_result.symbol_list_keys.size() > max_delta_ || !load_result.maybe_last_compaction)) {
+    if (!no_compaction && (meets_compaction_threshold(load_result.symbol_list_keys.size()) || !load_result.maybe_last_compaction)) {
         SYMBOL_LIST_RUNTIME_LOG("Compaction necessary. Obtaining lock...");
         try {
             if (StorageLock lock{CompactionLockName}; lock.try_lock(store)) {
@@ -81,8 +86,12 @@ bool SymbolList::can_update_symbol_list(const std::shared_ptr<Store>& store,
         store->iterate_type(KeyType::SYMBOL_LIST,
                 [&found_last, &has_newer, &last_compaction_key = *maybe_last_compaction.value()](auto&& key) {
                     auto atom = to_atom(key);
-                    if (atom == last_compaction_key) found_last = true;
-                    if (atom.creation_ts() > last_compaction_key.creation_ts()) has_newer = true;
+                    if (atom == last_compaction_key) {
+                        found_last = true;
+                    }
+                    if (atom.creation_ts() > last_compaction_key.creation_ts()) {
+                        has_newer = true;
+                    }
             }, std::get<std::string>(compaction_id));
     } else {
         // Version keys source
@@ -123,7 +132,7 @@ bool SymbolList::can_update_symbol_list(const std::shared_ptr<Store>& store,
             auto id = variant_key_id(key);
             stream_ids.push_back(id);
 
-            if (stream_ids.size() == this->max_delta_ * 2 && !warned_expected_slowdown_) {
+            if (stream_ids.size() == warning_threshold() && !warned_expected_slowdown_) {
                 log::version().warn(
                         "No compacted symbol list cache found. "
                         "`list_symbols` may take longer than expected. \n\n"
@@ -248,7 +257,7 @@ bool SymbolList::can_update_symbol_list(const std::shared_ptr<Store>& store,
             if(atom_key.id() != compaction_id) {
                 uncompacted_keys_found++;
             }
-            if (uncompacted_keys_found == this->max_delta_ * 2 && !warned_expected_slowdown_) {
+            if (uncompacted_keys_found == warning_threshold() && !warned_expected_slowdown_) {
                 log::version().warn(
                         "`list_symbols` may take longer than expected as there have been many modifications since `list_symbols` was last called. \n\n"
                         "See here for more information: https://docs.arcticdb.io/technical/on_disk_storage/#symbol-list-caching\n\n"
@@ -282,7 +291,7 @@ bool SymbolList::can_update_symbol_list(const std::shared_ptr<Store>& store,
         return store->remove_keys(variant_keys);
     }
 
-std::optional<SymbolList::KeyVectorItr> SymbolList::last_compaction(const KeyVector& keys) {
+    std::optional<SymbolList::KeyVectorItr> SymbolList::last_compaction(const KeyVector& keys) {
         auto pos = std::find_if(keys.rbegin(), keys.rend(), [] (const auto& key) {
             return key.id() == compaction_id;
         }) ;
@@ -292,6 +301,37 @@ std::optional<SymbolList::KeyVectorItr> SymbolList::last_compaction(const KeyVec
         } else {
             return { (pos + 1).base() }; // reverse_iterator -> forward itr has an offset of 1 per docs
         }
+    }
+
+    bool SymbolList::meets_compaction_threshold(uint64_t n_keys) const {
+        if (auto maybe_fixed = ConfigsMap::instance()->get_int("SymbolList.MaxDelta")) {
+            util::check(maybe_fixed > 0, "Bad configuration, SymbolList.MaxDelta=[{}] <= 0", maybe_fixed.value());
+            auto fixed = static_cast<uint64_t>(maybe_fixed.value());
+            auto result = n_keys > fixed;
+            log::version().debug("Symbol list: Fixed draw for compaction. needs_compaction=[{}] n_keys=[{}], MaxDelta=[{}]",
+                                 result, n_keys, fixed);
+            return result;
+        }
+
+        int64_t min = ConfigsMap::instance()->get_int("SymbolList.MinCompactionThreshold", 300);
+        int64_t max = ConfigsMap::instance()->get_int("SymbolList.MaxCompactionThreshold", 700);
+        util::check(max >= min, "Bad configuration, min compaction threshold=[{}] > max compaction threshold=[{}]", min, max);
+        util::check(min >= 0, "Bad configuration, min compaction threshold=[{}] < 0", min);
+
+        uint32_t seed;
+        if (seed_ == 0) {
+            seed = std::random_device{}();
+        } else {
+            seed = seed_;
+        }
+
+        std::mt19937 gen = std::mt19937{seed};
+        std::uniform_int_distribution<int64_t> distrib(min, max);
+        auto draw = distrib(gen);
+        auto result = n_keys > static_cast<uint64_t>(draw);
+        log::version().debug("Symbol list: Random draw for compaction. needs_compaction=[{}] n_keys=[{}], draw=[{}]",
+                             result, n_keys, draw);
+        return result;
     }
 
 } //namespace arcticdb
