@@ -49,14 +49,14 @@ class SymbolList {
     using KeyVectorItr = KeyVector::const_iterator;
 
     StreamId type_holder_;
-    uint64_t max_delta_ = 0;
+    uint32_t seed_;
     std::shared_ptr<VersionMap> version_map_;
     std::atomic<bool> warned_expected_slowdown_ = false;
 
   public:
-    explicit SymbolList(std::shared_ptr<VersionMap> version_map, StreamId type_indicator = StringId()) :
+    explicit SymbolList(std::shared_ptr<VersionMap> version_map, StreamId type_indicator = StringId(), uint32_t seed = 0) :
         type_holder_(std::move(type_indicator)),
-        max_delta_(ConfigsMap::instance()->get_int("SymbolList.MaxDelta", 500)),
+        seed_(seed),
         version_map_(std::move(version_map)){
     }
 
@@ -127,6 +127,14 @@ private:
     delete_keys(const std::shared_ptr<Store>& store, KeyVector&& to_remove, const AtomKey& exclude);
 
     static auto last_compaction(const KeyVector& keys) -> std::optional<KeyVectorItr>;
+
+    /**
+     * How many uncompacted keys will we accept in the cache without triggering a compaction?
+     *
+     * Includes a random element to reduce the chance that distinct processes calling `list_symbols` at the same time
+     * as each other will a) race or b) storm the storage with listing operations.
+     */
+    [[nodiscard]] bool meets_compaction_threshold(uint64_t n_keys) const;
 
     inline StreamDescriptor symbol_stream_descriptor(const StreamId& stream_id) {
         auto data_type = std::holds_alternative<StringId>(type_holder_) ? DataType::ASCII_DYNAMIC64 : DataType::UINT64;
