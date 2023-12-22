@@ -220,64 +220,60 @@ void Column::append(const Column& other, position_t at_row) {
                 row_count(), sparse_map().count());
 }
 
+void Column::physical_sort_external(std::vector<uint32_t> &&sorted_pos, size_t physical_rows) {
+    auto& buffer = data_.buffer();
+    type().visit_tag([&buffer, &sorted_pos, &physical_rows] (auto tdt) {
+        using TagType = decltype(tdt);
+        using RawType = typename TagType::DataTypeTag::raw_type;
+
+        for (auto i=0u; i<physical_rows; ++i){
+            if (i != sorted_pos[i]){
+                auto& current = buffer.cast<RawType>(i);
+                // Amortized O(1) complexity, because each iteration places an element where it's supposed to go
+                // and once an element is in it's sorted position we never move it.
+                while (i != sorted_pos[i]){
+                    auto move_to = sorted_pos[i];
+                    std::swap(sorted_pos[i], sorted_pos[move_to]);
+                    std::swap(current, buffer.cast<RawType>(move_to));
+                }
+            }
+        }
+    });
+}
+
 void Column::sort_external(const JiveTable& jive_table) {
     auto rows = row_count();
     if(!is_sparse()) {
         auto sorted_pos = jive_table.sorted_pos_;
-        auto& buffer = data_.buffer();
-        type().visit_tag([&buffer, &sorted_pos, &rows] (auto tdt) {
-            using TagType = decltype(tdt);
-            using RawType = typename TagType::DataTypeTag::raw_type;
-
-            for (auto i=0u; i<rows; ++i){
-                if (i != sorted_pos[i]){
-                    auto& current = buffer.cast<RawType>(i);
-                    // Amortized O(1) complexity, because each iteration places an element where it's supposed to go
-                    // and once an element is in it's sorted position we never move it.
-                    while (i != sorted_pos[i]){
-                        auto move_to = sorted_pos[i];
-                        std::swap(sorted_pos[i], sorted_pos[move_to]);
-                        std::swap(current, buffer.cast<RawType>(move_to));
-                    }
-                }
-            }
-        });
+        physical_sort_external(std::move(sorted_pos), rows);
     } else {
         const auto& sm = sparse_map();
-
         bm::bvector<>::enumerator en = sm.first();
         bm::bvector<>::enumerator en_end = sm.end();
         util::BitMagic new_map;
-
-        while (en < en_end) {
-            auto bv_index = *en;
-            new_map.set(jive_table.sorted_pos_[bv_index]);
-            ++en;
+        // The additional allocation is of the same size as the jive table
+        // and is needed for a significant speed improvement
+        auto sorted_logical_to_physical = std::vector<uint32_t>(jive_table.sorted_pos_.size());
+        for (auto physical=0u; en < en_end; ++physical, ++en) {
+            auto logical = *en;
+            auto sorted_logical = jive_table.sorted_pos_[logical];
+            new_map.set(sorted_logical);
+            sorted_logical_to_physical[sorted_logical] = physical;
         }
 
         util::check(new_map.count() == row_count(), "Mismatch between new bitmap size and row_count: {} != {}",
-            new_map.count(), row_count());
+                    new_map.count(), row_count());
 
-        auto new_buf = ChunkedBuffer::presized_in_blocks(data_.bytes());
+        auto physical_sort_pos = std::vector<uint32_t>(rows);
         en = new_map.first();
-        auto& buffer = data_.buffer();
-        auto rs = std::make_unique<util::BitIndex>();
-        sm.build_rs_index(rs.get());
+        for (auto sorted_physical=0u; sorted_physical<rows; ++sorted_physical, ++en){
+            auto sorted_logical = *en;
+            auto physical = sorted_logical_to_physical[sorted_logical];
+            physical_sort_pos[physical] = sorted_physical;
+        }
 
-        type().visit_tag([&jive_table, &sm, &rs, &buffer, rows, &en, &new_buf] (auto tdt) {
-            using TagType = decltype(tdt);
-            using RawType = typename TagType::DataTypeTag::raw_type;
-
-            for(auto i = 0u; i < rows; ++i) {
-                const auto bv_index = *en;
-                const auto logical_pos = jive_table.orig_pos_[bv_index];
-                const auto physical_pos = sm.count_to(logical_pos, *rs) - 1;
-                new_buf.template cast<RawType>(i) = buffer.cast<RawType>(physical_pos);
-                ++en;
-            }
-        });
-        std::swap(data_.buffer(), new_buf);
         std::swap(sparse_map_.value(), new_map);
+        physical_sort_external(std::move(physical_sort_pos), rows);
     }
 }
 
