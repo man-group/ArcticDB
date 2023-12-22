@@ -8,8 +8,13 @@
 #include <arcticdb/version/op_log.hpp>
 
 namespace arcticdb {
-    OpLog::OpLog(AtomKey&& key) {
-        key_ = std::move(key);
+    OpLog::OpLog(AtomKey&& key):
+        id_(std::get<StringIndex>(key.start_index())),
+        version_id_(key.version_id()),
+        action_(std::get<StringId>(key.id())),
+        creation_ts_(key.creation_ts()),
+        content_hash_(key.content_hash()) {
+
     }
 
     OpLog::OpLog(StringId id, VersionId version_id, const std::string& action, timestamp creation_ts):
@@ -20,39 +25,30 @@ namespace arcticdb {
     {}
 
     const StringId& OpLog::id() const {
-        if (key_.has_value()) {
-            return std::get<StringId>((*key_).start_index());
-        } else {
-            return id_;
-        }
+        return id_;
     }
 
     VersionId OpLog::version_id() const {
-        if (key_.has_value()) {
-            return (*key_).version_id();
-        } else {
-            return version_id_;
-        }
+        return version_id_;
     }
 
     const std::string& OpLog::action() const {
-        if (key_.has_value()) {
-            return std::get<std::string>((*key_).id());
-        } else {
-            return action_;
-        }
+        return action_;
     }
 
     timestamp OpLog::creation_ts() const {
-        if (key_.has_value()) {
-            return (*key_).creation_ts();
-        } else {
-            return creation_ts_;
-        }
+        return creation_ts_;
     }
 
-    AtomKey&& OpLog::extract_key() {
-        util::check(key_.has_value(), "Cannot extract Atomkey from OpLog");
-        return std::move(*key_);
+    AtomKey OpLog::extract_key() {
+        util::check(content_hash_.has_value(), "Cannot extract Atomkey from OpLog without content hash");
+        // Contents need to be compatible with version_log.hpp#log_event
+        return AtomKeyBuilder()
+          .version_id(version_id_)
+          .creation_ts(creation_ts_)
+          .content_hash(content_hash_.value())
+          .start_index(std::move(id_))
+          .end_index(std::move(id_))
+          .build<KeyType::LOG>(std::move(action_));
     }
 }

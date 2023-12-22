@@ -25,16 +25,16 @@ namespace arcticdb {
         const std::string& action() const;
         timestamp creation_ts() const;
 
-        AtomKey&& extract_key();
+        AtomKey extract_key();
 
     private:
-        std::optional<AtomKey> key_;
         // Represents the symbol or snapshot name
         StringId id_;
         // Unused for snapshot creation/deletion op logs
         VersionId version_id_;
         std::string action_;
         timestamp creation_ts_;
+        std::optional<ContentHash> content_hash_;
     };
 }
 
