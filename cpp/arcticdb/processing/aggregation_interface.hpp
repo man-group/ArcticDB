@@ -7,7 +7,8 @@
 
 #pragma once
 
-#include <unordered_map>
+#include <map>
+#include <utility>
 #include <folly/Poly.h>
 
 namespace arcticdb{
@@ -23,7 +24,7 @@ struct IGroupingAggregatorData {
         [[nodiscard]] SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values) {
             return folly::poly_call<2>(*this, output_column_name, dynamic_schema, unique_values);
         }
-        void set_string_offset_map(const std::unordered_map<entity::position_t, entity::position_t>& offset_map) { folly::poly_call<3>(*this, offset_map); }
+        void set_string_offset_map(const std::multimap<std::pair<entity::position_t, std::size_t>, entity::position_t>& offset_map) { folly::poly_call<3>(*this, offset_map); }
     };
 
     template<class T>

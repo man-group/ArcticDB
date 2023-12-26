@@ -4,9 +4,7 @@
  *
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
-#include <unordered_map>
-#include <vector>
-#include <variant>
+#include <map>
 
 #include <folly/Poly.h>
 
@@ -392,14 +390,17 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
     DataType grouping_data_type;
     GroupingMap grouping_map;
     Composite<ProcessingUnit> procs(std::move(procs_as_range));
+
+    // The multimap to store old/new string offsets: <<old_offset, group_id>, new_offset>
+    std::multimap<std::pair<entity::position_t, std::size_t>, entity::position_t> str_offset_mapping;
     procs.broadcast(
-        [&num_unique, &grouping_data_type, &grouping_map, &next_group_id, &aggregators_data, &string_pool, this](auto &proc) {
+        [&str_offset_mapping, &num_unique, &grouping_data_type, &grouping_map, &next_group_id, &aggregators_data, &string_pool, this](auto &proc) {
             auto partitioning_column = proc.get(ColumnName(grouping_column_));
             if (std::holds_alternative<ColumnWithStrings>(partitioning_column)) {
                 ColumnWithStrings col = std::get<ColumnWithStrings>(partitioning_column);
                 entity::details::visit_type(col.column_->type().data_type(),
                                             [&proc_=proc, &grouping_map, &next_group_id, &aggregators_data, &string_pool, &col,
-                                             &num_unique, &grouping_data_type, this](auto data_type_tag) {
+                                             &str_offset_mapping, &num_unique, &grouping_data_type, this](auto data_type_tag) {
                                                 using DataTypeTagType = decltype(data_type_tag);
                                                 using RawType = typename DataTypeTagType::raw_type;
                                                 constexpr auto data_type = DataTypeTagType::data_type;
@@ -491,6 +492,31 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
                                                             opt_input_column.emplace(std::move(column_with_strings));
                                                         }
                                                     }
+
+                                                    // Strings case: Add the string to the output string_pool and set map of strings offsets
+                                                    auto output_column_name = aggregators_.at(agg_data.index).get_output_column_name();
+                                                    auto output_column = proc_.get(output_column_name);
+                                                    if (std::holds_alternative<ColumnWithStrings>(output_column)) {
+                                                        auto output_column_with_strings = std::get<ColumnWithStrings>(output_column);
+                                                        if (is_sequence_type(output_column_with_strings.column_->type().data_type())) {
+                                                            auto output_data = output_column_with_strings.column_->data();
+                                                            while (auto out_block = output_data.template next<ScalarTagType<DataTypeTagType>>()) {
+                                                                const auto out_row_count = out_block->row_count();
+                                                                auto out_ptr = out_block->data();
+                                                                for (size_t orc = 0; orc < out_row_count; ++orc, ++out_ptr) {
+                                                                    std::optional<std::string_view> str = output_column_with_strings.string_at_offset(*out_ptr);
+                                                                    if (str.has_value()) {
+                                                                        // Add the string view `*str` to the output `string_pool` and map the new offset to the old one
+                                                                        auto out_offset = string_pool->get(*str, true).offset();
+                                                                        str_offset_mapping.insert(std::make_pair(std::make_pair(*out_ptr, row_to_group[orc]), out_offset));
+                                                                    }
+                                                                }
+                                                            }
+                                                            // Set map of string offsets before calling finalize
+                                                            agg_data->set_string_offset_map(str_offset_mapping);
+                                                        }
+                                                    }
+
                                                     agg_data->aggregate(opt_input_column, row_to_group, num_unique);
                                                 }
                                             });
@@ -523,38 +549,6 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
             *index_ptr++ = element.first;
     });
     index_col->set_row_data(grouping_map.size() - 1);
-
-
-    // Strings case: Add the string to the output string_pool and set map of strings offsets
-    procs.broadcast([&grouping_data_type, &aggregators_data, &string_pool, this](auto &proc) {
-        entity::details::visit_type(grouping_data_type, [&aggregators_data, &proc, &string_pool, this](auto data_type_tag) {
-            using DataTypeTagType = decltype(data_type_tag);
-            for (auto agg_data: folly::enumerate(aggregators_data)) {
-                auto output_column_name = aggregators_.at(agg_data.index).get_output_column_name();
-                auto output_column = proc.get(output_column_name);
-                if (std::holds_alternative<ColumnWithStrings>(output_column)) {
-                    auto output_column_with_strings = std::get<ColumnWithStrings>(output_column);
-                    if (is_sequence_type(output_column_with_strings.column_->type().data_type())) {
-                        std::unordered_map<entity::position_t, entity::position_t> str_offset_mapping;
-                        auto output_data = output_column_with_strings.column_->data();
-                        while (auto out_block = output_data.template next<ScalarTagType<DataTypeTagType>>()) {
-                            const auto out_row_count = out_block->row_count();
-                            auto out_ptr = out_block->data();
-                            for (size_t orc = 0; orc < out_row_count; ++orc, ++out_ptr) {
-                                std::optional<std::string_view> str = output_column_with_strings.string_at_offset(*out_ptr);
-                                if (str.has_value()) {
-                                    // Add the string view `*str` to the output `string_pool` and map the new offset to the old one
-                                    str_offset_mapping[*out_ptr] = string_pool->get(*str, true).offset();
-                                }
-                            }
-                        }
-                        // Set map of string offsets before calling finalize
-                        agg_data->set_string_offset_map(str_offset_mapping);
-                    }
-                }
-            }
-        });
-    });
 
     for (auto agg_data: folly::enumerate(aggregators_data)) {
         seg.concatenate(agg_data->finalize(aggregators_.at(agg_data.index).get_output_column_name(), processing_config_.dynamic_schema_, num_unique));

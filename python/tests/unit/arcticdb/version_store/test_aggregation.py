@@ -293,7 +293,7 @@ def test_first_aggregation_strings(local_object_version_store):
     df = DataFrame(
         {
             "grouping_column": ["group_1", "group_2", "group_1", "group_3"],
-            "get_first": ["Hello", "this", "is", "Homer", ],
+            "get_first": ["Hello", "this", "is", "Homer"],
         },
         index=np.arange(4),
     )
@@ -325,6 +325,26 @@ def test_first_agg_numeric_with_append(local_object_version_store):
     vit.data.sort_index(inplace=True)
 
     df = pd.DataFrame({"get_first": [10.0, 30.0]}, index=[0, 1])
+    df.index.rename("grouping_column", inplace=True)
+
+    assert_frame_equal(vit.data, df)
+
+
+def test_first_agg_strings_with_append(lmdb_version_store):
+    lib = lmdb_version_store
+
+    symbol = "first_agg"
+    lib.write(symbol, pd.DataFrame({"grouping_column": ["group_1"], "get_first": ["Hi"]}))
+    lib.append(symbol, pd.DataFrame({"grouping_column": ["group_2"], "get_first": ["HELLO"]}))
+    lib.append(symbol, pd.DataFrame({"grouping_column": ["group_1"], "get_first": ["NO"]}))
+    lib.append(symbol, pd.DataFrame({"grouping_column": ["group_2"], "get_first": ["BLABLABLA"]}))
+    lib.append(symbol, pd.DataFrame({"grouping_column": ["group_3"], "get_first": ["This is it"]}))
+    q = QueryBuilder().groupby("grouping_column").agg({"get_first": "first"})
+
+    vit = lib.read(symbol, query_builder=q)
+    vit.data.sort_index(inplace=True)
+
+    df = pd.DataFrame({"get_first": ["Hi", "HELLO", "This is it"]}, index=["group_1", "group_2", "group_3"])
     df.index.rename("grouping_column", inplace=True)
 
     assert_frame_equal(vit.data, df)
@@ -406,7 +426,7 @@ def test_last_aggregation_strings(local_object_version_store):
     df = DataFrame(
         {
             "grouping_column": ["group_1", "group_2", "group_1", "group_3"],
-            "get_last": ["Hello", "this", "is", "Homer", ],
+            "get_last": ["Hello", "this", "is", "Homer"],
         },
         index=np.arange(4),
     )
@@ -438,6 +458,26 @@ def test_last_agg_numeric_with_append(local_object_version_store):
     vit.data.sort_index(inplace=True)
 
     df = pd.DataFrame({"get_last": [20.0, 30.0]}, index=[0, 1])
+    df.index.rename("grouping_column", inplace=True)
+
+    assert_frame_equal(vit.data, df)
+
+
+def test_last_agg_strings_with_append(lmdb_version_store):
+    lib = lmdb_version_store
+
+    symbol = "last_agg"
+    lib.write(symbol, pd.DataFrame({"grouping_column": ["group_1"], "get_last": ["Hi"]}))
+    lib.append(symbol, pd.DataFrame({"grouping_column": ["group_2"], "get_last": ["HELLO"]}))
+    lib.append(symbol, pd.DataFrame({"grouping_column": ["group_1"], "get_last": ["NO"]}))
+    lib.append(symbol, pd.DataFrame({"grouping_column": ["group_2"], "get_last": ["BLABLABLA"]}))
+    lib.append(symbol, pd.DataFrame({"grouping_column": ["group_3"], "get_last": ["This is something else"]}))
+    q = QueryBuilder().groupby("grouping_column").agg({"get_last": "last"})
+
+    vit = lib.read(symbol, query_builder=q)
+    vit.data.sort_index(inplace=True)
+
+    df = pd.DataFrame({"get_last": ["NO", "BLABLABLA", "This is something else"]}, index=["group_1", "group_2", "group_3"])
     df.index.rename("grouping_column", inplace=True)
 
     assert_frame_equal(vit.data, df)

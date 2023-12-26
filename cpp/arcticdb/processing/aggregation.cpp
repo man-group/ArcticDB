@@ -463,7 +463,7 @@ void FirstAggregatorData::add_data_type(DataType data_type) {
     add_data_type_impl(data_type, data_type_);
 }
 
-void FirstAggregatorData::set_string_offset_map(const std::unordered_map<entity::position_t, entity::position_t>& offset_map) {
+void FirstAggregatorData::set_string_offset_map(const std::multimap<std::pair<entity::position_t, std::size_t>, entity::position_t>& offset_map) {
     str_offset_mapping_ = offset_map;
 }
 
@@ -517,8 +517,9 @@ SegmentInMemory FirstAggregatorData::finalize(const ColumnName& output_column_na
             if constexpr(is_sequence_type(InputType::DataTypeTag::data_type)) {
                 auto col_ptr = reinterpret_cast<RawType*>(col->ptr());
                 for (auto i = 0u; i < unique_values; ++i, ++col_ptr) {
-                    if(str_offset_mapping_.find(*col_ptr) != str_offset_mapping_.end()) {
-                        *col_ptr = str_offset_mapping_[*col_ptr];
+                    auto last_el = --str_offset_mapping_.upper_bound(std::make_pair(*col_ptr, i));
+                    if(last_el != str_offset_mapping_.end()) {
+                        *col_ptr = last_el->second;
                     }
                 }
             }
@@ -537,7 +538,7 @@ void LastAggregatorData::add_data_type(DataType data_type) {
     add_data_type_impl(data_type, data_type_);
 }
 
-void LastAggregatorData::set_string_offset_map(const std::unordered_map<entity::position_t, entity::position_t>& offset_map) {
+void LastAggregatorData::set_string_offset_map(const std::multimap<std::pair<entity::position_t, std::size_t>, entity::position_t>& offset_map) {
     str_offset_mapping_ = offset_map;
 }
 
@@ -589,8 +590,9 @@ SegmentInMemory LastAggregatorData::finalize(const ColumnName& output_column_nam
             if constexpr(is_sequence_type(InputType::DataTypeTag::data_type)) {
                 auto col_ptr = reinterpret_cast<RawType*>(col->ptr());
                 for (auto i = 0u; i < unique_values; ++i, ++col_ptr) {
-                    if(str_offset_mapping_.find(*col_ptr) != str_offset_mapping_.end()) {
-                        *col_ptr = str_offset_mapping_[*col_ptr];
+                    auto first_el = str_offset_mapping_.lower_bound(std::make_pair(*col_ptr, i));
+                    if(first_el != str_offset_mapping_.end()) {
+                        *col_ptr = first_el->second;
                     }
                 }
             }
