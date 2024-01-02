@@ -6,7 +6,6 @@
  */
 
 #include <arcticdb/util/configs_map.hpp>
-#include <folly/Singleton.h>
 
 namespace arcticdb {
 
