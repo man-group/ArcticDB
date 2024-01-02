@@ -79,7 +79,6 @@ else()
     find_package(robin_hood REQUIRED)
     find_package(LMDB REQUIRED)
     find_package(LMDBXX REQUIRED)
-    find_package(benchmark REQUIRED)
 
     if(${BUILD_WITH_REMOTERY})
         find_package(Remotery REQUIRED)
@@ -714,6 +713,7 @@ if(${TEST})
     find_package(Python 3 COMPONENTS Interpreter Development REQUIRED)
     find_package(Arrow REQUIRED)
     find_package(rapidcheck REQUIRED)
+    find_package(benchmark REQUIRED)
 
     python_utils_dump_vars_if_enabled("Python for test compilation")
 
