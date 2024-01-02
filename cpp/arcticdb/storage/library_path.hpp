@@ -11,7 +11,6 @@
 
 #include <folly/small_vector.h>
 #include <folly/Range.h>
-#include <folly/String.h>
 #include <fmt/format.h>
 #include <memory>
 #include <string>

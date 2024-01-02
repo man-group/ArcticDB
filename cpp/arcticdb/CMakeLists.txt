@@ -323,7 +323,6 @@ set(arcticdb_srcs
         util/ref_counted_map.hpp
         util/ref_counted_map.hpp
         util/regex_filter.hpp
-        util/shared_future.hpp
         util/simple_string_hash.hpp
         util/slab_allocator.hpp
         util/sparse_utils.hpp
