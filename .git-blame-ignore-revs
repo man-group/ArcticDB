@@ -6,3 +6,15 @@
 
 # Moving implementation from data_error.hpp to data_error.cpp
 9e10e4b129eadba325db50ec1c683f3aeca1d6ea
+
+# maint: Remove headers in types.hpp
+f32e342aeaf598e36a3ef20c5e0364a9b8956975
+
+# maint: Move implementations in memory_segment_impl.hpp to `memory_segment_impl.cpp`
+8cf2a80d7c2f8539718cad038128f663a8e96810
+
+# maint: Remove unneeded includes
+fbc2a76bdbf56c0181b38caa76863b1e4c5e5bec
+
+# build: Remove some adherence to folly
+44aaab5493b8132453591b653ab07f432f88b557
