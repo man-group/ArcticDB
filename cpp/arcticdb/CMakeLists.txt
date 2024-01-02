@@ -79,6 +79,7 @@ else()
     find_package(robin_hood REQUIRED)
     find_package(LMDB REQUIRED)
     find_package(LMDBXX REQUIRED)
+    find_package(benchmark REQUIRED)
 
     if(${BUILD_WITH_REMOTERY})
         find_package(Remotery REQUIRED)
@@ -855,6 +856,22 @@ if(${TEST})
     endif()
 
     gtest_discover_tests(test_unit_arcticdb PROPERTIES DISCOVERY_TIMEOUT 60)
+
+    set(benchmark_srcs
+            column_store/test/benchmark_memory_segment.cpp
+            processing/test/benchmark_clause.cpp)
+
+    add_executable(benchmarks ${benchmark_srcs})
+
+    target_link_libraries(benchmarks
+            PUBLIC
+            benchmark::benchmark
+            benchmark::benchmark_main
+            ${COMMON_PUBLIC_TEST_LIBRARIES}
+            PRIVATE
+            ${AWSSDK_LINK_LIBRARIES}
+            arcticdb_core_static
+            )
 
     set(rapidcheck_srcs
             column_store/test/rapidcheck_column_store.cpp

@@ -28,11 +28,12 @@ class Store;
 
 struct SymbolListData {
     entity::StreamId type_holder_;
-    uint64_t max_delta_ = 0;
+    uint32_t seed_;
     std::shared_ptr<VersionMap> version_map_;
     std::atomic<bool> warned_expected_slowdown_ = false;
 
-    explicit SymbolListData(std::shared_ptr<VersionMap> version_map, entity::StreamId type_indicator = entity::StringId());
+    explicit SymbolListData(std::shared_ptr<VersionMap> version_map, entity::StreamId type_indicator = entity::StringId(),
+                            uint32_t seed = 0);
 };
 
 constexpr std::string_view CompactionId = "__symbols__";
@@ -148,8 +149,9 @@ ProblematicResult is_problematic(const std::vector<SymbolEntryData>& updated, ti
 class SymbolList {
     SymbolListData data_;
   public:
-    explicit SymbolList(std::shared_ptr<VersionMap> version_map, entity::StreamId type_indicator = entity::StringId()) :
-        data_(std::move(version_map), std::move(type_indicator)) {
+    explicit SymbolList(std::shared_ptr<VersionMap> version_map, entity::StreamId type_indicator = entity::StringId(),
+                        uint32_t seed = 0) :
+        data_(std::move(version_map), std::move(type_indicator), seed) {
     }
 
     std::set<entity::StreamId> load(const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store, bool no_compaction);
