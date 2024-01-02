@@ -220,8 +220,13 @@ void Column::append(const Column& other, position_t at_row) {
                 row_count(), sparse_map().count());
 }
 
-void Column::physical_sort_external(std::vector<uint32_t> &&sorted_pos, size_t physical_rows) {
+void Column::physical_sort_external(std::vector<uint32_t> &&sorted_pos) {
+    size_t physical_rows = row_count();
     auto& buffer = data_.buffer();
+
+    util::check(sorted_pos.size() == physical_rows, "Mismatch between sorted_pos size and row_count: {} != {}",
+        sorted_pos.size(), physical_rows);
+
     type().visit_tag([&buffer, &sorted_pos, &physical_rows] (auto tdt) {
         using TagType = decltype(tdt);
         using RawType = typename TagType::DataTypeTag::raw_type;
@@ -245,16 +250,16 @@ void Column::sort_external(const JiveTable& jive_table) {
     auto rows = row_count();
     if(!is_sparse()) {
         auto sorted_pos = jive_table.sorted_pos_;
-        physical_sort_external(std::move(sorted_pos), rows);
+        physical_sort_external(std::move(sorted_pos));
     } else {
         const auto& sm = sparse_map();
         bm::bvector<>::enumerator en = sm.first();
-        bm::bvector<>::enumerator en_end = sm.end();
         util::BitMagic new_map;
         // The additional allocation is of the same size as the jive table
-        // and is needed for a significant speed improvement
+        // and is needed for a significant speed improvement.
+        // We could instead use a std::map and sacrifice some speed for smaller allocations.
         auto sorted_logical_to_physical = std::vector<uint32_t>(jive_table.sorted_pos_.size());
-        for (auto physical=0u; en < en_end; ++physical, ++en) {
+        for (auto physical=0u; physical<rows; ++physical, ++en) {
             auto logical = *en;
             auto sorted_logical = jive_table.sorted_pos_[logical];
             new_map.set(sorted_logical);
@@ -262,7 +267,7 @@ void Column::sort_external(const JiveTable& jive_table) {
         }
 
         util::check(new_map.count() == row_count(), "Mismatch between new bitmap size and row_count: {} != {}",
-                    new_map.count(), row_count());
+            new_map.count(), row_count());
 
         auto physical_sort_pos = std::vector<uint32_t>(rows);
         en = new_map.first();
@@ -273,7 +278,7 @@ void Column::sort_external(const JiveTable& jive_table) {
         }
 
         std::swap(sparse_map_.value(), new_map);
-        physical_sort_external(std::move(physical_sort_pos), rows);
+        physical_sort_external(std::move(physical_sort_pos));
     }
 }
 

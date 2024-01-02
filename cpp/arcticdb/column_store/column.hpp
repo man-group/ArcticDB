@@ -525,23 +525,14 @@ public:
         return *data_.buffer().ptr_cast<T>(bytes_offset(*physical_row), sizeof(T));
     }
 
+    // Copies all physical scalars to a std::vector<T>. This is useful if you require many random access operations
+    // and you would like to avoid the overhead of computing the exact location every time.
     template<typename T>
-    std::vector<std::optional<T>> clone_scalars_to_vector() const {
-        std::vector<std::optional<T>> values(row_count(), std::nullopt);
-        if (!is_sparse()){
-            const auto& buffer = data_.buffer();
-            for (auto i=0u; i<row_count(); ++i){
-                values[i] = std::optional<T>(*buffer.ptr_cast<T>(i*item_size(), sizeof(T)));
-            }
-        }
-        else{
-            const auto& buffer = data_.buffer();
-            const auto& sm = sparse_map();
-            auto en = sm.first();
-            auto en_end = sm.end();
-            for (auto i=0u; en < en_end; ++en, ++i){
-                values[*en] = std::optional<T>(*buffer.ptr_cast<T>(i*item_size(), sizeof(T)));
-            }
+    std::vector<T> clone_scalars_to_vector() const {
+        auto values = std::vector<T>(row_count());
+        const auto& buffer = data_.buffer();
+        for (auto i=0u; i<row_count(); ++i){
+            values[i] = *buffer.ptr_cast<T>(i*item_size(), sizeof(T));
         }
         return values;
     }
@@ -670,7 +661,9 @@ private:
     void set_sparse_bit_for_row(size_t sparse_location);
     bool empty() const;
     void regenerate_offsets() const;
-    void physical_sort_external(std::vector<uint32_t> &&sorted_pos, size_t physical_rows);
+
+    // Permutes the physical column storage based on the given sorted_pos.
+    void physical_sort_external(std::vector<uint32_t> &&sorted_pos);
 
     [[nodiscard]] util::BitMagic& sparse_map();
     const util::BitMagic& sparse_map() const;
