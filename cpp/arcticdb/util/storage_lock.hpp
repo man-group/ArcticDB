@@ -14,7 +14,6 @@
 #include <arcticdb/util/exponential_backoff.hpp>
 #include <arcticdb/util/configs_map.hpp>
 
-#include <folly/portability/PThread.h>
 #include <folly/system/ThreadId.h>
 
 #include <mutex>

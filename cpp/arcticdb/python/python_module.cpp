@@ -52,12 +52,6 @@ enum class LoggerId {
     SNAPSHOT
 };
 
-void initialize_folly() {
-    //folly::SingletonVault::singleton()->registrationComplete();
-    auto programName ="__arcticdb_logger__";
-    google::InitGoogleLogging(programName);
-}
-
 void register_log(py::module && log) {
     log.def("configure", [](const py::object & py_log_conf, bool force=false){
         arcticdb::proto::logger::LoggersConfig config;
@@ -307,7 +301,8 @@ PYBIND11_MODULE(arcticdb_ext, m) {
 
         Top level package of ArcticDB extension plugin.
     )pbdoc";
-    initialize_folly();
+    auto programName ="__arcticdb_logger__";
+    google::InitGoogleLogging(programName);
 #ifndef WIN32
     // No fork() in Windows, so no need to register the handler
     pthread_atfork(nullptr, nullptr, &SingleThreadMutexHolder::reset_mutex);

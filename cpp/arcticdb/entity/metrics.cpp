@@ -8,10 +8,12 @@
 #include <arcticdb/entity/metrics.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/util/preconditions.hpp>
-#include <folly/system/ThreadName.h>
-#include <folly/container/F14Map.h>
 #include <arcticdb/util/preprocess.hpp>
 #include <arcticdb/util/pb_util.hpp>
+
+#ifdef _WIN32
+#    include <Winsock.h> // for gethostname
+#endif
 
 using namespace prometheus;
 

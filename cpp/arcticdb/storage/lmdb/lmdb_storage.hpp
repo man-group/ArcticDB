@@ -12,7 +12,6 @@
 
 #include <arcticdb/entity/protobufs.hpp>
 
-#include <folly/String.h>
 #include <folly/Range.h>
 #include <arcticdb/util/composite.hpp>
 
