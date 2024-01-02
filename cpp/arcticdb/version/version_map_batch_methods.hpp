@@ -43,7 +43,14 @@ inline void submit_tasks_for_range(const Inputs& inputs, TaskSubmitter submitter
         });
     }, window_size);
 
-    folly::collectAll(futures).get();
+    auto collected_futs = folly::collectAll(futures).get();
+    std::optional<std::string> all_exceptions;
+    for (auto&& collected_fut: collected_futs) {
+        if (!collected_fut.hasValue()) {
+            all_exceptions = all_exceptions.value_or("").append(collected_fut.exception().what().toStdString()).append("\n");
+        }
+    }
+    internal::check<ErrorCode::E_RUNTIME_ERROR>(!all_exceptions.has_value(), all_exceptions.value_or(""));
 }
 
 inline std::shared_ptr<std::unordered_map<StreamId, SymbolStatus>> batch_check_latest_id_and_status(
