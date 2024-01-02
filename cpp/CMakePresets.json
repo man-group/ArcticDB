@@ -94,7 +94,8 @@
       "installDir": "${sourceDir}/out/install",
       "cacheVariables": {
         "CMAKE_CXX_FLAGS": "/MP",
-        "VCPKG_TARGET_TRIPLET": "x64-windows-static"
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static",
+        "ARCTICDB_PYTHON_EXPLICIT_LINK": "ON"
       }
     },
 
