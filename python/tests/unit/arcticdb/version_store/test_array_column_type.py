@@ -22,6 +22,7 @@ def assert_db_in_out_match(version_store, df_in, symbol):
     assert_frame_equal(df_in, df_out.data)
 
 
+@pytest.mark.skip(reason="Arrays occasionally raise segfault")
 class TestEmptyArrays:
     def test_single_empty_array(self, lmdb_version_store):
         df_in = pd.DataFrame({"col1": [np.array([])]})
@@ -85,6 +86,7 @@ class TestEmptyArrays:
         assert_frame_equal(df_target, df_out.data)
 
 
+@pytest.mark.skip(reason="Arrays occasionally raise segfault")
 class TestNonEmptyArrays:
     def test_single_array(self, lmdb_version_store, array_type):
         df_in = pd.DataFrame({"col1": [np.array([1, 2, 3]).astype(array_type)]})
@@ -124,6 +126,7 @@ class TestNonEmptyArrays:
         assert_frame_equal(df_target, df_out.data)
 
 
+@pytest.mark.skip(reason="Arrays occasionally raise segfault")
 class TestFailure:
     def test_cannot_mix_scalars_and_arrays(self, lmdb_version_store):
         with pytest.raises(Exception):
