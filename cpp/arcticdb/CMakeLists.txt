@@ -514,6 +514,14 @@ set (arcticdb_core_libraries
         Azure::azure-storage-blobs
 )
 
+if(${ARCTICDB_PYTHON_EXPLICIT_LINK})
+    # Even though python is transitive dependency MSVS builds fail if we don't link against python explicitly
+    # TODO: Figure out why
+    list(APPEND arcticdb_core_libraries
+        Python::Python
+    )
+endif()
+
 # Dependencies expose different names of their libraries depending
 # on their origin (i.e. vendored source or packages on conda-forge).
 if(${ARCTICDB_USING_CONDA})
