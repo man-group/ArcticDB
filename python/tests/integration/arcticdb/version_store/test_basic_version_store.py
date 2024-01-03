@@ -1610,8 +1610,8 @@ def test_coercion_to_str_with_dynamic_strings(basic_store):
         sample_mock.assert_not_called()
 
 
-@pytest.mark.xfail(reason="Needs to be fixed by issue #496")
-def test_find_version(lmdb_version_store_v1):
+@pytest.mark.parametrize('execution_number', range(1000))
+def test_find_version(lmdb_version_store_v1, execution_number):
     lib = lmdb_version_store_v1
     sym = "test_find_version"
 
