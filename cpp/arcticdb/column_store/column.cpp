@@ -246,7 +246,7 @@ void Column::physical_sort_external(std::vector<uint32_t> &&sorted_pos) {
     });
 }
 
-void Column::sort_external(const JiveTable& jive_table) {
+void Column::sort_external(const JiveTable& jive_table, std::vector<uint32_t>& pre_allocated_space) {
     auto rows = row_count();
     if(!is_sparse()) {
         auto sorted_pos = jive_table.sorted_pos_;
@@ -258,7 +258,10 @@ void Column::sort_external(const JiveTable& jive_table) {
         // The additional allocation is of the same size as the jive table
         // and is needed for a significant speed improvement.
         // We could instead use a std::map and sacrifice some speed for smaller allocations.
-        auto sorted_logical_to_physical = std::vector<uint32_t>(jive_table.sorted_pos_.size());
+        util::check(pre_allocated_space.size() == jive_table.sorted_pos_.size(),
+                    "Mismatch between provided pre_allocated_space size and jive table size: {} != {}",
+                    pre_allocated_space.size(), jive_table.sorted_pos_.size());
+        auto& sorted_logical_to_physical = pre_allocated_space;
         for (auto physical=0u; physical<rows; ++physical, ++en) {
             auto logical = *en;
             auto sorted_logical = jive_table.sorted_pos_[logical];

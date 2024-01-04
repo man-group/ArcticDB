@@ -394,7 +394,10 @@ public:
     void append_sparse_map(const util::BitMagic& bv, position_t at_row);
     void append(const Column& other, position_t at_row);
 
-    void sort_external(const JiveTable& jive_table);
+    // Sorts the column by an external column's jive_table.
+    // pre_allocated_space can be reused across different calls to sort_external to avoid unnecessary allocations.
+    // It has to be the same size as the jive_table.
+    void sort_external(const JiveTable& jive_table, std::vector<uint32_t>& pre_allocated_space);
 
     void mark_absent_rows(size_t num_rows);
 
