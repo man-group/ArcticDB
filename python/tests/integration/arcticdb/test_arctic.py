@@ -92,6 +92,24 @@ def test_get_library(arctic_client):
         _ = ac.get_library("pytest_test_lib", create_if_missing=False, library_options=library_options)
 
 
+def test_create_library_with_invalid_name(arctic_client):
+    ac = arctic_client
+
+    # These should succeed because the names are valid
+    valid_names = ["lib", "lib/with/slash", "lib-with-dash", "lib123"]
+    for lib_name in valid_names:
+        ac.create_library(lib_name)
+
+    # These should fail because the names are invalid
+    invalid_names = [chr(0), "lib>", "lib<", "lib*", "lib"*1000]
+    for lib_name in invalid_names:
+        ac.create_library(lib_name)
+
+    # TODO: Listing libraries should not fail. Instead creating libraries with invalid names should fail.
+    with pytest.raises(Exception):
+        assert set(ac.list_libraries()) == set(valid_names)
+
+
 def test_do_not_persist_s3_details(s3_storage):
     """We apply an in-memory overlay for these instead. In particular we should absolutely not persist credentials
     in the storage."""
