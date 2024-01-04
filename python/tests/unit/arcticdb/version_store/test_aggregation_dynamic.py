@@ -250,15 +250,17 @@ def test_count_aggregation_dynamic(s3_version_store_dynamic_schema_v2):
         index=range_indexes(),
     )
 )
-@pytest.mark.xfail(reason="Not supported yet")
 def test_hypothesis_first_agg_dynamic_numeric(lmdb_version_store_dynamic_schema_v1, df):
     lib = lmdb_version_store_dynamic_schema_v1
     assume(not df.empty)
 
     symbol = f"first_agg-{uuid.uuid4().hex}"
     expected, slices = make_dynamic(df)
-    for df_slice in slices:
-        lib.append(symbol, df_slice, write_if_missing=True)
+    # `slices` is not used since `expected` is a concatenation of `slices` elements with missing columns
+    # set to NaN (cf. `pandas.concat` used in `make_dynamic`) and resulting in a mismatch and therefore
+    # a test failure
+    for idx in range(len(expected.index)):
+        lib.append(symbol, expected.iloc[[idx],:], write_if_missing=True)
 
     try:
         q = QueryBuilder()
@@ -275,8 +277,7 @@ def test_hypothesis_first_agg_dynamic_numeric(lmdb_version_store_dynamic_schema_
         pass
 
 
-@pytest.mark.xfail(reason="Not supported yet")
-def test_first_aggregation_dynamic(s3_version_store_dynamic_schema_v2):
+def test_first_aggregation_dynamic_numeric(s3_version_store_dynamic_schema_v2):
     lib = s3_version_store_dynamic_schema_v2
     df = DataFrame(
         {
@@ -285,7 +286,35 @@ def test_first_aggregation_dynamic(s3_version_store_dynamic_schema_v2):
         },
         index=np.arange(7),
     )
-    symbol = "test_first_aggregation_dynamic"
+    symbol = "test_first_aggregation_dynamic_numeric"
+    expected, slices = make_dynamic(df)
+    # `slices` is not used since `expected` is a concatenation of `slices` elements with missing columns
+    # set to NaN (cf. `pandas.concat` used in `make_dynamic`) and resulting in a mismatch and therefore
+    # a test failure
+    for idx in range(len(expected.index)):
+        lib.append(symbol, expected.iloc[[idx],:], write_if_missing=True)
+
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"get_first": "first"})
+
+    received = lib.read(symbol, query_builder=q).data
+    received.sort_index(inplace=True)
+
+    expected = expected.groupby("grouping_column").agg({"get_first": "first"})
+
+    assert_frame_equal(received, expected)
+
+
+def test_first_aggregation_strings_dynamic(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    df = DataFrame(
+        {
+            "grouping_column": ["group_1", "group_2", "group_1", "group_2", "group_3"],
+            "get_first": ["Hi", "HELLO", "NO", "BLABLABLA", "This is something else"],
+        },
+        index=np.arange(5),
+    )
+    symbol = "test_first_aggregation_strings_dynamic"
     expected, slices = make_dynamic(df)
     for df_slice in slices:
         lib.append(symbol, df_slice, write_if_missing=True)
@@ -312,15 +341,17 @@ def test_first_aggregation_dynamic(s3_version_store_dynamic_schema_v2):
         index=range_indexes(),
     )
 )
-@pytest.mark.xfail(reason="Not supported yet")
 def test_hypothesis_last_agg_dynamic_numeric(lmdb_version_store_dynamic_schema_v1, df):
     lib = lmdb_version_store_dynamic_schema_v1
     assume(not df.empty)
 
     symbol = f"last_agg-{uuid.uuid4().hex}"
     expected, slices = make_dynamic(df)
-    for df_slice in slices:
-        lib.append(symbol, df_slice, write_if_missing=True)
+    # `slices` is not used since `expected` is a concatenation of `slices` elements with missing columns
+    # set to NaN (cf. `pandas.concat` used in `make_dynamic`) and resulting in a mismatch and therefore
+    # a test failure
+    for idx in range(len(expected.index)):
+        lib.append(symbol, expected.iloc[[idx],:], write_if_missing=True)
 
     try:
         q = QueryBuilder()
@@ -337,8 +368,7 @@ def test_hypothesis_last_agg_dynamic_numeric(lmdb_version_store_dynamic_schema_v
         pass
 
 
-@pytest.mark.xfail(reason="Not supported yet")
-def test_last_aggregation_dynamic(s3_version_store_dynamic_schema_v2):
+def test_last_aggregation_dynamic_numeric(s3_version_store_dynamic_schema_v2):
     lib = s3_version_store_dynamic_schema_v2
     df = DataFrame(
         {
@@ -347,7 +377,35 @@ def test_last_aggregation_dynamic(s3_version_store_dynamic_schema_v2):
         },
         index=np.arange(9),
     )
-    symbol = "test_last_aggregation_dynamic"
+    symbol = "test_last_aggregation_dynamic_numeric"
+    expected, slices = make_dynamic(df)
+    # `slices` is not used since `expected` is a concatenation of `slices` elements with missing columns
+    # set to NaN (cf. `pandas.concat` used in `make_dynamic`) and resulting in a mismatch and therefore
+    # a test failure
+    for idx in range(len(expected.index)):
+        lib.append(symbol, expected.iloc[[idx],:], write_if_missing=True)
+
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"get_last": "last"})
+
+    received = lib.read(symbol, query_builder=q).data
+    received.sort_index(inplace=True)
+
+    expected = expected.groupby("grouping_column").agg({"get_last": "last"})
+
+    assert_frame_equal(received, expected)
+
+
+def test_last_aggregation_strings_dynamic(s3_version_store_dynamic_schema_v2):
+    lib = s3_version_store_dynamic_schema_v2
+    df = DataFrame(
+        {
+            "grouping_column": ["group_1", "group_2", "group_1", "group_2", "group_3"],
+            "get_last": ["Hi", "HELLO", "NO", "BLABLABLA", "This is something else"],
+        },
+        index=np.arange(5),
+    )
+    symbol = "test_last_aggregation_strings_dynamic"
     expected, slices = make_dynamic(df)
     for df_slice in slices:
         lib.append(symbol, df_slice, write_if_missing=True)
