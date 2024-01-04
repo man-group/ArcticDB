@@ -16,6 +16,7 @@
 #include <arcticdb/async/tasks.hpp>
 #include <arcticdb/util/key_utils.hpp>
 #include <arcticdb/util/optional_defaults.hpp>
+#include <arcticdb/util/name_validation.hpp>
 #include <arcticdb/stream/append_map.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
 #include <arcticdb/pipeline/read_frame.hpp>
@@ -95,8 +96,8 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
     bool validate_index
     ) {
     ARCTICDB_SAMPLE(DoWrite, 0)
-    if (0 == version_id)
-        verify_stream_id(frame->desc.id());
+    if (version_id == 0)
+        verify_symbol_key(frame->desc.id());
     // Slice the frame according to the write options
     frame->set_bucketize_dynamic(options.bucketize_dynamic);
     auto slicing_arg = get_slicing_policy(options, *frame);
