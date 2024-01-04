@@ -53,6 +53,7 @@ jobs:
         env:
           ARCTICDB_USING_CONDA: 1
           ARCTICDB_BUILD_CPP_TESTS: 1
+          ARCTICDB_PROTOC_VERS: "4"
 
       - name: Build C++ Tests
         shell: bash -l {0}
@@ -129,6 +130,7 @@ jobs:
         env:
           ARCTICDB_USING_CONDA: 1
           ARCTICDB_BUILD_CPP_TESTS: 1
+          ARCTICDB_PROTOC_VERS: "4"
 
       - name: Build C++ Tests
         shell: bash -l {0}
