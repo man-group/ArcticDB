@@ -582,8 +582,9 @@ void SegmentInMemoryImpl::sort(position_t idx) {
         return create_jive_table<RawType>(sort_col);
     });
 
+    auto pre_allocated_space = std::vector<uint32_t>(sort_col.row_count());
     for (auto field_col = 0u; field_col < descriptor().field_count(); ++field_col) {
-        column(field_col).sort_external(table);
+        column(field_col).sort_external(table, pre_allocated_space);
     }
 }
 
