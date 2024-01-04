@@ -289,7 +289,10 @@ def test_first_aggregation_numeric(local_object_version_store):
     assert_frame_equal(res.data, df)
 
 
-def test_first_aggregation_strings(local_object_version_store):
+@pytest.mark.parametrize("dynamic_strings", [True, False])
+def test_first_aggregation_strings(version_store_factory, dynamic_strings):
+    lib = version_store_factory(dynamic_strings=dynamic_strings)
+
     df = DataFrame(
         {
             "grouping_column": ["group_1", "group_2", "group_1", "group_3"],
@@ -300,9 +303,9 @@ def test_first_aggregation_strings(local_object_version_store):
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"get_first": "first"})
     symbol = "test_first_aggregation"
-    local_object_version_store.write(symbol, df)
+    lib.write(symbol, df)
 
-    res = local_object_version_store.read(symbol, query_builder=q)
+    res = lib.read(symbol, query_builder=q)
     res.data.sort_index(inplace=True)
 
     df = pd.DataFrame({"get_first": ["Hello", "this", "Homer"]}, index=["group_1", "group_2", "group_3"])
@@ -330,28 +333,9 @@ def test_first_agg_numeric_with_append(local_object_version_store):
     assert_frame_equal(vit.data, df)
 
 
-def test_first_agg_strings_with_append_local(local_object_version_store):
-    lib = local_object_version_store
-
-    symbol = "first_agg"
-    lib.write(symbol, pd.DataFrame({"grouping_column": ["group_1"], "get_first": ["Hi"]}))
-    lib.append(symbol, pd.DataFrame({"grouping_column": ["group_2"], "get_first": ["HELLO"]}))
-    lib.append(symbol, pd.DataFrame({"grouping_column": ["group_1"], "get_first": ["NO"]}))
-    lib.append(symbol, pd.DataFrame({"grouping_column": ["group_2"], "get_first": ["BLABLABLA"]}))
-    lib.append(symbol, pd.DataFrame({"grouping_column": ["group_3"], "get_first": ["This is it"]}))
-    q = QueryBuilder().groupby("grouping_column").agg({"get_first": "first"})
-
-    vit = lib.read(symbol, query_builder=q)
-    vit.data.sort_index(inplace=True)
-
-    df = pd.DataFrame({"get_first": ["Hi", "HELLO", "This is it"]}, index=["group_1", "group_2", "group_3"])
-    df.index.rename("grouping_column", inplace=True)
-
-    assert_frame_equal(vit.data, df)
-
-
-def test_first_agg_strings_with_append(lmdb_version_store):
-    lib = lmdb_version_store
+@pytest.mark.parametrize("dynamic_strings", [True, False])
+def test_first_agg_strings_with_append(version_store_factory, dynamic_strings):
+    lib = version_store_factory(dynamic_strings=dynamic_strings)
 
     symbol = "first_agg"
     lib.write(symbol, pd.DataFrame({"grouping_column": ["group_1"], "get_first": ["Hi"]}))
@@ -442,7 +426,10 @@ def test_last_aggregation_numeric(local_object_version_store):
     assert_frame_equal(res.data, df)
 
 
-def test_last_aggregation_strings(local_object_version_store):
+@pytest.mark.parametrize("dynamic_strings", [True, False])
+def test_last_aggregation_strings(version_store_factory, dynamic_strings):
+    lib = version_store_factory(dynamic_strings=dynamic_strings)
+
     df = DataFrame(
         {
             "grouping_column": ["group_1", "group_2", "group_1", "group_3"],
@@ -453,9 +440,9 @@ def test_last_aggregation_strings(local_object_version_store):
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"get_last": "last"})
     symbol = "test_last_aggregation"
-    local_object_version_store.write(symbol, df)
+    lib.write(symbol, df)
 
-    res = local_object_version_store.read(symbol, query_builder=q)
+    res = lib.read(symbol, query_builder=q)
     res.data.sort_index(inplace=True)
 
     df = pd.DataFrame({"get_last": ["is", "this", "Homer"]}, index=["group_1", "group_2", "group_3"])
@@ -483,28 +470,9 @@ def test_last_agg_numeric_with_append(local_object_version_store):
     assert_frame_equal(vit.data, df)
 
 
-def test_last_agg_strings_with_append(lmdb_version_store):
-    lib = lmdb_version_store
-
-    symbol = "last_agg"
-    lib.write(symbol, pd.DataFrame({"grouping_column": ["group_1"], "get_last": ["Hi"]}))
-    lib.append(symbol, pd.DataFrame({"grouping_column": ["group_2"], "get_last": ["HELLO"]}))
-    lib.append(symbol, pd.DataFrame({"grouping_column": ["group_1"], "get_last": ["NO"]}))
-    lib.append(symbol, pd.DataFrame({"grouping_column": ["group_2"], "get_last": ["BLABLABLA"]}))
-    lib.append(symbol, pd.DataFrame({"grouping_column": ["group_3"], "get_last": ["This is something else"]}))
-    q = QueryBuilder().groupby("grouping_column").agg({"get_last": "last"})
-
-    vit = lib.read(symbol, query_builder=q)
-    vit.data.sort_index(inplace=True)
-
-    df = pd.DataFrame({"get_last": ["NO", "BLABLABLA", "This is something else"]}, index=["group_1", "group_2", "group_3"])
-    df.index.rename("grouping_column", inplace=True)
-
-    assert_frame_equal(vit.data, df)
-
-
-def test_last_agg_strings_with_append_local(local_object_version_store):
-    lib = local_object_version_store
+@pytest.mark.parametrize("dynamic_strings", [True, False])
+def test_last_agg_strings_with_append(version_store_factory, dynamic_strings):
+    lib = version_store_factory(dynamic_strings=dynamic_strings)
 
     symbol = "last_agg"
     lib.write(symbol, pd.DataFrame({"grouping_column": ["group_1"], "get_last": ["Hi"]}))
