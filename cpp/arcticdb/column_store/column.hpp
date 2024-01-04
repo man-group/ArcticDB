@@ -529,10 +529,11 @@ public:
     // and you would like to avoid the overhead of computing the exact location every time.
     template<typename T>
     std::vector<T> clone_scalars_to_vector() const {
-        auto values = std::vector<T>(row_count());
+        auto values = std::vector<T>();
+        values.reserve(row_count());
         const auto& buffer = data_.buffer();
         for (auto i=0u; i<row_count(); ++i){
-            values[i] = *buffer.ptr_cast<T>(i*item_size(), sizeof(T));
+            values.push_back(*buffer.ptr_cast<T>(i*item_size(), sizeof(T)));
         }
         return values;
     }
