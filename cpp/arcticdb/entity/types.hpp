@@ -9,20 +9,11 @@
 
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/constructors.hpp>
-#include <arcticdb/util/variant.hpp>
-#include <arcticdb/log/log.hpp>
-#include <google/protobuf/util/message_differencer.h>
 
-#include <fmt/format.h>
-
-#include <algorithm>
 #include <cstdint>
 #include <vector>
 #include <string>
-#include <exception>
 #include <type_traits>
-#include <iostream>
-#include <optional>
 #include <variant>
 
 
