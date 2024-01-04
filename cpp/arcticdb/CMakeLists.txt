@@ -310,6 +310,7 @@ set(arcticdb_srcs
         util/magic_num.hpp
         util/movable_priority_queue.hpp
         util/movable_priority_queue.hpp
+        util/name_validation.hpp
         util/offset_string.hpp
         util/offset_string.hpp
         util/optional_defaults.hpp
@@ -420,6 +421,7 @@ set(arcticdb_srcs
         util/decimal.cpp
         util/error_code.cpp
         util/global_lifetimes.cpp
+        util/name_validation.cpp
         util/offset_string.cpp
         util/offset_string.cpp
         util/sparse_utils.cpp

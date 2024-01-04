@@ -2,6 +2,7 @@
 
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/util/preconditions.hpp>
+#include <arcticdb/util/name_validation.hpp>
 #include <arcticdb/entity/key.hpp>
 #include <arcticdb/storage/storage_exceptions.hpp>
 #include <arcticdb/storage/open_mode.hpp>
@@ -101,9 +102,12 @@ void LibraryManager::write_library_config(const py::object& lib_cfg, const Libra
 
     segment.set_metadata(std::move(output));
 
+    auto library_name = path.to_delim_path();
+    verify_library_path_on_write(library_name);
+
     store_->write_sync(
             entity::KeyType::LIBRARY_CONFIG,
-            StreamId(path.to_delim_path()),
+            StreamId(library_name),
             std::move(segment)
     );
 }
