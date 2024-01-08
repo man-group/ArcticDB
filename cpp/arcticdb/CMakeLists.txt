@@ -33,8 +33,6 @@ if(NOT WIN32 AND ${SSL_LINK})
 endif()
 
 find_package(Protobuf REQUIRED)
-set(Protobuf_LIBRARY protobuf::libprotobuf)
-
 find_package(mongocxx REQUIRED)
 find_package(bsoncxx REQUIRED)
 find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypasses our cpp/CMake/FindZstd.cmake module
@@ -502,7 +500,7 @@ set (arcticdb_core_libraries
         prometheus-cpp::pull
         ${standard_libraries}
         fmt::fmt
-        ${Protobuf_LIBRARY}
+        protobuf::libprotobuf
         ${LZ4_LIBRARY}
         ${Zstd_LIBRARY}
         ${ARCTICDB_MONGO_LIBS}
