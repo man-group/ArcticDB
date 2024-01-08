@@ -9,6 +9,7 @@
 
 #include <arcticdb/codec/encoding_sizes.hpp>
 #include <arcticdb/codec/codec.hpp>
+#include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/pipeline/index_segment_reader.hpp>
 #include <arcticdb/pipeline/read_frame.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
@@ -688,7 +689,7 @@ public:
                     [&] (std::string_view sv) {
                         std::memcpy(dst_, sv.data(), sv.size());
                 },
-                [&] (StringPool::offset_t ) {
+                [&] (entity::position_t ) {
                     memset(dst_, 0, column_width_);
                 });
             dst_ += column_width_;
@@ -724,7 +725,7 @@ public:
                                     util::check(success, "Failed to convert utf8 to utf32 for string {}", sv);
                                     memcpy(dst_, buf_, column_width_);
                                 },
-                                [&] (StringPool::offset_t ) {
+                                [&] (entity::position_t ) {
                                     memset(dst_, 0, column_width_);
                                 });
 
@@ -797,7 +798,7 @@ class DynamicStringReducer : public StringReducer {
     };
 
     template<typename StringCreator, typename LockPolicy>
-    void assign_strings_shared(size_t end, const StringPool::offset_t* ptr_src, bool has_type_conversion, const StringPool& string_pool) {
+    void assign_strings_shared(size_t end, const entity::position_t* ptr_src, bool has_type_conversion, const StringPool& string_pool) {
         LockPolicy::lock(*lock_);
         auto none = std::make_unique<py::none>(py::none{});
         LockPolicy::unlock(*lock_);
@@ -836,12 +837,12 @@ class DynamicStringReducer : public StringReducer {
 
 
     template<typename StringCreator, typename LockPolicy>
-    void assign_strings_local(size_t end, const StringPool::offset_t* ptr_src, bool has_type_conversion, const StringPool& string_pool) {
+    void assign_strings_local(size_t end, const entity::position_t* ptr_src, bool has_type_conversion, const StringPool& string_pool) {
         LockPolicy::lock(*lock_);
         auto none = std::make_unique<py::none>(py::none{});
         LockPolicy::unlock(*lock_);
         size_t none_count = 0u;
-        robin_hood::unordered_flat_map<StringPool::offset_t, std::pair<PyObject*, folly::SpinLock>> local_map;
+        robin_hood::unordered_flat_map<entity::position_t, std::pair<PyObject*, folly::SpinLock>> local_map;
         local_map.reserve(end - row_);
         // TODO this is no good for non-contigous blocks, but we currently expect
         // output data to be contiguous
@@ -885,7 +886,7 @@ class DynamicStringReducer : public StringReducer {
         bool has_type_conversion,
         bool is_utf,
         size_t end,
-        const StringPool::offset_t* ptr_src,
+        const entity::position_t* ptr_src,
         const StringPool& string_pool) {
         auto string_constructor = get_string_constructor(has_type_conversion, is_utf);
 
@@ -921,7 +922,7 @@ public:
         std::shared_ptr<PyObject> py_nan,
         std::shared_ptr<LockType> lock,
         bool do_lock) :
-        StringReducer(column, context, std::move(frame), frame_field, sizeof(StringPool::offset_t)),
+        StringReducer(column, context, std::move(frame), frame_field, sizeof(entity::position_t)),
         ptr_dest_(reinterpret_cast<PyObject**>(dst_)),
         unique_string_map_(std::move(unique_string_map)),
         py_nan_(py_nan),
@@ -1064,7 +1065,7 @@ struct ReduceColumnTask : async::BaseTask {
             column.default_initialize_rows(0, frame_.row_count(), false);
             bool dynamic_type = is_dynamic_string_type(field_type);
             if(dynamic_type) {
-                EmptyDynamicStringReducer reducer(column, frame_, frame_field, sizeof(StringPool::offset_t), lock_);
+                EmptyDynamicStringReducer reducer(column, frame_, frame_field, sizeof(entity::position_t), lock_);
                 reducer.reduce(frame_.row_count());
             }
         } else {

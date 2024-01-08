@@ -15,7 +15,6 @@
 #include <arcticdb/entity/index_range.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/stream/stream_reader.hpp>
-#include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/util/variant.hpp>
 
 namespace py = pybind11;
@@ -50,7 +49,7 @@ class ARCTICDB_VISIBILITY_HIDDEN PyRowRef : public py::tuple {
                         auto str_arr = segment.string_array_at(row_pos, col).value();
                         set_col(col, py::array(from_string_array(str_arr)));
                     } else if (T::DataTypeTag::data_type == DataType::ASCII_DYNAMIC64) {
-                        auto string_refs = segment.tensor_at<OffsetString::offset_t>(row_pos, col).value();
+                        auto string_refs = segment.tensor_at<entity::position_t>(row_pos, col).value();
                         std::vector<std::string_view> output;
                         for (ssize_t i = 0; i < string_refs.size(); ++i)
                             output.emplace_back(view_at(string_refs.at(i)));
@@ -68,7 +67,7 @@ class ARCTICDB_VISIBILITY_HIDDEN PyRowRef : public py::tuple {
     }
 
   private:
-    std::string_view view_at(OffsetString::offset_t o) {
+    std::string_view view_at(entity::position_t o) {
         return row_ref_.segment().string_pool().get_view(o);
     }
 

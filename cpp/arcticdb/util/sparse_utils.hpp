@@ -14,7 +14,6 @@
 
 #include <arcticdb/column_store/chunked_buffer.hpp>
 
-#include <bitmagic/bm.h>
 #include <bitmagic/bmserial.h>
 
 #include <algorithm>

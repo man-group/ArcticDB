@@ -10,7 +10,7 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/cursor.hpp>
 #include <arcticdb/column_store/column.hpp>
-#include <arcticdb/column_store/string_pool.hpp>
+#include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/util/preconditions.hpp>
 
 #include <arcticdb/entity/timeseries_descriptor.hpp>
@@ -529,7 +529,7 @@ public:
         column_unchecked(col).set_scalar(row, ofstr.offset());
     }
 
-    void set_no_string_at(position_t col, position_t row, OffsetString::offset_t placeholder) {
+    void set_no_string_at(position_t col, position_t row, position_t placeholder) {
         column_unchecked(col).set_scalar(row, placeholder);
     }
 
