@@ -18,3 +18,6 @@ fbc2a76bdbf56c0181b38caa76863b1e4c5e5bec
 
 # build: Remove some adherence to folly
 44aaab5493b8132453591b653ab07f432f88b557
+
+# Clean and reorganize `OffsetString` and `StringPool`
+06a252f99f9e0c1cc19dd95c61dd239ddf68845c
