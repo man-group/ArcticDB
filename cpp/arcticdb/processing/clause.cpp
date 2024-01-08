@@ -7,9 +7,14 @@
 
 #include <vector>
 #include <variant>
-#include <arcticdb/processing/processing_unit.hpp>
+
 #include <folly/Poly.h>
+
+#include <arcticdb/processing/processing_unit.hpp>
+#include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/util/composite.hpp>
+#include <arcticdb/util/offset_string.hpp>
+
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/value_set.hpp>
@@ -20,6 +25,7 @@
 #else
     #include <arcticdb/util/third_party/robin_hood.hpp>
 #endif
+
 namespace arcticdb {
 
 using namespace pipelines;

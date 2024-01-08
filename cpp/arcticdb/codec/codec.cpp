@@ -5,6 +5,7 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 #include <arcticdb/codec/codec.hpp>
+#include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/stream/protobuf_mappings.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/codec/default_codecs.hpp>

@@ -5,6 +5,7 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
+#include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/entity/native_tensor.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
@@ -17,6 +18,7 @@
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/entity/protobufs.hpp>
+#include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/python/python_types.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
@@ -220,7 +222,7 @@ void update_string_columns(const SegmentInMemory& original, SegmentInMemory outp
                                         auto off_str = output.string_pool().get(sv);
                                         set_offset_string_at(row, target, off_str.offset());
                                     },
-                                    [&] (StringPool::offset_t offset) {
+                                    [&] (entity::position_t offset) {
                                         set_offset_string_at(row, target, offset);
                                     });
 

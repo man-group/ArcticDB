@@ -10,7 +10,6 @@
 #include <cstdlib>
 #include <cstdint>
 #include <memory>
-#include <vector>
 
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/constructors.hpp>
