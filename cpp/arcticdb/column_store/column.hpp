@@ -61,14 +61,11 @@ constexpr bool is_narrowing_conversion() {
 struct JiveTable {
     explicit JiveTable(size_t num_rows) :
         orig_pos_(num_rows),
-        sorted_pos_(num_rows),
-        unsorted_rows_(bv_size(num_rows)) {
+        sorted_pos_(num_rows) {
     }
 
     std::vector<uint32_t> orig_pos_;
     std::vector<uint32_t> sorted_pos_;
-    util::BitSet unsorted_rows_;
-    size_t num_unsorted_ = 0;
 };
 
 class Column;
@@ -397,7 +394,10 @@ public:
     void append_sparse_map(const util::BitMagic& bv, position_t at_row);
     void append(const Column& other, position_t at_row);
 
-    void sort_external(const JiveTable& jive_table);
+    // Sorts the column by an external column's jive_table.
+    // pre_allocated_space can be reused across different calls to sort_external to avoid unnecessary allocations.
+    // It has to be the same size as the jive_table.
+    void sort_external(const JiveTable& jive_table, std::vector<uint32_t>& pre_allocated_space);
 
     void mark_absent_rows(size_t num_rows);
 
@@ -528,6 +528,19 @@ public:
         return *data_.buffer().ptr_cast<T>(bytes_offset(*physical_row), sizeof(T));
     }
 
+    // Copies all physical scalars to a std::vector<T>. This is useful if you require many random access operations
+    // and you would like to avoid the overhead of computing the exact location every time.
+    template<typename T>
+    std::vector<T> clone_scalars_to_vector() const {
+        auto values = std::vector<T>();
+        values.reserve(row_count());
+        const auto& buffer = data_.buffer();
+        for (auto i=0u; i<row_count(); ++i){
+            values.push_back(*buffer.ptr_cast<T>(i*item_size(), sizeof(T)));
+        }
+        return values;
+    }
+
     // N.B. returning a value not a reference here, so it will need to be pre-checked when data is sparse or it
     // will likely 'splode.
     template<typename T>
@@ -653,6 +666,9 @@ private:
     bool empty() const;
     void regenerate_offsets() const;
 
+    // Permutes the physical column storage based on the given sorted_pos.
+    void physical_sort_external(std::vector<uint32_t> &&sorted_pos);
+
     [[nodiscard]] util::BitMagic& sparse_map();
     const util::BitMagic& sparse_map() const;
 
@@ -676,21 +692,16 @@ template <typename T>
 JiveTable create_jive_table(const Column& col) {
     JiveTable output(col.row_count());
     std::iota(std::begin(output.orig_pos_), std::end(output.orig_pos_), 0);
-    std::iota(std::begin(output.sorted_pos_), std::end(output.sorted_pos_), 0);
 
+    // Calls to scalar_at are expensive, so we precompute them to speed up the sort compare function.
+    auto values = col.template clone_scalars_to_vector<T>();
     std::sort(std::begin(output.orig_pos_), std::end(output.orig_pos_),[&](const auto& a, const auto& b) -> bool {
-        return col.template scalar_at<T>(a) < col.template scalar_at<T>(b);
+        return values[a] < values[b];
     });
 
-    std::sort(std::begin(output.sorted_pos_), std::end(output.sorted_pos_),[&](const auto& a, const auto& b) -> bool {
-        return output.orig_pos_[a] < output.orig_pos_[b];
-    });
-
-    for(auto pos : folly::enumerate(output.sorted_pos_)) {
-        if(pos.index != *pos) {
-            output.unsorted_rows_.set(bv_size(pos.index), true);
-            ++output.num_unsorted_;
-        }
+    // Obtain the sorted_pos_ by reversing the orig_pos_ permutation
+    for (auto i=0u; i<output.orig_pos_.size(); ++i){
+        output.sorted_pos_[output.orig_pos_[i]] = i;
     }
 
     return output;

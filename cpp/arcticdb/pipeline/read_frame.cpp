@@ -32,6 +32,7 @@
 #include <google/protobuf/util/message_differencer.h>
 #include <folly/SpinLock.h>
 #include <folly/gen/Base.h>
+#include <folly/concurrency/ConcurrentHashMap.h>
 
 namespace arcticdb::pipelines {
 

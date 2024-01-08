@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import os
 from contextlib import contextmanager
 from typing import Mapping, Any, Optional, Iterable, NamedTuple, List, AnyStr
@@ -17,7 +18,6 @@ import time
 import attr
 from copy import deepcopy
 from functools import wraps
-import sys
 
 from arcticdb.config import Defaults
 from arcticdb.log import configure, logger_by_name
@@ -30,6 +30,16 @@ from arcticc.pb2.storage_pb2 import LibraryDescriptor, VersionStoreConfig
 from arcticdb.version_store.helper import ArcticFileConfig
 from arcticdb.config import _DEFAULT_ENVS_PATH
 from arcticdb_ext import set_config_int, get_config_int, unset_config_int
+
+
+def create_df(start=0, columns=1) -> pd.DataFrame:
+    data = {}
+    for i in range(columns):
+        col_name = chr(ord("x") + i)  # Generates column names like 'x', 'y', 'z', etc.
+        data[col_name] = np.arange(start + i * 10, start + (i + 1) * 10, dtype=np.int64)
+
+    index = np.arange(start, start + 10, dtype=np.int64)
+    return pd.DataFrame(data, index=index)
 
 
 def maybe_not_check_freq(f):
@@ -180,7 +190,12 @@ def configure_test_logger(level="INFO"):
 
 
 CustomThing = NamedTuple(
-    "CustomThing", [("custom_index", np.ndarray), ("custom_columns", List[AnyStr]), ("custom_values", List[np.ndarray])]
+    "CustomThing",
+    [
+        ("custom_index", np.ndarray),
+        ("custom_columns", List[AnyStr]),
+        ("custom_values", List[np.ndarray]),
+    ],
 )
 
 
@@ -362,7 +377,12 @@ def compare_version_data(source_lib, target_libs, versions):
             for target_lib in target_libs:
                 target_vit = target_lib.read(symbol, as_of=version)
                 try:
-                    compare_data(source_vit.data, source_vit.metadata, target_vit.data, target_vit.metadata)
+                    compare_data(
+                        source_vit.data,
+                        source_vit.metadata,
+                        target_vit.data,
+                        target_vit.metadata,
+                    )
                 except AssertionError as e:
                     print("Version {} of symbol {} differs".format(version, symbol))
                     print("Source:\n{}".format(source_vit.data))
@@ -377,7 +397,12 @@ def compare_snapshot_data(source_lib, target_libs, snapshot_versions):
             for target_lib in target_libs:
                 target_vit = target_lib.read(symbol, as_of=snapshot)
                 try:
-                    compare_data(source_vit.data, source_vit.metadata, target_vit.data, target_vit.metadata)
+                    compare_data(
+                        source_vit.data,
+                        source_vit.metadata,
+                        target_vit.data,
+                        target_vit.metadata,
+                    )
                 except AssertionError as e:
                     print("Snapshot {} of symbol {} differs".format(snapshot, symbol))
                     print("Source:\n{}".format(source_vit.data))

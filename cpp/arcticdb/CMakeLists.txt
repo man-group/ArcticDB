@@ -323,7 +323,6 @@ set(arcticdb_srcs
         util/ref_counted_map.hpp
         util/ref_counted_map.hpp
         util/regex_filter.hpp
-        util/shared_future.hpp
         util/simple_string_hash.hpp
         util/slab_allocator.hpp
         util/sparse_utils.hpp
@@ -514,6 +513,14 @@ set (arcticdb_core_libraries
         Azure::azure-identity
         Azure::azure-storage-blobs
 )
+
+if(${ARCTICDB_PYTHON_EXPLICIT_LINK})
+    # Even though python is transitive dependency MSVS builds fail if we don't link against python explicitly
+    # TODO: Figure out why
+    list(APPEND arcticdb_core_libraries
+        Python::Python
+    )
+endif()
 
 # Dependencies expose different names of their libraries depending
 # on their origin (i.e. vendored source or packages on conda-forge).
@@ -713,6 +720,7 @@ if(${TEST})
     find_package(Python 3 COMPONENTS Interpreter Development REQUIRED)
     find_package(Arrow REQUIRED)
     find_package(rapidcheck REQUIRED)
+    find_package(benchmark REQUIRED)
 
     python_utils_dump_vars_if_enabled("Python for test compilation")
 
@@ -856,6 +864,22 @@ if(${TEST})
     endif()
 
     gtest_discover_tests(test_unit_arcticdb PROPERTIES DISCOVERY_TIMEOUT 60)
+
+    set(benchmark_srcs
+            column_store/test/benchmark_memory_segment.cpp
+            processing/test/benchmark_clause.cpp)
+
+    add_executable(benchmarks ${benchmark_srcs})
+
+    target_link_libraries(benchmarks
+            PUBLIC
+            benchmark::benchmark
+            benchmark::benchmark_main
+            ${COMMON_PUBLIC_TEST_LIBRARIES}
+            PRIVATE
+            ${AWSSDK_LINK_LIBRARIES}
+            arcticdb_core_static
+            )
 
     set(rapidcheck_srcs
             column_store/test/rapidcheck_column_store.cpp

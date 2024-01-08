@@ -49,31 +49,4 @@ namespace arcticdb {
         log_event(store, snapshot_id, DeleteSnapshotId);
     }
 
-    // Compact log events
-    StreamDescriptor log_compacted_stream_descriptor(const StreamId& stream_id,
-                                                     DataType symbol_datatype = DataType::ASCII_DYNAMIC64);
-
-    inline bool is_recognized_log_action(const StreamId& id) {
-        return
-        id == StreamId{WriteVersionId} ||
-        id == StreamId{TombstoneVersionId} ||
-        id == StreamId{TombstoneAllVersionId} ||
-        id == StreamId{CreateSnapshotId} ||
-        id == StreamId{DeleteSnapshotId};
-    }
-
-    inline StreamDescriptor ts_stream_descriptor(const StreamId &stream_id) {
-        return StreamDescriptor{
-            stream_descriptor(stream_id, stream::RowCountIndex(),
-                {scalar_field(DataType::UINT64, "ts")})
-        };
-    }
-
-    inline SegmentInMemory ts_segment(const StreamId &name, uint64_t timestamp) {
-        SegmentInMemory output{ts_stream_descriptor(name)};
-        output.set_scalar(0, timestamp);
-        output.end_row();
-        return output;
-    }
-
- } //namespace arcticdb
+} //namespace arcticdb

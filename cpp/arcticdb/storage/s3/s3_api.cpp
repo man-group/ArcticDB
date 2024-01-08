@@ -6,7 +6,6 @@
  */
 
 #include <arcticdb/storage/s3/s3_api.hpp>
-#include <folly/Singleton.h>
 #include <aws/core/utils/memory/stl/AWSString.h>
 #include <aws/core/utils/logging/DefaultLogSystem.h>
 #include <aws/core/utils/logging/AWSLogging.h>
@@ -40,7 +39,7 @@ S3ApiInstance::S3ApiInstance(Aws::Utils::Logging::LogLevel log_level) :
     }
     if (ec2_metadata_endpoint_reachable())
         return;
-    ARCTICDB_RUNTIME_DEBUG(log::Loggers::instance()->storage(),
+    ARCTICDB_RUNTIME_DEBUG(log::storage(),
         "Does not appear to be using AWS. Will set AWS_EC2_METADATA_DISABLED");
 #ifdef WIN32
     _putenv_s("AWS_EC2_METADATA_DISABLED", "true");

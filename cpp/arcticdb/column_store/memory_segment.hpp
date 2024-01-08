@@ -385,7 +385,7 @@ public:
         impl_->sort(column);
     }
 
-    SegmentInMemory clone() {
+    SegmentInMemory clone() const {
         return SegmentInMemory(std::make_shared<SegmentInMemoryImpl>(impl_->clone()));
     }
 

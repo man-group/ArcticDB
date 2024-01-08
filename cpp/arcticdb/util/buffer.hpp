@@ -10,12 +10,8 @@
 #include <util/allocator.hpp>
 #include <util/constructors.hpp>
 
-#include <cstdlib>
 #include <cstdint>
 #include <memory>
-#include <algorithm>
-#include <cassert>
-#include <cstring>
 #include <variant>
 
 namespace arcticdb {
@@ -217,7 +213,7 @@ struct Buffer : public BaseBuffer<Buffer, true> {
     [[nodiscard]] uint8_t* preamble() {
         return data_;
     }
-    
+
     [[nodiscard]] size_t available() const {
         return capacity_ >= preamble_bytes_ ? capacity_ - preamble_bytes_ : 0;
     }

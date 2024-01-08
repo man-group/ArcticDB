@@ -20,7 +20,6 @@
 #include <filesystem>
 #include <chrono>
 #include <thread>
-#include <folly/futures/Barrier.h>
 
 struct VersionStoreTest : arcticdb::TestStore {
 protected:

@@ -494,6 +494,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("update",
              &PythonVersionStore::update,
              py::call_guard<SingleThreadMutexHolder>(), "Update the most recent version of a dataframe")
+       .def("indexes_sorted",
+             &PythonVersionStore::indexes_sorted,
+             py::call_guard<SingleThreadMutexHolder>(), "Returns the sorted indexes of a symbol")
         .def("snapshot",
              &PythonVersionStore::snapshot,
              py::call_guard<SingleThreadMutexHolder>(), "Create a snapshot")

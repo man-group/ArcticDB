@@ -7,8 +7,6 @@
 
 #include <arcticdb/storage/mongo/mongo_instance.hpp>
 
-#include <folly/Singleton.h>
-
 namespace arcticdb::storage::mongo {
 
 void MongoInstance::init() {
