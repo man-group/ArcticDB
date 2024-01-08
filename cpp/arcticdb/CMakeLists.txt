@@ -33,7 +33,6 @@ if(NOT WIN32 AND ${SSL_LINK})
 endif()
 
 find_package(Protobuf REQUIRED)
-set(Protobuf_lite_LIBRARY protobuf::libprotobuf-lite)
 set(Protobuf_LIBRARY protobuf::libprotobuf)
 
 find_package(mongocxx REQUIRED)
@@ -503,7 +502,6 @@ set (arcticdb_core_libraries
         prometheus-cpp::pull
         ${standard_libraries}
         fmt::fmt
-        ${Protobuf_lite_LIBRARY}
         ${Protobuf_LIBRARY}
         ${LZ4_LIBRARY}
         ${Zstd_LIBRARY}
