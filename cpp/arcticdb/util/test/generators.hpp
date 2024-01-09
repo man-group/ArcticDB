@@ -80,7 +80,7 @@ using SinkWrapper = SinkWrapperImpl<TestAggregator>;
 using RowCountIndexTestAggregator =  Aggregator<RowCountIndex, FixedSchema, stream::NeverSegmentPolicy>;
 using RowCountIndexSinkWrapper = SinkWrapperImpl<RowCountIndexTestAggregator>;
 
-using TableIndexTestAggregator =  Aggregator<RowCountIndex, FixedSchema, stream::NeverSegmentPolicy>;
+using TableIndexTestAggregator =  Aggregator<TableIndex, FixedSchema, stream::NeverSegmentPolicy>;
 using TableIndexIndexSinkWrapper = SinkWrapperImpl<TableIndexTestAggregator>;
 
 using TestSparseAggregator = Aggregator<TimeseriesIndex, FixedSchema, stream::NeverSegmentPolicy, SparseColumnPolicy>;

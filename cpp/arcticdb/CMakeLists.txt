@@ -495,6 +495,7 @@ else()
     endif()
 endif()
 
+target_link_libraries(arcticdb_proto PUBLIC protobuf::libprotobuf)
 
 set (arcticdb_core_libraries
         pybind11::module # Transitively includes Python::Module or Python::Python as appropriate
@@ -503,8 +504,6 @@ set (arcticdb_core_libraries
         prometheus-cpp::pull
         ${standard_libraries}
         fmt::fmt
-        ${Protobuf_lite_LIBRARY}
-        ${Protobuf_LIBRARY}
         ${LZ4_LIBRARY}
         ${Zstd_LIBRARY}
         ${ARCTICDB_MONGO_LIBS}
