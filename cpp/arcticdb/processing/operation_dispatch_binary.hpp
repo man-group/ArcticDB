@@ -85,7 +85,7 @@ VariantData binary_membership(const ColumnWithStrings& column_with_strings, Valu
                     util::BitSet::bulk_insert_iterator inserter(*output);
                     auto pos = 0u;
                     while (auto block = column_data.next<TypeDescriptorTag<ColumnTagType, DimensionTag<entity::Dimension::Dim0>>>()) {
-                        auto ptr = reinterpret_cast<const StringPool::offset_t*>(block->data());
+                        auto ptr = reinterpret_cast<const entity::position_t*>(block->data());
                         const auto row_count = block->row_count();
                         for (auto i = 0u; i < row_count; ++i, ++pos) {
                             auto offset = *ptr++;
@@ -196,7 +196,7 @@ VariantData binary_comparator(const Value& val, const ColumnWithStrings& column_
                 util::BitSet::bulk_insert_iterator inserter(*output);
                 auto pos = 0u;
                 while (auto block = column_data.next<TypeDescriptorTag<ColumnTagType, DimensionTag<entity::Dimension::Dim0>>>()) {
-                    auto ptr = reinterpret_cast<const StringPool::offset_t*>(block->data());
+                    auto ptr = reinterpret_cast<const entity::position_t*>(block->data());
                     const auto row_count = block->row_count();
                     for (auto i = 0u; i < row_count; ++i, ++pos) {
                         auto offset = *ptr++;
@@ -335,7 +335,7 @@ VariantData binary_comparator(const ColumnWithStrings& column_with_strings, cons
                 util::BitSet::bulk_insert_iterator inserter(*output);
                 auto pos = 0u;
                 while (auto block = column_data.next<TypeDescriptorTag<ColumnTagType, DimensionTag<entity::Dimension::Dim0>>>()) {
-                    auto ptr = reinterpret_cast<const StringPool::offset_t*>(block->data());
+                    auto ptr = reinterpret_cast<const entity::position_t*>(block->data());
                     const auto row_count = block->row_count();
                     for (auto i = 0u; i < row_count; ++i, ++pos) {
                         auto offset = *ptr++;

@@ -9,5 +9,24 @@
 #include <arcticdb/column_store/string_pool.hpp>
 
 namespace arcticdb {
-OffsetString::operator std::string_view() const { return pool_->get_view(offset()); }
+
+OffsetString::OffsetString(OffsetString::offset_t offset, StringPool *pool)
+    : offset_(offset)
+    , pool_(pool)
+{}
+
+OffsetString::operator std::string_view() const {
+    return pool_->get_view(offset());
+}
+
+OffsetString::offset_t OffsetString::offset() const {
+    return offset_;
+}
+
+// Given a set of string pool offsets, removes any that represent None or NaN
+void remove_nones_and_nans(robin_hood::unordered_set<OffsetString::offset_t>& offsets) {
+    offsets.erase(not_a_string());
+    offsets.erase(nan_placeholder());
+}
+
 } //namespace arcticdb
