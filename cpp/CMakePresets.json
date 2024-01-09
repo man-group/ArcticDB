@@ -43,6 +43,11 @@
         "type": "allOf",
         "conditions": [
           {
+            "lhs": "$env{ARCTICDB_USING_CONDA}",
+            "type": "equals",
+            "rhs": "1"
+          },
+          {
             "lhs": "${hostSystemName}",
             "type": "equals",
             "rhs": "$env{cmakepreset_expected_host_system}"
