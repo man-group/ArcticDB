@@ -1,4 +1,4 @@
-name: arcticdb
+name: adb
 channels:
   - conda-forge
 dependencies:
@@ -35,8 +35,7 @@ dependencies:
   - azure-core-cpp
   - azure-identity-cpp
   - azure-storage-blobs-cpp
-  # RocksDB is not supported on the conda build at the moment
-  #  - rocksdb
+  - rocksdb
   # ArcticDB is currently incompatible with fmt 10
   - fmt < 10
   - folly

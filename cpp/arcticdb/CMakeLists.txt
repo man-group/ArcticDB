@@ -40,6 +40,8 @@ find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypasses our cpp/CMake/FindZstd.c
 find_package(azure-identity-cpp CONFIG REQUIRED)
 find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
 
+find_package(RocksDB CONFIG REQUIRED)
+
 if(${BUILD_WITH_REMOTERY})
     add_compile_definitions(USE_REMOTERY)
 endif()
@@ -49,12 +51,7 @@ if(NOT ${ARCTICDB_USING_CONDA})
     find_package(Libevent CONFIG REQUIRED)
     set(ARCTICDB_MONGO_LIBS $<IF:$<TARGET_EXISTS:mongo::mongocxx_static>,mongo::mongocxx_static,mongo::mongocxx_shared>)
     set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
-
-    if(NOT DEFINED ARCTICDB_INCLUDE_ROCKSDB)
-        set(ARCTICDB_INCLUDE_ROCKSDB 1)
-    endif()
 else()
-
     # ARCTICDB_USING_CONDA is used in header of the files including vendored
     # sources to be able to use dependencies via conda at compile time.
     # TODO: rely on CMake directives instead of `ARCTICDB_USING_CONDA`.
@@ -90,12 +87,6 @@ else()
     list(REMOVE_ITEM NEW_FOLLY_DEPS "/usr/local/opt/openssl/include" )
     set_target_properties(Folly::folly_deps PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${NEW_FOLLY_DEPS}")
 
-endif()
-# RocksDB can be manually excluded with set(ARCTICDB_INCLUDE_ROCKSDB 0)
-# Default is to include on PyPI builds and exclude on conda builds
-if(${ARCTICDB_INCLUDE_ROCKSDB})
-    add_compile_definitions(ARCTICDB_INCLUDE_ROCKSDB)
-    find_package(RocksDB CONFIG REQUIRED)
 endif()
 
 # Libraries baked into the internal and external Linux images are found by searching various paths
@@ -406,6 +397,8 @@ set(arcticdb_srcs
         storage/mongo/mongo_client.cpp
         storage/mongo/mongo_instance.cpp
         storage/mongo/mongo_storage.cpp
+        storage/rocksdb/rocksdb_storage.hpp
+        storage/rocksdb/rocksdb_storage.cpp
         storage/s3/nfs_backed_storage.cpp
         storage/s3/s3_api.cpp
         storage/s3/s3_storage.cpp
@@ -436,13 +429,6 @@ set(arcticdb_srcs
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
         )
-
-if(${ARCTICDB_INCLUDE_ROCKSDB})
-    list (APPEND arcticdb_srcs
-        storage/rocksdb/rocksdb_storage.hpp
-        storage/rocksdb/rocksdb_storage.cpp
-    )
-endif()
 
 # Exclude vendored sources when using conda.
 if(NOT ${ARCTICDB_USING_CONDA})
@@ -508,6 +494,7 @@ set (arcticdb_core_libraries
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
         Azure::azure-identity
         Azure::azure-storage-blobs
+        RocksDB::rocksdb
 )
 
 if(${ARCTICDB_PYTHON_EXPLICIT_LINK})
@@ -567,10 +554,6 @@ else ()
             ${Sasl2_LIBRARY}
             )
 endif ()
-
-if (${ARCTICDB_INCLUDE_ROCKSDB})
-    list (APPEND arcticdb_core_libraries RocksDB::rocksdb)
-endif()
 
 list (APPEND arcticdb_core_libraries Threads::Threads) # comes last for weakreference resolution pthread_atexit in folly
 
