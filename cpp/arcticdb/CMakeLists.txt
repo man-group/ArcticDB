@@ -449,8 +449,19 @@ set(arcticdb_srcs
         version/version_store_api.cpp
         version/version_utils.cpp
         version/version_map_batch_methods.cpp
-        arrow/arrow_utils.hpp arrow/arrow_c_data_interface.hpp arrow/arrow_stream_interace.hpp arrow/arrow_wrappers.h arrow/arrow_schema.hpp arrow/arrow_error.hpp arrow/arrow_array.hpp arrow/arrow_buffer.hpp arrow/arrow_schema.cpp arrow/arrow_array.cpp arrow/python_bindings.cpp arrow/python_bindings.hpp)
-        version/symbol_list.cpp arrow/arrow_common.hpp)
+        arrow/arrow_utils.hpp
+        arrow/arrow_c_data_interface.hpp
+        arrow/arrow_stream_interace.hpp
+        arrow/arrow_wrappers.h
+        arrow/arrow_schema.hpp
+        arrow/arrow_error.hpp
+        arrow/arrow_array.hpp
+        arrow/arrow_buffer.hpp
+        arrow/arrow_schema.cpp
+        arrow/arrow_array.cpp
+        arrow/python_bindings.cpp
+        arrow/python_bindings.hpp
+        arrow/arrow_common.hpp arrow/arrow_data_interface.hpp)
 
 if(${ARCTICDB_INCLUDE_ROCKSDB})
     list (APPEND arcticdb_srcs
