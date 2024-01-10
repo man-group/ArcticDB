@@ -23,4 +23,6 @@ message Config {
     string region = 11;
     bool use_virtual_addressing = 12;
     bool use_mock_storage_for_testing = 13;
+    string ca_cert_path = 14;
+    string ca_cert_dir = 15;
 }
