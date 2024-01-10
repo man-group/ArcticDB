@@ -26,8 +26,8 @@ namespace arcticdb {
     }
 
     /// @important This calls pybind's initialize array function which is NOT thread safe. Moreover, numpy arrays can
-    /// be created only by the thread holindg the GIL. In practice we can get away with allocating arrays only from
-    /// a sigle thread (enve if it's not the one holding the GIL). This, however, is not guranteed to work.
+    /// be created only by the thread holding the GIL. In practice we can get away with allocating arrays only from
+    /// a single thread (even if it's not the one holding the GIL). This, however, is not guaranteed to work.
     /// @todo Allocate numpy arrays only from the thread holding the GIL
     [[nodiscard]] static inline PyObject* initialize_array(
         const pybind11::dtype& descr,
@@ -57,7 +57,8 @@ namespace arcticdb {
         const uint8_t*& input,
         uint8_t* dest,
         const VariantField& variant_field,
-        const entity::TypeDescriptor&,
+        const entity::TypeDescriptor& source_type_descriptor,
+        const entity::TypeDescriptor& destination_type_descriptor,
         size_t dest_bytes,
         std::shared_ptr<BufferHolder>,
         EncodingVersion
@@ -66,8 +67,25 @@ namespace arcticdb {
         util::check(dest != nullptr, "Got null destination pointer");
         const size_t num_rows = dest_bytes / get_type_size(DataType::EMPTYVAL);
         static_assert(get_type_size(DataType::EMPTYVAL) == sizeof(PyObject *));
-        auto ptr_dest = reinterpret_cast<const PyObject **>(dest);
-        fill_with_none(ptr_dest, num_rows);
+
+        const SizeBits destination_size_bits = destination_type_descriptor.get_size_bits();
+        destination_type_descriptor.visit_tag([&](auto tag) {
+            if constexpr (is_nullable_type(TypeDescriptor(tag))) {
+                auto ptr_dest = reinterpret_cast<const PyObject**>(dest);
+                fill_with_none(ptr_dest, num_rows);
+            } else if constexpr (is_floating_point_type(tag.data_type())) {
+                using RawType = typename decltype(tag)::DataTypeTag::raw_type;
+                RawType* ptr_dest = reinterpret_cast<RawType*>(dest);
+                std::generate(ptr_dest, ptr_dest + num_rows, &std::numeric_limits<RawType>::quiet_NaN);
+                dest += num_rows * sizeof(RawType);
+            } else if constexpr (is_integer_type(tag.data_type()) || is_bool_type(tag.data_type()) || is_time_type(tag.data_type())) {
+                using RawType = typename decltype(tag)::DataTypeTag::raw_type;
+                std::memset(dest, 0, sizeof(RawType) * num_rows);
+                dest += num_rows * sizeof(RawType);
+            } else {
+                static_assert(sizeof(tag) == 0, "Unhandled data_type");
+            }
+        });
 
         util::variant_match(variant_field, [&input](const auto &field) {
             using EncodedFieldType = std::decay_t<decltype(*field)>;
@@ -92,7 +110,8 @@ namespace arcticdb {
             const uint8_t*& data,
             uint8_t* dest,
             const VariantField& encoded_field_info,
-            const entity::TypeDescriptor& type_descriptor,
+            const entity::TypeDescriptor& source_type_descriptor,
+            const entity::TypeDescriptor& destination_type_descriptor,
             size_t dest_bytes,
             std::shared_ptr<BufferHolder>,
             EncodingVersion encding_version
@@ -116,7 +135,7 @@ namespace arcticdb {
             const auto bytes = encoding_sizes::data_uncompressed_size(ndarray);
             auto sparse = ChunkedBuffer::presized(bytes);
             SliceDataSink sparse_sink{sparse.data(), bytes};
-            data += decode_field(type_descriptor, *field, data, sparse_sink, bv, encding_version);
+            data += decode_field(source_type_descriptor, *field, data, sparse_sink, bv, encding_version);
             const auto num_bools = bv->count();
             auto ptr_src = sparse.template ptr_cast<uint8_t>(0, num_bools * sizeof(uint8_t));
             auto last_row = 0u;
@@ -142,7 +161,8 @@ namespace arcticdb {
         const uint8_t*& data,
         uint8_t* dest,
         const VariantField& encoded_field_info,
-        const entity::TypeDescriptor& type_descriptor,
+        const entity::TypeDescriptor& source_type_descriptor,
+        const entity::TypeDescriptor& destination_type_descriptor,
         size_t dest_bytes,
         std::shared_ptr<BufferHolder> buffers,
 		EncodingVersion encoding_version
@@ -158,17 +178,17 @@ namespace arcticdb {
                 fill_with_none(ptr_dest, row_count);
                 return;
             }
-            std::shared_ptr<Column> column = buffers->get_buffer(type_descriptor, true);
+            std::shared_ptr<Column> column = buffers->get_buffer(source_type_descriptor, true);
             column->check_magic();
             log::version().info("Column got buffer at {}", uintptr_t(column.get()));
             auto bv = std::make_optional(util::BitSet{});
-            data += decode_field(type_descriptor, *field, data, *column, bv, encoding_version);
+            data += decode_field(source_type_descriptor, *field, data, *column, bv, encoding_version);
 
             auto last_row = 0u;
             ARCTICDB_SUBSAMPLE(InitArrayAcquireGIL, 0)
-            const auto strides = static_cast<stride_t>(get_type_size(type_descriptor.data_type()));
-            const py::dtype py_dtype = generate_python_dtype(type_descriptor, strides);
-            type_descriptor.visit_tag([&] (auto tdt) {
+            const auto strides = static_cast<stride_t>(get_type_size(source_type_descriptor.data_type()));
+            const py::dtype py_dtype = generate_python_dtype(source_type_descriptor, strides);
+            source_type_descriptor.visit_tag([&] (auto tdt) {
                 const auto& blocks = column->blocks();
                 if(blocks.empty())
                     return;

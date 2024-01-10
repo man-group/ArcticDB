@@ -508,6 +508,10 @@ struct TypeDescriptor {
         data_type_ = combine_data_type(slice_value_type(data_type_), new_size_bits);
     }
 
+    [[nodiscard]] SizeBits get_size_bits() const {
+        return slice_bit_size(data_type_);
+    }
+
     [[nodiscard]] constexpr int get_type_byte_size() const {
         return get_byte_count(slice_bit_size(data_type_));
     }
@@ -529,11 +533,16 @@ constexpr bool is_numpy_array(TypeDescriptor td) {
 }
 
 constexpr bool is_pyobject_type(TypeDescriptor td) {
-    return is_dynamic_string_type(slice_value_type(td.data_type())) ||
-           slice_value_type(td.data_type()) == ValueType::PYBOOL ||
-           is_numpy_array(td);
+	return is_dynamic_string_type(slice_value_type(td.data_type())) || is_py_bool_type(td.data_type()) ||
+		is_numpy_array(td);
 }
 
+constexpr inline bool is_nullable_type(TypeDescriptor td) {
+    return td.dimension() > Dimension::Dim0 ||
+        is_empty_type(td.data_type()) ||
+        is_sequence_type(td.data_type()) ||
+        is_py_bool_type(td.data_type());
+}
 
 inline void set_data_type(DataType data_type, TypeDescriptor& type_desc) {
     type_desc.data_type_ = data_type;

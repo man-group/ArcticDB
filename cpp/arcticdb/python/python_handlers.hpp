@@ -17,7 +17,8 @@ namespace arcticdb {
             const uint8_t*& data,
             uint8_t* dest,
             const VariantField& encoded_field,
-            const entity::TypeDescriptor& type_descriptor,
+            const entity::TypeDescriptor& source_type_descriptor,
+            const entity::TypeDescriptor& destination_type_descriptor,
             size_t dest_bytes,
             std::shared_ptr<BufferHolder> buffers,
             EncodingVersion encding_version);
@@ -29,7 +30,8 @@ namespace arcticdb {
             const uint8_t *&data,
             uint8_t *dest,
             const VariantField &encoded_field,
-            const entity::TypeDescriptor &type_descriptor,
+            const entity::TypeDescriptor& source_type_descriptor,
+            const entity::TypeDescriptor& destination_type_descriptor,
             size_t dest_bytes,
             std::shared_ptr<BufferHolder> buffers,
             EncodingVersion encding_version);
@@ -40,7 +42,8 @@ namespace arcticdb {
                 const uint8_t*& data,
                 uint8_t* dest,
                 const VariantField& encoded_field,
-                const entity::TypeDescriptor& type_descriptor,
+                const entity::TypeDescriptor& source_type_descriptor,
+                const entity::TypeDescriptor& destination_type_descriptor,
                 size_t dest_bytes,
                 std::shared_ptr<BufferHolder> buffers
         );
@@ -55,7 +58,8 @@ namespace arcticdb {
             const uint8_t*& data,
             uint8_t* dest,
             const VariantField& encoded_field,
-            const entity::TypeDescriptor& type_descriptor,
+            const entity::TypeDescriptor& source_type_descriptor,
+            const entity::TypeDescriptor& destination_type_descriptor,
             size_t dest_bytes,
             std::shared_ptr<BufferHolder> buffers,
             EncodingVersion encding_version);
