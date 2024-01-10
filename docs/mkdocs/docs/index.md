@@ -46,7 +46,7 @@ To get started, we can import ArcticDB and instantiate it:
 >>> ac = Arctic(<URI>)
 ```
 
-For more information on the format of _<URI\>_, please view the docstring ([`>>> help(Arctic)`](https://docs.arcticdb.io/api/arcticdb#arcticdb.Arctic)). Below we'll run through some setup examples.
+For more information on the format of _<URI\>_, please view the docstring ([`>>> help(Arctic)`](api/arctic.md#arcticdb.Arctic)). Below we'll run through some setup examples.
 
 #### S3 configuration
 
@@ -117,7 +117,7 @@ For example:
 >>> ac = Arctic("azure://CA_cert_path=/etc/ssl/certs/ca-certificates.crt;BlobEndpoint=https://arctic.blob.core.windows.net;Container=acblob;SharedAccessSignature=sp=awd&st=2001-01-01T00:00:00Z&se=2002-01-01T00:00:00Z&spr=https&rf=g&sig=awd%3D")
 ```
 
-For more information, [see the Arctic class reference](https://docs.arcticdb.io/api/arcticdb#arcticdb.Arctic.__init__).
+For more information, [see the Arctic class reference](api/arctic.md#arcticdb.Arctic).
 
 #### LMDB
 
