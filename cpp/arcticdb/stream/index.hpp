@@ -244,6 +244,11 @@ private:
     std::string name_;
 };
 
+/*
+ * Special index which does not store any index values. The index value is
+ * derived from the offset of the segment, and no column representing the index
+ * is materialized.
+ */
 class RowCountIndex : public BaseIndex<RowCountIndex> {
   public:
     using TypeDescTag = TypeDescriptorTag<
@@ -261,7 +266,7 @@ class RowCountIndex : public BaseIndex<RowCountIndex> {
     static constexpr IndexDescriptor::Type type() { return IndexDescriptor::ROWCOUNT; }
 
     void check(const FieldCollection& ) const {
-        // No index defined
+        // No state to check for row count index.
     }
 
     template<typename SegmentType>
@@ -286,11 +291,8 @@ class RowCountIndex : public BaseIndex<RowCountIndex> {
 
     template<class RowCellSetter>
     void set(RowCellSetter setter, const IndexValue &index_value) {
-        if (std::holds_alternative<int64_t>(index_value)) {
-            auto index_val = std::get<int64_t>(index_value);
-            setter(0, index_val);
-        } else
-            util::raise_rte("Cannot set this type, expecting int64_t");
+        // No index value can be set since the value of the index relies on the
+        // offset of the segment.
     }
 
     RowCountIndex make_from_descriptor(const StreamDescriptor&) const {
