@@ -8,6 +8,8 @@ As of the Change Date specified in that file, in accordance with the Business So
 import re
 import time
 from typing import Optional
+import ssl
+import platform
 
 from arcticdb.options import LibraryOptions
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap, LibraryConfig
@@ -45,6 +47,13 @@ class ParsedQuery:
     # DEPRECATED - see https://github.com/man-group/ArcticDB/pull/833
     force_uri_lib_config: Optional[bool] = True
 
+    # winhttp is used as s3 backend support on Winodws by default; winhttp itself mainatains ca cert.
+    # The options has no effect on Windows
+    CA_cert_path: Optional[str] = "" # CURLOPT_CAINFO in curl
+    CA_cert_dir: Optional[str] = "" # CURLOPT_CAPATH in curl
+
+    ssl: Optional[bool] = False
+
 
 class S3LibraryAdapter(ArcticLibraryAdapter):
     REGEX = r"s3(s)?://(?P<endpoint>.*):(?P<bucket>[-_a-zA-Z0-9.]+)(?P<query>\?.*)?"
@@ -73,6 +82,18 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
 
         self._https = uri.startswith("s3s")
         self._encoding_version = encoding_version
+        if platform.system() != "Linux" and (self._query_params.CA_cert_path or self._query_params.CA_cert_dir):
+            raise ValueError("You have provided `ca_cert_path` or `ca_cert_dir` in the URI which is only supported on Linux. " \
+                             "Remove the setting in the connection URI and use your operating system defaults.")
+        self._ca_cert_path = self._query_params.CA_cert_path
+        self._ca_cert_dir = self._query_params.CA_cert_dir
+        if not self._ca_cert_path and not self._ca_cert_dir and platform.system() == "Linux":
+            if ssl.get_default_verify_paths().cafile is not None:
+                self._ca_cert_path = ssl.get_default_verify_paths().cafile
+            if ssl.get_default_verify_paths().capath is not None:
+                self._ca_cert_dir = ssl.get_default_verify_paths().capath
+
+        self._ssl = self._query_params.ssl
 
         if "amazonaws" in self._endpoint:
             self._configure_aws()
@@ -103,6 +124,9 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
             with_prefix=with_prefix,
             region=self._query_params.region,
             use_virtual_addressing=self._query_params.use_virtual_addressing,
+            ca_cert_path=self._ca_cert_path,
+            ca_cert_dir=self._ca_cert_dir,
+            ssl=self._ssl,
         )
 
         lib = NativeVersionStore.create_store_from_config(
@@ -160,6 +184,14 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
             s3_override.endpoint = self._endpoint
         if self._bucket:
             s3_override.bucket_name = self._bucket
+        if self._https:
+            s3_override.https = self._https
+        if self._ca_cert_path:
+            s3_override.ca_cert_path = self._ca_cert_path
+        if self._ca_cert_dir:
+            s3_override.ca_cert_dir = self._ca_cert_dir
+        if self._ssl:
+            s3_override.ssl = self._ssl
 
         s3_override.use_virtual_addressing = self._query_params.use_virtual_addressing
 
@@ -196,6 +228,9 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
             env_name=_DEFAULT_ENV,
             region=self._query_params.region,
             use_virtual_addressing=self._query_params.use_virtual_addressing,
+            ca_cert_path=self._ca_cert_path,
+            ca_cert_dir=self._ca_cert_dir,
+            ssl=self._ssl,
         )
 
     def _configure_aws(self):
