@@ -11,8 +11,8 @@
 
 #include <arcticdb/util/pb_util.hpp>
 #include <arcticdb/util/dump_bytes.hpp>
-#include <arcticdb/codec/encoded_field_collection.hpp>
 #include <arcticdb/codec/codec.hpp>
+#include <arcticdb/codec/magic_words.hpp>
 
 namespace arcticdb {
 namespace segment_size {
@@ -46,10 +46,11 @@ FieldCollection decode_fields(
         ARCTICDB_TRACE(log::codec(), "Decoding string pool");
         std::optional<util::BitMagic> bv;
         data += decode_field(FieldCollection::type(),
-                       hdr.descriptor_field(),
-                       data,
-                       fields,
-                       bv);
+            hdr.descriptor_field(),
+            data,
+            fields,
+            bv,
+            to_encoding_version(hdr.encoding_version()));
 
         ARCTICDB_TRACE(log::codec(), "Decoded string pool to position {}", data-begin);
     }
@@ -67,10 +68,11 @@ std::optional<FieldCollection> decode_index_fields(
         ARCTICDB_TRACE(log::codec(), "Decoding string pool");
         std::optional<util::BitMagic> bv;
         data += decode_field(FieldCollection::type(),
-                       hdr.index_descriptor_field(),
-                       data,
-                       fields,
-                       bv);
+            hdr.index_descriptor_field(),
+            data,
+            fields,
+            bv,
+            to_encoding_version(hdr.encoding_version()));
 
         ARCTICDB_TRACE(log::codec(), "Decoded string pool to position {}", data-begin);
         return std::make_optional<FieldCollection>(std::move(fields));
@@ -91,7 +93,7 @@ Segment Segment::from_bytes(const std::uint8_t* src, std::size_t readable_size, 
                        arcticdb::Segment::FIXED_HEADER_SIZE,
                        fixed_hdr->header_bytes,
                        header_bytes);
-    google::protobuf::io::ArrayInputStream ais(src + arcticdb::Segment::FIXED_HEADER_SIZE, fixed_hdr->header_bytes);
+    google::protobuf::io::ArrayInputStream ais(src + arcticdb::Segment::FIXED_HEADER_SIZE, static_cast<int>(fixed_hdr->header_bytes));
     auto arena = std::make_unique<google::protobuf::Arena>();
     auto seg_hdr = google::protobuf::Arena::CreateMessage<arcticdb::proto::encoding::SegmentHeader>(arena.get());
     seg_hdr->ParseFromZeroCopyStream(&ais);
@@ -111,11 +113,11 @@ Segment Segment::from_bytes(const std::uint8_t* src, std::size_t readable_size, 
         fields = fields_from_proto(seg_hdr->stream_descriptor());
     else {
         const auto* fields_ptr = src;
-        check_magic<MetadataMagic>(fields_ptr);
+        util::check_magic<MetadataMagic>(fields_ptr);
         if(seg_hdr->has_metadata_field())
             fields_ptr += encoding_sizes::field_compressed_size(seg_hdr->metadata_field());
 
-        check_magic<DescriptorMagic>(fields_ptr);
+        util::check_magic<DescriptorMagic>(fields_ptr);
         if(seg_hdr->has_descriptor_field() && seg_hdr->descriptor_field().has_ndarray())
             fields = decode_fields(*seg_hdr, fields_ptr);
     }
@@ -190,15 +192,13 @@ Segment Segment::from_buffer(std::shared_ptr<Buffer>&& buffer) {
     }
     else {
         const auto* fields_ptr = buffer->data() + preamble_size;
-        check_magic<MetadataMagic>(fields_ptr);
+        util::check_magic<MetadataMagic>(fields_ptr);
         if(seg_hdr->has_metadata_field())
             fields_ptr += encoding_sizes::field_compressed_size(seg_hdr->metadata_field());
 
-        check_magic<DescriptorMagic>(fields_ptr);
+        util::check_magic<DescriptorMagic>(fields_ptr);
         if(seg_hdr->has_descriptor_field() && seg_hdr->descriptor_field().has_ndarray())
             fields = decode_fields(*seg_hdr, fields_ptr);
-
-        preamble_size = fields_ptr - buffer->data();
     }
 
     buffer->set_preamble(arcticdb::Segment::FIXED_HEADER_SIZE + fixed_hdr->header_bytes);
@@ -207,7 +207,7 @@ Segment Segment::from_buffer(std::shared_ptr<Buffer>&& buffer) {
 
 }
 
-void Segment::write_header(uint8_t* dst, size_t hdr_size) {
+void Segment::write_header(uint8_t* dst, size_t hdr_size) const {
     FixedHeader hdr = {MAGIC_NUMBER, HEADER_VERSION_V1, std::uint32_t(hdr_size)};
     hdr.write(dst);
     if(!header_->has_metadata_field())

@@ -17,16 +17,16 @@ jobs:
       SYMBOLS_ARTIFACT: /tmp/symbols.tar.zst # Use absolute path to workaround a bug in action-gh-release
     steps:
       # Copy and pasted from the pypi job below, until GitHub adds selective artifact download
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v3.8.2
         if: inputs.run_id <= 0
         with:
           node-version: 16
-      - run: npm install @actions/artifact
+      - run: npm install @actions/artifact@1
         if: inputs.run_id <= 0
       - id: download
         name: Fetch wheel artifacts
         if: inputs.run_id <= 0
-        uses: actions/github-script@v6
+        uses: actions/github-script@v6.4.1
         with:
           script: |
             const dhc = require("./node_modules/@actions/artifact/lib/internal/download-http-client.js");
@@ -37,7 +37,7 @@ jobs:
             const client = new dhc.DownloadHttpClient();
             const artifactsResponse = await client.listArtifacts();
             for (const artifact of artifactsResponse.value) {
-                if (artifact.name.startsWith("build-metadata-follower-")) {
+                if (artifact.name.startsWith("build-metadata-build-")) {
                   console.log(`Downloading ${artifact.name} to ${cwd}`);
                   const itemsResponse = await client.getContainerItems(artifact.name, artifact.fileContainerResourceUrl);
                   // Must match "symbols" in build.yml
@@ -66,11 +66,11 @@ jobs:
         continue-on-error: true
 
       - name: Checkout # Needed by the release action
-        uses: actions/checkout@v3
+        uses: actions/checkout@v3.3.0
 
       - id: changelog
         name: Release Changelog Builder
-        uses: mikepenz/release-changelog-builder-action@v3
+        uses: mikepenz/release-changelog-builder-action@v3.7.3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -86,7 +86,7 @@ jobs:
             ${{steps.changelog.outputs.changelog}}
 
             ---
-            > The wheels are on [Pypi](https://pypi.org/project/arcticdb/). Below are for debugging:
+            > The wheels are on [PyPI](https://pypi.org/project/arcticdb/). Below are for debugging:
           files: ${{steps.compress.outcome == 'success' && env.SYMBOLS_ARTIFACT || ''}}
 
 
@@ -104,15 +104,15 @@ jobs:
           GH_REPO: ${{github.repository}}
 
       # Above `gh` command don't work on the current run, so will have to hack:
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v3.8.2
         if: inputs.run_id <= 0
         with:
           node-version: 16
-      - run: npm install @actions/artifact
+      - run: npm install @actions/artifact@1
         if: inputs.run_id <= 0
       - name: Fetch wheel artifacts
         if: inputs.run_id <= 0
-        uses: actions/github-script@v6
+        uses: actions/github-script@v6.4.1
         with:
           script: |
             const dhc = require("./node_modules/@actions/artifact/lib/internal/download-http-client.js");

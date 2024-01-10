@@ -138,7 +138,7 @@ struct DefaultStringGenerator {
         vec.resize(num_rows * strides_);
         const char *strings[] = {"dog", "cat", "horse"};
         for (size_t i = 0; i < num_rows; ++i) {
-            memcpy(&vec[i * strides_], &strings[i % 3], sizeof(strings[i % 3]));
+            memcpy(&vec[i * strides_], &strings[i % 3], strlen(strings[i % 3]));
         }
     }
 };
@@ -146,13 +146,13 @@ struct DefaultStringGenerator {
 template<class ContainerType, typename DTT,
     std::enable_if_t<std::is_floating_point_v<typename DTT::raw_type> || std::is_integral_v<typename DTT::raw_type>,
                      int> = 0>
-NativeTensor test_column(ContainerType &container, DTT, size_t num_rows, size_t start_val, bool is_index) {
+NativeTensor test_column(ContainerType &container, DTT, shape_t num_rows, size_t start_val, bool is_index) {
     using RawType = typename DTT::raw_type;
     constexpr auto dt = DTT::data_type;
 
     shape_t shapes = num_rows;
     stride_t strides;
-    ssize_t elsize;
+    stride_t elsize;
 
     strides = sizeof(RawType);
     elsize = static_cast<ssize_t>(get_type_size(dt));
@@ -162,11 +162,11 @@ NativeTensor test_column(ContainerType &container, DTT, size_t num_rows, size_t 
         fill_test_value_vector(container, RawType{}, num_rows, start_val);
 
     ssize_t bytes = shapes * strides;
-    return NativeTensor{bytes, 1, &strides, &shapes, dt, elsize, container.ptr()};
+    return NativeTensor{bytes, 1, &strides, &shapes, dt, elsize, container.ptr(), 1};
 }
 
 template<class ContainerType, typename DTT, class StringGenerator = DefaultStringGenerator>
-NativeTensor test_string_column(ContainerType &vec, DTT, size_t num_rows) {
+NativeTensor test_string_column(ContainerType &vec, DTT, shape_t num_rows) {
     constexpr auto dt = DTT::data_type;
     shape_t shapes = num_rows;
     stride_t strides;
@@ -178,7 +178,7 @@ NativeTensor test_string_column(ContainerType &vec, DTT, size_t num_rows) {
     string_gen.fill_string_vector(vec, num_rows);
 
     ssize_t bytes = shapes * strides;
-    return NativeTensor{bytes, 1, &strides, &shapes, dt, elsize, vec.data()};
+    return NativeTensor{bytes, 1, &strides, &shapes, dt, elsize, vec.data(), 1};
 }
 
 inline std::vector<entity::FieldRef> get_test_timeseries_fields() {
@@ -219,9 +219,9 @@ void fill_test_column(arcticdb::pipelines::InputTensorFrame &frame,
     using RawType = typename decltype(data_type_tag)::raw_type;
     if (!is_index) {
         if constexpr (std::is_integral_v<RawType> || std::is_floating_point_v<RawType>)
-            frame.field_tensors.push_back(test_column(container, data_type_tag, num_rows, start_val, is_index));
+            frame.field_tensors.emplace_back(test_column(container, data_type_tag, num_rows, start_val, is_index));
         else
-            frame.field_tensors.push_back(test_string_column(container, data_type_tag, num_rows, start_val, is_index));
+            frame.field_tensors.emplace_back(test_string_column(container, data_type_tag, num_rows, start_val, is_index));
     } else {
         if constexpr (std::is_integral_v<RawType>)
             frame.index_tensor =

@@ -112,6 +112,18 @@ inline Column generate_int_column_repeated_values(size_t num_rows, size_t unique
     return column;
 }
 
+// Similar to generate_int_column_repeated_values, but with missing values where index % (unique_values + 1) == 0
+inline Column generate_int_column_sparse_repeated_values(size_t num_rows, size_t unique_values) {
+    using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension ::Dim0>>;
+    Column column(static_cast<TypeDescriptor>(TDT{}), 0, false, true);
+    for(size_t idx = 0; idx < num_rows; ++idx) {
+        if (idx % (unique_values + 1) != 0) {
+            column.set_scalar<int64_t>(static_cast<ssize_t>(idx), static_cast<int64_t>(idx % unique_values));
+        }
+    }
+    return column;
+}
+
 // Generates a Column of empty type
 inline Column generate_empty_column() {
     using TDT = TypeDescriptorTag<DataTypeTag<DataType::EMPTYVAL>, DimensionTag<Dimension ::Dim0>>;
@@ -158,6 +170,22 @@ inline SegmentInMemory generate_groupby_testing_sparse_segment(size_t num_rows, 
     for (const auto& name: col_names)
     {
         auto col = std::make_shared<Column>(generate_int_sparse_column(num_rows));
+        seg.add_column(scalar_field(col->type().data_type(), name), col);
+    }
+    seg.set_row_id(num_rows - 1);
+    return seg;
+}
+
+inline SegmentInMemory generate_sparse_groupby_testing_segment(size_t num_rows, size_t unique_values)
+{
+    SegmentInMemory seg;
+    auto int_sparse_repeated_values_col = std::make_shared<Column>(generate_int_column_sparse_repeated_values(num_rows, unique_values));
+    int_sparse_repeated_values_col->mark_absent_rows(num_rows-1);
+    seg.add_column(scalar_field(int_sparse_repeated_values_col->type().data_type(), "int_sparse_repeated_values"), int_sparse_repeated_values_col);
+    std::vector<std::string> col_names = { "sum_int", "min_int", "max_int", "mean_int", "count_int" };
+    for (const auto& name: col_names)
+    {
+        auto col = std::make_shared<Column>(generate_int_column(num_rows));
         seg.add_column(scalar_field(col->type().data_type(), name), col);
     }
     seg.set_row_id(num_rows - 1);
@@ -303,7 +331,8 @@ inline NativeTensor tensor_from_column(const Column &column) {
             shape_ptr,
             data_type,
             get_type_size(data_type),
-            column.ptr()
+            column.ptr(),
+            to_tensor_dim(dim)
         };
         return tensor;
     });
@@ -325,9 +354,8 @@ struct SegmentToInputFrameAdapter {
             }
         }
 
-        while (col < segment_.num_columns()) {
-            input_frame_.field_tensors.push_back(tensor_from_column(segment_.column(col++)));
-        }
+        while (col < segment_.num_columns())
+            input_frame_.field_tensors.emplace_back(tensor_from_column(segment_.column(col++)));
 
         input_frame_.set_index_range();
     }
@@ -337,7 +365,7 @@ struct SegmentToInputFrameAdapter {
             auto segment_tsd = segment_.index_descriptor();
             input_frame_.norm_meta.CopyFrom(segment_tsd.proto().normalization());
         }
-        ensure_norm_meta(input_frame_.norm_meta, input_frame_.desc.id(), false);
+        ensure_timeseries_norm_meta(input_frame_.norm_meta, input_frame_.desc.id(), false);
     }
 
 };

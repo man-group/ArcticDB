@@ -36,7 +36,7 @@ public:
 
 private:
     bool acquired_gil_;
-    PyGILState_STATE state_;
+    PyGILState_STATE state_ = PyGILState_UNLOCKED;
 };
 
 } //namespace arcticdb

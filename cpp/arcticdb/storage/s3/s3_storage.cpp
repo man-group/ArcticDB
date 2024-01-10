@@ -38,7 +38,6 @@
 #include <aws/s3/model/ObjectIdentifier.h>
 
 #include <boost/interprocess/streams/bufferstream.hpp>
-#include <folly/ThreadLocal.h>
 
 #include <arcticdb/storage/s3/detail-inl.hpp>
 
@@ -78,11 +77,11 @@ void S3Storage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
 }
 
 void S3Storage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string& prefix) {
-    auto prefix_handler = [] (const std::string& prefix, const std::string& key_type_dir, const KeyDescriptor key_descriptor, KeyType) {
+    auto prefix_handler = [] (const std::string& prefix, const std::string& key_type_dir, const KeyDescriptor& key_descriptor, KeyType) {
         return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
     };
 
-    detail::do_iterate_type_impl(key_type, std::move(visitor), root_folder_, bucket_name_, s3_client_, FlatBucketizer{}, std::move(prefix_handler), prefix);
+    detail::do_iterate_type_impl(key_type, visitor, root_folder_, bucket_name_, s3_client_, FlatBucketizer{}, std::move(prefix_handler), prefix);
 }
 
 bool S3Storage::do_key_exists(const VariantKey& key) {
@@ -98,17 +97,17 @@ namespace arcticdb::storage::s3 {
 
 namespace detail {
 std::streamsize S3StreamBuffer::xsputn(const char_type* s, std::streamsize n) {
-    ARCTICDB_DEBUG(log::version(), "xsputn {} pos at {}, {} bytes", uintptr_t(buffer_.get()), pos_, n);
+    ARCTICDB_TRACE(log::version(), "xsputn {} pos at {}, {} bytes", uintptr_t(buffer_.get()), pos_, n);
     if(buffer_->bytes() < pos_ + n) {
-        ARCTICDB_DEBUG(log::version(), "{} Calling ensure for {}", uintptr_t(buffer_.get()), (pos_ + n) * 2);
+        ARCTICDB_TRACE(log::version(), "{} Calling ensure for {}", uintptr_t(buffer_.get()), (pos_ + n) * 2);
         buffer_->ensure((pos_ + n) * 2);
     }
 
     auto target = buffer_->ptr_cast<char_type>(pos_, n);
-    ARCTICDB_DEBUG(log::version(), "Putting {} bytes at {}", n, uintptr_t(target));
+    ARCTICDB_TRACE(log::version(), "Putting {} bytes at {}", n, uintptr_t(target));
     memcpy(target, s, n);
     pos_ += n;
-    ARCTICDB_DEBUG(log::version(), "{} pos is now {}, returning {}", uintptr_t(buffer_.get()), pos_, n);
+    ARCTICDB_TRACE(log::version(), "{} pos is now {}, returning {}", uintptr_t(buffer_.get()), pos_, n);
     return n;
 }
 }

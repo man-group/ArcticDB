@@ -147,7 +147,7 @@ RC_GTEST_PROP(Column, TruncateSparse, (const std::vector<int64_t> &input)) {
     }
 }
 
-RC_GTEST_PROP(Column, SearchSorted, (const std::vector<int64_t>& input, const int64_t& value_to_find)) {
+RC_GTEST_PROP(Column, SearchSorted, (const std::vector<int64_t>& input, int64_t value_to_find)) {
     using namespace arcticdb;
     RC_PRE(input.size() > 0u);
     auto sorted_input = input;
@@ -162,9 +162,7 @@ RC_GTEST_PROP(Column, SearchSorted, (const std::vector<int64_t>& input, const in
     }
     auto left_idx = column.search_sorted<int64_t>(value_to_find, false);
     auto right_idx = column.search_sorted<int64_t>(value_to_find, true);
-    RC_ASSERT(left_idx >= 0);
     RC_ASSERT(left_idx <= n);
-    RC_ASSERT(right_idx >= 0);
     RC_ASSERT(right_idx <= n);
     if (left_idx == 0) {
         RC_ASSERT(value_to_find <= smallest_value);

@@ -38,8 +38,8 @@ struct TestValue {
     using raw_type = typename DataTypeTag::raw_type;
 
     std::vector<raw_type> data_;
-    std::vector<ssize_t> shapes_;
-    mutable std::vector<ssize_t> strides_;
+    std::vector<shape_t> shapes_;
+    mutable std::vector<stride_t> strides_;
     raw_type start_val_;
 
     TestValue(raw_type start_val = raw_type(), size_t num_vals = 20) :
@@ -49,7 +49,7 @@ struct TestValue {
             return;
         }
 
-        constexpr ssize_t itemsize = ssize_t(sizeof(raw_type));
+        constexpr int64_t itemsize = sizeof(raw_type);
 
         if (dimensions == Dimension::Dim1) {
             shapes_.push_back(num_vals);
@@ -92,7 +92,7 @@ struct TestValue {
     TensorType<raw_type> get_tensor() const {
         util::check_arg(dimensions != Dimension::Dim0, "get tensor called on scalar test value");
         reconstruct_strides();
-        return TensorType<raw_type>{shapes_.data(), ssize_t(dimensions), DataTypeTag::data_type, get_type_size(DataTypeTag::data_type), data_.data()};
+        return TensorType<raw_type>{shapes_.data(), ssize_t(dimensions), DataTypeTag::data_type, get_type_size(DataTypeTag::data_type), data_.data(), ssize_t(dimensions)};
     }
 
     bool check_tensor(TensorType<raw_type> &t) const {
@@ -108,7 +108,7 @@ struct TestValue {
         return check_impl(dimensions, 0, shapes, strides, data);
     }
 
-    bool check_impl(Dimension dim, int pos, const ssize_t *shapes, const ssize_t *strides, const raw_type *data) const {
+    bool check_impl(Dimension dim, int pos, const shape_t *shapes, const stride_t *strides, const raw_type *data) const {
         auto shape = shapes_[size_t(dim) - 1];
         auto stride = strides_[size_t(dim) - 1] / sizeof(raw_type);
         for (int i = 0; i < +shape; ++i) {
@@ -143,7 +143,7 @@ struct TestRow {
         values_() {
         std::iota(std::begin(starts_), std::end(starts_), start_val);
         for (auto &s : starts_)
-            values_.push_back(TestValue<TDT>{s, num_vals});
+            values_.emplace_back(TestValue<TDT>{s, num_vals});
         auto prev_size = bitset_.size();
         bitset_.resize(num_columns + 1);
         bitset_.set_range(prev_size, bitset_.size() - 1, true);
@@ -162,4 +162,3 @@ struct TestRow {
     mutable util::BitSet bitset_;
     std::vector<TestValue<TDT>> values_;
 };
-

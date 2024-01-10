@@ -80,7 +80,7 @@ void register_types(py::module &m) {
     //TODO re-add at the end
    python_util::add_repr(py::class_<StreamDescriptor>(m, "StreamDescriptor")
     .def(py::init([](StreamId stream_id, IndexDescriptor idx_desc, const std::vector<FieldRef>& fields) {
-                                  auto index = default_index_type_from_descriptor(idx_desc.proto());
+                                  auto index = stream::default_index_type_from_descriptor(idx_desc.proto());
                                   return util::variant_match(index, [&stream_id, &fields] (auto idx_type){
                                       return StreamDescriptor{index_descriptor(stream_id, idx_type, fields_from_range(fields))};
                                   });

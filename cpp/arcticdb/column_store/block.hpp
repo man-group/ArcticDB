@@ -9,17 +9,8 @@
 
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/magic_num.hpp>
-#include <arcticdb/util/allocator.hpp>
-#include <arcticdb/util/bitset.hpp>
 
-#include <cstdlib>
 #include <cstdint>
-#include <memory>
-#include <algorithm>
-#include <cassert>
-#include <cstring>
-#include <vector>
-#include <numeric>
 
 
 namespace arcticdb {
@@ -114,7 +105,7 @@ struct MemBlock {
 
     size_t bytes_;
     size_t capacity_;
-    const uint8_t *external_data_;
+    const uint8_t *external_data_ = nullptr;
     size_t offset_;
     entity::timestamp ts_;
 

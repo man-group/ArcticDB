@@ -79,11 +79,11 @@ static_assert(sizeof(TurboPforCodec) == encoding_size);
 struct Lz4Codec {
     static constexpr Codec type_ = Codec::Lz4;
 
-    void MergeFrom(arcticdb::proto::encoding::VariantCodec::Lz4 lz4) {
+    void MergeFrom(const arcticdb::proto::encoding::VariantCodec::Lz4& lz4) {
         acceleration_ = lz4.acceleration();
     }
 
-    int32_t acceleration_;
+    int32_t acceleration_ = 1;
     int16_t padding_ = 0;
 };
 
@@ -199,16 +199,16 @@ struct EncodedBlock {
         hash_ = hash;
     }
 
+    [[nodiscard]] uint64_t hash() const {
+        return hash_;
+    }
+
     uint32_t out_bytes() const {
         return out_bytes_;
     }
 
     uint32_t in_bytes() const {
         return in_bytes_;
-    }
-
-    void set_version(uint16_t version) {
-        encoder_version_ = version;
     }
 
     BlockCodec *mutable_codec() {
@@ -336,6 +336,12 @@ struct EncodedField {
             return is_shapes_ ? field_.shapes_count_ : field_.shapes_count_ + field_.values_count_;
         }
 
+        [[nodiscard]] const EncodedBlock& operator[](const size_t idx) const {
+            // Shape blocks are located before values blocks in the field. In case this is a collection of value blocks
+            // we have to skip all shape blocks. In case this is a collection of shapes we can start from 0 index.
+            const size_t shape_offset = !is_shapes_ * field_.shapes_count_;
+            return field_.blocks()[shape_offset + idx];
+        }
         const EncodedField &field_;
         bool is_shapes_;
     };
@@ -344,7 +350,7 @@ struct EncodedField {
         return type_;
     }
 
-    const EncodedBlock &shapes(size_t n) const {
+    const EncodedBlock& shapes(size_t n) const {
         util::check(n == 0, "Expected only one shape");
         util::check(shapes_count_ != 0, "No shape allocated");
         return blocks_[0];

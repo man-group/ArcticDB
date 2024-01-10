@@ -1,11 +1,10 @@
-cmake_minimum_required(VERSION 3.12) # FindPython
+cmake_minimum_required(VERSION 3.21) # TARGET_RUNTIME_DLLS
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake" ${CMAKE_MODULE_PATH})
 cmake_policy(SET CMP0048 NEW)
 project(arcticdb VERSION 0.0.1)
 
 enable_testing()
-
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -14,20 +13,55 @@ option(
     "Whether ArcticDB's build system relies on conda for resolving its dependencies."
     OFF
 )
+option(ARCTICDB_USING_ADDRESS_SANITIZER "Enable address sanitizer." OFF)
+option(ARCTICDB_USING_THREAD_SANITIZER "Enable thread sanitizer." OFF)
+option(ARCTICDB_USING_UB_SANITIZER "Enable undefined behavior sanitizer." OFF)
 
+set(ARCTICDB_SANITIZER_FLAGS)
+if(${ARCTICDB_USING_ADDRESS_SANITIZER})
+    list(APPEND ARCTICDB_SANITIZER_FLAGS "-fsanitize=address;-shared-libasan")
+    link_libraries(atomic)
+    message(STATUS "Building ArcticDB with Address Sanitizer")
+endif()
+if(${ARCTICDB_USING_THREAD_SANITIZER})
+    list(APPEND ARCTICDB_SANITIZER_FLAGS "-fsanitize=thread")
+    link_libraries(atomic)
+    message(STATUS "Building ArcticDB with Thread Sanitizer")
+endif()
+if(${ARCTICDB_USING_UB_SANITIZER})
+    list(APPEND ARCTICDB_SANITIZER_FLAGS "-fsanitize=undefined")
+    message(STATUS "Building ArcticDB with UB Sanitizer")
+endif()
+
+if(ARCTICDB_SANITIZER_FLAGS)
+    list(APPEND ARCTICDB_SANITIZER_FLAGS "-g;-fno-omit-frame-pointer;-fno-optimize-sibling-calls;")
+    if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        add_link_options(-fuse-ld=lld)
+        # According to clang's docs only LLD can be used for lining https://clang.llvm.org/docs/AddressSanitizer.html#usage
+        message(STATUS "Clang compiler detected. Enforcing lld compiler.")
+    else()
+        message(WARNING "Sanitizers are tested only under Clang compiler and LLD linker.")
+    endif()
+    # Note: Sanitizer flags are set globally for all targets created after
+    add_compile_options("${ARCTICDB_SANITIZER_FLAGS}")
+    add_link_options(${ARCTICDB_SANITIZER_FLAGS})
+    message(STATUS "Building ArcticDB with sanitizers. Compiler flags: ${ARCTICDB_SANITIZER_FLAGS}")
+endif()
 
 if(WIN32)
-    add_compile_definitions(NOGDI)
-    add_compile_definitions(WIN32_LEAN_AND_MEAN)
-    add_compile_definitions(HAVE_SNPRINTF)
-    add_compile_definitions(NOMINMAX)
+    add_compile_definitions(
+        NOGDI WIN32_LEAN_AND_MEAN HAVE_SNPRINTF NOMINMAX
+        "$<$<CONFIG:Debug>:DEBUG_BUILD>"
+    )
 
     # We always generate the debug info on Windows since those are not in the final .dll.
     # sccache needs the /Z7 format, but the linker will still produce .pdb files.
     # Guide to MSVC compilation warnings https://learn.microsoft.com/en-us/cpp/error-messages/compiler-warnings/compiler-warnings-c4000-through-c4199?view=msvc-170
-    set(CMAKE_CXX_FLAGS "/DWIN32 /D_WINDOWS /GR /EHsc /bigobj /Z7 /w /wd4244 /wd4267")
-    set(CMAKE_CXX_FLAGS_RELEASE "/MT /DNDEBUG /O2")
-    set(CMAKE_CXX_FLAGS_DEBUG "/MTd /RTC1 /Od")
+    add_compile_options(
+        /DWIN32 /D_WINDOWS /GR /EHsc /bigobj /Z7 /wd4244 /wd4267
+        "$<$<CONFIG:Debug>:/RTC1;/Od;/MTd>"
+        "$<$<CONFIG:Release>:/MT;/Ox>"
+    )
 else()
     if(${ARCTICDB_USING_CONDA})
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wextra")
@@ -42,10 +76,10 @@ else()
     set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -ggdb")
 endif()
 
-IF(DEFINED ENV{CMAKE_BUILD_TYPE})
+if(DEFINED ENV{CMAKE_BUILD_TYPE})
     message(STATUS "Setting CMAKE_BUILD_TYPE to $ENV{CMAKE_BUILD_TYPE}")
     set(CMAKE_BUILD_TYPE $ENV{CMAKE_BUILD_TYPE})
-ENDIF()
+endif()
 
 if(NOT CMAKE_BUILD_TYPE)
     message(STATUS "Setting CMAKE_BUILD_TYPE to Release")

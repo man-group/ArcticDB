@@ -10,110 +10,11 @@
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/util/format_date.hpp>
+#include <arcticdb/util/memory_tracing.hpp>
 #include <arcticdb/pipeline/filter_segment.hpp>
+#include <arcticdb/stream/merge_utils.hpp>
 
 namespace arcticdb::stream {
-
-inline void merge_string_column(
-    ChunkedBuffer& src_buffer,
-    const std::shared_ptr<StringPool>& src_pool,
-    const std::shared_ptr<StringPool>& merged_pool,
-    CursoredBuffer<ChunkedBuffer>& output,
-    bool verify
-    ) {
-    using OffsetType = StringPool::offset_t;
-    constexpr auto offset_size =  sizeof(OffsetType);
-    auto num_strings = src_buffer.bytes() / offset_size;
-    for(auto row = size_t(0); row < num_strings; ++row) {
-        auto offset = get_offset_string_at(row, src_buffer);
-        StringPool::offset_t new_value;
-        if (offset != not_a_string() && offset != nan_placeholder()) {
-            auto sv = get_string_from_pool(offset, *src_pool);
-            new_value = merged_pool->get(sv).offset();
-        } else {
-            new_value = offset;
-        }
-        output.ensure<OffsetType>(1);
-        util::check(new_value >= 0, "Unexpected negative number {} in merge string column", new_value);
-        output.typed_cursor<OffsetType>() = new_value;
-        output.commit();
-    }
-    if (verify) {
-        const auto& out_buffer = output.buffer();
-        auto num_out = out_buffer.bytes() /offset_size;
-        util::check(num_strings == num_out, "Mismatch in input/output size {} != {}", num_strings, num_out);
-        for(auto row = size_t(0); row < num_out; ++row) {
-            auto offset = get_offset_string_at(row, out_buffer);
-            if (offset != not_a_string() && offset != nan_placeholder()) {
-                auto sv = get_string_from_pool(offset, *merged_pool);
-                // Checking every position is accessible or not
-                auto str = std::string(sv);
-                log::version().debug("Accessed {} from string pool");
-            }
-        }
-    }
-}
-
-inline void merge_string_columns(const SegmentInMemory& segment, const std::shared_ptr<StringPool>& merged_pool, bool verify) {
-    for (size_t c = 0; c < segment.descriptor().field_count(); ++c) {
-        auto &frame_field = segment.field(c);
-        const auto& field_type = frame_field.type();
-
-        if (!is_sequence_type(field_type.data_type_))
-            continue;
-
-        auto &src = segment.column(static_cast<position_t>(c)).data().buffer();
-        CursoredBuffer<ChunkedBuffer> cursor{src.bytes(), false};
-        merge_string_column(src, segment.string_pool_ptr(), merged_pool, cursor, verify);
-        std::swap(src, cursor.buffer());
-    }
-}
-
-inline void merge_segments(
-    std::vector<SegmentInMemory>& segments,
-    SegmentInMemory& merged,
-    bool is_sparse) {
-    ARCTICDB_DEBUG(log::version(), "Appending {} segments", segments.size());
-    timestamp min_idx = std::numeric_limits<timestamp>::max();
-    timestamp max_idx = std::numeric_limits<timestamp>::min();
-    for (auto &segment : segments) {
-        std::vector<SegmentInMemory> history{{segment}};
-        const auto& latest = *history.rbegin();
-        ARCTICDB_DEBUG(log::version(), "Appending segment with {} rows", latest.row_count());
-        for(const auto& field : latest.descriptor().fields()) {
-            if(!merged.column_index(field.name())){//TODO: Bottleneck for wide segments
-                auto pos = merged.add_column(field, 0, false);
-                if (!is_sparse){
-                    merged.column(pos).mark_absent_rows(merged.row_count());
-                }
-            }
-        }
-        if (latest.row_count() && latest.descriptor().index().type() == IndexDescriptor::TIMESTAMP) {
-            min_idx = std::min(min_idx, latest.begin()->begin()->value<timestamp>());
-            max_idx = std::max(max_idx, (latest.end() - 1)->begin()->value<timestamp>());
-        }
-        merge_string_columns(latest, merged.string_pool_ptr(), false);
-        merged.append(*history.rbegin());
-        merged.set_compacted(true);
-        util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
-    }
-}
-
-inline pipelines::FrameSlice merge_slices(
-    std::vector<pipelines::FrameSlice>& slices,
-    const StreamDescriptor& desc) {
-    util::check(!slices.empty(), "Expected to merge non-empty slices_vector");
-
-    pipelines::FrameSlice output{slices[0]};
-    for(const auto& slice : slices) {
-        output.row_range.first = std::min(output.row_range.first, slice.row_range.first);
-        output.row_range.second = std::max(output.row_range.second, slice.row_range.second);
-    }
-
-    output.col_range.first = desc.index().field_count();
-    output.col_range.second = desc.field_count();
-    return output;
-}
 
 inline void convert_descriptor_types(StreamDescriptor & descriptor) {
     for(size_t i = 0; i < descriptor.field_count(); ++i) {
@@ -185,8 +86,9 @@ public:
             AggregatorType::segment().init_column_map();
             merge_segments(segments_, AggregatorType::segment(), DensityPolicy::allow_sparse);
         }
-        auto slice = merge_slices(slices_, AggregatorType::segment().descriptor());
+
         if (AggregatorType::segment().row_count() > 0) {
+            auto slice = merge_slices(slices_, AggregatorType::segment().descriptor());
             AggregatorType::commit_impl();
             slice_callback_(std::move(slice));
         }

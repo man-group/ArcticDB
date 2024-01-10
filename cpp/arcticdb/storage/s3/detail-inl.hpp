@@ -26,7 +26,6 @@
 #include <aws/s3/model/ObjectIdentifier.h>
 
 #include <boost/interprocess/streams/bufferstream.hpp>
-#include <folly/ThreadLocal.h>
 
 #undef GetMessage
 
@@ -187,10 +186,11 @@ namespace s3 {
             auto res = s3_client.GetObject(request);
 
             if (!res.IsSuccess() && !is_expected_error_type(res.GetError().GetErrorType())) {
+                const auto& error = res.GetError();
                 log::storage().error("Got unexpected error: '{}' {}: {}",
-                                     int(res.GetError().GetErrorType()),
-                                     res.GetError().GetExceptionName().c_str(),
-                                     res.GetError().GetMessage().c_str());
+                                     int(error.GetErrorType()),
+                                     error.GetExceptionName().c_str(),
+                                     error.GetMessage().c_str());
 
                 throw UnexpectedS3ErrorException{};
             }
@@ -260,12 +260,12 @@ namespace s3 {
                                                variant_key_view(k));
                             } else {
                                 auto &error = get_object_outcome.GetError();
-                                if (!opts.dont_warn_about_missing_key) {
-                                    log::storage().warn("Failed to find segment for key '{}' {}: {}",
-                                                        variant_key_view(k),
-                                                        error.GetExceptionName().c_str(),
-                                                        error.GetMessage().c_str());
-                                }
+                                log::storage().log(
+                                    opts.dont_warn_about_missing_key ? spdlog::level::debug : spdlog::level::warn,
+                                    "Failed to find segment for key '{}' {}: {}",
+                                    variant_key_view(k),
+                                    error.GetExceptionName().c_str(),
+                                    error.GetMessage().c_str());
 
                                 failed_reads.push_back(k);
                             }
@@ -314,7 +314,7 @@ namespace s3 {
                                     for (const auto &bad_key: delete_object_outcome.GetResult().GetErrors()) {
                                         auto bad_key_name = bad_key.GetKey().substr(key_type_dir.size(),
                                                                                     std::string::npos);
-                                        failed_deletes.push_back(
+                                        failed_deletes.emplace_back(
                                                 from_tokenized_variant_key(
                                                         reinterpret_cast<const uint8_t *>(bad_key_name.data()),
                                                         bad_key_name.size(), group.key()));
@@ -371,7 +371,8 @@ namespace s3 {
                 auto list_objects_outcome = s3_client.ListObjectsV2(objects_request);
 
                 if (list_objects_outcome.IsSuccess()) {
-                    auto object_list = list_objects_outcome.GetResult().GetContents();
+                    const auto& result = list_objects_outcome.GetResult();
+                    auto object_list = result.GetContents();
                     const auto root_folder_size = key_type_dir.size() + 1 + bucketizer.bucketize_length(key_type);
                     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Received object list");
 
@@ -389,10 +390,10 @@ namespace s3 {
                         visitor(std::move(k));
                         ARCTICDB_SUBSAMPLE(S3StorageCursorNext, 0)
                     }
-                    more = list_objects_outcome.GetResult().GetIsTruncated();
+                    more = result.GetIsTruncated();
                     if (more)
                         objects_request.SetContinuationToken(
-                                list_objects_outcome.GetResult().GetNextContinuationToken());
+                            result.GetNextContinuationToken());
 
                 } else {
                     const auto &error = list_objects_outcome.GetError();

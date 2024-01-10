@@ -14,7 +14,6 @@
 #include <arcticdb/util/exponential_backoff.hpp>
 #include <arcticdb/util/configs_map.hpp>
 
-#include <folly/portability/PThread.h>
 #include <folly/system/ThreadId.h>
 
 #include <mutex>
@@ -98,8 +97,8 @@ class StorageLock {
     }
 
     void unlock(const std::shared_ptr<Store>& store) {
-        if(auto read_ts = read_timestamp(store); !read_ts || read_ts.value() != ts_) {
-            log::version().warn("Unexpected lock timestamp, {} != {}", read_ts ? read_ts.value() : 0, ts_);
+        if(auto read_ts = read_timestamp(store); !read_ts || *read_ts != ts_) {
+            log::version().warn("Unexpected lock timestamp, {} != {}", read_ts ? *read_ts : 0, ts_);
             mutex_.unlock();
             return;
         }
@@ -117,12 +116,12 @@ class StorageLock {
         OnExit x{[that=this] () {
             that->mutex_.unlock();
         }};
-        if(!ref_key_exists(store)) {
+        if(!ref_key_exists(store) || ttl_expired(store)) {
             ts_= create_ref_key(store);
             auto lock_sleep = ConfigsMap::instance()->get_int("StorageLock.WaitMs", 200);
             std::this_thread::sleep_for(std::chrono::milliseconds(lock_sleep));
             auto read_ts = read_timestamp(store);
-            if(read_ts && read_ts.value() == ts_) {
+            if(read_ts && *read_ts == ts_) {
                 x.release();
                 ARCTICDB_DEBUG(log::lock(), "Storage lock: succeeded {}", get_thread_id());
                 return true;
@@ -135,6 +134,10 @@ class StorageLock {
             ARCTICDB_DEBUG(log::lock(), "Storage lock: failed {}", get_thread_id());
             return false;
         }
+    }
+
+    void _test_release_local_lock() {
+        mutex_.unlock();
     }
 
   private:
@@ -151,16 +154,9 @@ class StorageLock {
             sleep_ms(wait_ms);
             total_wait += wait_ms;
             wait_ms *= 2;
-            if (auto read_ts = read_timestamp(store); read_ts) {
-                // check TTL
-                auto ttl = ConfigsMap::instance()->get_int("StorageLock.TTL", DEFAULT_TTL_INTERVAL);
-                if (ClockType::coarse_nanos_since_epoch() - read_ts.value() > ttl) {
-                    log::lock().warn("StorageLock {} taken for more than TTL (default 1 day). Force releasing", name_);
-                    force_release_lock(name_, store);
-                    break;
-                }
-            }
-            if (timeout_ms && total_wait > timeout_ms.value()) {
+            if (ttl_expired(store))
+                break;
+            if (timeout_ms && total_wait > *timeout_ms) {
                 ts_ = 0;
                 log::lock().info("Lock timed out, giving up after {}", wait_ms);
                 mutex_.unlock();
@@ -172,8 +168,8 @@ class StorageLock {
         auto lock_sleep = ConfigsMap::instance()->get_int("StorageLock.WaitMs", 200);
         std::this_thread::sleep_for(std::chrono::milliseconds(lock_sleep));
         auto read_ts = read_timestamp(store);
-        if(!read_ts || read_ts.value() != ts_) {
-            log::lock().info("Lock preempted, expected timestamp {} but got {}", ts_, read_ts ? read_ts.value() : 0);
+        if(!read_ts || *read_ts != ts_) {
+            log::lock().info("Lock preempted, expected timestamp {} but got {}", ts_, read_ts.value_or(0));
             ts_ = 0;
             goto do_wait;
         }
@@ -226,6 +222,19 @@ class StorageLock {
         } catch (const storage::KeyNotFoundException&) {
             return std::nullopt;
         }
+    }
+
+    bool ttl_expired(const std::shared_ptr<Store>& store) {
+        if (auto read_ts = read_timestamp(store); read_ts) {
+            // check TTL
+            auto ttl = ConfigsMap::instance()->get_int("StorageLock.TTL", DEFAULT_TTL_INTERVAL);
+            if (ClockType::coarse_nanos_since_epoch() - *read_ts > ttl) {
+                log::lock().warn("StorageLock {} taken for more than TTL (default 1 day). Force releasing", name_);
+                force_release_lock(name_, store);
+                return true;
+            }
+        }
+        return false;
     }
 };
 

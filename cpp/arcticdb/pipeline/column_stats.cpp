@@ -186,7 +186,7 @@ void ColumnStats::drop(const ColumnStats& to_drop, bool warn_if_missing) {
         if (it->second.empty()) {
             it = column_stats_.erase(it);
         } else {
-            it++;
+            ++it;
         }
     }
 }

@@ -5,6 +5,7 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
+#include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/entity/native_tensor.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
@@ -17,6 +18,7 @@
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/entity/protobufs.hpp>
+#include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/python/python_types.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
@@ -60,7 +62,7 @@ folly::Future<std::vector<SliceAndKey>> write_slices(
             if(!first_row)
                 first_row = slice.row_range.first;
 
-            if(slice.row_range.first == first_row.value())
+            if(slice.row_range.first == *first_row)
                 slice_num_for_column = 0;
 
             SingleSegmentAggregator agg{FixedSchema{*slice.desc(), frame.index}, [&](auto &&segment) {
@@ -124,20 +126,6 @@ folly::Future<std::vector<SliceAndKey>> write_slices(
     });
 }
 
-folly::Future<entity::VariantKey> write_multi_index(
-        InputTensorFrame&& frame,
-        std::vector<SliceAndKey>&& slice_and_keys,
-        const IndexPartialKey& partial_key,
-        const std::shared_ptr<stream::StreamSink>& sink
-) {
-    auto timeseries_desc = index_descriptor_from_frame(std::move(frame), frame.offset);
-    index::IndexWriter<stream::RowCountIndex> writer(sink, partial_key, std::move(timeseries_desc));
-    for (auto &slice_and_key : slice_and_keys) {
-        writer.add(slice_and_key.key(), slice_and_key.slice_);
-    }
-    return writer.commit();
-}
-
 folly::Future<std::vector<SliceAndKey>> slice_and_write(
         InputTensorFrame &frame,
         const SlicingPolicy &slicing,
@@ -164,7 +152,7 @@ write_frame(
     // Write the keys of the slices into an index segment
     ARCTICDB_SUBSAMPLE_DEFAULT(WriteIndex)
     return std::move(fut_slice_keys).thenValue([frame = std::move(frame), key = std::move(key), &store](auto&& slice_keys) mutable {
-        return index::write_index(std::move(frame), std::move(slice_keys), key, store);
+        return index::write_index(std::move(frame), std::forward<decltype(slice_keys)>(slice_keys), key, store);
     });
 }
 
@@ -183,10 +171,9 @@ folly::Future<entity::AtomKey> append_frame(
                             util::check(frame.has_index(), "Cannot append timeseries without index");
                             util::check(static_cast<bool>(frame.index_tensor), "Got null index tensor in append_frame");
                             auto& frame_index = frame.index_tensor.value();
-                            util::check(frame_index.size() > 0, "Cannot append empty frame");
                             util::check(frame_index.data_type() == DataType::NANOSECONDS_UTC64,
                                         "Expected timestamp index in append, got type {}", frame_index.data_type());
-                            if (index_segment_reader.tsd().proto().total_rows() != 0) {
+                            if (index_segment_reader.tsd().proto().total_rows() != 0 && frame_index.size() != 0) {
                                 auto first_index = NumericIndex{*frame_index.ptr_cast<timestamp>(0)};
                                 auto prev = std::get<NumericIndex>(index_segment_reader.last()->key().end_index());
                                 util::check(ignore_sort_order || prev - 1 <= first_index,
@@ -202,7 +189,7 @@ folly::Future<entity::AtomKey> append_frame(
     auto existing_slices = unfiltered_index(index_segment_reader);
     auto keys_fut = slice_and_write(frame, slicing, get_partial_key_gen(frame, key), store);
     return std::move(keys_fut)
-    .thenValue([dynamic_schema, slices_to_write = std::move(existing_slices), frame = std::move(frame), index_segment_reader = std::move(index_segment_reader), key = std::move(key), &store](auto&& slice_and_keys_to_append) mutable {
+    .thenValue([dynamic_schema, slices_to_write = std::move(existing_slices), frame = std::move(frame), index_segment_reader = std::move(index_segment_reader), key = key, &store](auto&& slice_and_keys_to_append) mutable {
         slices_to_write.insert(std::end(slices_to_write), std::make_move_iterator(std::begin(slice_and_keys_to_append)), std::make_move_iterator(std::end(slice_and_keys_to_append)));
         std::sort(std::begin(slices_to_write), std::end(slices_to_write));
         if(dynamic_schema) {
@@ -235,7 +222,7 @@ void update_string_columns(const SegmentInMemory& original, SegmentInMemory outp
                                         auto off_str = output.string_pool().get(sv);
                                         set_offset_string_at(row, target, off_str.offset());
                                     },
-                                    [&] (StringPool::offset_t offset) {
+                                    [&] (entity::position_t offset) {
                                         set_offset_string_at(row, target, offset);
                                     });
 

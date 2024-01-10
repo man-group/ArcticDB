@@ -55,13 +55,12 @@ ArcticDB is designed from the outset to be resilient; there is no single point o
 | Azure Blob Storage | ✔️ | ✔️ | ➖ |
 
 We have tested against the following S3 backends:
-
 - AWS S3
-- VAST Data S3
-- Pure Storage S3
 - Ceph
 - MinIO on Linux
+- Pure Storage S3
 - Scality S3
+- VAST Data S3
 
 ### Installation
 
@@ -154,7 +153,7 @@ Please see version conversion dates in the below table:
 | 3.0 | Business Source License 1.1 | Sep  13, 2025 |
 | 4.0 | Business Source License 1.1 | Sep  27, 2025 |
 | 4.1 | Business Source Licesne 1.1 | Nov 1, 2025 |
-
+| 4.2 | Business Source Licesne 1.1 | Nov 12, 2025 |
 ## Code of Conduct
 
 [Code of Conduct](https://github.com/man-group/ArcticDB/blob/master/CODE_OF_CONDUCT.md)
@@ -171,7 +170,7 @@ page and feel free to open issues on GitHub.
 
 We are also always looking for feedback from our dedicated community! If you have used ArcticDB please let us know, we would love to hear about your experience!
 
-Our release process is [documented here](https://github.com/man-group/ArcticDB/blob/master/docs/mkdocs/docs/technical/releasing.md).
+Our release process is [documented here](https://github.com/man-group/ArcticDB/wiki/Releasing).
 
 ## Community
 

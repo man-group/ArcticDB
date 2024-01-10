@@ -24,7 +24,6 @@ namespace arcticdb {
 ModuleData::~ModuleData() {
     BufferPool::destroy_instance();
     TracingData::destroy_instance();
-    SharedMemoryAllocator::destroy_instance();
     Allocator::destroy_instance();
     PrometheusInstance::destroy_instance();
 #if defined(USE_REMOTERY)

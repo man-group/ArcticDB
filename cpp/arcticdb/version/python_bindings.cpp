@@ -228,26 +228,6 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def_property_readonly("end", &pipelines::ColRange::end)
         .def_property_readonly("diff", &pipelines::ColRange::diff);
 
-    auto adapt_read_dfs = [](std::vector<std::variant<ReadResult, DataError>> && ret) -> py::list {
-        py::list lst;
-        for (auto &res: ret) {
-            util::variant_match(
-                    res,
-                    [&lst] (ReadResult& res) {
-                        auto pynorm = python_util::pb_to_python(res.norm_meta);
-                        auto pyuser_meta = python_util::pb_to_python(res.user_meta);
-                        auto multi_key_meta = python_util::pb_to_python(res.multi_key_meta);
-                        lst.append(py::make_tuple(res.item, std::move(res.frame_data), pynorm, pyuser_meta, multi_key_meta,
-                                                  res.multi_keys));
-                    },
-                    [&lst] (DataError& data_error) {
-                        lst.append(data_error);
-                    }
-            );
-        }
-        return lst;
-    };
-
     py::class_<IndexRange>(version, "IndexRange")
             .def(py::init([](timestamp start, timestamp end){
                 return IndexRange(start, end);
@@ -497,12 +477,12 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("get_active_incomplete_refs",
              &PythonVersionStore::get_active_incomplete_refs,
              py::call_guard<SingleThreadMutexHolder>(), "Get all the symbols that have incomplete entries and some appended data")
-        .def("push_incompletes_to_symbol_list",
-             &PythonVersionStore::push_incompletes_to_symbol_list,
-             py::call_guard<SingleThreadMutexHolder>(), "Push all the symbols that have incomplete entries to the symbol list")
         .def("update",
              &PythonVersionStore::update,
              py::call_guard<SingleThreadMutexHolder>(), "Update the most recent version of a dataframe")
+       .def("indexes_sorted",
+             &PythonVersionStore::indexes_sorted,
+             py::call_guard<SingleThreadMutexHolder>(), "Returns the sorted indexes of a symbol")
         .def("snapshot",
              &PythonVersionStore::snapshot,
              py::call_guard<SingleThreadMutexHolder>(), "Create a snapshot")
@@ -588,14 +568,15 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("restore_version",
              [&](PythonVersionStore& v,  StreamId sid, const VersionQuery& version_query) {
                 auto [vit, tsd] = v.restore_version(sid, version_query);
+                const auto& tsd_proto = tsd.proto();
                 ReadResult res{
                     vit,
                     PythonOutputFrame{
-                            SegmentInMemory{tsd.as_stream_descriptor()},
-                            std::make_shared<BufferHolder>()},
-                        tsd.proto().normalization(),
-                        tsd.proto().user_meta(),
-                        tsd.proto().multi_key_meta(),
+                        SegmentInMemory{tsd.as_stream_descriptor()},
+                        std::make_shared<BufferHolder>()},
+                        tsd_proto.normalization(),
+                        tsd_proto.user_meta(),
+                        tsd_proto.multi_key_meta(),
                         std::vector<entity::AtomKey>{}
                 };
                 return adapt_read_df(std::move(res)); },
@@ -630,12 +611,12 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              py::call_guard<SingleThreadMutexHolder>(), "Force release a lock.")
         .def("batch_read",
              [&](PythonVersionStore& v, const std::vector<StreamId> &stream_ids,  const std::vector<VersionQuery>& version_queries, std::vector<ReadQuery> read_queries, const ReadOptions& read_options){
-                 return adapt_read_dfs(v.batch_read(stream_ids, version_queries, read_queries, read_options));
+                 return python_util::adapt_read_dfs(v.batch_read(stream_ids, version_queries, read_queries, read_options));
              },
              py::call_guard<SingleThreadMutexHolder>(), "Read a dataframe from the store")
         .def("batch_read_keys",
              [&](PythonVersionStore& v, std::vector<AtomKey> atom_keys) {
-                 return adapt_read_dfs(frame_to_read_result(v.batch_read_keys(atom_keys, {}, ReadOptions{})));
+                 return python_util::adapt_read_dfs(frame_to_read_result(v.batch_read_keys(atom_keys, {}, ReadOptions{})));
              },
              py::call_guard<SingleThreadMutexHolder>(), "Read a specific version of a dataframe from the store")
         .def("batch_write",
@@ -656,11 +637,12 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                  std::vector<py::object> output;
                  output.reserve(results.size());
                  for(auto& [vit, tsd] : results) {
+                     const auto& tsd_proto = tsd.proto();
                      ReadResult res{vit, PythonOutputFrame{
                          SegmentInMemory{tsd.as_stream_descriptor()}, std::make_shared<BufferHolder>()},
-                         tsd.proto().normalization(),
-                         tsd.proto().user_meta(),
-                         tsd.proto().multi_key_meta(), {}};
+                                    tsd_proto.normalization(),
+                                    tsd_proto.user_meta(),
+                                    tsd_proto.multi_key_meta(), {}};
 
                      output.emplace_back(adapt_read_df(std::move(res)));
                  }
@@ -701,6 +683,10 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                Allocator::instance()->trim();
               },
              py::call_guard<SingleThreadMutexHolder>(), "Call trim on the native store's underlining memory allocator")
+        .def_static("reuse_storage_for_testing",
+            [](PythonVersionStore& from, PythonVersionStore& to) {
+                to._test_set_store(from._test_get_store());
+            })
         ;
 
     py::class_<ManualClockVersionStore, PythonVersionStore>(version, "ManualClockVersionStore")

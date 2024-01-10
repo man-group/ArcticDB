@@ -604,6 +604,60 @@
         "version": "ed4587ca351d24477560baa8e184e265b612140183e88c412c36bf8a9352191c",
         "warmup_time": -1
     },
+    "local_query_builder.LocalQueryBuilderFunctions.peakmem_filtering_numeric": {
+        "code": "class LocalQueryBuilderFunctions:\n    def peakmem_filtering_numeric(self, num_rows):\n        lib = self.ac[self.lib_name]\n        q = QueryBuilder()\n        # v3 is random floats between 0 and 100\n        q = q[q[\"v3\"] < 10.0]\n        lib.read(f\"{num_rows}_rows\", columns=[\"v3\"], query_builder=q)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(\"lmdb://query_builder?map_size=5GB\")\n        self.lib_name = \"query_builder\"\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://query_builder?map_size=5GB\")\n    \n        num_rows = LocalQueryBuilderFunctions.params\n        self.lib_name = \"query_builder\"\n        self.ac.delete_library(self.lib_name)\n        self.ac.create_library(self.lib_name)\n        lib = self.ac[self.lib_name]\n        for rows in num_rows:\n            lib.write(f\"{rows}_rows\", generate_benchmark_df(rows))",
+        "name": "local_query_builder.LocalQueryBuilderFunctions.peakmem_filtering_numeric",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "setup_cache_key": "local_query_builder:21",
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "119932c4738eb092fbbd9da22b3ff1e16bd4d6052dace2da6748fff5b416462d"
+    },
+    "local_query_builder.LocalQueryBuilderFunctions.peakmem_filtering_string_isin": {
+        "code": "class LocalQueryBuilderFunctions:\n    def peakmem_filtering_string_isin(self, num_rows):\n        lib = self.ac[self.lib_name]\n        # Selects about 1% of the rows\n        k = num_rows // 1000\n        string_set = [f\"id{str(i).zfill(3)}\" for i in range(1, k + 1)]\n        q = QueryBuilder()\n        q = q[q[\"id1\"].isin(string_set)]\n        lib.read(f\"{num_rows}_rows\", columns=[\"v3\"], query_builder=q)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(\"lmdb://query_builder?map_size=5GB\")\n        self.lib_name = \"query_builder\"\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://query_builder?map_size=5GB\")\n    \n        num_rows = LocalQueryBuilderFunctions.params\n        self.lib_name = \"query_builder\"\n        self.ac.delete_library(self.lib_name)\n        self.ac.create_library(self.lib_name)\n        lib = self.ac[self.lib_name]\n        for rows in num_rows:\n            lib.write(f\"{rows}_rows\", generate_benchmark_df(rows))",
+        "name": "local_query_builder.LocalQueryBuilderFunctions.peakmem_filtering_string_isin",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "setup_cache_key": "local_query_builder:21",
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "e77e28f6a2cb96e5b549ca58b551462e0ff90d7704ad3cf12f3e2ad71b1ccd73"
+    },
+    "local_query_builder.LocalQueryBuilderFunctions.peakmem_projection": {
+        "code": "class LocalQueryBuilderFunctions:\n    def peakmem_projection(self, num_rows):\n        lib = self.ac[self.lib_name]\n        q = QueryBuilder()\n        q = q.apply(\"new_col\", q[\"v2\"] * q[\"v3\"])\n        lib.read(f\"{num_rows}_rows\", columns=[\"new_col\"], query_builder=q)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(\"lmdb://query_builder?map_size=5GB\")\n        self.lib_name = \"query_builder\"\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://query_builder?map_size=5GB\")\n    \n        num_rows = LocalQueryBuilderFunctions.params\n        self.lib_name = \"query_builder\"\n        self.ac.delete_library(self.lib_name)\n        self.ac.create_library(self.lib_name)\n        lib = self.ac[self.lib_name]\n        for rows in num_rows:\n            lib.write(f\"{rows}_rows\", generate_benchmark_df(rows))",
+        "name": "local_query_builder.LocalQueryBuilderFunctions.peakmem_projection",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "setup_cache_key": "local_query_builder:21",
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "928c58e85b09b5969e7b2302b3a3a3c5af5d47ce5bd1cd5245387bf34fcb266b"
+    },
     "local_query_builder.LocalQueryBuilderFunctions.peakmem_query_1": {
         "code": "class LocalQueryBuilderFunctions:\n    def peakmem_query_1(self, num_rows):\n        lib = self.ac[self.lib_name]\n        q = QueryBuilder()\n        q = q.groupby(\"id1\").agg({\"v1\": \"sum\"})\n        lib.read(f\"{num_rows}_rows\", query_builder=q)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(\"lmdb://query_builder?map_size=5GB\")\n        self.lib_name = \"query_builder\"\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://query_builder?map_size=5GB\")\n    \n        num_rows = LocalQueryBuilderFunctions.params\n        self.lib_name = \"query_builder\"\n        self.ac.delete_library(self.lib_name)\n        self.ac.create_library(self.lib_name)\n        lib = self.ac[self.lib_name]\n        for rows in num_rows:\n            lib.write(f\"{rows}_rows\", generate_benchmark_df(rows))",
         "name": "local_query_builder.LocalQueryBuilderFunctions.peakmem_query_1",
@@ -612,8 +666,8 @@
         ],
         "params": [
             [
-                "10000",
-                "100000"
+                "1000000",
+                "10000000"
             ]
         ],
         "setup_cache_key": "local_query_builder:21",
@@ -630,8 +684,8 @@
         ],
         "params": [
             [
-                "10000",
-                "100000"
+                "1000000",
+                "10000000"
             ]
         ],
         "setup_cache_key": "local_query_builder:21",
@@ -648,8 +702,8 @@
         ],
         "params": [
             [
-                "10000",
-                "100000"
+                "1000000",
+                "10000000"
             ]
         ],
         "setup_cache_key": "local_query_builder:21",
@@ -666,8 +720,8 @@
         ],
         "params": [
             [
-                "10000",
-                "100000"
+                "1000000",
+                "10000000"
             ]
         ],
         "setup_cache_key": "local_query_builder:21",
@@ -675,6 +729,78 @@
         "type": "peakmemory",
         "unit": "bytes",
         "version": "36489c1cb0a3965ff6003b10a5f5cf2f2354a619346e53c488b2a3d1a07fd4c2"
+    },
+    "local_query_builder.LocalQueryBuilderFunctions.time_filtering_numeric": {
+        "code": "class LocalQueryBuilderFunctions:\n    def time_filtering_numeric(self, num_rows):\n        lib = self.ac[self.lib_name]\n        q = QueryBuilder()\n        # v3 is random floats between 0 and 100\n        q = q[q[\"v3\"] < 1.0]\n        lib.read(f\"{num_rows}_rows\", columns=[\"v3\"], query_builder=q)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(\"lmdb://query_builder?map_size=5GB\")\n        self.lib_name = \"query_builder\"\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://query_builder?map_size=5GB\")\n    \n        num_rows = LocalQueryBuilderFunctions.params\n        self.lib_name = \"query_builder\"\n        self.ac.delete_library(self.lib_name)\n        self.ac.create_library(self.lib_name)\n        lib = self.ac[self.lib_name]\n        for rows in num_rows:\n            lib.write(f\"{rows}_rows\", generate_benchmark_df(rows))",
+        "min_run_count": 2,
+        "name": "local_query_builder.LocalQueryBuilderFunctions.time_filtering_numeric",
+        "number": 5,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "local_query_builder:21",
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "441c9db2c41da7c09c3f758c1cd0993dc5ea674f05d708e8997567826a961251",
+        "warmup_time": -1
+    },
+    "local_query_builder.LocalQueryBuilderFunctions.time_filtering_string_isin": {
+        "code": "class LocalQueryBuilderFunctions:\n    def time_filtering_string_isin(self, num_rows):\n        lib = self.ac[self.lib_name]\n        # Selects about 1% of the rows\n        k = num_rows // 1000\n        string_set = [f\"id{str(i).zfill(3)}\" for i in range(1, k + 1)]\n        q = QueryBuilder()\n        q = q[q[\"id1\"].isin(string_set)]\n        lib.read(f\"{num_rows}_rows\", columns=[\"v3\"], query_builder=q)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(\"lmdb://query_builder?map_size=5GB\")\n        self.lib_name = \"query_builder\"\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://query_builder?map_size=5GB\")\n    \n        num_rows = LocalQueryBuilderFunctions.params\n        self.lib_name = \"query_builder\"\n        self.ac.delete_library(self.lib_name)\n        self.ac.create_library(self.lib_name)\n        lib = self.ac[self.lib_name]\n        for rows in num_rows:\n            lib.write(f\"{rows}_rows\", generate_benchmark_df(rows))",
+        "min_run_count": 2,
+        "name": "local_query_builder.LocalQueryBuilderFunctions.time_filtering_string_isin",
+        "number": 5,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "local_query_builder:21",
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "f9d819943b527f80d002995694ba8cfc60f5ed75586144f6c4d1ba612a761294",
+        "warmup_time": -1
+    },
+    "local_query_builder.LocalQueryBuilderFunctions.time_projection": {
+        "code": "class LocalQueryBuilderFunctions:\n    def time_projection(self, num_rows):\n        lib = self.ac[self.lib_name]\n        q = QueryBuilder()\n        q = q.apply(\"new_col\", q[\"v2\"] * q[\"v3\"])\n        lib.read(f\"{num_rows}_rows\", columns=[\"new_col\"], query_builder=q)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(\"lmdb://query_builder?map_size=5GB\")\n        self.lib_name = \"query_builder\"\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://query_builder?map_size=5GB\")\n    \n        num_rows = LocalQueryBuilderFunctions.params\n        self.lib_name = \"query_builder\"\n        self.ac.delete_library(self.lib_name)\n        self.ac.create_library(self.lib_name)\n        lib = self.ac[self.lib_name]\n        for rows in num_rows:\n            lib.write(f\"{rows}_rows\", generate_benchmark_df(rows))",
+        "min_run_count": 2,
+        "name": "local_query_builder.LocalQueryBuilderFunctions.time_projection",
+        "number": 5,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "local_query_builder:21",
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "911828bde306e54bd165122188fb8acc406697e8cc94daa3e02596c1efc4530a",
+        "warmup_time": -1
     },
     "local_query_builder.LocalQueryBuilderFunctions.time_query_1": {
         "code": "class LocalQueryBuilderFunctions:\n    def time_query_1(self, num_rows):\n        lib = self.ac[self.lib_name]\n        q = QueryBuilder()\n        q = q.groupby(\"id1\").agg({\"v1\": \"sum\"})\n        lib.read(f\"{num_rows}_rows\", query_builder=q)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(\"lmdb://query_builder?map_size=5GB\")\n        self.lib_name = \"query_builder\"\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://query_builder?map_size=5GB\")\n    \n        num_rows = LocalQueryBuilderFunctions.params\n        self.lib_name = \"query_builder\"\n        self.ac.delete_library(self.lib_name)\n        self.ac.create_library(self.lib_name)\n        lib = self.ac[self.lib_name]\n        for rows in num_rows:\n            lib.write(f\"{rows}_rows\", generate_benchmark_df(rows))",
@@ -686,8 +812,8 @@
         ],
         "params": [
             [
-                "10000",
-                "100000"
+                "1000000",
+                "10000000"
             ]
         ],
         "repeat": 0,
@@ -710,8 +836,8 @@
         ],
         "params": [
             [
-                "10000",
-                "100000"
+                "1000000",
+                "10000000"
             ]
         ],
         "repeat": 0,
@@ -734,8 +860,8 @@
         ],
         "params": [
             [
-                "10000",
-                "100000"
+                "1000000",
+                "10000000"
             ]
         ],
         "repeat": 0,
@@ -758,8 +884,8 @@
         ],
         "params": [
             [
-                "10000",
-                "100000"
+                "1000000",
+                "10000000"
             ]
         ],
         "repeat": 0,

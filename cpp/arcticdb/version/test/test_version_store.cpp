@@ -15,11 +15,11 @@
 #include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/util/allocator.hpp>
 #include <arcticdb/codec/default_codecs.hpp>
+#include <arcticdb/version/version_functions.hpp>
 
 #include <filesystem>
 #include <chrono>
 #include <thread>
-#include <folly/futures/Barrier.h>
 
 struct VersionStoreTest : arcticdb::TestStore {
 protected:
@@ -29,8 +29,8 @@ protected:
 };
 
 auto write_version_frame(
-    const StreamId& stream_id,
-    VersionId v_id,
+    const arcticdb::StreamId& stream_id,
+    arcticdb::VersionId v_id,
     arcticdb::version_store::PythonVersionStore& pvs,
     size_t rows = 1000000,
     bool update_version_map = false,
@@ -226,7 +226,7 @@ TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {
         }
 
         wrapper.aggregator_.commit();
-        wrapper.segment().drop_column(fmt::format("thing{}", (i % 3) + 1));
+        wrapper.segment().drop_column(fmt::format("thing{}", (i % 4) + 1));
         data.emplace_back( SegmentToInputFrameAdapter{std::move(wrapper.segment())});
     }
     std::mt19937 mt{42};
@@ -248,7 +248,7 @@ TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {
     auto col4_pos = seg.column_index( "thing4").value();
 
     for (size_t i = 0; i < 10; ++i) {
-        auto dropped_column = (i % 3) + 1;
+        auto dropped_column = (i % 4) + 1;
         for(size_t j = 0; j < 20; ++j ) {
             auto idx = seg.scalar_at<uint64_t>(count, 0);
             ASSERT_EQ(idx.value(), count);
@@ -423,7 +423,6 @@ TEST(VersionStore, UpdateWithin) {
     ScopedConfig reload_interval("VersionMap.ReloadInterval", 0);
 
     PilotedClock::reset();
-    std::string lib_name("test.update_schema_change");
     StreamId symbol("update_schema");
     auto version_store = get_test_engine();
     size_t num_rows{100};
@@ -465,7 +464,6 @@ TEST(VersionStore, UpdateBefore) {
     using namespace arcticdb::pipelines;
 
     PilotedClock::reset();
-    std::string lib_name("test.update_schema_change");
     StreamId symbol("update_schema");
     auto version_store = get_test_engine();
     size_t num_rows{100};
@@ -507,7 +505,6 @@ TEST(VersionStore, UpdateAfter) {
     using namespace arcticdb::pipelines;
 
     PilotedClock::reset();
-    std::string lib_name("test.update_schema_change");
     StreamId symbol("update_schema");
     auto version_store = get_test_engine();
     size_t num_rows{100};
@@ -549,7 +546,6 @@ TEST(VersionStore, UpdateIntersectBefore) {
     using namespace arcticdb::pipelines;
 
     PilotedClock::reset();
-    std::string lib_name("test.update_schema_change");
     StreamId symbol("update_schema");
     auto version_store = get_test_engine();
     size_t num_rows{100};
@@ -592,7 +588,6 @@ TEST(VersionStore, UpdateIntersectAfter) {
     using namespace arcticdb::pipelines;
 
     PilotedClock::reset();
-    std::string lib_name("test.update_schema_change");
     StreamId symbol("update_schema");
     auto version_store = get_test_engine();
     size_t num_rows{100};
@@ -635,7 +630,6 @@ TEST(VersionStore, UpdateWithinSchemaChange) {
     using namespace arcticdb::pipelines;
 
     PilotedClock::reset();
-    std::string lib_name("test.update_schema_change");
     StreamId symbol("update_schema");
     auto version_store = get_test_engine();
     size_t num_rows{100};
@@ -758,7 +752,6 @@ TEST(VersionStore, TestWriteAppendMapHead) {
     using namespace arcticdb::pipelines;
 
     PilotedClock::reset();
-    std::string lib_name("test.write_append_map_head");
     StreamId symbol("append");
     auto version_store = get_test_engine();
     size_t num_rows{100};

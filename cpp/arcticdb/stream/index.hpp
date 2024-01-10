@@ -60,7 +60,7 @@ class TimeseriesIndex : public BaseIndex<TimeseriesIndex> {
 public:
     static constexpr const char* DefaultName = "time" ;
 
-    explicit TimeseriesIndex(const std::string name) :
+    explicit TimeseriesIndex(const std::string& name) :
         name_(name) {
     }
 
@@ -306,7 +306,7 @@ inline Index index_type_from_descriptor(const StreamDescriptor &desc) {
         return TableIndex::make_from_descriptor(desc);
     case IndexDescriptor::ROWCOUNT:
         return RowCountIndex{};
-    default:util::raise_rte("Data obtained from storage refers to an index type that this build of ArcticDB doesn't understand ({}).", desc.index().proto().kind());
+    default:util::raise_rte("Data obtained from storage refers to an index type that this build of ArcticDB doesn't understand ({}).", int(desc.index().proto().kind()));
     }
 }
 
@@ -319,12 +319,12 @@ inline Index default_index_type_from_descriptor(const IndexDescriptor::Proto &de
     case IndexDescriptor::ROWCOUNT:
         return RowCountIndex::default_index();
     default:
-        util::raise_rte("Unknown index type {} trying to generate index type", desc.kind());
+        util::raise_rte("Unknown index type {} trying to generate index type", int(desc.kind()));
     }
 }
 
 // Only to be used for visitation to get field count etc as the name is not set
-inline Index variant_index_from_type(const IndexDescriptor::Type &type) {
+inline Index variant_index_from_type(IndexDescriptor::Type type) {
     switch (type) {
     case IndexDescriptor::TIMESTAMP:
         return TimeseriesIndex{TimeseriesIndex::DefaultName};
@@ -333,7 +333,7 @@ inline Index variant_index_from_type(const IndexDescriptor::Type &type) {
     case IndexDescriptor::ROWCOUNT:
         return RowCountIndex{};
     default:
-        util::raise_rte("Unknown index type {} trying to generate index type", type);
+        util::raise_rte("Unknown index type {} trying to generate index type", int(type));
     }
 }
 

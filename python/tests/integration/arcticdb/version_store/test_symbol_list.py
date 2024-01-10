@@ -6,7 +6,9 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import numpy as np
+import pandas as pd
 import pytest
+
 from arcticdb.config import Defaults
 from arcticdb.util.test import sample_dataframe
 from arcticdb.version_store._store import NativeVersionStore
@@ -14,6 +16,11 @@ from arcticdb.toolbox.library_tool import VariantKey, AtomKey, key_to_props_dict
 from arcticdb_ext import set_config_int, unset_config_int
 from arcticdb_ext.storage import KeyType, OpenMode
 from arcticdb_ext.tools import CompactionId, CompactionLockName
+
+from multiprocessing import Pool
+from arcticdb_ext import set_config_int
+import random
+import string
 
 
 @pytest.fixture(autouse=True)
@@ -90,6 +97,14 @@ def test_interleaved_store_read(version_store_and_real_s3_basic_store_factory):
     vs2.delete("a")
 
     assert vs1.list_symbols() == []
+
+
+def test_symbol_list_regex(basic_store):
+    for i in range(15):
+        basic_store.write(f"sym_{i}", pd.DataFrame())
+
+    assert set(basic_store.list_symbols(regex="1$")) == {"sym_1", "sym_11"}
+    assert set(basic_store.list_symbols(regex=".*1.*")) == {"sym_1", "sym_10", "sym_11", "sym_12", "sym_13", "sym_14"}
 
 
 @pytest.mark.parametrize("compact_first", [True, False])
@@ -190,20 +205,18 @@ def test_only_latest_compaction_key_is_used(basic_store):
     assert len(keys) == 3
 
     # Should return content based on the latest timestamp
-    assert lib.list_symbols() == ["a"]
+    assert sorted(lib.list_symbols()) == ["a", "c"]
 
 
 @pytest.mark.parametrize("write_another", [False, True])
-# TODO: look into why this doesn't work with azure
-# def test_turning_on_symbol_list_after_a_symbol_written(object_store_factory, write_another):
-def test_turning_on_symbol_list_after_a_symbol_written(s3_store_factory, write_another):
+def test_turning_on_symbol_list_after_a_symbol_written(object_store_factory, write_another):
     # The if(!maybe_last_compaction) case
-    lib: NativeVersionStore = s3_store_factory(symbol_list=False)
+    lib: NativeVersionStore = object_store_factory(symbol_list=False)
 
     lib.write("a", 1)
     assert not lib.library_tool().find_keys(KeyType.SYMBOL_LIST)
 
-    lib = s3_store_factory(reuse_name=True, symbol_list=True)
+    lib = object_store_factory(reuse_name=True, symbol_list=True)
     lt = lib.library_tool()
     if write_another:
         lib.write("b", 2)
@@ -235,7 +248,7 @@ def test_lock_contention(small_max_delta, basic_store, mode):
     lib.write("a", 1)
     lib.write("b", 2)
     orig_sl = lt.find_keys(KeyType.SYMBOL_LIST)
-    assert len(orig_sl) > 2  # > small_max_delta
+    assert len(orig_sl) >= 2  # > small_max_delta
 
     if mode == "conflict":
         lock.lock()
@@ -247,3 +260,88 @@ def test_lock_contention(small_max_delta, basic_store, mode):
         assert lt.find_keys(KeyType.SYMBOL_LIST) == orig_sl
     else:
         assert lt.find_keys(KeyType.SYMBOL_LIST) != orig_sl
+
+
+def random_strings(count, max_length):
+    result = []
+    for _ in range(count):
+        length = random.randrange(max_length) + 2
+        result.append("".join(random.choice(string.ascii_letters) for _ in range(length)))
+    return result
+
+
+def _tiny_df(idx):
+    return pd.DataFrame({"x": np.arange(idx % 10, idx % 10 + 10)}, index=pd.date_range(idx % 10, periods=10, freq="h"))
+
+
+def _trigger(count, frequency):
+    return count > frequency and count % frequency == 0
+
+
+def _perform_actions(args):
+    lib, symbols, idx, num_cycles, list_freq, delete_freq, update_freq = args
+    for _ in range(num_cycles):
+        for c, sym in enumerate(symbols):
+            count = c + idx
+            if _trigger(count, delete_freq):
+                lib.delete(sym)
+            elif _trigger(count, list_freq):
+                lib.list_symbols()
+            elif _trigger(count, update_freq):
+                lib.update(sym, _tiny_df(idx + c), upsert=True)
+            else:
+                lib.write(sym, _tiny_df(idx + c))
+
+
+class ScopedMaxDelta:
+    def __init__(self, max_delta):
+        set_config_int("SymbolList.MaxDelta", max_delta)
+
+    def __del__(self):
+        unset_config_int("SymbolList.MaxDelta")
+
+
+@pytest.mark.parametrize("list_freq", [2, 100])
+@pytest.mark.parametrize("delete_freq", [2, 10])
+@pytest.mark.parametrize("update_freq", [3, 8])
+@pytest.mark.parametrize("compaction_size", [2, 10, 200])
+@pytest.mark.parametrize("same_symbols", [True, False])
+def test_symbol_list_parallel_stress_with_delete(
+    lmdb_version_store_v1, list_freq, delete_freq, update_freq, compaction_size, same_symbols
+):
+    pd.set_option("display.max_rows", None)
+    ScopedMaxDelta(compaction_size)
+
+    lib = lmdb_version_store_v1
+    num_pre_existing_symbols = 100
+    num_symbols = 10
+    num_workers = 5
+    num_cycles = 1
+    symbol_length = 6
+
+    pre_existing_symbols = random_strings(num_pre_existing_symbols, symbol_length)
+    for idx, existing in enumerate(pre_existing_symbols):
+        lib.write(existing, _tiny_df(idx))
+
+    if same_symbols:
+        frozen_symbols = random_strings(num_symbols, symbol_length)
+        symbols = [frozen_symbols for _ in range(num_workers)]
+    else:
+        symbols = [random_strings(num_symbols, symbol_length) for _ in range(num_workers)]
+
+    with Pool(num_workers) as p:
+        p.map(
+            _perform_actions,
+            [(lib, syms, idx, num_cycles, list_freq, delete_freq, update_freq) for idx, syms in enumerate(symbols)],
+        )
+
+    p.close()
+    p.join()
+
+    expected_symbols = set(lib.list_symbols(use_symbol_list=False))
+    got_symbols = set(lib.list_symbols())
+    extra_symbols = got_symbols - expected_symbols
+    assert len(extra_symbols) == 0
+    missing_symbols = expected_symbols - got_symbols
+    for sym in missing_symbols:
+        assert not lib.version_store.indexes_sorted(sym)

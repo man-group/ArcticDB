@@ -17,6 +17,7 @@ struct StreamDescriptor {
 
     std::shared_ptr<Proto> data_ = std::make_shared<Proto>();
     std::shared_ptr<FieldCollection> fields_ = std::make_shared<FieldCollection>();
+    ;
 
     StreamDescriptor() = default;
     ~StreamDescriptor() = default;
@@ -32,16 +33,6 @@ struct StreamDescriptor {
             set_data_type(field.type().data_type(), *new_field->mutable_type_desc());
         }
         return proto;
-    }
-
-    void copy_to_self_proto() {
-        data_->mutable_fields()->Clear();
-        for(const auto& field : *fields_) {
-            auto new_field = data_->mutable_fields()->Add();
-            new_field->set_name(std::string(field.name()));
-            new_field->mutable_type_desc()->set_dimension(static_cast<uint32_t>(field.type().dimension()));
-            set_data_type(field.type().data_type(), *new_field->mutable_type_desc());
-        }
     }
 
     void set_id(const StreamId& id) {
@@ -118,6 +109,7 @@ struct StreamDescriptor {
     }
 
     StreamDescriptor(const StreamDescriptor& other) = default;
+    StreamDescriptor& operator=(const StreamDescriptor& other) = default;
 
     friend void swap(StreamDescriptor& left, StreamDescriptor& right) noexcept {
         using std::swap;
@@ -129,7 +121,7 @@ struct StreamDescriptor {
         swap(left.fields_, right.fields_);
     }
 
-    StreamDescriptor& operator=(StreamDescriptor other) {
+    StreamDescriptor& operator=(StreamDescriptor&& other) {
         swap(*this, other);
         return *this;
     }
@@ -228,16 +220,11 @@ struct StreamDescriptor {
         util::check(field < position_t(fields().size()), "Column index out of range in drop_column");
         fields_->erase_field(field);
     }
-/*
-    std::optional<Field> field_at(size_t pos) {
-        if (UNLIKELY(pos >= static_cast<size_t>(fields().size()))) return std::nullopt;
-        return fields(pos);
-    }
 
     FieldCollection& mutable_fields() {
         return *fields_;
     }
-*/
+
     [[nodiscard]] const Field& fields(size_t pos) const {
         return fields_->at(pos);
     }
@@ -258,19 +245,7 @@ struct StreamDescriptor {
         data_->PrintDebugString();
     }
 };
-/*
-inline void set_id(arcticdb::proto::descriptors::StreamDescriptor& pb_desc, const StreamId& id) {
-    std::visit([&pb_desc](auto &&arg) {
-        using IdType = std::decay_t<decltype(arg)>;
-        if constexpr (std::is_same_v<IdType, NumericId>)
-        pb_desc.set_num_id(arg);
-        else if constexpr (std::is_same_v<IdType, StringId>)
-        pb_desc.set_str_id(arg);
-        else
-            util::raise_rte("Encoding unknown descriptor type");
-        }, id);
-}
-*/
+
 template <class IndexType>
 inline void set_index(arcticdb::proto::descriptors::StreamDescriptor &stream_desc) {
     auto& pb_desc = *stream_desc.mutable_index();

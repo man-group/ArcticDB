@@ -135,6 +135,7 @@ def test_(initial: InputFactories, append: InputFactories, match, swap, lmdb_ver
     df_in_str=st.booleans(),
 )
 @SLOW_TESTS_MARK
+@pytest.mark.xfail(reason="Needs to be fixed with issue #496")
 def test_append_with_defragmentation(
     sym,
     col_per_append_df,

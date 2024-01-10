@@ -126,7 +126,13 @@ namespace compatibility {
     constexpr auto raise = check<code>.raise;
 }
 
+namespace codec {
+    template<ErrorCode code>
+    constexpr auto check = util::detail::Check<code, ErrorCategory::CODEC>{};
 
+    template<ErrorCode code>
+    constexpr auto raise = check<code>.raise;
+}
 
 // TODO Change legacy codes to internal::
 namespace util {

@@ -94,7 +94,6 @@ TEST_P(SimpleTestSuite, ConstructDestruct) {
 
 TEST_P(SimpleTestSuite, Example) {
     std::unique_ptr<as::Storage> storage = GetParam().new_backend();
-
     ac::entity::AtomKey k = ac::entity::atom_key_builder().gen_id(1).build<ac::entity::KeyType::TABLE_DATA>(999);
 
     as::KeySegmentPair kv(k);
@@ -176,7 +175,7 @@ TEST_P(SimpleTestSuite, Strings) {
     arcticdb::proto::encoding::VariantCodec opt;
     auto lz4ptr = opt.mutable_lz4();
     lz4ptr->set_acceleration(1);
-    Segment seg = encode_v1(s.clone(), opt);
+    Segment seg = encode_dispatch(s.clone(), opt, EncodingVersion::V1);
 
     auto environment_name = as::EnvironmentName{"res"};
     auto storage_name = as::StorageName{"lmdb_01"};
@@ -217,4 +216,3 @@ auto backend_generators = get_backend_generators();
 
 INSTANTIATE_TEST_SUITE_P(TestEmbedded, SimpleTestSuite, testing::ValuesIn(backend_generators),
     [](const testing::TestParamInfo<SimpleTestSuite::ParamType>& info) { return info.param.get_name(); });
-

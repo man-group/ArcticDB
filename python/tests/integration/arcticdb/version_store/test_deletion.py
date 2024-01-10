@@ -559,9 +559,12 @@ def test_delete_date_range_remove_everything(version_store_factory, map_timeout)
 
         range_to_delete = pd.date_range(start=start_time, end=end_time)
         lib.delete(symbol, date_range=range_to_delete)
-        df = df.drop(df.index[start : end + 1])  # Arctic is end date inclusive
 
         vit = lib.read(symbol)
+        df = df.drop(df.index[start : end + 1])  # Arctic is end date inclusive
+        assert len(df) == 0
+        # Empty DataFrames in Pandas < 2 have different default dtype.
+        df = df.astype(vit.data.dtypes)
         assert_frame_equal(vit.data, df)
 
 

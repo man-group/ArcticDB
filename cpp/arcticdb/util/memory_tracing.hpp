@@ -10,6 +10,7 @@
 #include <array>
 #include <fstream>
 #include <arcticdb/util/preprocess.hpp>
+#include <log/log.hpp>
 #ifdef WIN32
 #include <process.h>
 #else
@@ -74,7 +75,7 @@ inline void print_total_mem_usage(const char *file ARCTICDB_UNUSED, int line ARC
     FILE *statm_file;
     statm_file = fopen(file_name.c_str(), "r");
     if(statm_file == nullptr) {
-        ARCTICDB_DEBUG(log::memory(), "Unable to read {}", file_name);
+        ARCTICDB_RUNTIME_DEBUG(log::memory(), "Unable to read {}", file_name);
         return;
     }
 
@@ -84,7 +85,7 @@ inline void print_total_mem_usage(const char *file ARCTICDB_UNUSED, int line ARC
         if(fscanf(statm_file, "%d", &mem_stat[i])){}
     }
     fclose(statm_file);
-    ARCTICDB_DEBUG(log::memory(), "{} ({}:{}) size {} resident {} share {} text {} data/stack {}",
+    ARCTICDB_RUNTIME_DEBUG(log::memory(), "{} ({}:{}) size {} resident {} share {} text {} data/stack {}",
                        file,
                        function,
                        line,

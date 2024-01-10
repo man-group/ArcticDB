@@ -197,21 +197,31 @@ See also: [`twine` docs](https://twine.readthedocs.io/en/stable/#environment-var
 <tr><th>vars.TWINE_CERT</th><td>SSL CA</td>
 </table>
 
-## [docs.yml](docs.yml)
+## [docs_build.yml](docs_build.yml)
 
-**Runs on forks**: Yes. Must supply a CloudFlare Pages site to upload to
+* Checks out suppied git tag  `v{version}-docs` or `master`
+* Fetches shallow copy of `docs-pages` branch.
+* Downloads and install wheel for API docs (either version or from last good build)
+* Install docs tools
+* Builds docs
+* Commits to docs-pages branch
 
 ### Call patterns
 | Called from       | Environment   | Intended effect
 |-------------------|---------------|----------------
-| master build      | TestPypi      | Updates the preview site
-| version tag build | ProdPypi      | Updates the public/`main` site
-| other build^      | null          | Doc syntax check only
-| workflow_dispatch | user supplied | Per environment settings
+| workflow_dispatch (manual) | user supplied | Per environment settings
 
-^ `build.yml` is triggered by changes to the code directories only.
-If you pushed only docs changes, please use the workflow dispatch to run a build manually
-(and supply a suitable ArcticDB wheel from a previous build).
+## [docs_publish.yml](docs_publish.yml)
+
+* Checks out docs-pages branch
+* Uploads to cloudflare, with as preview (TestPyPi) or `docs.arcticdb.io` (ProdPyPi).
+
+### Call patterns
+| Called from       | Environment   | Intended effect
+|-------------------|---------------|----------------
+
+| workflow_dispatch (manual) | user supplied | Per environment settings
+
 
 ### Settings
 <table>

@@ -13,6 +13,7 @@
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/frame_and_descriptor.hpp>
 #include <arcticdb/pipeline//python_output_frame.hpp>
+#include <arcticdb/util/memory_tracing.hpp>
 
 #include <vector>
 
@@ -51,7 +52,8 @@ inline ReadResult create_python_read_result(
     auto python_frame = pipelines::PythonOutputFrame{result.frame_, result.buffers_};
     util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
 
-    return {version, std::move(python_frame), result.desc_.proto().normalization(),
-            result.desc_.proto().user_meta(), result.desc_.proto().multi_key_meta(), std::move(result.keys_)};
+    const auto& desc_proto = result.desc_.proto();
+    return {version, std::move(python_frame), desc_proto.normalization(),
+            desc_proto.user_meta(), desc_proto.multi_key_meta(), std::move(result.keys_)};
 }
 } //namespace arcticdb

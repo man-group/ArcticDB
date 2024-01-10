@@ -11,7 +11,6 @@
 
 #include <folly/small_vector.h>
 #include <folly/Range.h>
-#include <folly/String.h>
 #include <fmt/format.h>
 #include <memory>
 #include <string>
@@ -44,6 +43,8 @@ class DefaultStringViewable : public std::shared_ptr<std::string> {
         return hash_;
     }
 
+    DefaultStringViewable operator=(const DefaultStringViewable&) = delete;
+
   private:
     HashedValue hash_;
 };
@@ -73,7 +74,7 @@ class LibraryPathImpl {
             return parts_.empty();
         }
 
-    LibraryPathImpl(const std::string_view &delim_path, char delim) :
+    LibraryPathImpl(std::string_view delim_path, char delim) :
         parts_(),
         hash_() {
         folly::StringPiece p{delim_path};
@@ -85,7 +86,7 @@ class LibraryPathImpl {
         hash_ = compute_hash();
     }
 
-    static LibraryPathImpl<StringViewable> from_delim_path(const std::string_view &delim_path, char delim = '.') {
+    static LibraryPathImpl<StringViewable> from_delim_path(std::string_view delim_path, char delim = '.') {
         return LibraryPathImpl<StringViewable>{delim_path, delim};
     }
 

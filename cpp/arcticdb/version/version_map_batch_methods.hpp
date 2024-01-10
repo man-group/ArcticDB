@@ -13,9 +13,80 @@
 #include <arcticdb/version/version_store_objects.hpp>
 #include <arcticdb/pipeline/query.hpp>
 #include <arcticdb/version/version_functions.hpp>
+#include <arcticdb/version/snapshot.hpp>
+
 #include <folly/futures/FutureSplitter.h>
 
 namespace arcticdb {
+
+struct SymbolStatus {
+    const VersionId version_id_ = 0;
+    const bool exists_ = false;
+    const timestamp timestamp_ = 0;
+
+    SymbolStatus(VersionId version_id, bool exists, timestamp ts) :
+        version_id_(version_id),
+        exists_(exists),
+        timestamp_(ts) {
+    }
+};
+
+template <typename Inputs, typename TaskSubmitter, typename ResultHandler>
+inline void submit_tasks_for_range(const Inputs& inputs, TaskSubmitter submitter, ResultHandler result_handler) {
+    const auto window_size = async::TaskScheduler::instance()->io_thread_count() * 2;
+
+    auto futures = folly::window(inputs, [&submitter, &result_handler](const auto &input) {
+        return submitter(input).thenValue([&result_handler, &input](auto &&r) {
+            auto result = std::forward<decltype(r)>(r);
+            result_handler(input, std::move(result));
+            return folly::Unit{};
+        });
+    }, window_size);
+
+    auto collected_futs = folly::collectAll(futures).get();
+    std::optional<std::string> all_exceptions;
+    for (auto&& collected_fut: collected_futs) {
+        if (!collected_fut.hasValue()) {
+            all_exceptions = all_exceptions.value_or("").append(collected_fut.exception().what().toStdString()).append("\n");
+        }
+    }
+    internal::check<ErrorCode::E_RUNTIME_ERROR>(!all_exceptions.has_value(), all_exceptions.value_or(""));
+}
+
+inline std::shared_ptr<std::unordered_map<StreamId, SymbolStatus>> batch_check_latest_id_and_status(
+    const std::shared_ptr<Store> &store,
+    const std::shared_ptr<VersionMap> &version_map,
+    const std::shared_ptr<std::vector<StreamId>> &symbols) {
+    ARCTICDB_SAMPLE(BatchGetLatestVersion, 0)
+    const LoadParameter load_param{LoadType::LOAD_LATEST_UNDELETED};
+    auto output = std::make_shared<std::unordered_map<StreamId, SymbolStatus>>();
+    auto mutex = std::make_shared<std::mutex>();
+
+    submit_tasks_for_range(*symbols,
+        [store, version_map, &load_param](auto &symbol) {
+          return async::submit_io_task(CheckReloadTask{store, version_map, symbol, load_param});
+        },
+        [output, mutex](const auto& id, const std::shared_ptr<VersionMapEntry> &entry) {
+          auto index_key = entry->get_first_index(false);
+          if (index_key) {
+              std::lock_guard lock{*mutex};
+              output->insert(std::make_pair<StreamId, SymbolStatus>(StreamId{id}, {index_key->version_id(), true, index_key->creation_ts()}));
+          } else {
+              index_key = entry->get_first_index(true);
+              if (index_key) {
+                  std::lock_guard lock{*mutex};
+                  output->insert(std::make_pair<StreamId, SymbolStatus>(StreamId{id}, {index_key->version_id(), false, index_key->creation_ts()}));
+              } else {
+                  if (entry->head_ && entry->head_->type() == KeyType::TOMBSTONE_ALL) {
+                      const auto& head = *entry->head_;
+                      std::lock_guard lock{*mutex};
+                      output->insert(std::make_pair<StreamId, SymbolStatus>(StreamId{id}, {head.version_id(), false, head.creation_ts()}));
+                  }
+              }
+          }});
+
+    return output;
+}
 
 inline std::shared_ptr<std::unordered_map<StreamId, AtomKey>> batch_get_latest_version(
     const std::shared_ptr<Store> &store,
@@ -25,21 +96,41 @@ inline std::shared_ptr<std::unordered_map<StreamId, AtomKey>> batch_get_latest_v
     ARCTICDB_SAMPLE(BatchGetLatestVersion, 0)
     const LoadParameter load_param{include_deleted ? LoadType::LOAD_LATEST : LoadType::LOAD_LATEST_UNDELETED};
     auto output = std::make_shared<std::unordered_map<StreamId, AtomKey>>();
+    auto mutex = std::make_shared<std::mutex>();
 
-    async::submit_tasks_for_range(stream_ids,
+    submit_tasks_for_range(stream_ids,
             [store, version_map, &load_param](auto& stream_id) {
                 return async::submit_io_task(CheckReloadTask{store, version_map, stream_id, load_param});
             },
-            [output, include_deleted](auto& id, auto&& entry) {
+            [output, include_deleted, mutex](auto id, auto entry) {
                 auto index_key = entry->get_first_index(include_deleted);
-                if (index_key)
+                if (index_key) {
+                    std::lock_guard lock{*mutex};
                     (*output)[id] = *index_key;
+                }
             });
 
     return output;
 }
 
-// The logic here is the same as get_latest_undeleted_version_and_next_version_id
+inline std::vector<folly::Future<std::pair<std::optional<AtomKey>, std::optional<AtomKey>>>> batch_get_latest_undeleted_and_latest_versions_async(
+    const std::shared_ptr<Store> &store,
+    const std::shared_ptr<VersionMap> &version_map,
+    const std::vector<StreamId> &stream_ids) {
+    ARCTICDB_SAMPLE(BatchGetLatestUndeletedVersionAndNextVersionId, 0)
+    std::vector<folly::Future<std::pair<std::optional<AtomKey>, std::optional<AtomKey>>>> vector_fut;
+    for (auto& stream_id: stream_ids){
+        vector_fut.push_back(async::submit_io_task(CheckReloadTask{store,
+                                                                   version_map,
+                                                                   stream_id,
+                                                                   LoadParameter{LoadType::LOAD_LATEST_UNDELETED}})
+                                 .thenValue([](const std::shared_ptr<VersionMapEntry>& entry){
+                                     return std::make_pair(entry->get_first_index(false), entry->get_first_index(true));
+                                 }));
+    }
+    return vector_fut;
+}
+
 inline std::vector<folly::Future<version_store::UpdateInfo>> batch_get_latest_undeleted_version_and_next_version_id_async(
         const std::shared_ptr<Store> &store,
         const std::shared_ptr<VersionMap> &version_map,
@@ -51,7 +142,7 @@ inline std::vector<folly::Future<version_store::UpdateInfo>> batch_get_latest_un
                                                      version_map,
                                                      stream_id,
                                                      LoadParameter{LoadType::LOAD_LATEST_UNDELETED}})
-        .thenValue([](auto&& entry){
+        .thenValue([](auto entry){
             auto latest_version = entry->get_first_index(true);
             auto latest_undeleted_version = entry->get_first_index(false);
             VersionId next_version_id = latest_version.has_value() ? latest_version->version_id() + 1 : 0;
@@ -61,21 +152,46 @@ inline std::vector<folly::Future<version_store::UpdateInfo>> batch_get_latest_un
     return vector_fut;
 }
 
+template <typename MapType>
+struct MapRandomAccessWrapper {
+    const MapType& map_;
+
+    using iterator = typename MapType::iterator;
+
+    explicit MapRandomAccessWrapper(const MapType& map) :
+        map_(map) {
+    }
+
+    [[nodiscard]] size_t size() const {
+        return map_.size();
+    }
+
+    auto& operator[](size_t pos) const {
+        auto it = std::begin(map_);
+        std::advance(it, pos);
+        return *it;
+    }
+};
+
+// This version assumes that there is only one version per symbol, so no need for the state machine below
 inline std::shared_ptr<std::unordered_map<StreamId, AtomKey>> batch_get_specific_version(
     const std::shared_ptr<Store>& store,
     const std::shared_ptr<VersionMap>& version_map,
-    std::map<StreamId, VersionId>& sym_versions) {
+    const std::map<StreamId, VersionId>& sym_versions,
+    bool include_deleted = true) {
     ARCTICDB_SAMPLE(BatchGetLatestVersion, 0)
     auto output = std::make_shared<std::unordered_map<StreamId, AtomKey>>();
+    auto mutex = std::make_shared<std::mutex>();
 
-    async::submit_tasks_for_range(sym_versions,
-                                  [store, version_map](auto& sym_version) {
-        LoadParameter load_param{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(sym_version.second)};
-        return async::submit_io_task(CheckReloadTask{store, version_map, sym_version.first, load_param});
+    MapRandomAccessWrapper wrapper{sym_versions};
+    submit_tasks_for_range(wrapper, [store, version_map](auto& sym_version) {
+            LoadParameter load_param{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(sym_version.second)};
+            return async::submit_io_task(CheckReloadTask{store, version_map, sym_version.first, load_param});
         },
-        [output](auto& sym_version, auto&& entry) {
-        auto index_key = find_index_key_for_version_id(sym_version.second, entry);
+        [output, include_deleted, mutex](auto sym_version, const std::shared_ptr<VersionMapEntry>& entry) {
+        auto index_key = find_index_key_for_version_id(sym_version.second, entry, include_deleted);
         if (index_key) {
+            std::lock_guard lock{*mutex};
             (*output)[sym_version.first] = *index_key;
         }
     });
@@ -92,23 +208,27 @@ using VersionVectorType = std::vector<VersionId>;
 inline std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>> batch_get_specific_versions(
         const std::shared_ptr<Store>& store,
         const std::shared_ptr<VersionMap>& version_map,
-        std::map<StreamId, VersionVectorType>& sym_versions) {
+        std::map<StreamId, VersionVectorType>& sym_versions,
+        bool include_deleted = true) {
     ARCTICDB_SAMPLE(BatchGetLatestVersion, 0)
     auto output = std::make_shared<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>>();
+    MapRandomAccessWrapper wrapper{sym_versions};
+    auto mutex = std::make_shared<std::mutex>();
 
-    async::submit_tasks_for_range(sym_versions,
-            [store, version_map](auto& sym_version) {
+    submit_tasks_for_range(wrapper, [store, version_map](auto sym_version) {
                 auto first_version = *std::min_element(std::begin(sym_version.second), std::end(sym_version.second));
                 LoadParameter load_param{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(first_version)};
                 return async::submit_io_task(CheckReloadTask{store, version_map, sym_version.first, load_param});
             },
-            [output, &sym_versions](auto& sym_version, auto&& entry) {
+
+            [output, &sym_versions, include_deleted, mutex](auto sym_version, const std::shared_ptr<VersionMapEntry>& entry) {
                 auto sym_it = sym_versions.find(sym_version.first);
                 util::check(sym_it != sym_versions.end(), "Failed to find versions for symbol {}", sym_version.first);
                 const auto& versions = sym_it->second;
                 for(auto version : versions) {
-                    auto index_key = find_index_key_for_version_id(version, entry);
+                    auto index_key = find_index_key_for_version_id(version, entry, include_deleted);
                     if (index_key) {
+                        std::lock_guard lock{*mutex};
                         (*output)[std::pair(sym_version.first, version)] = *index_key;
                     }
                 }
@@ -116,166 +236,27 @@ inline std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKe
 
     return output;
 }
-
 struct StreamVersionData {
-    explicit StreamVersionData(const pipelines::VersionQuery& version_query) {
-        react(version_query);
-    }
-
-    StreamVersionData() = default;
-
     size_t count_ = 0;
-    LoadParameter load_param_ = LoadParameter{LoadType::LOAD_LATEST_UNDELETED};
+    LoadParameter load_param_ = LoadParameter{LoadType::NOT_LOADED};
+    folly::small_vector<SnapshotId, 1> snapshots_;
 
-    void react(const pipelines::VersionQuery& version_query) {
-        util::variant_match(version_query.content_, [that = this](const auto &query) {
-            that->do_react(query);
-        });
-    }
-
-    void do_react(std::monostate) {
-        ++count_;
-    }
-
-    void do_react(const pipelines::SpecificVersionQuery& specific_version) {
-        ++count_;
-        switch(load_param_.load_type_) {
-        case LoadType::LOAD_LATEST_UNDELETED:
-            load_param_ = LoadParameter{LoadType::LOAD_DOWNTO, specific_version.version_id_};
-            break;
-        case LoadType::LOAD_DOWNTO:
-            util::check(load_param_.load_until_.has_value(), "Expect LOAD_DOWNTO to have version specificed");
-            if ((specific_version.version_id_ >= 0 && is_positive_version_query(load_param_)) ||
-                    (specific_version.version_id_ < 0 && load_param_.load_until_.value() < 0)) {
-                load_param_.load_until_ = std::min(load_param_.load_until_.value(), specific_version.version_id_);
-            } else {
-                load_param_ = LoadParameter{LoadType::LOAD_UNDELETED};
-            }
-            break;
-        case LoadType::LOAD_FROM_TIME:
-        case LoadType::LOAD_UNDELETED:
-            load_param_ = LoadParameter{LoadType::LOAD_UNDELETED};
-            break;
-        default:
-            util::raise_rte("Unexpected load state {} applying specific version query", load_param_.load_type_);
-        }
-    }
-
-    void do_react(const pipelines::TimestampVersionQuery& timestamp_query) {
-        ++count_;
-        switch(load_param_.load_type_) {
-        case LoadType::LOAD_LATEST_UNDELETED:
-            load_param_ = LoadParameter{LoadType::LOAD_FROM_TIME, timestamp_query.timestamp_};
-            break;
-        case LoadType::LOAD_FROM_TIME:
-            util::check(load_param_.load_from_time_.has_value(), "Expect LOAD_TO_TIME to have timestamp specificed");
-            load_param_.load_from_time_ = std::min(load_param_.load_from_time_.value(), timestamp_query.timestamp_);
-            break;
-        case LoadType::LOAD_DOWNTO:
-        case LoadType::LOAD_UNDELETED:
-            load_param_ = LoadParameter{LoadType::LOAD_UNDELETED};
-            break;
-        default:
-            util::raise_rte("Unexpected load state {} applying specific version query", load_param_.load_type_);
-        }
-    }
-
-    void do_react(const pipelines::SnapshotVersionQuery&) {
-        util::raise_rte("Snapshot not currently supported in generic batch read version");
-    }
+    explicit StreamVersionData(const pipelines::VersionQuery& version_query);
+    StreamVersionData() = default;
+    void react(const pipelines::VersionQuery& version_query);
+private:
+    void do_react(std::monostate);
+    void do_react(const pipelines::SpecificVersionQuery& specific_version);
+    void do_react(const pipelines::TimestampVersionQuery& timestamp_query);
+    void do_react(const pipelines::SnapshotVersionQuery& snapshot_query);
 };
 
-inline std::optional<AtomKey> get_key_for_version_query(
-    const std::shared_ptr<VersionMapEntry>& version_map_entry, 
-    const pipelines::VersionQuery& version_query) {
-    return util::variant_match(version_query.content_,
-        [&version_map_entry] (const pipelines::SpecificVersionQuery& specific_version) -> std::optional<AtomKey> {
-            auto signed_version_id = specific_version.version_id_;
-            VersionId version_id;
-            if (signed_version_id >= 0) {
-                version_id = static_cast<VersionId>(signed_version_id);
-            } else {
-                auto opt_latest = version_map_entry->get_first_index(true);
-                if (opt_latest.has_value()) {
-                    auto opt_version_id = get_version_id_negative_index(opt_latest->version_id(), signed_version_id);
-                    if (opt_version_id.has_value()) {
-                        version_id = *opt_version_id;
-                    } else {
-                        return std::nullopt;
-                    }
-                } else {
-                    return std::nullopt;
-                }
-            }
-            return find_index_key_for_version_id(version_id, version_map_entry);
-        },
-        [&version_map_entry] (const pipelines::TimestampVersionQuery& timestamp_version) -> std::optional<AtomKey> {
-            auto version_key = get_index_key_from_time(timestamp_version.timestamp_, version_map_entry->get_indexes(false));
-            if(version_key.has_value()){
-                auto version_id = version_key.value().version_id();
-                return find_index_key_for_version_id(version_id, version_map_entry, false);
-            }else{
-                return std::nullopt;
-            }
-        },
-        [&version_map_entry] (const std::monostate&) {
-        return version_map_entry->get_first_index(false);
-        },
-        [] (const auto&) -> std::optional<AtomKey> {
-            util::raise_rte("Unsupported version query type");
-        });
-}
-
-inline std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions_async(
+std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions_async(
     const std::shared_ptr<Store>& store,
     const std::shared_ptr<VersionMap>& version_map,
     const std::vector<StreamId>& symbols,
     const std::vector<pipelines::VersionQuery>& version_queries,
-    const std::optional<bool>& use_previous_on_error) {
-    ARCTICDB_SAMPLE(BatchGetVersion, 0)
-    util::check(symbols.size() == version_queries.size(), "Symbol and version query list mismatch: {} != {}", symbols.size(), version_queries.size());
-
-    robin_hood::unordered_flat_map<StreamId, StreamVersionData> version_data;
-    for(const auto& symbol : folly::enumerate(symbols)) {
-        auto it = version_data.find(*symbol);
-        if(it == version_data.end())
-            version_data.insert(robin_hood::pair<StreamId, StreamVersionData>(*symbol, StreamVersionData{version_queries[symbol.index]}));
-        else
-            it->second.react(version_queries[symbol.index]);
-    }
-
-    using SplitterType = folly::FutureSplitter<std::shared_ptr<VersionMapEntry>>;
-    robin_hood::unordered_flat_map<StreamId, SplitterType> shared_futures;
-    std::vector<folly::Future<std::optional<AtomKey>>> output;
-    output.reserve(symbols.size());
-    for(const auto& symbol : folly::enumerate(symbols)) {
-        const auto it = version_data.find(*symbol);
-        util::check(it != version_data.end(), "Missing version data for symbol {}", *symbol);
-        auto version_entry_fut = folly::Future<std::shared_ptr<VersionMapEntry>>::makeEmpty();
-
-        if(use_previous_on_error.value_or(false))
-            it->second.load_param_.use_previous_ = true;
-
-        if(it->second.count_ == 1) {
-            version_entry_fut = async::submit_io_task(CheckReloadTask{store, version_map, *symbol, it->second.load_param_});
-        } else {
-            auto fut = shared_futures.find(*symbol);
-            if(fut == shared_futures.end()) {
-                auto [splitter, inserted] = shared_futures.emplace(*symbol, folly::FutureSplitter(async::submit_io_task(CheckReloadTask{store, version_map, *symbol, it->second.load_param_})));
-
-                version_entry_fut = splitter->second.getFuture();
-            } else {
-                version_entry_fut = fut->second.getFuture();
-            }
-        }
-        output.push_back(std::move(version_entry_fut)
-        .thenValue([version_query = version_queries[symbol.index]](auto version_map_entry) {
-            return get_key_for_version_query(version_map_entry, version_query);
-        }));
-    }
-
-    return output;
-}
+    const std::optional<bool>& use_previous_on_error);
 
 inline std::vector<folly::Future<folly::Unit>> batch_write_version(
     const std::shared_ptr<Store> &store,

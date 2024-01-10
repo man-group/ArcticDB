@@ -161,7 +161,7 @@ class Aggregator {
         C &&c,
         SegmentingPolicy &&segmenting_policy = SegmentingPolicyType(),
         const std::optional<StreamDescriptor>& desc = std::nullopt,
-        const std::optional<size_t> row_count = std::nullopt) :
+        const std::optional<size_t>& row_count = std::nullopt) :
         schema_policy_(std::move(schema)),
         row_builder_(schema_policy_, self()),
         callback_(std::forward<Callback>(c)),
@@ -224,11 +224,19 @@ class Aggregator {
         segment_.set_sparse_block(pos, val,  rows_to_write);
     }
 
+    void set_sparse_block(position_t idx, ChunkedBuffer&& buffer, util::BitSet&& bitset) {
+        segment_.set_sparse_block(idx, std::move(buffer), std::move(bitset));
+    }
+
+    void set_sparse_block(position_t idx, ChunkedBuffer&& buffer, Buffer&& shapes, util::BitSet&& bitset) {
+        segment_.set_sparse_block(idx, std::move(buffer), std::move(shapes), std::move(bitset));
+    }
+
     void set_string_at(position_t col, position_t row, const char* val, size_t size) {
         segment_.set_string_at(col, row, val, size);
     }
 
-    void set_no_string_at(position_t col, position_t row, OffsetString::offset_t placeholder) {
+    void set_no_string_at(position_t col, position_t row, position_t placeholder) {
         segment_.set_no_string_at(col, row, placeholder);
     }
 

@@ -12,7 +12,11 @@ namespace arcticdb {
 inline std::size_t sizeof_datatype(const TypeDescriptor &td) {
     return td.visit_tag([](auto dt) {
         using RawType = typename std::decay_t<decltype(dt)>::DataTypeTag::raw_type;
-        return sizeof(RawType);
+        // Array types are stored on disk as flat sequences. The python layer cannot work with this. We need to pass
+        // it pointers to an array type (at numpy arrays at the moment). When we allocate a column for an array we
+        // need to allocate space for one pointer per row. This also affects how we handle arrays to python as well.
+        // Check cpp/arcticdb/column_store/column_utils.hpp::array_at and cpp/arcticdb/column_store/column.hpp
+        return dt.dimension() == Dimension::Dim0 ? sizeof(RawType) : sizeof(void*);
     });
 }
 
@@ -58,8 +62,8 @@ struct StaticColumnMappingIterator {
         bit_set_(context.get_selected_columns()) {
             prev_col_offset_ = first_slice_col_offset_ - 1;
             if(bit_set_) {
-                source_col_ = bit_set_.value()[bv_size(first_slice_col_offset_)] ? first_slice_col_offset_ : bit_set_->get_next(bv_size(first_slice_col_offset_));
-                if (bit_set_.value()[bv_size(first_slice_col_offset_)]) {
+                source_col_ = (*bit_set_)[bv_size(first_slice_col_offset_)] ? first_slice_col_offset_ : bit_set_->get_next(bv_size(first_slice_col_offset_));
+                if ((*bit_set_)[bv_size(first_slice_col_offset_)]) {
                     source_col_ = first_slice_col_offset_;
                 } else {
                     auto next_pos = bit_set_->get_next(bv_size(first_slice_col_offset_));
@@ -97,7 +101,7 @@ struct StaticColumnMappingIterator {
         prev_col_offset_ = source_col_;
         auto new_source_col = get_next_source_col();
         if(new_source_col) {
-            source_col_ = new_source_col.value();
+            source_col_ = *new_source_col;
             source_field_pos_ = (source_col_ - first_slice_col_offset_) + index_fieldcount_;
         } else {
             source_field_pos_ = field_count_;

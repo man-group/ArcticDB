@@ -23,7 +23,7 @@ class LibraryIndex {
         ARCTICDB_DEBUG(log::storage(), "Creating library index with resolver type {}", resolver->resolver_type());
     }
 
-    std::vector<LibraryPath> list_libraries(const std::string_view &prefix) {
+    std::vector<LibraryPath> list_libraries(std::string_view prefix) {
         std::lock_guard<std::mutex> lock{mutex_};
         return config_cache_.list_libraries(prefix);
     }
@@ -62,7 +62,7 @@ class LibraryIndex {
             cfg = desc->config_;
         }
         auto lib = std::make_shared<Library>(path, config_cache_.create_storages(path, mode), cfg);
-        if (auto &&[it, inserted] = library_cache_.insert(std::make_pair(path, lib)); !inserted) {
+        if (auto &&[it, inserted] = library_cache_.try_emplace(path, lib); !inserted) {
             lib = it->second;
         }
         return lib;

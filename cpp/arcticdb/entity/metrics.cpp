@@ -8,10 +8,12 @@
 #include <arcticdb/entity/metrics.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/util/preconditions.hpp>
-#include <folly/system/ThreadName.h>
-#include <folly/container/F14Map.h>
 #include <arcticdb/util/preprocess.hpp>
 #include <arcticdb/util/pb_util.hpp>
+
+#ifdef _WIN32
+#    include <Winsock.h> // for gethostname
+#endif
 
 using namespace prometheus;
 
@@ -46,8 +48,8 @@ namespace arcticdb {
             // IMP: This is the GROUPING_KEY - every push overwrites the previous grouping key
             auto labels = prometheus::Gateway::GetInstanceLabel(getHostName());
             mongo_instance_ = cfg.instance();
-            labels.insert(std::pair<std::string, std::string>(MONGO_INSTANCE_LABEL, mongo_instance_));
-            labels.insert(std::pair<std::string, std::string>(PROMETHEUS_ENV_LABEL, cfg.prometheus_env()));
+            labels.try_emplace(MONGO_INSTANCE_LABEL, mongo_instance_);
+            labels.try_emplace(PROMETHEUS_ENV_LABEL, cfg.prometheus_env());
             gateway_= std::make_shared<prometheus::Gateway>(cfg.host(), cfg.port(), cfg.job_name(), labels);
             registry_ = std::make_shared<prometheus::Registry>();
             gateway_->RegisterCollectable(registry_);

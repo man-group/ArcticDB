@@ -86,7 +86,6 @@ def test_column_stats_infinity(lmdb_version_store_tiny_segment):
     expected_column_stats = expected_column_stats.iloc[[0, 1, 2]]
     expected_column_stats["v1.0_MIN(col_1)"] = [df0["col_1"].min(), df1["col_1"].min(), df2["col_1"].min()]
     expected_column_stats["v1.0_MAX(col_1)"] = [df0["col_1"].max(), df1["col_1"].max(), df2["col_1"].max()]
-
     column_stats_dict = {"col_1": {"MINMAX"}}
 
     lib.create_column_stats(sym, column_stats_dict)
@@ -105,7 +104,6 @@ def test_column_stats_as_of(lmdb_version_store_tiny_segment):
         axis=1,
         inplace=True,
     )
-
     column_stats_dict = {"col_1": {"MINMAX"}}
     lib.create_column_stats(sym, column_stats_dict, as_of=0)
     assert lib.get_column_stats_info(sym, as_of=0) == column_stats_dict
@@ -370,7 +368,6 @@ def test_column_stats_dynamic_schema_missing_data(lmdb_version_store_tiny_segmen
         np.nan,
         df4["col_2"].max(),
     ]
-
     column_stats_dict = {"col_1": {"MINMAX"}, "col_2": {"MINMAX"}}
     lib.create_column_stats(sym, column_stats_dict)
     assert lib.get_column_stats_info(sym) == column_stats_dict
@@ -446,7 +443,6 @@ def test_column_stats_dynamic_schema_types_changing(lmdb_version_store_tiny_segm
 
     expected_column_stats["v1.0_MIN(float_to_int)"] = [df0["float_to_int"].min(), df1["float_to_int"].min()]
     expected_column_stats["v1.0_MAX(float_to_int)"] = [df0["float_to_int"].max(), df1["float_to_int"].max()]
-
     column_stats_dict = {
         "int_widening": {"MINMAX"},
         "int_narrowing": {"MINMAX"},

@@ -9,6 +9,8 @@
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/version/version_log.hpp>
 
+#include <algorithm>
+
 using namespace arcticdb::entity;
 using namespace arcticdb::stream;
 
@@ -23,16 +25,18 @@ void write_snapshot_entry(
         KeyType key_type
 ) {
     ARCTICDB_SAMPLE(WriteJournalEntry, 0)
-    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write snapshot entry");
-    IndexAggregator <RowCountIndex> snapshot_agg(snapshot_id, [&](auto &&segment) {
+    ARCTICDB_RUNTIME_DEBUG(log::snapshot(), "Command: write snapshot entry");
+    IndexAggregator <RowCountIndex> snapshot_agg(snapshot_id, [&store, key_type, &snapshot_id](SegmentInMemory&& segment) {
         store->write(key_type, snapshot_id, std::move(segment)).get();
     });
 
+    ARCTICDB_DEBUG(log::snapshot(), "Constructing snapshot {}", snapshot_id);
     // Most of the searches in snapshot are for a given symbol, this helps us do a binary search on the segment
     // on read time.
     std::sort(keys.begin(), keys.end(), [](const AtomKey &l, const AtomKey &r) {return l.id() < r.id(); });
 
     for (const auto &key: keys) {
+        ARCTICDB_DEBUG(log::snapshot(), "Adding key {}", key);
         snapshot_agg.add_key(key);
     }
     // Serialize and store the python metadata in the journal entry for snapshot.
@@ -51,7 +55,7 @@ void write_snapshot_entry(
 }
 
 void tombstone_snapshot(
-    std::shared_ptr<StreamSink> store,
+    const std::shared_ptr<StreamSink>& store,
     const RefKey& key,
     SegmentInMemory&& segment_in_memory,
     bool log_changes
@@ -66,7 +70,7 @@ void tombstone_snapshot(
 }
 
 void tombstone_snapshot(
-        std::shared_ptr<StreamSink> store,
+        const std::shared_ptr<StreamSink>& store,
         storage::KeySegmentPair&& key_segment_pair,
         bool log_changes
         ) {
@@ -80,39 +84,23 @@ void tombstone_snapshot(
     store->write_compressed(std::move(key_segment_pair)).get();
 }
 
-// Returns true if snapshot with given key is successfully tombstoned, or false if the snapshot with this key doesn't exist
-void tombstone_snapshot(
-        std::shared_ptr<Store> store,
-        const RefKey& key,
-        bool log_changes
-        ) {
-    try {
-        auto key_segment_pair = store->read_compressed(key).get();
-        tombstone_snapshot(store, std::move(key_segment_pair), log_changes);
-    } catch (const storage::KeyNotFoundException& e) {
-        log::version().info("Cannot tombstone snapshot {}, key does not exist on the store", key);
-    } catch (const std::exception& e) {
-        log::version().error("Cannot tombstone snapshot {}: {}", key, e.what());
-    }
-}
-
-void iterate_snapshots(std::shared_ptr <Store> store, folly::Function<void(entity::VariantKey & )> visitor) {
+void iterate_snapshots(const std::shared_ptr<Store>& store, folly::Function<void(entity::VariantKey & )> visitor) {
     ARCTICDB_SAMPLE(IterateSnapshots, 0)
 
     std::vector<VariantKey> snap_variant_keys;
     std::unordered_set<SnapshotId> seen;
 
-    store->iterate_type(KeyType::SNAPSHOT_REF, [&](VariantKey &&vk) {
+    store->iterate_type(KeyType::SNAPSHOT_REF, [&snap_variant_keys, &seen](VariantKey &&vk) {
         util::check(std::holds_alternative<RefKey>(vk), "Expected shapshot ref to be reference type, got {}", variant_key_view(vk));
-        auto ref_key = std::get<RefKey>(vk);
+        auto ref_key = std::get<RefKey>(std::move(vk));
         seen.insert(ref_key.id());
         snap_variant_keys.emplace_back(ref_key);
     });
 
-    store->iterate_type(KeyType::SNAPSHOT, [&](VariantKey &&vk) {
-        const auto &key = to_atom(vk);
+    store->iterate_type(KeyType::SNAPSHOT, [&snap_variant_keys, &seen](VariantKey &&vk) {
+        auto key = to_atom(std::move(vk));
         if (seen.find(key.id()) == seen.end()) {
-            snap_variant_keys.push_back(key);
+            snap_variant_keys.emplace_back(key);
         }
     });
 
@@ -128,8 +116,10 @@ void iterate_snapshots(std::shared_ptr <Store> store, folly::Function<void(entit
     }
 }
 
-std::optional<size_t>
-row_id_for_stream_in_snapshot_segment(SegmentInMemory &seg, bool using_ref_key, StreamId stream_id) {
+std::optional<size_t> row_id_for_stream_in_snapshot_segment(
+    SegmentInMemory &seg,
+    bool using_ref_key,
+    const StreamId& stream_id) {
     if (using_ref_key) {
         // With ref keys we are sure the snapshot segment has the index atom keys sorted by stream_id.
         auto lb = std::lower_bound(std::begin(seg), std::end(seg), stream_id,
@@ -148,7 +138,7 @@ row_id_for_stream_in_snapshot_segment(SegmentInMemory &seg, bool using_ref_key, 
     }
     // Fall back to linear search for old atom key snapshots.
     for (size_t idx = 0; idx < seg.row_count(); idx++) {
-        auto row_stream_id = stream_id_from_segment<pipelines::index::Fields>(seg, idx);
+        auto row_stream_id = stream_id_from_segment<pipelines::index::Fields>(seg, static_cast<ssize_t>(idx));
         if (row_stream_id == stream_id) {
             return idx;
         }
@@ -156,38 +146,15 @@ row_id_for_stream_in_snapshot_segment(SegmentInMemory &seg, bool using_ref_key, 
     return std::nullopt;
 }
 
-std::unordered_map<VariantKey, SnapshotRefData> get_snapshots_and_index_keys(
-        const std::shared_ptr<Store>& store
-        ) {
-    ARCTICDB_SAMPLE(GetSnapshotsAndIndexKeys, 0)
-    std::unordered_map<VariantKey, SnapshotRefData> res;
-    iterate_snapshots(store, [&store, &res](const VariantKey &vk) {
-        try {
-            auto segment = store->read_sync(vk).second;
-            std::unordered_set<VariantKey> index_keys;
-            for (size_t idx = 0; idx < segment.row_count(); idx++) {
-                auto key = read_key_row(segment, idx);
-                if (is_index_key_type(key.type())) {
-                    index_keys.emplace(std::move(key));
-                }
-            }
-            SnapshotRefData snapshot_ref_data{std::move(segment), std::move(index_keys)};
-            res.try_emplace(vk, std::move(snapshot_ref_data));
-        } catch (const storage::KeyNotFoundException& e) {
-            log::version().info("Failed to read snapshot key: {}", e.what());
-        }
-    });
-    return res;
-}
-
 std::unordered_set<entity::AtomKey> get_index_keys_in_snapshots(
-        std::shared_ptr <Store> store,
+        const std::shared_ptr<Store>& store,
         const StreamId &stream_id) {
     ARCTICDB_SAMPLE(GetIndexKeysInSnapshot, 0)
 
     std::unordered_set<entity::AtomKey> index_keys_in_snapshots{};
 
-    iterate_snapshots(store, [&](VariantKey &vk) {
+    iterate_snapshots(store, [&index_keys_in_snapshots, &store, &stream_id](const VariantKey &vk) {
+        ARCTICDB_DEBUG(log::snapshot(), "Reading snapshot {}", vk);
         bool snapshot_using_ref = variant_key_type(vk) == KeyType::SNAPSHOT_REF;
         SegmentInMemory snapshot_segment = store->read_sync(vk).second;
         if (snapshot_segment.row_count() == 0) {
@@ -199,8 +166,11 @@ std::unordered_set<entity::AtomKey> get_index_keys_in_snapshots(
         auto opt_idx_for_stream_id = row_id_for_stream_in_snapshot_segment(
                 snapshot_segment, snapshot_using_ref, stream_id);
         if (opt_idx_for_stream_id) {
-            auto stream_idx = opt_idx_for_stream_id.value();
-            index_keys_in_snapshots.insert(read_key_row(snapshot_segment, stream_idx));
+            ARCTICDB_DEBUG(log::snapshot(), "Found index key for {} at {}", stream_id, *opt_idx_for_stream_id);
+            auto stream_idx = *opt_idx_for_stream_id;
+            index_keys_in_snapshots.insert(read_key_row(snapshot_segment, static_cast<ssize_t>(stream_idx)));
+        } else {
+            ARCTICDB_DEBUG(log::snapshot(), "Failed to find index key for {}", stream_id);
         }
     });
 
@@ -211,7 +181,7 @@ std::unordered_set<entity::AtomKey> get_index_keys_in_snapshots(
  * Returned pair has first: keys not in snapshots, second: keys in snapshots.
  */
 std::pair<std::vector<AtomKey>, std::unordered_set<AtomKey>> get_index_keys_partitioned_by_inclusion_in_snapshots(
-        std::shared_ptr <Store> store,
+        const std::shared_ptr<Store>& store,
         const StreamId& stream_id,
         const std::vector<entity::AtomKey> &all_index_keys
 ) {
@@ -228,20 +198,23 @@ std::pair<std::vector<AtomKey>, std::unordered_set<AtomKey>> get_index_keys_part
     return std::make_pair(index_keys_not_in_snapshot, index_keys_in_snapshot);
 }
 
-std::optional<VariantKey> get_snapshot_key(std::shared_ptr <Store> store, const SnapshotId &snap_name) {
+VariantKey get_ref_key(const SnapshotId& snap_name) {
+    return RefKey{snap_name, KeyType::SNAPSHOT_REF};
+}
+
+std::optional<VariantKey> get_snapshot_key(const std::shared_ptr<Store>& store, const SnapshotId &snap_name) {
     ARCTICDB_SAMPLE(getSnapshot, 0)
 
-    auto maybe_ref_key = RefKey{std::move(snap_name), KeyType::SNAPSHOT_REF};
-    if(store->key_exists_sync(maybe_ref_key))
+    if(auto maybe_ref_key = get_ref_key(snap_name); store->key_exists_sync(maybe_ref_key))
         return maybe_ref_key;
 
     // Fall back to iteration
     ARCTICDB_DEBUG(log::version(), "Ref key not found for snapshot, falling back to slow path: {}", snap_name);
-    std::optional<std::pair<VariantKey, SegmentInMemory>> opt_segment = std::nullopt;
+    std::optional<std::pair<VariantKey, SegmentInMemory>> opt_segment;
 
     std::optional<VariantKey> ret;
     store->iterate_type(KeyType::SNAPSHOT, [&ret, &snap_name](VariantKey &&vk) {
-        auto snap_key = to_atom(vk);
+        auto snap_key = to_atom(std::move(vk));
         if (snap_key.id() == snap_name) {
             ret = snap_key;
         }
@@ -249,7 +222,65 @@ std::optional<VariantKey> get_snapshot_key(std::shared_ptr <Store> store, const 
     return ret;
 }
 
-std::optional<std::pair<VariantKey, SegmentInMemory>> get_snapshot(std::shared_ptr <Store> store, const SnapshotId &snap_name) {
+std::unordered_map<SnapshotId, std::optional<VariantKey>> all_ref_keys(
+    const std::vector<SnapshotId>& snap_names,
+    const std::vector<VariantKey>& ref_keys
+    ) {
+    std::unordered_map<SnapshotId, std::optional<VariantKey>> output;
+    output.reserve(snap_names.size());
+    for(auto name : folly::enumerate(snap_names))
+        output.try_emplace(*name, ref_keys[name.index]);
+
+    return output;
+}
+
+std::unordered_map<SnapshotId, std::optional<VariantKey>> get_snapshot_keys_via_iteration(
+    const std::vector<bool>& ref_key_exists,
+    const std::vector<SnapshotId>& snap_names,
+    const std::vector<VariantKey>& ref_keys,
+    const std::shared_ptr<Store>& store
+    ){
+    std::unordered_map<SnapshotId, std::optional<VariantKey>> output;
+    for (auto snap : folly::enumerate(snap_names)) {
+        if (!ref_key_exists[snap.index])
+            output.try_emplace(*snap, std::nullopt);
+    }
+
+    store->iterate_type(KeyType::SNAPSHOT, [&output](VariantKey &&vk) {
+        if (auto it = output.find(variant_key_id(vk)); it != output.end())
+            it->second = std::move(vk);
+    });
+
+    for (auto snap : folly::enumerate(snap_names)) {
+        if (ref_key_exists[snap.index])
+            output.try_emplace(*snap, ref_keys[snap.index]);
+    }
+    return output;
+}
+
+
+std::unordered_map<SnapshotId, std::optional<VariantKey>> get_keys_for_snapshots(
+    const std::shared_ptr<Store>& store,
+    const std::vector<SnapshotId>& snap_names) {
+    std::vector<VariantKey> ref_keys;
+    ref_keys.resize(snap_names.size());
+    std::transform(std::begin(snap_names), std::end(snap_names), std::begin(ref_keys), [] (const auto& name) { return get_ref_key(name); });
+
+    auto found_keys = folly::collect(store->batch_key_exists(ref_keys)).via(&async::io_executor()).thenValue(
+        [&snap_names, &ref_keys, store] (std::vector<bool> ref_key_exists) {
+            if(std::all_of(std::begin(ref_key_exists), std::end(ref_key_exists), [] (bool b) { return b; })) {
+                return all_ref_keys(snap_names, ref_keys);
+            } else {
+                return get_snapshot_keys_via_iteration(ref_key_exists, snap_names, ref_keys, store);
+            }
+        });
+
+    return std::move(found_keys).get();
+}
+
+std::optional<std::pair<VariantKey, SegmentInMemory>> get_snapshot(
+    const std::shared_ptr<Store>& store,
+    const SnapshotId &snap_name) {
     ARCTICDB_SAMPLE(getSnapshot, 0)
     auto opt_snap_key = get_snapshot_key(store, snap_name);
     if(!opt_snap_key)
@@ -260,7 +291,7 @@ std::optional<std::pair<VariantKey, SegmentInMemory>> get_snapshot(std::shared_p
 
 std::set<StreamId> list_streams_in_snapshot(
         const std::shared_ptr<Store>& store,
-        SnapshotId snap_name) {
+        const SnapshotId& snap_name) {
     ARCTICDB_SAMPLE(ListStreamsInSnapshot, 0)
     std::set<StreamId> res;
     auto opt_snap_key = get_snapshot(store, snap_name);
@@ -268,40 +299,25 @@ std::set<StreamId> list_streams_in_snapshot(
     if (!opt_snap_key)
         throw storage::NoDataFoundException(snap_name);
 
-    auto& snapshot_segment = opt_snap_key.value().second;
+    const auto& snapshot_segment = opt_snap_key->second;
 
     for (size_t idx = 0; idx < snapshot_segment.row_count(); idx++) {
-        auto stream_index = read_key_row(snapshot_segment, idx);
+        auto stream_index = read_key_row(snapshot_segment, static_cast<ssize_t>(idx));
         res.insert(stream_index.id());
     }
     return res;
 }
 
-namespace {
+
 std::vector<AtomKey> get_versions_from_segment(
     const SegmentInMemory& snapshot_segment
     ) {
     std::vector<AtomKey> res;
     for (size_t idx = 0; idx < snapshot_segment.row_count(); idx++) {
-        auto stream_index = read_key_row(snapshot_segment, idx);
+        auto stream_index = read_key_row(snapshot_segment, static_cast<ssize_t>(idx));
         res.push_back(stream_index);
     }
     return res;
-}
-
-py::object get_metadata_from_segment(
-    const SegmentInMemory& snapshot_segment
-    ) {
-    auto metadata_proto = snapshot_segment.metadata();
-    py::object pyobj;
-    if (metadata_proto) {
-        arcticdb::proto::descriptors::UserDefinedMetadata user_meta_proto;
-        metadata_proto->UnpackTo(&user_meta_proto);
-        pyobj = python_util::pb_to_python(user_meta_proto);
-    } else {
-        pyobj = pybind11::none();
-    }
-    return pyobj;
 }
 
 std::vector<AtomKey> get_versions_from_snapshot(
@@ -311,15 +327,6 @@ std::vector<AtomKey> get_versions_from_snapshot(
     auto snapshot_segment = store->read_sync(vk).second;
     return get_versions_from_segment(snapshot_segment);
 }
-} //namespace
-
-std::pair<std::vector<AtomKey>, py::object> get_versions_and_metadata_from_snapshot(
-    const std::shared_ptr<Store>& store,
-    const VariantKey& vk
-    ) {
-    auto snapshot_segment = store->read_sync(vk).second;
-    return {get_versions_from_segment(snapshot_segment), get_metadata_from_segment(snapshot_segment)};
-}
 
 SnapshotMap get_versions_from_snapshots(
         const std::shared_ptr<Store>& store
@@ -327,7 +334,7 @@ SnapshotMap get_versions_from_snapshots(
     ARCTICDB_SAMPLE(GetVersionsFromSnapshot, 0)
     SnapshotMap res;
 
-    iterate_snapshots(store, [&](VariantKey &vk) {
+    iterate_snapshots(store, [&res, &store](const VariantKey &vk) {
         SnapshotId snapshot_id{fmt::format("{}", variant_key_id(vk))};
         res[snapshot_id] = get_versions_from_snapshot(store, vk);
     });
@@ -335,25 +342,19 @@ SnapshotMap get_versions_from_snapshots(
     return res;
 }
 
-//TODO I don't love having py:object here, return the protobuf and convert at the outer edge
-py::object get_metadata_for_snapshot(std::shared_ptr <Store> store, VariantKey& snap_key) {
-   auto seg = store->read_sync(snap_key).second;
-   return get_metadata_from_segment(seg);
-}
-
 MasterSnapshotMap get_master_snapshots_map(
         std::shared_ptr<Store> store,
         const std::optional<const std::tuple<const SnapshotVariantKey&, std::vector<IndexTypeKey>&>>& get_keys_in_snapshot
 ) {
     MasterSnapshotMap out;
-    iterate_snapshots(store, [&](VariantKey &sk) {
+    iterate_snapshots(store, [&get_keys_in_snapshot, &out, &store](const VariantKey &sk) {
         auto snapshot_id = variant_key_id(sk);
         auto snapshot_segment = store->read_sync(sk).second;
         for (size_t idx = 0; idx < snapshot_segment.row_count(); idx++) {
-            auto stream_index = read_key_row(snapshot_segment, idx);
+            auto stream_index = read_key_row(snapshot_segment, static_cast<ssize_t>(idx));
             out[stream_index.id()][stream_index].insert(snapshot_id);
             if (get_keys_in_snapshot) {
-                auto[wanted_snap_key, sink] = get_keys_in_snapshot.value();
+                auto [wanted_snap_key, sink] = *get_keys_in_snapshot;
                 if (wanted_snap_key == sk) {
                     sink.push_back(stream_index);
                 }

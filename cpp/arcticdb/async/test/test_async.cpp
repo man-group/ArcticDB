@@ -46,7 +46,7 @@ TEST(Async, SinkBasic) {
         ac::entity::KeyType::GENERATION, 6, 123, 456, 457, 999, std::move(seg), codec_opt, ac::EncodingVersion::V2
     };
 
-    auto v = sched.submit_cpu_task(enc).via(&aa::io_executor()).thenValue(aa::WriteSegmentTask{lib}).get();
+    auto v = sched.submit_cpu_task(std::move(enc)).via(&aa::io_executor()).thenValue(aa::WriteSegmentTask{lib}).get();
 
     ac::HashAccum h;
     auto default_content_hash = h.digest();
@@ -173,7 +173,6 @@ folly::Future<std::string> do_read(folly::Future<IndexSegmentReader>&& fut) {
 TEST(Async, SemiFuturePassing) {
     using namespace folly;
     using namespace arcticdb;
-    StreamId id{"thing"};
     Promise<StreamId> p;
     Future<StreamId> f = p.getFuture();
     auto f2 = get_index_segment_reader(std::move(f));
@@ -215,12 +214,10 @@ auto multiplex(folly::Future<int> &&n) {
 TEST(Async, DynamicSizing) {
     using namespace folly;
     using namespace arcticdb;
-    StreamId id{"thing"};
     Promise<int> p;
     Future<int> f = p.getFuture();
     auto f1 = num_slices(std::move(f));
     auto f2 = multiplex(std::move(f1));
     p.setValue(5);
     auto v = std::move(f2).get();
-    std::cout << "thing" << std::endl;
 }

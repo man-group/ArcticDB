@@ -10,12 +10,8 @@
 #include <util/allocator.hpp>
 #include <util/constructors.hpp>
 
-#include <cstdlib>
 #include <cstdint>
 #include <memory>
-#include <algorithm>
-#include <cassert>
-#include <cstring>
 #include <variant>
 
 namespace arcticdb {
@@ -55,7 +51,7 @@ struct BufferView : public BaseBuffer<BufferView, false> {
 };
 
 struct Buffer : public BaseBuffer<Buffer, true> {
-    void init(size_t size, std::optional<size_t> preamble = std::nullopt) {
+    void init(size_t size, const std::optional<size_t>& preamble = std::nullopt) {
         preamble_bytes_ = preamble.value_or(0);
         ensure(size);
         check_invariants();
@@ -217,7 +213,7 @@ struct Buffer : public BaseBuffer<Buffer, true> {
     [[nodiscard]] uint8_t* preamble() {
         return data_;
     }
-    
+
     [[nodiscard]] size_t available() const {
         return capacity_ >= preamble_bytes_ ? capacity_ - preamble_bytes_ : 0;
     }
