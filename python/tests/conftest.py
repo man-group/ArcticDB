@@ -20,7 +20,7 @@ from datetime import datetime
 from functools import partial
 
 from arcticdb.storage_fixtures.api import StorageFixture
-from arcticdb.storage_fixtures.azure import AzuriteStorageFixtureFactory
+from arcticdb.storage_fixtures.azure import AzuriteStorageFixtureFactory, AzureRealStorageFixtureFactory
 from arcticdb.storage_fixtures.lmdb import LmdbStorageFixture
 from arcticdb.storage_fixtures.s3 import MotoS3StorageFixtureFactory, real_s3_from_environment_variables
 from arcticdb.storage_fixtures.mongo import auto_detect_server
@@ -140,12 +140,21 @@ def azurite_storage_factory():
     with AzuriteStorageFixtureFactory() as f:
         yield f
 
+@pytest.fixture(scope="session")
+def real_azure_storage_factory():
+    with AzureRealStorageFixtureFactory() as f:
+        yield f
 
 @pytest.fixture
 def azurite_storage(azurite_storage_factory: AzuriteStorageFixtureFactory):
     with azurite_storage_factory.create_fixture() as f:
         yield f
 
+
+@pytest.fixture
+def real_azure_storage(real_azure_storage_factory: AzureRealStorageFixtureFactory):
+    with real_azure_storage_factory.create_fixture() as f:
+        yield f
 
 @pytest.fixture(scope="session")
 def mongo_server():

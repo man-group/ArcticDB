@@ -26,10 +26,10 @@ namespace arcticdb::storage::apy {
 
 using namespace python_util;
 
-std::shared_ptr<LibraryIndex> create_library_index(const std::string &environment_name, const py::object &py_envs) {
+std::shared_ptr<LibraryIndex> create_library_index(const std::string &environment_name, const py::object &py_envs, StorageCredential &storage_credential) {
     arcticdb::proto::storage::EnvironmentConfigsMap envs;
     pb_from_python(py_envs, envs);
-    auto env_by_id = convert_environment_config(envs);
+    auto env_by_id = convert_environment_config(envs, storage_credential);
     auto mem_resolver = create_in_memory_resolver(env_by_id);
     return std::make_shared<LibraryIndex>(EnvironmentName{environment_name}, mem_resolver);
 }
@@ -70,16 +70,32 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         .value("WRITE", OpenMode::WRITE)
         .value("DELETE", OpenMode::DELETE);
 
-    storage.def("create_library_index", &create_library_index);
+    py::class_<AzureBaseCredential, std::shared_ptr<AzureBaseCredential>>(storage, "AzureBaseCredential");
+    py::class_<Azure::Identity::DefaultAzureCredential, std::shared_ptr<Azure::Identity::DefaultAzureCredential>, AzureBaseCredential>(storage, "AzureDefaultCredential")
+        .def(py::init<>());
 
-    storage.def("create_mem_config_resolver", [](const py::object & env_config_map_py) -> std::shared_ptr<ConfigResolver> {
+    py::class_<StorageCredential>(storage, "StorageCredential")
+        .def(py::init<>())
+        .def(py::pickle(
+            [](const StorageCredential& a) { // dump
+                return py::make_tuple(a.storage_credential_);
+            },
+            [](py::tuple t) { // load
+                return StorageCredential{t[0].cast<VariantStorageCredential>()};
+            }
+        ))
+        .def("set_azure_credential", &StorageCredential::set_azure_credential);
+
+    storage.def("create_library_index", &create_library_index, py::arg("environment_name"), py::arg("py_envs"), py::arg("storage_credential") = StorageCredential{});
+
+    storage.def("create_mem_config_resolver", [](const py::object & env_config_map_py, const StorageCredential &storage_credential) -> std::shared_ptr<ConfigResolver> {
         arcticdb::proto::storage::EnvironmentConfigsMap ecm;
         pb_from_python(env_config_map_py, ecm);
         auto resolver = std::make_shared<storage::details::InMemoryConfigResolver>();
         for(auto &[env, cfg] :ecm.env_by_id()){
             EnvironmentName env_name{env};
             for(auto &[id, variant_storage]: cfg.storage_by_id()){
-                resolver->add_storage(env_name, StorageName{id}, variant_storage);
+                resolver->add_storage(env_name, StorageName{id}, {variant_storage, storage_credential});
             }
             for(auto &[id, lib_desc]: cfg.lib_by_path()){
                 resolver->add_library(env_name, lib_desc);
@@ -153,9 +169,9 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         .def("remove_library_config", [](const LibraryManager& library_manager, std::string_view library_path){
             return library_manager.remove_library_config(LibraryPath{library_path, '.'});
         }, py::call_guard<SingleThreadMutexHolder>())
-        .def("get_library", [](LibraryManager& library_manager, std::string_view library_path, const StorageOverride& storage_override){
-            return library_manager.get_library(LibraryPath{library_path, '.'}, storage_override);
-        }, py::arg("library_path"), py::arg("storage_override") = StorageOverride{})
+        .def("get_library", [](LibraryManager& library_manager, std::string_view library_path, const StorageOverride& storage_override, const StorageCredential &storage_credential){
+            return library_manager.get_library(LibraryPath{library_path, '.'}, storage_override, storage_credential);
+        }, py::arg("library_path"), py::arg("storage_override") = StorageOverride{}, py::arg("storage_credential") = StorageCredential{})
         .def("close_library_if_open", [](LibraryManager& library_manager, std::string_view library_path) {
             return library_manager.close_library_if_open(LibraryPath{library_path, '.'});
         })

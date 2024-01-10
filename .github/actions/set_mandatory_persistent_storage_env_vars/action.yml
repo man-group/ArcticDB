@@ -1,0 +1,22 @@
+name: 'Set mandatory persistent storages env variables'
+description: 'Set the necessary variables for mandatory persistent storage tests'
+inputs:
+  azure_client_id:        {required: true, type: string, description: The value for the Azure client id}
+  azure_client_secret:    {required: true, type: string, description: The value for the Azure client secret}
+  azure_tenant_id:        {required: true, type: string, description: The value for the Azure tenant id}
+  azure_storage_account:  {required: true, type: string, description: The value for the Azure storage account}
+runs:
+  using: "composite"
+  steps:
+    - name: Set real storage variables
+      shell: bash
+      
+      run: |
+        # Common
+        echo "ARCTICDB_MANDATORY_PERSISTENT_STORAGE_TESTS=1" >> $GITHUB_ENV
+        # Env var requried by Azure SDK
+        echo "AZURE_CLIENT_ID=${{ inputs.azure_client_id }}" >> $GITHUB_ENV
+        echo "AZURE_CLIENT_SECRET=${{ inputs.azure_client_secret }}" >> $GITHUB_ENV
+        echo "AZURE_TENANT_ID=${{ inputs.azure_tenant_id }}" >> $GITHUB_ENV
+        # Use in arcticdb azure adpater test only
+        echo "ARCTICDB_REAL_AZURE_STORAGE_ACCOUNT=${{ inputs.azure_storage_account }}" >> $GITHUB_ENV

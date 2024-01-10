@@ -43,7 +43,7 @@ class PrefixingLibraryAdapterDecorator(ArcticLibraryAdapter if TYPE_CHECKING els
     def supports_uri(uri: str) -> bool:
         return bool(PrefixingLibraryAdapterDecorator._parse(uri))
 
-    def __init__(self, uri: str, encoding_version: EncodingVersion):
+    def __init__(self, uri: str, encoding_version: EncodingVersion, *args, **kwargs):
         parsed = PrefixingLibraryAdapterDecorator._parse(uri)
         assert parsed, f"Invalid uri for {type(self).__name__}: {uri}"
         self._prefix = parsed[0]

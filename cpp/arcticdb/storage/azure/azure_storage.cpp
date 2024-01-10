@@ -28,6 +28,7 @@
 
 #include <azure/core.hpp>
 #include <azure/storage/blobs.hpp>
+#include <azure/storage/blobs/blob_service_client.hpp>
 
 #include <boost/interprocess/streams/bufferstream.hpp>
 
@@ -92,11 +93,12 @@ void do_write_impl(
                         blob_client.UploadFrom(dst, write_size, upload_option, get_context(request_timeout));
                     }
                     catch (const Azure::Core::RequestFailedException& e){
-                        util::raise_rte("Failed to write azure with key '{}' {} {}: {}",
+                        util::raise_rte("Failed to write azure with key '{}' {} {}: {} :{}",
                                             k,
                                             blob_name,
                                             static_cast<int>(e.StatusCode),
-                                            e.ReasonPhrase);
+                                            e.ReasonPhrase,
+                                            e.what());
                     }
 
                     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Wrote key {}: {}, with {} bytes of data",
@@ -155,11 +157,12 @@ void do_read_impl(Composite<VariantKey> && ks,
                 }
                 catch (const Azure::Core::RequestFailedException& e){
                     if (!opts.dont_warn_about_missing_key) {
-                        log::storage().warn("Failed to read azure segment with key '{}' {} {}: {}",
+                        log::storage().warn("Failed to read azure segment with key '{}' {} {}: {} :{}",
                                                 k,
                                                 blob_name,
                                                 static_cast<int>(e.StatusCode),
-                                                e.ReasonPhrase);
+                                                e.ReasonPhrase,
+                                                e.what());
                     }
                     failed_reads.push_back(k);
                 }
@@ -188,9 +191,10 @@ void do_remove_impl(Composite<VariantKey>&& ks,
                 container_client.SubmitBatch(batch, Azure::Storage::Blobs::SubmitBlobBatchOptions(), get_context(request_timeout));//To align with s3 behaviour, deleting non-exist objects is not an error, so not handling response
             }
             catch (const Azure::Core::RequestFailedException& e){
-                util::raise_rte("Failed to create azure segment batch remove request {}: {}",
+                util::raise_rte("Failed to create azure segment batch remove request {}: {} :{}",
                                     static_cast<int>(e.StatusCode),
-                                    e.ReasonPhrase);
+                                    e.ReasonPhrase,
+                                    e.what());
             }
             batch = container_client.CreateBatch();
             batch_counter = 0u;
@@ -260,10 +264,11 @@ void do_iterate_type_impl(KeyType key_type,
             }
         }
         catch (const Azure::Core::RequestFailedException& e){
-            log::storage().warn("Failed to iterate azure blobs '{}' {}: {}",
+            log::storage().warn("Failed to iterate azure blobs '{}' {}: {} :{}",
                                 key_type,
                                 static_cast<int>(e.StatusCode),
-                                e.ReasonPhrase);
+                                e.ReasonPhrase,
+                                e.what());
         }
 }
 
@@ -283,11 +288,12 @@ bool do_key_exists_impl(
                 return true;
         }
         catch (const Azure::Core::RequestFailedException& e){
-            log::storage().debug("Failed to check azure key '{}' {} {}: {}",
+            log::storage().debug("Failed to check azure key '{}' {} {}: {} :{}",
                                 key,
                                 blob_name,
                                 static_cast<int>(e.StatusCode),
-                                e.ReasonPhrase);
+                                e.ReasonPhrase,
+                                e.what());
         }
         return false;
 }
@@ -332,9 +338,32 @@ using namespace Azure::Storage;
 using namespace Azure::Storage::Blobs;
 
 
-AzureStorage::AzureStorage(const LibraryPath &library_path, OpenMode mode, const Config &conf) :
+Azure::Storage::Blobs::BlobClientOptions get_client_options(const arcticdb::proto::azure_storage::Config &conf) {
+    BlobClientOptions client_options;
+    if (!conf.ca_cert_path().empty()) {//WARNING: Setting ca_cert_path will force Azure sdk uses libcurl as backend support, instead of winhttp
+        Azure::Core::Http::CurlTransportOptions curl_transport_options;
+        curl_transport_options.CAInfo = conf.ca_cert_path();
+        client_options.Transport.Transport = std::make_shared<Azure::Core::Http::CurlTransport>(curl_transport_options);
+    }
+    return client_options;
+}
+
+BlobContainerClient get_blob_container_client(const arcticdb::proto::azure_storage::Config &conf, const std::shared_ptr<AzureBaseCredential>& storage_credential) {
+    if (storage_credential) {
+        auto client = BlobContainerClient::CreateFromConnectionString(conf.endpoint(), "", get_client_options(conf)); //only use for extracting endpoint
+        auto blob_service_client = Azure::Storage::Blobs::BlobServiceClient(client.GetUrl(), storage_credential, get_client_options(conf));
+        return blob_service_client.GetBlobContainerClient(conf.container_name());
+    }
+    else {
+        auto client = BlobContainerClient::CreateFromConnectionString(conf.endpoint(), conf.container_name(), get_client_options(conf));
+        return client;
+    }
+}
+
+
+AzureStorage::AzureStorage(const LibraryPath &library_path, OpenMode mode, const Config &conf, const std::shared_ptr<AzureBaseCredential>& storage_credential) :
     Storage(library_path, mode),
-    container_client_(BlobContainerClient::CreateFromConnectionString(conf.endpoint(), conf.container_name(), get_client_options(conf))),
+    container_client_(get_blob_container_client(conf, storage_credential)),
     root_folder_(object_store_utils::get_root_folder(library_path)),
     request_timeout_(conf.request_timeout() == 0 ? 60000 : conf.request_timeout()){
         if (conf.ca_cert_path().empty())
@@ -353,15 +382,4 @@ AzureStorage::AzureStorage(const LibraryPath &library_path, OpenMode mode, const
         upload_option_.TransferOptions.Concurrency = max_connections;
         download_option_.TransferOptions.Concurrency = max_connections;
 }
-
-Azure::Storage::Blobs::BlobClientOptions AzureStorage::get_client_options(const Config &conf) {
-    BlobClientOptions client_options;
-    if (!conf.ca_cert_path().empty()) {//WARNING: Setting ca_cert_path will force Azure sdk uses libcurl as backend support, instead of winhttp
-        Azure::Core::Http::CurlTransportOptions curl_transport_options;
-        curl_transport_options.CAInfo = conf.ca_cert_path();
-        client_options.Transport.Transport = std::make_shared<Azure::Core::Http::CurlTransport>(curl_transport_options);
-    }
-    return client_options;
-}
-
 } // namespace arcticdb::storage::azure

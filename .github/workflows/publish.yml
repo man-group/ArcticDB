@@ -20,7 +20,7 @@ jobs:
       - uses: actions/setup-node@v3.8.2
         if: inputs.run_id <= 0
         with:
-          node-version: 16
+          node-version: 18
       - run: npm install @actions/artifact@1
         if: inputs.run_id <= 0
       - id: download
@@ -107,7 +107,7 @@ jobs:
       - uses: actions/setup-node@v3.8.2
         if: inputs.run_id <= 0
         with:
-          node-version: 16
+          node-version: 18
       - run: npm install @actions/artifact@1
         if: inputs.run_id <= 0
       - name: Fetch wheel artifacts

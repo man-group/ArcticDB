@@ -115,7 +115,7 @@ def test_upgrade_script_dryrun_azure(azurite_storage: AzureContainer):
     # Then
     config = ac._library_manager.get_library_config(LIB_NAME)
     azure_storage = _get_azure_storage_config(config)
-    assert azure_storage.ca_cert_path == azurite_storage.factory.ca_cert_path
+    assert azure_storage.ca_cert_path == azurite_storage.factory.client_cert_file
     assert azure_storage.container_name == azurite_storage.container
     assert azurite_storage.factory.account_name in azure_storage.endpoint
     assert azurite_storage.factory.account_key in azure_storage.endpoint

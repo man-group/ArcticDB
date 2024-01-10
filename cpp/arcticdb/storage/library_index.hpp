@@ -32,14 +32,6 @@ class LibraryIndex {
         return library_cache_.find(path) != library_cache_.end() || config_cache_.library_exists(path);
     }
 
-    std::shared_ptr<Library> add_library_config(const LibraryPath &path, const arcticdb::proto::storage::LibraryConfig &lib_cfg, const UserAuth &) {
-        std::lock_guard<std::mutex> lock{mutex_};
-        if (has_library(path))
-            throw std::runtime_error(fmt::format("Can't create library {} when it already exists", path));
-
-        config_cache_.add_library_config(path, lib_cfg);
-        return get_library_internal(path, OpenMode::WRITE);
-    }
 
     std::shared_ptr<Library> get_library(const LibraryPath &path, OpenMode mode, const UserAuth &) {
         std::lock_guard<std::mutex> lock{mutex_};
@@ -50,9 +42,6 @@ class LibraryIndex {
         return get_library_internal(path, mode);
     }
 
-    void add_storage(const StorageName& storage_name, const arcticdb::proto::storage::VariantStorage& storage) {
-        config_cache_.add_storage(storage_name, storage);
-    }
 
   private:
     std::shared_ptr<Library> get_library_internal(const LibraryPath &path, OpenMode mode) {
