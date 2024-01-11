@@ -49,8 +49,8 @@ $ aws s3 mb s3://<BUCKET_NAME>
 - Use your `<REGION>` and `<BUCKET_NAME>`.
 - Setup `~/.aws/credentials` with `aws configure`, as above.
 ```python
-from arcticdb import Arctic
-arctic = Arctic('s3://s3.<REGION>.amazonaws.com:<BUCKET_NAME>?aws_auth=true')
+import arcticdb as adb
+arctic = adb.Arctic('s3://s3.<REGION>.amazonaws.com:<BUCKET_NAME>?aws_auth=true')
 ```
 
 ## Checking connectivity to the S3 bucket.

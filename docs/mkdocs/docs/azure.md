@@ -49,8 +49,8 @@ The connection string includes the `AccountKey` for authentication and so you sh
 - Find your CA_CERT_PATH path. See the [ArcticAB API docs](api/arctic.md#arcticdb.Arctic) for more information.
 - Replace `<CONNECTION_STRING>` and `<CA_CERT_PATH>` in the following example.
 ```python
-from arcticdb import Arctic
+import arcticdb as adb
 connection_string = '<CONNECTION_STRING>'
 ca_cert_path = '<CA_CERT_PATH>'
-arctic = Arctic(f"azure://{connection_string};Container=data;CA_cert_path={ca_cert_path}")
+arctic = adb.Arctic(f"azure://{connection_string};Container=data;CA_cert_path={ca_cert_path}")
 ```

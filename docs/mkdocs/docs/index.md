@@ -37,13 +37,13 @@ ArcticDB is a storage engine designed for object storage, but also supports loca
 
     ArcticDB supports any S3 API compatible storage. It has been tested against AWS S3 and storage appliances like [VAST Universal Storage](https://vastdata.com/).
 
-    ArcticDB also supports LMDB for local/file based storage - to use LMDB, pass an LMDB path as the URI: `Arctic('lmdb://path/to/desired/database')`.
+    ArcticDB also supports LMDB for local/file based storage - to use LMDB, pass an LMDB path as the URI: `adb.Arctic('lmdb://path/to/desired/database')`.
 
 To get started, we can import ArcticDB and instantiate it:
 
 ```python
->>> from arcticdb import Arctic
->>> ac = Arctic(<URI>)
+>>> import arcticdb as adb
+>>> ac = adb.Arctic(<URI>)
 ```
 
 For more information on the format of _<URI\>_, please view the docstring ([`>>> help(Arctic)`](api/arctic.md#arcticdb.Arctic)). Below we'll run through some setup examples.
@@ -53,20 +53,20 @@ For more information on the format of _<URI\>_, please view the docstring ([`>>>
 There are two methods to configure S3 access. If you happen to know the access and secret key, simply connect as follows:
 
 ```python
->>> from arcticdb import Arctic
->>> ac = Arctic('s3://ENDPOINT:BUCKET?region=blah&access=ABCD&secret=DCBA')
+>>> import arcticdb as adb
+>>> ac = adb.Arctic('s3://ENDPOINT:BUCKET?region=blah&access=ABCD&secret=DCBA')
 ```
 
 Otherwise, you can delegate authentication to the AWS SDK (obeys standard [AWS configuration options](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html)):
 
 ```python
->>> ac = Arctic('s3://ENDPOINT:BUCKET?aws_auth=true')
+>>> ac = adb.Arctic('s3://ENDPOINT:BUCKET?aws_auth=true')
 ```
 
 Same as above, but using HTTPS:
 
 ```python
->>> ac = Arctic('s3s://ENDPOINT:BUCKET?aws_auth=true')
+>>> ac = adb.Arctic('s3s://ENDPOINT:BUCKET?aws_auth=true')
 ```
 
 !!! s3 vs s3s
@@ -78,7 +78,7 @@ Same as above, but using HTTPS:
 Connect to local storage (not AWS - HTTP endpoint of s3.local) with a pre-defined access and storage key:
 
 ```python
->>> ac = Arctic('s3://s3.local:arcticdb-test-bucket?access=EFGH&secret=HGFE')
+>>> ac = adb.Arctic('s3://s3.local:arcticdb-test-bucket?access=EFGH&secret=HGFE')
 ```
 
 ##### Connecting to AWS
@@ -86,7 +86,7 @@ Connect to local storage (not AWS - HTTP endpoint of s3.local) with a pre-define
 Connecting to AWS with a pre-defined region:
 
 ```python
->>> ac = Arctic('s3s://s3.eu-west-2.amazonaws.com:arcticdb-test-bucket?aws_auth=true')
+>>> ac = adb.Arctic('s3s://s3.eu-west-2.amazonaws.com:arcticdb-test-bucket?aws_auth=true')
 ```
 
 Note that no explicit credential parameters are given. When `aws_auth` is passed, authentication is delegated to the AWS SDK which is responsible for locating the appropriate credentials in the `.config` file or
@@ -98,7 +98,7 @@ in environment variables. You can manually configure which profile is being used
 You may want to restrict access for the ArcticDB library to a specific path within the bucket. To do this, you can use the `path_prefix` parameter:
 
 ```python
->>> ac = Arctic('s3s://s3.eu-west-2.amazonaws.com:arcticdb-test-bucket?path_prefix=test&aws_auth=true')
+>>> ac = adb.Arctic('s3s://s3.eu-west-2.amazonaws.com:arcticdb-test-bucket?path_prefix=test&aws_auth=true')
 ```
 
 #### Azure
@@ -106,15 +106,15 @@ You may want to restrict access for the ArcticDB library to a specific path with
 ArcticDB uses the [Azure connection string](https://learn.microsoft.com/en-us/azure/storage/common/storage-configure-connection-string) to define the connection: 
 
 ```python
->>> from arcticdb import Arctic
->>> ac = Arctic('azure://AccountName=ABCD;AccountKey=EFGH;BlobEndpoint=ENDPOINT;Container=CONTAINER')
+>>> import arcticdb as adb
+>>> ac = adb.Arctic('azure://AccountName=ABCD;AccountKey=EFGH;BlobEndpoint=ENDPOINT;Container=CONTAINER')
 ```
 
 For example: 
 
 ```python
->>> from arcticdb import Arctic
->>> ac = Arctic("azure://CA_cert_path=/etc/ssl/certs/ca-certificates.crt;BlobEndpoint=https://arctic.blob.core.windows.net;Container=acblob;SharedAccessSignature=sp=awd&st=2001-01-01T00:00:00Z&se=2002-01-01T00:00:00Z&spr=https&rf=g&sig=awd%3D")
+>>> import arcticdb as adb
+>>> ac = adb.Arctic("azure://CA_cert_path=/etc/ssl/certs/ca-certificates.crt;BlobEndpoint=https://arctic.blob.core.windows.net;Container=acblob;SharedAccessSignature=sp=awd&st=2001-01-01T00:00:00Z&se=2002-01-01T00:00:00Z&spr=https&rf=g&sig=awd%3D")
 ```
 
 For more information, [see the Arctic class reference](api/arctic.md#arcticdb.Arctic).
@@ -129,8 +129,8 @@ space for the map file eagerly, whereas on Linux the map size is an upper bound 
 You can set a map size in the connection string:
 
 ```python
->>> from arcticdb import Arctic
->>> ac = Arctic('lmdb://path/to/desired/database?map_size=2GB')
+>>> import arcticdb as adb
+>>> ac = adb.Arctic('lmdb://path/to/desired/database?map_size=2GB')
 ```
 
 The default on Windows is 2GiB. Errors with `lmdb errror code -30792` indicate that the map is getting full and that you should
@@ -149,8 +149,8 @@ There are no configuration parameters, and the memory is owned solely be the Arc
 For example:
 
 ```python
->>> from arcticdb import Arctic
->>> ac = Arctic('mem://')
+>>> import arcticdb as adb
+>>> ac = adb.Arctic('mem://')
 ```
 
 For concurrent access to a local backend, we recommend LMDB connected to tmpfs.
@@ -281,8 +281,8 @@ ArcticDB uses a Pandas-_like_ syntax to describe how to filter data. For more de
 ```Python
 >>> _range = (df.index[5], df.index[8])
 >>> _cols = ['COL_30', 'COL_31']
->>> from arcticdb import QueryBuilder
->>> q = QueryBuilder()
+>>> import arcticdb as adb
+>>> q = adb.QueryBuilder()
 >>> q = q[(q["COL_30"] > 30) & (q["COL_31"] < 50)]
 >>> library.read('test_frame', date_range=_range, columns=_cols, query_builder=q).data
 >>>
