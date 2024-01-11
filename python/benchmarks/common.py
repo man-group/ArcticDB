@@ -25,6 +25,18 @@ def generate_pseudo_random_dataframe(n, freq="S", end_timestamp="1/1/2023"):
     return df
 
 
+def generate_random_floats_dataframe(num_rows, num_cols):
+    """
+    Generates a dataframe of random 64 bit floats with num_rows rows and num_cols columns.
+    Columns are named "col_n" for n in range(num_cols).
+    Row range indexed.
+    """
+    columns = [f"col_{n}" for n in range(num_cols)]
+    rng = np.random.default_rng()
+    data = rng.random((num_rows, num_cols), dtype=np.float64)
+    return pd.DataFrame(data, columns=columns)
+
+
 def generate_benchmark_df(n, freq="T", end_timestamp="1/1/2023"):
     timestamps = pd.date_range(end=end_timestamp, periods=n, freq=freq)
     k = n // 10
