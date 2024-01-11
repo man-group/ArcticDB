@@ -862,6 +862,7 @@ if(${TEST})
     gtest_discover_tests(test_unit_arcticdb PROPERTIES DISCOVERY_TIMEOUT 60)
 
     set(benchmark_srcs
+            stream/test/stream_test_common.cpp
             column_store/test/benchmark_memory_segment.cpp
             processing/test/benchmark_clause.cpp)
 
