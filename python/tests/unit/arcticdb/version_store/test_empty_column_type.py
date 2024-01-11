@@ -5,52 +5,69 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+from math import nan
 import pandas as pd
 from pandas.testing import assert_frame_equal
 import numpy as np
 import pytest
 
-@pytest.fixture
-def int_dtype():
-    bit_sizes = ["8", "16", "32", "64"]
-    base_numeric_types = ["int", "uint"]
-    for t in base_numeric_types:
-        for s in bit_sizes:
-            yield t + s
+@pytest.fixture(params=[t + s for s in ["8", "16", "32", "64"] for t in ["int", "uint"]])
+def int_dtype(request):
+    yield request.param
 
 
-@pytest.fixture
-def float_dtype():
-    bit_sizes = ["32", "64"]
-    for s in bit_sizes:
-        yield "float" + s
+@pytest.fixture(params=["float" + s for s in ["32", "64"]])
+def float_dtype(request):
+    yield request.param
 
-class TestEmptyColumnTypeAppend:
-    def test_can_append_non_empty_to_empty(self, lmdb_version_store_v2, int_dtype):
-        lmdb_version_store = lmdb_version_store_v2
+
+# object is for nullable boolean
+@pytest.fixture(params=["bool", "object"])
+def boolean_dtype(request):
+    yield request.param
+
+
+class TestCanAppendToEmptyColumn:
+
+    @pytest.fixture(autouse=True)
+    def create_empty_column(self, lmdb_version_store):
         df_empty = pd.DataFrame({"col1": [None, None]})
-        lmdb_version_store.write("test_can_append_to_empty_column", df_empty)
+        lmdb_version_store.write("sym", df_empty)
+        yield
+
+    def test_integer(self, lmdb_version_store, int_dtype):
         df_non_empty = pd.DataFrame({"col1": np.array([1,2,3], dtype=int_dtype)})
-        lmdb_version_store.append("test_can_append_to_empty_column", df_non_empty)
+        lmdb_version_store.append("sym", df_non_empty)
         expected_result = pd.DataFrame({"col1": np.array([0,0,1,2,3], dtype=int_dtype)})
-        assert_frame_equal(lmdb_version_store.read("test_can_append_to_empty_column").data, expected_result)
+        assert_frame_equal(lmdb_version_store.read("sym").data, expected_result)
 
-    @pytest.mark.xfail(reason="Not implemented")
-    def test_can_append_empty_to_non_empty(self, lmdb_version_store, element_type_constructor):
-        df_empty = pd.DataFrame({"col1": [None, None]})
-        df_non_empty = pd.DataFrame({"col1": map(element_type_constructor, [1, 2, 3])})
-        lmdb_version_store.write("test_can_append_to_empty_column", df_non_empty)
-        lmdb_version_store.append("test_can_append_to_empty_column", df_empty)
-        expected_result = pd.concat([df_non_empty, df_empty], ignore_index=True)
-        assert_frame_equal(lmdb_version_store.read("test_can_append_to_empty_column").data, expected_result)
+    def test_float(self, lmdb_version_store, float_dtype):
+        df_non_empty = pd.DataFrame({"col1": np.array([1,2,3], dtype=float_dtype)})
+        lmdb_version_store.append("sym", df_non_empty)
+        expected_result = pd.DataFrame({"col1": np.array([float("NaN"),float("NaN"),1,2,3], dtype=float_dtype)})
+        assert_frame_equal(lmdb_version_store.read("sym").data, expected_result)
 
-    @pytest.mark.xfail(reason="Not implemented")
-    def test_can_append_empty_to_empty(self, lmdb_version_store, element_type_constructor):
-        df_empty_1 = pd.DataFrame({"col1": [None, None]})
-        df_empty_2 = pd.DataFrame({"col1": []})
-        df_empty_3 = pd.DataFrame({"col1": [None]})
-        lmdb_version_store.write("test_can_append_to_empty_column", df_empty_1)
-        lmdb_version_store.append("test_can_append_to_empty_column", df_empty_2)
-        lmdb_version_store.append("test_can_append_to_empty_column", df_empty_3)
-        expected_result = pd.concat([df_empty_1, df_empty_2, df_empty_3], ignore_index=True)
-        assert_frame_equal(lmdb_version_store.read("test_can_append_to_empty_column").data, expected_result)
+    def test_bool(self, lmdb_version_store, boolean_dtype):
+        df_non_empty = pd.DataFrame({"col1": np.array([True, False, True], dtype=boolean_dtype)})
+        lmdb_version_store.append("sym", df_non_empty)
+        expected_result = pd.DataFrame({"col1": np.array([None, None, True, False, True], dtype=boolean_dtype)})
+        assert_frame_equal(lmdb_version_store.read("sym").data, expected_result)
+
+    def test_empty(self, lmdb_version_store):
+        df_non_empty = pd.DataFrame({"col1": np.array([None, None, None])})
+        lmdb_version_store.append("sym", df_non_empty)
+        expected_result = pd.DataFrame({"col1": np.array([None, None, None, None, None])})
+        assert_frame_equal(lmdb_version_store.read("sym").data, expected_result)
+
+    def test_string(self, lmdb_version_store):
+        df_non_empty = pd.DataFrame({"col1": np.array(["some_string", "long_string"*100])})
+        lmdb_version_store.append("sym", df_non_empty)
+        expected_result = pd.DataFrame({"col1": np.array([None, None, "some_string", "long_string"*100])})
+        assert_frame_equal(lmdb_version_store.read("sym").data, expected_result)
+
+    def test_date(self, lmdb_version_store):
+        df_non_empty = pd.DataFrame({"col1": np.array([np.datetime64('2005-02'), np.datetime64('2005-03'), np.datetime64('2005-03')])})
+        lmdb_version_store.append("sym", df_non_empty)
+        expected_result = pd.DataFrame({"col1": np.array([np.datetime64('NaT'), np.datetime64('NaT'), np.datetime64('2005-02'), np.datetime64('2005-03'), np.datetime64('2005-03')], dtype="datetime64[ns]")})
+        assert_frame_equal(lmdb_version_store.read("sym").data, expected_result)
+

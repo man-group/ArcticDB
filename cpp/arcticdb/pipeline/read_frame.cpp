@@ -296,16 +296,16 @@ void decode_or_expand(
     EncodingVersion encoding_version
 ) {
     util::variant_match(variant_field, [&](auto field) {
-		decode_or_expand_impl(
-			data,
-			dest,
-			*field,
-			source_type_descriptor,
-			destination_type_descriptor,
-			dest_bytes,
-			buffers,
-			encoding_version
-		);
+        decode_or_expand_impl(
+            data,
+            dest,
+            *field,
+            source_type_descriptor,
+            destination_type_descriptor,
+            dest_bytes,
+            buffers,
+            encoding_version
+        );
     });
 }
 
@@ -399,16 +399,16 @@ void decode_into_frame_static(
                         it.dest_col(),
                         m.frame_field_descriptor_.name());
             util::check(data != end || remaining_fields_empty(it, context), "Reached end of input block with {} fields to decode", it.remaining_fields());
-			decode_or_expand(
-				data,
-				buffer.data() + m.offset_bytes_,
-				encoded_field,
-				m.source_type_desc_,
-				m.dest_type_desc_,
-				m.dest_bytes_,
-				buffers,
-				encoding_version
-			);
+            decode_or_expand(
+                data,
+                buffer.data() + m.offset_bytes_,
+                encoded_field,
+                m.source_type_desc_,
+                m.dest_type_desc_,
+                m.dest_bytes_,
+                buffers,
+                encoding_version
+            );
             ARCTICDB_TRACE(log::codec(), "Decoded column {} to position {}", field_name, data - begin);
 
             it.advance();
@@ -477,19 +477,19 @@ void decode_into_frame_dynamic(
                         using DestinationType =  typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
                         m.source_type_desc_.visit_tag([&buffer, &m, &data, &encoded_field, &buffers, encdoing_version] (auto src_desc_tag ) {
                             using SourceType =  typename decltype(src_desc_tag)::DataTypeTag::raw_type;
-                            if constexpr(std::is_arithmetic_v<SourceType> && std::is_arithmetic_v<DestinationType>) {
+                            if constexpr (std::is_arithmetic_v<SourceType> && std::is_arithmetic_v<DestinationType>) {
                                 const auto src_bytes = sizeof_datatype(m.source_type_desc_) * m.num_rows_;
                                 Buffer tmp_buf{src_bytes};
-								decode_or_expand(
-									data,
-									tmp_buf.data(),
-									encoded_field,
-									m.source_type_desc_,
-									m.dest_type_desc_,
-									src_bytes,
-									buffers,
-									encdoing_version
-								);
+                                decode_or_expand(
+                                    data,
+                                    tmp_buf.data(),
+                                    encoded_field,
+                                    m.source_type_desc_,
+                                    m.dest_type_desc_,
+                                    src_bytes,
+                                    buffers,
+                                    encdoing_version
+                                );
                                 auto src_ptr = reinterpret_cast<SourceType *>(tmp_buf.data());
                                 auto dest_ptr = reinterpret_cast<DestinationType *>(buffer.data() + m.offset_bytes_);
                                 for (auto i = 0u; i < m.num_rows_; ++i) {
@@ -507,17 +507,16 @@ void decode_into_frame_dynamic(
                 util::check(data != end,
                             "Reached end of input block with {} fields to decode",
                             field_count - field_col);
-
                 decode_or_expand(
-					data,
-					buffer.data() + m.offset_bytes_,
-					encoded_field,
-					m.source_type_desc_,
-					m.dest_type_desc_,
-					m.dest_bytes_,
-					buffers,
-					encdoing_version
-				);
+                    data,
+                    buffer.data() + m.offset_bytes_,
+                    encoded_field,
+                    m.source_type_desc_,
+                    m.dest_type_desc_,
+                    m.dest_bytes_,
+                    buffers,
+                    encdoing_version
+                );
             }
             ARCTICDB_TRACE(log::codec(), "Decoded column {} to position {}", frame.field(dst_col).name(), data - begin);
         }

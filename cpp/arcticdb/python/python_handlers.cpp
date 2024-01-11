@@ -53,6 +53,10 @@ namespace arcticdb {
         return dest + count;
     }
 
+	constexpr inline bool is_nullable_type(TypeDescriptor td) {
+		return td.dimension() > Dimension::Dim0 || is_empty_type(td.data_type()) || is_py_bool_type(td.data_type());
+	}
+
     void EmptyHandler::handle_type(
         const uint8_t*& input,
         uint8_t* dest,
@@ -65,39 +69,45 @@ namespace arcticdb {
     ) {
         ARCTICDB_SAMPLE(HandleEmpty, 0)
         util::check(dest != nullptr, "Got null destination pointer");
-        const size_t num_rows = dest_bytes / get_type_size(DataType::EMPTYVAL);
-        static_assert(get_type_size(DataType::EMPTYVAL) == sizeof(PyObject *));
+        const size_t num_rows = dest_bytes / destination_type_descriptor.get_type_byte_size();
+        static_assert(get_type_size(DataType::EMPTYVAL) == sizeof(PyObject*));
 
-        const SizeBits destination_size_bits = destination_type_descriptor.get_size_bits();
+        // TODO: arcticdb::util::default_initialize does mostly the same thing
+        // the main difference is that it does not write py::none directly
+        // * Should use that?
+        // * It doesn't handle nullable bools and arrays? How should they be handled?
         destination_type_descriptor.visit_tag([&](auto tag) {
-            if constexpr (is_nullable_type(TypeDescriptor(tag))) {
-                auto ptr_dest = reinterpret_cast<const PyObject**>(dest);
-                fill_with_none(ptr_dest, num_rows);
+            using RawType = typename decltype(tag)::DataTypeTag::raw_type;
+            RawType* ptr_dest = reinterpret_cast<RawType*>(dest);
+            if constexpr (is_sequence_type(tag.data_type())) {
+                // not_a_string() is set here as strings are offset in the string pool
+                // later in fix_and_reduce() the offsets are replaced by a real python strings
+                // TODO: It would be best if the type handler sets this to py::none
+                std::fill_n(ptr_dest, num_rows, arcticdb::not_a_string());
+            } else if constexpr (is_nullable_type(TypeDescriptor(tag))) {
+                fill_with_none(reinterpret_cast<const PyObject**>(dest), num_rows);
             } else if constexpr (is_floating_point_type(tag.data_type())) {
-                using RawType = typename decltype(tag)::DataTypeTag::raw_type;
-                RawType* ptr_dest = reinterpret_cast<RawType*>(dest);
-                std::generate(ptr_dest, ptr_dest + num_rows, &std::numeric_limits<RawType>::quiet_NaN);
-                dest += num_rows * sizeof(RawType);
-            } else if constexpr (is_integer_type(tag.data_type()) || is_bool_type(tag.data_type()) || is_time_type(tag.data_type())) {
-                using RawType = typename decltype(tag)::DataTypeTag::raw_type;
+                std::fill_n(ptr_dest, num_rows, std::numeric_limits<RawType>::quiet_NaN());
+            } else if constexpr (is_integer_type(tag.data_type()) || is_bool_type(tag.data_type())) {
                 std::memset(dest, 0, sizeof(RawType) * num_rows);
-                dest += num_rows * sizeof(RawType);
+            } else if constexpr (is_time_type(tag.data_type())) {
+                std::fill_n(ptr_dest, num_rows, arcticdb::util::NaT);
             } else {
                 static_assert(sizeof(tag) == 0, "Unhandled data_type");
             }
         });
 
-        util::variant_match(variant_field, [&input](const auto &field) {
+        util::variant_match(variant_field, [&input](const auto& field) {
             using EncodedFieldType = std::decay_t<decltype(*field)>;
             if constexpr (std::is_same_v<EncodedFieldType, arcticdb::EncodedField>)
                 util::check_magic<ColumnMagic>(input);
 
             if (field->encoding_case() == EncodedFieldType::kNdarray) {
-                const auto &ndarray_field = field->ndarray();
+                const auto& ndarray_field = field->ndarray();
                 const auto num_blocks = ndarray_field.values_size();
                 util::check(num_blocks <= 1, "Unexpected number of empty type blocks: {}", num_blocks);
                 for (auto block_num = 0; block_num < num_blocks; ++block_num) {
-                    const auto &block_info = ndarray_field.values(block_num);
+                    const auto& block_info = ndarray_field.values(block_num);
                     input += block_info.out_bytes();
                 }
             } else {

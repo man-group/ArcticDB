@@ -537,13 +537,6 @@ constexpr bool is_pyobject_type(TypeDescriptor td) {
 		is_numpy_array(td);
 }
 
-constexpr inline bool is_nullable_type(TypeDescriptor td) {
-    return td.dimension() > Dimension::Dim0 ||
-        is_empty_type(td.data_type()) ||
-        is_sequence_type(td.data_type()) ||
-        is_py_bool_type(td.data_type());
-}
-
 inline void set_data_type(DataType data_type, TypeDescriptor& type_desc) {
     type_desc.data_type_ = data_type;
 }

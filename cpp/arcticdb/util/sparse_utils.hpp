@@ -68,6 +68,9 @@ inline void expand_dense_buffer_using_bitmap(const util::BitMagic &bv, const uin
     }
 }
 
+// TODO: EmptyHandler::handle_type has similar procedure.
+//  * Should this be used instead?
+//  * What about nullable booleans and arrays?
 template <typename TagType>
 void default_initialize(uint8_t* data, size_t bytes) {
     using RawType = typename TagType::DataTypeTag::raw_type;
