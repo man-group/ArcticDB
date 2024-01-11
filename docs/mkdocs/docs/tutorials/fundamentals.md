@@ -7,7 +7,7 @@ This tutorial will walk through the fundamentals of ArcticDB:
 3. Reading data
 4. Modifying data
 
-To start, let's import arcticdb:
+To start, let's import `arcticdb`:
 
 ```python
 import arcticdb as adb
