@@ -47,7 +47,7 @@ void time_merge_on_segments(const std::vector<SegmentInMemory> &segments, benchm
     auto stream_id = StreamId("Merge");
     StreamDescriptor descriptor{};
     descriptor.add_field(FieldRef{make_scalar_type(DataType::NANOSECONDS_UTC64),"time"});
-    MergeClause merge_clause();
+    MergeClause merge_clause;
     merge_clause.set_component_manager(component_manager);
     state.ResumeTiming();
 
