@@ -25,10 +25,10 @@ tmpfs                    1.0G     0  1.0G   0% /somedir/tmpfs_mount_point
 From ArcticDB you can connect to this filesystem with LMDB as you would usually:
 
 ```py
-from arcticdb import Arctic
+import arcticdb as adb
 import pandas as pd
 
-ac_lmdb = Arctic('lmdb:///somedir/tmpfs_mount_point')
+ac_lmdb = adb.Arctic('lmdb:///somedir/tmpfs_mount_point')
 lib = ac_lmdb.get_library('lib', create_if_missing=True)
 lib.write('symbol', pd.DataFrame({'a': [1, 2, 3]})
 print(lib.read('symbol').data)
@@ -46,7 +46,7 @@ which gives:
 The equivalent instantiation for an in-memory store uses the URI `'mem://'` as in:
 
 ```py
-ac_mem = Arctic('mem://')
+ac_mem = adb.Arctic('mem://')
 ```
 
 The `ac_mem` instance owns the storage, which lives only for the lifetime of the `ac_mem` Python object. Behind the
@@ -67,7 +67,7 @@ symbol are [not supported](parallel_writes.md)).
 
 ```py
 # Code tested on Linux
-from arcticdb import Arctic
+import arcticdb as adb
 import pandas as pd
 from multiprocessing import Process, Queue
 import numpy as np
@@ -79,13 +79,13 @@ ncols = 10
 
 nrows = int(data_KB * 1e3 / ncols / np.dtype(float).itemsize)
 
-ac = Arctic(f'lmdb://{lmdb_dir}')
+ac = adb.Arctic(f'lmdb://{lmdb_dir}')
 ac.create_library('lib')
 lib = ac['lib']
 
 timings = Queue()
 def connect_and_write_symbol(symbol, lmdb_dir, timings_):
-    ac = Arctic(f'lmdb://{lmdb_dir}')
+    ac = adb.Arctic(f'lmdb://{lmdb_dir}')
     lib = ac['lib']
     start = pd.to_datetime('now')
     lib.write(
