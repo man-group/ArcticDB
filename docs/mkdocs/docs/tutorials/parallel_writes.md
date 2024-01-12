@@ -7,14 +7,15 @@ as a result **staged data must be timeseries indexed**. The below code uses Spar
 
 ``` py linenums="1"
 import pyspark
+import arcticdb as adb
 
 # This example assumes the below variables (host, bucket, access, secret) are validly set
-ac = Arctic(f"s3://{HOST}:{BUCKET}?access={ACCESS}&secret={SECRET})
+ac = adb.Arctic(f"s3://{HOST}:{BUCKET}?access={ACCESS}&secret={SECRET})
 
 def _load(work):
     # This method is run in parallel via Spark.
     host, bucket, access, secret, symbol, library, file_path = work
-    ac = Arctic(f"s3://{host}:{bucket}?access={access}&secret={secret}")
+    ac = adb.Arctic(f"s3://{host}:{bucket}?access={access}&secret={secret}")
 
     library = ac[library]
 
