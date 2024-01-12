@@ -725,16 +725,21 @@ class DataFrameNormalizer(_PandasNormalizer):
             #       df = DataFrame(index=index, columns=columns_mapping, copy=False)
             #
             if not IS_PANDAS_TWO:
-                possibly_empty_columns_names = [] if data is None else [name for name, np_array in data.items() if np_array.dtype in OBJECT_TOKENS]
-                for column_name in possibly_empty_columns_names:
-                    # TODO(jjerphan): Remove once pandas < 2 is not supported anymore.
-                    if len(df[column_name]) == 0:
-                        # Before Pandas 2.0, empty series' dtype was float, but as of Pandas 2.0. empty series' dtype became object.
-                        # See: https://github.com/pandas-dev/pandas/issues/17261
-                        # EMPTY type column are returned as pandas.Series with "object" dtype to match Pandas 2.0 default.
-                        # We cast it back to "float" so that it matches Pandas 1.0 default for empty series.
-                        # Pandas 0.X overrides the index of df to a RangeIndex if the index isn't explicitly provided here
-                        df[column_name] = pd.Series([], index=index dtype='float64')
+                # TODO(jjerphan): Remove once pandas < 2 is not supported anymore.
+                # Before Pandas 2.0, empty series' dtype was float, but as of Pandas 2.0. empty series' dtype became object.
+                # See: https://github.com/pandas-dev/pandas/issues/17261
+                # EMPTY type column are returned as pandas.Series with "object" dtype to match Pandas 2.0 default.
+                # We cast it back to "float" so that it matches Pandas 1.0 default for empty series.
+                # Moreover, we explicitly provide the index otherwise Pandas 0.X overrides it for a RangeIndex
+                empty_columns_names = (
+                    [] if data is None else
+                    [
+                        name for name, np_array in data.items()
+                        if np_array.dtype in OBJECT_TOKENS and len(df[column_name]) == 0
+                    ]
+                )
+                for column_name in empty_columns_names:
+                    df[column_name] = pd.Series([], index=index, dtype='float64')
 
         else:
             if index is not None:
