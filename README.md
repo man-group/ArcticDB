@@ -77,23 +77,23 @@ $ conda install -c conda-forge arcticdb
 Import ArcticDB:
 
 ```Python
->>> from arcticdb import Arctic
+>>> import arcticdb as adb
 ```
 
 Create an instance on your S3 storage (with or without explicit credentials):
 
 ```Python
 # Leave AWS to derive credential information
->>> ac = Arctic('s3://MY_ENDPOINT:MY_BUCKET?aws_auth=true')
+>>> ac = adb.Arctic('s3://MY_ENDPOINT:MY_BUCKET?aws_auth=true')
 
 # Manually specify creds
->>> ac = Arctic('s3://MY_ENDPOINT:MY_BUCKET?region=YOUR_REGION&access=ABCD&secret=DCBA')
+>>> ac = adb.Arctic('s3://MY_ENDPOINT:MY_BUCKET?region=YOUR_REGION&access=ABCD&secret=DCBA')
 ```
 
 Or create an instance on your local disk:
 
 ```Python
->>> ac = Arctic("lmdb:///<path>")
+>>> ac = adb.Arctic("lmdb:///<path>")
 ```
 
 Create your first library and list the libraries in the instance:
