@@ -71,3 +71,16 @@ class TestCanAppendToEmptyColumn:
         expected_result = pd.DataFrame({"col1": np.array([np.datetime64('NaT'), np.datetime64('NaT'), np.datetime64('2005-02'), np.datetime64('2005-03'), np.datetime64('2005-03')], dtype="datetime64[ns]")})
         assert_frame_equal(lmdb_version_store.read("sym").data, expected_result)
 
+
+class TestCanAppendEmptyToColumn:
+
+    def test_integer(self, lmdb_version_store_v2):
+        int_dtype = "int32"
+        lmdb_version_store = lmdb_version_store_v2
+        df = pd.DataFrame({"col1": np.array([1,2,3], dtype=int_dtype)})
+        lmdb_version_store.write("sym", df)
+        lmdb_version_store.append("sym", pd.DataFrame({"col1": [None, None]}))
+        lmdb_version_store.append("sym", pd.DataFrame({"col1": [None, None]}))
+        expected_result = pd.DataFrame({"col1": np.array([1,2,3,0,0,0,0], dtype=int_dtype)})
+        print(lmdb_version_store.read("sym", row_range=[5,7]).data)
+        assert_frame_equal(lmdb_version_store.read("sym").data, expected_result)
