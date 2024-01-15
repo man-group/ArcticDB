@@ -26,7 +26,7 @@ from arcticdb.storage_fixtures.s3 import MotoS3StorageFixtureFactory, real_s3_fr
 from arcticdb.storage_fixtures.mongo import auto_detect_server
 from arcticdb.storage_fixtures.in_memory import InMemoryStorageFixture
 from arcticdb.version_store._normalization import MsgPackNormalizer
-from arcticdb.util.test import configure_test_logger, create_df
+from arcticdb.util.test import create_df
 from tests.util.mark import (
     AZURE_TESTS_MARK,
     MONGO_TESTS_MARK,
@@ -39,8 +39,6 @@ hypothesis.settings.register_profile("ci_windows", max_examples=100)
 hypothesis.settings.register_profile("dev", max_examples=100)
 
 hypothesis.settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))
-
-configure_test_logger()
 
 # Use a smaller memory mapped limit for all tests
 MsgPackNormalizer.MMAP_DEFAULT_SIZE = 20 * (1 << 20)
