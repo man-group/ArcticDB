@@ -10,7 +10,7 @@
 
 namespace arcticdb {
 
-std::string_view FieldCollection::add_field(TypeDescriptor type, std::string_view name) {
+std::string_view FieldCollection::add_field(const TypeDescriptor& type, std::string_view name) {
   const auto total_size = Field::calc_size(name);
   buffer_.ensure_bytes(total_size);
   auto field = reinterpret_cast<Field*>(buffer_.ptr());
