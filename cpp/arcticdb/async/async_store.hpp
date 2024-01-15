@@ -317,11 +317,10 @@ std::vector<folly::Future<bool>> batch_key_exists(
                 std::move(seg),
                 codec_,
                 encoding_version_}();
-            return std::make_tuple<VariantKey, Segment, pipelines::FrameSlice>(std::move(key_seg.variant_key()), std::move(key_seg.segment()), std::move(slice));
+            return std::pair<storage::KeySegmentPair, FrameSlice>(std::move(key_seg), std::move(slice));
         })
         .thenValue([de_dup_map](auto &&ks) -> std::pair<KeyOptSegment, pipelines::FrameSlice> {
-            auto [key, seg, slice] = std::forward<decltype(ks)>(ks);
-            storage::KeySegmentPair key_seg{std::move(key), std::move(seg)};
+            auto [key_seg, slice] = std::forward<decltype(ks)>(ks);
             return std::make_pair(lookup_match_in_dedup_map(de_dup_map, std::move(key_seg)), std::move(slice));
         })
         .via(&async::io_executor())
