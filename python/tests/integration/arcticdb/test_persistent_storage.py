@@ -1,6 +1,5 @@
 import pytest
 import os
-from arcticdb.arctic import Arctic
 from arcticdb.util.test import assert_frame_equal
 from tests.util.mark import PERSISTENT_STORAGE_TESTS_ENABLED, REAL_S3_TESTS_MARK
 from tests.util.storage_test import (
@@ -18,25 +17,30 @@ else:
     LIBRARIES = []
 
 
+@pytest.fixture(params=[pytest.param("REAL_S3", marks=REAL_S3_TESTS_MARK)])
+def shared_persistent_arctic_client(real_s3_storage_without_clean_up, encoding_version):
+    return real_s3_storage_without_clean_up.create_arctic(encoding_version=encoding_version)
+
+
 # TODO: Add a check if the real storage tests are enabled
 @pytest.mark.parametrize("library", LIBRARIES)
 @REAL_S3_TESTS_MARK
-def test_real_s3_storage_read(shared_real_s3_uri, library):
-    ac = Arctic(shared_real_s3_uri)
+def test_real_s3_storage_read(shared_persistent_arctic_client, library):
+    ac = shared_persistent_arctic_client
     lib = ac[library]
     read_persistent_library(lib)
 
 
 @REAL_S3_TESTS_MARK
-def test_real_s3_storage_write(shared_real_s3_uri, three_col_df):
+def test_real_s3_storage_write(shared_persistent_arctic_client):
     strategy_branch = os.getenv("ARCTICDB_PERSISTENT_STORAGE_STRATEGY_BRANCH")
     library_to_write_to = f"test_{strategy_branch}"
-    ac = Arctic(shared_real_s3_uri)
+    ac = shared_persistent_arctic_client
     # There shouldn't be a library with this name present, so delete just in case
     ac.delete_library(library_to_write_to)
     ac.create_library(library_to_write_to)
     lib = ac[library_to_write_to]
-    write_persistent_library(lib)
+    write_persistent_library(lib, latest=True)
 
 
 @pytest.fixture(params=[pytest.param("REAL_S3", marks=REAL_S3_TESTS_MARK)])

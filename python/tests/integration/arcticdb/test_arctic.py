@@ -175,6 +175,9 @@ def test_separation_between_libraries(arctic_client):
 
 
 def add_path_prefix(uri, prefix):
+    if "path_prefix" in uri:
+        return uri + prefix
+
     if "azure" in uri:  # azure connection string has a different format
         return f"{uri};Path_prefix={prefix}"
     else:

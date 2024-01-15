@@ -112,8 +112,7 @@ get_common_pandas(NormalizationMetadata
 }
 
 template<class NormalizationMetadata>
-bool check_pandas_like(bool is_append,
-                       const NormalizationMetadata &old_norm,
+bool check_pandas_like(const NormalizationMetadata &old_norm,
                        NormalizationMetadata &new_norm,
                        size_t old_length) {
     auto old_pandas = get_common_pandas(old_norm);
@@ -153,7 +152,6 @@ bool check_pandas_like(bool is_append,
                                     stop);
                 }
 
-                normalization::check<ErrorCode::E_UPDATE_NOT_SUPPORTED>(is_append, "update() on ROWCOUNT index is not implemented");
                 new_pandas->get().mutable_index()->set_start(old_index->start());
             }
         }
@@ -197,7 +195,7 @@ void fix_normalization_or_throw(
     auto &old_norm = existing_isr.tsd().proto().normalization();
     auto &new_norm = new_frame.norm_meta;
 
-    if (check_pandas_like(is_append, old_norm, new_norm, existing_isr.tsd().proto().total_rows()))
+    if (check_pandas_like(old_norm, new_norm, existing_isr.tsd().proto().total_rows()))
         return;
     if (is_append) {
         if (check_ndarray_append(old_norm, new_norm))
