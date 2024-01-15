@@ -927,6 +927,8 @@ def test_get_description(arctic_library):
     assert original_info.row_count == 4
     assert info.last_update_time > original_info.last_update_time
     assert info.last_update_time.tz == pytz.UTC
+    assert original_info.sorted == "ASCENDING"
+    assert info.sorted == "ASCENDING"
 
 
 def test_tail(arctic_library):

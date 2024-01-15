@@ -126,6 +126,17 @@ class SymbolDescription(NamedTuple):
     date_range : Tuple[datetime.datetime, datetime.datetime]
         The times in UTC that data for this symbol spans. If the data is not timeseries indexed then this value will be
         ``(datetime.datetime(1970, 1, 1), datetime.datetime(1970, 1, 1))``.
+    sorted : str
+        One of "ASCENDING", "DESCENDING", "UNSORTED", or "UNKNOWN":
+        ASCENDING - The data has a timestamp index, and is sorted in ascending order. Guarantees that operations such as
+                    append, update, and read with date_range work as expected.
+        DESCENDING - The data has a timestamp index, and is sorted in descending order. Update and read with date_range
+                     will not work.
+        UNSORTED - The data has a timestamp index, and is not sorted. Can only be created by calling write, write_batch,
+                   append, or append_batch with validate_index set to False. Update and read with date_range will not
+                   work.
+        UNKNOWN - Either the data does not have a timestamp index, or the data does have a timestamp index, but was
+                  written by a client that predates this information being stored.
     """
 
     columns: Tuple[NameWithDType]
@@ -134,6 +145,7 @@ class SymbolDescription(NamedTuple):
     row_count: int
     last_update_time: datetime64
     date_range: Tuple[datetime.datetime, datetime.datetime]
+    sorted: str
 
 
 class WritePayload:
@@ -1538,6 +1550,7 @@ class Library:
             last_update_time=last_update_time,
             index_type=info["index_type"],
             date_range=date_range,
+            sorted=info["sorted"],
         )
 
     def get_description(self, symbol: str, as_of: Optional[AsOf] = None) -> SymbolDescription:
