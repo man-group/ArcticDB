@@ -64,12 +64,13 @@ void SegmentInMemoryImpl::generate_column_map() const {
 }
 
 void SegmentInMemoryImpl::create_columns(size_t old_size, size_t expected_column_size, bool presize, bool allow_sparse) {
-    columns_.reserve(descriptor_->field_count());
+    columns_.reserve(descriptor_->field_count()); // the field count is 1 in arcticc and the storage lock tests, but 0 for replication test!
     for (size_t i = old_size; i < size_t(descriptor_->field_count()); ++i) {
         auto type = descriptor_->fields(i).type();
         util::check(type.data_type() != DataType::UNKNOWN, "Can't create column in create_columns with unknown data type");
-        columns_.emplace_back(
-                std::make_shared<Column>(descriptor_->fields(i).type(), expected_column_size, presize, allow_sparse));
+        std::shared_ptr<Column> col = std::make_shared<Column>(descriptor_->fields(i).type(),
+                                                                      expected_column_size, presize, allow_sparse);
+        columns_.push_back(col);
     }
     generate_column_map();
 }

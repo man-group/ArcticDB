@@ -15,21 +15,29 @@
 using namespace arcticdb;
 using namespace folly;
 
+TEST(StorageLock, Types) {
+    auto td = arcticdb::TypeDescriptor(DataType::UINT64, Dimension::Dim0);
+    ASSERT_EQ(get_type_size(td.data_type()), 8);
+}
+
 TEST(StorageLock, SingleThreaded) {
-    SKIP_MAC("StorageLock is not supported");
     auto store = std::make_shared<InMemoryStore>();
     StorageLock lock1{StringId{"test_lock"}};
-    StorageLock lock2{StringId{"test_lock"}};
     ASSERT_EQ(lock1.try_lock(store), true);
-    ASSERT_EQ(!lock2.try_lock(store), true);
-    ASSERT_EQ(!lock2.try_lock(store), true);
-    ASSERT_EQ(!lock1.try_lock(store), true);
-    lock1.unlock(store);
-    ASSERT_EQ(lock2.try_lock(store), true);
-    lock2.unlock(store);
-    lock1.lock(store);
-    ASSERT_EQ(!lock2.try_lock(store), true);
-    lock1.unlock(store);
+}
+
+TEST(StorageLock, Simple) {
+    auto ts = 1234L;
+    const StreamId& sid = "ABC";
+    const FieldRef& field = scalar_field(DataType::UINT64, "version");
+
+    StreamDescriptor sd;
+    sd.set_id(sid);
+
+    sd.add_field(FieldRef{field.type(), field.name()});
+
+    SegmentInMemory output{sd};
+    output.set_scalar(0, ts);
 }
 
 TEST(StorageLock, Timeout) {

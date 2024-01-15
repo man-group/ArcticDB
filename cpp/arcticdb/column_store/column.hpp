@@ -66,11 +66,7 @@ struct JiveTable {
     std::vector<uint32_t> sorted_pos_;
 };
 
-class Column;
 class StringPool;
-
-template <typename T>
-JiveTable create_jive_table(const Column& col);
 
 class Column {
 

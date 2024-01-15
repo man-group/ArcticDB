@@ -22,10 +22,11 @@ namespace arcticdb {
 
 namespace {
 inline StreamDescriptor lock_stream_descriptor(const StreamId &stream_id) {
-    return StreamDescriptor{stream_descriptor(
+    const StreamDescriptor result = stream_descriptor(
             stream_id,
             stream::RowCountIndex(),
-            {scalar_field(DataType::UINT64, "version")})};
+            {scalar_field(DataType::UINT64, "version")});
+    return result;
 }
 
 SegmentInMemory lock_segment(const StreamId &name, uint64_t timestamp) {
