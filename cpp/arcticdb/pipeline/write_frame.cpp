@@ -149,7 +149,7 @@ folly::Future<std::vector<SliceAndKey>> write_slices(
         ++slice_num_for_column;
     }
 
-    const auto write_window = ConfigsMap::instance()->get_int("VersionStore.BatchWriteWindow", 50);
+    const auto write_window = ConfigsMap::instance()->get_int("VersionStore.BatchWriteWindow", 2 * async::TaskScheduler::instance()->io_thread_count());
     return folly::collect(folly::window(std::move(slice_and_rowcount), [de_dup_map, frame, slicing, key=std::move(key), sink, sparsify_floats](auto&& slice) {
             return async::submit_cpu_task(WriteToSegmentTask(
                 frame,
