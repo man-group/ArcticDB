@@ -369,13 +369,11 @@ class Library:
             Removes previous (non-snapshotted) versions from the database.
         staged : bool, default=False
             Whether to write to a staging area rather than immediately to the library.
-        validate_index: bool, default=False
-            If True, will verify that the index of `data` supports date range searches and update operations. This in effect tests that the data is sorted in ascending order.
-            ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the
-            data to be sorted
-
-            Note that each unit of staged data must a) be datetime indexed and b) not overlap with any other unit of
+            Each unit of staged data must a) be datetime indexed and b) not overlap with any other unit of
             staged data. Note that this will create symbols with Dynamic Schema enabled.
+        validate_index: bool, default=True
+            If True, verify that the index of `data` supports date range searches and update operations.
+            This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
 
         Returns
         -------
@@ -387,7 +385,7 @@ class Library:
         ArcticUnsupportedDataTypeException
             If ``data`` is not of NormalizableType.
         UnsortedDataException
-            If data is unsorted, when validate_index is set to True.
+            If data is unsorted and validate_index is set to True.
 
         Examples
         --------
@@ -516,10 +514,9 @@ class Library:
             Symbols and their corresponding data. There must not be any duplicate symbols in `payload`.
         prune_previous_versions: `bool`, default=False
             See `write`.
-        validate_index: bool, default=False
-            If set to True, it will verify for each entry in the batch whether the index of the data supports date range searches and update operations.
-            This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted -
-            you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted
+        validate_index: bool, default=True
+            Verify that each entry in the batch has an index that supports date range searches and update operations.
+            This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
 
         Returns
         -------
@@ -649,10 +646,9 @@ class Library:
             not combined in any way with the metadata stored in the previous version.
         prune_previous_versions
             Removes previous (non-snapshotted) versions from the database when True.
-        validate_index: bool, default=False
-            If True, will verify that resulting symbol will support date range searches and update operations. This in effect tests that the previous version of the
-            data and `data` are both sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing
-            on your input DataFrame to see if Pandas believes the data to be sorted
+        validate_index: bool, default=True
+            If True, verify that the index of `data` supports date range searches and update operations.
+            This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
 
         Returns
         -------
@@ -720,10 +716,9 @@ class Library:
             Symbols and their corresponding data. There must not be any duplicate symbols in `append_payloads`.
         prune_previous_versions : bool, default=False
             Removes previous (non-snapshotted) versions from the database.
-        validate_index: bool, default=False
-            If set to True, it will verify for each entry in the batch whether the index of the data supports date range searches and update operations.
-            This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted -
-            you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted
+        validate_index: bool, default=True
+            Verify that each entry in the batch has an index that supports date range searches and update operations.
+            This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
 
         Returns
         -------
