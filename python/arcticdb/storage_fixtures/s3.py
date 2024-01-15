@@ -12,6 +12,7 @@ import json
 import os
 import re
 import sys
+import time
 
 import requests
 from typing import NamedTuple, Optional, Any, Type
@@ -63,6 +64,11 @@ class S3Bucket(StorageFixture):
 
     def create_test_cfg(self, lib_name: str) -> EnvironmentConfigsMap:
         cfg = EnvironmentConfigsMap()
+        if self.factory.default_prefix:
+            with_prefix = f"{self.factory.default_prefix}/{lib_name}"
+        else:
+            with_prefix = False
+
         add_s3_library_to_env(
             cfg,
             lib_name=lib_name,
@@ -71,7 +77,7 @@ class S3Bucket(StorageFixture):
             credential_key=self.key.secret,
             bucket_name=self.bucket,
             endpoint=self.factory.endpoint,
-            with_prefix=False,  # to allow s3_store_factory reuse_name to work correctly
+            with_prefix=with_prefix,
             is_https=self.factory.endpoint.startswith("s3s:"),
             region=self.factory.region,
         )

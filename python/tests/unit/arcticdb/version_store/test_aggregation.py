@@ -582,7 +582,7 @@ def test_aggregation_with_nones_and_nans_in_string_grouping_column(version_store
     q = q.groupby("grouping_column").agg({"to_sum": "sum"})
     res = lib.read(symbol, query_builder=q)
     res.data.sort_index(inplace=True)
-
+    expected.index.rename("grouping_column", inplace=True)
     assert_frame_equal(res.data, expected)
 
 

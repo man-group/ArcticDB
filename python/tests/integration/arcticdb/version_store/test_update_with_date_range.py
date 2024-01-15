@@ -136,6 +136,39 @@ def test_update_date_range_non_pandas_dataframe(basic_store_custom_norm, with_ti
     np.testing.assert_array_equal(result["a"].values, [1, 32, 33, 34, 5])
 
 
+@pytest.mark.parametrize("with_timezone_attr,timezone_", [(True, None), (True, timezone.utc), (False, None)])
+def test_append_date_range_non_pandas_dataframe(basic_store_custom_norm, with_timezone_attr, timezone_):
+    """Check that updates with a daterange work for a simple non-Pandas timeseries.
+
+    This simulates a legacy DataFrame equivalent still used occasionally in Man.
+    """
+    version_store = basic_store_custom_norm
+
+    # given
+    dtidx = pd.date_range("2022-06-01", "2022-06-05")
+    df = pd.DataFrame(index=dtidx, data={"a": [1, 2, 3, 4, 5]})
+    version_store.write("sym_1", CustomTimeseries(df, with_timezone_attr=with_timezone_attr, timezone_=timezone_))
+    info = version_store.get_info("sym_1")
+    assert info["sorted"] == "UNKNOWN"
+
+    dtidx = pd.date_range("2022-06-05", "2022-06-10")
+    a = np.arange(dtidx.shape[0]).astype(np.int64)
+    update_df = pd.DataFrame(index=dtidx, data={"a": a})
+
+    # when
+    version_store.append(
+        "sym_1",
+        CustomTimeseries(update_df, with_timezone_attr=with_timezone_attr, timezone_=timezone_),
+        date_range=(datetime(2022, 6, 2), datetime(2022, 6, 4)),
+    )
+    info = version_store.get_info("sym_1")
+    assert info["sorted"] == "UNKNOWN"
+
+    # then
+    result = version_store.read("sym_1").data
+    np.testing.assert_array_equal(result["a"].values, pd.concat([df, update_df])["a"].values)
+
+
 def test_update_date_range_dataframe_multiindex(basic_store):
     """Similar to the test_update_date_range_dataframe, but with a multiindex."""
     # given

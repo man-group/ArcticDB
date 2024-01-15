@@ -22,7 +22,7 @@ from arcticc.pb2.descriptors_pb2 import UserDefinedMetadata, NormalizationMetada
 from arcticc.pb2.storage_pb2 import VersionStoreConfig
 from mmap import mmap
 from collections import Counter
-from arcticdb.exceptions import ArcticNativeException, ArcticDbNotYetImplemented
+from arcticdb.exceptions import ArcticNativeException, ArcticDbNotYetImplemented, NormalizationException
 from arcticdb.supported_types import DateRangeInput, time_types as supported_time_types
 from arcticdb.util._versions import IS_PANDAS_TWO, IS_PANDAS_ZERO
 from arcticdb.version_store.read_result import ReadResult
@@ -295,13 +295,13 @@ def _normalize_single_index(index, index_names, index_norm, dynamic_strings=None
     if isinstance(index, RangeIndex):
         # skip index since we can reconstruct it, so no need to actually store it
         if index.name:
-            if not isinstance(index.name, str):
-                raise ArcticNativeException(
-                    "Cannot use non string type as index name. Actual {} with type {}".format(
-                        index.name, type(index.name)
-                    )
+            if not isinstance(index.name, int) and not isinstance(index.name, str):
+                raise NormalizationException(
+                    f"Index name must be a string or an int, received {index.name} of type {type(index.name)}"
                 )
-            index_norm.name = _column_name_to_strings(index.name)
+            if isinstance(index.name, int):
+                index_norm.is_int = True
+            index_norm.name = str(index.name)
         index_norm.start = index.start if _range_index_props_are_public else index._start
         index_norm.step = index.step if _range_index_props_are_public else index._step
         return [], []
@@ -334,7 +334,17 @@ def _normalize_single_index(index, index_names, index_norm, dynamic_strings=None
         if index_tz is not None:
             index_norm.tz = _ensure_str_timezone(index_tz)
 
-        return index_names, ix_vals
+        if not isinstance(index_names[0], int) and not isinstance(index_names[0], str):
+            raise NormalizationException(
+                f"Index name must be a string or an int, received {index_names[0]} of type {type(index_names[0])}"
+            )
+        # Currently, we only support a single index column
+        # when we support multi-index, we will need to implement a similar logic to the one in _normalize_columns_names
+        # in the mean time, we will cast all other index names to string, so we don't crash in the cpp layer
+        if isinstance(index_names[0], int):
+            index_norm.is_int = True
+        index_norm.name = str(index_names[0])
+        return [str(name) for name in index_names], ix_vals
 
 
 def _ensure_str_timezone(index_tz):
@@ -366,7 +376,9 @@ def _denormalize_single_index(item, norm_meta):
         item.index_columns.append(item.names.pop(0))
 
     if len(item.index_columns) == 1:
-        rtn = Index(item.data[0] if len(item.data) > 0 else [], name=item.index_columns[0])
+        name = int(item.index_columns[0]) if norm_meta.index.is_int else item.index_columns[0]
+        rtn = Index(item.data[0] if len(item.data) > 0 else [], name=name)
+
         tz = get_timezone_from_metadata(norm_meta)
         if isinstance(rtn, DatetimeIndex) and tz:
             rtn = rtn.tz_localize("UTC").tz_convert(tz)
@@ -384,8 +396,11 @@ def _denormalize_columns_names(columns_names, norm_meta):
                 columns_names[idx] = None
             elif col_data.is_empty:
                 columns_names[idx] = ""
+            elif col_data.is_int:
+                columns_names[idx] = int(col_data.original_name)
             else:
-                columns_names[idx] = int(col_data.original_name) if col_data.is_int else col_data.original_name
+                columns_names[idx] = col_data.original_name
+
     return columns_names
 
 
@@ -420,6 +435,12 @@ def _normalize_columns_names(columns_names, index_names, norm_meta, dynamic_sche
             norm_meta.common.col_names[new_name].is_none = True
             columns_names[idx] = new_name
             continue
+
+        if not isinstance(col, str) and not isinstance(col, int):
+            raise NormalizationException(
+                f"Column names must be of type str or int, received {col} of type {type(col)} on column number {idx}"
+            )
+
         col_str = str(col)
         columns_names[idx] = col_str
         if len(col_str) == 0:
@@ -431,12 +452,14 @@ def _normalize_columns_names(columns_names, index_names, norm_meta, dynamic_sche
         else:
             if dynamic_schema and (counter[col] > 1):
                 raise ArcticNativeException("Same column names not allowed in dynamic_schema")
+            new_name = col_str
             if counter[col] > 1 or col in index_names:
                 new_name = "__col_{}__{}".format(col, 0 if dynamic_schema else idx)
-                norm_meta.common.col_names[new_name].original_name = col_str
-                if isinstance(col, int):
-                    norm_meta.common.col_names[new_name].is_int = True
-                columns_names[idx] = new_name
+            if isinstance(col, int):
+                norm_meta.common.col_names[new_name].is_int = True
+            norm_meta.common.col_names[new_name].original_name = col_str
+            columns_names[idx] = new_name
+
     return columns_names
 
 

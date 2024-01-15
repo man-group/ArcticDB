@@ -1,11 +1,51 @@
 import pandas as pd
+from pandas.testing import assert_frame_equal
 import os
+import io
 import numpy as np
 import argparse
 import re
 from datetime import datetime
 
 from arcticdb import Arctic
+
+
+# TODO: Remove this when the latest version that we support
+# contains the create_df function from the arcticdb.util.test library
+def create_df(start=0, columns=1) -> pd.DataFrame:
+    data = {}
+    for i in range(columns):
+        col_name = chr(ord("x") + i)  # Generates column names like 'x', 'y', 'z', etc.
+        data[col_name] = np.arange(start + i * 10, start + (i + 1) * 10, dtype=np.int64)
+
+    index = np.arange(start, start + 10, dtype=np.int64)
+    return pd.DataFrame(data, index=index)
+
+
+def get_basic_dfs():
+    df1 = create_df(0, 3)
+    df2 = create_df(1, 3)
+    df3 = create_df(2, 3)
+    return (df1, "one"), (df2, "two"), (df3, "three")
+
+
+def get_empty_series():
+    sym = "empty_s"
+    series = pd.Series(dtype="datetime64[ns]")
+    return series, sym
+
+
+def get_csv_df():
+    buf = io.StringIO("2023-11-27 00:00:00,0.73260,0.73260,0.73260,0.73260,7")
+
+    df = pd.read_csv(buf, parse_dates=[0], index_col=0, header=None)
+    df.columns = [1, 1, 1, 1, 1]
+    df.index = pd.to_datetime(df.index)
+    df.index.name = 0
+
+    sym = "csv_df"
+
+    return df, sym
 
 
 def real_s3_credentials(shared_path: bool = True):
@@ -63,18 +103,21 @@ def get_test_libraries(ac=None):
 
 
 def read_persistent_library(lib):
-    symbols = lib.list_symbols()
+    for df, sym in get_basic_dfs():
+        res_df = lib.read(sym).data
+        assert_frame_equal(res_df, pd.concat([df, df]))
 
-    for sym in ["one", "two", "three"]:
-        assert sym in symbols
-        df = lib.read(sym).data
-        column_names = df.columns.values.tolist()
-        assert column_names == ["x", "y", "z"]
+    df, sym = get_empty_series()
+    res_df = lib.read(sym).data
+    assert res_df.empty
+    assert str(res_df.dtype) == "datetime64[ns]"
 
-    assert "empty_s" in symbols
-    res = lib.read("empty_s").data
-    assert res.empty
-    assert str(res.dtype) == "datetime64[ns]"
+    df, sym = get_csv_df()
+    res_df = lib.read(sym).data
+    # 'cast' to str to accomodate previous versions of ArcticDB
+    df.index.rename(str(df.index.name), inplace=True)
+    res_df.index.rename(str(res_df.index.name), inplace=True)
+    assert_frame_equal(res_df, df)
 
 
 def verify_library(ac):
@@ -90,34 +133,22 @@ def is_strategy_branch_valid_format(input_string):
     return bool(match)
 
 
-# TODO: Remove this when the latest version that we support
-# contains the create_df function from the arcticdb.util.test library
-def create_df(start=0, columns=1) -> pd.DataFrame:
-    data = {}
-    for i in range(columns):
-        col_name = chr(ord("x") + i)  # Generates column names like 'x', 'y', 'z', etc.
-        data[col_name] = np.arange(start + i * 10, start + (i + 1) * 10, dtype=np.int64)
+def write_persistent_library(lib, latest: bool = False):
+    for df, sym in get_basic_dfs():
+        lib.write(sym, df)
+        lib.append(sym, df)
 
-    index = np.arange(start, start + 10, dtype=np.int64)
-    return pd.DataFrame(data, index=index)
-
-
-def write_persistent_library(lib):
-    one_df = create_df(0, 3)
-    lib.write("one", one_df)
-
-    two_df = create_df(1, 3)
-    lib.write("two", two_df)
-
-    two_df = create_df(2, 3)
-    lib.append("two", two_df)
-
-    three_df = create_df(3, 3)
-    lib.append("three", three_df)
-
-    sym = "empty_s"
-    series = pd.Series(dtype="datetime64[ns]")
+    series, sym = get_empty_series()
     lib.write(sym, series)
+
+    df, sym = get_csv_df()
+    if not latest:
+        # 'cast' to str because we only support string index names in past versions
+        df.index.rename(str(df.index.name), inplace=True)
+    lib.write(sym, df)
+
+    res = lib.read(sym).data
+    assert_frame_equal(res, df)
 
 
 def seed_library(ac, version: str = ""):
@@ -135,7 +166,7 @@ def seed_library(ac, version: str = ""):
     ac.create_library(lib_name)
 
     library = ac[lib_name]
-    write_persistent_library(library)
+    write_persistent_library(library, latest=False)
 
 
 def cleanup_libraries(ac):
@@ -258,7 +289,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     job_type = str(args.type).lower()
     # TODO: Add support for other storages
-    ac = Arctic(get_real_s3_uri())
+    uri = get_real_s3_uri()
+    ac = Arctic(uri)
 
     if "seed" == job_type:
         seed_library(ac, args.version)
