@@ -1517,10 +1517,10 @@ Filesystem               Size  Used Avail Use% Mounted on
 tmpfs                    1.0G     0  1.0G   0% /somedir/tmpfs_mount_point
 </code></pre></div>
 <p>From ArcticDB you can connect to this filesystem with LMDB as you would usually:</p>
-<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">arcticdb</span> <span class="kn">import</span> <span class="n">Arctic</span>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">arcticdb</span> <span class="k">as</span> <span class="nn">adb</span>
 <span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
 
-<span class="n">ac_lmdb</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;lmdb:///somedir/tmpfs_mount_point&#39;</span><span class="p">)</span>
+<span class="n">ac_lmdb</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;lmdb:///somedir/tmpfs_mount_point&#39;</span><span class="p">)</span>
 <span class="n">lib</span> <span class="o">=</span> <span class="n">ac_lmdb</span><span class="o">.</span><span class="n">get_library</span><span class="p">(</span><span class="s1">&#39;lib&#39;</span><span class="p">,</span> <span class="n">create_if_missing</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s1">&#39;symbol&#39;</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s1">&#39;a&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]})</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s1">&#39;symbol&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
@@ -1532,7 +1532,7 @@ tmpfs                    1.0G     0  1.0G   0% /somedir/tmpfs_mount_point
 <span class="mi">2</span>  <span class="mi">3</span>
 </code></pre></div>
 <p>The equivalent instantiation for an in-memory store uses the URI <code>'mem://'</code> as in:</p>
-<div class="highlight"><pre><span></span><code><span class="n">ac_mem</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;mem://&#39;</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><span class="n">ac_mem</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;mem://&#39;</span><span class="p">)</span>
 </code></pre></div>
 <p>The <code>ac_mem</code> instance owns the storage, which lives only for the lifetime of the <code>ac_mem</code> Python object. Behind the
 scenes, a <a href="https://github.com/facebook/folly/blob/main/folly/concurrency/ConcurrentHashMap.h">Folly Concurrent Hash Map</a>
@@ -1546,7 +1546,7 @@ are not appropriate for this use case.</p>
 to spawn 50 processes that concurrently write to different symbols. (Non-staged parallel writes to the same
 symbol are <a href="../parallel_writes/">not supported</a>).</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># Code tested on Linux</span>
-<span class="kn">from</span> <span class="nn">arcticdb</span> <span class="kn">import</span> <span class="n">Arctic</span>
+<span class="kn">import</span> <span class="nn">arcticdb</span> <span class="k">as</span> <span class="nn">adb</span>
 <span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
 <span class="kn">from</span> <span class="nn">multiprocessing</span> <span class="kn">import</span> <span class="n">Process</span><span class="p">,</span> <span class="n">Queue</span>
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
@@ -1558,13 +1558,13 @@ symbol are <a href="../parallel_writes/">not supported</a>).</p>
 
 <span class="n">nrows</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">data_KB</span> <span class="o">*</span> <span class="mf">1e3</span> <span class="o">/</span> <span class="n">ncols</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">itemsize</span><span class="p">)</span>
 
-<span class="n">ac</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;lmdb://</span><span class="si">{</span><span class="n">lmdb_dir</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+<span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;lmdb://</span><span class="si">{</span><span class="n">lmdb_dir</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
 <span class="n">ac</span><span class="o">.</span><span class="n">create_library</span><span class="p">(</span><span class="s1">&#39;lib&#39;</span><span class="p">)</span>
 <span class="n">lib</span> <span class="o">=</span> <span class="n">ac</span><span class="p">[</span><span class="s1">&#39;lib&#39;</span><span class="p">]</span>
 
 <span class="n">timings</span> <span class="o">=</span> <span class="n">Queue</span><span class="p">()</span>
 <span class="k">def</span> <span class="nf">connect_and_write_symbol</span><span class="p">(</span><span class="n">symbol</span><span class="p">,</span> <span class="n">lmdb_dir</span><span class="p">,</span> <span class="n">timings_</span><span class="p">):</span>
-    <span class="n">ac</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;lmdb://</span><span class="si">{</span><span class="n">lmdb_dir</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+    <span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;lmdb://</span><span class="si">{</span><span class="n">lmdb_dir</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
     <span class="n">lib</span> <span class="o">=</span> <span class="n">ac</span><span class="p">[</span><span class="s1">&#39;lib&#39;</span><span class="p">]</span>
     <span class="n">start</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">to_datetime</span><span class="p">(</span><span class="s1">&#39;now&#39;</span><span class="p">)</span>
     <span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span>

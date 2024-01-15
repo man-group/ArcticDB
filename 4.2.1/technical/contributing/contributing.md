@@ -295,7 +295,7 @@ Recent versions of some popular C++ IDEs support reading/importing these presets
 * [Visual Studio & Code](https://devblogs.microsoft.com/cppblog/cmake-presets-integration-in-visual-studio-and-visual-studio-code/)
 * [CLion](https://www.jetbrains.com/help/clion/cmake-presets.html)
 
-And it's equally easy to use on the command line ([see example](#compiling-step-by-step)).
+And it's equally easy to use on the command line.
 
 We already ship a `CMakePresets.json` in the cpp directory, which is used by our builds.
 You can add a `CMakeUserPresets.json` in the same directory for local overrides.
@@ -405,7 +405,7 @@ Symbols are almost completely decoupled from one another in ArcticDB.
 The major feature for which this is not the case is snapshots.
 Whenever a change involves deleting any keys from the storage, care must be taken that those keys are not in fact still needed by a snapshot.
 Similarly, any operation that modifies a snapshot, including deleting it, must ensure that any keys for which this snapshot was the last reference are also deleted.
-See the [tutorial](https://docs.arcticdb.io/tutorials/snapshots/) and [API documentation](https://docs.arcticdb.io/api/library#arcticdb.version_store.library.Library.snapshot) for more details.
+See the [tutorial](../tutorials/snapshots.md) and [API documentation](../api/library.md#arcticdb.version_store.library.Library.snapshot) for more details.
 
 ## Batch methods
 

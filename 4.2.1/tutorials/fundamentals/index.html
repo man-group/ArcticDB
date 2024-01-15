@@ -1599,15 +1599,15 @@
 <li>Reading data</li>
 <li>Modifying data</li>
 </ol>
-<p>To start, let's import Arctic:</p>
-<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">arcticdb</span> <span class="kn">import</span> <span class="n">Arctic</span>
+<p>To start, let's import <code>arcticdb</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">arcticdb</span> <span class="k">as</span> <span class="nn">adb</span>
 </code></pre></div>
 <h2 id="accessing-libraries">Accessing libraries<a class="headerlink" href="#accessing-libraries" title="Permanent link">&para;</a></h2>
 <p>Connect to your storage:</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># Connect using defined keys</span>
-<span class="n">ac</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;s3s://s3.eu-west-2.amazonaws.com:arctic-test-aws?access=&lt;access key&gt;&amp;secret=&lt;secret key&gt;&#39;</span><span class="p">)</span>
+<span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;s3s://s3.eu-west-2.amazonaws.com:arctic-test-aws?access=&lt;access key&gt;&amp;secret=&lt;secret key&gt;&#39;</span><span class="p">)</span>
 <span class="c1"># Leave AWS SDK to work out auth details </span>
-<span class="n">ac</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;s3s://s3.eu-west-2.amazonaws.com:arctic-test-aws?aws_auth=true)</span>
+<span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;s3s://s3.eu-west-2.amazonaws.com:arctic-test-aws?aws_auth=true)</span>
 </code></pre></div>
 <p>For more information on how the AWS SDK configures authentication without utilising defined keys, please see the <a href="https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html">AWS documentation</a>.</p>
 <p>Access a library using either the <code>[library_name]</code> notation or the <code>get_library</code> method:</p>

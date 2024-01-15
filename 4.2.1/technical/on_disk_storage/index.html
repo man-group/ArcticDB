@@ -1717,7 +1717,7 @@ when using another storage engine such as LMDB.</p>
 <p>For more information on the data stored in this layer, see the <a href="#structural-overview">Structural Overview diagram</a>.</p>
 <p>The index layer primarily stores keys of type <em>Table Index</em>, as <a href="#key-types">documented below</a>.</p>
 <h3 id="data-layer">Data Layer<a class="headerlink" href="#data-layer" title="Permanent link">&para;</a></h3>
-<p>The data layer is an immutable layer that contains compressed data segments. Dataframes provided by the user are sliced by both columns and rows, in order to facilitate rapid date-range and column searching during read operations. See the <a href="../../api/arctic/#LibraryOptions">documentation</a> for the <code>rows_per_segment</code> and <code>columns_per_segment</code> library configuration options for more details.</p>
+<p>The data layer is an immutable layer that contains compressed data segments. Dataframes provided by the user are sliced by both columns and rows, in order to facilitate rapid date-range and column searching during read operations. See the <a href="../../api/arctic/#arcticdb.LibraryOptions">documentation</a> for the <code>rows_per_segment</code> and <code>columns_per_segment</code> library configuration options for more details.</p>
 <p>The data layer primarily stores keys of type <em>Table Data</em>, as <a href="#key-types">documented below</a>.</p>
 <h2 id="arcticdb-key-types">ArcticDB Key Types<a class="headerlink" href="#arcticdb-key-types" title="Permanent link">&para;</a></h2>
 <h3 id="what-is-an-arcticdb-key">What is an ArcticDB key?<a class="headerlink" href="#what-is-an-arcticdb-key" title="Permanent link">&para;</a></h3>

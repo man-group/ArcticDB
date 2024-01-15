@@ -5,8 +5,9 @@ ArcticDB enables you to store arbitrary binary-blobs alongside symbols and versi
 The below example shows a basic example of writing and reading metadata (in this case a pickled Python dictionary):
 
 ```Python
+import arcticdb as adb
 # This example assumes the below variables (host, bucket, access, secret) are validly set
-ac = Arctic(f"s3://{HOST}:{BUCKET}?access={ACCESS}&secret={SECRET})
+ac = adb.Arctic(f"s3://{HOST}:{BUCKET}?access={ACCESS}&secret={SECRET})
 library = "my_library"
 
 if library not in ac.list_libraries():
@@ -35,9 +36,10 @@ We can do this using the following code:
 ```python
 import glob
 import datetime
+import arcticdb as adb
 
 # This example assumes the below variables (host, bucket, access, secret) are validly set
-ac = Arctic(f"s3://{HOST}:{BUCKET}?access={ACCESS}&secret={SECRET})
+ac = adb.Arctic(f"s3://{HOST}:{BUCKET}?access={ACCESS}&secret={SECRET})
 library = "my_library"
 
 if library not in ac.list_libraries():

@@ -2234,7 +2234,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
 <span class="kn">from</span> <span class="nn">botocore</span> <span class="kn">import</span> <span class="n">UNSIGNED</span>
 <span class="kn">from</span> <span class="nn">botocore.client</span> <span class="kn">import</span> <span class="n">Config</span>
-<span class="kn">from</span> <span class="nn">arcticdb</span> <span class="kn">import</span> <span class="n">Arctic</span><span class="p">,</span> <span class="n">QueryBuilder</span><span class="p">,</span> <span class="n">LibraryOptions</span>
+<span class="kn">import</span> <span class="nn">arcticdb</span> <span class="k">as</span> <span class="nn">adb</span>
 <span class="kn">from</span> <span class="nn">google.colab</span> <span class="kn">import</span> <span class="n">drive</span><span class="p">,</span> <span class="n">userdata</span>
 </pre></div>
 <div class="clipboard-copy-txt" id="cell-2">import os
@@ -2246,7 +2246,7 @@ import numpy as np
 import pandas as pd
 from botocore import UNSIGNED
 from botocore.client import Config
-from arcticdb import Arctic, QueryBuilder, LibraryOptions
+import arcticdb as adb
 from google.colab import drive, userdata</div>
 </div>
 </div>
@@ -2528,20 +2528,20 @@ else:
 </clipboard-copy>
 </div>
 <div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># create an arcticdb instance in the bucket</span>
-<span class="n">arctic</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="sa">f</span><span class="s1">'s3://s3.</span><span class="si">{</span><span class="n">region</span><span class="si">}</span><span class="s1">.amazonaws.com:</span><span class="si">{</span><span class="n">bucket_name</span><span class="si">}</span><span class="s1">?aws_auth=true'</span><span class="p">)</span>
+<span class="n">arctic</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="sa">f</span><span class="s1">'s3://s3.</span><span class="si">{</span><span class="n">region</span><span class="si">}</span><span class="s1">.amazonaws.com:</span><span class="si">{</span><span class="n">bucket_name</span><span class="si">}</span><span class="s1">?aws_auth=true'</span><span class="p">)</span>
 
 <span class="k">if</span> <span class="s1">'btc'</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">arctic</span><span class="o">.</span><span class="n">list_libraries</span><span class="p">():</span>
     <span class="c1"># library does not already exist</span>
-    <span class="n">arctic</span><span class="o">.</span><span class="n">create_library</span><span class="p">(</span><span class="s1">'btc'</span><span class="p">,</span> <span class="n">library_options</span><span class="o">=</span><span class="n">LibraryOptions</span><span class="p">(</span><span class="n">dynamic_schema</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+    <span class="n">arctic</span><span class="o">.</span><span class="n">create_library</span><span class="p">(</span><span class="s1">'btc'</span><span class="p">,</span> <span class="n">library_options</span><span class="o">=</span><span class="n">adb</span><span class="o">.</span><span class="n">LibraryOptions</span><span class="p">(</span><span class="n">dynamic_schema</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
 <span class="n">library</span> <span class="o">=</span> <span class="n">arctic</span><span class="o">.</span><span class="n">get_library</span><span class="p">(</span><span class="s1">'btc'</span><span class="p">)</span>
 <span class="n">library</span>
 </pre></div>
 <div class="clipboard-copy-txt" id="cell-7"># create an arcticdb instance in the bucket
-arctic = Arctic(f's3://s3.{region}.amazonaws.com:{bucket_name}?aws_auth=true')
+arctic = adb.Arctic(f's3://s3.{region}.amazonaws.com:{bucket_name}?aws_auth=true')
 
 if 'btc' not in arctic.list_libraries():
     # library does not already exist
-    arctic.create_library('btc', library_options=LibraryOptions(dynamic_schema=True))
+    arctic.create_library('btc', library_options=adb.LibraryOptions(dynamic_schema=True))
 library = arctic.get_library('btc')
 library</div>
 </div>

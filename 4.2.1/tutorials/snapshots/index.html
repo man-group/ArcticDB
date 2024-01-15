@@ -1425,8 +1425,10 @@
 <span class="normal">23</span>
 <span class="normal">24</span>
 <span class="normal">25</span>
-<span class="normal">26</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="c1"># This example assumes the below variables (host, bucket, access, secret) are validly set</span>
-<span class="n">ac</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;s3://</span><span class="si">{</span><span class="n">HOST</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">BUCKET</span><span class="si">}</span><span class="s2">?access=</span><span class="si">{</span><span class="n">ACCESS</span><span class="si">}</span><span class="s2">&amp;secret=</span><span class="si">{</span><span class="n">SECRET</span><span class="si">}</span><span class="s2">)</span>
+<span class="normal">26</span>
+<span class="normal">27</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="kn">import</span> <span class="nn">arcticdb</span> <span class="k">as</span> <span class="nn">adb</span>
+<span class="c1"># This example assumes the below variables (host, bucket, access, secret) are validly set</span>
+<span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;s3://</span><span class="si">{</span><span class="n">HOST</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">BUCKET</span><span class="si">}</span><span class="s2">?access=</span><span class="si">{</span><span class="n">ACCESS</span><span class="si">}</span><span class="s2">&amp;secret=</span><span class="si">{</span><span class="n">SECRET</span><span class="si">}</span><span class="s2">)</span>
 
 <span class="n">library</span><span class="o">=</span> <span class="s2">&quot;my_library&quot;</span>
 

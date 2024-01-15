@@ -1883,13 +1883,13 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
 <span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">datetime</span>
-<span class="kn">from</span> <span class="nn">arcticdb</span> <span class="kn">import</span> <span class="n">Arctic</span><span class="p">,</span> <span class="n">QueryBuilder</span>
+<span class="kn">import</span> <span class="nn">arcticdb</span> <span class="k">as</span> <span class="nn">adb</span>
 </pre></div>
 <div class="clipboard-copy-txt" id="cell-2">import time
 import numpy as np
 import pandas as pd
 from datetime import datetime
-from arcticdb import Arctic, QueryBuilder</div>
+import arcticdb as adb</div>
 </div>
 </div>
 </div>
@@ -2473,9 +2473,9 @@ daily3</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">arctic</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="s2">"lmdb://arcticdb_demo"</span><span class="p">)</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">arctic</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s2">"lmdb://arcticdb_demo"</span><span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-6">arctic = Arctic("lmdb://arcticdb_demo")</div>
+<div class="clipboard-copy-txt" id="cell-6">arctic = adb.Arctic("lmdb://arcticdb_demo")</div>
 </div>
 </div>
 </div>
@@ -4225,12 +4225,12 @@ print(f'Wrote {n/(t2-t1)/1e6:.2f} million floats per second.')</div>
 </clipboard-copy>
 </div>
 <div class="highlight-ipynb hl-python"><pre><span></span><span class="o">%%</span><span class="n">time</span>
-<span class="n">q</span> <span class="o">=</span> <span class="n">QueryBuilder</span><span class="p">()</span>
+<span class="n">q</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span>
 <span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="p">[(</span><span class="n">q</span><span class="p">[</span><span class="s2">"Price"</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mf">49e6</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">q</span><span class="p">[</span><span class="s2">"Price"</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mf">51e6</span><span class="p">)]</span>
 <span class="n">filtered</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"long"</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
 </pre></div>
 <div class="clipboard-copy-txt" id="cell-19">%%time
-q = QueryBuilder()
+q = adb.QueryBuilder()
 q = q[(q["Price"] &gt; 49e6) &amp; (q["Price"] &lt; 51e6)]
 filtered = lib.read("long", query_builder=q).data</div>
 </div>

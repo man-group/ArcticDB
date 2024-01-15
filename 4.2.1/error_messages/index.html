@@ -1858,6 +1858,11 @@ what they mean, and what (if anything) can be done to resolve the issue.</p>
 <td>A missing version has been requested of a symbol.</td>
 <td>Please request a valid version - see the documentation for the <code>list_versions</code> method to enumerate existing versions.</td>
 </tr>
+<tr>
+<td>3001</td>
+<td>A symbol from an incomplete library without any versions was requested and no incomplete segments were found.</td>
+<td>Append incomplete data to the symbol.</td>
+</tr>
 </tbody>
 </table>
 <h3 id="schema-error">Schema Error<a class="headerlink" href="#schema-error" title="Permanent link">&para;</a></h3>
@@ -1925,7 +1930,7 @@ what they mean, and what (if anything) can be done to resolve the issue.</p>
 <tr>
 <td>5003</td>
 <td>The LMDB map is full.</td>
-<td>Close and reopen your LMDB backed Arctic instance with a larger map size. For example to open <code>/tmp/a/b/</code> with a map size of 5GB, use <code>Arctic("lmdb:///tmp/a/b?map_size=5GB")</code>. Also see the <a href="http://www.lmdb.tech/doc/group__mdb.html#gaa2506ec8dab3d969b0e609cd82e619e5">LMDB documentation</a>.</td>
+<td>Close and reopen your LMDB backed Arctic instance with a larger map size. For example to open <code>/tmp/a/b/</code> with a map size of 5GB, use <code>adb.Arctic("lmdb:///tmp/a/b?map_size=5GB")</code>. Also see the <a href="http://www.lmdb.tech/doc/group__mdb.html#gaa2506ec8dab3d969b0e609cd82e619e5">LMDB documentation</a>.</td>
 </tr>
 </tbody>
 </table>

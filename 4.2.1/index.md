@@ -37,36 +37,36 @@ ArcticDB is a storage engine designed for object storage, but also supports loca
 
     ArcticDB supports any S3 API compatible storage. It has been tested against AWS S3 and storage appliances like [VAST Universal Storage](https://vastdata.com/).
 
-    ArcticDB also supports LMDB for local/file based storage - to use LMDB, pass an LMDB path as the URI: `Arctic('lmdb://path/to/desired/database')`.
+    ArcticDB also supports LMDB for local/file based storage - to use LMDB, pass an LMDB path as the URI: `adb.Arctic('lmdb://path/to/desired/database')`.
 
 To get started, we can import ArcticDB and instantiate it:
 
 ```python
->>> from arcticdb import Arctic
->>> ac = Arctic(<URI>)
+>>> import arcticdb as adb
+>>> ac = adb.Arctic(<URI>)
 ```
 
-For more information on the format of _<URI\>_, please view the docstring ([`>>> help(Arctic)`](https://docs.arcticdb.io/api/arcticdb#arcticdb.Arctic)). Below we'll run through some setup examples.
+For more information on the format of _<URI\>_, please view the docstring ([`>>> help(Arctic)`](api/arctic.md#arcticdb.Arctic)). Below we'll run through some setup examples.
 
 #### S3 configuration
 
 There are two methods to configure S3 access. If you happen to know the access and secret key, simply connect as follows:
 
 ```python
->>> from arcticdb import Arctic
->>> ac = Arctic('s3://ENDPOINT:BUCKET?region=blah&access=ABCD&secret=DCBA')
+>>> import arcticdb as adb
+>>> ac = adb.Arctic('s3://ENDPOINT:BUCKET?region=blah&access=ABCD&secret=DCBA')
 ```
 
 Otherwise, you can delegate authentication to the AWS SDK (obeys standard [AWS configuration options](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html)):
 
 ```python
->>> ac = Arctic('s3://ENDPOINT:BUCKET?aws_auth=true')
+>>> ac = adb.Arctic('s3://ENDPOINT:BUCKET?aws_auth=true')
 ```
 
 Same as above, but using HTTPS:
 
 ```python
->>> ac = Arctic('s3s://ENDPOINT:BUCKET?aws_auth=true')
+>>> ac = adb.Arctic('s3s://ENDPOINT:BUCKET?aws_auth=true')
 ```
 
 !!! s3 vs s3s
@@ -78,7 +78,7 @@ Same as above, but using HTTPS:
 Connect to local storage (not AWS - HTTP endpoint of s3.local) with a pre-defined access and storage key:
 
 ```python
->>> ac = Arctic('s3://s3.local:arcticdb-test-bucket?access=EFGH&secret=HGFE')
+>>> ac = adb.Arctic('s3://s3.local:arcticdb-test-bucket?access=EFGH&secret=HGFE')
 ```
 
 ##### Connecting to AWS
@@ -86,7 +86,7 @@ Connect to local storage (not AWS - HTTP endpoint of s3.local) with a pre-define
 Connecting to AWS with a pre-defined region:
 
 ```python
->>> ac = Arctic('s3s://s3.eu-west-2.amazonaws.com:arcticdb-test-bucket?aws_auth=true')
+>>> ac = adb.Arctic('s3s://s3.eu-west-2.amazonaws.com:arcticdb-test-bucket?aws_auth=true')
 ```
 
 Note that no explicit credential parameters are given. When `aws_auth` is passed, authentication is delegated to the AWS SDK which is responsible for locating the appropriate credentials in the `.config` file or
@@ -98,7 +98,7 @@ in environment variables. You can manually configure which profile is being used
 You may want to restrict access for the ArcticDB library to a specific path within the bucket. To do this, you can use the `path_prefix` parameter:
 
 ```python
->>> ac = Arctic('s3s://s3.eu-west-2.amazonaws.com:arcticdb-test-bucket?path_prefix=test&aws_auth=true')
+>>> ac = adb.Arctic('s3s://s3.eu-west-2.amazonaws.com:arcticdb-test-bucket?path_prefix=test&aws_auth=true')
 ```
 
 #### Azure
@@ -106,18 +106,18 @@ You may want to restrict access for the ArcticDB library to a specific path with
 ArcticDB uses the [Azure connection string](https://learn.microsoft.com/en-us/azure/storage/common/storage-configure-connection-string) to define the connection: 
 
 ```python
->>> from arcticdb import Arctic
->>> ac = Arctic('azure://AccountName=ABCD;AccountKey=EFGH;BlobEndpoint=ENDPOINT;Container=CONTAINER')
+>>> import arcticdb as adb
+>>> ac = adb.Arctic('azure://AccountName=ABCD;AccountKey=EFGH;BlobEndpoint=ENDPOINT;Container=CONTAINER')
 ```
 
 For example: 
 
 ```python
->>> from arcticdb import Arctic
->>> ac = Arctic("azure://CA_cert_path=/etc/ssl/certs/ca-certificates.crt;BlobEndpoint=https://arctic.blob.core.windows.net;Container=acblob;SharedAccessSignature=sp=awd&st=2001-01-01T00:00:00Z&se=2002-01-01T00:00:00Z&spr=https&rf=g&sig=awd%3D")
+>>> import arcticdb as adb
+>>> ac = adb.Arctic("azure://CA_cert_path=/etc/ssl/certs/ca-certificates.crt;BlobEndpoint=https://arctic.blob.core.windows.net;Container=acblob;SharedAccessSignature=sp=awd&st=2001-01-01T00:00:00Z&se=2002-01-01T00:00:00Z&spr=https&rf=g&sig=awd%3D")
 ```
 
-For more information, [see the Arctic class reference](https://docs.arcticdb.io/api/arcticdb#arcticdb.Arctic.__init__).
+For more information, [see the Arctic class reference](api/arctic.md#arcticdb.Arctic).
 
 #### LMDB
 
@@ -129,8 +129,8 @@ space for the map file eagerly, whereas on Linux the map size is an upper bound 
 You can set a map size in the connection string:
 
 ```python
->>> from arcticdb import Arctic
->>> ac = Arctic('lmdb://path/to/desired/database?map_size=2GB')
+>>> import arcticdb as adb
+>>> ac = adb.Arctic('lmdb://path/to/desired/database?map_size=2GB')
 ```
 
 The default on Windows is 2GiB. Errors with `lmdb errror code -30792` indicate that the map is getting full and that you should
@@ -149,8 +149,8 @@ There are no configuration parameters, and the memory is owned solely be the Arc
 For example:
 
 ```python
->>> from arcticdb import Arctic
->>> ac = Arctic('mem://')
+>>> import arcticdb as adb
+>>> ac = adb.Arctic('mem://')
 ```
 
 For concurrent access to a local backend, we recommend LMDB connected to tmpfs.
@@ -189,7 +189,9 @@ Now we have a library set up, we can get to reading and writing data! ArcticDB e
 Let's first look at writing a DataFrame to storage:
 
 ```Python
-# 50 columns, 25 rows, random data, datetime indexed. 
+# 50 columns, 25 rows, random data, datetime indexed.
+>>> import pandas as pd
+>>> import numpy as np
 >>> from datetime import datetime
 >>> cols = ['COL_%d' % i for i in range(50)]
 >>> df = pd.DataFrame(np.random.randint(0, 50, size=(25, 50)), columns=cols)
@@ -218,9 +220,9 @@ The `'test_frame'` DataFrame will be used for the remainder of this guide.
     * `DatetimeIndex`
     * `MultiIndex` composed of above supported types
     
-    Currently, ArcticDB only supports `append()`-ing to a `RangeIndex` with a continuing `RangeIndex` (i.e. the appending `RangeIndex.start` == `RangeIndex.stop` of the existing data and they have the same `RangeIndex.step`). If a DataFrame with a non-continuing `RangeIndex` is passed to `append()`, ArcticDB does _not_ convert it `Int64Index` like Pandas and will produce an error.
-    
-    Also note, the "row" concept in `head()/tail()` refers to the physical row, not the value in the `pandas.Index`.
+    Currently, ArcticDB allows `append()`-ing to a `RangeIndex` only with a continuing `RangeIndex` (i.e. the appending `RangeIndex.start` == `RangeIndex.stop` of the existing data and they have the same `RangeIndex.step`). If a DataFrame with a non-continuing `RangeIndex` is passed to `append()`, ArcticDB does _not_ convert it `Int64Index` like Pandas and will produce an error.
+
+    The "row" concept in `head()/tail()` refers to the row number, not the value in the `pandas.Index`.
 
 Read it back:
 
@@ -279,8 +281,8 @@ ArcticDB uses a Pandas-_like_ syntax to describe how to filter data. For more de
 ```Python
 >>> _range = (df.index[5], df.index[8])
 >>> _cols = ['COL_30', 'COL_31']
->>> from arcticdb import QueryBuilder
->>> q = QueryBuilder()
+>>> import arcticdb as adb
+>>> q = adb.QueryBuilder()
 >>> q = q[(q["COL_30"] > 30) & (q["COL_31"] < 50)]
 >>> library.read('test_frame', date_range=_range, columns=_cols, query_builder=q).data
 >>>
@@ -316,7 +318,7 @@ VersionedItem(symbol=test_frame,library=data,data=n/a,version=1,metadata=None,ho
 Now let's look at the first 2 rows in the symbol:
 
 ```Python
->>> library.head('test_frame', 2)  # head/tail are similar to the equivalent Pandas operations
+>>> library.head('test_frame', 2).data  # head/tail are similar to the equivalent Pandas operations
                      COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
 2000-01-01 05:00:00     46     24      4     20      7     32      1     18  ...
 2000-01-01 07:00:00     44     37     16     27     30      1     35     25  ...
@@ -339,7 +341,7 @@ Let's append data to the end of the timeseries:
 2000-01-02 11:00:00     30     47     14     41     43     40     22     45  ...
 ```
 
-** Note the starting date of this DataFrame is after the final row written previously! **
+** Note the starting datetime of this DataFrame is after the final row written previously! **
 
 Let's now _append_ that DataFrame to what was written previously, and then pull back the final 7 rows from storage:
 

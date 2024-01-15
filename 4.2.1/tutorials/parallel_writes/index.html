@@ -1440,15 +1440,17 @@ as a result <strong>staged data must be timeseries indexed</strong>. The below c
 <span class="normal">37</span>
 <span class="normal">38</span>
 <span class="normal">39</span>
-<span class="normal">40</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="kn">import</span> <span class="nn">pyspark</span>
+<span class="normal">40</span>
+<span class="normal">41</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="kn">import</span> <span class="nn">pyspark</span>
+<span class="kn">import</span> <span class="nn">arcticdb</span> <span class="k">as</span> <span class="nn">adb</span>
 
 <span class="c1"># This example assumes the below variables (host, bucket, access, secret) are validly set</span>
-<span class="n">ac</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;s3://</span><span class="si">{</span><span class="n">HOST</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">BUCKET</span><span class="si">}</span><span class="s2">?access=</span><span class="si">{</span><span class="n">ACCESS</span><span class="si">}</span><span class="s2">&amp;secret=</span><span class="si">{</span><span class="n">SECRET</span><span class="si">}</span><span class="s2">)</span>
+<span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;s3://</span><span class="si">{</span><span class="n">HOST</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">BUCKET</span><span class="si">}</span><span class="s2">?access=</span><span class="si">{</span><span class="n">ACCESS</span><span class="si">}</span><span class="s2">&amp;secret=</span><span class="si">{</span><span class="n">SECRET</span><span class="si">}</span><span class="s2">)</span>
 
 <span class="k">def</span> <span class="nf">_load</span><span class="p">(</span><span class="n">work</span><span class="p">):</span>
     <span class="c1"># This method is run in parallel via Spark.</span>
     <span class="n">host</span><span class="p">,</span> <span class="n">bucket</span><span class="p">,</span> <span class="n">access</span><span class="p">,</span> <span class="n">secret</span><span class="p">,</span> <span class="n">symbol</span><span class="p">,</span> <span class="n">library</span><span class="p">,</span> <span class="n">file_path</span> <span class="o">=</span> <span class="n">work</span>
-    <span class="n">ac</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;s3://</span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">bucket</span><span class="si">}</span><span class="s2">?access=</span><span class="si">{</span><span class="n">access</span><span class="si">}</span><span class="s2">&amp;secret=</span><span class="si">{</span><span class="n">secret</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;s3://</span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">bucket</span><span class="si">}</span><span class="s2">?access=</span><span class="si">{</span><span class="n">access</span><span class="si">}</span><span class="s2">&amp;secret=</span><span class="si">{</span><span class="n">secret</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
     <span class="n">library</span> <span class="o">=</span> <span class="n">ac</span><span class="p">[</span><span class="n">library</span><span class="p">]</span>
 

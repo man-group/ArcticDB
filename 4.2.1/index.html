@@ -1533,23 +1533,23 @@ you to store, retrieve and process DataFrames at scale, backed by commodity obje
 <div class="admonition storage compatibility">
 <p class="admonition-title">Storage</p>
 <p>ArcticDB supports any S3 API compatible storage. It has been tested against AWS S3 and storage appliances like <a href="https://vastdata.com/">VAST Universal Storage</a>.</p>
-<p>ArcticDB also supports LMDB for local/file based storage - to use LMDB, pass an LMDB path as the URI: <code>Arctic('lmdb://path/to/desired/database')</code>.</p>
+<p>ArcticDB also supports LMDB for local/file based storage - to use LMDB, pass an LMDB path as the URI: <code>adb.Arctic('lmdb://path/to/desired/database')</code>.</p>
 </div>
 <p>To get started, we can import ArcticDB and instantiate it:</p>
-<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span> <span class="nn">arcticdb</span> <span class="kn">import</span> <span class="n">Arctic</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">ac</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="o">&lt;</span><span class="n">URI</span><span class="o">&gt;</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span> <span class="nn">arcticdb</span> <span class="k">as</span> <span class="nn">adb</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="o">&lt;</span><span class="n">URI</span><span class="o">&gt;</span><span class="p">)</span>
 </code></pre></div>
-<p>For more information on the format of <em>&lt;URI&gt;</em>, please view the docstring (<a href="https://docs.arcticdb.io/api/arcticdb#arcticdb.Arctic"><code>&gt;&gt;&gt; help(Arctic)</code></a>). Below we'll run through some setup examples.</p>
+<p>For more information on the format of <em>&lt;URI&gt;</em>, please view the docstring (<a href="api/arctic/#arcticdb.Arctic"><code>&gt;&gt;&gt; help(Arctic)</code></a>). Below we'll run through some setup examples.</p>
 <h4 id="s3-configuration">S3 configuration<a class="headerlink" href="#s3-configuration" title="Permanent link">&para;</a></h4>
 <p>There are two methods to configure S3 access. If you happen to know the access and secret key, simply connect as follows:</p>
-<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span> <span class="nn">arcticdb</span> <span class="kn">import</span> <span class="n">Arctic</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">ac</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;s3://ENDPOINT:BUCKET?region=blah&amp;access=ABCD&amp;secret=DCBA&#39;</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span> <span class="nn">arcticdb</span> <span class="k">as</span> <span class="nn">adb</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;s3://ENDPOINT:BUCKET?region=blah&amp;access=ABCD&amp;secret=DCBA&#39;</span><span class="p">)</span>
 </code></pre></div>
 <p>Otherwise, you can delegate authentication to the AWS SDK (obeys standard <a href="https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html">AWS configuration options</a>):</p>
-<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="n">ac</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;s3://ENDPOINT:BUCKET?aws_auth=true&#39;</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;s3://ENDPOINT:BUCKET?aws_auth=true&#39;</span><span class="p">)</span>
 </code></pre></div>
 <p>Same as above, but using HTTPS:</p>
-<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="n">ac</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;s3s://ENDPOINT:BUCKET?aws_auth=true&#39;</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;s3s://ENDPOINT:BUCKET?aws_auth=true&#39;</span><span class="p">)</span>
 </code></pre></div>
 <div class="admonition s3 vs s3s">
 <p class="admonition-title">S3</p>
@@ -1557,36 +1557,36 @@ you to store, retrieve and process DataFrames at scale, backed by commodity obje
 </div>
 <h5 id="connecting-to-a-defined-storage-endpoint">Connecting to a defined storage endpoint<a class="headerlink" href="#connecting-to-a-defined-storage-endpoint" title="Permanent link">&para;</a></h5>
 <p>Connect to local storage (not AWS - HTTP endpoint of s3.local) with a pre-defined access and storage key:</p>
-<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="n">ac</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;s3://s3.local:arcticdb-test-bucket?access=EFGH&amp;secret=HGFE&#39;</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;s3://s3.local:arcticdb-test-bucket?access=EFGH&amp;secret=HGFE&#39;</span><span class="p">)</span>
 </code></pre></div>
 <h5 id="connecting-to-aws">Connecting to AWS<a class="headerlink" href="#connecting-to-aws" title="Permanent link">&para;</a></h5>
 <p>Connecting to AWS with a pre-defined region:</p>
-<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="n">ac</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;s3s://s3.eu-west-2.amazonaws.com:arcticdb-test-bucket?aws_auth=true&#39;</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;s3s://s3.eu-west-2.amazonaws.com:arcticdb-test-bucket?aws_auth=true&#39;</span><span class="p">)</span>
 </code></pre></div>
 <p>Note that no explicit credential parameters are given. When <code>aws_auth</code> is passed, authentication is delegated to the AWS SDK which is responsible for locating the appropriate credentials in the <code>.config</code> file or
 in environment variables. You can manually configure which profile is being used by setting the <code>AWS_PROFILE</code> environment variable as described in the
 <a href="https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html">AWS Documentation</a>.</p>
 <h4 id="using-a-specific-path-within-a-bucket">Using a specific path within a bucket<a class="headerlink" href="#using-a-specific-path-within-a-bucket" title="Permanent link">&para;</a></h4>
 <p>You may want to restrict access for the ArcticDB library to a specific path within the bucket. To do this, you can use the <code>path_prefix</code> parameter:</p>
-<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="n">ac</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;s3s://s3.eu-west-2.amazonaws.com:arcticdb-test-bucket?path_prefix=test&amp;aws_auth=true&#39;</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;s3s://s3.eu-west-2.amazonaws.com:arcticdb-test-bucket?path_prefix=test&amp;aws_auth=true&#39;</span><span class="p">)</span>
 </code></pre></div>
 <h4 id="azure">Azure<a class="headerlink" href="#azure" title="Permanent link">&para;</a></h4>
 <p>ArcticDB uses the <a href="https://learn.microsoft.com/en-us/azure/storage/common/storage-configure-connection-string">Azure connection string</a> to define the connection: </p>
-<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span> <span class="nn">arcticdb</span> <span class="kn">import</span> <span class="n">Arctic</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">ac</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;azure://AccountName=ABCD;AccountKey=EFGH;BlobEndpoint=ENDPOINT;Container=CONTAINER&#39;</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span> <span class="nn">arcticdb</span> <span class="k">as</span> <span class="nn">adb</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;azure://AccountName=ABCD;AccountKey=EFGH;BlobEndpoint=ENDPOINT;Container=CONTAINER&#39;</span><span class="p">)</span>
 </code></pre></div>
 <p>For example: </p>
-<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span> <span class="nn">arcticdb</span> <span class="kn">import</span> <span class="n">Arctic</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">ac</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="s2">&quot;azure://CA_cert_path=/etc/ssl/certs/ca-certificates.crt;BlobEndpoint=https://arctic.blob.core.windows.net;Container=acblob;SharedAccessSignature=sp=awd&amp;st=2001-01-01T00:00:00Z&amp;se=2002-01-01T00:00:00Z&amp;spr=https&amp;rf=g&amp;sig=awd%3D&quot;</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span> <span class="nn">arcticdb</span> <span class="k">as</span> <span class="nn">adb</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s2">&quot;azure://CA_cert_path=/etc/ssl/certs/ca-certificates.crt;BlobEndpoint=https://arctic.blob.core.windows.net;Container=acblob;SharedAccessSignature=sp=awd&amp;st=2001-01-01T00:00:00Z&amp;se=2002-01-01T00:00:00Z&amp;spr=https&amp;rf=g&amp;sig=awd%3D&quot;</span><span class="p">)</span>
 </code></pre></div>
-<p>For more information, <a href="https://docs.arcticdb.io/api/arcticdb#arcticdb.Arctic.__init__">see the Arctic class reference</a>.</p>
+<p>For more information, <a href="api/arctic/#arcticdb.Arctic">see the Arctic class reference</a>.</p>
 <h4 id="lmdb">LMDB<a class="headerlink" href="#lmdb" title="Permanent link">&para;</a></h4>
 <p>LMDB supports configuring its map size. See its <a href="http://www.lmdb.tech/doc/group__mdb.html#gaa2506ec8dab3d969b0e609cd82e619e5">documentation</a>.</p>
 <p>You may need to tweak it on Windows, whereas on Linux the default is much larger and should suffice. This is because Windows allocates physical
 space for the map file eagerly, whereas on Linux the map size is an upper bound to the physical space that will be used.</p>
 <p>You can set a map size in the connection string:</p>
-<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span> <span class="nn">arcticdb</span> <span class="kn">import</span> <span class="n">Arctic</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">ac</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;lmdb://path/to/desired/database?map_size=2GB&#39;</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span> <span class="nn">arcticdb</span> <span class="k">as</span> <span class="nn">adb</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;lmdb://path/to/desired/database?map_size=2GB&#39;</span><span class="p">)</span>
 </code></pre></div>
 <p>The default on Windows is 2GiB. Errors with <code>lmdb errror code -30792</code> indicate that the map is getting full and that you should
 increase its size. This will happen if you are doing large writes.</p>
@@ -1596,8 +1596,8 @@ increase its size. This will happen if you are doing large writes.</p>
 <p>An in-memory backend is provided mainly for testing and experimentation. It could be useful when creating files with LMDB is not desired.</p>
 <p>There are no configuration parameters, and the memory is owned solely be the Arctic instance.</p>
 <p>For example:</p>
-<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span> <span class="nn">arcticdb</span> <span class="kn">import</span> <span class="n">Arctic</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">ac</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;mem://&#39;</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span> <span class="nn">arcticdb</span> <span class="k">as</span> <span class="nn">adb</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;mem://&#39;</span><span class="p">)</span>
 </code></pre></div>
 <p>For concurrent access to a local backend, we recommend LMDB connected to tmpfs.</p>
 <h4 id="library-setup">Library Setup<a class="headerlink" href="#library-setup" title="Permanent link">&para;</a></h4>
@@ -1621,7 +1621,9 @@ library creation time.</p>
 <h5 id="reading-and-writing-dataframes">Reading And Writing Data(Frames)!<a class="headerlink" href="#reading-and-writing-dataframes" title="Permanent link">&para;</a></h5>
 <p>Now we have a library set up, we can get to reading and writing data! ArcticDB exposes a set of simple API primitives to enable DataFrame storage. </p>
 <p>Let's first look at writing a DataFrame to storage:</p>
-<div class="highlight"><pre><span></span><code><span class="c1"># 50 columns, 25 rows, random data, datetime indexed. </span>
+<div class="highlight"><pre><span></span><code><span class="c1"># 50 columns, 25 rows, random data, datetime indexed.</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">datetime</span>
 <span class="o">&gt;&gt;&gt;</span> <span class="n">cols</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;COL_</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">50</span><span class="p">)]</span>
 <span class="o">&gt;&gt;&gt;</span> <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">50</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="mi">25</span><span class="p">,</span> <span class="mi">50</span><span class="p">)),</span> <span class="n">columns</span><span class="o">=</span><span class="n">cols</span><span class="p">)</span>
@@ -1645,8 +1647,8 @@ library creation time.</p>
 <li><code>DatetimeIndex</code></li>
 <li><code>MultiIndex</code> composed of above supported types</li>
 </ul>
-<p>Currently, ArcticDB only supports <code>append()</code>-ing to a <code>RangeIndex</code> with a continuing <code>RangeIndex</code> (i.e. the appending <code>RangeIndex.start</code> == <code>RangeIndex.stop</code> of the existing data and they have the same <code>RangeIndex.step</code>). If a DataFrame with a non-continuing <code>RangeIndex</code> is passed to <code>append()</code>, ArcticDB does <em>not</em> convert it <code>Int64Index</code> like Pandas and will produce an error.</p>
-<p>Also note, the "row" concept in <code>head()/tail()</code> refers to the physical row, not the value in the <code>pandas.Index</code>.</p>
+<p>Currently, ArcticDB allows <code>append()</code>-ing to a <code>RangeIndex</code> only with a continuing <code>RangeIndex</code> (i.e. the appending <code>RangeIndex.start</code> == <code>RangeIndex.stop</code> of the existing data and they have the same <code>RangeIndex.step</code>). If a DataFrame with a non-continuing <code>RangeIndex</code> is passed to <code>append()</code>, ArcticDB does <em>not</em> convert it <code>Int64Index</code> like Pandas and will produce an error.</p>
+<p>The "row" concept in <code>head()/tail()</code> refers to the row number, not the value in the <code>pandas.Index</code>.</p>
 </div>
 <p>Read it back:</p>
 <div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="n">from_storage_df</span> <span class="o">=</span> <span class="n">library</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s1">&#39;test_frame&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
@@ -1690,8 +1692,8 @@ be slower.</p>
 </div>
 <div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="n">_range</span> <span class="o">=</span> <span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">index</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span> <span class="n">df</span><span class="o">.</span><span class="n">index</span><span class="p">[</span><span class="mi">8</span><span class="p">])</span>
 <span class="o">&gt;&gt;&gt;</span> <span class="n">_cols</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;COL_30&#39;</span><span class="p">,</span> <span class="s1">&#39;COL_31&#39;</span><span class="p">]</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span> <span class="nn">arcticdb</span> <span class="kn">import</span> <span class="n">QueryBuilder</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">q</span> <span class="o">=</span> <span class="n">QueryBuilder</span><span class="p">()</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span> <span class="nn">arcticdb</span> <span class="k">as</span> <span class="nn">adb</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">q</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span>
 <span class="o">&gt;&gt;&gt;</span> <span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="p">[(</span><span class="n">q</span><span class="p">[</span><span class="s2">&quot;COL_30&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">30</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">q</span><span class="p">[</span><span class="s2">&quot;COL_31&quot;</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">50</span><span class="p">)]</span>
 <span class="o">&gt;&gt;&gt;</span> <span class="n">library</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s1">&#39;test_frame&#39;</span><span class="p">,</span> <span class="n">date_range</span><span class="o">=</span><span class="n">_range</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="n">_cols</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
 <span class="o">&gt;&gt;&gt;</span>
@@ -1718,7 +1720,7 @@ remove <em>2000-01-01 06:00:00</em> and modify <em>2000-01-01 07:00:00</em>.</p>
 <span class="n">VersionedItem</span><span class="p">(</span><span class="n">symbol</span><span class="o">=</span><span class="n">test_frame</span><span class="p">,</span><span class="n">library</span><span class="o">=</span><span class="n">data</span><span class="p">,</span><span class="n">data</span><span class="o">=</span><span class="n">n</span><span class="o">/</span><span class="n">a</span><span class="p">,</span><span class="n">version</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span><span class="n">host</span><span class="o">=&lt;</span><span class="n">host</span><span class="o">&gt;</span><span class="p">)</span>
 </code></pre></div>
 <p>Now let's look at the first 2 rows in the symbol:</p>
-<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="n">library</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="s1">&#39;test_frame&#39;</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>  <span class="c1"># head/tail are similar to the equivalent Pandas operations</span>
+<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="n">library</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="s1">&#39;test_frame&#39;</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>  <span class="c1"># head/tail are similar to the equivalent Pandas operations</span>
                      <span class="n">COL_0</span>  <span class="n">COL_1</span>  <span class="n">COL_2</span>  <span class="n">COL_3</span>  <span class="n">COL_4</span>  <span class="n">COL_5</span>  <span class="n">COL_6</span>  <span class="n">COL_7</span>  <span class="o">...</span>
 <span class="mi">2000</span><span class="o">-</span><span class="mi">01</span><span class="o">-</span><span class="mi">01</span> <span class="mi">05</span><span class="p">:</span><span class="mi">00</span><span class="p">:</span><span class="mi">00</span>     <span class="mi">46</span>     <span class="mi">24</span>      <span class="mi">4</span>     <span class="mi">20</span>      <span class="mi">7</span>     <span class="mi">32</span>      <span class="mi">1</span>     <span class="mi">18</span>  <span class="o">...</span>
 <span class="mi">2000</span><span class="o">-</span><span class="mi">01</span><span class="o">-</span><span class="mi">01</span> <span class="mi">07</span><span class="p">:</span><span class="mi">00</span><span class="p">:</span><span class="mi">00</span>     <span class="mi">44</span>     <span class="mi">37</span>     <span class="mi">16</span>     <span class="mi">27</span>     <span class="mi">30</span>      <span class="mi">1</span>     <span class="mi">35</span>     <span class="mi">25</span>  <span class="o">...</span>
@@ -1736,7 +1738,7 @@ remove <em>2000-01-01 06:00:00</em> and modify <em>2000-01-01 07:00:00</em>.</p>
 <span class="mi">2000</span><span class="o">-</span><span class="mi">01</span><span class="o">-</span><span class="mi">02</span> <span class="mi">10</span><span class="p">:</span><span class="mi">00</span><span class="p">:</span><span class="mi">00</span>     <span class="mi">46</span>     <span class="mi">22</span>     <span class="mi">34</span>     <span class="mi">33</span>     <span class="mi">18</span>     <span class="mi">35</span>      <span class="mi">5</span>      <span class="mi">3</span>  <span class="o">...</span>
 <span class="mi">2000</span><span class="o">-</span><span class="mi">01</span><span class="o">-</span><span class="mi">02</span> <span class="mi">11</span><span class="p">:</span><span class="mi">00</span><span class="p">:</span><span class="mi">00</span>     <span class="mi">30</span>     <span class="mi">47</span>     <span class="mi">14</span>     <span class="mi">41</span>     <span class="mi">43</span>     <span class="mi">40</span>     <span class="mi">22</span>     <span class="mi">45</span>  <span class="o">...</span>
 </code></pre></div>
-<p>** Note the starting date of this DataFrame is after the final row written previously! **</p>
+<p>** Note the starting datetime of this DataFrame is after the final row written previously! **</p>
 <p>Let's now <em>append</em> that DataFrame to what was written previously, and then pull back the final 7 rows from storage:</p>
 <div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="n">library</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s1">&#39;test_frame&#39;</span><span class="p">,</span> <span class="n">df_append</span><span class="p">)</span>
 <span class="n">VersionedItem</span><span class="p">(</span><span class="n">symbol</span><span class="o">=</span><span class="n">test_frame</span><span class="p">,</span><span class="n">library</span><span class="o">=</span><span class="n">data</span><span class="p">,</span><span class="n">data</span><span class="o">=</span><span class="n">n</span><span class="o">/</span><span class="n">a</span><span class="p">,</span><span class="n">version</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span><span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span><span class="n">host</span><span class="o">=&lt;</span><span class="n">host</span><span class="o">&gt;</span><span class="p">)</span>

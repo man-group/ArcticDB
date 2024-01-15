@@ -1608,7 +1608,7 @@ presets</a> feature.</p>
 <p>Recent versions of some popular C++ IDEs support reading/importing these presets:
 * <a href="https://devblogs.microsoft.com/cppblog/cmake-presets-integration-in-visual-studio-and-visual-studio-code/">Visual Studio &amp; Code</a>
 * <a href="https://www.jetbrains.com/help/clion/cmake-presets.html">CLion</a></p>
-<p>And it's equally easy to use on the command line (<a href="#compiling-step-by-step">see example</a>).</p>
+<p>And it's equally easy to use on the command line.</p>
 <p>We already ship a <code>CMakePresets.json</code> in the cpp directory, which is used by our builds.
 You can add a <code>CMakeUserPresets.json</code> in the same directory for local overrides.
 Inheritance is supported.</p>
@@ -1699,7 +1699,7 @@ This is particularly true of the <code>NativeVersionStore</code> API, as this ha
 The major feature for which this is not the case is snapshots.
 Whenever a change involves deleting any keys from the storage, care must be taken that those keys are not in fact still needed by a snapshot.
 Similarly, any operation that modifies a snapshot, including deleting it, must ensure that any keys for which this snapshot was the last reference are also deleted.
-See the <a href="https://docs.arcticdb.io/tutorials/snapshots/">tutorial</a> and <a href="https://docs.arcticdb.io/api/library#arcticdb.version_store.library.Library.snapshot">API documentation</a> for more details.</p>
+See the <a href="../../tutorials/snapshots/">tutorial</a> and <a href="../../api/library/#arcticdb.version_store.library.Library.snapshot">API documentation</a> for more details.</p>
 <h2 id="batch-methods">Batch methods<a class="headerlink" href="#batch-methods" title="Permanent link">&para;</a></h2>
 <p>Almost all of the major reading and writing methods have batch equivalents.
 If a feature is added for the non-batch version, it should almost always work with the batch version as well.

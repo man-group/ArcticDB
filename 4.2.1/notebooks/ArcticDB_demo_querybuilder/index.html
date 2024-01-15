@@ -2202,14 +2202,14 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
 <span class="kn">import</span> <span class="nn">random</span>
-<span class="kn">from</span> <span class="nn">arcticdb</span> <span class="kn">import</span> <span class="n">Arctic</span><span class="p">,</span> <span class="n">QueryBuilder</span>
+<span class="kn">import</span> <span class="nn">arcticdb</span> <span class="k">as</span> <span class="nn">adb</span>
 <span class="kn">from</span> <span class="nn">arcticdb.util.test</span> <span class="kn">import</span> <span class="n">random_strings_of_length</span>
 </pre></div>
 <div class="clipboard-copy-txt" id="cell-2">import os
 import numpy as np
 import pandas as pd
 import random
-from arcticdb import Arctic, QueryBuilder
+import arcticdb as adb
 from arcticdb.util.test import random_strings_of_length</div>
 </div>
 </div>
@@ -2246,9 +2246,9 @@ from arcticdb.util.test import random_strings_of_length</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">arctic</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="s2">"lmdb://arcticdb_demo"</span><span class="p">)</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">arctic</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s2">"lmdb://arcticdb_demo"</span><span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-3">arctic = Arctic("lmdb://arcticdb_demo")</div>
+<div class="clipboard-copy-txt" id="cell-3">arctic = adb.Arctic("lmdb://arcticdb_demo")</div>
 </div>
 </div>
 </div>
@@ -2702,10 +2702,10 @@ lib.read(sym, columns=["grouping_column_10", "numeric_column"])</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">q</span> <span class="o">=</span> <span class="n">QueryBuilder</span><span class="p">()</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">q</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span>
 <span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="p">[</span><span class="n">q</span><span class="p">[</span><span class="s2">"numeric_column"</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mf">2.0</span><span class="p">]</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-13">q = QueryBuilder()
+<div class="clipboard-copy-txt" id="cell-13">q = adb.QueryBuilder()
 q = q[q["numeric_column"] &lt; 2.0]</div>
 </div>
 </div>
@@ -2771,10 +2771,10 @@ lib.read(sym, query_builder=q)</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">q</span> <span class="o">=</span> <span class="n">QueryBuilder</span><span class="p">()</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">q</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span>
 <span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="p">[</span><span class="n">q</span><span class="p">[</span><span class="s2">"numeric_column"</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mf">0.1</span><span class="p">]</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-15">q = QueryBuilder()
+<div class="clipboard-copy-txt" id="cell-15">q = adb.QueryBuilder()
 q = q[q["numeric_column"] &lt; 0.1]</div>
 </div>
 </div>
@@ -2878,10 +2878,10 @@ lib.read(sym, query_builder=q).data</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">q</span> <span class="o">=</span> <span class="n">QueryBuilder</span><span class="p">()</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">q</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span>
 <span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s2">"new_column"</span><span class="p">,</span> <span class="n">q</span><span class="p">[</span><span class="s2">"numeric_column"</span><span class="p">]</span> <span class="o">*</span> <span class="mf">2.0</span><span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-18">q = QueryBuilder()
+<div class="clipboard-copy-txt" id="cell-18">q = adb.QueryBuilder()
 q = q.apply("new_column", q["numeric_column"] * 2.0)</div>
 </div>
 </div>
@@ -2985,10 +2985,10 @@ lib.read(sym, query_builder=q)</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">q</span> <span class="o">=</span> <span class="n">QueryBuilder</span><span class="p">()</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">q</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span>
 <span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s2">"grouping_column_10"</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">"numeric_column"</span><span class="p">:</span> <span class="s2">"mean"</span><span class="p">})</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-21">q = QueryBuilder()
+<div class="clipboard-copy-txt" id="cell-21">q = adb.QueryBuilder()
 q = q.groupby("grouping_column_10").agg({"numeric_column": "mean"})</div>
 </div>
 </div>
@@ -3081,10 +3081,10 @@ lib.read(sym, query_builder=q)</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">q</span> <span class="o">=</span> <span class="n">QueryBuilder</span><span class="p">()</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">q</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span>
 <span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s2">"grouping_column_100_000"</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">"numeric_column"</span><span class="p">:</span> <span class="s2">"mean"</span><span class="p">})</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-24">q = QueryBuilder()
+<div class="clipboard-copy-txt" id="cell-24">q = adb.QueryBuilder()
 q = q.groupby("grouping_column_100_000").agg({"numeric_column": "mean"})</div>
 </div>
 </div>
@@ -3188,10 +3188,10 @@ lib.read(sym, query_builder=q)</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">q</span> <span class="o">=</span> <span class="n">QueryBuilder</span><span class="p">()</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">q</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span>
 <span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="p">[</span><span class="n">q</span><span class="p">[</span><span class="s2">"numeric_column"</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mf">0.1</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s2">"new_column"</span><span class="p">,</span> <span class="n">q</span><span class="p">[</span><span class="s2">"numeric_column"</span><span class="p">]</span> <span class="o">*</span> <span class="mf">2.0</span><span class="p">)</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s2">"grouping_column_10"</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">"numeric_column"</span><span class="p">:</span> <span class="s2">"mean"</span><span class="p">,</span> <span class="s2">"new_column"</span><span class="p">:</span> <span class="s2">"max"</span><span class="p">})</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-27">q = QueryBuilder()
+<div class="clipboard-copy-txt" id="cell-27">q = adb.QueryBuilder()
 q = q[q["numeric_column"] &lt; 0.1].apply("new_column", q["numeric_column"] * 2.0).groupby("grouping_column_10").agg({"numeric_column": "mean", "new_column": "max"})</div>
 </div>
 </div>
