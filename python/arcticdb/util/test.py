@@ -58,42 +58,6 @@ assert_frame_equal = maybe_not_check_freq(pd.testing.assert_frame_equal)
 assert_series_equal = maybe_not_check_freq(pd.testing.assert_series_equal)
 
 
-def configure_console_logger(level="INFO"):
-    get_test_logger_config(level)
-
-
-def get_test_logger_config(level: str = "INFO", outputs: Optional[Iterable[str]] = None) -> LoggersConfig:
-    """
-    outputs controls where log output is directed:
-        - file - writes log files in "~/.arctic/native"
-        - console - log to stderr and stdout
-
-    For example outputs=["file"], outputs=["file", "console"]
-    """
-    if outputs is None:
-        outputs = ("console",)
-
-    log_cfgs = LoggersConfig()
-
-    for o in outputs:
-        sink = log_cfgs.sink_by_id[o]
-        if o == "console":
-            sink.console.std_err = True
-        elif o == "file":
-            sink.daily_file.path = os.path.join(Defaults.LOG_DIR, "arcticc.daily.test.log")
-        else:
-            raise RuntimeError(f"Unexpected logger output {o}")
-
-    for n in logger_by_name.keys():
-        logger = log_cfgs.logger_by_id[n]
-        for o in outputs:
-            logger.sink_ids.append(o)
-        logger.level = getattr(LoggerConfig, level)
-        logger.pattern = "%Y%m%d %H:%M:%S.%f %t %L %n | %v".format("arcticc.{}".format(n) if n != "root" else "arcticc")
-
-    return log_cfgs
-
-
 def random_string(length: int):
     return "".join(random.choice(string.ascii_uppercase + string.digits) for _ in range(length))
 
