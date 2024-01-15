@@ -2602,6 +2602,7 @@ class NativeVersionStore:
             - normalization_metadata,
             - type, `str`
             - date_range, `tuple`
+            - sorted, `str`
         """
         version_query = self._get_version_query(version)
         read_options = _PythonVersionStoreReadOptions()
@@ -2637,6 +2638,7 @@ class NativeVersionStore:
             - normalization_metadata,
             - type, `str`
             - date_range, `tuple`
+            - sorted, `str`
         """
         throw_on_error = True
         return self._batch_read_descriptor(symbols, as_ofs, throw_on_error)

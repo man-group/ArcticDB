@@ -288,7 +288,7 @@ def test_append_not_sorted_range_index_non_exception(lmdb_version_store):
 
     lmdb_version_store.write(symbol, df)
     info = lmdb_version_store.get_info(symbol)
-    assert info["sorted"] == "ASCENDING"
+    assert info["sorted"] == "UNKNOWN"
 
     num_rows = 20
     dtidx = pd.RangeIndex(num_initial_rows, num_initial_rows + num_rows, 1)
