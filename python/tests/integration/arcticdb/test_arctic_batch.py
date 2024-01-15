@@ -955,6 +955,7 @@ def test_get_description_batch_missing_keys(arctic_library):
     assert batch[2].index[0] == ["named_index"]
     assert batch[2].index_type == "index"
     assert batch[2].row_count == 3
+    assert batch[2].sorted == "ASCENDING"
 
 
 def test_get_description_batch_symbol_doesnt_exist(arctic_library):
@@ -980,6 +981,7 @@ def test_get_description_batch_symbol_doesnt_exist(arctic_library):
     assert batch[0].index[0] == ["named_index"]
     assert batch[0].index_type == "index"
     assert batch[0].row_count == 4
+    assert batch[0].sorted == "ASCENDING"
 
     assert isinstance(batch[1], DataError)
     assert batch[1].symbol == "s2"
@@ -1016,6 +1018,7 @@ def test_get_description_batch_version_doesnt_exist(arctic_library):
     assert batch[0].index[0] == ["named_index"]
     assert batch[0].index_type == "index"
     assert batch[0].row_count == 4
+    assert batch[0].sorted == "ASCENDING"
 
     assert isinstance(batch[1], DataError)
     assert batch[1].symbol == "s1"
@@ -1157,6 +1160,8 @@ def test_get_description_batch(arctic_library):
         assert info.row_count == 6
         assert original_info.row_count == 4
         assert info.last_update_time > original_info.last_update_time
+        assert original_info.sorted == "ASCENDING"
+        assert info.sorted == "ASCENDING"
 
 
 def test_get_description_batch_multiple_versions(arctic_library):
@@ -1245,7 +1250,8 @@ def test_get_description_batch_multiple_versions(arctic_library):
         assert info.row_count == 6
         assert original_info.row_count == 4
         assert info.last_update_time > original_info.last_update_time
-
+        assert original_info.sorted == "ASCENDING"
+        assert info.sorted == "ASCENDING"
 
 def test_read_description_batch_high_amount(arctic_library):
     lib = arctic_library

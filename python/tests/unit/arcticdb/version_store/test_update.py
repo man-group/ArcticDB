@@ -453,98 +453,50 @@ def test_non_cstyle_numpy_update(lmdb_version_store):
     assert_frame_equal(after_arctic, before_arctic)
 
 
-def test_update_input_not_sorted_exception(lmdb_version_store):
-    symbol = "bad_update"
+@pytest.mark.parametrize("existing_df_sortedness", ("ASCENDING", "DESCENDING", "UNSORTED"))
+@pytest.mark.parametrize("update_df_sortedness", ("ASCENDING", "DESCENDING", "UNSORTED"))
+@pytest.mark.parametrize("date_range_arg_provided", (True, False))
+def test_update_sortedness_checks(
+        lmdb_version_store,
+        existing_df_sortedness,
+        update_df_sortedness,
+        date_range_arg_provided,
+):
+    lib = lmdb_version_store
+    symbol = "test_update_sortedness_checks"
+    num_rows = 10
+    data = np.arange(num_rows)
+    ascending_idx = pd.date_range("2024-01-15", periods=num_rows)
+    ascending_df = pd.DataFrame({"col": data}, index=ascending_idx)
+    descending_df = pd.DataFrame({"col": data}, index=pd.DatetimeIndex(reversed(ascending_idx)))
+    unsorted_df = pd.DataFrame({"col": data}, index=pd.DatetimeIndex(np.roll(ascending_idx, num_rows // 2)))
 
-    num_initial_rows = 20
-    initial_timestamp = pd.Timestamp("2019-01-01")
-    dtidx = pd.date_range(initial_timestamp, periods=num_initial_rows)
-    df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=dtidx)
-    assert df.index.is_monotonic_increasing == True
+    date_range = (pd.Timestamp("2024-01-13"), pd.Timestamp("2024-01-17")) if date_range_arg_provided else None
 
-    lmdb_version_store.write(symbol, df)
-    info = lmdb_version_store.get_info(symbol)
-    assert info["sorted"] == "ASCENDING"
+    if existing_df_sortedness == "ASCENDING":
+        write_df = ascending_df
+    elif existing_df_sortedness == "DESCENDING":
+        write_df = descending_df
+    else:
+        # existing_df_sortedness == "UNSORTED":
+        write_df = unsorted_df
+    lib.write(symbol, write_df)
+    assert lib.get_info(symbol)["sorted"] == existing_df_sortedness
 
-    num_rows = 20
-    initial_timestamp = pd.Timestamp("2020-01-01")
-    dtidx = np.roll(pd.date_range(initial_timestamp, periods=num_rows), 3)
-    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
-    assert df2.index.is_monotonic_increasing == False
+    if update_df_sortedness == "ASCENDING":
+        update_df = ascending_df
+    elif update_df_sortedness == "DESCENDING":
+        update_df = descending_df
+    else:
+        # update_df_sortedness == "UNSORTED":
+        update_df = unsorted_df
 
-    with pytest.raises(SortingException):
-        lmdb_version_store.update(symbol, df2)
-
-
-def test_update_existing_not_sorted_exception(lmdb_version_store):
-    symbol = "bad_update"
-
-    num_initial_rows = 20
-    initial_timestamp = pd.Timestamp("2019-01-01")
-    dtidx = np.roll(pd.date_range(initial_timestamp, periods=num_initial_rows), 3)
-    df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=dtidx)
-    assert df.index.is_monotonic_increasing == False
-
-    lmdb_version_store.write(symbol, df)
-    info = lmdb_version_store.get_info(symbol)
-    assert info["sorted"] == "UNSORTED"
-
-    num_rows = 20
-    initial_timestamp = pd.Timestamp("2020-01-01")
-    dtidx = pd.date_range(initial_timestamp, periods=num_rows)
-    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
-    assert df2.index.is_monotonic_increasing == True
-
-    with pytest.raises(SortingException):
-        lmdb_version_store.update(symbol, df2)
-
-
-def test_update_input_descending_exception(lmdb_version_store):
-    symbol = "bad_update"
-
-    num_initial_rows = 20
-    initial_timestamp = pd.Timestamp("2019-01-01")
-    dtidx = pd.date_range(initial_timestamp, periods=num_initial_rows)
-    df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=dtidx)
-    assert df.index.is_monotonic_increasing == True
-
-    lmdb_version_store.write(symbol, df)
-    info = lmdb_version_store.get_info(symbol)
-    assert info["sorted"] == "ASCENDING"
-
-    num_rows = 20
-    initial_timestamp = pd.Timestamp("2020-01-01")
-    dtidx = reversed(pd.date_range(initial_timestamp, periods=num_rows))
-    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
-    assert df2.index.is_monotonic_increasing == False
-    assert df2.index.is_monotonic_decreasing == True
-
-    with pytest.raises(SortingException):
-        lmdb_version_store.update(symbol, df2)
-
-
-def test_update_existing_descending_exception(lmdb_version_store):
-    symbol = "bad_update"
-
-    num_initial_rows = 20
-    initial_timestamp = pd.Timestamp("2019-01-01")
-    dtidx = reversed(pd.date_range(initial_timestamp, periods=num_initial_rows))
-    df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=dtidx)
-    assert df.index.is_monotonic_increasing == False
-    assert df.index.is_monotonic_decreasing == True
-
-    lmdb_version_store.write(symbol, df)
-    info = lmdb_version_store.get_info(symbol)
-    assert info["sorted"] == "DESCENDING"
-
-    num_rows = 20
-    initial_timestamp = pd.Timestamp("2020-01-01")
-    dtidx = pd.date_range(initial_timestamp, periods=num_rows)
-    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
-    assert df2.index.is_monotonic_increasing == True
-
-    with pytest.raises(SortingException):
-        lmdb_version_store.update(symbol, df2)
+    if existing_df_sortedness == "ASCENDING" and update_df_sortedness == "ASCENDING":
+        lib.update(symbol, update_df, date_range=date_range)
+        assert lib.get_info(symbol)["sorted"] == "ASCENDING"
+    else:
+        with pytest.raises(SortingException):
+            lib.update(symbol, update_df, date_range=date_range)
 
 
 def test_update_not_sorted_input_multi_index_exception(lmdb_version_store):

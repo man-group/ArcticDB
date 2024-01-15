@@ -292,6 +292,7 @@ void sorted_data_check_update(InputTensorFrame& frame, index::IndexSegmentReader
         "When calling update, the input data must be a time series.");
     bool input_data_is_sorted = frame.desc.get_sorted() == SortedValue::ASCENDING ||
                                 frame.desc.get_sorted() == SortedValue::UNKNOWN;
+    // If changing this error message, the corresponding message in _normalization.py::restrict_data_to_date_range_only should also be updated
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
         input_data_is_sorted,
         "When calling update, the input data must be sorted.");
