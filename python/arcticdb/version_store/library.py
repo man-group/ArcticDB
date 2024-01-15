@@ -412,8 +412,7 @@ class Library:
         2000-01-03       7
 
         WritePayload objects can be unpacked and used as parameters:
-
-        >>> w = WritePayload("symbol", df, metadata={'the': 'metadata'})
+        >>> w = adb.WritePayload("symbol", df, metadata={'the': 'metadata'})
         >>> lib.write(*w, staged=True)
         """
         if not isinstance(data, NORMALIZABLE_TYPES):
@@ -547,11 +546,10 @@ class Library:
         --------
 
         Writing a simple batch:
-
         >>> df_1 = pd.DataFrame({'column': [1,2,3]})
         >>> df_2 = pd.DataFrame({'column': [4,5,6]})
-        >>> payload_1 = WritePayload("symbol_1", df_1, metadata={'the': 'metadata'})
-        >>> payload_2 = WritePayload("symbol_2", df_2)
+        >>> payload_1 = adb.WritePayload("symbol_1", df_1, metadata={'the': 'metadata'})
+        >>> payload_2 = adb.WritePayload("symbol_2", df_2)
         >>> items = lib.write_batch([payload_1, payload_2])
         >>> lib.read("symbol_1").data
            column
@@ -1035,12 +1033,11 @@ class Library:
 
         Examples
         --------
-
         >>> lib.write("s1", pd.DataFrame())
         >>> lib.write("s2", pd.DataFrame({"col": [1, 2, 3]}))
         >>> lib.write("s2", pd.DataFrame(), prune_previous_versions=False)
         >>> lib.write("s3", pd.DataFrame())
-        >>> batch = lib.read_batch(["s1", ReadRequest("s2", as_of=0), "s3", ReadRequest("s2", as_of=1000)])
+        >>> batch = lib.read_batch(["s1", adb.ReadRequest("s2", as_of=0), "s3", adb.ReadRequest("s2", as_of=1000)])
         >>> batch[0].data.empty
         True
         >>> batch[1].data.empty
@@ -1049,8 +1046,7 @@ class Library:
         True
         >>> batch[3].symbol
         "s2"
-        >>> from arcticdb import DataError
-        >>> isinstance(batch[3], DataError)
+        >>> isinstance(batch[3], adb.DataError)
         True
         >>> batch[3].version_request_type
         VersionRequestType.SPECIFIC
@@ -1215,9 +1211,8 @@ class Library:
         --------
 
         Writing a simple batch:
-
-        >>> payload_1 = WriteMetadataPayload("symbol_1", {'the': 'metadata_1'})
-        >>> payload_2 = WriteMetadataPayload("symbol_2", {'the': 'metadata_2'})
+        >>> payload_1 = adb.WriteMetadataPayload("symbol_1", {'the': 'metadata_1'})
+        >>> payload_2 = adb.WriteMetadataPayload("symbol_2", {'the': 'metadata_2'})
         >>> items = lib.write_metadata_batch([payload_1, payload_2])
         >>> lib.read_metadata("symbol_1")
         {'the': 'metadata_1'}
