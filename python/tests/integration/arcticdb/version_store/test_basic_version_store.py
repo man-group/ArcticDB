@@ -662,16 +662,46 @@ def test_get_info_version_no_columns_nat(basic_store):
     df["b"] = df["b"].astype("int64")
     basic_store.write(sym, df, dynamic_strings=True, coerce_columns={"a": float, "b": int, "c": str})
     info = basic_store.get_info(sym)
-    assert np.isnat(info["date_range"][0]) == True
-    assert np.isnat(info["date_range"][1]) == True
+    assert np.isnat(info["date_range"][0])
+    assert np.isnat(info["date_range"][1])
 
 
 def test_get_info_version_empty_nat(basic_store):
     sym = "test_get_info_version_empty_nat"
     basic_store.write(sym, pd.DataFrame())
     info = basic_store.get_info(sym)
-    assert np.isnat(info["date_range"][0]) == True
-    assert np.isnat(info["date_range"][1]) == True
+    assert np.isnat(info["date_range"][0])
+    assert np.isnat(info["date_range"][1])
+
+
+def test_get_info_non_timestamp_index_date_range(basic_store):
+    lib = basic_store
+    sym = "test_get_info_non_timestamp_index_date_range"
+    # Row-range indexed
+    lib.write(sym, pd.DataFrame({"col": [1, 2, 3]}))
+    info = lib.get_info(sym)
+    assert np.isnat(info["date_range"][0])
+    assert np.isnat(info["date_range"][1])
+    # int64 indexed
+    lib.write(sym, pd.DataFrame({"col": [1, 2, 3]}), index=pd.Index([4, 5, 6], dtype=np.int64))
+    info = lib.get_info(sym)
+    assert np.isnat(info["date_range"][0])
+    assert np.isnat(info["date_range"][1])
+
+
+def test_get_info_unsorted_timestamp_index_date_range(basic_store):
+    lib = basic_store
+    sym = "test_get_info_unsorted_timestamp_index_date_range"
+    lib.write(
+        sym,
+        pd.DataFrame(
+            {"col": [1, 2, 3]},
+            index=[pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-02")]
+        )
+    )
+    info = lib.get_info(sym)
+    assert np.isnat(info["date_range"][0])
+    assert np.isnat(info["date_range"][1])
 
 
 def test_update_times(basic_store):

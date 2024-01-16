@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import datetime
+
 import pytz
 from enum import Enum, auto
 from typing import Optional, Any, Tuple, Dict, AnyStr, Union, List, Iterable, NamedTuple
@@ -18,7 +19,6 @@ from arcticdb.util._versions import IS_PANDAS_TWO
 
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionQueryInput
-from arcticdb.version_store._normalization import denormalize_user_metadata
 from arcticdb_ext.exceptions import ArcticException
 from arcticdb_ext.version_store import DataError
 import pandas as pd
@@ -123,9 +123,10 @@ class SymbolDescription(NamedTuple):
         Number of rows.
     last_update_time : datetime64
         The time of the last update to the symbol, in UTC.
-    date_range : Tuple[datetime.datetime, datetime.datetime]
-        The times in UTC that data for this symbol spans. If the data is not timeseries indexed then this value will be
-        ``(datetime.datetime(1970, 1, 1), datetime.datetime(1970, 1, 1))``.
+    date_range : Tuple[Union[datetime.datetime, numpy.datetime64], Union[datetime.datetime, numpy.datetime64]]
+        The values of the index column in the first and last rows of this symbol in UTC. Both values will be NaT if:
+        - the symbol is not timestamp indexed
+        - the symbol is timestamp indexed, but the sorted field of this class is UNSORTED (see below)
     sorted : str
         One of "ASCENDING", "DESCENDING", "UNSORTED", or "UNKNOWN":
         ASCENDING - The data has a timestamp index, and is sorted in ascending order. Guarantees that operations such as
@@ -144,8 +145,18 @@ class SymbolDescription(NamedTuple):
     index_type: str
     row_count: int
     last_update_time: datetime64
-    date_range: Tuple[datetime.datetime, datetime.datetime]
+    date_range: Tuple[Union[datetime.datetime, datetime64], Union[datetime.datetime, datetime64]]
     sorted: str
+
+    def __eq__(self, other):
+        # Needed as NaT != NaT
+        date_range_fields_equal = (self.date_range[0] == other.date_range[0] or (np.isnat(self.date_range[0]) and np.isnat(other.date_range[0]))) and \
+                                  (self.date_range[1] == other.date_range[1] or (np.isnat(self.date_range[1]) and np.isnat(other.date_range[1])))
+        if date_range_fields_equal:
+            non_date_range_fields = [field for field in self._fields if field != "date_range"]
+            return all(getattr(self, field) == getattr(other, field) for field in non_date_range_fields)
+        else:
+            return False
 
 
 class WritePayload:
