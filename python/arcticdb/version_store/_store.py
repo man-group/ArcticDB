@@ -989,7 +989,9 @@ class NativeVersionStore:
         Reads the metadata for multiple symbols in a batch fashion. This is more efficient than making multiple
         `read_metadata` calls in succession as some constant-time operations can be executed only once rather than once
         for each element of `symbols`.
-        Will raise if any of the symbols do not exist.
+        
+        If a `symbol` or its `as_of`in the query does not exist then the symbol will not be present in the resulting dict.
+        Consider using `Library#read_metadata_batch` instead, which has improved error handling behaviour.
 
         Parameters
         ----------
