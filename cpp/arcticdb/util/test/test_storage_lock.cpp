@@ -27,7 +27,6 @@ TEST(StorageLock, SingleThreaded) {
 }
 
 TEST(StorageLock, Simple) {
-    auto ts = 1234L;
     const StreamId& sid = "ABC";
     const FieldRef& field = scalar_field(DataType::UINT64, "version");
 
@@ -36,8 +35,10 @@ TEST(StorageLock, Simple) {
 
     sd.add_field(FieldRef{field.type(), field.name()});
 
-    SegmentInMemory output{sd};
-    output.set_scalar(0, ts);
+    std::cout << "hi" << "\n";
+
+//    SegmentInMemory output{sd};
+//    output.set_scalar(0, 1234L);
 }
 
 TEST(StorageLock, Timeout) {

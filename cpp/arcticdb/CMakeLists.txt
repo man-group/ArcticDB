@@ -788,6 +788,7 @@ if(${TEST})
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 
+    add_library(test_unit_arcticdb_lib ${unit_test_srcs})
     add_executable(test_unit_arcticdb ${unit_test_srcs})
 
     install(TARGETS test_unit_arcticdb RUNTIME
@@ -851,6 +852,13 @@ if(${TEST})
             ${AWSSDK_LINK_LIBRARIES}
             arcticdb_core_static
             )
+
+        target_link_libraries(test_unit_arcticdb_lib
+                PUBLIC
+                ${COMMON_PUBLIC_TEST_LIBRARIES}
+                ${AWSSDK_LINK_LIBRARIES}
+                arcticdb_core_static
+                )
 
         target_include_directories(test_unit_arcticdb PRIVATE
                 ${LIBMONGOCXX_STATIC_INCLUDE_DIRS}
