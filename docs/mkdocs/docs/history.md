@@ -1,5 +1,7 @@
 # History of ArcticDB
 
+spurious change to docs
+
 ### Arctic
 
 ArcticDB is built upon the foundations of [Arctic](https://github.com/man-group/arctic), 
