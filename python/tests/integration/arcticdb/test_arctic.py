@@ -62,6 +62,15 @@ def test_library_creation_deletion(arctic_client):
         _lib = ac["pytest_test_lib"]
     assert not ac.has_library("pytest_test_lib")
 
+def test_many_instances(real_s3_storage):
+    instances = []
+    for i in range(1000):
+        print(i)
+        ac = real_s3_storage.create_arctic()
+        instances.append(ac)
+        lib = ac.get_library("lib")
+        lib.head("symbol")
+
 
 def test_get_library(arctic_client):
     ac = arctic_client
