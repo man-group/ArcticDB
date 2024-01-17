@@ -18,17 +18,16 @@ namespace arcticdb {
 const auto UNSUPPORTED_S3_CHARS = std::set<char>{'*', '<', '>'};
 
 // We currently require the size to fit in uint8. See entity/serialized_key.hpp
-const auto MAX_SIZE = 255;
+constexpr auto MAX_SIZE = 255;
 
 void verify_name(
-        const std::string &name_type_for_error,
-        const StringId &name,
-        bool check_length = true,
+        const std::string& name_type_for_error,
+        const StringId& name,
         bool check_symbol_out_of_range = true,
-        const std::set<char> &unsupported_chars = UNSUPPORTED_S3_CHARS,
+        const std::set<char>& unsupported_chars = UNSUPPORTED_S3_CHARS,
         std::optional<char> unsupported_prefix = std::nullopt,
         std::optional<char> unsupported_suffix = std::nullopt) {
-    if (check_length && name.size() > MAX_SIZE) {
+    if (name.size() > MAX_SIZE) {
         user_input::raise<ErrorCode::E_NAME_TOO_LONG>(
                 "The {} length exceeds the max supported length. {} length: {}, Max Supported Length: {}",
                 name_type_for_error,
@@ -74,7 +73,7 @@ void verify_name(
     }
 }
 
-void verify_symbol_key(const StreamId &symbol_key) {
+void verify_symbol_key(const StreamId& symbol_key) {
     if (ConfigsMap::instance()->get_int("VersionStore.NoStrictSymbolCheck")) {
         ARCTICDB_DEBUG(log::version(),
                        "Key with stream id {} will not be strictly checked because VersionStore.NoStrictSymbolCheck variable is set to 1.",
@@ -97,30 +96,30 @@ void verify_symbol_key(const StreamId &symbol_key) {
 }
 
 // Library names starting with "/" fail if storage is LMDB and library parts starting with "/" will fail in Mongo
-const auto UNSUPPORTED_LMDB_MONGO_PREFIX = '/';
+constexpr auto UNSUPPORTED_LMDB_MONGO_PREFIX = '/';
 
-void verify_library_path(const StringId &library_path, char delim) {
-    verify_name("library name", library_path, true, false, {}, {}, delim);
+void verify_library_path(const StringId& library_path, char delim) {
+    verify_name("library name", library_path, false, {}, {}, delim);
 }
 
-void verify_library_path_part(const folly::StringPiece &library_part, char delim) {
+void verify_library_path_part(const std::string& library_part, char delim) {
     if (library_part.empty()) {
         user_input::raise<ErrorCode::E_INVALID_CHAR_IN_NAME>(
                 "Library name has an empty part. Parts are separated by delimiter: '{}'. This is currently not supported.",
                 delim
         );
     }
-    if (library_part.data()[0] == UNSUPPORTED_LMDB_MONGO_PREFIX) {
+    if (library_part[0] == UNSUPPORTED_LMDB_MONGO_PREFIX) {
         user_input::raise<ErrorCode::E_INVALID_CHAR_IN_NAME>(
-                "Library name part starts with an invalid characted. This is currently not supported. Library Name Part: '{}', Bad prefix: {}",
+                "Library name part starts with an invalid character. This is currently not supported. Library Name Part: '{}', Bad prefix: {}",
                 library_part,
                 UNSUPPORTED_LMDB_MONGO_PREFIX
         );
     }
 }
 
-void verify_library_path_on_write(const StringId &library_path) {
-    verify_name("library name", library_path, true, true, UNSUPPORTED_S3_CHARS);
+void verify_library_path_on_write(const StringId& library_path) {
+    verify_name("library name", library_path, true, UNSUPPORTED_S3_CHARS);
 }
 
 }
