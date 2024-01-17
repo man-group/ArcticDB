@@ -29,7 +29,9 @@ dependencies:
   - cyrus-sasl
   - aws-sdk-cpp
   - prometheus-cpp
-  - libprotobuf < 4
+  - libprotobuf
+  - openssl
+  - libcurl
   - bitmagic
   - spdlog
   - azure-core-cpp
