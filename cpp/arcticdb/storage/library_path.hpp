@@ -12,7 +12,6 @@
 
 #include <folly/small_vector.h>
 #include <folly/Range.h>
-#include <folly/String.h>
 #include <fmt/format.h>
 #include <memory>
 #include <string>
@@ -84,8 +83,9 @@ class LibraryPathImpl {
         folly::StringPiece p{delim_path};
         while (!p.empty()) {
             auto part = p.split_step(delim);
-            verify_library_path_part(part, delim);
-            parts_.push_back(std::string_view{part.data(), part.size()});
+            auto part_string = part.empty() ? "" : part.data();
+            verify_library_path_part(part_string, delim);
+            parts_.push_back(std::string_view{part_string, part.size()});
         }
         hash_ = compute_hash();
     }

@@ -14,20 +14,20 @@
 
 namespace arcticdb {
 
-/// Verifies whether a symbol_key is valid by raising UserInputException exceptions
-/// on invalid symbol names. Should be used only when writing new symbols to allow
-/// for backwards compatibility with old symbols.
+// Verifies whether a symbol_key is valid and raises UserInputException exceptions on invalid symbol names.
+// Should be used only when writing new symbols to allow for backwards compatibility with old symbols.
 void verify_symbol_key(const StreamId &symbol_key);
 
-/// Does strict checks on library names and raises UserInputException if it encounters an error.
-/// Should be checked only when writing new libraries to allow for backwards compatibility
-/// with old invalid libraries.
+// Does strict checks on library names and raises UserInputException if it encounters an error.
+// Should be checked only when writing new libraries to allow for backwards compatibility
+// with old invalid libraries.
 void verify_library_path_on_write(const StringId& library_path);
 
-/// These two do relaxed checks which should always be run on each library operation (including
-/// already existing libraries). These raise friendly error messages instead of segfaulting or
-/// raising an obscure internal error.
+// These two do relaxed checks which should always be run on each library operation (including
+// already existing libraries). These raise friendly error messages instead of segfaulting or
+// raising an obscure internal error.
 void verify_library_path(const StringId& library_path, char delim);
-void verify_library_path_part(const folly::StringPiece& library_part, char delim);
+
+void verify_library_path_part(const std::string& library_part, char delim);
 
 }

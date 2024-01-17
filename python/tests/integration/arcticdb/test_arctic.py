@@ -110,9 +110,7 @@ def test_create_library_with_invalid_name(arctic_client):
     assert set(ac.list_libraries()) == set(valid_names)
 
 
-# TODO: LMDB on Windows raises InternalExceptions because it creates Windows directories with invalid characters.
-# https://stackoverflow.com/questions/1976007/what-characters-are-forbidden-in-windows-and-linux-directory-names
-# We should include these checks for LMDB on Windows and add the lmdb storage
+# TODO: Fix issue #1247, then use "arcitc_client" instead of "arctic_client_no_lmdb"
 @pytest.mark.parametrize("prefix", ["", "prefix"])
 @pytest.mark.parametrize("suffix", ["", "suffix"])
 def test_create_library_with_all_chars(arctic_client_no_lmdb, prefix, suffix):
