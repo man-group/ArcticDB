@@ -136,7 +136,7 @@ def test_symbol_names_with_all_chars(object_version_store, prefix, suffix):
     assert set(object_version_store.list_symbols()) == written_symbols
 
 
-@pytest.mark.parametrize("unhandled_char", [chr(30), chr(127), chr(128)])
+@pytest.mark.parametrize("unhandled_char", [chr(0), chr(30), chr(127), chr(128)])
 def test_unhandled_chars_default(object_version_store, unhandled_char):
     """Test that by default, the problematic chars are raising an exception"""
     sym = f"prefix{unhandled_char}postfix"
@@ -147,7 +147,7 @@ def test_unhandled_chars_default(object_version_store, unhandled_char):
     assert sym not in syms
 
 
-@pytest.mark.parametrize("unhandled_char", [chr(30), chr(127), chr(128)])
+@pytest.mark.parametrize("unhandled_char", [chr(0), chr(30), chr(127), chr(128)])
 def test_unhandled_chars_update_upsert(object_version_store, unhandled_char):
     df = pd.DataFrame(
         {"col_1": ["a", "b"], "col_2": [0.1, 0.2]}, index=[pd.Timestamp("2022-01-01"), pd.Timestamp("2022-01-02")]
@@ -159,7 +159,7 @@ def test_unhandled_chars_update_upsert(object_version_store, unhandled_char):
     assert sym not in syms
 
 
-@pytest.mark.parametrize("unhandled_char", [chr(30), chr(127), chr(128)])
+@pytest.mark.parametrize("unhandled_char", [chr(0), chr(30), chr(127), chr(128)])
 def test_unhandled_chars_append(object_version_store, unhandled_char):
     df = pd.DataFrame(
         {"col_1": ["a", "b"], "col_2": [0.1, 0.2]}, index=[pd.Timestamp("2022-01-01"), pd.Timestamp("2022-01-02")]
