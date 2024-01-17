@@ -198,7 +198,9 @@ def test_append_with_defragmentation(
             segment_details, merged_segment_row_size
         ) != get_no_of_column_merged_segments(segment_details):
             seg_details_before_compaction = lib.read_index(sym)
+            assert lib.get_info(sym)["sorted"] == "ASCENDING"
             lib.defragment_symbol_data(sym, None)
+            assert lib.get_info(sym)["sorted"] == "ASCENDING"
             res = lib.read(sym).data
             res = res.reindex(sorted(list(res.columns)), axis=1)
             res = res.replace("", 0.0)
