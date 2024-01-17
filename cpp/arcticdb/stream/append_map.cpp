@@ -8,7 +8,6 @@
 #include <arcticdb/stream/append_map.hpp>
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
-#include <arcticdb/stream/protobuf_mappings.hpp>
 #include <arcticdb/stream/stream_source.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/entity/protobufs.hpp>
@@ -214,6 +213,10 @@ folly::Future<arcticdb::entity::VariantKey> write_incomplete_frame(
     const std::shared_ptr<InputTensorFrame>& frame,
     std::optional<AtomKey>&& next_key)  {
     using namespace arcticdb::pipelines;
+
+    if (!index_is_not_timeseries_or_is_sorted_ascending(frame)) {
+        sorting::raise<ErrorCode::E_UNSORTED_DATA>("When writing/appending staged data in parallel, input data must be sorted.");
+    }
 
     auto index_range = frame->index_range;
     auto segment = incomplete_segment_from_frame(frame, 0, std::move(next_key), false);

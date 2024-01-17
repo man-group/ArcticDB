@@ -9,7 +9,9 @@ import numpy as np
 import pandas as pd
 import random
 import datetime
+import pytest
 
+from arcticdb.exceptions import SortingException
 from arcticdb.util.test import (
     assert_frame_equal,
     random_strings_of_length,
@@ -240,3 +242,157 @@ def test_datetimes_to_nats(lmdb_version_store):
         result = result.astype(df.dtypes)
 
     assert_frame_equal(result, df)
+
+
+@pytest.mark.parametrize("append", (True, False))
+@pytest.mark.parametrize("arg", (True, False, None))
+@pytest.mark.parametrize("lib_config", (True, False))
+def test_compact_incomplete_prune_previous(lib_config, arg, append, version_store_factory):
+    lib = version_store_factory(prune_previous_version=lib_config)
+    lib.write("sym", pd.DataFrame({"col": [3]}, index=pd.DatetimeIndex([0])))
+    lib.append("sym", pd.DataFrame({"col": [4]}, index=pd.DatetimeIndex([1])), incomplete=True)
+
+    lib.compact_incomplete("sym", append, convert_int_to_float=False, prune_previous_version=arg)
+    assert lib.read_metadata("sym").version == 1
+
+    should_prune = lib_config if arg is None else arg
+    assert lib.has_symbol("sym", 0) != should_prune
+
+
+def test_compact_incomplete_sets_sortedness(lmdb_version_store):
+    lib = lmdb_version_store
+    sym = "test_compact_incomplete_sets_sortedness"
+    df_0 = pd.DataFrame({"col": [1, 2]}, index=[pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")])
+    df_1 = pd.DataFrame({"col": [3, 4]}, index=[pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-04")])
+    lib.write(sym, df_1, parallel=True)
+    lib.write(sym, df_0, parallel=True)
+    lib.compact_incomplete(sym, False, False)
+    assert lib.get_info(sym)["sorted"] == "ASCENDING"
+
+    df_2 = pd.DataFrame({"col": [5, 6]}, index=[pd.Timestamp("2024-01-05"), pd.Timestamp("2024-01-06")])
+    df_3 = pd.DataFrame({"col": [7, 8]}, index=[pd.Timestamp("2024-01-07"), pd.Timestamp("2024-01-08")])
+    lib.append(sym, df_3, incomplete=True)
+    lib.append(sym, df_2, incomplete=True)
+    lib.compact_incomplete(sym, True, False)
+    assert lib.get_info(sym)["sorted"] == "ASCENDING"
+
+
+@pytest.mark.parametrize("append", (True, False))
+def test_parallel_sortedness_checks(lmdb_version_store, append):
+    lib = lmdb_version_store
+    sym = "test_parallel_sortedness_checks"
+    if append:
+        df_0 = pd.DataFrame({"col": [1, 2]}, index=[pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")])
+        lib.write(sym, df_0)
+    df_1 = pd.DataFrame({"col": [3, 4]}, index=[pd.Timestamp("2024-01-04"), pd.Timestamp("2024-01-03")])
+    with pytest.raises(SortingException):
+        if append:
+            lib.append(sym, df_1, incomplete=True)
+        else:
+            lib.write(sym, df_1, parallel=True)
+
+
+@pytest.mark.parametrize("append", (True, False))
+def test_parallel_non_timestamp_index(lmdb_version_store, append):
+    lib = lmdb_version_store
+    sym = "test_parallel_non_timestamp_index"
+    if append:
+        df_0 = pd.DataFrame({"col": [1, 2]}, index=np.arange(0, 2))
+        lib.write(sym, df_0)
+        assert lib.get_info(sym)["sorted"] == "UNKNOWN"
+    df_1 = pd.DataFrame({"col": [3, 4]}, index=np.arange(2, 4))
+    df_2 = pd.DataFrame({"col": [5, 6]}, index=np.arange(4, 6))
+    if append:
+        lib.append(sym, df_2, incomplete=True)
+        lib.append(sym, df_1, incomplete=True)
+    else:
+        lib.write(sym, df_2, parallel=True)
+        lib.write(sym, df_1, parallel=True)
+    lib.compact_incomplete(sym, append, False)
+    assert lib.get_info(sym)["sorted"] == "UNKNOWN"
+
+    read_df = lib.read(sym).data
+    if append:
+        expected_df = pd.concat([df_0, df_1, df_2]) if read_df["col"].iloc[-1] == 6 else pd.concat([df_0, df_2, df_1])
+    else:
+        expected_df = pd.concat([df_1, df_2]) if read_df["col"].iloc[-1] == 6 else pd.concat([df_2, df_1])
+    assert_frame_equal(expected_df, read_df)
+
+
+@pytest.mark.xfail(reason="See https://github.com/man-group/ArcticDB/issues/1248")
+@pytest.mark.parametrize("append", (True, False))
+def test_parallel_overlapping_incomplete_segments(lmdb_version_store, append):
+    lib = lmdb_version_store
+    sym = "test_parallel_overlapping_incomplete_segments"
+    if append:
+        df_0 = pd.DataFrame({"col": [1, 2]}, index=[pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")])
+        lib.write(sym, df_0)
+    df_1 = pd.DataFrame({"col": [3, 4]}, index=[pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-04")])
+    df_2 = pd.DataFrame({"col": [5, 6]}, index=[pd.Timestamp("2024-01-03T12"), pd.Timestamp("2024-01-05")])
+    if append:
+        lib.append(sym, df_2, incomplete=True)
+        lib.append(sym, df_1, incomplete=True)
+    else:
+        lib.write(sym, df_2, parallel=True)
+        lib.write(sym, df_1, parallel=True)
+    with pytest.raises(Exception):
+        lib.compact_incomplete(sym, append, False)
+
+
+@pytest.mark.xfail(reason="See https://github.com/man-group/ArcticDB/issues/1249")
+def test_parallel_append_overlapping_with_existing(lmdb_version_store):
+    lib = lmdb_version_store
+    sym = "test_parallel_append_overlapping_with_existing"
+    df_0 = pd.DataFrame({"col": [1, 2]}, index=[pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")])
+    lib.write(sym, df_0)
+    df_1 = pd.DataFrame({"col": [3, 4]}, index=[pd.Timestamp("2024-01-01T12"), pd.Timestamp("2024-01-03")])
+    lib.append(sym, df_1, incomplete=True)
+    with pytest.raises(Exception):
+        lib.compact_incomplete(sym, True, False)
+
+
+@pytest.mark.xfail(reason="See https://github.com/man-group/ArcticDB/issues/1250")
+@pytest.mark.parametrize("append", (True, False))
+def test_parallel_dynamic_schema_compatible_types(lmdb_version_store_dynamic_schema, append):
+    lib = lmdb_version_store_dynamic_schema
+    sym = "test_parallel_dynamic_schema_compatible_types"
+    if append:
+        df_0 = pd.DataFrame(
+            {
+                "same type": np.arange(1, dtype=np.uint8),
+                "compatible type": np.arange(1, dtype=np.uint8),
+                "column in some incompletes": np.arange(1, dtype=np.uint8),
+                "column in no incompletes": np.arange(1, dtype=np.uint8),
+            }
+            , index=[pd.Timestamp("2024-01-01")]
+        )
+        lib.write(sym, df_0)
+    df_1 = pd.DataFrame(
+        {
+            "same type": np.arange(1, 2, dtype=np.uint8),
+            "compatible type": np.arange(1, 2, dtype=np.uint16),
+            "column in some incompletes": np.arange(1, 2, dtype=np.uint8),
+        }
+        , index=[pd.Timestamp("2024-01-02")]
+    )
+    df_2 = pd.DataFrame(
+        {
+            "same type": np.arange(2, 3, dtype=np.uint8),
+            "compatible type": np.arange(2, 3, dtype=np.uint32),
+        }
+        , index=[pd.Timestamp("2024-01-03")]
+    )
+    if append:
+        lib.append(sym, df_2, incomplete=True)
+        lib.append(sym, df_1, incomplete=True)
+    else:
+        lib.write(sym, df_2, parallel=True)
+        lib.write(sym, df_1, parallel=True)
+    lib.compact_incomplete(sym, append, False)
+
+    read_df = lib.read(sym).data
+    if append:
+        expected_df = pd.concat([df_0, df_1, df_2])
+    else:
+        expected_df = pd.concat([df_1, df_2])
+    assert_frame_equal(expected_df, read_df)
