@@ -1125,7 +1125,7 @@ class TimeFrameNormalizer(Normalizer):
                 index_values=ix_vals,
                 column_names=columns_names,
                 columns_values=columns_vals,
-                sorted=_SortedValue.UNKNOWN,
+                sorted=_SortedValue.ASCENDING if item.issorted else _SortedValue.UNSORTED,
             ),
             metadata=norm_meta,
         )

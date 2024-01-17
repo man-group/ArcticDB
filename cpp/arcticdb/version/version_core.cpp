@@ -102,8 +102,9 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
     frame->set_bucketize_dynamic(options.bucketize_dynamic);
     auto slicing_arg = get_slicing_policy(options, *frame);
     auto partial_key = IndexPartialKey{frame->desc.id(), version_id};
-    sorting::check<ErrorCode::E_UNSORTED_DATA>(!validate_index || frame->desc.get_sorted() == SortedValue::ASCENDING || !std::holds_alternative<stream::TimeseriesIndex>(frame->index),
-                "When calling write with validate_index enabled, input data must be sorted.");
+    if (validate_index && !index_is_not_timeseries_or_is_sorted_ascending(frame)) {
+        sorting::raise<ErrorCode::E_UNSORTED_DATA>("When calling write with validate_index enabled, input data must be sorted");
+    }
     return write_frame(std::move(partial_key), frame, slicing_arg, store, de_dup_map, sparsify_floats);
 }
 
@@ -120,17 +121,14 @@ IndexDescriptor::Proto check_index_match(const arcticdb::stream::Index& index, c
 }
 }
 
-void sorted_data_check_append(InputTensorFrame& frame, index::IndexSegmentReader& index_segment_reader, bool validate_index){
-    bool is_time_series = std::holds_alternative<stream::TimeseriesIndex>(frame.index);
-    bool input_data_is_sorted = frame.desc.get_sorted() == SortedValue::ASCENDING;
+void sorted_data_check_append(const std::shared_ptr<InputTensorFrame>& frame, index::IndexSegmentReader& index_segment_reader){
+    if (!index_is_not_timeseries_or_is_sorted_ascending(frame)) {
+        sorting::raise<ErrorCode::E_UNSORTED_DATA>("When calling append with validate_index enabled, input data must be sorted");
+    }
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
-        input_data_is_sorted || !validate_index || !is_time_series,
-        "validate_index set but input data index is not sorted");
-
-    bool existing_data_is_sorted = index_segment_reader.mutable_tsd().mutable_proto().stream_descriptor().sorted() == arcticdb::proto::descriptors::SortedValue::ASCENDING;
-    sorting::check<ErrorCode::E_UNSORTED_DATA>(
-        existing_data_is_sorted || !validate_index || !is_time_series,
-        "validate_index set but existing data index is not sorted");
+        !std::holds_alternative<stream::TimeseriesIndex>(frame->index) ||
+        index_segment_reader.mutable_tsd().mutable_proto().stream_descriptor().sorted() == arcticdb::proto::descriptors::SortedValue::ASCENDING,
+        "When calling append with validate_index enabled, the existing data must be sorted");
 }
 
 folly::Future<AtomKey> async_append_impl(
@@ -147,7 +145,9 @@ folly::Future<AtomKey> async_append_impl(
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
     auto row_offset = index_segment_reader.tsd().proto().total_rows();
     util::check_rte(!index_segment_reader.is_pickled(), "Cannot append to pickled data");
-    sorted_data_check_append(*frame, index_segment_reader, validate_index);
+    if (validate_index) {
+        sorted_data_check_append(frame, index_segment_reader);
+    }
     frame->set_offset(static_cast<ssize_t>(row_offset));
     fix_descriptor_mismatch_or_throw(APPEND, options.dynamic_schema, index_segment_reader, *frame);
 
@@ -1163,8 +1163,11 @@ VersionedItem sort_merge_impl(
     pipeline_context->version_id_ = update_info.next_version_id_;
     ReadQuery read_query;
 
-    if(append && update_info.previous_index_key_.has_value())
+    std::optional<SortedValue> previous_sorted_value;
+    if(append && update_info.previous_index_key_.has_value()) {
         read_indexed_keys_to_pipeline(store, pipeline_context, *(update_info.previous_index_key_), read_query, ReadOptions{});
+        previous_sorted_value.emplace(pipeline_context->desc_->get_sorted());
+    }
 
     auto num_versioned_rows = pipeline_context->total_rows_;
 
@@ -1215,6 +1218,7 @@ VersionedItem sort_merge_impl(
                 sk->unset_segment();
             }
             aggregator.commit();
+            pipeline_context->desc_->set_sorted(deduce_sorted(previous_sorted_value.value_or(SortedValue::ASCENDING), SortedValue::ASCENDING));
         },
         [&](const auto &) {
             util::raise_rte("Sort merge only supports datetime indexed data. You data does not have a datetime index.");
@@ -1253,8 +1257,11 @@ VersionedItem compact_incomplete_impl(
     read_options.set_dynamic_schema(true);
 
     std::optional<SegmentInMemory> last_indexed;
-    if(append && update_info.previous_index_key_.has_value())
+    std::optional<SortedValue> previous_sorted_value;
+    if(append && update_info.previous_index_key_.has_value()) {
         read_indexed_keys_to_pipeline(store, pipeline_context, *(update_info.previous_index_key_), read_query, read_options);
+        previous_sorted_value.emplace(pipeline_context->desc_->get_sorted());
+    }
 
     auto prev_size = pipeline_context->slice_and_keys_.size();
     read_incompletes_to_pipeline(store, pipeline_context, ReadQuery{}, ReadOptions{}, convert_int_to_float, via_iteration, sparsify);
@@ -1273,12 +1280,12 @@ VersionedItem compact_incomplete_impl(
     std::vector<FrameSlice> slices;
     bool dynamic_schema = write_options.dynamic_schema;
     auto index = index_type_from_descriptor(first_seg.descriptor());
-    auto policies = std::make_tuple(index, 
+    auto policies = std::make_tuple(index,
                                     dynamic_schema ? VariantSchema{DynamicSchema::default_schema(index)} : VariantSchema{FixedSchema::default_schema(index)}, 
                                     sparsify ? VariantColumnPolicy{SparseColumnPolicy{}} : VariantColumnPolicy{DenseColumnPolicy{}}
                                     );
     util::variant_match(std::move(policies), [
-        &fut_vec, &slices, pipeline_context=pipeline_context, &store, convert_int_to_float] (auto &&idx, auto &&schema, auto &&column_policy) {
+        &fut_vec, &slices, pipeline_context=pipeline_context, &store, convert_int_to_float, &previous_sorted_value] (auto &&idx, auto &&schema, auto &&column_policy) {
         using IndexType = std::remove_reference_t<decltype(idx)>;
         using SchemaType = std::remove_reference_t<decltype(schema)>;
         using ColumnPolicyType = std::remove_reference_t<decltype(column_policy)>;
@@ -1291,6 +1298,9 @@ VersionedItem compact_incomplete_impl(
                 store,
                 convert_int_to_float,
                 std::nullopt);
+        if constexpr(std::is_same_v<IndexType, TimeseriesIndex>) {
+            pipeline_context->desc_->set_sorted(deduce_sorted(previous_sorted_value.value_or(SortedValue::ASCENDING), SortedValue::ASCENDING));
+        }
     });
 
     auto keys = folly::collect(fut_vec).get();
@@ -1300,8 +1310,7 @@ VersionedItem compact_incomplete_impl(
         slices,
         keys,
         pipeline_context->incompletes_after(),
-        user_meta
-        );
+        user_meta);
 
 
     store->remove_keys(delete_keys).get();
