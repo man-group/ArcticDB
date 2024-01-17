@@ -121,6 +121,10 @@ class TimeFrame(
     def tsloc(self):
         return TimeFrame._TsLocProxy(self)
 
+    @property
+    def issorted(self):
+        return np.all(self.times[:-1] <= self.times[1:])
+
     def __eq__(self, other):
         if other is None:
             return False
