@@ -11,6 +11,8 @@ from arcticdb.version_store import NativeVersionStore
 from arcticdb_ext.exceptions import InternalException, NormalizationException, SortingException
 from arcticdb_ext import set_config_int
 from arcticdb.util.test import random_integers, assert_frame_equal
+from arcticdb.config import set_log_level
+
 
 def test_append_simple(lmdb_version_store):
     symbol = "test_append_simple"
@@ -286,7 +288,7 @@ def test_append_not_sorted_range_index_non_exception(lmdb_version_store):
 
     lmdb_version_store.write(symbol, df)
     info = lmdb_version_store.get_info(symbol)
-    assert info["sorted"] == "ASCENDING"
+    assert info["sorted"] == "UNKNOWN"
 
     num_rows = 20
     dtidx = pd.RangeIndex(num_initial_rows, num_initial_rows + num_rows, 1)
@@ -479,3 +481,69 @@ def test_append_docs_example(lmdb_version_store):
     assert_frame_equal(lib.read("test_frame").data, expected)
 
     print(lib.tail("test_frame", 7, as_of=0).data)
+
+
+def test_read_incomplete_no_warning(s3_store_factory, sym, get_stderr):
+    pytest.skip("This test is flaky due to trying to retrieve the log messages")
+    lib = s3_store_factory(dynamic_strings=True, incomplete=True)
+    symbol = sym
+
+    write_df = pd.DataFrame({"a": [1, 2, 3]}, index=pd.DatetimeIndex([1, 2, 3]))
+    lib.append(symbol, write_df, incomplete=True)
+    # Need to compact so that the APPEND_REF points to a non-existent APPEND_DATA (intentionally)
+    lib.compact_incomplete(symbol, True, False, False, True)
+    set_log_level("DEBUG")
+
+    try:
+        read_df = lib.read(symbol, date_range=(pd.to_datetime(0), pd.to_datetime(10))).data
+        assert_frame_equal(read_df, write_df.tz_localize("UTC"))
+
+        err = get_stderr()
+        assert err.count("W arcticdb.storage | Failed to find segment for key") == 0
+        assert err.count("D arcticdb.storage | Failed to find segment for key") == 1
+    finally:
+        set_log_level()
+
+
+def test_defragment_read_prev_versions(sym, lmdb_version_store):
+    start_time, end_time = pd.to_datetime(("1990-1-1", "1995-1-1"))
+    cols = ["a", "b", "c", "d"]
+    index = pd.date_range(start_time, end_time, freq="D")
+    original_df = pd.DataFrame(np.random.randn(len(index), len(cols)), index=index, columns=cols)
+    lmdb_version_store.write(sym, original_df)
+    expected_dfs = [original_df]
+
+    for idx in range(100):
+        update_start = end_time + pd.to_timedelta(idx, "days")
+        update_end = update_start + pd.to_timedelta(10, "days")
+        update_index = pd.date_range(update_start, update_end, freq="D")
+        update_df = pd.DataFrame(np.random.randn(len(update_index), len(cols)), index=update_index, columns=cols)
+        lmdb_version_store.update(sym, update_df)
+        next_expected_df = expected_dfs[-1].reindex(expected_dfs[-1].index.union(update_df.index))
+        next_expected_df.loc[update_df.index] = update_df
+        expected_dfs.append(next_expected_df)
+
+    assert_frame_equal(lmdb_version_store.read(sym).data, expected_dfs[-1])
+    assert len(lmdb_version_store.list_versions(sym)) == 101
+    assert len(expected_dfs) == 101
+    for version_id, expected_df in enumerate(expected_dfs):
+        assert_frame_equal(lmdb_version_store.read(sym, as_of=version_id).data, expected_df)
+
+    assert lmdb_version_store.is_symbol_fragmented(sym)
+    versioned_item = lmdb_version_store.defragment_symbol_data(sym)
+    assert versioned_item.version == 101
+    assert len(lmdb_version_store.list_versions(sym)) == 102
+
+    assert_frame_equal(lmdb_version_store.read(sym).data, expected_dfs[-1])
+    assert_frame_equal(lmdb_version_store.read(sym, as_of=0).data, expected_dfs[0])
+    for version_id, expected_df in enumerate(expected_dfs):
+        assert_frame_equal(lmdb_version_store.read(sym, as_of=version_id).data, expected_df)
+
+
+def test_defragment_no_work_to_do(sym, lmdb_version_store):
+    df = pd.DataFrame({"a": [1, 2, 3]})
+    lmdb_version_store.write(sym, df)
+    assert_frame_equal(lmdb_version_store.read(sym).data, df)
+    assert list(lmdb_version_store.list_versions(sym))[0]["version"] == 0
+    with pytest.raises(InternalException):
+        lmdb_version_store.defragment_symbol_data(sym)

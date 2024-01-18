@@ -59,10 +59,12 @@ class LmdbStorageFixture(StorageFixture):
         return cfg
 
     def create_version_store_factory(self, default_lib_name: str, **defaults):
+        default_lmdb_config = MappingProxyType(defaults.pop("lmdb_config", _DEFAULT_CONFIG))
+
         def create_version_store(
             col_per_group: Optional[int] = None,  # Legacy option names
             row_per_segment: Optional[int] = None,
-            lmdb_config: Dict[str, Any] = {},  # Mainly to allow setting map_size
+            lmdb_config: Dict[str, Any] = default_lmdb_config,  # Mainly to allow setting map_size
             **kwargs,
         ) -> NativeVersionStore:
             if col_per_group is not None and "column_group_size" not in kwargs:
@@ -72,7 +74,8 @@ class LmdbStorageFixture(StorageFixture):
             cfg_factory = self.create_test_cfg
             if lmdb_config:
                 cfg_factory = functools.partial(cfg_factory, lmdb_config=lmdb_config)
-            return self._factory_impl(self.libs_from_factory, cfg_factory, default_lib_name, **defaults, **kwargs)
+            combined_args = {**defaults, **kwargs} if defaults else kwargs
+            return self._factory_impl(self.libs_from_factory, cfg_factory, default_lib_name, **combined_args)
 
         return create_version_store
 

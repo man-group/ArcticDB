@@ -34,6 +34,8 @@
 #include <folly/portability/PThread.h>
 #include <mongocxx/exception/logic_error.hpp>
 
+#include <logger.pb.h>
+
 namespace py = pybind11;
 
 enum class LoggerId {
@@ -45,20 +47,16 @@ enum class LoggerId {
     MEMORY,
     TIMINGS,
     LOCK,
-    SCHEDULE
+    SCHEDULE,
+    SYMBOL,
+    SNAPSHOT
 };
-
-void initialize_folly() {
-    //folly::SingletonVault::singleton()->registrationComplete();
-    auto programName ="__arcticdb_logger__";
-    google::InitGoogleLogging(programName);
-}
 
 void register_log(py::module && log) {
     log.def("configure", [](const py::object & py_log_conf, bool force=false){
         arcticdb::proto::logger::LoggersConfig config;
         arcticdb::python_util::pb_from_python(py_log_conf, config);
-        return arcticdb::log::Loggers::instance()->configure(config, force);
+        return arcticdb::log::Loggers::instance().configure(config, force);
     }, py::arg("py_log_conf"), py::arg("force")=false);
 
      py::enum_<spdlog::level::level_enum>(log, "LogLevel")
@@ -78,7 +76,8 @@ void register_log(py::module && log) {
              .value("TIMINGS", LoggerId::TIMINGS)
              .value("LOCK", LoggerId::LOCK)
              .value("SCHEDULE", LoggerId::SCHEDULE)
-             .value("SYMBOL", LoggerId::SCHEDULE)
+             .value("SYMBOL", LoggerId::SYMBOL)
+             .value("SNAPSHOT", LoggerId::SNAPSHOT)
              .export_values()
     ;
     auto choose_logger = [&](LoggerId log_id) -> decltype(arcticdb::log::storage()) /* logger ref */{
@@ -101,6 +100,10 @@ void register_log(py::module && log) {
                 return arcticdb::log::lock();
             case LoggerId::SCHEDULE:
                 return arcticdb::log::schedule();
+            case LoggerId::SYMBOL:
+                return arcticdb::log::symbol();
+            case LoggerId::SNAPSHOT:
+                return arcticdb::log::snapshot();
             default:
                 arcticdb::util::raise_rte("Unsupported logger id");
         }
@@ -133,7 +136,7 @@ void register_log(py::module && log) {
     });
 
     log.def("flush_all", [](){
-        arcticdb::log::Loggers::instance()->flush_all();
+        arcticdb::log::Loggers::instance().flush_all();
     });
 }
 
@@ -282,7 +285,14 @@ void register_metrics(py::module && m){
 /// Register handling of non-trivial types. For more information @see arcticdb::TypeHandlerRegistry and
 /// @see arcticdb::ITypeHandler
 void register_type_handlers() {
-    arcticdb::TypeHandlerRegistry::instance()->register_handler(arcticdb::DataType::EMPTYVAL, arcticdb::EmptyHandler());
+    using namespace arcticdb;
+    TypeHandlerRegistry::instance()->register_handler(TypeDescriptor{DataType::EMPTYVAL, Dimension::Dim0}, arcticdb::EmptyHandler());
+    constexpr std::array<DataType, 5> allowed_array_types = {DataType::INT64, DataType::FLOAT64, DataType::EMPTYVAL, DataType::FLOAT32, DataType::INT32};
+    for(const DataType& data_type : allowed_array_types) {
+        TypeHandlerRegistry::instance()->register_handler(TypeDescriptor{data_type, Dimension::Dim1}, arcticdb::ArrayHandler());
+    }
+    TypeHandlerRegistry::instance()->register_handler(TypeDescriptor{DataType::PYBOOL64, Dimension::Dim0}, arcticdb::BoolHandler());
+    TypeHandlerRegistry::instance()->register_handler(TypeDescriptor{DataType::PYBOOL8, Dimension::Dim0}, arcticdb::BoolHandler());
 }
 
 PYBIND11_MODULE(arcticdb_ext, m) {
@@ -291,7 +301,8 @@ PYBIND11_MODULE(arcticdb_ext, m) {
 
         Top level package of ArcticDB extension plugin.
     )pbdoc";
-    initialize_folly();
+    auto programName ="__arcticdb_logger__";
+    google::InitGoogleLogging(programName);
 #ifndef WIN32
     // No fork() in Windows, so no need to register the handler
     pthread_atfork(nullptr, nullptr, &SingleThreadMutexHolder::reset_mutex);

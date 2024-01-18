@@ -221,6 +221,10 @@ struct StreamDescriptor {
         fields_->erase_field(field);
     }
 
+    FieldCollection& mutable_fields() {
+        return *fields_;
+    }
+
     [[nodiscard]] const Field& fields(size_t pos) const {
         return fields_->at(pos);
     }

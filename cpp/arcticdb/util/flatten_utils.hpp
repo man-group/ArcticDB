@@ -10,6 +10,10 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/preconditions.hpp>
 
+#include <pybind11/numpy.h>
+
+namespace py = pybind11;
+
 namespace arcticdb::util {
 
 using namespace arcticdb::entity;
@@ -70,8 +74,9 @@ public:
             if (dim == 1) {
                 *dest = *(advance_func_(src, sd, i));
                 dest++;
-            } else
+            } else {
                 flatten(dest, advance_func_(src, sd, i), dim - 1);
+            }
         }
     }
 };
@@ -89,8 +94,7 @@ class FlattenHelper {
         if(has_funky_strides(array_)) {
             FlattenHelperImpl<T, Tensor, stride_advance_conservative<T>> flh{array_};
             flh.flatten(dest, src, array_.ndim());
-        }
-        else {
+        } else {
             FlattenHelperImpl<T, Tensor, stride_advance_optimistic<T>> flh{array_};
             flh.flatten(dest, src, array_.ndim());
         }

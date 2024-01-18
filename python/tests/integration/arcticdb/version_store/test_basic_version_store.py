@@ -662,16 +662,46 @@ def test_get_info_version_no_columns_nat(basic_store):
     df["b"] = df["b"].astype("int64")
     basic_store.write(sym, df, dynamic_strings=True, coerce_columns={"a": float, "b": int, "c": str})
     info = basic_store.get_info(sym)
-    assert np.isnat(info["date_range"][0]) == True
-    assert np.isnat(info["date_range"][1]) == True
+    assert np.isnat(info["date_range"][0])
+    assert np.isnat(info["date_range"][1])
 
 
 def test_get_info_version_empty_nat(basic_store):
     sym = "test_get_info_version_empty_nat"
     basic_store.write(sym, pd.DataFrame())
     info = basic_store.get_info(sym)
-    assert np.isnat(info["date_range"][0]) == True
-    assert np.isnat(info["date_range"][1]) == True
+    assert np.isnat(info["date_range"][0])
+    assert np.isnat(info["date_range"][1])
+
+
+def test_get_info_non_timestamp_index_date_range(basic_store):
+    lib = basic_store
+    sym = "test_get_info_non_timestamp_index_date_range"
+    # Row-range indexed
+    lib.write(sym, pd.DataFrame({"col": [1, 2, 3]}))
+    info = lib.get_info(sym)
+    assert np.isnat(info["date_range"][0])
+    assert np.isnat(info["date_range"][1])
+    # int64 indexed
+    lib.write(sym, pd.DataFrame({"col": [1, 2, 3]}), index=pd.Index([4, 5, 6], dtype=np.int64))
+    info = lib.get_info(sym)
+    assert np.isnat(info["date_range"][0])
+    assert np.isnat(info["date_range"][1])
+
+
+def test_get_info_unsorted_timestamp_index_date_range(basic_store):
+    lib = basic_store
+    sym = "test_get_info_unsorted_timestamp_index_date_range"
+    lib.write(
+        sym,
+        pd.DataFrame(
+            {"col": [1, 2, 3]},
+            index=[pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-02")]
+        )
+    )
+    info = lib.get_info(sym)
+    assert np.isnat(info["date_range"][0])
+    assert np.isnat(info["date_range"][1])
 
 
 def test_update_times(basic_store):
@@ -971,7 +1001,6 @@ def test_read_ts(basic_store):
     with distinct_timestamps(basic_store):
         basic_store.write("a", 3)  # v2
     basic_store.write("a", 4)  # v3
-    basic_store.snapshot("snap3")
 
     versions = basic_store.list_versions()
     assert len(versions) == 4
@@ -981,15 +1010,15 @@ def test_read_ts(basic_store):
     assert vitem.version == 1
     assert vitem.data == 2
 
-    ts_for_v2 = sorted_versions_for_a[0]["date"]
-    vitem = basic_store.read("a", as_of=ts_for_v2)
+    ts_for_v0 = sorted_versions_for_a[0]["date"]
+    vitem = basic_store.read("a", as_of=ts_for_v0)
     assert vitem.version == 0
     assert vitem.data == 1
 
     with pytest.raises(NoDataFoundException):
         basic_store.read("a", as_of=pd.Timestamp(0))
 
-    brexit_almost_over = pd.Timestamp(np.iinfo(np.int64).max)  # Timestamp("2262-04-11 23:47:16.854775807")
+    brexit_almost_over = pd.Timestamp.max - pd.Timedelta(1, unit="day")  # Timestamp("2262-04-10 23:47:16.854775807")
     vitem = basic_store.read("a", as_of=brexit_almost_over)
     assert vitem.version == 3
     assert vitem.data == 4
@@ -1610,7 +1639,6 @@ def test_coercion_to_str_with_dynamic_strings(basic_store):
         sample_mock.assert_not_called()
 
 
-@pytest.mark.xfail(reason="Needs to be fixed by issue #496")
 def test_find_version(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     sym = "test_find_version"

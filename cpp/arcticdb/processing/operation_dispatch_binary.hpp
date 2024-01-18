@@ -85,7 +85,7 @@ VariantData binary_membership(const ColumnWithStrings& column_with_strings, Valu
                     util::BitSet::bulk_insert_iterator inserter(*output);
                     auto pos = 0u;
                     while (auto block = column_data.next<TypeDescriptorTag<ColumnTagType, DimensionTag<entity::Dimension::Dim0>>>()) {
-                        auto ptr = reinterpret_cast<const StringPool::offset_t*>(block->data());
+                        auto ptr = reinterpret_cast<const entity::position_t*>(block->data());
                         const auto row_count = block->row_count();
                         for (auto i = 0u; i < row_count; ++i, ++pos) {
                             auto offset = *ptr++;
@@ -196,7 +196,7 @@ VariantData binary_comparator(const Value& val, const ColumnWithStrings& column_
                 util::BitSet::bulk_insert_iterator inserter(*output);
                 auto pos = 0u;
                 while (auto block = column_data.next<TypeDescriptorTag<ColumnTagType, DimensionTag<entity::Dimension::Dim0>>>()) {
-                    auto ptr = reinterpret_cast<const StringPool::offset_t*>(block->data());
+                    auto ptr = reinterpret_cast<const entity::position_t*>(block->data());
                     const auto row_count = block->row_count();
                     for (auto i = 0u; i < row_count; ++i, ++pos) {
                         auto offset = *ptr++;
@@ -317,25 +317,25 @@ VariantData binary_comparator(const ColumnWithStrings& column_with_strings, cons
             using DataTypeTag =  typename decltype(value_desc_tag)::DataTypeTag;
             if constexpr(is_sequence_type(ColumnTagType::data_type) && is_sequence_type(DataTypeTag::data_type)) {
                 std::optional<std::string> utf32_string;
-                std::optional<std::string_view> value_string;
+                std::string value_string;
                 if constexpr(is_fixed_string_type(ColumnTagType::data_type)) {
                     auto width = column_with_strings.get_fixed_width_string_size();
                     if (width.has_value()) {
                         utf32_string = ascii_to_padded_utf32(std::string_view(*val.str_data(), val.len()), *width);
                         if (utf32_string.has_value()) {
-                            value_string = std::string_view(*utf32_string);
+                            value_string = *utf32_string;
                         }
                     }
                 } else {
-                    value_string = std::string_view(*val.str_data(), val.len());
+                    value_string = std::string(*val.str_data(), val.len());
                 }
-                auto value_offset = column_with_strings.string_pool_->get_offset_for_column(*value_string, *column_with_strings.column_);
+                auto value_offset = column_with_strings.string_pool_->get_offset_for_column(value_string, *column_with_strings.column_);
                 auto column_data = column_with_strings.column_->data();
 
                 util::BitSet::bulk_insert_iterator inserter(*output);
                 auto pos = 0u;
                 while (auto block = column_data.next<TypeDescriptorTag<ColumnTagType, DimensionTag<entity::Dimension::Dim0>>>()) {
-                    auto ptr = reinterpret_cast<const StringPool::offset_t*>(block->data());
+                    auto ptr = reinterpret_cast<const entity::position_t*>(block->data());
                     const auto row_count = block->row_count();
                     for (auto i = 0u; i < row_count; ++i, ++pos) {
                         auto offset = *ptr++;

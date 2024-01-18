@@ -20,7 +20,6 @@
 #include <filesystem>
 #include <chrono>
 #include <thread>
-#include <folly/futures/Barrier.h>
 
 struct VersionStoreTest : arcticdb::TestStore {
 protected:
@@ -30,8 +29,8 @@ protected:
 };
 
 auto write_version_frame(
-    const StreamId& stream_id,
-    VersionId v_id,
+    const arcticdb::StreamId& stream_id,
+    arcticdb::VersionId v_id,
     arcticdb::version_store::PythonVersionStore& pvs,
     size_t rows = 1000000,
     bool update_version_map = false,
@@ -48,7 +47,7 @@ auto write_version_frame(
     auto wrapper = get_test_simple_frame(stream_id, rows, start_val);
     auto& frame = wrapper.frame_;
     auto store = pvs._test_get_store();
-    auto var_key = write_frame(std::move(pk), std::move(frame), slicing, store, de_dup_map).get();
+    auto var_key = write_frame(std::move(pk), frame, slicing, store, de_dup_map).get();
     auto key = to_atom(var_key); // Moves
     if (update_version_map) {
         pvs._test_get_version_map()->write_version(store, key);
@@ -304,7 +303,7 @@ TEST_F(VersionStoreTest, StressBatchWrite) {
 
     std::vector<StreamId> symbols;
     std::vector<TestTensorFrame> wrappers;
-    std::vector<InputTensorFrame> frames;
+    std::vector<std::shared_ptr<pipelines::InputTensorFrame>> frames;
     std::vector<VersionId> version_ids;
     std::vector<std::shared_ptr<DeDupMap>> dedup_maps;
 

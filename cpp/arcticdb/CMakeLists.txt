@@ -8,10 +8,6 @@ find_package(GTest CONFIG REQUIRED)
 include(CTest)
 include(GoogleTest)
 
-if(${TEST})
-find_package(rapidcheck REQUIRED)
-endif()
-
 include(GenerateExportHeader)
 
 # System and third-party libraries with built-in find_package Config
@@ -37,9 +33,6 @@ if(NOT WIN32 AND ${SSL_LINK})
 endif()
 
 find_package(Protobuf REQUIRED)
-set(Protobuf_lite_LIBRARY protobuf::libprotobuf-lite)
-set(Protobuf_LIBRARY protobuf::libprotobuf)
-
 find_package(mongocxx REQUIRED)
 find_package(bsoncxx REQUIRED)
 find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypasses our cpp/CMake/FindZstd.cmake module
@@ -54,7 +47,7 @@ endif()
 if(NOT ${ARCTICDB_USING_CONDA})
     find_package(unofficial-pcre REQUIRED)
     find_package(Libevent CONFIG REQUIRED)
-    set(ARCTICDB_MONGO_LIBS mongo::mongocxx_static mongo::bsoncxx_static)
+    set(ARCTICDB_MONGO_LIBS $<IF:$<TARGET_EXISTS:mongo::mongocxx_static>,mongo::mongocxx_static,mongo::mongocxx_shared>)
     set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
 
     if(NOT DEFINED ARCTICDB_INCLUDE_ROCKSDB)
@@ -178,11 +171,14 @@ set(arcticdb_srcs
         async/task_scheduler.hpp
         async/tasks.hpp
         codec/codec.hpp
+        codec/encode_common.hpp
         codec/codec-inl.hpp
         codec/core.hpp
         codec/lz4.hpp
+        codec/magic_words.hpp
         codec/passthrough.hpp
         codec/slice_data_sink.hpp
+        codec/typed_block_encoder_impl.hpp
         codec/zstd.hpp
         column_store/block.hpp
         column_store/chunked_buffer.hpp
@@ -323,7 +319,6 @@ set(arcticdb_srcs
         util/ref_counted_map.hpp
         util/ref_counted_map.hpp
         util/regex_filter.hpp
-        util/shared_future.hpp
         util/simple_string_hash.hpp
         util/slab_allocator.hpp
         util/sparse_utils.hpp
@@ -356,14 +351,18 @@ set(arcticdb_srcs
         async/task_scheduler.cpp
         async/tasks.cpp
         codec/codec.cpp
+        codec/encode_v1.cpp
+        codec/encode_v2.cpp
         codec/encoding_sizes.cpp
         codec/segment.cpp
         codec/variant_encoded_field_collection.cpp
         column_store/chunked_buffer.cpp
         column_store/column.cpp
+        column_store/column_data.cpp
         column_store/memory_segment_impl.cpp
         column_store/memory_segment_impl.cpp
         column_store/string_pool.cpp
+        entity/data_error.cpp
         entity/field_collection.cpp
         entity/key.cpp
         entity/merge_descriptors.cpp
@@ -434,6 +433,7 @@ set(arcticdb_srcs
         version/version_store_api.cpp
         version/version_utils.cpp
         version/symbol_list.cpp
+        version/version_map_batch_methods.cpp
         )
 
 if(${ARCTICDB_INCLUDE_ROCKSDB})
@@ -453,12 +453,14 @@ endif()
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
 if (WIN32)
-    # C++17 support for MSVC
-    # lmdbxx requires __cplusplus to be set for C++11 or later.
-    # See: https://github.com/drycpp/lmdbxx/blob/0b43ca87d8cfabba392dfe884eb1edb83874de02/lmdb%2B%2B.h#L17-L21
-    # /Zc:__cplusplus is needed to get the correct __cplusplus macro value
-    # See: https://developercommunity.visualstudio.com/t/msvc-incorrectly-defines-cplusplus/139261#T-N223868
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++17 /Zc:__cplusplus")
+    target_compile_options(
+        arcticdb_core_object
+        PRIVATE
+            /W4
+            /external:I${CMAKE_SOURCE_DIR}/vcpkg
+            /external:I${CMAKE_SOURCE_DIR}/third_party
+            /Zc:__cplusplus #needed to get the correct __cplusplus macro value
+    )
 else()
     if (STATIC_LINK_STD_LIB)
         message("Statically linking standard libraries")
@@ -497,8 +499,7 @@ set (arcticdb_core_libraries
         prometheus-cpp::pull
         ${standard_libraries}
         fmt::fmt
-        ${Protobuf_lite_LIBRARY}
-        ${Protobuf_LIBRARY}
+        protobuf::libprotobuf
         ${LZ4_LIBRARY}
         ${Zstd_LIBRARY}
         ${ARCTICDB_MONGO_LIBS}
@@ -507,6 +508,14 @@ set (arcticdb_core_libraries
         Azure::azure-identity
         Azure::azure-storage-blobs
 )
+
+if(${ARCTICDB_PYTHON_EXPLICIT_LINK})
+    # Even though python is transitive dependency MSVS builds fail if we don't link against python explicitly
+    # TODO: Figure out why
+    list(APPEND arcticdb_core_libraries
+        Python::Python
+    )
+endif()
 
 # Dependencies expose different names of their libraries depending
 # on their origin (i.e. vendored source or packages on conda-forge).
@@ -705,6 +714,9 @@ if(${TEST})
     unset(Python_USE_STATIC_LIBS)
     find_package(Python 3 COMPONENTS Interpreter Development REQUIRED)
     find_package(Arrow REQUIRED)
+    find_package(rapidcheck REQUIRED)
+    find_package(benchmark REQUIRED)
+
     python_utils_dump_vars_if_enabled("Python for test compilation")
 
     set(unit_test_srcs
@@ -783,17 +795,32 @@ if(${TEST})
                 COMPONENT Tests)
 
     if (WIN32)
-        target_link_libraries(test_unit_arcticdb
-                PUBLIC
-                arcticdb_core_static
+        target_link_libraries(
+            test_unit_arcticdb
+            PRIVATE
+                ${AWSSDK_LINK_LIBRARIES}
                 GTest::gtest
                 GTest::gmock
-                PRIVATE
-                ${AWSSDK_LINK_LIBRARIES}
-                )
+                arcticdb_core_static
+        )
 
-        # Fix gtest/folly unistd conflict until one of them fixes it. There's another copy for rapidtest
+        # Fix gtest/folly unistd conflict until one of them fixes it. There's another copy for rapidcheck
         target_compile_options(test_unit_arcticdb PRIVATE /FI "${CMAKE_CURRENT_SOURCE_DIR}/util/test/gtest.hpp")
+
+        # gtest_discover_tests runs the exe in order to dynamically list all tests. In case the executable depends on a DLL
+        # which is not in PATH gtest_discover_tests will return a cryptic error. The tests depend on a few DLLs one of which
+        # is python<version>.dll. On Windows there is no RPATH and in addition to that gtest_discover_tests cannot take/modify
+        # environment variables (known issue: https://gitlab.kitware.com/cmake/cmake/-/issues/21453). Thus we are left with two options:
+        # 1. Instruct each developer to modify their path variable (gets annoying when different venvs are used)
+        # 2. Copy all required DLLs to the folder with the exe
+        # Option 2 is used. Although it defeats the purpose of a DLL it works without extra configuration steps
+        # The same approach is used for rapidcheck tests
+        add_custom_command(
+	        TARGET test_unit_arcticdb POST_BUILD
+	        COMMAND ${CMAKE_COMMAND} -E echo "Copy required DLLs: $<TARGET_RUNTIME_DLLS:test_unit_arcticdb>"
+	        COMMAND ${CMAKE_COMMAND} -E $<$<NOT:$<BOOL:$<TARGET_RUNTIME_DLLS:test_unit_arcticdb>>>:true> copy_if_different $<TARGET_RUNTIME_DLLS:test_unit_arcticdb> $<TARGET_FILE_DIR:test_unit_arcticdb>
+	        COMMAND_EXPAND_LISTS
+        )
     else()
         set(COMMON_PUBLIC_TEST_LIBRARIES
                 arcticdb_core_static
@@ -821,6 +848,7 @@ if(${TEST})
             ${COMMON_PUBLIC_TEST_LIBRARIES}
             PRIVATE
             ${AWSSDK_LINK_LIBRARIES}
+            arcticdb_core_static
             )
 
         target_include_directories(test_unit_arcticdb PRIVATE
@@ -831,6 +859,23 @@ if(${TEST})
     endif()
 
     gtest_discover_tests(test_unit_arcticdb PROPERTIES DISCOVERY_TIMEOUT 60)
+
+    set(benchmark_srcs
+            stream/test/stream_test_common.cpp
+            column_store/test/benchmark_memory_segment.cpp
+            processing/test/benchmark_clause.cpp)
+
+    add_executable(benchmarks ${benchmark_srcs})
+
+    target_link_libraries(benchmarks
+            PUBLIC
+            benchmark::benchmark
+            benchmark::benchmark_main
+            ${COMMON_PUBLIC_TEST_LIBRARIES}
+            PRIVATE
+            ${AWSSDK_LINK_LIBRARIES}
+            arcticdb_core_static
+            )
 
     set(rapidcheck_srcs
             column_store/test/rapidcheck_column_store.cpp
@@ -852,31 +897,49 @@ if(${TEST})
                 COMPONENT Tests)
 
     if(ARCTICDB_USING_CONDA)
-        set(RAPIDCHECK_PRIVATE_LIBRARIES ${AWSSDK_LINK_LIBRARIES} Arrow::arrow_shared)
+        set(RAPIDCHECK_PRIVATE_LIBRARIES
+            ${AWSSDK_LINK_LIBRARIES}
+            Arrow::arrow_shared)
     else()
-        set(RAPIDCHECK_PRIVATE_LIBRARIES ${AWSSDK_LINK_LIBRARIES} arrow_static)
+        set(RAPIDCHECK_PRIVATE_LIBRARIES
+            ${AWSSDK_LINK_LIBRARIES}
+            "$<IF:$<BOOL:${ARROW_BUILD_STATIC}>,Arrow::arrow_static,Arrow::arrow_shared>")
     endif()
 
     if(WIN32)
-        target_link_libraries(arcticdb_rapidcheck_tests PUBLIC
+        target_link_libraries(
+            arcticdb_rapidcheck_tests
+            PRIVATE
                 arcticdb_core_static
                 GTest::gtest
                 GTest::gmock
                 rapidcheck
                 rapidcheck_gtest
-                PRIVATE
                 ${RAPIDCHECK_PRIVATE_LIBRARIES}
-                )
-
+        )
+        # gtest_discover_tests runs the exe in order to dynamically list all tests. In case the executable depends on a DLL
+        # which is not in PATH gtest_discover_tests will return a cryptic error. The tests depend on a few DLLs one of which
+        # is python<version>.dll. On Windows there is no RPATH and in addition to that gtest_discover_tests cannot take/modify
+        # environment variables (known issue: https://gitlab.kitware.com/cmake/cmake/-/issues/21453). Thus we are left with two options:
+        # 1. Instruct each developer to modify their path variable (gets annoying when different venvs are used)
+        # 2. Copy all required DLLs to the folder with the exe
+        # Option 2 is used. Although it defeats the purpose of a DLL it works without extra configuration steps
+        # The same approach is used for unit tests
+        add_custom_command(
+	        TARGET arcticdb_rapidcheck_tests POST_BUILD
+	        COMMAND ${CMAKE_COMMAND} -E echo "Copy required DLLs: $<TARGET_RUNTIME_DLLS:arcticdb_rapidcheck_tests>"
+	        COMMAND ${CMAKE_COMMAND} -E $<$<NOT:$<BOOL:$<TARGET_RUNTIME_DLLS:arcticdb_rapidcheck_tests>>>:true> copy_if_different $<TARGET_RUNTIME_DLLS:arcticdb_rapidcheck_tests> $<TARGET_FILE_DIR:arcticdb_rapidcheck_tests>
+	        COMMAND_EXPAND_LISTS
+        )
         target_compile_options(arcticdb_rapidcheck_tests PRIVATE /FI "util/test/gtest.hpp")
     else()
         target_link_libraries(arcticdb_rapidcheck_tests
             PUBLIC
-            ${COMMON_PUBLIC_TEST_LIBRARIES}
-            rapidcheck
-            rapidcheck_gtest
+                ${COMMON_PUBLIC_TEST_LIBRARIES}
+                rapidcheck
+                rapidcheck_gtest
             PRIVATE
-            ${RAPIDCHECK_PRIVATE_LIBRARIES}
+                ${RAPIDCHECK_PRIVATE_LIBRARIES}
             )
     endif()
 

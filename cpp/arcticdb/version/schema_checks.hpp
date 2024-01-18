@@ -66,10 +66,8 @@ inline bool columns_match(const StreamDescriptor &left, const StreamDescriptor &
         const TypeDescriptor &left_type = left.fields(i).type();
         const TypeDescriptor &right_type = right.fields(i).type();
 
-        const bool valid_type_promotion = has_valid_type_promotion(left_type, right_type).has_value();
-        const bool trivial_type_compatibility = trivially_compatible_types(left_type, right_type);
-
-        if (!trivial_type_compatibility and !valid_type_promotion)
+        if (!trivially_compatible_types(left_type, right_type) &&
+            !(is_empty_type(left_type.data_type()) || is_empty_type(right_type.data_type())))
             return false;
     }
     return true;

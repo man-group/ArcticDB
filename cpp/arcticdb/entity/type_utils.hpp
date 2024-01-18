@@ -15,6 +15,18 @@ inline bool trivially_compatible_types(entity::TypeDescriptor left, entity::Type
     if(left == right)
         return true;
 
+    // Multidimensional types are pointers
+    if(left.dimension() >= entity::Dimension::Dim1 && right.dimension() >= entity::Dimension::Dim1)
+        return true;
+
+    // Multidimensional types are pointer the empty type is pointer as well
+    if(left.dimension() >= entity::Dimension::Dim1 && is_empty_type(right.data_type()))
+        return true;
+    
+    // Multidimensional types are pointer the empty type is pointer as well
+    if(right.dimension() >= entity::Dimension::Dim1 && is_empty_type(left.data_type()))
+        return true;
+
     if(is_sequence_type(left.data_type()) && is_sequence_type(right.data_type())) {
         //TODO coercion of utf strings is not always safe, should allow safe conversion and reinstate the
         //stronger requirement for trivial conversion below.
@@ -24,12 +36,23 @@ inline bool trivially_compatible_types(entity::TypeDescriptor left, entity::Type
         return is_utf_type(slice_value_type(left.data_type()))  == is_utf_type(slice_value_type(right.data_type()));
     }
 
+    if(is_py_bool_type(right.data_type()) && is_py_bool_type(right.data_type())) {
+        return true;
+    }
+
     return false;
 }
 
 inline std::optional<entity::TypeDescriptor> has_valid_type_promotion(entity::TypeDescriptor source, entity::TypeDescriptor target) {
-    if(source.dimension() != target.dimension())
+
+    if(source.dimension() != target.dimension()) {
+        // Empty of dimension 0 means lack of any given type and can be promoted to anything (even if the dimensions don't
+        // match), e.g. empty type can become int or array of ints. Empty type of higher dimension is used to specify an
+        // empty array or an empty matrix, thus it cannot become any other type unless the dimensionality matches
+        if(is_empty_type(source.data_type()) && source.dimension() == entity::Dimension::Dim0)
+            return target;
         return std::nullopt;
+    }
 
     if (source == target)
         return target;

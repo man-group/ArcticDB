@@ -10,7 +10,7 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/cursor.hpp>
 #include <arcticdb/column_store/column.hpp>
-#include <arcticdb/column_store/string_pool.hpp>
+#include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/util/preconditions.hpp>
 
 #include <arcticdb/entity/timeseries_descriptor.hpp>
@@ -495,10 +495,6 @@ public:
         column_unchecked(idx).set_sparse_block(std::move(buffer), std::move(shapes), std::move(bitset));
     }
 
-    void set_secondary_type(position_t idx, TypeDescriptor type) {
-        column_unchecked(idx).set_secondary_type(type);
-    }
-
     template<class T, std::enable_if_t<std::is_same_v<std::decay_t<T>, std::string>, int> = 0>
         void set_scalar(position_t idx, T val) {
         set_string(idx, val);
@@ -524,7 +520,7 @@ public:
         column_unchecked(col).set_scalar(row, ofstr.offset());
     }
 
-    void set_no_string_at(position_t col, position_t row, OffsetString::offset_t placeholder) {
+    void set_no_string_at(position_t col, position_t row, position_t placeholder) {
         column_unchecked(col).set_scalar(row, placeholder);
     }
 

@@ -22,8 +22,8 @@ TEST(Append, Simple) {
     StreamId stream_id{"test_append"};
     auto wrapper = get_test_simple_frame(stream_id, 10, 0);
     auto& frame = wrapper.frame_;
-    auto desc = frame.desc.clone();
-    append_incomplete(store, stream_id, std::move(frame));
+    auto desc = frame->desc.clone();
+    append_incomplete(store, stream_id, frame);
     pipelines::FilterRange range;
     auto pipeline_context = std::make_shared<PipelineContext>(desc);
     pipeline_context->selected_columns_ = util::BitSet(2);
@@ -36,7 +36,7 @@ TEST(Append, Simple) {
     generate_filtered_field_descriptors(pipeline_context, {});
 
     SegmentInMemory allocated_frame = allocate_frame(pipeline_context);
-    ASSERT_EQ(allocated_frame.row_count(), size_t(frame.num_rows));
+    ASSERT_EQ(allocated_frame.row_count(), size_t(frame->num_rows));
 }
 
 TEST(Append, MergeDescriptorsPromote) {

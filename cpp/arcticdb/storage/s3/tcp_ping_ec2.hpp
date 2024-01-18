@@ -19,7 +19,7 @@ struct RaiiSocket {
             if (out < 0) {
                 close(fd);
                 fd = invalid;
-                ARCTICDB_DEBUG(arcticdb::log::Loggers::instance()->storage(),
+                ARCTICDB_DEBUG(arcticdb::log::Loggers::instance().storage(),
                     "ec2_metadata step {} failed with {}. errno={}", step, out, errno);
             }
             return out;

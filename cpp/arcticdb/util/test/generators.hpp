@@ -331,7 +331,8 @@ inline NativeTensor tensor_from_column(const Column &column) {
             shape_ptr,
             data_type,
             get_type_size(data_type),
-            column.ptr()
+            column.ptr(),
+            to_tensor_dim(dim)
         };
         return tensor;
     });
@@ -339,32 +340,32 @@ inline NativeTensor tensor_from_column(const Column &column) {
 
 struct SegmentToInputFrameAdapter {
     SegmentInMemory segment_;
-    pipelines::InputTensorFrame input_frame_;
+    std::shared_ptr<pipelines::InputTensorFrame> input_frame_ = std::make_shared<pipelines::InputTensorFrame>();
 
     explicit SegmentToInputFrameAdapter(SegmentInMemory &&segment) :
         segment_(std::move(segment)) {
-        input_frame_.desc = segment_.descriptor();
-        input_frame_.num_rows = segment_.row_count();
+        input_frame_->desc = segment_.descriptor();
+        input_frame_->num_rows = segment_.row_count();
         size_t col{0};
         if (segment_.descriptor().index().type() != IndexDescriptor::ROWCOUNT) {
             for (size_t i = 0; i < segment_.descriptor().index().field_count(); ++i) {
-                input_frame_.index_tensor = tensor_from_column(segment_.column(col));
+                input_frame_->index_tensor = tensor_from_column(segment_.column(col));
                 ++col;
             }
         }
 
         while (col < segment_.num_columns())
-            input_frame_.field_tensors.emplace_back(tensor_from_column(segment_.column(col++)));
+            input_frame_->field_tensors.emplace_back(tensor_from_column(segment_.column(col++)));
 
-        input_frame_.set_index_range();
+        input_frame_->set_index_range();
     }
 
     void synthesize_norm_meta() {
         if (segment_.metadata()) {
             auto segment_tsd = segment_.index_descriptor();
-            input_frame_.norm_meta.CopyFrom(segment_tsd.proto().normalization());
+            input_frame_->norm_meta.CopyFrom(segment_tsd.proto().normalization());
         }
-        ensure_timeseries_norm_meta(input_frame_.norm_meta, input_frame_.desc.id(), false);
+        ensure_timeseries_norm_meta(input_frame_->norm_meta, input_frame_->desc.id(), false);
     }
 
 };
@@ -374,10 +375,11 @@ struct SegmentSinkWrapperImpl {
     using SchemaPolicy = typename AggregatorType::SchemaPolicy;
     using IndexType =  typename AggregatorType::IndexType;
 
-        SegmentSinkWrapperImpl(StreamId stream_id, const IndexType& index, FieldCollection&& fields) :
-        sink_(std::make_shared<SegmentsSink>()),
+    SegmentSinkWrapperImpl(StreamId stream_id, const IndexType& index, const FieldCollection& fields) :
         aggregator_(
-            [](pipelines::FrameSlice&&) {},
+            [](pipelines::FrameSlice&&) {
+                // Do nothing
+                },
             SchemaPolicy{
                 index.create_stream_descriptor(std::move(stream_id), fields_from_range(fields)), index
             },
@@ -392,7 +394,7 @@ struct SegmentSinkWrapperImpl {
         return sink_->segments_[0];
     }
 
-    std::shared_ptr<SegmentsSink> sink_;
+    std::shared_ptr<SegmentsSink> sink_ = std::make_shared<SegmentsSink>();
     AggregatorType aggregator_;
 };
 

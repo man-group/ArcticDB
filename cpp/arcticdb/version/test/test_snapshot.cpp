@@ -81,7 +81,7 @@ TEST(SnapshotCreate, Basic) {
     frame.index_range = IndexRange{0, num_rows};
     frame.num_rows = num_rows;
 
-    auto fut = write::write_frame(std::move(pk), std::move(frame), slicing, store);
+    auto fut = write::write_frame(std::move(pk), frame, slicing, store);
 
 
     auto version_key = std::move(fut.wait().value());

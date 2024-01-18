@@ -5,15 +5,12 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/util/cursored_buffer.hpp>
-#include <arcticdb/util/buffer.hpp>
-#include <arcticdb/column_store/column_data.hpp>
 #include <arcticdb/entity/field_collection.hpp>
 
 namespace arcticdb {
 
-std::string_view FieldCollection::add_field(TypeDescriptor type, std::string_view name) {
+std::string_view FieldCollection::add_field(const TypeDescriptor& type, std::string_view name) {
   const auto total_size = Field::calc_size(name);
   buffer_.ensure_bytes(total_size);
   auto field = reinterpret_cast<Field*>(buffer_.ptr());

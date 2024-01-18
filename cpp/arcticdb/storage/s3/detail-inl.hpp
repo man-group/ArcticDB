@@ -26,7 +26,6 @@
 #include <aws/s3/model/ObjectIdentifier.h>
 
 #include <boost/interprocess/streams/bufferstream.hpp>
-#include <folly/ThreadLocal.h>
 
 #undef GetMessage
 
@@ -261,12 +260,12 @@ namespace s3 {
                                                variant_key_view(k));
                             } else {
                                 auto &error = get_object_outcome.GetError();
-                                if (!opts.dont_warn_about_missing_key) {
-                                    log::storage().warn("Failed to find segment for key '{}' {}: {}",
-                                                        variant_key_view(k),
-                                                        error.GetExceptionName().c_str(),
-                                                        error.GetMessage().c_str());
-                                }
+                                log::storage().log(
+                                    opts.dont_warn_about_missing_key ? spdlog::level::debug : spdlog::level::warn,
+                                    "Failed to find segment for key '{}' {}: {}",
+                                    variant_key_view(k),
+                                    error.GetExceptionName().c_str(),
+                                    error.GetMessage().c_str());
 
                                 failed_reads.push_back(k);
                             }

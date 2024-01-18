@@ -12,7 +12,6 @@
 #include <arcticdb/pipeline/pipeline_context.hpp>
 #include <arcticdb/pipeline/read_options.hpp>
 #include <arcticdb/util/bitset.hpp>
-#include <arcticdb/util/shared_future.hpp>
 #include <arcticdb/util/buffer_holder.hpp>
 
 #include <folly/futures/Future.h>
@@ -81,7 +80,7 @@ void decode_into_frame_static(
     SegmentInMemory &frame,
     PipelineContextRow &context,
     Segment &&seg,
-    const std::shared_ptr<BufferHolder> buffers
+    const std::shared_ptr<BufferHolder>& buffers
     );
 
 void decode_into_frame_dynamic(

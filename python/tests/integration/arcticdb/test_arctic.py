@@ -175,6 +175,9 @@ def test_separation_between_libraries(arctic_client):
 
 
 def add_path_prefix(uri, prefix):
+    if "path_prefix" in uri:
+        return uri + prefix
+
     if "azure" in uri:  # azure connection string has a different format
         return f"{uri};Path_prefix={prefix}"
     else:
@@ -924,6 +927,8 @@ def test_get_description(arctic_library):
     assert original_info.row_count == 4
     assert info.last_update_time > original_info.last_update_time
     assert info.last_update_time.tz == pytz.UTC
+    assert original_info.sorted == "ASCENDING"
+    assert info.sorted == "ASCENDING"
 
 
 def test_tail(arctic_library):

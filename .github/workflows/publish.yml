@@ -21,7 +21,7 @@ jobs:
         if: inputs.run_id <= 0
         with:
           node-version: 16
-      - run: npm install @actions/artifact
+      - run: npm install @actions/artifact@1
         if: inputs.run_id <= 0
       - id: download
         name: Fetch wheel artifacts
@@ -37,7 +37,7 @@ jobs:
             const client = new dhc.DownloadHttpClient();
             const artifactsResponse = await client.listArtifacts();
             for (const artifact of artifactsResponse.value) {
-                if (artifact.name.startsWith("build-metadata-follower-")) {
+                if (artifact.name.startsWith("build-metadata-build-")) {
                   console.log(`Downloading ${artifact.name} to ${cwd}`);
                   const itemsResponse = await client.getContainerItems(artifact.name, artifact.fileContainerResourceUrl);
                   // Must match "symbols" in build.yml
@@ -86,7 +86,7 @@ jobs:
             ${{steps.changelog.outputs.changelog}}
 
             ---
-            > The wheels are on [Pypi](https://pypi.org/project/arcticdb/). Below are for debugging:
+            > The wheels are on [PyPI](https://pypi.org/project/arcticdb/). Below are for debugging:
           files: ${{steps.compress.outcome == 'success' && env.SYMBOLS_ARTIFACT || ''}}
 
 
@@ -108,7 +108,7 @@ jobs:
         if: inputs.run_id <= 0
         with:
           node-version: 16
-      - run: npm install @actions/artifact
+      - run: npm install @actions/artifact@1
         if: inputs.run_id <= 0
       - name: Fetch wheel artifacts
         if: inputs.run_id <= 0

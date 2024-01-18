@@ -3,6 +3,7 @@
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
+#include <arcticdb/util/memory_tracing.hpp>
 
 namespace arcticdb {
 inline void merge_string_column(
@@ -12,12 +13,12 @@ inline void merge_string_column(
     CursoredBuffer<ChunkedBuffer>& output,
     bool verify
 ) {
-    using OffsetType = StringPool::offset_t;
+    using OffsetType = entity::position_t;
     constexpr auto offset_size =  sizeof(OffsetType);
     auto num_strings = src_buffer.bytes() / offset_size;
     for(auto row = 0ULL; row < num_strings; ++row) {
         auto offset = get_offset_string_at(row, src_buffer);
-        StringPool::offset_t new_value;
+        entity::position_t new_value;
         if (offset != not_a_string() && offset != nan_placeholder()) {
             auto sv = get_string_from_pool(offset, *src_pool);
             new_value = merged_pool->get(sv).offset();

@@ -127,11 +127,11 @@ namespace compatibility {
 }
 
 namespace codec {
-template<ErrorCode code>
-constexpr auto check = util::detail::Check<code, ErrorCategory::CODEC>{};
+    template<ErrorCode code>
+    constexpr auto check = util::detail::Check<code, ErrorCategory::CODEC>{};
 
-template<ErrorCode code>
-constexpr auto raise = check<code>.raise;
+    template<ErrorCode code>
+    constexpr auto raise = check<code>.raise;
 }
 
 // TODO Change legacy codes to internal::

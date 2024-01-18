@@ -49,9 +49,6 @@ struct ZstdBlockEncoder {
     }
 };
 
-template<template<typename> class F, class TD>
-using ZstdEncoder = GenericBlockEncoder<F<TD>, TD, ZstdBlockEncoder>;
-
 struct ZstdDecoder {
 
 /*

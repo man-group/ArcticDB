@@ -14,7 +14,6 @@
 #include <arcticdb/util/exponential_backoff.hpp>
 #include <arcticdb/util/configs_map.hpp>
 
-#include <folly/portability/PThread.h>
 #include <folly/system/ThreadId.h>
 
 #include <mutex>
@@ -117,7 +116,7 @@ class StorageLock {
         OnExit x{[that=this] () {
             that->mutex_.unlock();
         }};
-        if(!ref_key_exists(store)) {
+        if(!ref_key_exists(store) || ttl_expired(store)) {
             ts_= create_ref_key(store);
             auto lock_sleep = ConfigsMap::instance()->get_int("StorageLock.WaitMs", 200);
             std::this_thread::sleep_for(std::chrono::milliseconds(lock_sleep));
@@ -137,6 +136,10 @@ class StorageLock {
         }
     }
 
+    void _test_release_local_lock() {
+        mutex_.unlock();
+    }
+
   private:
     void do_lock(const std::shared_ptr<Store>& store, std::optional<size_t> timeout_ms = std::nullopt) {
         mutex_.lock();
@@ -151,15 +154,8 @@ class StorageLock {
             sleep_ms(wait_ms);
             total_wait += wait_ms;
             wait_ms *= 2;
-            if (auto read_ts = read_timestamp(store); read_ts) {
-                // check TTL
-                auto ttl = ConfigsMap::instance()->get_int("StorageLock.TTL", DEFAULT_TTL_INTERVAL);
-                if (ClockType::coarse_nanos_since_epoch() - *read_ts > ttl) {
-                    log::lock().warn("StorageLock {} taken for more than TTL (default 1 day). Force releasing", name_);
-                    force_release_lock(name_, store);
-                    break;
-                }
-            }
+            if (ttl_expired(store))
+                break;
             if (timeout_ms && total_wait > *timeout_ms) {
                 ts_ = 0;
                 log::lock().info("Lock timed out, giving up after {}", wait_ms);
@@ -226,6 +222,19 @@ class StorageLock {
         } catch (const storage::KeyNotFoundException&) {
             return std::nullopt;
         }
+    }
+
+    bool ttl_expired(const std::shared_ptr<Store>& store) {
+        if (auto read_ts = read_timestamp(store); read_ts) {
+            // check TTL
+            auto ttl = ConfigsMap::instance()->get_int("StorageLock.TTL", DEFAULT_TTL_INTERVAL);
+            if (ClockType::coarse_nanos_since_epoch() - *read_ts > ttl) {
+                log::lock().warn("StorageLock {} taken for more than TTL (default 1 day). Force releasing", name_);
+                force_release_lock(name_, store);
+                return true;
+            }
+        }
+        return false;
     }
 };
 

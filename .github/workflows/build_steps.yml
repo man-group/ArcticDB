@@ -11,11 +11,7 @@ on:
       python_deps_ids:   {default: '[""]', type: string, description: build-python-wheels test matrix parameter. JSON string.}
       python3:           {default: -1, type: number, description: Python 3 minor version}
       persistent_storage:      {default: "false", type: string, description: Specifies whether the python tests should tests against real storages e.g. AWS S3  }
-      # TODO: Maybe we should add these as GitHub variables
-      bucket:            {default: 'arcticdb-ci-test-bucket-01', type: string, description: The name of the S3 bucket that we will test against}
-      endpoint:          {default: 's3.eu-west-2.amazonaws.com', type: string, description: The address of the S3 endpoint}
-      region:            {default: 'eu-west-2', type: string, description: The S3 region of the bucket}
-      clear:             {default: 1, type: number, description: Controls wheather we will clear the libraries in the versions stores that we test against}
+      pytest_xdist_mode: {default: "", type: string, description: additional argument to pass for pytest-xdist}
 jobs:
   start_ec2_runner:
     if: inputs.compile-override == 'compile-on-ec2'
@@ -48,7 +44,7 @@ jobs:
         include:
             - ${{fromJSON(inputs.matrix)[0]}} # The items after 0 are for tests only
 
-    runs-on: ${{ needs.start_ec2_runner.result != 'failure' && needs.start_ec2_runner.outputs.label || matrix.distro}}
+    runs-on: ${{ needs.start_ec2_runner.status != 'failure' && needs.start_ec2_runner.outputs.label || matrix.distro}}
     container: ${{ (matrix.os == 'linux' && inputs.job_type != 'build-python-wheels') && matrix.container || null}}
     env:
       SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
@@ -319,6 +315,7 @@ jobs:
           # Use the Mongo created in the service container above to test against
           CI_MONGO_HOST: mongodb
           HYPOTHESIS_PROFILE: ci_${{matrix.os}}
+          PYTEST_XDIST_MODE: ${{inputs.pytest_xdist_mode}}
 
       - name: Collect crash dumps (Windows)
         if: matrix.os == 'windows' && failure()

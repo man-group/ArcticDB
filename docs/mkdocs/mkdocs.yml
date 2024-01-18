@@ -40,6 +40,7 @@ extra_css:
 
 plugins:
   - search
+  - autorefs
   - mkdocs-jupyter:
       ignore_h1_titles: True
       include_source: True
@@ -103,6 +104,7 @@ nav:
   - AWS Blockchain Notebook: 'notebooks/ArcticDB_aws_public_blockchain.ipynb'
   - Snapshots Notebook: 'notebooks/ArcticDB_demo_snapshots.ipynb'
   - Equity Analytics Notebook: 'notebooks/ArcticDB_demo_equity_analytics.ipynb'
+  - Equity Options Notebook: 'notebooks/ArcticDB_demo_equity_options.ipynb'
 - Python API Reference: 
   - Introduction: 'api/index.md'
   - Arctic: 'api/arctic.md'

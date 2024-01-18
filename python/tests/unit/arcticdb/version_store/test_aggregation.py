@@ -71,6 +71,9 @@ def test_hypothesis_mean_agg(lmdb_version_store, df):
     received_df.replace(-np.inf, np.nan, inplace=True)
     received_df.replace(np.inf, np.nan, inplace=True)
 
+    expected_df.replace(-np.inf, np.nan, inplace=True)
+    expected_df.replace(np.inf, np.nan, inplace=True)
+
     assert_frame_equal(expected_df, received_df)
 
 
@@ -215,6 +218,148 @@ def test_count_aggregation(local_object_version_store):
     res.data.sort_index(inplace=True)
 
     assert_frame_equal(res.data, df)
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=numeric_type_strategies()),
+        ],
+        index=range_indexes(),
+    )
+)
+def test_hypothesis_first_agg_numeric(lmdb_version_store, df):
+    lib = lmdb_version_store
+    assume(not df.empty)
+
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"a": "first"})
+    expected = df.groupby("grouping_column").agg({"a": "first"})
+    expected.replace(
+        np.nan, np.inf, inplace=True
+    )  # New version of pandas treats values which exceeds limits as np.nan rather than np.inf, as in old version and arcticdb
+
+    symbol = "first_agg"
+    lib.write(symbol, df)
+    vit = lib.read(symbol, query_builder=q)
+    vit.data.sort_index(inplace=True)
+
+    assert_frame_equal(expected, vit.data)
+
+
+def test_first_aggregation(local_object_version_store):
+    df = DataFrame(
+        {
+            "grouping_column": ["group_1", "group_2", "group_4", "group_2", "group_1", "group_3", "group_1"],
+            "get_first": [100.0, np.nan, np.nan, 2.7, 1.4, 5.8, 3.45],
+        },
+        index=np.arange(7),
+    )
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"get_first": "first"})
+    symbol = "test_first_aggregation"
+    local_object_version_store.write(symbol, df)
+
+    res = local_object_version_store.read(symbol, query_builder=q)
+    res.data.sort_index(inplace=True)
+
+    df = pd.DataFrame({"get_first": [100.0, 2.7, 5.8, np.nan]}, index=["group_1", "group_2", "group_3", "group_4"])
+    df.index.rename("grouping_column", inplace=True)
+    res.data.sort_index(inplace=True)
+
+    assert_frame_equal(res.data, df)
+
+
+def test_first_agg_with_append(local_object_version_store):
+    lib = local_object_version_store
+
+    symbol = "first_agg"
+    lib.write(symbol, pd.DataFrame({"grouping_column": [0], "get_first": [10.0]}))
+    lib.append(symbol, pd.DataFrame({"grouping_column": [1], "get_first": [30.0]}))
+    lib.append(symbol, pd.DataFrame({"grouping_column": [0], "get_first": [20.0]}))
+    q = QueryBuilder().groupby("grouping_column").agg({"get_first": "first"})
+
+    vit = lib.read(symbol, query_builder=q)
+    vit.data.sort_index(inplace=True)
+
+    df = pd.DataFrame({"get_first": [10.0, 30.0]}, index=[0, 1])
+    df.index.rename("grouping_column", inplace=True)
+
+    assert_frame_equal(vit.data, df)
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=numeric_type_strategies()),
+        ],
+        index=range_indexes(),
+    )
+)
+def test_hypothesis_last_agg_numeric(lmdb_version_store, df):
+    lib = lmdb_version_store
+    assume(not df.empty)
+
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"a": "last"})
+    expected = df.groupby("grouping_column").agg({"a": "last"})
+    expected.replace(
+        np.nan, np.inf, inplace=True
+    )  # New version of pandas treats values which exceeds limits as np.nan rather than np.inf, as in old version and arcticdb
+
+    symbol = "last_agg"
+    lib.write(symbol, df)
+    vit = lib.read(symbol, query_builder=q)
+    vit.data.sort_index(inplace=True)
+
+    assert_frame_equal(expected, vit.data)
+
+
+def test_last_aggregation(local_object_version_store):
+    df = DataFrame(
+        {
+            "grouping_column": ["group_1", "group_2", "group_4", "group_5", "group_2", "group_1", "group_3", "group_1", "group_5"],
+            "get_last": [100.0, 2.7, np.nan, np.nan, np.nan, 1.4, 5.8, 3.45, 6.9],
+        },
+        index=np.arange(9),
+    )
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"get_last": "last"})
+    symbol = "test_last_aggregation"
+    local_object_version_store.write(symbol, df)
+
+    res = local_object_version_store.read(symbol, query_builder=q)
+    res.data.sort_index(inplace=True)
+
+    df = pd.DataFrame({"get_last": [3.45, 2.7, 5.8, np.nan, 6.9]}, index=["group_1", "group_2", "group_3", "group_4", "group_5"])
+    df.index.rename("grouping_column", inplace=True)
+    res.data.sort_index(inplace=True)
+
+    assert_frame_equal(res.data, df)
+
+
+def test_last_agg_with_append(local_object_version_store):
+    lib = local_object_version_store
+
+    symbol = "last_agg"
+    lib.write(symbol, pd.DataFrame({"grouping_column": [0], "get_last": [10.0]}))
+    lib.append(symbol, pd.DataFrame({"grouping_column": [1], "get_last": [30.0]}))
+    lib.append(symbol, pd.DataFrame({"grouping_column": [0], "get_last": [20.0]}))
+    q = QueryBuilder().groupby("grouping_column").agg({"get_last": "last"})
+
+    vit = lib.read(symbol, query_builder=q)
+    vit.data.sort_index(inplace=True)
+
+    df = pd.DataFrame({"get_last": [20.0, 30.0]}, index=[0, 1])
+    df.index.rename("grouping_column", inplace=True)
+
+    assert_frame_equal(vit.data, df)
 
 
 def test_sum_aggregation(local_object_version_store):
@@ -437,7 +582,7 @@ def test_aggregation_with_nones_and_nans_in_string_grouping_column(version_store
     q = q.groupby("grouping_column").agg({"to_sum": "sum"})
     res = lib.read(symbol, query_builder=q)
     res.data.sort_index(inplace=True)
-
+    expected.index.rename("grouping_column", inplace=True)
     assert_frame_equal(res.data, expected)
 
 

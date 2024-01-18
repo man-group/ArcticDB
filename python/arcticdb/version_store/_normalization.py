@@ -22,7 +22,7 @@ from arcticc.pb2.descriptors_pb2 import UserDefinedMetadata, NormalizationMetada
 from arcticc.pb2.storage_pb2 import VersionStoreConfig
 from mmap import mmap
 from collections import Counter
-from arcticdb.exceptions import ArcticNativeException, ArcticDbNotYetImplemented
+from arcticdb.exceptions import ArcticNativeException, ArcticDbNotYetImplemented, NormalizationException, SortingException
 from arcticdb.supported_types import DateRangeInput, time_types as supported_time_types
 from arcticdb.util._versions import IS_PANDAS_TWO, IS_PANDAS_ZERO
 from arcticdb.version_store.read_result import ReadResult
@@ -240,6 +240,8 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
             casted_arr = coerce_string_column_to_fixed_length_array(arr, type(sample), string_max_len)
     elif dynamic_strings and sample is None:  # arr is entirely empty
         return arr
+    elif isinstance(sample, bool) or isinstance(sample, np.ndarray):
+        return arr
     else:
         raise ArcticDbNotYetImplemented(
             "Support for arbitrary objects in an array is not implemented apart from string, unicode, Timestamp. "
@@ -293,13 +295,13 @@ def _normalize_single_index(index, index_names, index_norm, dynamic_strings=None
     if isinstance(index, RangeIndex):
         # skip index since we can reconstruct it, so no need to actually store it
         if index.name:
-            if not isinstance(index.name, str):
-                raise ArcticNativeException(
-                    "Cannot use non string type as index name. Actual {} with type {}".format(
-                        index.name, type(index.name)
-                    )
+            if not isinstance(index.name, int) and not isinstance(index.name, str):
+                raise NormalizationException(
+                    f"Index name must be a string or an int, received {index.name} of type {type(index.name)}"
                 )
-            index_norm.name = _column_name_to_strings(index.name)
+            if isinstance(index.name, int):
+                index_norm.is_int = True
+            index_norm.name = str(index.name)
         index_norm.start = index.start if _range_index_props_are_public else index._start
         index_norm.step = index.step if _range_index_props_are_public else index._step
         return [], []
@@ -332,7 +334,17 @@ def _normalize_single_index(index, index_names, index_norm, dynamic_strings=None
         if index_tz is not None:
             index_norm.tz = _ensure_str_timezone(index_tz)
 
-        return index_names, ix_vals
+        if not isinstance(index_names[0], int) and not isinstance(index_names[0], str):
+            raise NormalizationException(
+                f"Index name must be a string or an int, received {index_names[0]} of type {type(index_names[0])}"
+            )
+        # Currently, we only support a single index column
+        # when we support multi-index, we will need to implement a similar logic to the one in _normalize_columns_names
+        # in the mean time, we will cast all other index names to string, so we don't crash in the cpp layer
+        if isinstance(index_names[0], int):
+            index_norm.is_int = True
+        index_norm.name = str(index_names[0])
+        return [str(name) for name in index_names], ix_vals
 
 
 def _ensure_str_timezone(index_tz):
@@ -364,7 +376,9 @@ def _denormalize_single_index(item, norm_meta):
         item.index_columns.append(item.names.pop(0))
 
     if len(item.index_columns) == 1:
-        rtn = Index(item.data[0] if len(item.data) > 0 else [], name=item.index_columns[0])
+        name = int(item.index_columns[0]) if norm_meta.index.is_int else item.index_columns[0]
+        rtn = Index(item.data[0] if len(item.data) > 0 else [], name=name)
+
         tz = get_timezone_from_metadata(norm_meta)
         if isinstance(rtn, DatetimeIndex) and tz:
             rtn = rtn.tz_localize("UTC").tz_convert(tz)
@@ -382,8 +396,11 @@ def _denormalize_columns_names(columns_names, norm_meta):
                 columns_names[idx] = None
             elif col_data.is_empty:
                 columns_names[idx] = ""
+            elif col_data.is_int:
+                columns_names[idx] = int(col_data.original_name)
             else:
-                columns_names[idx] = int(col_data.original_name) if col_data.is_int else col_data.original_name
+                columns_names[idx] = col_data.original_name
+
     return columns_names
 
 
@@ -418,6 +435,12 @@ def _normalize_columns_names(columns_names, index_names, norm_meta, dynamic_sche
             norm_meta.common.col_names[new_name].is_none = True
             columns_names[idx] = new_name
             continue
+
+        if not isinstance(col, str) and not isinstance(col, int):
+            raise NormalizationException(
+                f"Column names must be of type str or int, received {col} of type {type(col)} on column number {idx}"
+            )
+
         col_str = str(col)
         columns_names[idx] = col_str
         if len(col_str) == 0:
@@ -429,12 +452,14 @@ def _normalize_columns_names(columns_names, index_names, norm_meta, dynamic_sche
         else:
             if dynamic_schema and (counter[col] > 1):
                 raise ArcticNativeException("Same column names not allowed in dynamic_schema")
+            new_name = col_str
             if counter[col] > 1 or col in index_names:
                 new_name = "__col_{}__{}".format(col, 0 if dynamic_schema else idx)
-                norm_meta.common.col_names[new_name].original_name = col_str
-                if isinstance(col, int):
-                    norm_meta.common.col_names[new_name].is_int = True
-                columns_names[idx] = new_name
+            if isinstance(col, int):
+                norm_meta.common.col_names[new_name].is_int = True
+            norm_meta.common.col_names[new_name].original_name = col_str
+            columns_names[idx] = new_name
+
     return columns_names
 
 
@@ -694,7 +719,6 @@ class DataFrameNormalizer(_PandasNormalizer):
         columns, denormed_columns, data = _denormalize_columns(item, norm_meta, idx_type, n_indexes)
 
         if not self._skip_df_consolidation:
-            columns_dtype = {} if data is None else {name: np_array.dtype for name, np_array in data.items()}
             df = DataFrame(data, index=index, columns=columns)
 
             # Setting the columns' dtype manually, since pandas might just convert the dtype of some
@@ -708,16 +732,22 @@ class DataFrameNormalizer(_PandasNormalizer):
             #       }
             #       df = DataFrame(index=index, columns=columns_mapping, copy=False)
             #
-            for column_name, dtype in columns_dtype.items():
+            if not IS_PANDAS_TWO:
                 # TODO(jjerphan): Remove once pandas < 2 is not supported anymore.
-                if len(df[column_name]) == 0 and not IS_PANDAS_TWO and dtype in OBJECT_TOKENS:
-                    # Before Pandas 2.0, empty series' dtype was float, but as of Pandas 2.0. empty series' dtype became object.
-                    # See: https://github.com/pandas-dev/pandas/issues/17261
-                    # EMPTY type column are returned as pandas.Series with "object" dtype to match Pandas 2.0 default.
-                    # We cast it back to "float" so that it matches Pandas 1.0 default for empty series.
-                    df[column_name] = pd.Series([], dtype='float64')
-                else:
-                    df[column_name] = df[column_name].astype(dtype, copy=False)
+                # Before Pandas 2.0, empty series' dtype was float, but as of Pandas 2.0. empty series' dtype became object.
+                # See: https://github.com/pandas-dev/pandas/issues/17261
+                # EMPTY type column are returned as pandas.Series with "object" dtype to match Pandas 2.0 default.
+                # We cast it back to "float" so that it matches Pandas 1.0 default for empty series.
+                # Moreover, we explicitly provide the index otherwise Pandas 0.X overrides it for a RangeIndex
+                empty_columns_names = (
+                    [] if data is None else
+                    [
+                        name for name, np_array in data.items()
+                        if np_array.dtype in OBJECT_TOKENS and len(df[name]) == 0
+                    ]
+                )
+                for column_name in empty_columns_names:
+                    df[column_name] = pd.Series([], index=index, dtype='float64')
 
         else:
             if index is not None:
@@ -788,6 +818,13 @@ class DataFrameNormalizer(_PandasNormalizer):
                 if tz != "":
                     index_col = index_col.dt.tz_localize(tz)
 
+                if not IS_PANDAS_TWO and index_col.dtype == "float":
+                    # In Pandas < 2, empty series dtype is `"float"`, but as of Pandas 2.0, empty series dtype
+                    # is `"object"`. We cast it back to "float" so that it matches Pandas 1.0 default for empty series.
+                    # See: https://github.com/man-group/ArcticDB/pull/1049
+                    # Yet for index columns, we need to cast it to "object" to preserve the index level dtype.
+                    index_col = index_col.astype("object")
+
                 levels.append(index_col)
             if pd.__version__.startswith("0"):
                 index = pd.MultiIndex(levels=levels, labels=[[]] * len(levels), names=index_names)
@@ -852,7 +889,10 @@ class DataFrameNormalizer(_PandasNormalizer):
 
         sort_status = _SortedValue.UNKNOWN
         index = item.index
-        if hasattr(index, "is_monotonic_increasing"):
+        # Treat empty indexes as ascending so that all operations are valid
+        if index.empty:
+            sort_status = _SortedValue.ASCENDING
+        elif isinstance(index, (pd.DatetimeIndex, pd.PeriodIndex)):
             if index.is_monotonic_increasing:
                 sort_status = _SortedValue.ASCENDING
             elif index.is_monotonic_decreasing:
@@ -1314,6 +1354,17 @@ def restrict_data_to_date_range_only(data: T, *, start: Timestamp, end: Timestam
     if hasattr(data, "loc"):
         if not data.index.get_level_values(0).tz:
             start, end = _strip_tz(start, end)
+        if not data.index.is_monotonic_increasing:
+            # data.loc[...] scans forward through the index until hitting a value >= pd.to_datetime(end)
+            # If the input data is unsorted this produces non-intuitive results
+            # The copy below in data.loc[...] will recalculate is_monotonic_<in|de>creasing
+            # Therefore if data.loc[...] is sorted, but data is not the update will be allowed with unexpected results
+            # See https://github.com/man-group/ArcticDB/issues/1173 for more details
+            # We could set data.is_monotonic_<in|de>creasing to the values on input to this function after calling
+            # data.loc[...] and let version_core.cpp::sorted_data_check_update handle this, but that will be confusing
+            # as the frame input to sorted_data_check_update WILL be sorted. Instead, we fail early here, at the cost
+            # of duplicating exception messages.
+            raise SortingException("E_UNSORTED_DATA When calling update, the input data must be sorted.")
         data = data.loc[pd.to_datetime(start) : pd.to_datetime(end)]
     else:  # non-Pandas, try to slice it anyway
         if not getattr(data, "timezone", None):

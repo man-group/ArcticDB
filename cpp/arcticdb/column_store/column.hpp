@@ -51,17 +51,15 @@ constexpr bool is_narrowing_conversion() {
 struct JiveTable {
     explicit JiveTable(size_t num_rows) :
         orig_pos_(num_rows),
-        sorted_pos_(num_rows),
-        unsorted_rows_(bv_size(num_rows)) {
+        sorted_pos_(num_rows) {
     }
 
     std::vector<uint32_t> orig_pos_;
     std::vector<uint32_t> sorted_pos_;
-    util::BitSet unsorted_rows_;
-    size_t num_unsorted_ = 0;
 };
 
 class Column;
+class StringPool;
 
 template <typename T>
 JiveTable create_jive_table(const Column& col);
@@ -207,7 +205,11 @@ public:
         size_t expected_rows,
         bool presize,
         bool allow_sparse) :
-            data_(expected_rows * get_type_size(type.data_type()), presize),
+            // Array types are stored on disk as flat sequences. The python layer cannot work with this. We need to pass
+            // it pointers to an array type (at numpy arrays at the moment). When we allocate a column for an array we
+            // need to allocate space for one pointer per row. This also affects how we handle arrays to python as well.
+            // Check cpp/arcticdb/column_store/column_utils.hpp::array_at and cpp/arcticdb/column_store/column.hpp::Column
+            data_(expected_rows * (type.dimension() == Dimension::Dim0 ? get_type_size(type.data_type()) : sizeof(void*)), presize),
             type_(type),
             allow_sparse_(allow_sparse){
         ARCTICDB_TRACE(log::inmem(), "Creating column with descriptor {}", type);
@@ -291,7 +293,7 @@ public:
 
     template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
     inline void set_sparse_block(ssize_t row_offset, T *ptr, size_t rows_to_write) {
-        util::check(row_offset == 0, "Cannot write sparse column  with existing data");
+        util::check(row_offset == 0, "Cannot write sparse column with existing data");
         auto new_buffer = util::scan_floating_point_to_sparse(ptr, rows_to_write, sparse_map());
         std::swap(data_.buffer(), new_buffer);
     }
@@ -305,6 +307,14 @@ public:
         data_.buffer() = std::move(buffer);
         shapes_.buffer() = std::move(shapes);
         sparse_map_ = std::move(bitset);
+    }
+
+    ChunkedBuffer&& release_buffer() {
+        return std::move(data_.buffer());
+    }
+
+    Buffer&& release_shapes() {
+        return std::move(shapes_.buffer());
     }
 
     template<class T, template<class> class Tensor, std::enable_if_t<
@@ -327,7 +337,11 @@ public:
         ++last_logical_row_;
     }
 
+    void set_empty_array(ssize_t row_offset, int dimension_count);
+    void set_type(TypeDescriptor td);
+
     ssize_t last_row() const;
+
 
     void check_magic() const;
 
@@ -361,7 +375,10 @@ public:
 
     void append(const Column& other, position_t at_row);
 
-    void sort_external(const JiveTable& jive_table);
+    // Sorts the column by an external column's jive_table.
+    // pre_allocated_space can be reused across different calls to sort_external to avoid unnecessary allocations.
+    // It has to be the same size as the jive_table.
+    void sort_external(const JiveTable& jive_table, std::vector<uint32_t>& pre_allocated_space);
 
     void mark_absent_rows(size_t num_rows);
 
@@ -381,9 +398,10 @@ public:
 
     void set_shapes_buffer(size_t row_count);
 
+
     // The following two methods inflate (reduplicate) numpy string arrays that are potentially multi-dimensional,
     // i.e where the value is not a string but an array of strings
-    void inflate_string_array(const TensorType<OffsetString::offset_t> &string_refs,
+    void inflate_string_array(const TensorType<position_t> &string_refs,
                               CursoredBuffer<ChunkedBuffer> &data,
                               CursoredBuffer<Buffer> &shapes,
                               std::vector<position_t> &offsets,
@@ -425,15 +443,9 @@ public:
 
     const TypeDescriptor& orig_type() const;
 
-    void set_secondary_type(TypeDescriptor type);
-
-    bool has_secondary_type() const;
-
-    const TypeDescriptor& secondary_type() const;
-
     void compact_blocks();
 
-    const auto& blocks() const;
+    const std::vector<MemBlock *>& blocks() const;
 
     template<typename T>
     std::optional<T> scalar_at(position_t row) const {
@@ -442,6 +454,19 @@ public:
             return std::nullopt;
 
         return *data_.buffer().ptr_cast<T>(bytes_offset(*physical_row), sizeof(T));
+    }
+
+    // Copies all physical scalars to a std::vector<T>. This is useful if you require many random access operations
+    // and you would like to avoid the overhead of computing the exact location every time.
+    template<typename T>
+    std::vector<T> clone_scalars_to_vector() const {
+        auto values = std::vector<T>();
+        values.reserve(row_count());
+        const auto& buffer = data_.buffer();
+        for (auto i=0u; i<row_count(); ++i){
+            values.push_back(*buffer.ptr_cast<T>(i*item_size(), sizeof(T)));
+        }
+        return values;
     }
 
     // N.B. returning a value not a reference here, so it will need to be pre-checked when data is sparse or it
@@ -464,7 +489,8 @@ public:
                 ndim,
                 type().data_type(),
                 get_type_size(type().data_type()),
-                reinterpret_cast<const T*>(data_.buffer().ptr_cast<uint8_t>(bytes_offset(idx), calc_elements(shape_ptr, ndim))));
+                reinterpret_cast<const T*>(data_.buffer().ptr_cast<uint8_t>(bytes_offset(idx), calc_elements(shape_ptr, ndim))),
+                ndim);
     }
 
     template<typename T>
@@ -567,6 +593,10 @@ private:
     void set_sparse_bit_for_row(size_t sparse_location);
     bool empty() const;
     void regenerate_offsets() const;
+
+    // Permutes the physical column storage based on the given sorted_pos.
+    void physical_sort_external(std::vector<uint32_t> &&sorted_pos);
+
     [[nodiscard]] util::BitMagic& sparse_map();
     const util::BitMagic& sparse_map() const;
 
@@ -583,8 +613,6 @@ private:
     bool inflated_ = false;
     bool allow_sparse_ = false;
     std::optional<util::BitMagic> sparse_map_;
-    // For types that are arrays or matrices, the member type
-    std::optional<TypeDescriptor> secondary_type_;
     util::MagicNum<'D', 'C', 'o', 'l'> magic_;
 }; //class Column
 
@@ -592,21 +620,16 @@ template <typename T>
 JiveTable create_jive_table(const Column& col) {
     JiveTable output(col.row_count());
     std::iota(std::begin(output.orig_pos_), std::end(output.orig_pos_), 0);
-    std::iota(std::begin(output.sorted_pos_), std::end(output.sorted_pos_), 0);
 
+    // Calls to scalar_at are expensive, so we precompute them to speed up the sort compare function.
+    auto values = col.template clone_scalars_to_vector<T>();
     std::sort(std::begin(output.orig_pos_), std::end(output.orig_pos_),[&](const auto& a, const auto& b) -> bool {
-        return col.template scalar_at<T>(a) < col.template scalar_at<T>(b);
+        return values[a] < values[b];
     });
 
-    std::sort(std::begin(output.sorted_pos_), std::end(output.sorted_pos_),[&](const auto& a, const auto& b) -> bool {
-        return output.orig_pos_[a] < output.orig_pos_[b];
-    });
-
-    for(auto pos : folly::enumerate(output.sorted_pos_)) {
-        if(pos.index != *pos) {
-            output.unsorted_rows_.set(bv_size(pos.index), true);
-            ++output.num_unsorted_;
-        }
+    // Obtain the sorted_pos_ by reversing the orig_pos_ permutation
+    for (auto i=0u; i<output.orig_pos_.size(); ++i){
+        output.sorted_pos_[output.orig_pos_[i]] = i;
     }
 
     return output;

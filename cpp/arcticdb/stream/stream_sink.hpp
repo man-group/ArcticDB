@@ -13,8 +13,13 @@
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/version/de_dup_map.hpp>
+#include <arcticdb/pipeline/frame_slice.hpp>
 
 #include <folly/futures/Future.h>
+// FIXME: winnt.h is included by folly/futures/Future.h at some point and adds unwanted macros
+#ifdef DELETE
+#undef DELETE
+#endif
 
 namespace arcticdb::stream {
 
@@ -101,13 +106,9 @@ struct StreamSink {
 
     [[nodiscard]] virtual folly::Future<folly::Unit> write_compressed(storage::KeySegmentPair&& ks) = 0;
 
-    virtual void write_compressed_sync(
-        storage::KeySegmentPair &&ks) = 0;
-
-    [[nodiscard]] virtual folly::Future<std::vector<entity::VariantKey>> batch_write(
-        std::vector<std::pair<PartialKey, SegmentInMemory>> &&key_segments,
-        const std::shared_ptr<DeDupMap> &de_dup_map,
-        const BatchWriteArgs &args = BatchWriteArgs()) = 0;
+    [[nodiscard]] virtual folly::Future<pipelines::SliceAndKey> async_write(
+        folly::Future<std::tuple<PartialKey, SegmentInMemory, pipelines::FrameSlice>> &&input_fut,
+        const std::shared_ptr<DeDupMap> &de_dup_map) = 0;
 
     [[nodiscard]] virtual folly::Future<folly::Unit> batch_write_compressed(
         std::vector<storage::KeySegmentPair> kvs) = 0;

@@ -7,10 +7,10 @@ This tutorial will walk through the fundamentals of ArcticDB:
 3. Reading data
 4. Modifying data
 
-To start, let's import Arctic:
+To start, let's import `arcticdb`:
 
 ```python
-from arcticdb import Arctic
+import arcticdb as adb
 ```
 
 ## Accessing libraries
@@ -19,9 +19,9 @@ Connect to your storage:
 
 ```python
 # Connect using defined keys
-ac = Arctic('s3s://s3.eu-west-2.amazonaws.com:arctic-test-aws?access=<access key>&secret=<secret key>')
+ac = adb.Arctic('s3s://s3.eu-west-2.amazonaws.com:arctic-test-aws?access=<access key>&secret=<secret key>')
 # Leave AWS SDK to work out auth details 
-ac = Arctic('s3s://s3.eu-west-2.amazonaws.com:arctic-test-aws?aws_auth=true)
+ac = adb.Arctic('s3s://s3.eu-west-2.amazonaws.com:arctic-test-aws?aws_auth=true)
 ```
 
 For more information on how the AWS SDK configures authentication without utilising defined keys, please see the [AWS documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html).

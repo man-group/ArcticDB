@@ -151,7 +151,7 @@ TimeseriesDescriptor pack_timeseries_descriptor(
 }
 
 SegmentInMemory incomplete_segment_from_frame(
-    pipelines::InputTensorFrame&& frame,
+    const std::shared_ptr<pipelines::InputTensorFrame>& frame,
     size_t existing_rows,
     std::optional<entity::AtomKey>&& prev_key,
     bool allow_sparse
@@ -160,18 +160,18 @@ SegmentInMemory incomplete_segment_from_frame(
 
     auto offset_in_frame = 0;
     auto slice_num_for_column = 0;
-    const auto num_rows = frame.num_rows;
-    auto index_tensor = std::move(frame.index_tensor);
-    const bool has_index = frame.has_index();
-    const auto index = std::move(frame.index);
+    const auto num_rows = frame->num_rows;
+    auto index_tensor = std::move(frame->index_tensor);
+    const bool has_index = frame->has_index();
+    const auto index = std::move(frame->index);
     SegmentInMemory output;
-    auto field_tensors = std::move(frame.field_tensors);
+    auto field_tensors = std::move(frame->field_tensors);
 
     std::visit([&](const auto& idx) {
         using IdxType = std::decay_t<decltype(idx)>;
         using SingleSegmentAggregator = Aggregator<IdxType, FixedSchema, NeverSegmentPolicy>;
 
-        auto timeseries_desc = index_descriptor_from_frame(pipelines::InputTensorFrame{frame}, existing_rows, std::move(prev_key));
+        auto timeseries_desc = index_descriptor_from_frame(frame, existing_rows, std::move(prev_key));
         util::check(!timeseries_desc.fields().empty(), "Expected fields not to be empty in incomplete segment");
         auto norm_meta = timeseries_desc.proto().normalization();
         StreamDescriptor descriptor(std::make_shared<StreamDescriptor::Proto>(std::move(*timeseries_desc.mutable_proto().mutable_stream_descriptor())), timeseries_desc.fields_ptr());
@@ -211,12 +211,12 @@ SegmentInMemory incomplete_segment_from_frame(
 folly::Future<arcticdb::entity::VariantKey> write_incomplete_frame(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
-    InputTensorFrame&& frame,
+    const std::shared_ptr<InputTensorFrame>& frame,
     std::optional<AtomKey>&& next_key)  {
     using namespace arcticdb::pipelines;
 
-    auto index_range = frame.index_range;
-    auto segment = incomplete_segment_from_frame(std::move(frame), 0, std::move(next_key), false);
+    auto index_range = frame->index_range;
+    auto segment = incomplete_segment_from_frame(frame, 0, std::move(next_key), false);
     return store->write(
         KeyType::APPEND_DATA,
         VersionId(0),
@@ -229,9 +229,9 @@ folly::Future<arcticdb::entity::VariantKey> write_incomplete_frame(
 void write_parallel(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
-    InputTensorFrame&& frame) {
+    const std::shared_ptr<InputTensorFrame>& frame) {
     // TODO: dynamic bucketize doesn't work with incompletes
-    (void)write_incomplete_frame(store, stream_id, std::move(frame), std::nullopt).get();
+    (void)write_incomplete_frame(store, stream_id, frame, std::nullopt).get();
 }
 
 std::vector<SliceAndKey> get_incomplete(
@@ -331,12 +331,13 @@ std::pair<std::optional<AtomKey>, size_t> read_head(const std::shared_ptr<Stream
 std::pair<TimeseriesDescriptor, std::optional<SegmentInMemory>> get_descriptor_and_data(
     const std::shared_ptr<StreamSource>& store,
     const AtomKey& k,
-    bool load_data) {
+    bool load_data,
+    storage::ReadKeyOpts opts = storage::ReadKeyOpts{}) {
     if(load_data) {
-        auto [key, seg] = store->read(k).get();
+        auto [key, seg] = store->read_sync(k, opts);
         return std::make_pair(TimeseriesDescriptor{seg.timeseries_proto(), seg.index_fields()}, std::make_optional<SegmentInMemory>(seg));
     } else {
-        auto [key, tsd] = store->read_timeseries_descriptor(k).get();
+        auto [key, tsd] = store->read_timeseries_descriptor(k, opts).get();
         return std::make_pair(std::move(tsd), std::nullopt);
     }
 }
@@ -352,7 +353,9 @@ AppendMapEntry create_entry(const arcticdb::proto::descriptors::TimeSeriesDescri
 }
 
 AppendMapEntry entry_from_key(const std::shared_ptr<StreamSource>& store, const AtomKey& key, bool load_data) {
-    auto [tsd, seg] = get_descriptor_and_data(store, key, load_data);
+    auto opts = storage::ReadKeyOpts{};
+    opts.dont_warn_about_missing_key = true;
+    auto [tsd, seg] = get_descriptor_and_data(store, key, load_data, opts);
     auto entry = create_entry(tsd.proto());
     auto descriptor = std::make_shared<StreamDescriptor>();
     auto desc = std::make_shared<StreamDescriptor>(tsd.as_stream_descriptor());
@@ -369,17 +372,17 @@ AppendMapEntry entry_from_key(const std::shared_ptr<StreamSource>& store, const 
 void append_incomplete(
         const std::shared_ptr<Store>& store,
         const StreamId& stream_id,
-        InputTensorFrame&& frame) {
+        const std::shared_ptr<InputTensorFrame>& frame) {
     using namespace arcticdb::proto::descriptors;
     using namespace arcticdb::stream;
     ARCTICDB_SAMPLE_DEFAULT(AppendIncomplete)
     ARCTICDB_DEBUG(log::version(), "Writing incomplete frame for stream {}", stream_id);
 
     auto [next_key, total_rows] = read_head(store, stream_id);
-    const auto num_rows = frame.num_rows;
+    const auto num_rows = frame->num_rows;
     total_rows += num_rows;
-    auto desc = frame.desc.clone();
-    auto new_key = write_incomplete_frame(store, stream_id, std::move(frame), std::move(next_key)).get();
+    auto desc = frame->desc.clone();
+    auto new_key = write_incomplete_frame(store, stream_id, frame, std::move(next_key)).get();
 
 
     ARCTICDB_DEBUG(log::version(), "Wrote incomplete frame for stream {}, {} rows, total rows {}", stream_id, num_rows, total_rows);

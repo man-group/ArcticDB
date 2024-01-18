@@ -19,8 +19,10 @@
 #include <arcticdb/python/python_types.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
 #include <arcticdb/pipeline/string_pool_utils.hpp>
+#include <arcticdb/util/offset_string.hpp>
 #include <util/flatten_utils.hpp>
 #include <arcticdb/entity/timeseries_descriptor.hpp>
+#include <arcticdb/entity/type_utils.hpp>
 
 namespace arcticdb {
 
@@ -70,7 +72,7 @@ TimeseriesDescriptor timeseries_descriptor_from_pipeline_context(
 
 
 TimeseriesDescriptor index_descriptor_from_frame(
-    pipelines::InputTensorFrame&& frame,
+    const std::shared_ptr<pipelines::InputTensorFrame>& frame,
     size_t existing_rows,
     std::optional<entity::AtomKey>&& prev_key = {});
 
@@ -90,11 +92,12 @@ RawType* flatten_tensor(
     return reinterpret_cast<RawType*>(flattened_buffer->data());
 }
 
-template<typename Tensor, typename Aggregator>
+
+template<typename Aggregator>
 std::optional<convert::StringEncodingError> aggregator_set_data(
-    const TypeDescriptor &type_desc,
-    Tensor &tensor,
-    Aggregator &agg,
+    const TypeDescriptor& type_desc,
+    const entity::NativeTensor& tensor,
+    Aggregator& agg,
     size_t col,
     size_t rows_to_write,
     size_t row,
@@ -102,16 +105,18 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
     size_t regular_slice_size,
     bool sparsify_floats
 ) {
-    return type_desc.visit_tag([&](auto &&tag) {
+    return type_desc.visit_tag([&](auto tag) {
         using RawType = typename std::decay_t<decltype(tag)>::DataTypeTag::raw_type;
         constexpr auto dt = std::decay_t<decltype(tag)>::DataTypeTag::data_type;
 
         util::check(type_desc.data_type() == tensor.data_type(), "Type desc {} != {} tensor type", type_desc.data_type(),
                     tensor.data_type());
         util::check(type_desc.data_type() == dt, "Type desc {} != {} static type", type_desc.data_type(), dt);
-        auto c_style = util::is_cstyle_array<RawType>(tensor);
+        const auto c_style = util::is_cstyle_array<RawType>(tensor);
         std::optional<ChunkedBuffer> flattened_buffer;
         if constexpr (is_sequence_type(dt)) {
+            normalization::check<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(tag.dimension() == Dimension::Dim0,
+                "Multidimensional string types are not supported.");
             ARCTICDB_SUBSAMPLE_AGG(SetDataString)
             if (is_fixed_string_type(dt)) {
                 // deduplicate the strings
@@ -138,8 +143,8 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
                 // been processed, on the assumption that if a column has one such string it will probably have many.
                 std::optional<ScopedGILLock> scoped_gil_lock;
                 auto& column = agg.segment().column(col);
-                column.allocate_data(rows_to_write * sizeof(StringPool::offset_t));
-                auto out_ptr = reinterpret_cast<StringPool::offset_t*>(column.buffer().data());
+                column.allocate_data(rows_to_write * sizeof(entity::position_t));
+                auto out_ptr = reinterpret_cast<entity::position_t*>(column.buffer().data());
                 auto& string_pool = agg.segment().string_pool();
                 for (size_t s = 0; s < rows_to_write; ++s, ++ptr_data) {
                     if (*ptr_data == none.ptr()) {
@@ -167,7 +172,7 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
                     }
                 }
             }
-        } else if constexpr (is_numeric_type(dt) || is_bool_type(dt)) {
+        } else if constexpr ((is_numeric_type(dt) || is_bool_type(dt)) && tag.dimension() == Dimension::Dim0) {
             auto ptr = tensor.template ptr_cast<RawType>(row);
             if (sparsify_floats) {
                 if constexpr (is_floating_point_type(dt)) {
@@ -190,7 +195,102 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
                     agg.set_array(col, t);
                 }
             }
-        }  else if constexpr (!is_empty_type(dt)) {
+        } else if constexpr(is_py_bool_type(dt)) {
+            normalization::check<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(tag.dimension() == Dimension::Dim0,
+                "Multidimensional nullable booleans are not supported");
+            auto data = const_cast<void *>(tensor.data());
+            auto ptr_data = reinterpret_cast<PyObject **>(data);
+            ptr_data += row;
+
+            if (!c_style)
+                ptr_data = flatten_tensor<PyObject*>(flattened_buffer, rows_to_write, tensor, slice_num, regular_slice_size);
+
+            util::BitSet bitset = util::scan_object_type_to_sparse(ptr_data, rows_to_write);
+
+            const auto num_values = bitset.count();
+            auto bool_buffer = ChunkedBuffer::presized(num_values * sizeof(uint8_t));
+            auto en = bitset.first();
+            auto en_end = bitset.end();
+            auto bool_ptr = bool_buffer.ptr_cast<uint8_t>(0u, num_values);
+            while (en < en_end) {
+                *bool_ptr = static_cast<uint8_t>(PyObject_IsTrue(ptr_data[*en]));
+                ++en;
+                ++bool_ptr;
+            }
+            if(bitset.count() > 0)
+                agg.set_sparse_block(col, std::move(bool_buffer), std::move(bitset));
+
+        } else if constexpr(is_numpy_array(TypeDescriptor(tag))) {
+            auto data = const_cast<void*>(tensor.data());
+            const auto ptr_data = reinterpret_cast<PyObject**>(data) + row;
+
+            util::BitSet values_bitset = util::scan_object_type_to_sparse(ptr_data, rows_to_write);
+            util::check(!values_bitset.empty(),
+                "Empty bit set means empty colum and should be processed by the empty column code path.");
+            if constexpr (is_empty_type(dt)) {
+                // If we have a column of type {EMPTYVAL, Dim1} and all values of the bitset are set to 1 this means
+                // that we have a column full of empty arrays. In this case there is no need to proceed further and
+                // store anything on disc. Empty arrays can be reconstructed given the type descriptor. However, if
+                // there is at least one "missing" value this means that we're mixing empty arrays and None values.
+                // In that case we need to save the bitset so that we can distinguish empty array from None during the
+                // read.
+                if(values_bitset.size() == values_bitset.count()) {
+                    Column arr_col{TypeDescriptor{DataType::EMPTYVAL, Dimension::Dim2}, true};
+                    agg.set_sparse_block(col, arr_col.release_buffer(), arr_col.release_shapes(), std::move(values_bitset));
+                    return std::optional<convert::StringEncodingError>();
+                }
+            }
+
+            ssize_t last_logical_row{0};
+            const auto column_type_descriptor = TypeDescriptor{tensor.data_type(), Dimension::Dim2};
+            TypeDescriptor secondary_type = type_desc;
+            Column arr_col{column_type_descriptor, true};
+            for (auto en = values_bitset.first(); en < values_bitset.end(); ++en) {
+                const auto arr_pos = *en;
+                const auto row_tensor = convert::obj_to_tensor(ptr_data[arr_pos]);
+                const auto row_type_descriptor = TypeDescriptor{row_tensor.data_type(), Dimension::Dim1};
+                const std::optional<TypeDescriptor>& common_type = has_valid_common_type(row_type_descriptor, secondary_type);
+                normalization::check<ErrorCode::E_COLUMN_SECONDARY_TYPE_MISMATCH>(
+                    common_type.has_value(),
+                    "Numpy arrays in the same column must be of compatible types {} {}",
+                    datatype_to_str(secondary_type.data_type()),
+                    datatype_to_str(row_type_descriptor.data_type()));
+                secondary_type = *common_type;
+                // TODO: If the input array contains unexpected elements such as None, NaN, string the type
+                //  descriptor will have data_type == BYTES_DYNAMIC64. TypeDescriptor::visit_tag does not have a
+                //  case for it and it will throw exception which is not meaningful. Adding BYTES_DYNAMIC64 in
+                //  TypeDescriptor::visit_tag leads to a bunch of compilation errors spread all over the code.
+                normalization::check<ErrorCode::E_UNIMPLEMENTED_COLUMN_SECONDARY_TYPE>(
+                    is_numeric_type(row_type_descriptor.data_type()) || is_empty_type(row_type_descriptor.data_type()),
+                    "Numpy array type {} is not implemented. Only dense int and float arrays are supported.",
+                    datatype_to_str(row_type_descriptor.data_type())
+                );
+                row_type_descriptor.visit_tag([&arr_col, &row_tensor, &last_logical_row] (auto tdt) {
+                    using ArrayDataTypeTag = typename decltype(tdt)::DataTypeTag;
+                    using ArrayType = typename ArrayDataTypeTag::raw_type;
+                    if constexpr(is_empty_type(ArrayDataTypeTag::data_type)) {
+                        arr_col.set_empty_array(last_logical_row, row_tensor.ndim());
+                    } else if constexpr(is_numeric_type(ArrayDataTypeTag::data_type)) {
+                        if(row_tensor.nbytes()) {
+                            TypedTensor<ArrayType> typed_tensor{row_tensor};
+                            arr_col.set_array(last_logical_row, typed_tensor);
+                        } else {
+                            arr_col.set_empty_array(last_logical_row, row_tensor.ndim());
+                        }
+                    } else {
+                        normalization::raise<ErrorCode::E_UNIMPLEMENTED_COLUMN_SECONDARY_TYPE>(
+                            "Numpy array type is not implemented. Only dense int and float arrays are supported.");
+                    }
+                });
+                last_logical_row++;
+            }
+            arr_col.set_type(TypeDescriptor{secondary_type.data_type(), column_type_descriptor.dimension()});
+            agg.set_sparse_block(col, arr_col.release_buffer(), arr_col.release_shapes(), std::move(values_bitset));
+        } else if constexpr(tag.dimension() == Dimension::Dim2) {
+            normalization::raise<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(
+                "Trying to add matrix of base type {}. Matrix types are not supported.",
+                datatype_to_str(tag.data_type()));
+        } else if constexpr(!is_empty_type(dt)) {
             static_assert(!sizeof(dt), "Unknown data type");
         }
         return std::optional<convert::StringEncodingError>();

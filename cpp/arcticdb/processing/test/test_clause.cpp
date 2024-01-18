@@ -104,7 +104,7 @@ TEST(Clause, AggregationEmptyColumn) {
     using namespace arcticdb;
     auto component_manager = std::make_shared<ComponentManager>();
 
-    AggregationClause aggregation("int_repeated_values", {{"empty_sum", "sum"}, {"empty_min", "min"}, {"empty_max", "max"}, {"empty_mean", "mean"}, {"empty_count", "count"}});
+    AggregationClause aggregation("int_repeated_values", {{"empty_sum", "sum"}, {"empty_min", "min"}, {"empty_max", "max"}, {"empty_mean", "mean"}, {"empty_count", "count"}, {"empty_first", "first"}, {"empty_last", "last"}});
     aggregation.set_component_manager(component_manager);
 
     size_t num_rows{100};
@@ -128,11 +128,13 @@ TEST(Clause, AggregationEmptyColumn) {
         ASSERT_EQ(double(0), sum_column.scalar_at<double>(idx));
     }
 
-    // Min, max, mean and count aggregations should not be present in the output segment
+    // Min, max, mean, count, first and last aggregations should not be present in the output segment
     ASSERT_FALSE(segment->column_index("empty_min").has_value());
     ASSERT_FALSE(segment->column_index("empty_max").has_value());
     ASSERT_FALSE(segment->column_index("empty_mean").has_value());
     ASSERT_FALSE(segment->column_index("empty_count").has_value());
+    ASSERT_FALSE(segment->column_index("empty_first").has_value());
+    ASSERT_FALSE(segment->column_index("empty_last").has_value());
 }
 
 namespace aggregation_test
@@ -143,7 +145,7 @@ namespace aggregation_test
         auto column_index = segment.column_index(column_name);
         ASSERT_TRUE(column_index.has_value());
         auto& column = segment.column(*column_index);
-        DataType dt = arcticdb::data_type_from_raw_type<T>();
+        auto dt = arcticdb::data_type_from_raw_type<T>();
         ASSERT_EQ(dt, column.type().data_type());
         for(std::size_t idx = 0u; idx < ugv; ++idx)
         {

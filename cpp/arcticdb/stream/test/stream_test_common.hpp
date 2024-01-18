@@ -146,13 +146,13 @@ struct DefaultStringGenerator {
 template<class ContainerType, typename DTT,
     std::enable_if_t<std::is_floating_point_v<typename DTT::raw_type> || std::is_integral_v<typename DTT::raw_type>,
                      int> = 0>
-NativeTensor test_column(ContainerType &container, DTT, size_t num_rows, size_t start_val, bool is_index) {
+NativeTensor test_column(ContainerType &container, DTT, shape_t num_rows, size_t start_val, bool is_index) {
     using RawType = typename DTT::raw_type;
     constexpr auto dt = DTT::data_type;
 
     shape_t shapes = num_rows;
     stride_t strides;
-    ssize_t elsize;
+    stride_t elsize;
 
     strides = sizeof(RawType);
     elsize = static_cast<ssize_t>(get_type_size(dt));
@@ -162,11 +162,11 @@ NativeTensor test_column(ContainerType &container, DTT, size_t num_rows, size_t 
         fill_test_value_vector(container, RawType{}, num_rows, start_val);
 
     ssize_t bytes = shapes * strides;
-    return NativeTensor{bytes, 1, &strides, &shapes, dt, elsize, container.ptr()};
+    return NativeTensor{bytes, 1, &strides, &shapes, dt, elsize, container.ptr(), 1};
 }
 
 template<class ContainerType, typename DTT, class StringGenerator = DefaultStringGenerator>
-NativeTensor test_string_column(ContainerType &vec, DTT, size_t num_rows) {
+NativeTensor test_string_column(ContainerType &vec, DTT, shape_t num_rows) {
     constexpr auto dt = DTT::data_type;
     shape_t shapes = num_rows;
     stride_t strides;
@@ -178,7 +178,7 @@ NativeTensor test_string_column(ContainerType &vec, DTT, size_t num_rows) {
     string_gen.fill_string_vector(vec, num_rows);
 
     ssize_t bytes = shapes * strides;
-    return NativeTensor{bytes, 1, &strides, &shapes, dt, elsize, vec.data()};
+    return NativeTensor{bytes, 1, &strides, &shapes, dt, elsize, vec.data(), 1};
 }
 
 inline std::vector<entity::FieldRef> get_test_timeseries_fields() {
@@ -206,7 +206,7 @@ struct TestTensorFrame {
         segment_(std::move(desc), num_rows) {}
 
     SegmentInMemory segment_;
-    arcticdb::pipelines::InputTensorFrame frame_;
+    std::shared_ptr<arcticdb::pipelines::InputTensorFrame> frame_ = std::make_shared<arcticdb::pipelines::InputTensorFrame>();
 };
 
 template<class ContainerType, typename DTT>
@@ -275,14 +275,14 @@ TestTensorFrame get_test_frame(const StreamId &id,
     using namespace arcticdb::pipelines;
     TestTensorFrame output(get_test_descriptor<IndexType>(id, fields), num_rows);
 
-    output.frame_.desc = get_test_descriptor<IndexType>(id, fields);
-    output.frame_.index = index_type_from_descriptor(output.frame_.desc);
-    output.frame_.num_rows = num_rows;
-    output.frame_.desc.set_sorted(SortedValue::ASCENDING);
+    output.frame_->desc = get_test_descriptor<IndexType>(id, fields);
+    output.frame_->index = index_type_from_descriptor(output.frame_->desc);
+    output.frame_->num_rows = num_rows;
+    output.frame_->desc.set_sorted(SortedValue::ASCENDING);
 
-    fill_test_frame(output.segment_, output.frame_, num_rows, start_val, opt_row_offset);
+    fill_test_frame(output.segment_, *output.frame_, num_rows, start_val, opt_row_offset);
 
-    output.frame_.set_index_range();
+    output.frame_->set_index_range();
 
     return output;
 }

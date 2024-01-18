@@ -8,7 +8,6 @@
 #pragma once
 
 #include <arcticdb/column_store/column.hpp>
-#include <arcticdb/column_store/string_pool.hpp>
 #ifdef ARCTICDB_USING_CONDA
     #include <robin_hood.h>
 #else
@@ -17,14 +16,14 @@
 #include <arcticdb/util/configs_map.hpp>
 
 namespace arcticdb {
-robin_hood::unordered_set<StringPool::offset_t> unique_values_for_string_column(const Column &column) {
+robin_hood::unordered_set<entity::position_t> unique_values_for_string_column(const Column &column) {
     auto column_data = column.data();
-    return column_data.type().visit_tag([&](auto type_desc_tag) -> robin_hood::unordered_set<StringPool::offset_t> {
+    return column_data.type().visit_tag([&](auto type_desc_tag) -> robin_hood::unordered_set<entity::position_t> {
         using TDT = decltype(type_desc_tag);
         using DTT = typename TDT::DataTypeTag;
         if constexpr(is_sequence_type(DTT::data_type)) {
             using RawType = typename TDT::DataTypeTag::raw_type;
-            robin_hood::unordered_set<StringPool::offset_t> output;
+            robin_hood::unordered_set<entity::position_t> output;
             // Guessing that unique values is a third of the column length
             static auto map_reserve_ratio = ConfigsMap::instance()->get_int("UniqueColumns.AllocationRatio", 3);
             output.reserve(column.row_count() / map_reserve_ratio);

@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import datetime
+
 import pytz
 from enum import Enum, auto
 from typing import Optional, Any, Tuple, Dict, AnyStr, Union, List, Iterable, NamedTuple
@@ -18,7 +19,6 @@ from arcticdb.util._versions import IS_PANDAS_TWO
 
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionQueryInput
-from arcticdb.version_store._normalization import denormalize_user_metadata
 from arcticdb_ext.exceptions import ArcticException
 from arcticdb_ext.version_store import DataError
 import pandas as pd
@@ -123,9 +123,21 @@ class SymbolDescription(NamedTuple):
         Number of rows.
     last_update_time : datetime64
         The time of the last update to the symbol, in UTC.
-    date_range : Tuple[datetime.datetime, datetime.datetime]
-        The times in UTC that data for this symbol spans. If the data is not timeseries indexed then this value will be
-        ``(datetime.datetime(1970, 1, 1), datetime.datetime(1970, 1, 1))``.
+    date_range : Tuple[Union[datetime.datetime, numpy.datetime64], Union[datetime.datetime, numpy.datetime64]]
+        The values of the index column in the first and last rows of this symbol in UTC. Both values will be NaT if:
+        - the symbol is not timestamp indexed
+        - the symbol is timestamp indexed, but the sorted field of this class is UNSORTED (see below)
+    sorted : str
+        One of "ASCENDING", "DESCENDING", "UNSORTED", or "UNKNOWN":
+        ASCENDING - The data has a timestamp index, and is sorted in ascending order. Guarantees that operations such as
+                    append, update, and read with date_range work as expected.
+        DESCENDING - The data has a timestamp index, and is sorted in descending order. Update and read with date_range
+                     will not work.
+        UNSORTED - The data has a timestamp index, and is not sorted. Can only be created by calling write, write_batch,
+                   append, or append_batch with validate_index set to False. Update and read with date_range will not
+                   work.
+        UNKNOWN - Either the data does not have a timestamp index, or the data does have a timestamp index, but was
+                  written by a client that predates this information being stored.
     """
 
     columns: Tuple[NameWithDType]
@@ -133,7 +145,18 @@ class SymbolDescription(NamedTuple):
     index_type: str
     row_count: int
     last_update_time: datetime64
-    date_range: Tuple[datetime.datetime, datetime.datetime]
+    date_range: Tuple[Union[datetime.datetime, datetime64], Union[datetime.datetime, datetime64]]
+    sorted: str
+
+    def __eq__(self, other):
+        # Needed as NaT != NaT
+        date_range_fields_equal = (self.date_range[0] == other.date_range[0] or (np.isnat(self.date_range[0]) and np.isnat(other.date_range[0]))) and \
+                                  (self.date_range[1] == other.date_range[1] or (np.isnat(self.date_range[1]) and np.isnat(other.date_range[1])))
+        if date_range_fields_equal:
+            non_date_range_fields = [field for field in self._fields if field != "date_range"]
+            return all(getattr(self, field) == getattr(other, field) for field in non_date_range_fields)
+        else:
+            return False
 
 
 class WritePayload:
@@ -369,13 +392,11 @@ class Library:
             Removes previous (non-snapshotted) versions from the database.
         staged : bool, default=False
             Whether to write to a staging area rather than immediately to the library.
-        validate_index: bool, default=False
-            If True, will verify that the index of `data` supports date range searches and update operations. This in effect tests that the data is sorted in ascending order.
-            ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the
-            data to be sorted
-
-            Note that each unit of staged data must a) be datetime indexed and b) not overlap with any other unit of
+            Each unit of staged data must a) be datetime indexed and b) not overlap with any other unit of
             staged data. Note that this will create symbols with Dynamic Schema enabled.
+        validate_index: bool, default=True
+            If True, verify that the index of `data` supports date range searches and update operations.
+            This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
 
         Returns
         -------
@@ -387,7 +408,7 @@ class Library:
         ArcticUnsupportedDataTypeException
             If ``data`` is not of NormalizableType.
         UnsortedDataException
-            If data is unsorted, when validate_index is set to True.
+            If data is unsorted and validate_index is set to True.
 
         Examples
         --------
@@ -412,8 +433,7 @@ class Library:
         2000-01-03       7
 
         WritePayload objects can be unpacked and used as parameters:
-
-        >>> w = WritePayload("symbol", df, metadata={'the': 'metadata'})
+        >>> w = adb.WritePayload("symbol", df, metadata={'the': 'metadata'})
         >>> lib.write(*w, staged=True)
         """
         if not isinstance(data, NORMALIZABLE_TYPES):
@@ -517,10 +537,9 @@ class Library:
             Symbols and their corresponding data. There must not be any duplicate symbols in `payload`.
         prune_previous_versions: `bool`, default=False
             See `write`.
-        validate_index: bool, default=False
-            If set to True, it will verify for each entry in the batch whether the index of the data supports date range searches and update operations.
-            This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted -
-            you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted
+        validate_index: bool, default=True
+            Verify that each entry in the batch has an index that supports date range searches and update operations.
+            This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
 
         Returns
         -------
@@ -547,11 +566,10 @@ class Library:
         --------
 
         Writing a simple batch:
-
         >>> df_1 = pd.DataFrame({'column': [1,2,3]})
         >>> df_2 = pd.DataFrame({'column': [4,5,6]})
-        >>> payload_1 = WritePayload("symbol_1", df_1, metadata={'the': 'metadata'})
-        >>> payload_2 = WritePayload("symbol_2", df_2)
+        >>> payload_1 = adb.WritePayload("symbol_1", df_1, metadata={'the': 'metadata'})
+        >>> payload_2 = adb.WritePayload("symbol_2", df_2)
         >>> items = lib.write_batch([payload_1, payload_2])
         >>> lib.read("symbol_1").data
            column
@@ -651,10 +669,9 @@ class Library:
             not combined in any way with the metadata stored in the previous version.
         prune_previous_versions
             Removes previous (non-snapshotted) versions from the database when True.
-        validate_index: bool, default=False
-            If True, will verify that resulting symbol will support date range searches and update operations. This in effect tests that the previous version of the
-            data and `data` are both sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing
-            on your input DataFrame to see if Pandas believes the data to be sorted
+        validate_index: bool, default=True
+            If True, verify that the index of `data` supports date range searches and update operations.
+            This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
 
         Returns
         -------
@@ -722,10 +739,9 @@ class Library:
             Symbols and their corresponding data. There must not be any duplicate symbols in `append_payloads`.
         prune_previous_versions : bool, default=False
             Removes previous (non-snapshotted) versions from the database.
-        validate_index: bool, default=False
-            If set to True, it will verify for each entry in the batch whether the index of the data supports date range searches and update operations.
-            This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted -
-            you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted
+        validate_index: bool, default=True
+            Verify that each entry in the batch has an index that supports date range searches and update operations.
+            This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
 
         Returns
         -------
@@ -1035,12 +1051,11 @@ class Library:
 
         Examples
         --------
-
         >>> lib.write("s1", pd.DataFrame())
         >>> lib.write("s2", pd.DataFrame({"col": [1, 2, 3]}))
         >>> lib.write("s2", pd.DataFrame(), prune_previous_versions=False)
         >>> lib.write("s3", pd.DataFrame())
-        >>> batch = lib.read_batch(["s1", ReadRequest("s2", as_of=0), "s3", ReadRequest("s2", as_of=1000)])
+        >>> batch = lib.read_batch(["s1", adb.ReadRequest("s2", as_of=0), "s3", adb.ReadRequest("s2", as_of=1000)])
         >>> batch[0].data.empty
         True
         >>> batch[1].data.empty
@@ -1049,8 +1064,7 @@ class Library:
         True
         >>> batch[3].symbol
         "s2"
-        >>> from arcticdb import DataError
-        >>> isinstance(batch[3], DataError)
+        >>> isinstance(batch[3], adb.DataError)
         True
         >>> batch[3].version_request_type
         VersionRequestType.SPECIFIC
@@ -1215,9 +1229,8 @@ class Library:
         --------
 
         Writing a simple batch:
-
-        >>> payload_1 = WriteMetadataPayload("symbol_1", {'the': 'metadata_1'})
-        >>> payload_2 = WriteMetadataPayload("symbol_2", {'the': 'metadata_2'})
+        >>> payload_1 = adb.WriteMetadataPayload("symbol_1", {'the': 'metadata_1'})
+        >>> payload_2 = adb.WriteMetadataPayload("symbol_2", {'the': 'metadata_2'})
         >>> items = lib.write_metadata_batch([payload_1, payload_2])
         >>> lib.read_metadata("symbol_1")
         {'the': 'metadata_1'}
@@ -1362,12 +1375,15 @@ class Library:
         """
         return self._nvs.delete_snapshot(snapshot_name)
 
-    def list_symbols(self, snapshot_name: Optional[str] = None) -> List[str]:
+    def list_symbols(self, snapshot_name: Optional[str] = None, regex: Optional[str] = None) -> List[str]:
         """
         Return the symbols in this library.
 
         Parameters
         ----------
+        regex
+            If passed, returns only the symbols which match the regex.
+
         snapshot_name
             Return the symbols available under the snapshot. If None then considers symbols that are live in the
             library as of the current time.
@@ -1377,7 +1393,7 @@ class Library:
         List[str]
             Symbols in the library.
         """
-        return self._nvs.list_symbols(snapshot=snapshot_name)
+        return self._nvs.list_symbols(snapshot=snapshot_name, regex=regex)
 
     def has_symbol(self, symbol: str, as_of: Optional[AsOf] = None) -> bool:
         """
@@ -1545,6 +1561,7 @@ class Library:
             last_update_time=last_update_time,
             index_type=info["index_type"],
             date_range=date_range,
+            sorted=info["sorted"],
         )
 
     def get_description(self, symbol: str, as_of: Optional[AsOf] = None) -> SymbolDescription:

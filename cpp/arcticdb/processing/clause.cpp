@@ -7,9 +7,14 @@
 
 #include <vector>
 #include <variant>
-#include <arcticdb/processing/processing_unit.hpp>
+
 #include <folly/Poly.h>
+
+#include <arcticdb/processing/processing_unit.hpp>
+#include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/util/composite.hpp>
+#include <arcticdb/util/offset_string.hpp>
+
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/value_set.hpp>
@@ -20,6 +25,7 @@
 #else
     #include <arcticdb/util/third_party/robin_hood.hpp>
 #endif
+
 namespace arcticdb {
 
 using namespace pipelines;
@@ -348,6 +354,10 @@ AggregationClause::AggregationClause(const std::string& grouping_column,
             aggregators_.emplace_back(MinAggregator(typed_column_name, typed_column_name));
         } else if (aggregation_operator == "count") {
             aggregators_.emplace_back(CountAggregator(typed_column_name, typed_column_name));
+        } else if (aggregation_operator == "first") {
+            aggregators_.emplace_back(FirstAggregator(typed_column_name, typed_column_name));
+        } else if (aggregation_operator == "last") {
+            aggregators_.emplace_back(LastAggregator(typed_column_name, typed_column_name));
         } else {
             user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Unknown aggregation operator provided: {}", aggregation_operator);
         }
@@ -355,7 +365,14 @@ AggregationClause::AggregationClause(const std::string& grouping_column,
 }
 
 Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_ids) const {
-    auto procs = gather_entities(component_manager_, std::move(entity_ids));
+    auto procs_as_range = gather_entities(component_manager_, std::move(entity_ids)).as_range();
+
+    // Sort procs following row range ascending order
+    std::sort(std::begin(procs_as_range), std::end(procs_as_range),
+              [](const auto& left, const auto& right) {
+                  return left.row_ranges_->at(0)->start() < right.row_ranges_->at(0)->start();
+    });
+
     std::vector<GroupingAggregatorData> aggregators_data;
     internal::check<ErrorCode::E_INVALID_ARGUMENT>(
             !aggregators_.empty(),
@@ -365,21 +382,27 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
     }
 
     // Work out the common type between the processing units for the columns being aggregated
-    procs.broadcast([&aggregators_data, &aggregators=aggregators_](auto& proc) {
+    for (auto& proc: procs_as_range) {
         for (auto agg_data: folly::enumerate(aggregators_data)) {
-            auto input_column_name = aggregators.at(agg_data.index).get_input_column_name();
+            // Check that segments row ranges are the same
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                std::all_of(proc.row_ranges_->begin(), proc.row_ranges_->end(), [&] (const auto& row_range) {return row_range->start() == proc.row_ranges_->at(0)->start();}),
+                "Expected all data segments in one processing unit to have the same row ranges");
+
+            auto input_column_name = aggregators_.at(agg_data.index).get_input_column_name();
             auto input_column = proc.get(input_column_name);
             if (std::holds_alternative<ColumnWithStrings>(input_column)) {
                 agg_data->add_data_type(std::get<ColumnWithStrings>(input_column).column_->type().data_type());
             }
         }
-    });
+    }
 
     size_t num_unique{0};
     size_t next_group_id{0};
     auto string_pool = std::make_shared<StringPool>();
     DataType grouping_data_type;
     GroupingMap grouping_map;
+    Composite<ProcessingUnit> procs(std::move(procs_as_range));
     procs.broadcast(
         [&num_unique, &grouping_data_type, &grouping_map, &next_group_id, &aggregators_data, &string_pool, this](auto &proc) {
             auto partitioning_column = proc.get(ColumnName(grouping_column_));

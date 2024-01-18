@@ -28,6 +28,7 @@
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/pipeline/pipeline_utils.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
+#include <arcticdb/version/snapshot.hpp>
 
 #include <regex>
 
@@ -68,12 +69,12 @@ VersionedItem PythonVersionStore::write_dataframe_specific_version(
     return versioned_item;
 }
 
-std::vector<InputTensorFrame> create_input_tensor_frames(
+std::vector<std::shared_ptr<InputTensorFrame>> create_input_tensor_frames(
     const std::vector<StreamId>& stream_ids,
     const std::vector<py::tuple> &items,
     const std::vector<py::object> &norms,
     const std::vector<py::object> &user_metas) {
-    std::vector<InputTensorFrame> output;
+    std::vector<std::shared_ptr<InputTensorFrame>> output;
     output.reserve(stream_ids.size());
     for (size_t idx = 0; idx < stream_ids.size(); idx++) {
         output.emplace_back(convert::py_ndf_to_frame(stream_ids[idx], items[idx], norms[idx], user_metas[idx]));
@@ -301,6 +302,39 @@ VersionResultVector PythonVersionStore::list_versions(
        return get_all_versions_for_symbols(store(), version_map(), stream_ids, snapshots_for_symbol, creation_ts_for_version_symbol);
 }
 
+namespace {
+
+py::object get_metadata_from_segment(
+    const SegmentInMemory& segment
+) {
+    auto metadata_proto = segment.metadata();
+    py::object pyobj;
+    if (metadata_proto) {
+        arcticdb::proto::descriptors::UserDefinedMetadata user_meta_proto;
+        metadata_proto->UnpackTo(&user_meta_proto);
+        pyobj = python_util::pb_to_python(user_meta_proto);
+    } else {
+        pyobj = pybind11::none();
+    }
+    return pyobj;
+}
+
+py::object get_metadata_for_snapshot(const std::shared_ptr<Store> &store, const VariantKey &snap_key) {
+    auto seg = store->read_sync(snap_key).second;
+    return get_metadata_from_segment(seg);
+}
+
+std::pair<std::vector<AtomKey>, py::object> get_versions_and_metadata_from_snapshot(
+    const std::shared_ptr<Store>& store,
+    const VariantKey& vk
+) {
+    auto snapshot_segment = store->read_sync(vk).second;
+    return {get_versions_from_segment(snapshot_segment), get_metadata_from_segment(snapshot_segment)};
+}
+
+} //namespace
+
+
 std::vector<std::pair<SnapshotId, py::object>> PythonVersionStore::list_snapshots(std::optional<bool> load_metadata) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: list_snapshots");
     auto snap_ids = std::vector<std::pair<SnapshotId, py::object>>();
@@ -434,6 +468,7 @@ void PythonVersionStore::snapshot(
         // User did not provide explicit versions to snapshot, get latest of all filtered symbols.
         auto skip_symbols_set = std::set<StreamId>(skip_symbols.begin(), skip_symbols.end());
         auto all_symbols = list_streams();
+
         std::vector<StreamId> filtered_symbols;
         std::set_difference(all_symbols.begin(), all_symbols.end(), skip_symbols_set.begin(),
                 skip_symbols_set.end(), std::back_inserter(filtered_symbols));
@@ -548,7 +583,7 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
     auto index_keys = folly::collect(batch_write_internal(std::move(version_ids), sub_keys, std::move(frames), std::move(de_dup_maps), false)).get();
     auto multi_key = write_multi_index_entry(store(), index_keys, stream_id, metastruct, user_meta, version_id);
     auto versioned_item = VersionedItem(to_atom(std::move(multi_key)));
-    write_version_and_prune_previous_if_needed(prune_previous_versions, versioned_item.key_, maybe_prev);
+    write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, maybe_prev);
 
     if(cfg().symbol_list())
         symbol_list().add_symbol(store(), stream_id, version_id);
@@ -566,7 +601,7 @@ VersionedItem PythonVersionStore::write_versioned_dataframe(
     bool validate_index) {
     ARCTICDB_SAMPLE(WriteVersionedDataframe, 0)
     auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta);
-    auto versioned_item = write_versioned_dataframe_internal(stream_id, std::move(frame), prune_previous_versions, sparsify_floats, validate_index);
+    auto versioned_item = write_versioned_dataframe_internal(stream_id, frame, prune_previous_versions, sparsify_floats, validate_index);
 
     return versioned_item;
 }
@@ -615,8 +650,8 @@ void PythonVersionStore::append_incomplete(
     using namespace arcticdb::pipelines;
 
     // Turn the input into a standardised frame object
-    InputTensorFrame frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta);
-    append_incomplete_frame(stream_id, std::move(frame));
+    auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta);
+    append_incomplete_frame(stream_id, frame);
 }
 
 VersionedItem PythonVersionStore::write_metadata(
@@ -701,8 +736,8 @@ void PythonVersionStore::write_parallel(
     using namespace arcticdb::stream;
     using namespace arcticdb::pipelines;
 
-    InputTensorFrame frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta);
-    write_parallel_frame(stream_id, std::move(frame));
+    auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta);
+    write_parallel_frame(stream_id, frame);
 }
 
 std::unordered_map<VersionId, bool> PythonVersionStore::get_all_tombstoned_versions(const StreamId &stream_id) {

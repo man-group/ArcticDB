@@ -63,7 +63,7 @@ inline storage::LibraryDescriptor decode_library_descriptor(const arcticdb::prot
             case arcticdb::proto::storage::LibraryDescriptor::StoreTypeCase::STORE_TYPE_NOT_SET:
             // nothing to do, the variant is a monostate (empty struct) by default
             break;
-        default: util::raise_rte("Unsupported store config type {}", protobuf_descriptor.store_type_case());
+        default: util::raise_rte("Unsupported store config type {}", int(protobuf_descriptor.store_type_case()));
     }
 
     return output;

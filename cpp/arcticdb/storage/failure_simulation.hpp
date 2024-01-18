@@ -110,6 +110,9 @@ public:
     }
 };
 
+// Note that StorageFailureSimulator currently is only used for the following storages:
+// - Mongo storage
+// - InMemoryStore (only in cpp tests)
 class StorageFailureSimulator {
 public:
     using ParamActionSequence = FailureTypeState::ActionSequence;

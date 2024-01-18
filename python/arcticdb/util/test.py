@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import os
 from contextlib import contextmanager
 from typing import Mapping, Any, Optional, Iterable, NamedTuple, List, AnyStr
@@ -17,7 +18,6 @@ import time
 import attr
 from copy import deepcopy
 from functools import wraps
-import sys
 
 from arcticdb.config import Defaults
 from arcticdb.log import configure, logger_by_name
@@ -30,6 +30,16 @@ from arcticc.pb2.storage_pb2 import LibraryDescriptor, VersionStoreConfig
 from arcticdb.version_store.helper import ArcticFileConfig
 from arcticdb.config import _DEFAULT_ENVS_PATH
 from arcticdb_ext import set_config_int, get_config_int, unset_config_int
+
+
+def create_df(start=0, columns=1) -> pd.DataFrame:
+    data = {}
+    for i in range(columns):
+        col_name = chr(ord("x") + i)  # Generates column names like 'x', 'y', 'z', etc.
+        data[col_name] = np.arange(start + i * 10, start + (i + 1) * 10, dtype=np.int64)
+
+    index = np.arange(start, start + 10, dtype=np.int64)
+    return pd.DataFrame(data, index=index)
 
 
 def maybe_not_check_freq(f):
@@ -46,42 +56,6 @@ def maybe_not_check_freq(f):
 
 assert_frame_equal = maybe_not_check_freq(pd.testing.assert_frame_equal)
 assert_series_equal = maybe_not_check_freq(pd.testing.assert_series_equal)
-
-
-def configure_console_logger(level="INFO"):
-    get_test_logger_config(level)
-
-
-def get_test_logger_config(level: str = "INFO", outputs: Optional[Iterable[str]] = None) -> LoggersConfig:
-    """
-    outputs controls where log output is directed:
-        - file - writes log files in "~/.arctic/native"
-        - console - log to stderr and stdout
-
-    For example outputs=["file"], outputs=["file", "console"]
-    """
-    if outputs is None:
-        outputs = ("console",)
-
-    log_cfgs = LoggersConfig()
-
-    for o in outputs:
-        sink = log_cfgs.sink_by_id[o]
-        if o == "console":
-            sink.console.std_err = True
-        elif o == "file":
-            sink.daily_file.path = os.path.join(Defaults.LOG_DIR, "arcticc.daily.test.log")
-        else:
-            raise RuntimeError(f"Unexpected logger output {o}")
-
-    for n in logger_by_name.keys():
-        logger = log_cfgs.logger_by_id[n]
-        for o in outputs:
-            logger.sink_ids.append(o)
-        logger.level = getattr(LoggerConfig, level)
-        logger.pattern = "%Y%m%d %H:%M:%S.%f %t %L %n | %v".format("arcticc.{}".format(n) if n != "root" else "arcticc")
-
-    return log_cfgs
 
 
 def random_string(length: int):
@@ -170,17 +144,13 @@ def param_dict(fields, cases=None, xfail=None):
     return pytest.mark.parametrize(fields, params, ids=ids)
 
 
-def configure_test_logger(level="INFO"):
-    level = os.getenv("ARCTICC_TEST_LOG_LEVEL", level)
-    if os.getenv("ARCTICC_TEST_FILE_LOGGING"):
-        outputs = ["file", "console"]
-    else:
-        outputs = ["console"]
-    configure(get_test_logger_config(level=level, outputs=outputs), force=True)
-
-
 CustomThing = NamedTuple(
-    "CustomThing", [("custom_index", np.ndarray), ("custom_columns", List[AnyStr]), ("custom_values", List[np.ndarray])]
+    "CustomThing",
+    [
+        ("custom_index", np.ndarray),
+        ("custom_columns", List[AnyStr]),
+        ("custom_values", List[np.ndarray]),
+    ],
 )
 
 
@@ -362,7 +332,12 @@ def compare_version_data(source_lib, target_libs, versions):
             for target_lib in target_libs:
                 target_vit = target_lib.read(symbol, as_of=version)
                 try:
-                    compare_data(source_vit.data, source_vit.metadata, target_vit.data, target_vit.metadata)
+                    compare_data(
+                        source_vit.data,
+                        source_vit.metadata,
+                        target_vit.data,
+                        target_vit.metadata,
+                    )
                 except AssertionError as e:
                     print("Version {} of symbol {} differs".format(version, symbol))
                     print("Source:\n{}".format(source_vit.data))
@@ -377,7 +352,12 @@ def compare_snapshot_data(source_lib, target_libs, snapshot_versions):
             for target_lib in target_libs:
                 target_vit = target_lib.read(symbol, as_of=snapshot)
                 try:
-                    compare_data(source_vit.data, source_vit.metadata, target_vit.data, target_vit.metadata)
+                    compare_data(
+                        source_vit.data,
+                        source_vit.metadata,
+                        target_vit.data,
+                        target_vit.metadata,
+                    )
                 except AssertionError as e:
                     print("Snapshot {} of symbol {} differs".format(snapshot, symbol))
                     print("Source:\n{}".format(source_vit.data))

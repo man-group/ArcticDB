@@ -8,6 +8,7 @@ dependencies:
   - cmake
   - gtest
   - gflags
+  - benchmark
   - doxygen
   - boost-cpp
   - grpcio

@@ -32,7 +32,7 @@ public:
         return segment_.row_count();
     }
 
-    std::string_view view_at(OffsetString::offset_t o) {
+    std::string_view view_at(entity::position_t o) {
         return segment_.string_pool().get_view(o);
     }
 
@@ -75,7 +75,7 @@ public:
                     }
                     else if (T::DataTypeTag::data_type == DataType::ASCII_DYNAMIC64)
                     {
-                        auto string_refs = segment_.tensor_at<OffsetString::offset_t>(row, col).value();
+                        auto string_refs = segment_.tensor_at<entity::position_t>(row, col).value();
                         std::vector<std::string_view > output;
                         for(ssize_t i = 0; i < string_refs.size(); ++i )
                             output.emplace_back(view_at(string_refs.at(i)));

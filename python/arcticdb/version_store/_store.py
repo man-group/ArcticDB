@@ -21,7 +21,7 @@ from pandas import Timestamp, to_datetime, Timedelta
 from typing import Any, Optional, Union, List, Sequence, Tuple, Dict, Set
 from contextlib import contextmanager
 
-from arcticc.pb2.descriptors_pb2 import TypeDescriptor, SortedValue
+from arcticc.pb2.descriptors_pb2 import IndexDescriptor, TypeDescriptor, SortedValue
 from arcticc.pb2.storage_pb2 import LibraryConfig, EnvironmentConfigsMap
 from arcticdb.preconditions import check
 from arcticdb.supported_types import DateRangeInput, ExplicitlySupportedDates
@@ -2433,7 +2433,10 @@ class NativeVersionStore:
         return self.is_pickled_descriptor(dit.timeseries_descriptor)
 
     def _get_time_range_from_ts(self, desc, min_ts, max_ts):
-        if min_ts == None or max_ts == None:
+        if desc.stream_descriptor.index.kind != IndexDescriptor.Type.TIMESTAMP or \
+            desc.stream_descriptor.sorted == SortedValue.UNSORTED or \
+            min_ts is None or \
+            max_ts is None:
             return datetime64("nat"), datetime64("nat")
         input_type = desc.normalization.WhichOneof("input_type")
         tz = None
@@ -2602,6 +2605,7 @@ class NativeVersionStore:
             - normalization_metadata,
             - type, `str`
             - date_range, `tuple`
+            - sorted, `str`
         """
         version_query = self._get_version_query(version)
         read_options = _PythonVersionStoreReadOptions()
@@ -2637,6 +2641,7 @@ class NativeVersionStore:
             - normalization_metadata,
             - type, `str`
             - date_range, `tuple`
+            - sorted, `str`
         """
         throw_on_error = True
         return self._batch_read_descriptor(symbols, as_ofs, throw_on_error)

@@ -12,9 +12,6 @@
 namespace arcticdb {
     namespace py = pybind11;
     struct EmptyHandler {
-
-        EmptyHandler() = default;
-
         /// @see arcticdb::ITypeHandler
         void handle_type(
             const uint8_t*& data,
@@ -22,6 +19,46 @@ namespace arcticdb {
             const VariantField& encoded_field,
             const entity::TypeDescriptor& type_descriptor,
             size_t dest_bytes,
-            std::shared_ptr<BufferHolder> buffers);
+            std::shared_ptr<BufferHolder> buffers,
+            EncodingVersion encding_version);
+    };
+
+    struct BoolHandler {
+        /// @see arcticdb::ITypeHandler
+        void handle_type(
+            const uint8_t *&data,
+            uint8_t *dest,
+            const VariantField &encoded_field,
+            const entity::TypeDescriptor &type_descriptor,
+            size_t dest_bytes,
+            std::shared_ptr<BufferHolder> buffers,
+            EncodingVersion encding_version);
+    };
+
+    struct DecimalHandler {
+        void handle_type(
+                const uint8_t*& data,
+                uint8_t* dest,
+                const VariantField& encoded_field,
+                const entity::TypeDescriptor& type_descriptor,
+                size_t dest_bytes,
+                std::shared_ptr<BufferHolder> buffers
+        );
+
+        std::shared_ptr<std::mutex> mutex_ = std::make_shared<std::mutex>();
+        std::shared_ptr<py::object> decimal_ = std::make_shared<py::object>(py::module_::import("decimal").attr("Decimal"));
+    };
+
+    struct ArrayHandler {
+        /// @see arcticdb::ITypeHandler
+        void handle_type(
+            const uint8_t*& data,
+            uint8_t* dest,
+            const VariantField& encoded_field,
+            const entity::TypeDescriptor& type_descriptor,
+            size_t dest_bytes,
+            std::shared_ptr<BufferHolder> buffers,
+            EncodingVersion encding_version);
+        static std::mutex initialize_array_mutex;
     };
 } //namespace arcticdb

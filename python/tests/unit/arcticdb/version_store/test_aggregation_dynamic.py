@@ -61,10 +61,22 @@ def test_hypothesis_mean_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df):
     try:
         q = QueryBuilder()
         q = q.groupby("grouping_column").agg({"a": "mean"})
-        expected = expected.groupby("grouping_column").agg({"a": "mean"})
+        expected_df = expected.groupby("grouping_column").agg({"a": "mean"})
 
         vit = lib.read(symbol, query_builder=q)
-        assert_equal_value(vit.data, expected)
+        received_df = vit.data
+
+        # Older versions of Pandas treat values which exceeds limits as `np.inf` or `-np.inf`.
+        # ArcticDB adopted this behaviour.
+        #
+        # Yet, new version of Pandas treats values which exceeds limits as `np.nan` instead.
+        # To be able to compare the results, we need to replace `np.inf` and `-np.inf` with `np.nan`.
+        received_df.replace(-np.inf, np.nan, inplace=True)
+        received_df.replace(np.inf, np.nan, inplace=True)
+
+        expected_df.replace(-np.inf, np.nan, inplace=True)
+        expected_df.replace(np.inf, np.nan, inplace=True)
+        assert_equal_value(received_df, expected_df)
     # pandas 1.0 raises SpecificationError rather than KeyError if the column in "agg" doesn't exist
     except (KeyError, SpecificationError):
         pass
@@ -93,10 +105,22 @@ def test_hypothesis_sum_agg_dynamic(s3_version_store_dynamic_schema_v2, df):
     try:
         q = QueryBuilder()
         q = q.groupby("grouping_column").agg({"a": "sum"})
-        expected = expected.groupby("grouping_column").agg({"a": "sum"})
+        expected_df = expected.groupby("grouping_column").agg({"a": "sum"})
 
         vit = lib.read(symbol, query_builder=q)
-        assert_equal_value(vit.data, expected)
+        received_df = vit.data
+
+        # Older versions of Pandas treat values which exceeds limits as `np.inf` or `-np.inf`.
+        # ArcticDB adopted this behaviour.
+        #
+        # Yet, new version of Pandas treats values which exceeds limits as `np.nan` instead.
+        # To be able to compare the results, we need to replace `np.inf` and `-np.inf` with `np.nan`.
+        received_df.replace(-np.inf, np.nan, inplace=True)
+        received_df.replace(np.inf, np.nan, inplace=True)
+
+        expected_df.replace(-np.inf, np.nan, inplace=True)
+        expected_df.replace(np.inf, np.nan, inplace=True)
+        assert_equal_value(received_df, expected_df)
     # pandas 1.0 raises SpecificationError rather than KeyError if the column in "agg" doesn't exist
     except (KeyError, SpecificationError):
         pass
@@ -211,6 +235,130 @@ def test_count_aggregation_dynamic(s3_version_store_dynamic_schema_v2):
 
     expected = expected.groupby("grouping_column").agg({"to_count": "count"})
     expected = expected.astype(np.uint64)
+
+    assert_frame_equal(received, expected)
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=numeric_type_strategies()),
+        ],
+        index=range_indexes(),
+    )
+)
+@pytest.mark.xfail(reason="Not supported yet")
+def test_hypothesis_first_agg_dynamic_numeric(lmdb_version_store_dynamic_schema_v1, df):
+    lib = lmdb_version_store_dynamic_schema_v1
+    assume(not df.empty)
+
+    symbol = f"first_agg-{uuid.uuid4().hex}"
+    expected, slices = make_dynamic(df)
+    for df_slice in slices:
+        lib.append(symbol, df_slice, write_if_missing=True)
+
+    try:
+        q = QueryBuilder()
+        q = q.groupby("grouping_column").agg({"a": "first"})
+
+        vit = lib.read(symbol, query_builder=q)
+        vit.data.sort_index(inplace=True)
+
+        expected = expected.groupby("grouping_column").agg({"a": "first"})
+
+        assert_frame_equal(vit.data, expected)
+    # pandas 1.0 raises SpecificationError rather than KeyError if the column in "agg" doesn't exist
+    except (KeyError, SpecificationError):
+        pass
+
+
+@pytest.mark.xfail(reason="Not supported yet")
+def test_first_aggregation_dynamic(s3_version_store_dynamic_schema_v2):
+    lib = s3_version_store_dynamic_schema_v2
+    df = DataFrame(
+        {
+            "grouping_column": ["group_1", "group_2", "group_4", "group_2", "group_1", "group_3", "group_1"],
+            "get_first": [100.0, np.nan, np.nan, 2.7, 1.4, 5.8, 3.45],
+        },
+        index=np.arange(7),
+    )
+    symbol = "test_first_aggregation_dynamic"
+    expected, slices = make_dynamic(df)
+    for df_slice in slices:
+        lib.append(symbol, df_slice, write_if_missing=True)
+
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"get_first": "first"})
+
+    received = lib.read(symbol, query_builder=q).data
+    received.sort_index(inplace=True)
+
+    expected = expected.groupby("grouping_column").agg({"get_first": "first"})
+
+    assert_frame_equal(received, expected)
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=numeric_type_strategies()),
+        ],
+        index=range_indexes(),
+    )
+)
+@pytest.mark.xfail(reason="Not supported yet")
+def test_hypothesis_last_agg_dynamic_numeric(lmdb_version_store_dynamic_schema_v1, df):
+    lib = lmdb_version_store_dynamic_schema_v1
+    assume(not df.empty)
+
+    symbol = f"last_agg-{uuid.uuid4().hex}"
+    expected, slices = make_dynamic(df)
+    for df_slice in slices:
+        lib.append(symbol, df_slice, write_if_missing=True)
+
+    try:
+        q = QueryBuilder()
+        q = q.groupby("grouping_column").agg({"a": "last"})
+
+        vit = lib.read(symbol, query_builder=q)
+        vit.data.sort_index(inplace=True)
+
+        expected = expected.groupby("grouping_column").agg({"a": "last"})
+
+        assert_frame_equal(vit.data, expected)
+    # pandas 1.0 raises SpecificationError rather than KeyError if the column in "agg" doesn't exist
+    except (KeyError, SpecificationError):
+        pass
+
+
+@pytest.mark.xfail(reason="Not supported yet")
+def test_last_aggregation_dynamic(s3_version_store_dynamic_schema_v2):
+    lib = s3_version_store_dynamic_schema_v2
+    df = DataFrame(
+        {
+            "grouping_column": ["group_1", "group_2", "group_4", "group_5", "group_2", "group_1", "group_3", "group_1", "group_5"],
+            "get_last": [100.0, 2.7, np.nan, np.nan, np.nan, 1.4, 5.8, 3.45, 6.9],
+        },
+        index=np.arange(9),
+    )
+    symbol = "test_last_aggregation_dynamic"
+    expected, slices = make_dynamic(df)
+    for df_slice in slices:
+        lib.append(symbol, df_slice, write_if_missing=True)
+
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"get_last": "last"})
+
+    received = lib.read(symbol, query_builder=q).data
+    received.sort_index(inplace=True)
+
+    expected = expected.groupby("grouping_column").agg({"get_last": "last"})
 
     assert_frame_equal(received, expected)
 

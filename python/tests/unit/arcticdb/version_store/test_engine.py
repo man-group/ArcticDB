@@ -87,7 +87,6 @@ def test_partial_write_non_contiguous(version_store_factory, colnum, rownum, col
     nt.assert_array_equal(vit.data.values, expected.values)
 
 
-@pytest.mark.xfail(reason="Needs to be fixed by issue #316")
 @pytest.mark.parametrize("colnum,rownum,cols,tsbounds", gen_params())
 def test_partial_write_hashed(version_store_factory, colnum, rownum, cols, tsbounds):
     tz = "America/New_York"
