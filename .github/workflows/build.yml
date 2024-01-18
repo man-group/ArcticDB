@@ -14,8 +14,6 @@ on:
       - python/**
       - setup.*
       - pyproject.toml
-    paths-ignore:
-      - "**/*.md"
   workflow_dispatch:
     inputs:
       persistent_storage:
