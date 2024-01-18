@@ -4,7 +4,7 @@ on:
     tags: ["v**"]
     branches: ["master"]
     paths-ignore:
-      - **/*.md
+      - "**/*.md"
   pull_request:
     branches: ["**"]
     paths:
@@ -15,7 +15,7 @@ on:
       - setup.*
       - pyproject.toml
     paths-ignore:
-      - **/*.md
+      - "**/*.md"
   workflow_dispatch:
     inputs:
       persistent_storage:
