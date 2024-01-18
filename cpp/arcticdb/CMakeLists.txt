@@ -23,6 +23,7 @@ find_package(prometheus-cpp CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 find_package(double-conversion REQUIRED)
 
+
 if(NOT WIN32 AND ${SSL_LINK})
     find_package(Kerberos REQUIRED)
 endif()
@@ -53,7 +54,7 @@ set(TEST_DISCOVERY_TIMEOUT, 60)
 set(CMAKE_INSTALL_RPATH "\\$ORIGIN/lib")
 
 ## Core library without python bindings ##
-set(arcticdb_srcs
+set(arcticdb_headers
         # header files
         async/async_store.hpp
         async/batch_read_args.hpp
@@ -235,6 +236,9 @@ set(arcticdb_srcs
         version/version_store_api.hpp
         version/version_store_objects.hpp
         version/version_utils.hpp
+)
+
+set(arcticdb_cpp
         # CPP files
         storage/memory/memory_storage.cpp
         async/async_store.cpp
@@ -327,7 +331,9 @@ set(arcticdb_srcs
         util/third_party/robin_hood.hpp
         )
 
-add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
+set(arcticdb_srcs ${arcticdb_headers} ${arcticdb_cpp})
+
+add_library(arcticdb_core_object OBJECT ${arcticdb_cpp})
 
 if (STATIC_LINK_STD_LIB)
     message("Statically linking standard libraries")
@@ -399,6 +405,75 @@ target_include_directories(arcticdb_core_static PUBLIC
         )
 
 target_link_libraries(arcticdb_core_static PUBLIC ${arcticdb_core_libraries})
+
+
+# ------- For external consumption
+
+add_library(ArcticDb STATIC $<TARGET_OBJECTS:arcticdb_core_object>)
+
+# alias so "ArcticDb::ArcticDb" works when using `add_subdirectory`
+add_library(ArcticDb::ArcticDb ALIAS ArcticDb)
+
+include(GNUInstallDirs)
+
+target_include_directories(ArcticDb PUBLIC
+        "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
+        "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>"
+        "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>"
+)
+
+target_link_libraries(ArcticDb PUBLIC ${arcticdb_core_libraries})
+
+# TODO arcticdb_proto xxhash_static lmdb might need some attention...
+install(TARGETS ArcticDb arcticdb_proto
+        EXPORT ArcticDbTargets
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+install(FILES ${arcticdb_core_headers} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
+install(EXPORT ArcticDbTargets
+        FILE ArcticDbTargets.cmake
+        NAMESPACE ArcticDb::
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/ArcticDb
+)
+
+export(EXPORT ArcticDbTargets
+        FILE ArcticDbTargets.cmake
+        NAMESPACE ArcticDb::
+)
+
+export(PACKAGE ArcticDb)
+
+include(CMakePackageConfigHelpers)
+
+configure_package_config_file(${CMAKE_CURRENT_SOURCE_DIR}/arcticdb-config.cmake.in
+  "${CMAKE_CURRENT_BINARY_DIR}/ArcticDbConfig.cmake"
+  INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/ArcticDb
+)
+
+install(FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/ArcticDbConfig.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/ArcticDbConfigVersion.cmake"
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/ArcticDb
+)
+
+
+
+
+
+
+
+
+
+
+
+## ignore -----
+
+## shared
 
 add_library(arcticdb_core SHARED $<TARGET_OBJECTS:arcticdb_core_object>)
 
