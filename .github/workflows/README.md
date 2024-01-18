@@ -5,7 +5,6 @@ CI system guide
 <tr><th></th><td></td>
 -->
 
-Test change to be removed
 # Introduction
 
 This is the documentation of the CI system that is used to build and publish ArcticDB.
