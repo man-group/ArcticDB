@@ -5,16 +5,15 @@ on:
     branches: ["master"]
     paths-ignore:
       - "**/*.md"
-      - .github/workflows/*.yml
   pull_request:
     branches: ["**"]
     paths:
+      - .github/workflows/*.yml
       - build_tooling/**
       - cpp/**
       - python/**
       - setup.*
       - pyproject.toml
-      - ! .github/workflows/*.yml
   workflow_dispatch:
     inputs:
       persistent_storage:
