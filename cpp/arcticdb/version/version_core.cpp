@@ -819,6 +819,43 @@ void read_incompletes_to_pipeline(
     pipeline_context->total_rows_ = pipeline_context->calc_rows();
 }
 
+void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<PipelineContext>& pipeline_context) {
+    // Does nothing if the symbol is not timestamp-indexed
+    // Checks both that the index ranges of incomplete segments do not overlap with one another, and that the earliest
+    // timestamp in an incomplete segment is greater than the latest timestamp existing in the symbol in the case of a
+    // parallel append
+    if (pipeline_context->descriptor().index().type() == IndexDescriptor::TIMESTAMP) {
+        std::optional<timestamp> last_existing_index_value;
+        // Beginning of incomplete segments == beginning of all segments implies all segments are incompletes, so we are
+        // writing, not appending
+        if (pipeline_context->incompletes_begin() != pipeline_context->begin()) {
+            auto last_indexed_slice_and_key = std::prev(pipeline_context->incompletes_begin())->slice_and_key();
+            // -1 as end_time is stored as 1 greater than the last index value in the segment
+            last_existing_index_value = last_indexed_slice_and_key.key().end_time() - 1;
+        }
+
+        // Use ordered set so we only need to compare adjacent elements
+        std::set<TimestampRange> unique_timestamp_ranges;
+        for (auto it = pipeline_context->incompletes_begin(); it!= pipeline_context->end(); it++) {
+            sorting::check<ErrorCode::E_UNSORTED_DATA>(
+                    !last_existing_index_value.has_value() || it->slice_and_key().key().start_time() > *last_existing_index_value,
+                    "Cannot append staged segments to existing data as incomplete segment contains index value <= existing data: {} <= {}",
+                    it->slice_and_key().key().start_time(),
+                    *last_existing_index_value);
+            unique_timestamp_ranges.insert({it->slice_and_key().key().start_time(), it->slice_and_key().key().end_time()});
+        }
+        for (auto it = unique_timestamp_ranges.begin(); it != unique_timestamp_ranges.end(); it++) {
+            auto next_it = std::next(it);
+            if (next_it != unique_timestamp_ranges.end()) {
+                sorting::check<ErrorCode::E_UNSORTED_DATA>(
+                        next_it->first >= it->second,
+                        "Cannot append staged segments to existing data as incomplete segment index values overlap one another: ({}, {}) ∩ ({}, {}) ≠ ∅",
+                        it->first, it->second - 1, next_it->first, next_it->second - 1);
+            }
+        }
+    }
+}
+
 void copy_frame_data_to_buffer(const SegmentInMemory& destination, size_t target_index, SegmentInMemory& source, size_t source_index, const RowRange& row_range) {
     auto num_rows = row_range.diff();
     if (num_rows == 0) {
@@ -1172,6 +1209,7 @@ VersionedItem sort_merge_impl(
     auto num_versioned_rows = pipeline_context->total_rows_;
 
     read_incompletes_to_pipeline(store, pipeline_context, read_query, ReadOptions{}, convert_int_to_float, via_iteration, sparsify);
+    check_incompletes_index_ranges_dont_overlap(pipeline_context);
 
     std::vector<entity::VariantKey> delete_keys;
     for(auto sk = pipeline_context->incompletes_begin(); sk != pipeline_context->end(); ++sk) {
@@ -1268,6 +1306,7 @@ VersionedItem compact_incomplete_impl(
     if (pipeline_context->slice_and_keys_.size() == prev_size) {
         util::raise_rte("No incomplete segments found for {}", stream_id);
     }
+    check_incompletes_index_ranges_dont_overlap(pipeline_context);
     const auto& first_seg = pipeline_context->slice_and_keys_.begin()->segment(store);
 
     std::vector<entity::VariantKey> delete_keys;
