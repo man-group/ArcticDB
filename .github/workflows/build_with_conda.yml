@@ -3,13 +3,16 @@ on:
   push:
     branches:
       - master
+    paths-ignore:
+      - **/*.md
   # For Pull-Requests, this runs the CI on merge commit
   # of HEAD with the target branch instead on HEAD, allowing
   # testing against potential new states which might have
   # been introduced in the target branch last commits.
   # See: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request
   pull_request:
-
+    paths-ignore:
+      - **/*.md
 jobs:
   start_ec2_runner:
     uses: ./.github/workflows/ec2_runner_jobs.yml

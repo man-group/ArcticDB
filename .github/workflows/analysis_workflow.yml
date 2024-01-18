@@ -9,7 +9,8 @@ on:
     - cron: '0 0 * * *'
 
   pull_request:
-
+    paths-ignore:
+      - **/*.md
 jobs:
   cibw_docker_image:
     uses: ./.github/workflows/cibw_docker_image.yml
