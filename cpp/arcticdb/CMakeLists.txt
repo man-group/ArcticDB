@@ -426,7 +426,7 @@ target_include_directories(ArcticDb PUBLIC
 target_link_libraries(ArcticDb PUBLIC ${arcticdb_core_libraries})
 
 # TODO arcticdb_proto xxhash_static lmdb might need some attention...
-install(TARGETS ArcticDb arcticdb_proto
+install(TARGETS ArcticDb arcticdb_proto xxhash_static lmdb msgpackc-cxx
         EXPORT ArcticDbTargets
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
         ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
