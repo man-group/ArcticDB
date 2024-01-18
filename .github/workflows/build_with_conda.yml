@@ -13,7 +13,6 @@ on:
   pull_request:
     paths-ignore:
       - "**/*.md"
-      - .github/workflows/*.yml
 jobs:
   start_ec2_runner:
     uses: ./.github/workflows/ec2_runner_jobs.yml
