@@ -16,6 +16,7 @@ on:
       - pyproject.toml
     paths-ignore:
       - "**/*.md"
+      - .github/workflows/*.yml
   workflow_dispatch:
     inputs:
       persistent_storage:
