@@ -5,10 +5,10 @@ on:
     branches: ["master"]
     paths-ignore:
       - "**/*.md"
-      - .github/workflows/*.yml
   pull_request:
     branches: ["**"]
     paths:
+      - .github/workflows/*.yml
       - build_tooling/**
       - cpp/**
       - python/**
