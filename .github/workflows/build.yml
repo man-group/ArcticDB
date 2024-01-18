@@ -136,7 +136,7 @@ jobs:
         include:
           - python_deps_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.windows_matrix)}}
-    name: Seed Persistent Storage for 3.${{matrix.python3}} Windows with ${{ matrix.arcticdb_version }} ArcticDB package version 
+    name: Seed Persistent Storage for 3.${{matrix.python3}} Windows with ${{ matrix.arcticdb_version }} ArcticDB package version
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
     permissions: {packages: write}
@@ -238,7 +238,7 @@ jobs:
         include:
           - python_deps_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.linux_matrix)}}
-    name: Verify Persistent Storage for 3.${{matrix.python3}} Linux with ${{ matrix.arcticdb_version }} ArcticDB package version 
+    name: Verify Persistent Storage for 3.${{matrix.python3}} Linux with ${{ matrix.arcticdb_version }} ArcticDB package version
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
     permissions: {packages: write}
@@ -260,7 +260,7 @@ jobs:
         include:
           - python_deps_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.windows_matrix)}}
-    name: Verify Persistent Storage for 3.${{matrix.python3}} Windows with ${{ matrix.arcticdb_version }} ArcticDB package version 
+    name: Verify Persistent Storage for 3.${{matrix.python3}} Windows with ${{ matrix.arcticdb_version }} ArcticDB package version
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
     permissions: {packages: write}
@@ -270,7 +270,7 @@ jobs:
       arcticdb_version: ${{matrix.arcticdb_version}}
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
-    
+
   post_verify_cleanup:
     needs: [persistent_storage_verify_windows, persistent_storage_verify_linux]
     if: inputs.persistent_storage == true
@@ -280,12 +280,35 @@ jobs:
     with:
       job_type: cleanup
 
+  docs_only_check:
+    name: Check for docs-only change
+    outputs:
+      docs_only: ${{ steps.docs_only_check.outputs.docs_only }}
+    runs-on:
+      - ubuntu-20.04
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 10
+      - id: files
+        name: Get changed files
+        uses: tj-actions/changed-files@v23.1
+        with:
+          files_ignore: .github/workflows/**|README.md #change this to docs paths
+          files_ignore_separator: '|'
+      - id: docs_only_check
+        if: steps.files.outputs.any_changed != 'true'
+        name: Check for docs-only changes
+        run: echo '::set-output name=docs_only::DOCS_ONLY'
+
   can_merge:
-    needs: [cpp-test-linux, cpp-test-windows, build-python-wheels-linux, build-python-wheels-windows, persistent_storage_verify_linux, persistent_storage_verify_windows]
+    needs: [docs_only_check, cpp-test-linux, cpp-test-windows, build-python-wheels-linux, build-python-wheels-windows, persistent_storage_verify_linux, persistent_storage_verify_windows]
     if: |
       always() &&
       !failure() &&
-      !cancelled()
+      !cancelled() &&
+      needs.docs_only_check.outputs.docs_only != 'DOCS_ONLY'
     runs-on: ubuntu-latest
     steps:
       - run: echo Dummy job to simplify PR merge checks configuration
