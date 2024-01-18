@@ -10,6 +10,7 @@ on:
 
   pull_request:
     paths-ignore:
+      - .github/workflows/*.yml
       - "**/*.md"
 jobs:
   cibw_docker_image:

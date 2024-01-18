@@ -12,6 +12,7 @@ on:
   # See: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request
   pull_request:
     paths-ignore:
+      - .github/workflows/*.yml
       - "**/*.md"
 jobs:
   start_ec2_runner:
