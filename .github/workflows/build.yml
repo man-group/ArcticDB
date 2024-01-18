@@ -8,7 +8,7 @@ on:
   pull_request:
     branches: ["**"]
     paths:
-      - .github/workflows/*.yml
+      - "!.github/workflows/*.yml"
       - build_tooling/**
       - cpp/**
       - python/**
