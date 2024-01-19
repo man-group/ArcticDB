@@ -36,6 +36,7 @@ For legacy reasons, the terms `symbol`, `stream`, and `stream ID` are used inter
 | Error Code | Cause                                             | Resolution                                                                                                            |
 |------------|---------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------|
 | 3000       | A missing version has been requested of a symbol. | Please request a valid version - see the documentation for the `list_versions` method to enumerate existing versions. |
+| 3001       | A symbol from an incomplete library without any versions was requested and no incomplete segments were found. | Append incomplete data to the symbol. |
 
 ### Schema Error
 
@@ -55,7 +56,7 @@ For legacy reasons, the terms `symbol`, `stream`, and `stream ID` are used inter
 | 5000       | A missing key has been requested.                                      | ArcticDB has requested a key that does not exist in storage. Ensure that you have requested a `symbol`, `snapshot`, `version`, or column statistic that exists. |
 | 5001       | ArcticDB is attempting to write to an already-existing key in storage. | This error is unexpected - please ensure that no other tools are writing data the same storage location that may conflict with ArcticDB.            |
 | 5002       | The symbol being worked on does not exist.                             | ArcticDB has requested a key that does not exist in storage. Ensure that the symbol exists.                                                         |
-| 5003       | The LMDB map is full.                                                  | Close and reopen your LMDB backed Arctic instance with a larger map size. For example to open `/tmp/a/b/` with a map size of 5GB, use `Arctic("lmdb:///tmp/a/b?map_size=5GB")`. Also see the [LMDB documentation](http://www.lmdb.tech/doc/group__mdb.html#gaa2506ec8dab3d969b0e609cd82e619e5). |
+| 5003       | The LMDB map is full.                                                  | Close and reopen your LMDB backed Arctic instance with a larger map size. For example to open `/tmp/a/b/` with a map size of 5GB, use `adb.Arctic("lmdb:///tmp/a/b?map_size=5GB")`. Also see the [LMDB documentation](http://www.lmdb.tech/doc/group__mdb.html#gaa2506ec8dab3d969b0e609cd82e619e5). |
 
 ### Sorting Errors
 
@@ -65,11 +66,12 @@ For legacy reasons, the terms `symbol`, `stream`, and `stream ID` are used inter
 
 ### User Input Errors
 
-| Error Code | Cause                                                                  | Resolution                                                                                                                                          |
-|------------|------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------|
-| 7000       | The input provided by the user is invalid in some fashion.             | The resolution will depend on the nature of the incorrect input, and should be explained in the associated error message. |
-| 7001       | The input was expected to be a valid decimal string but it is not a valid decimal string.             | Pass a valid decimal string. |
-| 7002       | An unsupported character was found in a symbol name.             | We support only the ASCII characters between 32-127 inclusive. Change your symbol name so it contains only valid characters. **If you want to bypass this check, you can define an environment variable called - ARCTICDB_VersionStore_NoStrictSymbolCheck_int=1**. |
+| Error Code | Cause                                                                                     | Resolution                                                                                                                                                                                                                                                                                                              |
+|------------|-------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 7000       | The input provided by the user is invalid in some fashion.                                | The resolution will depend on the nature of the incorrect input, and should be explained in the associated error message.                                                                                                                                                                                               |
+| 7001       | The input was expected to be a valid decimal string but it is not a valid decimal string. | Pass a valid decimal string.                                                                                                                                                                                                                                                                                            |
+| 7002       | An unsupported character was found in a symbol or library name.                           | We support only the ASCII characters between 32-127 inclusive and exclude `<`, `>` and `*` specifically. Change your name so it contains only valid characters. **If you want to bypass this check for symbol names, you can define an environment variable called - ARCTICDB_VersionStore_NoStrictSymbolCheck_int=1**. |
+| 7003       | The library or symbol name was too long.                                                  | We currently only support names up to 255 characters long. Change your name so it not longer than 255 characters. |
 
 ### Compatibility Errors
 
