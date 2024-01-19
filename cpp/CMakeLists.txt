@@ -50,5 +50,6 @@ add_subdirectory(arcticdb)
 target_include_directories(ArcticDb PUBLIC
         "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
         "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>"
+        "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/proto/arcticc/pb2/proto/>"
         "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>"
 )
