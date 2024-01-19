@@ -453,6 +453,10 @@ void decode_into_frame_dynamic(
                     m.source_type_desc_.visit_tag([&buffer, &m, &data, &encoded_field, &buffers, encdoing_version] (auto src_desc_tag ) {
                         using SourceType =  typename decltype(src_desc_tag)::DataTypeTag::raw_type;
                         if constexpr(std::is_arithmetic_v<SourceType> && std::is_arithmetic_v<DestinationType>) {
+                            // If the source and destination types are different, then sizeof(destination type) >= sizeof(source type)
+                            // We have decoded the column of source type directly onto the output buffer above
+                            // We therefore need to iterate backwards through the source values, static casting them to the destination
+                            // type to avoid overriding values we haven't casted yet.
                             const auto src_ptr_offset = sizeof_datatype(m.source_type_desc_) * (m.num_rows_ - 1);
                             const auto dest_ptr_offset = sizeof_datatype(m.dest_type_desc_) * (m.num_rows_ - 1);
                             auto src_ptr = reinterpret_cast<SourceType *>(buffer.data() + m.offset_bytes_ + src_ptr_offset);
