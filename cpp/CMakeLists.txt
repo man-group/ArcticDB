@@ -13,68 +13,6 @@ option(
     "Whether ArcticDB's build system relies on conda for resolving its dependencies."
     OFF
 )
-option(ARCTICDB_USING_ADDRESS_SANITIZER "Enable address sanitizer." OFF)
-option(ARCTICDB_USING_THREAD_SANITIZER "Enable thread sanitizer." OFF)
-option(ARCTICDB_USING_UB_SANITIZER "Enable undefined behavior sanitizer." OFF)
-
-set(ARCTICDB_SANITIZER_FLAGS)
-if(${ARCTICDB_USING_ADDRESS_SANITIZER})
-    list(APPEND ARCTICDB_SANITIZER_FLAGS "-fsanitize=address;-shared-libasan")
-    link_libraries(atomic)
-    message(STATUS "Building ArcticDB with Address Sanitizer")
-endif()
-if(${ARCTICDB_USING_THREAD_SANITIZER})
-    list(APPEND ARCTICDB_SANITIZER_FLAGS "-fsanitize=thread")
-    link_libraries(atomic)
-    message(STATUS "Building ArcticDB with Thread Sanitizer")
-endif()
-if(${ARCTICDB_USING_UB_SANITIZER})
-    list(APPEND ARCTICDB_SANITIZER_FLAGS "-fsanitize=undefined")
-    message(STATUS "Building ArcticDB with UB Sanitizer")
-endif()
-
-if(ARCTICDB_SANITIZER_FLAGS)
-    list(APPEND ARCTICDB_SANITIZER_FLAGS "-g;-fno-omit-frame-pointer;-fno-optimize-sibling-calls;")
-    if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-        add_link_options(-fuse-ld=lld)
-        # According to clang's docs only LLD can be used for lining https://clang.llvm.org/docs/AddressSanitizer.html#usage
-        message(STATUS "Clang compiler detected. Enforcing lld compiler.")
-    else()
-        message(WARNING "Sanitizers are tested only under Clang compiler and LLD linker.")
-    endif()
-    # Note: Sanitizer flags are set globally for all targets created after
-    add_compile_options("${ARCTICDB_SANITIZER_FLAGS}")
-    add_link_options(${ARCTICDB_SANITIZER_FLAGS})
-    message(STATUS "Building ArcticDB with sanitizers. Compiler flags: ${ARCTICDB_SANITIZER_FLAGS}")
-endif()
-
-if(WIN32)
-    add_compile_definitions(
-        NOGDI WIN32_LEAN_AND_MEAN HAVE_SNPRINTF NOMINMAX
-        "$<$<CONFIG:Debug>:DEBUG_BUILD>"
-    )
-
-    # We always generate the debug info on Windows since those are not in the final .dll.
-    # sccache needs the /Z7 format, but the linker will still produce .pdb files.
-    # Guide to MSVC compilation warnings https://learn.microsoft.com/en-us/cpp/error-messages/compiler-warnings/compiler-warnings-c4000-through-c4199?view=msvc-170
-    add_compile_options(
-        /DWIN32 /D_WINDOWS /GR /EHsc /bigobj /Z7 /wd4244 /wd4267
-        "$<$<CONFIG:Debug>:/RTC1;/Od;/MTd>"
-        "$<$<CONFIG:Release>:/MT;/Ox>"
-    )
-else()
-    if(${ARCTICDB_USING_CONDA})
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wextra")
-    else()
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
-    endif()
-    set(CMAKE_CXX_FLAGS_DEBUG "-ggdb")
-    if(DEFINED ENV{ARCTICDB_CODE_COVERAGE_BUILD})
-        set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} --coverage -g -O0")
-    endif()
-    set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
-    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -ggdb")
-endif()
 
 if(DEFINED ENV{CMAKE_BUILD_TYPE})
     message(STATUS "Setting CMAKE_BUILD_TYPE to $ENV{CMAKE_BUILD_TYPE}")
@@ -95,9 +33,7 @@ include(PythonUtils) # Must be called before Pybind (third_party) to override it
 
 add_subdirectory(third_party)
 add_subdirectory(proto)
-if(NOT ${ARCTICDB_USING_CONDA})
-    include(AzureVcpkg) #AzureVcpkg.cmake is from https://github.com/Azure/azure-sdk-for-cpp/blob/main/cmake-modules/AzureVcpkg.cmake, commit ada77b3
-endif()
+include(AzureVcpkg) #AzureVcpkg.cmake is from https://github.com/Azure/azure-sdk-for-cpp/blob/main/cmake-modules/AzureVcpkg.cmake, commit ada77b3
 
 python_utils_dump_vars_if_enabled("After Pybind")
 python_utils_check_include_dirs("accepted by pybind")

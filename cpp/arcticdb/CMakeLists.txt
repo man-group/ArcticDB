@@ -163,8 +163,8 @@ if (NOT WIN32)
     add_compile_options("-fno-omit-frame-pointer")
 endif ()
 
-## Core library without python bindings ##
-set(arcticdb_srcs
+## Public headers
+set(arcticdb_public_headers
         # header files
         async/async_store.hpp
         async/batch_read_args.hpp
@@ -348,7 +348,10 @@ set(arcticdb_srcs
         version/version_store_api.hpp
         version/version_store_objects.hpp
         version/version_utils.hpp
-        # CPP files
+)
+
+## cpp files and private headers
+set(arcticdb_private_srcs
         async/async_store.cpp
         async/task_scheduler.cpp
         async/tasks.cpp
@@ -439,12 +442,7 @@ set(arcticdb_srcs
         version/version_map_batch_methods.cpp
         )
 
-if(${ARCTICDB_INCLUDE_ROCKSDB})
-    list (APPEND arcticdb_srcs
-        storage/rocksdb/rocksdb_storage.hpp
-        storage/rocksdb/rocksdb_storage.cpp
-    )
-endif()
+set(arcticdb_srcs ${arcticdb_public_headers} ${arcticdb_private_srcs})
 
 # Exclude vendored sources when using conda.
 if(NOT ${ARCTICDB_USING_CONDA})
@@ -948,3 +946,5 @@ if(${TEST})
 
     gtest_discover_tests(arcticdb_rapidcheck_tests PROPERTIES DISCOVERY_TIMEOUT 60)
 endif()
+
+
