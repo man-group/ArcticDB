@@ -464,8 +464,7 @@ void decode_into_frame_dynamic(
                             for (auto i = 0u; i < m.num_rows_; ++i) {
                                 *dest_ptr-- = static_cast<DestinationType>(*src_ptr--);
                             }
-                        }
-                        else {
+                        } else {
                             util::raise_rte("Can't promote type {} to type {} in field {}", m.source_type_desc_, m.dest_type_desc_, m.frame_field_descriptor_.name());
                         }
                     });
