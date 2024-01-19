@@ -215,10 +215,6 @@ inline std::vector<KeyType> key_types_read_precedence() {
     return output;
 }
 
-KeyType key_type_from_int(int type_num) {
-    util::check(type_num > 0 && type_num < int(KeyType::UNDEFINED), "Unrecognized key type number {}", type_num);
-    return KeyType(type_num);
-}
 
  } //namespace arcticdb::entity
 

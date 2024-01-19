@@ -31,7 +31,7 @@ class BaseIndex {
   public:
     template<class RangeType>
     StreamDescriptor create_stream_descriptor(StreamId stream_id, RangeType&& fields) const {
-        return stream_descriptor(stream_id, *derived(), std::move(fields));
+        return stream_descriptor(stream_id, *derived(), std::forward<RangeType>(fields));
     }
 
     [[nodiscard]] StreamDescriptor create_stream_descriptor(
@@ -55,13 +55,12 @@ class BaseIndex {
     }
 };
 
-//TODO make this into just a numeric index, of which timestamp is a special case
 class TimeseriesIndex : public BaseIndex<TimeseriesIndex> {
 public:
     static constexpr const char* DefaultName = "time" ;
 
-    explicit TimeseriesIndex(const std::string& name) :
-        name_(name) {
+    explicit TimeseriesIndex(std::string name) :
+        name_(std::move(name)) {
     }
 
     static TimeseriesIndex default_index() {
@@ -82,7 +81,7 @@ public:
 
     void check(const FieldCollection &fields) const {
         const size_t fields_size = fields.size();
-        const int current_fields_size = int(field_count());
+        const auto current_fields_size = int(field_count());
 
         const TypeDescriptor &first_field_type = fields[0].type();
         const TypeDescriptor &current_first_field_type = this->field(0).type();
@@ -163,8 +162,8 @@ class TableIndex : public BaseIndex<TableIndex> {
 public:
     static constexpr const char* DefaultName = "Key";
 
-    explicit TableIndex(const std::string& name) :
-        name_(name) {
+    explicit TableIndex(std::string name) :
+        name_(std::move(name)) {
     }
 
     static TableIndex default_index() {
@@ -285,11 +284,11 @@ class RowCountIndex : public BaseIndex<RowCountIndex> {
     }
 
     template<class RowCellSetter>
-    void set(RowCellSetter, const IndexValue & = {timestamp(0)}) {
+    void set(RowCellSetter, const IndexValue & = {timestamp(0)}) const {
         // No index value
     }
 
-    RowCountIndex make_from_descriptor(const StreamDescriptor&) const {
+    [[nodiscard]] RowCountIndex make_from_descriptor(const StreamDescriptor&) const {
         return RowCountIndex::default_index();
     }
 
@@ -302,8 +301,8 @@ class TimeSymbolIndex : public BaseIndex<TimeSymbolIndex> {
 public:
     static constexpr const char* DefaultName = "time_symbol";
 
-    explicit TimeSymbolIndex(const std::string name) :
-        name_(name) {
+    explicit TimeSymbolIndex(std::string name) :
+        name_(std::move(name)) {
     }
 
     static TimeSymbolIndex default_index() {
@@ -390,7 +389,7 @@ private:
     uint64_t ts_ = 0;
 };
 
-using Index = std::variant<stream::TimeseriesIndex, stream::RowCountIndex, stream::TableIndex>;
+using Index = std::variant<stream::TimeseriesIndex, stream::RowCountIndex, stream::TableIndex, TimeSymbolIndex>;
 
 inline Index index_type_from_descriptor(const StreamDescriptor &desc) {
     switch (desc.index().proto().kind()) {
@@ -419,7 +418,7 @@ inline Index default_index_type_from_descriptor(const IndexDescriptor::Proto &de
     }
 }
 
-// Only to be used for visitation to get field count etc as the name is not set
+// Only to be used for visitation to get field count etc. as the name is not set
 inline Index variant_index_from_type(IndexDescriptor::Type type) {
     switch (type) {
     case IndexDescriptor::TIMESTAMP:

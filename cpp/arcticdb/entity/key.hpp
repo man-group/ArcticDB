@@ -58,11 +58,11 @@ using ContentHash = std::uint64_t;
 
 enum class KeyType : int {
     /*
-     * TODO: For the Kestrel streaming stuff, not in general use atm.
+     * Originally planned to be used for treaming stuff, not in general use atm.
      */
     STREAM_GROUP = 0,
     /*
-     * TODO: For Kestrel streaming stuff, not in general use atm.
+     * Originally planned to be used for treaming stuff, not in general use atm.
      */
     GENERATION = 1,
     // The following keys are string-id-based
@@ -178,6 +178,10 @@ enum class KeyType : int {
      * Contains column stats about the index key with the same stream ID and version number
      */
     COLUMN_STATS = 25,
+    /*
+    * Coalesce keys into larger objects
+    */
+    COALESCE = 26,
     UNDEFINED
 };
 
@@ -231,6 +235,7 @@ char key_type_short_name(KeyType key_type);
 enum class VariantType : char {
     STRING_TYPE = 's',
     NUMERIC_TYPE = 'd',
+    UNSIGNED_TYPE ='n',
     UNKNOWN_TYPE = 'u'
 };
 
@@ -276,6 +281,10 @@ auto foreach_key_type_write_precedence(Function&& func) {
     }
 }
 
+inline KeyType key_type_from_int(int type_num) {
+    util::check(type_num > 0 && type_num < int(KeyType::UNDEFINED), "Unrecognized key type number {}", type_num);
+    return KeyType(type_num);
+}
 
 } // namespace arcticdb::entity
 

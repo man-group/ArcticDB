@@ -14,7 +14,7 @@ inline StreamDescriptor last_coalesce_stream_descriptor(const StreamId &stream_i
     return stream_descriptor(
         stream_id,
         stream::RowCountIndex(),
-        {scalar_field(DataType::MICROS_UTC64, "time")});
+        {scalar_field(DataType::NANOSECONDS_UTC64, "time")});
 }
 
 static RefKey ref_key() {
@@ -29,9 +29,7 @@ SegmentInMemory last_coalesce_segment(uint64_t timestamp) {
 }
 
 std::vector<StreamId> get_uncoalesced_symbols(
-    const std::shared_ptr<Store>& store
-    ) {
-
+        const std::shared_ptr<Store>& store) {
     std::vector<StreamId> output;
     store->iterate_type(KeyType::VERSION_REF, [&output](auto &&vk) {
         output.emplace_back(variant_key_id(std::forward<VariantKey&&>(vk)));
@@ -40,15 +38,15 @@ std::vector<StreamId> get_uncoalesced_symbols(
 }
 
 std::vector<std::shared_ptr<VersionMapEntry>> get_uncoalesced_versions(
-    const std::vector<StreamId>& uncoalesced_ids,
-    std::optional<timestamp> last_coalesce_time,
-    const std::shared_ptr<Store>& store,
-    const std::shared_ptr<VersionMap>& version_map
+        const std::vector<StreamId>& uncoalesced_ids,
+        std::optional<timestamp> last_coalesce_time,
+        const std::shared_ptr<Store>& store,
+        const std::shared_ptr<VersionMap>& version_map
     ) {
     auto load_param = last_coalesce_time ? LoadParameter{LoadType::LOAD_FROM_TIME, last_coalesce_time.value()} : LoadParameter{LoadType::LOAD_ALL};
     auto coalesce_window_size = ConfigsMap::instance()->get_int("Coalesce.SymbolWindowSize", 100);
     auto fut_entries = folly::window(uncoalesced_ids, [store, version_map, load_param] (const auto& id) {
-        return async::submit_io_task(CheckReloadTask{store, version_map, id, load_param, false});
+        return async::submit_io_task(CheckReloadTask{store, version_map, id, load_param});
     }, coalesce_window_size);
 
     return folly::collect(fut_entries).get();
@@ -93,7 +91,6 @@ std::map<StreamId, std::shared_ptr<VersionMapEntry>> get_versions_by_id(
 
     return output;
 }
-
 
 std::map<TimeSymbol::IndexDataType, std::shared_ptr<VersionMapEntry>> get_versions_by_time(
     const std::map<StreamId, std::shared_ptr<VersionMapEntry>>& version_by_id) {
@@ -188,7 +185,7 @@ void coalesce_keys_of_type_hashed(
     std::vector<std::unique_ptr<MultiSegmentIndexer>> indexers;
     storage::coalesced::MultiSegmentIndexer indexer{
         key_type,
-        storage::coalesced::BytesSizingPolicy{static_cast<uint64_t>(multi_segment_bytes)},
+        storage::coalesced::BytesSizingPolicy{multi_segment_bytes},
         get_write_function(storage, codec_meta, encoding_version),
         get_read_function(storage),
         codec_meta,
@@ -222,7 +219,7 @@ void storage_coalesce(
      * For each new entry in time/symbol order, see if it's in the list of existing most recent
      * symbols. If it is, the last  version map entry should be a version key equal to the target
      * version key in the existing_versions list (i.e. it is not a new symbol since the last
-     * coalescence). If it's a new then the last key should be an index key (i.e. there is no prior version
+     * coalescence). If it's new then the last key should be an index key (i.e. there is no prior version
      * segment), and the new version can be added without a predecessor.
      *
      * Declare three multi-segment aggregators, one for version-type information, one for indexes
@@ -288,12 +285,13 @@ void storage_coalesce(
         storage);
 
 
-    coalesce_keys_of_type_hashed(KeyType::TABLE_DATA,
-                          data_keys,
-                          codec_meta,
-                          encoding_version,
-                          multi_segment_bytes,
-                          storage);
+    coalesce_keys_of_type_hashed(
+        KeyType::TABLE_DATA,
+        data_keys,
+        codec_meta,
+        encoding_version,
+        multi_segment_bytes,
+        storage);
 }
 
 }

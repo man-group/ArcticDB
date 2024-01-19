@@ -53,12 +53,11 @@ class MultiSegmentHeader {
 public:
     using TimeSymbolTag = ScalarTagType<DataTypeTag<DataType::TIME_SYM64>>;
 
-    MultiSegmentHeader(StreamId id) :
-        segment_(multi_segment_descriptor(id)) {}
+    explicit MultiSegmentHeader(StreamId id) :
+        segment_(multi_segment_descriptor(std::move(id))) {}
 
-    MultiSegmentHeader(SegmentInMemory segment) :
-        segment_(segment) {
-
+    explicit MultiSegmentHeader(SegmentInMemory segment) :
+        segment_(std::move(segment)) {
     }
 
     void add_key_and_offset(const AtomKey &key, uint64_t offset, uint64_t size) {
@@ -73,7 +72,7 @@ public:
         return std::move(segment_);
     }
 
-    std::optional<std::pair<size_t, size_t>> get_offset_for_key(const AtomKey& key) const {
+    [[nodiscard]] std::optional<std::pair<size_t, size_t>> get_offset_for_key(const AtomKey& key) const {
         const auto& time_symbol_column = segment_.column(0);
         const auto time_symbol = time_symbol_from_key(key);
         auto start_pos = std::lower_bound(time_symbol_column.begin<TimeSymbolTag>(), time_symbol_column.end<TimeSymbolTag>(), time_symbol.data());
@@ -96,9 +95,6 @@ public:
         }
         return std::nullopt;
     }
-
-private:
-
 };
 
 } //namespace arcticdb::storage

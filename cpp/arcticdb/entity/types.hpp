@@ -76,8 +76,9 @@ inline SortedValue sorted_value_from_proto(arcticdb::proto::descriptors::SortedV
 }
 
 using NumericId = int64_t;
+using UnsignedId = uint64_t;
 using StringId = std::string;
-using VariantId = std::variant<NumericId, StringId>;
+using VariantId = std::variant<NumericId, StringId, UnsignedId>;
 using StreamId = VariantId;
 using SnapshotId = VariantId;
 using VersionId = uint64_t;

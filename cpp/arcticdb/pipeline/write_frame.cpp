@@ -192,8 +192,7 @@ folly::Future<std::vector<SliceAndKey>> slice_and_write(
     return write_slices(frame, std::move(slices), slicing, std::move(key), sink, de_dup_map, sparsify_floats);
 }
 
-folly::Future<entity::AtomKey>
-write_frame(
+folly::Future<entity::AtomKey> write_frame(
         IndexPartialKey&& key,
         const std::shared_ptr<InputTensorFrame>& frame,
         const SlicingPolicy &slicing,

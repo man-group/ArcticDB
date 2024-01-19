@@ -37,11 +37,12 @@ constexpr size_t NumNewKeyFields = size_t(NewKeyField::num_key_fields);
 inline VariantId variant_id_from_token(std::string_view strv, VariantType variant_type) {
     switch (variant_type) {
         case VariantType::STRING_TYPE:
-            return VariantId(std::string(strv));
+            return {std::string(strv)};
         case VariantType::NUMERIC_TYPE:
-            return VariantId(util::num_from_strv(strv));
-        default: // This may occur here because generation segments don't set an index type
-            return VariantId();
+        case VariantType::UNSIGNED_TYPE:
+            return {util::num_from_strv(strv)};
+        default:
+            return {};
     }
 }
 
@@ -52,7 +53,7 @@ inline VariantType variant_type_from_index_type(IndexDescriptor::Type index_type
             return VariantType::NUMERIC_TYPE;
         case IndexDescriptor::STRING:
             return VariantType::STRING_TYPE;
-    case IndexDescriptor::TIME_SYMBOL:
+        case IndexDescriptor::TIME_SYMBOL:
             return VariantType::UNSIGNED_TYPE;
         default:
             return VariantType::UNKNOWN_TYPE;
@@ -86,7 +87,7 @@ inline AtomKey key_from_old_style_bytes(const uint8_t *data, size_t size, KeyTyp
 }
 
 template <typename T>
-inline void serialize_string(const std::string &str, CursoredBuffer<T> &output) {
+inline void serialize_string(std::string_view str, CursoredBuffer<T> &output) {
     util::check_arg(str.size() < std::numeric_limits<uint8_t>::max(), "String too long for serialization type");
     output.ensure_bytes(str.size() + sizeof(uint8_t));
     auto data = output.ptr();
@@ -136,9 +137,9 @@ inline void serialize_variant_type(VariantId id, CursoredBuffer<T> &output) {
 
 inline VariantId unserialize_variant_type(VariantType type, const uint8_t *&data) {
     if (type == VariantType::NUMERIC_TYPE)
-        return VariantId(unserialize_number<timestamp>(data));
+        return {unserialize_number<timestamp>(data)};
     else
-        return VariantId(unserialize_string(data));
+        return {unserialize_string(data)};
 }
 
 enum class FormatType : char {
@@ -150,26 +151,23 @@ enum class FormatType : char {
 
 struct KeyDescriptor {
     explicit KeyDescriptor(const AtomKey &key, FormatType format_type) :
-            identifier(SerializedKeyIdentifier),
             id_type(variant_type_from_id(key.id())),
             index_type(to_type_char(stream::get_index_value_type(key))),
             format_type(format_type) {
     }
 
     KeyDescriptor(const StringId& id, IndexDescriptor::Type index_type, FormatType format_type) :
-            identifier(SerializedKeyIdentifier),
             id_type(variant_type_from_id(id)),
             index_type(to_type_char(index_type)),
             format_type(format_type) {}
 
     KeyDescriptor(const RefKey &key, FormatType format_type) :
-            identifier(SerializedKeyIdentifier),
             id_type(variant_type_from_id(key.id())),
             index_type(to_type_char(IndexDescriptor::UNKNOWN)),
             format_type(format_type) {
     }
 
-    char identifier;
+    char identifier = SerializedKeyIdentifier;
     VariantType id_type;
     IndexDescriptor::TypeChar index_type;
     FormatType format_type;
@@ -206,7 +204,7 @@ inline std::string to_serialized_key(const AtomKey &key) {
     serialize_number(key.content_hash(), output);
     serialize_variant_type(key.start_index(), output);
     serialize_variant_type(key.end_index(), output);
-    return std::string(reinterpret_cast<const char *>(output.data()), output.bytes());
+    return {reinterpret_cast<const char *>(output.data()), output.bytes()};
 }
 
 inline std::string to_serialized_key(const RefKey &key) {
@@ -216,11 +214,11 @@ inline std::string to_serialized_key(const RefKey &key) {
     output.commit();
 
     serialize_variant_type(key.id(), output);
-    return std::string(reinterpret_cast<const char *>(output.data()), output.bytes());
+    return {reinterpret_cast<const char *>(output.data()), output.bytes()};
 }
 
 inline std::string to_serialized_key(const entity::VariantKey &key) {
-    return std::visit([&](const auto &key) { return to_serialized_key(key); }, key);
+    return std::visit([&](const auto &k) { return to_serialized_key(k); }, key);
 }
 
 inline AtomKey from_serialized_atom_key(const uint8_t *data, KeyType key_type) {
@@ -231,7 +229,7 @@ inline AtomKey from_serialized_atom_key(const uint8_t *data, KeyType key_type) {
     auto variant_type = variant_type_from_index_type(from_type_char(descr->index_type));
     return atom_key_builder()
             .version_id(unserialize_number<uint64_t>(data))
-            .creation_ts(unserialize_number<uint64_t>(data))
+            .creation_ts(unserialize_number<int64_t>(data))
             .content_hash(unserialize_number<uint64_t>(data))
             .start_index(unserialize_variant_type(variant_type, data))
             .end_index(unserialize_variant_type(variant_type, data))
@@ -266,7 +264,7 @@ inline std::string to_tokenized_key(const RefKey &key) {
 }
 
 inline std::string to_tokenized_key(const entity::VariantKey &key) {
-    return std::visit([&](const auto &key) { return to_tokenized_key(key); }, key);
+    return std::visit([](const auto &k) { return to_tokenized_key(k); }, key);
 }
 
 inline AtomKey from_tokenized_atom_key(const uint8_t *data, size_t size, KeyType key_type) {

@@ -22,21 +22,8 @@ MultiSegment::MultiSegment(SegmentInMemory&& segment, const AtomKey& key) :
 
 }
 
-
-
 size_t MultiSegment::required_bytes() const {
     return segment_->total_segment_size() + body_bytes_; // TODO magic_nums
-}
-
-void MultiSegment::write_to(uint8_t* destination) {
-    segment_->write_to(destination, segment_->segment_header_bytes_size());
-    destination += segment_->total_segment_size();
-
-    for(auto&& k : key_segs_) {
-        auto key_seg = std::move(ks);
-        key_seg.segment().write_to(destination, key_seg.segment().segment_header_bytes_size());
-        destination += key_seg.segment().total_segment_size();
-    }
 }
 
 template <typename GetPartialFunc>
@@ -52,7 +39,7 @@ template <typename GetPartialFunc>
 std::optional<Segment> segment_from_coalesced_key(const AtomKey& key, const MultiSegment& multi_segment) {
     auto opt_position_data = multi_segment.get_offset_for_key(key);
 
-
+    return std::nullopt;
 }
 
 }  //namespace arcticdb

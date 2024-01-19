@@ -199,7 +199,6 @@ public:
                 if (--max_trials <= 0) {
                     throw;
                 }
-            } catch (const std::exception &err) {  //TODO catch only KeyNotFoundException
                 // We retry to read via ref key because it could have been modified by someone else (e.g. compaction)
                 log::version().warn(
                         "Loading versions from storage via ref key failed with error: {} for stream {}. Retrying",
@@ -687,10 +686,10 @@ private:
         const StreamId &stream_id,
         VersionId version_id,
         const std::shared_ptr<VersionMapEntry> &entry) {
-        folly::Future<VariantKey> journal_key_fut = folly::Future<VariantKey>::makeEmpty();
+        AtomKey journal_key;
         entry->validate_types();
 
-        auto commit_func = [&store, &journal_key_fut, &version_id, &stream_id](auto &&segment) {
+        IndexAggregator<RowCountIndex> version_agg(stream_id, [&store, &journal_key, &version_id, &stream_id](auto &&segment) {
             stream::StreamSink::PartialKey pk{
                 KeyType::VERSION,
                 version_id,
@@ -698,12 +697,14 @@ private:
                 IndexValue(0),
                 IndexValue(0)};
 
-            journal_key_fut = store->write_sync(pk, std::forward<SegmentInMemory>(segment));
-        };
-        aggregate_entry(stream_id, entry, std::move(commit_func));
+            journal_key = to_atom(store->write_sync(pk, std::forward<decltype(segment)>(segment)));
+        });
 
-        auto journal_key =  to_atom(std::move(journal_key_fut).get());
-        write_symbol_ref(store, *entry->keys_.cbegin(), journal_key);
+        for (const auto &key : entry->keys_) {
+            version_agg.add_key(key);
+        }
+
+        version_agg.commit();
         return journal_key;
     }
 

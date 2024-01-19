@@ -27,7 +27,7 @@ inline void CoalescedStorage<UnderlyingStorage>::do_write(Composite<KeySegmentPa
 }
 
 template <typename UnderlyingStorage>
-inline void CoalescedStorage<UnderlyingStorage>::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) {
+inline void CoalescedStorage<UnderlyingStorage>::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts) {
     ARCTICDB_SAMPLE(CoalescedStorageUpdate, 0)
 
     auto fmt_db = [](auto &&k) { return variant_key_type(k.variant_key()); };
@@ -35,11 +35,11 @@ inline void CoalescedStorage<UnderlyingStorage>::do_update(Composite<KeySegmentP
     (fg::from(kvs.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
         for (auto &kv : group.values()) {
             util::variant_match(kv.variant_key,
-                [this, &kv](const RefKey& ref_key) {
+                [this, &kv](const RefKey&) {
                         base_.update(std::move(kv));
                 },
                 [this, &kv](const AtomKey& atom_key) {
-                    if(!last_coalesce_time || atom_key.creation_ts() > last_coalesce_time.value())
+                    if(!last_coalesce_time_ || atom_key.creation_ts() > last_coalesce_time_.value())
                         base_.update(std::move(kv));
                     else
                         base_.write(std::move(kv));
@@ -65,14 +65,14 @@ void CoalescedStorage<UnderlyingStorage>::do_read(Composite<VariantKey>&& ks, Vi
                     if(!last_coalesce_time_ || atom_key.creation_ts() > last_coalesce_time_.value()) {
                         try {
                             return base_.read(k, [&visitor] (auto&& s) { return visitor(s); });
-                        } catch (const NoDataFoundException) {
+                        } catch (const NoDataFoundException&) {
                             refresh_coalesced_keys_ = true;
                         }
                     }
 
                     std::shared_lock reader_lock(keys_mutex_);
                     if(auto it = coalesced_keys_.find(k.type())) {
-                        return it.second->
+                        //return it.second->
                     }
                 }
             );

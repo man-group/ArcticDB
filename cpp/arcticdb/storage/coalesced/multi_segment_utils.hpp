@@ -1,7 +1,7 @@
 #pragma once
 
-#include "arcticdb/entity/atom_key.hpp"
-#include "arcticdb/column_store/memory_segment.hpp"
+#include <arcticdb/entity/key.hpp>
+#include <arcticdb/column_store/memory_segment.hpp>
 
 /*
  * Contains similar functions to stream_utils.hpp but assumes that many keys are mixed in together, so we can't guarantee that
@@ -55,7 +55,7 @@ entity::AtomKey get_key(position_t pos, const SegmentInMemory& segment) {
         .creation_ts(segment.scalar_at<uint64_t>(pos, as_pos(FieldType::creation_ts)).value())
         .start_index(get_index(pos, FieldType::start_index, segment))
         .end_index(get_index(pos, FieldType::end_index, segment))
-        .build(get_id<FieldType>(pos, segment), key_type_from_int(segment.scalar_at<uint8_t>(pos, as_pos(FieldType::key_type)).value()));
+        .build(get_id<FieldType>(pos, segment), entity::key_type_from_int(segment.scalar_at<uint8_t>(pos, as_pos(FieldType::key_type)).value()));
 }
 
 template <typename FieldType>

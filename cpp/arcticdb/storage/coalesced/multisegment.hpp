@@ -43,10 +43,12 @@ public:
         }
 
         segment_ = std::make_unique<Segment>(encode_dispatch(std::move(header_.detach_segment()), *codec_meta_, encoding_version_));
+        return segment_->total_segment_size();
     }
 
     template <typename GetSegmentFunc>
-    void write_to(uint8_t* dst,
+    void write_to(
+        uint8_t* dst,
         GetSegmentFunc&& get_seg) const {
         auto get_segment = std::forward<GetSegmentFunc>(get_seg);
 
@@ -61,6 +63,7 @@ public:
     }
 
     size_t required_bytes() const;
+
     Segment read(const AtomKey& key);
 
 private:

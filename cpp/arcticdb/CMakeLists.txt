@@ -450,7 +450,7 @@ set(arcticdb_srcs
         storage/storage_coalesce.hpp
         storage/coalesced/multi_segment_aggregator.hpp
         storage/coalesced/select_data_partition.hpp
-        )
+        storage/coalesced/coalesced_storage_common.hpp)
 
 if(${ARCTICDB_INCLUDE_ROCKSDB})
     list (APPEND arcticdb_srcs

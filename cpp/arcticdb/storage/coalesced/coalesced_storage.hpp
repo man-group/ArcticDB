@@ -13,11 +13,9 @@
 namespace arcticdb::storage::coalesced {
 
 template <typename UnderlyingStorage>
-class CoalescedStorage: public Storage<CoalescedStorage<UnderlyingStorage>> {
+class CoalescedStorage: public Storage {
     UnderlyingStorage base_;
 
-    using Parent = Storage<CoalescedStorage<UnderlyingStorage>>;
-    friend Parent;
 
     std::optional<timestamp> last_coalesce_time_;
     std::atomic<bool> refresh_coalesced_keys_ = false;
@@ -31,8 +29,7 @@ public:
         using Config = typename UnderlyingStorage::Config;
 
     CoalescedStorage(const LibraryPath &lib, OpenMode mode, const Config &conf) :
-        base_(lib, mode, conf),
-        Parent(lib, mode, conf) {
+        base_(lib, mode, conf) {
     }
 
     protected:

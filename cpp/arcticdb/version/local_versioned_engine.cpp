@@ -78,8 +78,6 @@ void LocalVersionedEngine::create_column_stats_internal(
     const ReadOptions& read_options) {
     ARCTICDB_RUNTIME_SAMPLE(CreateColumnStatsInternal, 0)
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: create_column_stats");
-    creaICDB_RUNTIME_DEBUG(log::version(), "Command: create_column_stats");
-    creaICDB_RUNTIME_DEBUG(log::version(), "Command: create_column_stats");
     create_column_stats_impl(store(),
                              versioned_item,
                              column_stats,

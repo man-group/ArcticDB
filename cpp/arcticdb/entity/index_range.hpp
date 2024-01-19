@@ -47,32 +47,27 @@ inline std::string tokenized_index(const IndexValue& val) {
 struct IndexRange {
     IndexValue start_;
     IndexValue end_;
-    bool specified_;
+    bool specified_ = false;
+    bool start_closed_ = true;
+    bool end_closed_ = true;
 
-    bool start_closed_;
-    bool end_closed_;
-
-    IndexRange() : specified_(false), start_closed_(true), end_closed_(true) {}
+    IndexRange() = default;
 
     IndexRange(IndexValue start, IndexValue end) :
         start_(std::move(start)),
         end_(std::move(end)),
-        specified_(true),
-        start_closed_(true),
-        end_closed_(true) {
+        specified_(true) {
     }
 
     explicit IndexRange(const TimestampRange &rg) :
         start_(rg.first),
         end_(rg.second),
-        specified_(true),
-        start_closed_(true),
-        end_closed_(true) {
+        specified_(true) {
     }
 
     // Indices of non-matching types will always be excluded, might want to assert though
     // as this should never happen
-    bool accept(const IndexValue &index) {
+    [[nodiscard]] bool accept(const IndexValue &index) const {
         if (!specified_)
             return true;
 
@@ -130,22 +125,15 @@ struct IndexRange {
     }
 
     void adjust_open_closed_interval() {
-        util::variant_match(start_,
-                            [that = this](const NumericIndex &start) mutable {
-                                if (!that->start_closed_)
-                                    that->start_ = IndexValue{start + 1};
-                            },
-                            [](const auto &) {
-                            });
+        if(std::holds_alternative<NumericIndex>(start_) && !start_closed_) {
+            auto start = std::get<NumericIndex>(start_);
+            start_ = NumericIndex(start + 1);
+        }
 
-        util::variant_match(end_,
-                            [that = this](const NumericIndex &end) {
-                                if (!that->end_closed_)
-                                    that->end_ = IndexValue{end - 1};
-                            },
-                            [](const auto &) {
-                            }
-        );
+        if(std::holds_alternative<NumericIndex>(end_) && !end_closed_) {
+            auto end = std::get<NumericIndex>(end_);
+            end_ = NumericIndex(end - 1);
+        }
     }
 };
 
