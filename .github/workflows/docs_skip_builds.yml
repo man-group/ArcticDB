@@ -36,6 +36,6 @@ jobs:
     needs: [docs_only_check]
     steps:
       - run: "can_merge_docs_only=\"${{ needs.docs_only_check.outputs.docs_only\
-        \ }}\"\nif [[ \"${can_merge_docs_only}\" == \"DOCS_ONLY\"]] \nthen\n\
+        \ }}\"\nif [[ ${can_merge_docs_only} == \"DOCS_ONLY\" ]] \nthen\n\
         \    echo \"CAN MERGE\"\n    exit 0\nelse\n    echo\
         \ \"CANNOT MERGE\"\n    exit 1\nfi\n"
