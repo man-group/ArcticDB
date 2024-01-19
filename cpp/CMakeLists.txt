@@ -47,7 +47,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 add_subdirectory(arcticdb)
 
-target_include_directories(ArcticDb PUBLIC
+target_include_directories(arcticdb_core_static PUBLIC
         "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
         "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>"
         "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/proto/arcticc/pb2/proto/>"
