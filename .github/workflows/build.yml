@@ -6,6 +6,7 @@ on:
   pull_request:
     branches: ["**"]
     paths:
+      - .github/workflows/*.yml
       - build_tooling/**
       - cpp/**
       - python/**
@@ -31,6 +32,8 @@ concurrency:
   cancel-in-progress: true
 jobs:
   cibw_docker_image:
+    if: ${{ needs.docs_only_check.outputs.docs_only != 'DOCS_ONLY' }}
+    needs: [docs_only_check]
     uses: ./.github/workflows/cibw_docker_image.yml
     permissions: {packages: write}
     with:
@@ -38,7 +41,8 @@ jobs:
       force_update: false
 
   common_config:
-    needs: [cibw_docker_image]
+    if: needs.docs_only_check.outputs.docs_only != 'DOCS_ONLY'
+    needs: [docs_only_check, cibw_docker_image]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -93,7 +97,8 @@ jobs:
       windows_matrix: ${{toJson(matrix.windows_matrix)}}
 
   pre_seed_cleanup:
-    if: inputs.persistent_storage == true
+    if: needs.docs_only_check.outputs.docs_only != 'DOCS_ONLY' && inputs.persistent_storage == true
+    needs: [docs_only_check]
     name: Cleanup persistent storages
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
@@ -101,8 +106,8 @@ jobs:
       job_type: cleanup
 
   persistent_storage_seed_linux:
-    needs: [common_config, pre_seed_cleanup]
-    if: inputs.persistent_storage == true
+    if: needs.docs_only_check.outputs.docs_only != 'DOCS_ONLY' && inputs.persistent_storage == true
+    needs: [docs_only_check, common_config, pre_seed_cleanup]
     strategy:
       fail-fast: false
       matrix:
@@ -123,8 +128,8 @@ jobs:
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
 
   persistent_storage_seed_windows:
-    needs: [common_config, pre_seed_cleanup]
-    if: inputs.persistent_storage == true
+    if: needs.docs_only_check.outputs.docs_only != 'DOCS_ONLY' && inputs.persistent_storage == true
+    needs: [docs_only_check, common_config, pre_seed_cleanup]
     strategy:
       fail-fast: false
       matrix:
@@ -145,7 +150,8 @@ jobs:
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
 
   cpp-test-linux:
-    needs: [cibw_docker_image, common_config]
+    if: needs.docs_only_check.outputs.docs_only != 'DOCS_ONLY'
+    needs: [docs_only_check, cibw_docker_image, common_config]
     name: Linux C++ Tests
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
@@ -158,7 +164,8 @@ jobs:
 
   build-python-wheels-linux:
     # Then use the cached compilation artifacts to build other python versions concurrently in cibuildwheels
-    needs: [cibw_docker_image, common_config]
+    if: needs.docs_only_check.outputs.docs_only != 'DOCS_ONLY'
+    needs: [docs_only_check, cibw_docker_image, common_config]
     strategy:
       fail-fast: false
       matrix:
@@ -197,7 +204,8 @@ jobs:
       pytest_xdist_mode: ${{matrix.pytest_xdist_mode}}
 
   cpp-test-windows:
-    needs: [common_config]
+    if: needs.docs_only_check.outputs.docs_only != 'DOCS_ONLY'
+    needs: [docs_only_check, common_config]
     name: Windows C++ Tests
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
@@ -207,7 +215,8 @@ jobs:
       matrix: ${{needs.common_config.outputs.windows_matrix}}
 
   build-python-wheels-windows:
-    needs: [common_config]
+    if: needs.docs_only_check.outputs.docs_only != 'DOCS_ONLY'
+    needs: [docs_only_check, common_config]
     strategy:
       fail-fast: false
       matrix:
@@ -225,8 +234,8 @@ jobs:
       persistent_storage: ${{ inputs.persistent_storage }}
 
   persistent_storage_verify_linux:
-    needs: [common_config, build-python-wheels-linux, build-python-wheels-windows]
-    if: inputs.persistent_storage == true
+    if: needs.docs_only_check.outputs.docs_only != 'DOCS_ONLY' && inputs.persistent_storage == true
+    needs: [docs_only_check, common_config, build-python-wheels-linux, build-python-wheels-windows]
     strategy:
       fail-fast: false
       matrix:
@@ -247,8 +256,8 @@ jobs:
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
 
   persistent_storage_verify_windows:
-    needs: [common_config, build-python-wheels-windows, build-python-wheels-linux]
-    if: inputs.persistent_storage == true
+    if: needs.docs_only_check.outputs.docs_only != 'DOCS_ONLY' && inputs.persistent_storage == true
+    needs: [docs_only_check, common_config, build-python-wheels-windows, build-python-wheels-linux]
     strategy:
       fail-fast: false
       matrix:
@@ -269,24 +278,69 @@ jobs:
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
     
   post_verify_cleanup:
-    needs: [persistent_storage_verify_windows, persistent_storage_verify_linux]
-    if: inputs.persistent_storage == true
+    if: needs.docs_only_check.outputs.docs_only != 'DOCS_ONLY' && inputs.persistent_storage == true
+    needs: [ docs_only_check, persistent_storage_verify_windows, persistent_storage_verify_linux]
     name: Cleanup persistent storages
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
     with:
       job_type: cleanup
 
+  docs_only_check:
+    name: Check for docs-only change
+    outputs:
+      docs_only: ${{ steps.docs_only_check.outputs.docs_only }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 10
+      - id: files
+        name: Get changed files
+        uses: tj-actions/changed-files@v23.1
+        with:
+          files_ignore: /**/*.yml|README.md #change this to docs paths
+          files_ignore_separator: '|'
+      - id: docs_only_check
+        if: steps.files.outputs.any_changed != 'true'
+        name: Check for docs-only changes
+        run: echo "docs_only=DOCS_ONLY" >> $GITHUB_OUTPUT
+
+  set_can_merge_docs_only:
+    if: needs.docs_only_check.outputs.docs_only == 'DOCS_ONLY'
+    needs: [ docs_only_check ]
+    outputs:
+      merge_ok: ${{ steps.set_merge_ok.outputs.merge_ok }}
+    runs-on:
+      - ubuntu-20.04
+    steps:
+      - id: set_merge_ok
+        run: echo "merge_ok=true" >> $GITHUB_OUTPUT
+
+  set_can_merge_not_docs_only:
+    if: needs.docs_only_check.outputs.docs_only != 'DOCS_ONLY'
+    needs: [docs_only_check, cpp-test-linux, cpp-test-windows, build-python-wheels-linux, build-python-wheels-windows, persistent_storage_verify_linux, persistent_storage_verify_windows]
+    outputs:
+      merge_ok: ${{ steps.set_merge_ok.outputs.merge_ok }}
+    runs-on: ubuntu-latest
+    steps:
+      - id: set_merge_ok
+        run: echo "merge_ok=true" >> $GITHUB_OUTPUT
+
   can_merge:
-    needs: [cpp-test-linux, cpp-test-windows, build-python-wheels-linux, build-python-wheels-windows, persistent_storage_verify_linux, persistent_storage_verify_windows]
+    needs: [set_can_merge_docs_only, set_can_merge_not_docs_only]
     if: |
       always() &&
       !failure() &&
       !cancelled()
     runs-on: ubuntu-latest
     steps:
-      - run: echo Dummy job to simplify PR merge checks configuration
-      # FUTURE: add some test stats/reporting
+      - run: "can_merge_docs_only=\"${{ needs.set_can_merge_docs_only.outputs.merge_ok\
+            \ }}\"\ncan_merge_not_docs_only=\"${{ needs.set_can_merge_not_docs_only.outputs.merge_ok\
+            \ }}\"\nif [[ \"${can_merge_docs_only}\" == \"true\" || \"${can_merge_not_docs_only}\"\
+            \ == \"true\" ]]; then\n    echo \"Merge OK\"\n    exit 0\nelse\n    echo\
+            \ \"Merge NOT OK\"\n    exit 1\nfi\n"
 
   publish:
     needs: [common_config, can_merge]
