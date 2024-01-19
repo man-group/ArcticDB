@@ -849,7 +849,7 @@ void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<PipelineC
             if (next_it != unique_timestamp_ranges.end()) {
                 sorting::check<ErrorCode::E_UNSORTED_DATA>(
                         next_it->first >= it->second,
-                        "Cannot append staged segments to existing data as incomplete segment index values overlap one another: ({}, {}) ∩ ({}, {}) ≠ ∅",
+                        "Cannot append staged segments to existing data as incomplete segment index values overlap one another: ({}, {}) intersects ({}, {})",
                         it->first, it->second - 1, next_it->first, next_it->second - 1);
             }
         }
@@ -1209,7 +1209,6 @@ VersionedItem sort_merge_impl(
     auto num_versioned_rows = pipeline_context->total_rows_;
 
     read_incompletes_to_pipeline(store, pipeline_context, read_query, ReadOptions{}, convert_int_to_float, via_iteration, sparsify);
-    check_incompletes_index_ranges_dont_overlap(pipeline_context);
 
     std::vector<entity::VariantKey> delete_keys;
     for(auto sk = pipeline_context->incompletes_begin(); sk != pipeline_context->end(); ++sk) {
