@@ -48,9 +48,10 @@ std::variant<StringEncodingError, PyStringWrapper> pystring_to_buffer(PyObject *
 }
 
 std::tuple<ValueType, uint8_t, ssize_t> determine_python_object_type(PyObject* obj) {
-    if(is_py_boolean(obj))
+    if (is_py_boolean(obj)) {
+        normalization::raise<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>("Nullable booleans are not supported at the moment");
         return {ValueType::PYBOOL, 1, 1};
-
+    }
     return {ValueType::BYTES, 8, 1};
 }
 
@@ -177,6 +178,9 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
             } else if (PYBIND11_BYTES_CHECK(sample)) {
                 val_type = ValueType::ASCII_DYNAMIC;
             } else if(is_py_array(sample)) {
+                normalization::raise<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(
+                    "Array types are not supported at the moment"
+                );
                 std::tie(val_type, val_bytes, ndim) = determine_python_array_type(current_object, current_object + element_count);
             } else {
                 std::tie(val_type, val_bytes, ndim) = determine_python_object_type(sample);
