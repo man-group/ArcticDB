@@ -110,3 +110,13 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR}/proto/arcticc/pb2/proto/)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 add_subdirectory(arcticdb)
+
+# arcticdb_core_static is used by other projects so we expose the headers via `arcticdb/.../abc.hpp`.
+# We plan to introduce a new target that exposes only a "public" subset of headers from this project
+# soon instead, as exposing all headers is fragile for consumers.
+target_include_directories(arcticdb_core_static PUBLIC
+        "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
+        "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>"
+        "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/proto/arcticc/pb2/proto/>"
+        "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>"
+)
