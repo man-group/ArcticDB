@@ -319,7 +319,6 @@ def test_parallel_non_timestamp_index(lmdb_version_store, append):
     assert_frame_equal(expected_df, read_df)
 
 
-@pytest.mark.xfail(reason="See https://github.com/man-group/ArcticDB/issues/1248")
 @pytest.mark.parametrize("append", (True, False))
 def test_parallel_overlapping_incomplete_segments(lmdb_version_store, append):
     lib = lmdb_version_store
@@ -335,11 +334,10 @@ def test_parallel_overlapping_incomplete_segments(lmdb_version_store, append):
     else:
         lib.write(sym, df_2, parallel=True)
         lib.write(sym, df_1, parallel=True)
-    with pytest.raises(Exception):
+    with pytest.raises(SortingException):
         lib.compact_incomplete(sym, append, False)
 
 
-@pytest.mark.xfail(reason="See https://github.com/man-group/ArcticDB/issues/1249")
 def test_parallel_append_overlapping_with_existing(lmdb_version_store):
     lib = lmdb_version_store
     sym = "test_parallel_append_overlapping_with_existing"
@@ -347,7 +345,7 @@ def test_parallel_append_overlapping_with_existing(lmdb_version_store):
     lib.write(sym, df_0)
     df_1 = pd.DataFrame({"col": [3, 4]}, index=[pd.Timestamp("2024-01-01T12"), pd.Timestamp("2024-01-03")])
     lib.append(sym, df_1, incomplete=True)
-    with pytest.raises(Exception):
+    with pytest.raises(SortingException):
         lib.compact_incomplete(sym, True, False)
 
 
