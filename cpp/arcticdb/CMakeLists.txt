@@ -964,3 +964,41 @@ target_include_directories(ArcticDb PUBLIC
 )
 
 target_link_libraries(ArcticDb PUBLIC ${arcticdb_core_libraries})
+
+# TODO arcticdb_proto xxhash_static lmdb might need some attention...
+install(TARGETS ArcticDb arcticdb_proto xxhash_static lmdb msgpackc-cxx
+        EXPORT ArcticDbTargets
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+install(FILES ${arcticdb_core_headers} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
+install(EXPORT ArcticDbTargets
+        FILE ArcticDbTargets.cmake
+        NAMESPACE ArcticDb::
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/ArcticDb
+)
+
+export(EXPORT ArcticDbTargets
+        FILE ArcticDbTargets.cmake
+        NAMESPACE ArcticDb::
+)
+
+export(PACKAGE ArcticDb)
+
+include(CMakePackageConfigHelpers)
+
+configure_package_config_file(${CMAKE_CURRENT_SOURCE_DIR}/arcticdb-config.cmake.in
+        "${CMAKE_CURRENT_BINARY_DIR}/ArcticDbConfig.cmake"
+        INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/ArcticDb
+)
+
+install(FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/ArcticDbConfig.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/ArcticDbConfigVersion.cmake"
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/ArcticDb
+)
+
