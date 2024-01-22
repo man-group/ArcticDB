@@ -7,6 +7,7 @@ on:
     branches: ["**"]
     paths:
       - .github/workflows/*.yml
+      - /**/*.md
       - build_tooling/**
       - cpp/**
       - python/**
@@ -305,7 +306,7 @@ jobs:
       - id: docs_only_check
         if: steps.files.outputs.any_changed != 'true'
         name: Check for docs-only changes
-        run: echo "docs_only=DOCS_ONLY" >> $GITHUB_OUTPUT
+        run: echo "docs_only=DOCS_ONLY" >> "$GITHUB_OUTPUT"
 
   set_can_merge_docs_only:
     if: needs.docs_only_check.outputs.docs_only == 'DOCS_ONLY'
@@ -316,7 +317,7 @@ jobs:
       - ubuntu-latest
     steps:
       - id: set_merge_ok
-        run: echo "merge_ok=true" >> $GITHUB_OUTPUT
+        run: echo "merge_ok=true" >> "$GITHUB_OUTPUT"
 
   set_can_merge_not_docs_only:
     if: needs.docs_only_check.outputs.docs_only != 'DOCS_ONLY'
@@ -326,7 +327,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - id: set_merge_ok
-        run: echo "merge_ok=true" >> $GITHUB_OUTPUT
+        run: echo "merge_ok=true" >> "$GITHUB_OUTPUT"
 
   can_merge:
     needs: [set_can_merge_docs_only, set_can_merge_not_docs_only]
