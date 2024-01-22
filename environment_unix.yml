@@ -42,9 +42,9 @@ dependencies:
   # ArcticDB is currently incompatible with fmt 10
   - fmt < 10
   - folly
-  # Vendored build dependencies (see `cpp/thirdparty`)
+  # Vendored build dependencies (see `cpp/thirdparty` and `cpp/vcpkg.json`)
   # Versions must be kept in sync
-  - xxhash
+  - xxhash==0.8.2
   - semimap
   - robin_hood
   - rapidcheck

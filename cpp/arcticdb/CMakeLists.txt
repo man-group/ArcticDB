@@ -35,6 +35,7 @@ endif()
 find_package(Protobuf REQUIRED)
 find_package(mongocxx REQUIRED)
 find_package(bsoncxx REQUIRED)
+find_package(xxHash REQUIRED)
 find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypasses our cpp/CMake/FindZstd.cmake module
 
 find_package(azure-identity-cpp CONFIG REQUIRED)
@@ -66,7 +67,6 @@ else()
     SET(HIDE_LINKED_SYMBOLS OFF)
 
     find_package(pybind11 REQUIRED)
-    find_package(xxHash REQUIRED)
     find_package(PCRE REQUIRED)
     find_package(Libevent  REQUIRED)
     find_package(semimap REQUIRED)
@@ -89,6 +89,10 @@ else()
     message(STATUS "NEW_FOLLY_DEPS" ${NEW_FOLLY_DEPS})
     list(REMOVE_ITEM NEW_FOLLY_DEPS "/usr/local/opt/openssl/include" )
     set_target_properties(Folly::folly_deps PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${NEW_FOLLY_DEPS}")
+
+    add_library(xxHash STATIC IMPORTED)
+    set_target_properties(xxHash PROPERTIES IMPORTED_LOCATION ${xxHash_LIBRARY})
+    set_target_properties(xxHash PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${xxHash_INCLUDE_DIR})
 
 endif()
 # RocksDB can be manually excluded with set(ARCTICDB_INCLUDE_ROCKSDB 0)
@@ -524,12 +528,13 @@ endif()
 # on their origin (i.e. vendored source or packages on conda-forge).
 if(${ARCTICDB_USING_CONDA})
 
-    # We must use dynamic libraries.
+    # We must use dynamic libraries, except for xxHash, which must be statically linked.
+    # In non-conda builds, we inline the functions so it does not need linking at all.
     list (APPEND arcticdb_core_libraries
-        xxHash::xxHash
         pcre
         msgpack-c
         ${LMDB_LIBRARIES}
+        xxHash
     )
     if(${BUILD_WITH_REMOTERY})
         list (APPEND arcticdb_core_libraries
@@ -538,10 +543,7 @@ if(${ARCTICDB_USING_CONDA})
     endif()
 else()
 
-    add_compile_definitions(ARCTICDB_USING_STATIC_XXHASH)
-
     list (APPEND arcticdb_core_libraries
-        xxhash_static
         unofficial::pcre::pcre
         msgpackc-cxx
         lmdb

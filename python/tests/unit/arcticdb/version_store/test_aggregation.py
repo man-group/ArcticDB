@@ -22,10 +22,7 @@ from arcticdb.util.hypothesis import (
 from hypothesis import assume, given, settings
 from hypothesis.extra.pandas import column, data_frames, range_indexes
 
-from tests.util.mark import xfail_on_linux_conda
 
-
-@xfail_on_linux_conda(reason="Test fails on linux conda, should be fixed by issue #1035")
 def test_group_on_float_column_with_nans(lmdb_version_store):
     lib = lmdb_version_store
     sym = "test_group_on_float_column_with_nans"
