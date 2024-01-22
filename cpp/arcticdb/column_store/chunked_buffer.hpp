@@ -14,11 +14,21 @@
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/column_store/block.hpp>
 
+#ifndef DEBUG_BUILD
 #include <boost/container/small_vector.hpp>
+#endif
 
 #include <cstdint>
 
 namespace arcticdb {
+
+#ifdef DEBUG_BUILD
+using MemBlockVectorType = std::vector<MemBlock *>;
+using MemBlockOffsetsVectorType = std::vector<size_t>;
+#else
+using MemBlockVectorType = boost::container::small_vector<MemBlock *, 1>;
+using MemBlockOffsetsVectorType = boost::container::small_vector<size_t, 1>;
+#endif
 
 /*
  * ChunkedBufferImpl is an untyped buffer that is composed of blocks of data that can be either regularly or
@@ -400,14 +410,8 @@ class ChunkedBufferImpl {
 
     size_t bytes_ = 0;
     size_t regular_sized_until_ = 0;
-//#define DEBUG_BUILD
-#ifndef DEBUG_BUILD
-    boost::container::small_vector<BlockType *, 1> blocks_;
-    boost::container::small_vector<size_t, 1> block_offsets_;
-#else
-    std::vector<BlockType*> blocks_;
-    std::vector<size_t> block_offsets_;
-#endif
+    MemBlockVectorType blocks_;
+    MemBlockOffsetsVectorType block_offsets_;
 };
 
 constexpr size_t PageSize = 4096;

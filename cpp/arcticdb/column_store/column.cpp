@@ -562,7 +562,7 @@ void Column::compact_blocks() {
     data_.compact_blocks();
 }
 
-const std::vector<MemBlock *>& Column::blocks() const {
+const MemBlockVectorType& Column::blocks() const {
     return data_.buffer().blocks();
 }
 

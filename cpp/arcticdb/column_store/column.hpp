@@ -445,7 +445,7 @@ public:
 
     void compact_blocks();
 
-    const std::vector<MemBlock *>& blocks() const;
+    const MemBlockVectorType& blocks() const;
 
     template<typename T>
     std::optional<T> scalar_at(position_t row) const {
