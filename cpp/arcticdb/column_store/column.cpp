@@ -90,14 +90,14 @@ void Column::unsparsify(size_t num_rows) {
     if(!sparse_map_)
         return;
 
-    type_.visit_tag([that=this, num_rows] (const auto tdt) {
+    type_.visit_tag([this, num_rows] (const auto tdt) {
         using TagType = decltype(tdt);
         using RawType = typename TagType::DataTypeTag::raw_type;
         const auto dest_bytes = num_rows * sizeof(RawType);
         auto dest = ChunkedBuffer::presized(dest_bytes);
         util::default_initialize<TagType>(dest.data(), dest_bytes);
-        util::expand_dense_buffer_using_bitmap<RawType>(that->sparse_map_.value(), that->data_.buffer().data(), dest.data());
-        std::swap(dest, that->data_.buffer());
+        util::expand_dense_buffer_using_bitmap<RawType>(sparse_map_.value(), data_.buffer().data(), dest.data());
+        std::swap(dest, data_.buffer());
     });
     sparse_map_ = std::nullopt;
     last_logical_row_ = last_physical_row_ = static_cast<ssize_t>(num_rows) - 1;
@@ -106,14 +106,13 @@ void Column::unsparsify(size_t num_rows) {
 }
 
 void Column::sparsify() {
-    type().visit_tag([that=this](auto type_desc_tag) {
-        using TDT = decltype(type_desc_tag);
-        using RawType = typename TDT::DataTypeTag::raw_type;
-        if constexpr(is_floating_point_type(TDT::DataTypeTag::data_type)) {
-            auto raw_ptr =reinterpret_cast<const RawType*>(that->ptr());
-            auto buffer = util::scan_floating_point_to_sparse(raw_ptr, that->row_count(), that->sparse_map());
-            std::swap(that->data().buffer(), buffer);
-            that->last_physical_row_ = that->sparse_map().count() - 1;
+    type().visit_tag([this](auto type_desc_tag) {
+        using RawType = typename decltype(type_desc_tag)::DataTypeTag::raw_type;
+        if constexpr (is_floating_point_type(type_desc_tag.data_type())) {
+            auto raw_ptr = reinterpret_cast<const RawType*>(ptr());
+            auto buffer = util::scan_floating_point_to_sparse(raw_ptr, row_count(), sparse_map());
+            std::swap(data().buffer(), buffer);
+            last_physical_row_ = sparse_map().count() - 1;
         }
     });
 }

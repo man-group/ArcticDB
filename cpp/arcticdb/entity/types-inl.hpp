@@ -18,7 +18,7 @@ namespace arcticdb::entity {
 namespace details {
 
 template<class DimType, class Callable>
-auto visit_dim(DataType dt, Callable &&c) {
+constexpr auto visit_dim(DataType dt, Callable &&c) {
     switch (dt) {
 #define DT_CASE(__T__) case DataType::__T__: \
         return c(TypeDescriptorTag<DataTypeTag<DataType::__T__>, DimType>());
@@ -40,7 +40,6 @@ auto visit_dim(DataType dt, Callable &&c) {
         DT_CASE(UTF_DYNAMIC64)
         DT_CASE(EMPTYVAL)
         DT_CASE(PYBOOL8)
-        DT_CASE(PYBOOL64)
 #undef DT_CASE
         default: util::raise_rte("Invalid dtype '{}' in visit dim", datatype_to_str(dt));
     }
@@ -77,7 +76,7 @@ auto visit_type(DataType dt, Callable &&c) {
 } // namespace details
 
 template<class Callable>
-auto TypeDescriptor::visit_tag(Callable &&callable) const {
+constexpr auto TypeDescriptor::visit_tag(Callable &&callable) const {
     switch (dimension_) {
         case Dimension::Dim0: return details::visit_dim<DimensionTag<Dimension::Dim0>>(data_type_, callable);
         case Dimension::Dim1: return details::visit_dim<DimensionTag<Dimension::Dim1>>(data_type_, callable);

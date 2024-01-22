@@ -56,27 +56,14 @@ void mark_index_slices(
         column_groups).value();
 }
 
-StreamDescriptor modify_output_sizes(StreamDescriptor&& desc) {
-    for(auto& field : desc.mutable_fields()) {
-        if(is_py_bool_type(field.type().data_type())) {
-            field.mutable_type_desc()->set_size_bits(SizeBits::S64);
-        }
-    }
-    return std::move(desc);
-}
-
 StreamDescriptor get_filtered_descriptor(StreamDescriptor&& descriptor, const std::shared_ptr<FieldCollection>& filter_columns) {
     // We assume here that filter_columns_ will always contain the index.
 
     auto desc = std::move(descriptor);
     auto index = stream::index_type_from_descriptor(desc);
     return util::variant_match(index, [&desc, &filter_columns] (const auto& idx) {
-        if(filter_columns) {
-            return modify_output_sizes(StreamDescriptor{index_descriptor(desc.id(), idx, *filter_columns)});
-        }
-        else {
-            return modify_output_sizes(StreamDescriptor{index_descriptor(desc.id(), idx, *desc.fields_ptr())});
-        }
+        const std::shared_ptr<FieldCollection>& fields = filter_columns ? filter_columns : desc.fields_ptr();
+        return StreamDescriptor{index_descriptor(desc.id(), idx, *fields)};
     });
 }
 
@@ -225,21 +212,20 @@ void decode_or_expand_impl(
     const uint8_t*& data,
     uint8_t* dest,
     const EncodedFieldType& encoded_field_info,
-    const TypeDescriptor& source_type_descriptor,
-    const TypeDescriptor& destination_type_descriptor,
     size_t dest_bytes,
     std::shared_ptr<BufferHolder> buffers,
-	EncodingVersion encding_version) {
-    if(auto handler = TypeHandlerRegistry::instance()->get_handler(source_type_descriptor); handler) {
+    EncodingVersion encding_version,
+    const ColumnMapping& m
+) {
+    if (auto handler = TypeHandlerRegistry::instance()->get_handler(m.source_type_desc_); handler) {
         handler->handle_type(
             data,
             dest,
             VariantField{&encoded_field_info},
-            source_type_descriptor,
-            destination_type_descriptor,
             dest_bytes,
             std::move(buffers),
-            encding_version
+            encding_version,
+            m
         );
     } else {
         std::optional<util::BitMagic> bv;
@@ -248,8 +234,8 @@ void decode_or_expand_impl(
             const auto bytes = encoding_sizes::data_uncompressed_size(ndarray);
             ChunkedBuffer sparse{bytes};
             SliceDataSink sparse_sink{sparse.data(), bytes};
-            data += decode_field(source_type_descriptor, encoded_field_info, data, sparse_sink, bv, encding_version);
-            source_type_descriptor.visit_tag([dest, dest_bytes, &bv, &sparse](const auto tdt) {
+            data += decode_field(m.source_type_desc_, encoded_field_info, data, sparse_sink, bv, encding_version);
+            m.source_type_desc_.visit_tag([dest, dest_bytes, &bv, &sparse](const auto tdt) {
                 using TagType = decltype(tdt);
                 using RawType = typename TagType::DataTypeTag::raw_type;
                 util::default_initialize<TagType>(dest, dest_bytes);
@@ -259,12 +245,12 @@ void decode_or_expand_impl(
             SliceDataSink sink(dest, dest_bytes);
             const auto &ndarray = encoded_field_info.ndarray();
             if (const auto bytes = encoding_sizes::data_uncompressed_size(ndarray); bytes < dest_bytes) {
-                source_type_descriptor.visit_tag([dest, bytes, dest_bytes](const auto tdt) {
+                m.source_type_desc_.visit_tag([dest, bytes, dest_bytes](const auto tdt) {
                     using TagType = decltype(tdt);
                     util::default_initialize<TagType>(dest + bytes, dest_bytes - bytes);
                 });
             }
-            data += decode_field(source_type_descriptor, encoded_field_info, data, sink, bv, encding_version);
+            data += decode_field(m.source_type_desc_, encoded_field_info, data, sink, bv, encding_version);
         }
     }
 }
@@ -289,22 +275,20 @@ void decode_or_expand(
     const uint8_t*& data,
     uint8_t* dest,
     const VariantField& variant_field,
-    const TypeDescriptor& source_type_descriptor,
-    const TypeDescriptor& destination_type_descriptor,
     size_t dest_bytes,
     std::shared_ptr<BufferHolder> buffers,
-    EncodingVersion encoding_version
+    EncodingVersion encoding_version,
+    const ColumnMapping& m
 ) {
     util::variant_match(variant_field, [&](auto field) {
         decode_or_expand_impl(
             data,
             dest,
             *field,
-            source_type_descriptor,
-            destination_type_descriptor,
             dest_bytes,
             buffers,
-            encoding_version
+            encoding_version,
+            m
         );
     });
 }
@@ -391,23 +375,29 @@ void decode_into_frame_static(
             ColumnMapping m{frame, it.dest_col(), it.source_field_pos(), context};
             const bool types_trivially_compatible = trivially_compatible_types(m.source_type_desc_, m.dest_type_desc_);
             const bool any_type_is_empty = is_empty_type(m.source_type_desc_.data_type()) || is_empty_type(m.dest_type_desc_.data_type());
-            util::check(types_trivially_compatible || any_type_is_empty, "Column type conversion from {} to {} not implemented in column {}:{} -> {}:{}",
-                        m.source_type_desc_,
-                        m.dest_type_desc_,
-                        it.source_col(),
-                        field_name,
-                        it.dest_col(),
-                        m.frame_field_descriptor_.name());
-            util::check(data != end || remaining_fields_empty(it, context), "Reached end of input block with {} fields to decode", it.remaining_fields());
+            util::check(
+                types_trivially_compatible || any_type_is_empty,
+                "Column type conversion from {} to {} not implemented in column {}:{} -> {}:{}",
+                m.source_type_desc_,
+                m.dest_type_desc_,
+                it.source_col(),
+                field_name,
+                it.dest_col(),
+                m.frame_field_descriptor_.name()
+            );
+            util::check(
+                data != end || remaining_fields_empty(it, context),
+                "Reached end of input block with {} fields to decode",
+                it.remaining_fields()
+            );
             decode_or_expand(
                 data,
                 buffer.data() + m.offset_bytes_,
                 encoded_field,
-                m.source_type_desc_,
-                m.dest_type_desc_,
                 m.dest_bytes_,
                 buffers,
-                encoding_version
+                encoding_version,
+                m
             );
             ARCTICDB_TRACE(log::codec(), "Decoded column {} to position {}", field_name, data - begin);
 
@@ -434,10 +424,11 @@ void decode_into_frame_static(
 }
 
 void decode_into_frame_dynamic(
-        SegmentInMemory &frame,
-        PipelineContextRow &context,
-        Segment &&s,
-        const std::shared_ptr<BufferHolder>& buffers) {
+    SegmentInMemory& frame,
+    PipelineContextRow& context,
+    Segment&& s,
+    const std::shared_ptr<BufferHolder>& buffers
+) {
     ARCTICDB_SAMPLE_DEFAULT(DecodeIntoFrame)
     auto seg = std::move(s);
     const uint8_t *data = seg.buffer().data();
@@ -450,9 +441,11 @@ void decode_into_frame_dynamic(
     context.set_compacted(hdr.compacted());
     const EncodingVersion encdoing_version = EncodingVersion(hdr.encoding_version());
     const bool has_magic_numbers = encdoing_version == EncodingVersion::V2;
+    VariantEncodedFieldCollection fields(seg);
 
-    if (data != end) {
-        VariantEncodedFieldCollection fields(seg);
+    // data == end in case we have empty data types (e.g. {EMPTYVAL, Dim0}, {EMPTYVAL, Dim1}) for which we store nothing
+    // in storage as they can be reconstructed in the type handler on the read path.
+    if (data != end || fields.size() > 0) {
         auto index_field = fields.at(0u);
         decode_index_field(frame, index_field, data, begin, end, context, encdoing_version);
 
@@ -469,53 +462,85 @@ void decode_into_frame_dynamic(
 
             auto dst_col = *frame_loc_opt;
             auto& buffer = frame.column(static_cast<position_t>(dst_col)).data().buffer();
-            if(ColumnMapping m{frame, dst_col, field_col, context};!trivially_compatible_types(m.source_type_desc_, m.dest_type_desc_)) {
-                util::check(static_cast<bool>(has_valid_type_promotion(m.source_type_desc_, m.dest_type_desc_)), "Can't promote type {} to type {} in field {}",
-                            m.source_type_desc_, m.dest_type_desc_, m.frame_field_descriptor_.name());
-
-                    m.dest_type_desc_.visit_tag([&buffer, &m, &data, encoded_field, buffers, encdoing_version] (auto dest_desc_tag) {
-                        using DestinationType =  typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
-                        m.source_type_desc_.visit_tag([&buffer, &m, &data, &encoded_field, &buffers, encdoing_version] (auto src_desc_tag ) {
-                            using SourceType =  typename decltype(src_desc_tag)::DataTypeTag::raw_type;
-                            if constexpr (std::is_arithmetic_v<SourceType> && std::is_arithmetic_v<DestinationType>) {
-                                const auto src_bytes = sizeof_datatype(m.source_type_desc_) * m.num_rows_;
+            const ColumnMapping m{frame, dst_col, field_col, context};
+            if(!trivially_compatible_types(m.source_type_desc_, m.dest_type_desc_)) {
+                util::check(
+                    static_cast<bool>(has_valid_type_promotion(m.source_type_desc_, m.dest_type_desc_)),
+                    "Can't promote type {} to type {} in field {}",
+                    m.source_type_desc_,
+                    m.dest_type_desc_,
+                    m.frame_field_descriptor_.name()
+                );
+                m.dest_type_desc_.visit_tag([&](auto dest_desc_tag) {
+                    using DestinationType = typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
+                    m.source_type_desc_.visit_tag([&](auto src_desc_tag) {
+                        using SourceType = typename decltype(src_desc_tag)::DataTypeTag::raw_type;
+                        if constexpr (std::is_arithmetic_v<SourceType> && std::is_arithmetic_v<DestinationType>) {
+                            const auto src_bytes = sizeof_datatype(m.source_type_desc_) * m.num_rows_;
+                            auto dest_ptr = reinterpret_cast<DestinationType*>(buffer.data() + m.offset_bytes_);
+                            if constexpr (is_empty_type(src_desc_tag.data_type())) {
+                                decode_or_expand(
+                                    data,
+                                    reinterpret_cast<uint8_t*>(dest_ptr),
+                                    encoded_field,
+                                    src_bytes,
+                                    buffers,
+                                    encdoing_version,
+                                    m
+                                );
+                            } else {
                                 Buffer tmp_buf{src_bytes};
                                 decode_or_expand(
                                     data,
                                     tmp_buf.data(),
                                     encoded_field,
-                                    m.source_type_desc_,
-                                    m.dest_type_desc_,
                                     src_bytes,
                                     buffers,
-                                    encdoing_version
+                                    encdoing_version,
+                                    m
                                 );
-                                auto src_ptr = reinterpret_cast<SourceType *>(tmp_buf.data());
-                                auto dest_ptr = reinterpret_cast<DestinationType *>(buffer.data() + m.offset_bytes_);
+                                auto src_ptr = reinterpret_cast<SourceType*>(tmp_buf.data());
                                 for (auto i = 0u; i < m.num_rows_; ++i) {
                                     *dest_ptr++ = static_cast<DestinationType>(*src_ptr++);
                                 }
-                            } else {
-                                util::raise_rte("Can't promote type {} to type {} in field {}", m.source_type_desc_, m.dest_type_desc_, m.frame_field_descriptor_.name());
                             }
-                        });
+                        } else {
+                            util::raise_rte(
+                                "Can't promote type {} to type {} in field {}",
+                                m.source_type_desc_,
+                                m.dest_type_desc_,
+                                m.frame_field_descriptor_.name()
+                            );
+                        }
                     });
-                    ARCTICDB_TRACE(log::codec(), "Decoded column {} to position {}", m.frame_field_descriptor_.name(), data - begin);
+                });
+                ARCTICDB_TRACE(
+                    log::codec(),
+                    "Decoded column {} to position {}",
+                    m.frame_field_descriptor_.name(),
+                    data - begin
+                );
             } else {
-                ARCTICDB_TRACE(log::storage(), "Creating data slice at {} with total size {} ({} rows)", m.offset_bytes_, m.dest_bytes_,
-                                     context.slice_and_key().slice_.row_range.diff());
-                util::check(data != end,
-                            "Reached end of input block with {} fields to decode",
-                            field_count - field_col);
+                ARCTICDB_TRACE(
+                    log::storage(),
+                    "Creating data slice at {} with total size {} ({} rows)",
+                    m.offset_bytes_,
+                    m.dest_bytes_,
+                    context.slice_and_key().slice_.row_range.diff()
+                );
+                util::check(
+                    data != end || is_empty_type(m.source_type_desc_.data_type()),
+                    "Reached end of input block with {} fields to decode",
+                    field_count - field_col
+                );
                 decode_or_expand(
                     data,
                     buffer.data() + m.offset_bytes_,
                     encoded_field,
-                    m.source_type_desc_,
-                    m.dest_type_desc_,
                     m.dest_bytes_,
                     buffers,
-                    encdoing_version
+                    encdoing_version,
+                    m
                 );
             }
             ARCTICDB_TRACE(log::codec(), "Decoded column {} to position {}", frame.field(dst_col).name(), data - begin);
@@ -1004,18 +1029,24 @@ public:
         const auto& segment_descriptor = context_row.descriptor();
         const auto& segment_field = segment_descriptor[column_index];
 
-        auto has_type_conversion = frame_field_.type() != segment_field.type();
-        util::check(!has_type_conversion || trivially_compatible_types(frame_field_.type(), segment_field.type()),
-                    "Cannot convert from type {} to {} in frame field", frame_field_.type(), segment_field.type());
+        const bool trivially_compatible = trivially_compatible_types(frame_field_.type(), segment_field.type());
+        // In case the segment type is EMPTYVAL the empty type handler should have ran and set all missing values
+        // to not_a_string()
+        util::check(trivially_compatible || is_empty_type(segment_field.type().data_type()),
+            "String types are not trivially compatible. Cannot convert from type {} to {} in frame field.",
+            frame_field_.type(),
+            segment_field.type()
+        );
 
         auto is_utf = is_utf_type(slice_value_type(frame_field_.type().data_type()));
         size_t end =  context_row.slice_and_key().slice_.row_range.second - frame_.offset();
 
+        const auto is_type_different = frame_field_.type() != segment_field.type();
         auto ptr_src = get_offset_ptr_at(row_, src_buffer_);
         if(do_lock_)
-            process_string_views<LockActive>(has_type_conversion, is_utf, end, ptr_src, context_row.string_pool());
+            process_string_views<LockActive>(is_type_different, is_utf, end, ptr_src, context_row.string_pool());
         else
-            process_string_views<LockDisabled>(has_type_conversion, is_utf, end, ptr_src, context_row.string_pool());
+            process_string_views<LockDisabled>(is_type_different, is_utf, end, ptr_src, context_row.string_pool());
     }
 
     void finalize() override {

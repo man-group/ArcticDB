@@ -75,19 +75,16 @@ template <typename TagType>
 void default_initialize(uint8_t* data, size_t bytes) {
     using RawType = typename TagType::DataTypeTag::raw_type;
     const auto num_rows ARCTICDB_UNUSED = bytes / sizeof(RawType);
-
-    constexpr auto data_type =TagType::DataTypeTag::data_type;
+    constexpr auto data_type = TagType::DataTypeTag::data_type;
     auto type_ptr ARCTICDB_UNUSED = reinterpret_cast<RawType*>(data);
     if constexpr (is_sequence_type(data_type)) {
-        std::fill(type_ptr, type_ptr + num_rows, not_a_string());
-    }
-    else if constexpr (is_floating_point_type(data_type)) {
-        std::fill(type_ptr, type_ptr + num_rows, std::numeric_limits<double>::quiet_NaN());
-    }
-    else if constexpr (is_time_type(data_type)) {
-        std::fill(type_ptr, type_ptr + num_rows, NaT);
+        std::fill_n(type_ptr, num_rows, not_a_string());
+    } else if constexpr (is_floating_point_type(data_type)) {
+        std::fill_n(type_ptr, num_rows, std::numeric_limits<double>::quiet_NaN());
+    } else if constexpr (is_time_type(data_type)) {
+        std::fill_n(type_ptr, num_rows, NaT);
     } else {
-        std::fill(data, data + bytes, 0);
+        std::fill_n(data, bytes, 0);
     }
 }
 

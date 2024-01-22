@@ -11,6 +11,7 @@
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/util/buffer_holder.hpp>
 #include <arcticdb/codec/variant_encoded_field_collection.hpp>
+#include <arcticdb/pipeline/column_mapping.hpp>
 
 #include <folly/Poly.h>
 
@@ -32,28 +33,30 @@ struct ITypeHandler {
             const uint8_t*& source,
             uint8_t* dest,
             const VariantField& encoded_field_info,
-            const entity::TypeDescriptor& source_type_descriptor,
-            const entity::TypeDescriptor& destination_type_descriptor,
             size_t dest_bytes,
             std::shared_ptr<BufferHolder> buffers,
-            EncodingVersion encoding_version
+            EncodingVersion encoding_version,
+            const ColumnMapping& m
         ) {
             folly::poly_call<0>(
                 *this,
                 source,
                 dest,
                 encoded_field_info,
-                source_type_descriptor,
-                destination_type_descriptor,
                 dest_bytes,
                 buffers,
-                encoding_version
+                encoding_version,
+                m
             );
+        }
+
+        int type_size() const {
+            return folly::poly_call<1>(*this);
         }
     };
 
     template<class T>
-    using Members = folly::PolyMembers<&T::handle_type>;
+    using Members = folly::PolyMembers<&T::handle_type, &T::type_size>;
 };
 
 using TypeHandler = folly::Poly<ITypeHandler>;

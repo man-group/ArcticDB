@@ -53,9 +53,7 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
                 // (numpy) array, thus the size of the element is not the size of the raw type, but the size of a pointer.
                 // This also affects how we allocate columns. Check cpp/arcticdb/column_store/column.hpp::Column and
                 // cpp/arcticdb/pipeline/column_mapping.hpp::sizeof_datatype
-                if constexpr(tag.dimension() > Dimension::Dim0) {
-                    esize = sizeof(PyObject*);
-                }
+                esize = sizeof_datatype(TypeDescriptor{tag});
             } else if constexpr(tag.dimension() == Dimension::Dim2) {
                 util::raise_rte("Read resulted in two dimensional type. This is not supported.");
             } else {
@@ -105,9 +103,7 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
             // (numpy) array, thus the size of the element is not the size of the raw type, but the size of a pointer.
             // This also affects how we allocate columns. Check cpp/arcticdb/column_store/column.hpp::Column and
             // cpp/arcticdb/pipeline/column_mapping.hpp::sizeof_datatype
-            if constexpr(tag.dimension() > Dimension::Dim0) {
-                esize = sizeof(PyObject*);
-            }
+            esize = sizeof_datatype(TypeDescriptor{tag});
         } else if constexpr(tag.dimension() == Dimension::Dim2) {
             util::raise_rte("Read resulted in two dimensional type. This is not supported.");
         } else {

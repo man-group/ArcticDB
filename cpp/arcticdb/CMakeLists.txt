@@ -195,6 +195,7 @@ set(arcticdb_srcs
         entity/key.hpp
         entity/metrics.hpp
         entity/data_error.hpp
+        entity/descriptors.hpp
         entity/native_tensor.hpp
         entity/performance_tracing.hpp
         entity/protobuf_mappings.hpp
@@ -203,6 +204,7 @@ set(arcticdb_srcs
         entity/serialized_key.hpp
         entity/type_conversion.hpp
         entity/types.hpp
+        entity/type_utils.hpp
         entity/types-inl.hpp
         entity/variant_key.hpp
         entity/versioned_item.hpp
@@ -370,7 +372,9 @@ set(arcticdb_srcs
         entity/metrics.cpp
         entity/performance_tracing.cpp
         entity/types.cpp
+        entity/type_utils.cpp
         log/log.cpp
+        pipeline/column_mapping.cpp
         pipeline/column_stats.cpp
         pipeline/frame_slice.cpp
         pipeline/frame_utils.cpp

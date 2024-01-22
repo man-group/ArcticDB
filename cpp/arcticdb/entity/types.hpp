@@ -12,6 +12,7 @@
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/log/log.hpp>
 #include <google/protobuf/util/message_differencer.h>
+#include <arcticdb/entity/descriptors.hpp>
 
 #include <fmt/format.h>
 
@@ -32,13 +33,6 @@
 #include <BaseTsd.h>
 using ssize_t = SSIZE_T;
 #endif
-
-// TODO: Forward declare further and move the inclusion of `descriptors.pb.h` in `types.cpp`.
-#include <descriptors.pb.h>
-
-namespace arcticdb::proto {
-    namespace descriptors = arcticc::pb2::descriptors_pb2;
-}
 
 namespace arcticdb::entity {
 
@@ -232,7 +226,6 @@ enum class DataType : uint8_t {
     UTF_DYNAMIC64 = detail::combine_val_bits(ValueType::UTF_DYNAMIC, SizeBits::S64),
     EMPTYVAL = detail::combine_val_bits(ValueType::EMPTY, SizeBits::S64),
     PYBOOL8 = detail::combine_val_bits(ValueType::PYBOOL, SizeBits::S8),
-    PYBOOL64 = detail::combine_val_bits(ValueType::PYBOOL, SizeBits::S64),
     UNKNOWN = 0,
 };
 
@@ -418,7 +411,6 @@ DATA_TYPE_TAG(UTF_FIXED64, std::uint64_t)
 DATA_TYPE_TAG(UTF_DYNAMIC64, std::uint64_t)
 DATA_TYPE_TAG(EMPTYVAL, std::uint64_t)
 DATA_TYPE_TAG(PYBOOL8, uint8_t)
-DATA_TYPE_TAG(PYBOOL64, std::uint64_t)
 #undef DATA_TYPE_TAG
 
 enum class Dimension : uint8_t {
@@ -474,7 +466,7 @@ struct TypeDescriptor {
     ARCTICDB_MOVE_COPY_DEFAULT(TypeDescriptor)
 
     template<typename Callable>
-    auto visit_tag(Callable &&callable) const;
+    constexpr auto visit_tag(Callable &&callable) const;
 
     bool operator==(const TypeDescriptor &o) const {
         return data_type_ == o.data_type_ && dimension_ == o.dimension_;
@@ -552,15 +544,19 @@ struct TypeDescriptorTag {
     using DataTypeTag = DT;
     using DimensionTag = D;
     explicit constexpr operator TypeDescriptor() const {
-        return TypeDescriptor{DataTypeTag::data_type, DimensionTag::value};
+        return type_descriptor();
     }
 
-    [[nodiscard]] constexpr Dimension dimension() const {
+    [[nodiscard]] static constexpr Dimension dimension() {
         return DimensionTag::value;
     }
 
-    [[nodiscard]] constexpr DataType data_type() const {
+    [[nodiscard]] static constexpr DataType data_type() {
         return DataTypeTag::data_type;
+    }
+
+    [[nodiscard]] static constexpr TypeDescriptor type_descriptor() {
+        return TypeDescriptor{DataTypeTag::data_type, DimensionTag::value};
     }
 };
 
@@ -804,6 +800,7 @@ inline bool operator!=(const Field& l, const Field& r) {
     return !(l == r);
 }
 
+std::size_t sizeof_datatype(const TypeDescriptor& td);
 } // namespace arcticdb::entity
 
 // StreamId ordering - numbers before strings

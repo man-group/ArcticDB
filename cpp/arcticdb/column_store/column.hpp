@@ -217,7 +217,7 @@ public:
             // it pointers to an array type (at numpy arrays at the moment). When we allocate a column for an array we
             // need to allocate space for one pointer per row. This also affects how we handle arrays to python as well.
             // Check cpp/arcticdb/column_store/column_utils.hpp::array_at and cpp/arcticdb/column_store/column.hpp::Column
-            data_(expected_rows * (type.dimension() == Dimension::Dim0 ? get_type_size(type.data_type()) : sizeof(void*)), presize),
+            data_(expected_rows * entity::sizeof_datatype(type), presize),
             type_(type),
             allow_sparse_(allow_sparse){
         ARCTICDB_TRACE(log::inmem(), "Creating column with descriptor {}", type);

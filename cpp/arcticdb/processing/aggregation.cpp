@@ -142,11 +142,6 @@ namespace
     struct OutputType<DataTypeTag<DataType::PYBOOL8>, void> {
         using type = ScalarTagType<DataTypeTag<DataType::PYBOOL8>>;
     };
-
-    template<>
-    struct OutputType<DataTypeTag<DataType::PYBOOL64>, void> {
-        using type = ScalarTagType<DataTypeTag<DataType::PYBOOL64>>;
-    };
 }
 
 /**********************
