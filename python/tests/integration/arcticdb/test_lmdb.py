@@ -127,11 +127,11 @@ def test_lmdb_mapsize(tmp_path):
 
 def test_lmdb_update_map_size(tmp_path):
     ac = Arctic(f"lmdb://{tmp_path}?map_size=100KB")
-    lib = ac.get_library('sym', create_if_missing=True)
+    lib = ac.get_library("sym", create_if_missing=True)
     ac = Arctic(f"lmdb://{tmp_path}?map_size=1GB")
 
     df = pd.DataFrame(np.random.randint(0, 1000, size=(int(1e6), 4)), columns=list("ABCD"))
-    lib.write('sym', df)
+    lib.write("sym", df)
 
 def test_lmdb_mapsize_write(version_store_factory):
     df = pd.DataFrame(np.random.randint(0, 100, size=(int(1e6), 4)), columns=list("ABCD"))
