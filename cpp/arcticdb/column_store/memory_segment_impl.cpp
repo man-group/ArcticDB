@@ -8,8 +8,7 @@
 #include <arcticdb/column_store/memory_segment_impl.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/entity/type_utils.hpp>
-#include <arcticdb/stream/index.hpp>
-#include <arcticdb/util/format_date.hpp>
+
 
 namespace arcticdb {
 // Append any columns that exist both in this segment and in the 'other' segment onto the
@@ -597,5 +596,6 @@ void SegmentInMemoryImpl::set_timeseries_descriptor(TimeseriesDescriptor&& tsd) 
     any.PackFrom(tsd.proto());
     set_metadata(std::move(any));
 }
+
 
 }

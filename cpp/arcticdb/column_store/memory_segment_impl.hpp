@@ -56,14 +56,6 @@ inline void check_output_bitset(const arcticdb::util::BitSet& output,
 }
 } // namespace anon
 
-inline bool operator==(const Field::Proto& left, const Field::Proto& right) {
-    google::protobuf::util::MessageDifferencer diff;
-    return diff.Compare(left, right);
-}
-
-inline bool operator<(const Field::Proto& left, const Field::Proto& right) {
-    return left.name() < right.name();
-}
 
 class SegmentInMemoryImpl {
 public:
