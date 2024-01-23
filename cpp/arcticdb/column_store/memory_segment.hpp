@@ -141,6 +141,13 @@ public:
         impl_->set_array(pos, val);
     }
 
+    template<class T, std::enable_if_t<
+        std::is_integral_v<T> || std::is_floating_point_v<T>,
+        int> = 0>
+    void set_array(position_t pos, py::array_t<T>& val) {
+        impl_->set_array(pos, val);
+    }
+
     void set_string(position_t pos, std::string_view str) {
         impl_->set_string(pos, str);
     }

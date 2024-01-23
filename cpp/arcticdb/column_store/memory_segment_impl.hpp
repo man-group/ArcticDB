@@ -503,7 +503,16 @@ public:
     template<class T, template<class> class Tensor, std::enable_if_t<
         std::is_integral_v<T> || std::is_floating_point_v<T>,
         int> = 0>
-    void set_array(position_t pos, Tensor<T> &val) {
+            void set_array(position_t pos, Tensor<T> &val) {
+        magic_.check();
+        ARCTICDB_SAMPLE(MemorySegmentSetArray, 0)
+        column_unchecked(pos).set_array(row_id_ + 1, val);
+    }
+
+    template<class T, std::enable_if_t<
+        std::is_integral_v<T> || std::is_floating_point_v<T>,
+        int> = 0>
+    void set_array(position_t pos, py::array_t<T>& val) {
         magic_.check();
         ARCTICDB_SAMPLE(MemorySegmentSetArray, 0)
         column_unchecked(pos).set_array(row_id_ + 1, val);
