@@ -515,7 +515,11 @@ public:
     void set_array(position_t pos, py::array_t<T>& val) {
         magic_.check();
         ARCTICDB_SAMPLE(MemorySegmentSetArray, 0)
+#ifdef _MSC_VER
+        column_unchecked(pos).template set_array<T, py::array_t>(row_id_ + 1, val);
+#else
         column_unchecked(pos).set_array(row_id_ + 1, val);
+#endif
     }
 
     void set_string(position_t pos, std::string_view str) {
