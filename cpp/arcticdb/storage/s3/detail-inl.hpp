@@ -125,6 +125,26 @@ namespace s3 {
                    || err == Aws::S3::S3Errors::RESOURCE_NOT_FOUND;
         }
 
+        inline void raise_if_unexpected_error(const Aws::S3::S3Error& err){
+            if (!is_expected_error_type(err.GetErrorType())) {
+                // We log a more detailed error explanation in case of NETWORK_CONNECTION errors to remedy #880.
+                if (err.GetErrorType() == Aws::S3::S3Errors::NETWORK_CONNECTION){
+                    log::storage().error("Got an unexpected network error: {}. "
+                                         "This could be due to a connectivity issue or exhausted open sockets. "
+                                         "In case socket file descriptors are exhausted, consider increasing `ulimit -n`.",
+                                         err.GetMessage().c_str());
+                }
+                else {
+                    log::storage().error("Got unexpected error: '{}' {}: {}",
+                                         int(err.GetErrorType()),
+                                         err.GetExceptionName().c_str(),
+                                         err.GetMessage().c_str());
+                }
+
+                throw UnexpectedS3ErrorException{};
+            }
+        }
+
 //TODO Use buffer pool once memory profile and lifetime is well understood
         struct S3StreamBuffer : public std::streambuf {
             ARCTICDB_NO_MOVE_OR_COPY(S3StreamBuffer)
@@ -185,14 +205,8 @@ namespace s3 {
             request.SetResponseStreamFactory(S3StreamFactory());
             auto res = s3_client.GetObject(request);
 
-            if (!res.IsSuccess() && !is_expected_error_type(res.GetError().GetErrorType())) {
-                const auto& error = res.GetError();
-                log::storage().error("Got unexpected error: '{}' {}: {}",
-                                     int(error.GetErrorType()),
-                                     error.GetExceptionName().c_str(),
-                                     error.GetMessage().c_str());
-
-                throw UnexpectedS3ErrorException{};
+            if (!res.IsSuccess()){
+                raise_if_unexpected_error(res.GetError());
             }
             ARCTICDB_RUNTIME_DEBUG(log::storage(), "Returning object {}", s3_object_name);
             return res;
@@ -213,13 +227,8 @@ namespace s3 {
             request.WithBucket(bucket_name.c_str()).WithKey(s3_object_name.c_str());
             auto res = s3_client.HeadObject(request);
 
-            if (!res.IsSuccess() && !is_expected_error_type(res.GetError().GetErrorType())) {
-                log::storage().error("Got unexpected error: '{}' {}: {}",
-                                     int(res.GetError().GetErrorType()),
-                                     res.GetError().GetExceptionName().c_str(),
-                                     res.GetError().GetMessage().c_str());
-
-                throw UnexpectedS3ErrorException{};
+            if (!res.IsSuccess()){
+                raise_if_unexpected_error(res.GetError());
             }
             ARCTICDB_RUNTIME_DEBUG(log::storage(), "Returning head of object {}", s3_object_name);
             return res;
