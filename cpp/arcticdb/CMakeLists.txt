@@ -492,6 +492,7 @@ else()
     endif()
 endif()
 
+
 set (arcticdb_core_libraries
         pybind11::module # Transitively includes Python::Module or Python::Python as appropriate
         arcticdb_proto
