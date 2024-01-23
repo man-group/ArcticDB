@@ -290,7 +290,7 @@ class RowCountIndex : public BaseIndex<RowCountIndex> {
     }
 
     template<class RowCellSetter>
-    void set(RowCellSetter setter, const IndexValue &index_value) {
+    void set(RowCellSetter, const IndexValue & = {timestamp(0)}) {
         // No index value can be set since the value of the index relies on the
         // offset of the segment.
     }
