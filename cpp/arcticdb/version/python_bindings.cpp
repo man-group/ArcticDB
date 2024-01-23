@@ -497,6 +497,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             py::call_guard<SingleThreadMutexHolder>(),  "Remove an item from a snapshot")
         .def("clear",
              &PythonVersionStore::clear,
+             py::arg("continue_on_error") = true,
              py::call_guard<SingleThreadMutexHolder>(), "Delete everything. Don't use this unless you want to delete everything")
         .def("empty",
              &PythonVersionStore::empty,

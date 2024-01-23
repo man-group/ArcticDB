@@ -78,7 +78,7 @@ inline void delete_all_for_stream(const std::shared_ptr<Store>& store, const Str
     foreach_key_type([&store, &stream_id, continue_on_error] (KeyType key_type) { delete_keys_of_type_for_stream(store, stream_id, key_type, continue_on_error); });
 }
 
-inline void delete_all(const std::shared_ptr<Store>& store, bool continue_on_error) {
+inline void delete_all(const std::shared_ptr<Store>& store, bool continue_on_error = true) {
     foreach_key_type([&store, continue_on_error] (KeyType key_type) {
         ARCTICDB_DEBUG(log::version(), "Deleting keys of type {}", key_type);
         delete_all_keys_of_type(key_type, store, continue_on_error);
