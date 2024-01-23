@@ -231,6 +231,7 @@ def test_count_aggregation(local_object_version_store):
         index=range_indexes(),
     )
 )
+@pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
 def test_hypothesis_first_agg_numeric(lmdb_version_store, df):
     lib = lmdb_version_store
     assume(not df.empty)
@@ -250,6 +251,7 @@ def test_hypothesis_first_agg_numeric(lmdb_version_store, df):
     assert_frame_equal(expected, vit.data)
 
 
+@pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
 def test_first_aggregation(local_object_version_store):
     df = DataFrame(
         {
@@ -273,6 +275,7 @@ def test_first_aggregation(local_object_version_store):
     assert_frame_equal(res.data, df)
 
 
+@pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
 def test_first_agg_with_append(local_object_version_store):
     lib = local_object_version_store
 
@@ -302,6 +305,7 @@ def test_first_agg_with_append(local_object_version_store):
         index=range_indexes(),
     )
 )
+@pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
 def test_hypothesis_last_agg_numeric(lmdb_version_store, df):
     lib = lmdb_version_store
     assume(not df.empty)
@@ -321,6 +325,7 @@ def test_hypothesis_last_agg_numeric(lmdb_version_store, df):
     assert_frame_equal(expected, vit.data)
 
 
+@pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
 def test_last_aggregation(local_object_version_store):
     df = DataFrame(
         {
@@ -344,6 +349,7 @@ def test_last_aggregation(local_object_version_store):
     assert_frame_equal(res.data, df)
 
 
+@pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
 def test_last_agg_with_append(local_object_version_store):
     lib = local_object_version_store
 
