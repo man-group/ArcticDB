@@ -81,7 +81,7 @@ using RowCountIndexTestAggregator =  Aggregator<RowCountIndex, FixedSchema, stre
 using RowCountIndexSinkWrapper = SinkWrapperImpl<RowCountIndexTestAggregator>;
 
 using TableIndexTestAggregator =  Aggregator<TableIndex, FixedSchema, stream::NeverSegmentPolicy>;
-using TableIndexIndexSinkWrapper = SinkWrapperImpl<TableIndexTestAggregator>;
+using TableIndexSinkWrapper = SinkWrapperImpl<TableIndexTestAggregator>;
 
 using TestSparseAggregator = Aggregator<TimeseriesIndex, FixedSchema, stream::NeverSegmentPolicy, SparseColumnPolicy>;
 using SparseSinkWrapper = SinkWrapperImpl<TestSparseAggregator>;
@@ -236,7 +236,7 @@ inline SegmentInMemory get_standard_row_count_segment(const std::string& name, s
 }
 
 inline SegmentInMemory get_standard_table_segment(const std::string& name, size_t num_rows = 10) {
-    auto wrapper = TableIndexIndexSinkWrapper(name, {
+    auto wrapper = TableIndexSinkWrapper(name, {
             scalar_field(DataType::INT8, "int8"),
             scalar_field(DataType::UINT64, "uint64"),
             scalar_field(DataType::UTF_DYNAMIC64, "strings")
