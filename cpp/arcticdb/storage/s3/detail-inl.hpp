@@ -114,7 +114,14 @@ namespace s3 {
             do_write_impl(std::move(kvs), root_folder, bucket_name, s3_client, std::move(bucketizer));
         }
 
-        struct UnexpectedS3ErrorException : public std::exception {
+        class UnexpectedS3ErrorException : public std::exception {
+        public:
+            UnexpectedS3ErrorException(const std::string& message):message(message){}
+            const char* what() const noexcept override {
+                return message.c_str();
+            }
+        private:
+            std::string message;
         };
 
         inline bool is_expected_error_type(Aws::S3::S3Errors err) {
@@ -127,21 +134,24 @@ namespace s3 {
 
         inline void raise_if_unexpected_error(const Aws::S3::S3Error& err){
             if (!is_expected_error_type(err.GetErrorType())) {
-                // We log a more detailed error explanation in case of NETWORK_CONNECTION errors to remedy #880.
+                std::string error_message;
+                // We create a more detailed error explanation in case of NETWORK_CONNECTION errors to remedy #880.
                 if (err.GetErrorType() == Aws::S3::S3Errors::NETWORK_CONNECTION){
-                    log::storage().error("Got an unexpected network error: {}. "
-                                         "This could be due to a connectivity issue or exhausted open sockets. "
-                                         "In case socket file descriptors are exhausted, consider increasing `ulimit -n`.",
-                                         err.GetMessage().c_str());
+                    error_message = fmt::format("Got an unexpected network error: {}. "
+                                                "This could be due to a connectivity issue or too many open Arctic instances. "
+                                                "Having more than one open Arctic instance is not advised, you should reuse them. "
+                                                "If you absolutely need many open Arctic instances, consider increasing `ulimit -n`.",
+                                                err.GetMessage().c_str());
                 }
                 else {
-                    log::storage().error("Got unexpected error: '{}' {}: {}",
-                                         int(err.GetErrorType()),
-                                         err.GetExceptionName().c_str(),
-                                         err.GetMessage().c_str());
+                    error_message = fmt::format("Got unexpected error: '{}' {}: {}",
+                                                int(err.GetErrorType()),
+                                                err.GetExceptionName().c_str(),
+                                                err.GetMessage().c_str());
                 }
 
-                throw UnexpectedS3ErrorException{};
+                log::storage().error(error_message);
+                throw UnexpectedS3ErrorException(error_message);
             }
         }
 
