@@ -206,12 +206,23 @@ namespace arcticdb {
             throw std::runtime_error("Not implemented");
         }
 
+        storage::KeySegmentPair read_compressed_sync(
+                const entity::VariantKey&,
+                storage::ReadKeyOpts
+        ) override {
+            throw std::runtime_error("Not implemented");
+        }
+
         folly::Future<std::pair<VariantKey, SegmentInMemory>> read(const VariantKey& key, storage::ReadKeyOpts opts) override {
             // Anything read_sync() throws should be returned inside the Future, so:
             return folly::makeFutureWith([&](){ return read_sync(key, opts); });
         }
 
         folly::Future<folly::Unit> write_compressed(storage::KeySegmentPair&&) override {
+            util::raise_rte("Not implemented");
+        }
+
+        void write_compressed_sync(storage::KeySegmentPair&&) override {
             util::raise_rte("Not implemented");
         }
 

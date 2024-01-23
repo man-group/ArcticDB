@@ -37,6 +37,11 @@ struct StreamSource {
         const entity::VariantKey &key,
         storage::ReadKeyOpts opts = storage::ReadKeyOpts{}) = 0;
 
+    virtual storage::KeySegmentPair read_compressed_sync(
+            const entity::VariantKey& key,
+            storage::ReadKeyOpts opts
+    ) = 0;
+
     virtual void iterate_type(
         KeyType type,
         const entity::IterateTypeVisitor& func,
