@@ -151,6 +151,10 @@ folly::Future<folly::Unit> write_compressed(storage::KeySegmentPair &&ks) overri
     return async::submit_io_task(WriteCompressedTask{std::move(ks), library_});
 }
 
+void write_compressed_sync(storage::KeySegmentPair &&ks) override {
+    library_->write(Composite<storage::KeySegmentPair>(std::move(ks)));
+}
+
 folly::Future<entity::VariantKey> update(const entity::VariantKey &key,
                                          SegmentInMemory &&segment,
                                          storage::UpdateOpts opts) override {
@@ -209,6 +213,13 @@ folly::Future<storage::KeySegmentPair> read_compressed(
         const entity::VariantKey &key,
         storage::ReadKeyOpts opts) override {
     return read_and_continue(key, library_, opts, PassThroughTask{});
+}
+
+storage::KeySegmentPair read_compressed_sync(
+        const entity::VariantKey& key,
+        storage::ReadKeyOpts opts
+        ) override {
+        return read_dispatch( key, library_, opts );
 }
 
 folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> read_metadata(const entity::VariantKey &key, storage::ReadKeyOpts opts) override {
