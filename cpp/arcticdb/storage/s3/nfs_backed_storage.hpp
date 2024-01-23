@@ -17,7 +17,6 @@
 #include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/composite.hpp>
-#include <arcticdb/storage/s3/s3_client_accessor.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/storage/s3/s3_api.hpp>
 
@@ -27,8 +26,6 @@ namespace arcticdb::storage::nfs_backed {
 
 class NfsBackedStorage final : public Storage {
 public:
-    friend class S3TestForwarder<NfsBackedStorage>;
-    friend class S3TestClientAccessor<NfsBackedStorage>;
     using Config = arcticdb::proto::nfs_backed_storage::Config;
 
     NfsBackedStorage(const LibraryPath &lib, OpenMode mode, const Config &conf);

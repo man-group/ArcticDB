@@ -17,7 +17,6 @@
 #include <arcticdb/storage/s3/s3_api.hpp>
 #include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/entity/protobufs.hpp>
-#include <arcticdb/storage/s3/s3_client_accessor.hpp>
 #include <arcticdb/util/composite.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <cstdlib>
@@ -31,7 +30,6 @@ const std::string USE_AWS_CRED_PROVIDERS_TOKEN = "_RBAC_";
 
 class S3Storage final : public Storage {
   public:
-    friend class S3TestClientAccessor<S3Storage>;
     using Config = arcticdb::proto::s3_storage::Config;
 
     S3Storage(const LibraryPath &lib, OpenMode mode, const Config &conf);
