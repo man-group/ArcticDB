@@ -510,6 +510,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              py::call_guard<SingleThreadMutexHolder>(), "Get a list of all the versions for a symbol which are tombstoned")
         .def("delete_storage",
              &PythonVersionStore::delete_storage,
+             py::arg("continue_on_error") = true,
              py::call_guard<SingleThreadMutexHolder>(), "Delete everything. Don't use this unless you want to delete everything")
         .def("write_versioned_dataframe",
              &PythonVersionStore::write_versioned_dataframe,
