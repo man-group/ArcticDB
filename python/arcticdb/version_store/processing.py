@@ -204,6 +204,18 @@ class ExpressionNode:
         value_list = value_list_from_args(*args)
         return self._apply(value_list, _OperationType.ISNOTIN)
 
+    def isna(self):
+        return self.isnull()
+
+    def isnull(self):
+        return ExpressionNode.compose(self, _OperationType.ISNULL, None)
+
+    def notna(self):
+        return self.notnull()
+
+    def notnull(self):
+        return ExpressionNode.compose(self, _OperationType.NOTNULL, None)
+
     def __str__(self):
         return self.get_name()
 
