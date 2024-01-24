@@ -1975,6 +1975,24 @@ def test_filter_string_nans_col_col(lmdb_version_store):
     generic_filter_test_nans(lmdb_version_store, symbol, df, q, pandas_query)
 
 
+def test_filter_float_null_filtering(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    symbol = "test_filter_float_null_filtering"
+    # Nones are coerced to NaNs
+    df = pd.DataFrame(
+        {
+            "a": [0.0, 1.0, None, None, 4.0, np.nan, np.nan, 7.0, None, np.nan, 10.0]
+        },
+        index=np.arange(11)
+    )
+    lib.write(symbol, df)
+    q = QueryBuilder()
+    q = q[q["a"].isna()]
+    received_isna = lib.read(symbol, query_builder=q).data
+    expected_isna = df[df["a"].isna()]
+    assert_frame_equal(expected_isna, received_isna)
+
+
 def test_filter_batch_one_query(lmdb_version_store):
     sym1 = "sym1"
     sym2 = "sym2"
