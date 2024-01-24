@@ -106,8 +106,8 @@ inline AtomKey index_to_tombstone(VersionId version_id, const StreamId& stream_i
         .version_id(version_id)
         .creation_ts(creation_ts)
         .content_hash(0)
-        .start_index(0)
-        .end_index(0)
+        .start_index(NumericIndex{0}) // TODO why not the one from the index key?
+        .end_index(NumericIndex{0})
         .build(stream_id, KeyType::TOMBSTONE);
 }
 

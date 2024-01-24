@@ -24,8 +24,10 @@
 #include <arcticdb/storage/lmdb/lmdb_storage.hpp>
 #include <arcticdb/version/version_store_api.hpp>
 #include <arcticdb/stream/index.hpp>
-#include <filesystem>
 #include <arcticdb/entity/protobufs.hpp>
+#include <arcticdb/stream/piloted_clock.hpp>
+
+#include <filesystem>
 
 namespace fg = folly::gen;
 
@@ -69,16 +71,6 @@ SegmentInMemory fill_test_index_segment(const StreamId &tsid, TsIndexKeyGen &&ts
     return seg;
 }
 
-struct PilotedClock {
-    static std::atomic<timestamp> time_;
-    static timestamp nanos_since_epoch() ARCTICDB_UNUSED {
-        return PilotedClock::time_++;
-    }
-
-    static void reset() ARCTICDB_UNUSED {
-        PilotedClock::time_ = 0;
-    }
-};
 
 inline auto get_simple_data_descriptor(const StreamId &id) {
     return TimeseriesIndex::default_index().create_stream_descriptor(

@@ -43,7 +43,7 @@ TEST(Async, SinkBasic) {
 
     auto seg = ac::SegmentInMemory();
     aa::EncodeAtomTask enc{
-        ac::entity::KeyType::GENERATION, 6, 123, 456, 457, 999, std::move(seg), codec_opt, ac::EncodingVersion::V2
+        ac::entity::KeyType::GENERATION, ac::entity::VersionId{6}, ac::entity::NumericId{123}, ac::entity::NumericId{456}, ac::timestamp{457}, {ac::entity::NumericIndex{999}}, std::move(seg), codec_opt, ac::EncodingVersion::V2
     };
 
     auto v = sched.submit_cpu_task(std::move(enc)).via(&aa::io_executor()).thenValue(aa::WriteSegmentTask{lib}).get();
@@ -52,7 +52,7 @@ TEST(Async, SinkBasic) {
     auto default_content_hash = h.digest();
 
     ASSERT_EQ(ac::entity::atom_key_builder().gen_id(6).start_index(456).end_index(457).creation_ts(999)
-                  .content_hash(default_content_hash).build(123, ac::entity::KeyType::GENERATION),
+        .content_hash(default_content_hash).build(ac::entity::NumericId{123}, ac::entity::KeyType::GENERATION),
               to_atom(v)
     );
 }
@@ -75,8 +75,8 @@ TEST(Async, DeDupTest) {
 
     std::vector<std::pair<ast::StreamSink::PartialKey, ac::SegmentInMemory>> key_segments;
 
-    key_segments.emplace_back(ast::StreamSink::PartialKey{ac::entity::KeyType::TABLE_DATA, 1, "", 0, 1}, seg);
-    key_segments.emplace_back(ast::StreamSink::PartialKey{ac::entity::KeyType::TABLE_DATA, 2, "", 1, 2}, seg);
+    key_segments.emplace_back(ast::StreamSink::PartialKey{ ac::entity::KeyType::TABLE_DATA, 1, "", ac::entity::NumericIndex{0}, ac::entity::NumericIndex{1} }, seg);
+    key_segments.emplace_back(ast::StreamSink::PartialKey{ ac::entity::KeyType::TABLE_DATA, 2, "", ac::entity::NumericIndex{1}, ac::entity::NumericIndex{2} }, seg);
 
     ac::HashAccum h;
     auto default_content_hash = h.digest();

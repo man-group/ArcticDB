@@ -23,15 +23,20 @@
 #include <arcticdb/python/gil_lock.hpp>
 
 namespace arcticdb::version_store {
+
 template<class ClockType>
 LocalVersionedEngine::LocalVersionedEngine(
         const std::shared_ptr<storage::Library>& library,
         const ClockType&) :
     store_(std::make_shared<async::AsyncStore<ClockType>>(library, codec::default_lz4_codec(), encoding_version(library->config()))),
     symbol_list_(std::make_shared<SymbolList>(version_map_)){
+    initialize(library);
+}
+
+void LocalVersionedEngine::initialize(const std::shared_ptr<storage::Library>& library) {
     configure(library->config());
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Created versioned engine at {} for library path {}  with config {}", uintptr_t(this),
-                         library->library_path(), [&cfg=cfg_]{  return util::format(cfg); });
+                           library->library_path(), [&cfg=cfg_]{  return util::format(cfg); });
 #ifdef USE_REMOTERY
     auto temp = RemoteryInstance::instance();
 #endif
@@ -1816,6 +1821,7 @@ void LocalVersionedEngine::force_release_lock(const StreamId& name) {
 WriteOptions LocalVersionedEngine::get_write_options() const  {
     return  WriteOptions::from_proto(cfg().write_options());
 }
+
 
 std::shared_ptr<VersionMap> LocalVersionedEngine::_test_get_version_map() {
     return version_map();

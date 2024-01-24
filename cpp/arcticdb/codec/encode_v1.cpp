@@ -88,7 +88,7 @@ namespace arcticdb {
 
     using EncodingPolicyV1 = EncodingPolicyType<EncodingVersion::V1, ColumnEncoderV1>;
 
-    [[nodiscard]] static SizeResult max_compressed_size_v1(
+    [[nodiscard]] SizeResult max_compressed_size_v1(
         const SegmentInMemory& in_mem_seg,
         const arcticdb::proto::encoding::VariantCodec& codec_opts
     ) {
@@ -142,7 +142,7 @@ namespace arcticdb {
         ARCTICDB_DEBUG(log::codec(), "Setting buffer bytes to {}", pos);
         out_buffer->set_bytes(pos);
         tsd->set_out_bytes(pos);
-        ARCTICDB_DEBUG(log::codec(), "Encoded header: {}", tsd->DebugString());
+        ARCTICDB_TRACE(log::codec(), "Encoded header: {}", tsd->DebugString());
         if(!segment_header->has_metadata_field())
             ARCTICDB_DEBUG(log::codec(), "No metadata field");
         ARCTICDB_DEBUG(log::codec(), "Block count {} header size {} ratio {}",

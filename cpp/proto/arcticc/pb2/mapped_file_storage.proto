@@ -1,0 +1,31 @@
+/*
+Copyright 2023 Man Group Operations Limited
+
+Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
+
+As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+*/
+syntax = "proto3";
+
+package arcticc.pb2.mapped_file_storage_pb2;
+
+import "arcticc/pb2/encoding.proto";
+import "arcticc/pb2/descriptors.proto";
+
+message Config {
+    string path = 1;
+    uint64 bytes = 2;
+    uint64 items_count = 3;
+    uint32 encoding_version = 4;
+
+    oneof id
+    {
+        uint64 num_id = 5;
+        string str_id = 6;
+    }
+
+    arcticc.pb2.descriptors_pb2.IndexDescriptor index = 7;
+    arcticc.pb2.encoding_pb2.VariantCodec codec_opts = 8;
+}
+
+

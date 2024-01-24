@@ -84,9 +84,13 @@ inline AtomKey key_from_old_style_bytes(const uint8_t *data, size_t size, KeyTyp
     return atom_key_from_tokens<OldKeyField>(arr, id_variant_type, index_variant_type, key_type);
 }
 
+constexpr inline size_t max_string_size() {
+    return std::numeric_limits<uint8_t>::max();
+}
+
 template <typename T>
 inline void serialize_string(const std::string &str, CursoredBuffer<T> &output) {
-    util::check_arg(str.size() < std::numeric_limits<uint8_t>::max(), "String too long for serialization type");
+    util::check_arg(str.size() < max_string_size(), "String too long for serialization type");
     output.ensure_bytes(str.size() + sizeof(uint8_t));
     auto data = output.ptr();
     *data++ = static_cast<uint8_t>(str.size());
@@ -147,6 +151,25 @@ enum class FormatType : char {
     't', // This is a readable type, with delimiters, for things that require keys to consist of printable characters
 };
 
+inline size_t max_id_size(const VariantId& id) {
+    return util::variant_match(id,
+    [] (const StringId& ) {
+       return max_string_size();
+    },
+    [] (const auto&) {
+        return sizeof(uint64_t);
+    });
+}
+
+inline size_t max_index_size(const IndexDescriptor& index) {
+    switch(index.type()) {
+    case IndexDescriptor::STRING:
+        return max_string_size();
+    default:
+        return sizeof(uint64_t);
+    }
+}
+
 struct KeyDescriptor {
     explicit KeyDescriptor(const AtomKey &key, FormatType format_type) :
             identifier(SerializedKeyIdentifier),
@@ -173,6 +196,10 @@ struct KeyDescriptor {
     IndexDescriptor::TypeChar index_type;
     FormatType format_type;
 };
+
+inline size_t max_key_size(const StreamId& id, const IndexDescriptor& idx) {
+    return 3 * sizeof(uint64_t) + max_id_size(id) + (2 * max_index_size(idx)) + sizeof(KeyDescriptor);
+}
 
 } //namespace arcticdb::entity
 
@@ -222,7 +249,7 @@ inline std::string to_serialized_key(const entity::VariantKey &key) {
     return std::visit([&](const auto &key) { return to_serialized_key(key); }, key);
 }
 
-inline AtomKey from_serialized_atom_key(const uint8_t *data, KeyType key_type) {
+inline AtomKey from_serialized_atom_key(const uint8_t* data, KeyType key_type) {
     const auto *descr = reinterpret_cast<const KeyDescriptor *>(data);
     util::check(descr->identifier == SerializedKeyIdentifier, "Read invalid serialized key");
     data += sizeof(KeyDescriptor);

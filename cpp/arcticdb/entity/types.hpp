@@ -34,8 +34,9 @@ enum class SortedValue : uint8_t {
 };
 
 using NumericId = int64_t;
+using UnsignedId = uint64_t;
 using StringId = std::string;
-using VariantId = std::variant<NumericId, StringId>;
+using VariantId = std::variant<NumericId, StringId, UnsignedId>;
 using StreamId = VariantId;
 using SnapshotId = VariantId;
 using VersionId = uint64_t;
@@ -60,7 +61,7 @@ constexpr size_t UNICODE_WIDTH = sizeof(UnicodeType);
 constexpr size_t ASCII_WIDTH = 1;
 //TODO: Fix unicode width for windows
 #ifndef _WIN32
-    static_assert(UNICODE_WIDTH == 4, "Only support python platforms where unicode width is 4");
+static_assert(UNICODE_WIDTH == 4, "Only support python platforms where unicode width is 4");
 #endif
 
 // Beware, all the enum values of the field must match exactly the values
@@ -99,13 +100,13 @@ enum class ValueType : uint8_t {
 // Sequence types are composed of more than one element
 constexpr bool is_sequence_type(ValueType v){
     return uint8_t(v) >= uint8_t(ValueType::ASCII_FIXED) &&
-    uint8_t(v) <= uint8_t(ValueType::ASCII_DYNAMIC);
+        uint8_t(v) <= uint8_t(ValueType::ASCII_DYNAMIC);
 }
 
 constexpr bool is_numeric_type(ValueType v){
     return v == ValueType::NANOSECONDS_UTC ||
-    (uint8_t(v) >= uint8_t(ValueType::UINT) &&
-    uint8_t(v) <= uint8_t(ValueType::FLOAT));
+        (uint8_t(v) >= uint8_t(ValueType::UINT) &&
+            uint8_t(v) <= uint8_t(ValueType::FLOAT));
 }
 
 constexpr bool is_floating_point_type(ValueType v){
@@ -146,20 +147,20 @@ enum class SizeBits : uint8_t {
 
 constexpr SizeBits get_size_bits(uint8_t size) {
     switch (size) {
-        case 2:return SizeBits::S16;
-        case 4:return SizeBits::S32;
-        case 8:return SizeBits::S64;
-        default:return SizeBits::S8;
+    case 2:return SizeBits::S16;
+    case 4:return SizeBits::S32;
+    case 8:return SizeBits::S64;
+    default:return SizeBits::S8;
     }
 }
 
 [[nodiscard]] constexpr int get_byte_count(SizeBits size_bits) {
     switch(size_bits) {
-        case SizeBits::S8: return 1;
-        case SizeBits::S16: return 2;
-        case SizeBits::S32: return 4;
-        case SizeBits::S64: return 8;
-        default: util::raise_rte("Unknown size bits");
+    case SizeBits::S8: return 1;
+    case SizeBits::S16: return 2;
+    case SizeBits::S32: return 4;
+    case SizeBits::S64: return 8;
+    default: util::raise_rte("Unknown size bits");
     }
 }
 
@@ -190,6 +191,7 @@ enum class DataType : uint8_t {
     UTF_DYNAMIC64 = detail::combine_val_bits(ValueType::UTF_DYNAMIC, SizeBits::S64),
     EMPTYVAL = detail::combine_val_bits(ValueType::EMPTY, SizeBits::S64),
     BOOL_OBJECT8 = detail::combine_val_bits(ValueType::BOOL_OBJECT, SizeBits::S8),
+#undef DT_COMBINE
     UNKNOWN = 0,
 };
 
@@ -289,10 +291,10 @@ static_assert(get_type_size(DataType::UINT64) == 8);
 
 constexpr  ValueType get_value_type(char specifier) noexcept {
     switch(specifier){
-        case 'u': return ValueType::UINT; //  unsigned integer
-        case 'i': return ValueType::INT; //  signed integer
-        case 'f': return ValueType::FLOAT; //  floating-point
-        case 'b': return ValueType::BOOL; //  boolean
+    case 'u': return ValueType::UINT; //  unsigned integer
+    case 'i': return ValueType::INT; //  signed integer
+    case 'f': return ValueType::FLOAT; //  floating-point
+    case 'b': return ValueType::BOOL; //  boolean
         // NOTE: this is safe as of Pandas < 2.0 because `datetime64` _always_ has been using nanosecond resolution,
         // i.e. Pandas < 2.0 _always_ provides `datetime64[ns]` and ignores any other resolution.
         // Yet, this has changed in Pandas 2.0 and other resolution can be used,
@@ -300,21 +302,21 @@ constexpr  ValueType get_value_type(char specifier) noexcept {
         // See: https://pandas.pydata.org/docs/dev/whatsnew/v2.0.0.html#construction-with-datetime64-or-timedelta64-dtype-with-unsupported-resolution
         // TODO: for the support of Pandas>=2.0, convert any `datetime` to `datetime64[ns]` before-hand and do not
         // rely uniquely on the resolution-less 'M' specifier if it this doable.
-        case 'M': return ValueType::NANOSECONDS_UTC; //  datetime // numpy doesn't support the buffer protocol for datetime64
-        case 'U': return ValueType::UTF8_FIXED; //  Unicode
-        case 'S': return ValueType::ASCII_FIXED; //  (byte-)string
-        case 'O': return ValueType::BYTES; // Fishy, an actual type might be better
-        default:
-            return ValueType::UNKNOWN_VALUE_TYPE;    // Unknown
+    case 'M': return ValueType::NANOSECONDS_UTC; //  datetime // numpy doesn't support the buffer protocol for datetime64
+    case 'U': return ValueType::UTF8_FIXED; //  Unicode
+    case 'S': return ValueType::ASCII_FIXED; //  (byte-)string
+    case 'O': return ValueType::BYTES; // Fishy, an actual type might be better
+    default:
+        return ValueType::UNKNOWN_VALUE_TYPE;    // Unknown
     }
 }
 
 constexpr char get_dtype_specifier(ValueType vt){
     switch(vt){
-        case ValueType::UINT: return 'u';
-        case ValueType::INT:  return 'i';
-        case ValueType::FLOAT: return 'f';
-        case ValueType::BOOL: return 'b';
+    case ValueType::UINT: return 'u';
+    case ValueType::INT:  return 'i';
+    case ValueType::FLOAT: return 'f';
+    case ValueType::BOOL: return 'b';
         // NOTE: this is safe as of Pandas < 2.0 because `datetime64` _always_ has been using nanosecond resolution,
         // i.e. Pandas < 2.0 _always_ provides `datetime64[ns]` and ignores any other resolution.
         // Yet, this has changed in Pandas 2.0 and other resolution can be used,
@@ -322,13 +324,13 @@ constexpr char get_dtype_specifier(ValueType vt){
         // See: https://pandas.pydata.org/docs/dev/whatsnew/v2.0.0.html#construction-with-datetime64-or-timedelta64-dtype-with-unsupported-resolution
         // TODO: for the support of Pandas>=2.0, convert any `datetime` to `datetime64[ns]` before-hand and do not
         // rely uniquely on the resolution-less 'M' specifier if it this doable.
-        case ValueType::NANOSECONDS_UTC: return 'M';
-        case ValueType::UTF8_FIXED: return 'U';
-        case ValueType::ASCII_FIXED: return 'S';
-        case ValueType::BYTES: return 'O';
-        case ValueType::EMPTY: return 'O';
-        default:
-            return 'x';
+    case ValueType::NANOSECONDS_UTC: return 'M';
+    case ValueType::UTF8_FIXED: return 'U';
+    case ValueType::ASCII_FIXED: return 'S';
+    case ValueType::BYTES: return 'O';
+    case ValueType::EMPTY: return 'O';
+    default:
+        return 'x';
     }
 }
 
@@ -461,7 +463,7 @@ constexpr bool must_contain_data(TypeDescriptor td) {
 /// @important Be sure to match this with the type handler registry in: cpp/arcticdb/python/python_module.cpp#register_type_handlers
 constexpr bool is_numpy_array(TypeDescriptor td) {
     return (is_numeric_type(td.data_type()) || is_bool_type(td.data_type()) || is_empty_type(td.data_type())) &&
-           (td.dimension() == Dimension::Dim1);
+        (td.dimension() == Dimension::Dim1);
 }
 
 constexpr bool is_pyobject_type(TypeDescriptor td) {
@@ -552,7 +554,7 @@ public:
     }
 
     static size_t calc_size(std::string_view name) {
-      return sizeof(type_) + sizeof(size_) + std::max(NameSize, name.size());
+        return sizeof(type_) + sizeof(size_) + std::max(NameSize, name.size());
     }
 
     [[nodiscard]] std::string_view name() const {
@@ -597,7 +599,7 @@ public:
 struct FieldWrapper {
     std::vector<uint8_t> data_;
     FieldWrapper(TypeDescriptor type, std::string_view name) :
-    data_(Field::calc_size(name)) {
+        data_(Field::calc_size(name)) {
         mutable_field().set(type, name);
     }
 

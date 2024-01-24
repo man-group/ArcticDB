@@ -18,9 +18,9 @@ namespace arcticdb {
 AtomKey make_test_index_key(std::string id,
                            VersionId version_id,
                            KeyType key_type,
-                           const IndexValue& index_start = 0,
-                           const IndexValue& index_end = 0,
-                           timestamp creation_ts = PilotedClock::nanos_since_epoch()) {
+    const IndexValue& index_start = NumericIndex{0},
+    const IndexValue& index_end = NumericIndex{0},
+     timestamp creation_ts = PilotedClock::nanos_since_epoch()) {
     return atom_key_builder().version_id(version_id).start_index(index_start).end_index(index_end).creation_ts(
             creation_ts)
         .content_hash(0).build(id, key_type);
