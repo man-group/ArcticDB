@@ -23,8 +23,7 @@ struct WriteOptions {
                 opt.dynamic_schema(),
                 opt.ignore_sort_order(),
                 opt.bucketize_dynamic(),
-                opt.max_num_buckets() > 0 ? size_t(opt.max_num_buckets()) : def.max_num_buckets,
-                opt.compact_incomplete_dedup_rows()
+                opt.max_num_buckets() > 0 ? size_t(opt.max_num_buckets()) : def.max_num_buckets
         };
     }
 
@@ -37,6 +36,6 @@ struct WriteOptions {
     bool ignore_sort_order = false;
     bool bucketize_dynamic = false;
     size_t max_num_buckets = 150;
-    bool compact_incomplete_dedup_rows = false;
+    bool sparsify_floats = false;
 };
 } //namespace arcticdb

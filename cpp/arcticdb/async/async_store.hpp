@@ -310,7 +310,7 @@ std::vector<folly::Future<bool>> batch_key_exists(
             const std::shared_ptr<DeDupMap> &de_dup_map) override {
         using KeyOptSegment = std::pair<VariantKey, std::optional<Segment>>;
         return std::move(input_fut).thenValue([this] (auto&& input) {
-            auto [key, seg, slice] = std::move(input);
+            auto [key, seg, slice] = std::forward<decltype(input)>(input);
             auto key_seg = EncodeAtomTask{
                 std::move(key),
                 ClockType::nanos_since_epoch(),

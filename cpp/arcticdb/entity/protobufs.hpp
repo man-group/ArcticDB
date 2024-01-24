@@ -24,6 +24,7 @@ namespace arcticdb::proto {
     namespace storage = arcticc::pb2::storage_pb2;
     namespace s3_storage = arcticc::pb2::s3_storage_pb2;
     namespace lmdb_storage = arcticc::pb2::lmdb_storage_pb2;
+    namespace single_file_storage = arcticc::pb2::single_file_storage_pb2;
     namespace mongo_storage = arcticc::pb2::mongo_storage_pb2;
     namespace memory_storage = arcticc::pb2::in_memory_storage_pb2;
     namespace rocksdb_storage = arcticc::pb2::rocksdb_storage_pb2;

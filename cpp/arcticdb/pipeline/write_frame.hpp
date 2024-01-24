@@ -26,6 +26,29 @@ namespace arcticdb::pipelines {
 
 using namespace arcticdb::stream;
 
+struct WriteToSegmentTask : public async::BaseTask {
+
+    std::shared_ptr<InputTensorFrame> frame_;
+    const FrameSlice slice_;
+    const SlicingPolicy slicing_;
+    folly::Function<stream::StreamSink::PartialKey(const FrameSlice&)> partial_key_gen_;
+    size_t slice_num_for_column_;
+    Index index_;
+    bool sparsify_floats_;
+    util::MagicNum<'W', 's', 'e', 'g'> magic_;
+
+    WriteToSegmentTask(
+        std::shared_ptr<InputTensorFrame> frame,
+        FrameSlice slice,
+        const SlicingPolicy& slicing,
+        folly::Function<stream::StreamSink::PartialKey(const FrameSlice&)>&& partial_key_gen,
+        size_t slice_num_for_column,
+        Index index,
+        bool sparsify_floats);
+
+    std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> operator()();
+};
+
 folly::Future<std::vector<SliceAndKey>> slice_and_write(
         const std::shared_ptr<InputTensorFrame> &frame,
         const SlicingPolicy &slicing,
@@ -73,5 +96,8 @@ std::optional<SliceAndKey> rewrite_partial_segment(
 std::vector<SliceAndKey> flatten_and_fix_rows(
         const std::vector<std::vector<SliceAndKey>>& groups,
         size_t& global_count);
+
+std::vector<std::pair<FrameSlice, size_t>> get_slice_and_rowcount(
+        const std::vector<FrameSlice>& slices);
 
 } //namespace arcticdb::pipelines

@@ -11,6 +11,7 @@
 #include <arcticdb/codec/segment.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/entity/types.hpp>
+#include <arcticdb/codec/encode_common.hpp>
 
 namespace arcticdb {
 
@@ -18,6 +19,12 @@ using ShapesBlockTDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, Dimension
 
 Segment encode_dispatch(
     SegmentInMemory&& in_mem_seg,
+    const arcticdb::proto::encoding::VariantCodec &codec_opts,
+    EncodingVersion encoding_version);
+
+
+SizeResult max_compressed_size_dispatch(
+    const SegmentInMemory& in_mem_seg,
     const arcticdb::proto::encoding::VariantCodec &codec_opts,
     EncodingVersion encoding_version);
 

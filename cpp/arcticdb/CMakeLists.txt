@@ -437,7 +437,7 @@ set(arcticdb_srcs
         version/version_utils.cpp
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
-        )
+        storage/coalesced/multi_segment.hpp storage/coalesced/multi_segment.cpp storage/coalesced/mullti_segment_header.hpp storage/coalesced/multi_segment_utils.hpp storage/coalesced/multi_segment_aggregator.hpp storage/coalesced/coalesced_storage_common.hpp util/memory_mapped_file.hpp storage/file/single_file_storage.cpp storage/file/file_store.hpp storage/file/file_store.hpp storage/file/file_store.hpp storage/file/single_file_storage.hpp storage/file/file_store.hpp)
 
 if(${ARCTICDB_INCLUDE_ROCKSDB})
     list (APPEND arcticdb_srcs
@@ -786,7 +786,7 @@ if(${TEST})
             version/test/test_version_store.cpp
             version/test/test_sorting_info_state_machine.cpp
             version/test/version_map_model.hpp
-            )
+            storage/test/test_multi_segment.cpp)
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 

@@ -44,6 +44,18 @@ constexpr TypeDescriptor encoded_blocks_type_desc() {
     };
 }
 
+SizeResult max_compressed_size_dispatch(
+    const SegmentInMemory& in_mem_seg,
+    const arcticdb::proto::encoding::VariantCodec &codec_opts,
+    EncodingVersion encoding_version) {
+    if(encoding_version == EncodingVersion::V2) {
+        return max_compressed_size_v2(in_mem_seg, codec_opts);
+    } else {
+        return max_compressed_size_v1(in_mem_seg, codec_opts);
+    }
+}
+
+
 Segment encode_dispatch(
     SegmentInMemory&& in_mem_seg,
     const arcticdb::proto::encoding::VariantCodec &codec_opts,

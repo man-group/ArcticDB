@@ -329,6 +329,20 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     std::vector<AtomKey> get_version_history(const StreamId& stream_id);
 
+    void write_dataframe_to_file(
+        const StreamId& stream_id,
+        const std::string& path,
+        const py::tuple& item,
+        const py::object& norm,
+        const py::object& user_meta,
+        const WriteOptions& options);
+
+    ReadResult read_dataframe_from_file(
+        const StreamId &stream_id,
+        const std::string path,
+        ReadQuery& read_query,
+        const ReadOptions& read_options);
+
 private:
 
     std::vector<VersionedItem> batch_write_index_keys_to_version_map(

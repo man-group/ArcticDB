@@ -1154,6 +1154,29 @@ bool PythonVersionStore::empty() {
     return true;
 }
 
+void PythonVersionStore::write_dataframe_to_file(
+    const StreamId& stream_id,
+    const std::string& path,
+    const py::tuple& item,
+    const py::object& norm,
+    const py::object& user_meta,
+    const WriteOptions& options) {
+
+    ARCTICDB_SAMPLE(WriteDataframeToFile, 0)
+    auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta);
+    write_dataframe_to_file_internal(stream_id, frame, options);
+}
+
+ReadResult PythonVersionStore::read_dataframe_from_file(
+    const StreamId &stream_id,
+    const std::string path,
+    ReadQuery& read_query,
+    const ReadOptions& read_options) {
+
+    auto opt_version_and_frame = read_dataframe_version_internal(stream_id, read_query, read_options);
+    return create_python_read_result(opt_version_and_frame.versioned_item_, std::move(opt_version_and_frame.frame_and_descriptor_));
+}
+
 void PythonVersionStore::force_delete_symbol(const StreamId& stream_id) {
     version_map()->delete_all_versions(store(), stream_id);
     delete_all_for_stream(store(), stream_id, true);
