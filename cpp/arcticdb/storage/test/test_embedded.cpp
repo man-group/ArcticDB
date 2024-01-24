@@ -94,7 +94,7 @@ TEST_P(SimpleTestSuite, ConstructDestruct) {
 
 TEST_P(SimpleTestSuite, Example) {
     std::unique_ptr<as::Storage> storage = GetParam().new_backend();
-    ac::entity::AtomKey k = ac::entity::atom_key_builder().gen_id(1).build<ac::entity::KeyType::TABLE_DATA>(999);
+    ac::entity::AtomKey k = ac::entity::atom_key_builder().gen_id(1).build<ac::entity::KeyType::TABLE_DATA>(NumericId{999});
 
     as::KeySegmentPair kv(k);
     kv.segment().header().set_start_ts(1234);
@@ -182,7 +182,7 @@ TEST_P(SimpleTestSuite, Strings) {
 
     std::unique_ptr<as::Storage> storage = GetParam().new_backend();
 
-    ac::entity::AtomKey k = ac::entity::atom_key_builder().gen_id(1).build<ac::entity::KeyType::TABLE_DATA>(999);
+    ac::entity::AtomKey k = ac::entity::atom_key_builder().gen_id(1).build<ac::entity::KeyType::TABLE_DATA>(NumericId{999});
     auto save_k = k;
     as::KeySegmentPair kv(std::move(k), std::move(seg));
     kv.segment().header().set_start_ts(1234);

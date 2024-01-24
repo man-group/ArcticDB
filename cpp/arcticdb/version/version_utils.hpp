@@ -38,8 +38,8 @@ inline entity::VariantKey write_multi_index_entry(
         multi_key_fut = store->write(KeyType::MULTI_KEY,
                                      version_id,  // version_id
                                      stream_id,
-                                     0,  // start_index
-                                     0,  // end_index
+                                     NumericIndex{0},  // start_index
+                                     NumericIndex{0},  // end_index
                                      std::forward<decltype(segment)>(segment)).wait();
     });
 

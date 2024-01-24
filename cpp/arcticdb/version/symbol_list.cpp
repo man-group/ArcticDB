@@ -684,7 +684,7 @@ folly::Future<VariantKey> write_symbols(
         segment = write_entries_to_symbol_segment(stream_id, type_holder, symbols);
     }
 
-    return store->write(KeyType::SYMBOL_LIST, 0, stream_id, creation_ts, 0, 0, std::move(segment));
+    return store->write(KeyType::SYMBOL_LIST, 0, stream_id, creation_ts, NumericIndex{ 0 }, NumericIndex{ 0 }, std::move(segment));
 }
 
 folly::Future<std::vector<Store::RemoveKeyResultType>> delete_keys(

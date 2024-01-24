@@ -63,9 +63,9 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     VersionedItem write_versioned_dataframe(
         const StreamId& stream_id,
-        const py::tuple &item,
-        const py::object &norm,
-        const py::object & user_meta,
+        const py::tuple& item,
+        const py::object& norm,
+        const py::object& user_meta,
         bool prune_previous_versions,
         bool allow_sparse,
         bool validate_index);
@@ -327,9 +327,22 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     std::vector<AtomKey> get_version_history(const StreamId& stream_id);
 
+
 private:
     void delete_snapshot_sync(const SnapshotId& snap_name, const VariantKey& snap_key);
 };
+
+void write_dataframe_to_file(
+    const StreamId& stream_id,
+    const std::string& path,
+    const py::tuple& item,
+    const py::object& norm,
+    const py::object& user_meta);
+
+ReadResult read_dataframe_from_file(
+    const StreamId &stream_id,
+    const std::string& path,
+    ReadQuery& read_query);
 
 struct ManualClockVersionStore : PythonVersionStore {
     ManualClockVersionStore(const std::shared_ptr<storage::Library>& library) :

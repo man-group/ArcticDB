@@ -925,7 +925,11 @@ void copy_segments_to_frame(const std::shared_ptr<Store>& store, const std::shar
     }
 }
 
-SegmentInMemory prepare_output_frame(std::vector<SliceAndKey>&& items, const std::shared_ptr<PipelineContext>& pipeline_context, const std::shared_ptr<Store>& store, const ReadOptions& read_options) {
+SegmentInMemory prepare_output_frame(
+        std::vector<SliceAndKey>&& items,
+        const std::shared_ptr<PipelineContext>& pipeline_context,
+        const std::shared_ptr<Store>& store,
+        const ReadOptions& read_options) {
     pipeline_context->clear_vectors();
     pipeline_context->slice_and_keys_ = std::move(items);
 	std::sort(std::begin(pipeline_context->slice_and_keys_), std::end(pipeline_context->slice_and_keys_), [] (const auto& left, const auto& right) {
@@ -1096,6 +1100,28 @@ ColumnStats get_column_stats_info_impl(
     }
 }
 
+SegmentInMemory do_direct_read_or_process(
+        const std::shared_ptr<Store>& store,
+        ReadQuery& read_query,
+        const ReadOptions& read_options,
+        const std::shared_ptr<PipelineContext>& pipeline_context,
+        const std::shared_ptr<BufferHolder>& buffers) {
+    SegmentInMemory frame;
+    if(!read_query.clauses_.empty()) {
+        ARCTICDB_SAMPLE(RunPipelineAndOutput, 0)
+        util::check_rte(!pipeline_context->is_pickled(),"Cannot filter pickled data");
+        auto segs = read_and_process(store, pipeline_context, read_query, read_options, 0u);
+
+        frame = prepare_output_frame(std::move(segs), pipeline_context, store, read_options);
+    } else {
+        ARCTICDB_SAMPLE(MarkAndReadDirect, 0)
+        util::check_rte(!(pipeline_context->is_pickled() && std::holds_alternative<RowRange>(read_query.row_filter)), "Cannot use head/tail/row_range with pickled data, use plain read instead");
+        mark_index_slices(pipeline_context, opt_false(read_options.dynamic_schema_), pipeline_context->bucketize_dynamic_);
+        frame = read_direct(store, pipeline_context, buffers, read_options);
+    }
+    return frame;
+}
+
 FrameAndDescriptor read_dataframe_impl(
     const std::shared_ptr<Store>& store,
     const std::variant<VersionedItem, StreamId>& version_info,
@@ -1131,20 +1157,9 @@ FrameAndDescriptor read_dataframe_impl(
     modify_descriptor(pipeline_context, read_options);
     generate_filtered_field_descriptors(pipeline_context, read_query.columns);
     ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
-    SegmentInMemory frame;
-    auto buffers = std::make_shared<BufferHolder>();
-    if(!read_query.clauses_.empty()) {
-        ARCTICDB_SAMPLE(RunPipelineAndOutput, 0)
-        util::check_rte(!pipeline_context->is_pickled(),"Cannot filter pickled data");
-        auto segs = read_and_process(store, pipeline_context, read_query, read_options, 0u);
 
-        frame = prepare_output_frame(std::move(segs), pipeline_context, store, read_options);
-    } else {
-        ARCTICDB_SAMPLE(MarkAndReadDirect, 0)
-        util::check_rte(!(pipeline_context->is_pickled() && std::holds_alternative<RowRange>(read_query.row_filter)), "Cannot use head/tail/row_range with pickled data, use plain read instead");
-        mark_index_slices(pipeline_context, opt_false(read_options.dynamic_schema_), pipeline_context->bucketize_dynamic_);
-        frame = read_direct(store, pipeline_context, buffers, read_options);
-    }
+    auto buffers = std::make_shared<BufferHolder>();
+    auto frame = do_direct_read_or_process(store, read_query, read_options, pipeline_context, buffers);
 
     ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
     reduce_and_fix_columns(pipeline_context, frame, read_options);
