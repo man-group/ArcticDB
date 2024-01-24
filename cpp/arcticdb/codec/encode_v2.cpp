@@ -84,6 +84,7 @@ namespace arcticdb {
         Buffer& out,
         std::ptrdiff_t& pos
     ) {
+        ARCTICDB_DEBUG(log::codec(), "Encoding field with codec {}", codec_opts.DebugString());
         encode_shapes(column_data, variant_field, out, pos);
         encode_blocks(codec_opts, column_data, variant_field, out, pos);
         encode_sparse_map(column_data, variant_field, out, pos);
@@ -191,7 +192,7 @@ namespace arcticdb {
             bytes += sizeof(EncodedBlock);
 
         bytes += sizeof(EncodedBlock) * col.num_blocks();
-        ARCTICDB_DEBUG(log::version(), "Encoded block size: {} + shapes({}) + {} * {} = {}",
+        ARCTICDB_TRACE(log::version(), "Encoded block size: {} + shapes({}) + {} * {} = {}",
             EncodedField::Size,
             col.type().dimension() != entity::Dimension::Dim0 ? sizeof(EncodedBlock) : 0u,
             sizeof(EncodedBlock),
@@ -239,7 +240,7 @@ namespace arcticdb {
         }
     }
 
-    [[nodiscard]] static SizeResult max_compressed_size_v2(
+    [[nodiscard]] SizeResult max_compressed_size_v2(
         const SegmentInMemory& in_mem_seg,
         const arcticdb::proto::encoding::VariantCodec& codec_opts
     ) {
@@ -276,7 +277,9 @@ namespace arcticdb {
         auto encoded_field = segment_header.mutable_column_fields();
         encoded_field->set_offset(static_cast<uint32_t>(pos));
         write_magic<EncodedMagic>(out_buffer, pos);
-        BytesEncoder<EncodingPolicyV2>::encode(encoded_blocks_buffer, codec_opts, out_buffer, pos, encoded_field);
+        if(!encoded_blocks_buffer.empty())
+            BytesEncoder<EncodingPolicyV2>::encode(encoded_blocks_buffer, codec_opts, out_buffer, pos, encoded_field);
+
         ARCTICDB_TRACE(log::codec(), "Encoded encoded blocks to position {}", pos);
     }
 
@@ -324,18 +327,15 @@ namespace arcticdb {
                     encoded_field_pos,
                     encoded_fields_buffer.bytes());
             }
-            auto field_here ARCTICDB_UNUSED = reinterpret_cast<EncodedField*>(encoded_fields_buffer.data());
             write_magic<StringPoolMagic>(*out_buffer, pos);
             encode_string_pool<EncodingPolicyV2>(in_mem_seg, *segment_header, codec_opts, *out_buffer, pos);
         }
 
-        auto field_before ARCTICDB_UNUSED = reinterpret_cast<EncodedField*>(encoded_fields_buffer.data());
         encode_encoded_fields(*segment_header, codec_opts, *out_buffer, pos, encoded_fields_buffer);
-        auto field ARCTICDB_UNUSED = reinterpret_cast<EncodedField*>(encoded_fields_buffer.data());
         out_buffer->set_bytes(pos);
         tsd->set_out_bytes(pos);
 
-        ARCTICDB_DEBUG(log::codec(), "Encoded header: {}", tsd->DebugString());
+        ARCTICDB_TRACE(log::codec(), "Encoded header: {}", tsd->DebugString());
         ARCTICDB_DEBUG(log::codec(), "Block count {} header size {} ratio {}",
             in_mem_seg.num_blocks(), segment_header->ByteSizeLong(),
             in_mem_seg.num_blocks() ? segment_header->ByteSizeLong() / in_mem_seg.num_blocks() : 0);

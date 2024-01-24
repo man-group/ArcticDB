@@ -41,7 +41,7 @@ TEST(TickStreamDesc, FromFields) {
     using namespace arcticdb::entity;
     using namespace arcticdb;
     StreamDescriptor tsd{stream_descriptor(
-        123,
+        NumericId{123},
         stream::TimeseriesIndex::default_index(),
         {
             scalar_field(DataType::UINT8, "uint8"),

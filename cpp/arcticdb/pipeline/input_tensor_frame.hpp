@@ -65,8 +65,8 @@ struct InputTensorFrame {
         // Fill index range
         // Note RowCountIndex will normally have an index field count of 0
         if(num_rows == 0) {
-            index_range.start_  = IndexValue{0};
-            index_range.end_ = IndexValue{0};
+            index_range.start_ = IndexValue{ NumericIndex{0} };
+            index_range.end_ = IndexValue{ NumericIndex{0} };
         } else if (desc.index().field_count() == 1) {
             visit_field(desc.field(0), [&](auto &&tag) {
                 using DT = std::decay_t<decltype(tag)>;
@@ -83,7 +83,7 @@ struct InputTensorFrame {
                     throw std::runtime_error("Unsupported non-integral index type");
                 });
         } else {
-            index_range.start_  = IndexValue{0};
+            index_range.start_ = IndexValue{ NumericIndex{0} };
             index_range.end_ = IndexValue{static_cast<timestamp>(num_rows) - 1};
         }
     }

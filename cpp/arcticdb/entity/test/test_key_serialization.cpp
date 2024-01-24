@@ -30,8 +30,8 @@ TEST(KeySerialize, RoundtripStringidNumericIndex) {
     auto key_type = KeyType::TABLE_INDEX;
     auto version_id = VersionId(26);
     auto content_hash = 0xBADF00D;
-    auto start_index = IndexValue(1234);
-    auto end_index = IndexValue(4321);
+    auto start_index = IndexValue(NumericIndex{1234});
+    auto end_index = IndexValue(NumericIndex{4321});
 
     auto key = atom_key_builder().version_id(version_id)
         .creation_ts(version_id)
@@ -61,12 +61,12 @@ TEST(KeySerialize, RoundtripNumericIdNumericIndex) {
     using namespace arcticdb;
     using namespace arcticdb::entity;
 
-    auto stream_id = StreamId(4753);
+    auto stream_id = StreamId(NumericId{ 753});
     auto key_type = KeyType::TABLE_DATA;
     auto version_id = VersionId(26);
     auto content_hash = 0xBADF00D;
-    auto start_index = IndexValue(1234);
-    auto end_index = IndexValue(4321);
+    auto start_index = IndexValue(NumericIndex{1234});
+    auto end_index = IndexValue(NumericIndex{4321});
 
     auto key = atom_key_builder().version_id(version_id)
         .creation_ts(version_id)
@@ -152,8 +152,8 @@ TEST(SerializeNumber, SignedNumbers) {
     auto key_type = KeyType::TABLE_DATA;
     auto version_id = VersionId(26);
     auto content_hash = 0xBADF00D;
-    auto start_index = IndexValue(-123456789);
-    auto end_index = IndexValue(-987654321);
+    auto start_index = IndexValue(NumericIndex{-123456789});
+    auto end_index = IndexValue(NumericIndex{-987654321});
 
     auto key = atom_key_builder().version_id(version_id)
         .creation_ts(version_id)
@@ -179,8 +179,8 @@ TEST(KeySerialize, RoundtripStringidSpecialCharacter) {
     auto key_type = KeyType::TABLE_INDEX;
     auto version_id = VersionId(26);
     auto content_hash = 0xBADF00D;
-    auto start_index = IndexValue(1234);
-    auto end_index = IndexValue(4321);
+    auto start_index = IndexValue(NumericIndex{ 234});
+    auto end_index = IndexValue(NumericIndex{4321});
 
     auto key = atom_key_builder().version_id(version_id)
         .creation_ts(version_id)

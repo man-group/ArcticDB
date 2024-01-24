@@ -101,7 +101,7 @@ public:
     template<typename SegmentType>
     static IndexValue start_value_for_segment(const SegmentType &segment) {
         if (segment.row_count() == 0)
-            return {0};
+            return { NumericIndex{0} };
         auto first_ts = segment.template scalar_at<timestamp>(0, 0).value();
         return {first_ts};
     }
@@ -110,7 +110,7 @@ public:
     static IndexValue end_value_for_segment(const SegmentType &segment) {
         auto row_count = segment.row_count();
         if (row_count == 0)
-            return {0};
+            return { NumericIndex{0} };
         auto last_ts = segment.template scalar_at<timestamp>(row_count - 1, 0).value();
         return {last_ts};
     }
@@ -118,7 +118,7 @@ public:
     template<typename SegmentType>
     static IndexValue start_value_for_keys_segment(const SegmentType &segment) {
         if (segment.row_count() == 0)
-            return {0};
+            return { NumericIndex{0} };
         auto start_index_id = int(pipelines::index::Fields::start_index);
         auto first_ts = segment.template scalar_at<timestamp>(0, start_index_id).value();
         return {first_ts};
@@ -128,7 +128,7 @@ public:
     static IndexValue end_value_for_keys_segment(const SegmentType &segment) {
         auto row_count = segment.row_count();
         if (row_count == 0)
-            return {0};
+            return { NumericIndex{0} };
         auto end_index_id = int(pipelines::index::Fields::end_index);
         auto last_ts = segment.template scalar_at<timestamp>(row_count - 1, end_index_id).value();
         return {last_ts};
@@ -207,7 +207,7 @@ public:
     template<typename SegmentType>
     static IndexValue start_value_for_keys_segment(const SegmentType &segment) {
         if (segment.row_count() == 0)
-            return {0};
+            return { NumericIndex{0} };
         auto start_index_id = int(pipelines::index::Fields::start_index);
         auto string_index = segment.string_at(0, start_index_id).value();
         return {std::string{string_index}};
@@ -217,7 +217,7 @@ public:
     static IndexValue end_value_for_keys_segment(const SegmentType &segment) {
         auto row_count = segment.row_count();
         if (row_count == 0)
-            return {0};
+            return { NumericIndex{0} };
         auto end_index_id = int(pipelines::index::Fields::end_index);
         auto string_index = segment.string_at(row_count - 1, end_index_id).value();
         return {std::string{string_index}};

@@ -60,7 +60,7 @@ message IndexDescriptor {
         ROWCOUNT = 82; // 'R'
         STRING = 83; // 'S'
         TIMESTAMP = 84; //  'T'
-
+        TIME_SYMBOL = 85; // 'U'
     }
     uint32 field_count = 1;
     Type kind = 2;

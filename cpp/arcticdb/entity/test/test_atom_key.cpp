@@ -26,8 +26,8 @@ TEST(Key, Basic) {
     timestamp creation_ts(34534);
     ContentHash content_hash(2734);
     KeyType numeric_data_key_type(KeyType::TABLE_DATA);
-    IndexValue timestamp_start(33);
-    IndexValue timestamp_end(57);
+    IndexValue timestamp_start(NumericId{33});
+    IndexValue timestamp_end(NumericId{57});
     AtomKey construct_numeric_key
         (numeric_id, version_id, creation_ts, content_hash, timestamp_start, timestamp_end, numeric_data_key_type);
 
@@ -108,7 +108,7 @@ struct AlternativeFormat {
 TEST(Key, Formatting) {
 
     AtomKey k{
-        StreamId{999},
+        StreamId{NumericId{999}},
         VersionId(123),
         timestamp(123000000LL),
         0x789456321ULL,
@@ -122,7 +122,7 @@ TEST(Key, Formatting) {
 
     auto k3 = atom_key_builder().gen_id(123).creation_ts(123000000)
         .start_index(timestamp(122000000)).end_index(timestamp(122000999))
-        .content_hash(0x789456321).build<KeyType::TABLE_DATA>(999);
+        .content_hash(0x789456321).build<KeyType::TABLE_DATA>(NumericId{999});
 
     ASSERT_EQ(k3, k2);
 

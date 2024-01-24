@@ -923,7 +923,7 @@ TEST_P(SymbolListRace, Run) {
                 store->remove_keys(get_symbol_list_keys(), {});
             }
             if (add_new2) {
-                store->write(KeyType::SYMBOL_LIST, 0, StringId{CompactionId}, PilotedClock::nanos_since_epoch(), 0, 0,
+                store->write(KeyType::SYMBOL_LIST, 0, StringId{ CompactionId }, PilotedClock::nanos_since_epoch(), NumericIndex{0}, NumericIndex{0},
                         SegmentInMemory{});
             }
             if (add_other2) {

@@ -53,8 +53,8 @@ std::pair<TimeseriesDescriptor , std::vector<SliceAndKey>> get_sample_slice_and_
                         version_id,
                         i,
                         col_range,
-                        IndexValue{start_val},
-                        IndexValue{end_val},
+                        IndexValue{NumericIndex{start_val}},
+                        IndexValue{NumericIndex{end_val}},
                         KeyType::TABLE_DATA
                     }
                 }
@@ -93,7 +93,7 @@ TEST(IndexFilter, Static) {
     auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor{isr.tsd().as_stream_descriptor()});
 
     ReadQuery read_query{};
-    read_query.row_filter = IndexRange{25, 65};
+    read_query.row_filter = IndexRange{ NumericIndex{25}, NumericIndex{65} };
 
     auto queries = get_column_bitset_and_query_functions<index::IndexSegmentReader>(
         read_query,
@@ -129,7 +129,7 @@ TEST(IndexFilter, Dynamic) {
     auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor(isr.tsd().as_stream_descriptor()));
 
     ReadQuery read_query{};
-    read_query.row_filter = IndexRange{25, 65};
+    read_query.row_filter = IndexRange{ NumericIndex{25}, NumericIndex{65} };
 
     auto queries = get_column_bitset_and_query_functions<index::IndexSegmentReader>(
         read_query,
@@ -165,7 +165,7 @@ TEST(IndexFilter, StaticMulticolumn) {
     auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor(isr.tsd().as_stream_descriptor()));
 
     ReadQuery read_query{};
-    read_query.row_filter = IndexRange{25, 65};
+    read_query.row_filter = IndexRange{ NumericIndex{25}, NumericIndex{65} };
 
     auto queries = get_column_bitset_and_query_functions<index::IndexSegmentReader>(
         read_query,
@@ -205,7 +205,7 @@ TEST(IndexFilter, MultiColumnSelectAll) {
     auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor{isr.tsd().as_stream_descriptor()});
 
     ReadQuery read_query{};
-    read_query.row_filter = IndexRange{0, 100};
+    read_query.row_filter = IndexRange{ NumericIndex{0}, NumericIndex{100} };
 
     auto queries = get_column_bitset_and_query_functions<index::IndexSegmentReader>(
         read_query,
@@ -240,7 +240,7 @@ TEST(IndexFilter, StaticMulticolumnFilterColumns) {
     auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor{isr.tsd().as_stream_descriptor()});
 
     ReadQuery read_query{};
-    read_query.row_filter = IndexRange{25, 65};
+    read_query.row_filter = IndexRange{ NumericIndex{25}, NumericIndex{65} };
     read_query.columns = std::vector<std::string> {"col_10", "col_91"};
 
     auto queries = get_column_bitset_and_query_functions<index::IndexSegmentReader>(

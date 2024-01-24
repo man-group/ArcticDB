@@ -29,6 +29,7 @@
 #include <arcticdb/pipeline/pipeline_utils.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/version/snapshot.hpp>
+#include <storage/file/file_store.hpp>
 
 #include <regex>
 
@@ -518,8 +519,8 @@ VersionedItem PythonVersionStore::write_partitioned_dataframe(
         multi_key_fut = store->write(KeyType::PARTITION,
                                      version_id,  // version_id
                                      stream_id,
-                                     0,  // start_index
-                                     0,  // end_index
+                                     NumericIndex{0},  // start_index
+                                     NumericIndex{0},  // end_index
                                      std::forward<decltype(segment)>(segment)).wait();
     });
 
@@ -1130,6 +1131,31 @@ bool PythonVersionStore::empty() {
         return false;
     }
     return true;
+}
+
+void write_dataframe_to_file(
+        const StreamId& stream_id,
+        const std::string& path,
+        const py::tuple& item,
+        const py::object& norm,
+        const py::object& user_meta) {
+    ARCTICDB_SAMPLE(WriteDataframeToFile, 0)
+    auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta);
+    write_dataframe_to_file_internal(stream_id, frame, path, WriteOptions{}, codec::default_lz4_codec(), EncodingVersion::V2);
+}
+
+ReadResult read_dataframe_from_file(
+        const StreamId &stream_id,
+        const std::string& path,
+        ReadQuery& read_query) {
+    auto opt_version_and_frame = read_dataframe_from_file_internal(
+        stream_id,
+        path,
+        read_query,
+        ReadOptions{},
+        codec::default_lz4_codec());
+
+    return create_python_read_result(opt_version_and_frame.versioned_item_, std::move(opt_version_and_frame.frame_and_descriptor_));
 }
 
 void PythonVersionStore::force_delete_symbol(const StreamId& stream_id) {

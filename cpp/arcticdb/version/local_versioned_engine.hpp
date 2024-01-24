@@ -52,11 +52,14 @@ struct KeySizesInfo {
 class LocalVersionedEngine : public VersionedEngine {
 
 public:
+    LocalVersionedEngine() = default;
+
     template<class ClockType = util::SysClock>
     explicit LocalVersionedEngine(
         const std::shared_ptr<storage::Library>& library,
-        const ClockType& = util::SysClock{} // Only used to allow the template variable to be inferred
-        );
+        const ClockType& = ClockType{});
+
+
 
     virtual ~LocalVersionedEngine() = default;
 
@@ -442,6 +445,7 @@ protected:
         const std::vector<VersionQuery>& version_queries);
 
 private:
+    void initialize(const std::shared_ptr<storage::Library>& library);
 
     std::shared_ptr<Store> store_;
     arcticdb::proto::storage::VersionStoreConfig cfg_;
