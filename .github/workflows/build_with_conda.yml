@@ -44,7 +44,10 @@ jobs:
         run: echo "linux_ok=true" >> $GITHUB_OUTPUT
 
   set_linux_not_docs_only:
-    if: needs.docs_only_check.outputs.docs_only != 'DOCS_ONLY'
+    if: |
+      always() &&
+      !cancelled() && 
+      needs.docs_only_check.outputs.docs_only != 'DOCS_ONLY'
     needs: [docs_only_check, start_ec2_runner]
     outputs:
       linux_ok: ${{ steps.set_linux_ok.outputs.linux_ok }}
@@ -157,7 +160,10 @@ jobs:
         run: echo "macos_ok=true" >> $GITHUB_OUTPUT
 
   set_macos_not_docs_only:
-    if: needs.docs_only_check.outputs.docs_only != 'DOCS_ONLY'
+    if: |
+      always() &&
+      !cancelled() &&
+      needs.docs_only_check.outputs.docs_only != 'DOCS_ONLY'
     needs: [docs_only_check]
     outputs:
       macos_ok: ${{ steps.set_macos_ok.outputs.macos_ok }}
