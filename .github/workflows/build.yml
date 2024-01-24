@@ -320,7 +320,11 @@ jobs:
         run: echo "merge_ok=true" >> "$GITHUB_OUTPUT"
 
   set_can_merge_not_docs_only:
-    if: needs.docs_only_check.outputs.docs_only != 'DOCS_ONLY'
+    if: |
+      always() &&
+      !failure() &&
+      !cancelled() &&
+      needs.docs_only_check.outputs.docs_only != 'DOCS_ONLY'
     needs: [docs_only_check, cpp-test-linux, cpp-test-windows, build-python-wheels-linux, build-python-wheels-windows, persistent_storage_verify_linux, persistent_storage_verify_windows]
     outputs:
       merge_ok: ${{ steps.set_merge_ok.outputs.merge_ok }}
