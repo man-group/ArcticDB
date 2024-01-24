@@ -12,6 +12,8 @@ on:
 
 jobs:
   start_ec2_runner:
+    if: needs.docs_only_check.outputs.docs_only != 'DOCS_ONLY'
+    needs: [docs_only_check]
     uses: ./.github/workflows/ec2_runner_jobs.yml
     secrets: inherit
     permissions: write-all
@@ -19,10 +21,37 @@ jobs:
       job_type: start
 
   linux:
+    needs: [ set_linux_docs_only, set_linux_not_docs_only ]
     if: |
       always() &&
       !cancelled()
-    needs: [start_ec2_runner]
+    runs-on: ubuntu-latest
+    steps:
+      - run: "linux_docs_only=\"${{ needs.set_linux_docs_only.outputs.linux_ok\
+              \ }}\"\nlinux_not_docs_only=\"${{ needs.set_linux_not_docs_only.outputs.linux_ok\
+              \ }}\"\nif [[ \"${linux_docs_only}\" == \"true\" || \"${linux_not_docs_only}\"\
+              \ == \"true\" ]]; then\n    echo \"LINUX PASS\"\n    exit 0\nelse\n    echo\
+              \ \"LINUX test FAIL\"\n    exit 1\nfi\n"
+
+  set_linux_docs_only:
+    if: needs.docs_only_check.outputs.docs_only == 'DOCS_ONLY'
+    needs: [docs_only_check]
+    outputs:
+      linux_ok: ${{ steps.set_linux_ok.outputs.linux_ok }}
+    runs-on:
+      - ubuntu-latest
+    steps:
+      - id: set_linux_ok
+        run: echo "linux_ok=true" >> $GITHUB_OUTPUT
+
+  set_linux_not_docs_only:
+    if: |
+      always() &&
+      !cancelled() && 
+      needs.docs_only_check.outputs.docs_only != 'DOCS_ONLY'
+    needs: [docs_only_check, start_ec2_runner]
+    outputs:
+      linux_ok: ${{ steps.set_linux_ok.outputs.linux_ok }}
     runs-on: ${{ needs.start_ec2_runner.result != 'failure' && needs.start_ec2_runner.outputs.label || 'ubuntu-latest'}}
     services:
       mongodb:
@@ -82,10 +111,12 @@ jobs:
           python -m pytest -n ${{ steps.cpu-cores.outputs.count }} tests
         env:
           ARCTICDB_USING_CONDA: 1
+      - id: set_linux_ok
+        run: echo "linux_ok=true" >> $GITHUB_OUTPUT
 
   stop-ec2-runner:
-    needs: [start_ec2_runner, linux]
-    if: ${{ always() }}
+    needs: [ docs_only_check, start_ec2_runner, linux]
+    if: ${{ always() && needs.docs_only_check.outputs.docs_only != 'DOCS_ONLY' }}
     uses: ./.github/workflows/ec2_runner_jobs.yml
     secrets: inherit
     permissions: write-all
@@ -95,6 +126,48 @@ jobs:
       ec2-instance-id: ${{ needs.start_ec2_runner.outputs.ec2-instance-id }}
 
   macos:
+    needs: [ set_macos_docs_only, set_macos_not_docs_only ]
+    if: |
+      always() &&
+      !cancelled()
+    strategy:
+      matrix:
+        include:
+          - os: macos-13
+
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+    steps:
+      - run: "macos_docs_only=\"${{ needs.set_macos_docs_only.outputs.macos_ok\
+              \ }}\"\nmacos_not_docs_only=\"${{ needs.set_macos_not_docs_only.outputs.macos_ok\
+              \ }}\"\nif [[ \"${macos_docs_only}\" == \"true\" || \"${macos_not_docs_only}\"\
+              \ == \"true\" ]]; then\n    echo \"MACOS PASS\"\n    exit 0\nelse\n    echo\
+              \ \" MACOS test FAIL\"\n    exit 1\nfi\n"
+
+  set_macos_docs_only:
+    if: needs.docs_only_check.outputs.docs_only == 'DOCS_ONLY'
+    needs: [docs_only_check]
+    outputs:
+      macos_ok: ${{ steps.set_macos_ok.outputs.macos_ok }}
+    strategy:
+      matrix:
+        include:
+          - os: macos-13
+
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+    steps:
+      - id: set_macos_ok
+        run: echo "macos_ok=true" >> $GITHUB_OUTPUT
+
+  set_macos_not_docs_only:
+    if: |
+      always() &&
+      !cancelled() &&
+      needs.docs_only_check.outputs.docs_only != 'DOCS_ONLY'
+    needs: [docs_only_check]
+    outputs:
+      macos_ok: ${{ steps.set_macos_ok.outputs.macos_ok }}
     strategy:
       matrix:
         include:
@@ -159,4 +232,26 @@ jobs:
           python -m pytest -n ${{ steps.cpu-cores.outputs.count }} tests
         env:
           ARCTICDB_USING_CONDA: 1
+      - id: set_macos_ok
+        run: echo "macos_ok=true" >> $GITHUB_OUTPUT
 
+  docs_only_check:
+    name: Check for docs-only change
+    outputs:
+      docs_only: ${{ steps.docs_only_check.outputs.docs_only }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 10
+      - id: files
+        name: Get changed files
+        uses: tj-actions/changed-files@v23.1
+        with:
+          files_ignore: /**/*.md|README.md #change this to docs paths
+          files_ignore_separator: '|'
+      - id: docs_only_check
+        if: steps.files.outputs.any_changed != 'true'
+        name: Check for docs-only changes
+        run: echo "docs_only=DOCS_ONLY" >> $GITHUB_OUTPUT
