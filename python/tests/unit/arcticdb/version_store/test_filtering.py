@@ -13,6 +13,7 @@ from hypothesis import assume, given, settings
 from hypothesis.extra.pandas import column, data_frames, range_indexes
 from hypothesis.extra.pytz import timezones as timezone_st
 import hypothesis.strategies as st
+from itertools import cycle
 from math import inf
 import numpy as np
 from pandas import DataFrame
@@ -1975,8 +1976,9 @@ def test_filter_string_nans_col_col(lmdb_version_store):
     generic_filter_test_nans(lmdb_version_store, symbol, df, q, pandas_query)
 
 
+@pytest.mark.parametrize("method", ("isna", "notna", "isnull", "notnull"))
 @pytest.mark.parametrize("type", (np.uint8, np.uint16, np.uint32, np.uint64, np.int8, np.int16, np.int32, np.int64))
-def test_filter_int_null_filtering(lmdb_version_store_v1, type):
+def test_filter_int_null_filtering(lmdb_version_store_v1, method, type):
     lib = lmdb_version_store_v1
     symbol = "test_filter_int_null_filtering"
     data = np.arange(20, dtype=type)
@@ -1984,110 +1986,37 @@ def test_filter_int_null_filtering(lmdb_version_store_v1, type):
     lib.write(symbol, df)
 
     q = QueryBuilder()
-    q = q[q["a"].isna()]
-    with pytest.raises(InternalException):
-        _ = lib.read(symbol, query_builder=q).data
-
-    q = QueryBuilder()
-    q = q[q["a"].isnull()]
-    with pytest.raises(InternalException):
-        _ = lib.read(symbol, query_builder=q).data
-
-    q = QueryBuilder()
-    q = q[q["a"].notna()]
-    with pytest.raises(InternalException):
-        _ = lib.read(symbol, query_builder=q).data
-
-    q = QueryBuilder()
-    q = q[q["a"].notnull()]
+    q = q[getattr(q["a"], method)()]
     with pytest.raises(InternalException):
         _ = lib.read(symbol, query_builder=q).data
 
 
-@pytest.mark.parametrize("type", (np.float32, np.float64))
-def test_filter_float_null_filtering(lmdb_version_store_v1, type):
+@pytest.mark.parametrize("method", ("isna", "notna", "isnull", "notnull"))
+@pytest.mark.parametrize("dtype", (np.float32, np.float64, np.datetime64, str))
+def test_filter_null_filtering(lmdb_version_store_v1, method, dtype):
     lib = lmdb_version_store_v1
-    symbol = "test_filter_float_null_filtering"
-    data = [idx if (idx % 2 == 0) else np.nan for idx in range(20)]
-    df = pd.DataFrame({"a": data}, dtype=type, index=np.arange(20))
-    lib.write(symbol, df)
+    symbol = "test_filter_null_filtering"
+    num_rows = 20
+    if dtype in (np.float32, np.float64):
+        data = np.arange(20, dtype=dtype)
+        null_values = cycle([np.nan])
+    elif dtype is np.datetime64:
+        data = np.arange(np.datetime64("2024-01-01"), np.datetime64(f"2024-01-{num_rows + 1}"), np.timedelta64(1, "D")).astype("datetime64[ns]")
+        null_values = cycle([np.datetime64("nat")])
+    else: # str
+        data = [str(idx) for idx in range(20)]
+        null_values = cycle([None, np.nan])
+    for idx in range(num_rows):
+        if idx % 2 == 0:
+            data[idx] = next(null_values)
 
-    q = QueryBuilder()
-    q = q[q["a"].isna()]
-    received = lib.read(symbol, query_builder=q).data
-    assert_frame_equal(df[df["a"].isna()], received)
-
-    q = QueryBuilder()
-    q = q[q["a"].isnull()]
-    received = lib.read(symbol, query_builder=q).data
-    assert_frame_equal(df[df["a"].isnull()], received)
-
-    q = QueryBuilder()
-    q = q[q["a"].notna()]
-    received = lib.read(symbol, query_builder=q).data
-    assert_frame_equal(df[df["a"].notna()], received)
-
-    q = QueryBuilder()
-    q = q[q["a"].notnull()]
-    received = lib.read(symbol, query_builder=q).data
-    assert_frame_equal(df[df["a"].notnull()], received)
-
-
-def test_filter_timestamp_null_filtering(lmdb_version_store_v1):
-    lib = lmdb_version_store_v1
-    symbol = "test_filter_timestamp_null_filtering"
-    data = [pd.Timestamp(idx) if (idx % 2 == 0) else pd.NaT for idx in range(20)]
-    df = pd.DataFrame({"a": data}, dtype="datetime64[ns]", index=np.arange(20))
-    lib.write(symbol, df)
-
-    q = QueryBuilder()
-    q = q[q["a"].isna()]
-    received = lib.read(symbol, query_builder=q).data
-    assert_frame_equal(df[df["a"].isna()], received)
-
-    q = QueryBuilder()
-    q = q[q["a"].isnull()]
-    received = lib.read(symbol, query_builder=q).data
-    assert_frame_equal(df[df["a"].isnull()], received)
-
-    q = QueryBuilder()
-    q = q[q["a"].notna()]
-    received = lib.read(symbol, query_builder=q).data
-    assert_frame_equal(df[df["a"].notna()], received)
-
-    q = QueryBuilder()
-    q = q[q["a"].notnull()]
-    received = lib.read(symbol, query_builder=q).data
-    assert_frame_equal(df[df["a"].notnull()], received)
-
-
-def test_filter_string_null_filtering(lmdb_version_store_v1):
-    lib = lmdb_version_store_v1
-    symbol = "test_filter_string_null_filtering"
-    data = [str(idx) if (idx % 2 == 0) else None for idx in range(20)]
-    data = [element if (idx % 3 == 0) else np.nan for idx, element in enumerate(data)]
     df = pd.DataFrame({"a": data}, index=np.arange(20))
     lib.write(symbol, df)
 
     q = QueryBuilder()
-    q = q[q["a"].isna()]
+    q = q[getattr(q["a"], method)()]
     received = lib.read(symbol, query_builder=q).data
-    assert_frame_equal(df[df["a"].isna()], received)
-
-    q = QueryBuilder()
-    q = q[q["a"].isnull()]
-    received = lib.read(symbol, query_builder=q).data
-    assert_frame_equal(df[df["a"].isnull()], received)
-
-    q = QueryBuilder()
-    q = q[q["a"].notna()]
-    received = lib.read(symbol, query_builder=q).data
-    assert_frame_equal(df[df["a"].notna()], received)
-
-    q = QueryBuilder()
-    q = q[q["a"].notnull()]
-    received = lib.read(symbol, query_builder=q).data
-    assert_frame_equal(df[df["a"].notnull()], received)
+    assert_frame_equal(df[getattr(df["a"], method)()], received)
 
 
 def test_filter_batch_one_query(lmdb_version_store):

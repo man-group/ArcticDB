@@ -28,7 +28,7 @@ enum class OperationType : uint8_t {
     NEG,
     // Comparison
     ISNULL,
-    ISNOTNULL,
+    NOTNULL,
     // Boolean
     IDENTITY,
     NOT,
@@ -240,7 +240,7 @@ bool apply(T t) {
 }
 };
 
-struct IsNotNullOperator {
+struct NotNullOperator {
 template<typename tag>
 bool apply(int64_t t) {
     if constexpr (std::is_same_v<tag, TimeTypeTag>) {

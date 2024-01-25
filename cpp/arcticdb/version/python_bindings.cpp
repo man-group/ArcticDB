@@ -311,7 +311,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .value("ABS", OperationType::ABS)
             .value("NEG", OperationType::NEG)
             .value("ISNULL", OperationType::ISNULL)
-            .value("ISNOTNULL", OperationType::ISNOTNULL)
+            .value("NOTNULL", OperationType::NOTNULL)
             .value("IDENTITY", OperationType::IDENTITY)
             .value("NOT", OperationType::NOT)
             .value("ADD", OperationType::ADD)
