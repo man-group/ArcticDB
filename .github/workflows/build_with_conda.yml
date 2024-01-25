@@ -249,7 +249,7 @@ jobs:
         name: Get changed files
         uses: tj-actions/changed-files@v23.1
         with:
-          files_ignore: /**/*.md|README.md #change this to docs paths
+          files_ignore: /**/build.yml|README.md #change this to docs paths
           files_ignore_separator: '|'
       - id: docs_only_check
         if: steps.files.outputs.any_changed != 'true'
