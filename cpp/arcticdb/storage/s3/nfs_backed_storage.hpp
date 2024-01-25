@@ -10,7 +10,6 @@
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_factory.hpp>
 #include <aws/core/Aws.h>
-#include <aws/s3/S3Client.h>
 #include <aws/s3/model/PutObjectRequest.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
 #include <arcticdb/log/log.hpp>
@@ -20,6 +19,7 @@
 #include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/storage/s3/s3_api.hpp>
 
+#include <arcticdb/storage/s3/s3_client_wrapper.hpp>
 #include <arcticdb/storage/s3/detail-inl.hpp>
 
 namespace arcticdb::storage::nfs_backed {
@@ -58,7 +58,7 @@ private:
     const std::string& root_folder() const { return root_folder_; }
 
     std::shared_ptr<storage::s3::S3ApiInstance> s3_api_;
-    Aws::S3::S3Client s3_client_;
+    std::unique_ptr<storage::s3::S3ClientWrapper> s3_client_;
     std::string root_folder_;
     std::string bucket_name_;
 };
@@ -86,7 +86,6 @@ inline arcticdb::proto::storage::VariantStorage pack_config(
     util::pack_to_any(cfg, *output.mutable_config());
     return output;
 }
-
 
 struct NfsBucketizer {
     static std::string bucketize(const std::string& root_folder, const VariantKey& vk);

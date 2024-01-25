@@ -9,6 +9,8 @@
 
 #include <arcticdb/util/simple_string_hash.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
+#include <arcticdb/storage/s3/real_s3_client.hpp>
+#include <arcticdb/storage/s3/s3_client_wrapper.hpp>
 
 namespace arcticdb::storage::nfs_backed {
 
@@ -120,14 +122,14 @@ void NfsBackedStorage::do_write(Composite<KeySegmentPair>&& kvs) {
     auto enc = kvs.transform([] (auto&& key_seg) {
         return KeySegmentPair{encode_object_id(key_seg.variant_key()), std::move(key_seg.segment())};
     });
-    s3::detail::do_write_impl(std::move(enc), root_folder_, bucket_name_, s3_client_, NfsBucketizer{});
+    s3::detail::do_write_impl(std::move(enc), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
 }
 
 void NfsBackedStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts) {
     auto enc = kvs.transform([] (auto&& key_seg) {
         return KeySegmentPair{encode_object_id(key_seg.variant_key()), std::move(key_seg.segment())};
     });
-    s3::detail::do_update_impl(std::move(enc), root_folder_, bucket_name_, s3_client_, NfsBucketizer{});
+    s3::detail::do_update_impl(std::move(enc), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
 }
 
 void NfsBackedStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
@@ -139,14 +141,14 @@ void NfsBackedStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& vi
         return encode_object_id(key);
     });
 
-    s3::detail::do_read_impl(std::move(enc), func, root_folder_, bucket_name_, s3_client_, NfsBucketizer{}, opts);
+    s3::detail::do_read_impl(std::move(enc), func, root_folder_, bucket_name_, *s3_client_, NfsBucketizer{}, opts);
 }
 
 void NfsBackedStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
     auto enc = ks.transform([] (auto&& key) {
         return encode_object_id(key);
     });
-    s3::detail::do_remove_impl(std::move(enc), root_folder_, bucket_name_, s3_client_, NfsBucketizer{});
+    s3::detail::do_remove_impl(std::move(enc), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
 }
 
 void NfsBackedStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string& prefix) {
@@ -166,21 +168,21 @@ void NfsBackedStorage::do_iterate_type(KeyType key_type, const IterateTypeVisito
         return !prefix.empty() ? fmt::format("{}/{}", key_type_dir, new_prefix) : key_type_dir;
     };
 
-    s3::detail::do_iterate_type_impl(key_type, std::move(func), root_folder_, bucket_name_, s3_client_, NfsBucketizer{}, prefix_handler, prefix);
+    s3::detail::do_iterate_type_impl(key_type, std::move(func), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{}, prefix_handler, prefix);
 }
 
 bool NfsBackedStorage::do_key_exists(const VariantKey& key) {
     auto encoded_key = encode_object_id(key);
-    return s3::detail::do_key_exists_impl(encoded_key, root_folder_, bucket_name_, s3_client_, NfsBucketizer{});
+    return s3::detail::do_key_exists_impl(encoded_key, root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
 }
 
 
 NfsBackedStorage::NfsBackedStorage(const LibraryPath &library_path, OpenMode mode, const Config &conf) :
     Storage(library_path, mode),
     s3_api_(s3::S3ApiInstance::instance()),
-    s3_client_(s3::get_aws_credentials(conf), s3::get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, false),
     root_folder_(object_store_utils::get_root_folder(library_path)),
     bucket_name_(conf.bucket_name()) {
+    s3_client_ = std::make_unique<s3::RealS3Client>(s3::get_aws_credentials(conf), s3::get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, false);
     if (!conf.prefix().empty()) {
         ARCTICDB_DEBUG(log::version(), "prefix found, using: {}", conf.prefix());
         auto prefix_path = LibraryPath::from_delim_path(conf.prefix(), '.');
