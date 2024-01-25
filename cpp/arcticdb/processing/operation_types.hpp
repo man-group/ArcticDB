@@ -25,6 +25,9 @@ enum class OperationType : uint8_t {
     // Operator
     ABS,
     NEG,
+    // Comparison
+    ISNULL,
+    ISNOTNULL,
     // Boolean
     IDENTITY,
     NOT,
@@ -213,6 +216,32 @@ struct NegOperator {
 template<typename T, typename V = typename unary_arithmetic_promoted_type<T, NegOperator>::type>
 V apply(T t) {
     return -static_cast<V>(t);
+}
+};
+
+struct IsNullOperator {
+template<typename T>
+// StringPool::offset_t is an alias for int64_t, there needs to be logic in the calling function not to use this
+// operator with integer columns
+bool apply(StringPool::offset_t t) {
+    return !is_a_string(t);
+}
+template<typename T, std::enable_if_t<std::is_floating_point<T>::value, bool> = true>
+bool apply(T t) {
+    return std::isnan(t);
+}
+};
+
+struct IsNotNullOperator {
+template<typename T>
+// StringPool::offset_t is an alias for int64_t, there needs to be logic in the calling function not to use this
+// operator with integer columns
+bool apply(StringPool::offset_t t) {
+    return is_a_string(t);
+}
+template<typename T, std::enable_if_t<std::is_floating_point<T>::value, bool> = true>
+bool apply(T t) {
+    return !std::isnan(t);
 }
 };
 

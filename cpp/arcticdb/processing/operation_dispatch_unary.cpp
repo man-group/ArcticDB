@@ -67,6 +67,10 @@ VariantData dispatch_unary(const VariantData& left, OperationType operation) {
             return visit_unary_operator(left, AbsOperator());
         case OperationType::NEG:
             return visit_unary_operator(left, NegOperator());
+        case OperationType::ISNULL:
+            return visit_unary_comparator(left, IsNullOperator());
+        case OperationType::ISNOTNULL:
+            return visit_unary_comparator(left, IsNotNullOperator());
         case OperationType::IDENTITY:
         case OperationType::NOT:
             return visit_unary_boolean(left, operation);
