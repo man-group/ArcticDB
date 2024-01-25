@@ -225,7 +225,7 @@ struct TimeTypeTag{};
 struct StringTypeTag{};
 
 struct IsNullOperator {
-template<typename tag>
+template<typename tag, std::enable_if_t<std::is_same_v<tag, TimeTypeTag> || std::is_same_v<tag, StringTypeTag>, bool> = true>
 bool apply(int64_t t) {
     if constexpr (std::is_same_v<tag, TimeTypeTag>) {
         return t == NaT;
@@ -234,14 +234,14 @@ bool apply(int64_t t) {
         return t >=  string_nan;
     }
 }
-template<typename T, std::enable_if_t<std::is_floating_point<T>::value, bool> = true>
+template<typename T, std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 bool apply(T t) {
     return std::isnan(t);
 }
 };
 
 struct NotNullOperator {
-template<typename tag>
+template<typename tag, std::enable_if_t<std::is_same_v<tag, TimeTypeTag> || std::is_same_v<tag, StringTypeTag>, bool> = true>
 bool apply(int64_t t) {
     if constexpr (std::is_same_v<tag, TimeTypeTag>) {
         return t != NaT;
@@ -250,7 +250,7 @@ bool apply(int64_t t) {
         return t < string_nan;
     }
 }
-template<typename T, std::enable_if_t<std::is_floating_point<T>::value, bool> = true>
+template<typename T, std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 bool apply(T t) {
     return !std::isnan(t);
 }
