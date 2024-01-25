@@ -42,12 +42,11 @@ VariantData unary_operator(const Value& val, Func&& func) {
     output->data_type_ = val.data_type_;
 
     details::visit_type(val.type().data_type(), [&](auto val_desc_tag) {
-        using DataTagType =  decltype(val_desc_tag);
-        if constexpr (!is_numeric_type(DataTagType::data_type)) {
+        using TDT = ScalarTagType<decltype(val_desc_tag)>;
+        using RawType = typename TDT::DataTypeTag::raw_type;
+        if constexpr (!is_numeric_type(TDT::DataTypeTag::data_type)) {
             util::raise_rte("Cannot perform arithmetic on {}", val.type());
         }
-        using DT = TypeDescriptorTag<decltype(val_desc_tag), DimensionTag<Dimension::Dim0>>;
-        using RawType = typename DT::DataTypeTag::raw_type;
         auto value = *reinterpret_cast<const RawType*>(val.data_);
         using TargetType = typename unary_arithmetic_promoted_type<RawType, std::remove_reference_t<Func>>::type;
         output->data_type_ = data_type_from_raw_type<TargetType>();
@@ -65,23 +64,23 @@ VariantData unary_operator(const Column& col, Func&& func) {
     std::unique_ptr<Column> output;
 
     details::visit_type(col.type().data_type(), [&](auto col_desc_tag) {
-        using ColumnTagType =  decltype(col_desc_tag);
-        if constexpr (!is_numeric_type(ColumnTagType::data_type)) {
+        using TDT = ScalarTagType<decltype(col_desc_tag)>;
+        using RawType = typename TDT::DataTypeTag::raw_type;
+        if constexpr (!is_numeric_type(TDT::DataTypeTag::data_type)) {
             util::raise_rte("Cannot perform arithmetic on {}", col.type());
         }
-        using DT = TypeDescriptorTag<decltype(col_desc_tag), DimensionTag<Dimension::Dim0>>;
-        using RawType = typename DT::DataTypeTag::raw_type;
         using TargetType = typename unary_arithmetic_promoted_type<RawType, std::remove_reference_t<Func>>::type;
         auto output_data_type = data_type_from_raw_type<TargetType>();
         output = std::make_unique<Column>(make_scalar_type(output_data_type), col.is_sparse());
-        auto data = col.data();
-        while(auto opt_block = data.next<DT>()) {
-            const auto& block = *opt_block;
-            const auto nbytes = sizeof(TargetType) * block.row_count();
-            auto ptr = reinterpret_cast<TargetType*>(output->allocate_data(nbytes));
-            for(auto idx = 0u; idx < block.row_count(); ++idx)
-                *ptr++ = func.apply(block[idx]);
-
+        auto col_data = col.data();
+        while(auto block = col_data.next<TDT>()) {
+            const auto row_count = block->row_count();
+            const auto nbytes = sizeof(TargetType) * row_count;
+            auto in_ptr = reinterpret_cast<const RawType*>(block->data());
+            auto out_ptr = reinterpret_cast<TargetType*>(output->allocate_data(nbytes));
+            for(auto idx = 0u; idx < row_count; ++idx) {
+                *out_ptr++ = func.apply(*in_ptr++);
+            }
             output->advance_data(nbytes);
         }
         output->set_row_data(col.row_count() - 1);
@@ -140,6 +139,9 @@ VariantData unary_comparator(const Column& col, Func&& func) {
                 } else if constexpr(is_time_type(TDT::DataTypeTag::data_type)) {
                     if (func.template apply<TimeTypeTag>(*ptr++))
                         inserter = pos;
+                } else {
+                    // Shouldn't reach this point due to earlier check
+                    internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Cannot perform null checks on {}", col.type());
                 }
             }
         }
