@@ -28,8 +28,6 @@
 #include <arcticdb/entity/merge_descriptors.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
 
-#include <pybind11/pybind11.h>
-
 namespace arcticdb::pipelines {
 
 using namespace arcticdb::entity;
@@ -299,19 +297,23 @@ std::optional<SliceAndKey> rewrite_partial_segment(
     }
 }
 
-std::vector<SliceAndKey> flatten_and_fix_rows(const std::vector<std::vector<SliceAndKey>>& groups, size_t& global_count) {
+std::vector<SliceAndKey> flatten_and_fix_rows(boost::span<const std::vector<SliceAndKey>> groups, size_t& global_count) {
     std::vector<SliceAndKey> output;
     global_count = 0;
-    for(auto group : groups) {
-        if(group.empty()) continue;
+    for (const std::vector<SliceAndKey>& group : groups) {
+        if (group.empty())
+            continue;
         auto group_start = group.begin()->slice_.row_range.first;
-        auto group_end = std::accumulate(std::begin(group), std::end(group), 0ULL, [](size_t a, const SliceAndKey& sk) { return std::max(a, sk.slice_.row_range.second); });
-        std::transform(std::begin(group), std::end(group), std::back_inserter(output), [&] (auto& sk) {
+        auto group_end = std::accumulate(std::begin(group), std::end(group), 0ULL, [](size_t a, const SliceAndKey& sk) {
+            return std::max(a, sk.slice_.row_range.second);
+        });
+        std::transform(std::begin(group), std::end(group), std::back_inserter(output), [&](SliceAndKey sk) {
             auto range_start = global_count + (sk.slice_.row_range.first - group_start);
             auto new_range = RowRange{range_start, range_start + (sk.slice_.row_range.diff())};
             sk.slice_.row_range = new_range;
-            return sk; });
-        global_count += (group_end - group_start) ;
+            return sk;
+        });
+        global_count += (group_end - group_start);
     }
     return output;
 }

@@ -7,12 +7,9 @@
 
 #pragma once
 
-#include <arcticdb/stream/index.hpp>
-#include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/index_range.hpp>
 
 #include <vector>
-#include <variant>
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <folly/futures/Future.h>
@@ -21,6 +18,8 @@
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/pipeline/pipeline_common.hpp>
+
+#include<boost/core/span.hpp>
 
 namespace arcticdb::pipelines {
 
@@ -70,8 +69,7 @@ std::optional<SliceAndKey> rewrite_partial_segment(
         bool before,
         const std::shared_ptr<Store>& store);
 
-std::vector<SliceAndKey> flatten_and_fix_rows(
-        const std::vector<std::vector<SliceAndKey>>& groups,
-        size_t& global_count);
+// TODO: Use std::span when C++20 is enabled
+std::vector<SliceAndKey> flatten_and_fix_rows(boost::span<const std::vector<SliceAndKey>> groups, size_t& global_count);
 
 } //namespace arcticdb::pipelines
