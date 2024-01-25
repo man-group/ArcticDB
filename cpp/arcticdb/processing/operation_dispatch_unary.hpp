@@ -123,7 +123,7 @@ VariantData unary_comparator(const Column& col, Func&& func) {
         if constexpr (!(is_floating_point_type(ColumnTagType::data_type) ||
                         is_sequence_type(ColumnTagType::data_type) ||
                         is_time_type(ColumnTagType::data_type))) {
-            util::raise_rte("Cannot perform null checks on {}", col.type());
+            internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Cannot perform null checks on {}", col.type());
         }
         auto column_data = col.data();
         util::BitSet::bulk_insert_iterator inserter(*output);

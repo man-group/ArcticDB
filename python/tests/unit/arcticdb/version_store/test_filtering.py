@@ -1978,8 +1978,8 @@ def test_filter_string_nans_col_col(lmdb_version_store):
 
 @pytest.mark.parametrize("method", ("isna", "notna", "isnull", "notnull"))
 @pytest.mark.parametrize("type", (np.uint8, np.uint16, np.uint32, np.uint64, np.int8, np.int16, np.int32, np.int64))
-def test_filter_int_null_filtering(lmdb_version_store_v1, method, type):
-    lib = lmdb_version_store_v1
+def test_filter_int_null_filtering(lmdb_version_store, method, type):
+    lib = lmdb_version_store
     symbol = "test_filter_int_null_filtering"
     data = np.arange(20, dtype=type)
     df = pd.DataFrame({"a": data}, index=np.arange(20))
@@ -1993,8 +1993,8 @@ def test_filter_int_null_filtering(lmdb_version_store_v1, method, type):
 
 @pytest.mark.parametrize("method", ("isna", "notna", "isnull", "notnull"))
 @pytest.mark.parametrize("dtype", (np.float32, np.float64, np.datetime64, str))
-def test_filter_null_filtering(lmdb_version_store_v1, method, dtype):
-    lib = lmdb_version_store_v1
+def test_filter_null_filtering(lmdb_version_store, method, dtype):
+    lib = lmdb_version_store
     symbol = "test_filter_null_filtering"
     num_rows = 20
     if dtype in (np.float32, np.float64):
