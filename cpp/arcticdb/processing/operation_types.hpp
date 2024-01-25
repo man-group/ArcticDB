@@ -11,6 +11,7 @@
 #include <optional>
 
 #include <arcticdb/processing/signed_unsigned_comparison.hpp>
+#include <arcticdb/util/constants.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #ifdef ARCTICDB_USING_CONDA
     #include <robin_hood.h>
@@ -227,9 +228,10 @@ struct IsNullOperator {
 template<typename tag>
 bool apply(int64_t t) {
     if constexpr (std::is_same_v<tag, TimeTypeTag>) {
-        return t == util::NaT;
+        return t == NaT;
     } else if constexpr (std::is_same_v<tag, StringTypeTag>) {
-        return !is_a_string(t);
+        // Relies on string_nan == string_none - 1
+        return t >=  string_nan;
     }
 }
 template<typename T, std::enable_if_t<std::is_floating_point<T>::value, bool> = true>
@@ -242,9 +244,10 @@ struct IsNotNullOperator {
 template<typename tag>
 bool apply(int64_t t) {
     if constexpr (std::is_same_v<tag, TimeTypeTag>) {
-        return t != util::NaT;
+        return t != NaT;
     } else if constexpr (std::is_same_v<tag, StringTypeTag>) {
-        return is_a_string(t);
+        // Relies on string_nan == string_none - 1
+        return t < string_nan;
     }
 }
 template<typename T, std::enable_if_t<std::is_floating_point<T>::value, bool> = true>

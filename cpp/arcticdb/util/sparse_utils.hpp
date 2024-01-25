@@ -11,6 +11,7 @@
 #include <arcticdb/util/preprocess.hpp>
 
 #include <arcticdb/util/bitset.hpp>
+#include <arcticdb/util/constants.hpp>
 
 #include <arcticdb/column_store/chunked_buffer.hpp>
 
@@ -20,8 +21,6 @@
 #include <cstdint>
 
 namespace arcticdb::util {
-
-constexpr timestamp NaT = std::numeric_limits<timestamp>::min();
 
 template <typename RawType>
 void densify_buffer_using_bitmap(const util::BitSet &block_bitset, arcticdb::ChunkedBuffer &dense_buffer, const uint8_t* sparse_ptr) {

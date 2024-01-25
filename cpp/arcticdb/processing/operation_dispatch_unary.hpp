@@ -107,6 +107,63 @@ VariantData visit_unary_operator(const VariantData& left, Func&& func) {
     }, left);
 }
 
+template <typename Func>
+VariantData unary_comparator(const Column& col, Func&& func) {
+    if (is_empty_type(col.type().data_type())) {
+        return EmptyResult{};
+    }
+    auto output = std::make_shared<util::BitSet>(static_cast<util::BitSetSizeType>(col.row_count()));
+
+    details::visit_type(col.type().data_type(), [&](auto col_desc_tag) {
+        using ColumnTagType =  decltype(col_desc_tag);
+        using DT = TypeDescriptorTag<decltype(col_desc_tag), DimensionTag<Dimension::Dim0>>;
+        using RawType = typename DT::DataTypeTag::raw_type;
+        // Right now this is equivalent to if constexpr (is_integer_type(ColumnTagType::data_type)), but that may change with the addition
+        // of new types, so be defensive here
+        if constexpr (!(is_floating_point_type(ColumnTagType::data_type) ||
+                        is_sequence_type(ColumnTagType::data_type) ||
+                        is_time_type(ColumnTagType::data_type))) {
+            util::raise_rte("Cannot perform null checks on {}", col.type());
+        }
+        auto column_data = col.data();
+        util::BitSet::bulk_insert_iterator inserter(*output);
+        auto pos = 0u;
+        while (auto block = column_data.next<DT>()) {
+            auto ptr = reinterpret_cast<const RawType*>(block->data());
+            const auto row_count = block->row_count();
+            for (auto i = 0u; i < row_count; ++i, ++pos) {
+                if constexpr(is_floating_point_type(ColumnTagType::data_type)) {
+                    if (func.apply(*ptr++))
+                        inserter = pos;
+                } else if constexpr(is_sequence_type(ColumnTagType::data_type)) {
+                    if (func.template apply<StringTypeTag>(*ptr++))
+                        inserter = pos;
+                } else if constexpr(is_time_type(ColumnTagType::data_type)) {
+                    if (func.template apply<TimeTypeTag>(*ptr++))
+                        inserter = pos;
+                }
+            }
+        }
+        inserter.flush();
+    });
+    return VariantData{std::move(output)};
+}
+
+template<typename Func>
+VariantData visit_unary_comparator(const VariantData& left, Func&& func) {
+    return std::visit(util::overload{
+            [&] (const ColumnWithStrings& l) -> VariantData {
+                return transform_to_placeholder(unary_comparator<decltype(func)>(*(l.column_), std::forward<decltype(func)>(func)));
+            },
+            [] (EmptyResult l) -> VariantData {
+                return l;
+            },
+            [](const auto&) -> VariantData {
+                util::raise_rte("Bitset/ValueSet inputs not accepted to unary comparators");
+            }
+    }, left);
+}
+
 VariantData dispatch_unary(const VariantData& left, OperationType operation);
 
 }
