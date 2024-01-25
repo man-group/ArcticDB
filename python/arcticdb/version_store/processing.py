@@ -214,7 +214,7 @@ class ExpressionNode:
         return self.notnull()
 
     def notnull(self):
-        return ExpressionNode.compose(self, _OperationType.NOTNULL, None)
+        return ExpressionNode.compose(self, _OperationType.ISNOTNULL, None)
 
     def __str__(self):
         return self.get_name()

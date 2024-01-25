@@ -252,7 +252,7 @@ bool apply(int64_t t) {
 }
 template<typename T, std::enable_if_t<std::is_floating_point<T>::value, bool> = true>
 bool apply(T t) {
-    return std::isnan(t);
+    return !std::isnan(t);
 }
 };
 
