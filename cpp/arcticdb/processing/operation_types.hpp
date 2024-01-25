@@ -219,12 +219,18 @@ V apply(T t) {
 }
 };
 
+// Needed for null and not bull operators as INT64, NANOSECONDS_UTC64, and all string columns hold int64_t values
+struct TimeTypeTag{};
+struct StringTypeTag{};
+
 struct IsNullOperator {
-template<typename T>
-// StringPool::offset_t is an alias for int64_t, there needs to be logic in the calling function not to use this
-// operator with integer columns
-bool apply(StringPool::offset_t t) {
-    return !is_a_string(t);
+template<typename tag>
+bool apply(int64_t t) {
+    if constexpr (std::is_same_v<tag, TimeTypeTag>) {
+        return t == util::NaT;
+    } else if constexpr (std::is_same_v<tag, StringTypeTag>) {
+        return !is_a_string(t);
+    }
 }
 template<typename T, std::enable_if_t<std::is_floating_point<T>::value, bool> = true>
 bool apply(T t) {
@@ -233,15 +239,17 @@ bool apply(T t) {
 };
 
 struct IsNotNullOperator {
-template<typename T>
-// StringPool::offset_t is an alias for int64_t, there needs to be logic in the calling function not to use this
-// operator with integer columns
-bool apply(StringPool::offset_t t) {
-    return is_a_string(t);
+template<typename tag>
+bool apply(int64_t t) {
+    if constexpr (std::is_same_v<tag, TimeTypeTag>) {
+        return t != util::NaT;
+    } else if constexpr (std::is_same_v<tag, StringTypeTag>) {
+        return is_a_string(t);
+    }
 }
 template<typename T, std::enable_if_t<std::is_floating_point<T>::value, bool> = true>
 bool apply(T t) {
-    return !std::isnan(t);
+    return std::isnan(t);
 }
 };
 

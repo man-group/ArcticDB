@@ -21,7 +21,7 @@
 
 namespace arcticdb::util {
 
-constexpr auto NaT = 0x8000000000000000;
+constexpr timestamp NaT = std::numeric_limits<timestamp>::min();
 
 template <typename RawType>
 void densify_buffer_using_bitmap(const util::BitSet &block_bitset, arcticdb::ChunkedBuffer &dense_buffer, const uint8_t* sparse_ptr) {
