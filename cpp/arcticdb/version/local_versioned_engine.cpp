@@ -1520,7 +1520,7 @@ struct WarnVersionTypeNotHandled {
 
     void warn(const StreamId& stream_id) {
         if (!warned) {
-            log::version().warn("Only exact version numbers are supported when using batch read calls."
+            log::version().warn("Only exact version numbers are supported when using add_to_snapshot/batch_restore_version calls."
                                 "The queries passed for '{}', etc. are ignored and the latest versions will be used!",
                                 stream_id);
             warned = true;
