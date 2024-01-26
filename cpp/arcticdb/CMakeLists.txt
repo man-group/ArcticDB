@@ -95,6 +95,7 @@ else()
     set_target_properties(xxHash PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${xxHash_INCLUDE_DIR})
 
 endif()
+
 # RocksDB can be manually excluded with set(ARCTICDB_INCLUDE_ROCKSDB 0)
 # Default is to include on PyPI builds and exclude on conda builds
 if(${ARCTICDB_INCLUDE_ROCKSDB})
@@ -529,12 +530,13 @@ endif()
 if(${ARCTICDB_USING_CONDA})
 
     # We must use dynamic libraries, except for xxHash, which must be statically linked.
-    # In non-conda builds, we inline the functions so it does not need linking at all.
+    # since `XXH_state_t` which we rely on is only available when statically linking.
+    # For all builds except linux conda's, we inline the functions so that xxhash does not need linking at all.
     list (APPEND arcticdb_core_libraries
+        xxHash::xxHash
         pcre
         msgpack-c
         ${LMDB_LIBRARIES}
-        xxHash
     )
     if(${BUILD_WITH_REMOTERY})
         list (APPEND arcticdb_core_libraries
