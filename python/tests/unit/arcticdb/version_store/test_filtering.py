@@ -1983,19 +1983,19 @@ def test_filter_null_filtering(lmdb_version_store, method, dtype):
     symbol = "test_filter_null_filtering"
     num_rows = 20
     if dtype in (np.float32, np.float64):
-        data = np.arange(20, dtype=dtype)
+        data = np.arange(num_rows, dtype=dtype)
         null_values = cycle([np.nan])
     elif dtype is np.datetime64:
         data = np.arange(np.datetime64("2024-01-01"), np.datetime64(f"2024-01-{num_rows + 1}"), np.timedelta64(1, "D")).astype("datetime64[ns]")
         null_values = cycle([np.datetime64("nat")])
     else: # str
-        data = [str(idx) for idx in range(20)]
+        data = [str(idx) for idx in range(num_rows)]
         null_values = cycle([None, np.nan])
     for idx in range(num_rows):
         if idx % 2 == 0:
             data[idx] = next(null_values)
 
-    df = pd.DataFrame({"a": data}, index=np.arange(20))
+    df = pd.DataFrame({"a": data}, index=np.arange(num_rows))
     lib.write(symbol, df)
 
     q = QueryBuilder()
