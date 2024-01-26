@@ -51,7 +51,7 @@ public:
         // ensure sorted by col group then row group, this is normally the case but in append scenario,
         // one will need to ensure that this holds, otherwise the assumptions in the read pipeline will be
         // broken.
-        ARCTICDB_DEBUG(log::version(), "Wriiting key {} to the index", key);
+        ARCTICDB_DEBUG(log::version(), "Writing key {} to the index", key);
         util::check_arg(!current_col_.has_value() || *current_col_ <= slice.col_range.first,
                         "expected increasing column group, last col range left value {}, arg {}",
                         current_col_.value_or(-1), slice.col_range
