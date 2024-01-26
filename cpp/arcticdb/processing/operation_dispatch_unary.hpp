@@ -109,9 +109,9 @@ VariantData visit_unary_operator(const VariantData& left, Func&& func) {
 template <typename Func>
 VariantData unary_comparator(const Column& col, Func&& func) {
     if (is_empty_type(col.type().data_type()) || is_integer_type(col.type().data_type())) {
-        if constexpr (std::is_same_v<Func, IsNullOperator &&>) {
+        if constexpr (std::is_same_v<Func, IsNullOperator&&>) {
             return is_empty_type(col.type().data_type()) ? VariantData(FullResult{}) : VariantData(EmptyResult{});
-        } else if constexpr (std::is_same_v<Func, NotNullOperator &&>) {
+        } else if constexpr (std::is_same_v<Func, NotNullOperator&&>) {
             return is_empty_type(col.type().data_type()) ? VariantData(EmptyResult{}) : VariantData(FullResult{});
         } else {
             internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected operator passed to unary_comparator");
@@ -154,8 +154,14 @@ VariantData visit_unary_comparator(const VariantData& left, Func&& func) {
             [&] (const ColumnWithStrings& l) -> VariantData {
                 return transform_to_placeholder(unary_comparator<decltype(func)>(*(l.column_), std::forward<decltype(func)>(func)));
             },
-            [] (EmptyResult l) -> VariantData {
-                return l;
+            [] (EmptyResult) -> VariantData {
+                if constexpr (std::is_same_v<Func, IsNullOperator>) {
+                    return FullResult{};
+                } else if constexpr (std::is_same_v<Func, NotNullOperator>) {
+                    return EmptyResult{};
+                } else {
+                    internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected operator passed to unary_comparator");
+                }
             },
             [](const auto&) -> VariantData {
                 util::raise_rte("Bitset/ValueSet inputs not accepted to unary comparators");

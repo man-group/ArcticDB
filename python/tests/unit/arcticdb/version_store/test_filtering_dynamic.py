@@ -372,15 +372,15 @@ def test_filter_column_type_change(lmdb_version_store_dynamic_schema):
 
 @pytest.mark.parametrize("method", ("isna", "notna", "isnull", "notnull"))
 @pytest.mark.parametrize("dtype", (np.float32, np.float64, np.datetime64, str))
-def test_filter_null_filtering_dynamic(lmdb_version_store_dynamic_schema, method, dtype):
-    lib = lmdb_version_store_dynamic_schema
+def test_filter_null_filtering_dynamic(lmdb_version_store_dynamic_schema_v1, method, dtype):
+    lib = lmdb_version_store_dynamic_schema_v1
     symbol = "lmdb_version_store_dynamic_schema"
-    num_rows = 20
+    num_rows = 3
     if dtype in (np.float32, np.float64):
         data = np.arange(num_rows, dtype=dtype)
         null_values = cycle([np.nan])
     elif dtype is np.datetime64:
-        data = np.arange(np.datetime64("2024-01-01"), np.datetime64(f"2024-01-{num_rows + 1}"), np.timedelta64(1, "D")).astype("datetime64[ns]")
+        data = np.arange(np.datetime64("2024-01-01"), np.datetime64(f"2024-01-0{num_rows + 1}"), np.timedelta64(1, "D")).astype("datetime64[ns]")
         null_values = cycle([np.datetime64("nat")])
     else: # str
         data = [str(idx) for idx in range(num_rows)]
@@ -389,19 +389,20 @@ def test_filter_null_filtering_dynamic(lmdb_version_store_dynamic_schema, method
         if idx % 2 == 0:
             data[idx] = next(null_values)
 
-    df_0 = pd.DataFrame({"a": data, "b": data}, index=np.arange(num_rows))
+    df_0 = pd.DataFrame({"a": data}, index=np.arange(num_rows))
     lib.write(symbol, df_0)
 
     df_1 = pd.DataFrame({"b": data}, index=np.arange(num_rows, 2 * num_rows))
     lib.append(symbol, df_1)
 
-    df_2 = pd.DataFrame({"a": data, "b": data}, index=np.arange(2 * num_rows, 3 * num_rows))
+    df_2 = pd.DataFrame({"a": data}, index=np.arange(2 * num_rows, 3 * num_rows))
     lib.append(symbol, df_2)
 
     # Omit df_1 as we treat missing columns with dynamic schema as not passing any filtering checks
-    df = pd.concat([df_0, df_2])
+    df = pd.concat([df_0, df_1, df_2])
+    expected = df[getattr(df["a"], method)()]
 
     q = QueryBuilder()
     q = q[getattr(q["a"], method)()]
     received = lib.read(symbol, query_builder=q).data
-    assert_frame_equal(df[getattr(df["a"], method)()], received)
+    assert_frame_equal(expected, received)

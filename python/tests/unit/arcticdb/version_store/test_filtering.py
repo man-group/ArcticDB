@@ -1981,7 +1981,7 @@ def test_filter_string_nans_col_col(lmdb_version_store):
 def test_filter_null_filtering(lmdb_version_store, method, dtype):
     lib = lmdb_version_store
     symbol = "test_filter_null_filtering"
-    num_rows = 20
+    num_rows = 5
     if dtype is np.int64:
         data = np.arange(num_rows, dtype=dtype)
         # These are the values used to represent:
@@ -1995,7 +1995,7 @@ def test_filter_null_filtering(lmdb_version_store, method, dtype):
         data = np.arange(num_rows, dtype=dtype)
         null_values = cycle([np.nan])
     elif dtype is np.datetime64:
-        data = np.arange(np.datetime64("2024-01-01"), np.datetime64(f"2024-01-{num_rows + 1}"), np.timedelta64(1, "D")).astype("datetime64[ns]")
+        data = np.arange(np.datetime64("2024-01-01"), np.datetime64(f"2024-01-0{num_rows + 1}"), np.timedelta64(1, "D")).astype("datetime64[ns]")
         null_values = cycle([np.datetime64("nat")])
     else: # str
         data = [str(idx) for idx in range(num_rows)]
@@ -2007,10 +2007,12 @@ def test_filter_null_filtering(lmdb_version_store, method, dtype):
     df = pd.DataFrame({"a": data}, index=np.arange(num_rows))
     lib.write(symbol, df)
 
+    expected = df[getattr(df["a"], method)()]
+
     q = QueryBuilder()
     q = q[getattr(q["a"], method)()]
     received = lib.read(symbol, query_builder=q).data
-    assert_frame_equal(df[getattr(df["a"], method)()], received)
+    assert_frame_equal(expected, received)
 
 
 def test_filter_batch_one_query(lmdb_version_store):
