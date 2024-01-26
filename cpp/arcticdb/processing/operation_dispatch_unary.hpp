@@ -108,39 +108,37 @@ VariantData visit_unary_operator(const VariantData& left, Func&& func) {
 
 template <typename Func>
 VariantData unary_comparator(const Column& col, Func&& func) {
-    if (is_empty_type(col.type().data_type())) {
-        return EmptyResult{};
+    if (is_empty_type(col.type().data_type()) || is_integer_type(col.type().data_type())) {
+        if constexpr (std::is_same_v<Func, IsNullOperator &&>) {
+            return is_empty_type(col.type().data_type()) ? VariantData(FullResult{}) : VariantData(EmptyResult{});
+        } else if constexpr (std::is_same_v<Func, NotNullOperator &&>) {
+            return is_empty_type(col.type().data_type()) ? VariantData(EmptyResult{}) : VariantData(FullResult{});
+        } else {
+            internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected operator passed to unary_comparator");
+        }
     }
-    auto output = std::make_shared<util::BitSet>(static_cast<util::BitSetSizeType>(col.row_count()));
 
+    auto output = std::make_shared<util::BitSet>(static_cast<util::BitSetSizeType>(col.row_count()));
     details::visit_type(col.type().data_type(), [&](auto col_desc_tag) {
         using TDT = ScalarTagType<decltype(col_desc_tag)>;
         using RawType = typename TDT::DataTypeTag::raw_type;
-        // Right now this is equivalent to if constexpr (is_integer_type(ColumnTagType::data_type)), but that may change with the addition
-        // of new types, so be defensive here
-        if constexpr (!(is_floating_point_type(TDT::DataTypeTag::data_type) ||
-                        is_sequence_type(TDT::DataTypeTag::data_type) ||
-                        is_time_type(TDT::DataTypeTag::data_type))) {
-            internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Cannot perform null checks on {}", col.type());
-        }
         auto column_data = col.data();
         util::BitSet::bulk_insert_iterator inserter(*output);
         auto pos = 0u;
         while (auto block = column_data.next<TDT>()) {
-            auto ptr = reinterpret_cast<const RawType*>(block->data());
+            auto ptr = reinterpret_cast<const RawType *>(block->data());
             const auto row_count = block->row_count();
             for (auto i = 0u; i < row_count; ++i, ++pos) {
-                if constexpr(is_floating_point_type(TDT::DataTypeTag::data_type)) {
+                if constexpr (is_floating_point_type(TDT::DataTypeTag::data_type)) {
                     if (func.apply(*ptr++))
                         inserter = pos;
-                } else if constexpr(is_sequence_type(TDT::DataTypeTag::data_type)) {
+                } else if constexpr (is_sequence_type(TDT::DataTypeTag::data_type)) {
                     if (func.template apply<StringTypeTag>(*ptr++))
                         inserter = pos;
-                } else if constexpr(is_time_type(TDT::DataTypeTag::data_type)) {
+                } else if constexpr (is_time_type(TDT::DataTypeTag::data_type)) {
                     if (func.template apply<TimeTypeTag>(*ptr++))
                         inserter = pos;
                 } else {
-                    // Shouldn't reach this point due to earlier check
                     internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Cannot perform null checks on {}", col.type());
                 }
             }

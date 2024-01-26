@@ -1977,12 +1977,21 @@ def test_filter_string_nans_col_col(lmdb_version_store):
 
 
 @pytest.mark.parametrize("method", ("isna", "notna", "isnull", "notnull"))
-@pytest.mark.parametrize("dtype", (np.float32, np.float64, np.datetime64, str))
+@pytest.mark.parametrize("dtype", (np.int64, np.float32, np.float64, np.datetime64, str))
 def test_filter_null_filtering(lmdb_version_store, method, dtype):
     lib = lmdb_version_store
     symbol = "test_filter_null_filtering"
     num_rows = 20
-    if dtype in (np.float32, np.float64):
+    if dtype is np.int64:
+        data = np.arange(num_rows, dtype=dtype)
+        # These are the values used to represent:
+        # - NaT in timestamp columns
+        # - None in string columns
+        # - NaN in string columns
+        # respectively, so are most likely to cause issues
+        iinfo = np.iinfo(np.int64)
+        null_values = cycle([iinfo.min, iinfo.max, iinfo.max - 1])
+    elif dtype in (np.float32, np.float64):
         data = np.arange(num_rows, dtype=dtype)
         null_values = cycle([np.nan])
     elif dtype is np.datetime64:
@@ -2002,21 +2011,6 @@ def test_filter_null_filtering(lmdb_version_store, method, dtype):
     q = q[getattr(q["a"], method)()]
     received = lib.read(symbol, query_builder=q).data
     assert_frame_equal(df[getattr(df["a"], method)()], received)
-
-
-@pytest.mark.parametrize("method", ("isna", "notna", "isnull", "notnull"))
-@pytest.mark.parametrize("type", (np.uint8, np.uint16, np.uint32, np.uint64, np.int8, np.int16, np.int32, np.int64))
-def test_filter_null_filtering_int_raises(lmdb_version_store, method, type):
-    lib = lmdb_version_store
-    symbol = "test_filter_null_filtering_int_raises"
-    data = np.arange(20, dtype=type)
-    df = pd.DataFrame({"a": data}, index=np.arange(20))
-    lib.write(symbol, df)
-
-    q = QueryBuilder()
-    q = q[getattr(q["a"], method)()]
-    with pytest.raises(InternalException):
-        _ = lib.read(symbol, query_builder=q).data
 
 
 def test_filter_batch_one_query(lmdb_version_store):

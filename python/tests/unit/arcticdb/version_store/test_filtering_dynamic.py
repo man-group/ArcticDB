@@ -405,26 +405,3 @@ def test_filter_null_filtering_dynamic(lmdb_version_store_dynamic_schema, method
     q = q[getattr(q["a"], method)()]
     received = lib.read(symbol, query_builder=q).data
     assert_frame_equal(df[getattr(df["a"], method)()], received)
-
-
-@pytest.mark.parametrize("method", ("isna", "notna", "isnull", "notnull"))
-@pytest.mark.parametrize("type", (np.uint8, np.uint16, np.uint32, np.uint64, np.int8, np.int16, np.int32, np.int64))
-def test_filter_null_filtering_int_raises_dynamic(lmdb_version_store_dynamic_schema, method, type):
-    lib = lmdb_version_store_dynamic_schema
-    symbol = "test_filter_null_filtering_int_raises_dynamic"
-    num_rows = 20
-    data = np.arange(num_rows, dtype=type)
-
-    df_0 = pd.DataFrame({"a": data, "b": data}, index=np.arange(num_rows))
-    lib.write(symbol, df_0)
-
-    df_1 = pd.DataFrame({"b": data}, index=np.arange(num_rows, 2 * num_rows))
-    lib.append(symbol, df_1)
-
-    df_2 = pd.DataFrame({"a": data, "b": data}, index=np.arange(2 * num_rows, 3 * num_rows))
-    lib.append(symbol, df_2)
-
-    q = QueryBuilder()
-    q = q[getattr(q["a"], method)()]
-    with pytest.raises(InternalException):
-        _ = lib.read(symbol, query_builder=q).data
