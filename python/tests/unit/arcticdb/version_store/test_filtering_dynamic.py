@@ -372,8 +372,8 @@ def test_filter_column_type_change(lmdb_version_store_dynamic_schema):
 
 @pytest.mark.parametrize("method", ("isna", "notna", "isnull", "notnull"))
 @pytest.mark.parametrize("dtype", (np.int64, np.float32, np.float64, np.datetime64, str))
-def test_filter_null_filtering_dynamic(lmdb_version_store_dynamic_schema_v1, method, dtype):
-    lib = lmdb_version_store_dynamic_schema_v1
+def test_filter_null_filtering_dynamic(lmdb_version_store_dynamic_schema, method, dtype):
+    lib = lmdb_version_store_dynamic_schema
     symbol = "lmdb_version_store_dynamic_schema"
     num_rows = 3
     if dtype is np.int64:
