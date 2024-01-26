@@ -371,12 +371,18 @@ def test_filter_column_type_change(lmdb_version_store_dynamic_schema):
 
 
 @pytest.mark.parametrize("method", ("isna", "notna", "isnull", "notnull"))
-@pytest.mark.parametrize("dtype", (np.float32, np.float64, np.datetime64, str))
+@pytest.mark.parametrize("dtype", (np.int64, np.float32, np.float64, np.datetime64, str))
 def test_filter_null_filtering_dynamic(lmdb_version_store_dynamic_schema_v1, method, dtype):
     lib = lmdb_version_store_dynamic_schema_v1
     symbol = "lmdb_version_store_dynamic_schema"
     num_rows = 3
-    if dtype in (np.float32, np.float64):
+    if dtype is np.int64:
+        data = np.arange(num_rows, dtype=dtype)
+        # Cannot use int64 min/max here as with the static schema tests, as pd.concat with missing columns promotes the
+        # np.int64 columns to np.float64 columns, and astype(np.int64) on this produces incorrect results (presumably
+        # due to loss of precision)
+        null_values = cycle([100])
+    elif dtype in (np.float32, np.float64):
         data = np.arange(num_rows, dtype=dtype)
         null_values = cycle([np.nan])
     elif dtype is np.datetime64:
@@ -401,6 +407,10 @@ def test_filter_null_filtering_dynamic(lmdb_version_store_dynamic_schema_v1, met
     # Omit df_1 as we treat missing columns with dynamic schema as not passing any filtering checks
     df = pd.concat([df_0, df_1, df_2])
     expected = df[getattr(df["a"], method)()]
+    # We backfill missing int columns with 0s to keep the original dtype, whereas Pandas promotes to float64 in concat
+    # when an int column is missing
+    if dtype is np.int64:
+        expected = expected.fillna(0).astype(np.int64)
 
     q = QueryBuilder()
     q = q[getattr(q["a"], method)()]
