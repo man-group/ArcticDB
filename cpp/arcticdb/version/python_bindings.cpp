@@ -548,6 +548,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
          .def("scan_object_sizes",
               &PythonVersionStore::scan_object_sizes,
             py::call_guard<SingleThreadMutexHolder>(), "Scan the sizes of object")
+        .def("scan_object_sizes_by_stream",
+             &PythonVersionStore::scan_object_sizes_by_stream,
+             py::call_guard<SingleThreadMutexHolder>(), "Scan the sizes of objects, grouped by stream ID.")
         .def("find_version",
              &PythonVersionStore::get_version_to_read,
              py::call_guard<SingleThreadMutexHolder>(), "Check if a specific stream has been written to previously")
