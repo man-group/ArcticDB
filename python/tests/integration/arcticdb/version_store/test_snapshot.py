@@ -7,8 +7,10 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import pytest
 import numpy as np
+import re
 
 from arcticdb_ext.exceptions import InternalException
+from arcticdb_ext.version_store import NoSuchVersionException
 from arcticdb.util.test import distinct_timestamps
 
 
@@ -268,23 +270,6 @@ def test_read_symbol_with_ts_in_snapshot(store, request, sym):
     assert lib.read(sym, as_of=third_write_timestamps.after).version == 2
 
 
-def test_snapshot_random_versions_to_fail(lmdb_version_store_tombstone_and_pruning, sym):
-    lib = lmdb_version_store_tombstone_and_pruning
-    lib.write(sym, 0)
-    lib.snapshot("snap0")  # v0 of sym will be pruned after the second write
-    lib.write(sym, 1)
-    lib.write("sym2", 1)
-    # try creating a snapshot with a deleted version just in a snapshot
-
-    lib.snapshot("snap1", versions={sym: 0, "sym2": 0})
-    assert len(lib.list_versions(snapshot="snap1")) == len(lib.list_symbols(snapshot="snap1"))
-
-    # try creating a snapshot with a random version that never existed
-    lib.snapshot("snap2", versions={sym: 42, "sym2": 0})
-    assert lib.read("sym2", as_of="snap2").data == 1
-    assert len(lib.list_versions(snapshot="snap2")) == 1
-
-
 def test_add_to_snapshot_simple(lmdb_version_store_tombstone_and_pruning):
     lib = lmdb_version_store_tombstone_and_pruning
     lib.write("s1", 1)
@@ -417,3 +402,46 @@ def test_remove_from_snapshot_multiple(lmdb_version_store_tombstone_and_pruning)
     assert len(versions) == 1
     assert lib.read("s3", as_of="saved").data == 3
     assert lib.read("s2", as_of="saved").data == 2
+
+
+def test_snapshot_not_accept_tombstoned_key(lmdb_version_store_tombstone_and_pruning, sym):
+    lib = lmdb_version_store_tombstone_and_pruning
+    ver = lib.write(sym, 1).version
+    lib.write(sym, 2)
+    with pytest.raises(NoSuchVersionException, match=re.escape(f"{sym}:{ver}")): # sym contains square bracket...
+        lib.snapshot("s", versions={sym:ver})
+
+
+def test_snapshot_partially_valid_version_map(lmdb_version_store_tombstone_and_pruning):
+    lib = lmdb_version_store_tombstone_and_pruning
+    symA = "A"
+    symB = "B"
+
+    symA_ver1 = lib.write(symA, 1).version
+    lib.delete(symA)
+    symB_ver1 = lib.write(symB, 3).version
+    partial_valid_versions = {symA:symA_ver1, symB:symB_ver1}
+    with pytest.raises(NoSuchVersionException):
+        lib.snapshot("s", versions=partial_valid_versions)
+    assert len(lib.list_snapshots()) == 0
+
+    lib.snapshot("s", versions=partial_valid_versions, allow_partial_snapshot=True)
+    with pytest.raises(NoSuchVersionException):
+        lib.read(symA, as_of="s")
+    assert lib.read(symB, as_of="s").data == 3
+
+
+def test_snapshot_tombstoned_but_referenced_in_other_snapshot_version(lmdb_version_store_tombstone_and_pruning):
+    lib = lmdb_version_store_tombstone_and_pruning
+    symA = "A"
+    symB = "B"
+
+    symA_ver = lib.write(symA, 1).version
+    symB_ver = lib.write(symB, 1).version
+    lib.snapshot("s")
+    lib.delete(symA)
+    lib.delete(symB)
+    lib.snapshot("s2", versions={symA:symA_ver, symB:symB_ver})
+    assert lib.read(symA, as_of="s2").data == 1
+    assert lib.read(symB, as_of="s2").data == 1
+

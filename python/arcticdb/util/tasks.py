@@ -169,7 +169,7 @@ def run_scenario(func, lib, with_snapshots, verbose):
         if verbose:
             print("Running function {}".format(func.__name__))
         func(lib, get_symbol(func, lib))
-        if with_snapshots:
+        if with_snapshots and lib.list_symbols():
             lib.snapshot("snapshot" + datetime.utcnow().isoformat())
             # clean up old snapshots - more than 3 hours old
             for s in lib.list_snapshots():

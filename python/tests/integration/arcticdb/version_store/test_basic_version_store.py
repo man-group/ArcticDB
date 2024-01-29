@@ -416,8 +416,11 @@ def test_negative_cases(lmdb_version_store, symbol):
     # To stay consistent with arctic this doesn't throw.
     lmdb_version_store.delete("does_not_exist")
 
-    # Creating a snapshot in an empty library should not create it.
-    lmdb_version_store.snapshot("empty_snapshot")
+    
+    with pytest.raises(NoSuchVersionException):
+        lmdb_version_store.snapshot("empty_snapshot")
+    with pytest.raises(NoSuchVersionException):
+        lmdb_version_store.snapshot("empty_snapshot", versions={"non-exist-symbol":0})
     with pytest.raises(NoDataFoundException):
         lmdb_version_store.delete_snapshot("empty_snapshot")
 

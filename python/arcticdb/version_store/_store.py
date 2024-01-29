@@ -2026,6 +2026,7 @@ class NativeVersionStore:
         metadata: Optional[Any] = None,
         skip_symbols: Optional[List[str]] = None,
         versions: Optional[Dict[str, int]] = None,
+        allow_partial_snapshot: Optional[bool] = False,
     ):
         """
         Create a named snapshot of the data within a library.
@@ -2034,6 +2035,8 @@ class NativeVersionStore:
         the snapshot. The symbols and versions contained within the snapshot will persist regardless of new symbols
         and versions written to the library post snapshot creation.
 
+        ``NoSuchVersionException`` will be thrown if no symbol exist in the library
+        
         Parameters
         ----------
         snap_name : `str`
@@ -2044,6 +2047,11 @@ class NativeVersionStore:
             Optional list of symbols to be excluded from the snapshot.
         versions: `Optional[Dict[str, int]]`, default=None
             Optional dictionary of versions of the symbols to include in the snapshot.
+        allow_partial_snapshot: Optional[bool], default=False
+            Changes the behaviour if either a symbol or the version of symbol specified in versions does not exist or has been deleted in the library:
+            - True: the snapshot will be created with all of the symbol-version pairs that do exist from the versions dict
+                    If none of the symbol-verison pairs exists, ``NoSuchVersionException`` will be thrown
+            - False: ``NoSuchVersionException`` will be thrown
         """
         if not skip_symbols:
             skip_symbols = []
@@ -2051,7 +2059,7 @@ class NativeVersionStore:
             versions = {}
         metadata = normalize_metadata(metadata) if metadata else None
 
-        self.version_store.snapshot(snap_name, metadata, skip_symbols, versions)
+        self.version_store.snapshot(snap_name, metadata, skip_symbols, versions, allow_partial_snapshot)
 
     def delete_snapshot(self, snap_name: str):
         """
