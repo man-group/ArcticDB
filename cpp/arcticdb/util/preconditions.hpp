@@ -68,6 +68,19 @@ namespace internal {
     constexpr auto raise = check<code>.raise;
 }
 
+namespace debug {
+#ifdef DEBUG_BUILD
+    template<ErrorCode code>
+    constexpr auto check = internal::check<code>;
+#else
+    template<ErrorCode code, typename...Args>
+    inline void check(ARCTICDB_UNUSED bool cond, ARCTICDB_UNUSED fmt::format_string<Args...> format, ARCTICDB_UNUSED Args&&...args) {}
+
+    template<ErrorCode code, typename FormatString, typename...Args>
+    inline void check(ARCTICDB_UNUSED bool cond, ARCTICDB_UNUSED FormatString format, ARCTICDB_UNUSED Args&&...args) {}
+#endif
+}
+
 namespace normalization {
 template<ErrorCode code>
 constexpr auto check = util::detail::Check<code, ErrorCategory::NORMALIZATION>{};
