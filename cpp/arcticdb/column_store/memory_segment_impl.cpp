@@ -418,8 +418,11 @@ bool operator==(const SegmentInMemoryImpl& left, const SegmentInMemoryImpl& righ
     return true;
 }
 
-// Inclusive of start_row, exclusive of end_row
-std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::truncate(size_t start_row, size_t end_row) const {
+std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::truncate(
+    size_t start_row,
+    size_t end_row,
+    bool reconstruct_string_pool
+) const {
     auto num_values = end_row - start_row;
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
             is_sparse() || (start_row < row_count() && end_row <= row_count()),
@@ -428,8 +431,10 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::truncate(size_t start_
     auto output = std::make_shared<SegmentInMemoryImpl>();
 
     output->set_row_data(num_values - 1);
-    output->set_string_pool(string_pool_);
     output->set_compacted(compacted_);
+    if (!reconstruct_string_pool) {
+        output->set_string_pool(string_pool_);
+    }
     if (metadata_) {
         google::protobuf::Any metadata;
         metadata.CopyFrom(*metadata_);
@@ -437,8 +442,25 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::truncate(size_t start_
     }
 
     for(const auto&& [idx, column] : folly::enumerate(columns_)) {
-        auto truncated_column = Column::truncate(column, start_row, end_row);
-        output->add_column(descriptor_->field(idx), truncated_column);
+        const DataType column_type = column->type().data_type();
+        const Field& field = descriptor_->field(idx);
+        if (is_sequence_type(column_type) && reconstruct_string_pool) {
+            output->add_column(field, num_values, true);
+            ChunkedBuffer& target = output->column(idx).data().buffer();
+            for (size_t row = 0u; row < num_values; ++row) {
+                util::variant_match(
+                    get_string_from_buffer(row, column->data().buffer(), output->string_pool()),
+                    [&](std::string_view sv) {
+                        OffsetString off_str = output->string_pool().get(sv);
+                        set_offset_string_at(row, target, off_str.offset());
+                    },
+                    [&](entity::position_t offset) { set_offset_string_at(row, target, offset); }
+                );
+            }
+        } else {
+            auto truncated_column = Column::truncate(column, start_row, end_row);
+            output->add_column(field, truncated_column);
+        }
     }
     output->attach_descriptor(descriptor_);
     return output;

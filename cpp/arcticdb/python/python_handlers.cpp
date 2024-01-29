@@ -5,7 +5,6 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 #include <python/python_handlers.hpp>
-#include <python/gil_lock.hpp>
 #include <arcticdb/codec/slice_data_sink.hpp>
 #include <arcticdb/codec/encoding_sizes.hpp>
 #include <arcticdb/codec/codec.hpp>
@@ -49,7 +48,7 @@ namespace arcticdb {
 
     static inline const PyObject** fill_with_none(const PyObject** dest, size_t count) {
         auto none = py::none();
-        std::generate(dest, dest + count, [&none]() { return none.inc_ref().ptr(); });
+        std::generate_n(dest, count, [&none]() { return none.inc_ref().ptr(); });
         return dest + count;
     }
 
@@ -85,9 +84,6 @@ namespace arcticdb {
             using RawType = typename decltype(tag)::DataTypeTag::raw_type;
             RawType* ptr_dest = reinterpret_cast<RawType*>(dest);
             if constexpr (is_sequence_type(tag.data_type())) {
-                // not_a_string() is set here as strings are offset in the string pool
-                // later in fix_and_reduce() the offsets are replaced by a real python strings
-                // TODO: It would be best if the type handler sets this to py::none
                 std::fill_n(ptr_dest, m.num_rows_, arcticdb::not_a_string());
             } else if constexpr (is_nullable_type(TypeDescriptor(tag))) {
                 fill_with_none(reinterpret_cast<const PyObject**>(dest), m.num_rows_);
@@ -140,35 +136,30 @@ namespace arcticdb {
             util::check(field->has_ndarray(), "Bool handler expected array");
             ARCTICDB_DEBUG(log::version(), "Bool handler got encoded field: {}", field->DebugString());
             auto ptr_dest = reinterpret_cast<const PyObject**>(dest);
-
-            if(!field->ndarray().sparse_map_bytes()) {
-                ARCTICDB_DEBUG(log::version(), "Bool handler has no values");
-                fill_with_none(ptr_dest, m.num_rows_);
-                return;
-            }
-
-            std::optional<util::BitSet> bv;
             const auto& ndarray = field->ndarray();
             const auto bytes = encoding_sizes::data_uncompressed_size(ndarray);
-            auto sparse = ChunkedBuffer::presized(bytes);
-            SliceDataSink sparse_sink{sparse.data(), bytes};
-            data += decode_field(m.source_type_desc_, *field, data, sparse_sink, bv, encding_version);
-            const auto num_bools = bv->count();
-            auto ptr_src = sparse.template ptr_cast<uint8_t>(0, num_bools * sizeof(uint8_t));
-            auto last_row = 0u;
-            const auto ptr_begin = ptr_dest;
-
-            for(auto en = bv->first(); en < bv->end(); ++en) {
-                const auto current_pos = *en;
-                ptr_dest = fill_with_none(ptr_dest, current_pos - last_row);
-                last_row = current_pos;
-                auto py_bool = py::bool_(static_cast<bool>(*ptr_src++));
-                *ptr_dest++ = py_bool.release().ptr();
-                ++last_row;
-                util::check(ptr_begin + last_row == ptr_dest, "Boolean pointer out of alignment {} != {}", last_row, uintptr_t(ptr_begin + last_row));
+            ChunkedBuffer decoded_data = ChunkedBuffer::presized(bytes);
+            SliceDataSink decoded_data_sink{decoded_data.data(), bytes};
+            std::optional<util::BitSet> sparse_map;
+            data += decode_field(m.source_type_desc_, *field, data, decoded_data_sink, sparse_map, encding_version);
+            const auto num_bools = sparse_map.has_value() ? sparse_map->count() : m.num_rows_;
+            auto ptr_src = decoded_data.template ptr_cast<uint8_t>(0, num_bools * sizeof(uint8_t));
+            if (sparse_map.has_value()) {
+                ARCTICDB_TRACE(log::codec(), "Bool handler using a sparse map");
+                unsigned last_row = 0u;
+                for (auto en = sparse_map->first(); en < sparse_map->end(); ++en, last_row++) {
+                    const auto current_pos = *en;
+                    ptr_dest = fill_with_none(ptr_dest, current_pos - last_row);
+                    last_row = current_pos;
+                    *ptr_dest++ = py::bool_(static_cast<bool>(*ptr_src++)).release().ptr();
+                }
+                fill_with_none(ptr_dest, m.num_rows_ - last_row);
+            } else {
+                ARCTICDB_TRACE(log::codec(), "Bool handler didn't find a sparse map. Assuming dense array.");
+                std::transform(ptr_src, ptr_src + num_bools, ptr_dest, [](uint8_t value) {
+                    return py::bool_(static_cast<bool>(value)).release().ptr();
+                });
             }
-            fill_with_none(ptr_dest, m.num_rows_ - last_row);
-            util::check(ptr_begin + last_row == ptr_dest, "Boolean pointer out of alignment at end: {} != {}", last_row, uintptr_t(ptr_begin + last_row));
         }, encoded_field_info);
     }
 

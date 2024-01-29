@@ -210,16 +210,28 @@ inline std::pair<std::vector<SliceAndKey>, std::vector<SliceAndKey>> intersectin
 
     for (const auto& affected_slice_and_key : affected_keys) {
         const auto& affected_range = affected_slice_and_key.key().index_range();
-        if (intersects(affected_range, front_range) && !overlaps(affected_range, front_range)
-        && is_before(affected_range, front_range)) {
-            auto front_overlap_key = rewrite_partial_segment(affected_slice_and_key, front_range, version_id, false, store);
+        if (intersects(affected_range, front_range) && !overlaps(affected_range, front_range) &&
+            is_before(affected_range, front_range)) {
+            auto front_overlap_key = rewrite_partial_segment(
+                affected_slice_and_key,
+                front_range,
+                version_id,
+                AffectedSegmentEnd::START,
+                store
+            );
             if (front_overlap_key)
                 intersect_before.push_back(*front_overlap_key);
         }
 
         if (intersects(affected_range, back_range) && !overlaps(affected_range, back_range)
         && is_after(affected_range, back_range)) {
-            auto back_overlap_key = rewrite_partial_segment(affected_slice_and_key, back_range, version_id, true, store);
+            auto back_overlap_key = rewrite_partial_segment(
+                affected_slice_and_key,
+                back_range,
+                version_id,
+                AffectedSegmentEnd::END,
+                store
+            );
             if (back_overlap_key)
                 intersect_after.push_back(*back_overlap_key);
         }

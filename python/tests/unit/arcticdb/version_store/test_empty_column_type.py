@@ -228,3 +228,20 @@ class TestCanAppendEmptyToColumn:
             lmdb_version_store_static_and_dynamic.read("sym", row_range=[3,5]).data,
             pd.DataFrame({"col1": np.array([np.datetime64('NaT'), np.datetime64('NaT')], dtype="datetime64[ns]")})
         )
+
+
+class TestCanUpdateWithEmpty:
+    def test_bool(self, lmdb_version_store_static_and_dynamic, boolean_dtype):
+        index = list(pd.date_range(start="1/1/2024", end="1/4/2024"))
+        lmdb_version_store_static_and_dynamic.write(
+            "sym",
+            pd.DataFrame({"col": [True, True, True, True]}, dtype=boolean_dtype, index=index)
+        )
+        lmdb_version_store_static_and_dynamic.update(
+            "sym",
+            pd.DataFrame({"col": [None, None]}, dtype=boolean_dtype, index=list(pd.date_range(start="1/2/2024", end="1/3/2024")))
+        )
+        assert_frame_equal(
+            lmdb_version_store_static_and_dynamic.read("sym").data,
+            pd.DataFrame({"col": [True, None, None, True]}, index=index, dtype=boolean_dtype)
+        )

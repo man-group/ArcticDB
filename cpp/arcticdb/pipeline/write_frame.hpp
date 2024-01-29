@@ -62,11 +62,16 @@ folly::Future<entity::AtomKey> append_frame(
         bool ignore_sort_order
 );
 
+enum class AffectedSegmentEnd {
+    START,
+    END
+};
+
 std::optional<SliceAndKey> rewrite_partial_segment(
         const SliceAndKey& existing,
         IndexRange index_range,
         VersionId version_id,
-        bool before,
+        AffectedSegmentEnd affected_end,
         const std::shared_ptr<Store>& store);
 
 // TODO: Use std::span when C++20 is enabled

@@ -34,7 +34,7 @@ void ProcessingUnit::truncate(size_t start_row, size_t end_row) {
                                                     "ProcessingUnit::truncate requires all of segments, row_ranges, and col_ranges to be present");
 
     for (auto&& [idx, segment]: folly::enumerate(*segments_)) {
-        auto seg = truncate_segment(*segment, start_row, end_row);
+        auto seg = segment->truncate(start_row, end_row, false);
         auto num_rows = seg.is_null() ? 0 : seg.row_count();
         row_ranges_->at(idx) = std::make_shared<pipelines::RowRange>(row_ranges_->at(idx)->first, row_ranges_->at(idx)->first + num_rows);
         auto num_cols = seg.is_null() ? 0 : seg.descriptor().field_count() - seg.descriptor().index().field_count();
