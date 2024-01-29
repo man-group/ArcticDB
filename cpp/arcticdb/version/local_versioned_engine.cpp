@@ -1787,6 +1787,24 @@ std::unordered_map<KeyType, std::pair<size_t, size_t>> LocalVersionedEngine::sca
     return sizes;
 }
 
+std::unordered_map<StreamId, std::unordered_map<KeyType, size_t>> LocalVersionedEngine::scan_object_sizes_by_stream() {
+    std::unordered_map<StreamId, std::unordered_map<KeyType, size_t>> sizes;
+    auto streams = symbol_list().get_symbols(store());
+    std::vector<KeyType> key_types {KeyType::TABLE_DATA, KeyType::TABLE_INDEX, KeyType::VERSION};
+    for (const auto& stream : streams) {
+        auto& sizes_for_stream = sizes[stream];
+        for (const auto& key_type : key_types) {
+            auto& size_for_key_type = sizes_for_stream[key_type];
+            iterate_keys_of_type_for_stream(store(), key_type, stream, [&size_for_key_type, &store=store()] (const auto& vk) {
+                // TODO not sync
+                size_for_key_type += store->read_compressed_sync(vk, storage::ReadKeyOpts{}).segment().total_segment_size();
+            });
+        }
+    }
+
+    return sizes;
+}
+
 void LocalVersionedEngine::move_storage(KeyType key_type, timestamp horizon, size_t storage_index) {
     store_->move_storage(key_type, horizon, storage_index);
 }
