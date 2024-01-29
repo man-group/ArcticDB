@@ -239,7 +239,8 @@ class PythonVersionStore : public LocalVersionedEngine {
         const SnapshotId &snap_name,
         const py::object &user_meta,
         const std::vector<StreamId> &skip_symbols,
-        std::map<StreamId, VersionId> &versions);
+        std::map<StreamId, VersionId> &versions,
+        bool allow_partial_snapshot);
 
     std::vector<std::pair<SnapshotId, py::object>> list_snapshots(const std::optional<bool> load_metadata);
 

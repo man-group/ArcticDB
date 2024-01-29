@@ -1285,6 +1285,9 @@ class Library:
         ------
         InternalException
             If a snapshot already exists with ``snapshot_name``. You must explicitly delete the pre-existing snapshot.
+        MissingDataException
+            If a symbol or the version of symbol specified in versions does not exist or has been deleted in the library,
+            or, the library has no symbol.
         """
         self._nvs.snapshot(snap_name=snapshot_name, metadata=metadata, skip_symbols=skip_symbols, versions=versions)
 
