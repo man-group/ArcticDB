@@ -404,7 +404,6 @@ def test_filter_null_filtering_dynamic(lmdb_version_store_dynamic_schema, method
     df_2 = pd.DataFrame({"a": data}, index=np.arange(2 * num_rows, 3 * num_rows))
     lib.append(symbol, df_2)
 
-    # Omit df_1 as we treat missing columns with dynamic schema as not passing any filtering checks
     df = pd.concat([df_0, df_1, df_2])
     expected = df[getattr(df["a"], method)()]
     # We backfill missing int columns with 0s to keep the original dtype, whereas Pandas promotes to float64 in concat

@@ -220,7 +220,7 @@ V apply(T t) {
 }
 };
 
-// Needed for null and not bull operators as INT64, NANOSECONDS_UTC64, and all string columns hold int64_t values
+// Needed for null and not null operators as INT64, NANOSECONDS_UTC64, and all string columns hold int64_t values
 struct TimeTypeTag{};
 struct StringTypeTag{};
 
