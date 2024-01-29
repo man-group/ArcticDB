@@ -35,6 +35,17 @@ inline constexpr bool is_partial_load_type(LoadType load_type) {
     return load_type == LoadType::LOAD_DOWNTO || load_type == LoadType::LOAD_FROM_TIME;
 }
 
+enum class VersionStatus {
+    LIVE,
+    TOMBSTONED,
+    NEVER_EXISTED
+};
+
+struct VersionDetails {
+    std::optional<AtomKey> key_;
+    VersionStatus version_status_;
+};
+
 inline constexpr bool is_latest_load_type(LoadType load_type) {
     return load_type == LoadType::LOAD_LATEST || load_type == LoadType::LOAD_LATEST_UNDELETED;
 }
@@ -388,17 +399,26 @@ inline std::optional<VersionId> get_next_version_in_entry(const std::shared_ptr<
     return std::nullopt;
 }
 
-inline std::optional<AtomKey> find_index_key_for_version_id(
+inline VersionDetails find_index_key_for_version_id_and_tombstone_status(
     VersionId version_id,
-    const std::shared_ptr<VersionMapEntry>& entry,
-    bool included_deleted = true) {
+    const std::shared_ptr<VersionMapEntry>& entry) {
     auto key = std::find_if(std::begin(entry->keys_), std::end(entry->keys_), [version_id] (const auto& key) {
         return is_index_key_type(key.type()) && key.version_id() == version_id;
     });
     if(key == std::end(entry->keys_))
-        return std::nullopt;
+        return VersionDetails{std::nullopt, VersionStatus::NEVER_EXISTED};
+    return VersionDetails{*key, entry->is_tombstoned(*key) ? VersionStatus::TOMBSTONED : VersionStatus::LIVE};
+}
 
-    return included_deleted || !entry->is_tombstoned(*key) ? std::make_optional(*key) : std::nullopt;
+inline std::optional<AtomKey> find_index_key_for_version_id(
+    VersionId version_id,
+    const std::shared_ptr<VersionMapEntry>& entry,
+    bool included_deleted = true) {
+    auto version_details = find_index_key_for_version_id_and_tombstone_status(version_id, entry);
+    if ((version_details.version_status_ == VersionStatus::TOMBSTONED && included_deleted) || version_details.version_status_ == VersionStatus::LIVE)
+        return version_details.key_;
+    else
+        return std::nullopt;
 }
 
 inline std::optional<std::pair<AtomKey, AtomKey>> get_latest_key_pair(const std::shared_ptr<VersionMapEntry>& entry) {

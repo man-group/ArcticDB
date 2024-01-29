@@ -31,6 +31,12 @@ struct SymbolStatus {
     }
 };
 
+enum class BatchGetVersionOption {
+    LIVE_AND_TOMBSTONED_VER_REF_IN_OTHER_SNAPSHOT,
+    ALL_VER_FOUND_IN_STORAGE,
+    COUNT
+};
+
 template <typename Inputs, typename TaskSubmitter, typename ResultHandler>
 inline void submit_tasks_for_range(const Inputs& inputs, TaskSubmitter submitter, ResultHandler result_handler) {
     const auto window_size = async::TaskScheduler::instance()->io_thread_count() * 2;
@@ -178,23 +184,47 @@ inline std::shared_ptr<std::unordered_map<StreamId, AtomKey>> batch_get_specific
     const std::shared_ptr<Store>& store,
     const std::shared_ptr<VersionMap>& version_map,
     const std::map<StreamId, VersionId>& sym_versions,
-    bool include_deleted = true) {
+    BatchGetVersionOption option = BatchGetVersionOption::ALL_VER_FOUND_IN_STORAGE) {
+    static_assert(static_cast<int>(BatchGetVersionOption::COUNT) == 2, "Update this function if new enum value added in BatchGetVersionOption");
     ARCTICDB_SAMPLE(BatchGetLatestVersion, 0)
     auto output = std::make_shared<std::unordered_map<StreamId, AtomKey>>();
-    auto mutex = std::make_shared<std::mutex>();
+    auto output_mutex = std::make_shared<std::mutex>();
+    auto tombstoned_vers = std::make_shared<std::vector<std::pair<StreamId, AtomKey>>>();
+    auto tombstoned_vers_mutex = std::make_shared<std::mutex>();
 
     MapRandomAccessWrapper wrapper{sym_versions};
     submit_tasks_for_range(wrapper, [store, version_map](auto& sym_version) {
             LoadParameter load_param{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(sym_version.second)};
             return async::submit_io_task(CheckReloadTask{store, version_map, sym_version.first, load_param});
         },
-        [output, include_deleted, mutex](auto sym_version, const std::shared_ptr<VersionMapEntry>& entry) {
-        auto index_key = find_index_key_for_version_id(sym_version.second, entry, include_deleted);
-        if (index_key) {
-            std::lock_guard lock{*mutex};
-            (*output)[sym_version.first] = *index_key;
+        [output, option, output_mutex, store, tombstoned_vers, tombstoned_vers_mutex]
+                    (auto sym_version, const std::shared_ptr<VersionMapEntry>& entry) {
+            auto version_details = find_index_key_for_version_id_and_tombstone_status(sym_version.second, entry);
+            if ((option == BatchGetVersionOption::ALL_VER_FOUND_IN_STORAGE && version_details.version_status_ == VersionStatus::TOMBSTONED) ||
+                        version_details.version_status_ == VersionStatus::LIVE) {
+                std::lock_guard lock{*output_mutex};
+                (*output)[sym_version.first] = version_details.key_.value();
+            }
+            else if (option == BatchGetVersionOption::LIVE_AND_TOMBSTONED_VER_REF_IN_OTHER_SNAPSHOT && version_details.version_status_ == VersionStatus::TOMBSTONED) {
+                // Need to allow tombstoned version but referenced in other snapshot(s) can be "re-snapshot"
+                log::version().warn("Version {} for symbol {} is tombstoned, need to check snapshots (this can be slow)", sym_version.second, sym_version.first);
+                std::lock_guard lock{*tombstoned_vers_mutex};
+                tombstoned_vers->emplace_back(sym_version.first, version_details.key_.value());
+            }
         }
-    });
+    );
+
+    if (!tombstoned_vers->empty()) {
+        const auto snap_map = get_master_snapshots_map(store);
+        for (const auto &tombstoned_ver : *tombstoned_vers) {
+            auto cit = snap_map.find(tombstoned_ver.first);
+            if (cit != snap_map.cend() && std::any_of(cit->second.cbegin(), cit->second.cend(), [tombstoned_ver, &sym_versions](const auto &key_and_snapshot_ids) {
+                return key_and_snapshot_ids.first.version_id() == sym_versions.at(tombstoned_ver.first);
+            }))
+                (*output)[tombstoned_ver.first] = tombstoned_ver.second;
+
+        }
+    }
 
     return output;
 }

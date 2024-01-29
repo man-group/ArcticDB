@@ -428,7 +428,8 @@ void PythonVersionStore::snapshot(
     const SnapshotId &snap_name,
     const py::object &user_meta,
     const std::vector<StreamId> &skip_symbols,
-    std::map<StreamId, VersionId> &versions
+    std::map<StreamId, VersionId> &versions,
+    bool allow_partial_snapshot
     ) {
     ARCTICDB_SAMPLE(CreateSnapshot, 0)
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: snapshot");
@@ -455,15 +456,32 @@ void PythonVersionStore::snapshot(
         std::set_difference(all_symbols.begin(), all_symbols.end(), skip_symbols_set.begin(),
                 skip_symbols_set.end(), std::back_inserter(filtered_symbols));
 
-        if (filtered_symbols.empty()) {
-            log::version().warn("No valid symbols in the library, skipping creation for snapshot: {}", snap_name);
-            return;
-        }
+        missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
+            !filtered_symbols.empty(),
+            "No valid symbols in the library, skipping creation for snapshot: {}", snap_name
+        );
 
         auto sym_index_map = batch_get_latest_version(store(), version_map(), filtered_symbols, false);
         index_keys = utils::values(*sym_index_map);
     } else {
-        auto sym_index_map = batch_get_specific_version(store(), version_map(), versions);
+        auto sym_index_map = batch_get_specific_version(store(), version_map(), versions, BatchGetVersionOption::LIVE_AND_TOMBSTONED_VER_REF_IN_OTHER_SNAPSHOT);
+        if (allow_partial_snapshot) {
+            missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
+                !sym_index_map->empty(),
+                "None of the symbol-version pairs specified in versions exist, skipping creation for snapshot: {}",
+                snap_name
+            );
+        } else {
+            if (sym_index_map->size() != versions.size()) {
+                std::string error_msg = fmt::format("Snapshot {} will not be created. Specified symbol-version pairs do not exist in the library: ", snap_name);
+                for (const auto &kv : versions) {
+                    if (!sym_index_map->count(kv.first)) {
+                        error_msg += fmt::format("{}:{} ", kv.first, kv.second);
+                    }
+                }
+                missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(error_msg);
+            }
+        }
         index_keys = utils::values(*sym_index_map);
         auto missing = filter_keys_on_existence(
                 utils::copy_of_values_as<VariantKey>(*sym_index_map), store(), false);
