@@ -425,8 +425,11 @@ def test_negative_cases(basic_store, symbol):
     # To stay consistent with arctic this doesn't throw.
     basic_store.delete("does_not_exist")
 
-    # Creating a snapshot in an empty library should not create it.
-    basic_store.snapshot("empty_snapshot")
+    
+    with pytest.raises(NoSuchVersionException):
+        basic_store.snapshot("empty_snapshot")
+    with pytest.raises(NoSuchVersionException):
+        basic_store.snapshot("empty_snapshot", versions={"non-exist-symbol":0})
     with pytest.raises(NoDataFoundException):
         basic_store.delete_snapshot("empty_snapshot")
 
