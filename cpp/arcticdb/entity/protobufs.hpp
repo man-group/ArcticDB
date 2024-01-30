@@ -16,6 +16,7 @@
 #include <rocksdb_storage.pb.h>
 #include <nfs_backed_storage.pb.h>
 #include <azure_storage.pb.h>
+#include <single_file_storage.pb.h>
 #include <config.pb.h>
 #include <utils.pb.h>
 

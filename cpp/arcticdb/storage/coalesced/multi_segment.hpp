@@ -4,7 +4,7 @@
 #include <vector>
 
 #include <arcticdb/codec/segment.hpp>
-#include <arcticdb/storage/coalesced/multisegment_header.hpp>
+#include <arcticdb/storage/coalesced/multi_segment_header.hpp>
 #include <arcticdb/codec/codec.hpp>
 
 namespace arcticdb::storage {

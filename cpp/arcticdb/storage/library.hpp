@@ -102,6 +102,10 @@ class Library {
         storages_->remove(std::move(ks), opts);
     }
 
+    void write_raw(uint8_t* data, size_t bytes) {
+        storages_->write_raw(data, bytes);
+    }
+
     bool fast_delete() {
         return storages_->fast_delete();
     }

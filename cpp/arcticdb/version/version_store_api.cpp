@@ -29,6 +29,7 @@
 #include <arcticdb/pipeline/pipeline_utils.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/version/snapshot.hpp>
+#include <storage/file/file_store.hpp>
 
 #include <regex>
 
@@ -1160,11 +1161,12 @@ void PythonVersionStore::write_dataframe_to_file(
     const py::tuple& item,
     const py::object& norm,
     const py::object& user_meta,
-    const WriteOptions& options) {
+    const WriteOptions& options,
+    EncodingVersion encoding_version) {
 
     ARCTICDB_SAMPLE(WriteDataframeToFile, 0)
     auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta);
-    write_dataframe_to_file_internal(stream_id, frame, options);
+    write_dataframe_to_file_internal(stream_id, frame, path, options, codec::default_lz4_codec(), encoding_version);
 }
 
 ReadResult PythonVersionStore::read_dataframe_from_file(
@@ -1173,7 +1175,9 @@ ReadResult PythonVersionStore::read_dataframe_from_file(
     ReadQuery& read_query,
     const ReadOptions& read_options) {
 
-    auto opt_version_and_frame = read_dataframe_version_internal(stream_id, read_query, read_options);
+
+
+
     return create_python_read_result(opt_version_and_frame.versioned_item_, std::move(opt_version_and_frame.frame_and_descriptor_));
 }
 

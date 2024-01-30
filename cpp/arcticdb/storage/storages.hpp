@@ -95,6 +95,10 @@ class Storages {
         }
     }
 
+    void write_raw(uint8_t* data, size_t bytes) {
+        primary().write_raw(data, bytes);
+    }
+
     /** Calls Storage::do_key_path on the primary storage. Remember to check the open mode. */
     std::string key_path(const VariantKey& key) const {
         return primary().key_path(key);

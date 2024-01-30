@@ -37,8 +37,8 @@ struct StreamDescriptor {
 
     void set_id(const StreamId& id) {
         util::variant_match(id,
-                            [that=this] (const StringId& str) { that->data_->set_str_id(str); },
-                            [that=this] (const NumericId& n) { that->data_->set_num_id(n); });
+                            [this] (const StringId& str) { data_->set_str_id(str); },
+                            [this] (const NumericId& n) { data_->set_num_id(n); });
     }
 
     static StreamId id_from_proto(const Proto& proto) {

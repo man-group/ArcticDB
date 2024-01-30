@@ -127,6 +127,7 @@ std::vector<std::pair<FrameSlice, size_t>> get_slice_and_rowcount(const std::vec
         slice_and_rowcount.emplace_back(slice, slice_num_for_column);
         ++slice_num_for_column;
     }
+    return slice_and_rowcount;
 }
 
 folly::Future<std::vector<SliceAndKey>> write_slices(

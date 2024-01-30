@@ -59,6 +59,10 @@ class LmdbStorage final : public Storage {
 
     std::string do_key_path(const VariantKey&) const final { return {}; };
 
+    void do_write_raw(uint8_t*, size_t) final {
+        util::raise_rte("Write raw not implemented for this storage");
+    }
+
     void warn_if_lmdb_already_open();
 
     // _internal methods assume the write mutex is already held

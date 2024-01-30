@@ -88,7 +88,7 @@ namespace arcticdb {
 
     using EncodingPolicyV1 = EncodingPolicyType<EncodingVersion::V1, ColumnEncoderV1>;
 
-    [[nodiscard]] static SizeResult max_compressed_size_v1(
+    [[nodiscard]] SizeResult max_compressed_size_v1(
         const SegmentInMemory& in_mem_seg,
         const arcticdb::proto::encoding::VariantCodec& codec_opts
     ) {

@@ -38,6 +38,10 @@ namespace arcticdb::storage::memory {
             return false;
         }
 
+        void do_write_raw(uint8_t*, size_t) {
+            util::raise_rte("Write raw not implemented for this storage");
+        }
+
         inline bool do_fast_delete() final;
 
         void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string & prefix) final;

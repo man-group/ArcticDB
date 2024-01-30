@@ -239,7 +239,7 @@ namespace arcticdb {
         }
     }
 
-    [[nodiscard]] static SizeResult max_compressed_size_v2(
+    [[nodiscard]] SizeResult max_compressed_size_v2(
         const SegmentInMemory& in_mem_seg,
         const arcticdb::proto::encoding::VariantCodec& codec_opts
     ) {

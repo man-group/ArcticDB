@@ -62,6 +62,10 @@ class S3Storage final : public Storage {
         return false;
     }
 
+    void do_write_raw(uint8_t*, size_t) final {
+        util::raise_rte("Write raw not implemented on this storage");
+    }
+
     std::string do_key_path(const VariantKey& key) const final { return get_key_path(key); };
 
     auto& client() { return s3_client_; }

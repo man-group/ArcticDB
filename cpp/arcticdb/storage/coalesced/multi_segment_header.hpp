@@ -1,3 +1,5 @@
+#pragma once
+
 #include <arcticdb/storage/key_segment_pair.hpp>
 #include <arcticdb/entity/stream_descriptor.hpp>
 #include <arcticdb/stream/index.hpp>
@@ -60,8 +62,14 @@ public:
         segment_(std::move(segment)) {
     }
 
-    explicit MultiSegmentHeader(StreamId id, size_t num_rows) :
-        segment_(multi_segment_descriptor(std::move(id)), num_rows, true) {
+    MultiSegmentHeader() = default;
+
+    void set_segment(SegmentInMemory&& segment) {
+        segment_ = std::move(segment);
+    }
+
+    void initalize(StreamId id, size_t num_rows) {
+        segment_ = SegmentInMemory{multi_segment_descriptor(std::move(id)), num_rows, true};
     }
 
     void add_key_and_offset(const AtomKey &key, uint64_t offset, uint64_t size) {
@@ -70,6 +78,10 @@ public:
         segment_.set_scalar(as_pos(MultiSegmentFields::offset), offset);
         segment_.set_scalar(as_pos(MultiSegmentFields::size), size);
         segment_.end_row();
+    }
+
+    void sort() {
+        segment_.sort(0);
     }
 
     const SegmentInMemory& segment() {

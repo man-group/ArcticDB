@@ -12,6 +12,7 @@
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/composite.hpp>
 #include <arcticdb/util/memory_mapped_file.hpp>
+#include <arcticdb/storage/coalesced/multi_segment_header.hpp>
 
 namespace fs = std::filesystem;
 
@@ -26,6 +27,8 @@ class SingleFileStorage final : public Storage {
     ~SingleFileStorage();
 
   private:
+    void do_write_raw(uint8_t* data, size_t bytes) final;
+
     void do_write(Composite<KeySegmentPair>&& kvs) final;
 
     void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) final;
@@ -46,22 +49,46 @@ class SingleFileStorage final : public Storage {
 
     bool do_key_exists(const VariantKey & key) final;
 
-    uint8_t* get_offset();
+    uint64_t get_data_offset(const Segment& seg);
+
+    uint64_t write_segment(Segment&& seg);
+
+    void init();
+
 private:
     std::mutex offset_mutex_;
     size_t offset_ = 0UL;
     Config config_;
     MemoryMappedFile file_;
-    storage::MultiSegmentHeader multi_segment_header_{stream_id, segments.size()};
+    storage::MultiSegmentHeader multi_segment_header_;
 };
 
-inline arcticdb::proto::storage::VariantStorage pack_config(const std::string& path, size_t file_size) {
+inline arcticdb::proto::storage::VariantStorage pack_config(
+        const std::string& path,
+        size_t file_size,
+        size_t items_count,
+        const StreamId& id,
+        IndexDescriptor index_desc,
+        EncodingVersion encoding_version) {
     arcticdb::proto::storage::VariantStorage output;
-    arcticdb::proto::lmdb_storage::Config cfg;
+    arcticdb::proto::single_file_storage::Config cfg;
     cfg.set_path(path);
     cfg.set_bytes(file_size);
+    cfg.set_items_count(items_count);
+    util::variant_match(id,
+                            [&cfg] (const StringId& str) { cfg.set_str_id(str); },
+                            [&cfg] (const NumericId& n) { cfg.set_num_id(n); });
+    cfg.mutable_index()->CopyFrom(index_desc.proto()),
+    cfg.set_encoding_version(static_cast<uint32_t>(encoding_version));
     util::pack_to_any(cfg, *output.mutable_config());
     return output;
 }
 
+inline arcticdb::proto::storage::VariantStorage pack_config(const std::string& path) {
+    arcticdb::proto::storage::VariantStorage output;
+    arcticdb::proto::single_file_storage::Config cfg;
+    cfg.set_path(path);
+    util::pack_to_any(cfg, *output.mutable_config());
+    return output;
 }
+} //namespace arcticdb::storage::file

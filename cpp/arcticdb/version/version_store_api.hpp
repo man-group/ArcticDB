@@ -335,7 +335,8 @@ class PythonVersionStore : public LocalVersionedEngine {
         const py::tuple& item,
         const py::object& norm,
         const py::object& user_meta,
-        const WriteOptions& options);
+        const WriteOptions& options,
+        EncodingVersion encoding_version);
 
     ReadResult read_dataframe_from_file(
         const StreamId &stream_id,

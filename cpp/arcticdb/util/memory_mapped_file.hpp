@@ -102,9 +102,32 @@ private:
 
 public:
     ARCTICDB_NO_MOVE_OR_COPY(MemoryMappedFile)
-    
-    MemoryMappedFile(const std::string &filepath, size_t size)
-        : length_(size) {
+
+    MemoryMappedFile() = default;
+
+    size_t get_file_size(const std::string& file_path) {
+        struct stat sb;
+        auto result = stat(file_path.c_str(), &sb);
+        util::check(result != -1, "Failed to stat file");
+        return static_cast<size_t>(sb.st_size);
+    }
+
+    void open_file(const std::string &filepath) {
+        length_ = get_file_size(filepath);
+        // Open file
+        fd_ = open(filepath.c_str(), O_RDWR, S_IRUSR | S_IWUSR);
+        util::check(fd_ != -1, "Error opening file for reading");
+
+        // Map file into memory
+        data_ = static_cast<uint8_t *>(mmap(nullptr, length_, PROT_READ, MAP_SHARED, fd_, 0));
+        if (data_ == MAP_FAILED) {
+            close(fd_);
+            util::raise_rte("Error mmapping the file");
+        }
+    }
+
+    void create_file(const std::string &filepath, size_t size) {
+        length_ = size;
         // Open file
         fd_ = open(filepath.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
         util::check(fd_ != -1, "Error opening file for writing");
