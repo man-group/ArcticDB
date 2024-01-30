@@ -1175,8 +1175,10 @@ ReadResult PythonVersionStore::read_dataframe_from_file(
     ReadQuery& read_query,
     const ReadOptions& read_options) {
 
-
-
+    auto opt_version_and_frame = read_dataframe_from_file_internal(stream_id,
+     path,
+    read_query,
+    read_options);
 
     return create_python_read_result(opt_version_and_frame.versioned_item_, std::move(opt_version_and_frame.frame_and_descriptor_));
 }

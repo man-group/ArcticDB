@@ -56,10 +56,6 @@ class AzureStorage final : public Storage {
         return false;
     }
 
-    void do_write_raw(uint8_t*, size_t) final {
-        util::raise_rte("Write raw not implemented on this storage");
-    }
-
     std::string do_key_path(const VariantKey&) const final { return {}; };
 
   private:

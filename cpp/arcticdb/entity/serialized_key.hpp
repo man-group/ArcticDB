@@ -169,7 +169,6 @@ size_t max_index_size(const IndexDescriptor& index) {
     }
 }
 
-
 struct KeyDescriptor {
     explicit KeyDescriptor(const AtomKey &key, FormatType format_type) :
             identifier(SerializedKeyIdentifier),
@@ -249,7 +248,7 @@ inline std::string to_serialized_key(const entity::VariantKey &key) {
     return std::visit([&](const auto &key) { return to_serialized_key(key); }, key);
 }
 
-inline AtomKey from_serialized_atom_key(const uint8_t *data, KeyType key_type) {
+inline AtomKey from_serialized_atom_key(const uint8_t* data, KeyType key_type) {
     const auto *descr = reinterpret_cast<const KeyDescriptor *>(data);
     util::check(descr->identifier == SerializedKeyIdentifier, "Read invalid serialized key");
     data += sizeof(KeyDescriptor);

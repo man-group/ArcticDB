@@ -4,7 +4,7 @@
  *
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
-#include <arcticdb/storage/file/single_file_storage.hpp>
+#include <arcticdb/storage/file/mapped_file_storage.hpp>
 
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/entity/atom_key.hpp>
@@ -19,18 +19,18 @@
 
 namespace arcticdb::storage::file {
 
-SingleFileStorage::SingleFileStorage(const LibraryPath &lib, OpenMode mode, const Config &conf) :
-    Storage(lib, mode),
+MappedFileStorage::MappedFileStorage(const LibraryPath &lib, OpenMode mode, const Config &conf) :
+    SingleFileStorage(lib, mode),
     config_(conf) {
     init();
 }
 
-void SingleFileStorage::do_write_raw(uint8_t *data, size_t bytes) {
+void MappedFileStorage::do_write_raw(const uint8_t* data, size_t bytes) {
     memcpy(file_.data() + offset_, data, bytes);
     offset_ += bytes;
 }
 
-void SingleFileStorage::init() {
+void MappedFileStorage::init() {
     if (config_.bytes() > 0) {
         multi_segment_header_.initalize(StreamId{0}, config_.items_count());
         auto data_size = config_.bytes() + max_compressed_size_dispatch(multi_segment_header_.segment(),
@@ -42,22 +42,24 @@ void SingleFileStorage::init() {
         file_.create_file(config_.path(), data_size);
     } else {
         file_.open_file(config_.path());
-        const auto data_end = file_.bytes() - sizeof(uint64_t);
-        auto index_offset = *reinterpret_cast<uint64_t*>(file_.data() + data_end);
-        auto index_segment = Segment::from_bytes(file_.data() + index_offset, data_end - index_offset);
-        auto header = decode_segment(std::move(index_segment));
-        multi_segment_header_.set_segment(std::move(header));
+
     }
 }
 
-uint64_t SingleFileStorage::get_data_offset(const Segment& seg) {
-    ARCTICDB_SAMPLE(SingleFileStorageGetOffset, 0)
+void MappedFileStorage::do_load_header(size_t header_offset, size_t header_size) {
+    auto index_segment = Segment::from_bytes(file_.data() + header_offset, header_size);
+    auto header = decode_segment(std::move(index_segment));
+    multi_segment_header_.set_segment(std::move(header));
+}
+
+uint64_t MappedFileStorage::get_data_offset(const Segment& seg) {
+    ARCTICDB_SAMPLE(MappedFileStorageGetOffset, 0)
     std::lock_guard<std::mutex> lock{offset_mutex_};
     offset_ += seg.total_segment_size();
     return offset_;
 }
 
-uint64_t SingleFileStorage::write_segment(Segment&& seg) {
+uint64_t MappedFileStorage::write_segment(Segment&& seg) {
     auto offset = get_data_offset(seg);
     auto* data = file_.data() + offset;
     const auto header_size = seg.segment_header_bytes_size();
@@ -67,8 +69,8 @@ uint64_t SingleFileStorage::write_segment(Segment&& seg) {
     return segment_size;
 }
 
-void SingleFileStorage::do_write(Composite<KeySegmentPair>&& kvs) {
-    ARCTICDB_SAMPLE(SingleFileStorageWriteValues, 0)
+void MappedFileStorage::do_write(Composite<KeySegmentPair>&& kvs) {
+    ARCTICDB_SAMPLE(MappedFileStorageWriteValues, 0)
     auto key_values = std::move(kvs);
     kvs.broadcast([this] (auto key_seg) {
         const auto size = key_seg.segment().total_segment_size();
@@ -77,38 +79,55 @@ void SingleFileStorage::do_write(Composite<KeySegmentPair>&& kvs) {
     });
 }
 
-void SingleFileStorage::do_update(Composite<KeySegmentPair>&&, UpdateOpts) {
+void MappedFileStorage::do_update(Composite<KeySegmentPair>&&, UpdateOpts) {
     util::raise_rte("Update not implemented for file storages");
 }
 
-void SingleFileStorage::do_read(Composite<VariantKey>&&, const ReadVisitor&, storage::ReadKeyOpts) {
-    ARCTICDB_SAMPLE(SingleFileStorageRead, 0)
+void MappedFileStorage::do_read(Composite<VariantKey>&&, const ReadVisitor&, storage::ReadKeyOpts) {
+    ARCTICDB_SAMPLE(MappedFileStorageRead, 0)
 }
 
-bool SingleFileStorage::do_key_exists(const VariantKey&) {
-    ARCTICDB_SAMPLE(SingleFileStorageKeyExists, 0)
+bool MappedFileStorage::do_key_exists(const VariantKey&) {
+    ARCTICDB_SAMPLE(MappedFileStorageKeyExists, 0)
     return true;
 }
 
-void SingleFileStorage::do_remove(Composite<VariantKey>&&, RemoveOpts) {
+void MappedFileStorage::do_remove(Composite<VariantKey>&&, RemoveOpts) {
     util::raise_rte("Remove not implemented for file storages");
 }
 
-bool SingleFileStorage::do_fast_delete() {
+bool MappedFileStorage::do_fast_delete() {
     util::raise_rte("Fast delete not implemented for file storage - just delete the file");
 }
 
-void SingleFileStorage::do_iterate_type(KeyType, const IterateTypeVisitor&, const std::string&) {
+void MappedFileStorage::do_finalize(KeyData key_data)  {
+    multi_segment_header_.sort();
+    auto header_segment = encode_dispatch(multi_segment_header_.detach_segment(),
+                                          config_.codec_opts(),
+                                          EncodingVersion{static_cast<uint16_t>(config_.encoding_version())});
+    write_segment(std::move(header_segment));
+    auto pos = reinterpret_cast<KeyData *>(file_.data() + offset_);
+    *pos = key_data;
+    offset_ += sizeof(KeyData);
+    file_.truncate(offset_);
+}
+
+
+uint8_t* MappedFileStorage::do_read_raw(size_t offset, size_t bytes) {
+    util::check(offset + bytes <= file_.bytes(), "Can't read {} bytes from {} in file of size {},",
+                                                 bytes, offset, file_.bytes());
+    return file_.data() + offset;
+}
+
+void MappedFileStorage::do_iterate_type(KeyType, const IterateTypeVisitor&, const std::string&) {
    util::raise_rte("Iterate type not implemented for file storage");
 }
 
-SingleFileStorage::~SingleFileStorage() {
-    multi_segment_header_.sort();
-    auto header_segment = encode_dispatch(multi_segment_header_.detach_segment(), config_.codec_opts(), EncodingVersion{static_cast<uint16_t>(config_.encoding_version())});
-    const auto offset = write_segment(std::move(header_segment));
-    auto pos = reinterpret_cast<uint64_t*>(file_.data() + offset_);
-    *pos = offset;
-    offset_ += sizeof(uint64_t);
-    file_.truncate(offset_);
+size_t MappedFileStorage::do_get_offset() const {
+    return offset_;
+}
+
+size_t MappedFileStorage::do_get_bytes() const {
+    return file_.bytes();
 }
 } // namespace arcticdb::storage::lmdb

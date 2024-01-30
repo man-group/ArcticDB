@@ -115,10 +115,6 @@ public:
         return read(Composite<VariantKey>{std::move(key)}, visitor, opts);
     }
 
-    void write_raw(uint8_t* data, size_t bytes) {
-        return do_write_raw(data, bytes);
-    }
-
     template<class KeyType>
     KeySegmentPair read(KeyType&& key, ReadKeyOpts opts) {
         KeySegmentPair key_seg;
@@ -180,8 +176,6 @@ private:
     virtual void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string & prefix) = 0;
 
     virtual std::string do_key_path(const VariantKey& key) const = 0;
-
-    virtual void do_write_raw(uint8_t* data, size_t bytes) = 0;
 
     LibraryPath lib_path_;
     OpenMode mode_;

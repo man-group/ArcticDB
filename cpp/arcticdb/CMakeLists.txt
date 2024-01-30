@@ -437,7 +437,7 @@ set(arcticdb_srcs
         version/version_utils.cpp
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
-        storage/coalesced/multi_segment.hpp storage/coalesced/multi_segment.cpp storage/coalesced/multi_segment_header.hpp storage/coalesced/multi_segment_utils.hpp storage/coalesced/multi_segment_aggregator.hpp storage/coalesced/coalesced_storage_common.hpp util/memory_mapped_file.hpp storage/file/single_file_storage.cpp storage/file/file_store.hpp storage/file/file_store.hpp storage/file/file_store.hpp storage/file/single_file_storage.hpp storage/file/file_store.hpp stream/piloted_clock.hpp)
+        storage/coalesced/multi_segment.hpp storage/coalesced/multi_segment.cpp storage/coalesced/multi_segment_header.hpp storage/coalesced/multi_segment_utils.hpp storage/coalesced/multi_segment_aggregator.hpp storage/coalesced/coalesced_storage_common.hpp util/memory_mapped_file.hpp storage/file/mapped_file_storage.cpp storage/file/file_store.hpp storage/file/file_store.hpp storage/file/file_store.hpp storage/file/mapped_file_storage.hpp storage/file/file_store.hpp stream/piloted_clock.hpp storage/single_file_storage.hpp)
 
 if(${ARCTICDB_INCLUDE_ROCKSDB})
     list (APPEND arcticdb_srcs

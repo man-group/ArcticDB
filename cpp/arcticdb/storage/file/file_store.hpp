@@ -9,11 +9,13 @@
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/codec/segment.hpp>
 #include <arcticdb/log/log.hpp>
-#include <arcticdb/storage/file/single_file_storage.hpp>
+#include <arcticdb/storage/file/mapped_file_storage.hpp>
+#include <arcticdb/storage/single_file_storage.hpp>
 #include <arcticdb/storage/library.hpp>
 #include <arcticdb/storage/library_path.hpp>
-#include "stream/piloted_clock.hpp"
+#include <arcticdb/stream/piloted_clock.hpp>
 #include <arcticdb/version/version_core.hpp>
+#include <arcticdb/entity/serialized_key.hpp>
 
 namespace arcticdb {
 
@@ -71,7 +73,7 @@ void write_dataframe_to_file_internal(
          write_window)).via(&async::io_executor());
     auto segments = std::move(key_seg_futs).get();
 
-    auto data_size = max_data_size(segments, codec_opts, encoding_version, frame->index);
+    auto data_size = max_data_size(segments, codec_opts, encoding_version);
     auto config = storage::file::pack_config(path, data_size, segments.size(), stream_id, stream::get_descriptor_from_index(frame->index), encoding_version);
 
     storage::LibraryPath lib_path{std::string{"file"}, fmt::format("{}", stream_id)};
@@ -85,25 +87,42 @@ void write_dataframe_to_file_internal(
     .thenValue([&frame, stream_id, store] (auto&& slice_and_keys) {
         return index::write_index(frame, std::forward<decltype(slice_and_keys)>(slice_and_keys), IndexPartialKey{stream_id, VersionId{0}}, store);
     });
-
+    // TODO include key size and key offset in max size calculation
+    auto index_key = std::move(index_fut).get();
+    auto serialized_key = to_serialized_key(index_key);
+    auto single_file_store = library->get_single_file_storage().value();
+    const auto offset = single_file_store->get_offset();
+    single_file_store->write_raw(reinterpret_cast<const uint8_t*>(serialized_key.c_str()), serialized_key.size());
+    single_file_store->finalize(storage::KeyData{offset, serialized_key.size()});
 }
 
-FrameAndDescriptor read_dataframe_from_file_internal(
+version_store::ReadVersionOutput read_dataframe_from_file_internal(
         const StreamId& stream_id,
         const std::string& path,
-        const ReadQuery& read_query,
-        const ReadOptions& read_options,
-        EncodingVersion encoding_version) {
+        ReadQuery& read_query,
+        const ReadOptions& read_options) {
     auto config = storage::file::pack_config(path);
     storage::LibraryPath lib_path{std::string{"file"}, fmt::format("{}", stream_id)};
     auto library = create_library(lib_path, storage::OpenMode::WRITE, {std::move(config)});
-    auto store = std::make_shared<async::AsyncStore<PilotedClock>>(library, codec::default_lz4_codec(), encoding_version);
+    auto store = std::make_shared<async::AsyncStore<PilotedClock>>(library, codec::default_lz4_codec(), EncodingVersion::V1);
+
+    auto single_file_storage = library->get_single_file_storage().value();
+
+    using namespace arcticdb::storage;
+    const auto data_end = single_file_storage->get_bytes() - sizeof(KeyData);
+    auto key_data = *reinterpret_cast<KeyData*>(single_file_storage->read_raw(data_end, sizeof(KeyData)));
+
+    auto index_key = from_serialized_atom_key(single_file_storage->read_raw(key_data.key_offset_, key_data.key_size_), KeyType::TABLE_INDEX);
+    VersionedItem versioned_item(index_key);
+    const auto header_offset = key_data.key_offset_ + key_data.key_size_;
+    single_file_storage->load_header(header_offset, data_end - header_offset);
+
     using namespace arcticdb::pipelines;
     auto pipeline_context = std::make_shared<PipelineContext>();
 
     pipeline_context->stream_id_ = stream_id;
 
-    read_indexed_keys_to_pipeline(store, pipeline_context, , read_query, read_options);
+    version_store::read_indexed_keys_to_pipeline(store, pipeline_context, versioned_item, read_query, read_options);
 
     version_store::modify_descriptor(pipeline_context, read_options);
     generate_filtered_field_descriptors(pipeline_context, read_query.columns);
@@ -112,7 +131,7 @@ FrameAndDescriptor read_dataframe_from_file_internal(
     auto frame = version_store::do_direct_read_or_process(store, read_query, read_options, pipeline_context, buffers);
     ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
     reduce_and_fix_columns(pipeline_context, frame, read_options);
-
-    return {frame, timeseries_descriptor_from_pipeline_context(pipeline_context, {}, pipeline_context->bucketize_dynamic_), {}, buffers};
+    FrameAndDescriptor frame_and_descriptor{frame, timeseries_descriptor_from_pipeline_context(pipeline_context, {}, pipeline_context->bucketize_dynamic_), {}, buffers};
+    return {std::move(versioned_item), std::move(frame_and_descriptor)};
 }
 } //namespace arcticdb

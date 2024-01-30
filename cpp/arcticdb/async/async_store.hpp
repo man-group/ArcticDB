@@ -76,10 +76,6 @@ public:
             .thenValue(WriteSegmentTask{library_});
     }
 
-    void write_raw_sync(uint8_t* data, size_t bytes) {
-        library_->write_raw(data, bytes);
-    }
-
 folly::Future<entity::VariantKey> write(
     stream::KeyType key_type,
     VersionId version_id,

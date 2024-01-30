@@ -126,8 +126,6 @@ struct StreamSink {
         std::vector<entity::VariantKey> &&keys, storage::RemoveOpts opts = storage::RemoveOpts{}) = 0;
 
     virtual timestamp current_timestamp() = 0;
-
-    virtual void write_raw_sync(uint8_t* bytes, size_t size) = 0;
 };
 
 } // namespace arcticdb::stream

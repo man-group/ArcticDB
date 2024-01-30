@@ -47,10 +47,6 @@ class MongoStorage final : public Storage {
 
     std::string collection_name(KeyType k);
 
-    void do_write_raw(uint8_t*, size_t) {
-        util::raise_rte("Raw write not implemented for this storage");
-    }
-
     std::shared_ptr<MongoInstance> instance_;
     std::shared_ptr<MongoClient> client_;
     std::string db_;

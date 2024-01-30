@@ -15,6 +15,7 @@
 #include <arcticdb/storage/storage_exceptions.hpp>
 #include <arcticdb/storage/open_mode.hpp>
 #include <arcticdb/storage/storages.hpp>
+#include <arcticdb/storage/single_file_storage.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/composite.hpp>
 
@@ -22,6 +23,7 @@
 #include <folly/concurrency/ConcurrentHashMap.h>
 #include <boost/core/noncopyable.hpp>
 #include <filesystem>
+
 
 
 #ifdef _WIN32
@@ -102,8 +104,8 @@ class Library {
         storages_->remove(std::move(ks), opts);
     }
 
-    void write_raw(uint8_t* data, size_t bytes) {
-        storages_->write_raw(data, bytes);
+    std::optional<std::shared_ptr<SingleFileStorage>> get_single_file_storage() const {
+        return storages_->get_single_file_storage();
     }
 
     bool fast_delete() {
