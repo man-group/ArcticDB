@@ -204,7 +204,8 @@ inline std::pair<std::vector<SliceAndKey>, std::vector<SliceAndKey>> intersectin
     const IndexRange& front_range,
     const IndexRange& back_range,
     VersionId version_id,
-    const std::shared_ptr<Store>& store) {
+    const std::shared_ptr<Store>& store
+) {
     std::vector<SliceAndKey> intersect_before;
     std::vector<SliceAndKey> intersect_after;
 
@@ -216,20 +217,20 @@ inline std::pair<std::vector<SliceAndKey>, std::vector<SliceAndKey>> intersectin
                 affected_slice_and_key,
                 front_range,
                 version_id,
-                AffectedSegmentEnd::START,
+                AffectedSegmentPart::START,
                 store
             );
             if (front_overlap_key)
                 intersect_before.push_back(*front_overlap_key);
         }
 
-        if (intersects(affected_range, back_range) && !overlaps(affected_range, back_range)
-        && is_after(affected_range, back_range)) {
+        if (intersects(affected_range, back_range) && !overlaps(affected_range, back_range) &&
+            is_after(affected_range, back_range)) {
             auto back_overlap_key = rewrite_partial_segment(
                 affected_slice_and_key,
                 back_range,
                 version_id,
-                AffectedSegmentEnd::END,
+                AffectedSegmentPart::END,
                 store
             );
             if (back_overlap_key)

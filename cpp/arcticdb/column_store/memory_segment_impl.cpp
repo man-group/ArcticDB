@@ -446,16 +446,15 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::truncate(
         const Field& field = descriptor_->field(idx);
         if (is_sequence_type(column_type) && reconstruct_string_pool) {
             output->add_column(field, num_values, true);
+            const ChunkedBuffer& source = column->data().buffer();
             ChunkedBuffer& target = output->column(idx).data().buffer();
-            for (size_t row = 0u; row < num_values; ++row) {
-                util::variant_match(
-                    get_string_from_buffer(row, column->data().buffer(), output->string_pool()),
-                    [&](std::string_view sv) {
-                        OffsetString off_str = output->string_pool().get(sv);
-                        set_offset_string_at(row, target, off_str.offset());
-                    },
-                    [&](entity::position_t offset) { set_offset_string_at(row, target, offset); }
+            for (size_t row = 0; row < num_values; ++row) {
+                const StringPool::offset_t offset = util::variant_match(
+                    get_string_from_buffer(start_row + row, source, *string_pool_),
+                    [&](std::string_view sv) { return output->string_pool().get(sv).offset(); },
+                    [](StringPool::offset_t offset) { return offset; }
                 );
+                set_offset_string_at(row, target, offset);
             }
         } else {
             auto truncated_column = Column::truncate(column, start_row, end_row);
@@ -466,8 +465,8 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::truncate(
     return output;
 }
 
-// Combine 2 segments that hold different columns associated with the same rows
-// If unique_column_names is true, any columns from other with names matching those in this are ignored
+/// @brief Combine 2 segments that hold different columns associated with the same rows
+/// @param[in] unique_column_names If true, any columns from other with names matching those in this are ignored
 void SegmentInMemoryImpl::concatenate(SegmentInMemoryImpl&& other, bool unique_column_names) {
         internal::check<ErrorCode::E_INVALID_ARGUMENT>(
                 row_count() == other.row_count(),

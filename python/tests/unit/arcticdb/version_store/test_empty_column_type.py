@@ -27,8 +27,12 @@ def boolean_dtype(request):
     yield request.param
 
 
-class TestCanAppendToEmptyColumn:
+@pytest.fixture(params=["datetime64[ns]"])
+def date_dtype(request):
+    yield request.param
 
+
+class TestCanAppendToEmptyColumn:
     @pytest.fixture(autouse=True)
     def create_empty_column(self, lmdb_version_store_static_and_dynamic):
         lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col1": [None, None]}))
@@ -104,14 +108,38 @@ class TestCanAppendToEmptyColumn:
             df_non_empty
         )
 
-    def test_date(self, lmdb_version_store_static_and_dynamic):
-        df_non_empty = pd.DataFrame({"col1": np.array([np.datetime64('2005-02'), np.datetime64('2005-03'), np.datetime64('2005-03')])}, dtype="datetime64[ns]")
+    def test_date(self, lmdb_version_store_static_and_dynamic, date_dtype):
+        df_non_empty = pd.DataFrame(
+            {
+                "col1": np.array(
+                    [
+                        np.datetime64('2005-02'),
+                        np.datetime64('2005-03'),
+                        np.datetime64('2005-03')
+                    ]
+                )
+            },
+            dtype=date_dtype
+        )
         lmdb_version_store_static_and_dynamic.append("sym", df_non_empty)
-        expected_result = pd.DataFrame({"col1": np.array([np.datetime64('NaT'), np.datetime64('NaT'), np.datetime64('2005-02'), np.datetime64('2005-03'), np.datetime64('2005-03')], dtype="datetime64[ns]")})
+        expected_result = pd.DataFrame(
+            {
+                "col1": np.array(
+                    [
+                        np.datetime64('NaT'),
+                        np.datetime64('NaT'),
+                        np.datetime64('2005-02'),
+                        np.datetime64('2005-03'),
+                        np.datetime64('2005-03')
+                    ],
+                    dtype=date_dtype
+                )
+            }
+        )
         assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, expected_result)
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym", row_range=[0,2]).data,
-            pd.DataFrame({"col1": np.array([np.datetime64('NaT'), np.datetime64('NaT')], dtype="datetime64[ns]")})
+            pd.DataFrame({"col1": np.array([np.datetime64('NaT'), np.datetime64('NaT')], dtype=date_dtype)})
         )
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym", row_range=[2,5]).data,
@@ -120,7 +148,6 @@ class TestCanAppendToEmptyColumn:
 
 
 class TestCanAppendEmptyToColumn:
-
     def test_integer(self, lmdb_version_store_static_and_dynamic, int_dtype):
         df_initial = pd.DataFrame({"col1": np.array([1,2,3], dtype=int_dtype)})
         lmdb_version_store_static_and_dynamic.write("sym", df_initial)
@@ -191,7 +218,7 @@ class TestCanAppendEmptyToColumn:
             df_with_none
         )
 
-    def test_date(self, lmdb_version_store_static_and_dynamic):
+    def test_date(self, lmdb_version_store_static_and_dynamic, date_dtype):
         df_initial = pd.DataFrame(
             {
                 "col1": np.array(
@@ -202,7 +229,7 @@ class TestCanAppendEmptyToColumn:
                     ]
                 )
             },
-            dtype="datetime64[ns]"
+            dtype=date_dtype
         )
         lmdb_version_store_static_and_dynamic.write("sym", df_initial)
         lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col1": np.array([None, None])}))
@@ -216,7 +243,7 @@ class TestCanAppendEmptyToColumn:
                         np.datetime64('NaT'),
                         np.datetime64('NaT')
                     ],
-                    dtype="datetime64[ns]")
+                    dtype=date_dtype)
             }
         )
         assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, expected_result)
@@ -226,22 +253,104 @@ class TestCanAppendEmptyToColumn:
         )
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym", row_range=[3,5]).data,
-            pd.DataFrame({"col1": np.array([np.datetime64('NaT'), np.datetime64('NaT')], dtype="datetime64[ns]")})
+            pd.DataFrame({"col1": np.array([np.datetime64('NaT'), np.datetime64('NaT')], dtype=date_dtype)})
         )
 
 
 class TestCanUpdateWithEmpty:
-    def test_bool(self, lmdb_version_store_static_and_dynamic, boolean_dtype):
-        index = list(pd.date_range(start="1/1/2024", end="1/4/2024"))
+    def index(self):
+        return list(pd.date_range(start="1/1/2024", end="1/4/2024"))
+
+    def update_index(self):
+        return list(pd.date_range(start="1/2/2024", end="1/3/2024"))
+
+    def test_int(self, lmdb_version_store_static_and_dynamic, int_dtype):
         lmdb_version_store_static_and_dynamic.write(
             "sym",
-            pd.DataFrame({"col": [True, True, True, True]}, dtype=boolean_dtype, index=index)
+            pd.DataFrame({"col": [1, 2, 3, 4]}, dtype=int_dtype, index=self.index())
         )
         lmdb_version_store_static_and_dynamic.update(
             "sym",
-            pd.DataFrame({"col": [None, None]}, dtype=boolean_dtype, index=list(pd.date_range(start="1/2/2024", end="1/3/2024")))
+            pd.DataFrame({"col": [None, None]}, index=self.update_index())
         )
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym").data,
-            pd.DataFrame({"col": [True, None, None, True]}, index=index, dtype=boolean_dtype)
+            pd.DataFrame({"col": [1, 0, 0, 4]}, index=self.index(), dtype=int_dtype)
+        )
+
+    def test_float(self, lmdb_version_store_static_and_dynamic, float_dtype):
+        lmdb_version_store_static_and_dynamic.write(
+            "sym",
+            pd.DataFrame({"col": [1, 2, 3, 4]}, dtype=float_dtype, index=self.index())
+        )
+        lmdb_version_store_static_and_dynamic.update(
+            "sym",
+            pd.DataFrame({"col": [None, None]}, index=self.update_index())
+        )
+        assert_frame_equal(
+            lmdb_version_store_static_and_dynamic.read("sym").data,
+            pd.DataFrame({"col": [1, float("NaN"), float("NaN"), 4]}, index=self.index(), dtype=float_dtype)
+        )
+
+    def test_bool(self, lmdb_version_store_static_and_dynamic, boolean_dtype):
+        lmdb_version_store_static_and_dynamic.write(
+            "sym",
+            pd.DataFrame({"col": [True, True, True, True]}, dtype=boolean_dtype, index=self.index())
+        )
+        lmdb_version_store_static_and_dynamic.update(
+            "sym",
+            pd.DataFrame({"col": [None, None]}, dtype=boolean_dtype, index=self.update_index())
+        )
+        assert_frame_equal(
+            lmdb_version_store_static_and_dynamic.read("sym").data,
+            pd.DataFrame({"col": [True, None, None, True]}, index=self.index(), dtype=boolean_dtype)
+        )
+
+    def test_string(self, lmdb_version_store_static_and_dynamic):
+        lmdb_version_store_static_and_dynamic.write(
+            "sym",
+            pd.DataFrame({"col": ["a", "longstr"*20, "b", "longstr"*20]}, index=self.index())
+        )
+        lmdb_version_store_static_and_dynamic.update(
+            "sym",
+            pd.DataFrame({"col": [None, None]}, index=self.update_index())
+        )
+        assert_frame_equal(
+            lmdb_version_store_static_and_dynamic.read("sym").data,
+            pd.DataFrame({"col": ["a", None, None, "longstr"*20]}, index=self.index())
+        )
+
+    def test_date(self, lmdb_version_store_static_and_dynamic, date_dtype):
+        lmdb_version_store_static_and_dynamic.write(
+            "sym",
+            pd.DataFrame(
+                {
+                    "col": [
+                        np.datetime64('2005-02'),
+                        np.datetime64('2005-03'),
+                        np.datetime64('2005-04'),
+                        np.datetime64('2005-05')
+                    ]
+                },
+                dtype=date_dtype,
+                index=self.index()
+            )
+        )
+        lmdb_version_store_static_and_dynamic.update(
+            "sym",
+            pd.DataFrame({"col": [None, None]}, index=self.update_index())
+        )
+        assert_frame_equal(
+            lmdb_version_store_static_and_dynamic.read("sym").data,
+            pd.DataFrame(
+                {
+                    "col": [
+                        np.datetime64('2005-02'),
+                        np.datetime64('NaT'),
+                        np.datetime64('NaT'),
+                        np.datetime64('2005-05')
+                    ]
+                },
+                index=self.index()
+            )
         )

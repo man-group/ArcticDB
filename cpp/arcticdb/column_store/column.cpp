@@ -512,8 +512,6 @@ std::vector<std::shared_ptr<Column>> Column::split(const std::shared_ptr<Column>
     return output;
 }
 
-// Produces a new column
-// Inclusive of start_row, exclusive of end_row
 std::shared_ptr<Column> Column::truncate(const std::shared_ptr<Column>& column, size_t start_row, size_t end_row) {
     auto type_size = get_type_size(column->type().data_type());
     // Bytes from the underlying chunked buffer to include. Inclusive of start_byte, exclusive of end_byte

@@ -647,7 +647,9 @@ public:
     }
 
     static std::vector<std::shared_ptr<Column>> split(const std::shared_ptr<Column>& column, size_t num_rows);
-
+    /// @biref Produces a new column containing only the data in range [start_row, end_row)
+    /// @param[in] start_row Inclusive start of the row range
+    /// @param[in] end_row Exclusive end of the row range
     static std::shared_ptr<Column> truncate(const std::shared_ptr<Column>& column, size_t start_row, size_t end_row);
 
 private:

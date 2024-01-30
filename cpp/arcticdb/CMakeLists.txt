@@ -230,7 +230,6 @@ set(arcticdb_srcs
         pipeline/read_pipeline.hpp
         pipeline/slicing.hpp
         pipeline/string_pool_utils.hpp
-        pipeline/string_pool_utils.hpp
         pipeline/value.hpp
         pipeline/value_set.hpp
         pipeline/write_frame.hpp

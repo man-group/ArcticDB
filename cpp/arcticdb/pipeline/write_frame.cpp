@@ -222,9 +222,9 @@ folly::Future<entity::AtomKey> append_frame(
 static RowRange partial_rewrite_row_range(
     const SegmentInMemory& segment,
     const IndexRange& range,
-    AffectedSegmentEnd affected_end
+    AffectedSegmentPart affected_end
 ) {
-    if (affected_end == AffectedSegmentEnd::START) {
+    if (affected_end == AffectedSegmentPart::START) {
         const timestamp start = std::get<timestamp>(range.start_);
         auto bound = std::lower_bound(std::begin(segment), std::end(segment), start, [](const auto& row, timestamp t) {
             return row.template index<TimeseriesIndex>() < t;
@@ -245,9 +245,9 @@ static RowRange partial_rewrite_row_range(
 static IndexRange partial_rewrite_index_range(
     const IndexRange& segment_range,
     const IndexRange& update_range,
-    AffectedSegmentEnd affected_end
+    AffectedSegmentPart affected_part
 ) {
-    if (affected_end == AffectedSegmentEnd::START) {
+    if (affected_part == AffectedSegmentPart::START) {
         util::check(
             segment_range.start_ < update_range.start_,
             "Unexpected index range in after: {} !< {}",
@@ -270,18 +270,18 @@ std::optional<SliceAndKey> rewrite_partial_segment(
     const SliceAndKey& existing,
     IndexRange index_range,
     VersionId version_id,
-    AffectedSegmentEnd affected_end,
+    AffectedSegmentPart affected_part,
     const std::shared_ptr<Store>& store
 ) {
     const auto& key = existing.key();
-    const auto& existing_range = key.index_range();
+    const IndexRange& existing_range = key.index_range();
     auto kv = store->read(key).get();
-    auto& segment = kv.second;
-    const IndexRange affected_index_range = partial_rewrite_index_range(existing_range, index_range, affected_end);
-    const RowRange affected_row_range = partial_rewrite_row_range(segment, index_range, affected_end);
+    const SegmentInMemory& segment = kv.second;
+    const IndexRange affected_index_range = partial_rewrite_index_range(existing_range, index_range, affected_part);
+    const RowRange affected_row_range = partial_rewrite_row_range(segment, index_range, affected_part);
     const size_t num_rows = affected_row_range.end() - affected_row_range.start();
     SegmentInMemory output = segment.truncate(affected_row_range.start(), affected_row_range.end(), true);
-    const FrameSlice new_slice{
+    FrameSlice new_slice{
         std::make_shared<StreamDescriptor>(output.descriptor()),
         existing.slice_.col_range,
         RowRange{0, num_rows},
@@ -300,6 +300,7 @@ std::optional<SliceAndKey> rewrite_partial_segment(
 
 std::vector<SliceAndKey> flatten_and_fix_rows(boost::span<const std::vector<SliceAndKey>> groups, size_t& global_count) {
     std::vector<SliceAndKey> output;
+    output.reserve(groups.size());
     global_count = 0;
     for (const std::vector<SliceAndKey>& group : groups) {
         if (group.empty())
