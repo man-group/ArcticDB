@@ -42,12 +42,11 @@ VariantData unary_operator(const Value& val, Func&& func) {
     output->data_type_ = val.data_type_;
 
     details::visit_type(val.type().data_type(), [&](auto val_desc_tag) {
-        using DataTagType =  decltype(val_desc_tag);
-        if constexpr (!is_numeric_type(DataTagType::data_type)) {
+        using TDT = ScalarTagType<decltype(val_desc_tag)>;
+        using RawType = typename TDT::DataTypeTag::raw_type;
+        if constexpr (!is_numeric_type(TDT::DataTypeTag::data_type)) {
             util::raise_rte("Cannot perform arithmetic on {}", val.type());
         }
-        using DT = TypeDescriptorTag<decltype(val_desc_tag), DimensionTag<Dimension::Dim0>>;
-        using RawType = typename DT::DataTypeTag::raw_type;
         auto value = *reinterpret_cast<const RawType*>(val.data_);
         using TargetType = typename unary_arithmetic_promoted_type<RawType, std::remove_reference_t<Func>>::type;
         output->data_type_ = data_type_from_raw_type<TargetType>();
@@ -65,23 +64,23 @@ VariantData unary_operator(const Column& col, Func&& func) {
     std::unique_ptr<Column> output;
 
     details::visit_type(col.type().data_type(), [&](auto col_desc_tag) {
-        using ColumnTagType =  decltype(col_desc_tag);
-        if constexpr (!is_numeric_type(ColumnTagType::data_type)) {
+        using TDT = ScalarTagType<decltype(col_desc_tag)>;
+        using RawType = typename TDT::DataTypeTag::raw_type;
+        if constexpr (!is_numeric_type(TDT::DataTypeTag::data_type)) {
             util::raise_rte("Cannot perform arithmetic on {}", col.type());
         }
-        using DT = TypeDescriptorTag<decltype(col_desc_tag), DimensionTag<Dimension::Dim0>>;
-        using RawType = typename DT::DataTypeTag::raw_type;
         using TargetType = typename unary_arithmetic_promoted_type<RawType, std::remove_reference_t<Func>>::type;
         auto output_data_type = data_type_from_raw_type<TargetType>();
         output = std::make_unique<Column>(make_scalar_type(output_data_type), col.is_sparse());
-        auto data = col.data();
-        while(auto opt_block = data.next<DT>()) {
-            const auto& block = *opt_block;
-            const auto nbytes = sizeof(TargetType) * block.row_count();
-            auto ptr = reinterpret_cast<TargetType*>(output->allocate_data(nbytes));
-            for(auto idx = 0u; idx < block.row_count(); ++idx)
-                *ptr++ = func.apply(block[idx]);
-
+        auto col_data = col.data();
+        while(auto block = col_data.next<TDT>()) {
+            const auto row_count = block->row_count();
+            const auto nbytes = sizeof(TargetType) * row_count;
+            auto in_ptr = reinterpret_cast<const RawType*>(block->data());
+            auto out_ptr = reinterpret_cast<TargetType*>(output->allocate_data(nbytes));
+            for(auto idx = 0u; idx < row_count; ++idx) {
+                *out_ptr++ = func.apply(*in_ptr++);
+            }
             output->advance_data(nbytes);
         }
         output->set_row_data(col.row_count() - 1);
@@ -104,6 +103,69 @@ VariantData visit_unary_operator(const VariantData& left, Func&& func) {
         [](const auto&) -> VariantData {
             util::raise_rte("Bitset/ValueSet inputs not accepted to unary operators");
         }
+    }, left);
+}
+
+template <typename Func>
+VariantData unary_comparator(const Column& col, Func&& func) {
+    if (is_empty_type(col.type().data_type()) || is_integer_type(col.type().data_type())) {
+        if constexpr (std::is_same_v<Func, IsNullOperator&&>) {
+            return is_empty_type(col.type().data_type()) ? VariantData(FullResult{}) : VariantData(EmptyResult{});
+        } else if constexpr (std::is_same_v<Func, NotNullOperator&&>) {
+            return is_empty_type(col.type().data_type()) ? VariantData(EmptyResult{}) : VariantData(FullResult{});
+        } else {
+            internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected operator passed to unary_comparator");
+        }
+    }
+
+    auto output = std::make_shared<util::BitSet>(static_cast<util::BitSetSizeType>(col.row_count()));
+    details::visit_type(col.type().data_type(), [&](auto col_desc_tag) {
+        using TDT = ScalarTagType<decltype(col_desc_tag)>;
+        using RawType = typename TDT::DataTypeTag::raw_type;
+        auto column_data = col.data();
+        util::BitSet::bulk_insert_iterator inserter(*output);
+        auto pos = 0u;
+        while (auto block = column_data.next<TDT>()) {
+            auto ptr = reinterpret_cast<const RawType *>(block->data());
+            const auto row_count = block->row_count();
+            for (auto i = 0u; i < row_count; ++i, ++pos) {
+                if constexpr (is_floating_point_type(TDT::DataTypeTag::data_type)) {
+                    if (func.apply(*ptr++))
+                        inserter = pos;
+                } else if constexpr (is_sequence_type(TDT::DataTypeTag::data_type)) {
+                    if (func.template apply<StringTypeTag>(*ptr++))
+                        inserter = pos;
+                } else if constexpr (is_time_type(TDT::DataTypeTag::data_type)) {
+                    if (func.template apply<TimeTypeTag>(*ptr++))
+                        inserter = pos;
+                } else {
+                    internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Cannot perform null checks on {}", col.type());
+                }
+            }
+        }
+        inserter.flush();
+    });
+    return VariantData{std::move(output)};
+}
+
+template<typename Func>
+VariantData visit_unary_comparator(const VariantData& left, Func&& func) {
+    return std::visit(util::overload{
+            [&] (const ColumnWithStrings& l) -> VariantData {
+                return transform_to_placeholder(unary_comparator<decltype(func)>(*(l.column_), std::forward<decltype(func)>(func)));
+            },
+            [] (EmptyResult) -> VariantData {
+                if constexpr (std::is_same_v<Func, IsNullOperator>) {
+                    return FullResult{};
+                } else if constexpr (std::is_same_v<Func, NotNullOperator>) {
+                    return EmptyResult{};
+                } else {
+                    internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected operator passed to unary_comparator");
+                }
+            },
+            [](const auto&) -> VariantData {
+                util::raise_rte("Bitset/ValueSet inputs not accepted to unary comparators");
+            }
     }, left);
 }
 
