@@ -11,6 +11,7 @@
 #include <optional>
 
 #include <arcticdb/processing/signed_unsigned_comparison.hpp>
+#include <arcticdb/util/constants.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #ifdef ARCTICDB_USING_CONDA
     #include <robin_hood.h>
@@ -25,6 +26,9 @@ enum class OperationType : uint8_t {
     // Operator
     ABS,
     NEG,
+    // Comparison
+    ISNULL,
+    NOTNULL,
     // Boolean
     IDENTITY,
     NOT,
@@ -213,6 +217,42 @@ struct NegOperator {
 template<typename T, typename V = typename unary_arithmetic_promoted_type<T, NegOperator>::type>
 V apply(T t) {
     return -static_cast<V>(t);
+}
+};
+
+// Needed for null and not null operators as INT64, NANOSECONDS_UTC64, and all string columns hold int64_t values
+struct TimeTypeTag{};
+struct StringTypeTag{};
+
+struct IsNullOperator {
+template<typename tag, std::enable_if_t<std::is_same_v<tag, TimeTypeTag> || std::is_same_v<tag, StringTypeTag>, bool> = true>
+bool apply(int64_t t) {
+    if constexpr (std::is_same_v<tag, TimeTypeTag>) {
+        return t == NaT;
+    } else if constexpr (std::is_same_v<tag, StringTypeTag>) {
+        // Relies on string_nan == string_none - 1
+        return t >=  string_nan;
+    }
+}
+template<typename T, std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+bool apply(T t) {
+    return std::isnan(t);
+}
+};
+
+struct NotNullOperator {
+template<typename tag, std::enable_if_t<std::is_same_v<tag, TimeTypeTag> || std::is_same_v<tag, StringTypeTag>, bool> = true>
+bool apply(int64_t t) {
+    if constexpr (std::is_same_v<tag, TimeTypeTag>) {
+        return t != NaT;
+    } else if constexpr (std::is_same_v<tag, StringTypeTag>) {
+        // Relies on string_nan == string_none - 1
+        return t < string_nan;
+    }
+}
+template<typename T, std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+bool apply(T t) {
+    return !std::isnan(t);
 }
 };
 

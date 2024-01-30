@@ -25,6 +25,7 @@
 #endif
 
 #include <arcticdb/entity/types.hpp> // for entity::position_t
+#include <arcticdb/util/constants.hpp>
 
 namespace arcticdb {
 
@@ -45,9 +46,9 @@ public:
     StringPool *pool_;
 };
 
-constexpr OffsetString::offset_t not_a_string(){ return std::numeric_limits<OffsetString::offset_t>::max(); }
+constexpr OffsetString::offset_t not_a_string(){ return string_none; }
 
-constexpr OffsetString::offset_t nan_placeholder() { return not_a_string() - 1; }
+constexpr OffsetString::offset_t nan_placeholder() { return string_nan; }
 
 // Returns true if the provided offset does not represent None or NaN
 constexpr bool is_a_string(OffsetString::offset_t offset) {

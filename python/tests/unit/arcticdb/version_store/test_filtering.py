@@ -13,6 +13,7 @@ from hypothesis import assume, given, settings
 from hypothesis.extra.pandas import column, data_frames, range_indexes
 from hypothesis.extra.pytz import timezones as timezone_st
 import hypothesis.strategies as st
+from itertools import cycle
 from math import inf
 import numpy as np
 from pandas import DataFrame
@@ -1973,6 +1974,45 @@ def test_filter_string_nans_col_col(lmdb_version_store):
     q = q[q["a"] != q["b"]]
     pandas_query = "a != b"
     generic_filter_test_nans(lmdb_version_store, symbol, df, q, pandas_query)
+
+
+@pytest.mark.parametrize("method", ("isna", "notna", "isnull", "notnull"))
+@pytest.mark.parametrize("dtype", (np.int64, np.float32, np.float64, np.datetime64, str))
+def test_filter_null_filtering(lmdb_version_store, method, dtype):
+    lib = lmdb_version_store
+    symbol = "test_filter_null_filtering"
+    num_rows = 5
+    if dtype is np.int64:
+        data = np.arange(num_rows, dtype=dtype)
+        # These are the values used to represent:
+        # - NaT in timestamp columns
+        # - None in string columns
+        # - NaN in string columns
+        # respectively, so are most likely to cause issues
+        iinfo = np.iinfo(np.int64)
+        null_values = cycle([iinfo.min, iinfo.max, iinfo.max - 1])
+    elif dtype in (np.float32, np.float64):
+        data = np.arange(num_rows, dtype=dtype)
+        null_values = cycle([np.nan])
+    elif dtype is np.datetime64:
+        data = np.arange(np.datetime64("2024-01-01"), np.datetime64(f"2024-01-0{num_rows + 1}"), np.timedelta64(1, "D")).astype("datetime64[ns]")
+        null_values = cycle([np.datetime64("nat")])
+    else: # str
+        data = [str(idx) for idx in range(num_rows)]
+        null_values = cycle([None, np.nan])
+    for idx in range(num_rows):
+        if idx % 2 == 0:
+            data[idx] = next(null_values)
+
+    df = pd.DataFrame({"a": data}, index=np.arange(num_rows))
+    lib.write(symbol, df)
+
+    expected = df[getattr(df["a"], method)()]
+
+    q = QueryBuilder()
+    q = q[getattr(q["a"], method)()]
+    received = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(expected, received)
 
 
 def test_filter_batch_one_query(lmdb_version_store):

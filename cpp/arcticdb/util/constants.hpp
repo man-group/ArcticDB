@@ -11,6 +11,14 @@ namespace arcticdb {
 
 using timestamp = int64_t;
 
+using position_t = int64_t;
+
+constexpr auto string_none = std::numeric_limits<position_t>::max();
+
+constexpr auto string_nan = std::numeric_limits<position_t>::max() - 1;
+
+constexpr auto NaT = std::numeric_limits<timestamp>::min();
+
 static constexpr decltype(timestamp(0) - timestamp(0)) ONE_SECOND = 1'000'000'000;
 
 static constexpr decltype(timestamp(0) - timestamp(0)) ONE_MINUTE = 60 * ONE_SECOND;
