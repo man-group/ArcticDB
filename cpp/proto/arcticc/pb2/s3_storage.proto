@@ -22,4 +22,5 @@ message Config {
     bool https = 10;
     string region = 11;
     bool use_virtual_addressing = 12;
+    bool use_mock_storage_for_testing = 13;
 }
