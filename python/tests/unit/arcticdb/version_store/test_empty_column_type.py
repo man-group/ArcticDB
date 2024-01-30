@@ -354,3 +354,11 @@ class TestCanUpdateWithEmpty:
                 index=self.index()
             )
         )
+
+class TestEmptyTypesIsOverriden:
+    def test_cannot_append_different_type_after_first_not_none(self, lmdb_version_store_static_and_dynamic):
+        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": [None, None]}))
+        lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col": [1, 2, 3]}))
+        lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col": [None, None]}))
+        with pytest.raises(Exception):
+            lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col": ["some", "string"]}))
