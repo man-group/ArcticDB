@@ -520,6 +520,10 @@ if(${ARCTICDB_PYTHON_EXPLICIT_LINK})
     )
 endif()
 
+# Remove the checks around the GIL (e.g. for incref and decref).
+# See: https://pybind11.readthedocs.io/en/stable/changelog.html#version-2-11-1-july-17-2023
+add_compile_definitions(PYBIND11_NO_ASSERT_GIL_HELD_INCREF_DECREF)
+
 # Dependencies expose different names of their libraries depending
 # on their origin (i.e. vendored source or packages on conda-forge).
 if(${ARCTICDB_USING_CONDA})
