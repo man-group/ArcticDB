@@ -40,6 +40,7 @@
 #include <boost/interprocess/streams/bufferstream.hpp>
 
 #include <arcticdb/storage/s3/real_s3_client.hpp>
+#include <arcticdb/storage/s3/mock_s3_client.hpp>
 #include <arcticdb/storage/s3/detail-inl.hpp>
 
 #undef GetMessage
@@ -104,7 +105,11 @@ S3Storage::S3Storage(const LibraryPath &library_path, OpenMode mode, const Confi
 
     auto creds = get_aws_credentials(conf);
 
-    if (creds.GetAWSAccessKeyId() == USE_AWS_CRED_PROVIDERS_TOKEN && creds.GetAWSSecretKey() == USE_AWS_CRED_PROVIDERS_TOKEN){
+    if (conf.use_mock_storage_for_testing()){
+        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using Mock S3 storage");
+        s3_client_ = std::make_unique<MockS3Client>();
+    }
+    else if (creds.GetAWSAccessKeyId() == USE_AWS_CRED_PROVIDERS_TOKEN && creds.GetAWSSecretKey() == USE_AWS_CRED_PROVIDERS_TOKEN){
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using AWS auth mechanisms");
         s3_client_ = std::make_unique<RealS3Client>(get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, conf.use_virtual_addressing());
     } else {
