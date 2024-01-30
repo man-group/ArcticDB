@@ -415,6 +415,7 @@ set(arcticdb_srcs
         storage/s3/nfs_backed_storage.cpp
         storage/s3/s3_api.cpp
         storage/s3/real_s3_client.cpp
+        storage/s3/mock_s3_client.cpp
         storage/s3/s3_storage.cpp
         storage/s3/s3_storage_tool.cpp
         storage/storage_factory.cpp
