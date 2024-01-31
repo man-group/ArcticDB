@@ -35,16 +35,6 @@ std::string operation_to_string(S3Operation operation){
     util::raise_rte("Invalid s3 operation");
 }
 
-std::optional<S3Operation> string_to_operation(const std::string& str){
-    if (str == "Head") return S3Operation::HEAD;
-    if (str == "Get") return S3Operation::GET;
-    if (str == "Put") return S3Operation::PUT;
-    if (str == "Delete") return S3Operation::DELETE;
-    if (str == "Delete_local") return S3Operation::DELETE_LOCAL;
-    if (str == "List") return S3Operation::LIST;
-    return std::nullopt;
-}
-
 std::string MockS3Client::get_failure_trigger(
         const std::string& s3_object_name,
         S3Operation operation_to_fail,
@@ -69,11 +59,13 @@ const auto not_found_error = Aws::S3::S3Error(Aws::Client::AWSError<Aws::S3::S3E
 
 S3Result<std::monostate> MockS3Client::head_object(
         const std::string& s3_object_name,
-        const std::string &bucket_name) {
+        const std::string &bucket_name) const {
     auto maybe_error = has_failure_trigger(s3_object_name, S3Operation::HEAD);
-    if (maybe_error.has_value()) return {maybe_error.value()};
+    if (maybe_error.has_value()) {
+        return {maybe_error.value()};
+    }
 
-    if (store.find({bucket_name, s3_object_name}) == store.end()){
+    if (s3_contents.find({bucket_name, s3_object_name}) == s3_contents.end()){
         return {not_found_error};
     }
     return {std::monostate()};
@@ -82,12 +74,14 @@ S3Result<std::monostate> MockS3Client::head_object(
 
 S3Result<Segment> MockS3Client::get_object(
         const std::string &s3_object_name,
-        const std::string &bucket_name) {
+        const std::string &bucket_name) const {
     auto maybe_error = has_failure_trigger(s3_object_name, S3Operation::GET);
-    if (maybe_error.has_value()) return {maybe_error.value()};
+    if (maybe_error.has_value()) {
+        return {maybe_error.value()};
+    }
 
-    auto pos = store.find({bucket_name, s3_object_name});
-    if (pos == store.end()){
+    auto pos = s3_contents.find({bucket_name, s3_object_name});
+    if (pos == s3_contents.end()){
         return {not_found_error};
     }
     return {pos->second};
@@ -98,9 +92,11 @@ S3Result<std::monostate> MockS3Client::put_object(
         Segment &&segment,
         const std::string &bucket_name) {
     auto maybe_error = has_failure_trigger(s3_object_name, S3Operation::PUT);
-    if (maybe_error.has_value()) return {maybe_error.value()};
+    if (maybe_error.has_value()) {
+        return {maybe_error.value()};
+    }
 
-    store.insert_or_assign({bucket_name, s3_object_name}, std::move(segment));
+    s3_contents.insert_or_assign({bucket_name, s3_object_name}, std::move(segment));
 
     return {std::monostate()};
 }
@@ -110,42 +106,48 @@ S3Result<DeleteOutput> MockS3Client::delete_objects(
         const std::string& bucket_name) {
     for (auto& s3_object_name : s3_object_names){
         auto maybe_error = has_failure_trigger(s3_object_name, S3Operation::DELETE);
-        if (maybe_error.has_value()) return {maybe_error.value()};
+        if (maybe_error.has_value()) {
+            return {maybe_error.value()};
+        }
     }
 
     DeleteOutput output;
     for (auto& s3_object_name : s3_object_names){
         auto maybe_error = has_failure_trigger(s3_object_name, S3Operation::DELETE_LOCAL);
-        if (maybe_error.has_value())
+        if (maybe_error.has_value()) {
             output.failed_deletes.emplace_back(s3_object_name);
-        else
-            store.erase({bucket_name, s3_object_name});
+        }
+        else {
+            s3_contents.erase({bucket_name, s3_object_name});
+        }
     }
     return {output};
 }
 
-// Using a fixed list length since it's only being used for simple tests.
+// Using a fixed page size since it's only being used for simple tests.
 // If we ever need to configure it we should move it to the s3 proto config instead.
-constexpr auto list_length = 10;
+constexpr auto page_size = 10;
 S3Result<ListObjectsOutput> MockS3Client::list_objects(
         const std::string& name_prefix,
         const std::string& bucket_name,
-        const std::optional<std::string> continuation_token) {
+        const std::optional<std::string> continuation_token) const {
     // Terribly inefficient but fine for tests.
     auto matching_names = std::vector<std::string>();
-    for (auto& key : store){
+    for (auto& key : s3_contents){
         if (key.first.first == bucket_name && key.first.second.rfind(name_prefix, 0) == 0){
             matching_names.emplace_back(key.first.second);
         }
     }
 
     auto start_from = 0u;
-    if (continuation_token.has_value()) start_from = std::stoi(continuation_token.value());
+    if (continuation_token.has_value()) {
+        start_from = std::stoi(continuation_token.value());
+    }
 
     ListObjectsOutput output;
     auto end_to = matching_names.size();
-    if (start_from + list_length < end_to){
-        end_to = start_from + list_length;
+    if (start_from + page_size < end_to){
+        end_to = start_from + page_size;
         output.next_continuation_token = std::to_string(end_to);
     }
 
