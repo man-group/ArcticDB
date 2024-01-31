@@ -23,7 +23,7 @@ inline const fs::path TEST_DATABASES_PATH = "./test_databases";
 class StorageFactory {
 public:
     virtual ~StorageFactory() = default;
-    virtual std::unique_ptr<acs::Storage> Create() = 0;
+    virtual std::unique_ptr<acs::Storage> create() = 0;
 };
 
 class LMDBStorageFactory : public StorageFactory {
@@ -35,13 +35,12 @@ public:
 
     explicit LMDBStorageFactory(uint64_t map_size) : map_size(map_size) { }
 
-    std::unique_ptr<acs::Storage> Create() override {
+    std::unique_ptr<acs::Storage> create() override {
         arcticdb::proto::lmdb_storage::Config cfg;
 
         fs::path db_name = "test_lmdb";
         cfg.set_path((TEST_DATABASES_PATH / db_name).generic_string());
         cfg.set_map_size(map_size);
-        cfg.set_recreate_if_exists(true);
         cfg.set_recreate_if_exists(true);
 
         acs::LibraryPath library_path{"a", "b"};
@@ -60,7 +59,8 @@ protected:
         if (!fs::exists(TEST_DATABASES_PATH)) {
             fs::create_directories(TEST_DATABASES_PATH);
         }
-        storage = GetParam()->Create();
+
+        storage = GetParam()->create();
     }
 
     void TearDown() override {
@@ -85,7 +85,6 @@ TEST_P(GenericStorageTest, WriteDuplicateKeyException) {
     acs::KeySegmentPair kv1(k);
     kv1.segment().set_buffer(std::make_shared<ac::Buffer>());
 
-
     ASSERT_THROW({
         storage->write(std::move(kv1));
     },  acs::DuplicateKeyException);
@@ -97,8 +96,8 @@ TEST_P(GenericStorageTest, ReadKeyNotFoundException) {
 
     ASSERT_TRUE(!storage->key_exists(k));
     ASSERT_THROW({
-                    storage->read(k, acs::ReadKeyOpts{});
-                 }, acs::KeyNotFoundException);
+        storage->read(k, acs::ReadKeyOpts{});
+    },  acs::KeyNotFoundException);
 
 }
 
@@ -111,8 +110,8 @@ TEST_P(GenericStorageTest, UpdateKeyNotFoundException) {
 
     ASSERT_TRUE(!storage->key_exists(k));
     ASSERT_THROW({
-                    storage->update(std::move(kv), acs::UpdateOpts{});
-                 }, acs::KeyNotFoundException);
+        storage->update(std::move(kv), acs::UpdateOpts{});
+    },  acs::KeyNotFoundException);
 
 }
 
@@ -121,8 +120,8 @@ TEST_P(GenericStorageTest, RemoveKeyNotFoundException) {
 
     ASSERT_TRUE(!storage->key_exists(k));
     ASSERT_THROW({
-                     storage->remove(k, acs::RemoveOpts{});
-                 }, acs::KeyNotFoundException);
+        storage->remove(k, acs::RemoveOpts{});
+    },  acs::KeyNotFoundException);
 
 }
 
@@ -134,7 +133,7 @@ INSTANTIATE_TEST_SUITE_P(
 
 // LMDB Storage specific tests
 
-class LMDBStorageTestBase : public ::testing::TestWithParam<std::shared_ptr<LMDBStorageFactory>> {
+class LMDBStorageTestBase : public ::testing::Test {
 protected:
     void SetUp() override {
         if (!fs::exists(TEST_DATABASES_PATH)) {
@@ -150,7 +149,7 @@ protected:
 
 TEST_F(LMDBStorageTestBase, WriteMapFullError) {
     LMDBStorageFactory factory(32ULL * (1ULL << 10));
-    auto storage = std::unique_ptr<acs::lmdb::LmdbStorage>(dynamic_cast<acs::lmdb::LmdbStorage*>(factory.Create().release()));
+    auto storage = std::unique_ptr<acs::lmdb::LmdbStorage>(dynamic_cast<acs::lmdb::LmdbStorage*>(factory.create().release()));
 
     ac::entity::AtomKey k = ac::entity::atom_key_builder().gen_id(0).build<ac::entity::KeyType::VERSION>("sym");
     acs::KeySegmentPair kv(k);
@@ -158,7 +157,7 @@ TEST_F(LMDBStorageTestBase, WriteMapFullError) {
     kv.segment().set_buffer(std::make_shared<ac::Buffer>(40000));
 
     ASSERT_THROW({
-                    storage->write(std::move(kv));
-                 }, ::lmdb::map_full_error);
+        storage->write(std::move(kv));
+    },  ::lmdb::map_full_error);
 
 }
