@@ -335,7 +335,7 @@ public:
     
     StorageLockWrapper get_storage_lock(const StreamId& stream_id) override;
 
-    void delete_storage() override;
+    void delete_storage(const bool continue_on_error = true) override;
 
     void configure(
         const storage::LibraryDescriptor::VariantStoreConfig & cfg) final;

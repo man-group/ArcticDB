@@ -1143,7 +1143,7 @@ std::vector<SliceAndKey> PythonVersionStore::list_incompletes(const StreamId& st
     return get_incomplete(store(), stream_id, unspecified_range(), 0u, true, false);
 }
 
-void PythonVersionStore::clear() {
+void PythonVersionStore::clear(const bool continue_on_error) {
     if (store()->fast_delete()) {
         // Most storage backends have a fast deletion method for a db/collection equivalent, eg. drop() for mongo and
         // lmdb and iterating each key is always going to be suboptimal.
@@ -1151,7 +1151,7 @@ void PythonVersionStore::clear() {
         return;
     }
 
-    delete_all(store(), true);
+    delete_all(store(), continue_on_error);
 }
 
 bool PythonVersionStore::empty() {

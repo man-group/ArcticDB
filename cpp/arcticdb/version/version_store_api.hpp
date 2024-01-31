@@ -311,7 +311,7 @@ class PythonVersionStore : public LocalVersionedEngine {
         const std::optional<bool>& use_symbol_list = std::nullopt,
         const std::optional<bool>& all_symbols = std::nullopt);
 
-    void clear();
+    void clear(const bool continue_on_error = true);
     bool empty();
     void force_delete_symbol(const StreamId& stream_id);
 

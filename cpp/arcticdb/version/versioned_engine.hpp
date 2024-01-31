@@ -160,7 +160,7 @@ public:
     virtual StorageLockWrapper get_storage_lock(
         const StreamId& stream_id) = 0;
 
-    virtual void delete_storage() = 0;
+    virtual void delete_storage(const bool continue_on_error = true) = 0;
 
     virtual void configure(
         const storage::LibraryDescriptor::VariantStoreConfig & cfg) = 0;

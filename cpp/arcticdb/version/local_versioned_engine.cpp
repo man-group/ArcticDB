@@ -1740,8 +1740,8 @@ StorageLockWrapper LocalVersionedEngine::get_storage_lock(const StreamId& stream
     return StorageLockWrapper{stream_id, store_};
 }
 
-void LocalVersionedEngine::delete_storage() {
-    delete_all(store_, true);
+void LocalVersionedEngine::delete_storage(const bool continue_on_error) {
+    delete_all(store_, continue_on_error);
 }
 
 void LocalVersionedEngine::configure(const storage::LibraryDescriptor::VariantStoreConfig & cfg){
