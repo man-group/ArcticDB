@@ -18,10 +18,16 @@ namespace arcticdb::stream {
 
 inline void write_key_to_segment(SegmentInMemory &segment, const entity::AtomKey &key) {
     ARCTICDB_DEBUG(log::storage(), "Writing key row {}", key.view());
-    std::visit([&segment](auto &&val) { segment.set_scalar(int(pipelines::index::Fields::start_index), val); }, key.start_index());
-    std::visit([&segment](auto &&val) { segment.set_scalar(int(pipelines::index::Fields::end_index), val); }, key.end_index());
+    std::visit([&segment](auto &&val) { segment.set_scalar(int(pipelines::index::Fields::start_index), std::forward<
+        decltype(val)>(val)); }, key.start_index());
+
+    std::visit([&segment](auto &&val) { segment.set_scalar(int(pipelines::index::Fields::end_index), std::forward<
+        decltype(val)>(val)); }, key.end_index());
+
     segment.set_scalar(int(pipelines::index::Fields::version_id), key.version_id());
-    std::visit([&segment](auto &&val) { segment.set_scalar(int(pipelines::index::Fields::stream_id), val); }, key.id());
+    std::visit([&segment](auto &&val) { segment.set_scalar(int(pipelines::index::Fields::stream_id), std::forward<
+        decltype(val)>(val)); }, key.id());
+
     segment.set_scalar(int(pipelines::index::Fields::creation_ts), key.creation_ts());
     segment.set_scalar(int(pipelines::index::Fields::content_hash), key.content_hash());
     segment.set_scalar(int(pipelines::index::Fields::index_type), static_cast<uint8_t>(stream::get_index_value_type(key)));
@@ -35,7 +41,7 @@ class FlatIndexingPolicy {
   public:
     template<class C>
     FlatIndexingPolicy(StreamId stream_id, C&& c) :
-        callback_(std::move(c)),
+        callback_(std::forward<C>(c)),
         schema_(idx_schema(stream_id, DataIndexType::default_index())),
         segment_(schema_.default_descriptor()) {}
 
@@ -65,7 +71,7 @@ class IndexAggregator {
   public:
     template<class C>
     IndexAggregator(StreamId stream_id, C &&c):
-        indexing_policy_(stream_id, std::move(c)) {}
+        indexing_policy_(stream_id, std::forward<C>(c)) {}
 
     void add_key(const AtomKey &key) {
         indexing_policy_.add_key(key);

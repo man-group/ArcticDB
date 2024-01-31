@@ -17,8 +17,6 @@
 #include <vector>
 
 namespace arcticdb {
-using namespace arcticdb::entity;
-using namespace arcticdb::stream;
 
 enum class LoadType :
         uint32_t {
@@ -138,6 +136,11 @@ struct VersionMapEntry {
      */
     VersionMapEntry() = default;
 
+    VersionMapEntry(std::deque<AtomKey>&& keys, std::optional<AtomKey>&& head) :
+        head_(std::move(head)),
+        keys_(std::move(keys)) {
+    }
+
     ARCTICDB_MOVE_COPY_DEFAULT(VersionMapEntry)
 
     void sort() {
@@ -218,8 +221,8 @@ struct VersionMapEntry {
             strm << fmt::format("    {}", key) << std::endl;
 
         strm << "Tombstones: " << std::endl << std::endl;
-        for(const auto& tombstone: tombstones_)
-            strm << fmt::format("    {} - {}", tombstone.first, tombstone.second) << std::endl;
+        for(const auto& [tombstone_id, tombstone_key]: tombstones_)
+            strm << fmt::format("    {} - {}", tombstone_id, tombstone_key) << std::endl;
 
         return strm.str();
     }

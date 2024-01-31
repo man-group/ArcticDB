@@ -1,0 +1,1 @@
+#include <arcticdb/storage/coalesced/coalesced_storage.hpp>

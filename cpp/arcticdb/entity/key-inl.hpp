@@ -5,7 +5,9 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#pragma once
+#ifndef ARCTICDB_KEY_H_
+#error "This should only be included by key.hpp"
+#endif
 
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/hash.hpp>
@@ -58,11 +60,11 @@ using ContentHash = std::uint64_t;
 
 enum class KeyType : int {
     /*
-     * Originally planned to be used for treaming stuff, not in general use atm.
+     * TODO: For the Kestrel streaming stuff, not in general use atm.
      */
     STREAM_GROUP = 0,
     /*
-     * Originally planned to be used for treaming stuff, not in general use atm.
+     * TODO: For Kestrel streaming stuff, not in general use atm.
      */
     GENERATION = 1,
     // The following keys are string-id-based
@@ -179,8 +181,8 @@ enum class KeyType : int {
      */
     COLUMN_STATS = 25,
     /*
-    * Coalesce keys into larger objects
-    */
+     * Contains segments that have been compacted into larger physical chunks
+     */
     COALESCE = 26,
     UNDEFINED
 };
@@ -213,7 +215,8 @@ inline std::vector<KeyType> key_types_read_precedence() {
     return output;
 }
 
-} //namespace arcticdb::entity
+
+ } //namespace arcticdb::entity
 
 namespace std {
     template <> struct hash<arcticdb::entity::KeyType >
@@ -235,7 +238,7 @@ char key_type_short_name(KeyType key_type);
 enum class VariantType : char {
     STRING_TYPE = 's',
     NUMERIC_TYPE = 'd',
-    UNSIGNED_TYPE ='n',
+    UNSIGNED_TYPE = 'c',
     UNKNOWN_TYPE = 'u'
 };
 
@@ -281,25 +284,24 @@ auto foreach_key_type_write_precedence(Function&& func) {
     }
 }
 
-inline KeyType key_type_from_int(int type_num) {
-    util::check(type_num > 0 && type_num < int(KeyType::UNDEFINED), "Unrecognized key type number {}", type_num);
-    return KeyType(type_num);
-}
 
 } // namespace arcticdb::entity
 
+namespace fmt {
+
+using namespace arcticdb::entity;
 
 template<>
-struct fmt::formatter<arcticdb::entity::KeyType> {
+struct formatter<KeyType> {
 
     template<typename ParseContext>
     constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
 
     template<typename FormatContext>
-    auto format(const arcticdb::entity::KeyType k, FormatContext &ctx) const {
-        using namespace arcticdb::entity;
+    auto format(const KeyType k, FormatContext &ctx) const {
         return  fmt::format_to(ctx.out(), "{}", key_type_short_name(k));
     }
 };
 
+}
 

@@ -19,12 +19,12 @@ namespace arcticdb::pipelines {
 using namespace arcticdb::entity;
 
 struct InputTensorFrame {
-
     template<class T>
     static constexpr bool is_valid_index_v =
         std::is_same_v<T, stream::TimeseriesIndex> ||
         std::is_same_v<T, stream::RowCountIndex> ||
-        std::is_same_v<T, stream::TableIndex>;
+        std::is_same_v<T, stream::TableIndex> ||
+        std::is_same_v<T, stream::TimeSymbolIndex>;
 
     InputTensorFrame() :
         index(stream::empty_index()) {}
