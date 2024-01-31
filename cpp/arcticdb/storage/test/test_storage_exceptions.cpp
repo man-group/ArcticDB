@@ -64,11 +64,11 @@ protected:
     }
 
     void TearDown() override {
+        storage.reset();
+
         if (fs::exists(TEST_DATABASES_PATH)) {
             fs::remove_all(TEST_DATABASES_PATH);
         }
-
-        storage = nullptr;
     }
 };
 
