@@ -232,10 +232,10 @@ auto get_s3_config(const ConfigType& conf) {
     client_configuration.connectTimeoutMs = conf.connect_timeout() == 0 ? 30000 : conf.connect_timeout();
     client_configuration.requestTimeoutMs = conf.request_timeout() == 0 ? 200000 : conf.request_timeout();
 
-#ifdef _WIN32
-    // Use more modern WIN_INET rather than WINHTTP for better error messages
-    client_configuration.httpLibOverride = Aws::Http::TransferLibType::WIN_INET_CLIENT;
-#endif
+    const bool use_win_inet = ConfigsMap::instance()->get_int("S3Storage.UseWinINet", 0);
+    if (use_win_inet) {
+        client_configuration.httpLibOverride = Aws::Http::TransferLibType::WIN_INET_CLIENT;
+    }
 
     return client_configuration;
 }
