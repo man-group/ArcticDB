@@ -150,7 +150,7 @@ enum class FormatType : char {
     't', // This is a readable type, with delimiters, for things that require keys to consist of printable characters
 };
 
-size_t max_id_size(const VariantId& id) {
+inline size_t max_id_size(const VariantId& id) {
     return util::variant_match(id,
     [] (const StringId& ) {
        return max_string_size();
@@ -160,7 +160,7 @@ size_t max_id_size(const VariantId& id) {
     });
 }
 
-size_t max_index_size(const IndexDescriptor& index) {
+inline size_t max_index_size(const IndexDescriptor& index) {
     switch(index.type()) {
     case IndexDescriptor::STRING:
         return max_string_size();

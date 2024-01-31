@@ -59,7 +59,7 @@ private:
     }
 };
 
-TimeSymbol time_symbol_from_key(const AtomKey& key) {
+inline TimeSymbol time_symbol_from_key(const AtomKey& key) {
     return {key.id(), key.creation_ts()};
 }
 
@@ -75,7 +75,7 @@ struct IndexVersionPair {
     }
 };
 
-std::string coalesced_id_for_key_type(KeyType key_type) {
+inline std::string coalesced_id_for_key_type(KeyType key_type) {
     return fmt::format("__coalesce_{}__", key_type_long_name(key_type));
 }
 

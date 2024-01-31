@@ -143,7 +143,7 @@ SegmentInMemory prepare_output_frame(
 
 SegmentInMemory do_direct_read_or_process(
     const std::shared_ptr<Store>& store,
-    const ReadQuery& read_query,
+    ReadQuery& read_query,
     const ReadOptions& read_options,
     const std::shared_ptr<PipelineContext>& pipeline_context,
     const std::shared_ptr<BufferHolder>& buffers);

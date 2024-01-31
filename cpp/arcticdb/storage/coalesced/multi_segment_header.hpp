@@ -25,7 +25,7 @@ enum class MultiSegmentFields : uint32_t {
     size
 };
 
-StreamDescriptor multi_segment_descriptor(StreamId stream_id) {
+inline StreamDescriptor multi_segment_descriptor(StreamId stream_id) {
     return stream_descriptor(stream_id, stream::RowCountIndex(), {
         scalar_field(DataType::TIME_SYM64, "time_symbol"),
         scalar_field(DataType::UINT64, "stream_id"),

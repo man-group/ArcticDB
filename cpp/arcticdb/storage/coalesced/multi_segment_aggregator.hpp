@@ -3,7 +3,7 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/codec/segment.hpp>
-#include <arcticdb/storage/coalesced/multisegment.hpp>
+#include <arcticdb/storage/coalesced/multi_segment.hpp>
 #include <arcticdb/storage/coalesced/coalesced_storage_common.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
 #include <arcticdb/stream/stream_utils.hpp>

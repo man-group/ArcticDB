@@ -16,12 +16,12 @@
 
 namespace arcticdb::storage {
 
-std::unique_ptr<Storage> create_storage(
+std::shared_ptr<Storage> create_storage(
     const LibraryPath &library_path,
     OpenMode mode,
     const arcticdb::proto::storage::VariantStorage &storage_descriptor) {
 
-    std::unique_ptr<Storage> storage;
+    std::shared_ptr<Storage> storage;
     auto type_name = util::get_arcticdb_pb_type_name(storage_descriptor.config());
 
     if (type_name == s3::S3Storage::Config::descriptor()->full_name()) {
