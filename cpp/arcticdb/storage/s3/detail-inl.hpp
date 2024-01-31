@@ -135,7 +135,7 @@ namespace s3 {
                           const ReadVisitor &visitor,
                           const std::string &root_folder,
                           const std::string &bucket_name,
-                          S3ClientWrapper &s3_client,
+                          const S3ClientWrapper &s3_client,
                           KeyBucketizer &&bucketizer,
                           ReadKeyOpts opts) {
             ARCTICDB_SAMPLE(S3StorageRead, 0)
@@ -242,7 +242,7 @@ namespace s3 {
                                   Visitor &&visitor,
                                   const std::string &root_folder,
                                   const std::string &bucket_name,
-                                  S3ClientWrapper &s3_client,
+                                  const S3ClientWrapper &s3_client,
                                   KeyBucketizer &&bucketizer,
                                   PrefixHandler &&prefix_handler = default_prefix_handler(),
                                   const std::string &prefix = std::string{}
@@ -306,7 +306,7 @@ namespace s3 {
                 const VariantKey &key,
                 const std::string &root_folder,
                 const std::string &bucket_name,
-                S3ClientWrapper &s3_client,
+                const S3ClientWrapper &s3_client,
                 KeyBucketizer &&b
         ) {
             auto key_type_dir = key_type_folder(root_folder, variant_key_type(key));

@@ -58,9 +58,9 @@ struct DeleteOutput{
 // It can be derived as either a real connection to S3 or a mock used for unit tests.
 class S3ClientWrapper {
 public:
-    virtual S3Result<std::monostate> head_object(const std::string& s3_object_name, const std::string& bucket_name) = 0;
+    virtual S3Result<std::monostate> head_object(const std::string& s3_object_name, const std::string& bucket_name) const = 0;
 
-    virtual S3Result<Segment> get_object(const std::string& s3_object_name, const std::string& bucket_name) = 0;
+    virtual S3Result<Segment> get_object(const std::string& s3_object_name, const std::string& bucket_name) const = 0;
 
     virtual S3Result<std::monostate> put_object(
             const std::string& s3_object_name,
@@ -74,7 +74,7 @@ public:
     virtual S3Result<ListObjectsOutput> list_objects(
             const std::string& prefix,
             const std::string& bucket_name,
-            const std::optional<std::string> continuation_token) = 0;
+            const std::optional<std::string> continuation_token) const = 0;
 };
 
 }

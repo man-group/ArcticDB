@@ -36,7 +36,7 @@ namespace s3 {
 
 S3Result<std::monostate> RealS3Client::head_object(
         const std::string& s3_object_name,
-        const std::string &bucket_name) {
+        const std::string &bucket_name) const {
 
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Looking for head of object {}", s3_object_name);
     Aws::S3::Model::HeadObjectRequest request;
@@ -104,13 +104,13 @@ struct S3IOStream : public std::iostream {
     }
 };
 
-inline Aws::IOStreamFactory S3StreamFactory() {
+Aws::IOStreamFactory S3StreamFactory() {
     return [=]() { return Aws::New<S3IOStream>(""); };
 }
 
 S3Result<Segment> RealS3Client::get_object(
         const std::string &s3_object_name,
-        const std::string &bucket_name) {
+        const std::string &bucket_name) const {
 
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Looking for object {}", s3_object_name);
     Aws::S3::Model::GetObjectRequest request;
@@ -202,7 +202,7 @@ S3Result<DeleteOutput> RealS3Client::delete_objects(
 S3Result<ListObjectsOutput> RealS3Client::list_objects(
         const std::string& name_prefix,
         const std::string& bucket_name,
-        const std::optional<std::string> continuation_token) {
+        const std::optional<std::string> continuation_token) const {
 
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Searching for objects in bucket {} with prefix {}", bucket_name,
                            name_prefix);
