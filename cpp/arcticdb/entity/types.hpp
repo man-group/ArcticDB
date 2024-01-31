@@ -14,6 +14,7 @@
 #include <google/protobuf/util/message_differencer.h>
 
 #include <fmt/format.h>
+#include <pybind11/pybind11.h>
 
 #include <algorithm>
 #include <cstdint>

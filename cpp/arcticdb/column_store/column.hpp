@@ -7,37 +7,29 @@
 
 #pragma once
 
-#include <arcticdb/column_store/chunked_buffer.hpp>
-#include <arcticdb/column_store/column_data.hpp>
-#include <arcticdb/entity/native_tensor.hpp>
-#include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/bitset.hpp>
+#include <arcticdb/util/cursor.hpp>
+#include <arcticdb/util/preconditions.hpp>
+#include <arcticdb/column_store/string_pool.hpp>
+#include <arcticdb/util/offset_string.hpp>
+#include <arcticdb/column_store/column_data.hpp>
+#include <arcticdb/entity/performance_tracing.hpp>
+#include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/util/cursored_buffer.hpp>
 #include <arcticdb/util/flatten_utils.hpp>
-#include <arcticdb/util/preconditions.hpp>
+#include <arcticdb/entity/native_tensor.hpp>
 #include <arcticdb/util/sparse_utils.hpp>
 
+#include <folly/Likely.h>
 #include <folly/container/Enumerate.h>
-#include <pybind11/pybind11.h>
-#include <pybind11/numpy.h>
+#include <bitmagic/bm.h>
+#include <bitmagic/bmserial.h>
 
-#include <numeric>
 #include <optional>
-
-namespace py = pybind11;
+#include <numeric>
 
 namespace arcticdb {
-
-/// @cond
-
-// this is needed to make templates of templates work
-// since py::array_t has more than one template parameter
-// (the rest are defaulted)
-template< class T>
-using py_array_t = py::array_t<T>;
-
-/// @endcond
 
 using namespace arcticdb::entity;
 
@@ -234,14 +226,9 @@ public:
 
     bool sparse_permitted() const;
 
-    void backfill_sparse_map(ssize_t to_row) {
-        ARCTICDB_TRACE(log::version(), "Backfilling sparse map to position {}", to_row);
-        sparse_map().set_range(0, bv_size(to_row), true);
-    }
+    void backfill_sparse_map(ssize_t to_row);
 
-    std::optional<util::BitMagic>& opt_sparse_map() {
-        return sparse_map_;
-    }
+    std::optional<util::BitMagic>& opt_sparse_map();
 
     template<typename TagType>
     auto begin() const {
@@ -350,35 +337,20 @@ public:
         ++last_logical_row_;
     }
 
-    template<class T, std::enable_if_t< std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
-    void set_array(ssize_t row_offset, py::array_t<T>& val) {
-        ARCTICDB_SAMPLE(ColumnSetArray, RMTSF_Aggregate)
-        magic_.check();
-        util::check_arg(last_logical_row_ + 1 == row_offset, "set_array expected row {}, actual {} ", last_logical_row_ + 1, row_offset);
-        data_.ensure_bytes(val.nbytes());
-        shapes_.ensure<shape_t>(val.ndim());
-        memcpy(shapes_.ptr(), val.shape(), val.ndim() * sizeof(shape_t));
-        auto info = val.request();
-        util::FlattenHelper<T, py_array_t> flatten(val);
-        auto data_ptr = reinterpret_cast<T*>(data_.ptr());
-        flatten.flatten(data_ptr, reinterpret_cast<const T*>(info.ptr));
-        update_offsets(val.nbytes());
-        data_.commit();
-        shapes_.commit();
-        ++last_logical_row_;
-    }
-
     void set_empty_array(ssize_t row_offset, int dimension_count);
     void set_type(TypeDescriptor td);
+
     ssize_t last_row() const;
 
 
     void check_magic() const;
 
     void unsparsify(size_t num_rows);
+
     void sparsify();
 
     void string_array_prologue(ssize_t row_offset, size_t num_strings);
+
     void string_array_epilogue(size_t num_strings);
 
     void set_string_array(ssize_t row_offset,
@@ -386,11 +358,21 @@ public:
                           size_t num_strings,
                           char *input,
                           StringPool &string_pool);
+
     void set_string_list(ssize_t row_offset,
                          const std::vector<std::string> &input,
                          StringPool &string_pool);
 
+    shape_t *allocate_shapes(std::size_t bytes);
+
+    uint8_t *allocate_data(std::size_t bytes);
+
+    void advance_data(std::size_t size);
+
+    void advance_shapes(std::size_t size);
+
     void append_sparse_map(const util::BitMagic& bv, position_t at_row);
+
     void append(const Column& other, position_t at_row);
 
     // Sorts the column by an external column's jive_table.
@@ -437,86 +419,33 @@ public:
 
     position_t row_count() const;
 
-    std::optional<StringArrayData> string_array_at(position_t idx, const StringPool &string_pool) {
-        util::check_arg(idx < row_count(), "String array index out of bounds in column");
-        util::check_arg(type_.dimension() == Dimension::Dim1, "String array should always be one dimensional");
-        if (!inflated_)
-            inflate_string_arrays(string_pool);
+    std::optional<StringArrayData> string_array_at(position_t idx, const StringPool &string_pool);
 
-        const shape_t *shape_ptr = shape_index(idx);
-        auto num_strings = *shape_ptr;
-        ssize_t string_size = offsets_[idx] / num_strings;
-        return StringArrayData{num_strings, string_size, data_.ptr_cast<char>(bytes_offset(idx), num_strings * string_size)};
-    }
+    ChunkedBuffer::Iterator get_iterator() const;
 
-    ChunkedBuffer::Iterator get_iterator() const {
-        return {const_cast<ChunkedBuffer*>(&data_.buffer()), get_type_size(type_.data_type())};
-    }
+    size_t bytes() const;
 
-    size_t bytes() const {
-        return data_.bytes();
-    }
+    ColumnData data() const;
 
-    ColumnData data() const {
-        return ColumnData(&data_.buffer(), &shapes_.buffer(), type_, sparse_map_ ? &*sparse_map_ : nullptr);
-    }
+    const uint8_t* ptr() const;
 
-    const uint8_t* ptr() const {
-        return data_.buffer().data();
-    }
+    uint8_t* ptr();
 
-    uint8_t* ptr() {
-        return data_.buffer().data();
-    }
+    TypeDescriptor type() const;
 
-    TypeDescriptor type() const { return type_; }
+    size_t num_blocks() const;
 
-    size_t num_blocks() const  {
-        return data_.buffer().num_blocks();
-    }
+    const shape_t* shape_ptr() const;
 
-    const shape_t* shape_ptr() const {
-        return shapes_.ptr_cast<shape_t>(0, num_shapes());
-    }
+    void set_orig_type(const TypeDescriptor& desc);
 
-    void set_orig_type(const TypeDescriptor& desc) {
-        orig_type_ = desc;
-    }
+    bool has_orig_type() const;
 
-    bool has_orig_type() const {
-        return static_cast<bool>(orig_type_);
-    }
+    const TypeDescriptor& orig_type() const;
 
-    const TypeDescriptor& orig_type() const  {
-        return orig_type_.value();
-    }
+    void compact_blocks();
 
-    void compact_blocks() {
-        data_.compact_blocks();
-    }
-
-    const auto& blocks() const {
-        return data_.buffer().blocks();
-    }
-
-    inline shape_t *allocate_shapes(std::size_t bytes) {
-        shapes_.ensure_bytes(bytes);
-        return reinterpret_cast<shape_t *>(shapes_.ptr());
-    }
-
-    inline uint8_t *allocate_data(std::size_t bytes) {
-        util::check(bytes != 0, "Allocate data called with zero size");
-        data_.ensure_bytes(bytes);
-        return data_.ptr();
-    }
-
-    inline void advance_data(std::size_t size) {
-        data_.advance(position_t(size));
-    }
-
-    inline void advance_shapes(std::size_t size) {
-        shapes_.advance(position_t(size));
-    }
+    const MemBlockVectorType& blocks() const;
 
     template<typename T>
     std::optional<T> scalar_at(position_t row) const {
