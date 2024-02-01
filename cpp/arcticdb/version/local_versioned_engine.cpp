@@ -1768,29 +1768,38 @@ timestamp LocalVersionedEngine::latest_timestamp(const std::string& symbol) {
 }
 
 std::unordered_map<KeyType, std::pair<size_t, size_t>> LocalVersionedEngine::scan_object_sizes() {
-    std::unordered_map<KeyType, std::pair<size_t, size_t>> sizes;
+    std::unordered_map<KeyType, std::pair<size_t, std::atomic<size_t>>> sizes;
     foreach_key_type([&store=store(), &sizes=sizes](KeyType key_type) {
-        std::vector<std::pair<VariantKey, stream::StreamSource::ReadContinuation>> keys_and_continuations;
-        auto& pair = sizes[key_type];
-        store->iterate_type(key_type, [&keys_and_continuations, &pair](const VariantKey &&k) {
-            keys_and_continuations.emplace_back(
-                std::forward<const VariantKey>(k),
-                [&pair](auto &&ks) {
-                    auto key_seg = std::move(ks);
-                    ++pair.first;
-                    pair.second += key_seg.segment().total_segment_size();
-                    return key_seg.variant_key();
-                });
+        std::vector<std::pair<VariantKey, stream::StreamSource::ReadContinuation>> keys;
+        store->iterate_type(key_type, [&keys, &sizes, &key_type](const VariantKey&& k) {
+            auto& pair = sizes[key_type];
+            ++pair.first;
+            auto& size_counter = pair.second;
+            keys.emplace_back(std::forward<const VariantKey>(k), [&size_counter] (auto&& ks) {
+                auto key_seg = std::move(ks);
+                size_counter += key_seg.segment().total_segment_size();
+                return key_seg.variant_key();
+            });
         });
+
+        if(!keys.empty()) {
+            store->batch_read_compressed(std::move(keys), BatchReadArgs{}).get();
+        }
+
     });
 
-    return sizes;
+    std::unordered_map<KeyType, std::pair<size_t, size_t>> result;
+    for (const auto& [k, v] : sizes) {
+        result[k] = v;
+    }
+    return result;
 }
 
 std::unordered_map<StreamId, std::unordered_map<KeyType, size_t>> LocalVersionedEngine::scan_object_sizes_by_stream() {
     std::unordered_map<StreamId, std::unordered_map<KeyType, size_t>> sizes;
     auto streams = symbol_list().get_symbols(store());
     std::vector<KeyType> key_types {KeyType::TABLE_DATA, KeyType::TABLE_INDEX, KeyType::VERSION};
+
     for (const auto& stream : streams) {
         auto& sizes_for_stream = sizes[stream];
         for (const auto& key_type : key_types) {
