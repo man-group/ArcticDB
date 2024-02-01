@@ -262,7 +262,7 @@ folly::Future<entity::AtomKey> append_frame(
             return index::write_index(stream::index_type_from_descriptor(frame->desc), std::move(tsd), std::move(slices_to_write), key, store);
         } else {
             const FieldCollection& new_fields{index_segment_reader.tsd().fields()};
-            for (int i = 0; i < new_fields.size(); ++i) {
+            for (size_t i = 0; i < new_fields.size(); ++i) {
                 const Field& new_field = new_fields.at(i);
                 TypeDescriptor& original_type = frame->desc.mutable_field(i).mutable_type();
                 if (is_empty_type(original_type.data_type()) && !is_empty_type(new_field.type().data_type())) {
