@@ -24,6 +24,8 @@ def float_dtype(request):
 # object is for nullable boolean
 @pytest.fixture(params=["object", "bool"])
 def boolean_dtype(request):
+    if request.param == "object":
+        pytest.skip("Nullable booleans are temporary disabled")
     yield request.param
 
 
