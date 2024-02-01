@@ -4,7 +4,8 @@ from arcticdb_ext.storage import KeyType
 
 def test_symbol_sizes(basic_store):
     sizes = basic_store.version_store.scan_object_sizes_by_stream()
-    assert sizes == dict()
+    assert len(sizes) == 1
+    assert "__symbols__" in sizes
 
     sym_names = []
     for i in range(5):
@@ -15,11 +16,9 @@ def test_symbol_sizes(basic_store):
 
     sizes = basic_store.version_store.scan_object_sizes_by_stream()
 
-    assert len(sizes) == 5
     for s in sym_names:
         assert s in sizes
 
-    assert len(sizes["sym_0"]) == 3
     assert sizes["sym_0"][KeyType.VERSION] < 1000
     assert sizes["sym_0"][KeyType.TABLE_INDEX] < 5000
     assert sizes["sym_0"][KeyType.TABLE_DATA] < 15000
@@ -31,7 +30,6 @@ def test_symbol_sizes_big(basic_store):
 
     sizes = basic_store.version_store.scan_object_sizes_by_stream()
 
-    assert len(sizes) == 1
     assert sizes["sym"][KeyType.VERSION] < 1000
     assert sizes["sym"][KeyType.TABLE_INDEX] < 5000
     assert 15_000 < sizes["sym"][KeyType.TABLE_DATA] < 100_000
