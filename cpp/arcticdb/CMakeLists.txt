@@ -266,7 +266,7 @@ set(arcticdb_srcs
         storage/mongo/mongo_storage.hpp
         storage/object_store_utils.hpp
         storage/s3/nfs_backed_storage.hpp
-        storage/s3/s3_client_accessor.hpp
+        storage/s3/s3_client_wrapper.hpp
         storage/s3/s3_storage_tool.hpp
         storage/storage_factory.hpp
         storage/storage_options.hpp
@@ -414,6 +414,7 @@ set(arcticdb_srcs
         storage/mongo/mongo_storage.cpp
         storage/s3/nfs_backed_storage.cpp
         storage/s3/s3_api.cpp
+        storage/s3/real_s3_client.cpp
         storage/s3/s3_storage.cpp
         storage/s3/s3_storage_tool.cpp
         storage/storage_factory.cpp
