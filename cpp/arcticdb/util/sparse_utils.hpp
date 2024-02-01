@@ -9,6 +9,7 @@
 
 #include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/util/preprocess.hpp>
+#include <arcticdb/util/type_handler.hpp>
 
 #include <arcticdb/util/bitset.hpp>
 
@@ -16,7 +17,6 @@
 
 #include <bitmagic/bmserial.h>
 
-#include <algorithm>
 #include <cstdint>
 
 namespace arcticdb::util {
@@ -68,11 +68,8 @@ inline void expand_dense_buffer_using_bitmap(const util::BitMagic &bv, const uin
     }
 }
 
-// TODO: EmptyHandler::handle_type has similar procedure.
-//  * Should this be used instead?
-//  * What about nullable booleans and arrays?
 template <typename TagType>
-void default_initialize(uint8_t* data, size_t bytes) {
+inline void default_initialize(uint8_t* data, size_t bytes) {
     using RawType = typename TagType::DataTypeTag::raw_type;
     const auto num_rows ARCTICDB_UNUSED = bytes / sizeof(RawType);
     constexpr auto data_type = TagType::DataTypeTag::data_type;
@@ -80,11 +77,23 @@ void default_initialize(uint8_t* data, size_t bytes) {
     if constexpr (is_sequence_type(data_type)) {
         std::fill_n(type_ptr, num_rows, not_a_string());
     } else if constexpr (is_floating_point_type(data_type)) {
-        std::fill_n(type_ptr, num_rows, std::numeric_limits<double>::quiet_NaN());
+        std::fill_n(type_ptr, num_rows, std::numeric_limits<RawType>::quiet_NaN());
     } else if constexpr (is_time_type(data_type)) {
         std::fill_n(type_ptr, num_rows, NaT);
+    } else if constexpr (is_integer_type(data_type) || is_bool_type(data_type)) {
+        std::memset(data, 0, bytes);
     } else {
-        std::fill_n(data, bytes, 0);
+        constexpr TypeDescriptor type_descriptor = TagType::type_descriptor();
+        const std::shared_ptr<TypeHandler>& handler =
+            arcticdb::TypeHandlerRegistry::instance()->get_handler(type_descriptor);
+        if (handler) {
+            handler->default_initialize(data, bytes);
+        } else {
+            internal::raise<ErrorCode::E_INVALID_ARGUMENT>(
+                "Default initialization for {} is not implemented.",
+                type_descriptor
+            );
+        }
     }
 }
 

@@ -8,8 +8,6 @@
 #pragma once
 
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/column_store/chunked_buffer.hpp>
-#include <arcticdb/util/buffer_holder.hpp>
 #include <arcticdb/codec/variant_encoded_field_collection.hpp>
 #include <arcticdb/pipeline/column_mapping.hpp>
 
@@ -20,6 +18,7 @@
 
 namespace arcticdb {
 
+struct BufferHolder;
 
 struct ITypeHandler {
     template<class Base>
@@ -53,10 +52,14 @@ struct ITypeHandler {
         int type_size() const {
             return folly::poly_call<1>(*this);
         }
+
+        void default_initialize(void* dest, size_t byte_size) const {
+            folly::poly_call<2>(*this, dest, byte_size);
+        }
     };
 
     template<class T>
-    using Members = folly::PolyMembers<&T::handle_type, &T::type_size>;
+    using Members = folly::PolyMembers<&T::handle_type, &T::type_size, &T::default_initialize>;
 };
 
 using TypeHandler = folly::Poly<ITypeHandler>;
@@ -71,13 +74,13 @@ public:
     static void init();
     static std::shared_ptr<TypeHandlerRegistry> instance();
 
-    std::shared_ptr<TypeHandler> get_handler(const util::TypeDescriptor& type_descriptor) const;
-    void register_handler(const util::TypeDescriptor& type_descriptor, TypeHandler&& handler);
+    std::shared_ptr<TypeHandler> get_handler(const entity::TypeDescriptor& type_descriptor) const;
+    void register_handler(const entity::TypeDescriptor& type_descriptor, TypeHandler&& handler);
 private:
     struct Hasher {
-        size_t operator()(const util::TypeDescriptor val) const;
+        size_t operator()(const entity::TypeDescriptor val) const;
     };
-    std::unordered_map<util::TypeDescriptor, std::shared_ptr<TypeHandler>, Hasher> handlers_;
+    std::unordered_map<entity::TypeDescriptor, std::shared_ptr<TypeHandler>, Hasher> handlers_;
 };
 
 }

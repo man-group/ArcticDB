@@ -476,19 +476,20 @@ void decode_into_frame_dynamic(
                     m.source_type_desc_.visit_tag([&](auto src_desc_tag) {
                         using SourceType = typename decltype(src_desc_tag)::DataTypeTag::raw_type;
                         if constexpr (std::is_arithmetic_v<SourceType> && std::is_arithmetic_v<DestinationType>) {
-                            const auto src_bytes = sizeof_datatype(m.source_type_desc_) * m.num_rows_;
                             auto dest_ptr = reinterpret_cast<DestinationType*>(buffer.data() + m.offset_bytes_);
                             if constexpr (is_empty_type(src_desc_tag.data_type())) {
+                                const size_t dest_bytes = m.num_rows_ * sizeof_datatype(m.dest_type_desc_);
                                 decode_or_expand(
                                     data,
                                     reinterpret_cast<uint8_t*>(dest_ptr),
                                     encoded_field,
-                                    src_bytes,
+                                    dest_bytes,
                                     buffers,
                                     encdoing_version,
                                     m
                                 );
                             } else {
+                                const auto src_bytes = sizeof_datatype(m.source_type_desc_) * m.num_rows_;
                                 Buffer tmp_buf{src_bytes};
                                 decode_or_expand(
                                     data,

@@ -8,6 +8,7 @@
 #include <arcticdb/codec/slice_data_sink.hpp>
 #include <arcticdb/codec/encoding_sizes.hpp>
 #include <arcticdb/codec/codec.hpp>
+#include <arcticdb/util/buffer_holder.hpp>
 
 namespace arcticdb {
 
@@ -76,26 +77,8 @@ namespace arcticdb {
         );
         static_assert(get_type_size(DataType::EMPTYVAL) == sizeof(PyObject*));
 
-        // TODO: arcticdb::util::default_initialize does mostly the same thing
-        // the main difference is that it does not write py::none directly
-        // * Should use that?
-        // * It doesn't handle nullable bools and arrays? How should they be handled?
         m.dest_type_desc_.visit_tag([&](auto tag) {
-            using RawType = typename decltype(tag)::DataTypeTag::raw_type;
-            RawType* ptr_dest = reinterpret_cast<RawType*>(dest);
-            if constexpr (is_sequence_type(tag.data_type())) {
-                std::fill_n(ptr_dest, m.num_rows_, arcticdb::not_a_string());
-            } else if constexpr (is_nullable_type(TypeDescriptor(tag))) {
-                fill_with_none(reinterpret_cast<const PyObject**>(dest), m.num_rows_);
-            } else if constexpr (is_floating_point_type(tag.data_type())) {
-                std::fill_n(ptr_dest, m.num_rows_, std::numeric_limits<RawType>::quiet_NaN());
-            } else if constexpr (is_integer_type(tag.data_type()) || is_bool_type(tag.data_type())) {
-                std::memset(dest, 0, sizeof(RawType) * m.num_rows_);
-            } else if constexpr (is_time_type(tag.data_type())) {
-                std::fill_n(ptr_dest, m.num_rows_, arcticdb::util::NaT);
-            } else {
-                static_assert(sizeof(tag) == 0, "Unhandled data_type");
-            }
+            util::default_initialize<decltype(tag)>(dest, dest_bytes);
         });
 
         util::variant_match(variant_field, [&input](const auto& field) {
@@ -119,6 +102,10 @@ namespace arcticdb {
 
     int EmptyHandler::type_size() const {
         return sizeof(PyObject*);
+    }
+
+    void EmptyHandler::default_initialize(void* dest, size_t byte_size) const {
+        fill_with_none(reinterpret_cast<const PyObject**>(dest), byte_size / type_size());
     }
 
     void BoolHandler::handle_type(
@@ -165,6 +152,10 @@ namespace arcticdb {
 
     int BoolHandler::type_size() const {
         return sizeof(PyObject*);
+    }
+
+    void BoolHandler::default_initialize(void* dest, size_t byte_size) const {
+        fill_with_none(reinterpret_cast<const PyObject**>(dest), byte_size / type_size());
     }
 
     std::mutex ArrayHandler::initialize_array_mutex;
@@ -240,5 +231,9 @@ namespace arcticdb {
 
     int ArrayHandler::type_size() const {
         return sizeof(PyObject*);
+    }
+
+    void ArrayHandler::default_initialize(void* dest, size_t byte_size) const {
+        fill_with_none(reinterpret_cast<const PyObject**>(dest), byte_size / type_size());
     }
 }

@@ -25,6 +25,7 @@ namespace arcticdb {
         );
 
         int type_size() const;
+        void default_initialize(void* dest, size_t byte_size) const;
     };
 
     struct BoolHandler {
@@ -39,6 +40,7 @@ namespace arcticdb {
             const ColumnMapping& columnMapping
         );
         int type_size() const;
+        void default_initialize(void* dest, size_t byte_size) const;
     };
 
     struct DecimalHandler {
@@ -66,6 +68,7 @@ namespace arcticdb {
             const ColumnMapping& columnMapping
         );
         int type_size() const;
+        void default_initialize(void* dest, size_t byte_size) const;
         static std::mutex initialize_array_mutex;
     };
 } //namespace arcticdb

@@ -18,10 +18,6 @@
 
 #include <arcticdb/util/bitset.hpp>
 
-#include <arcticdb/util/buffer.hpp>
-
-#include <google/protobuf/text_format.h>
-
 #include <type_traits>
 
 namespace arcticdb {
