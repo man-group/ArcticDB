@@ -37,7 +37,7 @@ std::string_view datatype_to_str(const DataType dt) {
         TO_STR(UTF_FIXED64)
         TO_STR(UTF_DYNAMIC64)
         TO_STR(EMPTYVAL)
-        TO_STR(PYBOOL8)
+        TO_STR(BOOL_OBJECT8)
 #undef TO_STR
         default:return std::string_view("UNKNOWN");
     }

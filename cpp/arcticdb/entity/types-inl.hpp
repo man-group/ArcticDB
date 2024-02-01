@@ -39,7 +39,7 @@ constexpr auto visit_dim(DataType dt, Callable &&c) {
         DT_CASE(UTF_FIXED64)
         DT_CASE(UTF_DYNAMIC64)
         DT_CASE(EMPTYVAL)
-        DT_CASE(PYBOOL8)
+        DT_CASE(BOOL_OBJECT8)
 #undef DT_CASE
         default: util::raise_rte("Invalid dtype '{}' in visit dim", datatype_to_str(dt));
     }
@@ -67,7 +67,7 @@ auto visit_type(DataType dt, Callable &&c) {
         DT_CASE(UTF_FIXED64)
         DT_CASE(UTF_DYNAMIC64)
         DT_CASE(EMPTYVAL)
-        DT_CASE(PYBOOL8)
+        DT_CASE(BOOL_OBJECT8)
 #undef DT_CASE
     default: util::raise_rte("Invalid dtype '{}' in visit type", datatype_to_str(dt));
     }

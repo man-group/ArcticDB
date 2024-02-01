@@ -120,7 +120,7 @@ namespace arcticdb {
             // Only allow promotion with UTF strings, and only to dynamic (never to fixed width)
             if (!is_utf_type(source_type) || !is_utf_type(target_type) || !is_dynamic_string_type(target_type))
                 return std::nullopt;
-        } else if (is_py_bool_type(source_type)) {
+        } else if (is_bool_object_type(source_type)) {
             return std::nullopt;
         } else {
             // Non-numeric source type

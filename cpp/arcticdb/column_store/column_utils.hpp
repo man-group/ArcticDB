@@ -7,7 +7,6 @@
 
 #pragma once
 
-#include <arcticdb/column_store/column.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/pipeline/frame_data_wrapper.hpp>
 
@@ -44,7 +43,7 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
                 } else {
                     dtype = fmt::format("{}{:d}", get_dtype_specifier(data_type), esize);
                 }
-            } else if constexpr (is_empty_type(data_type) || is_py_bool_type(data_type) || is_numpy_array(TypeDescriptor(tag))) {
+            } else if constexpr (is_empty_type(data_type) || is_bool_object_type(data_type) || is_numpy_array(TypeDescriptor(tag))) {
                 dtype= "O";
                 // The python representation of multidimensional columns differs from the in-memory/on-storage. In memory,
                 // we hold all scalars in a contiguous buffer with the shapes buffer telling us how many elements are there
@@ -94,7 +93,7 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
             } else {
                 dtype = fmt::format("{}{:d}", get_dtype_specifier(data_type), esize);
             }
-        } else if constexpr (is_empty_type(data_type) || is_py_bool_type(data_type) || is_numpy_array(TypeDescriptor(tag))){
+        } else if constexpr (is_empty_type(data_type) || is_bool_object_type(data_type) || is_numpy_array(TypeDescriptor(tag))){
             dtype = "O";
             // The python representation of multidimensional columns differs from the in-memory/on-storage. In memory,
             // we hold all scalars in a contiguous buffer with the shapes buffer telling us how many elements are there

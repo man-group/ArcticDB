@@ -139,8 +139,8 @@ namespace
     };
 
     template<>
-    struct OutputType<DataTypeTag<DataType::PYBOOL8>, void> {
-        using type = ScalarTagType<DataTypeTag<DataType::PYBOOL8>>;
+    struct OutputType<DataTypeTag<DataType::BOOL_OBJECT8>, void> {
+        using type = ScalarTagType<DataTypeTag<DataType::BOOL_OBJECT8>>;
     };
 }
 

@@ -49,7 +49,7 @@ std::variant<StringEncodingError, PyStringWrapper> pystring_to_buffer(PyObject *
 
 std::tuple<ValueType, uint8_t, ssize_t> determine_python_object_type(PyObject* obj) {
     if(is_py_boolean(obj))
-        return {ValueType::PYBOOL, 1, 1};
+        return {ValueType::BOOL_OBJECT, 1, 1};
 
     return {ValueType::BYTES, 8, 1};
 }

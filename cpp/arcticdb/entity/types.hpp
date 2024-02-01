@@ -128,7 +128,7 @@ enum class ValueType : uint8_t {
     // When data is appended, the column type is inferred from the data and the column is promoted to the inferred type.
     EMPTY = 13,
     /// Nullable booleans
-    PYBOOL = 14,
+    BOOL_OBJECT = 14,
     COUNT // Not a real value type, should not be added to proto descriptor. Used to count the number of items in the enum
 };
 
@@ -225,7 +225,7 @@ enum class DataType : uint8_t {
     UTF_FIXED64 = detail::combine_val_bits(ValueType::UTF8_FIXED, SizeBits::S64),
     UTF_DYNAMIC64 = detail::combine_val_bits(ValueType::UTF_DYNAMIC, SizeBits::S64),
     EMPTYVAL = detail::combine_val_bits(ValueType::EMPTY, SizeBits::S64),
-    PYBOOL8 = detail::combine_val_bits(ValueType::PYBOOL, SizeBits::S8),
+    BOOL_OBJECT8 = detail::combine_val_bits(ValueType::BOOL_OBJECT, SizeBits::S8),
     UNKNOWN = 0,
 };
 
@@ -279,8 +279,8 @@ constexpr bool is_bool_type(DataType dt) {
     return slice_value_type(dt) == ValueType::BOOL;
 }
 
-constexpr bool is_py_bool_type(DataType dt) {
-    return slice_value_type(dt) == ValueType::PYBOOL;
+constexpr bool is_bool_object_type(DataType dt) {
+    return slice_value_type(dt) == ValueType::BOOL_OBJECT;
 }
 
 constexpr bool is_unsigned_type(DataType dt) {
@@ -410,7 +410,7 @@ DATA_TYPE_TAG(ASCII_DYNAMIC64, std::uint64_t)
 DATA_TYPE_TAG(UTF_FIXED64, std::uint64_t)
 DATA_TYPE_TAG(UTF_DYNAMIC64, std::uint64_t)
 DATA_TYPE_TAG(EMPTYVAL, std::uint64_t)
-DATA_TYPE_TAG(PYBOOL8, uint8_t)
+DATA_TYPE_TAG(BOOL_OBJECT8, uint8_t)
 #undef DATA_TYPE_TAG
 
 enum class Dimension : uint8_t {
@@ -525,7 +525,7 @@ constexpr bool is_numpy_array(TypeDescriptor td) {
 }
 
 constexpr bool is_pyobject_type(TypeDescriptor td) {
-	return is_dynamic_string_type(slice_value_type(td.data_type())) || is_py_bool_type(td.data_type()) ||
+	return is_dynamic_string_type(slice_value_type(td.data_type())) || is_bool_object_type(td.data_type()) ||
 		is_numpy_array(td);
 }
 

@@ -53,10 +53,6 @@ namespace arcticdb {
         return dest + count;
     }
 
-	constexpr inline bool is_nullable_type(TypeDescriptor td) {
-		return td.dimension() > Dimension::Dim0 || is_empty_type(td.data_type()) || is_py_bool_type(td.data_type());
-	}
-
     void EmptyHandler::handle_type(
         const uint8_t*& input,
         uint8_t* dest,

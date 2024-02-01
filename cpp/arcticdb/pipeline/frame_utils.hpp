@@ -195,7 +195,7 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
                     agg.set_array(col, t);
                 }
             }
-        } else if constexpr(is_py_bool_type(dt)) {
+        } else if constexpr(is_bool_object_type(dt)) {
             normalization::check<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(tag.dimension() == Dimension::Dim0,
                 "Multidimensional nullable booleans are not supported");
             auto data = const_cast<void *>(tensor.data());
