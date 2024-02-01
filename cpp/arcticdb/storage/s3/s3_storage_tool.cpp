@@ -7,7 +7,7 @@
 
 #include <arcticdb/storage/s3/s3_storage_tool.hpp>
 
-
+#include <aws/s3/S3Client.h>
 #include <aws/s3/model/ListObjectsV2Request.h>
 #include <aws/s3/model/GetObjectRequest.h>
 #include <aws/s3/model/DeleteObjectRequest.h>
