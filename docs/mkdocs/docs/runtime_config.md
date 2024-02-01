@@ -67,6 +67,21 @@ Values:
 * 0: Do not perform SSL verification.
 * 1: Perform SSL verification.
 
+### S3Storage.UseWinINet
+
+This setting only has an effect on the Windows operating system.
+
+Control whether the client should use the WinINet HTTP backend rather than the default WinHTTP backend.
+
+WinINet can provide better error messages in AWS SDK debug logs, for example for diagnosing SSL issues. See the logging
+configuration section below for notes on how to set up AWS SDK debug logs.
+
+The INet backend does not allow SSL verification to be disabled with the current AWS SDK.
+
+Values:
+* 0: Use WinHTTP
+* 1: Use WinINet
+
 ### VersionStore.NumCPUThreads and VersionStore.NumIOThreads
 
 ArcticDB uses two threadpools in order to manage computational resources:
