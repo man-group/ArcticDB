@@ -5,6 +5,8 @@
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/util/memory_tracing.hpp>
 
+#include <arcticdb/pipeline/string_pool_utils.hpp>
+
 namespace arcticdb {
 inline void merge_string_column(
     ChunkedBuffer& src_buffer,
