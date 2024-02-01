@@ -15,15 +15,15 @@
 #include <filesystem>
 #include <memory>
 
-namespace ac = arcticdb;
-namespace acs = arcticdb::storage;
-
 inline const fs::path TEST_DATABASES_PATH = "./test_databases";
 
 class StorageFactory {
 public:
     virtual ~StorageFactory() = default;
-    virtual std::unique_ptr<acs::Storage> create() = 0;
+    virtual std::unique_ptr<arcticdb::storage::Storage> create() = 0;
+
+    virtual void setup() { }
+    virtual void clear_setup() { }
 };
 
 class LMDBStorageFactory : public StorageFactory {
@@ -31,11 +31,11 @@ private:
     uint64_t map_size;
 
 public:
-    LMDBStorageFactory() : map_size(128ULL * (1ULL << 20)) { }
+    LMDBStorageFactory() : map_size(128ULL * (1ULL << 20) /* 128MB */) { }
 
     explicit LMDBStorageFactory(uint64_t map_size) : map_size(map_size) { }
 
-    std::unique_ptr<acs::Storage> create() override {
+    std::unique_ptr<arcticdb::storage::Storage> create() override {
         arcticdb::proto::lmdb_storage::Config cfg;
 
         fs::path db_name = "test_lmdb";
@@ -43,9 +43,21 @@ public:
         cfg.set_map_size(map_size);
         cfg.set_recreate_if_exists(true);
 
-        acs::LibraryPath library_path{"a", "b"};
+        arcticdb::storage::LibraryPath library_path{"a", "b"};
 
-        return std::make_unique<acs::lmdb::LmdbStorage>(library_path, acs::OpenMode::WRITE, cfg);
+        return std::make_unique<arcticdb::storage::lmdb::LmdbStorage>(library_path, arcticdb::storage::OpenMode::WRITE, cfg);
+    }
+
+    void setup() override {
+        if (!fs::exists(TEST_DATABASES_PATH)) {
+            fs::create_directories(TEST_DATABASES_PATH);
+        }
+    }
+
+    void clear_setup() override {
+        if (fs::exists(TEST_DATABASES_PATH)) {
+            fs::remove_all(TEST_DATABASES_PATH);
+        }
     }
 };
 
@@ -53,75 +65,69 @@ public:
 
 class GenericStorageTest : public ::testing::TestWithParam<std::shared_ptr<StorageFactory>> {
 protected:
-    std::unique_ptr<acs::Storage> storage;
+    std::unique_ptr<arcticdb::storage::Storage> storage;
 
     void SetUp() override {
-        if (!fs::exists(TEST_DATABASES_PATH)) {
-            fs::create_directories(TEST_DATABASES_PATH);
-        }
-
+        GetParam()->setup();
         storage = GetParam()->create();
     }
 
     void TearDown() override {
         storage.reset();
-
-        if (fs::exists(TEST_DATABASES_PATH)) {
-            fs::remove_all(TEST_DATABASES_PATH);
-        }
+        GetParam()->clear_setup();
     }
 };
 
 TEST_P(GenericStorageTest, WriteDuplicateKeyException) {
-    ac::entity::AtomKey k = ac::entity::atom_key_builder().gen_id(0).build<ac::entity::KeyType::VERSION>("sym");
+    arcticdb::entity::AtomKey k = arcticdb::entity::atom_key_builder().gen_id(0).build<arcticdb::entity::KeyType::VERSION>("sym");
 
-    acs::KeySegmentPair kv(k);
-    kv.segment().set_buffer(std::make_shared<ac::Buffer>());
+    arcticdb::storage::KeySegmentPair kv(k);
+    kv.segment().set_buffer(std::make_shared<arcticdb::Buffer>());
 
     storage->write(std::move(kv));
 
     ASSERT_TRUE(storage->key_exists(k));
 
-    acs::KeySegmentPair kv1(k);
-    kv1.segment().set_buffer(std::make_shared<ac::Buffer>());
+    arcticdb::storage::KeySegmentPair kv1(k);
+    kv1.segment().set_buffer(std::make_shared<arcticdb::Buffer>());
 
     ASSERT_THROW({
         storage->write(std::move(kv1));
-    },  acs::DuplicateKeyException);
+    },  arcticdb::storage::DuplicateKeyException);
 
 }
 
 TEST_P(GenericStorageTest, ReadKeyNotFoundException) {
-    ac::entity::AtomKey k = ac::entity::atom_key_builder().gen_id(0).build<ac::entity::KeyType::VERSION>("sym");
+    arcticdb::entity::AtomKey k = arcticdb::entity::atom_key_builder().gen_id(0).build<arcticdb::entity::KeyType::VERSION>("sym");
 
     ASSERT_TRUE(!storage->key_exists(k));
     ASSERT_THROW({
-        storage->read(k, acs::ReadKeyOpts{});
-    },  acs::KeyNotFoundException);
+        storage->read(k, arcticdb::storage::ReadKeyOpts{});
+    },  arcticdb::storage::KeyNotFoundException);
 
 }
 
 TEST_P(GenericStorageTest, UpdateKeyNotFoundException) {
-    ac::entity::AtomKey k = ac::entity::atom_key_builder().gen_id(0).build<ac::entity::KeyType::VERSION>("sym");
+    arcticdb::entity::AtomKey k = arcticdb::entity::atom_key_builder().gen_id(0).build<arcticdb::entity::KeyType::VERSION>("sym");
 
-    acs::KeySegmentPair kv(k);
+    arcticdb::storage::KeySegmentPair kv(k);
     kv.segment().header().set_start_ts(1234);
-    kv.segment().set_buffer(std::make_shared<ac::Buffer>());
+    kv.segment().set_buffer(std::make_shared<arcticdb::Buffer>());
 
     ASSERT_TRUE(!storage->key_exists(k));
     ASSERT_THROW({
-        storage->update(std::move(kv), acs::UpdateOpts{});
-    },  acs::KeyNotFoundException);
+        storage->update(std::move(kv), arcticdb::storage::UpdateOpts{});
+    },  arcticdb::storage::KeyNotFoundException);
 
 }
 
 TEST_P(GenericStorageTest, RemoveKeyNotFoundException) {
-    ac::entity::AtomKey k = ac::entity::atom_key_builder().gen_id(0).build<ac::entity::KeyType::VERSION>("sym");
+    arcticdb::entity::AtomKey k = arcticdb::entity::atom_key_builder().gen_id(0).build<arcticdb::entity::KeyType::VERSION>("sym");
 
     ASSERT_TRUE(!storage->key_exists(k));
     ASSERT_THROW({
-        storage->remove(k, acs::RemoveOpts{});
-    },  acs::KeyNotFoundException);
+        storage->remove(k, arcticdb::storage::RemoveOpts{});
+    },  arcticdb::storage::KeyNotFoundException);
 
 }
 
@@ -140,6 +146,7 @@ protected:
             fs::create_directories(TEST_DATABASES_PATH);
         }
     }
+
     void TearDown() override {
         if (fs::exists(TEST_DATABASES_PATH)) {
             fs::remove_all(TEST_DATABASES_PATH);
@@ -148,13 +155,14 @@ protected:
 };
 
 TEST_F(LMDBStorageTestBase, WriteMapFullError) {
+    // Create a Storage with 32KB map size
     LMDBStorageFactory factory(32ULL * (1ULL << 10));
-    auto storage = std::unique_ptr<acs::lmdb::LmdbStorage>(dynamic_cast<acs::lmdb::LmdbStorage*>(factory.create().release()));
+    auto storage = factory.create();
 
-    ac::entity::AtomKey k = ac::entity::atom_key_builder().gen_id(0).build<ac::entity::KeyType::VERSION>("sym");
-    acs::KeySegmentPair kv(k);
+    arcticdb::entity::AtomKey k = arcticdb::entity::atom_key_builder().gen_id(0).build<arcticdb::entity::KeyType::VERSION>("sym");
+    arcticdb::storage::KeySegmentPair kv(k);
     kv.segment().header().set_start_ts(1234);
-    kv.segment().set_buffer(std::make_shared<ac::Buffer>(40000));
+    kv.segment().set_buffer(std::make_shared<arcticdb::Buffer>(40000));
 
     ASSERT_THROW({
         storage->write(std::move(kv));
