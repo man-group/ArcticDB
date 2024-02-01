@@ -1796,20 +1796,34 @@ std::unordered_map<KeyType, std::pair<size_t, size_t>> LocalVersionedEngine::sca
 }
 
 std::unordered_map<StreamId, std::unordered_map<KeyType, size_t>> LocalVersionedEngine::scan_object_sizes_by_stream() {
+    std::mutex mutex;
     std::unordered_map<StreamId, std::unordered_map<KeyType, size_t>> sizes;
     auto streams = symbol_list().get_symbols(store());
-    std::vector<KeyType> key_types {KeyType::TABLE_DATA, KeyType::TABLE_INDEX, KeyType::VERSION};
 
-    for (const auto& stream : streams) {
-        auto& sizes_for_stream = sizes[stream];
-        for (const auto& key_type : key_types) {
-            auto& size_for_key_type = sizes_for_stream[key_type];
-            iterate_keys_of_type_for_stream(store(), key_type, stream, [&size_for_key_type, &store=store()] (const auto& vk) {
-                // TODO not sync
-                size_for_key_type += store->read_compressed_sync(vk, storage::ReadKeyOpts{}).segment().total_segment_size();
+    foreach_key_type([&store=store(), &sizes, &mutex](KeyType key_type) {
+        std::vector<std::pair<VariantKey, stream::StreamSource::ReadContinuation>> keys;
+
+        store->iterate_type(key_type, [&keys, &mutex, &sizes, key_type](const VariantKey&& k){
+            keys.emplace_back(std::forward<const VariantKey>(k), [key_type, &sizes, &mutex] (auto&& ks) {
+                auto key_seg = std::move(ks);
+                auto variant_key = key_seg.variant_key();
+                auto stream_id = variant_key_id(variant_key);
+                auto size = key_seg.segment().total_segment_size();
+
+                {
+                    std::lock_guard lock{mutex};
+                    sizes[stream_id][key_type] += size;
+                }
+
+                return variant_key;
             });
+
+        });
+
+        if (!keys.empty()) {
+            store->batch_read_compressed(std::move(keys), BatchReadArgs{}).get();
         }
-    }
+    });
 
     return sizes;
 }
