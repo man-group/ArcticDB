@@ -92,6 +92,44 @@ def test_get_library(arctic_client):
         _ = ac.get_library("pytest_test_lib", create_if_missing=False, library_options=library_options)
 
 
+def test_create_library_with_invalid_name(arctic_client):
+    ac = arctic_client
+
+    # These should succeed because the names are valid
+    valid_names = ["lib", "lib/with/slash", "lib-with-dash", "lib.with.dot", "lib123"]
+    for lib_name in valid_names:
+        ac.create_library(lib_name)
+
+    # These should fail because the names are invalid
+    invalid_names = [chr(0), "lib>", "lib<", "lib*", "/lib", "lib...lib", "lib"*1000]
+    for lib_name in invalid_names:
+        with pytest.raises(UserInputException):
+            ac.create_library(lib_name)
+
+    # Verify that library list is not corrupted
+    assert set(ac.list_libraries()) == set(valid_names)
+
+
+# TODO: Fix issue #1247, then use "arcitc_client" instead of "arctic_client_no_lmdb"
+@pytest.mark.parametrize("prefix", ["", "prefix"])
+@pytest.mark.parametrize("suffix", ["", "suffix"])
+def test_create_library_with_all_chars(arctic_client_no_lmdb, prefix, suffix):
+    # Create library names with each character (except '\' because Azure replaces it with '/' in some cases)
+    names = [f"{prefix}{chr(i)}{suffix}" for i in range(256) if chr(i) != '\\']
+
+    ac = arctic_client_no_lmdb
+
+    created_libraries = set()
+    for name in names:
+        try:
+            ac.create_library(name)
+            created_libraries.add(name)
+        # We should only fail with UserInputException (indicating that name validation failed)
+        except UserInputException:
+            pass
+
+    assert set(ac.list_libraries()) == created_libraries
+
 def test_do_not_persist_s3_details(s3_storage):
     """We apply an in-memory overlay for these instead. In particular we should absolutely not persist credentials
     in the storage."""
@@ -927,6 +965,8 @@ def test_get_description(arctic_library):
     assert original_info.row_count == 4
     assert info.last_update_time > original_info.last_update_time
     assert info.last_update_time.tz == pytz.UTC
+    assert original_info.sorted == "ASCENDING"
+    assert info.sorted == "ASCENDING"
 
 
 def test_tail(arctic_library):

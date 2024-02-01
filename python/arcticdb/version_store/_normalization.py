@@ -22,7 +22,7 @@ from arcticc.pb2.descriptors_pb2 import UserDefinedMetadata, NormalizationMetada
 from arcticc.pb2.storage_pb2 import VersionStoreConfig
 from mmap import mmap
 from collections import Counter
-from arcticdb.exceptions import ArcticNativeException, ArcticDbNotYetImplemented, NormalizationException
+from arcticdb.exceptions import ArcticNativeException, ArcticDbNotYetImplemented, NormalizationException, SortingException
 from arcticdb.supported_types import DateRangeInput, time_types as supported_time_types
 from arcticdb.util._versions import IS_PANDAS_TWO, IS_PANDAS_ZERO
 from arcticdb.version_store.read_result import ReadResult
@@ -889,7 +889,10 @@ class DataFrameNormalizer(_PandasNormalizer):
 
         sort_status = _SortedValue.UNKNOWN
         index = item.index
-        if hasattr(index, "is_monotonic_increasing"):
+        # Treat empty indexes as ascending so that all operations are valid
+        if index.empty:
+            sort_status = _SortedValue.ASCENDING
+        elif isinstance(index, (pd.DatetimeIndex, pd.PeriodIndex)):
             if index.is_monotonic_increasing:
                 sort_status = _SortedValue.ASCENDING
             elif index.is_monotonic_decreasing:
@@ -1122,7 +1125,7 @@ class TimeFrameNormalizer(Normalizer):
                 index_values=ix_vals,
                 column_names=columns_names,
                 columns_values=columns_vals,
-                sorted=_SortedValue.UNKNOWN,
+                sorted=_SortedValue.ASCENDING if item.issorted else _SortedValue.UNSORTED,
             ),
             metadata=norm_meta,
         )
@@ -1351,6 +1354,17 @@ def restrict_data_to_date_range_only(data: T, *, start: Timestamp, end: Timestam
     if hasattr(data, "loc"):
         if not data.index.get_level_values(0).tz:
             start, end = _strip_tz(start, end)
+        if not data.index.is_monotonic_increasing:
+            # data.loc[...] scans forward through the index until hitting a value >= pd.to_datetime(end)
+            # If the input data is unsorted this produces non-intuitive results
+            # The copy below in data.loc[...] will recalculate is_monotonic_<in|de>creasing
+            # Therefore if data.loc[...] is sorted, but data is not the update will be allowed with unexpected results
+            # See https://github.com/man-group/ArcticDB/issues/1173 for more details
+            # We could set data.is_monotonic_<in|de>creasing to the values on input to this function after calling
+            # data.loc[...] and let version_core.cpp::sorted_data_check_update handle this, but that will be confusing
+            # as the frame input to sorted_data_check_update WILL be sorted. Instead, we fail early here, at the cost
+            # of duplicating exception messages.
+            raise SortingException("E_UNSORTED_DATA When calling update, the input data must be sorted.")
         data = data.loc[pd.to_datetime(start) : pd.to_datetime(end)]
     else:  # non-Pandas, try to slice it anyway
         if not getattr(data, "timezone", None):

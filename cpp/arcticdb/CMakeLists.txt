@@ -35,6 +35,7 @@ endif()
 find_package(Protobuf REQUIRED)
 find_package(mongocxx REQUIRED)
 find_package(bsoncxx REQUIRED)
+find_package(xxHash REQUIRED)
 find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypasses our cpp/CMake/FindZstd.cmake module
 
 find_package(azure-identity-cpp CONFIG REQUIRED)
@@ -66,7 +67,6 @@ else()
     SET(HIDE_LINKED_SYMBOLS OFF)
 
     find_package(pybind11 REQUIRED)
-    find_package(xxHash REQUIRED)
     find_package(PCRE REQUIRED)
     find_package(Libevent  REQUIRED)
     find_package(semimap REQUIRED)
@@ -90,7 +90,12 @@ else()
     list(REMOVE_ITEM NEW_FOLLY_DEPS "/usr/local/opt/openssl/include" )
     set_target_properties(Folly::folly_deps PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${NEW_FOLLY_DEPS}")
 
+    add_library(xxHash STATIC IMPORTED)
+    set_target_properties(xxHash PROPERTIES IMPORTED_LOCATION ${xxHash_LIBRARY})
+    set_target_properties(xxHash PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${xxHash_INCLUDE_DIR})
+
 endif()
+
 # RocksDB can be manually excluded with set(ARCTICDB_INCLUDE_ROCKSDB 0)
 # Default is to include on PyPI builds and exclude on conda builds
 if(${ARCTICDB_INCLUDE_ROCKSDB})
@@ -311,6 +316,7 @@ set(arcticdb_srcs
         util/magic_num.hpp
         util/movable_priority_queue.hpp
         util/movable_priority_queue.hpp
+        util/name_validation.hpp
         util/offset_string.hpp
         util/offset_string.hpp
         util/optional_defaults.hpp
@@ -423,6 +429,7 @@ set(arcticdb_srcs
         util/decimal.cpp
         util/error_code.cpp
         util/global_lifetimes.cpp
+        util/name_validation.cpp
         util/offset_string.cpp
         util/offset_string.cpp
         util/sparse_utils.cpp
@@ -525,7 +532,9 @@ endif()
 # on their origin (i.e. vendored source or packages on conda-forge).
 if(${ARCTICDB_USING_CONDA})
 
-    # We must use dynamic libraries.
+    # We must use dynamic libraries, except for xxHash, which must be statically linked.
+    # since `XXH_state_t` which we rely on is only available when statically linking.
+    # For all builds except linux conda's, we inline the functions so that xxhash does not need linking at all.
     list (APPEND arcticdb_core_libraries
         xxHash::xxHash
         pcre
@@ -539,10 +548,7 @@ if(${ARCTICDB_USING_CONDA})
     endif()
 else()
 
-    add_compile_definitions(ARCTICDB_USING_STATIC_XXHASH)
-
     list (APPEND arcticdb_core_libraries
-        xxhash_static
         unofficial::pcre::pcre
         msgpackc-cxx
         lmdb
@@ -865,6 +871,7 @@ if(${TEST})
     gtest_discover_tests(test_unit_arcticdb PROPERTIES DISCOVERY_TIMEOUT 60)
 
     set(benchmark_srcs
+            stream/test/stream_test_common.cpp
             column_store/test/benchmark_memory_segment.cpp
             processing/test/benchmark_clause.cpp)
 

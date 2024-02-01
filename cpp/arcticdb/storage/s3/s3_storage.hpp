@@ -231,6 +231,12 @@ auto get_s3_config(const ConfigType& conf) {
             conf.max_connections();
     client_configuration.connectTimeoutMs = conf.connect_timeout() == 0 ? 30000 : conf.connect_timeout();
     client_configuration.requestTimeoutMs = conf.request_timeout() == 0 ? 200000 : conf.request_timeout();
+
+    const bool use_win_inet = ConfigsMap::instance()->get_int("S3Storage.UseWinINet", 0);
+    if (use_win_inet) {
+        client_configuration.httpLibOverride = Aws::Http::TransferLibType::WIN_INET_CLIENT;
+    }
+
     return client_configuration;
 }
 

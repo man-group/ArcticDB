@@ -47,13 +47,6 @@ REAL_S3_TESTS_MARK = pytest.mark.skipif(
 Currently controlled by the ARCTICDB_PERSISTENT_STORAGE_TESTS and ARCTICDB_FAST_TESTS_ONLY env vars."""
 
 
-def xfail_on_linux_conda(reason=""):
-    def decorator(func):
-        return pytest.mark.xfail(ARCTICDB_USING_CONDA and sys.platform == "linux", reason=reason)(func)
-
-    return decorator
-
-
 def _no_op_decorator(fun):
     return fun
 

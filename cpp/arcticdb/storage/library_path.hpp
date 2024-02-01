@@ -8,6 +8,7 @@
 #pragma once
 
 #include <arcticdb/util/hash.hpp>
+#include <arcticdb/util/name_validation.hpp>
 
 #include <folly/small_vector.h>
 #include <folly/Range.h>
@@ -77,11 +78,14 @@ class LibraryPathImpl {
     LibraryPathImpl(std::string_view delim_path, char delim) :
         parts_(),
         hash_() {
+        // We verify the library name contains valid symbols, isn't too long etc.
+        verify_library_path(std::string(delim_path), delim);
         folly::StringPiece p{delim_path};
         while (!p.empty()) {
             auto part = p.split_step(delim);
-            if (!part.empty())
-                parts_.push_back(std::string_view{part.data(), part.size()});
+            auto part_string = part.empty() ? "" : part.data();
+            verify_library_path_part(part_string, delim);
+            parts_.push_back(std::string_view{part_string, part.size()});
         }
         hash_ = compute_hash();
     }

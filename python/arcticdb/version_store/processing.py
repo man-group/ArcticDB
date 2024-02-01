@@ -204,6 +204,18 @@ class ExpressionNode:
         value_list = value_list_from_args(*args)
         return self._apply(value_list, _OperationType.ISNOTIN)
 
+    def isna(self):
+        return self.isnull()
+
+    def isnull(self):
+        return ExpressionNode.compose(self, _OperationType.ISNULL, None)
+
+    def notna(self):
+        return self.notnull()
+
+    def notnull(self):
+        return ExpressionNode.compose(self, _OperationType.NOTNULL, None)
+
     def __str__(self):
         return self.get_name()
 
@@ -293,6 +305,12 @@ class QueryBuilder:
     * Unary arithmetic: -, abs
 
     Supported filtering operations:
+
+    # isna, isnull, notna, and notnull - return all rows where a specified column is/is not NaN or None. isna is
+    equivalent to isnull, and notna is equivalent to notnull. I.e. no distinction is made between NaN and None values
+    in column types that support both (e.g. strings).
+
+        >>> q = q[q["col"].isna()]
 
     * Binary comparisons: <, <=, >, >=, ==, !=
 
@@ -404,15 +422,13 @@ class QueryBuilder:
 
     def groupby(self, name: str):
         """
-        Group symbol by column name. GroupBy operations must be followed by an aggregation operator. Currently the following seven aggregation
+        Group symbol by column name. GroupBy operations must be followed by an aggregation operator. Currently the following five aggregation
         operators are supported:
             * "mean" - compute the mean of the group
             * "sum" - compute the sum of the group
             * "min" - compute the min of the group
             * "max" - compute the max of the group
             * "count" - compute the count of group
-            * "first" - compute the first element of the group
-            * "last" - compute the last element of the group
 
         For usage examples, see below.
 

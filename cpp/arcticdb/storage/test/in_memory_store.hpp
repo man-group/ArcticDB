@@ -55,6 +55,19 @@ namespace arcticdb {
             throw std::runtime_error("Not implemented for tests");
         }
 
+
+        AtomKey get_key(
+            stream::KeyType key_type,
+            VersionId gen_id,
+            const StreamId& stream_id,
+            IndexValue start_index,
+            IndexValue end_index,
+            std::optional<timestamp> creation_ts = std::nullopt
+        ) {
+            return atom_key_builder().gen_id(gen_id).content_hash(content_hash_).creation_ts(creation_ts.value_or(PilotedClock::nanos_since_epoch()))
+                .start_index(start_index).end_index(end_index).build(stream_id, key_type);
+        }
+
         folly::Future<VariantKey> write(
                 KeyType key_type,
                 VersionId gen_id,
@@ -63,8 +76,7 @@ namespace arcticdb {
                 IndexValue end_index,
                 SegmentInMemory &&segment
         ) override {
-            auto key = atom_key_builder().gen_id(gen_id).content_hash(content_hash_).creation_ts(PilotedClock::nanos_since_epoch())
-                    .start_index(start_index).end_index(end_index).build(stream_id, key_type);
+            auto key = get_key(key_type, gen_id, stream_id, start_index, end_index);
             add_segment(key, std::move(segment));
             ARCTICDB_DEBUG(log::storage(), "Mock store adding atom key {}", key);
             return folly::makeFuture(key);
@@ -79,8 +91,7 @@ namespace arcticdb {
                 IndexValue end_index,
                 SegmentInMemory &&segment
         ) override {
-            auto key = atom_key_builder().gen_id(gen_id).content_hash(content_hash_).creation_ts(creation_ts)
-                    .start_index(start_index).end_index(end_index).build(stream_id, key_type);
+            auto key = get_key(key_type, gen_id, stream_id, start_index, end_index, creation_ts);
             add_segment(key, std::move(segment));
             ARCTICDB_DEBUG(log::storage(), "Mock store adding atom key {}", key);
             return folly::makeFuture(key);
@@ -195,6 +206,13 @@ namespace arcticdb {
             throw std::runtime_error("Not implemented");
         }
 
+        storage::KeySegmentPair read_compressed_sync(
+                const entity::VariantKey&,
+                storage::ReadKeyOpts
+        ) override {
+            throw std::runtime_error("Not implemented");
+        }
+
         folly::Future<std::pair<VariantKey, SegmentInMemory>> read(const VariantKey& key, storage::ReadKeyOpts opts) override {
             // Anything read_sync() throws should be returned inside the Future, so:
             return folly::makeFutureWith([&](){ return read_sync(key, opts); });
@@ -255,16 +273,15 @@ namespace arcticdb {
             }
         }
 
-        folly::Future<std::vector<VariantKey>> batch_write(
-                std::vector<std::pair<PartialKey, SegmentInMemory>> &&key_segments,
-                const std::shared_ptr<DeDupMap> &,
-                const BatchWriteArgs &
-        ) override {
-            std::vector<VariantKey> output;
-            for (auto &pair : key_segments) {
-                output.emplace_back(std::get<AtomKey>(write(pair.first, std::move(pair.second)).value()));
-            }
-            return folly::makeFuture(std::move(output));
+        folly::Future<pipelines::SliceAndKey> async_write(
+            folly::Future<std::tuple<PartialKey, SegmentInMemory, pipelines::FrameSlice>> &&input_fut,
+            const std::shared_ptr<DeDupMap> &) override {
+            return std::move(input_fut).thenValue([this] (auto&& input) {
+                auto [pk, seg, slice] = std::move(input);
+                auto key = get_key(pk.key_type, 0, pk.stream_id, pk.start_index, pk.end_index);
+                add_segment(key, std::move(seg));
+                return SliceAndKey{std::move(slice), std::move(key)};
+            });
         }
 
         std::vector<folly::Future<bool>> batch_key_exists(const std::vector<entity::VariantKey> &keys) override {

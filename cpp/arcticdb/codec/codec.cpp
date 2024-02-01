@@ -310,11 +310,12 @@ void decode_string_pool( const arcticdb::proto::encoding::SegmentHeader& hdr,
     }
 }
 
-void decode_v2(const Segment& segment,
-           arcticdb::proto::encoding::SegmentHeader& hdr,
-           SegmentInMemory& res,
-           const StreamDescriptor& desc)
-           {
+void decode_v2(
+    const Segment& segment,
+    arcticdb::proto::encoding::SegmentHeader& hdr,
+    SegmentInMemory& res,
+    const StreamDescriptor& desc
+) {
     ARCTICDB_SAMPLE(DecodeSegment, 0)
     const auto [begin, end] = get_segment_begin_end(segment, hdr);
     auto encoded_fields_ptr = end;
@@ -364,11 +365,12 @@ void decode_v2(const Segment& segment,
         res.set_compacted(segment.header().compacted());
     }}
 
-void decode_v1(const Segment& segment,
-            const arcticdb::proto::encoding::SegmentHeader& hdr,
-            SegmentInMemory& res,
-            StreamDescriptor::Proto& desc)
-{
+void decode_v1(
+    const Segment& segment,
+    const arcticdb::proto::encoding::SegmentHeader& hdr,
+    SegmentInMemory& res,
+    StreamDescriptor::Proto& desc
+) {
     ARCTICDB_SAMPLE(DecodeSegment, 0)
     const uint8_t* data = segment.buffer().data();
     util::check(data != nullptr, "Got null data ptr from segment");
@@ -384,16 +386,16 @@ void decode_v1(const Segment& segment,
         const auto seg_row_count = fields_size ? ssize_t(hdr.fields(0).ndarray().items_count()) : 0LL;
         res.init_column_map();
 
-        for (std::size_t i = 0; i < static_cast<size_t>(fields_size); ++i) {
-            const auto& field = hdr.fields(static_cast<int>(i));
-            const auto& field_name = desc.fields(static_cast<int>(i)).name();
+        for (int i = 0; i < fields_size; ++i) {
+            const auto& field = hdr.fields(i);
+            const auto& field_name = desc.fields(i).name();
             util::check(data!=end, "Reached end of input block with {} fields to decode", fields_size-i);
             if(auto col_index = res.column_index(field_name)) {
                 auto& col = res.column(static_cast<position_t>(*col_index));
                 data += decode_field(res.field(*col_index).type(), field, data, col, col.opt_sparse_map(), to_encoding_version(hdr.encoding_version()));
-            } else
+            } else {
                 data += encoding_sizes::field_compressed_size(field);
-
+            }
             ARCTICDB_TRACE(log::codec(), "Decoded column {} to position {}", i, data-begin);
         }
 

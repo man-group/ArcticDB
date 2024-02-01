@@ -21,7 +21,7 @@ from pandas import Timestamp, to_datetime, Timedelta
 from typing import Any, Optional, Union, List, Sequence, Tuple, Dict, Set
 from contextlib import contextmanager
 
-from arcticc.pb2.descriptors_pb2 import TypeDescriptor, SortedValue
+from arcticc.pb2.descriptors_pb2 import IndexDescriptor, TypeDescriptor, SortedValue
 from arcticc.pb2.storage_pb2 import LibraryConfig, EnvironmentConfigsMap
 from arcticdb.preconditions import check
 from arcticdb.supported_types import DateRangeInput, ExplicitlySupportedDates
@@ -65,12 +65,6 @@ from arcticdb.version_store._normalization import (
     restrict_data_to_date_range_only,
     normalize_dt_range_to_ts,
 )
-
-# These chars are encoded by S3 and on doing a list_symbols they will show up as the encoded form eg. &amp
-UNSUPPORTED_S3_CHARS = {"\0", "*", "<", ">"}
-MAX_SYMBOL_SIZE = (2**8) - 1
-
-
 TimeSeriesType = Union[pd.DataFrame, pd.Series]
 
 
@@ -351,18 +345,6 @@ class NativeVersionStore:
 
         return udm, item, norm_meta
 
-    @staticmethod
-    def check_symbol_validity(symbol):
-        if not len(symbol) < MAX_SYMBOL_SIZE:
-            raise ArcticDbNotYetImplemented(
-                f"Symbol length {len(symbol)} chars exceeds the max supported length of {MAX_SYMBOL_SIZE} chars."
-            )
-
-        if len(set(symbol).intersection(UNSUPPORTED_S3_CHARS)):
-            raise ArcticDbNotYetImplemented(
-                f"The symbol '{symbol}' has one or more unsupported characters({','.join(UNSUPPORTED_S3_CHARS)})."
-            )
-
     def _try_flatten_and_write_composite_object(
         self, symbol, data, metadata, pickle_on_failure, dynamic_strings, prune_previous
     ):
@@ -518,7 +500,6 @@ class NativeVersionStore:
         1       6
         2       7
         """
-        self.check_symbol_validity(symbol)
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
 
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
@@ -676,7 +657,6 @@ class NativeVersionStore:
         2018-01-05       5
         2018-01-06       6
         """
-        self.check_symbol_validity(symbol)
 
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
         coerce_columns = kwargs.get("coerce_columns", None)
@@ -772,7 +752,6 @@ class NativeVersionStore:
         2018-01-03      40
         2018-01-04       4
         """
-        self.check_symbol_validity(symbol)
         update_query = _PythonVersionStoreUpdateQuery()
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
         dynamic_schema = self.resolve_defaults(
@@ -1215,9 +1194,6 @@ class NativeVersionStore:
         throw_on_error: bool = True,
         **kwargs,
     ) -> List[VersionedItem]:
-        for symbol in symbols:
-            self.check_symbol_validity(symbol)
-
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
         prune_previous_version = self.resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
@@ -1263,9 +1239,6 @@ class NativeVersionStore:
     def _batch_write_metadata_to_versioned_items(
         self, symbols: List[str], metadata_vector: List[Any], prune_previous_version, throw_on_error
     ):
-        for symbol in symbols:
-            self.check_symbol_validity(symbol)
-
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
         prune_previous_version = self.resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
@@ -1383,9 +1356,6 @@ class NativeVersionStore:
         throw_on_error,
         **kwargs,
     ):
-        for symbol in symbols:
-            self.check_symbol_validity(symbol)
-
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
         prune_previous_version = self.resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
@@ -2433,7 +2403,10 @@ class NativeVersionStore:
         return self.is_pickled_descriptor(dit.timeseries_descriptor)
 
     def _get_time_range_from_ts(self, desc, min_ts, max_ts):
-        if min_ts == None or max_ts == None:
+        if desc.stream_descriptor.index.kind != IndexDescriptor.Type.TIMESTAMP or \
+            desc.stream_descriptor.sorted == SortedValue.UNSORTED or \
+            min_ts is None or \
+            max_ts is None:
             return datetime64("nat"), datetime64("nat")
         input_type = desc.normalization.WhichOneof("input_type")
         tz = None
@@ -2602,6 +2575,7 @@ class NativeVersionStore:
             - normalization_metadata,
             - type, `str`
             - date_range, `tuple`
+            - sorted, `str`
         """
         version_query = self._get_version_query(version)
         read_options = _PythonVersionStoreReadOptions()
@@ -2637,6 +2611,7 @@ class NativeVersionStore:
             - normalization_metadata,
             - type, `str`
             - date_range, `tuple`
+            - sorted, `str`
         """
         throw_on_error = True
         return self._batch_read_descriptor(symbols, as_ofs, throw_on_error)
@@ -2689,8 +2664,6 @@ class NativeVersionStore:
             VersionedItem containing the metadata of the written symbol's version in the store.
             The data attribute will not be populated.
         """
-        self.check_symbol_validity(symbol)
-
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
 
         prune_previous_version = self.resolve_defaults(

@@ -390,8 +390,6 @@ struct DataTypeTag<DataType::__DT__> : public DataTypeTagBase { \
 }; \
 using TAG_##__DT__ = DataTypeTag<DataType::__DT__>;
 
-using timestamp = int64_t;
-
 
 DATA_TYPE_TAG(UINT8, std::uint8_t)
 DATA_TYPE_TAG(UINT16, std::uint16_t)

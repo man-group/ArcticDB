@@ -288,7 +288,7 @@ def test_append_not_sorted_range_index_non_exception(lmdb_version_store):
 
     lmdb_version_store.write(symbol, df)
     info = lmdb_version_store.get_info(symbol)
-    assert info["sorted"] == "ASCENDING"
+    assert info["sorted"] == "UNKNOWN"
 
     num_rows = 20
     dtidx = pd.RangeIndex(num_initial_rows, num_initial_rows + num_rows, 1)
@@ -428,7 +428,9 @@ def test_append_with_cont_mem_problem(sym, lmdb_version_store_tiny_segment_dynam
         lib.append(sym, df1).version
         lib.append(sym, df2).version
         lib.append(sym, df3).version
+        assert lib.get_info(sym)["sorted"] == "ASCENDING"
         lib.version_store.defragment_symbol_data(sym, None)
+        assert lib.get_info(sym)["sorted"] == "ASCENDING"
         res = lib.read(sym).data
         assert_frame_equal(df, res)
 
@@ -530,7 +532,9 @@ def test_defragment_read_prev_versions(sym, lmdb_version_store):
         assert_frame_equal(lmdb_version_store.read(sym, as_of=version_id).data, expected_df)
 
     assert lmdb_version_store.is_symbol_fragmented(sym)
+    assert lmdb_version_store.get_info(sym)["sorted"] == "ASCENDING"
     versioned_item = lmdb_version_store.defragment_symbol_data(sym)
+    assert lmdb_version_store.get_info(sym)["sorted"] == "ASCENDING"
     assert versioned_item.version == 101
     assert len(lmdb_version_store.list_versions(sym)) == 102
 

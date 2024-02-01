@@ -32,7 +32,7 @@ from arcticdb import QueryBuilder
 from arcticdb.flattener import Flattener
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._custom_normalizers import CustomNormalizer, register_normalizer
-from arcticdb.version_store._store import UNSUPPORTED_S3_CHARS, MAX_SYMBOL_SIZE, VersionedItem
+from arcticdb.version_store._store import VersionedItem
 from arcticdb_ext.exceptions import _ArcticLegacyCompatibilityException, StorageException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb_ext.version_store import NoSuchVersionException, StreamDescriptorMismatch, ManualClockVersionStore
@@ -98,7 +98,7 @@ def test_s3_breaking_chars(object_version_store, breaking_char):
     """
     sym = f"prefix{breaking_char}postfix"
     df = sample_dataframe()
-    with pytest.raises(ArcticDbNotYetImplemented):
+    with pytest.raises(UserInputException):
         object_version_store.write(sym, df)
 
     assert sym not in object_version_store.list_symbols()
@@ -110,15 +110,33 @@ def test_s3_breaking_chars_exception_compat(object_version_store):
     """
     sym = "prefix*postfix"
     df = sample_dataframe()
-    # Check that ArcticNativeNotYetImplemented is aliased correctly as ArcticDbNotYetImplemented for backwards compat
-    with pytest.raises(ArcticDbNotYetImplemented) as e_info:
+    with pytest.raises(UserInputException) as e_info:
         object_version_store.write(sym, df)
 
-    assert isinstance(e_info.value, ArcticNativeNotYetImplemented)
+    assert isinstance(e_info.value, UserInputException)
     assert sym not in object_version_store.list_symbols()
 
 
-@pytest.mark.parametrize("unhandled_char", [chr(30), chr(127), chr(128)])
+@pytest.mark.parametrize("prefix", ["", "prefix"])
+@pytest.mark.parametrize("suffix", ["", "suffix"])
+def test_symbol_names_with_all_chars(object_version_store, prefix, suffix):
+    # Create symbol names with each character (except '\' because Azure replaces it with '/' in some cases)
+    names = [f"{prefix}{chr(i)}{suffix}" for i in range(256) if chr(i) != '\\']
+    df = sample_dataframe()
+
+    written_symbols = set()
+    for name in names:
+        try:
+            object_version_store.write(name, df)
+            written_symbols.add(name)
+        # We should only fail with UserInputException (indicating that name validation failed)
+        except UserInputException:
+            pass
+
+    assert set(object_version_store.list_symbols()) == written_symbols
+
+
+@pytest.mark.parametrize("unhandled_char", [chr(0), chr(30), chr(127), chr(128)])
 def test_unhandled_chars_default(object_version_store, unhandled_char):
     """Test that by default, the problematic chars are raising an exception"""
     sym = f"prefix{unhandled_char}postfix"
@@ -129,7 +147,7 @@ def test_unhandled_chars_default(object_version_store, unhandled_char):
     assert sym not in syms
 
 
-@pytest.mark.parametrize("unhandled_char", [chr(30), chr(127), chr(128)])
+@pytest.mark.parametrize("unhandled_char", [chr(0), chr(30), chr(127), chr(128)])
 def test_unhandled_chars_update_upsert(object_version_store, unhandled_char):
     df = pd.DataFrame(
         {"col_1": ["a", "b"], "col_2": [0.1, 0.2]}, index=[pd.Timestamp("2022-01-01"), pd.Timestamp("2022-01-02")]
@@ -141,7 +159,7 @@ def test_unhandled_chars_update_upsert(object_version_store, unhandled_char):
     assert sym not in syms
 
 
-@pytest.mark.parametrize("unhandled_char", [chr(30), chr(127), chr(128)])
+@pytest.mark.parametrize("unhandled_char", [chr(0), chr(30), chr(127), chr(128)])
 def test_unhandled_chars_append(object_version_store, unhandled_char):
     df = pd.DataFrame(
         {"col_1": ["a", "b"], "col_2": [0.1, 0.2]}, index=[pd.Timestamp("2022-01-01"), pd.Timestamp("2022-01-02")]
@@ -662,16 +680,46 @@ def test_get_info_version_no_columns_nat(basic_store):
     df["b"] = df["b"].astype("int64")
     basic_store.write(sym, df, dynamic_strings=True, coerce_columns={"a": float, "b": int, "c": str})
     info = basic_store.get_info(sym)
-    assert np.isnat(info["date_range"][0]) == True
-    assert np.isnat(info["date_range"][1]) == True
+    assert np.isnat(info["date_range"][0])
+    assert np.isnat(info["date_range"][1])
 
 
 def test_get_info_version_empty_nat(basic_store):
     sym = "test_get_info_version_empty_nat"
     basic_store.write(sym, pd.DataFrame())
     info = basic_store.get_info(sym)
-    assert np.isnat(info["date_range"][0]) == True
-    assert np.isnat(info["date_range"][1]) == True
+    assert np.isnat(info["date_range"][0])
+    assert np.isnat(info["date_range"][1])
+
+
+def test_get_info_non_timestamp_index_date_range(basic_store):
+    lib = basic_store
+    sym = "test_get_info_non_timestamp_index_date_range"
+    # Row-range indexed
+    lib.write(sym, pd.DataFrame({"col": [1, 2, 3]}))
+    info = lib.get_info(sym)
+    assert np.isnat(info["date_range"][0])
+    assert np.isnat(info["date_range"][1])
+    # int64 indexed
+    lib.write(sym, pd.DataFrame({"col": [1, 2, 3]}), index=pd.Index([4, 5, 6], dtype=np.int64))
+    info = lib.get_info(sym)
+    assert np.isnat(info["date_range"][0])
+    assert np.isnat(info["date_range"][1])
+
+
+def test_get_info_unsorted_timestamp_index_date_range(basic_store):
+    lib = basic_store
+    sym = "test_get_info_unsorted_timestamp_index_date_range"
+    lib.write(
+        sym,
+        pd.DataFrame(
+            {"col": [1, 2, 3]},
+            index=[pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-02")]
+        )
+    )
+    info = lib.get_info(sym)
+    assert np.isnat(info["date_range"][0])
+    assert np.isnat(info["date_range"][1])
 
 
 def test_update_times(basic_store):
@@ -781,10 +829,14 @@ def test_empty_ndarr(basic_store):
     basic_store.write(sym, ndarr)
     assert_array_equal(basic_store.read(sym).data, ndarr)
 
+# The following restrictions should be checked in the cpp layer's name_validation
+MAX_SYMBOL_SIZE=255
+UNSUPPORTED_S3_CHARS={'*', '<', '>'}
 
 # See AN-765 for why we need no_symbol_list fixture
 def test_large_symbols(basic_store_no_symbol_list):
-    with pytest.raises(ArcticDbNotYetImplemented):
+    # TODO: Make too long name on LMDB raise a friendlier UserInputException (instead of InternalException [E_INVALID_ARGUMENT])
+    with pytest.raises( (UserInputException, InternalException) ):
         basic_store_no_symbol_list.write("a" * (MAX_SYMBOL_SIZE + 1), 1)
 
     for _ in range(5):
@@ -803,7 +855,7 @@ def test_large_symbols(basic_store_no_symbol_list):
 
 def test_unsupported_chars_in_symbols(basic_store):
     for ch in UNSUPPORTED_S3_CHARS:
-        with pytest.raises(ArcticDbNotYetImplemented):
+        with pytest.raises(UserInputException):
             basic_store.write(ch, 1)
 
     for _ in range(5):
@@ -971,7 +1023,6 @@ def test_read_ts(basic_store):
     with distinct_timestamps(basic_store):
         basic_store.write("a", 3)  # v2
     basic_store.write("a", 4)  # v3
-    basic_store.snapshot("snap3")
 
     versions = basic_store.list_versions()
     assert len(versions) == 4
@@ -981,15 +1032,15 @@ def test_read_ts(basic_store):
     assert vitem.version == 1
     assert vitem.data == 2
 
-    ts_for_v2 = sorted_versions_for_a[0]["date"]
-    vitem = basic_store.read("a", as_of=ts_for_v2)
+    ts_for_v0 = sorted_versions_for_a[0]["date"]
+    vitem = basic_store.read("a", as_of=ts_for_v0)
     assert vitem.version == 0
     assert vitem.data == 1
 
     with pytest.raises(NoDataFoundException):
         basic_store.read("a", as_of=pd.Timestamp(0))
 
-    brexit_almost_over = pd.Timestamp(np.iinfo(np.int64).max)  # Timestamp("2262-04-11 23:47:16.854775807")
+    brexit_almost_over = pd.Timestamp.max - pd.Timedelta(1, unit="day")  # Timestamp("2262-04-10 23:47:16.854775807")
     vitem = basic_store.read("a", as_of=brexit_almost_over)
     assert vitem.version == 3
     assert vitem.data == 4
