@@ -44,6 +44,52 @@ namespace s3 {
         template<class It>
         using Range = folly::Range<It>;
 
+        class UnexpectedS3ErrorException : public std::exception {
+        public:
+            UnexpectedS3ErrorException(const std::string& message):message(message){}
+            const char* what() const noexcept override {
+                return message.c_str();
+            }
+        private:
+            std::string message;
+        };
+
+        inline void raise_s3_exception(const Aws::S3::S3Error& err){
+            std::string error_message;
+            // We create a more detailed error explanation in case of NETWORK_CONNECTION errors to remedy #880.
+            if (err.GetErrorType() == Aws::S3::S3Errors::NETWORK_CONNECTION){
+                error_message = fmt::format("Got an unexpected network error: {}: {}. "
+                                            "This could be due to a connectivity issue or too many open Arctic instances. "
+                                            "Having more than one open Arctic instance is not advised, you should reuse them. "
+                                            "If you absolutely need many open Arctic instances, consider increasing `ulimit -n`.",
+                                            err.GetExceptionName().c_str(),
+                                            err.GetMessage().c_str());
+            }
+            else {
+                error_message = fmt::format("Got unexpected error: '{}' {}: {}",
+                                            int(err.GetErrorType()),
+                                            err.GetExceptionName().c_str(),
+                                            err.GetMessage().c_str());
+            }
+
+            log::storage().error(error_message);
+            throw UnexpectedS3ErrorException(error_message);
+        }
+
+        inline bool is_expected_error_type(Aws::S3::S3Errors err) {
+            return err == Aws::S3::S3Errors::NO_SUCH_KEY
+                   || err == Aws::S3::S3Errors::NO_SUCH_BUCKET
+                   || err == Aws::S3::S3Errors::INVALID_ACCESS_KEY_ID
+                   || err == Aws::S3::S3Errors::ACCESS_DENIED
+                   || err == Aws::S3::S3Errors::RESOURCE_NOT_FOUND;
+        }
+
+        inline void raise_if_unexpected_error(const Aws::S3::S3Error& err){
+            if (!is_expected_error_type(err.GetErrorType())) {
+                raise_s3_exception(err);
+            }
+        }
+
         template<class KeyBucketizer>
         void do_write_impl(
                 Composite<KeySegmentPair> &&kvs,
@@ -68,11 +114,8 @@ namespace s3 {
                             auto put_object_result = s3_client.put_object(s3_object_name, std::move(seg), bucket_name);
 
                             if (!put_object_result.is_success()) {
-                                auto &error = put_object_result.get_error();
-                                util::raise_rte("Failed to write s3 with key '{}' {}: {}",
-                                                k,
-                                                error.GetExceptionName().c_str(),
-                                                error.GetMessage().c_str());
+                                auto& error = put_object_result.get_error();
+                                raise_s3_exception(error);
                             }
                         }
                     });
@@ -87,47 +130,6 @@ namespace s3 {
                 KeyBucketizer &&bucketizer) {
             // s3 updates the key if it already exists (our buckets don't have versioning)
             do_write_impl(std::move(kvs), root_folder, bucket_name, s3_client, std::move(bucketizer));
-        }
-
-        class UnexpectedS3ErrorException : public std::exception {
-        public:
-            UnexpectedS3ErrorException(const std::string& message):message(message){}
-            const char* what() const noexcept override {
-                return message.c_str();
-            }
-        private:
-            std::string message;
-        };
-
-        inline bool is_expected_error_type(Aws::S3::S3Errors err) {
-            return err == Aws::S3::S3Errors::NO_SUCH_KEY
-                   || err == Aws::S3::S3Errors::NO_SUCH_BUCKET
-                   || err == Aws::S3::S3Errors::INVALID_ACCESS_KEY_ID
-                   || err == Aws::S3::S3Errors::ACCESS_DENIED
-                   || err == Aws::S3::S3Errors::RESOURCE_NOT_FOUND;
-        }
-
-        inline void raise_if_unexpected_error(const Aws::S3::S3Error& err){
-            if (!is_expected_error_type(err.GetErrorType())) {
-                std::string error_message;
-                // We create a more detailed error explanation in case of NETWORK_CONNECTION errors to remedy #880.
-                if (err.GetErrorType() == Aws::S3::S3Errors::NETWORK_CONNECTION){
-                    error_message = fmt::format("Got an unexpected network error: {}. "
-                                                "This could be due to a connectivity issue or too many open Arctic instances. "
-                                                "Having more than one open Arctic instance is not advised, you should reuse them. "
-                                                "If you absolutely need many open Arctic instances, consider increasing `ulimit -n`.",
-                                                err.GetMessage().c_str());
-                }
-                else {
-                    error_message = fmt::format("Got unexpected error: '{}' {}: {}",
-                                                int(err.GetErrorType()),
-                                                err.GetExceptionName().c_str(),
-                                                err.GetMessage().c_str());
-                }
-
-                log::storage().error(error_message);
-                throw UnexpectedS3ErrorException(error_message);
-            }
         }
 
         template<class KeyBucketizer>
@@ -205,19 +207,20 @@ namespace s3 {
                             if (to_delete.size() == delete_object_limit || k.index + 1 == group.size()) {
                                 auto delete_object_result = s3_client.delete_objects(to_delete, bucket_name);
                                 if (delete_object_result.is_success()) {
-                                    ARCTICDB_RUNTIME_DEBUG(log::storage(), "Deleted object with key '{}'",
+                                    ARCTICDB_RUNTIME_DEBUG(log::storage(), "Deleted {} objects, one of which with key '{}'",
+                                                           to_delete.size(),
                                                            variant_key_view(*k));
-                                } else {
-                                    // TODO: Fix error handling. The failed deletes should be managed in the success case.
-                                    // This is the case for an entire batch request failing (e.g. due to network error)
                                     for (auto& bad_key: delete_object_result.get_output().failed_deletes) {
                                         auto bad_key_name = bad_key.substr(key_type_dir.size(),
-                                                                                    std::string::npos);
+                                                                           std::string::npos);
                                         failed_deletes.emplace_back(
-                                                from_tokenized_variant_key(
+                                                variant_key_from_bytes(
                                                         reinterpret_cast<const uint8_t *>(bad_key_name.data()),
                                                         bad_key_name.size(), group.key()));
                                     }
+                                } else {
+                                    auto& error = delete_object_result.get_error();
+                                    raise_s3_exception(error);
                                 }
                                 to_delete.clear();
                             }
@@ -289,13 +292,14 @@ namespace s3 {
 
                     continuation_token = output.next_continuation_token;
                 } else {
-                    // TODO: We should raise here if we encounter an unexpected error, because otherwise
-                    // we'll likely return incomplete results
                     const auto &error = list_objects_result.get_error();
                     log::storage().warn("Failed to iterate key type with key '{}' {}: {}",
                                         key_type,
                                         error.GetExceptionName().c_str(),
                                         error.GetMessage().c_str());
+                    // We don't raise on expected errors like NoSuchBucket because we want to return an empty list
+                    // instead of raising.
+                    raise_if_unexpected_error(error);
                     return;
                 }
             } while (continuation_token.has_value());
