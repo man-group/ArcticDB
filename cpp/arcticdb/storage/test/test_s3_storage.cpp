@@ -296,7 +296,7 @@ TEST_F(S3StorageFixture, test_write){
     write_in_store(store, "symbol");
     ASSERT_THROW(
         write_in_store(store, MockS3Client::get_failure_trigger("symbol", S3Operation::PUT, Aws::S3::S3Errors::NETWORK_CONNECTION)),
-        ArcticCategorizedException<ErrorCategory::INTERNAL>);
+        s3::detail::UnexpectedS3ErrorException);
 }
 
 TEST_F(S3StorageFixture, test_remove) {
@@ -310,15 +310,17 @@ TEST_F(S3StorageFixture, test_remove) {
     ASSERT_EQ(list_in_store(store), remaining);
 
     // Remove 2 and local fail on 3
-    // TODO: Should raise an appropriate exception, we currently just silently fail to delete symbol_3.
-    remove_in_store(store, {"symbol_2", MockS3Client::get_failure_trigger("symbol_3", S3Operation::DELETE_LOCAL, Aws::S3::S3Errors::NETWORK_CONNECTION)});
+    ASSERT_THROW(
+        remove_in_store(store, {"symbol_2", MockS3Client::get_failure_trigger("symbol_3", S3Operation::DELETE_LOCAL, Aws::S3::S3Errors::NETWORK_CONNECTION)}),
+        KeyNotFoundException);
     remaining = std::set<std::string>{"symbol_3", "symbol_4"};
     ASSERT_EQ(list_in_store(store), remaining);
 
-    // TODO: Should raise an appropriate exception, we currently raise a std::bad_variant_access
+    // Attempt to remove 3 and 4, should fail entirely
     ASSERT_THROW(
         remove_in_store(store, {"symbol_3", MockS3Client::get_failure_trigger("symbol_4", S3Operation::DELETE, Aws::S3::S3Errors::NETWORK_CONNECTION)}),
-        std::bad_variant_access);
+        s3::detail::UnexpectedS3ErrorException);
+    ASSERT_EQ(list_in_store(store), remaining);
 }
 
 TEST_F(S3StorageFixture, test_list) {
@@ -332,11 +334,5 @@ TEST_F(S3StorageFixture, test_list) {
 
     write_in_store(store, MockS3Client::get_failure_trigger("symbol_99", S3Operation::LIST, Aws::S3::S3Errors::NETWORK_CONNECTION));
 
-    auto incomplete_symbols = std::set<std::string>();
-    for (int i = 10; i < 20; ++i) {
-        auto symbol = fmt::format("symbol_{}", i);
-        incomplete_symbols.emplace(symbol);
-    }
-    // TODO: Should raise, we currently return an incomplete result which is bad.
-    ASSERT_EQ(list_in_store(store), incomplete_symbols);
+    ASSERT_THROW(list_in_store(store), s3::detail::UnexpectedS3ErrorException);
 }
