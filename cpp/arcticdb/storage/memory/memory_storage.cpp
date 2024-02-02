@@ -58,7 +58,10 @@ namespace arcticdb::storage::memory {
             for (auto &kv : group.values()) {
                 auto it = key_vec.find(kv.variant_key());
 
-                util::check_rte(opts.upsert_ || it != key_vec.end(), "update called with upsert=false but key does not exist");
+                if (!opts.upsert_ && it == key_vec.end()) {
+                    std::string err_message = fmt::format("update called with upsert=false but key does not exist: {}", kv.variant_key());
+                    throw KeyNotFoundException(std::move(kv.variant_key()), err_message);
+                }
 
                 if(it != key_vec.end()) {
                     key_vec.erase(it);
@@ -110,7 +113,7 @@ namespace arcticdb::storage::memory {
                     ARCTICDB_DEBUG(log::storage(), "Read key {}: {}, with {} bytes of data", variant_key_type(k), variant_key_view(k));
                     key_vec.erase(it);
                 } else if (!opts.ignores_missing_key_) {
-                    util::raise_rte("Failed to find segment for key {}",variant_key_view(k));
+                    throw KeyNotFoundException(std::move(k));
                 }
             }
         });
