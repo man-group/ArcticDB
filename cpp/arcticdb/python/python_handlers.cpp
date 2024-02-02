@@ -108,7 +108,7 @@ namespace arcticdb {
         const uint8_t*& data,
         uint8_t* dest,
         const VariantField& encoded_field_info,
-        size_t dest_bytes,
+        size_t,
         std::shared_ptr<BufferHolder>,
         EncodingVersion encding_version,
         const ColumnMapping& m
@@ -160,7 +160,7 @@ namespace arcticdb {
         const uint8_t*& data,
         uint8_t* dest,
         const VariantField& encoded_field_info,
-        size_t dest_bytes,
+        size_t,
         std::shared_ptr<BufferHolder> buffers,
         EncodingVersion encoding_version,
         const ColumnMapping& m
@@ -168,12 +168,11 @@ namespace arcticdb {
         util::variant_match(encoded_field_info, [&](auto field){
             ARCTICDB_SAMPLE(HandleArray, 0)
             util::check(field->has_ndarray(), "Expected ndarray in array object handler");
-            const auto row_count = dest_bytes / sizeof(PyObject*);
 
             auto ptr_dest = reinterpret_cast<const PyObject**>(dest);
             if(!field->ndarray().sparse_map_bytes()) {
                 log::version().info("Array handler has no values");
-                fill_with_none(ptr_dest, row_count);
+                fill_with_none(ptr_dest, m.num_rows_);
                 return;
             }
             std::shared_ptr<Column> column = buffers->get_buffer(m.source_type_desc_, true);
@@ -221,7 +220,7 @@ namespace arcticdb {
             });
 
             ARCTICDB_SUBSAMPLE(ArrayIncNones, 0)
-            fill_with_none(ptr_dest, row_count - last_row);
+            fill_with_none(ptr_dest, m.num_rows_ - last_row);
         });
     }
 

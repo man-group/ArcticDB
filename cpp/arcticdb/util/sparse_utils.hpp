@@ -107,7 +107,7 @@ ChunkedBuffer scan_floating_point_to_sparse(
     util::BitMagic& block_bitset) {
     auto scan_ptr = ptr;
     for (size_t idx = 0; idx < rows_to_write; ++idx, ++scan_ptr) {
-        block_bitset[bv_size(idx)] = isnan(*scan_ptr) <= 0;
+        block_bitset[bv_size(idx)] = !isnan(*scan_ptr);
     }
 
     const auto bytes = block_bitset.count() * sizeof(RawType);

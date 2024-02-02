@@ -157,7 +157,7 @@ ENDIF()
 
 set(CMAKE_INSTALL_RPATH "\\$ORIGIN/lib")
 
-if (NOT WIN32)
+if (NOT MSVC)
     if(NOT ${ARCTICDB_USING_CONDA})
         # Compilers on conda-forge are relatively strict.
         # For now, we do not want to treat warnings as errors for those builds.
@@ -166,6 +166,13 @@ if (NOT WIN32)
     add_compile_options("-ggdb")
     add_compile_options("-fvisibility=hidden")
     add_compile_options("-fno-omit-frame-pointer")
+else()
+    add_compile_options(
+        /WX
+        /wd4250 # Suppress inherits via dominance warning
+        /we4189 # Unused local variable is an error
+        /we4100 # Unused function parameter is an error
+    )
 endif ()
 
 ## Core library without python bindings ##
