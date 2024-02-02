@@ -239,9 +239,9 @@ public:
         sparse_map().set_range(0, bv_size(to_row), true);
     }
 
-    std::optional<util::BitMagic>& opt_sparse_map() {
-        return sparse_map_;
-    }
+    [[nodiscard]] util::BitMagic& sparse_map();
+    [[nodiscard]] const util::BitMagic& sparse_map() const;
+    [[nodiscard]] std::optional<util::BitMagic>& opt_sparse_map();
 
     template<typename TagType>
     auto begin() const {
@@ -646,11 +646,18 @@ public:
         return *res;
     }
 
-    static std::vector<std::shared_ptr<Column>> split(const std::shared_ptr<Column>& column, size_t num_rows);
-    /// @biref Produces a new column containing only the data in range [start_row, end_row)
+    [[nodiscard]] static std::vector<std::shared_ptr<Column>> split(
+        const std::shared_ptr<Column>& column,
+        size_t num_rows
+    );
+    /// @brief Produces a new column containing only the data in range [start_row, end_row)
     /// @param[in] start_row Inclusive start of the row range
     /// @param[in] end_row Exclusive end of the row range
-    static std::shared_ptr<Column> truncate(const std::shared_ptr<Column>& column, size_t start_row, size_t end_row);
+    [[nodiscard]] static std::shared_ptr<Column> truncate(
+        const std::shared_ptr<Column>& column,
+        size_t start_row,
+        size_t end_row
+    );
 
 private:
 
@@ -669,9 +676,6 @@ private:
 
     // Permutes the physical column storage based on the given sorted_pos.
     void physical_sort_external(std::vector<uint32_t> &&sorted_pos);
-
-    [[nodiscard]] util::BitMagic& sparse_map();
-    const util::BitMagic& sparse_map() const;
 
     // Members
     CursoredBuffer<ChunkedBuffer> data_;

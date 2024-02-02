@@ -389,14 +389,26 @@ void decode_v1(
         for (int i = 0; i < fields_size; ++i) {
             const auto& field = hdr.fields(i);
             const auto& field_name = desc.fields(i).name();
-            util::check(data!=end, "Reached end of input block with {} fields to decode", fields_size-i);
-            if(auto col_index = res.column_index(field_name)) {
+            if (auto col_index = res.column_index(field_name)) {
                 auto& col = res.column(static_cast<position_t>(*col_index));
-                data += decode_field(res.field(*col_index).type(), field, data, col, col.opt_sparse_map(), to_encoding_version(hdr.encoding_version()));
+                util::check(
+                    data != end || is_empty_type(col.type().data_type()),
+                    "Reached end of input block with {} fields to decode",
+                    fields_size - i
+                );
+                data += decode_field(
+                    res.field(*col_index).type(),
+                    field,
+                    data,
+                    col,
+                    col.opt_sparse_map(),
+                    to_encoding_version(hdr.encoding_version())
+                );
             } else {
+                util::check(data != end, "Reached end of input block with {} fields to decode", fields_size - i);
                 data += encoding_sizes::field_compressed_size(field);
             }
-            ARCTICDB_TRACE(log::codec(), "Decoded column {} to position {}", i, data-begin);
+            ARCTICDB_TRACE(log::codec(), "Decoded column {} to position {}", i, data - begin);
         }
 
         decode_string_pool(hdr, data, begin, end, res);
