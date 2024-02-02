@@ -92,8 +92,8 @@ void LmdbStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) {
     if(!failed_deletes.empty()) {
         ARCTICDB_SUBSAMPLE(LmdbStorageCommit, 0)
         txn.commit();
-        throw KeyNotFoundException(Composite<VariantKey>(std::move(failed_deletes)),
-                "do_update called with upsert=false on non-existent key(s): {}");
+        std::string err_message = fmt::format("do_update called with upsert=false on non-existent key(s): {}", failed_deletes);
+        throw KeyNotFoundException(Composite<VariantKey>(std::move(failed_deletes)), err_message);
     }
     do_write_internal(std::move(kvs), txn);
     ARCTICDB_SUBSAMPLE(LmdbStorageCommit, 0)
