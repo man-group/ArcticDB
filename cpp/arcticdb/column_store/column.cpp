@@ -513,7 +513,7 @@ std::vector<std::shared_ptr<Column>> Column::split(const std::shared_ptr<Column>
 }
 
 /// Bytes from the underlying chunked buffer to include when truncating. Inclusive of start_byte, exclusive of end_byte
-static [[nodiscard]] std::pair<size_t, size_t> column_start_end_bytes(
+[[nodiscard]] static std::pair<size_t, size_t> column_start_end_bytes(
     const Column& column,
     size_t start_row,
     size_t end_row
@@ -551,7 +551,7 @@ static [[nodiscard]] std::pair<size_t, size_t> column_start_end_bytes(
     return {start_byte, end_byte};
 }
 
-static [[nodiscard]] util::BitMagic truncate_sparse_map(
+[[nodiscard]] static util::BitMagic truncate_sparse_map(
     const util::BitMagic& input_sparse_map,
     size_t start_row,
     size_t end_row
