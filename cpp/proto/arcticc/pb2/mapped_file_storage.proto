@@ -7,7 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 */
 syntax = "proto3";
 
-package arcticc.pb2.single_file_storage_pb2;
+package arcticc.pb2.mapped_file_storage_pb2;
 
 import "arcticc/pb2/encoding.proto";
 import "arcticc/pb2/descriptors.proto";

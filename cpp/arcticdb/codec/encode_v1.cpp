@@ -142,7 +142,7 @@ namespace arcticdb {
         ARCTICDB_DEBUG(log::codec(), "Setting buffer bytes to {}", pos);
         out_buffer->set_bytes(pos);
         tsd->set_out_bytes(pos);
-        ARCTICDB_DEBUG(log::codec(), "Encoded header: {}", tsd->DebugString());
+        ARCTICDB_TRACE(log::codec(), "Encoded header: {}", tsd->DebugString());
         if(!segment_header->has_metadata_field())
             ARCTICDB_DEBUG(log::codec(), "No metadata field");
         ARCTICDB_DEBUG(log::codec(), "Block count {} header size {} ratio {}",

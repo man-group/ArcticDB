@@ -1155,30 +1155,27 @@ bool PythonVersionStore::empty() {
     return true;
 }
 
-void PythonVersionStore::write_dataframe_to_file(
+void write_dataframe_to_file(
     const StreamId& stream_id,
     const std::string& path,
     const py::tuple& item,
     const py::object& norm,
-    const py::object& user_meta,
-    const WriteOptions& options,
-    EncodingVersion encoding_version) {
+    const py::object& user_meta) {
 
     ARCTICDB_SAMPLE(WriteDataframeToFile, 0)
     auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta);
-    write_dataframe_to_file_internal(stream_id, frame, path, options, codec::default_lz4_codec(), encoding_version);
+    write_dataframe_to_file_internal(stream_id, frame, path, WriteOptions{}, codec::default_lz4_codec(), EncodingVersion::V1);
 }
 
-ReadResult PythonVersionStore::read_dataframe_from_file(
+ReadResult read_dataframe_from_file(
     const StreamId &stream_id,
     const std::string path,
-    ReadQuery& read_query,
-    const ReadOptions& read_options) {
+    ReadQuery& read_query) {
 
     auto opt_version_and_frame = read_dataframe_from_file_internal(stream_id,
      path,
     read_query,
-    read_options);
+    ReadOptions{});
 
     return create_python_read_result(opt_version_and_frame.versioned_item_, std::move(opt_version_and_frame.frame_and_descriptor_));
 }

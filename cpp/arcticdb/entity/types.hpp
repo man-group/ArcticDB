@@ -136,7 +136,6 @@ enum class ValueType : uint8_t {
     EMPTY = 13,
     /// Nullable booleans
     PYBOOL = 14,
-    TIME_SYM = 15,
     COUNT // Not a real value type, should not be added to proto descriptor. Used to count the number of items in the enum
 };
 
@@ -235,7 +234,6 @@ enum class DataType : uint8_t {
     EMPTYVAL = detail::combine_val_bits(ValueType::EMPTY, SizeBits::S64),
     PYBOOL8 = detail::combine_val_bits(ValueType::PYBOOL, SizeBits::S8),
     PYBOOL64 = detail::combine_val_bits(ValueType::PYBOOL, SizeBits::S64),
-    TIME_SYM64 = detail::combine_val_bits(ValueType::TIME_SYM, SizeBits::S64),
 
 #undef DT_COMBINE
     UNKNOWN = 0,
@@ -424,7 +422,6 @@ DATA_TYPE_TAG(UTF_DYNAMIC64, std::uint64_t)
 DATA_TYPE_TAG(EMPTYVAL, std::uint64_t)
 DATA_TYPE_TAG(PYBOOL8, uint8_t)
 DATA_TYPE_TAG(PYBOOL64, std::uint64_t)
-DATA_TYPE_TAG(TIME_SYM64, std::uint64_t)
 #undef DATA_TYPE_TAG
 
 enum class Dimension : uint8_t {

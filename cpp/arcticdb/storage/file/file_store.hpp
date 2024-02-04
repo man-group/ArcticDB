@@ -74,6 +74,7 @@ void write_dataframe_to_file_internal(
     auto segments = std::move(key_seg_futs).get();
 
     auto data_size = max_data_size(segments, codec_opts, encoding_version);
+    ARCTICDB_DEBUG(log::version(), "Estimated max data size: {}", data_size);
     auto config = storage::file::pack_config(path, data_size, segments.size(), stream_id, stream::get_descriptor_from_index(frame->index), encoding_version);
 
     storage::LibraryPath lib_path{std::string{"file"}, fmt::format("{}", stream_id)};

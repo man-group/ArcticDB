@@ -335,7 +335,7 @@ namespace arcticdb {
         out_buffer->set_bytes(pos);
         tsd->set_out_bytes(pos);
 
-        ARCTICDB_DEBUG(log::codec(), "Encoded header: {}", tsd->DebugString());
+        ARCTICDB_TRACE(log::codec(), "Encoded header: {}", tsd->DebugString());
         ARCTICDB_DEBUG(log::codec(), "Block count {} header size {} ratio {}",
             in_mem_seg.num_blocks(), segment_header->ByteSizeLong(),
             in_mem_seg.num_blocks() ? segment_header->ByteSizeLong() / in_mem_seg.num_blocks() : 0);

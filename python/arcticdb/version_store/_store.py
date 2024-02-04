@@ -46,6 +46,7 @@ from arcticdb_ext.version_store import PythonVersionStoreVersionQuery as _Python
 from arcticdb_ext.version_store import ColumnStats as _ColumnStats
 from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticdb_ext.version_store import DataError
+from arcticdb_ext.version_store import write_dataframe_to_file, read_dataframe_from_file
 from arcticdb.authorization.permissions import OpenMode
 from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticNativeException
 from arcticdb.flattener import Flattener
@@ -65,11 +66,71 @@ from arcticdb.version_store._normalization import (
     restrict_data_to_date_range_only,
     normalize_dt_range_to_ts,
 )
+
+from arcticc.pb2.storage_pb2 import VersionStoreConfig
 TimeSeriesType = Union[pd.DataFrame, pd.Series]
 
 
 IS_WINDOWS = sys.platform == "win32"
 
+def _get_read_query(
+        date_range: Optional[DateRangeInput],
+        row_range: Tuple[int, int],
+        columns: Optional[List[str]],
+        query_builder: QueryBuilder,
+):
+    check(date_range is None or row_range is None, "Date range and row range both specified")
+    read_query = _PythonVersionStoreReadQuery()
+
+    if query_builder:
+        read_query.add_clauses(query_builder.clauses)
+
+    if row_range is not None:
+        read_query.row_range = _SignedRowRange(row_range[0], row_range[1])
+
+    if date_range is not None:
+        read_query.row_filter = _normalize_dt_range(date_range)
+
+    if columns is not None:
+        read_query.columns = list(columns)
+
+    return read_query
+
+def adapt_read_res(read_result, library_path, env, normalizer, custom_normalizer):
+    frame_data = FrameData.from_cpp(read_result.frame_data)
+
+    meta = denormalize_user_metadata(read_result.udm, normalizer)
+    data = normalizer.denormalize(frame_data, read_result.norm)
+    if read_result.norm.HasField("custom"):
+        data = custom_normalizer.denormalize(data, read_result.norm.custom)
+
+    return VersionedItem(
+        symbol=read_result.version.symbol,
+        library=library_path,
+        data=data,
+        version=read_result.version.version,
+        metadata=meta,
+        host=env
+    )
+
+def post_process_filters(read_result, read_query, query_builder):
+    if read_query.row_filter is not None and (query_builder is None or query_builder.needs_post_processing()):
+        # post filter
+        start_idx = end_idx = None
+        if isinstance(read_query.row_filter, _RowRange):
+            start_idx = read_query.row_filter.start - read_result.frame_data.offset
+            end_idx = read_query.row_filter.end - read_result.frame_data.offset
+        elif isinstance(read_query.row_filter, _IndexRange):
+            ts_idx = read_result.frame_data.value.data[0]
+            if len(ts_idx) != 0:
+                start_idx = ts_idx.searchsorted(datetime64(read_query.row_filter.start_ts, "ns"), side="left")
+                end_idx = ts_idx.searchsorted(datetime64(read_query.row_filter.end_ts, "ns"), side="right")
+        else:
+            raise ArcticNativeException("Unrecognised row_filter type: {}".format(type(read_query.row_filter)))
+        data = []
+        for c in read_result.frame_data.value.data:
+            data.append(c[start_idx:end_idx])
+        read_result.frame_data = FrameData(data, read_result.frame_data.names, read_result.frame_data.index_columns)
 
 # auto_attribs=True breaks Cython-ising this code. As a result must manually create attr.ib instances.
 @attr.s(slots=True, auto_attribs=False)
@@ -1471,30 +1532,6 @@ class NativeVersionStore:
         else:
             return [self._get_version_query(None, **kwargs) for _ in range(num_symbols)]
 
-    def _get_read_query(
-        self,
-        date_range: Optional[DateRangeInput],
-        row_range: Tuple[int, int],
-        columns: Optional[List[str]],
-        query_builder: QueryBuilder,
-    ):
-        check(date_range is None or row_range is None, "Date range and row range both specified")
-        read_query = _PythonVersionStoreReadQuery()
-
-        if query_builder:
-            read_query.add_clauses(query_builder.clauses)
-
-        if row_range is not None:
-            read_query.row_range = _SignedRowRange(row_range[0], row_range[1])
-
-        if date_range is not None:
-            read_query.row_filter = _normalize_dt_range(date_range)
-
-        if columns is not None:
-            read_query.columns = list(columns)
-
-        return read_query
-
     def _get_read_queries(
         self,
         num_symbols: int,
@@ -1548,7 +1585,7 @@ class NativeVersionStore:
             if query_builder is not None:
                 query = query_builder if isinstance(query_builder, QueryBuilder) else query_builder[idx]
 
-            read_query = self._get_read_query(
+            read_query = _get_read_query(
                 date_range=date_range,
                 row_range=row_range,
                 columns=these_columns,
@@ -1575,7 +1612,7 @@ class NativeVersionStore:
     def _get_queries(self, symbol, as_of, date_range, row_range, columns, query_builder, **kwargs):
         version_query = self._get_version_query(as_of, **kwargs)
         read_options = self._get_read_options(**kwargs)
-        read_query = self._get_read_query(
+        read_query = _get_read_query(
             date_range=date_range, row_range=row_range, columns=columns, query_builder=query_builder
         )
         return version_query, read_options, read_query
@@ -1717,44 +1754,30 @@ class NativeVersionStore:
     def _read_dataframe(self, symbol, version_query, read_query, read_options):
         return ReadResult(*self.version_store.read_dataframe_version(symbol, version_query, read_query, read_options))
 
-    def _post_process_dataframe(self, read_result, read_query, query_builder):
-        if read_query.row_filter is not None and (query_builder is None or query_builder.needs_post_processing()):
-            # post filter
-            start_idx = end_idx = None
-            if isinstance(read_query.row_filter, _RowRange):
-                start_idx = read_query.row_filter.start - read_result.frame_data.offset
-                end_idx = read_query.row_filter.end - read_result.frame_data.offset
-            elif isinstance(read_query.row_filter, _IndexRange):
-                ts_idx = read_result.frame_data.value.data[0]
-                if len(ts_idx) != 0:
-                    start_idx = ts_idx.searchsorted(datetime64(read_query.row_filter.start_ts, "ns"), side="left")
-                    end_idx = ts_idx.searchsorted(datetime64(read_query.row_filter.end_ts, "ns"), side="right")
-            else:
-                raise ArcticNativeException("Unrecognised row_filter type: {}".format(type(read_query.row_filter)))
-            data = []
-            for c in read_result.frame_data.value.data:
-                data.append(c[start_idx:end_idx])
-            read_result.frame_data = FrameData(data, read_result.frame_data.names, read_result.frame_data.index_columns)
+    def _handle_recursive_normalization(self, read_result, vitem):
+        meta_struct = denormalize_user_metadata(read_result.mmeta)
 
+        key_map = {v.symbol: v.data for v in self._batch_read_keys(read_result.keys)}
+        original_data = Flattener().create_original_obj_from_metastruct_new(meta_struct, key_map)
+
+        return VersionedItem(
+            symbol=vitem.symbol,
+            library=vitem.library,
+            data=original_data,
+            version=vitem.version,
+            metadata=vitem.metadata,
+            host=vitem.host,
+        )
+
+    def _post_process_dataframe(self, read_result, read_query, query_builder):
+        post_process_filters(read_result, read_query, query_builder)
         vitem = self._adapt_read_res(read_result)
 
         # Handle custom normalized data
         if len(read_result.keys) > 0:
-            meta_struct = denormalize_user_metadata(read_result.mmeta)
-
-            key_map = {v.symbol: v.data for v in self._batch_read_keys(read_result.keys)}
-            original_data = Flattener().create_original_obj_from_metastruct_new(meta_struct, key_map)
-
-            return VersionedItem(
-                symbol=vitem.symbol,
-                library=vitem.library,
-                data=original_data,
-                version=vitem.version,
-                metadata=vitem.metadata,
-                host=vitem.host,
-            )
-
-        return vitem
+            return self._handle_recursive_normalization(read_result, vitem)
+        else:
+            return vitem
 
     def _find_version(
         self, symbol: str, as_of: Optional[VersionQueryInput] = None, raise_on_missing: Optional[bool] = False, **kwargs
@@ -1907,21 +1930,7 @@ class NativeVersionStore:
         return index_columns
 
     def _adapt_read_res(self, read_result: ReadResult) -> VersionedItem:
-        frame_data = FrameData.from_cpp(read_result.frame_data)
-
-        meta = denormalize_user_metadata(read_result.udm, self._normalizer)
-        data = self._normalizer.denormalize(frame_data, read_result.norm)
-        if read_result.norm.HasField("custom"):
-            data = self._custom_normalizer.denormalize(data, read_result.norm.custom)
-
-        return VersionedItem(
-            symbol=read_result.version.symbol,
-            library=self._library.library_path,
-            data=data,
-            version=read_result.version.version,
-            metadata=meta,
-            host=self.env,
-        )
+        return adapt_read_res(read_result, self._library.library_path, self.env, self._normalizer, self._custom_normalizer)
 
     def list_versions(
         self,
@@ -2773,3 +2782,50 @@ class NativeVersionStore:
 
     def library_tool(self) -> LibraryTool:
         return LibraryTool(self.library())
+
+
+def write_file(path, data, metadata = None):
+    symbol="f"
+    pickle_on_failure = False
+    dynamic_strings = True
+    coerce_columns = False
+    dynamic_schema = False
+
+    udm = normalize_metadata(metadata) if metadata is not None else None
+    normalizer = CompositeNormalizer()
+    item, norm_meta = normalizer.normalize(
+        data
+    )
+    write_dataframe_to_file(symbol, path, item, norm_meta, udm)
+
+    return VersionedItem(
+        symbol=symbol,
+        library=path,
+        version=0,
+        metadata=metadata,
+        data=None,
+        host="file"
+    )
+
+def read_file(
+    path: str,
+    date_range: Optional[DateRangeInput] = None,
+    row_range: Optional[Tuple[int, int]] = None,
+    columns: Optional[List[str]] = None,
+    query_builder: Optional[QueryBuilder] = None,
+    ) -> VersionedItem:
+    if date_range is not None and query_builder is not None:
+        q = QueryBuilder()
+        query_builder = q.date_range(date_range).then(query_builder)
+
+    if row_range is not None and query_builder is not None:
+        q = QueryBuilder()
+        query_builder = q._row_range(row_range).then(query_builder)
+
+    read_query = _get_read_query(date_range, row_range, columns, query_builder)
+
+    res = read_dataframe_from_file("f", path, read_query)
+    read_result = ReadResult(*res)
+    post_process_filters(read_result, read_query, query_builder)
+    normalizer = CompositeNormalizer()
+    return adapt_read_res(read_result, "file", "local", normalizer, None)

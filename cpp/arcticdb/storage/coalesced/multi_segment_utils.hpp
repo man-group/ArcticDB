@@ -59,17 +59,19 @@ entity::AtomKey get_key(position_t pos, const SegmentInMemory& segment) {
 }
 
 template <typename FieldType>
-void set_index(const IndexValue &index, FieldType field, SegmentInMemory& segment) {
+void set_index(const IndexValue &index, FieldType field, SegmentInMemory& segment, bool set_type) {
     util::variant_match(index,
-                        [&segment, field](const StringIndex &string_index) {
+                        [&segment, field, set_type](const StringIndex &string_index) {
                             auto offset = segment.string_pool().get(std::string_view(string_index));
                             segment.set_scalar<uint64_t>(as_pos(field), offset.offset());
-                            segment.set_scalar<uint64_t>(as_pos(FieldType::index_type),
+                            if(set_type)
+                                segment.set_scalar<uint8_t>(as_pos(FieldType::index_type),
                                                          static_cast<uint8_t>(VariantType::STRING_TYPE));
                         },
-                        [&segment, field](const NumericIndex &numeric_index) {
+                        [&segment, field, set_type](const NumericIndex &numeric_index) {
                             segment.set_scalar<uint64_t>(as_pos(field), numeric_index);
-                            segment.set_scalar<uint64_t>(as_pos(FieldType::index_type),
+                            if(set_type)
+                                segment.set_scalar<uint8_t>(as_pos(FieldType::index_type),
                                                          static_cast<uint8_t>(VariantType::NUMERIC_TYPE));
                         });
 }
@@ -80,12 +82,12 @@ void set_id(const AtomKey &key, SegmentInMemory& segment) {
                         [&segment](const StringId &string_id) {
                             auto offset = segment.string_pool().get(std::string_view(string_id));
                             segment.set_scalar<uint64_t>(as_pos(FieldType::stream_id), offset.offset());
-                            segment.set_scalar<uint64_t>(as_pos(FieldType::id_type),
+                            segment.set_scalar<uint8_t>(as_pos(FieldType::id_type),
                                                          static_cast<uint8_t>(IdType::String));
                         },
                         [&segment](const NumericId &numeric_id) {
                             segment.set_scalar<uint64_t>(as_pos(FieldType::stream_id), numeric_id);
-                            segment.set_scalar<uint64_t>(as_pos(FieldType::id_type),
+                            segment.set_scalar<uint8_t>(as_pos(FieldType::id_type),
                                                          static_cast<uint8_t>(IdType::Numeric));
                         });
 }
@@ -94,8 +96,8 @@ template <typename FieldType>
 void set_key(const AtomKey& key, SegmentInMemory& segment) {
     set_id<FieldType>(key, segment);
     segment.set_scalar(as_pos(FieldType::version_id), key.version_id());
-    set_index(key.start_index(), FieldType::start_index, segment);
-    set_index(key.end_index(), FieldType::end_index, segment);
+    set_index(key.start_index(), FieldType::start_index, segment, true);
+    set_index(key.end_index(), FieldType::end_index, segment, false);
     segment.set_scalar(as_pos(FieldType::creation_ts), key.creation_ts());
     segment.set_scalar(as_pos(FieldType::content_hash), key.content_hash());
     segment.set_scalar(as_pos(FieldType::key_type), static_cast<char>(key.type()));

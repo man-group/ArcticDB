@@ -4,8 +4,8 @@
 namespace arcticdb {
 
 struct PilotedClock {
-    static std::atomic <timestamp> time_;
-    static timestamp nanos_since_epoch() {
+    static std::atomic<entity::timestamp> time_;
+    static entity::timestamp nanos_since_epoch() {
         return PilotedClock::time_++;
     }
 

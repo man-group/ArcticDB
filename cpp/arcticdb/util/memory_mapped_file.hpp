@@ -119,6 +119,7 @@ public:
         util::check(fd_ != -1, "Error opening file for reading");
 
         // Map file into memory
+        ARCTICDB_DEBUG(log::storage(), "Memory-mapped file at path {} with length {}", filepath, length_);
         data_ = static_cast<uint8_t *>(mmap(nullptr, length_, PROT_READ, MAP_SHARED, fd_, 0));
         if (data_ == MAP_FAILED) {
             close(fd_);
@@ -150,6 +151,7 @@ public:
             close(fd_);
             util::raise_rte("Error mmapping the file");
         }
+        ARCTICDB_DEBUG(log::storage(), "Created memory mapped file at {} with size {}", filepath, length_);
     }
 
     void truncate(size_t new_size) {
@@ -161,6 +163,7 @@ public:
 
         length_ = new_size;
         data_ = nullptr;
+        ARCTICDB_DEBUG(log::storage(), "Truncated memory-mapped file to size {}", length_);
     }
 
 
@@ -176,6 +179,7 @@ public:
             }
         }
 
+        ARCTICDB_DEBUG(log::storage(), "Closing memory-mapped file of length {}", length_);
         if (fd_ != -1) {
             close(fd_);
         }

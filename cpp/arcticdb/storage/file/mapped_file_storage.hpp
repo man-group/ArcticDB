@@ -22,20 +22,20 @@ class MappedFileStorage final : public SingleFileStorage {
   public:
     using Config = arcticdb::proto::mapped_file_storage::Config;
 
-    MappedFileStorage(const LibraryPath &lib, OpenMode mode, const Config &conf);
+    MappedFileStorage(const LibraryPath &lib, OpenMode mode, Config conf);
 
-    ~MappedFileStorage();
+    ~MappedFileStorage() = default;
 
   private:
     void do_write_raw(const uint8_t* data, size_t bytes) final;
 
     void do_write(Composite<KeySegmentPair>&& kvs) final;
 
-    void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) final;
+    [[noreturn]] void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) final;
 
     void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, storage::ReadKeyOpts opts) final;
 
-    void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) final;
+    [[noreturn]] void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) final;
 
     bool do_supports_prefix_matching() const final {
         return false;
@@ -45,7 +45,7 @@ class MappedFileStorage final : public SingleFileStorage {
 
     inline bool do_fast_delete() final;
 
-    void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix) final;
+    [[noreturn]] void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix) final;
 
     bool do_key_exists(const VariantKey & key) final;
 
@@ -65,7 +65,6 @@ class MappedFileStorage final : public SingleFileStorage {
 
     void init();
 
-private:
     std::mutex offset_mutex_;
     size_t offset_ = 0UL;
     Config config_;
@@ -78,7 +77,7 @@ inline arcticdb::proto::storage::VariantStorage pack_config(
         size_t file_size,
         size_t items_count,
         const StreamId& id,
-        IndexDescriptor index_desc,
+        const IndexDescriptor& index_desc,
         EncodingVersion encoding_version) {
     arcticdb::proto::storage::VariantStorage output;
     arcticdb::proto::mapped_file_storage::Config cfg;
