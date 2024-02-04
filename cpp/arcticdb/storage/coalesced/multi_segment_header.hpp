@@ -53,7 +53,7 @@ std::pair<size_t, size_t> get_offset_and_size(size_t pos, const SegmentInMemory&
 
 class MultiSegmentHeader {
     SegmentInMemory segment_;
-
+    std::mutex mutex_;
 public:
     using TimeSymbolTag = ScalarTagType<DataTypeTag<DataType::INT64>>;
 
@@ -76,6 +76,7 @@ public:
 
     void add_key_and_offset(const AtomKey &key, uint64_t offset, uint64_t size) {
         auto time_sym = time_symbol_from_key(key).data();
+        std::lock_guard lock(mutex_);
         ARCTICDB_DEBUG(log::storage(), "Adding key {} with offset {} and {} bytes, time_sym: {}", key, offset, size, time_sym);
         segment_.set_scalar(as_pos(MultiSegmentFields::time_symbol), time_sym);
         set_key<MultiSegmentFields>(key, segment_);
