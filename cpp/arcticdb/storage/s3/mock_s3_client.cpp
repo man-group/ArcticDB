@@ -50,7 +50,7 @@ std::optional<Aws::S3::S3Error> has_failure_trigger(const std::string& s3_object
         auto failure_code_string = s3_object_name.substr(position + failure_string_for_operation.size());
         auto failure_code = Aws::S3::S3Errors(std::stoi(failure_code_string));
         return Aws::S3::S3Error(Aws::Client::AWSError<Aws::S3::S3Errors>(failure_code, "Simulated error", "Simulated error message", true));
-    } catch (std::exception& e) {
+    } catch (std::exception&) {
         return std::nullopt;
     }
 }
