@@ -21,7 +21,7 @@ class BasicFunctions:
     param_names = ["rows", "num_symbols"]
 
     def setup_cache(self):
-        self.ac = Arctic("lmdb://basic_functions?map_size=50GB")
+        self.ac = Arctic("lmdb://basic_functions?map_size=5GB")
         num_rows, num_symbols = BasicFunctions.params
 
         self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in num_rows}
@@ -41,7 +41,7 @@ class BasicFunctions:
             self.ac.delete_library(lib)
 
     def setup(self, rows, num_symbols):
-        self.ac = Arctic("lmdb://basic_functions?map_size=50GB")
+        self.ac = Arctic("lmdb://basic_functions?map_size=5GB")
         self.read_reqs = [ReadRequest(f"{sym}_sym") for sym in range(num_symbols)]
 
         self.df = generate_pseudo_random_dataframe(rows)
