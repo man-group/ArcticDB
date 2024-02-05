@@ -1770,20 +1770,20 @@ timestamp LocalVersionedEngine::latest_timestamp(const std::string& symbol) {
 std::unordered_map<KeyType, std::pair<size_t, size_t>> LocalVersionedEngine::scan_object_sizes() {
     std::unordered_map<KeyType, std::pair<size_t, std::atomic<size_t>>> sizes;
     foreach_key_type([&store=store(), &sizes=sizes](KeyType key_type) {
-        std::vector<std::pair<VariantKey, stream::StreamSource::ReadContinuation>> keys;
-        store->iterate_type(key_type, [&keys, &sizes, &key_type](const VariantKey&& k) {
-            auto& pair = sizes[key_type];
-            ++pair.first;
-            auto& size_counter = pair.second;
-            keys.emplace_back(std::forward<const VariantKey>(k), [&size_counter] (auto&& ks) {
+        std::vector<std::pair<VariantKey, stream::StreamSource::ReadContinuation>> key_size_calculators;
+        store->iterate_type(key_type, [&key_size_calculators, &sizes, &key_type](const VariantKey&& k) {
+            auto& [count, bytes] = sizes[key_type];
+            ++count;
+            auto& bytes_capture = bytes;
+            key_size_calculators.emplace_back(std::forward<const VariantKey>(k), [&bytes_capture] (auto&& ks) {
                 auto key_seg = std::move(ks);
-                size_counter += key_seg.segment().total_segment_size();
+                bytes_capture += key_seg.segment().total_segment_size();
                 return key_seg.variant_key();
             });
         });
 
-        if(!keys.empty()) {
-            store->batch_read_compressed(std::move(keys), BatchReadArgs{}).get();
+        if(!key_size_calculators.empty()) {
+            store->batch_read_compressed(std::move(key_size_calculators), BatchReadArgs{}).get();
         }
 
     });
