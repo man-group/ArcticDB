@@ -8,6 +8,7 @@
 #pragma once
 
 #include <arcticdb/storage/s3/s3_storage.hpp>
+#include <aws/s3/S3Client.h>
 
 namespace arcticdb::storage::s3 {
 
