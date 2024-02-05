@@ -20,11 +20,21 @@ class PersistentQueryBuilderFunctions:
     def __init__(self):
         self.ac = real_s3_from_environment_variables(shared_path=True).create_fixture().create_arctic()
 
-        num_rows = PersistentQueryBuilderFunctions.params
         self.lib_name = "query_builder_benchmark_lib"
 
     def setup(self, num_rows):
         pass
+
+    def setup_cache(self):
+        self.ac = real_s3_from_environment_variables(shared_path=True).create_fixture().create_arctic()
+
+        num_rows = PersistentQueryBuilderFunctions.params
+        self.lib_name = "query_builder_benchmark_lib"
+        self.ac.delete_library(self.lib_name)
+        self.ac.create_library(self.lib_name)
+        lib = self.ac[self.lib_name]
+        for rows in num_rows:
+            lib.write(f"{rows}_rows", generate_benchmark_df(rows))
 
     # The names are based on the queries used here: https://duckdblabs.github.io/db-benchmark/
     def time_query_1(self, num_rows):

@@ -9,7 +9,7 @@ import pandas as pd
 import numpy as np
 
 
-def generate_pseudo_random_dataframe(n, freq="S", end_timestamp="1/1/2023"):
+def generate_pseudo_random_dataframe(n, freq="s", end_timestamp="1/1/2023"):
     """
     Generates a Data Frame with 2 columns (timestamp and value) and N rows
     - timestamp contains timestamps with a given frequency that end at end_timestamp
@@ -37,7 +37,7 @@ def generate_random_floats_dataframe(num_rows, num_cols):
     return pd.DataFrame(data, columns=columns)
 
 
-def generate_benchmark_df(n, freq="T", end_timestamp="1/1/2023"):
+def generate_benchmark_df(n, freq="min", end_timestamp="1/1/2023"):
     timestamps = pd.date_range(end=end_timestamp, periods=n, freq=freq)
     k = n // 10
     # Based on https://github.com/duckdblabs/db-benchmark/blob/master/_data/groupby-datagen.R#L19
