@@ -5,6 +5,7 @@ inputs:
   threads:           {default: '1', type: string, description: Specifies the number of threads that will be used for tests }
   fast_tests_only:   {default: '0', type: string, description: Specifies whether we want to run only the fast tests or not }
   other_params:      {default: '', type: string, description: Other params that should be passed to the python command }
+  other_pytest_params:      {default: '', type: string, description: Other params that should be passed to the pytest command }
 runs:
   using: "composite"
   steps:
@@ -18,7 +19,7 @@ runs:
         cd python
         ln -s ../cpp/out/linux-${{ inputs.build_type }}-build/arcticdb/arcticdb_ext.cpython-36m-x86_64-linux-gnu.so
         export ARCTICDB_RAND_SEED=$RANDOM
-        python ${{inputs.other_params}} -m pytest -n ${{ inputs.threads }} tests
+        python ${{inputs.other_params}} -m pytest -n ${{ inputs.threads }} ${{ inputs.other_pytest_params }} tests
       env:
         TEST_OUTPUT_DIR: ${{ runner.temp }}
         ARCTICDB_FAST_TESTS_ONLY: ${{ inputs.fast_tests_only }}

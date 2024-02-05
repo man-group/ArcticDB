@@ -89,13 +89,14 @@ jobs:
           python -m pip install --upgrade pip
           ARCTIC_CMAKE_PRESET=skip pip install -ve .[Testing]
 
-      # - name: Test with pytest
-      #   uses: ./.github/actions/run_local_pytest
-      #   with:
-      #     build_type: debug
-      #     threads: 1
-      #     fast_tests_only: 0
-      #     other_params: '-m coverage run '
+      - name: Test with pytest
+        uses: ./.github/actions/run_local_pytest
+        with:
+          build_type: debug
+          threads: 1
+          fast_tests_only: 0
+          other_params: '-m coverage run '
+          other_pytest_params: '-vs'
 
       - name: Get python Coverage report
         shell: bash -l {0}
