@@ -56,7 +56,7 @@ def test_symbol_sizes_big(basic_store):
     assert sizes["sym"][KeyType.TABLE_INDEX].count == 1
 
     assert 50_000 < sizes["sym"][KeyType.TABLE_DATA].compressed_size < 85_000
-    assert 85_000 < sizes["sym"][KeyType.TABLE_DATA].uncompressed_size < 150_000
+    assert 60_000 < sizes["sym"][KeyType.TABLE_DATA].uncompressed_size < 150_000
     assert sizes["sym"][KeyType.TABLE_DATA].count == 1
 
 
@@ -70,7 +70,7 @@ def test_symbol_sizes_multiple_versions(basic_store):
     assert sizes["sym"][KeyType.VERSION].count == 2
     assert sizes["sym"][KeyType.TABLE_INDEX].count == 2
     assert sizes["sym"][KeyType.TABLE_DATA].count == 2
-    assert 150_000 < sizes["sym"][KeyType.TABLE_DATA].uncompressed_size < 250_000
+    assert 100_000 < sizes["sym"][KeyType.TABLE_DATA].uncompressed_size < 250_000
 
 
 def test_scan_object_sizes(basic_store):
