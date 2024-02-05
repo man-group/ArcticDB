@@ -11,19 +11,12 @@ on:
   pull_request:
 
 jobs:
-  start_ec2_runner:
-    uses: ./.github/workflows/ec2_runner_jobs.yml
-    secrets: inherit
-    permissions: write-all
-    with:
-      job_type: start
 
   linux:
     if: |
       always() &&
       !cancelled()
-    needs: [start_ec2_runner]
-    runs-on: ${{ needs.start_ec2_runner.result != 'failure' && needs.start_ec2_runner.outputs.label || 'ubuntu-latest'}}
+    runs-on: ubuntu-latest
     services:
       mongodb:
         image: mongo:4.4
@@ -82,17 +75,6 @@ jobs:
           python -m pytest -n ${{ steps.cpu-cores.outputs.count }} tests
         env:
           ARCTICDB_USING_CONDA: 1
-
-  stop-ec2-runner:
-    needs: [start_ec2_runner, linux]
-    if: ${{ always() }}
-    uses: ./.github/workflows/ec2_runner_jobs.yml
-    secrets: inherit
-    permissions: write-all
-    with:
-      job_type: stop
-      label: ${{ needs.start_ec2_runner.outputs.label }}
-      ec2-instance-id: ${{ needs.start_ec2_runner.outputs.ec2-instance-id }}
 
   macos:
     strategy:
