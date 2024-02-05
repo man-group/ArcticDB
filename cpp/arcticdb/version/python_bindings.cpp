@@ -543,11 +543,14 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              py::call_guard<SingleThreadMutexHolder>(), "Get the most recent update time for a list of stream ids")
          .def("scan_object_sizes",
               &PythonVersionStore::scan_object_sizes,
-            py::call_guard<SingleThreadMutexHolder>(), "Scan the sizes of all objects in the library. Sizes are in bytes.")
+              py::call_guard<SingleThreadMutexHolder>(),
+              "Scan the compressed sizes of all objects in the library. Sizes are in bytes. Returns a dict "
+              "{KeyType: (n_keys_of_type, total_size_of_keys_in_bytes)}")
         .def("scan_object_sizes_by_stream",
              &PythonVersionStore::scan_object_sizes_by_stream,
              py::call_guard<SingleThreadMutexHolder>(),
-             "Scan the sizes of all objects in the library, grouped by stream ID. Sizes are in bytes.")
+             "Scan the compressed sizes of all objects in the library, grouped by stream ID and KeyType. Sizes are in bytes. "
+             "Returns a dict {symbol_id: {KeyType: size_in_bytes}")
         .def("find_version",
              &PythonVersionStore::get_version_to_read,
              py::call_guard<SingleThreadMutexHolder>(), "Check if a specific stream has been written to previously")
