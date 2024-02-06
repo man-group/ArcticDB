@@ -19,6 +19,7 @@
 #include <arcticdb/util/sparse_utils.hpp>
 
 #include <folly/container/Enumerate.h>
+#include <folly/Function.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 
@@ -648,7 +649,8 @@ public:
 
     template<typename input_tdt>
     static void for_each(const Column& input_column,
-                          std::function<void(typename input_tdt::DataTypeTag::raw_type)>&& f) {
+                          folly::Function<void(typename input_tdt::DataTypeTag::raw_type)>&& f) {
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(f.heapAllocatedMemory() == 0, "Heap allocated {} bytes in Column::for_each", f.heapAllocatedMemory());
         auto input_data = input_column.data();
         std::for_each(input_data.cbegin<input_tdt>(), input_data.cend<input_tdt>(), [&f](auto input_value) {
             f(input_value);
@@ -658,17 +660,19 @@ public:
     template<typename input_tdt, typename output_tdt>
     static void transform(const Column& input_column,
                           Column& output_column,
-                          std::function<typename output_tdt::DataTypeTag::raw_type(typename input_tdt::DataTypeTag::raw_type)>&& f) {
+                          folly::Function<typename output_tdt::DataTypeTag::raw_type(typename input_tdt::DataTypeTag::raw_type)>&& f) {
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(f.heapAllocatedMemory() == 0, "Heap allocated {} bytes in Column::transform 1", f.heapAllocatedMemory());
         auto input_data = input_column.data();
         auto output_data = output_column.data();
-        std::transform(input_data.cbegin<input_tdt>(), input_data.cend<input_tdt>(), output_data.begin<output_tdt>(), f);
+        std::transform(input_data.cbegin<input_tdt>(), input_data.cend<input_tdt>(), output_data.begin<output_tdt>(), std::move(f));
     }
 
     template<typename left_input_tdt, typename right_input_tdt, typename output_tdt>
     static void transform(const Column& left_input_column,
                           const Column& right_input_column,
                           Column& output_column,
-                          std::function<typename output_tdt::DataTypeTag::raw_type(typename left_input_tdt::DataTypeTag::raw_type, typename right_input_tdt::DataTypeTag::raw_type)>&& f) {
+                          folly::Function<typename output_tdt::DataTypeTag::raw_type(typename left_input_tdt::DataTypeTag::raw_type, typename right_input_tdt::DataTypeTag::raw_type)>&& f) {
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(f.heapAllocatedMemory() == 0, "Heap allocated {} bytes in Column::transform 2", f.heapAllocatedMemory());
         auto left_input_data = left_input_column.data();
         auto right_input_data = right_input_column.data();
         auto output_data = output_column.data();
@@ -680,7 +684,8 @@ public:
     template<typename input_tdt>
     static void transform(const Column& input_column,
                           util::BitSet& output_bitset,
-                          std::function<bool(typename input_tdt::DataTypeTag::raw_type)>&& f) {
+                          folly::Function<bool(typename input_tdt::DataTypeTag::raw_type)>&& f) {
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(f.heapAllocatedMemory() == 0, "Heap allocated {} bytes in Column::transform 3", f.heapAllocatedMemory());
         auto input_data = input_column.data();
         util::BitSet::bulk_insert_iterator inserter(output_bitset);
         auto pos = 0u;
@@ -697,7 +702,8 @@ public:
     static void transform(const Column& left_input_column,
                           const Column& right_input_column,
                           util::BitSet& output_bitset,
-                          std::function<bool(typename left_input_tdt::DataTypeTag::raw_type, typename right_input_tdt::DataTypeTag::raw_type)>&& f) {
+                          folly::Function<bool(typename left_input_tdt::DataTypeTag::raw_type, typename right_input_tdt::DataTypeTag::raw_type)>&& f) {
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(f.heapAllocatedMemory() == 0, "Heap allocated {} bytes in Column::transform 4", f.heapAllocatedMemory());
         auto left_input_data = left_input_column.data();
         auto right_it = right_input_column.data().cbegin<right_input_tdt>();
         util::BitSet::bulk_insert_iterator inserter(output_bitset);
