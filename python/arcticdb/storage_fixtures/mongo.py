@@ -128,14 +128,25 @@ class ManagedMongoDBServer(StorageFixtureFactory):
 
 
 def auto_detect_server():
-    """Use the Server specified by the CI_MONGO_HOST env var or localhost, if available, falling back to starting a
-    dedicated instance on a random port."""
+    """Use the Server specified by the CI_MONGO_HOST env var. If not set, try localhost before falling back to starting
+    a dedicated instance on a random port."""
     import requests
+
+    def check_mongo_running(host):
+        try:
+            res = requests.get(f"http://{host}")
+        except requests.exceptions.ConnectionError:
+            return False
+        return res.status_code == 200 and "mongodb" in res.text.lower()
 
     mongo_host = os.getenv("CI_MONGO_HOST")
     if mongo_host:
-        res = requests.get(f"http://{mongo_host}:27017")
-        assert res.status_code == 200 and "mongodb" in res.text.lower()
-        return ExternalMongoDBServer(f"mongodb://{mongo_host}:27017")
-    else:
-        return ManagedMongoDBServer()
+        host = f"{mongo_host}:27017"
+        assert check_mongo_running(host)
+        return ExternalMongoDBServer(f"mongodb://{host}")
+
+    host = "localhost:27017"
+    if check_mongo_running(host):
+        return ExternalMongoDBServer(f"mongodb://{host}")
+
+    return ManagedMongoDBServer()
