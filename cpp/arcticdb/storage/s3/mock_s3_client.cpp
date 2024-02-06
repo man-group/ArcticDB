@@ -38,8 +38,8 @@ std::string operation_to_string(S3Operation operation){
 std::string MockS3Client::get_failure_trigger(
         const std::string& s3_object_name,
         S3Operation operation_to_fail,
-        Aws::S3::S3Errors error_to_fail_with) {
-    return fmt::format("{}#Failure_{}_{}", s3_object_name, operation_to_string(operation_to_fail), (int)error_to_fail_with);
+        Aws::S3::S3Errors error_to_fail_with, bool retryable) {
+    return fmt::format("{}#Failure_{}_{}_{}", s3_object_name, operation_to_string(operation_to_fail), (int)error_to_fail_with, (int) retryable);
 }
 
 std::optional<Aws::S3::S3Error> has_failure_trigger(const std::string& s3_object_name, S3Operation operation){
@@ -47,9 +47,10 @@ std::optional<Aws::S3::S3Error> has_failure_trigger(const std::string& s3_object
     auto position = s3_object_name.rfind(failure_string_for_operation);
     if (position == std::string::npos) return std::nullopt;
     try {
-        auto failure_code_string = s3_object_name.substr(position + failure_string_for_operation.size());
+        auto failure_code_string = s3_object_name.substr(position + failure_string_for_operation.size(), s3_object_name.find_last_of('_'));
         auto failure_code = Aws::S3::S3Errors(std::stoi(failure_code_string));
-        return Aws::S3::S3Error(Aws::Client::AWSError<Aws::S3::S3Errors>(failure_code, "Simulated error", "Simulated error message", true));
+        bool retryable = std::stoi(s3_object_name.substr(s3_object_name.find_last_of('_') + 1));
+        return Aws::S3::S3Error(Aws::Client::AWSError<Aws::S3::S3Errors>(failure_code, "Simulated error", "Simulated error message", retryable));
     } catch (std::exception& e) {
         return std::nullopt;
     }

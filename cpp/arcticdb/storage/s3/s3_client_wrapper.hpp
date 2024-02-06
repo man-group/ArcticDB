@@ -75,6 +75,8 @@ public:
             const std::string& prefix,
             const std::string& bucket_name,
             const std::optional<std::string> continuation_token) const = 0;
+
+    virtual ~S3ClientWrapper() = default;
 };
 
 }

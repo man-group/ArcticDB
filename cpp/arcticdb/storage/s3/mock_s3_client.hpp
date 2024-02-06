@@ -48,7 +48,7 @@ public:
     //
     // The returned name looks like "{s3_object_name}#Failure_{operation_to_fail}_{error_to_fail_with}".
     // For example: "symbol_1#Failure_Delete_99" will trigger a delete failure with code 99.
-    static std::string get_failure_trigger(const std::string& s3_object_name, S3Operation operation_to_fail, Aws::S3::S3Errors error_to_fail_with);
+    static std::string get_failure_trigger(const std::string& s3_object_name, S3Operation operation_to_fail, Aws::S3::S3Errors error_to_fail_with, bool retryable=true);
 
     S3Result<std::monostate> head_object(const std::string& s3_object_name, const std::string& bucket_name) const override;
 
