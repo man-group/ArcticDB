@@ -19,6 +19,7 @@
 #include <arcticdb/util/sparse_utils.hpp>
 
 #include <folly/container/Enumerate.h>
+#include <cstdio>
 #include <folly/Function.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
