@@ -139,7 +139,7 @@ struct ColumnData {
             std::conditional_t<constant, typename TDT::DataTypeTag::raw_type const, typename TDT::DataTypeTag::raw_type>,
             boost::forward_traversal_tag
             > {
-    using RawType = typename TDT::DataTypeTag::raw_type;
+    using RawType = std::conditional_t<constant, const typename TDT::DataTypeTag::raw_type, typename TDT::DataTypeTag::raw_type>;
     public:
         ColumnDataIterator() = delete;
 
@@ -151,7 +151,7 @@ struct ColumnData {
             if(opt_block_.has_value()) {
                 remaining_values_in_block_ = opt_block_->row_count();
                 if constexpr(constant) {
-                    ptr_ = reinterpret_cast<const RawType*>(opt_block_->data());
+                    ptr_ = reinterpret_cast<RawType*>(opt_block_->data());
                 } else {
                     ptr_ = const_cast<RawType*>(opt_block_->data());
                 }
@@ -159,7 +159,7 @@ struct ColumnData {
         }
 
         // Used to construct [c]end iterators
-        explicit ColumnDataIterator(ColumnData* parent, std::conditional_t<constant, const RawType*, RawType*> end_ptr):
+        explicit ColumnDataIterator(ColumnData* parent, RawType* end_ptr):
                 parent_(parent),
                 ptr_(end_ptr) {}
 
@@ -182,7 +182,7 @@ struct ColumnData {
                 if(ARCTICDB_LIKELY(opt_block_.has_value())) {
                     remaining_values_in_block_ = opt_block_->row_count();
                     if constexpr(constant) {
-                        ptr_ = reinterpret_cast<const RawType*>(opt_block_->data());
+                        ptr_ = reinterpret_cast<RawType*>(opt_block_->data());
                     } else {
                         ptr_ = const_cast<RawType*>(opt_block_->data());
                     }
@@ -195,14 +195,14 @@ struct ColumnData {
             return parent_ == other.parent_ && ptr_ == other.ptr_;
         }
 
-        std::conditional_t<constant, const RawType&, RawType&> dereference() const {
+        RawType& dereference() const {
             return *ptr_;
         }
 
         ColumnData* parent_{nullptr};
         std::optional<TypedBlockData<TDT>> opt_block_{std::nullopt};
         std::size_t remaining_values_in_block_{0};
-        std::conditional_t<constant, const RawType*, RawType*> ptr_{nullptr};
+        RawType* ptr_{nullptr};
     };
 
     ColumnData(
