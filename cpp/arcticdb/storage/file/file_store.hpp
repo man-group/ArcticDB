@@ -75,7 +75,7 @@ void write_dataframe_to_file_internal(
 
     auto data_size = max_data_size(segments, codec_opts, encoding_version);
     ARCTICDB_DEBUG(log::version(), "Estimated max data size: {}", data_size);
-    auto config = storage::file::pack_config(path, data_size, segments.size(), stream_id, stream::get_descriptor_from_index(frame->index), encoding_version);
+    auto config = storage::file::pack_config(path, data_size, segments.size(), stream_id, stream::get_descriptor_from_index(frame->index), encoding_version, codec_opts);
 
     storage::LibraryPath lib_path{std::string{"file"}, fmt::format("{}", stream_id)};
     auto library = create_library(lib_path, storage::OpenMode::WRITE, {std::move(config)});
@@ -101,8 +101,9 @@ version_store::ReadVersionOutput read_dataframe_from_file_internal(
         const StreamId& stream_id,
         const std::string& path,
         ReadQuery& read_query,
-        const ReadOptions& read_options) {
-    auto config = storage::file::pack_config(path);
+        const ReadOptions& read_options,
+        const arcticdb::proto::encoding::VariantCodec &codec_opts) {
+    auto config = storage::file::pack_config(path, codec_opts);
     storage::LibraryPath lib_path{std::string{"file"}, fmt::format("{}", stream_id)};
     auto library = create_library(lib_path, storage::OpenMode::WRITE, {std::move(config)});
     auto store = std::make_shared<async::AsyncStore<PilotedClock>>(library, codec::default_lz4_codec(), EncodingVersion::V1);
@@ -116,6 +117,7 @@ version_store::ReadVersionOutput read_dataframe_from_file_internal(
     auto index_key = from_serialized_atom_key(single_file_storage->read_raw(key_data.key_offset_, key_data.key_size_), KeyType::TABLE_INDEX);
     VersionedItem versioned_item(index_key);
     const auto header_offset = key_data.key_offset_ + key_data.key_size_;
+    ARCTICDB_DEBUG(log::storage(), "Got header offset at {}", header_offset);
     single_file_storage->load_header(header_offset, data_end - header_offset);
 
     using namespace arcticdb::pipelines;

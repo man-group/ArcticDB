@@ -400,7 +400,6 @@ class ChunkedBufferImpl {
 
     size_t bytes_ = 0;
     size_t regular_sized_until_ = 0;
-//#define DEBUG_BUILD
 #ifndef DEBUG_BUILD
     boost::container::small_vector<BlockType *, 1> blocks_;
     boost::container::small_vector<size_t, 1> block_offsets_;

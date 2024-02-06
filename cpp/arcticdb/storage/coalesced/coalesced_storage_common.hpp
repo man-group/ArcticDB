@@ -15,7 +15,7 @@ uint64_t get_symbol_prefix(const entity::StreamId& stream_id) {
     static_assert(sizeof(StorageType) <= sizeof(InternalType));
     constexpr size_t end = sizeof(InternalType);
     constexpr size_t begin = sizeof(InternalType) - sizeof(StorageType);
-    InternalType data = 0UL;
+    StorageType data{};
     util::variant_match(stream_id,
                         [&data] (const entity::StringId& string_id) {
                             auto* target = reinterpret_cast<char*>(&data);
@@ -55,7 +55,7 @@ private:
     void set_data(const entity::StreamId& stream_id, entity::timestamp time) {
         time <<= 32;
         auto prefix = get_symbol_prefix<uint32_t>(stream_id);
-        data_ = time & prefix;
+        data_ = time | prefix;
     }
 };
 

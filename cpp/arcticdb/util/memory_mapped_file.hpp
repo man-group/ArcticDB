@@ -115,7 +115,7 @@ public:
     void open_file(const std::string &filepath) {
         length_ = get_file_size(filepath);
         // Open file
-        fd_ = open(filepath.c_str(), O_RDWR, S_IRUSR | S_IWUSR);
+        fd_ = open(filepath.c_str(), O_RDONLY);
         util::check(fd_ != -1, "Error opening file for reading");
 
         // Map file into memory
@@ -154,20 +154,7 @@ public:
         ARCTICDB_DEBUG(log::storage(), "Created memory mapped file at {} with size {}", filepath, length_);
     }
 
-    void truncate(size_t new_size) {
-        auto result = munmap(data_, length_);
-        util::check(result != -1, "Error un-mapping file");
-
-        result = ftruncate(fd_, new_size);
-        util::check(result != -1, "Error truncating file");
-
-        length_ = new_size;
-        data_ = nullptr;
-        ARCTICDB_DEBUG(log::storage(), "Truncated memory-mapped file to size {}", length_);
-    }
-
-
-    ~MemoryMappedFile() {
+    void unmap() {
         if (data_ != nullptr) {
             auto result = msync(data_, length_, MS_SYNC);
             if(result == -1) {
@@ -178,11 +165,27 @@ public:
                     log::storage().warn("Error un-mmapping the file");
             }
         }
+    }
+
+    void truncate(size_t new_size) {
+        length_ = new_size;
+        unmap();
+
+        auto result = ftruncate(fd_, new_size);
+        util::check(result != -1, "Error truncating file");
+
+        data_ = nullptr;
+        ARCTICDB_DEBUG(log::storage(), "Truncated memory-mapped file to size {}", length_);
+    }
+
+
+    ~MemoryMappedFile() {
+        unmap();
 
         ARCTICDB_DEBUG(log::storage(), "Closing memory-mapped file of length {}", length_);
-        if (fd_ != -1) {
+        if (fd_ != -1)
             close(fd_);
-        }
+
     }
 
     [[nodiscard]] uint8_t *data() const {

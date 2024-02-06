@@ -32,6 +32,7 @@ void MappedFileStorage::do_write_raw(const uint8_t* data, size_t bytes) {
 }
 
 void MappedFileStorage::init() {
+    ARCTICDB_DEBUG(log::storage(), "Creating file with config {}", config_.DebugString());
     if (config_.bytes() > 0) {
         ARCTICDB_DEBUG(log::storage(), "Creating new mapped file storage at path {}", config_.path());
         multi_segment_header_.initalize(StreamId{0}, config_.items_count());
@@ -49,17 +50,22 @@ void MappedFileStorage::init() {
     }
 }
 
+SegmentInMemory MappedFileStorage::read_segment(size_t offset, size_t bytes) {
+    auto index_segment = Segment::from_bytes(file_.data() + offset, bytes);
+    return decode_segment(std::move(index_segment));
+
+}
+
 void MappedFileStorage::do_load_header(size_t header_offset, size_t header_size) {
-    auto index_segment = Segment::from_bytes(file_.data() + header_offset, header_size);
-    auto header = decode_segment(std::move(index_segment));
+    auto header = read_segment(header_offset, header_size);
     ARCTICDB_DEBUG(log::storage(), "Loaded mapped file header of size {}", header.row_count());
     multi_segment_header_.set_segment(std::move(header));
 }
 
-uint64_t MappedFileStorage::get_data_offset(const Segment& seg) {
+uint64_t MappedFileStorage::get_data_offset(const Segment& seg, size_t header_size) {
     ARCTICDB_SAMPLE(MappedFileStorageGetOffset, 0)
     std::lock_guard lock{offset_mutex_};
-    const auto segment_size = seg.total_segment_size();
+    const auto segment_size = seg.total_segment_size(header_size);
     ARCTICDB_DEBUG(log::storage(), "Mapped file storage returning offset {} and adding {} bytes", offset_, segment_size);
     const auto previous_offset = offset_;
     offset_ += segment_size;
@@ -68,12 +74,11 @@ uint64_t MappedFileStorage::get_data_offset(const Segment& seg) {
 
 uint64_t MappedFileStorage::write_segment(Segment&& seg) {
     auto segment = std::move(seg);
-    auto offset = get_data_offset(segment);
-    auto* data = file_.data() + offset;
     const auto header_size = segment.segment_header_bytes_size();
-    const auto segment_size = segment.total_segment_size(header_size);
+    auto offset = get_data_offset(segment, header_size);
+    auto* data = file_.data() + offset;
     ARCTICDB_SUBSAMPLE(FileStorageMemCpy, 0)
-    ARCTICDB_DEBUG(log::storage(), "Mapped file storage writing segment of size {} at offset {}", segment_size, offset);
+    ARCTICDB_DEBUG(log::storage(), "Mapped file storage writing segment of size {} at offset {}",  segment.total_segment_size(header_size), offset);
     segment.write_to(data, header_size);
     return offset;
 }
@@ -121,11 +126,14 @@ void MappedFileStorage::do_finalize(KeyData key_data)  {
     auto header_segment = encode_dispatch(multi_segment_header_.detach_segment(),
                                           config_.codec_opts(),
                                           EncodingVersion{static_cast<uint16_t>(config_.encoding_version())});
-    write_segment(std::move(header_segment));
+    auto size = header_segment.total_segment_size();
+    const auto segment_offset = write_segment(std::move(header_segment));
     auto pos = reinterpret_cast<KeyData *>(file_.data() + offset_);
     *pos = key_data;
     ARCTICDB_DEBUG(log::storage(), "Finalizing mapped file, writing key data {}:{}", pos->key_offset_, pos->key_size_); //TODO format specifier
     offset_ += sizeof(KeyData);
+    auto temp = read_segment(segment_offset, size);
+    util::check(!temp.empty(), "Something weird");
     file_.truncate(offset_);
 }
 

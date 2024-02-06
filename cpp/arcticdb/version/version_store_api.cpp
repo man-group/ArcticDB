@@ -1164,7 +1164,7 @@ void write_dataframe_to_file(
 
     ARCTICDB_SAMPLE(WriteDataframeToFile, 0)
     auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta);
-    write_dataframe_to_file_internal(stream_id, frame, path, WriteOptions{}, codec::default_lz4_codec(), EncodingVersion::V1);
+    write_dataframe_to_file_internal(stream_id, frame, path, WriteOptions{}, codec::default_lz4_codec(), EncodingVersion::V2);
 }
 
 ReadResult read_dataframe_from_file(
@@ -1175,7 +1175,8 @@ ReadResult read_dataframe_from_file(
     auto opt_version_and_frame = read_dataframe_from_file_internal(stream_id,
      path,
     read_query,
-    ReadOptions{});
+    ReadOptions{},
+    codec::default_lz4_codec());
 
     return create_python_read_result(opt_version_and_frame.versioned_item_, std::move(opt_version_and_frame.frame_and_descriptor_));
 }

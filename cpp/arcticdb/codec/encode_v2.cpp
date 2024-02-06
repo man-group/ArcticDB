@@ -84,6 +84,7 @@ namespace arcticdb {
         Buffer& out,
         std::ptrdiff_t& pos
     ) {
+        ARCTICDB_DEBUG(log::codec(), "Encoding field with codec {}", codec_opts.DebugString());
         encode_shapes(column_data, variant_field, out, pos);
         encode_blocks(codec_opts, column_data, variant_field, out, pos);
         encode_sparse_map(column_data, variant_field, out, pos);
@@ -191,7 +192,7 @@ namespace arcticdb {
             bytes += sizeof(EncodedBlock);
 
         bytes += sizeof(EncodedBlock) * col.num_blocks();
-        ARCTICDB_DEBUG(log::version(), "Encoded block size: {} + shapes({}) + {} * {} = {}",
+        ARCTICDB_TRACE(log::version(), "Encoded block size: {} + shapes({}) + {} * {} = {}",
             EncodedField::Size,
             col.type().dimension() != entity::Dimension::Dim0 ? sizeof(EncodedBlock) : 0u,
             sizeof(EncodedBlock),

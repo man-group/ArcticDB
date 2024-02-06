@@ -354,9 +354,9 @@ void decode_v2(const Segment& segment,
         const auto seg_row_count = fields_size ? ssize_t(encoded_fields.at(0).ndarray().items_count()) : 0L;
         res.init_column_map();
 
-        for (std::size_t i = 0; i < static_cast<size_t>(fields_size); ++i) {
+        for (std::size_t i = 0; i < fields_size; ++i) {
             const auto& encoded_field = encoded_fields.at(i);
-            //log::version().debug("{}", dump_bytes(begin, (data - begin) + encoding_sizes::field_compressed_size(*encoded_field), 100u));
+            log::version().debug("{}", dump_bytes(begin, (data - begin) + encoding_sizes::field_compressed_size(encoded_field), 100u));
             const auto& field_name = desc.fields(i).name();
             util::check(data!=end, "Reached end of input block with {} fields to decode", fields_size-i);
             if(auto col_index = res.column_index(field_name)) {

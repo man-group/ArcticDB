@@ -43,7 +43,7 @@ IndexValue get_index(position_t pos, FieldType field, const SegmentInMemory& seg
     case VariantType::NUMERIC_TYPE:
         return StreamId{static_cast<NumericId>(index.value())};
     default:
-        util::raise_rte("Unknown index type {}", static_cast<int>(index_type));
+        util::raise_rte("Unknown index type {} in multi_segment", static_cast<int>(index_type));
     }
 }
 

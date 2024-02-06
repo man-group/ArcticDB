@@ -664,7 +664,7 @@ constexpr IndexDescriptor::TypeChar to_type_char(IndexDescriptor::Type type) {
     case IndexDescriptor::ROWCOUNT:return 'R';
     case IndexDescriptor::STRING:return 'S';
     case IndexDescriptor::UNKNOWN:return 'U';
-    default:util::raise_rte("Unknown index type: {}", int(type));
+    default:util::raise_rte("Unknown index type in to_type_char: {}", int(type));
     }
 }
 
@@ -675,7 +675,7 @@ constexpr IndexDescriptor::Type from_type_char(IndexDescriptor::TypeChar type) {
     case 'R': return IndexDescriptor::ROWCOUNT;
     case 'S': return IndexDescriptor::STRING;
     case 'U': return IndexDescriptor::UNKNOWN;
-    default:util::raise_rte("Unknown index type: {}", int(type));
+    default:util::raise_rte("Unknown index type in from_type_char: {}", int(type));
     }
 }
 
