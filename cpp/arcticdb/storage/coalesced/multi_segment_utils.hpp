@@ -49,13 +49,24 @@ IndexValue get_index(position_t pos, FieldType field, const SegmentInMemory& seg
 
 template <typename FieldType>
 entity::AtomKey get_key(position_t pos, const SegmentInMemory& segment) {
-    return atom_key_builder()
-        .version_id(segment.scalar_at<uint64_t>(pos, as_pos(FieldType::version_id)).value())
-        .content_hash(segment.scalar_at<uint64_t>(pos, as_pos(FieldType::content_hash)).value())
-        .creation_ts(segment.scalar_at<uint64_t>(pos, as_pos(FieldType::creation_ts)).value())
-        .start_index(get_index(pos, FieldType::start_index, segment))
-        .end_index(get_index(pos, FieldType::end_index, segment))
-        .build(get_id<FieldType>(pos, segment), entity::key_type_from_int(segment.scalar_at<uint8_t>(pos, as_pos(FieldType::key_type)).value()));
+    const auto id = get_id<FieldType>(pos, segment);
+    const auto key_type_num = segment.scalar_at<int32_t>(pos, as_pos(FieldType::key_type)).value();
+    const auto key_type = entity::key_type_from_int(key_type_num);
+    const auto version_id = segment.scalar_at<uint64_t>(pos, as_pos(FieldType::version_id)).value();
+    const auto content_hash = segment.scalar_at<uint64_t>(pos, as_pos(FieldType::content_hash)).value();
+    const auto creation_ts = segment.scalar_at<uint64_t>(pos, as_pos(FieldType::creation_ts)).value();
+    const auto start_index = get_index(pos, FieldType::start_index, segment);
+    const auto end_index = get_index(pos, FieldType::end_index, segment);
+
+    auto key = atom_key_builder()
+        .version_id(version_id)
+        .content_hash(content_hash)
+        .creation_ts(creation_ts)
+        .start_index(start_index)
+        .end_index(end_index)
+        .build(id, key_type);
+
+    return key;
 }
 
 template <typename FieldType>
@@ -100,8 +111,7 @@ void set_key(const AtomKey& key, SegmentInMemory& segment) {
     set_index(key.end_index(), FieldType::end_index, segment, false);
     segment.set_scalar(as_pos(FieldType::creation_ts), key.creation_ts());
     segment.set_scalar(as_pos(FieldType::content_hash), key.content_hash());
-    segment.set_scalar(as_pos(FieldType::key_type), static_cast<char>(key.type()));
-
+    segment.set_scalar<int32_t>(as_pos(FieldType::key_type), static_cast<int32_t>(key.type()));
 }
 
 } //namespace arcticdb

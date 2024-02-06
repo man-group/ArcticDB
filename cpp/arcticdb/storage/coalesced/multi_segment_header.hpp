@@ -36,7 +36,7 @@ inline StreamDescriptor multi_segment_descriptor(StreamId stream_id) {
         scalar_field(DataType::UINT64, "content_hash"),
         scalar_field(DataType::UINT8, "index_type"),
         scalar_field(DataType::UINT8, "id_type"),
-        scalar_field(DataType::UINT8, "key_type"),
+        scalar_field(DataType::UINT32, "key_type"),
         scalar_field(DataType::UINT64, "offset"),
         scalar_field(DataType::UINT64, "size")
     });
@@ -71,7 +71,7 @@ public:
     }
 
     void initalize(StreamId id, size_t num_rows) {
-        segment_ = SegmentInMemory{multi_segment_descriptor(std::move(id)), num_rows, true};
+        segment_ = SegmentInMemory{multi_segment_descriptor(std::move(id)), num_rows, false};
     }
 
     void add_key_and_offset(const AtomKey &key, uint64_t offset, uint64_t size) {

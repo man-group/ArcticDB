@@ -91,9 +91,8 @@ class ChunkedBufferImpl {
     ChunkedBufferImpl() = default;
 
     explicit ChunkedBufferImpl(size_t size) {
-        add_block(size != 0 ? size : DefaultBlockSize, 0u);
-        if(size != 0)
-            block_offsets_.push_back(0);
+        if(size > 0)
+            add_block(std::max(size, DefaultBlockSize), 0UL);
     }
 
     ChunkedBufferImpl &operator=(ChunkedBufferImpl &&other) noexcept {
@@ -400,13 +399,13 @@ class ChunkedBufferImpl {
 
     size_t bytes_ = 0;
     size_t regular_sized_until_ = 0;
-#ifndef DEBUG_BUILD
-    boost::container::small_vector<BlockType *, 1> blocks_;
-    boost::container::small_vector<size_t, 1> block_offsets_;
-#else
+//#ifndef DEBUG_BUILD
+//    boost::container::small_vector<BlockType *, 1> blocks_;
+//    boost::container::small_vector<size_t, 1> block_offsets_;
+//#else
     std::vector<BlockType*> blocks_;
     std::vector<size_t> block_offsets_;
-#endif
+//#endif
 };
 
 constexpr size_t PageSize = 4096;

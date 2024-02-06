@@ -126,14 +126,11 @@ void MappedFileStorage::do_finalize(KeyData key_data)  {
     auto header_segment = encode_dispatch(multi_segment_header_.detach_segment(),
                                           config_.codec_opts(),
                                           EncodingVersion{static_cast<uint16_t>(config_.encoding_version())});
-    auto size = header_segment.total_segment_size();
-    const auto segment_offset = write_segment(std::move(header_segment));
+    write_segment(std::move(header_segment));
     auto pos = reinterpret_cast<KeyData *>(file_.data() + offset_);
     *pos = key_data;
     ARCTICDB_DEBUG(log::storage(), "Finalizing mapped file, writing key data {}:{}", pos->key_offset_, pos->key_size_); //TODO format specifier
     offset_ += sizeof(KeyData);
-    auto temp = read_segment(segment_offset, size);
-    util::check(!temp.empty(), "Something weird");
     file_.truncate(offset_);
 }
 
