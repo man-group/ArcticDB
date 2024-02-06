@@ -38,7 +38,8 @@ std::string operation_to_string(S3Operation operation){
 std::string MockS3Client::get_failure_trigger(
         const std::string& s3_object_name,
         S3Operation operation_to_fail,
-        Aws::S3::S3Errors error_to_fail_with, bool retryable) {
+        Aws::S3::S3Errors error_to_fail_with,
+        bool retryable) {
     return fmt::format("{}#Failure_{}_{}_{}", s3_object_name, operation_to_string(operation_to_fail), (int)error_to_fail_with, (int) retryable);
 }
 
