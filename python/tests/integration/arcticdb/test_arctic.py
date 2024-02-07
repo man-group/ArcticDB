@@ -47,6 +47,7 @@ def test_library_creation_deletion(arctic_client):
 
     assert ac.list_libraries() == ["pytest_test_lib"]
     assert ac.has_library("pytest_test_lib")
+    assert "pytest_test_lib" in ac
     if "mongo" in arctic_client.get_uri():
         # The mongo fixture uses PrefixingLibraryAdapterDecorator which leaks in this one case
         assert ac["pytest_test_lib"].name.endswith(".pytest_test_lib")
@@ -61,6 +62,7 @@ def test_library_creation_deletion(arctic_client):
     with pytest.raises(LibraryNotFound):
         _lib = ac["pytest_test_lib"]
     assert not ac.has_library("pytest_test_lib")
+    assert "pytest_test_lib" not in ac
 
 
 def test_get_library(arctic_client):
