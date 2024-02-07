@@ -35,7 +35,7 @@ namespace arcticdb {
     public:
         static void encode(
             const arcticdb::proto::encoding::VariantCodec &codec_opts,
-            ColumnData& column_data,
+            const ColumnData& column_data,
             std::variant<EncodedField*, arcticdb::proto::encoding::EncodedField*> variant_field,
             Buffer& out,
             std::ptrdiff_t& pos);
@@ -48,9 +48,10 @@ namespace arcticdb {
             std::variant<EncodedField*, arcticdb::proto::encoding::EncodedField*> variant_field,
             Buffer& out,
             std::ptrdiff_t& pos_in_buffer);
+
         static void encode_blocks(
             const arcticdb::proto::encoding::VariantCodec &codec_opts,
-            ColumnData& column_data,
+            const ColumnData& column_data,
             std::variant<EncodedField*, arcticdb::proto::encoding::EncodedField*> variant_field,
             Buffer& out,
             std::ptrdiff_t& pos);

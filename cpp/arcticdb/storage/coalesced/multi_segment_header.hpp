@@ -5,7 +5,6 @@
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/stream/schema.hpp>
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/storage/coalesced/coalesced_storage_common.hpp>
 #include <arcticdb/storage/coalesced/multi_segment_utils.hpp>
 
 namespace arcticdb::storage {

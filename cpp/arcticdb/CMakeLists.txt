@@ -248,6 +248,8 @@ set(arcticdb_srcs
         storage/constants.hpp
         storage/common.hpp
         storage/config_resolvers.hpp
+        storage/coalesced/multi_segment_header.hpp
+        storage/coalesced/multi_segment_utils.hpp
         storage/failure_simulation.hpp
         storage/library.hpp
         storage/library_index.hpp
@@ -263,7 +265,6 @@ set(arcticdb_srcs
         storage/file/file_store.hpp
         storage/file/mapped_file_storage.hpp
         storage/file/file_store.hpp
-        stream/piloted_clock.hpp
         storage/single_file_storage.hpp
         storage/s3/nfs_backed_storage.hpp
         storage/s3/s3_client_accessor.hpp
@@ -277,6 +278,7 @@ set(arcticdb_srcs
         stream/aggregator-inl.hpp
         stream/append_map.hpp
         stream/merge_utils.hpp
+        stream/piloted_clock.hpp
         stream/index_aggregator.hpp
         stream/index.hpp
         stream/merge.hpp
@@ -315,6 +317,7 @@ set(arcticdb_srcs
         util/magic_num.hpp
         util/movable_priority_queue.hpp
         util/movable_priority_queue.hpp
+        util/memory_mapped_file.hpp
         util/name_validation.hpp
         util/offset_string.hpp
         util/offset_string.hpp
@@ -412,7 +415,6 @@ set(arcticdb_srcs
         storage/mongo/mongo_client.cpp
         storage/mongo/mongo_instance.cpp
         storage/mongo/mongo_storage.cpp
-
         storage/s3/nfs_backed_storage.cpp
         storage/s3/s3_api.cpp
         storage/s3/s3_storage.cpp
@@ -420,6 +422,7 @@ set(arcticdb_srcs
         storage/storage_factory.cpp
         stream/aggregator.cpp
         stream/append_map.cpp
+        stream/piloted_clock.cpp
         toolbox/library_tool.cpp
         util/allocator.cpp
         util/buffer_pool.cpp
@@ -444,11 +447,8 @@ set(arcticdb_srcs
         version/version_utils.cpp
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
-        storage/coalesced/multi_segment_header.hpp
-        storage/coalesced/multi_segment_utils.hpp
-        util/memory_mapped_file.hpp
 
-        stream/piloted_clock.cpp)
+        )
 
 if(${ARCTICDB_INCLUDE_ROCKSDB})
     list (APPEND arcticdb_srcs

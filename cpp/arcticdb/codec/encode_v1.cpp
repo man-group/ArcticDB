@@ -17,7 +17,7 @@ namespace arcticdb {
     );
 
     void encode_sparse_map(
-        ColumnData& column_data,
+        const ColumnData& column_data,
         std::variant<EncodedField*, arcticdb::proto::encoding::EncodedField*> variant_field,
         Buffer& out,
         std::ptrdiff_t& pos
