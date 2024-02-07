@@ -27,45 +27,45 @@ class MappedFileStorage final : public SingleFileStorage {
     ~MappedFileStorage() = default;
 
   private:
-    void do_write_raw(const uint8_t* data, size_t bytes) final;
+    void do_write_raw(const uint8_t* data, size_t bytes) override;
 
-    void do_write(Composite<KeySegmentPair>&& kvs) final;
+    void do_write(Composite<KeySegmentPair>&& kvs) override;
 
-    [[noreturn]] void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) final;
+    [[noreturn]] void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) override;
 
-    void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, storage::ReadKeyOpts opts) final;
+    void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, storage::ReadKeyOpts opts) override;
 
-    [[noreturn]] void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) final;
+    [[noreturn]] void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) override;
 
-    bool do_supports_prefix_matching() const final {
+    bool do_supports_prefix_matching() const override {
         return false;
     };
 
-    std::string do_key_path(const VariantKey&) const final { return {}; }
+    std::string do_key_path(const VariantKey&) const override { return {}; }
 
-    inline bool do_fast_delete() final;
+    [[noreturn]] inline bool do_fast_delete() override;
 
-    [[noreturn]] void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix) final;
+    [[noreturn]] void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix) override;
 
-    bool do_key_exists(const VariantKey & key) final;
+    bool do_key_exists(const VariantKey & key) override;
 
-    size_t do_get_offset() const final;
+    size_t do_get_offset() const override;
 
-    void do_finalize(KeyData key_data) final;
+    void do_finalize(KeyData key_data) override;
 
     uint64_t get_data_offset(const Segment& seg, size_t header_size);
 
-    void do_load_header(size_t header_offset, size_t header_size) final;
+    void do_load_header(size_t header_offset, size_t header_size) override;
 
     uint64_t write_segment(Segment&& seg);
 
-    uint8_t* do_read_raw(size_t offset, size_t bytes) final;
+    uint8_t* do_read_raw(size_t offset, size_t bytes) override;
 
-    size_t do_get_bytes() const final;
+    size_t do_get_bytes() const override;
 
     void init();
 
-    SegmentInMemory read_segment(size_t offset, size_t bytes);
+    SegmentInMemory read_segment(size_t offset, size_t bytes) const;
 
     std::mutex offset_mutex_;
     size_t offset_ = 0UL;

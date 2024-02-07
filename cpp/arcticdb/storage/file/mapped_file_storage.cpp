@@ -46,14 +46,12 @@ void MappedFileStorage::init() {
     } else {
         ARCTICDB_DEBUG(log::storage(), "Opening existing mapped file storage at path {}", config_.path());
         file_.open_file(config_.path());
-
     }
 }
 
-SegmentInMemory MappedFileStorage::read_segment(size_t offset, size_t bytes) {
+SegmentInMemory MappedFileStorage::read_segment(size_t offset, size_t bytes) const  {
     auto index_segment = Segment::from_bytes(file_.data() + offset, bytes);
     return decode_segment(std::move(index_segment));
-
 }
 
 void MappedFileStorage::do_load_header(size_t header_offset, size_t header_size) {
@@ -97,8 +95,9 @@ void MappedFileStorage::do_update(Composite<KeySegmentPair>&&, UpdateOpts) {
     util::raise_rte("Update not implemented for file storages");
 }
 
-void MappedFileStorage::do_read(Composite<VariantKey>&& keys, const ReadVisitor& visitor, storage::ReadKeyOpts) {
+void MappedFileStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, storage::ReadKeyOpts) {
     ARCTICDB_SAMPLE(MappedFileStorageRead, 0)
+    auto keys = std::move(ks);
     keys.broadcast([&visitor, this] (const auto& key) {
         auto maybe_offset = multi_segment_header_.get_offset_for_key(to_atom(key));
         util::check(maybe_offset.has_value(), "Failed to find key {} in file", key);

@@ -260,6 +260,11 @@ set(arcticdb_srcs
         storage/mongo/mongo_instance.hpp
         storage/mongo/mongo_storage.hpp
         storage/object_store_utils.hpp
+        storage/file/file_store.hpp
+        storage/file/mapped_file_storage.hpp
+        storage/file/file_store.hpp
+        stream/piloted_clock.hpp
+        storage/single_file_storage.hpp
         storage/s3/nfs_backed_storage.hpp
         storage/s3/s3_client_accessor.hpp
         storage/s3/s3_storage_tool.hpp
@@ -407,6 +412,7 @@ set(arcticdb_srcs
         storage/mongo/mongo_client.cpp
         storage/mongo/mongo_instance.cpp
         storage/mongo/mongo_storage.cpp
+
         storage/s3/nfs_backed_storage.cpp
         storage/s3/s3_api.cpp
         storage/s3/s3_storage.cpp
@@ -421,6 +427,7 @@ set(arcticdb_srcs
         util/decimal.cpp
         util/error_code.cpp
         util/global_lifetimes.cpp
+        util/memory_mapped_file.hpp
         util/name_validation.cpp
         util/offset_string.cpp
         util/offset_string.cpp
@@ -437,7 +444,11 @@ set(arcticdb_srcs
         version/version_utils.cpp
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
-        storage/coalesced/multi_segment.hpp storage/coalesced/multi_segment.cpp storage/coalesced/multi_segment_header.hpp storage/coalesced/multi_segment_utils.hpp storage/coalesced/multi_segment_aggregator.hpp storage/coalesced/coalesced_storage_common.hpp util/memory_mapped_file.hpp storage/file/mapped_file_storage.cpp storage/file/file_store.hpp storage/file/file_store.hpp storage/file/file_store.hpp storage/file/mapped_file_storage.hpp storage/file/file_store.hpp stream/piloted_clock.hpp storage/single_file_storage.hpp stream/piloted_clock.cpp)
+        storage/coalesced/multi_segment_header.hpp
+        storage/coalesced/multi_segment_utils.hpp
+        util/memory_mapped_file.hpp
+
+        stream/piloted_clock.cpp)
 
 if(${ARCTICDB_INCLUDE_ROCKSDB})
     list (APPEND arcticdb_srcs

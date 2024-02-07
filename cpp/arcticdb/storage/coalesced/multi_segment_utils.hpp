@@ -2,6 +2,7 @@
 
 #include <arcticdb/entity/key.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
+#include <arcticdb/entity/types.hpp>
 
 /*
  * Contains similar functions to stream_utils.hpp but assumes that many keys are mixed in together, so we can't guarantee that
@@ -9,11 +10,68 @@
  */
 namespace arcticdb {
 
+static constexpr uint64_t NumericMask = 0x7FFFFF;
+static constexpr uint64_t NumericFlag = uint64_t(1) << 31;
+static_assert(NumericFlag > NumericMask);
+
+template<typename StorageType>
+uint64_t get_symbol_prefix(const entity::StreamId& stream_id) {
+    using InternalType = uint64_t;
+    static_assert(sizeof(StorageType) <= sizeof(InternalType));
+    constexpr size_t end = sizeof(InternalType);
+    constexpr size_t begin = sizeof(InternalType) - sizeof(StorageType);
+    StorageType data{};
+    util::variant_match(stream_id,
+        [&data] (const entity::StringId& string_id) {
+            auto* target = reinterpret_cast<char*>(&data);
+            for(size_t p = begin, i = 0; p < end && i < string_id.size(); ++p, ++i) {
+                const auto c = string_id[i];
+                util::check(c < 127, "Out of bounds character {}", c);
+                target[p] = c;
+            }
+        },
+        [&data] (const entity::NumericId& numeric_id) {
+            util::check(numeric_id < static_cast<entity::NumericId>(NumericMask), "Numeric id too large: {}", numeric_id);
+            data &= NumericFlag;
+            data &= numeric_id;
+        }
+    );
+    return data;
+}
+
 enum class IdType : uint8_t {
     String,
     Numeric
 };
 
+struct TimeSymbol {
+    using IndexDataType = uint64_t;
+
+    IndexDataType data_ = 0UL;
+
+    TimeSymbol(const entity::StreamId& stream_id, entity::timestamp time) {
+        set_data(stream_id, time);
+    }
+
+    [[nodiscard]] IndexDataType data() const {
+        return data_;
+    }
+
+    friend bool operator<(const TimeSymbol& left, const TimeSymbol& right) {
+        return left.data() < right.data();
+    }
+
+private:
+    void set_data(const entity::StreamId& stream_id, entity::timestamp time) {
+        time <<= 32;
+        auto prefix = get_symbol_prefix<uint32_t>(stream_id);
+        data_ = time | prefix;
+    }
+};
+
+inline TimeSymbol time_symbol_from_key(const AtomKey& key) {
+    return {key.id(), key.creation_ts()};
+}
 template <typename FieldType>
 position_t as_pos(FieldType id_type) {
     return static_cast<position_t>(id_type);
@@ -72,35 +130,35 @@ entity::AtomKey get_key(position_t pos, const SegmentInMemory& segment) {
 template <typename FieldType>
 void set_index(const IndexValue &index, FieldType field, SegmentInMemory& segment, bool set_type) {
     util::variant_match(index,
-                        [&segment, field, set_type](const StringIndex &string_index) {
-                            auto offset = segment.string_pool().get(std::string_view(string_index));
-                            segment.set_scalar<uint64_t>(as_pos(field), offset.offset());
-                            if(set_type)
-                                segment.set_scalar<uint8_t>(as_pos(FieldType::index_type),
-                                                         static_cast<uint8_t>(VariantType::STRING_TYPE));
-                        },
-                        [&segment, field, set_type](const NumericIndex &numeric_index) {
-                            segment.set_scalar<uint64_t>(as_pos(field), numeric_index);
-                            if(set_type)
-                                segment.set_scalar<uint8_t>(as_pos(FieldType::index_type),
-                                                         static_cast<uint8_t>(VariantType::NUMERIC_TYPE));
-                        });
+        [&segment, field, set_type](const StringIndex &string_index) {
+            auto offset = segment.string_pool().get(std::string_view(string_index));
+            segment.set_scalar<uint64_t>(as_pos(field), offset.offset());
+            if(set_type)
+                segment.set_scalar<uint8_t>(as_pos(FieldType::index_type),
+                                         static_cast<uint8_t>(VariantType::STRING_TYPE));
+        },
+        [&segment, field, set_type](const NumericIndex &numeric_index) {
+            segment.set_scalar<uint64_t>(as_pos(field), numeric_index);
+            if(set_type)
+                segment.set_scalar<uint8_t>(as_pos(FieldType::index_type),
+                                         static_cast<uint8_t>(VariantType::NUMERIC_TYPE));
+        });
 }
 
 template <typename FieldType>
 void set_id(const AtomKey &key, SegmentInMemory& segment) {
     util::variant_match(key.id(),
-                        [&segment](const StringId &string_id) {
-                            auto offset = segment.string_pool().get(std::string_view(string_id));
-                            segment.set_scalar<uint64_t>(as_pos(FieldType::stream_id), offset.offset());
-                            segment.set_scalar<uint8_t>(as_pos(FieldType::id_type),
-                                                         static_cast<uint8_t>(IdType::String));
-                        },
-                        [&segment](const NumericId &numeric_id) {
-                            segment.set_scalar<uint64_t>(as_pos(FieldType::stream_id), numeric_id);
-                            segment.set_scalar<uint8_t>(as_pos(FieldType::id_type),
-                                                         static_cast<uint8_t>(IdType::Numeric));
-                        });
+        [&segment](const StringId &string_id) {
+            auto offset = segment.string_pool().get(std::string_view(string_id));
+            segment.set_scalar<uint64_t>(as_pos(FieldType::stream_id), offset.offset());
+            segment.set_scalar<uint8_t>(as_pos(FieldType::id_type),
+                                         static_cast<uint8_t>(IdType::String));
+        },
+        [&segment](const NumericId &numeric_id) {
+            segment.set_scalar<uint64_t>(as_pos(FieldType::stream_id), numeric_id);
+            segment.set_scalar<uint8_t>(as_pos(FieldType::id_type),
+                                         static_cast<uint8_t>(IdType::Numeric));
+        });
 }
 
 template <typename FieldType>

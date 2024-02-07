@@ -26,7 +26,7 @@ enum class MultiSegmentFields : uint32_t {
 };
 
 inline StreamDescriptor multi_segment_descriptor(StreamId stream_id) {
-    return stream_descriptor(stream_id, stream::RowCountIndex(), {
+    return stream_descriptor(std::move(stream_id), stream::RowCountIndex(), {
         scalar_field(DataType::INT64, "time_symbol"),
         scalar_field(DataType::UINT64, "stream_id"),
         scalar_field(DataType::UINT64, "version_id"),
@@ -89,7 +89,7 @@ public:
         segment_.sort(0);
     }
 
-    const SegmentInMemory& segment() {
+    const SegmentInMemory& segment() const {
         return std::move(segment_);
     }
 
