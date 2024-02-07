@@ -584,6 +584,13 @@ inline DataType data_type_from_proto(const arcticdb::proto::descriptors::TypeDes
 template <typename DTT>
 using ScalarTagType = TypeDescriptorTag<DTT, DimensionTag<Dimension::Dim0>>;
 
+template<typename T>
+struct ScalarTypeInfo {
+    using TDT = ScalarTagType<T>;
+    static constexpr auto data_type = TDT::DataTypeTag::data_type;
+    using RawType = typename TDT::DataTypeTag::raw_type;
+};
+
 inline arcticdb::proto::descriptors::StreamDescriptor_FieldDescriptor field_proto(DataType dt, Dimension dim, std::string_view name) {
     arcticdb::proto::descriptors::StreamDescriptor_FieldDescriptor output;
     if(!name.empty())
