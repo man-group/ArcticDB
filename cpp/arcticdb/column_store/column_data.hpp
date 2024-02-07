@@ -147,15 +147,7 @@ struct ColumnData {
         explicit ColumnDataIterator(ColumnData* parent):
         parent_(parent)
         {
-            opt_block_ = parent->next<TDT>();
-            if(opt_block_.has_value()) {
-                remaining_values_in_block_ = opt_block_->row_count();
-                if constexpr(constant) {
-                    ptr_ = reinterpret_cast<RawType*>(opt_block_->data());
-                } else {
-                    ptr_ = const_cast<RawType*>(opt_block_->data());
-                }
-            }
+            increment_block();
         }
 
         // Used to construct [c]end iterators
@@ -178,14 +170,18 @@ struct ColumnData {
                 ++ptr_;
                 --remaining_values_in_block_;
             } else {
-                opt_block_ = parent_->next<TDT>();
-                if(ARCTICDB_LIKELY(opt_block_.has_value())) {
-                    remaining_values_in_block_ = opt_block_->row_count();
-                    if constexpr(constant) {
-                        ptr_ = reinterpret_cast<RawType*>(opt_block_->data());
-                    } else {
-                        ptr_ = const_cast<RawType*>(opt_block_->data());
-                    }
+                increment_block();
+            }
+        }
+
+        void increment_block() {
+            opt_block_ = parent_->next<TDT>();
+            if(ARCTICDB_LIKELY(opt_block_.has_value())) {
+                remaining_values_in_block_ = opt_block_->row_count();
+                if constexpr(constant) {
+                    ptr_ = reinterpret_cast<RawType*>(opt_block_->data());
+                } else {
+                    ptr_ = const_cast<RawType*>(opt_block_->data());
                 }
             }
         }
