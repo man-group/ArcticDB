@@ -59,7 +59,7 @@ namespace arcticdb::storage::memory {
                 auto it = key_vec.find(kv.variant_key());
 
                 if (!opts.upsert_ && it == key_vec.end()) {
-                    std::string err_message = fmt::format("update called with upsert=false but key does not exist: {}", kv.variant_key());
+                    std::string err_message = fmt::format("do_update called with upsert=false on non-existent key(s): {}", kv.variant_key());
                     throw KeyNotFoundException(std::move(kv.variant_key()), err_message);
                 }
 
