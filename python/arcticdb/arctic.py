@@ -205,6 +205,9 @@ class Arctic:
     def __repr__(self):
         return "Arctic(config=%r)" % self._library_adapter
 
+    def __contains__(self, name: str):
+        return self.has_library(name)
+
     def get_library(
         self, name: str, create_if_missing: Optional[bool] = False, library_options: Optional[LibraryOptions] = None
     ) -> Library:
