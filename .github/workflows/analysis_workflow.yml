@@ -96,7 +96,7 @@ jobs:
           threads: 1
           fast_tests_only: 0
           other_params: '-m coverage run '
-          other_pytest_params: '-vs'
+          other_pytest_params: '-vs' #-k test_warnings_library'
 
       - name: Get python Coverage report
         shell: bash -l {0}
