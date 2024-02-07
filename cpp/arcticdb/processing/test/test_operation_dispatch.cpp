@@ -85,17 +85,17 @@ TEST(OperationDispatch, binary_comparator) {
     ASSERT_TRUE(std::holds_alternative<EmptyResult>(visit_binary_comparator(int_column, int_column, LessThanOperator{})));
     // int col < val
     auto variant_data_0 = visit_binary_comparator(int_column, value, LessThanOperator{});
-    ASSERT_TRUE(std::holds_alternative<std::shared_ptr<util::BitSet>>(variant_data_0));
-    auto results_bitset_0 = std::get<std::shared_ptr<util::BitSet>>(variant_data_0);
+    ASSERT_TRUE(std::holds_alternative<util::BitSet>(variant_data_0));
+    auto results_bitset_0 = std::get<util::BitSet>(variant_data_0);
     for (size_t idx = 0; idx < num_rows; idx++) {
-        ASSERT_EQ(idx < 50, results_bitset_0->get_bit(idx));
+        ASSERT_EQ(idx < 50, results_bitset_0.get_bit(idx));
     }
     // val < int col
     auto variant_data_1 = visit_binary_comparator(value, int_column, LessThanOperator{});
-    ASSERT_TRUE(std::holds_alternative<std::shared_ptr<util::BitSet>>(variant_data_1));
-    auto results_bitset_1 = std::get<std::shared_ptr<util::BitSet>>(variant_data_1);
+    ASSERT_TRUE(std::holds_alternative<util::BitSet>(variant_data_1));
+    auto results_bitset_1 = std::get<util::BitSet>(variant_data_1);
     for (size_t idx = 0; idx < num_rows; idx++) {
-        ASSERT_EQ(50 < idx, results_bitset_1->get_bit(idx));
+        ASSERT_EQ(50 < idx, results_bitset_1.get_bit(idx));
     }
     // val < val not supported, should be handled at expression evaluation time
     // int col < empty col
@@ -120,17 +120,17 @@ TEST(OperationDispatch, binary_membership) {
 
     // int col isin set
     auto variant_data_0 = visit_binary_membership(int_column, value_set, IsInOperator{});
-    ASSERT_TRUE(std::holds_alternative<std::shared_ptr<util::BitSet>>(variant_data_0));
-    auto results_bitset_0 = std::get<std::shared_ptr<util::BitSet>>(variant_data_0);
+    ASSERT_TRUE(std::holds_alternative<util::BitSet>(variant_data_0));
+    auto results_bitset_0 = std::get<util::BitSet>(variant_data_0);
     for (size_t idx = 0; idx < num_rows; idx++) {
-        ASSERT_EQ(raw_set.count(static_cast<int64_t>(idx)) > 0, results_bitset_0->get_bit(idx));
+        ASSERT_EQ(raw_set.count(static_cast<int64_t>(idx)) > 0, results_bitset_0.get_bit(idx));
     }
     // int col isnotin set
     auto variant_data_1 = visit_binary_membership(int_column, value_set, IsNotInOperator{});
-    ASSERT_TRUE(std::holds_alternative<std::shared_ptr<util::BitSet>>(variant_data_0));
-    auto results_bitset_1 = std::get<std::shared_ptr<util::BitSet>>(variant_data_1);
+    ASSERT_TRUE(std::holds_alternative<util::BitSet>(variant_data_0));
+    auto results_bitset_1 = std::get<util::BitSet>(variant_data_1);
     for (size_t idx = 0; idx < num_rows; idx++) {
-        ASSERT_EQ(raw_set.count(static_cast<int64_t>(idx)) == 0, results_bitset_1->get_bit(idx));
+        ASSERT_EQ(raw_set.count(static_cast<int64_t>(idx)) == 0, results_bitset_1.get_bit(idx));
     }
     // empty col isin set
     ASSERT_TRUE(std::holds_alternative<EmptyResult>(visit_binary_membership(empty_column, value_set, IsInOperator{})));

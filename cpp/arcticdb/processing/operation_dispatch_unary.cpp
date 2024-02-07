@@ -10,12 +10,12 @@
 
 namespace arcticdb {
 
-VariantData unary_boolean(const std::shared_ptr<util::BitSet>& bitset, OperationType operation) {
+VariantData unary_boolean(const util::BitSet& bitset, OperationType operation) {
     switch(operation) {
         case OperationType::IDENTITY:
             return bitset;
         case OperationType::NOT:
-            return std::make_shared<util::BitSet>(~(*bitset));
+            return ~bitset;
         default:
             util::raise_rte("Unexpected operator in unary_boolean {}", int(operation));
     }
@@ -46,7 +46,7 @@ VariantData unary_boolean(FullResult, OperationType operation) {
 VariantData visit_unary_boolean(const VariantData& left, OperationType operation) {
     auto data = transform_to_bitset(left);
     return std::visit(util::overload{
-            [operation] (const std::shared_ptr<util::BitSet>& d) -> VariantData {
+            [operation] (const util::BitSet& d) -> VariantData {
                 return transform_to_placeholder(unary_boolean(d, operation));
             },
             [operation](EmptyResult d) {
