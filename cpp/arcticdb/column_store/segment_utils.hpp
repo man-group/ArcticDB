@@ -17,29 +17,22 @@
 
 namespace arcticdb {
 robin_hood::unordered_set<entity::position_t> unique_values_for_string_column(const Column &column) {
-    auto column_data = column.data();
-    return column_data.type().visit_tag([&](auto type_desc_tag) -> robin_hood::unordered_set<entity::position_t> {
-        using TDT = decltype(type_desc_tag);
-        using DTT = typename TDT::DataTypeTag;
-        if constexpr(is_sequence_type(DTT::data_type)) {
-            using RawType = typename TDT::DataTypeTag::raw_type;
-            robin_hood::unordered_set<entity::position_t> output;
-            // Guessing that unique values is a third of the column length
-            static auto map_reserve_ratio = ConfigsMap::instance()->get_int("UniqueColumns.AllocationRatio", 3);
-            output.reserve(column.row_count() / map_reserve_ratio);
+    robin_hood::unordered_set<entity::position_t> output_set;
+    // Guessing that unique values is a third of the column length
+    static auto map_reserve_ratio = ConfigsMap::instance()->get_int("UniqueColumns.AllocationRatio", 3);
+    output_set.reserve(column.row_count() / map_reserve_ratio);
 
-            while (auto block = column_data.next<TDT>()) {
-                auto ptr = reinterpret_cast<const RawType *>(block->data());
-                const auto row_count = block->row_count();
-                for (auto i = 0u; i < row_count; ++i) {
-                    output.insert(*ptr++);
-                }
-            }
-            return output;
+    details::visit_type(column.type().data_type(), [&](auto col_desc_tag) {
+        using type_info = ScalarTypeInfo<decltype(col_desc_tag)>;
+        if constexpr(is_sequence_type(type_info::data_type)) {
+            Column::for_each<typename type_info::TDT>(column, [&output_set](auto value) {
+                output_set.insert(value);
+            });
         } else {
             util::raise_rte("Column {} is not a string type column");
         }
     });
+    return output_set;
 }
 
 }
