@@ -13,6 +13,46 @@ on:
     - "**/*.md"
 
 jobs:
+  get-tag-commits:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Get tags
+        run: |
+          tags=$(git tag --list | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$')
+          commits=()
+          for tag in $tags; do
+            commit=$(git rev-list -n 1 $tag)
+            commits+=("\"$commit\"")
+          done
+          commits_string=$(IFS=, ; echo "${commits[*]}")
+          echo "commits=$commits_string" >> $GITHUB_ENV
+
+      - name: Set matrix for next job
+        id: set-matrix
+        run: |
+          echo "matrix={\"commit\": [$commits]}" | tee -a $GITHUB_ENV
+
+  process-tags:
+    needs: [get-tag-commits]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{fromJson(needs.get-tag-commits.outputs.matrix)}}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Process commit
+        run: |
+          echo "Processing commit ${{ matrix.commit }}"
+
+
   cibw_docker_image:
     uses: ./.github/workflows/cibw_docker_image.yml
     permissions: {packages: write}
@@ -193,45 +233,6 @@ jobs:
     secrets: inherit
     with:
       job_type: start
-
-  get-tag-commits:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: 0
-
-      - name: Get tags
-        run: |
-          tags=$(git tag --list | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$')
-          commits=()
-          for tag in $tags; do
-            commit=$(git rev-list -n 1 $tag)
-            commits+=("\"$commit\"")
-          done
-          commits_string=$(IFS=, ; echo "${commits[*]}")
-          echo "commits=$commits_string" >> $GITHUB_ENV
-
-      - name: Set matrix for next job
-        id: set-matrix
-        run: |
-          echo "matrix={\"commit\": [$commits]}" | tee -a $GITHUB_ENV
-
-  process-tags:
-    needs: get-tag-commits
-    runs-on: ubuntu-latest
-    strategy:
-      matrix: ${{fromJson(needs.get-tag-commits.outputs.matrix)}}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: Process commit
-        run: |
-          echo "Processing commit ${{ matrix.commit }}"
 
   benchmark_linux_medium:
     timeout-minutes: 1200
