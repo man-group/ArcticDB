@@ -21,6 +21,10 @@ from arcticdb.adapters.prefixing_library_adapter_decorator import PrefixingLibra
 if TYPE_CHECKING:
     from pymongo import MongoClient
 
+import logging
+log = logging.getLogger("MONGO SERVER FIXTURE")
+logging.basicConfig(level=logging.DEBUG)
+
 
 class MongoDatabase(StorageFixture):
     """Each fixture is backed by its own Mongo database, to make clean up easier."""
@@ -46,6 +50,7 @@ class MongoDatabase(StorageFixture):
         self.client = client or MongoClient(mongo_uri)
         if not name:
             while True:
+                log.log(logging.INFO, "Searching for new name!")
                 name = f"MongoFixture{int(time.time() * 1e6)}"
                 if name not in self.client.list_database_names():
                     break
@@ -144,9 +149,13 @@ def auto_detect_server():
         host = f"{mongo_host}:27017"
         assert check_mongo_running(host)
         return ExternalMongoDBServer(f"mongodb://{host}")
+    else:
+        log.log(logging.INFO, "No env var, so try localhost then fallback.")
 
     host = "localhost:27017"
     if check_mongo_running(host):
         return ExternalMongoDBServer(f"mongodb://{host}")
+    else:
+        log.log(logging.INFO, "No localhost, so falling back to managed.")
 
     return ManagedMongoDBServer()

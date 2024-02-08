@@ -38,24 +38,24 @@ jobs:
       #   uses: SimenB/github-actions-cpu-cores@v1.1.0
       #   id: cpu-cores
 
-      # - name: Install Conda environment from environment_unix.yml
-      #   uses: mamba-org/setup-micromamba@v1.6.0
-      #   with:
-      #     environment-file: environment_unix.yml
-      #     init-shell: >-
-      #       bash
-      #     cache-environment: true
-      #     post-cleanup: 'all'
+      - name: Install Conda environment from environment_unix.yml
+        uses: mamba-org/setup-micromamba@v1.6.0
+        with:
+          environment-file: environment_unix.yml
+          init-shell: >-
+            bash
+          cache-environment: true
+          post-cleanup: 'all'
 
-      # - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
-      #   shell: bash -l {0}
-      #   run: |
-      #     # Protocol buffers compilation require not using build isolation.
-      #     python -m pip install --no-build-isolation --no-deps -v -e .
-      #   env:
-      #     ARCTICDB_USING_CONDA: 1
-      #     ARCTICDB_BUILD_CPP_TESTS: 1
-      #     ARCTICDB_PROTOC_VERS: "4"
+      - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
+        shell: bash -l {0}
+        run: |
+          # Protocol buffers compilation require not using build isolation.
+          python -m pip install --no-build-isolation --no-deps -v -e .
+        env:
+          ARCTICDB_USING_CONDA: 1
+          ARCTICDB_BUILD_CPP_TESTS: 1
+          ARCTICDB_PROTOC_VERS: "4"
 
       # - name: Build C++ Tests
       #   shell: bash -l {0}
@@ -70,24 +70,6 @@ jobs:
       #     cd cpp/out/linux-conda-release-build/
       #     CTEST_OUTPUT_ON_FAILURE=1 make test
 
-      # Try running this to get pip to work properly!
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      # - name: Install arcticdb
-      #   shell: bash
-      #   run: |
-      #     pip install arcticdb[Testing]
-
-      #- name: Install arcticdb, no build
-      #  shell: bash
-      #  run: |
-      #    python -m pip install --upgrade pip
-      #    ARCTIC_CMAKE_PRESET=skip pip install -ve .[Testing]
-      #    # Install also globally for the built versions
-      #    pip install arcticdb[Testing]
-
       - name: Install deps for isolated test script
         shell: bash
         run: pip install requests pymongo
@@ -98,17 +80,15 @@ jobs:
         with:
           node-version: '16'
 
-      # added to the environment_unix.yml instead
-      # - name: pip install arcticdb to save building
-      #   shell: bash
-      #   run: |
-      #     pip install arcticdb
-
       - name: Test with pytest
         shell: bash -l {0}
         run: |
           cd python
+          # todo: add back -n for parallel testing
           python arcticdb/storage_fixtures/test_mongo_fixture.py
+          python -m pytest -vs -n 1 tests/integration/arcticdb/test_arctic.py
+        env:
+          ARCTICDB_USING_CONDA: 1
           
 
   macos:

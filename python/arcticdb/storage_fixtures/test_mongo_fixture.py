@@ -112,7 +112,6 @@ class MongoDatabase():
         self.client = client or MongoClient(mongo_uri)
         if not name:
             while True:
-                print("Trying to search for a name...")
                 name = f"MongoFixture{int(time.time() * 1e6)}"
                 if name not in self.client.list_database_names():
                     break
