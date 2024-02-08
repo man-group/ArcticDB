@@ -5,20 +5,54 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+import os
+from arcticdb import Arctic
 from arcticdb.storage_fixtures.s3 import real_s3_from_environment_variables
 from arcticdb.version_store.processing import QueryBuilder
 
 from .common import *
 
 
+# We keep these functions here to make sure that every version of the benchmark
+# has access to the same functions for creating the AWS url and the real S3 credentials
+def real_s3_credentials(shared_path: bool = True):
+    endpoint = os.getenv("ARCTICDB_REAL_S3_ENDPOINT")
+    bucket = os.getenv("ARCTICDB_REAL_S3_BUCKET")
+    region = os.getenv("ARCTICDB_REAL_S3_REGION")
+    access_key = os.getenv("ARCTICDB_REAL_S3_ACCESS_KEY")
+    secret_key = os.getenv("ARCTICDB_REAL_S3_SECRET_KEY")
+    if shared_path:
+        path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX")
+    else:
+        path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX")
+
+    clear = str(os.getenv("ARCTICDB_REAL_S3_CLEAR")).lower() in ("true", "1")
+
+    return endpoint, bucket, region, access_key, secret_key, path_prefix, clear
+
+
+def get_real_s3_uri(shared_path: bool = True):
+    (
+        endpoint,
+        bucket,
+        region,
+        access_key,
+        secret_key,
+        path_prefix,
+        _,
+    ) = real_s3_credentials(shared_path)
+    aws_uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix={path_prefix}"
+    return aws_uri
+
+
 class PersistentQueryBuilderFunctions:
     number = 2
     timeout = 6000
 
-    params = [10_000_000, 100_000_000]
+    params = [1_000_000, 10_000_000]
 
     def __init__(self):
-        self.ac = real_s3_from_environment_variables(shared_path=True).create_fixture().create_arctic()
+        self.ac = Arctic(get_real_s3_uri())
 
         self.lib_name = "query_builder_benchmark_lib"
 
@@ -26,7 +60,7 @@ class PersistentQueryBuilderFunctions:
         pass
 
     def setup_cache(self):
-        self.ac = real_s3_from_environment_variables(shared_path=True).create_fixture().create_arctic()
+        self.ac = Arctic(get_real_s3_uri())
 
         num_rows = PersistentQueryBuilderFunctions.params
         self.lib_name = "query_builder_benchmark_lib"
