@@ -15,7 +15,7 @@ class PersistentQueryBuilderFunctions:
     number = 2
     timeout = 6000
 
-    params = [10_000_000, 100_000_000]
+    params = [1_000_000, 10_000_000]
 
     def __init__(self):
         self.ac = real_s3_from_environment_variables(shared_path=True).create_fixture().create_arctic()
