@@ -13,7 +13,7 @@ on:
     - "**/*.md"
 
 jobs:
-  get-tag-commits:
+  get_tag_commits:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -39,11 +39,16 @@ jobs:
         run: |
           echo "matrix={\"commit\": [$commits]}" | tee -a $GITHUB_ENV
 
-  process-tags:
-    needs: [get-tag-commits]
-    runs-on: ubuntu-latest
+  process_tags:
+    needs: [get_tag_commits]
+    if: |
+      always() &&
+      !cancelled()
     strategy:
-      matrix: ${{fromJson(needs.get-tag-commits.outputs.matrix)}}
+      matrix: 
+        include:
+          - ${{fromJson(needs.get_tag_commits.outputs.matrix)}}
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
