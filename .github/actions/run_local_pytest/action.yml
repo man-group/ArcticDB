@@ -19,7 +19,7 @@ runs:
         cd python
         ln -s ../cpp/out/linux-${{ inputs.build_type }}-build/arcticdb/arcticdb_ext.cpython-36m-x86_64-linux-gnu.so
         export ARCTICDB_RAND_SEED=$RANDOM
-        python ${{inputs.other_params}} -m pytest -n ${{ inputs.threads }} ${{ inputs.other_pytest_params }} tests/integration/arcticdb/test_lmdb.py # narrow to this file
+        python ${{inputs.other_params}} -m pytest ${{ inputs.other_pytest_params }} tests/integration/arcticdb/test_lmdb.py # narrow to this file + skip xdist parallel mode
       env:
         TEST_OUTPUT_DIR: ${{ runner.temp }}
         ARCTICDB_FAST_TESTS_ONLY: ${{ inputs.fast_tests_only }}
