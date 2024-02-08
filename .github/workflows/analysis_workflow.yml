@@ -194,6 +194,44 @@ jobs:
     with:
       job_type: start
 
+  get-tags:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Get tags
+        id: get-tags
+        run: |
+          tags=$(git tag --list | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$')
+          commits=""
+          for tag in $tags; do
+            commit=$(git rev-list -n 1 $tag)
+            commits="$commits $commit"
+          done
+          echo "::set-output name=commits::$commits"
+
+      - name: Set matrix for next job
+        id: set-matrix
+        run: |
+          echo "::set-output name=matrix::{\"commit\": [${{ steps.get-tags.outputs.commits }}]}"
+
+  process-tags:
+    needs: get-tags
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{fromJson(needs.get-tags.outputs.matrix)}}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Process commit
+        run: echo "Processing commit ${{ matrix.commit }}"
+
   benchmark_linux_medium:
     timeout-minutes: 1200
     needs: [start_ec2_runner, cibw_docker_image]
@@ -246,20 +284,20 @@ jobs:
         if: inputs.run_all_benchmarks == true
         shell: bash -el {0}
         run: |
-          python -m asv run -v --show-stderr HASHFILE:python/hashes_to_benchmark.txt
+          python -m asv run --strict -v --show-stderr HASHFILE:python/hashes_to_benchmark.txt
 
       - name: Benchmark only latest commit
         if: github.event_name != 'pull_request' && inputs.run_all_benchmarks == false
         shell: bash -el {0}
         run: |
-          python -m asv run -v --show-stderr HEAD^!
+          python -m asv run --strict -v --show-stderr HEAD^!
           git log HEAD^..HEAD --oneline -n1 --decorate=no | awk '{print $1;}' >> python/hashes_to_benchmark.txt
 
       - name: Benchmark against master
         if: github.event_name == 'pull_request' && inputs.run_all_benchmarks == false
         shell: bash -el {0}
         run: |
-          python -m asv continuous -v --show-stderr origin/master HEAD -f 1.15
+          python -m asv continuous --strict -v --show-stderr origin/master HEAD -f 1.15
 
       - name: Publish results
         if: github.event_name != 'pull_request' || github.ref == 'refs/heads/master'
