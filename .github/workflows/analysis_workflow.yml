@@ -194,7 +194,7 @@ jobs:
     with:
       job_type: start
 
-  get-tags:
+  get-tag-commits:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -205,32 +205,33 @@ jobs:
           fetch-depth: 0
 
       - name: Get tags
-        id: get-tags
         run: |
           tags=$(git tag --list | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$')
-          commits=""
+          commits=()
           for tag in $tags; do
             commit=$(git rev-list -n 1 $tag)
-            commits="$commits $commit"
+            commits+=("\"$commit\"")
           done
-          echo "::set-output name=commits::$commits"
+          commits_string=$(IFS=, ; echo "${commits[*]}")
+          echo "commits=$commits_string" >> $GITHUB_ENV
 
       - name: Set matrix for next job
         id: set-matrix
         run: |
-          echo "::set-output name=matrix::{\"commit\": [${{ steps.get-tags.outputs.commits }}]}"
+          echo "matrix={\"commit\": [$commits]}" | tee -a $GITHUB_ENV
 
   process-tags:
-    needs: get-tags
+    needs: get-tag-commits
     runs-on: ubuntu-latest
     strategy:
-      matrix: ${{fromJson(needs.get-tags.outputs.matrix)}}
+      matrix: ${{fromJson(needs.get-tag-commits.outputs.matrix)}}
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
 
       - name: Process commit
-        run: echo "Processing commit ${{ matrix.commit }}"
+        run: |
+          echo "Processing commit ${{ matrix.commit }}"
 
   benchmark_linux_medium:
     timeout-minutes: 1200
