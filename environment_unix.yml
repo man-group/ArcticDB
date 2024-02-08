@@ -1,7 +1,9 @@
-name: arcticdb
+name: testpackagearcticdb
 channels:
   - conda-forge
 dependencies:
+  # depend on arcticdb to save building
+  - arcticdb
   # Build tools
   - cxx-compiler
   - c-compiler
