@@ -31,6 +31,9 @@
 
 #include <boost/interprocess/streams/bufferstream.hpp>
 
+#include <arcticdb/storage/azure/azure_client_wrapper.hpp>
+#include <arcticdb/storage/azure/azure_real_client.hpp>
+
 #undef GetMessage
 
 namespace arcticdb::storage {
@@ -45,16 +48,11 @@ namespace detail {
 
 static const size_t BATCH_SUBREQUEST_LIMIT = 256; //https://github.com/Azure/azure-sdk-for-python/blob/767facc39f2487504bcde4e627db16a79f96b297/sdk/storage/azure-storage-blob/azure/storage/blob/_container_client.py#L1608
 
-Azure::Core::Context get_context(unsigned int request_timeout){
-    Azure::Core::Context requestContext; //TODO: Maybe can be static but need to be careful with its shared_ptr and ContextSharedState
-    return requestContext.WithDeadline(std::chrono::system_clock::now() + std::chrono::milliseconds(request_timeout));
-}
-
 template<class KeyBucketizer>
 void do_write_impl(
     Composite<KeySegmentPair>&& kvs,
     const std::string& root_folder,
-    Azure::Storage::Blobs::BlobContainerClient& container_client,
+    AzureClientWrapper& azure_client,
     KeyBucketizer&& bucketizer,
     const Azure::Storage::Blobs::UploadBlockBlobFromOptions& upload_option,
     unsigned int request_timeout) {
@@ -62,7 +60,7 @@ void do_write_impl(
         auto fmt_db = [](auto&& kv) { return kv.key_type(); };
 
         (fg::from(kvs.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach(
-            [&container_client, &root_folder, b=std::move(bucketizer), &upload_option, &request_timeout] (auto&& group) {
+            [&azure_client, &root_folder, b=std::move(bucketizer), &upload_option, &request_timeout] (auto&& group) {
                 auto key_type_dir = key_type_folder(root_folder, group.key());
                 ARCTICDB_TRACE(log::storage(), "Azure key_type_folder is {}", key_type_dir);
 
@@ -72,24 +70,8 @@ void do_write_impl(
                     auto blob_name = object_path(b.bucketize(key_type_dir, k), k);
                     auto& seg = kv.segment();
 
-                    std::shared_ptr<Buffer> tmp;
-                    auto hdr_size = seg.segment_header_bytes_size();
-                    auto [dst, write_size] = seg.try_internal_write(tmp, hdr_size);
-                    util::check(arcticdb::Segment::FIXED_HEADER_SIZE + hdr_size + seg.buffer().bytes() <= write_size,
-                                    "Size disparity, fixed header size {} + variable header size {} + buffer size {}  >= total size {}",
-                                    arcticdb::Segment::FIXED_HEADER_SIZE,
-                                    hdr_size,
-                                    seg.buffer().bytes(),
-                                    write_size);
-
-                    ARCTICDB_SUBSAMPLE(AzureStorageUploadObject, 0)
-                    try{
-                        auto blob_client = container_client.GetBlockBlobClient(blob_name);
-                        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Writing key {}: {}, with {} bytes of data",
-                                               variant_key_type(k),
-                                               variant_key_view(k),
-                                               seg.total_segment_size(hdr_size));
-                        blob_client.UploadFrom(dst, write_size, upload_option, get_context(request_timeout));
+                    try {
+                        azure_client.write_blob(blob_name, std::move(seg), upload_option, request_timeout);
                     }
                     catch (const Azure::Core::RequestFailedException& e){
                         util::raise_rte("Failed to write azure with key '{}' {} {}: {}",
@@ -99,10 +81,6 @@ void do_write_impl(
                                             e.ReasonPhrase);
                     }
 
-                    ARCTICDB_RUNTIME_DEBUG(log::storage(), "Wrote key {}: {}, with {} bytes of data",
-                                        variant_key_type(k),
-                                        variant_key_view(k),
-                                        seg.total_segment_size(hdr_size));
                 }
             }
         );
@@ -112,12 +90,12 @@ template<class KeyBucketizer>
 void do_update_impl(
     Composite<KeySegmentPair>&& kvs,
     const std::string& root_folder,
-    Azure::Storage::Blobs::BlobContainerClient& container_client,
+    AzureClientWrapper& azure_client,
     KeyBucketizer&& bucketizer,
     const Azure::Storage::Blobs::UploadBlockBlobFromOptions& upload_option,
     unsigned int request_timeout) {
         // azure updates the key if it already exists
-        do_write_impl(std::move(kvs), root_folder, container_client, std::move(bucketizer), upload_option, request_timeout);
+        do_write_impl(std::move(kvs), root_folder, azure_client, std::move(bucketizer), upload_option, request_timeout);
 }
 
 struct UnexpectedAzureErrorException : public std::exception {};
@@ -126,7 +104,7 @@ template<class KeyBucketizer>
 void do_read_impl(Composite<VariantKey> && ks,
     const ReadVisitor& visitor,
     const std::string& root_folder,
-    Azure::Storage::Blobs::BlobContainerClient& container_client,
+    AzureClientWrapper& azure_client,
     KeyBucketizer&& bucketizer,
     ReadKeyOpts opts,
     const Azure::Storage::Blobs::DownloadBlobToOptions& download_option,
@@ -136,20 +114,13 @@ void do_read_impl(Composite<VariantKey> && ks,
         std::vector<VariantKey> failed_reads;
 
         (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach(
-            [&container_client, &root_folder, b=std::move(bucketizer), &visitor, &failed_reads,
+            [&azure_client, &root_folder, b=std::move(bucketizer), &visitor, &failed_reads,
             opts=opts, &download_option, &request_timeout] (auto&& group) {
             for (auto& k : group.values()) {
                 auto key_type_dir = key_type_folder(root_folder, variant_key_type(k));
                 auto blob_name = object_path(b.bucketize(key_type_dir, k), k);
                 try{
-                    ARCTICDB_DEBUG(log::storage(), "Reading key {}: {}", variant_key_type(k), variant_key_view(k));
-
-                    auto blob_client = container_client.GetBlockBlobClient(blob_name);
-                    auto properties = blob_client.GetProperties(Azure::Storage::Blobs::GetBlobPropertiesOptions{}, get_context(request_timeout)).Value;
-                    std::shared_ptr<Buffer> buffer = std::make_shared<Buffer>(properties.BlobSize);
-                    blob_client.DownloadTo(buffer->preamble(), buffer->available(), download_option, get_context(request_timeout));
-                    ARCTICDB_SUBSAMPLE(AzureStorageVisitSegment, 0)
-                    visitor(k, Segment::from_buffer(std::move(buffer)));
+                    visitor(k, azure_client.read_blob(blob_name, download_option, request_timeout));
 
                     ARCTICDB_DEBUG(log::storage(), "Read key {}: {}", variant_key_type(k), variant_key_view(k));
                 }
@@ -172,49 +143,42 @@ void do_read_impl(Composite<VariantKey> && ks,
 template<class KeyBucketizer>
 void do_remove_impl(Composite<VariantKey>&& ks,
     const std::string& root_folder,
-    Azure::Storage::Blobs::BlobContainerClient& container_client,
+    AzureClientWrapper& azure_client,
     KeyBucketizer&& bucketizer,
     unsigned int request_timeout) {
         ARCTICDB_SUBSAMPLE(AzureStorageDeleteBatch, 0)
         auto fmt_db = [](auto&& k) { return variant_key_type(k); };
+        std::vector<std::string> to_delete;
         static const size_t delete_object_limit =
             std::min(BATCH_SUBREQUEST_LIMIT, static_cast<size_t>(ConfigsMap::instance()->get_int("AzureStorage.DeleteBatchSize", BATCH_SUBREQUEST_LIMIT)));
 
-        auto batch = container_client.CreateBatch();
         unsigned int batch_counter = 0u;
-        auto submit_batch = [&container_client, &request_timeout, &batch_counter](auto &batch) {
-            ARCTICDB_SUBSAMPLE(AzureStorageDeleteObjects, 0)
-            try{
-                container_client.SubmitBatch(batch, Azure::Storage::Blobs::SubmitBlobBatchOptions(), get_context(request_timeout));//To align with s3 behaviour, deleting non-exist objects is not an error, so not handling response
+        auto submit_batch = [&azure_client, &request_timeout, &batch_counter](auto &to_delete) {
+            try {
+                azure_client.delete_blobs(to_delete, request_timeout);
             }
-            catch (const Azure::Core::RequestFailedException& e){
+            catch (const Azure::Core::RequestFailedException& e) {
                 util::raise_rte("Failed to create azure segment batch remove request {}: {}",
                                     static_cast<int>(e.StatusCode),
                                     e.ReasonPhrase);
             }
-            batch = container_client.CreateBatch();
             batch_counter = 0u;
         };
 
         (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach(
-            [&root_folder, b=std::move(bucketizer), &batch, delete_object_limit=delete_object_limit, &batch_counter, &submit_batch] (auto&& group) {//bypass incorrect 'set but no used" error for delete_object_limit
+            [&root_folder, b=std::move(bucketizer), delete_object_limit=delete_object_limit, &batch_counter, &to_delete, &submit_batch] (auto&& group) {//bypass incorrect 'set but no used" error for delete_object_limit
                 auto key_type_dir = key_type_folder(root_folder, group.key());
                 for (auto k : folly::enumerate(group.values())) {
                     auto blob_name = object_path(b.bucketize(key_type_dir, *k), *k);
-                    ARCTICDB_RUNTIME_DEBUG(log::storage(), "Removing azure object with key {}", blob_name);
-                    batch.DeleteBlob(blob_name);
+                    to_delete.emplace_back(std::move(blob_name));
                     if (++batch_counter == delete_object_limit) {
-                        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Submitting DeleteBlob batch");
-                        submit_batch(batch);
-                        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Submitted DeleteBlob batch");
+                        submit_batch(to_delete);
                     }
                 }
             }
         );
         if (batch_counter) {
-            ARCTICDB_RUNTIME_DEBUG(log::storage(), "Submitting DeleteBlob batch");
-            submit_batch(batch);
-            ARCTICDB_RUNTIME_DEBUG(log::storage(), "Submitted DeleteBlob batch");
+            submit_batch(to_delete);
         }
 }
 
@@ -228,7 +192,7 @@ template<class KeyBucketizer, class PrefixHandler>
 void do_iterate_type_impl(KeyType key_type,
     const IterateTypeVisitor& visitor,
     const std::string& root_folder,
-    Azure::Storage::Blobs::BlobContainerClient& container_client,
+    AzureClientWrapper& azure_client,
     KeyBucketizer&& bucketizer,
     PrefixHandler&& prefix_handler = default_prefix_handler(),
     const std::string& prefix = std::string{}) {
@@ -238,13 +202,10 @@ void do_iterate_type_impl(KeyType key_type,
         KeyDescriptor key_descriptor(prefix,
             is_ref_key_class(key_type) ? IndexDescriptor::UNKNOWN : IndexDescriptor::TIMESTAMP, FormatType::TOKENIZED);
         auto key_prefix = prefix_handler(prefix, key_type_dir, key_descriptor, key_type);
-        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Searching for objects with prefix {}", key_prefix);
         const auto root_folder_size = key_type_dir.size() + 1 + bucketizer.bucketize_length(key_type);
 
-        Azure::Storage::Blobs::ListBlobsOptions options;
-        options.Prefix = key_prefix;
-        try{
-            for (auto page = container_client.ListBlobs(options); page.HasPage(); page.MoveToNextPage()) {
+        try {
+            for (auto page = azure_client.list_blobs(key_prefix); page.HasPage(); page.MoveToNextPage()) {
                 for (const auto& blob : page.Blobs) {
                     auto key = blob.Name.substr(root_folder_size);
                     ARCTICDB_TRACE(log::version(), "Got object_list: {}, key: {}", blob.Name, key);
@@ -259,7 +220,7 @@ void do_iterate_type_impl(KeyType key_type,
                 }
             }
         }
-        catch (const Azure::Core::RequestFailedException& e){
+        catch (const Azure::Core::RequestFailedException& e) {
             log::storage().warn("Failed to iterate azure blobs '{}' {}: {}",
                                 key_type,
                                 static_cast<int>(e.StatusCode),
@@ -271,16 +232,12 @@ template<class KeyBucketizer>
 bool do_key_exists_impl(
     const VariantKey& key,
     const std::string& root_folder,
-    Azure::Storage::Blobs::BlobContainerClient& container_client,
+    AzureClientWrapper& azure_client,
     KeyBucketizer&& bucketizer) {
         auto key_type_dir = key_type_folder(root_folder, variant_key_type(key));
         auto blob_name = object_path(bucketizer.bucketize(key_type_dir, key), key);
         try{
-            auto blob_client = container_client.GetBlockBlobClient(blob_name);
-            auto properties = blob_client.GetProperties().Value;
-
-            if (properties.ETag.HasValue())
-                return true;
+            return azure_client.blob_exists(blob_name);
         }
         catch (const Azure::Core::RequestFailedException& e){
             log::storage().debug("Failed to check azure key '{}' {} {}: {}",
@@ -294,19 +251,19 @@ bool do_key_exists_impl(
 } //namespace detail
 
 void AzureStorage::do_write(Composite<KeySegmentPair>&& kvs) {
-    detail::do_write_impl(std::move(kvs), root_folder_, container_client_, FlatBucketizer{}, upload_option_, request_timeout_);
+    detail::do_write_impl(std::move(kvs), root_folder_, *azure_client_, FlatBucketizer{}, upload_option_, request_timeout_);
 }
 
 void AzureStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts) {
-    detail::do_update_impl(std::move(kvs), root_folder_, container_client_, FlatBucketizer{}, upload_option_, request_timeout_);
+    detail::do_update_impl(std::move(kvs), root_folder_, *azure_client_, FlatBucketizer{}, upload_option_, request_timeout_);
 }
 
 void AzureStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
-    detail::do_read_impl(std::move(ks), visitor, root_folder_, container_client_, FlatBucketizer{}, opts, download_option_, request_timeout_);
+    detail::do_read_impl(std::move(ks), visitor, root_folder_, *azure_client_, FlatBucketizer{}, opts, download_option_, request_timeout_);
 }
 
 void AzureStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
-    detail::do_remove_impl(std::move(ks), root_folder_, container_client_, FlatBucketizer{}, request_timeout_);
+    detail::do_remove_impl(std::move(ks), root_folder_, *azure_client_, FlatBucketizer{}, request_timeout_);
 }
 
 void AzureStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix) {
@@ -314,11 +271,11 @@ void AzureStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& v
         return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
     };
 
-    detail::do_iterate_type_impl(key_type, visitor, root_folder_, container_client_, FlatBucketizer{}, std::move(prefix_handler), prefix);
+    detail::do_iterate_type_impl(key_type, visitor, root_folder_, *azure_client_, FlatBucketizer{}, std::move(prefix_handler), prefix);
 }
 
 bool AzureStorage::do_key_exists(const VariantKey& key) {
-    return detail::do_key_exists_impl(key, root_folder_, container_client_, FlatBucketizer{});
+    return detail::do_key_exists_impl(key, root_folder_, *azure_client_, FlatBucketizer{});
 }
 
 } // namespace azure
@@ -334,9 +291,9 @@ using namespace Azure::Storage::Blobs;
 
 AzureStorage::AzureStorage(const LibraryPath &library_path, OpenMode mode, const Config &conf) :
     Storage(library_path, mode),
-    container_client_(BlobContainerClient::CreateFromConnectionString(conf.endpoint(), conf.container_name(), get_client_options(conf))),
     root_folder_(object_store_utils::get_root_folder(library_path)),
-    request_timeout_(conf.request_timeout() == 0 ? 60000 : conf.request_timeout()){
+    request_timeout_(conf.request_timeout() == 0 ? 60000 : conf.request_timeout()) {
+        azure_client_ = std::make_unique<RealAzureClient>(conf);
         if (conf.ca_cert_path().empty())
             ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using default CA cert path");
         else
@@ -352,16 +309,6 @@ AzureStorage::AzureStorage(const LibraryPath &library_path, OpenMode mode, const
         unsigned int max_connections = conf.max_connections() == 0 ? ConfigsMap::instance()->get_int("VersionStore.NumIOThreads", 16) : conf.max_connections();
         upload_option_.TransferOptions.Concurrency = max_connections;
         download_option_.TransferOptions.Concurrency = max_connections;
-}
-
-Azure::Storage::Blobs::BlobClientOptions AzureStorage::get_client_options(const Config &conf) {
-    BlobClientOptions client_options;
-    if (!conf.ca_cert_path().empty()) {//WARNING: Setting ca_cert_path will force Azure sdk uses libcurl as backend support, instead of winhttp
-        Azure::Core::Http::CurlTransportOptions curl_transport_options;
-        curl_transport_options.CAInfo = conf.ca_cert_path();
-        client_options.Transport.Transport = std::make_shared<Azure::Core::Http::CurlTransport>(curl_transport_options);
-    }
-    return client_options;
 }
 
 } // namespace arcticdb::storage::azure
