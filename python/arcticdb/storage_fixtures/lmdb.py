@@ -16,7 +16,7 @@ from itertools import chain
 from .api import *
 from .utils import safer_rmtree
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
-from arcticdb.version_store.helper import add_lmdb_library_to_env
+from arcticdb.version_store._config import add_lmdb_library_to_env
 
 # 128 MiB - needs to be reasonably small else Windows build runs out of disk
 _DEFAULT_CONFIG = MappingProxyType({"map_size": 128 * (1 << 20)})

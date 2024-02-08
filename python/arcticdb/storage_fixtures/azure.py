@@ -14,7 +14,7 @@ from tempfile import mkdtemp
 from .api import *
 from .utils import get_ephemeral_port, GracefulProcessUtils, wait_for_server_to_come_up, safer_rmtree
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
-from arcticdb.version_store.helper import add_azure_library_to_env
+from arcticdb.version_store._config import add_azure_library_to_env
 
 # All storage client libraries to be imported on-demand to speed up start-up of ad-hoc test runs
 if TYPE_CHECKING:

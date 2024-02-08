@@ -7,7 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 from arcticdb.options import LibraryOptions
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap, LibraryConfig
-from arcticdb.version_store.helper import add_mongo_library_to_env
+from arcticdb.version_store._config import add_mongo_library_to_env
 from arcticdb.config import _DEFAULT_ENV
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter, set_library_options

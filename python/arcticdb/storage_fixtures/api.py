@@ -16,7 +16,7 @@ from .utils import handle_cleanup_exception
 from arcticdb import Arctic
 from arcticdb.config import Defaults
 from arcticdb.version_store import NativeVersionStore
-from arcticdb.version_store.helper import ArcticMemoryConfig
+from arcticdb.version_store._config import ArcticMemoryConfig
 from arcticdb.util.test import apply_lib_cfg
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 

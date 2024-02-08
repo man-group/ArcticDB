@@ -8,7 +8,8 @@ As of the Change Date specified in that file, in accordance with the Business So
 import os.path as osp
 import re
 import time
-from typing import Iterable, Dict, Any, Union
+from typing import Iterable, Dict, Any, Union, Optional
+from abc import abstractmethod, ABCMeta
 
 from arcticc.pb2.lmdb_storage_pb2 import Config as LmdbConfig
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
@@ -31,6 +32,17 @@ from arcticdb.config import _expand_path
 from arcticdb.exceptions import ArcticNativeException, LibraryNotFound, UserInputException
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.authorization.permissions import OpenMode
+
+from arcticdb.config import Defaults, load_envs_config, load_env_config
+
+
+def env_config_from_lib_config(lib_cfg, env):
+    cfg = EnvironmentConfigsMap()
+    e = cfg.env_by_id[env]
+    e.lib_by_path[lib_cfg.lib_desc.name].CopyFrom(lib_cfg.lib_desc)
+    for sid in lib_cfg.lib_desc.storage_ids:
+        e.storage_by_id[sid].CopyFrom(lib_cfg.storage_by_id[sid])
+    return cfg
 
 
 def create_lib_from_config(cfg, env=Defaults.ENV, lib_name=Defaults.LIB):
@@ -240,7 +252,7 @@ def get_s3_proto(
         s3.https = is_https
     if use_virtual_addressing is not None:
         s3.use_virtual_addressing = use_virtual_addressing
-    # adding time to prefix - so that the s3 root folder is unique and we can delete and recreate fast
+    # adding time to prefix - so that the s3 root folder is unique, and we can delete and recreate fast
     if with_prefix:
         if isinstance(with_prefix, str):
             s3.prefix = with_prefix

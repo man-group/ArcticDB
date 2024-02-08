@@ -12,14 +12,10 @@ import pandas as pd
 import pytz
 import re
 import itertools
-import attr
-import warnings
-import difflib
 from datetime import datetime
 from numpy import datetime64
 from pandas import Timestamp, to_datetime, Timedelta
 from typing import Any, Optional, Union, List, Sequence, Tuple, Dict, Set
-from contextlib import contextmanager
 
 from arcticc.pb2.descriptors_pb2 import IndexDescriptor, TypeDescriptor, SortedValue
 from arcticc.pb2.storage_pb2 import LibraryConfig, EnvironmentConfigsMap
@@ -35,16 +31,11 @@ from arcticdb_ext.storage import (
     Library as _Library,
 )
 from arcticdb.version_store.read_result import ReadResult
-from arcticdb_ext.version_store import IndexRange as _IndexRange
-from arcticdb_ext.version_store import RowRange as _RowRange
-from arcticdb_ext.version_store import SignedRowRange as _SignedRowRange
+from arcticdb.version_store.versioned_item import VersionedItem
 from arcticdb_ext.version_store import PythonVersionStore as _PythonVersionStore
-from arcticdb_ext.version_store import PythonVersionStoreReadQuery as _PythonVersionStoreReadQuery
-from arcticdb_ext.version_store import PythonVersionStoreUpdateQuery as _PythonVersionStoreUpdateQuery
+
 from arcticdb_ext.version_store import PythonVersionStoreReadOptions as _PythonVersionStoreReadOptions
-from arcticdb_ext.version_store import PythonVersionStoreVersionQuery as _PythonVersionStoreVersionQuery
 from arcticdb_ext.version_store import ColumnStats as _ColumnStats
-from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticdb_ext.version_store import DataError
 from arcticdb_ext.version_store import write_dataframe_to_file, read_dataframe_from_file
 from arcticdb.authorization.permissions import OpenMode
@@ -66,196 +57,14 @@ from arcticdb.version_store._normalization import (
     restrict_data_to_date_range_only,
     normalize_dt_range_to_ts,
 )
+from arcticdb.version_store._pre_process import check_batch_kwargs, diff_long_stream_descriptor_mismatch, handle_categorical_columns
 
-from arcticc.pb2.storage_pb2 import VersionStoreConfig
 TimeSeriesType = Union[pd.DataFrame, pd.Series]
-
 
 IS_WINDOWS = sys.platform == "win32"
 
-def _get_read_query(
-        date_range: Optional[DateRangeInput],
-        row_range: Tuple[int, int],
-        columns: Optional[List[str]],
-        query_builder: QueryBuilder,
-):
-    check(date_range is None or row_range is None, "Date range and row range both specified")
-    read_query = _PythonVersionStoreReadQuery()
-
-    if query_builder:
-        read_query.add_clauses(query_builder.clauses)
-
-    if row_range is not None:
-        read_query.row_range = _SignedRowRange(row_range[0], row_range[1])
-
-    if date_range is not None:
-        read_query.row_filter = _normalize_dt_range(date_range)
-
-    if columns is not None:
-        read_query.columns = list(columns)
-
-    return read_query
-
-def adapt_read_res(read_result, library_path, env, normalizer, custom_normalizer):
-    frame_data = FrameData.from_cpp(read_result.frame_data)
-
-    meta = denormalize_user_metadata(read_result.udm, normalizer)
-    data = normalizer.denormalize(frame_data, read_result.norm)
-    if read_result.norm.HasField("custom"):
-        data = custom_normalizer.denormalize(data, read_result.norm.custom)
-
-    return VersionedItem(
-        symbol=read_result.version.symbol,
-        library=library_path,
-        data=data,
-        version=read_result.version.version,
-        metadata=meta,
-        host=env
-    )
-
-def post_process_filters(read_result, read_query, query_builder):
-    if read_query.row_filter is not None and (query_builder is None or query_builder.needs_post_processing()):
-        # post filter
-        start_idx = end_idx = None
-        if isinstance(read_query.row_filter, _RowRange):
-            start_idx = read_query.row_filter.start - read_result.frame_data.offset
-            end_idx = read_query.row_filter.end - read_result.frame_data.offset
-        elif isinstance(read_query.row_filter, _IndexRange):
-            ts_idx = read_result.frame_data.value.data[0]
-            if len(ts_idx) != 0:
-                start_idx = ts_idx.searchsorted(datetime64(read_query.row_filter.start_ts, "ns"), side="left")
-                end_idx = ts_idx.searchsorted(datetime64(read_query.row_filter.end_ts, "ns"), side="right")
-        else:
-            raise ArcticNativeException("Unrecognised row_filter type: {}".format(type(read_query.row_filter)))
-        data = []
-        for c in read_result.frame_data.value.data:
-            data.append(c[start_idx:end_idx])
-        read_result.frame_data = FrameData(data, read_result.frame_data.names, read_result.frame_data.index_columns)
 
 # auto_attribs=True breaks Cython-ising this code. As a result must manually create attr.ib instances.
-@attr.s(slots=True, auto_attribs=False)
-class VersionedItem:
-    """
-    Return value for many operations that captures the result and associated information.
-
-    Attributes
-    ----------
-    library: str
-        Library this result relates to.
-    symbol: str
-        Read or modified symbol.
-    data: Any
-        For data retrieval (read) operations, contains the data read.
-        For data modification operations, the value might not be populated.
-    version: int
-        For data retrieval operations, the version the `as_of` argument resolved to.
-        For data modification operations, the version the data has been written under.
-    metadata: Any
-        The metadata saved alongside `data`.
-        Availability depends on the method used and may be different from that of `data`.
-    host: Optional[str]
-        Informational / for backwards compatibility.
-    """
-
-    symbol: str = attr.ib()
-    library: str = attr.ib()
-    data: Any = attr.ib(repr=lambda d: "n/a" if d is None else str(type(d)))
-    version: int = attr.ib()
-    metadata: Any = attr.ib(default=None)
-    host: Optional[str] = attr.ib(default=None)
-
-    def __iter__(self):  # Backwards compatible with the old NamedTuple implementation
-        warnings.warn("Don't iterate VersionedItem. Use attrs.astuple() explicitly", SyntaxWarning, stacklevel=2)
-        return iter(attr.astuple(self))
-
-
-def _env_config_from_lib_config(lib_cfg, env):
-    cfg = EnvironmentConfigsMap()
-    e = cfg.env_by_id[env]
-    e.lib_by_path[lib_cfg.lib_desc.name].CopyFrom(lib_cfg.lib_desc)
-    for sid in lib_cfg.lib_desc.storage_ids:
-        e.storage_by_id[sid].CopyFrom(lib_cfg.storage_by_id[sid])
-    return cfg
-
-
-VersionQueryInput = Union[int, str, ExplicitlySupportedDates, None]
-
-
-def _normalize_dt_range(dtr: DateRangeInput) -> _IndexRange:
-    start, end = normalize_dt_range_to_ts(dtr)
-    return _IndexRange(start.value, end.value)
-
-
-def _handle_categorical_columns(symbol, data, throw=True):
-    if isinstance(data, (pd.DataFrame, pd.Series)):
-        categorical_columns = []
-        if isinstance(data, pd.DataFrame):
-            for column_name, dtype in data.dtypes.items():
-                if dtype.name == "category":
-                    categorical_columns.append(column_name)
-        else:
-            # Series
-            if data.dtype.name == "category":
-                categorical_columns.append(data.name)
-        if len(categorical_columns) > 0:
-            message = (
-                "Symbol: {}\nDataFrame/Series contains categorical data, cannot append or update\nCategorical"
-                " columns: {}".format(symbol, categorical_columns)
-            )
-            if throw:
-                raise ArcticDbNotYetImplemented(message)
-            else:
-                log.warn(message)
-
-
-_BATCH_BAD_ARGS: Dict[Any, Sequence[str]] = {}
-_STREAM_DESCRIPTOR_SPLIT = re.compile(r"(?<=>), ")
-
-
-def _check_batch_kwargs(batch_fun, non_batch_fun, kwargs: Dict):
-    cached = _BATCH_BAD_ARGS.get(batch_fun, None)
-    if not cached:
-        batch_args = set(batch_fun.__code__.co_varnames[: batch_fun.__code__.co_argcount])
-        none_args = set(non_batch_fun.__code__.co_varnames[: non_batch_fun.__code__.co_argcount])
-        cached = _BATCH_BAD_ARGS[batch_fun] = none_args - batch_args
-    union = cached & kwargs.keys()
-    if union:
-        log.warning("Using non-batch arguments {} with {}", union, batch_fun.__name__)
-
-
-@contextmanager
-def _diff_long_stream_descriptor_mismatch(nvs):  # Diffing strings is easier done in Python than C++
-    try:
-        yield
-    except StreamDescriptorMismatch as sdm:
-        nvs.last_mismatch_msg = sdm.args[0]
-        preamble, existing, new_val = sdm.args[0].split("\n")
-        existing = _STREAM_DESCRIPTOR_SPLIT.split(existing[existing.find("=") + 1 :])
-        new_val = _STREAM_DESCRIPTOR_SPLIT.split(new_val[new_val.find("=") + 1 :])
-        diff = difflib.unified_diff(existing, new_val, n=0)
-        new_msg_lines = (
-            preamble,
-            "(Showing only the mismatch. Full col list saved in the `last_mismatch_msg` attribute of the lib instance.",
-            "'-' marks columns missing from the argument, '+' for unexpected.)",
-            *(x for x in itertools.islice(diff, 3, None) if not x.startswith("@@")),
-        )
-        sdm.args = ("\n".join(new_msg_lines),)
-        raise
-
-
-def _assume_true(name, kwargs):
-    if name in kwargs and kwargs.get(name) is False:
-        return False
-    else:
-        return True
-
-
-def _assume_false(name, kwargs):
-    if name not in kwargs or kwargs.get(name) is False:
-        return False
-    else:
-        return True
-
 
 class NativeVersionStore:
     """
@@ -305,7 +114,7 @@ class NativeVersionStore:
 
     @staticmethod
     def create_library_config(cfg, env, lib_name, encoding_version=EncodingVersion.V1):
-        from arcticdb.version_store.helper import extract_lib_config
+        from arcticdb.version_store._config import extract_lib_config
 
         lib_cfg = extract_lib_config(cfg.env_by_id[env], lib_name)
         lib_cfg.lib_desc.version.encoding_version = encoding_version
@@ -321,7 +130,8 @@ class NativeVersionStore:
 
     @staticmethod
     def create_lib_from_lib_config(lib_cfg, env, open_mode):
-        envs_cfg = _env_config_from_lib_config(lib_cfg, env)
+        from arcticdb.version_store._config import env_config_from_lib_config
+        envs_cfg = env_config_from_lib_config(lib_cfg, env)
         cfg_resolver = _create_mem_config_resolver(envs_cfg)
         lib_idx = _LibraryIndex.create_from_resolver(env, cfg_resolver)
         return lib_idx.get_library(lib_cfg.lib_desc.name, _OpenMode(open_mode))
@@ -584,7 +394,7 @@ class NativeVersionStore:
         coerce_columns = kwargs.get("coerce_columns", None)
         sparsify_floats = kwargs.get("sparsify_floats", False)
 
-        _handle_categorical_columns(symbol, data, False)
+        handle_categorical_columns(symbol, data, False)
 
         log.debug(
             "Writing with pickle_on_failure={}, prune_previous_version={}, recursive_normalizers={}",
@@ -721,15 +531,14 @@ class NativeVersionStore:
 
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
         coerce_columns = kwargs.get("coerce_columns", None)
+        write_if_missing = kwargs.get("write_if_missing", True)
 
         _handle_categorical_columns(symbol, dataframe)
 
         udm, item, norm_meta = self._try_normalize(symbol, dataframe, metadata, False, dynamic_strings, coerce_columns)
 
-        write_if_missing = kwargs.get("write_if_missing", True)
-
         if isinstance(item, NPDDataFrame):
-            with _diff_long_stream_descriptor_mismatch(self):
+            with diff_long_stream_descriptor_mismatch(self):
                 if incomplete:
                     self.version_store.append_incomplete(symbol, item, norm_meta, udm)
                 else:
@@ -813,7 +622,6 @@ class NativeVersionStore:
         2018-01-03      40
         2018-01-04       4
         """
-        update_query = _PythonVersionStoreUpdateQuery()
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
         dynamic_schema = self.resolve_defaults(
             "dynamic_schema", self._lib_cfg.lib_desc.version.write_options, False, **kwargs
@@ -822,13 +630,13 @@ class NativeVersionStore:
 
         if date_range is not None:
             start, end = normalize_dt_range_to_ts(date_range)
-            update_query.row_filter = _IndexRange(start.value, end.value)
             data = restrict_data_to_date_range_only(data, start=start, end=end)
 
         _handle_categorical_columns(symbol, data)
 
         udm, item, norm_meta = self._try_normalize(symbol, data, metadata, False, dynamic_strings, coerce_columns)
 
+        update_query = get_update_query(date_range)
         if isinstance(item, NPDDataFrame):
             with _diff_long_stream_descriptor_mismatch(self):
                 vit = self.version_store.update(
@@ -1486,7 +1294,7 @@ class NativeVersionStore:
             Includes the version number that was just written.
             i-th entry corresponds to i-th element of `symbols`.
         """
-        _check_batch_kwargs(NativeVersionStore.batch_restore_version, NativeVersionStore.restore_version, kwargs)
+        check_batch_kwargs(NativeVersionStore.batch_restore_version, NativeVersionStore.restore_version, kwargs)
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
         raw_results = self.version_store.batch_restore_version(symbols, version_queries)
         read_results = [ReadResult(*r) for r in raw_results]
@@ -1504,97 +1312,7 @@ class NativeVersionStore:
             for result, meta in zip(read_results, metadatas)
         ]
 
-    def _get_version_query(self, as_of: VersionQueryInput, **kwargs):
-        version_query = _PythonVersionStoreVersionQuery()
-        version_query.set_skip_compat(_assume_true("skip_compat", kwargs))
-        version_query.set_iterate_on_failure(_assume_false("iterate_on_failure", kwargs))
 
-        if isinstance(as_of, str):
-            version_query.set_snap_name(as_of)
-        elif isinstance(as_of, int):
-            version_query.set_version(as_of)
-        elif isinstance(as_of, (datetime, Timestamp)):
-            version_query.set_timestamp(Timestamp(as_of).value)
-        elif as_of is not None:
-            raise ArcticNativeException("Unexpected combination of read parameters")
-
-        return version_query
-
-    def _get_version_queries(self, num_symbols: int, as_ofs: Optional[List[VersionQueryInput]], **kwargs):
-        if as_ofs is not None:
-            check(
-                len(as_ofs) == num_symbols,
-                "Mismatched number of symbols ({}) and as_ofs ({}) supplied to batch read",
-                num_symbols,
-                len(as_ofs),
-            )
-            return [self._get_version_query(as_of, **kwargs) for as_of in as_ofs]
-        else:
-            return [self._get_version_query(None, **kwargs) for _ in range(num_symbols)]
-
-    def _get_read_queries(
-        self,
-        num_symbols: int,
-        date_ranges: Optional[List[Optional[DateRangeInput]]],
-        row_ranges: Optional[List[Optional[Tuple[int, int]]]],
-        columns: Optional[List[List[str]]],
-        query_builder: Optional[Union[QueryBuilder, List[QueryBuilder]]],
-    ):
-        read_queries = []
-
-        if date_ranges is not None:
-            check(
-                len(date_ranges) == num_symbols,
-                "Mismatched number of symbols ({}) and date ranges ({}) supplied to batch read",
-                num_symbols,
-                len(date_ranges),
-            )
-        if row_ranges is not None:
-            check(
-                len(row_ranges) == num_symbols,
-                "Mismatched number of symbols ({}) and row ranges ({}) supplied to batch read",
-                num_symbols,
-                len(row_ranges),
-            )
-        if query_builder is not None and not isinstance(query_builder, QueryBuilder):
-            check(
-                len(query_builder) == num_symbols,
-                "Mismatched number of symbols ({}) and query builders ({}) supplied to batch read",
-                num_symbols,
-                len(query_builder),
-            )
-        if columns is not None:
-            check(
-                len(columns) == num_symbols,
-                "Mismatched number of symbols ({}) and columns ({}) supplied to batch read",
-                num_symbols,
-                len(columns),
-            )
-
-        for idx in range(num_symbols):
-            date_range = None
-            row_range = None
-            these_columns = None
-            query = None
-            if date_ranges is not None:
-                date_range = date_ranges[idx]
-            if row_ranges is not None:
-                row_range = row_ranges[idx]
-            if columns is not None:
-                these_columns = columns[idx]
-            if query_builder is not None:
-                query = query_builder if isinstance(query_builder, QueryBuilder) else query_builder[idx]
-
-            read_query = _get_read_query(
-                date_range=date_range,
-                row_range=row_range,
-                columns=these_columns,
-                query_builder=query,
-            )
-
-            read_queries.append(read_query)
-
-        return read_queries
 
     def _get_read_options(self, **kwargs):
         proto_cfg = self._lib_cfg.lib_desc.version.write_options

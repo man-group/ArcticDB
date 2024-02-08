@@ -9,7 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 
 from .api import *
-from arcticdb.version_store.helper import add_memory_library_to_env
+from arcticdb.version_store._config import add_memory_library_to_env
 from arcticdb.adapters.in_memory_library_adapter import InMemoryLibraryAdapter
 from arcticdb_ext.version_store import PythonVersionStore
 
