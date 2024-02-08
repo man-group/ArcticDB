@@ -14,6 +14,7 @@ on:
 
 jobs:
   get_tag_commits:
+    name: Get tag commits
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{toJson(steps.set-matrix.outputs.matrix)}}
@@ -40,14 +41,10 @@ jobs:
           echo "matrix={\"commit\": [$commits]}" | tee -a $GITHUB_ENV
 
   process_tags:
+    name: Process tags
     needs: [get_tag_commits]
-    if: |
-      always() &&
-      !cancelled()
     strategy:
-      matrix: 
-        include:
-          - ${{fromJson(needs.get_tag_commits.outputs.matrix)}}
+      matrix: ${{fromJson(needs.get_tag_commits.outputs.matrix)}}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
