@@ -42,3 +42,26 @@ class TestEmptyColumnTypeAppend:
         lmdb_version_store.append("test_can_append_to_empty_column", df_empty_3)
         expected_result = pd.concat([df_empty_1, df_empty_2, df_empty_3], ignore_index=True)
         assert_frame_equal(lmdb_version_store.read("test_can_append_to_empty_column").data, expected_result)
+
+
+@pytest.fixture(
+    scope="function",
+    params=(
+        "lmdb_version_store_v1",
+        "lmdb_version_store_v2",
+        "lmdb_version_store_dynamic_schema_v1",
+        "lmdb_version_store_dynamic_schema_v2",
+    ),
+)
+def lmdb_version_store_static_and_dynamic(request):
+    """
+    Designed to test all combinations between schema and encoding version for LMDB
+    """
+    yield request.getfixturevalue(request.param)
+    
+
+def test_roundtrip(lmdb_version_store_static_and_dynamic):
+    df = pd.DataFrame({"col": [None, None, None], "another_col": [None, "asd", float("NaN")]})
+    lmdb_version_store_static_and_dynamic.write("sym", df)
+    print(lmdb_version_store_static_and_dynamic.read("sym").data)
+    assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df)

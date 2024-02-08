@@ -420,8 +420,8 @@ void decode_into_frame_dynamic(
     const EncodingVersion encdoing_version = EncodingVersion(hdr.encoding_version());
     const bool has_magic_numbers = encdoing_version == EncodingVersion::V2;
 
-    if (data != end) {
-        VariantEncodedFieldCollection fields(seg);
+    VariantEncodedFieldCollection fields(seg);
+    if (data != end || fields.size() > 0) {
         auto index_field = fields.at(0u);
         decode_index_field(frame, index_field, data, begin, end, context, encdoing_version);
 
@@ -443,7 +443,7 @@ void decode_into_frame_dynamic(
                         m.source_type_desc_, m.dest_type_desc_, m.frame_field_descriptor_.name());
             ARCTICDB_TRACE(log::storage(), "Creating data slice at {} with total size {} ({} rows)", m.offset_bytes_, m.dest_bytes_,
                            context.slice_and_key().slice_.row_range.diff());
-            util::check(data != end,
+            util::check(data != end || is_empty_type(m.source_type_desc_.data_type()),
                         "Reached end of input block with {} fields to decode",
                         field_count - field_col);
             decode_or_expand(data, buffer.data() + m.offset_bytes_, encoded_field, m.source_type_desc_, m.dest_bytes_, buffers, encdoing_version);
