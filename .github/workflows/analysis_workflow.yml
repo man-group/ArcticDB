@@ -43,8 +43,8 @@ jobs:
   process_tags:
     name: Process tags
     needs: [get_tag_commits]
-    strategy:
-      matrix: ${{fromJson(needs.get_tag_commits.outputs.matrix)}}
+    # strategy:
+    #   matrix: ${{fromJson(needs.get_tag_commits.outputs.matrix)}}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -52,7 +52,7 @@ jobs:
 
       - name: Process commit
         run: |
-          echo "Processing commit ${{ matrix.commit }}"
+          echo "Processing commit ${{ needs.get_tag_commits.outputs.matrix }}"
 
 
   cibw_docker_image:
