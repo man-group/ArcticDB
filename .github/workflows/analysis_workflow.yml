@@ -16,7 +16,7 @@ jobs:
   get_tag_commits:
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      matrix: ${{toJson(steps.set-matrix.outputs.matrix)}}
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
