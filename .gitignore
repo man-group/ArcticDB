@@ -44,3 +44,7 @@ docs/mkdocs/docs/notebooks/.ipynb_checkpoints/
 
 # Ignore automatically generated stub files (*.pyi)
 **/*.pyi
+
+# Ignore asv results
+python/.asv/html/
+python/.asv/results/
