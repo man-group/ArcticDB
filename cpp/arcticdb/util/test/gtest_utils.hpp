@@ -18,7 +18,7 @@ template<> inline void PrintTo(const our_type&val, ::std::ostream* os) { fmt::pr
 MAKE_GTEST_FMT(arcticdb::entity::RefKey, "{}")
 MAKE_GTEST_FMT(arcticdb::entity::AtomKeyImpl, "{}")
 MAKE_GTEST_FMT(arcticdb::entity::VariantKey, "VariantKey({})")
-MAKE_GTEST_FMT(arcticdb::entity::VariantId, "VariantId({})")
+MAKE_GTEST_FMT(arcticdb::VariantId, "VariantId({})")
 
 // FUTURE (C++20): with capabilities, we can write a generic PrintTo that covers all fmt::format-able types that is
 // not ambiguous with the built-in

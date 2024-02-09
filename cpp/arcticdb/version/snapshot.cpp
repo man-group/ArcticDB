@@ -41,14 +41,12 @@ void write_snapshot_entry(
     }
     // Serialize and store the python metadata in the journal entry for snapshot.
     if (!user_meta.is_none()) {
-        arcticdb::proto::descriptors::UserDefinedMetadata user_meta_proto;
-        google::protobuf::Any output = {};
-        python_util::pb_from_python(user_meta, user_meta_proto);
-        output.PackFrom(user_meta_proto);
-        snapshot_agg.set_metadata(std::move(output));
+        TimeseriesDescriptor timeseries_descriptor;
+        python_util::pb_from_python(user_meta, *timeseries_descriptor.mutable_proto().mutable_user_meta());
+        snapshot_agg.set_timeseries_descriptor(timeseries_descriptor);
     }
 
-    snapshot_agg.commit();
+    snapshot_agg.finalize();
     if (log_changes) {
         log_create_snapshot(store, snapshot_id);
     }
@@ -111,7 +109,7 @@ void iterate_snapshots(const std::shared_ptr<Store>& store, folly::Function<void
             e.keys().broadcast([&vk, &e](const VariantKey& key) {
                 if (key != vk) throw storage::KeyNotFoundException(std::move(e.keys()));
             });
-            log::version().info("Ignored exception due to {} being deleted during iterate_snapshots().");
+            ARCTICDB_DEBUG(log::version(), "Ignored exception due to {} being deleted during iterate_snapshots().");
         }
     }
 }

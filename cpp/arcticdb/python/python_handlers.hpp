@@ -17,42 +17,44 @@ namespace arcticdb {
         void handle_type(
             const uint8_t*& data,
             uint8_t* dest,
-            const VariantField& encoded_field,
+            const EncodedFieldImpl& encoded_field,
+            const ColumnMapping& mapping,
             size_t dest_bytes,
-            std::shared_ptr<BufferHolder> buffers,
-            EncodingVersion encding_version,
-            const ColumnMapping& columnMapping
+            const std::shared_ptr<BufferHolder>& buffers,
+            EncodingVersion encding_version
         );
 
         int type_size() const;
+
         void default_initialize(void* dest, size_t byte_size) const;
     };
 
     struct BoolHandler {
-        /// @see arcticdb::ITypeHandler
         void handle_type(
             const uint8_t *&data,
             uint8_t *dest,
-            const VariantField &encoded_field,
+            const EncodedFieldImpl &encoded_field,
+            const ColumnMapping& mapping,
             size_t dest_bytes,
-            std::shared_ptr<BufferHolder> buffers,
-            EncodingVersion encding_version,
-            const ColumnMapping& columnMapping
+            const std::shared_ptr<BufferHolder>& buffers,
+            EncodingVersion encding_version
         );
+
         int type_size() const;
+
         void default_initialize(void* dest, size_t byte_size) const;
     };
 
     struct DecimalHandler {
         void handle_type(
-            const uint8_t*& data,
-            uint8_t* dest,
-            const VariantField& encoded_field,
-            size_t dest_bytes,
-            std::shared_ptr<BufferHolder> buffers,
-            EncodingVersion encding_version,
-            const ColumnMapping& m
+                const uint8_t*& data,
+                uint8_t* dest,
+                const EncodedFieldImpl& encoded_field,
+                const ColumnMapping& mapping,
+                size_t dest_bytes,
+                const std::shared_ptr<BufferHolder>& buffers
         );
+
         int type_size() const;
     };
 
@@ -61,14 +63,17 @@ namespace arcticdb {
         void handle_type(
             const uint8_t*& data,
             uint8_t* dest,
-            const VariantField& encoded_field,
+            const EncodedFieldImpl& encoded_field,
+            const ColumnMapping& mapping,
             size_t dest_bytes,
-            std::shared_ptr<BufferHolder> buffers,
-            EncodingVersion encding_version,
-            const ColumnMapping& columnMapping
+            const std::shared_ptr<BufferHolder>& buffers,
+            EncodingVersion encding_version
         );
+
         int type_size() const;
+
         void default_initialize(void* dest, size_t byte_size) const;
+
         static std::mutex initialize_array_mutex;
     };
 } //namespace arcticdb

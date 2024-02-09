@@ -9,45 +9,43 @@
 
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/atom_key.hpp>
-#include <arcticdb/util/variant.hpp>
-
+#include <arcticdb/entity/types.hpp>
 
 namespace arcticdb {
 
-using namespace arcticdb::entity;
+namespace entity {
+struct StreamDescriptor;
+} //namespace arcticdb::entity
 
-inline arcticdb::proto::descriptors::AtomKey encode_key(const AtomKey &key) {
-    arcticdb::proto::descriptors::AtomKey output;
-    util::variant_match(key.id(),
-                        [&](const StringId &id) { output.set_string_id(id); },
-                        [&](const NumericId &id) { output.set_numeric_id(id); });
-    output.set_version_id(key.version_id());
-    output.set_creation_ts(key.creation_ts());
-    output.set_content_hash(key.content_hash());
+struct TimeseriesDescriptor;
 
-    util::variant_match(key.start_index(),
-                        [&](const StringId &id) { output.set_string_start(id); },
-                        [&](const NumericId &id) { output.set_numeric_start(id); });
-    util::variant_match(key.end_index(),
-                        [&](const StringId &id) { output.set_string_end(id); },
-                        [&](const NumericId &id) { output.set_numeric_end(id); });
+arcticdb::proto::descriptors::AtomKey encode_key(const entity::AtomKey &key);
 
-    output.set_key_type(arcticdb::proto::descriptors::KeyType (int(key.type())));
-    return output;
-}
+entity::AtomKey decode_key(const arcticdb::proto::descriptors::AtomKey& input);
 
-inline AtomKey decode_key(const arcticdb::proto::descriptors::AtomKey& input) {
-    StreamId stream_id = input.id_case() == input.kNumericId ? StreamId(input.numeric_id()) : StreamId(input.string_id());
-    IndexValue index_start = input.index_start_case() == input.kNumericStart ? IndexValue(input.numeric_start()) : IndexValue(input.string_start());
-    IndexValue index_end = input.index_end_case() == input.kNumericEnd ? IndexValue(input.numeric_end() ): IndexValue(input.string_end());
+void copy_stream_descriptor_to_proto(const entity::StreamDescriptor& desc, arcticdb::proto::descriptors::StreamDescriptor& proto);
 
-    return atom_key_builder()
-         .version_id(input.version_id())
-         .creation_ts(timestamp(input.creation_ts()))
-         .content_hash(input.content_hash())
-         .start_index(index_start)
-         .end_index(index_end)
-         .build(stream_id, KeyType(input.key_type()));
+arcticdb::proto::descriptors::TimeSeriesDescriptor copy_time_series_descriptor_to_proto(const TimeseriesDescriptor& tsd);
+
+inline void set_id(arcticdb::proto::descriptors::StreamDescriptor& pb_desc, StreamId id);
+
+[[nodiscard]] arcticdb::proto::descriptors::IndexDescriptor index_descriptor_to_proto(const entity::IndexDescriptorImpl& index_descriptor);
+
+[[nodiscard]] entity::IndexDescriptorImpl index_descriptor_from_proto(const arcticdb::proto::descriptors::IndexDescriptor index_descriptor);
+
+template<typename SourceType, typename DestType>
+void exchange_timeseries_proto(const SourceType& source, DestType& destination) {
+    if (source.has_normalization())
+        *destination.mutable_normalization() = source.normalization();
+
+    if (source.has_user_meta())
+        *destination.mutable_user_meta() = source.user_meta();
+
+    if (source.has_next_key())
+        *destination.mutable_next_key() = source.next_key();
+
+    if (source.has_multi_key_meta())
+        *destination.mutable_multi_key_meta() = source.multi_key_meta();
 }
 
 } //namespace arcticdb

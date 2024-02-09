@@ -402,7 +402,7 @@ VariantData binary_operator(const ColumnWithStrings& col, const Value& val, Func
                 Column::transform<typename col_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
                         *(col.column_),
                         *output_column,
-                        [&func, &col, &column_name, raw_value](auto input_value) -> ReversedTargetType {
+                        [&func, raw_value](auto input_value) -> ReversedTargetType {
                             return func.apply(raw_value, input_value);
                 });
             } else {
@@ -412,7 +412,7 @@ VariantData binary_operator(const ColumnWithStrings& col, const Value& val, Func
                 Column::transform<typename col_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
                         *(col.column_),
                         *output_column,
-                        [&func, &col, &column_name, raw_value](auto input_value) -> TargetType {
+                        [&func, raw_value](auto input_value) -> TargetType {
                             return func.apply(input_value, raw_value);
                 });
             }

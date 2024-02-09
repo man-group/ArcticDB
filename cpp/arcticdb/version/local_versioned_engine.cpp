@@ -46,6 +46,7 @@ void LocalVersionedEngine::initialize(const std::shared_ptr<storage::Library>& l
         async::TaskScheduler::set_forked(false);
         async::TaskScheduler::reattach_instance();
     }
+    (void)async::TaskScheduler::instance();
 }
 
 template LocalVersionedEngine::LocalVersionedEngine(const std::shared_ptr<storage::Library>& library, const util::SysClock&);
@@ -365,10 +366,10 @@ folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(
     .thenValue([](auto&& key_seg_pair) -> DescriptorItem {
         auto key = to_atom(std::move(key_seg_pair.first));
         auto seg = std::move(key_seg_pair.second);
-        auto tsd = std::make_optional<arcticdb::proto::descriptors::TimeSeriesDescriptor>();
-        if (seg.has_metadata()) {
-            seg.metadata()->UnpackTo(&(*tsd));
-        }
+        std::optional<TimeseriesDescriptor> timeseries_descriptor;
+        if (seg.has_index_descriptor())
+            timeseries_descriptor.emplace(seg.index_descriptor());
+
         std::optional<timestamp> start_index;
         std::optional<timestamp> end_index;
         if (seg.row_count() > 0) {
@@ -389,7 +390,7 @@ folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(
                 }
             });
         }
-        return DescriptorItem{std::move(key), start_index, end_index, std::move(tsd)};
+        return DescriptorItem{std::move(key), start_index, end_index, std::move(timeseries_descriptor)};
     });
 }
 
@@ -606,7 +607,7 @@ VersionedItem LocalVersionedEngine::write_versioned_metadata_internal(
                                                                         stream_id,
                                                                         VersionQuery{});
     if(update_info.previous_index_key_.has_value()) {
-        ARCTICDB_DEBUG(log::version(), "write_versioned_dataframe for stream_id: {}", stream_id);
+        ARCTICDB_DEBUG(log::version(), "write_versioned_metadata for stream_id: {}", stream_id);
         auto index_key = UpdateMetadataTask{store(), update_info, std::move(user_meta)}();
         write_version_and_prune_previous(prune_previous_versions, index_key, update_info.previous_index_key_);
         return VersionedItem{ std::move(index_key) };
@@ -733,10 +734,10 @@ VersionedItem LocalVersionedEngine::write_individual_segment(
     ) {
     ARCTICDB_SAMPLE(WriteVersionedDataFrame, 0)
 
-    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write_versioned_dataframe");
+    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write individual segment");
     auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id, VersionQuery{});
     auto version_id = get_next_version_from_key(maybe_prev);
-    ARCTICDB_DEBUG(log::version(), "write_versioned_dataframe for stream_id: {} , version_id = {}", stream_id, version_id);
+    ARCTICDB_DEBUG(log::version(), "write individual segment for stream_id: {} , version_id = {}", stream_id, version_id);
     auto index = index_type_from_descriptor(segment.descriptor());
     auto range = get_range_from_segment(index, segment);
 
@@ -1727,9 +1728,9 @@ std::unordered_map<KeyType, KeySizesInfo> LocalVersionedEngine::scan_object_size
             ++sizes_info.count;
             key_size_calculators.emplace_back(std::forward<const VariantKey>(k), [&sizes_info] (auto&& ks) {
                 auto key_seg = std::move(ks);
-                sizes_info.compressed_size += key_seg.segment().total_segment_size();
-                auto desc = key_seg.segment().header().stream_descriptor();
-                sizes_info.uncompressed_size += desc.in_bytes();
+                sizes_info.compressed_size += key_seg.segment().size();
+                const auto& desc = key_seg.segment().descriptor();
+                sizes_info.uncompressed_size += desc.uncompressed_bytes();
                 return key_seg.variant_key();
             });
         });
@@ -1760,9 +1761,9 @@ std::unordered_map<StreamId, std::unordered_map<KeyType, KeySizesInfo>> LocalVer
                 auto key_seg = std::move(ks);
                 auto variant_key = key_seg.variant_key();
                 auto stream_id = variant_key_id(variant_key);
-                auto compressed_size = key_seg.segment().total_segment_size();
-                auto desc = key_seg.segment().header().stream_descriptor();
-                auto uncompressed_size = desc.in_bytes();
+                auto compressed_size = key_seg.segment().size();
+                auto desc = key_seg.segment().descriptor();
+                auto uncompressed_size = desc.uncompressed_bytes();
 
                 {
                     std::lock_guard lock{mutex};

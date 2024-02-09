@@ -11,9 +11,10 @@
 #include <arcticdb/storage/storage_factory.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/composite.hpp>
-#include <folly/Range.h>
+#include <arcticdb/util/pb_util.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
 
+#include <folly/Range.h>
 #include <rocksdb/db.h>
 
 namespace arcticdb::storage::rocksdb {

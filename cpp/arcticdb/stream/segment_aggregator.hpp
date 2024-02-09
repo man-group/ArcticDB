@@ -73,6 +73,10 @@ public:
         util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
     }
 
+    void finalize() override {
+        commit();
+    }
+
     void commit() override {
         if(segments_.empty())
             return;
@@ -98,7 +102,7 @@ public:
 
         if (AggregatorType::segment().row_count() > 0) {
             auto slice = merge_slices(slices_, AggregatorType::segment().descriptor());
-            AggregatorType::commit_impl();
+            AggregatorType::commit_impl(false);
             slice_callback_(std::move(slice));
         }
         segments_.clear();

@@ -85,6 +85,7 @@ LibraryManager::LibraryManager(const std::shared_ptr<storage::Library>& library)
 void LibraryManager::write_library_config(const py::object& lib_cfg, const LibraryPath& path, const StorageOverride& storage_override,
                           const bool validate) const {
     SegmentInMemory segment;
+    segment.descriptor().set_index({0UL, IndexDescriptor::Type::ROWCOUNT});
 
     arcticdb::proto::storage::LibraryConfig lib_cfg_proto;
     google::protobuf::Any output = {};

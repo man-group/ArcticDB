@@ -15,8 +15,9 @@
 #include <arcticdb/codec/lz4.hpp>
 #include <arcticdb/codec/encoded_field.hpp>
 #include <arcticdb/codec/magic_words.hpp>
-
 #include <arcticdb/util/bitset.hpp>
+#include <arcticdb/util/buffer.hpp>
+#include <arcticdb/util/sparse_utils.hpp>
 
 #include <type_traits>
 
@@ -32,23 +33,23 @@ void decode_block(const BlockType &block, const std::uint8_t *input, T *output) 
         arcticdb::detail::PassthroughDecoder::decode_block<T>(input, size_to_decode, output, decoded_size);
     } else {
         std::uint32_t encoder_version = block.encoder_version();
-        switch (block.codec().codec_case()) {
-            case arcticdb::proto::encoding::VariantCodec::kZstd:
-                arcticdb::detail::ZstdDecoder::decode_block<T>(encoder_version,
-                                                     input,
-                                                     size_to_decode,
-                                                     output,
-                                                     decoded_size);
-                break;
-            case arcticdb::proto::encoding::VariantCodec::kLz4:
-                arcticdb::detail::Lz4Decoder::decode_block<T>(encoder_version,
-                                                    input,
-                                                    size_to_decode,
-                                                    output,
-                                                    decoded_size);
-                break;
-            default:
-                util::raise_error_msg("Unsupported block codec {}", block);
+        switch (block.codec().codec_type()) {
+        case arcticdb::Codec::ZSTD:
+            arcticdb::detail::ZstdDecoder::decode_block<T>(encoder_version,
+                 input,
+                 size_to_decode,
+                 output,
+                 decoded_size);
+            break;
+        case arcticdb::Codec::LZ4:
+            arcticdb::detail::Lz4Decoder::decode_block<T>(encoder_version,
+                input,
+                size_to_decode,
+                output,
+                decoded_size);
+            break;
+        default:
+            util::raise_rte("Unsupported block codec {}", codec_type_to_string(block.codec().codec_type()));
         }
     }
 }
@@ -74,10 +75,11 @@ std::size_t decode_ndarray(
     const NDArrayEncodedFieldType& field,
     const std::uint8_t* input,
     DataSink& data_sink,
-    std::optional<util::BitMagic>& bv,
+    std::optional<util::BitSet>& bv,
     EncodingVersion encoding_version
 ) {
     ARCTICDB_SUBSAMPLE_AGG(DecodeNdArray)
+
     std::size_t read_bytes = 0;
     td.visit_tag([&](auto type_desc_tag) {
         using TD = std::decay_t<decltype(type_desc_tag)>;
@@ -85,7 +87,7 @@ std::size_t decode_ndarray(
 
         const auto data_size = encoding_sizes::data_uncompressed_size(field);
         const bool is_empty_array = (data_size == 0) && type_desc_tag.dimension() > Dimension::Dim0;
-        // Empty array will not contain actual data, however, its sparse map should be loaded
+        // Empty array types will not contain actual data, however, its sparse map should be loaded
         // so that we can distinguish None from []
         if(data_size == 0 && !is_empty_array) {
             util::check(type_desc_tag.data_type() == DataType::EMPTYVAL,
@@ -152,25 +154,25 @@ std::size_t decode_ndarray(
     return read_bytes;
 }
 
-template<class DataSink, typename EncodedFieldType>
+template<class DataSink>
 std::size_t decode_field(
     const TypeDescriptor &td,
-    const EncodedFieldType &field,
+    const EncodedFieldImpl &field,
     const std::uint8_t *input,
     DataSink &data_sink,
-    std::optional<util::BitMagic>& bv,
+    std::optional<util::BitSet>& bv,
     EncodingVersion encoding_version) {
     size_t magic_size = 0u;
-    if constexpr(std::is_same_v<EncodedFieldType, EncodedField>) {
+    if (encoding_version != EncodingVersion::V1) {
         magic_size += sizeof(ColumnMagic);
         util::check_magic<ColumnMagic>(input);
     }
 
     switch (field.encoding_case()) {
-        case EncodedFieldType::kNdarray:
+        case EncodedFieldType::NDARRAY:
             return decode_ndarray(td, field.ndarray(), input, data_sink, bv, encoding_version) + magic_size;
         default:
-            util::raise_error_msg("Unsupported encoding {}", field);
+            util::raise_rte("Unsupported encoding {}", field);
     }
 }
 

@@ -11,16 +11,12 @@
 #include <arcticdb/pipeline/index_fields.hpp>
 #include <arcticdb/entity/type_utils.hpp>
 
+#include <folly/Range.h>
 
 namespace arcticdb::stream {
 
-IndexDescriptor::Type get_index_value_type(const AtomKey& key) {
-        return std::holds_alternative<timestamp>(key.start_index()) ? IndexDescriptor::TIMESTAMP
-                                                                    : IndexDescriptor::STRING;
-    }
-
 template <typename Derived>
-    StreamDescriptor BaseIndex<Derived>::create_stream_descriptor(
+StreamDescriptor BaseIndex<Derived>::create_stream_descriptor(
     StreamId stream_id,
     std::initializer_list<FieldRef> fields
 ) const {
@@ -28,11 +24,15 @@ template <typename Derived>
     return create_stream_descriptor(stream_id, folly::range(fds));
 }
 
+[[nodiscard]] IndexDescriptor::Type get_index_value_type(const AtomKey& key) {
+    return std::holds_alternative<timestamp>(key.start_index()) ? IndexDescriptor::Type::TIMESTAMP : IndexDescriptor::Type::STRING;
+}
+
 template <typename Derived> const Derived* BaseIndex<Derived>::derived() const {
     return static_cast<const Derived*>(this);
 }
 
-template <typename Derived> BaseIndex<Derived>::operator IndexDescriptor() const {
+template <typename Derived> BaseIndex<Derived>::operator IndexDescriptorImpl() const {
     return {Derived::field_count(), Derived::type()};
 }
 
@@ -172,7 +172,6 @@ RowCountIndex RowCountIndex::default_index() {
     return RowCountIndex{};
 }
 
-
 IndexValue RowCountIndex::start_value_for_segment(const SegmentInMemory& segment) {
     return static_cast<timestamp>(segment.offset());
 }
@@ -210,35 +209,40 @@ IndexValue EmptyIndex::end_value_for_keys_segment(const SegmentInMemory& segment
 }
 
 Index index_type_from_descriptor(const StreamDescriptor& desc) {
-    switch (desc.index().proto().kind()) {
-    case IndexDescriptor::EMPTY: return EmptyIndex{};
-    case IndexDescriptor::TIMESTAMP: return TimeseriesIndex::make_from_descriptor(desc);
-    case IndexDescriptor::STRING: return TableIndex::make_from_descriptor(desc);
-    case IndexDescriptor::ROWCOUNT: return RowCountIndex{};
+    switch (desc.index().type()) {
+    case IndexDescriptor::Type::EMPTY:
+        return EmptyIndex{};
+    case IndexDescriptor::Type::TIMESTAMP:
+        return TimeseriesIndex::make_from_descriptor(desc);
+    case IndexDescriptor::Type::STRING:
+        return TableIndex::make_from_descriptor(desc);
+    case IndexDescriptor::Type::ROWCOUNT:
+        return RowCountIndex{};
     default:
         util::raise_rte(
             "Data obtained from storage refers to an index type that this build of ArcticDB doesn't understand ({}).",
-            int(desc.index().proto().kind())
+            int(desc.index().type())
         );
     }
 }
 
-Index default_index_type_from_descriptor(const IndexDescriptor::Proto& desc) {
-    switch (desc.kind()) {
-    case IndexDescriptor::EMPTY: return EmptyIndex{};
-    case IndexDescriptor::TIMESTAMP: return TimeseriesIndex::default_index();
-    case IndexDescriptor::STRING: return TableIndex::default_index();
-    case IndexDescriptor::ROWCOUNT: return RowCountIndex::default_index();
-    default: util::raise_rte("Unknown index type {} trying to generate index type", int(desc.kind()));
+Index default_index_type_from_descriptor(const IndexDescriptorImpl& desc) {
+    switch (desc.type()) {
+    case IndexDescriptor::Type::EMPTY:
+        return EmptyIndex{};
+    case IndexDescriptor::Type::TIMESTAMP:
+        return TimeseriesIndex::default_index();
+    case IndexDescriptor::Type::STRING:
+        return TableIndex::default_index();
+    case IndexDescriptor::Type::ROWCOUNT:
+        return RowCountIndex::default_index();
+    default:
+        util::raise_rte("Unknown index type {} trying to generate index type", int(desc.type()));
     }
 }
 
-Index default_index_type_from_descriptor(const IndexDescriptor& desc) {
-    return default_index_type_from_descriptor(desc.proto());
-}
-
 IndexDescriptor get_descriptor_from_index(const Index& index) {
-    return util::variant_match(index, [](const auto& idx) { return static_cast<IndexDescriptor>(idx); });
+    return util::variant_match(index, [](const auto& idx) { return static_cast<IndexDescriptorImpl>(idx); });
 }
 
 Index empty_index() {
@@ -249,4 +253,5 @@ template class BaseIndex<TimeseriesIndex>;
 template class BaseIndex<TableIndex>;
 template class BaseIndex<RowCountIndex>;
 template class BaseIndex<EmptyIndex>;
+
 }

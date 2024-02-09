@@ -129,6 +129,10 @@ Column Column::clone() const {
     return output;
 }
 
+bool Column::empty() const {
+    return row_count() == 0;
+}
+
 bool Column::is_sparse() const {
     if(last_logical_row_ != last_physical_row_) {
         util::check(static_cast<bool>(sparse_map_), "Expected sparse map in column with logical row {} and physical row {}", last_logical_row_, last_physical_row_);
@@ -220,7 +224,7 @@ void Column::set_string_list(ssize_t row_offset, const std::vector<std::string> 
     string_array_epilogue(input.size());
 }
 
-void Column::append_sparse_map(const util::BitMagic& bv, position_t at_row) {
+void Column::append_sparse_map(const util::BitSet& bv, position_t at_row) {
     auto& sm = sparse_map();
 
     bm::bvector<>::enumerator en = bv.first();
@@ -319,7 +323,7 @@ void Column::sort_external(const JiveTable& jive_table, std::vector<uint32_t>& p
     } else {
         const auto& sm = sparse_map();
         bm::bvector<>::enumerator en = sm.first();
-        util::BitMagic new_map;
+        util::BitSet new_map;
         // The additional allocation is of the same size as the jive table
         // and is needed for a significant speed improvement.
         // We could instead use a std::map and sacrifice some speed for smaller allocations.
@@ -590,7 +594,7 @@ std::vector<std::shared_ptr<Column>> Column::split(const std::shared_ptr<Column>
     size_t start_byte = start_row * type_size;
     size_t end_byte = end_row * type_size;
     if (column.is_sparse()) {
-        const util::BitMagic& input_sparse_map = column.sparse_map();
+        const util::BitSet& input_sparse_map = column.sparse_map();
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(
             input_sparse_map.size() > 0,
             "Unexpected empty sparse map in Column::truncate"
@@ -619,15 +623,15 @@ std::vector<std::shared_ptr<Column>> Column::split(const std::shared_ptr<Column>
     return {start_byte, end_byte};
 }
 
-[[nodiscard]] static util::BitMagic truncate_sparse_map(
-    const util::BitMagic& input_sparse_map,
+[[nodiscard]] static util::BitSet truncate_sparse_map(
+    const util::BitSet& input_sparse_map,
     size_t start_row,
     size_t end_row
 ) {
     // The output sparse map is the slice [start_row, end_row) of the input sparse map
     // BitMagic doesn't have a method for this, so hand-roll it here
     // Ctor parameter is the size
-    util::BitMagic output_sparse_map(end_row - start_row);
+    util::BitSet output_sparse_map(end_row - start_row);
     util::BitSet::bulk_insert_iterator inserter(output_sparse_map);
     util::BitSetSizeType set_input_bit;
     if (start_row == 0) {
@@ -744,10 +748,6 @@ void Column::set_sparse_bit_for_row(size_t sparse_location) {
     sparse_map()[bv_size(sparse_location)] = true;
 }
 
-bool Column::empty() const {
-    return row_count() == 0;
-}
-
 void Column::regenerate_offsets() const {
     if (ARCTICDB_LIKELY(is_scalar() || !offsets_.empty()))
         return;
@@ -763,23 +763,23 @@ void Column::regenerate_offsets() const {
     }
 }
 
-util::BitMagic& Column::sparse_map() {
+util::BitSet& Column::sparse_map() {
     if(!sparse_map_)
-        sparse_map_ = std::make_optional<util::BitMagic>(0);
+        sparse_map_ = std::make_optional<util::BitSet>(0);
 
     return sparse_map_.value();
 }
 
-const util::BitMagic& Column::sparse_map() const {
+const util::BitSet& Column::sparse_map() const {
     util::check(static_cast<bool>(sparse_map_), "Expected sparse map when it was not set");
     return sparse_map_.value();
 }
 
-std::optional<util::BitMagic>& Column::opt_sparse_map() {
+std::optional<util::BitSet>& Column::opt_sparse_map() {
     return sparse_map_;
 }
 
-std::optional<util::BitMagic> Column::opt_sparse_map() const {
+std::optional<util::BitSet> Column::opt_sparse_map() const {
     return sparse_map_;
 }
 

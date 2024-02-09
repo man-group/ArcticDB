@@ -9,13 +9,16 @@
 
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/constructors.hpp>
+#include <arcticdb/util/variant.hpp>
+#include <arcticdb/log/log.hpp>
+#include <google/protobuf/util/message_differencer.h>
+#include <arcticdb/memory_layout.hpp>
 
 #include <cstdint>
 #include <vector>
 #include <string>
 #include <type_traits>
 #include <variant>
-
 
 #ifdef _WIN32
 // `ssize_t` is defined in `sys/types.h` but it is not ISO C (it simply is POSIX), hence its is not defined natively by MSVC.
@@ -24,20 +27,22 @@
 using ssize_t = SSIZE_T;
 #endif
 
-namespace arcticdb::entity {
+#include <descriptors.pb.h>
 
-enum class SortedValue : uint8_t {
-    UNKNOWN = 0,
-    UNSORTED = 1,
-    ASCENDING = 2,
-    DESCENDING = 3,
-};
+namespace arcticdb::proto {
+    namespace descriptors = arcticc::pb2::descriptors_pb2;
+}
+
+namespace arcticdb {
 
 using NumericId = int64_t;
 using UnsignedId = uint64_t;
 using StringId = std::string;
 using VariantId = std::variant<NumericId, StringId, UnsignedId>;
 using StreamId = VariantId;
+
+namespace entity {
+
 using SnapshotId = VariantId;
 using VersionId = uint64_t;
 using SignedVersionId = int64_t;
@@ -50,7 +55,8 @@ using position_t = int64_t;
 
 /** The VariantId holds int64 (NumericId) but is also used to store sizes up to uint64, so needs safe conversion */
 inline NumericId safe_convert_to_numeric_id(uint64_t input) {
-    util::check(input <= static_cast<uint64_t>(std::numeric_limits<NumericId>::max()), "Numeric symbol greater than 2^63 is not supported.");
+    util::check(input <= static_cast<uint64_t>(std::numeric_limits<NumericId>::max()),
+                "Numeric symbol greater than 2^63 is not supported.");
     return static_cast<NumericId>(input);
 }
 
@@ -99,34 +105,34 @@ enum class ValueType : uint8_t {
 };
 
 // Sequence types are composed of more than one element
-constexpr bool is_sequence_type(ValueType v){
+constexpr bool is_sequence_type(ValueType v) {
     return uint8_t(v) >= uint8_t(ValueType::ASCII_FIXED) &&
         uint8_t(v) <= uint8_t(ValueType::ASCII_DYNAMIC);
 }
 
-constexpr bool is_numeric_type(ValueType v){
+constexpr bool is_numeric_type(ValueType v) {
     return v == ValueType::NANOSECONDS_UTC ||
         (uint8_t(v) >= uint8_t(ValueType::UINT) &&
             uint8_t(v) <= uint8_t(ValueType::FLOAT));
 }
 
-constexpr bool is_floating_point_type(ValueType v){
+constexpr bool is_floating_point_type(ValueType v) {
     return uint8_t(v) == uint8_t(ValueType::FLOAT);
 }
 
-constexpr bool is_time_type(ValueType v){
+constexpr bool is_time_type(ValueType v) {
     return uint8_t(v) == uint8_t(ValueType::NANOSECONDS_UTC);
 }
 
-constexpr bool is_integer_type(ValueType v){
+constexpr bool is_integer_type(ValueType v) {
     return uint8_t(v) == uint8_t(ValueType::INT) || uint8_t(v) == uint8_t(ValueType::UINT);
 }
 
-constexpr bool is_fixed_string_type(ValueType v){
+constexpr bool is_fixed_string_type(ValueType v) {
     return v == ValueType::ASCII_FIXED || v == ValueType::UTF8_FIXED;
 }
 
-constexpr bool is_dynamic_string_type(ValueType v){
+constexpr bool is_dynamic_string_type(ValueType v) {
     return is_sequence_type(v) && !is_fixed_string_type(v);
 }
 constexpr bool is_utf_type(ValueType v) {
@@ -156,7 +162,7 @@ constexpr SizeBits get_size_bits(uint8_t size) {
 }
 
 [[nodiscard]] constexpr int get_byte_count(SizeBits size_bits) {
-    switch(size_bits) {
+    switch (size_bits) {
     case SizeBits::S8: return 1;
     case SizeBits::S16: return 2;
     case SizeBits::S32: return 4;
@@ -165,7 +171,7 @@ constexpr SizeBits get_size_bits(uint8_t size) {
     }
 }
 
-namespace detail{
+namespace detail {
 
 constexpr uint8_t combine_val_bits(ValueType v, SizeBits b = SizeBits::UNKNOWN_SIZE_BITS) {
     return (static_cast<uint8_t>(v) << 3u) | static_cast<uint8_t>(b);
@@ -203,13 +209,13 @@ constexpr DataType combine_data_type(ValueType v, SizeBits b = SizeBits::UNKNOWN
 }
 
 // Constructs the corresponding DataType from a given primitive arithmetic type (u/int8_t, float, or double)
-template <typename T>
+template<typename T>
 constexpr DataType data_type_from_raw_type() {
     static_assert(std::is_arithmetic_v<T>);
     if constexpr (std::is_floating_point_v<T>) {
         return combine_data_type(ValueType::FLOAT, get_size_bits(sizeof(T)));
     }
-    if constexpr(std::is_signed_v<T>) {
+    if constexpr (std::is_signed_v<T>) {
         return combine_data_type(ValueType::INT, get_size_bits(sizeof(T)));
     }
     return combine_data_type(ValueType::UINT, get_size_bits(sizeof(T)));
@@ -234,11 +240,11 @@ constexpr size_t get_type_size(DataType dt) noexcept {
     return size_t(1) << (size_t(s) - 1);
 }
 
-constexpr bool is_sequence_type(DataType v){
+constexpr bool is_sequence_type(DataType v) {
     return is_sequence_type(slice_value_type(v));
 }
 
-constexpr bool is_numeric_type(DataType v){
+constexpr bool is_numeric_type(DataType v) {
     return is_numeric_type(slice_value_type(v));
 }
 
@@ -258,31 +264,31 @@ constexpr bool is_signed_type(DataType dt) {
     return slice_value_type(dt) == ValueType::INT;
 }
 
-constexpr bool is_floating_point_type(DataType v){
+constexpr bool is_floating_point_type(DataType v) {
     return is_floating_point_type(slice_value_type(v));
 }
 
-constexpr bool is_time_type(DataType v){
+constexpr bool is_time_type(DataType v) {
     return is_time_type(slice_value_type(v));
 }
 
-constexpr bool is_integer_type(DataType v){
+constexpr bool is_integer_type(DataType v) {
     return is_integer_type(slice_value_type(v));
 }
 
-constexpr bool is_fixed_string_type(DataType v){
+constexpr bool is_fixed_string_type(DataType v) {
     return is_fixed_string_type(slice_value_type(v));
 }
 
-constexpr bool is_dynamic_string_type(DataType v){
+constexpr bool is_dynamic_string_type(DataType v) {
     return is_dynamic_string_type(slice_value_type(v));
 }
 
-constexpr bool is_utf_type(DataType v){
+constexpr bool is_utf_type(DataType v) {
     return is_utf_type(slice_value_type(v));
 }
 
-constexpr bool is_empty_type(DataType v){
+constexpr bool is_empty_type(DataType v) {
     return is_empty_type(slice_value_type(v));
 }
 
@@ -290,8 +296,8 @@ static_assert(slice_value_type(DataType::UINT16) == ValueType(1));
 static_assert(get_type_size(DataType::UINT32) == 4);
 static_assert(get_type_size(DataType::UINT64) == 8);
 
-constexpr  ValueType get_value_type(char specifier) noexcept {
-    switch(specifier){
+constexpr ValueType get_value_type(char specifier) noexcept {
+    switch (specifier) {
     case 'u': return ValueType::UINT; //  unsigned integer
     case 'i': return ValueType::INT; //  signed integer
     case 'f': return ValueType::FLOAT; //  floating-point
@@ -312,10 +318,10 @@ constexpr  ValueType get_value_type(char specifier) noexcept {
     }
 }
 
-constexpr char get_dtype_specifier(ValueType vt){
-    switch(vt){
+constexpr char get_dtype_specifier(ValueType vt) {
+    switch (vt) {
     case ValueType::UINT: return 'u';
-    case ValueType::INT:  return 'i';
+    case ValueType::INT: return 'i';
     case ValueType::FLOAT: return 'f';
     case ValueType::BOOL: return 'b';
         // NOTE: this is safe as of Pandas < 2.0 because `datetime64` _always_ has been using nanosecond resolution,
@@ -330,12 +336,11 @@ constexpr char get_dtype_specifier(ValueType vt){
     case ValueType::ASCII_FIXED: return 'S';
     case ValueType::BYTES: return 'O';
     case ValueType::EMPTY: return 'O';
-    default:
-        return 'x';
+    default:return 'x';
     }
 }
 
-constexpr char get_dtype_specifier(DataType dt){
+constexpr char get_dtype_specifier(DataType dt) {
     return get_dtype_specifier(slice_value_type(dt));
 }
 
@@ -356,7 +361,6 @@ struct DataTypeTag<DataType::__DT__> : public DataTypeTagBase { \
     using raw_type = __T__; \
 }; \
 using TAG_##__DT__ = DataTypeTag<DataType::__DT__>;
-
 
 DATA_TYPE_TAG(UINT8, std::uint8_t)
 DATA_TYPE_TAG(UINT16, std::uint16_t)
@@ -404,7 +408,7 @@ Dimension as_dim_checked(uint8_t d);
 
 struct TypeDescriptor;
 
-inline void set_data_type(DataType data_type, TypeDescriptor& type_desc);
+inline void set_data_type(DataType data_type, TypeDescriptor &type_desc);
 
 struct TypeDescriptor {
     DataType data_type_;
@@ -434,6 +438,10 @@ struct TypeDescriptor {
         return data_type_;
     }
 
+    [[nodiscard]] constexpr ValueType value_type() const {
+        return slice_value_type(data_type_);
+    }
+
     [[nodiscard]] constexpr Dimension dimension() const {
         return dimension_;
     }
@@ -451,7 +459,6 @@ struct TypeDescriptor {
     }
 };
 
-
 /// @brief Check if the type must contain data
 /// Some types are allowed not to have any data, e.g. empty arrays or the empty type (which by design denotes the
 /// lack of data).
@@ -468,11 +475,11 @@ constexpr bool is_numpy_array(TypeDescriptor td) {
 }
 
 constexpr bool is_pyobject_type(TypeDescriptor td) {
-	return is_dynamic_string_type(slice_value_type(td.data_type())) || is_bool_object_type(td.data_type()) ||
-		is_numpy_array(td);
+    return is_dynamic_string_type(slice_value_type(td.data_type())) || is_bool_object_type(td.data_type()) ||
+        is_numpy_array(td);
 }
 
-inline void set_data_type(DataType data_type, TypeDescriptor& type_desc) {
+inline void set_data_type(DataType data_type, TypeDescriptor &type_desc) {
     type_desc.data_type_ = data_type;
 }
 
@@ -503,7 +510,7 @@ struct TypeDescriptorTag {
     }
 };
 
-template <typename DTT>
+template<typename DTT>
 using ScalarTagType = TypeDescriptorTag<DTT, DimensionTag<Dimension::Dim0>>;
 
 template<typename T>
@@ -512,6 +519,66 @@ struct ScalarTypeInfo {
     static constexpr auto data_type = TDT::DataTypeTag::data_type;
     using RawType = typename TDT::DataTypeTag::raw_type;
 };
+
+struct IndexDescriptorImpl : public IndexDescriptor {
+    using TypeChar = char;
+
+    IndexDescriptorImpl() = default;
+
+    IndexDescriptorImpl(uint32_t field_count, Type type) :
+        IndexDescriptor(type, field_count) {
+    }
+
+    IndexDescriptorImpl(const IndexDescriptor& idx) :
+        IndexDescriptor(idx) {
+    }
+
+    [[nodiscard]] bool uninitialized() const {
+        return field_count() == 0 && type_ == Type::UNKNOWN;
+    }
+
+    [[nodiscard]] uint32_t field_count() const {
+        return field_count_;
+    }
+
+    [[nodiscard]] Type type() const {
+        return type_;
+    }
+
+    void set_type(Type type) {
+        type_ = type;
+    }
+
+    void set_field_count(uint32_t field_count) {
+        field_count_ = field_count;
+    }
+
+    ARCTICDB_MOVE_COPY_DEFAULT(IndexDescriptorImpl)
+
+    friend bool operator==(const IndexDescriptorImpl &left, const IndexDescriptorImpl &right) {
+        return left.type() == right.type() && left.field_count_ == right.field_count_;
+    }
+};
+
+constexpr IndexDescriptorImpl::TypeChar to_type_char(IndexDescriptorImpl::Type type) {
+    switch (type) {
+    case IndexDescriptorImpl::Type::TIMESTAMP:return 'T';
+    case IndexDescriptorImpl::Type::ROWCOUNT:return 'R';
+    case IndexDescriptorImpl::Type::STRING:return 'S';
+    case IndexDescriptorImpl::Type::UNKNOWN:return 'U';
+    default:util::raise_rte("Unknown index type: {}", int(type));
+    }
+}
+
+constexpr IndexDescriptorImpl::Type from_type_char(IndexDescriptorImpl::TypeChar type) {
+    switch (type) {
+    case 'T': return IndexDescriptorImpl::Type::TIMESTAMP;
+    case 'R': return IndexDescriptorImpl::Type::ROWCOUNT;
+    case 'S': return IndexDescriptorImpl::Type::STRING;
+    case 'U': return IndexDescriptorImpl::Type::UNKNOWN;
+    default:util::raise_rte("Unknown index type: {}", int(type));
+    }
+}
 
 struct FieldRef {
     TypeDescriptor type_;
@@ -525,11 +592,10 @@ struct FieldRef {
         return name_;
     }
 
-    friend bool operator==(const FieldRef& left, const FieldRef& right) {
+    friend bool operator==(const FieldRef &left, const FieldRef &right) {
         return left.type_ == right.type_ && left.name_ == right.name_;
     }
 };
-
 
 struct Field {
     uint32_t size_ = 0;
@@ -539,10 +605,8 @@ struct Field {
 
     ARCTICDB_NO_MOVE_OR_COPY(Field)
 
-
-
 private:
-    explicit Field(const FieldRef& ref) {
+    explicit Field(const FieldRef &ref) {
         set(ref.type_, ref.name_);
     }
 
@@ -550,8 +614,8 @@ private:
         set(type, name);
     }
 public:
-    static void emplace(TypeDescriptor type, std::string_view name, void* ptr) {
-        new (ptr) Field(type, name);
+    static void emplace(TypeDescriptor type, std::string_view name, void *ptr) {
+        new(ptr) Field(type, name);
     }
 
     static size_t calc_size(std::string_view name) {
@@ -562,15 +626,15 @@ public:
         return {name_, size_};
     }
 
-    [[nodiscard]] const TypeDescriptor& type() const {
+    [[nodiscard]] const TypeDescriptor &type() const {
         return type_;
     }
 
-    [[nodiscard]] TypeDescriptor* mutable_type_desc() {
+    [[nodiscard]] TypeDescriptor *mutable_type_desc() {
         return &type_;
     }
 
-    TypeDescriptor& mutable_type() {
+    TypeDescriptor &mutable_type() {
         return type_;
     }
 
@@ -604,13 +668,21 @@ struct FieldWrapper {
         mutable_field().set(type, name);
     }
 
-    const Field& field() const {
-        return *reinterpret_cast<const Field*>(data_.data());
+    const Field &field() const {
+        return *reinterpret_cast<const Field *>(data_.data());
+    }
+
+    const TypeDescriptor& type() const {
+        return field().type();
+    }
+
+    const std::string_view name() const {
+        return field().name();
     }
 
 private:
-    Field& mutable_field() {
-        return *reinterpret_cast<Field*>(data_.data());
+    Field &mutable_field() {
+        return *reinterpret_cast<Field *>(data_.data());
     }
 };
 
@@ -618,29 +690,32 @@ inline FieldRef scalar_field(DataType type, std::string_view name) {
     return {TypeDescriptor{type, Dimension::Dim0}, name};
 }
 
-template <typename Callable>
-auto visit_field(const Field& field, Callable&& c) {
+template<typename Callable>
+auto visit_field(const Field &field, Callable &&c) {
     return field.type().visit_tag(std::forward<Callable>(c));
 }
 
-inline bool operator==(const Field& l, const Field& r) {
+inline bool operator==(const Field &l, const Field &r) {
     return l.type() == r.type() && l.name() == r.name();
 }
 
-inline bool operator!=(const Field& l, const Field& r) {
+inline bool operator!=(const Field &l, const Field &r) {
     return !(l == r);
 }
 
-std::size_t sizeof_datatype(const TypeDescriptor& td);
-} // namespace arcticdb::entity
+std::size_t sizeof_datatype(const TypeDescriptor &td);
+
+} // namespace entity
+
+} // namespace arcticdb
 
 // StreamId ordering - numbers before strings
 namespace std {
-template<>
-struct less<arcticdb::entity::StreamId> {
 
-    bool operator()(const arcticdb::entity::StreamId &left, const arcticdb::entity::StreamId &right) const {
-        using namespace arcticdb::entity;
+template<>
+struct less<arcticdb::StreamId> {
+    bool operator()(const arcticdb::StreamId &left, const arcticdb::StreamId &right) const {
+        using namespace arcticdb;
         if (std::holds_alternative<NumericId>(left)) {
             if (std::holds_alternative<NumericId>(right))
                 return left < right;
@@ -654,7 +729,8 @@ struct less<arcticdb::entity::StreamId> {
         }
     }
 };
-}
+
+} // namespace std
 
 namespace fmt {
 
@@ -672,7 +748,19 @@ struct formatter<FieldRef> {
     }
 };
 
-}
+template<>
+struct formatter<FieldWrapper> {
+
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const FieldWrapper& f, FormatContext &ctx) const {
+        return fmt::format_to(ctx.out(), "{}: {}", f.type(), f.name());
+    }
+};
+
+} //namespace fmt
 
 #define ARCTICDB_TYPES_H_
 #include "types-inl.hpp"

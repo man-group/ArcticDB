@@ -47,7 +47,7 @@ void densify_buffer_using_bitmap(const util::BitSet &block_bitset, arcticdb::Chu
 }
 
 template <typename RawType>
-inline void expand_dense_buffer_using_bitmap(const util::BitMagic &bv, const uint8_t *dense_ptr,
+inline void expand_dense_buffer_using_bitmap(const util::BitSet &bv, const uint8_t *dense_ptr,
                                              uint8_t *sparse_ptr) {
     auto en = bv.first();
     auto en_end = bv.end();
@@ -104,7 +104,7 @@ template <typename RawType>
 ChunkedBuffer scan_floating_point_to_sparse(
     RawType* ptr,
     size_t rows_to_write,
-    util::BitMagic& block_bitset) {
+    util::BitSet& block_bitset) {
     auto scan_ptr = ptr;
     for (size_t idx = 0; idx < rows_to_write; ++idx, ++scan_ptr) {
         block_bitset[bv_size(idx)] = !isnan(*scan_ptr);
@@ -117,15 +117,15 @@ ChunkedBuffer scan_floating_point_to_sparse(
     return dense_buffer;
 }
 
-inline util::BitMagic deserialize_bytes_to_bitmap(const std::uint8_t*& input, size_t bytes_in_sparse_bitmap) {
-    util::BitMagic bv;
+inline util::BitSet deserialize_bytes_to_bitmap(const std::uint8_t*& input, size_t bytes_in_sparse_bitmap) {
+    util::BitSet bv;
     bm::deserialize(bv, input);
     ARCTICDB_DEBUG(log::version(), "count in bitvector while decoding: {}", bv.count());
     input += bytes_in_sparse_bitmap;
     return bv;
 }
 
-inline void dump_bitvector(const util::BitMagic& bv) {
+inline void dump_bitvector(const util::BitSet& bv) {
     auto en = bv.first();
     auto en_end = bv.end();
 
@@ -135,7 +135,7 @@ inline void dump_bitvector(const util::BitMagic& bv) {
         vals.push_back(idx);
         ++en;
     }
-    log::version().info("Bit vector values {}", vals);
+    ARCTICDB_DEBUG(log::version(), "Bit vector values {}", vals);
 }
 
 }

@@ -769,7 +769,7 @@ TEST(VersionStore, TestWriteAppendMapHead) {
 
     auto key = atom_key_builder().version_id(0).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(0).build(symbol, KeyType::APPEND_DATA);
 
-    auto descriptor = StreamDescriptor{symbol, IndexDescriptor{1u, IndexDescriptor::TIMESTAMP}, std::make_shared<FieldCollection>(fields_from_range(fields))};
+    auto descriptor = StreamDescriptor{symbol, IndexDescriptorImpl{1u, IndexDescriptorImpl::Type::TIMESTAMP}, std::make_shared<FieldCollection>(fields_from_range(fields))};
     write_head(version_store._test_get_store(), key, num_rows);
     auto [next_key, total_rows] = read_head(version_store._test_get_store(), symbol);
     ASSERT_EQ(next_key, key);

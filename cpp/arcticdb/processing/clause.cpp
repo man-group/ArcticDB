@@ -26,12 +26,14 @@ namespace arcticdb {
 
 using namespace pipelines;
 
-std::vector<std::vector<size_t>> structure_by_row_slice(std::vector<RangesAndKey>& ranges_and_keys,
-                                                           size_t start_from) {
+std::vector<std::vector<size_t>> structure_by_row_slice(
+        std::vector<RangesAndKey>& ranges_and_keys,
+        size_t start_from) {
     std::sort(std::begin(ranges_and_keys), std::end(ranges_and_keys), [] (const RangesAndKey& left, const RangesAndKey& right) {
         return std::tie(left.row_range_.first, left.col_range_.first) < std::tie(right.row_range_.first, right.col_range_.first);
     });
     ranges_and_keys.erase(ranges_and_keys.begin(), ranges_and_keys.begin() + start_from);
+
     std::vector<std::vector<size_t>> res;
     RowRange previous_row_range;
     for (const auto& [idx, ranges_and_key]: folly::enumerate(ranges_and_keys)) {
@@ -41,23 +43,6 @@ std::vector<std::vector<size_t>> structure_by_row_slice(std::vector<RangesAndKey
         }
         res.back().emplace_back(idx);
         previous_row_range = current_row_range;
-    }
-    return res;
-}
-
-std::vector<std::vector<size_t>> structure_by_column_slice(std::vector<RangesAndKey>& ranges_and_keys) {
-    std::sort(std::begin(ranges_and_keys), std::end(ranges_and_keys), [] (const RangesAndKey& left, const RangesAndKey& right) {
-        return std::tie(left.col_range_.first, left.row_range_.first) < std::tie(right.col_range_.first, right.row_range_.first);
-    });
-    std::vector<std::vector<size_t>> res;
-    ColRange previous_col_range;
-    for (const auto& [idx, ranges_and_key]: folly::enumerate(ranges_and_keys)) {
-        ColRange current_col_range{ranges_and_key.col_range_};
-        if (current_col_range != previous_col_range) {
-            res.emplace_back();
-        }
-        res.back().emplace_back(idx);
-        previous_col_range = current_col_range;
     }
     return res;
 }
@@ -466,8 +451,9 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
     }
     SegmentInMemory seg;
     auto index_col = std::make_shared<Column>(make_scalar_type(grouping_data_type), grouping_map.size(), true, false);
+
     seg.add_column(scalar_field(grouping_data_type, grouping_column_), index_col);
-    seg.descriptor().set_index(IndexDescriptor(0, IndexDescriptor::ROWCOUNT));
+    seg.descriptor().set_index(IndexDescriptorImpl(0, IndexDescriptorImpl::Type::ROWCOUNT));
 
     details::visit_type(grouping_data_type, [&grouping_map, &index_col](auto data_type_tag) {
         using col_type_info = ScalarTypeInfo<decltype(data_type_tag)>;
@@ -692,7 +678,7 @@ Composite<EntityIds> ResampleClause<closed_boundary>::process(Composite<EntityId
     RowRange output_row_range(row_slices.front().row_ranges_->at(0)->start(),
                               row_slices.front().row_ranges_->at(0)->start() + output_index_column->row_count());
     seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, index_column_name), output_index_column);
-    seg.descriptor().set_index(IndexDescriptor(1, IndexDescriptor::TIMESTAMP));
+    seg.descriptor().set_index(IndexDescriptorImpl(1, IndexDescriptor::Type::TIMESTAMP));
     auto& string_pool = seg.string_pool();
     for (const auto& aggregator: aggregators_) {
         std::vector<std::optional<ColumnWithStrings>> input_agg_columns;
@@ -901,7 +887,7 @@ void merge_impl(
     FieldCollection new_fields{};
     (void)new_fields.add(fields[0].ref());
 
-    auto index_desc = index_descriptor(stream_id, index, new_fields);
+    auto index_desc = index_descriptor_from_range(stream_id, index, new_fields);
     auto desc = StreamDescriptor{index_desc};
 
     AggregatorType agg{
@@ -922,9 +908,9 @@ Composite<EntityIds> MergeClause::process(Composite<EntityIds>&& entity_ids) con
             [](const std::unique_ptr<SegmentWrapper> &left,
                const std::unique_ptr<SegmentWrapper> &right) {
                 const auto left_index = index::index_value_from_row(left->row(),
-                                                                               IndexDescriptor::TIMESTAMP, 0);
+                                                                               IndexDescriptorImpl::Type::TIMESTAMP, 0);
                 const auto right_index = index::index_value_from_row(right->row(),
-                                                                                IndexDescriptor::TIMESTAMP, 0);
+                                                                                IndexDescriptorImpl::Type::TIMESTAMP, 0);
                 return left_index > right_index;
             };
 
@@ -1028,7 +1014,7 @@ Composite<EntityIds> ColumnStatsGenerationClause::process(Composite<EntityIds>&&
     end_index_col->set_row_data(0);
 
     SegmentInMemory seg;
-    seg.descriptor().set_index(IndexDescriptor(0, IndexDescriptor::ROWCOUNT));
+    seg.descriptor().set_index(IndexDescriptorImpl(0, IndexDescriptorImpl::Type::ROWCOUNT));
     seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, start_index_column_name), start_index_col);
     seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, end_index_column_name), end_index_col);
     for (const auto& agg_data: folly::enumerate(aggregators_data)) {

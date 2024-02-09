@@ -19,7 +19,7 @@ void do_merge(
     while (!input_streams.empty()) {
         auto next = input_streams.pop_top();
 
-        agg.start_row(pipelines::index::index_value_from_row(next->row(), IndexDescriptor::TIMESTAMP, 0).value()) ([&next, add_symbol_column](auto &rb) {
+        agg.start_row(pipelines::index::index_value_from_row(next->row(), IndexDescriptorImpl::Type::TIMESTAMP, 0).value()) ([&next, add_symbol_column](auto &rb) {
             if(add_symbol_column)
                 rb.set_scalar_by_name("symbol", std::string_view(std::get<StringId>(next->id())), DataType::UTF_DYNAMIC64);
 

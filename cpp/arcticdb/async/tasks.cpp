@@ -27,10 +27,10 @@ namespace arcticdb::async {
                     }
                 }
 
-                return index_descriptor(StreamDescriptor::id_from_proto(desc.proto()), idx, fields);
+                return index_descriptor_from_range(desc.id(), idx, fields);
             }
             else {
-                return index_descriptor(StreamDescriptor::id_from_proto(desc.proto()), idx, desc.fields());
+                return index_descriptor_from_range(desc.id(), idx, desc.fields());
             }
         });
     }
@@ -39,10 +39,10 @@ namespace arcticdb::async {
         auto key = std::move(key_segment_pair.atom_key());
         auto seg = std::move(key_segment_pair.release_segment());
         ARCTICDB_DEBUG(log::storage(), "ReadAndDecodeAtomTask decoding segment of size {} with key {}",
-                       seg.total_segment_size(),
+                       seg.size(),
                        key);
         auto &hdr = seg.header();
-        auto desc = StreamDescriptor(std::make_shared<StreamDescriptor::Proto>(std::move(*hdr.mutable_stream_descriptor())), seg.fields_ptr());
+        const auto& desc = seg.descriptor();
         auto descriptor = async::get_filtered_descriptor(desc, columns_to_decode_);
         ranges_and_key_.col_range_.second = ranges_and_key_.col_range_.first + (descriptor.field_count() - descriptor.index().field_count());
         ARCTICDB_TRACE(log::codec(), "Creating segment");
@@ -53,12 +53,11 @@ namespace arcticdb::async {
 
     pipelines::SliceAndKey DecodeSlicesTask::decode_into_slice(std::pair<Segment, pipelines::SliceAndKey>&& sk_pair) const {
         auto [seg, sk] = std::move(sk_pair);
-        ARCTICDB_DEBUG(log::storage(), "ReadAndDecodeAtomTask decoding segment of size {} with key {}",
-                      seg.total_segment_size(),
+        ARCTICDB_DEBUG(log::storage(), "ReadAndDecodeAtomTask decoding segment with key {}",
                       variant_key_view(sk.key()));
 
         auto &hdr = seg.header();
-        auto desc = StreamDescriptor(std::make_shared<StreamDescriptor::Proto>(std::move(*hdr.mutable_stream_descriptor())), seg.fields_ptr());
+        const auto& desc = seg.descriptor();
         auto descriptor = async::get_filtered_descriptor(desc, filter_columns_);
         sk.slice_.adjust_columns(descriptor.field_count() - descriptor.index().field_count());
 

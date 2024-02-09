@@ -21,6 +21,7 @@
 #include <utils.pb.h>
 
 namespace arcticdb::proto {
+
     namespace encoding = arcticc::pb2::encoding_pb2;
     namespace storage = arcticc::pb2::storage_pb2;
     namespace s3_storage = arcticc::pb2::s3_storage_pb2;
@@ -34,4 +35,4 @@ namespace arcticdb::proto {
     namespace nfs_backed_storage = arcticc::pb2::nfs_backed_storage_pb2;
     namespace utils = arcticc::pb2::utils_pb2;
 
-} //namespace arcticdb
+} //namespace arcticdb::proto

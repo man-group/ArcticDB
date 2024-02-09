@@ -28,16 +28,15 @@ template <typename Derived>
 class BaseIndex {
 public:
     template <class RangeType> StreamDescriptor create_stream_descriptor(StreamId stream_id, RangeType&& fields) const {
-        return stream_descriptor(stream_id, *derived(), std::move(fields));
+        return stream_descriptor_from_range(stream_id, *derived(), std::move(fields));
     }
 
     [[nodiscard]] StreamDescriptor create_stream_descriptor(StreamId stream_id, std::initializer_list<FieldRef> fields) const;
     [[nodiscard]] const Derived* derived() const;
-    explicit operator IndexDescriptor() const;
+    explicit operator IndexDescriptorImpl() const;
     [[nodiscard]] FieldRef field(size_t) const;
 };
 
-//TODO make this into just a numeric index, of which timestamp is a special case
 class TimeseriesIndex : public BaseIndex<TimeseriesIndex> {
 public:
     static constexpr const char* DefaultName = "time" ;
@@ -50,8 +49,8 @@ public:
         return 1;
     }
 
-    static constexpr IndexDescriptor::Type type() {
-        return IndexDescriptor::TIMESTAMP;
+    static constexpr IndexDescriptorImpl::Type type() {
+        return IndexDescriptorImpl::Type::TIMESTAMP;
     }
     TimeseriesIndex(const std::string& name);
     static TimeseriesIndex default_index();
@@ -96,8 +95,8 @@ public:
         return 1;
     }
 
-    static constexpr IndexDescriptor::Type type() {
-        return IndexDescriptor::STRING;
+    static constexpr IndexDescriptorImpl::Type type() {
+        return IndexDescriptorImpl::Type::STRING;
     }
 
     void check(const FieldCollection& fields) const;
@@ -138,7 +137,7 @@ class RowCountIndex : public BaseIndex<RowCountIndex> {
 
     static constexpr size_t field_count() { return 0; }
 
-    static constexpr IndexDescriptor::Type type() { return IndexDescriptor::ROWCOUNT; }
+    static constexpr IndexDescriptorImpl::Type type() { return IndexDescriptorImpl::Type::ROWCOUNT; }
 
     static IndexValue start_value_for_segment(const SegmentInMemory& segment);
 
@@ -166,7 +165,7 @@ public:
     }
 
     static constexpr IndexDescriptor::Type type() {
-        return IndexDescriptor::EMPTY;
+        return IndexDescriptor::Type::EMPTY;
     }
 
     static constexpr const char* name() {
@@ -186,9 +185,10 @@ public:
 using Index = std::variant<stream::TimeseriesIndex, stream::RowCountIndex, stream::TableIndex, stream::EmptyIndex>;
 
 Index index_type_from_descriptor(const StreamDescriptor& desc);
-Index default_index_type_from_descriptor(const IndexDescriptor::Proto& desc);
+Index default_index_type_from_descriptor(const IndexDescriptorImpl& desc);
 
 // Only to be used for visitation to get field count etc as the name is not set
+
 Index variant_index_from_type(IndexDescriptor::Type type);
 Index default_index_type_from_descriptor(const IndexDescriptor& desc);
 IndexDescriptor get_descriptor_from_index(const Index& index);

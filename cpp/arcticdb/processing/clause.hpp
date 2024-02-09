@@ -111,7 +111,6 @@ using Clause = folly::Poly<IClause>;
 
 std::vector<std::vector<size_t>> structure_by_row_slice(std::vector<RangesAndKey>& ranges_and_keys,
                                                         size_t start_from);
-std::vector<std::vector<size_t>> structure_by_column_slice(std::vector<RangesAndKey>& ranges_and_keys);
 
 Composite<ProcessingUnit> gather_entities(std::shared_ptr<ComponentManager> component_manager,
                                           Composite<EntityIds>&& entity_ids,
@@ -343,12 +342,6 @@ struct PartitionClause {
         return fmt::format("GROUPBY Column[\"{}\"]", grouping_column_);
     }
 };
-
-inline StreamDescriptor empty_descriptor(arcticdb::proto::descriptors::IndexDescriptor::Type type = arcticdb::proto::descriptors::IndexDescriptor::ROWCOUNT, const StreamId &id = "merged") {
-    const auto index = stream::variant_index_from_type(type);
-    const auto field_count = util::variant_match(index, [] (const auto& idx) { return idx.field_count(); });
-    return StreamDescriptor{StreamId{id}, IndexDescriptor{field_count, type}, std::make_shared<FieldCollection>()};
-}
 
 struct NamedAggregator {
     NamedAggregator(const std::string& s, const std::string& t, const std::string& v) :

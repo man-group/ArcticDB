@@ -87,9 +87,7 @@ void initialise_output_column(const Column& left_input_column, const Column& rig
 void initialise_output_bitset(const util::BitSet& input_bitset, bool sparse_missing_value_output, util::BitSet& output_bitset);
 
 class Column {
-
 public:
-
     template<typename TDT, typename ValueType>
     class TypedColumnIterator :  public boost::iterator_facade<TypedColumnIterator<TDT, ValueType>, ValueType, boost::random_access_traversal_tag> {
         using RawType =  std::decay_t<typename TDT::DataTypeTag::raw_type>;
@@ -222,6 +220,13 @@ public:
         allow_sparse_(allow_sparse) {
     }
 
+    Column(TypeDescriptor type, bool allow_sparse, ChunkedBuffer&& buffer, Buffer&& shapes) :
+        data_(std::move(buffer)),
+        shapes_(std::move(shapes)),
+        type_(type),
+        allow_sparse_(allow_sparse) {
+    }
+
     Column(
         TypeDescriptor type,
         size_t expected_rows,
@@ -244,6 +249,8 @@ public:
 
     Column clone() const;
 
+    bool empty() const;
+
     bool is_sparse() const;
 
     bool sparse_permitted() const;
@@ -253,10 +260,10 @@ public:
         sparse_map().set_range(0, bv_size(to_row), true);
     }
 
-    [[nodiscard]] util::BitMagic& sparse_map();
-    [[nodiscard]] const util::BitMagic& sparse_map() const;
-    [[nodiscard]] std::optional<util::BitMagic>& opt_sparse_map();
-    [[nodiscard]] std::optional<util::BitMagic> opt_sparse_map() const;
+    [[nodiscard]] util::BitSet& sparse_map();
+    [[nodiscard]] const util::BitSet& sparse_map() const;
+    [[nodiscard]] std::optional<util::BitSet>& opt_sparse_map();
+    [[nodiscard]] std::optional<util::BitSet> opt_sparse_map() const;
 
     template<typename TagType>
     auto begin() const {
@@ -405,7 +412,7 @@ public:
                          const std::vector<std::string> &input,
                          StringPool &string_pool);
 
-    void append_sparse_map(const util::BitMagic& bv, position_t at_row);
+    void append_sparse_map(const util::BitSet& bv, position_t at_row);
     void append(const Column& other, position_t at_row);
 
     // Sorts the column by an external column's jive_table.
@@ -593,9 +600,8 @@ public:
         return data_.buffer();
     }
 
-    //TODO this will need to be more efficient - index each block?
     template<typename T>
-    std::optional<position_t> index_of(T val) const {
+    std::optional<position_t> search_unsorted(T val) const {
         util::check_arg(is_scalar(), "Cannot index on multidimensional values");
         for (position_t i = 0; i < row_count(); ++i) {
             if (val == *ptr_cast<T>(i, sizeof(T)))
@@ -899,7 +905,6 @@ public:
     }
 
 private:
-
     position_t last_offset() const;
     void update_offsets(size_t nbytes);
     bool is_scalar() const;
@@ -910,7 +915,6 @@ private:
     size_t inflated_row_count() const;
     size_t num_shapes() const;
     void set_sparse_bit_for_row(size_t sparse_location);
-    bool empty() const;
     void regenerate_offsets() const;
 
     // Permutes the physical column storage based on the given sorted_pos.
@@ -929,7 +933,7 @@ private:
     bool inflated_ = false;
     bool allow_sparse_ = false;
 
-    std::optional<util::BitMagic> sparse_map_;
+    std::optional<util::BitSet> sparse_map_;
     util::MagicNum<'D', 'C', 'o', 'l'> magic_;
 }; //class Column
 

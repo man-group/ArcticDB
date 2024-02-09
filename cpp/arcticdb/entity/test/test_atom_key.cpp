@@ -15,9 +15,11 @@
 
 #include <folly/Range.h>
 
+using namespace arcticdb;
 using namespace arcticdb::entity;
 
 TEST(Key, Basic) {
+    using namespace arcticdb;
     using namespace arcticdb::entity;
     using namespace arcticdb::storage;
 
@@ -108,7 +110,7 @@ struct AlternativeFormat {
 TEST(Key, Formatting) {
 
     AtomKey k{
-        StreamId{NumericId{999}},
+        arcticdb::StreamId{NumericId{999}},
         VersionId(123),
         timestamp(123000000LL),
         0x789456321ULL,
