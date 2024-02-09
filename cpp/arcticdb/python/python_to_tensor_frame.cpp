@@ -231,14 +231,14 @@ std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
         // TODO handle string indexes
         if (index_tensor.data_type() == DataType::NANOSECONDS_UTC64) {
             res->desc.set_index_field_count(1);
-            res->desc.set_index_type(IndexDescriptor::TIMESTAMP);
+            res->desc.set_index_type(IndexDescriptor::Type::TIMESTAMP);
 
             res->desc.add_scalar_field(index_tensor.dt_, index_column_name);
             res->index = stream::TimeseriesIndex(index_column_name);
             res->index_tensor = std::move(index_tensor);
         } else {
             res->index = stream::RowCountIndex();
-            res->desc.set_index_type(IndexDescriptor::ROWCOUNT);
+            res->desc.set_index_type(IndexDescriptor::Type::ROWCOUNT);
             res->desc.add_scalar_field(index_tensor.dt_, index_column_name);
             res->field_tensors.push_back(std::move(index_tensor));
         }
@@ -268,12 +268,12 @@ std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
     // index explicitly. Thus we handle this case after all columns are read so that we know how many rows are there.
     if (idx_names.empty()) {
         res->index = stream::RowCountIndex();
-        res->desc.set_index_type(IndexDescriptor::ROWCOUNT);
+        res->desc.set_index_type(IndexDescriptor::Type::ROWCOUNT);
     }
 
     if (empty_types && res->num_rows == 0) {
         res->index = stream::EmptyIndex();
-        res->desc.set_index_type(IndexDescriptor::EMPTY);
+        res->desc.set_index_type(IndexDescriptor::Type::EMPTY);
     }
 
     ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res->desc);
@@ -293,7 +293,7 @@ std::shared_ptr<InputTensorFrame> py_none_to_frame() {
 
     // Fill index
     res->index = stream::RowCountIndex();
-    res->desc.set_index_type(IndexDescriptor::ROWCOUNT);
+    res->desc.set_index_type(IndexDescriptorImpl::Type::ROWCOUNT);
 
     // Fill tensors
     auto col_name = "bytes";

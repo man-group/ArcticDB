@@ -14,6 +14,7 @@
 #include <folly/Range.h>
 #include <folly/concurrency/ConcurrentHashMap.h>
 #include <arcticdb/storage/key_segment_pair.hpp>
+#include <arcticdb/util/pb_util.hpp>
 
 namespace arcticdb::storage::memory {
 

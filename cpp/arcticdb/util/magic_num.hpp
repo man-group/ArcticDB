@@ -27,7 +27,7 @@ struct MagicNum {
 
     void check() const {
         std::string_view expected(reinterpret_cast<const char*>(&Magic), 4);
-        util::check(magic_ == Magic, "Magic number failure, expected {}({}) got {}({})", Magic, expected, magic_);
+        util::check(magic_ == Magic, "Magic number failure, expected {}({}) got {}", Magic, expected, magic_);
     }
 
   private:

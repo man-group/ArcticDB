@@ -50,9 +50,9 @@ StreamId stream_id_from_document(DocType& doc, KeyType key_type) {
 
 template<typename DocType>
 AtomKey atom_key_from_document(DocType &doc, KeyType key_type) {
-    auto index_type = IndexDescriptor::Type(doc["index_type"].get_int32().value);
+    auto index_type = IndexDescriptorImpl::Type(doc["index_type"].get_int32().value);
     IndexValue start_index, end_index;
-    if (index_type == IndexDescriptor::TIMESTAMP) {
+    if (index_type == IndexDescriptorImpl::Type::TIMESTAMP) {
         start_index = doc["start_time"].get_int64().value;
         end_index = doc["end_time"].get_int64().value;
     } else {
@@ -117,7 +117,7 @@ void add_atom_key_values(bsoncxx::builder::basic::document& basic_builder, const
 
     auto index_type = arcticdb::stream::get_index_value_type(key);
     basic_builder.append(kvp("index_type", types::b_int32{static_cast<int32_t>(index_type)}));
-    if(index_type == IndexDescriptor::TIMESTAMP) {
+    if(index_type == IndexDescriptorImpl::Type::TIMESTAMP) {
         basic_builder.append(kvp("start_time", types::b_int64{int64_t(std::get<NumericId>(key.start_index()))}));
         basic_builder.append(kvp("end_time", types::b_int64{int64_t(std::get<NumericId>(key.end_index()))}));
     } else
@@ -134,13 +134,12 @@ auto build_document(storage::KeySegmentPair &kv) {
     using builder::stream::document;
 
     const auto &key = kv.variant_key();
-    const auto &segment = kv.segment();
-    const auto hdr_size = segment.segment_header_bytes_size();
-    const auto total_size = segment.total_segment_size(hdr_size);
+    auto &segment = kv.segment();
+    const auto total_size = segment.calculate_size();
     /*thread_local*/ std::vector<uint8_t> buffer{};
     buffer.resize(total_size);
     bsoncxx::types::b_binary data = {};
-    kv.segment().write_to(buffer.data(), hdr_size);
+    kv.segment().write_to(buffer.data());
     data.size = uint32_t(total_size);
     data.bytes = buffer.data();
 
@@ -264,6 +263,7 @@ bool MongoClientImpl::write_segment(const std::string &database_name,
     auto collection = database[collection_name];
 
     ARCTICDB_SUBSAMPLE(MongoStorageWriteInsertOne, 0)
+    ARCTICDB_DEBUG(log::storage(), "Mongo client writing data with key {}", variant_key_view(kv.variant_key()));
     if(std::holds_alternative<RefKey>(kv.variant_key())) {
         mongocxx::model::replace_one replace{document{} << "key" << fmt::format("{}", kv.ref_key()) << finalize, doc.view()};
         replace.upsert(true);

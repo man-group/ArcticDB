@@ -71,6 +71,7 @@ void LmdbStorage::do_write_internal(Composite<KeySegmentPair>&& kvs, ::lmdb::txn
             ARCTICDB_DEBUG(log::storage(), "Lmdb storage writing segment with key {}", kv.key_view());
             auto k = to_serialized_key(kv.variant_key());
             auto &seg = kv.segment();
+
             int64_t overwrite_flag = std::holds_alternative<RefKey>(kv.variant_key()) ? 0 : MDB_NOOVERWRITE;
             try {
                 lmdb_client_->write(db_name, k, std::move(seg), txn, dbi, overwrite_flag);
@@ -139,9 +140,8 @@ void LmdbStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor
                     ARCTICDB_SUBSAMPLE(LmdbStorageVisitSegment, 0)
                     std::any keepalive;
                     segment.value().set_keepalive(std::any(std::move(txn)));
+                    ARCTICDB_DEBUG(log::storage(), "Read key {}: {}, with {} bytes of data", variant_key_type(k), variant_key_view(k), segment.value().size());
                     visitor(k, std::move(segment.value()));
-                    ARCTICDB_DEBUG(log::storage(), "Read key {}: {}, with {} bytes of data", variant_key_type(k),
-                                   variant_key_view(k), segment.value().total_segment_size());
                 } else {
                     ARCTICDB_DEBUG(log::storage(), "Failed to find segment for key {}", variant_key_view(k));
                     failed_reads.push_back(k);

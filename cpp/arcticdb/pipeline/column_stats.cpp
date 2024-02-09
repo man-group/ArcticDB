@@ -14,6 +14,7 @@ namespace arcticdb {
 SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& segments) {
     SegmentInMemory merged;
     merged.init_column_map();
+    merged.descriptor().set_index(IndexDescriptorImpl{0, IndexDescriptor::Type::ROWCOUNT});
 
     // Maintain the order of the columns in the input segments
     ankerl::unordered_dense::map<std::string, size_t> field_name_to_index;
@@ -22,6 +23,7 @@ SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& 
     for (auto &segment : segments) {
         for (const auto &field: segment.descriptor().fields()) {
             auto new_type = field.type();
+
             if (auto it = field_name_to_index.find(std::string{field.name()}); it != field_name_to_index.end()) {
                 auto &merged_type = type_descriptors.at(field_name_to_index.at(std::string{field.name()}));
                 auto opt_common_type = has_valid_common_type(merged_type, new_type);

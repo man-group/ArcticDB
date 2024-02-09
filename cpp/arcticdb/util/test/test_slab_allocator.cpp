@@ -38,15 +38,12 @@ pointer_set<MemoryChunk> call_alloc(MemoryChunk& mc, std::size_t n, int64_t& exe
         mcps.insert(mc.allocate());
 
     auto time_end = std::chrono::high_resolution_clock::now();
-
-    execution_time_ms =
-            std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_begin).count();
+    execution_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_begin).count();
     return mcps;
 }
 
 template <typename MemoryChunk>
-void check_sets(const pointer_set<MemoryChunk>& s1, const pointer_set<MemoryChunk>& s2)
-{
+void check_sets(const pointer_set<MemoryChunk>& s1, const pointer_set<MemoryChunk>& s2) {
     auto end = std::cend(s2);
     for (auto* p : s1)
         if (s2.find(p) != end)
@@ -54,8 +51,7 @@ void check_sets(const pointer_set<MemoryChunk>& s1, const pointer_set<MemoryChun
 }
 
 template <typename MemoryChunk>
-void run_test(MemoryChunk& mc, unsigned int K)
-{
+void run_test(MemoryChunk& mc, unsigned int K) {
     std::vector<int64_t> execution_times(num_threads);
     int64_t avg = 0;
     for (size_t k = 0; k < K; ++k ) {
@@ -72,7 +68,6 @@ void run_test(MemoryChunk& mc, unsigned int K)
             t.wait();
 
         for (size_t i = 0; i < num_threads; ++i) {
-//            std::cout << "Execution time for thread " << i << ": " << execution_times[ i ] << " ms\n";
             avg += execution_times[i] ;
         }
 
@@ -139,7 +134,6 @@ TEST(SlabAlloc, Integer) {
         ASSERT_EQ(*p, i);
         mc128.deallocate(p);
     }
-
 }
 
 TEST(SlabAlloc, Char32) {

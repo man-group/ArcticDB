@@ -135,7 +135,7 @@ inline void dump_bitvector(const util::BitMagic& bv) {
         vals.push_back(idx);
         ++en;
     }
-    log::version().info("Bit vector values {}", vals);
+    ARCTICDB_DEBUG(log::version(), "Bit vector values {}", vals);
 }
 
 }

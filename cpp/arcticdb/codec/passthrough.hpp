@@ -19,7 +19,6 @@ namespace arcticdb::detail {
 
 template<template<typename> class BlockType, class TD>
 struct PassthroughEncoderV1 {
-
     using Opts = arcticdb::proto::encoding::VariantCodec::Passthrough;
 
     static size_t max_compressed_size(const BlockType<TD> &block ) {
@@ -35,7 +34,12 @@ struct PassthroughEncoderV1 {
     }
 
     template <typename EncodedFieldType>
-    static void encode(const Opts&, const BlockType<TD>& block, EncodedFieldType& field, Buffer& out, std::ptrdiff_t& pos) {
+    static void encode(
+            const Opts&,
+            const BlockType<TD>& block,
+            EncodedFieldType& field,
+            Buffer& out,
+            std::ptrdiff_t& pos) {
         using namespace arcticdb::entity;
         using Helper = CodecHelper<TD>;
         using T = typename Helper::T;
@@ -46,19 +50,20 @@ struct PassthroughEncoderV1 {
 
         if constexpr (Helper::dim == entity::Dimension::Dim0) {
             // Only store data, no shapes since dimension is 0
-            auto v_block = Helper::scalar_block(block_row_count);
-            helper.ensure_buffer(out, pos, v_block.bytes_);
+            auto scalar_block = Helper::scalar_block(block_row_count);
+            helper.ensure_buffer(out, pos, scalar_block.bytes_);
 
             // doing copy + hash in one pass, this might have a negative effect on perf
             // since the hashing is path dependent. This is a toy example though so not critical
-            T *t_out = out.ptr_cast<T>(pos, v_block.bytes_);
-            encode_block(d, v_block, helper.hasher_, t_out, pos);
+            T *t_out = out.ptr_cast<T>(pos, scalar_block.bytes_);
+            encode_block(d, scalar_block, helper.hasher_, t_out, pos);
 
             auto *nd_array = field.mutable_ndarray();
             auto total_row_count = nd_array->items_count() + block_row_count;
             nd_array->set_items_count(total_row_count);
-            auto values_pb = nd_array->add_values();
-            v_block.set_block_data(*values_pb, helper.hasher_.digest(), v_block.bytes_);
+            auto values = nd_array->add_values(EncodingVersion::V1);
+            (void)values->mutable_codec()->mutable_passthrough();
+            scalar_block.set_block_data(*values, helper.hasher_.digest(), scalar_block.bytes_);
         } else {
             auto helper_array_block = Helper::nd_array_block(block_row_count, block.shapes());
             helper.ensure_buffer(out, pos, helper_array_block.shapes_.bytes_ + helper_array_block.values_.bytes_);
@@ -73,12 +78,16 @@ struct PassthroughEncoderV1 {
             encode_block(d, helper_array_block.values_, helper.hasher_, t_out, pos);
             auto field_nd_array = field.mutable_ndarray();
             // Important: In case V2 EncodedField is used shapes must be added before values.
-            auto shapes_pb = field_nd_array->add_shapes();
-            auto values_pb = field_nd_array->add_values();
+            auto shapes = field_nd_array->add_shapes();
+            (void)shapes->mutable_codec()->mutable_passthrough();
+
+            auto values = field_nd_array->add_values(EncodingVersion::V1);
+            (void)values->mutable_codec()->mutable_passthrough();
+
             helper_array_block.update_field_size(*field_nd_array);
             helper_array_block.set_block_data(
-				shapes_pb,
-				values_pb,
+                shapes,
+				values,
 				shape_hash,
 				helper_array_block.shapes_.bytes_,
 				helper.hasher_.digest(),
@@ -87,7 +96,7 @@ struct PassthroughEncoderV1 {
     }
 private:
     template<class T>
-    static void encode_block(const T *in, BlockProtobufHelper &block_utils, HashAccum &hasher, T *out, std::ptrdiff_t &pos) {
+    static void encode_block(const T *in, BlockDataHelper &block_utils, HashAccum &hasher, T *out, std::ptrdiff_t &pos) {
         memcpy(out, in, block_utils.bytes_);
         hasher(in, block_utils.bytes_ / sizeof(T));
         pos += static_cast<ssize_t>(block_utils.bytes_);
@@ -100,7 +109,6 @@ private:
 /// @see arcticdb::ColumnEncoder2 arcticdb::detail::GenericBlockEncoder2
 template<template<typename> class BlockType, class TD>
 struct PassthroughEncoderV2 {
-
     using Opts = arcticdb::proto::encoding::VariantCodec::Passthrough;
 
     static size_t max_compressed_size(const BlockType<TD> &block) {
@@ -109,12 +117,11 @@ struct PassthroughEncoderV2 {
 
     template <typename EncodedBlockType>
     static void encode(
-        const Opts&,
-        const BlockType<TD> &block,
-        Buffer &out,
-        std::ptrdiff_t &pos,
-        EncodedBlockType* encoded_block
-    ) {
+            const Opts&,
+            const BlockType<TD> &block,
+            Buffer &out,
+            std::ptrdiff_t &pos,
+            EncodedBlockType* encoded_block) {
         using namespace arcticdb::entity;
         using Helper = CodecHelper<TD>;
         using T = typename Helper::T;
@@ -131,16 +138,16 @@ struct PassthroughEncoderV2 {
         encoded_block->set_in_bytes(data_byte_size);
         encoded_block->set_out_bytes(data_byte_size);
         encoded_block->set_hash(helper.hasher_.digest());
+        (void)encoded_block->mutable_codec()->mutable_passthrough();
     }
 private:
     template<class T>
     static void encode_block(
-        const T* in,
-        size_t in_byte_size,
-        HashAccum& hasher,
-        T* out,
-        std::ptrdiff_t& pos
-    ) {
+            const T* in,
+            size_t in_byte_size,
+            HashAccum& hasher,
+            T* out,
+            std::ptrdiff_t& pos) {
         memcpy(out, in, in_byte_size);
         hasher(in, in_byte_size / sizeof(T));
         pos += static_cast<ssize_t>(in_byte_size);
@@ -149,10 +156,12 @@ private:
 
 struct PassthroughDecoder {
     template<typename T>
-    static void decode_block(const std::uint8_t *in, std::size_t in_bytes, T *t_out,
-                             std::size_t out_bytes) {
-        arcticdb::util::check_arg(in_bytes == out_bytes, "expected  in_bytes==out_bytes, actual {} != {}", in_bytes,
-                                 out_bytes);
+    static void decode_block(
+            const std::uint8_t *in,
+            std::size_t in_bytes,
+            T *t_out,
+            std::size_t out_bytes) {
+        arcticdb::util::check_arg(in_bytes == out_bytes, "expected  in_bytes==out_bytes, actual {} != {}", in_bytes,out_bytes);
         memcpy(t_out, in, in_bytes);
     }
 };

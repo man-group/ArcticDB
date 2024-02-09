@@ -16,7 +16,7 @@ namespace arcticdb::pipelines::index {
 
 template <class IndexType>
 folly::Future<entity::AtomKey> write_index(
-    TimeseriesDescriptor &&metadata,
+   const TimeseriesDescriptor& metadata,
     std::vector<SliceAndKey> &&sk,
     const IndexPartialKey &partial_key,
     const std::shared_ptr<stream::StreamSink> &sink
@@ -31,14 +31,14 @@ folly::Future<entity::AtomKey> write_index(
 
 folly::Future<entity::AtomKey> write_index(
     const stream::Index& index,
-    TimeseriesDescriptor &&metadata,
+    const TimeseriesDescriptor& metadata,
     std::vector<SliceAndKey> &&sk,
     const IndexPartialKey &partial_key,
     const std::shared_ptr<stream::StreamSink> &sink
     ) {
     return util::variant_match(index, [&] (auto idx) {
         using IndexType = decltype(idx);
-        return write_index<IndexType>(std::move(metadata), std::move(sk), partial_key, sink);
+        return write_index<IndexType>(metadata, std::move(sk), partial_key, sink);
     });
 }
 
@@ -51,7 +51,7 @@ folly::Future<entity::AtomKey> write_index(
     auto offset = frame->offset;
     auto index = stream::index_type_from_descriptor(frame->desc);
     auto timeseries_desc = index_descriptor_from_frame(frame, offset);
-    return write_index(index, std::move(timeseries_desc), std::move(slice_and_keys), partial_key, sink);
+    return write_index(index, timeseries_desc, std::move(slice_and_keys), partial_key, sink);
 }
 
 folly::Future<entity::AtomKey> write_index(
@@ -86,7 +86,7 @@ TimeseriesDescriptor get_merged_tsd(
         const std::shared_ptr<pipelines::InputTensorFrame>& new_frame) {
     auto existing_descriptor = existing_tsd.as_stream_descriptor();
     auto merged_descriptor = existing_descriptor;
-    if (existing_tsd.proto().total_rows() == 0){
+    if (existing_tsd.total_rows() == 0){
         // If the existing dataframe is empty, we use the descriptor of the new_frame
         merged_descriptor = new_frame->desc;
     }
@@ -116,7 +116,7 @@ TimeseriesDescriptor get_merged_tsd(
             }
         }
     }
-    merged_descriptor.set_sorted(deduce_sorted(existing_descriptor.get_sorted(), new_frame->desc.get_sorted()));
+    merged_descriptor.set_sorted(deduce_sorted(existing_descriptor.sorted(), new_frame->desc.sorted()));
     return make_timeseries_descriptor(
             row_count,
             std::move(merged_descriptor),

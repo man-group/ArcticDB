@@ -32,7 +32,7 @@ using CollectionType = std::vector<SymbolListEntry>;
 constexpr std::string_view version_string = "_v2_";
 constexpr NumericIndex version_identifier = std::numeric_limits<NumericIndex>::max();
 
-SymbolListData::SymbolListData(std::shared_ptr<VersionMap> version_map, entity::StreamId type_indicator, uint32_t seed) :
+SymbolListData::SymbolListData(std::shared_ptr<VersionMap> version_map, StreamId type_indicator, uint32_t seed) :
     type_holder_(std::move(type_indicator)),
     seed_(seed),
     version_map_(std::move(version_map)){
@@ -160,7 +160,6 @@ T scalar_at(const SegmentInMemory& seg, position_t row, position_t col){
     return scalar.value();
 }
 
-
 StreamId stream_id_from_segment(
         DataType data_type,
         const SegmentInMemory& seg,
@@ -202,7 +201,7 @@ std::vector<SymbolListEntry> read_old_style_list_from_storage(const SegmentInMem
 
 std::vector<SymbolListEntry> read_new_style_list_from_storage(const SegmentInMemory& seg) {
     std::vector<SymbolListEntry> output;
-    if(seg.row_count() == 0)
+    if(seg.empty())
         return output;
 
     const auto data_type = get_symbol_data_type(seg);
@@ -316,7 +315,6 @@ bool contains_unknown_reference_ids(const std::vector<SymbolEntryData>& updated)
     });
 }
 
-
 SymbolVectorResult cannot_validate_symbol_vector() {
     return {ProblematicResult{true}};
 }
@@ -378,8 +376,6 @@ ProblematicResult is_problematic(
 
     if(existing.reference_id_ < latest.reference_id_)
         return not_a_problem();
-
-
 
     if(all_same_action)
         return not_a_problem();
@@ -682,11 +678,6 @@ SegmentInMemory write_entries_to_symbol_segment(
 
 SegmentInMemory create_empty_segment(const StreamId& stream_id) {
     SegmentInMemory output{StreamDescriptor{stream_id}};
-    google::protobuf::Any any = {};
-    arcticdb::proto::descriptors::SymbolListDescriptor metadata;
-    metadata.set_enabled(true);
-    any.PackFrom(metadata);
-    output.set_metadata(std::move(any));
     return output;
 }
 
@@ -706,6 +697,7 @@ VariantKey write_symbols(
         segment = write_entries_to_symbol_segment(stream_id, type_holder, symbols);
     }
 
+    ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Writing symbol segment with stream id {} and {} rows", stream_id, segment.row_count());
     return store->write_sync(KeyType::SYMBOL_LIST, 0, stream_id, NumericIndex{ 0 }, NumericIndex{ 0 }, std::move(segment));
 }
 

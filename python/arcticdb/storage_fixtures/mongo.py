@@ -111,6 +111,7 @@ class ManagedMongoDBServer(StorageFixtureFactory):
         self._data_dir = data_dir or tempfile.mkdtemp("ManagedMongoDBServer")
         self._port = port or get_ephemeral_port(5)
         self._executable = executable
+        self._client = None
 
     def _safe_enter(self):
         from pymongo import MongoClient

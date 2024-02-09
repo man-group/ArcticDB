@@ -13,6 +13,7 @@
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/storage/test/in_memory_store.hpp>
 #include <arcticdb/pipeline/index_writer.hpp>
+#include <arcticdb/codec/codec.hpp>
 
 namespace arcticdb {
 using namespace arcticdb::pipelines;
@@ -20,7 +21,7 @@ using namespace arcticdb::pipelines;
 std::pair<TimeseriesDescriptor , std::vector<SliceAndKey>> get_sample_slice_and_key(StreamId stream_id, VersionId version_id, size_t col_slices = 1, size_t row_slices = 10) {
     StreamDescriptor stream_desc{
         stream_id,
-        IndexDescriptor{1, IndexDescriptor::TIMESTAMP}
+        IndexDescriptorImpl{1, IndexDescriptorImpl::Type::TIMESTAMP}
     };
 
     stream_desc.add_field(scalar_field(DataType::NANOSECONDS_UTC64, "time"));
@@ -77,11 +78,11 @@ TEST(IndexFilter, Static) {
     const auto stream_id = StreamId{"thing"};
     const auto version_id = VersionId{0};
 
-    auto [metadata, slice_and_keys] = get_sample_slice_and_key(stream_id, version_id);
+    auto [tsd, slice_and_keys] = get_sample_slice_and_key(stream_id, version_id);
 
     const IndexPartialKey& partial_key{stream_id, version_id};
     auto mock_store = std::make_shared<InMemoryStore>();
-    index::IndexWriter<stream::RowCountIndex> writer(mock_store, partial_key, std::move(metadata));
+    index::IndexWriter<stream::RowCountIndex> writer(mock_store, partial_key, std::move(tsd));
 
     for (auto &slice_and_key : slice_and_keys) {
         writer.add(slice_and_key.key(), slice_and_key.slice());
@@ -89,6 +90,7 @@ TEST(IndexFilter, Static) {
     auto key_fut = writer.commit();
     auto key = std::move(key_fut).get();
     auto seg = mock_store->read(key, storage::ReadKeyOpts{}).get();
+
     pipelines::index::IndexSegmentReader isr{std::move(seg.second)};
     auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor{isr.tsd().as_stream_descriptor()});
 

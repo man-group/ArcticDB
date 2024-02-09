@@ -28,10 +28,10 @@ public:
         index_(std::move(index)) {
     }
 
-    static FixedSchema default_schema(const Index &index) {
-        return util::variant_match(index, [](auto idx) {
+    static FixedSchema default_schema(const Index &index, const StreamId& stream_id) {
+        return util::variant_match(index, [&stream_id](auto idx) {
             using IndexType = std::remove_reference_t<decltype(idx)>;
-            return FixedSchema(StreamDescriptor(), IndexType::default_index());
+            return FixedSchema(StreamDescriptor(stream_id), IndexType::default_index());
         });
     }
 
@@ -84,10 +84,10 @@ public:
         index_(index) {
     }
 
-    static DynamicSchema default_schema(const Index &index) {
-        return util::variant_match(index, [](auto idx) {
+    static DynamicSchema default_schema(const Index &index, const StreamId& stream_id) {
+        return util::variant_match(index, [stream_id](auto idx) {
             using IndexType = std::remove_reference_t<decltype(idx)>;
-            return DynamicSchema(StreamDescriptor(), IndexType::default_index());
+            return DynamicSchema(StreamDescriptor(stream_id), IndexType::default_index());
         });
     }
 
