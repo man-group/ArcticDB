@@ -127,7 +127,7 @@ VariantData unary_comparator(const ColumnWithStrings& col, Func&& func) {
     constexpr auto sparse_missing_value_output = std::is_same_v<std::remove_reference_t<Func>, IsNullOperator>;
     details::visit_type(col.column_->type().data_type(), [&](auto col_tag) {
         using type_info = ScalarTypeInfo<decltype(col_tag)>;
-        Column::transform_to_bitset<typename type_info::TDT>(*(col.column_), output_bitset, sparse_missing_value_output, [&col, &func](auto input_value) -> bool {
+        Column::transform_to_bitset<typename type_info::TDT>(*(col.column_), output_bitset, sparse_missing_value_output, [&](auto input_value) -> bool {
             if constexpr (is_floating_point_type(type_info::data_type)) {
                 return func.apply(input_value);
             } else if constexpr (is_sequence_type(type_info::data_type)) {

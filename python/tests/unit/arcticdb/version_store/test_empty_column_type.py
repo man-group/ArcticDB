@@ -77,6 +77,50 @@ def empty_index(request):
     yield request.param
 
 
+def test_simple_empty_column(lmdb_version_store_empty_types_v1):
+    lib = lmdb_version_store_empty_types_v1
+    df = pd.DataFrame({"col": 2 * [None]})
+    lib.write("sym", df)
+    vit = lib.read("sym")
+    assert_frame_equal(vit.data, df)
+
+
+def test_integer_simple(lmdb_version_store_empty_types_v1):
+    lib = lmdb_version_store_empty_types_v1
+    lib.write("sym", pd.DataFrame({"col": 2 * [None]}))
+    int_dtype = 'int16'
+    df_non_empty = pd.DataFrame({"col": np.array([1,2,3], dtype=int_dtype)})
+    lib.append("sym", df_non_empty)
+    expected_result = pd.DataFrame({"col": np.array([0,0,1,2,3], dtype=int_dtype)})
+    assert_frame_equal(lib.read("sym").data, expected_result)
+    assert_frame_equal(
+        lib.read("sym", row_range=[0,2]).data,
+        pd.DataFrame({"col": np.array([0,0], dtype=int_dtype)})
+    )
+    assert_frame_equal(
+        lib.read("sym", row_range=[2,5]).data,
+        df_non_empty
+    )
+
+
+def test_integer_simple_dynamic(lmdb_version_store_empty_types_dynamic_schema_v1):
+    lib = lmdb_version_store_empty_types_dynamic_schema_v1
+    lib.write("sym", pd.DataFrame({"col": 2 * [None]}))
+    int_dtype = 'int16'
+    df_non_empty = pd.DataFrame({"col": np.array([1,2,3], dtype=int_dtype)})
+    lib.append("sym", df_non_empty)
+    expected_result = pd.DataFrame({"col": np.array([0,0,1,2,3], dtype=int_dtype)})
+    assert_frame_equal(lib.read("sym").data, expected_result)
+    assert_frame_equal(
+        lib.read("sym", row_range=[0,2]).data,
+        pd.DataFrame({"col": np.array([0,0], dtype=int_dtype)})
+    )
+    assert_frame_equal(
+        lib.read("sym", row_range=[2,5]).data,
+        df_non_empty
+    )
+
+
 class TestCanAppendToColumnWithNones:
     """
     Tests that it is possible to write a column containing None values and latter append to it. Initially the type of

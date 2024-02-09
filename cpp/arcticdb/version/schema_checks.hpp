@@ -33,13 +33,13 @@ inline IndexDescriptor::Type get_common_index_type(const IndexDescriptor::Type& 
     if (left == right) {
         return left;
     }
-    if (left == IndexDescriptor::EMPTY) {
+    if (left == IndexDescriptor::Type::EMPTY) {
         return right;
     }
-    if (right == IndexDescriptor::EMPTY) {
+    if (right == IndexDescriptor::Type::EMPTY) {
         return left;
     }
-    return IndexDescriptor::UNKNOWN;
+    return IndexDescriptor::Type::UNKNOWN;
 }
 
 inline void check_normalization_index_match(
@@ -53,20 +53,20 @@ inline void check_normalization_index_match(
     if (operation == UPDATE) {
         const bool new_is_timeseries = std::holds_alternative<TimeseriesIndex>(frame.index);
         util::check_rte(
-            (old_idx_kind == IndexDescriptor::TIMESTAMP || old_idx_kind == IndexDescriptor::EMPTY) && new_is_timeseries,
+            (old_idx_kind == IndexDescriptor::Type::TIMESTAMP || old_idx_kind == IndexDescriptor::Type::EMPTY) && new_is_timeseries,
             "Update will not work as expected with a non-timeseries index"
         );
     } else {
         const IndexDescriptor::Type common_index_type = get_common_index_type(old_idx_kind, new_idx_kind);
         if (empty_types) {
             normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
-                common_index_type != IndexDescriptor::UNKNOWN,
+                common_index_type != IndexDescriptor::Type::UNKNOWN,
                 "Cannot append {} index to {} index",
                 index_type_to_str(new_idx_kind),
                 index_type_to_str(old_idx_kind)
             );
         } else {
-            // (old_idx_kind == IndexDescriptor::TIMESTAMP && new_idx_kind == IndexDescriptor::ROWCOUNT) is left to preserve
+            // (old_idx_kind == IndexDescriptor::Type::TIMESTAMP && new_idx_kind == IndexDescriptor::Type::ROWCOUNT) is left to preserve
             // pre-empty index behavior with pandas 2, see test_empty_writes.py::test_append_empty_series. Empty pd.Series
             // have Rowrange index, but due to: https://github.com/man-group/ArcticDB/blob/bd1776291fe402d8b18af9fea865324ebd7705f1/python/arcticdb/version_store/_normalization.py#L545
             // it gets converted to DatetimeIndex (all empty indexes except categorical and multiindex are converted to datetime index
@@ -76,8 +76,8 @@ inline void check_normalization_index_match(
             // after we enable the empty index.
             const bool input_frame_is_series = frame.norm_meta.has_series();
             normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
-                common_index_type != IndexDescriptor::UNKNOWN ||
-                    (input_frame_is_series && old_idx_kind == IndexDescriptor::TIMESTAMP && new_idx_kind == IndexDescriptor::ROWCOUNT),
+                common_index_type != IndexDescriptor::Type::UNKNOWN ||
+                    (input_frame_is_series && old_idx_kind == IndexDescriptor::Type::TIMESTAMP && new_idx_kind == IndexDescriptor::Type::ROWCOUNT),
                 "Cannot append {} index to {} index",
                 index_type_to_str(new_idx_kind),
                 index_type_to_str(old_idx_kind)
@@ -91,7 +91,7 @@ inline bool columns_match(
     const StreamDescriptor& new_df_descriptor
 ) {
     const int index_field_size =
-        df_in_store_descriptor.index().type() == IndexDescriptor::EMPTY ? new_df_descriptor.index().field_count() : 0;
+        df_in_store_descriptor.index().type() == IndexDescriptor::Type::EMPTY ? new_df_descriptor.index().field_count() : 0;
     // The empty index is compatible with all other index types. Differences in the index fields in this case is
     // allowed. The index fields are always the first in the list.
     if (df_in_store_descriptor.fields().size() + index_field_size != new_df_descriptor.fields().size()) {

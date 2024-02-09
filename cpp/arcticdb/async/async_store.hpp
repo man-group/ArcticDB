@@ -338,7 +338,7 @@ std::vector<folly::Future<bool>> batch_key_exists(
 }
 
 
-    folly::Future<SliceAndKey> async_write(
+folly::Future<SliceAndKey> async_write(
             folly::Future<std::tuple<PartialKey, SegmentInMemory, pipelines::FrameSlice>> &&input_fut,
             const std::shared_ptr<DeDupMap> &de_dup_map) override {
         using KeyOptSegment = std::pair<VariantKey, std::optional<Segment>>;

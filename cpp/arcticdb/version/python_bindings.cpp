@@ -232,11 +232,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def_property_readonly("start_index", &DescriptorItem::start_index)
         .def_property_readonly("end_index", &DescriptorItem::end_index)
         .def_property_readonly("creation_ts", &DescriptorItem::creation_ts)
-        .def_property_readonly("timeseries_descriptor", [](const DescriptorItem& self) {
-            // FUTURE: Use std::optional monadic operations in C++23
-            auto opt_tsd = self.timeseries_descriptor();
-            return opt_tsd.has_value() ? python_util::pb_to_python(*opt_tsd) : pybind11::none();
-        });
+        .def_property_readonly("timeseries_descriptor", &DescriptorItem::timeseries_descriptor);
 
     py::class_<pipelines::FrameSlice, std::shared_ptr<pipelines::FrameSlice>>(version, "FrameSlice")
         .def_property_readonly("col_range", &pipelines::FrameSlice::columns)
@@ -762,6 +758,21 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
       .def("read_versioned_dataframe",
            &LocalVersionedEngine::read_dataframe_version_internal,
            py::call_guard<SingleThreadMutexHolder>(), "Read a dataframe from the store");
+
+    version.def("sorted_value_name", [] (SortedValue sorted_value) {
+        switch(sorted_value) {
+        case SortedValue::UNKNOWN:
+            return "UNKNOWN";
+        case SortedValue::ASCENDING:
+            return "ASCENDING";
+        case SortedValue::DESCENDING:
+            return "DESCENDING";
+        case SortedValue::UNSORTED:
+            return "UNSORTED";
+        default:
+            util::raise_rte("Unknown sorted value: {}", static_cast<uint8_t>(sorted_value));
+        }
+    });
 }
 
 } //namespace arcticdb::version_store

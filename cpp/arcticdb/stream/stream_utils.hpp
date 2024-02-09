@@ -368,9 +368,9 @@ inline std::set<StreamId> filter_by_regex(const std::set<StreamId>& results, con
     return filtered_results;
 }
 
-inline std::vector<std::string> get_index_columns_from_descriptor(const TimeseriesDescriptor& descriptor) {
-    const auto& norm_info = descriptor.proto().normalization();
-    const auto& stream_descriptor = descriptor.proto().stream_descriptor();
+inline std::vector<std::string_view> get_index_columns_from_descriptor(const TimeseriesDescriptor& tsd) {
+    const auto& norm_info = tsd.proto().normalization();
+    const auto& stream_descriptor = tsd.as_stream_descriptor();
     // For explicit integer indexes, the index is actually present in the first column even though the field_count
     // is 0.
     ssize_t index_till;
@@ -380,7 +380,7 @@ inline std::vector<std::string> get_index_columns_from_descriptor(const Timeseri
     else
         index_till = 1 + common.multi_index().field_count();  //# The value of field_count is len(index) - 1
 
-    std::vector<std::string> index_columns;
+    std::vector<std::string_view> index_columns;
     for(auto field_idx = 0; field_idx < index_till; ++field_idx)
         index_columns.push_back(stream_descriptor.fields(field_idx).name());
 

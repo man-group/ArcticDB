@@ -35,8 +35,7 @@ folly::Future<VariantKey> collect_and_commit(
     VersionId version_id,
     std::optional<IndexRange> specified_range,
     std::shared_ptr<StreamSink> store,
-    Verifier &&verifier,
-    google::protobuf::Any &&metadata) {
+    Verifier &&verifier) {
 
     // Shared ptr here is used to keep the futures alive until the collect future is ready
     auto commit_keys = std::make_shared<std::vector<folly::Future<VariantKey>>>(std::move(fut_keys));
@@ -71,7 +70,6 @@ folly::Future<VariantKey> collect_and_commit(
         idx_agg.add_key(to_atom(key));
     }
 
-    idx_agg.set_metadata(std::move(metadata));
     idx_agg.commit();
     util::check(index_key.valid(), "Empty key returned while committing index");
     return index_key;
@@ -133,8 +131,7 @@ class StreamWriter : boost::noncopyable {
             version_id_,
             specified_range_,
             store_,
-            std::move(verify),
-            google::protobuf::Any());
+            std::move(verify));
     }
 
     StreamId stream_id() const {

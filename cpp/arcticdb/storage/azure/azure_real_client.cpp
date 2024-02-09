@@ -51,24 +51,13 @@ void RealAzureClient::write_blob(
         const Azure::Storage::Blobs::UploadBlockBlobFromOptions& upload_option,
         unsigned int request_timeout) {
 
-    std::shared_ptr<Buffer> tmp;
-    auto hdr_size = segment.segment_header_bytes_size();
-    auto [dst, write_size] = segment.try_internal_write(tmp, hdr_size);
-    util::check(arcticdb::Segment::FIXED_HEADER_SIZE + hdr_size + segment.buffer().bytes() <= write_size,
-                "Size disparity, fixed header size {} + variable header size {} + buffer size {}  >= total size {}",
-                arcticdb::Segment::FIXED_HEADER_SIZE,
-                hdr_size,
-                segment.buffer().bytes(),
-                write_size);
+    auto [dst, write_size, buffer] = segment.serialize_header();
     ARCTICDB_SUBSAMPLE(AzureStorageUploadObject, 0)
     auto blob_client = container_client.GetBlockBlobClient(blob_name);
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Writing key '{}' with {} bytes of data",
                            blob_name,
-                           segment.total_segment_size(hdr_size));
+                           write_size);
     blob_client.UploadFrom(dst, write_size, upload_option, get_context(request_timeout));
-    ARCTICDB_RUNTIME_DEBUG(log::storage(), "Wrote key '{}' with {} bytes of data",
-                           blob_name,
-                           segment.total_segment_size(hdr_size));
 }
 
 Segment RealAzureClient::read_blob(

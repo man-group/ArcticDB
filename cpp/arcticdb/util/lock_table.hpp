@@ -40,7 +40,7 @@ struct ScopedLock {
 };
 
 class LockTable {
-    std::unordered_map<entity::StreamId, std::shared_ptr<Lock>> locks_;
+    std::unordered_map<StreamId, std::shared_ptr<Lock>> locks_;
     std::mutex mutex_;
 public:
     LockTable() = default;

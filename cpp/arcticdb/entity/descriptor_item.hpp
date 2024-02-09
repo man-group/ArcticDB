@@ -15,10 +15,11 @@
 namespace arcticdb {
 struct DescriptorItem {
     DescriptorItem(
-        entity::AtomKey &&key, 
+        entity::AtomKey &&key,
         std::optional<timestamp> start_index,
         std::optional<timestamp> end_index,
-        std::optional<arcticdb::proto::descriptors::TimeSeriesDescriptor>&& timeseries_descriptor) :
+        std::optional<TimeseriesDescriptor> timeseries_descriptor) :
+
         key_(std::move(key)),
         start_index_(start_index),
         end_index_(end_index),
@@ -30,13 +31,13 @@ struct DescriptorItem {
     entity::AtomKey key_;
     std::optional<timestamp> start_index_;
     std::optional<timestamp> end_index_;
-    std::optional<arcticdb::proto::descriptors::TimeSeriesDescriptor> timeseries_descriptor_;
-    
+    std::optional<TimeseriesDescriptor> timeseries_descriptor_;
+
     std::string symbol() const { return fmt::format("{}", key_.id()); }
     uint64_t version() const { return key_.version_id(); }
     timestamp creation_ts() const { return key_.creation_ts(); }
     std::optional<timestamp> start_index() const { return start_index_; }
     std::optional<timestamp> end_index() const { return end_index_; }
-    std::optional<arcticdb::proto::descriptors::TimeSeriesDescriptor> timeseries_descriptor() const { return timeseries_descriptor_; }
+    std::optional<TimeseriesDescriptor> timeseries_descriptor() const { return timeseries_descriptor_; }
 };
 }

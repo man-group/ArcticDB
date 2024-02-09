@@ -21,6 +21,7 @@
 
 #include <folly/Range.h>
 #include <folly/Function.h>
+#include <folly/ScopeGuard.h>
 
 #include <typeinfo>
 
@@ -88,7 +89,7 @@ class RowBuilder {
         return *this;
     }
 
-    std::optional<std::size_t> find_field(std::string_view field_name) const {
+    [[nodiscard]] std::optional<std::size_t> find_field(std::string_view field_name) const {
         return descriptor().find_field(field_name);
     }
 
@@ -154,7 +155,7 @@ class RowBuilder {
         aggregator_.set_string_list(pos, input);
     }
 
-    std::size_t nbytes() const {
+    [[nodiscard]] std::size_t nbytes() const {
         return std::size_t(nbytes_);
     }
 
@@ -162,12 +163,11 @@ class RowBuilder {
         return *aggregator_;
     }
 
-    const arcticdb::entity::StreamDescriptor &descriptor() const {
+    [[nodiscard]] const arcticdb::entity::StreamDescriptor &descriptor() const {
         return aggregator_.descriptor();
     }
 
   private:
-
     void reset() {
         nbytes_ = 0;
     }

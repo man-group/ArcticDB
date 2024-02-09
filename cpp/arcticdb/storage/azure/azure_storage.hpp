@@ -15,6 +15,7 @@
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/composite.hpp>
 #include <arcticdb/util/configs_map.hpp>
+#include <arcticdb/util/pb_util.hpp>
 #include <azure/core.hpp>
 #include <azure/storage/blobs.hpp>
 #include <cstdlib>

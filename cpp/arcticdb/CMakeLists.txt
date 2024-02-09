@@ -176,6 +176,7 @@ endif ()
 
 ## Core library without python bindings ##
 set(arcticdb_srcs
+        memory_layout.hpp
         # header files
         async/async_store.hpp
         async/batch_read_args.hpp
@@ -188,7 +189,10 @@ set(arcticdb_srcs
         codec/lz4.hpp
         codec/magic_words.hpp
         codec/passthrough.hpp
+        codec/protobuf_mappings.hpp
         codec/slice_data_sink.hpp
+        codec/segment_header.hpp
+        codec/segment_identifier.hpp
         codec/typed_block_encoder_impl.hpp
         codec/zstd.hpp
         column_store/block.hpp
@@ -277,6 +281,7 @@ set(arcticdb_srcs
         storage/azure/azure_mock_client.hpp
         storage/azure/azure_real_client.hpp
         storage/azure/azure_storage.hpp
+        storage/lmdb/lmdb.hpp
         storage/lmdb/lmdb_client_wrapper.hpp
         storage/lmdb/lmdb_mock_client.hpp
         storage/lmdb/lmdb_real_client.hpp
@@ -310,7 +315,7 @@ set(arcticdb_srcs
         stream/index.hpp
         stream/merge.hpp
         stream/merge.hpp
-        stream/merge.hpp util/ref_counted_map.hpp
+        stream/merge.hpp
         stream/protobuf_mappings.hpp
         stream/row_builder.hpp
         stream/schema.hpp
@@ -332,6 +337,7 @@ set(arcticdb_srcs
         util/container_filter_wrapper.hpp
         util/cursored_buffer.hpp
         util/cursor.hpp
+        util/cxx17_concepts.hpp
         util/decimal.hpp
         util/encoding_conversion.hpp
         util/exponential_backoff.hpp
@@ -352,8 +358,6 @@ set(arcticdb_srcs
         util/preconditions.hpp
         util/preprocess.hpp
         util/ranges_from_future.hpp
-        util/ref_counted_map.hpp
-        util/ref_counted_map.hpp
         util/regex_filter.hpp
         util/simple_string_hash.hpp
         util/slab_allocator.hpp
@@ -390,9 +394,10 @@ set(arcticdb_srcs
         codec/codec.cpp
         codec/encode_v1.cpp
         codec/encode_v2.cpp
-        codec/encoding_sizes.cpp
+        codec/encoded_field.cpp
+        codec/protobuf_mappings.cpp
         codec/segment.cpp
-        codec/variant_encoded_field_collection.cpp
+        codec/segment_header.cpp
         column_store/chunked_buffer.cpp
         column_store/column.cpp
         column_store/column_data.cpp
@@ -406,6 +411,7 @@ set(arcticdb_srcs
         entity/merge_descriptors.cpp
         entity/metrics.cpp
         entity/performance_tracing.cpp
+        entity/protobuf_mappings.cpp
         entity/types.cpp
         entity/type_utils.cpp
         entity/types_proto.cpp
@@ -455,6 +461,7 @@ set(arcticdb_srcs
         storage/mongo/mongo_mock_client.cpp
         storage/mongo/mongo_storage.cpp
         storage/s3/nfs_backed_storage.cpp
+        storage/s3/ec2_utils.cpp
         storage/s3/s3_api.cpp
         storage/s3/s3_real_client.cpp
         storage/s3/s3_mock_client.cpp
@@ -465,6 +472,7 @@ set(arcticdb_srcs
         stream/append_map.cpp
         stream/index.cpp
         stream/piloted_clock.cpp
+        stream/protobuf_mappings.cpp
         toolbox/library_tool.cpp
         util/allocator.cpp
         util/buffer_pool.cpp
@@ -488,8 +496,7 @@ set(arcticdb_srcs
         version/version_utils.cpp
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
-        storage/s3/ec2_utils.cpp
-        storage/lmdb/lmdb.hpp util/cxx17_concepts.hpp)
+        )
 
 if(${ARCTICDB_INCLUDE_ROCKSDB})
     list (APPEND arcticdb_srcs
@@ -807,7 +814,7 @@ if(${TEST})
             version/test/test_sorting_info_state_machine.cpp
             version/test/version_map_model.hpp
             storage/test/common.hpp
-    )
+            codec/test/test_encode_field_collection.cpp codec/test/test_segment_header.cpp codec/test/test_encoded_field.cpp)
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 

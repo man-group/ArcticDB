@@ -290,12 +290,10 @@ namespace {
 py::object get_metadata_from_segment(
     const SegmentInMemory& segment
 ) {
-    auto metadata_proto = segment.metadata();
     py::object pyobj;
-    if (metadata_proto) {
+    if (segment.has_user_metadata()) {
         arcticdb::proto::descriptors::UserDefinedMetadata user_meta_proto;
-        metadata_proto->UnpackTo(&user_meta_proto);
-        pyobj = python_util::pb_to_python(user_meta_proto);
+        pyobj = python_util::pb_to_python(segment.user_metadata());
     } else {
         pyobj = pybind11::none();
     }
@@ -882,7 +880,7 @@ std::vector<SnapshotVariantKey> ARCTICDB_UNUSED iterate_snapshot_tombstones (
             ARCTICDB_DEBUG(log::version(), "Processing {}", snap_tomb_key);
             std::vector<IndexTypeKey> indexes{};
             auto snap_seg = store->read_sync(snap_tomb_key).second;
-            auto before = candidates.size();
+            auto before ARCTICDB_UNUSED = candidates.size();
 
             for (size_t idx = 0; idx < snap_seg.row_count(); idx++) {
                 auto key = read_key_row(snap_seg, static_cast<ssize_t>(idx));
@@ -897,7 +895,7 @@ std::vector<SnapshotVariantKey> ARCTICDB_UNUSED iterate_snapshot_tombstones (
                 indexes.clear();
             }
 
-            log::version().info("Processed {} keys from snapshot {}. {} are unique.",
+            ARCTICDB_DEBUG(log::version(), "Processed {} keys from snapshot {}. {} are unique.",
                                 snap_seg.row_count(), variant_key_id(snap_tomb_key), candidates.size() - before);
             snap_tomb_keys.emplace_back(std::move(snap_tomb_key));
         });
@@ -1006,9 +1004,15 @@ namespace {
 py::object metadata_protobuf_to_pyobject(const std::optional<google::protobuf::Any>& metadata_proto) {
     py::object pyobj;
     if (metadata_proto) {
-        arcticdb::proto::descriptors::TimeSeriesDescriptor tsd;
-        metadata_proto->UnpackTo(&tsd);
-        pyobj = python_util::pb_to_python(tsd.user_meta());
+        if(metadata_proto->Is<arcticdb::proto::descriptors::TimeSeriesDescriptor>()) {
+            arcticdb::proto::descriptors::TimeSeriesDescriptor tsd;
+            metadata_proto->UnpackTo(&tsd);
+            pyobj = python_util::pb_to_python(tsd.user_meta());
+        } else {
+            arcticdb::proto::descriptors::FrameMetadata meta;
+            metadata_proto->UnpackTo(&meta);
+            pyobj = python_util::pb_to_python(meta.user_meta());
+        }
     }
     else {
         pyobj = pybind11::none();

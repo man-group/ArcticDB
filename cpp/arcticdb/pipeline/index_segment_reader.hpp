@@ -37,7 +37,6 @@ struct IndexSegmentReader {
         using std::swap;
 
         swap(left.seg_, right.seg_);
-        swap(left.tsd_, right.tsd_);
     }
 
     ARCTICDB_MOVE_ONLY_DEFAULT(IndexSegmentReader)
@@ -64,26 +63,25 @@ struct IndexSegmentReader {
 
     bool bucketize_dynamic() const;
 
-    SortedValue get_sorted() const {
-        return sorted_value_from_proto(tsd().proto().stream_descriptor().sorted());
+    SortedValue sorted() const {
+        return tsd().sorted();
     }
 
     void set_sorted(SortedValue sorted)  {
-        mutable_tsd().mutable_proto().mutable_stream_descriptor()->set_sorted(sorted_value_to_proto(sorted));
+        mutable_tsd().set_sorted(sorted);
     }
 
     const TimeseriesDescriptor& tsd() const {
-        return tsd_;
+        return seg_.index_descriptor();
     }
 
     TimeseriesDescriptor& mutable_tsd() {
-        return tsd_;
+        return seg_.mutable_index_descriptor();
     }
 
 private:
     mutable std::unordered_map<ColRange, std::shared_ptr<StreamDescriptor>, AxisRange::Hasher> descriptor_by_col_group_;
     SegmentInMemory seg_;
-    TimeseriesDescriptor tsd_;
 };
 
 struct IndexSegmentIterator {

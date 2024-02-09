@@ -15,14 +15,14 @@ static constexpr uint64_t NumericFlag = uint64_t(1) << 31;
 static_assert(NumericFlag > NumericMask);
 
 template<typename StorageType>
-uint64_t get_symbol_prefix(const entity::StreamId& stream_id) {
+uint64_t get_symbol_prefix(const StreamId& stream_id) {
     using InternalType = uint64_t;
     static_assert(sizeof(StorageType) <= sizeof(InternalType));
     constexpr size_t end = sizeof(InternalType);
     constexpr size_t begin = sizeof(InternalType) - sizeof(StorageType);
     StorageType data{};
     util::variant_match(stream_id,
-        [&data, begin, end] (const entity::StringId& string_id) {
+        [&] (const StringId& string_id) {
             auto* target = reinterpret_cast<char*>(&data);
             for(size_t p = begin, i = 0; p < end && i < string_id.size(); ++p, ++i) {
                 const auto c = string_id[i];
@@ -30,8 +30,8 @@ uint64_t get_symbol_prefix(const entity::StreamId& stream_id) {
                 target[p] = c;
             }
         },
-        [&data] (const entity::NumericId& numeric_id) {
-            util::check(numeric_id < static_cast<entity::NumericId>(NumericMask), "Numeric id too large: {}", numeric_id);
+        [&data] (const NumericId& numeric_id) {
+            util::check(numeric_id < static_cast<NumericId>(NumericMask), "Numeric id too large: {}", numeric_id);
             data &= NumericFlag;
             data &= numeric_id;
         }
@@ -49,7 +49,7 @@ struct TimeSymbol {
 
     IndexDataType data_ = 0UL;
 
-    TimeSymbol(const entity::StreamId& stream_id, entity::timestamp time) {
+    TimeSymbol(const StreamId& stream_id, entity::timestamp time) {
         set_data(stream_id, time);
     }
 
@@ -62,7 +62,7 @@ struct TimeSymbol {
     }
 
 private:
-    void set_data(const entity::StreamId& stream_id, entity::timestamp time) {
+    void set_data(const StreamId& stream_id, entity::timestamp time) {
         time <<= 32;
         auto prefix = get_symbol_prefix<uint32_t>(stream_id);
         data_ = time | prefix;

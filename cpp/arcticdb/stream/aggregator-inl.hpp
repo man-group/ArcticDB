@@ -16,15 +16,18 @@ void Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy>::end_row() {
     segment_.end_row();
     stats_.update(row_builder_.nbytes());
     if (segmenting_policy_(stats_)) {
-        commit_impl();
+        commit_impl(false);
     }
 }
 
 template<class Index, class Schema, class SegmentingPolicy, class DensityPolicy>
-inline void Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy>::commit_impl() {
+inline void Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy>::commit_impl(bool final) {
     // TODO critical section here in async scenario
     callback_(std::move(segment_));
     commits_count_++;
+    if(final)
+        return;
+
     segment_ = SegmentInMemory(schema_policy_.default_descriptor(), segmenting_policy_.expected_row_size(), false, SparsePolicy::allow_sparse);
     segment_.init_column_map();
     stats_.reset();
@@ -32,11 +35,18 @@ inline void Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy>::commit_i
 
 template<class Index, class Schema, class SegmentingPolicy, class DensityPolicy>
 inline void Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy>::commit() {
-    if (ARCTICDB_LIKELY(segment_.row_count() > 0 || segment_.metadata())) { // LIKELY
-//        segment_.end_sparse_columns();
-        commit_impl();
+    if (ARCTICDB_LIKELY(segment_.row_count() > 0 || segment_.metadata()) || segment_.has_index_descriptor()) {
+        commit_impl(false);
     }
 }
+
+template<class Index, class Schema, class SegmentingPolicy, class DensityPolicy>
+inline void Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy>::finalize() {
+    if (ARCTICDB_LIKELY(segment_.row_count() > 0 || segment_.metadata()) || segment_.has_index_descriptor()) {
+        commit_impl(true);
+    }
+}
+
 
 template<class Index, class Schema, class SegmentingPolicy, class DensityPolicy>
 inline void Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy>::clear() {

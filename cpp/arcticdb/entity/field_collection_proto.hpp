@@ -8,12 +8,12 @@
 #pragma once
 
 #include <arcticdb/entity/field_collection.hpp>
-#include <arcticdb/entity/types_proto.hpp>
+#include <descriptors.pb.h>
 
 namespace arcticdb {
 
 FieldCollection fields_from_proto(const arcticdb::proto::descriptors::StreamDescriptor& desc);
-void proto_from_fields(const FieldCollection& fields, arcticdb::proto::descriptors::StreamDescriptor& desc);
 
+void proto_from_fields(const FieldCollection& fields, arcticdb::proto::descriptors::StreamDescriptor& desc);
 
 } //namespace arcticdb

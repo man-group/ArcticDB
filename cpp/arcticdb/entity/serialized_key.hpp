@@ -46,12 +46,12 @@ inline VariantId variant_id_from_token(std::string_view strv, VariantType varian
     }
 }
 
-inline VariantType variant_type_from_index_type(IndexDescriptor::Type index_type) {
+inline VariantType variant_type_from_index_type(IndexDescriptorImpl::Type index_type) {
     switch (index_type) {
-        case IndexDescriptor::TIMESTAMP:
-        case IndexDescriptor::ROWCOUNT:
+        case IndexDescriptorImpl::Type::TIMESTAMP:
+        case IndexDescriptorImpl::Type::ROWCOUNT:
             return VariantType::NUMERIC_TYPE;
-        case IndexDescriptor::STRING:
+        case IndexDescriptorImpl::Type::STRING:
             return VariantType::STRING_TYPE;
         default:
             return VariantType::UNKNOWN_TYPE;
@@ -79,7 +79,7 @@ inline AtomKey key_from_old_style_bytes(const uint8_t *data, size_t size, KeyTyp
     auto cursor = std::string_view(reinterpret_cast<const char *>(data), size);
     auto arr = util::split_to_array<NumOldKeyFields>(cursor, OldKeyDelimiter);
     auto id_variant_type = variant_type_from_key_type(key_type);
-    auto index_type = IndexDescriptor::Type(util::num_from_strv(arr[int(OldKeyField::index_type)]));
+    auto index_type = IndexDescriptorImpl::Type(util::num_from_strv(arr[int(OldKeyField::index_type)]));
     auto index_variant_type = variant_type_from_index_type(index_type);
     return atom_key_from_tokens<OldKeyField>(arr, id_variant_type, index_variant_type, key_type);
 }
@@ -162,8 +162,8 @@ inline size_t max_id_size(const VariantId& id) {
 }
 
 inline size_t max_index_size(const IndexDescriptor& index) {
-    switch(index.type()) {
-    case IndexDescriptor::STRING:
+    switch(index.type_) {
+    case IndexDescriptor::Type::STRING:
         return max_string_size();
     default:
         return sizeof(uint64_t);
@@ -178,7 +178,7 @@ struct KeyDescriptor {
             format_type(format_type) {
     }
 
-    KeyDescriptor(const StringId& id, IndexDescriptor::Type index_type, FormatType format_type) :
+    KeyDescriptor(const StringId& id, IndexDescriptorImpl::Type index_type, FormatType format_type) :
             identifier(SerializedKeyIdentifier),
             id_type(variant_type_from_id(id)),
             index_type(to_type_char(index_type)),
@@ -187,13 +187,13 @@ struct KeyDescriptor {
     KeyDescriptor(const RefKey &key, FormatType format_type) :
             identifier(SerializedKeyIdentifier),
             id_type(variant_type_from_id(key.id())),
-            index_type(to_type_char(IndexDescriptor::UNKNOWN)),
+            index_type(to_type_char(IndexDescriptorImpl::Type::UNKNOWN)),
             format_type(format_type) {
     }
 
     char identifier;
     VariantType id_type;
-    IndexDescriptor::TypeChar index_type;
+    IndexDescriptorImpl::TypeChar index_type;
     FormatType format_type;
 };
 
