@@ -391,6 +391,7 @@ inline SortedValue deduce_sorted(SortedValue existing_frame, SortedValue input_f
     return final_state;
 }
 
+
 FrameAndDescriptor frame_and_descriptor_from_segment(SegmentInMemory&& seg);
 
 } // namespace arcticdb

@@ -55,7 +55,7 @@ class RowsFromSegIterator : public IndexRangeFilter {
 
             // Not filtering rows where we have a rowcount index - the assumption is that it's essentially an un-indexed blob
             // that we need to segment somehow.
-            auto accept = index_type == IndexDescriptor::ROWCOUNT || accept_index(pipelines::index::index_start_from_row(res.value(), index_type).value());
+            auto accept = index_type == IndexDescriptorImpl::Type::ROWCOUNT || accept_index(pipelines::index::index_start_from_row(res.value(), index_type).value());
             if (++row_id == seg_->row_count()) {
                 prev_seg_ = seg_;
                 seg_ = std::nullopt;

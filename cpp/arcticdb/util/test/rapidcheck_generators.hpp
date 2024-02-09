@@ -71,7 +71,7 @@ struct Arbitrary<arcticdb::entity::StreamDescriptor> {
         for (const auto& field_name: field_names) {
             field_descriptors.add_field(arcticdb::entity::scalar_field(*gen_numeric_datatype(), field_name));
         }
-        auto desc =stream_descriptor(arcticdb::entity::StreamId{id}, arcticdb::stream::RowCountIndex{}, arcticdb::fields_from_range(field_descriptors));
+        auto desc =stream_descriptor(arcticdb::StreamId{id}, arcticdb::stream::RowCountIndex{}, arcticdb::fields_from_range(field_descriptors));
         return gen::build<StreamDescriptor>(
             gen::set(&StreamDescriptor::data_, gen::just(desc.data_)),
             gen::set(&StreamDescriptor::fields_, gen::just(desc.fields_))

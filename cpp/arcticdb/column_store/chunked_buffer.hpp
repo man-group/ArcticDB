@@ -328,7 +328,7 @@ class ChunkedBufferImpl {
         bytes_ += size;
     }
 
-    bool empty() const { return bytes_ == 0; }
+    [[nodiscard]] bool empty() const { return bytes_ == 0; }
 
     void clear() {
         bytes_ = 0;

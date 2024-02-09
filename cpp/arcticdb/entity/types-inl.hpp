@@ -126,7 +126,31 @@ struct formatter<arcticdb::entity::TypeDescriptor> {
 };
 
 template<>
-struct formatter<arcticdb::entity::StreamId> {
+struct formatter<arcticdb::entity::Field> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const arcticdb::entity::Field &fd, FormatContext &ctx) const {
+        if (!fd.name().empty())
+            return format_to(ctx.out(), "FD<name={}, type={}>", fd.name(), fd.type());
+        else
+            return format_to(ctx.out(), "FD<type={}>", fd.type());
+    }
+};
+
+template<>
+struct formatter<arcticdb::entity::IndexDescriptorImpl> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const arcticdb::entity::IndexDescriptorImpl &idx, FormatContext &ctx) const {
+        return format_to(ctx.out(), "IDX<size={}, kind={}>", idx.field_count(), static_cast<char>(idx.type()));
+    }
+};
+template<>
+struct formatter<arcticdb::StreamId> {
     template<typename ParseContext>
     constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
 

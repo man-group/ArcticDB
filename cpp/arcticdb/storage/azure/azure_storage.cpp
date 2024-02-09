@@ -248,7 +248,7 @@ void do_iterate_type_impl(KeyType key_type,
         auto key_type_dir = key_type_folder(root_folder, key_type);
 
         KeyDescriptor key_descriptor(prefix,
-            is_ref_key_class(key_type) ? IndexDescriptor::UNKNOWN : IndexDescriptor::TIMESTAMP, FormatType::TOKENIZED);
+            is_ref_key_class(key_type) ? IndexDescriptorImpl::Type::UNKNOWN : IndexDescriptorImpl::Type::TIMESTAMP, FormatType::TOKENIZED);
         auto key_prefix = prefix_handler(prefix, key_type_dir, key_descriptor, key_type);
         const auto root_folder_size = key_type_dir.size() + 1 + bucketizer.bucketize_length(key_type);
 

@@ -505,7 +505,7 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
     SegmentInMemory seg;
     auto index_col = std::make_shared<Column>(make_scalar_type(grouping_data_type), grouping_map.size(), true, false);
     auto index_pos = seg.add_column(scalar_field(grouping_data_type, grouping_column_), index_col);
-    seg.descriptor().set_index(IndexDescriptor(0, IndexDescriptor::ROWCOUNT));
+    seg.descriptor().set_index(IndexDescriptorImpl(0, IndexDescriptorImpl::Type::ROWCOUNT));
 
     entity::details::visit_type(grouping_data_type, [&seg, &grouping_map, index_pos](auto data_type_tag) {
         using DataTypeTagType = decltype(data_type_tag);
@@ -650,9 +650,9 @@ Composite<EntityIds> MergeClause::process(Composite<EntityIds>&& entity_ids) con
             [](const std::unique_ptr<SegmentWrapper> &left,
                const std::unique_ptr<SegmentWrapper> &right) {
                 const auto left_index = index::index_value_from_row(left->row(),
-                                                                               IndexDescriptor::TIMESTAMP, 0);
+                                                                               IndexDescriptorImpl::Type::TIMESTAMP, 0);
                 const auto right_index = index::index_value_from_row(right->row(),
-                                                                                IndexDescriptor::TIMESTAMP, 0);
+                                                                                IndexDescriptorImpl::Type::TIMESTAMP, 0);
                 return left_index > right_index;
             };
 
@@ -756,7 +756,7 @@ Composite<EntityIds> ColumnStatsGenerationClause::process(Composite<EntityIds>&&
     end_index_col->set_row_data(0);
 
     SegmentInMemory seg;
-    seg.descriptor().set_index(IndexDescriptor(0, IndexDescriptor::ROWCOUNT));
+    seg.descriptor().set_index(IndexDescriptorImpl(0, IndexDescriptorImpl::Type::ROWCOUNT));
     seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, start_index_column_name), start_index_col);
     seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, end_index_column_name), end_index_col);
     for (const auto& agg_data: folly::enumerate(aggregators_data)) {

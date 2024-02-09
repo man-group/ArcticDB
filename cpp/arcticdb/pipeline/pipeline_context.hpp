@@ -39,12 +39,10 @@ struct PipelineContextRow {
     [[nodiscard]] const SliceAndKey& slice_and_key() const;
     SliceAndKey& slice_and_key();
     [[nodiscard]] const std::optional<util::BitSet>& get_selected_columns() const;
-    bool selected_columns(size_t n) const;
     bool fetch_index();
     [[nodiscard]] const StreamDescriptor& descriptor() const;
     void set_descriptor(StreamDescriptor&& desc);
-    void set_descriptor(std::shared_ptr<StreamDescriptor>&& desc);
-    void set_descriptor(const std::shared_ptr<StreamDescriptor>& desc);
+    void set_descriptor(const StreamDescriptor& desc);
     void set_compacted(bool val);
     [[nodiscard]] bool compacted() const;
     [[nodiscard]] bool has_string_pool() const;
@@ -122,7 +120,7 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
     std::vector<std::shared_ptr<StringPool>> string_pools_;
     std::optional<util::BitSet> selected_columns_;
     std::shared_ptr<FieldCollection> filter_columns_;
-    std::vector<std::shared_ptr<StreamDescriptor>> segment_descriptors_;
+    std::vector<StreamDescriptor> segment_descriptors_;
     std::optional<std::unordered_set<std::string_view>> filter_columns_set_;
     std::optional<SegmentInMemory> multi_key_;
     std::optional<util::BitSet> overall_column_bitset_;

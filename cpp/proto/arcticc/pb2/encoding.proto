@@ -26,7 +26,7 @@ message SegmentHeader {
         ROWCOUNT = 0;
         XX_HASH = 1;
     }
-    HashType hashing_algo = 6; // defaults to none
+    HashType hashing_algo = 6; // unused
     EncodedField metadata_field = 7;  // optional metadata encoding
     EncodedField string_pool_field = 8; // string pool
     bool compacted = 9; // is the segment the result of a compaction

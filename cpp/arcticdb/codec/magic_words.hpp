@@ -14,4 +14,5 @@ namespace arcticdb {
     using MetadataMagic = util::MagicNum<'M','e','t','a'>;
     using IndexMagic = util::MagicNum<'I','n','d','x'>;
     using ColumnMagic = util::MagicNum<'C','l','m','n'>;
+    using FrameDataMagic = util::MagicNum<'F','r', 'a', 'm'>;
 }

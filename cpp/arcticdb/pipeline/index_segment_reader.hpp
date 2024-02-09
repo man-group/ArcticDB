@@ -65,11 +65,11 @@ struct IndexSegmentReader {
     bool bucketize_dynamic() const;
 
     SortedValue get_sorted() const {
-        return sorted_value_from_proto(tsd().proto().stream_descriptor().sorted());
+        return tsd().sorted();
     }
 
     void set_sorted(SortedValue sorted)  {
-        mutable_tsd().mutable_proto().mutable_stream_descriptor()->set_sorted(sorted_value_to_proto(sorted));
+        mutable_tsd().set_sorted(sorted);
     }
 
     const TimeseriesDescriptor& tsd() const {
@@ -78,6 +78,10 @@ struct IndexSegmentReader {
 
     TimeseriesDescriptor& mutable_tsd() {
         return tsd_;
+    }
+
+    StreamDescriptor index_descriptor() const {
+        return {tsd_.data_, tsd_.fields_};
     }
 
 private:

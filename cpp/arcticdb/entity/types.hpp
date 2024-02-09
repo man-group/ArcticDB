@@ -9,13 +9,16 @@
 
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/constructors.hpp>
+#include <arcticdb/util/variant.hpp>
+#include <arcticdb/log/log.hpp>
+#include <google/protobuf/util/message_differencer.h>
+#include <arcticdb/memory_layout.hpp>
 
 #include <cstdint>
 #include <vector>
 #include <string>
 #include <type_traits>
 #include <variant>
-
 
 #ifdef _WIN32
 // `ssize_t` is defined in `sys/types.h` but it is not ISO C (it simply is POSIX), hence its is not defined natively by MSVC.
@@ -24,20 +27,22 @@
 using ssize_t = SSIZE_T;
 #endif
 
-namespace arcticdb::entity {
+#include <descriptors.pb.h>
 
-enum class SortedValue : uint8_t {
-    UNKNOWN = 0,
-    UNSORTED = 1,
-    ASCENDING = 2,
-    DESCENDING = 3,
-};
+namespace arcticdb::proto {
+    namespace descriptors = arcticc::pb2::descriptors_pb2;
+}
+
+namespace arcticdb {
 
 using NumericId = int64_t;
 using UnsignedId = uint64_t;
 using StringId = std::string;
 using VariantId = std::variant<NumericId, StringId, UnsignedId>;
 using StreamId = VariantId;
+
+namespace entity {
+
 using SnapshotId = VariantId;
 using VersionId = uint64_t;
 using SignedVersionId = int64_t;
@@ -512,6 +517,84 @@ struct ScalarTypeInfo {
     using RawType = typename TDT::DataTypeTag::raw_type;
 };
 
+<<<<<<< HEAD
+=======
+inline arcticdb::proto::descriptors::StreamDescriptor_FieldDescriptor field_proto(DataType dt, Dimension dim, std::string_view name) {
+    arcticdb::proto::descriptors::StreamDescriptor_FieldDescriptor output;
+    if(!name.empty())
+        output.set_name(name.data(), name.size());
+
+    auto output_desc = output.mutable_type_desc();
+    output_desc->set_dimension(static_cast<uint32_t>(dim));
+    output_desc->set_size_bits(static_cast<arcticdb::proto::descriptors::TypeDescriptor_SizeBits>(
+                                                  static_cast<std::uint8_t>(slice_bit_size(dt))));
+
+    output_desc->set_value_type(
+        static_cast<arcticdb::proto::descriptors::TypeDescriptor_ValueType>(
+            static_cast<std::uint8_t>(slice_value_type(dt))));
+
+    return output;
+}
+
+struct IndexDescriptorImpl : public IndexDescriptor {
+
+
+    using TypeChar = char;
+
+    IndexDescriptorImpl() = default;
+
+    IndexDescriptorImpl(uint32_t field_count, Type type) :
+        IndexDescriptor(type, field_count) {
+    }
+
+    [[nodiscard]] bool uninitialized() const {
+        return field_count() == 0 && type_ == Type::UNKNOWN;
+    }
+
+    [[nodiscard]] uint32_t field_count() const {
+        return field_count_;
+    }
+
+    [[nodiscard]] Type type() const {
+        return type_;
+    }
+
+    void set_type(Type type) {
+        type_ = type;
+    }
+
+    void set_field_count(uint32_t field_count) {
+        field_count_ = field_count;
+    }
+
+    ARCTICDB_MOVE_COPY_DEFAULT(IndexDescriptorImpl)
+
+    friend bool operator==(const IndexDescriptorImpl& left, const IndexDescriptorImpl& right) {
+        return left.type() == right.type() && left.field_count_ == right.field_count_;
+    }
+};
+
+constexpr IndexDescriptorImpl::TypeChar to_type_char(IndexDescriptorImpl::Type type) {
+    switch (type) {
+    case IndexDescriptorImpl::Type::TIMESTAMP:return 'T';
+    case IndexDescriptorImpl::Type::ROWCOUNT:return 'R';
+    case IndexDescriptorImpl::Type::STRING:return 'S';
+    case IndexDescriptorImpl::Type::UNKNOWN:return 'U';
+    default:util::raise_rte("Unknown index type: {}", int(type));
+    }
+}
+
+constexpr IndexDescriptorImpl::Type from_type_char(IndexDescriptorImpl::TypeChar type) {
+    switch (type) {
+    case 'T': return IndexDescriptorImpl::Type::TIMESTAMP;
+    case 'R': return IndexDescriptorImpl::Type::ROWCOUNT;
+    case 'S': return IndexDescriptorImpl::Type::STRING;
+    case 'U': return IndexDescriptorImpl::Type::UNKNOWN;
+    default:util::raise_rte("Unknown index type: {}", int(type));
+    }
+}
+
+>>>>>>> 59f95f03 (WIP descriptor changes)
 struct FieldRef {
     TypeDescriptor type_;
     std::string_view name_;
@@ -529,7 +612,10 @@ struct FieldRef {
     }
 };
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 59f95f03 (WIP descriptor changes)
 struct Field {
     uint32_t size_ = 0;
     TypeDescriptor type_;
@@ -630,16 +716,21 @@ inline bool operator!=(const Field& l, const Field& r) {
     return !(l == r);
 }
 
+<<<<<<< HEAD
 std::size_t sizeof_datatype(const TypeDescriptor& td);
 } // namespace arcticdb::entity
+=======
+} //namespace entity
+}// namespace arcticdb
+>>>>>>> 59f95f03 (WIP descriptor changes)
 
 // StreamId ordering - numbers before strings
 namespace std {
 template<>
-struct less<arcticdb::entity::StreamId> {
+struct less<arcticdb::StreamId> {
 
-    bool operator()(const arcticdb::entity::StreamId &left, const arcticdb::entity::StreamId &right) const {
-        using namespace arcticdb::entity;
+    bool operator()(const arcticdb::StreamId &left, const arcticdb::StreamId &right) const {
+        using namespace arcticdb;
         if (std::holds_alternative<NumericId>(left)) {
             if (std::holds_alternative<NumericId>(right))
                 return left < right;
@@ -653,7 +744,8 @@ struct less<arcticdb::entity::StreamId> {
         }
     }
 };
-}
+
+} // namespace std
 
 namespace fmt {
 
@@ -671,7 +763,7 @@ struct formatter<FieldRef> {
     }
 };
 
-}
+} //namespace fmt
 
 #define ARCTICDB_TYPES_H_
 #include "types-inl.hpp"

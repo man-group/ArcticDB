@@ -8,8 +8,9 @@
 #pragma once
 
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/codec/variant_encoded_field_collection.hpp>
-#include <arcticdb/pipeline/column_mapping.hpp>
+#include <arcticdb/column_store/chunked_buffer.hpp>
+#include <arcticdb/util/buffer_holder.hpp>
+#include <arcticdb/codec/segment_header.hpp>
 
 #include <folly/Poly.h>
 
@@ -31,7 +32,12 @@ struct ITypeHandler {
         void handle_type(
             const uint8_t*& source,
             uint8_t* dest,
+<<<<<<< HEAD
             const VariantField& encoded_field_info,
+=======
+            const EncodedFieldImpl& encoded_field_info,
+            const entity::TypeDescriptor& type_descriptor,
+>>>>>>> 59f95f03 (WIP descriptor changes)
             size_t dest_bytes,
             std::shared_ptr<BufferHolder> buffers,
             EncodingVersion encoding_version,

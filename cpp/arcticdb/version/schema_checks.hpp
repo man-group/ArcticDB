@@ -36,17 +36,17 @@ inline void check_normalization_index_match(NormalizationOperation operation,
     bool new_is_timeseries = std::holds_alternative<TimeseriesIndex>(frame.index);
 
     if (operation == UPDATE) {
-        util::check_rte(old_idx_kind == IndexDescriptor::TIMESTAMP && new_is_timeseries,
+        util::check_rte(old_idx_kind == IndexDescriptorImpl::Type::TIMESTAMP && new_is_timeseries,
                         "Update will not work as expected with a non-timeseries index");
     } else {
         // TODO: AN-722
         if (new_is_timeseries) {
-            if (old_idx_kind != IndexDescriptor::TIMESTAMP) {
+            if (old_idx_kind != IndexDescriptorImpl::Type::TIMESTAMP) {
                 log::version().warn("Appending a timeseries to a non-timeseries-indexed symbol may create a "
                                     "confusing index and cause problems later");
             }
         } else {
-            if (old_idx_kind != IndexDescriptor::ROWCOUNT) {
+            if (old_idx_kind != IndexDescriptorImpl::Type::ROWCOUNT) {
                 // Backwards compatibility
                 log::version().warn("Appending a non-timeseries-indexed data to a timeseries symbol is highly "
                                     "likely to cause corruption/unexpected behaviour.");

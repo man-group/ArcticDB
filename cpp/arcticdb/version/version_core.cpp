@@ -109,12 +109,12 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
 }
 
 namespace {
-IndexDescriptor::Proto check_index_match(const arcticdb::stream::Index& index, const IndexDescriptor::Proto& desc) {
+IndexDescriptorImpl::Proto check_index_match(const arcticdb::stream::Index& index, const IndexDescriptorImpl::Proto& desc) {
     if (std::holds_alternative<stream::TimeseriesIndex>(index))
-        util::check(desc.kind() == IndexDescriptor::TIMESTAMP,
+        util::check(desc.kind() == IndexDescriptorImpl::Type::TIMESTAMP,
                     "Index mismatch, cannot update a non-timeseries-indexed frame with a timeseries");
     else
-        util::check(desc.kind() == IndexDescriptor::ROWCOUNT,
+        util::check(desc.kind() == IndexDescriptorImpl::Type::ROWCOUNT,
                     "Index mismatch, cannot update a timeseries with a non-timeseries-indexed frame");
 
     return desc;
@@ -298,7 +298,7 @@ VersionedItem delete_range_impl(
     return versioned_item;
 }
 
-void sorted_data_check_update(InputTensorFrame& frame, index::IndexSegmentReader& index_segment_reader){
+void sorted_data_check_update(InputTensorFrame& frame, const index::IndexSegmentReader& index_segment_reader){
     bool is_time_series = std::holds_alternative<stream::TimeseriesIndex>(frame.index);
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
         is_time_series,
@@ -329,7 +329,7 @@ VersionedItem update_impl(
     auto index_segment_reader = index::get_index_reader(*(update_info.previous_index_key_), store);
     util::check_rte(!index_segment_reader.is_pickled(), "Cannot update pickled data");
     auto index_desc = check_index_match(frame->index, index_segment_reader.tsd().proto().stream_descriptor().index());
-    util::check(index_desc.kind() == IndexDescriptor::TIMESTAMP, "Update not supported for non-timeseries indexes");
+    util::check(index_desc.kind() == IndexDescriptorImpl::Type::TIMESTAMP, "Update not supported for non-timeseries indexes");
     sorted_data_check_update(*frame, index_segment_reader);
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
     (void)check_and_mark_slices(index_segment_reader, dynamic_schema, false, std::nullopt, bucketize_dynamic);
@@ -826,7 +826,7 @@ void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<PipelineC
     // Checks both that the index ranges of incomplete segments do not overlap with one another, and that the earliest
     // timestamp in an incomplete segment is greater than the latest timestamp existing in the symbol in the case of a
     // parallel append
-    if (pipeline_context->descriptor().index().type() == IndexDescriptor::TIMESTAMP) {
+    if (pipeline_context->descriptor().index().type() == IndexDescriptorImpl::Type::TIMESTAMP) {
         std::optional<timestamp> last_existing_index_value;
         // Beginning of incomplete segments == beginning of all segments implies all segments are incompletes, so we are
         // writing, not appending

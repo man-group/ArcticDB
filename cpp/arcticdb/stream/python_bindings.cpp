@@ -66,20 +66,20 @@ void register_types(py::module &m) {
                               .def("name", &FieldRef::name)
     );
 
-    py::enum_<IndexDescriptor::Type>(m, "IndexKind")
-        .value("TIMESTAMP", IndexDescriptor::TIMESTAMP)
-        .value("STRING", IndexDescriptor::STRING)
-        .value("ROWCOUNT", IndexDescriptor::ROWCOUNT);
+    py::enum_<IndexDescriptorImpl::Type>(m, "IndexKind")
+        .value("TIMESTAMP", IndexDescriptorImpl::Type::TIMESTAMP)
+        .value("STRING", IndexDescriptorImpl::Type::STRING)
+        .value("ROWCOUNT", IndexDescriptorImpl::Type::ROWCOUNT);
 
-    python_util::add_repr(py::class_<IndexDescriptor>(m, "IndexDescriptor")
-                              .def(py::init<std::size_t, IndexDescriptor::Type>())
-                              .def("field_count", &IndexDescriptor::field_count)
-                              .def("kind", &IndexDescriptor::type)
+    python_util::add_repr(py::class_<IndexDescriptorImpl>(m, "IndexDescriptorImpl")
+                              .def(py::init<std::size_t, IndexDescriptorImpl::Type>())
+                              .def("field_count", &IndexDescriptorImpl::field_count)
+                              .def("kind", &IndexDescriptorImpl::type)
     );
 
     //TODO re-add at the end
    python_util::add_repr(py::class_<StreamDescriptor>(m, "StreamDescriptor")
-    .def(py::init([](StreamId stream_id, IndexDescriptor idx_desc, const std::vector<FieldRef>& fields) {
+    .def(py::init([](StreamId stream_id, IndexDescriptorImpl idx_desc, const std::vector<FieldRef>& fields) {
                                   auto index = stream::default_index_type_from_descriptor(idx_desc.proto());
                                   return util::variant_match(index, [&stream_id, &fields] (auto idx_type){
                                       return StreamDescriptor{index_descriptor(stream_id, idx_type, fields_from_range(fields))};

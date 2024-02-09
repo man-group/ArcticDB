@@ -7,19 +7,35 @@
 
 #pragma once
 
+#include <arcticdb/entity/types.hpp>
 #include <arcticdb/codec/encoded_field.hpp>
+#include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/util/buffer.hpp>
 
 namespace arcticdb {
 
+using namespace arcticdb::entity;
+
+constexpr TypeDescriptor encoded_fields_type_desc() {
+    using namespace arcticdb::entity;
+    return TypeDescriptor{
+        DataType::UINT8, Dimension::Dim1
+    };
+}
+
 class EncodedFieldCollection {
-    Buffer buffer_;
-    std::vector<size_t> offsets_;
+    ChunkedBuffer data_;
+    Buffer offsets_;
 
 public:
-    explicit EncodedFieldCollection(Buffer &&buffer) :
-        buffer_(std::move(buffer)) {
-        regenerate_offsets();
+    EncodedFieldCollection(ChunkedBuffer&& data, Buffer&& offsets) :
+        data_(std::move(data)),
+        offsets_(std::move(offsets)) {
+    }
+
+    EncodedFieldCollection(size_t bytes, size_t num_fields) :
+        data_(bytes),
+        offsets_(num_fields * sizeof(uint64_t)){
     }
 
     EncodedFieldCollection() = default;
@@ -27,36 +43,54 @@ public:
     ARCTICDB_MOVE_ONLY_DEFAULT(EncodedFieldCollection)
 
     [[nodiscard]] bool empty() const {
-        return buffer_.empty();
+        return data_.empty();
     }
 
-    [[nodiscard]] size_t get_offset(size_t pos) const {
-        util::check(pos < offsets_.size(), "Offset {} exceeds offsets size {}", pos, offsets_.size());
-        return offsets_[pos];
+    [[nodiscard]] size_t data_bytes() const {
+        return data_.bytes();
     }
 
-    [[nodiscard]] const EncodedField &at(size_t pos) const {
-        return *(buffer_.ptr_cast<EncodedField>(get_offset(pos), EncodedField::MinimumSize));
+    [[nodiscard]] const uint8_t* data_buffer() const {
+        return data_.data();
     }
 
-    [[nodiscard]] EncodedField &at(size_t pos) {
-        return *(buffer_.ptr_cast<EncodedField>(get_offset(pos), EncodedField::MinimumSize));
+    [[nodiscard]] size_t offset_bytes() const {
+        return offsets_.bytes();
+    }
+
+    [[nodiscard]] const uint8_t* offsets_buffer() const {
+        return offsets_.data();
+    }
+
+    [[nodiscard]] uint64_t get_offset(size_t pos) const {
+        return *offsets_.ptr_cast<uint64_t>(pos, sizeof(uint64_t));
+    }
+
+    [[nodiscard]] const EncodedFieldImpl &at(size_t pos) const {
+        return *reinterpret_cast<const EncodedFieldImpl*>(data_.data() + get_offset(pos));
+    }
+
+    [[nodiscard]] EncodedFieldImpl &at(size_t pos) {
+        return *reinterpret_cast<EncodedFieldImpl*>(data_.data() + get_offset(pos));
     }
 
     [[nodiscard]] size_t size() const {
-        return offsets_.size();
+        return offsets_.bytes() / sizeof(uint64_t);
     }
 
-    void regenerate_offsets() {
-        if (!offsets_.empty())
-            return;
-
-        auto field_pos = 0u;
-        while (field_pos < buffer_.bytes()) {
-            offsets_.push_back(field_pos);
-            field_pos += encoded_field_bytes(*reinterpret_cast<const EncodedField *>(buffer_.data() + field_pos));
-        }
+    [[nodiscard]] EncodedFieldImpl* add_field(size_t pos, uint64_t offset) {
+        *offsets_.ptr_cast<uint64_t>(pos, sizeof(uint64_t)) = offset;
+        return new (data_.data() + offset)EncodedFieldImpl;
     }
+
+    Buffer&& release_offsets() {
+        return std::move(offsets_);
+    }
+
+    ChunkedBuffer release_data() {
+        return std::move(data_);
+    }
+
 };
 
 } //namespace arcticdb

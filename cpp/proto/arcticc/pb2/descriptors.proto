@@ -309,6 +309,14 @@ message TimeSeriesDescriptor
     UserDefinedMetadata multi_key_meta = 7;
 }
 
+message FrameMetadata
+{
+    NormalizationMetadata normalization = 1;
+    UserDefinedMetadata user_meta = 2;
+    AtomKey next_key = 3;
+    UserDefinedMetadata multi_key_meta = 4;
+}
+
 message SymbolListDescriptor
 {
     bool enabled = 1;

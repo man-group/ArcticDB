@@ -630,12 +630,7 @@ void SegmentInMemoryImpl::sort(position_t idx) {
 }
 
 void SegmentInMemoryImpl::set_timeseries_descriptor(TimeseriesDescriptor&& tsd) {
-    index_fields_ = tsd.fields_ptr();
-    tsd_ = tsd.proto_ptr();
-    util::check(!tsd_->has_stream_descriptor() || tsd_->stream_descriptor().has_index(), "Stream descriptor without index in set_timeseries_descriptor");
-    google::protobuf::Any any;
-    any.PackFrom(tsd.proto());
-    set_metadata(std::move(any));
+    tsd_ = std::move(tsd);
 }
 
 void SegmentInMemoryImpl::set_metadata(google::protobuf::Any&& meta) {

@@ -222,7 +222,7 @@ std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
 
     if (idx_names.empty()) {
         res->index = stream::RowCountIndex();
-        res->desc.set_index_type(IndexDescriptor::ROWCOUNT);
+        res->desc.set_index_type(IndexDescriptorImpl::Type::ROWCOUNT);
     } else {
         util::check(idx_names.size() == 1, "Multi-indexed dataframes not handled");
         auto index_tensor = obj_to_tensor(idx_vals[0].ptr());
@@ -236,14 +236,14 @@ std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
         if (index_tensor.data_type() == DataType::NANOSECONDS_UTC64 || is_empty_type(index_tensor.data_type())) {
 
             res->desc.set_index_field_count(1);
-            res->desc.set_index_type(IndexDescriptor::TIMESTAMP);
+            res->desc.set_index_type(IndexDescriptorImpl::Type::TIMESTAMP);
 
             res->desc.add_scalar_field(index_tensor.dt_, index_column_name);
             res->index = stream::TimeseriesIndex(index_column_name);
             res->index_tensor = std::move(index_tensor);
         } else {
             res->index = stream::RowCountIndex();
-            res->desc.set_index_type(IndexDescriptor::ROWCOUNT);
+            res->desc.set_index_type(IndexDescriptorImpl::Type::ROWCOUNT);
             res->desc.add_scalar_field(index_tensor.dt_, index_column_name);
             res->field_tensors.push_back(std::move(index_tensor));
         }
@@ -284,7 +284,7 @@ std::shared_ptr<InputTensorFrame> py_none_to_frame() {
 
     // Fill index
     res->index = stream::RowCountIndex();
-    res->desc.set_index_type(IndexDescriptor::ROWCOUNT);
+    res->desc.set_index_type(IndexDescriptorImpl::Type::ROWCOUNT);
 
     // Fill tensors
     auto col_name = "bytes";

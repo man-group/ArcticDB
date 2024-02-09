@@ -35,14 +35,14 @@ inline std::vector<SliceAndKey> unfiltered_index(const index::IndexSegmentReader
 }
 
 template<typename RowType>
-std::optional<IndexValue> index_value_from_row(const RowType &row, IndexDescriptor::Type index_type, int field_num) {
+std::optional<IndexValue> index_value_from_row(const RowType &row, IndexDescriptorImpl::Type index_type, int field_num) {
     std::optional<IndexValue> index_value;
     switch (index_type) {
-    case IndexDescriptor::TIMESTAMP:
-        case IndexDescriptor::ROWCOUNT:
+    case IndexDescriptorImpl::Type::TIMESTAMP:
+        case IndexDescriptorImpl::Type::ROWCOUNT:
             index_value = row.template scalar_at<timestamp>(field_num);
             break;
-            case IndexDescriptor::STRING: {
+            case IndexDescriptorImpl::Type::STRING: {
                 auto opt = row.string_at(field_num);
                 index_value = opt ? std::make_optional<IndexValue>(std::string(opt.value())) : std::nullopt;
                 break;
@@ -54,7 +54,7 @@ std::optional<IndexValue> index_value_from_row(const RowType &row, IndexDescript
 }
 
 template<typename RowType>
-std::optional<IndexValue> index_start_from_row(const RowType &row, IndexDescriptor::Type index_type) {
+std::optional<IndexValue> index_start_from_row(const RowType &row, IndexDescriptorImpl::Type index_type) {
     return index_value_from_row(row, index_type, 0);
 }
 
@@ -63,11 +63,11 @@ template<typename SegmentType, typename FieldType=pipelines::index::Fields>
     auto index_type = seg.template scalar_at<uint8_t>(row_id, int(FieldType::index_type));
     IndexValue index_value;
     switch (index_type.value()) {
-    case IndexDescriptor::TIMESTAMP:
-        case IndexDescriptor::ROWCOUNT:
+    case IndexDescriptorImpl::Type::TIMESTAMP:
+        case IndexDescriptorImpl::Type::ROWCOUNT:
             index_value = seg.template scalar_at<timestamp>(row_id, int(field)).value();
             break;
-            case IndexDescriptor::STRING:
+            case IndexDescriptorImpl::Type::STRING:
                 index_value = std::string(seg.string_at(row_id, int(field)).value());
                 break;
                 default:

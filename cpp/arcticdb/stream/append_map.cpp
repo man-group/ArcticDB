@@ -440,7 +440,7 @@ std::vector<AppendMapEntry> get_incomplete_append_slices_for_stream_id(
     if(!entries.empty()) {
         auto index_desc = entries[0].descriptor().index();
 
-        if (index_desc.type() != IndexDescriptor::ROWCOUNT) {
+        if (index_desc.type() != IndexDescriptorImpl::Type::ROWCOUNT) {
             std::sort(std::begin(entries), std::end(entries));
         } else {
             // Can't sensibly sort rowcount indexes, so you'd better have written them in the right order

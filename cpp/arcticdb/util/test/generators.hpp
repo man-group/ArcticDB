@@ -408,7 +408,7 @@ struct SegmentToInputFrameAdapter {
         input_frame_->desc = segment_.descriptor();
         input_frame_->num_rows = segment_.row_count();
         size_t col{0};
-        if (segment_.descriptor().index().type() != IndexDescriptor::ROWCOUNT) {
+        if (segment_.descriptor().index().type() != IndexDescriptorImpl::Type::ROWCOUNT) {
             for (size_t i = 0; i < segment_.descriptor().index().field_count(); ++i) {
                 input_frame_->index_tensor = tensor_from_column(segment_.column(col));
                 ++col;

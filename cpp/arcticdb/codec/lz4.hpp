@@ -53,7 +53,7 @@ struct Lz4BlockEncoder {
         ARCTICDB_TRACE(log::storage(), "Block of size {} compressed to {} bytes", block_utils.bytes_, compressed_bytes);
         hasher(in, block_utils.count_);
         pos += ssize_t(compressed_bytes);
-        out_codec.mutable_lz4()->MergeFrom(opts);
+        copy_codec(*out_codec.mutable_lz4(), opts);
         return std::size_t(compressed_bytes);
     }
 };

@@ -17,7 +17,8 @@ namespace arcticdb {
         void handle_type(
             const uint8_t*& data,
             uint8_t* dest,
-            const VariantField& encoded_field,
+            const EncodedFieldImpl& encoded_field,
+            const entity::TypeDescriptor& type_descriptor,
             size_t dest_bytes,
             std::shared_ptr<BufferHolder> buffers,
             EncodingVersion encding_version,
@@ -33,7 +34,8 @@ namespace arcticdb {
         void handle_type(
             const uint8_t *&data,
             uint8_t *dest,
-            const VariantField &encoded_field,
+            const EncodedFieldImpl &encoded_field,
+            const entity::TypeDescriptor &type_descriptor,
             size_t dest_bytes,
             std::shared_ptr<BufferHolder> buffers,
             EncodingVersion encding_version,
@@ -45,13 +47,12 @@ namespace arcticdb {
 
     struct DecimalHandler {
         void handle_type(
-            const uint8_t*& data,
-            uint8_t* dest,
-            const VariantField& encoded_field,
-            size_t dest_bytes,
-            std::shared_ptr<BufferHolder> buffers,
-            EncodingVersion encding_version,
-            const ColumnMapping& m
+                const uint8_t*& data,
+                uint8_t* dest,
+                const EncodedFieldImpl& encoded_field,
+                const entity::TypeDescriptor& type_descriptor,
+                size_t dest_bytes,
+                std::shared_ptr<BufferHolder> buffers
         );
         int type_size() const;
     };
@@ -61,7 +62,8 @@ namespace arcticdb {
         void handle_type(
             const uint8_t*& data,
             uint8_t* dest,
-            const VariantField& encoded_field,
+            const EncodedFieldImpl& encoded_field,
+            const entity::TypeDescriptor& type_descriptor,
             size_t dest_bytes,
             std::shared_ptr<BufferHolder> buffers,
             EncodingVersion encding_version,

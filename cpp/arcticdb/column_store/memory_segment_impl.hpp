@@ -32,7 +32,7 @@ namespace arcticdb {
 class SegmentInMemoryImpl;
 
 namespace {
-inline std::shared_ptr<SegmentInMemoryImpl> allocate_sparse_segment(const StreamId& id, const IndexDescriptor& index);
+inline std::shared_ptr<SegmentInMemoryImpl> allocate_sparse_segment(const StreamId& id, const IndexDescriptorImpl& index);
 
 inline std::shared_ptr<SegmentInMemoryImpl> allocate_dense_segment(const StreamDescriptor& descriptor, size_t row_count);
 
@@ -417,12 +417,12 @@ public:
         row_id_++;
     }
 
-    std::shared_ptr<FieldCollection> index_fields() const {
-        return index_fields_;
+    const TimeseriesDescriptor& index_descriptor() const {
+        return *tsd_;
     }
 
-    void set_index_fields(std::shared_ptr<FieldCollection> index_fields) {
-        index_fields_ = std::move(index_fields);
+    void set_index_descriptor(TimeseriesDescriptor&& index_descriptor) {
+        tsd_ = std::move(index_descriptor);
     }
 
     void end_block_write(ssize_t size) {
@@ -765,15 +765,17 @@ public:
     std::shared_ptr<arcticdb::proto::descriptors::TimeSeriesDescriptor> timeseries_proto();
 
     TimeseriesDescriptor index_descriptor() {
-        return {timeseries_proto(), index_fields_};
+        util::check(tsd_.has_value(), "No index descriptor on segment");
+        return *tsd_;
     }
 
-    bool has_index_fields() const {
-        return static_cast<bool>(index_fields_);
+    bool has_index_descriptor() const {
+        return tsd_.has_value();
     }
 
-    FieldCollection&& detach_index_fields() {
-        return std::move(*index_fields_);
+    TimeseriesDescriptor&& detach_index_descriptor() {
+        util::check(tsd_.has_value(), "No index descriptor on segment");
+        return std::move(*tsd_);
     }
 
     void set_timeseries_descriptor(TimeseriesDescriptor&& tsd);
@@ -816,12 +818,12 @@ private:
     bool allow_sparse_ = false;
     bool compacted_ = false;
     util::MagicNum<'M', 'S', 'e', 'g'> magic_;
-    std::shared_ptr<FieldCollection> index_fields_;
-    std::shared_ptr<arcticdb::proto::descriptors::TimeSeriesDescriptor> tsd_;
+    std::optional<TimeseriesDescriptor> tsd_;
 };
 
+
 namespace {
-inline std::shared_ptr<SegmentInMemoryImpl> allocate_sparse_segment(const StreamId& id, const IndexDescriptor& index) {
+inline std::shared_ptr<SegmentInMemoryImpl> allocate_sparse_segment(const StreamId& id, const IndexDescriptorImpl& index) {
     return std::make_shared<SegmentInMemoryImpl>(StreamDescriptor{id, index}, 0, false, true);
 }
 

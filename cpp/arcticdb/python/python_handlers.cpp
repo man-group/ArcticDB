@@ -56,11 +56,11 @@ namespace arcticdb {
     void EmptyHandler::handle_type(
         const uint8_t*& input,
         uint8_t* dest,
-        const VariantField& variant_field,
+        const EncodedFieldImpl& field,
+        const entity::TypeDescriptor&,
         size_t dest_bytes,
         std::shared_ptr<BufferHolder>,
-        EncodingVersion,
-        const ColumnMapping& m
+        EncodingVersion encoding_version
     ) {
         ARCTICDB_SAMPLE(HandleEmpty, 0)
         util::check(dest != nullptr, "Got null destination pointer");
@@ -73,27 +73,20 @@ namespace arcticdb {
         );
         static_assert(get_type_size(DataType::EMPTYVAL) == sizeof(PyObject*));
 
-        m.dest_type_desc_.visit_tag([&](auto tag) {
-            util::default_initialize<decltype(tag)>(dest, dest_bytes);
-        });
+        if (encoding_version == EncodingVersion::V2)
+            util::check_magic<ColumnMagic>(input);
 
-        util::variant_match(variant_field, [&input](const auto& field) {
-            using EncodedFieldType = std::decay_t<decltype(*field)>;
-            if constexpr (std::is_same_v<EncodedFieldType, arcticdb::EncodedField>)
-                util::check_magic<ColumnMagic>(input);
-
-            if (field->encoding_case() == EncodedFieldType::kNdarray) {
-                const auto& ndarray_field = field->ndarray();
-                const auto num_blocks = ndarray_field.values_size();
-                util::check(num_blocks <= 1, "Unexpected number of empty type blocks: {}", num_blocks);
-                for (auto block_num = 0; block_num < num_blocks; ++block_num) {
-                    const auto& block_info = ndarray_field.values(block_num);
-                    input += block_info.out_bytes();
-                }
-            } else {
-                util::raise_error_msg("Unsupported encoding {}", *field);
+        if (field.encoding_case() == EncodedFieldType::NDARRAY) {
+            const auto &ndarray_field = field.ndarray();
+            const auto num_blocks = ndarray_field.values_size();
+            util::check(num_blocks <= 1, "Unexpected number of empty type blocks: {}", num_blocks);
+            for (auto block_num = 0; block_num < num_blocks; ++block_num) {
+                const auto &block_info = ndarray_field.values(block_num);
+                input += block_info.out_bytes();
             }
-        });
+        } else {
+            util::raise_rte("Unsupported encoding {}", field);
+        }
     }
 
     int EmptyHandler::type_size() const {
@@ -105,15 +98,14 @@ namespace arcticdb {
     }
 
     void BoolHandler::handle_type(
-        const uint8_t*& data,
-        uint8_t* dest,
-        const VariantField& encoded_field_info,
-        size_t,
-        std::shared_ptr<BufferHolder>,
-        EncodingVersion encding_version,
-        const ColumnMapping& m
+            const uint8_t*& data,
+            uint8_t* dest,
+            const EncodedFieldImpl& field,
+            const entity::TypeDescriptor& type_descriptor,
+            size_t dest_bytes,
+            std::shared_ptr<BufferHolder>,
+            EncodingVersion encding_version
     ) {
-        std::visit([&](const auto& field){
             ARCTICDB_SAMPLE(HandleBool, 0)
             util::check(dest != nullptr, "Got null destination pointer");
             util::check(field->has_ndarray(), "Bool handler expected array");
@@ -159,12 +151,19 @@ namespace arcticdb {
     void ArrayHandler::handle_type(
         const uint8_t*& data,
         uint8_t* dest,
+<<<<<<< HEAD
         const VariantField& encoded_field_info,
         size_t,
+=======
+        const EncodedFieldImpl& field,
+        const entity::TypeDescriptor& type_descriptor,
+        size_t dest_bytes,
+>>>>>>> 59f95f03 (WIP descriptor changes)
         std::shared_ptr<BufferHolder> buffers,
         EncodingVersion encoding_version,
         const ColumnMapping& m
     ) {
+<<<<<<< HEAD
         util::variant_match(encoded_field_info, [&](auto field){
             ARCTICDB_SAMPLE(HandleArray, 0)
             util::check(field->has_ndarray(), "Expected ndarray in array object handler");
@@ -216,8 +215,60 @@ namespace arcticdb {
                     }
 
                     ++last_row;
+=======
+        ARCTICDB_SAMPLE(HandleArray, 0)
+        util::check(field.has_ndarray(), "Expected ndarray in array object handler");
+        const auto row_count = dest_bytes / sizeof(PyObject*);
+
+        auto ptr_dest = reinterpret_cast<const PyObject**>(dest);
+        if(!field.ndarray().sparse_map_bytes()) {
+            log::version().info("Array handler has no values");
+            fill_with_none(ptr_dest, row_count);
+            return;
+        }
+        std::shared_ptr<Column> column = buffers->get_buffer(type_descriptor, true);
+        column->check_magic();
+        log::version().info("Column got buffer at {}", uintptr_t(column.get()));
+        auto bv = std::make_optional(util::BitSet{});
+        data += decode_field(type_descriptor, field, data, *column, bv, encoding_version);
+
+        auto last_row = 0u;
+        ARCTICDB_SUBSAMPLE(InitArrayAcquireGIL, 0)
+        const auto strides = static_cast<stride_t>(get_type_size(type_descriptor.data_type()));
+        const py::dtype py_dtype = generate_python_dtype(type_descriptor, strides);
+        type_descriptor.visit_tag([&] (auto tdt) {
+            const auto& blocks = column->blocks();
+            if(blocks.empty())
+                return;
+
+            auto block_it = blocks.begin();
+            const auto* shapes = column->shape_ptr();
+            auto block_pos = 0u;
+            const auto* ptr_src = (*block_it)->data();
+            constexpr stride_t stride = static_cast<TypeDescriptor>(tdt).get_type_byte_size();
+            for (auto en = bv->first(); en < bv->end(); ++en) {
+                const shape_t shape = shapes ? *shapes : 0;
+                const auto offset = *en;
+                ptr_dest = fill_with_none(ptr_dest, offset - last_row);
+                last_row = offset;
+                *ptr_dest++ = initialize_array(py_dtype,
+                    shape,
+                    stride,
+                    ptr_src + block_pos,
+                    column,
+                    initialize_array_mutex);
+                block_pos += shape * stride;
+                if(shapes) {
+                    ++shapes;
+>>>>>>> 59f95f03 (WIP descriptor changes)
                 }
-            });
+                if(block_it != blocks.end() && block_pos == (*block_it)->bytes() && ++block_it != blocks.end()) {
+                    ptr_src = (*block_it)->data();
+                    block_pos = 0;
+                }
+
+                ++last_row;
+            }
 
             ARCTICDB_SUBSAMPLE(ArrayIncNones, 0)
             fill_with_none(ptr_dest, m.num_rows_ - last_row);

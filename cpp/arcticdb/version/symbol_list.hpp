@@ -27,12 +27,12 @@ struct LoadResult;
 class Store;
 
 struct SymbolListData {
-    entity::StreamId type_holder_;
+    StreamId type_holder_;
     uint32_t seed_;
     std::shared_ptr<VersionMap> version_map_;
     std::atomic<bool> warned_expected_slowdown_ = false;
 
-    explicit SymbolListData(std::shared_ptr<VersionMap> version_map, entity::StreamId type_indicator = entity::StringId(),
+    explicit SymbolListData(std::shared_ptr<VersionMap> version_map, StreamId type_indicator = StringId(),
                             uint32_t seed = 0);
 };
 
@@ -48,7 +48,7 @@ enum class ActionType : uint8_t {
     DELETE
 };
 
-inline entity::StreamId action_id(ActionType action) {
+inline StreamId action_id(ActionType action) {
     switch (action) {
     case ActionType::ADD:
         return StringId{AddSymbol};
@@ -85,10 +85,10 @@ inline bool operator==(const SymbolEntryData& l, const SymbolEntryData& r) {
 }
 
 struct SymbolListEntry : public SymbolEntryData {
-    entity::StreamId stream_id_;
+    StreamId stream_id_;
 
     SymbolListEntry(
-        entity::StreamId stream_id,
+        StreamId stream_id,
         entity::VersionId reference_id,
         timestamp reference_time,
         ActionType action
@@ -149,25 +149,25 @@ ProblematicResult is_problematic(const std::vector<SymbolEntryData>& updated, ti
 class SymbolList {
     SymbolListData data_;
   public:
-    explicit SymbolList(std::shared_ptr<VersionMap> version_map, entity::StreamId type_indicator = entity::StringId(),
+    explicit SymbolList(std::shared_ptr<VersionMap> version_map, StreamId type_indicator = StringId(),
                         uint32_t seed = 0) :
         data_(std::move(version_map), std::move(type_indicator), seed) {
     }
 
-    std::set<entity::StreamId> load(const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store, bool no_compaction);
+    std::set<StreamId> load(const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store, bool no_compaction);
 
-    std::vector<entity::StreamId> get_symbols(const std::shared_ptr<Store>& store, bool no_compaction=false) {
+    std::vector<StreamId> get_symbols(const std::shared_ptr<Store>& store, bool no_compaction=false) {
         auto symbols = load(data_.version_map_, store, no_compaction);
         return {std::make_move_iterator(symbols.begin()), std::make_move_iterator(symbols.end())};
     }
 
-    std::set<entity::StreamId> get_symbol_set(const std::shared_ptr<Store>& store) {
+    std::set<StreamId> get_symbol_set(const std::shared_ptr<Store>& store) {
         return load(data_.version_map_, store, false);
     }
 
-    static void add_symbol(const std::shared_ptr<Store>& store, const entity::StreamId& symbol, entity::VersionId reference_id);
+    static void add_symbol(const std::shared_ptr<Store>& store, const StreamId& symbol, entity::VersionId reference_id);
 
-    static void remove_symbol(const std::shared_ptr<Store>& store, const entity::StreamId& symbol, entity::VersionId reference_id);
+    static void remove_symbol(const std::shared_ptr<Store>& store, const StreamId& symbol, entity::VersionId reference_id);
 
     static void clear(const std::shared_ptr<Store>& store);
 
@@ -183,13 +183,13 @@ folly::Future<std::vector<Store::RemoveKeyResultType>> delete_keys(
 struct WriteSymbolTask : async::BaseTask {
     const std::shared_ptr<Store> store_;
     std::shared_ptr<SymbolList> symbol_list_;
-    const entity::StreamId stream_id_;
+    const StreamId stream_id_;
     const entity::VersionId reference_id_;
 
     WriteSymbolTask(
             std::shared_ptr<Store> store,
             std::shared_ptr<SymbolList> symbol_list,
-            entity::StreamId stream_id,
+            StreamId stream_id,
             entity::VersionId reference_id) :
             store_(std::move(store)),
             symbol_list_(std::move(symbol_list)),

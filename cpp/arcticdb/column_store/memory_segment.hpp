@@ -99,28 +99,21 @@ public:
         return impl_->column_index(name);
     }
 
-    std::shared_ptr<FieldCollection> index_fields() const {
-        return impl_->index_fields();
-    }
-
-    bool has_index_fields() const {
-        return impl_->has_index_fields();
-    }
 
     TimeseriesDescriptor index_descriptor() {
         return impl_->index_descriptor();
     }
 
-    FieldCollection&& detach_index_fields() {
-        return impl_->detach_index_fields();
+    TimeseriesDescriptor&& detach_index_descriptor() {
+        return impl_->detach_index_descriptor();
     }
 
     std::shared_ptr<arcticdb::proto::descriptors::TimeSeriesDescriptor> timeseries_proto() {
         return impl_->timeseries_proto();
     }
 
-    void set_index_fields(std::shared_ptr<FieldCollection> fields) {
-        impl_->set_index_fields(std::move(fields));
+    void set_index_descripto(TimeseriesDescriptor index_descriptor) {
+        impl_->set_index_descriptor(std::move(index_descriptor));
     }
 
     void init_column_map() const  {

@@ -20,8 +20,8 @@ using namespace arcticdb::entity;
 using namespace arcticdb::stream;
 
 
-std::unordered_map<entity::StreamId, size_t> get_num_version_entries(const std::shared_ptr<Store>& store, size_t batch_size)  {
-    std::unordered_map<entity::StreamId, size_t> output;
+std::unordered_map<StreamId, size_t> get_num_version_entries(const std::shared_ptr<Store>& store, size_t batch_size)  {
+    std::unordered_map<StreamId, size_t> output;
     size_t max_blocks = ConfigsMap::instance()->get_int("VersionMap.MaxVersionBlocks", 5);
     store->iterate_type(entity::KeyType::VERSION, [&output, batch_size, max_blocks] (const VariantKey& key) {
         ++output[variant_key_id(key)];

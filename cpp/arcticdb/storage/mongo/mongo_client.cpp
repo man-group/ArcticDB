@@ -50,9 +50,9 @@ StreamId stream_id_from_document(DocType& doc, KeyType key_type) {
 
 template<typename DocType>
 AtomKey atom_key_from_document(DocType &doc, KeyType key_type) {
-    auto index_type = IndexDescriptor::Type(doc["index_type"].get_int32().value);
+    auto index_type = IndexDescriptorImpl::Type(doc["index_type"].get_int32().value);
     IndexValue start_index, end_index;
-    if (index_type == IndexDescriptor::TIMESTAMP) {
+    if (index_type == IndexDescriptorImpl::Type::TIMESTAMP) {
         start_index = doc["start_time"].get_int64().value;
         end_index = doc["end_time"].get_int64().value;
     } else {
@@ -117,7 +117,7 @@ void add_atom_key_values(bsoncxx::builder::basic::document& basic_builder, const
 
     auto index_type = arcticdb::stream::get_index_value_type(key);
     basic_builder.append(kvp("index_type", types::b_int32{static_cast<int32_t>(index_type)}));
-    if(index_type == IndexDescriptor::TIMESTAMP) {
+    if(index_type == IndexDescriptorImpl::Type::TIMESTAMP) {
         basic_builder.append(kvp("start_time", types::b_int64{int64_t(std::get<NumericId>(key.start_index()))}));
         basic_builder.append(kvp("end_time", types::b_int64{int64_t(std::get<NumericId>(key.end_index()))}));
     } else

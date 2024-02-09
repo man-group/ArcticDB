@@ -275,14 +275,14 @@ inline FilterQuery<ContainerType> create_index_filter(const IndexRange &range, b
         auto index_type = container.seg().template scalar_at<uint8_t>(0u, int(index::Fields::index_type));
 
         switch (index_type.value()) {
-        case IndexDescriptor::TIMESTAMP: {
+        case IndexDescriptorImpl::Type::TIMESTAMP: {
             return build_bitset_for_index<ContainerType, TimeseriesIndex>(container,
                                                                           rg,
                                                                           dynamic_schema,
                                                                           column_groups,
                                                                           std::move(input));
         }
-        case IndexDescriptor::STRING: {
+        case IndexDescriptorImpl::Type::STRING: {
             return build_bitset_for_index<ContainerType, TableIndex>(container, rg, dynamic_schema, column_groups, std::move(input));
         }
         default:util::raise_rte("Unknown index type {} in create_index_filter", uint32_t(index_type.value()));

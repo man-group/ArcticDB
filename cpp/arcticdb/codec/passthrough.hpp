@@ -19,7 +19,6 @@ namespace arcticdb::detail {
 
 template<template<typename> class BlockType, class TD>
 struct PassthroughEncoderV1 {
-
     using Opts = arcticdb::proto::encoding::VariantCodec::Passthrough;
 
     static size_t max_compressed_size(const BlockType<TD> &block ) {

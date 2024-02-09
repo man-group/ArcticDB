@@ -383,7 +383,6 @@ set(arcticdb_srcs
         codec/encode_v2.cpp
         codec/encoding_sizes.cpp
         codec/segment.cpp
-        codec/variant_encoded_field_collection.cpp
         column_store/chunked_buffer.cpp
         column_store/column.cpp
         column_store/column_data.cpp
@@ -481,7 +480,13 @@ set(arcticdb_srcs
         version/version_utils.cpp
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
-)
+        codec/segment_header.hpp
+        codec/protobuf_mappings.hpp
+        codec/encoded_field.cpp
+        codec/encoding_version.hpp
+        memory_layout.hpp
+        codec/protobuf_mappings.cpp
+        entity/protobuf_mappings.cpp)
 
 if(${ARCTICDB_INCLUDE_ROCKSDB})
     list (APPEND arcticdb_srcs

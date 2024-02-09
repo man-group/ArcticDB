@@ -110,7 +110,7 @@ bool IndexSegmentReader::is_pickled() const {
 }
 
 bool IndexSegmentReader::has_timestamp_index() const {
-    return tsd_.proto().stream_descriptor().index().kind() == arcticdb::proto::descriptors::IndexDescriptor::Type::IndexDescriptor_Type_TIMESTAMP;
+    return tsd_.proto().stream_descriptor().index().kind() == arcticdb::proto::descriptors::IndexDescriptor::Type::IndexDescriptorImpl_Type_TIMESTAMP;
 }
 
 void check_column_and_date_range_filterable(const pipelines::index::IndexSegmentReader& index_segment_reader, const ReadQuery& read_query) {

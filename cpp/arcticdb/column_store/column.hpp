@@ -86,9 +86,7 @@ void initialise_output_column(const Column& left_input_column, const Column& rig
 void initialise_output_bitset(const util::BitSet& input_bitset, bool sparse_missing_value_output, util::BitSet& output_bitset);
 
 class Column {
-
 public:
-
     template<typename TDT, typename ValueType>
     class TypedColumnIterator :  public boost::iterator_facade<TypedColumnIterator<TDT, ValueType>, ValueType, boost::random_access_traversal_tag> {
         using RawType =  std::decay_t<typename TDT::DataTypeTag::raw_type>;
@@ -217,6 +215,13 @@ public:
 
     Column(TypeDescriptor type, bool allow_sparse, ChunkedBuffer&& buffer) :
         data_(std::move(buffer)),
+        type_(type),
+        allow_sparse_(allow_sparse) {
+    }
+
+    Column(TypeDescriptor type, bool allow_sparse, ChunkedBuffer&& buffer, Buffer&& shapes) :
+        data_(std::move(buffer)),
+        shapes_(std::move(shapes)),
         type_(type),
         allow_sparse_(allow_sparse) {
     }
@@ -592,9 +597,8 @@ public:
         return data_.buffer();
     }
 
-    //TODO this will need to be more efficient - index each block?
     template<typename T>
-    std::optional<position_t> index_of(T val) const {
+    std::optional<position_t> search_unsorted(T val) const {
         util::check_arg(is_scalar(), "Cannot index on multidimensional values");
         for (position_t i = 0; i < row_count(); ++i) {
             if (val == *ptr_cast<T>(i, sizeof(T)))
@@ -891,7 +895,6 @@ public:
     }
 
 private:
-
     position_t last_offset() const;
     void update_offsets(size_t nbytes);
     bool is_scalar() const;
@@ -902,7 +905,6 @@ private:
     size_t inflated_row_count() const;
     size_t num_shapes() const;
     void set_sparse_bit_for_row(size_t sparse_location);
-    bool empty() const;
     void regenerate_offsets() const;
 
     // Permutes the physical column storage based on the given sorted_pos.

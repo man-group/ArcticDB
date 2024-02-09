@@ -32,7 +32,7 @@ using CollectionType = std::vector<SymbolListEntry>;
 constexpr std::string_view version_string = "_v2_";
 constexpr NumericIndex version_identifier = std::numeric_limits<NumericIndex>::max();
 
-SymbolListData::SymbolListData(std::shared_ptr<VersionMap> version_map, entity::StreamId type_indicator, uint32_t seed) :
+SymbolListData::SymbolListData(std::shared_ptr<VersionMap> version_map, StreamId type_indicator, uint32_t seed) :
     type_holder_(std::move(type_indicator)),
     seed_(seed),
     version_map_(std::move(version_map)){
@@ -659,11 +659,6 @@ SegmentInMemory write_entries_to_symbol_segment(
 
 SegmentInMemory create_empty_segment(const StreamId& stream_id) {
     SegmentInMemory output{StreamDescriptor{stream_id}};
-    google::protobuf::Any any = {};
-    arcticdb::proto::descriptors::SymbolListDescriptor metadata;
-    metadata.set_enabled(true);
-    any.PackFrom(metadata);
-    output.set_metadata(std::move(any));
     return output;
 }
 
