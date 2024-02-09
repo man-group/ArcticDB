@@ -26,7 +26,7 @@ namespace arcticdb {
         static void encode(
             const arcticdb::proto::encoding::VariantCodec &codec_opts,
             ColumnData& column_data,
-            std::variant<EncodedField*, arcticdb::proto::encoding::EncodedField*> variant_field,
+            EncodedFieldImpl& variant_field,
             Buffer& out,
             std::ptrdiff_t& pos);
     };
@@ -36,7 +36,7 @@ namespace arcticdb {
         static void encode(
             const arcticdb::proto::encoding::VariantCodec &codec_opts,
             ColumnData& column_data,
-            std::variant<EncodedField*, arcticdb::proto::encoding::EncodedField*> variant_field,
+            EncodedFieldImpl& variant_field,
             Buffer& out,
             std::ptrdiff_t& pos);
         static std::pair<size_t, size_t> max_compressed_size(
@@ -45,14 +45,14 @@ namespace arcticdb {
     private:
         static void encode_shapes(
             const ColumnData& column_data,
-            std::variant<EncodedField*, arcticdb::proto::encoding::EncodedField*> variant_field,
+            EncodedFieldImpl& variant_field,
             Buffer& out,
             std::ptrdiff_t& pos_in_buffer);
 
         static void encode_blocks(
             const arcticdb::proto::encoding::VariantCodec &codec_opts,
             ColumnData& column_data,
-            std::variant<EncodedField*, arcticdb::proto::encoding::EncodedField*> variant_field,
+            EncodedFieldImpl& variant_field,
             Buffer& out,
             std::ptrdiff_t& pos);
     };
@@ -62,7 +62,7 @@ namespace arcticdb {
 
 using namespace arcticdb;
 
-using EncoginVersions = ::testing::Types<
+using EncodingVersions = ::testing::Types<
     std::integral_constant<EncodingVersion, EncodingVersion::V1>,
     std::integral_constant<EncodingVersion, EncodingVersion::V2>>;
 
@@ -80,7 +80,7 @@ protected:
 template<typename EncodedFieldType>
 class FieldEncoderTestDim0 : public FieldEncoderTestDim0Base{};
 
-using EncodedFieldsType = ::testing::Types<arcticdb::proto::encoding::EncodedField, EncodedField>;
+using EncodedFieldsType = ::testing::Types<EncodedFieldImpl>;
 TYPED_TEST_SUITE(FieldEncoderTestDim0, EncodedFieldsType);
 
 TYPED_TEST(FieldEncoderTestDim0, Passthrough_v1) {
@@ -133,10 +133,8 @@ class FieldEncoderTestFromColumnDim0 : public FieldEncoderTestDim0Base{};
 /// @brief Cartesian product between the type of the encoded field and the encoding version.
 /// (EncodedField, arcticdb::proto::encoding::EncodedField) x (EncodingVersion::V1, EncodingVersion::V2)
 using FieldVersionT = ::testing::Types<
-    std::pair<arcticdb::proto::encoding::EncodedField, ColumnEncoderV1>,
-	std::pair<arcticdb::proto::encoding::EncodedField, ColumnEncoderV2>,
-	std::pair<EncodedField, ColumnEncoderV1>,
-	std::pair<EncodedField, ColumnEncoderV2>>;
+    std::pair<EncodedFieldImpl, ColumnEncoderV1>,
+	std::pair<EncodedFieldImpl, ColumnEncoderV2>>;
 TYPED_TEST_SUITE(FieldEncoderTestFromColumnDim0, FieldVersionT);
 
 TYPED_TEST(FieldEncoderTestFromColumnDim0, Passthrough) {
@@ -156,7 +154,7 @@ TYPED_TEST(FieldEncoderTestFromColumnDim0, Passthrough) {
         column_data);
     Buffer out(max_compressed_size);
     column_data.reset();
-    ColumnEncoder::encode(TestFixture::passthorugh_encoding_options, column_data, &field, out, pos);
+    ColumnEncoder::encode(TestFixture::passthorugh_encoding_options, column_data, field, out, pos);
     auto& nd = field.ndarray();
     ASSERT_EQ(nd.items_count(), TestFixture::values.size());
     ASSERT_EQ(nd.shapes_size(), 0);
@@ -180,34 +178,6 @@ protected:
     arcticdb::proto::encoding::VariantCodec passthorugh_encoding_options;
 };
 
-TEST_F(FieldEncoderTestDim1, PassthroughV1ProtoField) {
-    using Encoder = TypedBlockEncoderImpl<TypedBlockData, ValuesTypeDescriptorTag, EncodingVersion::V1>;
-    const TypedBlockData<ValuesTypeDescriptorTag> block(
-        values.data(),
-        shapes.data(),
-        values_byte_size,
-        shapes.size(),
-        nullptr);
-    arcticdb::proto::encoding::EncodedField field;
-    Buffer out(Encoder::max_compressed_size(passthorugh_encoding_options, block));
-    std::ptrdiff_t pos = 0;
-    Encoder::encode(passthorugh_encoding_options, block, field, out, pos);
-
-    const auto& nd = field.ndarray();
-    ASSERT_EQ(nd.items_count(), shapes.size());
-
-    const auto& shapes = nd.shapes();
-    ASSERT_EQ(shapes[0].in_bytes(), shapes_byte_size);
-    ASSERT_EQ(shapes[0].out_bytes(), shapes_byte_size);
-    ASSERT_NE(0, shapes[0].hash());
-
-    const auto& vals = nd.values();
-    ASSERT_EQ(vals[0].in_bytes(), values_expected_bytes);
-    ASSERT_EQ(vals[0].out_bytes(), values_expected_bytes);
-    ASSERT_NE(0, vals[0].hash());
-    ASSERT_EQ(pos, values_expected_bytes + shapes_byte_size);
-}
-
 TEST_F(FieldEncoderTestDim1, PassthroughV1NativeField) {
     using Encoder = TypedBlockEncoderImpl<TypedBlockData, ValuesTypeDescriptorTag, EncodingVersion::V1>;
     const TypedBlockData<ValuesTypeDescriptorTag> block(
@@ -216,57 +186,17 @@ TEST_F(FieldEncoderTestDim1, PassthroughV1NativeField) {
         values_byte_size,
         shapes.size(),
         nullptr);
+
     // one block for shapes and one for values
-    constexpr size_t encoded_field_size = EncodedField::Size + 2 * sizeof(EncodedBlock);
+    constexpr size_t encoded_field_size = EncodedFieldImpl::Size + 2 * sizeof(EncodedBlock);
     std::array<uint8_t, encoded_field_size> encoded_field_memory;
-    EncodedField* field = new(encoded_field_memory.data()) EncodedField;
+    EncodedFieldImpl* field = new(encoded_field_memory.data()) EncodedFieldImpl;
 
     Buffer out(Encoder::max_compressed_size(passthorugh_encoding_options, block));
     std::ptrdiff_t pos = 0;
     Encoder::encode(passthorugh_encoding_options, block, *field, out, pos);
 
     const auto& nd = field->ndarray();
-    ASSERT_EQ(nd.items_count(), shapes.size());
-
-    const auto& shapes = nd.shapes();
-    ASSERT_EQ(shapes[0].in_bytes(), shapes_byte_size);
-    ASSERT_EQ(shapes[0].out_bytes(), shapes_byte_size);
-    ASSERT_NE(0, shapes[0].hash());
-
-    const auto& vals = nd.values();
-    ASSERT_EQ(vals[0].in_bytes(), values_expected_bytes);
-    ASSERT_EQ(vals[0].out_bytes(), values_expected_bytes);
-    ASSERT_NE(0, vals[0].hash());
-    ASSERT_EQ(pos, values_expected_bytes + shapes_byte_size);
-}
-
-TEST_F(FieldEncoderTestDim1, PassthroughV2ProtoField) {
-    using Encoder = TypedBlockEncoderImpl<TypedBlockData, ValuesTypeDescriptorTag, EncodingVersion::V2>;
-    using ShapesEncoder = TypedBlockEncoderImpl<TypedBlockData, arcticdb::ShapesBlockTDT, EncodingVersion::V2>;
-    const TypedBlockData<ValuesTypeDescriptorTag> values_block(
-        values.data(),
-        shapes.data(),
-        values_byte_size,
-        shapes.size(),
-        nullptr);
-    const TypedBlockData<arcticdb::ShapesBlockTDT> shapes_block(
-        shapes.data(),
-        nullptr,
-        shapes_byte_size,
-        0,
-        nullptr);
-    const size_t values_max_compressed_size = Encoder::max_compressed_size(passthorugh_encoding_options,
-        values_block);
-    const size_t shapes_max_compressed_size = ShapesEncoder::max_compressed_size(passthorugh_encoding_options,
-        shapes_block);
-    const size_t total_max_compressed_size = values_max_compressed_size + shapes_max_compressed_size;
-    arcticdb::proto::encoding::EncodedField field;
-    Buffer out(total_max_compressed_size);
-    std::ptrdiff_t pos = 0;
-    ShapesEncoder::encode_shapes(passthorugh_encoding_options, shapes_block, field, out, pos);
-    Encoder::encode_values(passthorugh_encoding_options, values_block, field, out, pos);
-
-    const auto& nd = field.ndarray();
     ASSERT_EQ(nd.items_count(), shapes.size());
 
     const auto& shapes = nd.shapes();
@@ -290,21 +220,21 @@ TEST_F(FieldEncoderTestDim1, PassthroughV2NativeField) {
         values_byte_size,
         shapes.size(),
         nullptr);
+
     const TypedBlockData<arcticdb::ShapesBlockTDT> shapes_block(
         shapes.data(),
         nullptr,
         shapes_byte_size,
         0,
         nullptr);
-    const size_t values_max_compressed_size = Encoder::max_compressed_size(passthorugh_encoding_options,
-        values_block);
-    const size_t shapes_max_compressed_size = ShapesEncoder::max_compressed_size(passthorugh_encoding_options,
-        shapes_block);
+
+    const size_t values_max_compressed_size = Encoder::max_compressed_size(passthorugh_encoding_options, values_block);
+    const size_t shapes_max_compressed_size = ShapesEncoder::max_compressed_size(passthorugh_encoding_options, shapes_block);
     const size_t total_max_compressed_size = values_max_compressed_size + shapes_max_compressed_size;
     // one block for shapes and one for values
-    constexpr size_t encoded_field_size = EncodedField::Size + 2 * sizeof(EncodedBlock);
+    constexpr size_t encoded_field_size = EncodedFieldImpl::Size + 2 * sizeof(EncodedBlock);
     std::array<uint8_t, encoded_field_size> encoded_field_memory;
-    EncodedField* field = new(encoded_field_memory.data()) EncodedField;
+    EncodedFieldImpl* field = new(encoded_field_memory.data()) EncodedFieldImpl;
     Buffer out(total_max_compressed_size);
     std::ptrdiff_t pos = 0;
     ShapesEncoder::encode_shapes(passthorugh_encoding_options, shapes_block, *field, out, pos);
@@ -341,14 +271,13 @@ protected:
             0);
         memcpy(shapes_buffer.data(), shapes_data.data(), shapes_data_byte_size);
     }
+
     using ValuesTypeDescriptorTag = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension::Dim1>>;
     static constexpr TypeDescriptor type_descriptor = static_cast<TypeDescriptor>(ValuesTypeDescriptorTag());
     static constexpr std::array<int64_t, 8> first_block_data = {1, 2, 3, 4, 5, 6, 7, 8};
-    static constexpr size_t first_block_data_byte_size =
-        sizeof(decltype(first_block_data)::value_type) * first_block_data.size();
+    static constexpr size_t first_block_data_byte_size = sizeof(decltype(first_block_data)::value_type) * first_block_data.size();
     static constexpr std::array<int64_t, 2> second_block_data = {9, 10};
-    static constexpr size_t second_block_data_byte_size =
-        sizeof(decltype(second_block_data)::value_type) * second_block_data.size();
+    static constexpr size_t second_block_data_byte_size = sizeof(decltype(second_block_data)::value_type) * second_block_data.size();
     static constexpr std::array<shape_t, 2> shapes_data = {first_block_data.size(), second_block_data.size()};
     static constexpr size_t shapes_data_byte_size = sizeof(decltype(shapes_data)::value_type) * shapes_data.size();
     arcticdb::proto::encoding::VariantCodec passthorugh_encoding_options;
@@ -356,31 +285,17 @@ protected:
     Buffer shapes_buffer;
 };
 
-TEST_F(TestMultiblockData_Dim1, EncodingVersion_1) {
-    arcticdb::proto::encoding::EncodedField encoded_field;
-    ColumnData column_data(&data_buffer, &shapes_buffer, type_descriptor, nullptr);
-    const auto [_, max_compressed_size] = ColumnEncoderV1::max_compressed_size(passthorugh_encoding_options, column_data);
-    Buffer out(max_compressed_size);
-    ptrdiff_t out_pos = 0;
-    column_data.reset();
-    ColumnEncoderV1::encode(passthorugh_encoding_options, column_data, &encoded_field, out, out_pos);
-    const auto ndarray = encoded_field.ndarray();
-    ASSERT_EQ(ndarray.shapes_size(), 2);
-    ASSERT_EQ(ndarray.values_size(), 2);
-    ASSERT_EQ(ndarray.items_count(), shapes_data.size());
-}
-
 TEST_F(TestMultiblockData_Dim1, EncodingVersion_2) {
-    constexpr size_t encoded_field_size = EncodedField::Size + 3 * sizeof(EncodedBlock);
+    constexpr size_t encoded_field_size = EncodedFieldImpl::Size + 3 * sizeof(EncodedBlock);
     std::array<uint8_t, encoded_field_size> encoded_field_owner;
-    EncodedField* encoded_field = new(encoded_field_owner.data()) EncodedField;
+    EncodedFieldImpl* encoded_field = new(encoded_field_owner.data()) EncodedFieldImpl;
     ColumnData column_data(&data_buffer, &shapes_buffer, type_descriptor, nullptr);
     const auto [_, max_compressed_size] = ColumnEncoderV2::max_compressed_size(passthorugh_encoding_options, column_data);
     Buffer out(max_compressed_size);
     ptrdiff_t out_pos = 0;
     column_data.reset();
-    ColumnEncoderV2::encode(passthorugh_encoding_options, column_data, encoded_field, out, out_pos);
-    const auto ndarray = encoded_field->ndarray();
+    ColumnEncoderV2::encode(passthorugh_encoding_options, column_data, *encoded_field, out, out_pos);
+    const auto& ndarray = encoded_field->ndarray();
     ASSERT_EQ(ndarray.shapes_size(), 1);
     ASSERT_EQ(ndarray.values_size(), 2);
     ASSERT_EQ(ndarray.items_count(), shapes_data.size());
@@ -389,7 +304,7 @@ TEST_F(TestMultiblockData_Dim1, EncodingVersion_2) {
 template<typename EncodedFieldType>
 class SegmentStringEncodingTest : public testing::Test{};
 
-TYPED_TEST_SUITE(SegmentStringEncodingTest, EncoginVersions);
+TYPED_TEST_SUITE(SegmentStringEncodingTest, EncodingVersions);
 
 TYPED_TEST(SegmentStringEncodingTest, EncodeSingleString) {
     const auto tsd = create_tsd<DataTypeTag<DataType::ASCII_DYNAMIC64>, Dimension::Dim0>("thing", 1);
@@ -485,15 +400,114 @@ bool TransactionalThing::destroyed = false;
 
 TEST(Segment, KeepAlive) {
     {
+        auto buf = std::make_shared<Buffer>();
         Segment segment;
+        segment.set_buffer(std::move(buf));
         segment.set_keepalive(std::any(TransactionalThing{}));
 
         auto seg1 = std::move(segment);
         Segment seg2{std::move(seg1)};
-        auto seg3 = seg2;
-        Segment seg4{seg3};
+        auto seg3 = seg2.clone();
+        Segment seg4{seg3.clone()};
 
-        std::any_cast<TransactionalThing>(seg4.keepalive()).magic_.check();
+        std::any_cast<TransactionalThing>(seg2.keepalive()).magic_.check();
     }
     ASSERT_EQ(TransactionalThing::destroyed, true);
+}
+
+TEST(Segment, RoundtripTimeseriesDescriptorV1) {
+    const auto stream_desc = stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UINT8, "ints")});
+    SegmentInMemory in_mem_seg{stream_desc.clone()};
+    in_mem_seg.set_scalar<uint8_t>(0, 23);
+    in_mem_seg.end_row();
+    TimeseriesDescriptor tsd;
+    tsd.set_total_rows(23);
+    tsd.set_stream_descriptor(stream_desc);
+    in_mem_seg.set_timeseries_descriptor(tsd);
+    auto copy = in_mem_seg.clone();
+    auto seg = encode_v1(std::move(in_mem_seg), codec::default_lz4_codec());
+    SegmentInMemory decoded{stream_desc.clone()};
+    decode_v1(seg, seg.header(), decoded, seg.descriptor());
+    ASSERT_EQ(decoded.index_descriptor().total_rows(), 23);
+    ASSERT_EQ(decoded, copy);
+}
+
+TEST(Segment, RoundtripTimeseriesDescriptorWriteToBufferV1) {
+    const auto stream_desc = stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UINT8, "ints")});
+    SegmentInMemory in_mem_seg{stream_desc.clone()};
+    in_mem_seg.set_scalar<uint8_t>(0, 23);
+    in_mem_seg.end_row();
+    TimeseriesDescriptor tsd;
+    tsd.set_total_rows(23);
+    tsd.set_stream_descriptor(stream_desc);
+    in_mem_seg.set_timeseries_descriptor(tsd);
+    auto copy = in_mem_seg.clone();
+    auto seg = encode_v1(std::move(in_mem_seg), codec::default_lz4_codec());
+    std::vector<uint8_t> vec;
+    const auto bytes = seg.calculate_size();
+    vec.resize(bytes);
+    seg.write_to(vec.data());
+    auto unserialized = Segment::from_bytes(vec.data(), bytes);
+    SegmentInMemory decoded{stream_desc.clone()};
+    decode_v1(unserialized, unserialized.header(), decoded, unserialized.descriptor());
+    ASSERT_EQ(decoded.index_descriptor().total_rows(), 23);
+    ASSERT_EQ(decoded, copy);
+}
+
+TEST(Segment, RoundtripStringsWriteToBufferV1) {
+    const auto stream_desc = stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UTF_DYNAMIC64, "ints")});
+    SegmentInMemory in_mem_seg{stream_desc.clone()};
+    in_mem_seg.set_string(0, "kismet");
+    in_mem_seg.end_row();
+    auto copy = in_mem_seg.clone();
+    auto seg = encode_v1(std::move(in_mem_seg), codec::default_lz4_codec());
+    std::vector<uint8_t> vec;
+    const auto bytes = seg.calculate_size();
+    vec.resize(bytes);
+    seg.write_to(vec.data());
+    auto unserialized = Segment::from_bytes(vec.data(), bytes);
+    SegmentInMemory decoded{stream_desc.clone()};
+    decode_v1(unserialized, unserialized.header(), decoded, unserialized.descriptor());
+    ASSERT_EQ(decoded.string_at(0, 0).value(), "kismet");
+    ASSERT_EQ(decoded, copy);
+}
+
+TEST(Segment, RoundtripTimeseriesDescriptorV2) {
+    const auto stream_desc = stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UINT8, "ints")});
+    SegmentInMemory in_mem_seg{stream_desc.clone()};
+    in_mem_seg.set_scalar<uint8_t>(0, 23);
+    in_mem_seg.end_row();
+    TimeseriesDescriptor tsd;
+    tsd.set_total_rows(23);
+    tsd.set_stream_descriptor(stream_desc);
+    in_mem_seg.set_timeseries_descriptor(tsd);
+    auto copy = in_mem_seg.clone();
+    auto seg = encode_v2(std::move(in_mem_seg), codec::default_lz4_codec());
+    SegmentInMemory decoded{stream_desc.clone()};
+    decode_v2(seg, seg.header(), decoded, seg.descriptor());
+    ASSERT_EQ(decoded.index_descriptor().total_rows(), 23);
+    ASSERT_EQ(decoded, copy);
+}
+
+TEST(Segment, RoundtripTimeseriesDescriptorWriteToBufferV2) {
+    const auto stream_desc = stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UINT8, "ints")});
+    SegmentInMemory in_mem_seg{stream_desc.clone()};
+    in_mem_seg.set_scalar<uint8_t>(0, 23);
+    in_mem_seg.end_row();
+    TimeseriesDescriptor tsd;
+    tsd.set_total_rows(23);
+    tsd.set_stream_descriptor(stream_desc);
+    in_mem_seg.set_timeseries_descriptor(tsd);
+    auto copy = in_mem_seg.clone();
+    auto seg = encode_v2(std::move(in_mem_seg), codec::default_lz4_codec());
+    std::vector<uint8_t> vec;
+    const auto bytes = seg.calculate_size();
+    ARCTICDB_DEBUG(log::codec(), "## Resizing buffer to {} bytes", bytes);
+    vec.resize(bytes);
+    seg.write_to(vec.data());
+    auto unserialized = Segment::from_bytes(vec.data(), bytes);
+    SegmentInMemory decoded{stream_desc.clone()};
+    decode_v2(unserialized, unserialized.header(), decoded, unserialized.descriptor());
+    ASSERT_EQ(decoded.index_descriptor().total_rows(), 23);
+    ASSERT_EQ(decoded, copy);
 }

@@ -39,7 +39,7 @@ Segment LibraryTool::read_to_segment(const VariantKey& key) {
     auto kv = store_->read_compressed_sync(key, storage::ReadKeyOpts{});
     util::check(kv.has_segment(), "Failed to read key: {}", key);
     kv.segment().force_own_buffer();
-    return kv.segment();
+    return std::move(kv.segment());
 }
 
 std::optional<google::protobuf::Any> LibraryTool::read_metadata(const VariantKey& key){
@@ -55,7 +55,7 @@ TimeseriesDescriptor LibraryTool::read_timeseries_descriptor(const VariantKey& k
     return store_->read_timeseries_descriptor(key).get().second;
 }
 
-void LibraryTool::write(VariantKey key, Segment segment) {
+void LibraryTool::write(VariantKey key, Segment& segment) {
     storage::KeySegmentPair kv{std::move(key), std::move(segment)};
     store_->write_compressed_sync(std::move(kv));
 }

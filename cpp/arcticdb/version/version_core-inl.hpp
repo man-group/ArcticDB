@@ -66,8 +66,8 @@ void merge_frames_for_keys_impl(
 
     auto compare = [](const std::unique_ptr<StreamMergeWrapper>& left,
                       const std::unique_ptr<StreamMergeWrapper>& right) {
-        return pipelines::index::index_value_from_row(left->row(), IndexDescriptor::TIMESTAMP, 0) >
-            pipelines::index::index_value_from_row(right->row(), IndexDescriptor::TIMESTAMP, 0);
+        return pipelines::index::index_value_from_row(left->row(), IndexDescriptor::Type::TIMESTAMP, 0) >
+            pipelines::index::index_value_from_row(right->row(), IndexDescriptor::Type::TIMESTAMP, 0);
     };
 
     movable_priority_queue<std::unique_ptr<StreamMergeWrapper>, std::vector<std::unique_ptr<StreamMergeWrapper>>, decltype(compare)> input_streams{compare};

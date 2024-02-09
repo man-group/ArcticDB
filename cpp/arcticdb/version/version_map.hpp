@@ -417,7 +417,7 @@ public:
     void compact_if_necessary_stand_alone(const std::shared_ptr<Store>& store, size_t batch_size) {
         auto map = get_num_version_entries(store, batch_size);
         size_t max_blocks = ConfigsMap::instance()->get_int("VersionMap.MaxVersionBlocks", 5);
-        const auto total_symbols = map.size();
+        const auto total_symbols ARCTICDB_UNUSED = map.size();
         size_t num_sym_compacted = 0;
         for(const auto& [symbol, size] : map) {
             if(size < max_blocks)
@@ -431,10 +431,10 @@ public:
                 log::version().warn("Error: {} in compacting {}", e.what(), symbol);
             }
             if (num_sym_compacted % 50 == 0) {
-                log::version().info("Compacted {} symbols", num_sym_compacted);
+                ARCTICDB_RUNTIME_DEBUG(log::version(), "Compacted {} symbols", num_sym_compacted);
             }
         }
-        log::version().info("Compacted {} out of {} total symbols", num_sym_compacted, total_symbols);
+        ARCTICDB_RUNTIME_DEBUG(log::version(), "Compacted {} out of {} total symbols", num_sym_compacted, total_symbols);
     }
 
     void compact(std::shared_ptr<Store> store, const StreamId& stream_id) {
@@ -792,8 +792,9 @@ private:
             entry->load_type_ = load_param.load_type_;
         }
         catch (const std::runtime_error &err) {
+            (void)err;
             if (iterate_on_failure) {
-                log::version().info(
+                ARCTICDB_DEBUG(log::version(),
                         "Loading versions from storage via ref key failed with error: {}, will load via iteration",
                         err.what());
             } else {

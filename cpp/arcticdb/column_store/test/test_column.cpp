@@ -53,7 +53,7 @@ void test_column_type(size_t num_values = 20, size_t num_tests = 50) {
         ASSERT_EQ(*column.ptr_cast<raw_type>(index, sizeof(raw_type)), start);
 
         if constexpr (dimensions == Dimension::Dim0) {
-            ASSERT_EQ(column.index_of(start).value(), index);
+            ASSERT_EQ(column.search_unsorted(start).value(), index);
             auto s = column.scalar_at<raw_type>(j);
             ASSERT_FALSE(s == std::nullopt);
             ASSERT_EQ(s.value(), start);

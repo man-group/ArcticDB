@@ -26,7 +26,6 @@
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/stream/schema.hpp>
 #include <arcticdb/pipeline/index_writer.hpp>
-#include <arcticdb/entity/metrics.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/util/composite.hpp>
 #include <arcticdb/pipeline/column_mapping.hpp>
@@ -109,13 +108,13 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
 }
 
 namespace {
-IndexDescriptor::Proto check_index_match(const arcticdb::stream::Index& index, const IndexDescriptor::Proto& desc) {
+IndexDescriptorImpl check_index_match(const arcticdb::stream::Index& index, const IndexDescriptorImpl& desc) {
     if (std::holds_alternative<stream::TimeseriesIndex>(index))
         util::check(
-            desc.kind() == IndexDescriptor::TIMESTAMP || desc.kind() == IndexDescriptor::EMPTY,
+            desc.type() == IndexDescriptor::Type::TIMESTAMP || desc.type() == IndexDescriptor::Type::EMPTY,
                     "Index mismatch, cannot update a non-timeseries-indexed frame with a timeseries");
     else
-        util::check(desc.kind() == IndexDescriptor::ROWCOUNT,
+        util::check(desc.type() == IndexDescriptorImpl::Type::ROWCOUNT,
                     "Index mismatch, cannot update a timeseries with a non-timeseries-indexed frame");
 
     return desc;
@@ -128,7 +127,7 @@ void sorted_data_check_append(const InputTensorFrame& frame, index::IndexSegment
     }
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
         !std::holds_alternative<stream::TimeseriesIndex>(frame.index) ||
-        index_segment_reader.mutable_tsd().mutable_proto().stream_descriptor().sorted() == arcticdb::proto::descriptors::SortedValue::ASCENDING,
+        index_segment_reader.tsd().sorted() == SortedValue::ASCENDING,
         "When calling append with validate_index enabled, the existing data must be sorted");
 }
 
@@ -145,7 +144,7 @@ folly::Future<AtomKey> async_append_impl(
     ARCTICDB_DEBUG(log::version(), "append stream_id: {} , version_id: {}", stream_id, update_info.next_version_id_);
     auto index_segment_reader = index::get_index_reader(*(update_info.previous_index_key_), store);
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
-    auto row_offset = index_segment_reader.tsd().proto().total_rows();
+    auto row_offset = index_segment_reader.tsd().total_rows();
     util::check_rte(!index_segment_reader.is_pickled(), "Cannot append to pickled data");
     frame->set_offset(static_cast<ssize_t>(row_offset));
     fix_descriptor_mismatch_or_throw(APPEND, options.dynamic_schema, index_segment_reader, *frame, empty_types);
@@ -290,11 +289,9 @@ VersionedItem delete_range_impl(
     auto flattened_slice_and_keys = flatten_and_fix_rows(groups, row_count);
 
     std::sort(std::begin(flattened_slice_and_keys), std::end(flattened_slice_and_keys));
-    bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
-    auto time_series = timseries_descriptor_from_index_segment(row_count, std::move(index_segment_reader), std::nullopt, bucketize_dynamic);
-    auto version_key_fut = util::variant_match(index, [&time_series, &flattened_slice_and_keys, &stream_id, &version_id, &store] (auto idx) {
+    auto version_key_fut = util::variant_match(index, [&index_segment_reader, &flattened_slice_and_keys, &stream_id, &version_id, &store] (auto idx) {
         using IndexType = decltype(idx);
-        return pipelines::index::write_index<IndexType>(std::move(time_series), std::move(flattened_slice_and_keys), IndexPartialKey{stream_id, version_id}, store);
+        return pipelines::index::write_index<IndexType>(index_segment_reader.tsd(), std::move(flattened_slice_and_keys), IndexPartialKey{stream_id, version_id}, store);
     });
     auto version_key = std::move(version_key_fut).get();
     auto versioned_item = VersionedItem(to_atom(std::move(version_key)));
@@ -302,19 +299,19 @@ VersionedItem delete_range_impl(
     return versioned_item;
 }
 
-void sorted_data_check_update(InputTensorFrame& frame, index::IndexSegmentReader& index_segment_reader){
+void sorted_data_check_update(InputTensorFrame& frame, const index::IndexSegmentReader& index_segment_reader){
     bool is_time_series = std::holds_alternative<stream::TimeseriesIndex>(frame.index);
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
         is_time_series,
         "When calling update, the input data must be a time series.");
-    bool input_data_is_sorted = frame.desc.get_sorted() == SortedValue::ASCENDING ||
-                                frame.desc.get_sorted() == SortedValue::UNKNOWN;
+    bool input_data_is_sorted = frame.desc.sorted() == SortedValue::ASCENDING ||
+                                frame.desc.sorted() == SortedValue::UNKNOWN;
     // If changing this error message, the corresponding message in _normalization.py::restrict_data_to_date_range_only should also be updated
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
         input_data_is_sorted,
         "When calling update, the input data must be sorted.");
-    bool existing_data_is_sorted = index_segment_reader.get_sorted() == SortedValue::ASCENDING ||
-                                    index_segment_reader.get_sorted() == SortedValue::UNKNOWN;
+    bool existing_data_is_sorted = index_segment_reader.sorted() == SortedValue::ASCENDING ||
+                                    index_segment_reader.sorted() == SortedValue::UNKNOWN;
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
          existing_data_is_sorted,
         "When calling update, the existing data must be sorted.");
@@ -333,9 +330,9 @@ VersionedItem update_impl(
     ARCTICDB_DEBUG(log::version(), "Update versioned dataframe for stream_id: {} , version_id = {}", stream_id, update_info.previous_index_key_->version_id());
     auto index_segment_reader = index::get_index_reader(*(update_info.previous_index_key_), store);
     util::check_rte(!index_segment_reader.is_pickled(), "Cannot update pickled data");
-    auto index_desc = check_index_match(frame->index, index_segment_reader.tsd().proto().stream_descriptor().index());
+    auto index_desc = check_index_match(frame->index, index_segment_reader.tsd().index());
     util::check(
-        index_desc.kind() == IndexDescriptor::TIMESTAMP || index_desc.kind() == IndexDescriptor::EMPTY,
+        index_desc.type() == IndexDescriptor::Type::TIMESTAMP || index_desc.type() == IndexDescriptor::Type::EMPTY,
         "Update not supported for non-timeseries indexes"
     );
     sorted_data_check_update(*frame, index_segment_reader);
@@ -412,9 +409,6 @@ VersionedItem update_impl(
 FrameAndDescriptor read_multi_key(
     const std::shared_ptr<Store>& store,
     const SegmentInMemory& index_key_seg) {
-    const auto& multi_index_seg = index_key_seg;
-    TimeseriesDescriptor tsd;
-    multi_index_seg.metadata()->UnpackTo(&tsd.mutable_proto());
     std::vector<AtomKey> keys;
     for (size_t idx = 0; idx < index_key_seg.row_count(); idx++) {
         keys.push_back(stream::read_key_row(index_key_seg, static_cast<ssize_t>(idx)));
@@ -424,7 +418,7 @@ FrameAndDescriptor read_multi_key(
     ReadQuery read_query;
     auto res = read_dataframe_impl(store, VersionedItem{std::move(dup)}, read_query, {});
 
-    TimeseriesDescriptor multi_key_desc{tsd};
+    TimeseriesDescriptor multi_key_desc{index_key_seg.index_descriptor()};
     multi_key_desc.mutable_proto().mutable_normalization()->CopyFrom(res.desc_.proto().normalization());
     return {res.frame_, multi_key_desc, keys, std::shared_ptr<BufferHolder>{}};
 }
@@ -602,11 +596,13 @@ void set_output_descriptors(
 
 std::shared_ptr<std::unordered_set<std::string>> columns_to_decode(const std::shared_ptr<PipelineContext>& pipeline_context) {
     std::shared_ptr<std::unordered_set<std::string>> res;
+    ARCTICDB_DEBUG(log::version(), "Creating columns list with {} bits set", pipeline_context->overall_column_bitset_->count());
     if(pipeline_context->overall_column_bitset_) {
         res = std::make_shared<std::unordered_set<std::string>>();
         auto en = pipeline_context->overall_column_bitset_->first();
         auto en_end = pipeline_context->overall_column_bitset_->end();
         while (en < en_end) {
+            ARCTICDB_DEBUG(log::version(), "Adding field {}", pipeline_context->desc_->field(*en).name());
             res->insert(std::string(pipeline_context->desc_->field(*en++).name()));
         }
     }
@@ -700,7 +696,7 @@ void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDes
         std::vector<std::string> index_columns_to_add;
         for(const auto& index_column : index_columns) {
             if(std::find(std::begin(read_query.columns), std::end(read_query.columns), index_column) == std::end(read_query.columns))
-                index_columns_to_add.push_back(index_column);
+                index_columns_to_add.push_back(std::string(index_column));
         }
         read_query.columns.insert(std::begin(read_query.columns), std::begin(index_columns_to_add), std::end(index_columns_to_add));
     }
@@ -709,8 +705,7 @@ void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDes
 FrameAndDescriptor read_segment_impl(
     const std::shared_ptr<Store>& store,
     const VariantKey& key) {
-    auto fut_segment = store->read(key);
-    auto [_, seg] = std::move(fut_segment).get();
+    auto [_, seg] = store->read_sync(key);
     return frame_and_descriptor_from_segment(std::move(seg));
 }
 
@@ -761,7 +756,7 @@ void read_indexed_keys_to_pipeline(
     add_index_columns_to_query(read_query, index_segment_reader.tsd());
 
     const auto& tsd = index_segment_reader.tsd();
-    read_query.calculate_row_filter(static_cast<int64_t>(tsd.proto().total_rows()));
+    read_query.calculate_row_filter(static_cast<int64_t>(tsd.total_rows()));
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
     pipeline_context->desc_ = tsd.as_stream_descriptor();
 
@@ -774,7 +769,7 @@ void read_indexed_keys_to_pipeline(
 
     pipeline_context->slice_and_keys_ = filter_index(index_segment_reader, combine_filter_functions(queries));
     pipeline_context->total_rows_ = pipeline_context->calc_rows();
-    pipeline_context->rows_ = index_segment_reader.tsd().proto().total_rows();
+    pipeline_context->rows_ = index_segment_reader.tsd().total_rows();
     pipeline_context->norm_meta_ = std::make_unique<arcticdb::proto::descriptors::NormalizationMetadata>(std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_normalization()));
     pipeline_context->user_meta_ = std::make_unique<arcticdb::proto::descriptors::UserDefinedMetadata>(std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_user_meta()));
     pipeline_context->bucketize_dynamic_ = bucketize_dynamic;
@@ -840,7 +835,7 @@ void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<PipelineC
       - that the earliest timestamp in an incomplete segment is greater than the latest timestamp existing in the
         symbol in the case of a parallel append
      */
-    if (pipeline_context->descriptor().index().type() == IndexDescriptor::TIMESTAMP) {
+    if (pipeline_context->descriptor().index().type() == IndexDescriptorImpl::Type::TIMESTAMP) {
         std::optional<timestamp> last_existing_index_value;
         // Beginning of incomplete segments == beginning of all segments implies all segments are incompletes, so we are
         // writing, not appending
@@ -1122,7 +1117,7 @@ FrameAndDescriptor read_column_stats_impl(
     try {
         auto segment_in_memory = store->read(column_stats_key).get().second;
         TimeseriesDescriptor tsd;
-        tsd.mutable_proto().set_total_rows(segment_in_memory.row_count());
+        tsd.set_total_rows(segment_in_memory.row_count());
         tsd.set_stream_descriptor(segment_in_memory.descriptor());
         return {SegmentInMemory(std::move(segment_in_memory)), tsd, {}, {}};
     } catch (const std::exception& e) {
@@ -1221,8 +1216,8 @@ VersionedItem collate_and_write(
     TimeseriesDescriptor tsd;
 
     tsd.set_stream_descriptor(pipeline_context->descriptor());
+    tsd.set_total_rows(pipeline_context->total_rows_);
     auto& tsd_proto = tsd.mutable_proto();
-    tsd_proto.set_total_rows(pipeline_context->total_rows_);
     tsd_proto.mutable_normalization()->CopyFrom(*pipeline_context->norm_meta_);
     if(user_meta)
         tsd_proto.mutable_user_meta()->CopyFrom(*user_meta);
@@ -1263,7 +1258,7 @@ VersionedItem sort_merge_impl(
     std::optional<SortedValue> previous_sorted_value;
     if(append && update_info.previous_index_key_.has_value()) {
         read_indexed_keys_to_pipeline(store, pipeline_context, *(update_info.previous_index_key_), read_query, ReadOptions{});
-        previous_sorted_value.emplace(pipeline_context->desc_->get_sorted());
+        previous_sorted_value.emplace(pipeline_context->desc_->sorted());
     }
 
     auto num_versioned_rows = pipeline_context->total_rows_;
@@ -1358,7 +1353,7 @@ VersionedItem compact_incomplete_impl(
     std::optional<SortedValue> previous_sorted_value;
     if(append && update_info.previous_index_key_.has_value()) {
         read_indexed_keys_to_pipeline(store, pipeline_context, *(update_info.previous_index_key_), read_query, read_options);
-        previous_sorted_value.emplace(pipeline_context->desc_->get_sorted());
+        previous_sorted_value.emplace(pipeline_context->desc_->sorted());
     }
 
     auto prev_size = pipeline_context->slice_and_keys_.size();
@@ -1378,11 +1373,13 @@ VersionedItem compact_incomplete_impl(
     std::vector<folly::Future<VariantKey>> fut_vec;
     std::vector<FrameSlice> slices;
     bool dynamic_schema = write_options.dynamic_schema;
-    auto index = index_type_from_descriptor(first_seg.descriptor());
-    auto policies = std::make_tuple(index,
-                                    dynamic_schema ? VariantSchema{DynamicSchema::default_schema(index)} : VariantSchema{FixedSchema::default_schema(index)}, 
-                                    sparsify ? VariantColumnPolicy{SparseColumnPolicy{}} : VariantColumnPolicy{DenseColumnPolicy{}}
-                                    );
+    const auto index = index_type_from_descriptor(first_seg.descriptor());
+    auto policies = std::make_tuple(
+        index,
+        dynamic_schema ? VariantSchema{DynamicSchema::default_schema(index, stream_id)} : VariantSchema{FixedSchema::default_schema(index, stream_id)},
+        sparsify ? VariantColumnPolicy{SparseColumnPolicy{}} : VariantColumnPolicy{DenseColumnPolicy{}}
+        );
+
     util::variant_match(std::move(policies), [
         &fut_vec, &slices, pipeline_context=pipeline_context, &store, convert_int_to_float, &previous_sorted_value, &write_options] (auto &&idx, auto &&schema, auto &&column_policy) {
         using IndexType = std::remove_reference_t<decltype(idx)>;
@@ -1411,7 +1408,6 @@ VersionedItem compact_incomplete_impl(
         pipeline_context->incompletes_after(),
         user_meta);
 
-
     store->remove_keys(delete_keys).get();
     return vit;
 }
@@ -1437,7 +1433,7 @@ PredefragmentationInfo get_pre_defragmentation_info(
     first_col_segment_idx.reserve(slice_and_keys.size());
     std::optional<CompactionStartInfo> compaction_start_info;
     size_t segment_idx = 0, num_to_segments_after_compact = 0, new_segment_row_size = 0;
-    for(auto it = slice_and_keys.begin(); it != slice_and_keys.end(); it++) {
+    for(auto it = slice_and_keys.begin(); it != slice_and_keys.end(); ++it) {
         auto &slice = it->slice();
 
         if (slice.row_range.diff() < segment_size && !compaction_start_info)
@@ -1481,10 +1477,11 @@ VersionedItem defragment_symbol_data_impl(
     // in the new index segment, we will start appending after this value
     std::vector<folly::Future<VariantKey>> fut_vec;
     std::vector<FrameSlice> slices;
-    auto index = index_type_from_descriptor(pre_defragmentation_info.pipeline_context->descriptor());
-    auto policies = std::make_tuple(index,
-                                    options.dynamic_schema ? VariantSchema{DynamicSchema::default_schema(index)} : VariantSchema{FixedSchema::default_schema(index)}
-                                    );
+    const auto index = index_type_from_descriptor(pre_defragmentation_info.pipeline_context->descriptor());
+    auto policies = std::make_tuple(
+        index,
+        options.dynamic_schema ? VariantSchema{DynamicSchema::default_schema(index, stream_id)} : VariantSchema{FixedSchema::default_schema(index, stream_id)}
+        );
 
     util::variant_match(std::move(policies), [
         &fut_vec, &slices, &store, &options, &pre_defragmentation_info, segment_size=segment_size] (auto &&idx, auto &&schema) {
@@ -1493,24 +1490,24 @@ VersionedItem defragment_symbol_data_impl(
         using IndexType = std::remove_reference_t<decltype(idx)>;
         using SchemaType = std::remove_reference_t<decltype(schema)>;
         do_compact<IndexType, SchemaType, RowCountSegmentPolicy, DenseColumnPolicy>(
-                    segments.begin(),
-                    segments.end(),
-                    pre_defragmentation_info.pipeline_context,
-                    fut_vec,
-                    slices,
-                    store,
-                    false,
-                    segment_size);
+            segments.begin(),
+            segments.end(),
+            pre_defragmentation_info.pipeline_context,
+            fut_vec,
+            slices,
+            store,
+            false,
+            segment_size);
     });
 
     auto keys = folly::collect(fut_vec).get();
     auto vit = collate_and_write(
-            store,
-            pre_defragmentation_info.pipeline_context,
-            slices,
-            keys,
-            pre_defragmentation_info.append_after.value(),
-            std::nullopt);
+        store,
+        pre_defragmentation_info.pipeline_context,
+        slices,
+        keys,
+        pre_defragmentation_info.append_after.value(),
+        std::nullopt);
     
     return vit;
 }

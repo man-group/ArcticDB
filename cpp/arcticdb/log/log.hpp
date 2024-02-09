@@ -20,6 +20,7 @@
 #define ARCTICDB_TRACE(logger, ...) (void)0
 #endif
 
+#define ARCTICDB_INFO(logger, ...) logger.info(__VA_ARGS__)
 #define ARCTICDB_RUNTIME_DEBUG(logger, ...) logger.debug(__VA_ARGS__)
 
 namespace arcticc::pb2::logger_pb2 {

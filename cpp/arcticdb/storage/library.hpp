@@ -76,28 +76,15 @@ class Library {
             throw LibraryPermissionException(library_path_, open_mode(), "write");
         }
 
-        [[maybe_unused]] const size_t total_size = kvs.fold(
-            [](size_t s, const KeySegmentPair& seg) { return s + seg.segment().total_segment_size(); },
-            size_t(0)
-        );
-        [[maybe_unused]] const auto kv_count = kvs.size();
         storages_->write(std::move(kvs));
-        ARCTICDB_TRACE(log::storage(), "{} kv written, {} bytes", kv_count, total_size);
     }
 
     void update(Composite<KeySegmentPair>&& kvs, storage::UpdateOpts opts) {
         ARCTICDB_SAMPLE(LibraryUpdate, 0)
-        if (open_mode() < OpenMode::WRITE) {
+        if (open_mode() < OpenMode::WRITE)
             throw LibraryPermissionException(library_path_, open_mode(), "update");
-        }
 
-        [[maybe_unused]] const size_t total_size = kvs.fold(
-            [](size_t s, const KeySegmentPair& seg) { return s + seg.segment().total_segment_size(); },
-            size_t(0)
-        );
-        [[maybe_unused]] const auto kv_count = kvs.size();
         storages_->update(std::move(kvs), opts);
-        ARCTICDB_TRACE(log::storage(), "{} kv updated, {} bytes", kv_count, total_size);
     }
 
     void read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {

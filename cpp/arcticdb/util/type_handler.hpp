@@ -8,8 +8,8 @@
 #pragma once
 
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/codec/variant_encoded_field_collection.hpp>
-#include <arcticdb/pipeline/column_mapping.hpp>
+#include <arcticdb/column_store/chunked_buffer.hpp>
+#include <arcticdb/codec/segment_header.hpp>
 
 #include <folly/Poly.h>
 
@@ -19,6 +19,7 @@
 namespace arcticdb {
 
 struct BufferHolder;
+struct ColumnMapping;
 
 struct ITypeHandler {
     template<class Base>
@@ -31,21 +32,21 @@ struct ITypeHandler {
         void handle_type(
             const uint8_t*& source,
             uint8_t* dest,
-            const VariantField& encoded_field_info,
+            const EncodedFieldImpl& encoded_field_info,
+            const ColumnMapping& mapping,
             size_t dest_bytes,
-            std::shared_ptr<BufferHolder> buffers,
-            EncodingVersion encoding_version,
-            const ColumnMapping& m
+            const std::shared_ptr<BufferHolder>& buffers,
+            EncodingVersion encoding_version
         ) {
             folly::poly_call<0>(
                 *this,
                 source,
                 dest,
                 encoded_field_info,
+                mapping,
                 dest_bytes,
                 buffers,
-                encoding_version,
-                m
+                encoding_version
             );
         }
 

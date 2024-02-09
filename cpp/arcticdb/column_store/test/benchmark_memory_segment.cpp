@@ -34,12 +34,19 @@ std::vector<uint64_t> get_random_permutation(size_t num_rows, std::mt19937 g){
 SegmentInMemory get_shuffled_segment(const StreamId& id, size_t num_rows, size_t num_columns, std::optional<float> sparsity_percentage = std::nullopt){
     // We use a seed to get the same shuffled segment for given arguments.
     std::mt19937 g(0);
-    auto fields = std::vector<FieldRef>(num_columns);
+    std::vector<FieldWrapper> fields;
     for (auto i=0u; i<num_columns; ++i){
-        fields[i] = scalar_field(DataType::UINT64, "column_"+std::to_string(i));
+        fields.emplace_back(make_scalar_type(DataType::UINT64), "column_"+std::to_string(i));
     }
+
+    std::vector<FieldRef> field_refs;
+    field_refs.reserve(fields.size());
+    for(const auto& wrapper : fields) {
+        field_refs.emplace_back(FieldRef{wrapper.type(), wrapper.name()});
+    }
+
     auto segment = SegmentInMemory{
-        get_test_descriptor<stream::TimeseriesIndex>(id, fields),
+        get_test_descriptor<stream::TimeseriesIndex>(id, field_refs),
         num_rows,
         false,
         sparsity_percentage.has_value()

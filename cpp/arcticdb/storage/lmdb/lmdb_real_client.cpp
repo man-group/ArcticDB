@@ -35,7 +35,7 @@ std::optional<Segment> RealLmdbClient::read(const std::string&, std::string& pat
         return std::nullopt;
     }
 
-    auto segment = Segment::from_bytes(reinterpret_cast<std::uint8_t *>(mdb_val.mv_data),mdb_val.mv_size);
+    auto segment = Segment::from_bytes(reinterpret_cast<std::uint8_t *>(mdb_val.mv_data), mdb_val.mv_size);
     return segment;
 }
 
@@ -43,9 +43,8 @@ void RealLmdbClient::write(const std::string&, std::string& path, arcticdb::Segm
                            ::lmdb::txn& txn, ::lmdb::dbi& dbi, int64_t overwrite_flag) {
     MDB_val mdb_key{path.size(), path.data()};
 
-    std::size_t hdr_sz = seg.segment_header_bytes_size();
     MDB_val mdb_val;
-    mdb_val.mv_size = seg.total_segment_size(hdr_sz);
+    mdb_val.mv_size = seg.calculate_size();
 
     ARCTICDB_SUBSAMPLE(LmdbPut, 0)
     int rc = ::mdb_put(txn.handle(), dbi.handle(), &mdb_key, &mdb_val, MDB_RESERVE | overwrite_flag);
@@ -55,7 +54,7 @@ void RealLmdbClient::write(const std::string&, std::string& path, arcticdb::Segm
 
     ARCTICDB_SUBSAMPLE(LmdbMemCpy, 0)
     // mdb_val now points to a reserved memory area we must write to
-    seg.write_to(reinterpret_cast<std::uint8_t *>(mdb_val.mv_data), hdr_sz);
+    seg.write_to(reinterpret_cast<std::uint8_t *>(mdb_val.mv_data));
 }
 
 bool RealLmdbClient::remove(const std::string&, std::string& path, ::lmdb::txn& txn, ::lmdb::dbi& dbi) {

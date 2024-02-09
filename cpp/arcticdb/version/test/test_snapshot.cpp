@@ -86,7 +86,6 @@ TEST(SnapshotCreate, Basic) {
 
     auto version_key = std::move(fut.wait().value());
     ::sleep(1);
-    log::root().info("{}", version_key);
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
     version_store->snapshot("blah");
     version_store->list_snapshots();

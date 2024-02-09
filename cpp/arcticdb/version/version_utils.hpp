@@ -46,22 +46,19 @@ inline entity::VariantKey write_multi_index_entry(
     for (auto &key : keys) {
         multi_index_agg.add_key(to_atom(key));
     }
-    google::protobuf::Any any = {};
-    TimeseriesDescriptor metadata;
+    TimeseriesDescriptor timeseries_descriptor;
 
     if (!metastruct.is_none()) {
         arcticdb::proto::descriptors::UserDefinedMetadata multi_key_proto;
         python_util::pb_from_python(metastruct, multi_key_proto);
-        metadata.mutable_proto().mutable_multi_key_meta()->CopyFrom(multi_key_proto);
+        timeseries_descriptor.set_multi_key_metadata(std::move(multi_key_proto));
     }
     if (!user_meta.is_none()) {
         arcticdb::proto::descriptors::UserDefinedMetadata user_meta_proto;
         python_util::pb_from_python(user_meta, user_meta_proto);
-        metadata.mutable_proto().mutable_user_meta()->CopyFrom(user_meta_proto);
+        timeseries_descriptor.set_user_metadata(std::move(user_meta_proto));
     }
-    any.PackFrom(metadata.proto());
-    multi_index_agg.set_metadata(std::move(any));
-
+    multi_index_agg.set_timeseries_descriptor(timeseries_descriptor);
     multi_index_agg.commit();
     return multi_key_fut.wait().value();
 }

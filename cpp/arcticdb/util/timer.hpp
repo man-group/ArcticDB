@@ -202,7 +202,7 @@ private:
 /* Timer helper, use like so:
  *
    ScopedTimer timer{"read_partial", [](auto msg) {
-        log::version().info(msg);
+        ARCTICDB_DEBUG(log::version(), msg);
     }};
 */
 class ScopedTimer {
@@ -261,7 +261,7 @@ public:
 
 /* Timer helper, use like so:
   ScopedTimer timer{"read_partial", [](auto time) {
-        log::version().info(time);
+        ARCTICDB_DEBUG(log::version(), time);
     }};
 */
 

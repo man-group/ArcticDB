@@ -12,73 +12,133 @@
 
 namespace arcticdb {
 
+struct FrameDescriptorImpl : public FrameDescriptor {
+    FrameDescriptorImpl() = default;
+
+    ARCTICDB_MOVE_COPY_DEFAULT(FrameDescriptorImpl)
+
+    [[nodiscard]] FrameDescriptorImpl clone() const {
+        return *this;
+    }
+};
+
 struct TimeseriesDescriptor {
-  using Proto = arcticdb::proto::descriptors::TimeSeriesDescriptor;
+    using Proto = arcticdb::proto::descriptors::FrameMetadata;
 
-  std::shared_ptr<Proto> proto_ = std::make_shared<Proto>();
-  std::shared_ptr<FieldCollection> fields_ = std::make_shared<FieldCollection>();
-  TimeseriesDescriptor() = default;
+    std::shared_ptr<FrameDescriptorImpl> frame_data_ = std::make_shared<FrameDescriptorImpl>();
+    std::shared_ptr<SegmentDescriptorImpl> segment_desc_ = std::make_shared<SegmentDescriptorImpl>();
+    std::shared_ptr<Proto> proto_ = std::make_shared<Proto>();
+    std::shared_ptr<FieldCollection> fields_ = std::make_shared<FieldCollection>();
+    StreamId stream_id_;
 
-  TimeseriesDescriptor(std::shared_ptr<Proto> proto, std::shared_ptr<FieldCollection> fields) :
-    proto_(std::move(proto)),
-    fields_(std::move(fields)) {
-  }
+    TimeseriesDescriptor() = default;
 
-  [[nodiscard]] std::shared_ptr<FieldCollection> fields_ptr() const  {
-      return fields_;
-  }
+    TimeseriesDescriptor(
+        std::shared_ptr<FrameDescriptorImpl> frame_desc,
+        std::shared_ptr<SegmentDescriptorImpl> segment_desc,
+        std::shared_ptr<Proto> proto,
+        std::shared_ptr<FieldCollection> fields,
+        StreamId stream_id) :
+        frame_data_(std::move(frame_desc)),
+        segment_desc_(segment_desc),
+        proto_(std::move(proto)),
+        fields_(std::move(fields)),
+        stream_id_(stream_id) {
+    }
 
-  [[nodiscard]] std::shared_ptr<Proto> proto_ptr() const {
-      return proto_;
-  }
+    [[nodiscard]] const FrameDescriptorImpl &frame_descriptor() const {
+        return *frame_data_;
+    }
 
-  [[nodiscard]] bool proto_is_null() const {
-      return !proto_;
-  }
+    [[nodiscard]] IndexDescriptorImpl index() const {
+        return segment_desc_->index_;
+    }
 
-  void set_stream_descriptor(const StreamDescriptor& desc) {
-      fields_ = std::make_shared<FieldCollection>(desc.fields().clone());
-      proto_ = std::make_shared<Proto>();
-      proto_->mutable_stream_descriptor()->CopyFrom(desc.proto());
-  }
+    void set_stream_descriptor(const StreamDescriptor &desc) {
+        segment_desc_ = desc.data_ptr();
+        fields_ = desc.fields_ptr();
+        stream_id_ = desc.stream_id_;
+    }
 
-  [[nodiscard]] const FieldCollection& fields() const {
-      return *fields_;
-  }
+    void set_total_rows(uint64_t rows) {
+        frame_data_->total_rows_ = rows;
+    }
 
-  [[nodiscard]] FieldCollection& mutable_fields() {
-      return *fields_;
-  }
+    [[nodiscard]] uint64_t total_rows() const {
+        return frame_data_->total_rows_;
+    }
 
-  [[nodiscard]] Proto& mutable_proto() {
-       return *proto_;
-  }
+    [[nodiscard]] SortedValue sorted() const {
+        return segment_desc_->sorted_;
+    }
 
-  [[nodiscard]] const Proto& proto() const {
-      return *proto_;
-  }
+    void set_sorted(SortedValue sorted) {
+        segment_desc_->sorted_ = sorted;
+    }
 
-  [[nodiscard]] TimeseriesDescriptor clone() const {
-      auto proto = std::make_shared<Proto>();
-      proto->CopyFrom(*proto_);
-      return {std::move(proto), std::make_shared<FieldCollection>(fields_->clone())};
-  }
+    const arcticdb::proto::descriptors::UserDefinedMetadata& user_metadata() const {
+        return proto_->user_meta();
+    }
 
-  [[nodiscard]] StreamDescriptor as_stream_descriptor() const {
-      auto stream_descriptor = std::make_shared<arcticdb::proto::descriptors::StreamDescriptor>();
-      stream_descriptor->CopyFrom(proto_->stream_descriptor());
-      return StreamDescriptor(stream_descriptor, fields_);
-  }
+    const arcticdb::proto::descriptors::NormalizationMetadata normalization() const {
+        return proto_->normalization();
+    }
 
-  void copy_to_self_proto() {
-      proto_->mutable_stream_descriptor()->mutable_fields()->Clear();
-      for(const auto& field : *fields_) {
-          auto new_field = proto_->mutable_stream_descriptor()->mutable_fields()->Add();
-          new_field->set_name(std::string(field.name()));
-          new_field->mutable_type_desc()->set_dimension(static_cast<uint32_t>(field.type().dimension()));
-          set_data_type(field.type().data_type(), *new_field->mutable_type_desc());
-      }
-  }
+    void set_user_metadata(arcticdb::proto::descriptors::UserDefinedMetadata &&user_meta) {
+        *proto_->mutable_user_meta() = std::move(user_meta);
+    }
+
+    void set_normalization_metadata(arcticdb::proto::descriptors::NormalizationMetadata &&norm_meta) {
+        *proto_->mutable_normalization() = std::move(norm_meta);
+    }
+
+    void set_multi_key_metadata(arcticdb::proto::descriptors::UserDefinedMetadata &&multi_key_meta) {
+        *proto_->mutable_multi_key_meta() = std::move(multi_key_meta);
+    }
+
+    [[nodiscard]] std::shared_ptr<FieldCollection> fields_ptr() const {
+        return fields_;
+    }
+
+    [[nodiscard]] std::shared_ptr<Proto> proto_ptr() const {
+        return proto_;
+    }
+
+    [[nodiscard]] bool proto_is_null() const {
+        return !proto_;
+    }
+
+    [[nodiscard]] const FieldCollection &fields() const {
+        return *fields_;
+    }
+
+    [[nodiscard]] FieldCollection &mutable_fields() {
+        return *fields_;
+    }
+
+    [[nodiscard]] Proto &mutable_proto() {
+        return *proto_;
+    }
+
+    [[nodiscard]] const Proto &proto() const {
+        return *proto_;
+    }
+
+    [[nodiscard]] TimeseriesDescriptor clone() const {
+        auto proto = std::make_shared<Proto>();
+        proto->CopyFrom(*proto_);
+        auto frame_desc = std::make_shared<FrameDescriptorImpl>(frame_data_->clone());
+        auto segment_desc = std::make_shared<SegmentDescriptorImpl>(segment_desc_->clone());
+        return {std::move(frame_desc), std::move(segment_desc), std::move(proto), std::make_shared<FieldCollection>(fields_->clone()), stream_id_};
+    }
+
+    [[nodiscard]] bool column_groups() const {
+        return frame_data_->column_groups_;
+    }
+
+    [[nodiscard]] StreamDescriptor as_stream_descriptor() const {
+        return {segment_desc_, fields_, stream_id_};
+    }
 };
 
 } //namespace arcticdb

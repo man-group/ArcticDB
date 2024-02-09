@@ -113,7 +113,7 @@ TEST_F(IngestionStressStore, ScalarIntAppend) {
     }
     GTEST_COUT << " 2 done";
 
-    agg.commit();
+    agg.finalize();
 
     for(auto &seg : sink.segments_)
         arcticdb::append_incomplete_segment(test_store_->_test_get_store(), symbol, std::move(seg));
@@ -172,7 +172,6 @@ TEST_F(IngestionStressStore, ScalarIntDynamicSchema) {
     auto new_descriptor = index.create_stream_descriptor(symbol, columns_second.clone());
 
     // Now write again.
-
     for (timestamp i = 0; i < NumRows; ++i) {
         agg.start_row(timestamp{i + NumRows})([&](auto &rb) {
             for (uint64_t j = 1u; j < NumColumnsSecondWrite; ++j)
@@ -199,12 +198,9 @@ TEST_F(IngestionStressStore, ScalarIntDynamicSchema) {
         });
     }
 
-
-    agg.commit();
-
-
+    agg.finalize();
     for(auto &seg : sink.segments_) {
-        log::version().info("Writing to symbol: {}", symbol);
+        ARCTICDB_DEBUG(log::version(), "Writing to symbol: {}", symbol);
         arcticdb::append_incomplete_segment(test_store_->_test_get_store(), symbol, std::move(seg));
     }
 
@@ -252,10 +248,10 @@ TEST_F(IngestionStressStore, DynamicSchemaWithStrings) {
     timer.stop_timer(timer_name);
     GTEST_COUT << " 1 done";
 
-    agg.commit();
+    agg.finalize();
 
     for(auto &seg : sink.segments_) {
-        log::version().info("Writing to symbol: {}", symbol);
+        ARCTICDB_DEBUG(log::version(), "Writing to symbol: {}", symbol);
         arcticdb::append_incomplete_segment(test_store_->_test_get_store(), symbol, std::move(seg));
     }
 
@@ -268,5 +264,5 @@ TEST_F(IngestionStressStore, DynamicSchemaWithStrings) {
     ReadQuery read_query;
     read_query.row_filter = universal_range();
     auto read_result = test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, read_options);
-    log::version().info("result columns: {}", read_result.frame_data.names());
+    ARCTICDB_DEBUG(log::version(), "result columns: {}", read_result.frame_data.names());
 }

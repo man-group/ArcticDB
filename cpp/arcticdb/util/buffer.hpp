@@ -52,14 +52,14 @@ struct BufferView : public BaseBuffer<BufferView, false> {
 };
 
 struct Buffer : public BaseBuffer<Buffer, true> {
-    void init(size_t size, const std::optional<size_t>& preamble = std::nullopt) {
+    void reserve(size_t size, const std::optional<size_t>& preamble = std::nullopt) {
         preamble_bytes_ = preamble.value_or(0);
         ensure(size);
         check_invariants();
     }
 
     explicit Buffer(size_t size, std::optional<size_t> preamble = std::nullopt) {
-        init(size, preamble);
+        reserve(size, preamble);
     }
 
     Buffer() = default;
@@ -68,6 +68,10 @@ struct Buffer : public BaseBuffer<Buffer, true> {
         *this = std::move(other);
         check_invariants();
     }
+
+    static auto presized(size_t size) {
+        return Buffer(size);
+    };
 
     Buffer &operator=(Buffer &&b) noexcept {
         deallocate();
@@ -138,7 +142,7 @@ struct Buffer : public BaseBuffer<Buffer, true> {
     [[nodiscard]] Buffer clone() const {
         Buffer output;
         if(total_bytes() > 0) {
-            output.init(body_bytes_, preamble_bytes_);
+            output.reserve(body_bytes_, preamble_bytes_);
             util::check(data_ != nullptr && output.data_ != nullptr, "Error in buffer allocation of size {} + {}", body_bytes_, preamble_bytes_);
             memcpy(output.data_, data_, total_bytes());
         }
@@ -150,7 +154,7 @@ struct Buffer : public BaseBuffer<Buffer, true> {
         check_invariants();
         if (bytes_offset  + required_bytes > bytes()) {
             std::string err = fmt::format("Cursor overflow in reallocating buffer ptr_cast, cannot read {} bytes from a buffer of size {} with cursor "
-                                          "at {}, as it would required {} bytes. ",
+                                          "at {}, as it would require {} bytes. ",
                                           required_bytes,
                                           bytes(),
                                           bytes_offset,
@@ -169,8 +173,7 @@ struct Buffer : public BaseBuffer<Buffer, true> {
     }
 
     inline void ensure(size_t bytes) {
-        const size_t total_size = bytes + preamble_bytes_;
-        if(total_size > capacity_) {
+        if(const size_t total_size = bytes + preamble_bytes_; total_size > capacity_) {
             resize(total_size);
         } else {
             ARCTICDB_TRACE(log::version(), "Buffer {} has sufficient bytes for {}, ptr {} data {}, capacity {}",
@@ -259,7 +262,106 @@ struct Buffer : public BaseBuffer<Buffer, true> {
     entity::timestamp ts_ = 0;
 };
 
-using VariantBuffer = std::variant<std::monostate, std::shared_ptr<Buffer>, BufferView>;
+class VariantBuffer {
+    using VariantType = std::variant<std::monostate, std::shared_ptr<Buffer>, BufferView>;
+
+    VariantType buffer_;
+public:
+    VariantBuffer() = default;
+
+    template<typename BufferType>
+    VariantBuffer(BufferType&& buf) :
+            buffer_(std::forward<decltype(buf)>(buf)) {
+    }
+
+    [[nodiscard]] VariantBuffer clone() const {
+        return util::variant_match(buffer_,
+           [] (const BufferView& bv) { auto b = std::make_shared<Buffer>(); bv.copy_to(*b); return VariantBuffer{std::move(b)}; },
+           [] (const std::shared_ptr<Buffer>& buf) { return VariantBuffer{ std::make_shared<Buffer>(buf->clone())}; },
+           [] (const std::monostate) -> VariantBuffer { util::raise_rte("Uninitialized buffer"); }
+           );
+    }
+
+    template<typename BufferType>
+    VariantBuffer& operator=(BufferType&& buf) {
+        buffer_ = std::forward<decltype(buf)>(buf);
+        return *this;
+    }
+
+    [[nodiscard]] const std::shared_ptr<Buffer>& get_owning_buffer() const {
+        return std::get<std::shared_ptr<Buffer>>(buffer_);
+    }
+
+    uint8_t* data() {
+        return util::variant_match(buffer_,
+           [] (BufferView& bv) { return bv.data(); },
+           [] (const std::shared_ptr<Buffer>& buf) { return buf->data(); },
+           [] (const std::monostate) ->uint8_t* { util::raise_rte("Uninitialized buffer"); }
+        );
+    }
+
+    [[nodiscard]] size_t preamble_bytes() const {
+        if (std::holds_alternative<std::shared_ptr<Buffer>>(buffer_)) {
+            return std::get<std::shared_ptr<Buffer>>(buffer_)->preamble_bytes();
+        } else {
+            return 0U;
+        }
+    }
+
+    [[nodiscard]] BufferView view() const {
+        if (std::holds_alternative<std::shared_ptr<Buffer>>(buffer_)) {
+            return std::get<std::shared_ptr<Buffer>>(buffer_)->view();
+        } else {
+            return std::get<BufferView>(buffer_);
+        }
+    }
+
+    [[nodiscard]] std::size_t bytes() const {
+        std::size_t s = 0;
+        util::variant_match(buffer_,
+            [] (const std::monostate&) { /* Uninitialized buffer */},
+            [&s](const BufferView& b) { s = b.bytes(); },
+            [&s](const std::shared_ptr<Buffer>& b) { s = b->bytes(); });
+
+        return s;
+    }
+
+    [[nodiscard]] bool is_uninitialized() const {
+        return std::holds_alternative<std::monostate>(buffer_);
+    }
+
+    void move_buffer(VariantBuffer &&that) {
+        if(is_uninitialized() || that.is_uninitialized()) {
+            std::swap(buffer_, that.buffer_);
+        } else if (!(is_owning_buffer() ^ that.is_owning_buffer())) {
+            if (is_owning_buffer()) {
+                swap(*std::get<std::shared_ptr<Buffer>>(buffer_), *std::get<std::shared_ptr<Buffer>>(that.buffer_));
+            } else {
+                swap(std::get<BufferView>(buffer_), std::get<BufferView>(that.buffer_));
+            }
+        } else if (is_owning_buffer()) {
+            log::storage().info("Copying segment");
+            // data of segment being moved is not owned, moving it is dangerous, copying instead
+            std::get<BufferView>(that.buffer_).copy_to(*std::get<std::shared_ptr<Buffer>>(buffer_));
+        } else {
+            // data of this segment is a view, but the move data is moved
+            buffer_ = std::move(std::get<std::shared_ptr<Buffer>>(that.buffer_));
+        }
+    }
+
+    [[nodiscard]] bool is_owning_buffer() const {
+        return std::holds_alternative<std::shared_ptr<Buffer>>(buffer_);
+    }
+
+    void force_own_buffer() {
+        if (!is_owning_buffer()) {
+            auto b = std::make_shared<Buffer>();
+            std::get<BufferView>(buffer_).copy_to(*b);
+            buffer_ = std::move(b);
+        }
+    }
+};
+
 
 
 } // namespace arcticdb

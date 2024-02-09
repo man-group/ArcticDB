@@ -251,9 +251,11 @@ TEST_F(LMDBStorageTestBase, WriteMapFullError) {
     auto storage = factory.create();
 
     arcticdb::entity::AtomKey k = arcticdb::entity::atom_key_builder().gen_id(0).build<arcticdb::entity::KeyType::VERSION>("sym");
-    arcticdb::storage::KeySegmentPair kv(k);
-    kv.segment().header().set_start_ts(1234);
-    kv.segment().set_buffer(std::make_shared<arcticdb::Buffer>(40000));
+
+    auto segment_in_memory = get_test_frame<arcticdb::stream::TimeseriesIndex>("symbol", {}, 40000, 0).segment_;
+    auto codec_opts = proto::encoding::VariantCodec();
+    auto segment = encode_dispatch(std::move(segment_in_memory), codec_opts, arcticdb::EncodingVersion::V2);
+    arcticdb::storage::KeySegmentPair kv(k, std::move(segment));
 
     ASSERT_THROW({
         storage->write(std::move(kv));
