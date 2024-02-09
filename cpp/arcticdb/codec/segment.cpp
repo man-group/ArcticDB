@@ -78,7 +78,7 @@ FieldCollection decode_descriptor_fields(
     const uint8_t* begin ARCTICDB_UNUSED) {
     FieldCollection fields;
     if (hdr.has_descriptor_field()) {
-        std::optional<util::BitMagic> bv;
+        std::optional<util::BitSet> bv;
         util::check(hdr.descriptor_field().has_ndarray(), "Expected descriptor field to be ndarray");
         (void)decode_ndarray(FieldCollection::type(),
             hdr.descriptor_field(),

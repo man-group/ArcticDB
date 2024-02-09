@@ -70,7 +70,7 @@ std::size_t decode_field(
     const EncodedFieldImpl &field,
     const uint8_t *input,
     DataSink &data_sink,
-    std::optional<util::BitMagic>& bv,
+    std::optional<util::BitSet>& bv,
     arcticdb::EncodingVersion encoding_version);
 
 std::optional<google::protobuf::Any> decode_metadata_from_segment(
@@ -87,6 +87,8 @@ HashedValue get_segment_hash(Segment& seg);
 SegmentDescriptorImpl read_segment_descriptor(const uint8_t*& data);
 
 TimeseriesDescriptor unpack_timeseries_descriptor_from_proto(const google::protobuf::Any& any);
+
+bm::serializer<bm::bvector<> >::buffer encode_bitmap(const util::BitSet& sparse_map);
 
 } // namespace arcticdb
 

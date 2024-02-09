@@ -98,7 +98,7 @@ std::optional<google::protobuf::Any> decode_metadata(
         hdr.metadata_field().validate();
         auto meta_type_desc = metadata_type_desc();
         MetaBuffer meta_buf;
-        std::optional<util::BitMagic> bv;
+        std::optional<util::BitSet> bv;
         ARCTICDB_DEBUG(log::codec(), "Decoding metadata at position {}: {}", data - begin, dump_bytes(data, 10));
         data += decode_ndarray(meta_type_desc, hdr.metadata_field().ndarray(), data, meta_buf, bv, hdr.encoding_version());
         ARCTICDB_TRACE(log::codec(), "Decoded metadata to position {}", data - begin);
@@ -145,7 +145,7 @@ EncodedFieldCollection decode_encoded_fields(
     ARCTICDB_TRACE(log::codec(), "Decoding encoded fields");
 
     util::check(hdr.has_column_fields() && hdr.column_fields().has_ndarray(), "Expected encoded field description to be set in header");
-    std::optional<util::BitMagic> bv;
+    std::optional<util::BitSet> bv;
     const auto uncompressed_size = encoding_sizes::uncompressed_size(hdr.column_fields());
     constexpr auto type_desc = encoded_fields_type_desc();
     Column encoded_column(type_desc, uncompressed_size, false, false);
@@ -187,7 +187,7 @@ std::shared_ptr<FieldCollection> decode_index_fields(
     if(hdr.has_index_descriptor_field() && hdr.index_descriptor_field().has_ndarray()) {
         ARCTICDB_TRACE(log::codec(), "Decoding index fields");
         util::check(data!=end, "Reached end of input block with index descriptor fields to decode");
-        std::optional<util::BitMagic> bv;
+        std::optional<util::BitSet> bv;
 
         data += decode_ndarray(FieldCollection::type(),
                        hdr.index_descriptor_field().ndarray(),
@@ -224,7 +224,7 @@ std::optional<FieldCollection> decode_descriptor_fields(
     if(hdr.has_descriptor_field()) {
         ARCTICDB_TRACE(log::codec(), "Decoding index fields");
         util::check(data!=end, "Reached end of input block with descriptor fields to decode");
-        std::optional<util::BitMagic> bv;
+        std::optional<util::BitSet> bv;
         FieldCollection fields;
         data += decode_field(FieldCollection::type(),
                        hdr.descriptor_field(),
@@ -351,7 +351,8 @@ void decode_string_pool(
     if (hdr.has_string_pool_field()) {
         ARCTICDB_TRACE(log::codec(), "Decoding string pool");
         util::check(data!=end, "Reached end of input block with string pool fields to decode");
-        std::optional<util::BitMagic> bv;
+
+        std::optional<util::BitSet> bv;
         data += decode_ndarray(string_pool_descriptor().type(),
                        hdr.string_pool_field(),
                        data,
@@ -581,28 +582,33 @@ void add_bitmagic_compressed_size(
     size_t& uncompressed_bytes
 ) {
     if (column_data.bit_vector() != nullptr && column_data.bit_vector()->count() > 0)   {
-        bm::serializer<util::BitMagic>::statistics_type stat{};
+        bm::serializer<util::BitSet>::statistics_type stat{};
         column_data.bit_vector()->calc_stat(&stat);
         uncompressed_bytes += stat.memory_used;
         max_compressed_bytes += stat.max_serialize_mem;
     }
 }
 
+bm::serializer<bm::bvector<> >::buffer encode_bitmap(const util::BitSet& sparse_map) {
+    bm::serializer<bm::bvector<> > bvs;
+    bm::serializer<bm::bvector<> >::buffer buffer;
+    bvs.serialize(sparse_map, buffer);
+    return buffer;
+}
+
 /// @brief Write the sparse map to the out buffer
 /// Bitmagic achieves the theoretical best compression for booleans. Adding additional encoding (lz4, zstd, etc...)
-/// will not improve anything and in fact it might worsen the encoding.
-[[nodiscard]] static size_t encode_bitmap(const util::BitMagic& sparse_map, Buffer& out, std::ptrdiff_t& pos) {
+/// will not improve anything and in fact it might worsen the compression.
+[[nodiscard]] static size_t encode_bitmap_to_buffer(const util::BitSet& sparse_map, Buffer& out, std::ptrdiff_t& pos) {
     ARCTICDB_DEBUG(log::version(), "Encoding sparse map of count: {}", sparse_map.count());
-    bm::serializer<bm::bvector<> > bvs;
-    bm::serializer<bm::bvector<> >::buffer sbuf;
-    bvs.serialize(sparse_map, sbuf);
-    auto sz = sbuf.size();
+    auto buffer = encode_bitmap(sparse_map);
+    auto sz = buffer.size();
     auto total_sz = sz + util::combined_bit_magic_delimiters_size();
     out.assert_size(pos + total_sz);
 
     uint8_t* target = out.data() + pos;
     util::write_magic<util::BitMagicStart>(target);
-    std::memcpy(target, sbuf.data(), sz);
+    std::memcpy(target, buffer.data(), sz);
     target += sz;
     util::write_magic<util::BitMagicEnd>(target);
     pos = pos + static_cast<ptrdiff_t>(total_sz);
@@ -618,7 +624,7 @@ void encode_sparse_map(
     if (column_data.bit_vector() != nullptr && column_data.bit_vector()->count() > 0) {
         util::check(!is_empty_type(column_data.type().data_type()), "Empty typed columns should not have sparse maps");
         ARCTICDB_DEBUG(log::codec(), "Sparse map count = {} pos = {}", column_data.bit_vector()->count(), pos);
-        const size_t sparse_bm_bytes = encode_bitmap(*column_data.bit_vector(), out, pos);
+        const size_t sparse_bm_bytes = encode_bitmap_to_buffer(*column_data.bit_vector(), out, pos);
         field.mutable_ndarray()->set_sparse_map_bytes(static_cast<int>(sparse_bm_bytes));
     }
 }

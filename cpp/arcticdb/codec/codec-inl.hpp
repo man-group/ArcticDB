@@ -75,7 +75,7 @@ std::size_t decode_ndarray(
     const NDArrayEncodedFieldType& field,
     const std::uint8_t* input,
     DataSink& data_sink,
-    std::optional<util::BitMagic>& bv,
+    std::optional<util::BitSet>& bv,
     EncodingVersion encoding_version
 ) {
     ARCTICDB_SUBSAMPLE_AGG(DecodeNdArray)
@@ -160,7 +160,7 @@ std::size_t decode_field(
     const EncodedFieldImpl &field,
     const std::uint8_t *input,
     DataSink &data_sink,
-    std::optional<util::BitMagic>& bv,
+    std::optional<util::BitSet>& bv,
     EncodingVersion encoding_version) {
     size_t magic_size = 0u;
     if (encoding_version != EncodingVersion::V1) {

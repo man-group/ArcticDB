@@ -186,6 +186,9 @@ set(arcticdb_srcs
         codec/encode_common.hpp
         codec/codec-inl.hpp
         codec/core.hpp
+        codec/run_length_encoding.hpp
+        codec/constant_encoding.hpp
+        codec/frequency_encoding.hpp
         codec/lz4.hpp
         codec/magic_words.hpp
         codec/passthrough.hpp
@@ -495,8 +498,7 @@ set(arcticdb_srcs
         version/version_store_api.cpp
         version/version_utils.cpp
         version/symbol_list.cpp
-        version/version_map_batch_methods.cpp
-        )
+        version/version_map_batch_methods.cpp)
 
 if(${ARCTICDB_INCLUDE_ROCKSDB})
     list (APPEND arcticdb_srcs
@@ -747,6 +749,13 @@ if(${TEST})
     set(unit_test_srcs
             async/test/test_async.cpp
             codec/test/test_codec.cpp
+            codec/test/test_encode_field_collection.cpp
+            codec/test/test_segment_header.cpp
+            codec/test/test_encoded_field.cpp
+            codec/test/test_run_length_encoding.cpp
+            codec/test/encoding_test_common.hpp
+            codec/test/test_constant_encoding.cpp
+            codec/test/test_frequency_encoding.cpp
             column_store/test/ingestion_stress_test.cpp
             column_store/test/test_column.cpp
             column_store/test/test_column_data_random_accessor.cpp
@@ -814,7 +823,9 @@ if(${TEST})
             version/test/test_sorting_info_state_machine.cpp
             version/test/version_map_model.hpp
             storage/test/common.hpp
-            codec/test/test_encode_field_collection.cpp codec/test/test_segment_header.cpp codec/test/test_encoded_field.cpp)
+            codec/test/test_encode_field_collection.cpp
+            codec/test/test_segment_header.cpp
+            codec/test/test_encoded_field.cpp)
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 
@@ -908,6 +919,8 @@ if(${TEST})
             )
 
     set(rapidcheck_srcs
+            codec/test/rapidcheck_run_length_encoding.cpp
+            codec/test/rapidcheck_frequency_encoding.cpp
             column_store/test/rapidcheck_column_store.cpp
             column_store/test/rapidcheck_chunked_buffer.cpp
             column_store/test/rapidcheck_column.cpp
@@ -921,6 +934,7 @@ if(${TEST})
             util/test/rapidcheck_string_pool.cpp
             util/test/rapidcheck_main.cpp
             version/test/rapidcheck_version_map.cpp
+
     )
 
     add_executable(arcticdb_rapidcheck_tests ${rapidcheck_srcs})
