@@ -9,8 +9,7 @@
 
 #include <cmath>
 
-namespace arcticdb
-{
+namespace arcticdb {
 
 void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
     details::visit_type(input_column.column_->type().data_type(), [&] (auto col_tag) {
@@ -57,63 +56,64 @@ SegmentInMemory MinMaxAggregatorData::finalize(const std::vector<ColumnName>& ou
 }
 
 namespace {
-    template<typename T, typename T2=void>
-    struct OutputType;
 
-    template <typename InputType>
-    struct OutputType <InputType, typename std::enable_if_t<is_floating_point_type(InputType::DataTypeTag::data_type)>> {
-        using type = ScalarTagType<DataTypeTag<DataType::FLOAT64>>;
-    };
+template<typename T, typename T2=void>
+struct OutputType;
 
-    template <typename InputType>
-    struct OutputType <InputType, typename std::enable_if_t<is_unsigned_type(InputType::DataTypeTag::data_type)>> {
-        using type = ScalarTagType<DataTypeTag<DataType::UINT64>>;
-    };
+template <typename InputType>
+struct OutputType <InputType, typename std::enable_if_t<is_floating_point_type(InputType::DataTypeTag::data_type)>> {
+    using type = ScalarTagType<DataTypeTag<DataType::FLOAT64>>;
+};
 
-    template <typename InputType>
-    struct OutputType<InputType, typename std::enable_if_t<is_signed_type(InputType::DataTypeTag::data_type) && is_integer_type(InputType::DataTypeTag::data_type)>> {
-        using type = ScalarTagType<DataTypeTag<DataType::INT64>>;
-    };
+template <typename InputType>
+struct OutputType <InputType, typename std::enable_if_t<is_unsigned_type(InputType::DataTypeTag::data_type)>> {
+    using type = ScalarTagType<DataTypeTag<DataType::UINT64>>;
+};
 
-    template<>
-    struct OutputType<DataTypeTag<DataType::BOOL8>, void> {
-        using type = ScalarTagType<DataTypeTag<DataType::BOOL8>>;
-    };
+template <typename InputType>
+struct OutputType<InputType, typename std::enable_if_t<is_signed_type(InputType::DataTypeTag::data_type) && is_integer_type(InputType::DataTypeTag::data_type)>> {
+    using type = ScalarTagType<DataTypeTag<DataType::INT64>>;
+};
 
-    template<>
-    struct OutputType<DataTypeTag<DataType::NANOSECONDS_UTC64>, void> {
-        using type = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
-    };
+template<>
+struct OutputType<DataTypeTag<DataType::BOOL8>, void> {
+    using type = ScalarTagType<DataTypeTag<DataType::BOOL8>>;
+};
 
-    template<>
-    struct OutputType<DataTypeTag<DataType::EMPTYVAL>, void> {
-        using type = ScalarTagType<DataTypeTag<DataType::EMPTYVAL>>;
-    };
+template<>
+struct OutputType<DataTypeTag<DataType::NANOSECONDS_UTC64>, void> {
+    using type = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
+};
 
-    template<>
-    struct OutputType<DataTypeTag<DataType::ASCII_FIXED64>, void> {
-        using type = ScalarTagType<DataTypeTag<DataType::ASCII_FIXED64>>;
-    };
+template<>
+struct OutputType<DataTypeTag<DataType::EMPTYVAL>, void> {
+    using type = ScalarTagType<DataTypeTag<DataType::EMPTYVAL>>;
+};
 
-    template<>
-    struct OutputType<DataTypeTag<DataType::UTF_DYNAMIC64>, void> {
-        using type = ScalarTagType<DataTypeTag<DataType::UTF_DYNAMIC64>>;
-    };
+template<>
+struct OutputType<DataTypeTag<DataType::ASCII_FIXED64>, void> {
+    using type = ScalarTagType<DataTypeTag<DataType::ASCII_FIXED64>>;
+};
 
-    template<>
-    struct OutputType<DataTypeTag<DataType::ASCII_DYNAMIC64>, void> {
-        using type = ScalarTagType<DataTypeTag<DataType::ASCII_DYNAMIC64>>;
-    };
+template<>
+struct OutputType<DataTypeTag<DataType::UTF_DYNAMIC64>, void> {
+    using type = ScalarTagType<DataTypeTag<DataType::UTF_DYNAMIC64>>;
+};
 
-    template<>
-    struct OutputType<DataTypeTag<DataType::UTF_FIXED64>, void> {
-        using type = ScalarTagType<DataTypeTag<DataType::UTF_FIXED64>>;
-    };
+template<>
+struct OutputType<DataTypeTag<DataType::ASCII_DYNAMIC64>, void> {
+    using type = ScalarTagType<DataTypeTag<DataType::ASCII_DYNAMIC64>>;
+};
 
-    template<>
-    struct OutputType<DataTypeTag<DataType::BOOL_OBJECT8>, void> {
-        using type = ScalarTagType<DataTypeTag<DataType::BOOL_OBJECT8>>;
-    };
+template<>
+struct OutputType<DataTypeTag<DataType::UTF_FIXED64>, void> {
+    using type = ScalarTagType<DataTypeTag<DataType::UTF_FIXED64>>;
+};
+
+template<>
+struct OutputType<DataTypeTag<DataType::BOOL_OBJECT8>, void> {
+    using type = ScalarTagType<DataTypeTag<DataType::BOOL_OBJECT8>>;
+};
 }
 
 /**********************

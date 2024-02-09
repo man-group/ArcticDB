@@ -4,183 +4,123 @@
  *
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
-
 #pragma once
 
-#include <arcticdb/codec/segment.hpp>
+#include <arcticdb/util/preconditions.hpp>
+#include <arcticdb/entity/protobufs.hpp>
+#include "arcticdb/storage/memory_layout.hpp"
 
-#pragma pack(push)
-#pragma pack(1)
-
+#include <utility>
+#include <boost/iterator/iterator_facade.hpp>
 namespace arcticdb {
 
-inline std::pair<const uint8_t *, const uint8_t *> get_segment_begin_end(const Segment &segment,
-                                                                         const arcticdb::proto::encoding::SegmentHeader &hdr) {
-    const uint8_t *data = segment.buffer().data();
-    util::check(data != nullptr, "Got null data ptr from segment");
-    const uint8_t *begin = data;
+class Segment;
+class SegmentHeader;
 
-    const auto fields_offset = hdr.column_fields().offset();
-    const auto end = begin + fields_offset;
-    return {begin, end};
+std::pair<const uint8_t*, const uint8_t*> get_segment_begin_end(
+    const Segment &segment,
+    const SegmentHeader& hdr);
+
+constexpr std::string_view codec_type_to_string(Codec codec) {
+    switch(codec) {
+    case Codec::LZ4:
+        return "LZ4";
+    case Codec::ZSTD:
+        return "ZSTD";
+    case Codec::PFOR:
+        return "PFOR";
+    case Codec::PASS:
+        return "PASS";
+    default:
+        return "Unknown";
+    }
 }
 
-constexpr size_t encoding_size = 6;
-enum class Codec : uint16_t {
-    Unknown = 0,
-    Zstd,
-    TurboPfor,
-    Lz4,
-    Passthrough
-};
-
-struct ZstdCodec {
-    static constexpr Codec type_ = Codec::Zstd;
-
-    void MergeFrom(const arcticdb::proto::encoding::VariantCodec::Zstd &zstd) {
-        level_ = zstd.level();
-        is_streaming = zstd.is_streaming();
-    }
-
-    int32_t level_ = 0;
-    bool is_streaming = false;
-    uint8_t padding_ = 0;
-};
-
-static_assert(sizeof(ZstdCodec) == encoding_size);
-
-struct TurboPforCodec {
-    static constexpr Codec type_ = Codec::TurboPfor;
-
-    void MergeFrom(const arcticdb::proto::encoding::VariantCodec::TurboPfor &tp4) {
-        sub_codec_ = SubCodec(tp4.sub_codec());
-    }
-
-    enum class SubCodec : uint32_t {
-        UNKNOWN = 0,
-        P4 = 16,
-        P4_DELTA = 17,
-        P4_DELTA_RLE = 18,
-        P4_ZZ = 20,
-
-        FP_DELTA = 32, // fpp
-        FP_DELTA2_ZZ = 33,  // fpzz
-        FP_GORILLA_RLE = 34, // fpg
-        FP_ZZ = 36, // bvz
-        FP_ZZ_DELTA = 40, // bvz
-    };
-
-    SubCodec sub_codec_ = SubCodec::UNKNOWN;
-    uint16_t padding_ = 0;
-};
-
-static_assert(sizeof(TurboPforCodec) == encoding_size);
-
-struct Lz4Codec {
-    static constexpr Codec type_ = Codec::Lz4;
-
-    void MergeFrom(const arcticdb::proto::encoding::VariantCodec::Lz4& lz4) {
-        acceleration_ = lz4.acceleration();
-    }
-
-    int32_t acceleration_ = 1;
-    int16_t padding_ = 0;
-};
-
-static_assert(sizeof(Lz4Codec) == encoding_size);
-
-struct PassthroughCodec {
-    static constexpr Codec type_ = Codec::Passthrough;
-
-    uint32_t unused_ = 0;
-    uint16_t padding_ = 0;
-};
-
-static_assert(sizeof(PassthroughCodec) == encoding_size);
-
-struct BlockCodec {
-    Codec codec_ = Codec::Unknown;
-    constexpr static size_t DataSize = 24;
-    std::array<uint8_t, DataSize> data_;
-
+struct BlockCodecImpl : public BlockCodec {
     uint8_t* data() {
         return &data_[0];
     }
 
-    BlockCodec() {
+    [[nodiscard]] Codec codec_type() const {
+        return codec_;
+    }
+
+    [[nodiscard]] const uint8_t* data() const {
+        return &data_[0];
+    }
+
+    BlockCodecImpl() {
         memset(data(), 0, DataSize);
     }
 
     ZstdCodec *mutable_zstd() {
-        codec_ = Codec::Zstd;
+        codec_ = Codec::ZSTD;
         auto zstd = new(data()) ZstdCodec{};
         return zstd;
     }
 
     Lz4Codec *mutable_lz4() {
-        codec_ = Codec::Lz4;
+        codec_ = Codec::LZ4;
         auto lz4 = new(data()) Lz4Codec{};
         return lz4;
     }
 
-    TurboPforCodec *mutable_turbopfor() {
-        codec_ = Codec::TurboPfor;
-        auto pfor = new(data()) TurboPforCodec{};
+    PforCodec *mutable_pfor() {
+        codec_ = Codec::PFOR;
+        auto pfor = new(data()) PforCodec{};
         return pfor;
     }
 
     PassthroughCodec *mutable_passthrough() {
-        codec_ = Codec::Passthrough;
+        codec_ = Codec::PASS;
         auto pass = new(data()) PassthroughCodec{};
         return pass;
     }
 
-    arcticdb::proto::encoding::VariantCodec::CodecCase codec_case() const {
-        switch (codec_) {
-        case Codec::Zstd:return arcticdb::proto::encoding::VariantCodec::kLz4;
-        case Codec::Lz4:return arcticdb::proto::encoding::VariantCodec::kLz4;
-        case Codec::TurboPfor:return arcticdb::proto::encoding::VariantCodec::kTp4;
-        case Codec::Passthrough:return arcticdb::proto::encoding::VariantCodec::kPassthrough;
-        default:util::raise_rte("Unknown codec");
-        }
+    [[nodiscard]] const ZstdCodec& zstd() const {
+        util::check(codec_ == Codec::ZSTD, "Not a zstd codec");
+        return *reinterpret_cast<const ZstdCodec*>(data());
+    }
+
+    [[nodiscard]] const Lz4Codec& lz4() const {
+        util::check(codec_ == Codec::LZ4, "Not an lz4 codec");
+        return *reinterpret_cast<const Lz4Codec*>(data());
+    }
+
+    [[nodiscard]] const PforCodec& pfor() const {
+        util::check(codec_ == Codec::PFOR, "Not a pfor codec");
+        return *reinterpret_cast<const PforCodec*>(data());
+    }
+
+    [[nodiscard]] const PassthroughCodec& passthrough() const {
+        util::check(codec_ == Codec::PASS, "Not a passthrough codec");
+        return *reinterpret_cast<const PassthroughCodec*>(data());
     }
 
     template<class CodecType>
-    explicit BlockCodec(const CodecType &codec) :
-        codec_(CodecType::type) {
+    explicit BlockCodecImpl(const CodecType &codec) {
+        codec_ = CodecType::type;
         memcpy(data_, &codec, encoding_size);
     }
 };
 
-struct EncodedBlock {
-    uint32_t in_bytes_ = 0;
-    uint32_t out_bytes_ = 0;
-    uint64_t hash_ = 0;
-    uint16_t encoder_version_ = 0;
-    bool is_shape_ = false;
-    uint8_t pad_ = 0;
-    BlockCodec codec_;
+struct EncodedBlock : Block {
+    explicit EncodedBlock(bool is_shape) {
+        is_shape_ = is_shape;
+    }
 
     EncodedBlock() = default;
 
-    explicit EncodedBlock(bool is_shape) :
-        is_shape_(is_shape) {
+    [[nodiscard]] bool has_codec() const {
+        return codecs_[0].codec_ != Codec::PASS;
     }
 
-    std::string DebugString() const {
-        return "";
-    }
-
-    bool has_codec() const {
-        return codec_.codec_ != Codec::Passthrough;
-    }
-
-    auto encoder_version() const {
+    [[nodiscard]] auto encoder_version() const {
         return encoder_version_;
     }
 
-    auto codec() const {
-        return codec_;
+    [[nodiscard]] auto codec() const {
+        return *reinterpret_cast<const BlockCodecImpl*>(&codecs_[0]);
     }
 
     void set_in_bytes(uint32_t bytes) {
@@ -203,57 +143,42 @@ struct EncodedBlock {
         return hash_;
     }
 
-    uint32_t out_bytes() const {
+    [[nodiscard]] uint32_t out_bytes() const {
         return out_bytes_;
     }
 
-    uint32_t in_bytes() const {
+    [[nodiscard]] uint32_t in_bytes() const {
         return in_bytes_;
     }
 
-    BlockCodec *mutable_codec() {
-        return &codec_;
+    BlockCodecImpl *mutable_codec() {
+        return reinterpret_cast<BlockCodecImpl*>(&codecs_[0]);
     }
 };
 
-struct EncodedField {
-
-    enum class EncodedFieldType : uint8_t {
-        Unknown,
-        kNdarray,
-        Dictionary
-    };
-
-    EncodedFieldType type_ = EncodedFieldType::Unknown;
-    google::protobuf::uint8 shapes_count_ = 0u;
-    uint16_t values_count_ = 0u;
-    uint32_t sparse_map_bytes_ = 0u;
-    uint64_t items_count_ = 0u;
-    std::array<EncodedBlock, 1> blocks_;
-
-    static constexpr size_t MinimumSize = sizeof(type_) + sizeof(shapes_count_) + sizeof(values_count_) + sizeof(sparse_map_bytes_) + sizeof(items_count_);
-
-    static constexpr EncodedFieldType kNdarray = EncodedFieldType::kNdarray;
-
+struct EncodedFieldImpl : public EncodedField {
     static constexpr size_t Size =
         sizeof(type_) +
             sizeof(shapes_count_) +
             sizeof(values_count_) +
             sizeof(sparse_map_bytes_) +
-            sizeof(items_count_);
+            sizeof(items_count_) +
+            sizeof(format_);
 
-    EncodedField() = default;
+    EncodedFieldImpl() = default;
+
+    ARCTICDB_NO_MOVE_OR_COPY(EncodedFieldImpl)
 
     EncodedBlock *blocks() {
-        return &blocks_[0];
+        return reinterpret_cast<EncodedBlock*>(&blocks_[0]);
     }
 
-    const EncodedBlock* blocks() const {
-        return &blocks_[0];
+    [[nodiscard]] const EncodedBlock* blocks() const {
+        return reinterpret_cast<const EncodedBlock*>(&blocks_[0]);
     }
 
     struct EncodedBlockCollection {
-        EncodedBlockCollection(const EncodedField &field, bool is_shapes) :
+        EncodedBlockCollection(const EncodedFieldImpl &field, bool is_shapes) :
             field_(field),
             is_shapes_(is_shapes) {
         }
@@ -263,19 +188,22 @@ struct EncodedField {
                                                                              ValueType,
                                                                              boost::forward_traversal_tag> {
         public:
-            explicit EncodedBlockCollectionIterator(EncodedBlock *blocks) :
-                blocks_(blocks) {}
+            EncodedBlockCollectionIterator(EncodedBlock *blocks, size_t increment) :
+                blocks_(blocks),
+                increment_(increment){}
 
            ~EncodedBlockCollectionIterator() = default;
 
-            explicit EncodedBlockCollectionIterator(EncodedBlock *blocks, size_t pos) :
+            EncodedBlockCollectionIterator(EncodedBlock *blocks, size_t pos, size_t increment) :
                 blocks_(blocks),
-                pos_(pos) {}
+                pos_(pos),
+                increment_(increment){}
 
             template<class OtherValue>
             explicit EncodedBlockCollectionIterator(const EncodedBlockCollectionIterator<OtherValue> &other) :
                 blocks_(other.blocks_),
-                pos_(other.pos_) {}
+                pos_(other.pos_),
+                increment_(other.increment_){}
 
             EncodedBlockCollectionIterator() = default;
 
@@ -283,6 +211,7 @@ struct EncodedField {
                 if (&other != this) {
                     pos_ = other.pos_;
                     blocks_ = other.blocks_;
+                    increment_ = other.increment_;
                 }
 
                 return *this;
@@ -290,16 +219,17 @@ struct EncodedField {
 
             EncodedBlockCollectionIterator(const EncodedBlockCollectionIterator &other) :
                 blocks_(other.blocks_),
-                pos_(other.pos_) {
+                pos_(other.pos_),
+                increment_(other.increment_) {
             }
 
             template<class OtherValue>
-            bool equal(const EncodedBlockCollectionIterator<OtherValue> &other) const {
-                return pos_ == other.pos_ && blocks_ == other.blocks_;
+            [[nodiscard]] bool equal(const EncodedBlockCollectionIterator<OtherValue> &other) const {
+                return pos_ == other.pos_ && blocks_ == other.blocks_ && increment_ == other.increment_;
             }
 
             void increment() {
-                ++pos_;
+               pos_ += increment_;
             }
 
             [[nodiscard]] ValueType &dereference() const {
@@ -308,81 +238,125 @@ struct EncodedField {
 
             EncodedBlock *blocks_ = nullptr;
             size_t pos_ = 0;
+            size_t increment_ = 1;
         };
 
-        EncodedBlock *blocks() const {
-            return const_cast<EncodedField &>(field_).blocks();
+        [[nodiscard]] EncodedBlock *blocks() const {
+            return const_cast<EncodedFieldImpl&>(field_).blocks();
+        }
+
+        [[nodiscard]] size_t increment() const {
+            return field_.is_scalar() || !field_.is_old_style_shapes() ? 1 : 2;
         }
 
         [[nodiscard]] auto begin() {
-            return EncodedBlockCollectionIterator<EncodedBlock>(blocks(), first());
+            return EncodedBlockCollectionIterator<EncodedBlock>(blocks(), first(), increment());
         }
 
         [[nodiscard]] auto end() {
-            return EncodedBlockCollectionIterator<EncodedBlock>(blocks(), last());
+            return EncodedBlockCollectionIterator<EncodedBlock>(blocks(), last(), increment());
         }
 
         [[nodiscard]] auto begin() const {
-            return EncodedBlockCollectionIterator<const EncodedBlock>(blocks(), first());
+            return EncodedBlockCollectionIterator<const EncodedBlock>(blocks(), first(), increment());
         }
 
         [[nodiscard]] auto end() const {
-            return EncodedBlockCollectionIterator<const EncodedBlock>(blocks(), last());
+            return EncodedBlockCollectionIterator<const EncodedBlock>(blocks(), last(), increment());
         }
 
-        size_t first() const {
-            return is_shapes_ ? 0u : field_.shapes_count_;
+        [[nodiscard]] size_t shape_value_offset() const {
+            return is_shapes_  || field_.is_scalar() ? 0U : 1U;
         }
 
-        size_t last() const {
-            return is_shapes_ ? field_.shapes_count_ : field_.shapes_count_ + field_.values_count_;
+        [[nodiscard]] size_t first() const {
+            return shape_value_offset();
+        }
+
+        [[nodiscard]] size_t last() const {
+            if(field_.is_scalar())
+                return is_shapes_ ? 0 : field_.values_count_;
+
+            if(field_.is_old_style_shapes())
+                return field_.values_count_ + field_.shapes_count_ + shape_value_offset();
+            else
+                return is_shapes_ ? field_.shapes_count_ : field_.shapes_count_ + field_.values_count_;
         }
 
         [[nodiscard]] const EncodedBlock& operator[](const size_t idx) const {
-            // Shape blocks are located before values blocks in the field. In case this is a collection of value blocks
-            // we have to skip all shape blocks. In case this is a collection of shapes we can start from 0 index.
-            const size_t shape_offset = !is_shapes_ * field_.shapes_count_;
+            const size_t shape_offset = is_shapes_ ? 0 : field_.shapes_count_;
             return field_.blocks()[shape_offset + idx];
         }
-        const EncodedField &field_;
+
+        const EncodedFieldImpl& field_;
         bool is_shapes_;
     };
 
-    EncodedFieldType encoding_case() const {
+    [[nodiscard]] bool is_scalar() const {
+        return shapes_count_ == 0;
+    }
+
+    [[nodiscard]] bool is_old_style_shapes() const {
+        return shapes_size() == values_size();
+    }
+
+    [[nodiscard]] EncodedFieldType encoding_case() const {
         return type_;
     }
 
-    const EncodedBlock& shapes(size_t n) const {
-        util::check(n == 0, "Expected only one shape");
+    [[nodiscard]] const EncodedBlock& shapes(size_t n) const {
         util::check(shapes_count_ != 0, "No shape allocated");
-        return blocks_[0];
+        if(!is_old_style_shapes())
+            return *reinterpret_cast<const EncodedBlock*>(&blocks_[0]);
+        else
+            return *reinterpret_cast<const EncodedBlock*>(&blocks_[n * 2]);
     }
 
-    const EncodedBlock &values(size_t n) const {
+    [[nodiscard]] const EncodedBlock &values(size_t n) const {
         util::check(n < values_count_ + shapes_count_, "Cannot return block {} from {} blocks ({} shapes)", n, values_count_, shapes_count_);
-        return blocks()[shapes_count_ + n];
+        if(is_scalar() || !is_old_style_shapes())
+            return blocks()[shapes_count_ + n];
+        else
+            return blocks()[(n * 2) + 1];
     }
 
-    EncodedBlockCollection shapes() const {
+    [[nodiscard]] EncodedBlockCollection shapes() const {
         return {*this, true};
     }
 
-    EncodedBlockCollection values() const {
+    [[nodiscard]] EncodedBlockCollection values() const {
         return {*this, false};
     }
 
+    void validate() const {
+        size_t shapes_count = 0;
+        for(const auto& shape : shapes()) {
+            util::check(shape.is_shape_, "Expected shape to have is_shape_set");
+            util::check(shape.codecs_[0].codec_ != Codec::UNKNOWN, "Unknown shape codec");
+            ++shapes_count;
+        }
+        util::check(shapes_count == static_cast<size_t>(shapes_size()), "Shape size mismatch: {} != {}", shapes_count, shapes_size());
+
+        size_t values_count = 0;
+        for(const auto& value : values()) {
+            util::check(!value.is_shape_, "Value has is_shape set");
+            util::check(value.codec().codec_type() != Codec::UNKNOWN, "Unknown codec in block {}", values_count);
+            ++values_count;
+        }
+        util::check(values_count == static_cast<size_t>(values_size()), "Shape size mismatch: {} != {}", values_count, values_size());
+    }
+
     EncodedBlock *add_shapes() {
-        util::check(shapes_count_ == 0, "Expected single shapes block");
-        auto block = new(blocks() + items_count()) EncodedBlock{true};
+        auto block = new(blocks() + (shapes_count_ * 2)) EncodedBlock{true};
         ++shapes_count_;
         return block;
     }
 
-    int shapes_size() const {
+    [[nodiscard]] int shapes_size() const {
         return shapes_count_;
     }
 
-    int values_size() const {
+    [[nodiscard]] int values_size() const {
         return values_count_;
     }
 
@@ -390,49 +364,94 @@ struct EncodedField {
         sparse_map_bytes_ = bytes;
     }
 
-    EncodedBlock *add_values() {
-        auto block = new(static_cast<void *>(blocks() + shapes_count_ + values_count_)) EncodedBlock{false};
+    EncodedBlock *add_values(EncodingVersion encoding_version) {
+        const bool old_style = encoding_version == EncodingVersion::V1;
+        size_t pos;
+        if(!old_style || is_scalar())
+            pos = shapes_count_ + values_count_;
+        else
+            pos = (values_count_ * 2) + 1;
+
+        auto block = new(static_cast<void *>(blocks() + pos)) EncodedBlock{false};
         ++values_count_;
         return block;
     }
 
-    EncodedField *mutable_ndarray() {
-        type_ = EncodedFieldType::kNdarray;
+    EncodedFieldImpl *mutable_ndarray() {
+        type_ = EncodedFieldType::NDARRAY;
         return this;
     }
 
-    const EncodedField &ndarray() const {
+    [[nodiscard]] const EncodedFieldImpl &ndarray() const {
         return *this;
     }
 
-    bool has_ndarray() const {
-        return type_ == EncodedFieldType::kNdarray;
+    [[nodiscard]] bool has_ndarray() const {
+        return type_ == EncodedFieldType::NDARRAY;
     }
 
-    std::string DebugString() const {
-        return "";
+    [[nodiscard]] std::string DebugString() const {
+        return fmt::format("{}: {} shapes {} values", has_ndarray() ? "NDARRAY" : "DICT", shapes_size(), values_size());
     }
 
     [[nodiscard]] size_t items_count() const {
         return items_count_;
     }
 
-    size_t sparse_map_bytes() const {
+    [[nodiscard]] size_t sparse_map_bytes() const {
         return sparse_map_bytes_;
     }
 
-    void set_items_count(size_t count) {
+    void set_items_count(uint32_t count) {
         items_count_ = count;
     }
 };
 
-static_assert(sizeof(EncodedField) - sizeof(EncodedBlock) == EncodedField::Size);
+static_assert(EncodedFieldImpl::Size == sizeof(EncodedFieldImpl) - sizeof(EncodedBlock));
 
-inline size_t encoded_field_bytes(const EncodedField &encoded_field) {
-    return sizeof(EncodedField)
-        + (sizeof(EncodedBlock) * ((encoded_field.shapes_count_ + encoded_field.values_count_) - 1));
+inline size_t calc_field_bytes(size_t num_blocks) {
+    return EncodedFieldImpl::Size + (sizeof(EncodedBlock) * num_blocks);
 }
 
-#pragma pack(pop)
+inline size_t encoded_field_bytes(const EncodedField &encoded_field) {
+    return calc_field_bytes(encoded_field.shapes_count_ + encoded_field.values_count_);
+}
 
-} //namespace arcticc
+} //namespace arcticdb
+
+namespace fmt {
+template<>
+struct formatter<arcticdb::BlockCodecImpl> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(arcticdb::BlockCodecImpl codec, FormatContext &ctx) const {
+        return format_to(ctx.out(), "{}", arcticdb::codec_type_to_string(codec.codec_type()));
+    }
+};
+
+template<>
+struct formatter<arcticdb::EncodedFieldImpl> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const arcticdb::EncodedFieldImpl& field, FormatContext &ctx) const {
+        const char* label = field.has_ndarray() ? "NDARRAY\n" : "DICT\n";
+        fmt::format_to(ctx.out(), "{}", label);
+
+        fmt::format_to(ctx.out(), "Shapes: {}\n", field.shapes_size());
+        for(const auto& shape : field.shapes()) {
+            fmt::format_to(ctx.out(), "\tCodec: {} in_bytes: {}, out_bytes {}\n", arcticdb::codec_type_to_string(shape.codecs_[0].codec_), shape.in_bytes(), shape.out_bytes());
+        }
+
+        fmt::format_to(ctx.out(), "Values: {}\n", field.values_size());
+        for(const auto& value : field.values()) {
+            fmt::format_to(ctx.out(), "\tCodec: {} in_bytes: {}, out_bytes {}\n", arcticdb::codec_type_to_string(value.codecs_[0].codec_), value.in_bytes(), value.out_bytes());
+        }
+        return fmt::format_to(ctx.out(), "\n");
+    }
+};
+
+} // namespace fmt

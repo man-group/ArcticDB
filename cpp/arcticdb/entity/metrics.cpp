@@ -7,8 +7,6 @@
 
 #include <arcticdb/entity/metrics.hpp>
 #include <arcticdb/log/log.hpp>
-#include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/util/preprocess.hpp>
 #include <arcticdb/util/pb_util.hpp>
 
 #ifdef _WIN32
@@ -140,94 +138,82 @@ namespace arcticdb {
         }
 }
 
-    // update new cardinal counter
-    void PrometheusInstance::incrementCounter(const std::string& name, const std::map<std::string, std::string>& labels) {
-        if (registry_.use_count() == 0)
-            return;
+void PrometheusInstance::incrementCounter(const std::string& name, double value, const std::map<std::string, std::string>& labels) {
+    if (registry_.use_count() == 0)
+        return;
 
-        if (map_counter_.count(name) != 0) {
-            // Add returns Counter&
-            map_counter_[name]->Add(labels).Increment();
-        } else {
-            arcticdb::log::version().warn("Unregistered counter metric {}", name);
-        }
+    if (map_counter_.count(name) != 0) {
+        // Add returns Counter&
+        map_counter_[name]->Add(labels).Increment(value);
+    } else {
+        arcticdb::log::version().warn("Unregistered counter metric {}", name);
     }
-    void PrometheusInstance::incrementCounter(const std::string& name, double value, const std::map<std::string, std::string>& labels) {
-        if (registry_.use_count() == 0)
-            return;
+}
+void PrometheusInstance::setGauge(const std::string& name, double value, const std::map<std::string, std::string>& labels) {
+    if (registry_.use_count() == 0)
+        return;
 
-        if (map_counter_.count(name) != 0) {
-            // Add returns Counter&
-            map_counter_[name]->Add(labels).Increment(value);
-        } else {
-            arcticdb::log::version().warn("Unregistered counter metric {}", name);
-        }
+    if (map_gauge_.count(name) != 0) {
+        map_gauge_[name]->Add(labels).Set(value);
+    } else {
+        arcticdb::log::version().warn("Unregistered gauge metric {}", name);
     }
-    void PrometheusInstance::setGauge(const std::string& name, double value, const std::map<std::string, std::string>& labels) {
-        if (registry_.use_count() == 0)
-            return;
+}
+void PrometheusInstance::setGaugeCurrentTime(const std::string& name, const std::map<std::string, std::string>& labels) {
+    if (registry_.use_count() == 0)
+        return;
 
-        if (map_gauge_.count(name) != 0) {
-            map_gauge_[name]->Add(labels).Set(value);
-        } else {
-            arcticdb::log::version().warn("Unregistered gauge metric {}", name);
-        }
+    if (map_gauge_.count(name) != 0) {
+        map_gauge_[name]->Add(labels).SetToCurrentTime();
+    } else {
+        arcticdb::log::version().warn("Unregistered gauge metric {}", name);
     }
-    void PrometheusInstance::setGaugeCurrentTime(const std::string& name, const std::map<std::string, std::string>& labels) {
-        if (registry_.use_count() == 0)
-            return;
+}
+void PrometheusInstance::observeHistogram(const std::string& name, double value, const std::map<std::string, std::string>& labels) {
+    if (registry_.use_count() == 0)
+        return;
+    if (auto it=map_histogram_.find(name); it != map_histogram_.end()) {
+        it->second.histogram->Add(labels, it->second.buckets_list).Observe(value);
+    } else {
+        arcticdb::log::version().warn("Unregistered Histogram metric {}", name);
+    }
+}
+void PrometheusInstance::DeleteHistogram(const std::string& name, const std::map<std::string, std::string>& labels) {
+    if (registry_.use_count() == 0)
+        return;
 
-        if (map_gauge_.count(name) != 0) {
-            map_gauge_[name]->Add(labels).SetToCurrentTime();
-        } else {
-            arcticdb::log::version().warn("Unregistered gauge metric {}", name);
-        }
+    if (auto it=map_histogram_.find(name); it != map_histogram_.end()) {
+        it->second.histogram->Remove(&it->second.histogram->Add(labels, it->second.buckets_list));
+    } else {
+        arcticdb::log::version().warn("Unregistered Histogram metric {}", name);
     }
-    void PrometheusInstance::observeHistogram(const std::string& name, double value, const std::map<std::string, std::string>& labels) {
-        if (registry_.use_count() == 0)
-            return;
-        if (auto it=map_histogram_.find(name); it != map_histogram_.end()) {
-            it->second.histogram->Add(labels, it->second.buckets_list).Observe(value);
-        } else {
-            arcticdb::log::version().warn("Unregistered Histogram metric {}", name);
-        }
-    }
-    void PrometheusInstance::DeleteHistogram(const std::string& name, const std::map<std::string, std::string>& labels) {
-        if (registry_.use_count() == 0)
-            return;
+}
+void PrometheusInstance::observeSummary(const std::string& name, double value, const std::map<std::string, std::string>& labels) {
+    if (registry_.use_count() == 0)
+        return;
 
-        if (auto it=map_histogram_.find(name); it != map_histogram_.end()) {
-            it->second.histogram->Remove(&it->second.histogram->Add(labels, it->second.buckets_list));
-        } else {
-            arcticdb::log::version().warn("Unregistered Histogram metric {}", name);
-        }
+    if (map_summary_.count(name) != 0) {
+        //TODO DMK quantiles
+        map_summary_[name]->Add(labels,Summary::Quantiles{ {0.1, 0.05}, {0.2, 0.05}, {0.3, 0.05}, {0.4, 0.05}, {0.5, 0.05}, {0.6, 0.05}, {0.7, 0.05}, {0.8, 0.05}, {0.9, 0.05}, {0.9, 0.05}, {1.0, 0.05}}, std::chrono::seconds{SUMMARY_MAX_AGE}, SUMMARY_AGE_BUCKETS).Observe(value);
+    } else {
+        arcticdb::log::version().warn("Unregistered summary metric {}", name);
     }
-    void PrometheusInstance::observeSummary(const std::string& name, double value, const std::map<std::string, std::string>& labels) {
-        if (registry_.use_count() == 0)
-            return;
+}
+std::string PrometheusInstance::getHostName() {
+    char hostname[1024];
+    if (::gethostname(hostname, sizeof(hostname))) {
+        return {};
+    }
+    return hostname;
+}
 
-        if (map_summary_.count(name) != 0) {
-            //TODO DMK quantiles
-            map_summary_[name]->Add(labels,Summary::Quantiles{ {0.1, 0.05}, {0.2, 0.05}, {0.3, 0.05}, {0.4, 0.05}, {0.5, 0.05}, {0.6, 0.05}, {0.7, 0.05}, {0.8, 0.05}, {0.9, 0.05}, {0.9, 0.05}, {1.0, 0.05}}, std::chrono::seconds{SUMMARY_MAX_AGE}, SUMMARY_AGE_BUCKETS).Observe(value);
-        } else {
-            arcticdb::log::version().warn("Unregistered summary metric {}", name);
-        }
+int PrometheusInstance::push() {
+    if (gateway_.use_count() > 0) {
+        return gateway_->PushAdd();
+    } else {
+        return 0;
     }
-    std::string PrometheusInstance::getHostName() {
-        char hostname[1024];
-        if (::gethostname(hostname, sizeof(hostname))) {
-            return {};
-        }
-        return hostname;
-    }
-
-    int PrometheusInstance::push() {
-        if (gateway_.use_count() > 0) {
-            return gateway_->PushAdd();
-        } else {
-            return 0;
-        }
-    }
+}
 
 } // Namespace arcticdb
 

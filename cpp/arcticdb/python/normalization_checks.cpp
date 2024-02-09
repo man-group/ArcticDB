@@ -107,6 +107,8 @@ void update_rowcount_normalization_data(
     if (old_index) {
         constexpr auto error_suffix =
             " the existing version. Please convert both to use Int64Index if you need this to work.";
+
+        util::check(new_index != nullptr, "New index is null in normalization checks");
         normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
             old_index->is_physically_stored() == new_index->is_physically_stored(),
             "The argument uses a {} index which is incompatible with {}",
@@ -162,14 +164,6 @@ bool check_pandas_like(
     return false;
 }
 
-size_t product(const google::protobuf::RepeatedField<size_t> &shape) {
-    // FUTURE: use std::reduce when our libc++ implements it
-    size_t out = 1;
-    for (auto i : shape)
-        out *= i;
-    return out;
-}
-
 template<class NormalizationMetadata>
 bool check_ndarray_append(const NormalizationMetadata &old_norm, NormalizationMetadata &new_norm) {
     if (old_norm.has_np() || new_norm.has_np()) {
@@ -194,10 +188,10 @@ void fix_normalization_or_throw(
     auto &old_norm = existing_isr.tsd().proto().normalization();
     auto &new_norm = new_frame.norm_meta;
     if (check_pandas_like(old_norm, new_norm)) {
-        const IndexDescriptor::Type old_index_type = existing_isr.tsd().proto().stream_descriptor().index().kind();
+        const IndexDescriptor::Type old_index_type = existing_isr.tsd().index().type();
         const IndexDescriptor::Type new_index_type = new_frame.desc.index().type();
-        if (old_index_type == new_index_type && old_index_type == IndexDescriptor::ROWCOUNT) {
-            update_rowcount_normalization_data(old_norm, new_norm, existing_isr.tsd().proto().total_rows());
+        if (old_index_type == new_index_type && old_index_type == IndexDescriptor::Type::ROWCOUNT) {
+            update_rowcount_normalization_data(old_norm, new_norm, existing_isr.tsd().total_rows());
         }
         return;
     }
@@ -206,8 +200,7 @@ void fix_normalization_or_throw(
             return;
     } else {
         // ndarray normalizes to a ROWCOUNT frame and we don't support update on those
-        normalization::check<ErrorCode::E_UPDATE_NOT_SUPPORTED>(!old_norm.has_np() && !new_norm.has_np(),
-                        "current normalization scheme doesn't allow update of ndarray");
+        normalization::check<ErrorCode::E_UPDATE_NOT_SUPPORTED>(!old_norm.has_np() && !new_norm.has_np(), "current normalization scheme doesn't allow update of ndarray");
     }
 }
 

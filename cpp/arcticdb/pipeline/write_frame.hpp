@@ -90,7 +90,7 @@ enum class AffectedSegmentPart {
 
 std::optional<SliceAndKey> rewrite_partial_segment(
         const SliceAndKey& existing,
-        IndexRange index_range,
+        const IndexRange& index_range,
         VersionId version_id,
         AffectedSegmentPart affected_part,
         const std::shared_ptr<Store>& store);

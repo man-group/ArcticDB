@@ -129,7 +129,7 @@ public:
         KeySegmentPair key_seg;
         const ReadVisitor& visitor = [&key_seg](const VariantKey & vk, Segment&& value) {
             key_seg.variant_key() = vk;
-            key_seg.segment() = value;
+            key_seg.segment() = std::move(value);
         };
 
         read(std::forward<KeyType>(key), visitor, opts);

@@ -125,7 +125,7 @@ void MongoStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visito
             try {
                 auto kv = client_->read_segment(db_, collection, k);
                 // later we should add the key to failed_reads in this case
-                if (!kv.has_value() || !kv.value().has_segment()) {
+                if (!kv.has_value()) {
                     keys_not_found.push_back(k);
                 }
                 else {

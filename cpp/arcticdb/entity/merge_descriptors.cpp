@@ -15,7 +15,7 @@ StreamDescriptor merge_descriptors(
     const StreamDescriptor &original,
     const std::vector<std::shared_ptr<FieldCollection>> &entries,
     const std::unordered_set<std::string_view> &filtered_set,
-    const std::optional<IndexDescriptor>& default_index) {
+    const std::optional<IndexDescriptorImpl>& default_index) {
     using namespace arcticdb::stream;
     std::vector<std::string_view> merged_fields;
     std::unordered_map<std::string_view, TypeDescriptor> merged_fields_map;
@@ -61,7 +61,7 @@ StreamDescriptor merge_descriptors(
                 if(auto existing = merged_fields_map.find(field.name()); existing != merged_fields_map.end()) {
                     auto existing_type_desc = existing->second;
                     if(existing_type_desc != type_desc) {
-                        log::version().info(
+                        ARCTICDB_DEBUG(log::version(),
                                 "Merging different type descriptors for column: {}\n"
                                 "Existing type descriptor                : {}\n"
                                 "New type descriptor                     : {}",
@@ -92,7 +92,7 @@ StreamDescriptor merge_descriptors(
     const StreamDescriptor &original,
     const std::vector<std::shared_ptr<FieldCollection>> &entries,
     const std::vector<std::string> &filtered_columns,
-    const std::optional<IndexDescriptor>& default_index) {
+    const std::optional<IndexDescriptorImpl>& default_index) {
     std::unordered_set<std::string_view> filtered_set(filtered_columns.begin(), filtered_columns.end());
     return merge_descriptors(original, entries, filtered_set, default_index);
 }
@@ -101,7 +101,7 @@ StreamDescriptor merge_descriptors(
     const StreamDescriptor &original,
     const std::vector<pipelines::SliceAndKey> &entries,
     const std::vector<std::string> &filtered_columns,
-    const std::optional<IndexDescriptor>& default_index) {
+    const std::optional<IndexDescriptorImpl>& default_index) {
     std::vector<std::shared_ptr<FieldCollection>> fields;
     for (const auto &entry : entries) {
         fields.push_back(std::make_shared<FieldCollection>(entry.slice_.desc()->fields().clone()));
@@ -114,7 +114,7 @@ StreamDescriptor merge_descriptors(
     const StreamDescriptor &original,
     const std::vector<pipelines::SliceAndKey> &entries,
     const std::unordered_set<std::string_view> &filtered_set,
-    const std::optional<IndexDescriptor>& default_index) {
+    const std::optional<IndexDescriptorImpl>& default_index) {
     std::vector<std::shared_ptr<FieldCollection>> fields;
     for (const auto &entry : entries) {
         fields.push_back(std::make_shared<FieldCollection>(entry.segment(store).descriptor().fields().clone()));

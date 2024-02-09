@@ -84,7 +84,7 @@ std::vector<SliceAndKey> filter_index(const ContainerType &container, std::optio
     return output;
 }
 
-inline util::BitSet build_column_bitset(const StreamDescriptor::Proto &desc, const folly::F14FastSet<std::string_view>& columns) {
+inline util::BitSet build_column_bitset(const StreamDescriptor& desc, const folly::F14FastSet<std::string_view>& columns) {
     util::BitSet col_bitset(static_cast<util::BitSetSizeType>(desc.fields().size()));
     for (std::size_t c = 0; c < static_cast<std::size_t>(desc.fields().size()); ++c) {
         auto& f = desc.fields(static_cast<int>(c));
@@ -95,24 +95,24 @@ inline util::BitSet build_column_bitset(const StreamDescriptor::Proto &desc, con
     return col_bitset;
 }
 
-inline util::BitSet build_column_bitset(const StreamDescriptor::Proto&desc, const std::vector<std::string>& columns) {
+inline util::BitSet build_column_bitset(const StreamDescriptor& desc, const std::vector<std::string>& columns) {
     folly::F14FastSet<std::string_view> col_set{columns.begin(), columns.end()};
     return build_column_bitset(desc, col_set);
 }
 
-inline bool contains_index_column(const std::vector<std::string>& columns, const StreamDescriptor::Proto& desc) {
+inline auto add_index_column(const std::vector<std::string>& columns, const StreamDescriptor& desc) {
+    std::vector<std::string> columns_with_index{columns};
+    columns_with_index.push_back(std::string{desc.fields(0).name()});
+    return columns_with_index;
+}
+
+inline bool contains_index_column(const std::vector<std::string>& columns, const StreamDescriptor& desc) {
     return desc.index().field_count() == 0
         || std::find(std::begin(columns), std::end(columns), desc.fields(0).name())
             != std::end(columns);
 }
 
-inline auto add_index_column(const std::vector<std::string>& columns, const StreamDescriptor::Proto& desc) {
-    std::vector<std::string> columns_with_index{columns};
-    columns_with_index.push_back(desc.fields(0).name());
-    return columns_with_index;
-}
-
-inline std::optional<util::BitSet> requested_column_bitset_including_index(const StreamDescriptor::Proto& desc, const std::vector<std::string>& columns) {
+inline std::optional<util::BitSet> requested_column_bitset_including_index(const StreamDescriptor& desc, const std::vector<std::string>& columns) {
     // Add the index column if it's not there
     if (!columns.empty()) {
         if(!contains_index_column(columns, desc)) {
@@ -125,8 +125,9 @@ inline std::optional<util::BitSet> requested_column_bitset_including_index(const
     return std::nullopt;
 }
 
-inline std::optional<util::BitSet> clause_column_bitset(const StreamDescriptor::Proto& desc,
-                                                        const std::vector<std::shared_ptr<Clause>>& clauses) {
+inline std::optional<util::BitSet> clause_column_bitset(
+        const StreamDescriptor& desc,
+        const std::vector<std::shared_ptr<Clause>>& clauses) {
     folly::F14FastSet<std::string_view> column_set;
     for (const auto& clause: clauses) {
         auto opt_columns = clause->clause_info().input_columns_;
@@ -136,18 +137,18 @@ inline std::optional<util::BitSet> clause_column_bitset(const StreamDescriptor::
             }
         }
     }
-    if (!column_set.empty()) {
+    if (!column_set.empty())
         return build_column_bitset(desc, column_set);
-    } else {
+    else
         return std::nullopt;
-    }
 }
 
 // Returns std::nullopt if all columns are required, which is the case if requested_columns is std::nullopt
 // Otherwise augment the requested_columns bitset with columns that are required by any of the clauses
-inline std::optional<util::BitSet> overall_column_bitset(const StreamDescriptor::Proto& desc,
-                                                         const std::vector<std::shared_ptr<Clause>>& clauses,
-                                                         const std::optional<util::BitSet>& requested_columns) {
+inline std::optional<util::BitSet> overall_column_bitset(
+        const StreamDescriptor& desc,
+        const std::vector<std::shared_ptr<Clause>>& clauses,
+        const std::optional<util::BitSet>& requested_columns) {
     // std::all_of returns true if the range is empty
     auto clauses_can_combine_with_column_selection = std::all_of(clauses.begin(), clauses.end(),
                                                                  [](const std::shared_ptr<Clause>& clause){
@@ -202,7 +203,7 @@ inline std::vector<FilterQuery<ContainerType>> get_column_bitset_and_query_funct
 
     if(!dynamic_schema || column_groups) {
         pipeline_context->set_selected_columns(query.columns);
-        pipeline_context->overall_column_bitset_ = overall_column_bitset(pipeline_context->descriptor().proto(),
+        pipeline_context->overall_column_bitset_ = overall_column_bitset(pipeline_context->descriptor(),
                                                                          query.clauses_,
                                                                          pipeline_context->selected_columns_);
     }

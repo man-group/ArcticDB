@@ -11,6 +11,7 @@
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/lmdb/lmdb_storage.hpp>
 #include <arcticdb/storage/memory/memory_storage.hpp>
+#include <arcticdb/stream/test/stream_test_common.hpp>
 
 #ifdef ARCTICDB_INCLUDE_ROCKSDB
 #include <arcticdb/storage/rocksdb/rocksdb_storage.hpp>
@@ -96,9 +97,10 @@ TEST_P(SimpleTestSuite, Example) {
     std::unique_ptr<as::Storage> storage = GetParam().new_backend();
     ac::entity::AtomKey k = ac::entity::atom_key_builder().gen_id(1).build<ac::entity::KeyType::TABLE_DATA>(NumericId{999});
 
-    as::KeySegmentPair kv(k);
-    kv.segment().header().set_start_ts(1234);
-    kv.segment().set_buffer(std::make_shared<Buffer>());
+    auto segment_in_memory = get_test_frame<arcticdb::stream::TimeseriesIndex>("symbol", {}, 10, 0).segment_;
+    auto codec_opts = proto::encoding::VariantCodec();
+    auto segment = encode_dispatch(std::move(segment_in_memory), codec_opts, arcticdb::EncodingVersion::V2);
+    arcticdb::storage::KeySegmentPair kv(k, std::move(segment));
 
     storage->write(std::move(kv));
 
@@ -110,10 +112,8 @@ TEST_P(SimpleTestSuite, Example) {
         res.segment() = std::move(seg);
         res.segment().force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
     }, storage::ReadKeyOpts{});
-    ASSERT_EQ(res.segment().header().start_ts(), 1234);
 
     res = storage->read(k, as::ReadKeyOpts{});
-    ASSERT_EQ(res.segment().header().start_ts(), 1234);
 
     bool executed = false;
     storage->iterate_type(arcticdb::entity::KeyType::TABLE_DATA,
@@ -123,9 +123,10 @@ TEST_P(SimpleTestSuite, Example) {
                          });
     ASSERT_TRUE(executed);
 
-    as::KeySegmentPair update_kv(k);
-    update_kv.segment().header().set_start_ts(4321);
-    update_kv.segment().set_buffer(std::make_shared<Buffer>());
+    segment_in_memory = get_test_frame<arcticdb::stream::TimeseriesIndex>("symbol", {}, 10, 0).segment_;
+    codec_opts = proto::encoding::VariantCodec();
+    segment = encode_dispatch(std::move(segment_in_memory), codec_opts, arcticdb::EncodingVersion::V2);
+    arcticdb::storage::KeySegmentPair update_kv(k, std::move(segment));
 
     storage->update(std::move(update_kv), as::UpdateOpts{});
 
@@ -135,10 +136,8 @@ TEST_P(SimpleTestSuite, Example) {
         update_res.segment() = std::move(seg);
         update_res.segment().force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
     }, as::ReadKeyOpts{});
-    ASSERT_EQ(update_res.segment().header().start_ts(), 4321);
 
     update_res = storage->read(k, as::ReadKeyOpts{});
-    ASSERT_EQ(update_res.segment().header().start_ts(), 4321);
 
     executed = false;
     storage->iterate_type(arcticdb::entity::KeyType::TABLE_DATA,
@@ -167,8 +166,8 @@ TEST_P(SimpleTestSuite, Strings) {
 
     google::protobuf::Any any;
     arcticdb::TimeseriesDescriptor metadata;
-    metadata.mutable_proto().set_total_rows(12);
-    metadata.mutable_proto().mutable_stream_descriptor()->CopyFrom(s.descriptor().proto());
+    metadata.set_total_rows(12);
+    metadata.set_stream_descriptor(s.descriptor());
     any.PackFrom(metadata.proto());
     s.set_metadata(std::move(any));
 
@@ -185,7 +184,6 @@ TEST_P(SimpleTestSuite, Strings) {
     ac::entity::AtomKey k = ac::entity::atom_key_builder().gen_id(1).build<ac::entity::KeyType::TABLE_DATA>(NumericId{999});
     auto save_k = k;
     as::KeySegmentPair kv(std::move(k), std::move(seg));
-    kv.segment().header().set_start_ts(1234);
     storage->write(std::move(kv));
 
     as::KeySegmentPair res;
@@ -194,7 +192,6 @@ TEST_P(SimpleTestSuite, Strings) {
         res.segment() = std::move(seg);
         res.segment().force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
     }, as::ReadKeyOpts{});
-    ASSERT_EQ(res.segment().header().start_ts(), 1234);
 
     SegmentInMemory res_mem = decode_segment(std::move(res.segment()));
     ASSERT_EQ(s.string_at(0, 1), res_mem.string_at(0, 1));

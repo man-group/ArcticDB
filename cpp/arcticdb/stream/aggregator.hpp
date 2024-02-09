@@ -194,7 +194,9 @@ class Aggregator {
         // TODO implement rollback
     }
 
-    virtual void commit(); // TODO return Future?
+    virtual void commit();
+
+    virtual void finalize();
 
     void clear();
 
@@ -274,7 +276,7 @@ class Aggregator {
     AggregationStats& stats() { return stats_; }
 
 protected:
-    void commit_impl();
+    void commit_impl(bool final);
 
 private:
     template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>

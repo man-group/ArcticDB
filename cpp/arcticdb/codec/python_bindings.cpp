@@ -102,7 +102,7 @@ Segment encode_segment(SegmentInMemory segment_in_memory, const py::object &opts
     return encode_dispatch(std::move(segment_in_memory), opts_cpp, encoding_version);
 }
 
-SegmentInMemory decode_python_segment(Segment segment) {
+SegmentInMemory decode_python_segment(Segment& segment) {
     return decode_segment(std::move(segment));
 }
 
@@ -188,8 +188,8 @@ void register_codec(py::module &m) {
             .def("fields_size", &Segment::fields_size)
             .def("fields", &Segment::fields_vector)
             .def_property_readonly("header", [](const Segment& self) {
-                return pb_to_python(self.header());
-            })
+                return self.header().clone();
+            },  py::return_value_policy::move)
             .def_property_readonly("bytes", [](const Segment& self) {
                 return py::bytes(reinterpret_cast<char *>(self.buffer().data()), self.buffer().bytes());
             });

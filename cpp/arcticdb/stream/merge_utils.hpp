@@ -78,10 +78,12 @@ inline void merge_segments(
                 }
             }
         }
-        if (segment.row_count() && segment.descriptor().index().type() == IndexDescriptor::TIMESTAMP) {
+
+        if (segment.row_count() && segment.descriptor().index().type() == IndexDescriptorImpl::Type::TIMESTAMP) {
             min_idx = std::min(min_idx, segment.begin()->begin()->value<timestamp>());
             max_idx = std::max(max_idx, (segment.end() - 1)->begin()->value<timestamp>());
         }
+
         merge_string_columns(segment, merged.string_pool_ptr(), false);
         merged.append(segment);
         merged.set_compacted(true);

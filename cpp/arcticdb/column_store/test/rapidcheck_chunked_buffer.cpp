@@ -67,7 +67,7 @@ RC_GTEST_PROP(ChunkedBuffer, SplitBuffer, (const std::vector<uint8_t> &input, ui
         auto right = input[i];
         auto& buf_obj = *buf;
         if(buf_obj.cast<uint8_t>(where) != input[i])
-            log::version().info("Mismatch at {} ({}), {} != {}", i, where, left, right);
+            ARCTICDB_DEBUG(log::version(), "Mismatch at {} ({}), {} != {}", i, where, left, right);
         RC_ASSERT(left == right);
         if(((i + 1) % split_size) == 0)
             ++buf;

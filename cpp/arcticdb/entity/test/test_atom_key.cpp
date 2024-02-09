@@ -15,9 +15,11 @@
 
 #include <folly/Range.h>
 
+using namespace arcticdb;
 using namespace arcticdb::entity;
 
 TEST(Key, Basic) {
+    using namespace arcticdb;
     using namespace arcticdb::entity;
     using namespace arcticdb::storage;
 
@@ -108,7 +110,7 @@ struct AlternativeFormat {
 TEST(Key, Formatting) {
 
     AtomKey k{
-        StreamId{NumericId{999}},
+        arcticdb::StreamId{NumericId{999}},
         VersionId(123),
         timestamp(123000000LL),
         0x789456321ULL,
@@ -148,7 +150,7 @@ TEST(AtomKey, ProtobufRoundtrip) {
     auto key = atom_key_builder().version_id(0).content_hash(1).creation_ts(2).start_index(3)
     .end_index(4).build(StreamId{"Natbag"}, KeyType::TABLE_INDEX);
 
-    auto pb_key = arcticdb::encode_key(key);
-    auto decoded_key = arcticdb::decode_key(pb_key);
+    auto pb_key = arcticdb::key_to_proto(key);
+    auto decoded_key = arcticdb::key_from_proto(pb_key);
     ASSERT_EQ(key, decoded_key);
 }

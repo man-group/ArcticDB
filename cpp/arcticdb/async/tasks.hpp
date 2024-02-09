@@ -89,7 +89,7 @@ struct EncodeAtomTask : BaseTask {
     storage::KeySegmentPair encode() {
         ARCTICDB_DEBUG(log::codec(), "Encoding object with partial key {}", partial_key_);
         auto enc_seg = ::arcticdb::encode_dispatch(std::move(segment_), *codec_meta_, encoding_version_);
-        auto content_hash = hash_segment_header(enc_seg.header());
+        auto content_hash = get_segment_hash(enc_seg);
 
         AtomKey k = partial_key_.build_key(creation_ts_, content_hash);
         return {std::move(k), std::move(enc_seg)};
@@ -208,7 +208,9 @@ struct KeySegmentContinuation {
 };
 
 inline storage::KeySegmentPair read_dispatch(const entity::VariantKey& variant_key, const std::shared_ptr<storage::Library>& lib, const storage::ReadKeyOpts& opts) {
-    return util::variant_match(variant_key, [&lib, &opts](const auto &key) { return lib->read(key, opts); });
+    return util::variant_match(variant_key, [&lib, &opts](const auto &key) {
+        return lib->read(key, opts);
+    });
 }
 
 template <typename Callable>
@@ -322,8 +324,7 @@ struct DecodeSegmentTask : BaseTask {
         ARCTICDB_SAMPLE(DecodeAtomTask, 0)
 
         auto key_seg = std::move(ks);
-        ARCTICDB_DEBUG(log::storage(), "ReadAndDecodeAtomTask decoding segment of size {} with key {}",
-                             key_seg.segment().total_segment_size(),
+        ARCTICDB_DEBUG(log::storage(), "ReadAndDecodeAtomTask decoding segment with key {}",
                              variant_key_view(key_seg.variant_key()));
 
         return {key_seg.variant_key(), decode_segment(std::move(key_seg.segment()))};
@@ -365,10 +366,10 @@ struct DecodeSlicesTask : BaseTask {
     Composite<pipelines::SliceAndKey> operator()(Composite<std::pair<Segment, pipelines::SliceAndKey>> && skp) const {
         ARCTICDB_SAMPLE(DecodeSlicesTask, 0)
         auto sk_pairs = std::move(skp);
-        return sk_pairs.transform([that=this] (auto&& ssp){
-            auto seg_slice_pair = std::forward<decltype(ssp)>(ssp);
+        return sk_pairs.transform([this] (auto&& ssp){
+            auto seg_slice_pair = std::move(ssp);
             ARCTICDB_DEBUG(log::version(), "Decoding slice {}", seg_slice_pair.second.key());
-            return that->decode_into_slice(std::move(seg_slice_pair));
+            return decode_into_slice(std::move(seg_slice_pair));
         });
     }
 
@@ -442,8 +443,7 @@ struct DecodeMetadataTask : BaseTask {
     std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> operator()(storage::KeySegmentPair &&ks) const {
         ARCTICDB_SAMPLE(ReadMetadataTask, 0)
         auto key_seg = std::move(ks);
-        ARCTICDB_DEBUG(log::storage(), "ReadAndDecodeMetadataTask decoding segment of size {} with key {}",
-                             key_seg.segment().total_segment_size(), variant_key_view(key_seg.variant_key()));
+        ARCTICDB_DEBUG(log::storage(), "ReadAndDecodeMetadataTask decoding segment with key {}", variant_key_view(key_seg.variant_key()));
 
         auto meta = decode_metadata_from_segment(key_seg.segment());
         std::pair<VariantKey, std::optional<google::protobuf::Any>> output;
@@ -463,18 +463,14 @@ struct DecodeTimeseriesDescriptorTask : BaseTask {
     std::pair<VariantKey, TimeseriesDescriptor> operator()(storage::KeySegmentPair &&ks) const {
         ARCTICDB_SAMPLE(DecodeTimeseriesDescriptorTask, 0)
         auto key_seg = std::move(ks);
-        ARCTICDB_DEBUG(log::storage(), "DecodeTimeseriesDescriptorTask decoding segment of size {} with key {}",
-                      key_seg.segment().total_segment_size(), variant_key_view(key_seg.variant_key()));
+        ARCTICDB_DEBUG(log::storage(), "DecodeTimeseriesDescriptorTask decoding segment with key {}", variant_key_view(key_seg.variant_key()));
 
         auto maybe_desc = decode_timeseries_descriptor(key_seg.segment());
 
         util::check(static_cast<bool>(maybe_desc), "Failed to decode timeseries descriptor");
         return std::make_pair(
             std::move(key_seg.variant_key()),
-            TimeseriesDescriptor{
-                std::make_shared<TimeseriesDescriptor::Proto>(std::move(std::get<1>(*maybe_desc))),
-                    std::make_shared<FieldCollection>(std::move(std::get<2>(*maybe_desc)))}
-            );
+            std::move(*maybe_desc));
 
     }
 };
@@ -486,8 +482,7 @@ struct DecodeMetadataAndDescriptorTask : BaseTask {
     std::tuple<VariantKey, std::optional<google::protobuf::Any>, StreamDescriptor> operator()(storage::KeySegmentPair &&ks) const {
         ARCTICDB_SAMPLE(ReadMetadataAndDescriptorTask, 0)
         auto key_seg = std::move(ks);
-        ARCTICDB_DEBUG(log::storage(), "DecodeMetadataAndDescriptorTask decoding segment of size {} with key {}",
-                      key_seg.segment().total_segment_size(), variant_key_view(key_seg.variant_key()));
+        ARCTICDB_DEBUG(log::storage(), "DecodeMetadataAndDescriptorTask decoding segment with key {}", variant_key_view(key_seg.variant_key()));
 
         auto [any, descriptor] = decode_metadata_and_descriptor_fields(key_seg.segment());
         return std::make_tuple(

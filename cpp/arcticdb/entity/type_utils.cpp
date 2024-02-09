@@ -8,7 +8,6 @@
 
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/entity/types_proto.hpp>
 
 namespace arcticdb {
     bool trivially_compatible_types(const entity::TypeDescriptor& left, const entity::TypeDescriptor& right) {
@@ -131,13 +130,6 @@ namespace arcticdb {
         return target;
     }
 
-    std::optional<entity::TypeDescriptor> has_valid_type_promotion(
-        const proto::descriptors::TypeDescriptor& source,
-        const proto::descriptors::TypeDescriptor& target
-    ) {
-        return has_valid_type_promotion(entity::type_desc_from_proto(source), entity::type_desc_from_proto(target));
-    }
-
     std::optional<entity::TypeDescriptor> has_valid_common_type(
         const entity::TypeDescriptor& left,
         const entity::TypeDescriptor& right
@@ -178,12 +170,4 @@ namespace arcticdb {
         }
         return maybe_common_type;
     }
-
-    std::optional<entity::TypeDescriptor> has_valid_common_type(
-        const proto::descriptors::TypeDescriptor& left,
-        const proto::descriptors::TypeDescriptor& right
-    ) {
-        return has_valid_common_type(entity::type_desc_from_proto(left), entity::type_desc_from_proto(right));
-    }
-
 }

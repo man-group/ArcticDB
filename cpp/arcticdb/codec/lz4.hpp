@@ -34,7 +34,7 @@ struct Lz4BlockEncoder {
     static std::size_t encode_block(
             const Opts& opts,
             const T *in,
-            BlockProtobufHelper &block_utils,
+            BlockDataHelper &block_utils,
             HashAccum &hasher,
             T *out,
             std::size_t out_capacity,
@@ -53,28 +53,21 @@ struct Lz4BlockEncoder {
         ARCTICDB_TRACE(log::storage(), "Block of size {} compressed to {} bytes", block_utils.bytes_, compressed_bytes);
         hasher(in, block_utils.count_);
         pos += ssize_t(compressed_bytes);
-        out_codec.mutable_lz4()->MergeFrom(opts);
+        copy_codec(*out_codec.mutable_lz4(), opts);
         return std::size_t(compressed_bytes);
     }
 };
 
 struct Lz4Decoder {
-/*
- * encoder_version is here to support multiple versions but won't be used before we have them
- */
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-
     template<typename T>
     static void decode_block(
-        [[maybe_unused]] std::uint32_t encoder_version,
-        const std::uint8_t* in,
-        std::size_t in_bytes,
-        T* t_out,
-        std::size_t out_bytes
-    ) {
-
+            [[maybe_unused]] std::uint32_t encoder_version, //support multiple versions but won't be used before we have them
+            const std::uint8_t* in,
+            std::size_t in_bytes,
+            T* t_out,
+            std::size_t out_bytes) {
         ARCTICDB_TRACE(log::codec(), "Lz4 decoder reading block: {} {}", in_bytes, out_bytes);
+
         // Decompressed size < 0 means an error occurred in LZ4 during the decompression. In case it's  negative
         // the specific value is somewhat random and does not mean anything. Decompressed size of 0 is allowed and means
         // 0 bytes were passed for compression. In that case t_out is allowed to be null since it's not used at all.
@@ -89,13 +82,12 @@ struct Lz4Decoder {
             uintptr_t(in),
             in_bytes,
             decompressed_size);
+
         util::check_arg(std::size_t(decompressed_size) == out_bytes,
             "expected out_bytes == lz4 decompressed bytes, actual {} != {}",
             out_bytes,
             decompressed_size);
     }
-
-#pragma GCC diagnostic pop
 };
 
 } // namespace arcticdb::detail
