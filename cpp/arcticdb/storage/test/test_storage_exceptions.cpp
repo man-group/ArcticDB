@@ -10,6 +10,7 @@
 #include <arcticdb/codec/codec.hpp>
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/lmdb/lmdb_storage.hpp>
+#include <arcticdb/storage/memory/memory_storage.hpp>
 #include <arcticdb/util/buffer.hpp>
 
 #include <filesystem>
@@ -58,6 +59,15 @@ public:
         if (fs::exists(TEST_DATABASES_PATH)) {
             fs::remove_all(TEST_DATABASES_PATH);
         }
+    }
+};
+
+class MemoryStorageFactory : public StorageFactory {
+    std::unique_ptr<arcticdb::storage::Storage> create() override {
+        arcticdb::proto::memory_storage::Config cfg;
+        arcticdb::storage::LibraryPath library_path{"a", "b"};
+
+        return std::make_unique<arcticdb::storage::memory::MemoryStorage>(library_path, arcticdb::storage::OpenMode::WRITE, cfg);
     }
 };
 
@@ -134,7 +144,10 @@ TEST_P(GenericStorageTest, RemoveKeyNotFoundException) {
 INSTANTIATE_TEST_SUITE_P(
         AllStoragesCommonTests,
         GenericStorageTest,
-        ::testing::Values(std::make_shared<LMDBStorageFactory>())
+        ::testing::Values(
+                std::make_shared<LMDBStorageFactory>(),
+                std::make_shared<MemoryStorageFactory>()
+        )
 );
 
 // LMDB Storage specific tests

@@ -13,25 +13,19 @@ namespace arcticdb
 {
 
 void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
-    entity::details::visit_type(input_column.column_->type().data_type(), [&input_column, that=this] (auto type_desc_tag) {
-        using InputType = decltype(type_desc_tag);
-        if constexpr(!is_sequence_type(InputType::DataTypeTag::data_type)) {
-            using DescriptorType = std::decay_t<decltype(type_desc_tag)>;
-            using RawType = typename DescriptorType::raw_type;
-            auto col_data = input_column.column_->data();
-            while (auto block = col_data.next<ScalarTagType<DescriptorType>>()) {
-                auto ptr = reinterpret_cast<const RawType *>(block->data());
-                for (auto i = 0u; i < block->row_count(); ++i, ++ptr) {
-                    const auto& curr = RawType(*ptr);
-                    if (UNLIKELY(!that->min_.has_value())) {
-                        that->min_ = std::make_optional<Value>(curr, DescriptorType::DataTypeTag::data_type);
-                        that->max_ = std::make_optional<Value>(curr, DescriptorType::DataTypeTag::data_type);
-                    } else {
-                        that->min_->set(std::min(that->min_->get<RawType>(), curr));
-                        that->max_->set(std::max(that->max_->get<RawType>(), curr));
-                    }
+    details::visit_type(input_column.column_->type().data_type(), [&] (auto col_desc_tag) {
+        using type_info = ScalarTypeInfo<decltype(col_desc_tag)>;
+        if constexpr(!is_sequence_type(type_info::data_type)) {
+            Column::for_each<typename type_info::TDT>(*input_column.column_, [this](auto value) {
+                const auto& curr = static_cast<typename type_info::RawType>(value);
+                if (ARCTICDB_UNLIKELY(!min_.has_value())) {
+                    min_ = std::make_optional<Value>(curr, type_info::data_type);
+                    max_ = std::make_optional<Value>(curr, type_info::data_type);
+                } else {
+                    min_->set(std::min(min_->get<typename type_info::RawType>(), curr));
+                    max_->set(std::max(max_->get<typename type_info::RawType>(), curr));
                 }
-            }
+            });
         } else {
             schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
                     "Minmax column stat generation not supported with string types");
@@ -46,8 +40,8 @@ SegmentInMemory MinMaxAggregatorData::finalize(const std::vector<ColumnName>& ou
             output_column_names.size());
     SegmentInMemory seg;
     if (min_.has_value()) {
-        entity::details::visit_type(min_->data_type_, [&output_column_names, &seg, that = this](auto type_desc_tag) {
-            using RawType = typename decltype(type_desc_tag)::DataTypeTag::raw_type;
+        details::visit_type(min_->data_type_, [&output_column_names, &seg, that = this](auto type_desc_tag) {
+            using RawType = typename ScalarTypeInfo<decltype(type_desc_tag)>::RawType;
             auto min_col = std::make_shared<Column>(make_scalar_type(that->min_->data_type_), true);
             min_col->template push_back<RawType>(that->min_->get<RawType>());
 

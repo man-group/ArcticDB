@@ -73,6 +73,13 @@ public:
             keys_(std::make_shared<Composite<VariantKey>>(std::move(keys))) {
     }
 
+    explicit KeyNotFoundException(const VariantKey& single_key):
+            KeyNotFoundException(Composite<VariantKey>{VariantKey{single_key}}) {}
+
+    explicit KeyNotFoundException(const VariantKey& single_key, std::string err_output):
+            KeyNotFoundException(Composite<VariantKey>{VariantKey{single_key}}, err_output) {}
+
+
     Composite<VariantKey>& keys() {
         return *keys_;
     }

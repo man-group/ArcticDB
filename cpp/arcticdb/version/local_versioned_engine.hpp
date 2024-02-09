@@ -42,6 +42,13 @@ struct IndexKeyAndUpdateInfo{
     entity::AtomKey index_key;
     version_store::UpdateInfo update_info;
 };
+
+struct KeySizesInfo {
+    size_t count;
+    size_t compressed_size; // bytes
+    size_t uncompressed_size; // bytes
+};
+
 class LocalVersionedEngine : public VersionedEngine {
 
 public:
@@ -389,7 +396,10 @@ public:
         const StreamId& stream_id, 
         const WriteOptions& write_options);
 
-    std::unordered_map<KeyType, std::pair<size_t, size_t>> scan_object_sizes();
+    std::unordered_map<KeyType, KeySizesInfo> scan_object_sizes();
+
+    std::unordered_map<StreamId, std::unordered_map<KeyType, KeySizesInfo>> scan_object_sizes_by_stream();
+
     std::shared_ptr<Store>& _test_get_store() { return store_; }
     void _test_set_validate_version_map() {
         version_map()->set_validate(true);

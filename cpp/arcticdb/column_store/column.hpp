@@ -19,6 +19,11 @@
 #include <arcticdb/util/sparse_utils.hpp>
 
 #include <folly/container/Enumerate.h>
+// Compilation fails on Mac if cstdio is not included prior to folly/Function.h due to a missing definition of memalign in folly/Memory.h
+#ifdef __APPLE__
+#include <cstdio>
+#endif
+#include <folly/Function.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 
@@ -658,6 +663,81 @@ public:
         size_t start_row,
         size_t end_row
     );
+
+    /*
+     * !!!!!!!!!!----------IMPORTANT----------!!!!!!!!!!
+     * When adding new uses of these static methods, add an internal::check<...>(f.heapAllocatedMemory() == 0,...)
+     * and run all of the tests in CI on all supported platforms. We do not want these checks in the released code,
+     * but also do not want any passed in lambdas to be heap allocated.
+     */
+
+    template<typename input_tdt>
+    static void for_each(const Column& input_column,
+                          folly::Function<void(typename input_tdt::DataTypeTag::raw_type)>&& f) {
+        auto input_data = input_column.data();
+        std::for_each(input_data.cbegin<input_tdt>(), input_data.cend<input_tdt>(), [&f](auto input_value) {
+            f(input_value);
+        });
+    }
+
+    template<typename input_tdt, typename output_tdt>
+    static void transform(const Column& input_column,
+                          Column& output_column,
+                          folly::Function<typename output_tdt::DataTypeTag::raw_type(typename input_tdt::DataTypeTag::raw_type)>&& f) {
+        auto input_data = input_column.data();
+        auto output_data = output_column.data();
+        std::transform(input_data.cbegin<input_tdt>(), input_data.cend<input_tdt>(), output_data.begin<output_tdt>(), std::move(f));
+    }
+
+    template<typename left_input_tdt, typename right_input_tdt, typename output_tdt>
+    static void transform(const Column& left_input_column,
+                          const Column& right_input_column,
+                          Column& output_column,
+                          folly::Function<typename output_tdt::DataTypeTag::raw_type(typename left_input_tdt::DataTypeTag::raw_type, typename right_input_tdt::DataTypeTag::raw_type)>&& f) {
+        auto left_input_data = left_input_column.data();
+        auto right_input_data = right_input_column.data();
+        auto output_data = output_column.data();
+        std::transform(left_input_data.cbegin<left_input_tdt>(), left_input_data.cend<left_input_tdt>(), right_input_data.cbegin<right_input_tdt>(), output_data.begin<output_tdt>(), [&f](auto left_value, auto right_value) {
+            return f(left_value, right_value);
+        });
+    }
+
+    template<typename input_tdt>
+    static void transform(const Column& input_column,
+                          util::BitSet& output_bitset,
+                          folly::Function<bool(typename input_tdt::DataTypeTag::raw_type)>&& f) {
+        auto input_data = input_column.data();
+        util::BitSet::bulk_insert_iterator inserter(output_bitset);
+        auto pos = 0u;
+        std::for_each(input_data.cbegin<input_tdt>(), input_data.cend<input_tdt>(), [&inserter, &pos, &f](auto input_value) {
+            if (f(input_value)) {
+                inserter = pos;
+            }
+            ++pos;
+        });
+        inserter.flush();
+    }
+
+    template<typename left_input_tdt, typename right_input_tdt>
+    static void transform(const Column& left_input_column,
+                          const Column& right_input_column,
+                          util::BitSet& output_bitset,
+                          folly::Function<bool(typename left_input_tdt::DataTypeTag::raw_type, typename right_input_tdt::DataTypeTag::raw_type)>&& f) {
+        auto left_input_data = left_input_column.data();
+        auto right_it = right_input_column.data().cbegin<right_input_tdt>();
+        util::BitSet::bulk_insert_iterator inserter(output_bitset);
+        auto pos = 0u;
+        std::for_each(left_input_data.cbegin<left_input_tdt>(), left_input_data.cend<left_input_tdt>(), [&right_it, &inserter, &pos, &f](auto left_value) {
+            auto right_value = *right_it++;
+            if (f(left_value, right_value)) {
+                inserter = pos;
+            }
+            ++pos;
+        });
+        inserter.flush();
+    }
+
+    // end IMPORTANT
 
 private:
 

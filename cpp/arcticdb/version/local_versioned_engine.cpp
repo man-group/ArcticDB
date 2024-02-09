@@ -1767,21 +1767,74 @@ timestamp LocalVersionedEngine::latest_timestamp(const std::string& symbol) {
     return -1;
 }
 
-std::unordered_map<KeyType, std::pair<size_t, size_t>> LocalVersionedEngine::scan_object_sizes() {
-    std::unordered_map<KeyType, std::pair<size_t, size_t>> sizes;
+struct AtomicKeySizesInfo {
+    size_t count;
+    std::atomic<size_t> compressed_size;
+    std::atomic<size_t> uncompressed_size;
+};
+
+std::unordered_map<KeyType, KeySizesInfo> LocalVersionedEngine::scan_object_sizes() {
+    std::unordered_map<KeyType, AtomicKeySizesInfo> sizes;
     foreach_key_type([&store=store(), &sizes=sizes](KeyType key_type) {
-        std::vector<std::pair<VariantKey, stream::StreamSource::ReadContinuation>> keys_and_continuations;
-        auto& pair = sizes[key_type];
-        store->iterate_type(key_type, [&keys_and_continuations, &pair](const VariantKey &&k) {
-            keys_and_continuations.emplace_back(
-                std::forward<const VariantKey>(k),
-                [&pair](auto &&ks) {
-                    auto key_seg = std::move(ks);
-                    ++pair.first;
-                    pair.second += key_seg.segment().total_segment_size();
-                    return key_seg.variant_key();
-                });
+        std::vector<std::pair<VariantKey, stream::StreamSource::ReadContinuation>> key_size_calculators;
+        store->iterate_type(key_type, [&key_size_calculators, &sizes, &key_type](const VariantKey&& k) {
+            auto& sizes_info = sizes[key_type];
+            ++sizes_info.count;
+            key_size_calculators.emplace_back(std::forward<const VariantKey>(k), [&sizes_info] (auto&& ks) {
+                auto key_seg = std::move(ks);
+                sizes_info.compressed_size += key_seg.segment().total_segment_size();
+                auto desc = key_seg.segment().header().stream_descriptor();
+                sizes_info.uncompressed_size += desc.in_bytes();
+                return key_seg.variant_key();
+            });
         });
+
+        if(!key_size_calculators.empty()) {
+            store->batch_read_compressed(std::move(key_size_calculators), BatchReadArgs{}).get();
+        }
+
+    });
+
+    std::unordered_map<KeyType, KeySizesInfo> result;
+    for (const auto& [k, v] : sizes) {
+        result[k] = KeySizesInfo{v.count, v.compressed_size, v.uncompressed_size};
+    }
+    return result;
+}
+
+std::unordered_map<StreamId, std::unordered_map<KeyType, KeySizesInfo>> LocalVersionedEngine::scan_object_sizes_by_stream() {
+    std::mutex mutex;
+    std::unordered_map<StreamId, std::unordered_map<KeyType, KeySizesInfo>> sizes;
+    auto streams = symbol_list().get_symbols(store());
+
+    foreach_key_type([&store=store(), &sizes, &mutex](KeyType key_type) {
+        std::vector<std::pair<VariantKey, stream::StreamSource::ReadContinuation>> keys;
+
+        store->iterate_type(key_type, [&keys, &mutex, &sizes, key_type](const VariantKey&& k){
+            keys.emplace_back(std::forward<const VariantKey>(k), [key_type, &sizes, &mutex] (auto&& ks) {
+                auto key_seg = std::move(ks);
+                auto variant_key = key_seg.variant_key();
+                auto stream_id = variant_key_id(variant_key);
+                auto compressed_size = key_seg.segment().total_segment_size();
+                auto desc = key_seg.segment().header().stream_descriptor();
+                auto uncompressed_size = desc.in_bytes();
+
+                {
+                    std::lock_guard lock{mutex};
+                    auto& sizes_info = sizes[stream_id][key_type];
+                    sizes_info.count++;
+                    sizes_info.compressed_size += compressed_size;
+                    sizes_info.uncompressed_size += uncompressed_size;
+                }
+
+                return variant_key;
+            });
+
+        });
+
+        if (!keys.empty()) {
+            store->batch_read_compressed(std::move(keys), BatchReadArgs{}).get();
+        }
     });
 
     return sizes;
