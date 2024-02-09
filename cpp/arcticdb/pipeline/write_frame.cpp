@@ -292,7 +292,7 @@ static RowRange partial_rewrite_row_range(
         return {0, bound->row_pos()};
     } else {
         const timestamp end = std::get<timestamp>(range.end_);
-        auto bound = std::upper_bound(std::begin(segment), std::end(segment), end, [](timestamp t, auto& row) {
+        auto bound = std::upper_bound(std::begin(segment), std::end(segment), end, [](timestamp t, const auto& row) {
             return t < row.template index<TimeseriesIndex>();
         });
         return {bound->row_pos(), segment.row_count()};
@@ -339,7 +339,10 @@ std::optional<SliceAndKey> rewrite_partial_segment(
     const SegmentInMemory& segment = kv.second;
     const IndexRange affected_index_range = partial_rewrite_index_range(existing_range, index_range, affected_part);
     const RowRange affected_row_range = partial_rewrite_row_range(segment, index_range, affected_part);
-    const size_t num_rows = affected_row_range.end() - affected_row_range.start();
+    const int64_t num_rows = affected_row_range.end() - affected_row_range.start();
+    if (num_rows <= 0) {
+        return std::nullopt;
+    }
     SegmentInMemory output = segment.truncate(affected_row_range.start(), affected_row_range.end(), true);
     FrameSlice new_slice{
         std::make_shared<StreamDescriptor>(output.descriptor()),
