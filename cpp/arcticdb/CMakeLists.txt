@@ -419,6 +419,11 @@ set(arcticdb_srcs
         storage/s3/s3_storage.cpp
         storage/s3/s3_storage_tool.cpp
         storage/storage_factory.cpp
+        storage/azure/azure_client_wrapper.hpp
+        storage/azure/azure_real_client.hpp
+        storage/azure/azure_real_client.cpp
+        storage/azure/azure_mock_client.hpp
+        storage/azure/azure_mock_client.cpp
         stream/aggregator.cpp
         stream/append_map.cpp
         toolbox/library_tool.cpp
@@ -444,9 +449,6 @@ set(arcticdb_srcs
         version/version_utils.cpp
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
-        storage/azure/azure_client_wrapper.hpp
-        storage/azure/azure_real_client.hpp
-        storage/azure/azure_real_client.cpp
 )
 
 if(${ARCTICDB_INCLUDE_ROCKSDB})
