@@ -17,8 +17,8 @@ VariantData transform_to_placeholder(VariantData data) {
     // modified with each transformation. It would be worth it in the scenario
     // where a true result is very common, but is a premature change to make at this point.
     return util::variant_match(data,
-                               [](std::shared_ptr<util::BitSet> bitset) -> VariantData {
-                                   if (bitset->count() == 0) {
+                               [](const util::BitSet& bitset) -> VariantData {
+                                   if (bitset.count() == 0) {
                                        return VariantData{EmptyResult{}};
                                    } else {
                                        return VariantData{bitset};
@@ -46,14 +46,14 @@ VariantData transform_to_bitset(const VariantData& data) {
                 util::raise_rte("ValueSet inputs cannot be input to boolean operations");
             },
             [&] (const ColumnWithStrings& column_with_strings) -> VariantData {
-                auto output = std::make_shared<util::BitSet>(static_cast<util::BitSetSizeType>(column_with_strings.column_->row_count()));
-                column_with_strings.column_->type().visit_tag([&column_with_strings, &output] (auto column_desc_tag) {
+                util::BitSet output_bitset(static_cast<util::BitSetSizeType>(column_with_strings.column_->row_count()));
+                column_with_strings.column_->type().visit_tag([&column_with_strings, &output_bitset] (auto column_desc_tag) {
                     using ColumnDescriptorType = std::decay_t<decltype(column_desc_tag)>;
                     using ColumnTagType =  typename ColumnDescriptorType::DataTypeTag;
                     using ColumnType =  typename ColumnTagType::raw_type;
                     if constexpr (is_bool_type(ColumnTagType::data_type)) {
                         auto column_data = column_with_strings.column_->data();
-                        util::BitSet::bulk_insert_iterator inserter(*output);
+                        util::BitSet::bulk_insert_iterator inserter(output_bitset);
                         auto pos = 0u;
                         while (auto block = column_data.next<ColumnDescriptorType>()) {
                             auto ptr = reinterpret_cast<const ColumnType*>(block->data());
@@ -68,7 +68,7 @@ VariantData transform_to_bitset(const VariantData& data) {
                         util::raise_rte("Cannot convert column of type {} to a bitset", column_with_strings.column_->type());
                     }
                 });
-                return output;
+                return output_bitset;
             },
             [](const auto& d) -> VariantData {
                 // util::BitSet, FullResult, or EmptyResult

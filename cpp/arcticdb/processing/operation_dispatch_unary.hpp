@@ -28,7 +28,7 @@
 
 namespace arcticdb {
 
-VariantData unary_boolean(const std::shared_ptr<util::BitSet>& bitset, OperationType operation);
+VariantData unary_boolean(const util::BitSet& bitset, OperationType operation);
 
 VariantData unary_boolean(EmptyResult, OperationType operation);
 
@@ -42,13 +42,12 @@ VariantData unary_operator(const Value& val, Func&& func) {
     output->data_type_ = val.data_type_;
 
     details::visit_type(val.type().data_type(), [&](auto val_desc_tag) {
-        using TDT = ScalarTagType<decltype(val_desc_tag)>;
-        using RawType = typename TDT::DataTypeTag::raw_type;
-        if constexpr (!is_numeric_type(TDT::DataTypeTag::data_type)) {
+        using type_info = ScalarTypeInfo<decltype(val_desc_tag)>;
+        if constexpr (!is_numeric_type(type_info::data_type)) {
             util::raise_rte("Cannot perform arithmetic on {}", val.type());
         }
-        auto value = *reinterpret_cast<const RawType*>(val.data_);
-        using TargetType = typename unary_arithmetic_promoted_type<RawType, std::remove_reference_t<Func>>::type;
+        auto value = *reinterpret_cast<const typename type_info::RawType*>(val.data_);
+        using TargetType = typename unary_arithmetic_promoted_type<typename type_info::RawType, std::remove_reference_t<Func>>::type;
         output->data_type_ = data_type_from_raw_type<TargetType>();
         *reinterpret_cast<TargetType*>(output->data_) = func.apply(value);
     });
@@ -61,31 +60,22 @@ VariantData unary_operator(const Column& col, Func&& func) {
     schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
             !is_empty_type(col.type().data_type()),
             "Empty column provided to unary operator");
-    std::unique_ptr<Column> output;
+    std::unique_ptr<Column> output_column;
 
     details::visit_type(col.type().data_type(), [&](auto col_desc_tag) {
-        using TDT = ScalarTagType<decltype(col_desc_tag)>;
-        using RawType = typename TDT::DataTypeTag::raw_type;
-        if constexpr (!is_numeric_type(TDT::DataTypeTag::data_type)) {
+        using type_info = ScalarTypeInfo<decltype(col_desc_tag)>;
+        if constexpr (!is_numeric_type(type_info::data_type)) {
             util::raise_rte("Cannot perform arithmetic on {}", col.type());
         }
-        using TargetType = typename unary_arithmetic_promoted_type<RawType, std::remove_reference_t<Func>>::type;
-        auto output_data_type = data_type_from_raw_type<TargetType>();
-        output = std::make_unique<Column>(make_scalar_type(output_data_type), col.is_sparse());
-        auto col_data = col.data();
-        while(auto block = col_data.next<TDT>()) {
-            const auto row_count = block->row_count();
-            const auto nbytes = sizeof(TargetType) * row_count;
-            auto in_ptr = reinterpret_cast<const RawType*>(block->data());
-            auto out_ptr = reinterpret_cast<TargetType*>(output->allocate_data(nbytes));
-            for(auto idx = 0u; idx < row_count; ++idx) {
-                *out_ptr++ = func.apply(*in_ptr++);
-            }
-            output->advance_data(nbytes);
-        }
-        output->set_row_data(col.row_count() - 1);
+        using TargetType = typename unary_arithmetic_promoted_type<typename type_info::RawType, std::remove_reference_t<Func>>::type;
+        constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
+        output_column = std::make_unique<Column>(make_scalar_type(output_data_type), col.row_count(), true, false);
+        output_column->set_row_data(col.last_row());
+        Column::transform<typename type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(col, *output_column, [&func](auto input_value) {
+            return func.apply(input_value);
+        });
     });
-    return {ColumnWithStrings(std::move(output))};
+    return {ColumnWithStrings(std::move(output_column))};
 }
 
 template<typename Func>
@@ -118,34 +108,22 @@ VariantData unary_comparator(const Column& col, Func&& func) {
         }
     }
 
-    auto output = std::make_shared<util::BitSet>(static_cast<util::BitSetSizeType>(col.row_count()));
+    util::BitSet output_bitset(static_cast<util::BitSetSizeType>(col.row_count()));
     details::visit_type(col.type().data_type(), [&](auto col_desc_tag) {
-        using TDT = ScalarTagType<decltype(col_desc_tag)>;
-        using RawType = typename TDT::DataTypeTag::raw_type;
-        auto column_data = col.data();
-        util::BitSet::bulk_insert_iterator inserter(*output);
-        auto pos = 0u;
-        while (auto block = column_data.next<TDT>()) {
-            auto ptr = reinterpret_cast<const RawType *>(block->data());
-            const auto row_count = block->row_count();
-            for (auto i = 0u; i < row_count; ++i, ++pos) {
-                if constexpr (is_floating_point_type(TDT::DataTypeTag::data_type)) {
-                    if (func.apply(*ptr++))
-                        inserter = pos;
-                } else if constexpr (is_sequence_type(TDT::DataTypeTag::data_type)) {
-                    if (func.template apply<StringTypeTag>(*ptr++))
-                        inserter = pos;
-                } else if constexpr (is_time_type(TDT::DataTypeTag::data_type)) {
-                    if (func.template apply<TimeTypeTag>(*ptr++))
-                        inserter = pos;
-                } else {
-                    internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Cannot perform null checks on {}", col.type());
-                }
+        using type_info = ScalarTypeInfo<decltype(col_desc_tag)>;
+        Column::transform<typename type_info::TDT>(col, output_bitset, [&func](auto input_value) -> bool {
+            if constexpr (is_floating_point_type(type_info::data_type)) {
+                return func.apply(input_value);
+            } else if constexpr (is_sequence_type(type_info::data_type)) {
+                return func.template apply<StringTypeTag>(input_value);
+            } else if constexpr (is_time_type(type_info::data_type)) {
+                return func.template apply<TimeTypeTag>(input_value);
+            } else {
+                internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Cannot perform null checks on {}", type_info::data_type);
             }
-        }
-        inserter.flush();
+        });
     });
-    return VariantData{std::move(output)};
+    return VariantData{std::move(output_bitset)};
 }
 
 template<typename Func>

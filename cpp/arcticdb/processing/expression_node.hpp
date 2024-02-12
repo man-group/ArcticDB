@@ -66,7 +66,7 @@ struct FullResult {};
 
 struct EmptyResult {};
 
-using VariantData = std::variant<FullResult, EmptyResult, std::shared_ptr<Value>, std::shared_ptr<ValueSet>, ColumnWithStrings, std::shared_ptr<util::BitSet>>;
+using VariantData = std::variant<FullResult, EmptyResult, std::shared_ptr<Value>, std::shared_ptr<ValueSet>, ColumnWithStrings, util::BitSet>;
 
 /*
  * Basic AST node.
