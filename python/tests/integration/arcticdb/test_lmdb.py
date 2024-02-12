@@ -23,6 +23,9 @@ import arcticdb.adapters.lmdb_library_adapter as la
 from arcticdb.exceptions import LmdbOptionsError
 
 
+from arcticdb.config import set_log_level
+set_log_level("DEBUG")
+
 def test_batch_read_only_segfault_regression(lmdb_storage):
     # See Github issue #520
     # This segfaults with arcticdb==1.5.0
