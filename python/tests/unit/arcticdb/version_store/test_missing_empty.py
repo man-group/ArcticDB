@@ -307,7 +307,7 @@ _APPEND_TESTS_RAW = [
              _datetime_data2, None,
              mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
     TestCase('no_index/no_type_empty_append', 'no_index/no_type_empty', None, [None, None, None], None,
-             mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
+             mark=pytest.mark.skip(reason="must be fixed for 4.4.0 (skipped due to seg fault in Windows test)")),
     TestCase('no_index/bool_empty_append_none', 'no_index/bool_empty', None, [None, None, None], None,
              mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
     TestCase('no_index/int_empty_append_none', 'no_index/int_empty', None, [None, None, None], None,
@@ -512,4 +512,3 @@ def test_empty_missing_update_lmdb_dynamic_schema(lmdb_version_store_dynamic_sch
     if test_case.base_name not in _BASE_TEST_LOOKUP:
         pytest.fail(f"Base test case {test_case.base_name} not found")
     run_test(lmdb_version_store_dynamic_schema, test_case, update, _BASE_TEST_LOOKUP[test_case.base_name])
-    
