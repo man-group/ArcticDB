@@ -44,12 +44,15 @@ namespace s3 {
         template<class It>
         using Range = folly::Range<It>;
 
-        inline void handle_s3_error(const Aws::S3::S3Error& err){
+        inline void raise_s3_exception(const Aws::S3::S3Error& err){
             std::string error_message;
             auto type = err.GetErrorType();
 
-            if(type == Aws::S3::S3Errors::NO_SUCH_KEY || type == Aws::S3::S3Errors::RESOURCE_NOT_FOUND || type == Aws::S3::S3Errors::NO_SUCH_BUCKET) {
-                return; // Caller need to handle these
+            if(type == Aws::S3::S3Errors::NO_SUCH_KEY) {
+                throw KeyNotFoundException(fmt::format("Key Not Found Error: S3Error#{} {}: {}",
+                                                       int(err.GetErrorType()),
+                                                       err.GetExceptionName().c_str(),
+                                                       err.GetMessage().c_str()));
             }
 
             if(type == Aws::S3::S3Errors::ACCESS_DENIED || type == Aws::S3::S3Errors::INVALID_ACCESS_KEY_ID || type == Aws::S3::S3Errors::SIGNATURE_DOES_NOT_MATCH) {
@@ -87,6 +90,16 @@ namespace s3 {
             raise<ErrorCode::E_UNEXPECTED_S3_ERROR>(error_message);
         }
 
+        inline bool is_expected_error_type(Aws::S3::S3Errors err) {
+            return err == Aws::S3::S3Errors::NO_SUCH_KEY;
+        }
+
+        inline void raise_if_unexpected_error(const Aws::S3::S3Error& err) {
+            if (!is_expected_error_type(err.GetErrorType())) {
+                raise_s3_exception(err);
+            }
+        }
+
         template<class KeyBucketizer>
         void do_write_impl(
                 Composite<KeySegmentPair> &&kvs,
@@ -113,7 +126,7 @@ namespace s3 {
                             if (!put_object_result.is_success()) {
                                 auto& error = put_object_result.get_error();
                                 // No DuplicateKeyException is thrown because S3 overwrites the given key if it already exists.
-                                handle_s3_error(error);
+                                raise_s3_exception(error);
                             }
                         }
                     });
@@ -163,7 +176,7 @@ namespace s3 {
                                                variant_key_view(k));
                             } else {
                                 auto &error = get_object_result.get_error();
-                                handle_s3_error(error);
+                                raise_if_unexpected_error(error);
 
                                 log::storage().log(
                                     opts.dont_warn_about_missing_key ? spdlog::level::debug : spdlog::level::warn,
@@ -218,7 +231,7 @@ namespace s3 {
                                     }
                                 } else {
                                     auto& error = delete_object_result.get_error();
-                                    handle_s3_error(error);
+                                    raise_s3_exception(error);
                                 }
                                 to_delete.clear();
                             }
@@ -295,9 +308,9 @@ namespace s3 {
                                         key_type,
                                         error.GetExceptionName().c_str(),
                                         error.GetMessage().c_str());
-                    // We don't raise on expected errors like NoSuchBucket because we want to return an empty list
+                    // We don't raise on expected errors like NoSuchKey because we want to return an empty list
                     // instead of raising.
-                    handle_s3_error(error);
+                    raise_if_unexpected_error(error);
                     return;
                 }
             } while (continuation_token.has_value());
@@ -320,7 +333,7 @@ namespace s3 {
 
             if (!head_object_result.is_success()) {
                 auto &error = head_object_result.get_error();
-                handle_s3_error(error);
+                raise_if_unexpected_error(error);
 
                 ARCTICDB_DEBUG(log::storage(), "Head object returned false for key {} {} {}:{}",
                                variant_key_view(key),
