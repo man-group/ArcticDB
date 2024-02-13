@@ -47,8 +47,8 @@ namespace s3 {
         inline void raise_s3_exception(const Aws::S3::S3Error& err){
             std::string error_message;
             auto type = err.GetErrorType();
-
-            if(type == Aws::S3::S3Errors::NO_SUCH_KEY) {
+            // s3_client.HeadObject returns RESOURCE_NOT_FOUND if a key is not found.
+            if(type == Aws::S3::S3Errors::NO_SUCH_KEY || type == Aws::S3::S3Errors::RESOURCE_NOT_FOUND) {
                 throw KeyNotFoundException(fmt::format("Key Not Found Error: S3Error#{} {}: {}",
                                                        int(err.GetErrorType()),
                                                        err.GetExceptionName().c_str(),
