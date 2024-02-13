@@ -19,7 +19,7 @@ and diagrams are generated, even undocumented classes / functions. This gives ab
 
 Install
 ```
-pip install mkdocs-material mkdocs-jupyter mkdocstrings[python] black pybind11-stubgen mike
+pip3 install mkdocs-material mkdocs-jupyter 'mkdocstrings[python]' black pybind11-stubgen mike
 ```
 - mkdocs-material: theme
 - mkdocs-jupyter: jupyter notebook support
@@ -43,7 +43,7 @@ pip install arcticdb
 
 `mkdocstrings[python]` doesn't support python extensions very well, so create interface files (pyi) for the extensions first.
 ```
-cd python
+cd docs/mkdocs
 # TODO fix these errors!
 pybind11-stubgen arcticdb_ext.version_store --ignore-all-errors -o .
 ```
