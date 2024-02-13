@@ -12,6 +12,7 @@
 #include <arcticdb/storage/storage_factory.hpp>
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/util/test/config_common.hpp>
+#include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/util/random.h>
 
 #include <fmt/format.h>
@@ -61,6 +62,7 @@ TEST(Async, DeDupTest) {
     as::EnvironmentName environment_name{"research"};
     as::StorageName storage_name("lmdb_local");
     as::LibraryPath library_path{"a", "b"};
+    namespace ap = arcticdb::pipelines;
 
     auto env_config = arcticdb::get_test_environment_config(library_path, storage_name, environment_name);
     auto config_resolver = as::create_in_memory_resolver(env_config);
@@ -85,7 +87,16 @@ TEST(Async, DeDupTest) {
             .content_hash(default_content_hash).build("", ac::entity::KeyType::TABLE_DATA);
     de_dup_map->insert_key(k);
 
-    auto keys = store.batch_write(std::move(key_segments), de_dup_map, ast::StreamSink::BatchWriteArgs()).get();
+    std::vector<folly::Future<arcticdb::pipelines::SliceAndKey>> slice_key_futs;
+    for(auto& [key, segment] : key_segments) {
+        auto input = std::make_tuple<ast::StreamSink::PartialKey, ac::SegmentInMemory, ap::FrameSlice>(std::move(key), std::move(segment), {});
+        auto fut = folly::makeFuture(std::move(input));
+        slice_key_futs.emplace_back(store.async_write(std::move(fut), de_dup_map));
+    }
+    auto slice_keys = folly::collect(slice_key_futs).get();
+    std::vector<ac::AtomKey> keys;
+    for(const auto& slice_key : slice_keys)
+        keys.emplace_back(slice_key.key());
 
     //The first key will be de-duped, second key will be fresh because indexes dont match
     ASSERT_EQ(2ULL, keys.size());

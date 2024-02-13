@@ -9,6 +9,8 @@ on:
     - cron: '0 0 * * *'
 
   pull_request:
+    paths-ignore:
+    - "**/*.md"
 
 jobs:
   cibw_docker_image:
@@ -87,13 +89,13 @@ jobs:
           python -m pip install --upgrade pip
           ARCTIC_CMAKE_PRESET=skip pip install -ve .[Testing]
 
-      - name: Test with pytest
-        uses: ./.github/actions/run_local_pytest
-        with:
-          build_type: debug
-          threads: 1
-          fast_tests_only: 0
-          other_params: '-m coverage run '
+      # - name: Test with pytest
+      #   uses: ./.github/actions/run_local_pytest
+      #   with:
+      #     build_type: debug
+      #     threads: 1
+      #     fast_tests_only: 0
+      #     other_params: '-m coverage run '
 
       - name: Get python Coverage report
         shell: bash -l {0}
@@ -263,8 +265,8 @@ jobs:
         if: github.event_name != 'pull_request' || github.ref == 'refs/heads/master'
         shell: bash -el {0}
         run: |
-          git config --global user.email "arcticdb@man.com"
-          git config --global user.name "arcticdb-service-user"
+          git config --global user.name "${GITHUB_ACTOR}"
+          git config --global user.email "${GITHUB_ACTOR_ID}+${GITHUB_ACTOR}@users.noreply.github.com"
 
           git fetch --tags --all
           git pull

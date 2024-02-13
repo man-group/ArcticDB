@@ -75,19 +75,19 @@ TimeseriesDescriptor timeseries_descriptor_from_pipeline_context(
 }
 
 TimeseriesDescriptor index_descriptor_from_frame(
-        pipelines::InputTensorFrame&& frame,
+        const std::shared_ptr<pipelines::InputTensorFrame>& frame,
         size_t existing_rows,
         std::optional<entity::AtomKey>&& prev_key
 ) {
     return make_timeseries_descriptor(
-        frame.num_rows + existing_rows,
-        StreamDescriptor{std::make_shared<StreamDescriptor::Proto>(std::move(frame.desc.mutable_proto())),
-           frame.desc.fields_ptr()},
-        std::move(frame.norm_meta),
-        std::move(frame.user_meta),
+        frame->num_rows + existing_rows,
+        StreamDescriptor{std::make_shared<StreamDescriptor::Proto>(std::move(frame->desc.mutable_proto())),
+           frame->desc.fields_ptr()},
+        std::move(frame->norm_meta),
+        std::move(frame->user_meta),
         std::move(prev_key),
         std::nullopt,
-        frame.bucketize_dynamic);
+        frame->bucketize_dynamic);
 }
 
 void adjust_slice_rowcounts(const std::shared_ptr<pipelines::PipelineContext>& pipeline_context) {
@@ -146,6 +146,10 @@ std::pair<size_t, size_t> offset_and_row_count(const std::shared_ptr<pipelines::
     std::size_t offset = row_count ? context->slice_and_keys_[0].slice_.row_range.first : 0ULL;
     ARCTICDB_DEBUG(log::version(), "Got offset {} and row_count {}", offset, row_count);
     return std::make_pair(offset, row_count);
+}
+
+bool index_is_not_timeseries_or_is_sorted_ascending(const std::shared_ptr<pipelines::InputTensorFrame>& frame) {
+    return !std::holds_alternative<stream::TimeseriesIndex>(frame->index) || frame->desc.get_sorted() == SortedValue::ASCENDING;
 }
 
 }

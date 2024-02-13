@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 from arcticdb import Arctic
 from arcticdb.version_store.library import WritePayload, ReadRequest
+import pandas as pd
 
 from .common import *
 
@@ -20,7 +21,7 @@ class BasicFunctions:
     param_names = ["rows", "num_symbols"]
 
     def setup_cache(self):
-        self.ac = Arctic("lmdb://basic_functions")
+        self.ac = Arctic("lmdb://basic_functions?map_size=10GB")
         num_rows, num_symbols = BasicFunctions.params
 
         self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in num_rows}
@@ -31,6 +32,7 @@ class BasicFunctions:
             lib = self.ac[lib]
             for sym in range(num_symbols[-1]):
                 lib.write(f"{sym}_sym", self.dfs[rows])
+        lib.write("short_wide_sym", generate_random_floats_dataframe(5_000, 30_000))
 
     def teardown(self, rows, num_symbols):
         for lib in self.ac.list_libraries():
@@ -39,10 +41,11 @@ class BasicFunctions:
             self.ac.delete_library(lib)
 
     def setup(self, rows, num_symbols):
-        self.ac = Arctic("lmdb://basic_functions")
+        self.ac = Arctic("lmdb://basic_functions?map_size=10GB")
         self.read_reqs = [ReadRequest(f"{sym}_sym") for sym in range(num_symbols)]
 
         self.df = generate_pseudo_random_dataframe(rows)
+        self.df_short_wide = generate_random_floats_dataframe(5_000, 30_000)
 
     def get_fresh_lib(self):
         self.ac.delete_library("fresh_lib")
@@ -58,6 +61,14 @@ class BasicFunctions:
         lib = self.get_fresh_lib()
         for sym in range(num_symbols):
             lib.write(f"{sym}_sym", self.df)
+
+    def time_write_short_wide(self, rows, num_symbols):
+        lib = self.get_fresh_lib()
+        lib.write("short_wide_sym", self.df_short_wide)
+
+    def peakmem_write_short_wide(self, rows, num_symbols):
+        lib = self.get_fresh_lib()
+        lib.write("short_wide_sym", self.df_short_wide)
 
     def time_write_staged(self, rows, num_symbols):
         lib = self.get_fresh_lib()
@@ -94,6 +105,14 @@ class BasicFunctions:
     def peakmem_read(self, rows, num_symbols):
         lib = self.ac[get_prewritten_lib_name(rows)]
         [lib.read(f"{sym}_sym").data for sym in range(num_symbols)]
+
+    def time_read_short_wide(self, rows, num_symbols):
+        lib = self.ac[get_prewritten_lib_name(rows)]
+        lib.read("short_wide_sym").data
+
+    def peakmem_read_short_wide(self, rows, num_symbols):
+        lib = self.ac[get_prewritten_lib_name(rows)]
+        lib.read("short_wide_sym").data
 
     def time_read_batch(self, rows, num_symbols):
         lib = self.ac[get_prewritten_lib_name(rows)]

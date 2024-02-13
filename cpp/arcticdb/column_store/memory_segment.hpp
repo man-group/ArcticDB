@@ -11,7 +11,6 @@
 #include <arcticdb/util/cursor.hpp>
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/util/magic_num.hpp>
 #include <arcticdb/util/constructors.hpp>
@@ -157,7 +156,7 @@ public:
         impl_->set_string_at(col, row, str, size);
     }
 
-    void set_no_string_at(position_t col, position_t row, OffsetString::offset_t placeholder) {
+    void set_no_string_at(position_t col, position_t row, position_t placeholder) {
         impl_->set_no_string_at(col, row, placeholder);
     }
 
@@ -385,7 +384,7 @@ public:
         impl_->sort(column);
     }
 
-    SegmentInMemory clone() {
+    SegmentInMemory clone() const {
         return SegmentInMemory(std::make_shared<SegmentInMemoryImpl>(impl_->clone()));
     }
 

@@ -9,6 +9,7 @@
 
 #include <arcticdb/codec/encoding_sizes.hpp>
 #include <arcticdb/codec/codec.hpp>
+#include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/pipeline/index_segment_reader.hpp>
 #include <arcticdb/pipeline/read_frame.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
@@ -437,38 +438,37 @@ void decode_into_frame_dynamic(
 
             auto dst_col = *frame_loc_opt;
             auto& buffer = frame.column(static_cast<position_t>(dst_col)).data().buffer();
-            if(ColumnMapping m{frame, dst_col, field_col, context};!trivially_compatible_types(m.source_type_desc_, m.dest_type_desc_)) {
-                util::check(static_cast<bool>(has_valid_type_promotion(m.source_type_desc_, m.dest_type_desc_)), "Can't promote type {} to type {} in field {}",
-                            m.source_type_desc_, m.dest_type_desc_, m.frame_field_descriptor_.name());
-
-                    m.dest_type_desc_.visit_tag([&buffer, &m, &data, encoded_field, buffers, encdoing_version] (auto dest_desc_tag) {
-                        using DestinationType =  typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
-                        m.source_type_desc_.visit_tag([&buffer, &m, &data, &encoded_field, &buffers, encdoing_version] (auto src_desc_tag ) {
-                            using SourceType =  typename decltype(src_desc_tag)::DataTypeTag::raw_type;
-                            if constexpr(std::is_arithmetic_v<SourceType> && std::is_arithmetic_v<DestinationType>) {
-                                const auto src_bytes = sizeof_datatype(m.source_type_desc_) * m.num_rows_;
-                                Buffer tmp_buf{src_bytes};
-                                decode_or_expand(data, tmp_buf.data(), encoded_field, m.source_type_desc_, src_bytes, buffers, encdoing_version);
-                                auto src_ptr = reinterpret_cast<SourceType *>(tmp_buf.data());
-                                auto dest_ptr = reinterpret_cast<DestinationType *>(buffer.data() + m.offset_bytes_);
-                                for (auto i = 0u; i < m.num_rows_; ++i) {
-                                    *dest_ptr++ = static_cast<DestinationType>(*src_ptr++);
-                                }
+            ColumnMapping m{frame, dst_col, field_col, context};
+            util::check(static_cast<bool>(has_valid_type_promotion(m.source_type_desc_, m.dest_type_desc_)), "Can't promote type {} to type {} in field {}",
+                        m.source_type_desc_, m.dest_type_desc_, m.frame_field_descriptor_.name());
+            ARCTICDB_TRACE(log::storage(), "Creating data slice at {} with total size {} ({} rows)", m.offset_bytes_, m.dest_bytes_,
+                           context.slice_and_key().slice_.row_range.diff());
+            util::check(data != end,
+                        "Reached end of input block with {} fields to decode",
+                        field_count - field_col);
+            decode_or_expand(data, buffer.data() + m.offset_bytes_, encoded_field, m.source_type_desc_, m.dest_bytes_, buffers, encdoing_version);
+            if (!trivially_compatible_types(m.source_type_desc_, m.dest_type_desc_)) {
+                m.dest_type_desc_.visit_tag([&buffer, &m, &data, encoded_field, buffers, encdoing_version] (auto dest_desc_tag) {
+                    using DestinationType =  typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
+                    m.source_type_desc_.visit_tag([&buffer, &m, &data, &encoded_field, &buffers, encdoing_version] (auto src_desc_tag ) {
+                        using SourceType =  typename decltype(src_desc_tag)::DataTypeTag::raw_type;
+                        if constexpr(std::is_arithmetic_v<SourceType> && std::is_arithmetic_v<DestinationType>) {
+                            // If the source and destination types are different, then sizeof(destination type) >= sizeof(source type)
+                            // We have decoded the column of source type directly onto the output buffer above
+                            // We therefore need to iterate backwards through the source values, static casting them to the destination
+                            // type to avoid overriding values we haven't casted yet.
+                            const auto src_ptr_offset = sizeof_datatype(m.source_type_desc_) * (m.num_rows_ - 1);
+                            const auto dest_ptr_offset = sizeof_datatype(m.dest_type_desc_) * (m.num_rows_ - 1);
+                            auto src_ptr = reinterpret_cast<SourceType *>(buffer.data() + m.offset_bytes_ + src_ptr_offset);
+                            auto dest_ptr = reinterpret_cast<DestinationType *>(buffer.data() + m.offset_bytes_ + dest_ptr_offset);
+                            for (auto i = 0u; i < m.num_rows_; ++i) {
+                                *dest_ptr-- = static_cast<DestinationType>(*src_ptr--);
                             }
-                            else {
-                                util::raise_rte("Can't promote type {} to type {} in field {}", m.source_type_desc_, m.dest_type_desc_, m.frame_field_descriptor_.name());
-                            }
-                        });
+                        } else {
+                            util::raise_rte("Can't promote type {} to type {} in field {}", m.source_type_desc_, m.dest_type_desc_, m.frame_field_descriptor_.name());
+                        }
                     });
-                    ARCTICDB_TRACE(log::codec(), "Decoded column {} to position {}", m.frame_field_descriptor_.name(), data - begin);
-            } else {
-                ARCTICDB_TRACE(log::storage(), "Creating data slice at {} with total size {} ({} rows)", m.offset_bytes_, m.dest_bytes_,
-                                     context.slice_and_key().slice_.row_range.diff());
-                util::check(data != end,
-                            "Reached end of input block with {} fields to decode",
-                            field_count - field_col);
-
-                decode_or_expand(data, buffer.data() + m.offset_bytes_, encoded_field, m.source_type_desc_, m.dest_bytes_, buffers, encdoing_version);
+                });
             }
             ARCTICDB_TRACE(log::codec(), "Decoded column {} to position {}", frame.field(dst_col).name(), data - begin);
         }
@@ -688,7 +688,7 @@ public:
                     [&] (std::string_view sv) {
                         std::memcpy(dst_, sv.data(), sv.size());
                 },
-                [&] (StringPool::offset_t ) {
+                [&] (entity::position_t ) {
                     memset(dst_, 0, column_width_);
                 });
             dst_ += column_width_;
@@ -724,7 +724,7 @@ public:
                                     util::check(success, "Failed to convert utf8 to utf32 for string {}", sv);
                                     memcpy(dst_, buf_, column_width_);
                                 },
-                                [&] (StringPool::offset_t ) {
+                                [&] (entity::position_t ) {
                                     memset(dst_, 0, column_width_);
                                 });
 
@@ -797,7 +797,7 @@ class DynamicStringReducer : public StringReducer {
     };
 
     template<typename StringCreator, typename LockPolicy>
-    void assign_strings_shared(size_t end, const StringPool::offset_t* ptr_src, bool has_type_conversion, const StringPool& string_pool) {
+    void assign_strings_shared(size_t end, const entity::position_t* ptr_src, bool has_type_conversion, const StringPool& string_pool) {
         LockPolicy::lock(*lock_);
         auto none = std::make_unique<py::none>(py::none{});
         LockPolicy::unlock(*lock_);
@@ -836,12 +836,12 @@ class DynamicStringReducer : public StringReducer {
 
 
     template<typename StringCreator, typename LockPolicy>
-    void assign_strings_local(size_t end, const StringPool::offset_t* ptr_src, bool has_type_conversion, const StringPool& string_pool) {
+    void assign_strings_local(size_t end, const entity::position_t* ptr_src, bool has_type_conversion, const StringPool& string_pool) {
         LockPolicy::lock(*lock_);
         auto none = std::make_unique<py::none>(py::none{});
         LockPolicy::unlock(*lock_);
         size_t none_count = 0u;
-        robin_hood::unordered_flat_map<StringPool::offset_t, std::pair<PyObject*, folly::SpinLock>> local_map;
+        robin_hood::unordered_flat_map<entity::position_t, std::pair<PyObject*, folly::SpinLock>> local_map;
         local_map.reserve(end - row_);
         // TODO this is no good for non-contigous blocks, but we currently expect
         // output data to be contiguous
@@ -885,7 +885,7 @@ class DynamicStringReducer : public StringReducer {
         bool has_type_conversion,
         bool is_utf,
         size_t end,
-        const StringPool::offset_t* ptr_src,
+        const entity::position_t* ptr_src,
         const StringPool& string_pool) {
         auto string_constructor = get_string_constructor(has_type_conversion, is_utf);
 
@@ -921,7 +921,7 @@ public:
         std::shared_ptr<PyObject> py_nan,
         std::shared_ptr<LockType> lock,
         bool do_lock) :
-        StringReducer(column, context, std::move(frame), frame_field, sizeof(StringPool::offset_t)),
+        StringReducer(column, context, std::move(frame), frame_field, sizeof(entity::position_t)),
         ptr_dest_(reinterpret_cast<PyObject**>(dst_)),
         unique_string_map_(std::move(unique_string_map)),
         py_nan_(py_nan),
@@ -1064,7 +1064,7 @@ struct ReduceColumnTask : async::BaseTask {
             column.default_initialize_rows(0, frame_.row_count(), false);
             bool dynamic_type = is_dynamic_string_type(field_type);
             if(dynamic_type) {
-                EmptyDynamicStringReducer reducer(column, frame_, frame_field, sizeof(StringPool::offset_t), lock_);
+                EmptyDynamicStringReducer reducer(column, frame_, frame_field, sizeof(entity::position_t), lock_);
                 reducer.reduce(frame_.row_count());
             }
         } else {

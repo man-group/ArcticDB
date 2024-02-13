@@ -28,7 +28,7 @@
 
 namespace arcticdb {
 
-VariantData unary_boolean(const std::shared_ptr<util::BitSet>& bitset, OperationType operation);
+VariantData unary_boolean(const util::BitSet& bitset, OperationType operation);
 
 VariantData unary_boolean(EmptyResult, OperationType operation);
 
@@ -42,14 +42,12 @@ VariantData unary_operator(const Value& val, Func&& func) {
     output->data_type_ = val.data_type_;
 
     details::visit_type(val.type().data_type(), [&](auto val_desc_tag) {
-        using DataTagType =  decltype(val_desc_tag);
-        if constexpr (!is_numeric_type(DataTagType::data_type)) {
+        using type_info = ScalarTypeInfo<decltype(val_desc_tag)>;
+        if constexpr (!is_numeric_type(type_info::data_type)) {
             util::raise_rte("Cannot perform arithmetic on {}", val.type());
         }
-        using DT = TypeDescriptorTag<decltype(val_desc_tag), DimensionTag<Dimension::Dim0>>;
-        using RawType = typename DT::DataTypeTag::raw_type;
-        auto value = *reinterpret_cast<const RawType*>(val.data_);
-        using TargetType = typename unary_arithmetic_promoted_type<RawType, std::remove_reference_t<Func>>::type;
+        auto value = *reinterpret_cast<const typename type_info::RawType*>(val.data_);
+        using TargetType = typename unary_arithmetic_promoted_type<typename type_info::RawType, std::remove_reference_t<Func>>::type;
         output->data_type_ = data_type_from_raw_type<TargetType>();
         *reinterpret_cast<TargetType*>(output->data_) = func.apply(value);
     });
@@ -62,31 +60,22 @@ VariantData unary_operator(const Column& col, Func&& func) {
     schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
             !is_empty_type(col.type().data_type()),
             "Empty column provided to unary operator");
-    std::unique_ptr<Column> output;
+    std::unique_ptr<Column> output_column;
 
     details::visit_type(col.type().data_type(), [&](auto col_desc_tag) {
-        using ColumnTagType =  decltype(col_desc_tag);
-        if constexpr (!is_numeric_type(ColumnTagType::data_type)) {
+        using type_info = ScalarTypeInfo<decltype(col_desc_tag)>;
+        if constexpr (!is_numeric_type(type_info::data_type)) {
             util::raise_rte("Cannot perform arithmetic on {}", col.type());
         }
-        using DT = TypeDescriptorTag<decltype(col_desc_tag), DimensionTag<Dimension::Dim0>>;
-        using RawType = typename DT::DataTypeTag::raw_type;
-        using TargetType = typename unary_arithmetic_promoted_type<RawType, std::remove_reference_t<Func>>::type;
-        auto output_data_type = data_type_from_raw_type<TargetType>();
-        output = std::make_unique<Column>(make_scalar_type(output_data_type), col.is_sparse());
-        auto data = col.data();
-        while(auto opt_block = data.next<DT>()) {
-            const auto& block = *opt_block;
-            const auto nbytes = sizeof(TargetType) * block.row_count();
-            auto ptr = reinterpret_cast<TargetType*>(output->allocate_data(nbytes));
-            for(auto idx = 0u; idx < block.row_count(); ++idx)
-                *ptr++ = func.apply(block[idx]);
-
-            output->advance_data(nbytes);
-        }
-        output->set_row_data(col.row_count() - 1);
+        using TargetType = typename unary_arithmetic_promoted_type<typename type_info::RawType, std::remove_reference_t<Func>>::type;
+        constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
+        output_column = std::make_unique<Column>(make_scalar_type(output_data_type), col.row_count(), true, false);
+        output_column->set_row_data(col.last_row());
+        Column::transform<typename type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(col, *output_column, [&func](auto input_value) {
+            return func.apply(input_value);
+        });
     });
-    return {ColumnWithStrings(std::move(output))};
+    return {ColumnWithStrings(std::move(output_column))};
 }
 
 template<typename Func>
@@ -104,6 +93,57 @@ VariantData visit_unary_operator(const VariantData& left, Func&& func) {
         [](const auto&) -> VariantData {
             util::raise_rte("Bitset/ValueSet inputs not accepted to unary operators");
         }
+    }, left);
+}
+
+template <typename Func>
+VariantData unary_comparator(const Column& col, Func&& func) {
+    if (is_empty_type(col.type().data_type()) || is_integer_type(col.type().data_type())) {
+        if constexpr (std::is_same_v<Func, IsNullOperator&&>) {
+            return is_empty_type(col.type().data_type()) ? VariantData(FullResult{}) : VariantData(EmptyResult{});
+        } else if constexpr (std::is_same_v<Func, NotNullOperator&&>) {
+            return is_empty_type(col.type().data_type()) ? VariantData(EmptyResult{}) : VariantData(FullResult{});
+        } else {
+            internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected operator passed to unary_comparator");
+        }
+    }
+
+    util::BitSet output_bitset(static_cast<util::BitSetSizeType>(col.row_count()));
+    details::visit_type(col.type().data_type(), [&](auto col_desc_tag) {
+        using type_info = ScalarTypeInfo<decltype(col_desc_tag)>;
+        Column::transform<typename type_info::TDT>(col, output_bitset, [&func](auto input_value) -> bool {
+            if constexpr (is_floating_point_type(type_info::data_type)) {
+                return func.apply(input_value);
+            } else if constexpr (is_sequence_type(type_info::data_type)) {
+                return func.template apply<StringTypeTag>(input_value);
+            } else if constexpr (is_time_type(type_info::data_type)) {
+                return func.template apply<TimeTypeTag>(input_value);
+            } else {
+                internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Cannot perform null checks on {}", type_info::data_type);
+            }
+        });
+    });
+    return VariantData{std::move(output_bitset)};
+}
+
+template<typename Func>
+VariantData visit_unary_comparator(const VariantData& left, Func&& func) {
+    return std::visit(util::overload{
+            [&] (const ColumnWithStrings& l) -> VariantData {
+                return transform_to_placeholder(unary_comparator<decltype(func)>(*(l.column_), std::forward<decltype(func)>(func)));
+            },
+            [] (EmptyResult) -> VariantData {
+                if constexpr (std::is_same_v<Func, IsNullOperator>) {
+                    return FullResult{};
+                } else if constexpr (std::is_same_v<Func, NotNullOperator>) {
+                    return EmptyResult{};
+                } else {
+                    internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected operator passed to unary_comparator");
+                }
+            },
+            [](const auto&) -> VariantData {
+                util::raise_rte("Bitset/ValueSet inputs not accepted to unary comparators");
+            }
     }, left);
 }
 

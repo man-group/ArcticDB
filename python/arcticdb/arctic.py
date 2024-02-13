@@ -163,9 +163,9 @@ class Arctic:
         Examples
         --------
 
-        >>> ac = Arctic('s3://MY_ENDPOINT:MY_BUCKET')  # Leave AWS to derive credential information
-        >>> ac = Arctic('s3://MY_ENDPOINT:MY_BUCKET?region=YOUR_REGION&access=ABCD&secret=DCBA') # Manually specify creds
-        >>> ac = Arctic('azure://CA_cert_path=/etc/ssl/certs/ca-certificates.crt;BlobEndpoint=https://arctic.blob.core.windows.net;Container=acblob;SharedAccessSignature=sp=sig')
+        >>> ac = adb.Arctic('s3://MY_ENDPOINT:MY_BUCKET')  # Leave AWS to derive credential information
+        >>> ac = adb.Arctic('s3://MY_ENDPOINT:MY_BUCKET?region=YOUR_REGION&access=ABCD&secret=DCBA') # Manually specify creds
+        >>> ac = adb.Arctic('azure://CA_cert_path=/etc/ssl/certs/ca-certificates.crt;BlobEndpoint=https://arctic.blob.core.windows.net;Container=acblob;SharedAccessSignature=sp=sig')
         >>> ac.create_library('travel_data')
         >>> ac.list_libraries()
         ['travel_data']
@@ -205,14 +205,17 @@ class Arctic:
     def __repr__(self):
         return "Arctic(config=%r)" % self._library_adapter
 
+    def __contains__(self, name: str):
+        return self.has_library(name)
+
     def get_library(
         self, name: str, create_if_missing: Optional[bool] = False, library_options: Optional[LibraryOptions] = None
     ) -> Library:
         """
         Returns the library named ``name``.
 
-        This method can also be invoked through subscripting. ``Arctic('bucket').get_library("test")`` is equivalent to
-        ``Arctic('bucket')["test"]``.
+        This method can also be invoked through subscripting. ``adb.Arctic('bucket').get_library("test")`` is equivalent to
+        ``adb.Arctic('bucket')["test"]``.
 
         Parameters
         ----------
@@ -231,7 +234,7 @@ class Arctic:
 
         Examples
         --------
-        >>> arctic = Arctic('s3://MY_ENDPOINT:MY_BUCKET')
+        >>> arctic = adb.Arctic('s3://MY_ENDPOINT:MY_BUCKET')
         >>> arctic.create_library('test.library')
         >>> my_library = arctic.get_library('test.library')
         >>> my_library = arctic['test.library']
@@ -280,7 +283,7 @@ class Arctic:
 
         Examples
         --------
-        >>> arctic = Arctic('s3://MY_ENDPOINT:MY_BUCKET')
+        >>> arctic = adb.Arctic('s3://MY_ENDPOINT:MY_BUCKET')
         >>> arctic.create_library('test.library')
         >>> my_library = arctic['test.library']
 
@@ -350,7 +353,7 @@ class Arctic:
 
         Examples
         --------
-        >>> arctic = Arctic('s3://MY_ENDPOINT:MY_BUCKET')
+        >>> arctic = adb.Arctic('s3://MY_ENDPOINT:MY_BUCKET')
         >>> arctic.list_libraries()
         ['test.library']
 
@@ -367,7 +370,7 @@ class Arctic:
 
         Examples
         --------
-        >>> arctic = Arctic('s3://MY_ENDPOINT:MY_BUCKET')
+        >>> arctic = adb.Arctic('s3://MY_ENDPOINT:MY_BUCKET')
         >>> arctic.get_uri()
 
         Returns

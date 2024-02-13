@@ -47,6 +47,7 @@ def test_library_creation_deletion(arctic_client):
 
     assert ac.list_libraries() == ["pytest_test_lib"]
     assert ac.has_library("pytest_test_lib")
+    assert "pytest_test_lib" in ac
     if "mongo" in arctic_client.get_uri():
         # The mongo fixture uses PrefixingLibraryAdapterDecorator which leaks in this one case
         assert ac["pytest_test_lib"].name.endswith(".pytest_test_lib")
@@ -61,6 +62,7 @@ def test_library_creation_deletion(arctic_client):
     with pytest.raises(LibraryNotFound):
         _lib = ac["pytest_test_lib"]
     assert not ac.has_library("pytest_test_lib")
+    assert "pytest_test_lib" not in ac
 
 
 def test_get_library(arctic_client):
@@ -91,6 +93,44 @@ def test_get_library(arctic_client):
     with pytest.raises(ArcticInvalidApiUsageException):
         _ = ac.get_library("pytest_test_lib", create_if_missing=False, library_options=library_options)
 
+
+def test_create_library_with_invalid_name(arctic_client):
+    ac = arctic_client
+
+    # These should succeed because the names are valid
+    valid_names = ["lib", "lib/with/slash", "lib-with-dash", "lib.with.dot", "lib123"]
+    for lib_name in valid_names:
+        ac.create_library(lib_name)
+
+    # These should fail because the names are invalid
+    invalid_names = [chr(0), "lib>", "lib<", "lib*", "/lib", "lib...lib", "lib"*1000]
+    for lib_name in invalid_names:
+        with pytest.raises(UserInputException):
+            ac.create_library(lib_name)
+
+    # Verify that library list is not corrupted
+    assert set(ac.list_libraries()) == set(valid_names)
+
+
+# TODO: Fix issue #1247, then use "arcitc_client" instead of "arctic_client_no_lmdb"
+@pytest.mark.parametrize("prefix", ["", "prefix"])
+@pytest.mark.parametrize("suffix", ["", "suffix"])
+def test_create_library_with_all_chars(arctic_client_no_lmdb, prefix, suffix):
+    # Create library names with each character (except '\' because Azure replaces it with '/' in some cases)
+    names = [f"{prefix}{chr(i)}{suffix}" for i in range(256) if chr(i) != '\\']
+
+    ac = arctic_client_no_lmdb
+
+    created_libraries = set()
+    for name in names:
+        try:
+            ac.create_library(name)
+            created_libraries.add(name)
+        # We should only fail with UserInputException (indicating that name validation failed)
+        except UserInputException:
+            pass
+
+    assert set(ac.list_libraries()) == created_libraries
 
 def test_do_not_persist_s3_details(s3_storage):
     """We apply an in-memory overlay for these instead. In particular we should absolutely not persist credentials
@@ -175,6 +215,9 @@ def test_separation_between_libraries(arctic_client):
 
 
 def add_path_prefix(uri, prefix):
+    if "path_prefix" in uri:
+        return uri + prefix
+
     if "azure" in uri:  # azure connection string has a different format
         return f"{uri};Path_prefix={prefix}"
     else:
@@ -924,6 +967,8 @@ def test_get_description(arctic_library):
     assert original_info.row_count == 4
     assert info.last_update_time > original_info.last_update_time
     assert info.last_update_time.tz == pytz.UTC
+    assert original_info.sorted == "ASCENDING"
+    assert info.sorted == "ASCENDING"
 
 
 def test_tail(arctic_library):

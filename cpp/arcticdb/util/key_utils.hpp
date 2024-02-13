@@ -116,7 +116,7 @@ inline std::unordered_set<AtomKey> get_data_keys_set(
 
 std::unordered_set<AtomKey> recurse_segment(const std::shared_ptr<stream::StreamSource>& store,
                                             SegmentInMemory segment,
-                                            std::optional<VersionId> version_id);
+                                            const std::optional<VersionId>& version_id);
 
 /* Given a [multi-]index key, returns a set containing the top level [multi-]index key itself, and all of the
  * multi-index, index, and data keys referenced by this [multi-]index key.

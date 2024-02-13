@@ -33,11 +33,9 @@ if(NOT WIN32 AND ${SSL_LINK})
 endif()
 
 find_package(Protobuf REQUIRED)
-set(Protobuf_lite_LIBRARY protobuf::libprotobuf-lite)
-set(Protobuf_LIBRARY protobuf::libprotobuf)
-
 find_package(mongocxx REQUIRED)
 find_package(bsoncxx REQUIRED)
+find_package(xxHash REQUIRED)
 find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypasses our cpp/CMake/FindZstd.cmake module
 
 find_package(azure-identity-cpp CONFIG REQUIRED)
@@ -69,7 +67,6 @@ else()
     SET(HIDE_LINKED_SYMBOLS OFF)
 
     find_package(pybind11 REQUIRED)
-    find_package(xxHash REQUIRED)
     find_package(PCRE REQUIRED)
     find_package(Libevent  REQUIRED)
     find_package(semimap REQUIRED)
@@ -93,7 +90,12 @@ else()
     list(REMOVE_ITEM NEW_FOLLY_DEPS "/usr/local/opt/openssl/include" )
     set_target_properties(Folly::folly_deps PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${NEW_FOLLY_DEPS}")
 
+    add_library(xxHash STATIC IMPORTED)
+    set_target_properties(xxHash PROPERTIES IMPORTED_LOCATION ${xxHash_LIBRARY})
+    set_target_properties(xxHash PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${xxHash_INCLUDE_DIR})
+
 endif()
+
 # RocksDB can be manually excluded with set(ARCTICDB_INCLUDE_ROCKSDB 0)
 # Default is to include on PyPI builds and exclude on conda builds
 if(${ARCTICDB_INCLUDE_ROCKSDB})
@@ -264,7 +266,7 @@ set(arcticdb_srcs
         storage/mongo/mongo_storage.hpp
         storage/object_store_utils.hpp
         storage/s3/nfs_backed_storage.hpp
-        storage/s3/s3_client_accessor.hpp
+        storage/s3/s3_client_wrapper.hpp
         storage/s3/s3_storage_tool.hpp
         storage/storage_factory.hpp
         storage/storage_options.hpp
@@ -313,6 +315,7 @@ set(arcticdb_srcs
         util/magic_num.hpp
         util/movable_priority_queue.hpp
         util/movable_priority_queue.hpp
+        util/name_validation.hpp
         util/offset_string.hpp
         util/offset_string.hpp
         util/optional_defaults.hpp
@@ -323,7 +326,6 @@ set(arcticdb_srcs
         util/ref_counted_map.hpp
         util/ref_counted_map.hpp
         util/regex_filter.hpp
-        util/shared_future.hpp
         util/simple_string_hash.hpp
         util/slab_allocator.hpp
         util/sparse_utils.hpp
@@ -412,6 +414,8 @@ set(arcticdb_srcs
         storage/mongo/mongo_storage.cpp
         storage/s3/nfs_backed_storage.cpp
         storage/s3/s3_api.cpp
+        storage/s3/real_s3_client.cpp
+        storage/s3/mock_s3_client.cpp
         storage/s3/s3_storage.cpp
         storage/s3/s3_storage_tool.cpp
         storage/storage_factory.cpp
@@ -424,6 +428,7 @@ set(arcticdb_srcs
         util/decimal.cpp
         util/error_code.cpp
         util/global_lifetimes.cpp
+        util/name_validation.cpp
         util/offset_string.cpp
         util/offset_string.cpp
         util/sparse_utils.cpp
@@ -504,8 +509,7 @@ set (arcticdb_core_libraries
         prometheus-cpp::pull
         ${standard_libraries}
         fmt::fmt
-        ${Protobuf_lite_LIBRARY}
-        ${Protobuf_LIBRARY}
+        protobuf::libprotobuf
         ${LZ4_LIBRARY}
         ${Zstd_LIBRARY}
         ${ARCTICDB_MONGO_LIBS}
@@ -515,11 +519,21 @@ set (arcticdb_core_libraries
         Azure::azure-storage-blobs
 )
 
+if(${ARCTICDB_PYTHON_EXPLICIT_LINK})
+    # Even though python is transitive dependency MSVS builds fail if we don't link against python explicitly
+    # TODO: Figure out why
+    list(APPEND arcticdb_core_libraries
+        Python::Python
+    )
+endif()
+
 # Dependencies expose different names of their libraries depending
 # on their origin (i.e. vendored source or packages on conda-forge).
 if(${ARCTICDB_USING_CONDA})
 
-    # We must use dynamic libraries.
+    # We must use dynamic libraries, except for xxHash, which must be statically linked.
+    # since `XXH_state_t` which we rely on is only available when statically linking.
+    # For all builds except linux conda's, we inline the functions so that xxhash does not need linking at all.
     list (APPEND arcticdb_core_libraries
         xxHash::xxHash
         pcre
@@ -533,10 +547,7 @@ if(${ARCTICDB_USING_CONDA})
     endif()
 else()
 
-    add_compile_definitions(ARCTICDB_USING_STATIC_XXHASH)
-
     list (APPEND arcticdb_core_libraries
-        xxhash_static
         unofficial::pcre::pcre
         msgpackc-cxx
         lmdb
@@ -713,6 +724,7 @@ if(${TEST})
     find_package(Python 3 COMPONENTS Interpreter Development REQUIRED)
     find_package(Arrow REQUIRED)
     find_package(rapidcheck REQUIRED)
+    find_package(benchmark REQUIRED)
 
     python_utils_dump_vars_if_enabled("Python for test compilation")
 
@@ -780,6 +792,7 @@ if(${TEST})
             version/test/test_version_store.cpp
             version/test/test_sorting_info_state_machine.cpp
             version/test/version_map_model.hpp
+            storage/test/test_storage_exceptions.cpp
             )
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
@@ -856,6 +869,23 @@ if(${TEST})
     endif()
 
     gtest_discover_tests(test_unit_arcticdb PROPERTIES DISCOVERY_TIMEOUT 60)
+
+    set(benchmark_srcs
+            stream/test/stream_test_common.cpp
+            column_store/test/benchmark_memory_segment.cpp
+            processing/test/benchmark_clause.cpp)
+
+    add_executable(benchmarks ${benchmark_srcs})
+
+    target_link_libraries(benchmarks
+            PUBLIC
+            benchmark::benchmark
+            benchmark::benchmark_main
+            ${COMMON_PUBLIC_TEST_LIBRARIES}
+            PRIVATE
+            ${AWSSDK_LINK_LIBRARIES}
+            arcticdb_core_static
+            )
 
     set(rapidcheck_srcs
             column_store/test/rapidcheck_column_store.cpp

@@ -204,6 +204,18 @@ class ExpressionNode:
         value_list = value_list_from_args(*args)
         return self._apply(value_list, _OperationType.ISNOTIN)
 
+    def isna(self):
+        return self.isnull()
+
+    def isnull(self):
+        return ExpressionNode.compose(self, _OperationType.ISNULL, None)
+
+    def notna(self):
+        return self.notnull()
+
+    def notnull(self):
+        return ExpressionNode.compose(self, _OperationType.NOTNULL, None)
+
     def __str__(self):
         return self.get_name()
 
@@ -279,8 +291,7 @@ class PythonRowRangeClause(NamedTuple):
 class QueryBuilder:
     """
     Build a query to process read results with. Syntax is designed to be similar to Pandas:
-
-        >>> q = QueryBuilder()
+        >>> q = adb.QueryBuilder()
         >>> q = q[q["a"] < 5] (equivalent to q = q[q.a < 5] provided the column name is also a valid Python variable name)
         >>> dataframe = lib.read(symbol, query_builder=q).data
 
@@ -294,6 +305,12 @@ class QueryBuilder:
     * Unary arithmetic: -, abs
 
     Supported filtering operations:
+
+    # isna, isnull, notna, and notnull - return all rows where a specified column is/is not NaN or None. isna is
+    equivalent to isnull, and notna is equivalent to notnull. I.e. no distinction is made between NaN and None values
+    in column types that support both (e.g. strings).
+
+        >>> q = q[q["col"].isna()]
 
     * Binary comparisons: <, <=, >, >=, ==, !=
 
@@ -314,12 +331,12 @@ class QueryBuilder:
 
     Boolean columns can be filtered on directly:
 
-        >>> q = QueryBuilder()
+        >>> q = adb.QueryBuilder()
         >>> q = q[q["boolean_column"]]
 
     and combined with other operations intuitively:
 
-        >>> q = QueryBuilder()
+        >>> q = adb.QueryBuilder()
         >>> q = q[(q["boolean_column_1"] & ~q["boolean_column_2"]) & (q["numeric_column"] > 0)]
 
     Arbitrary combinations of these expressions is possible, for example:
@@ -378,7 +395,7 @@ class QueryBuilder:
             index=np.arange(10),
         )
         >>> lib.write("expression", df)
-        >>> q = QueryBuilder()
+        >>> q = adb.QueryBuilder()
         >>> q = q.apply("ADJUSTED", q["ASK"] * q["VOL_ACC"] + 7)
         >>> lib.read("expression", query_builder=q).data
         VOL_ACC  ASK  VWAP  ADJUSTED
@@ -423,7 +440,6 @@ class QueryBuilder:
         Examples
         --------
         Average (mean) over two groups:
-
         >>> df = pd.DataFrame(
             {
                 "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"],
@@ -431,7 +447,7 @@ class QueryBuilder:
             },
             index=np.arange(5),
         )
-        >>> q = QueryBuilder()
+        >>> q = adb.QueryBuilder()
         >>> q = q.groupby("grouping_column").agg({"to_mean": "mean"})
         >>> lib.write("symbol", df)
         >>> lib.read("symbol", query_builder=q).data
@@ -448,7 +464,7 @@ class QueryBuilder:
             },
             index=np.arange(3),
         )
-        >>> q = QueryBuilder()
+        >>> q = adb.QueryBuilder()
         >>> q = q.groupby("grouping_column").agg({"to_max": "max"})
         >>> lib.write("symbol", df)
         >>> lib.read("symbol", query_builder=q).data
@@ -465,7 +481,7 @@ class QueryBuilder:
             },
             index=np.arange(3),
         )
-        >>> q = QueryBuilder()
+        >>> q = adb.QueryBuilder()
         >>> q = q.groupby("grouping_column").agg({"to_max": "max", "to_mean": "mean"})
         >>> lib.write("symbol", df)
         >>> lib.read("symbol", query_builder=q).data
@@ -552,8 +568,7 @@ class QueryBuilder:
 
         Examples
         --------
-
-        >>> q = QueryBuilder()
+        >>> q = adb.QueryBuilder()
         >>> q = q.date_range((pd.Timestamp("2000-01-01"), pd.Timestamp("2001-01-01")))
 
         Returns

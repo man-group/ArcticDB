@@ -61,12 +61,24 @@ private:
     std::optional<VariantId> key_;
 };
 
-class KeyNotFoundException : public ArcticSpecificException<ErrorCode::E_DUPLICATE_KEY> {
+class KeyNotFoundException : public ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND> {
 public:
     explicit KeyNotFoundException(Composite<VariantKey>&& keys) :
-        ArcticSpecificException<ErrorCode::E_DUPLICATE_KEY>(fmt::format("{}", keys)),
+        ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(fmt::format("Not found: {}", keys)),
         keys_(std::make_shared<Composite<VariantKey>>(std::move(keys))) {
     }
+
+    explicit KeyNotFoundException(Composite<VariantKey>&& keys, std::string err_output) :
+            ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(err_output),
+            keys_(std::make_shared<Composite<VariantKey>>(std::move(keys))) {
+    }
+
+    explicit KeyNotFoundException(const VariantKey& single_key):
+            KeyNotFoundException(Composite<VariantKey>{VariantKey{single_key}}) {}
+
+    explicit KeyNotFoundException(const VariantKey& single_key, std::string err_output):
+            KeyNotFoundException(Composite<VariantKey>{VariantKey{single_key}}, err_output) {}
+
 
     Composite<VariantKey>& keys() {
         return *keys_;

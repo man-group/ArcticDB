@@ -5,8 +5,9 @@ ArcticDB enables multi-symbol snapshotting. Snapshots enable multiple symbols to
 In practise this is useful to tie derived data with the source data.
 
 ``` py linenums="1"
+import arcticdb as adb
 # This example assumes the below variables (host, bucket, access, secret) are validly set
-ac = Arctic(f"s3://{HOST}:{BUCKET}?access={ACCESS}&secret={SECRET})
+ac = adb.Arctic(f"s3://{HOST}:{BUCKET}?access={ACCESS}&secret={SECRET})
 
 library= "my_library"
 

@@ -10,14 +10,13 @@
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_factory.hpp>
 #include <aws/core/Aws.h>
-#include <aws/s3/S3Client.h>
 #include <aws/s3/model/PutObjectRequest.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/storage/s3/s3_api.hpp>
+#include <arcticdb/storage/s3/s3_client_wrapper.hpp>
 #include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/entity/protobufs.hpp>
-#include <arcticdb/storage/s3/s3_client_accessor.hpp>
 #include <arcticdb/util/composite.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <cstdlib>
@@ -31,7 +30,6 @@ const std::string USE_AWS_CRED_PROVIDERS_TOKEN = "_RBAC_";
 
 class S3Storage final : public Storage {
   public:
-    friend class S3TestClientAccessor<S3Storage>;
     using Config = arcticdb::proto::s3_storage::Config;
 
     S3Storage(const LibraryPath &lib, OpenMode mode, const Config &conf);
@@ -69,7 +67,7 @@ class S3Storage final : public Storage {
     const std::string& root_folder() const { return root_folder_; }
 
     std::shared_ptr<S3ApiInstance> s3_api_;
-    Aws::S3::S3Client s3_client_;
+    std::unique_ptr<S3ClientWrapper> s3_client_;
     std::string root_folder_;
     std::string bucket_name_;
 };
@@ -231,6 +229,12 @@ auto get_s3_config(const ConfigType& conf) {
             conf.max_connections();
     client_configuration.connectTimeoutMs = conf.connect_timeout() == 0 ? 30000 : conf.connect_timeout();
     client_configuration.requestTimeoutMs = conf.request_timeout() == 0 ? 200000 : conf.request_timeout();
+
+    const bool use_win_inet = ConfigsMap::instance()->get_int("S3Storage.UseWinINet", 0);
+    if (use_win_inet) {
+        client_configuration.httpLibOverride = Aws::Http::TransferLibType::WIN_INET_CLIENT;
+    }
+
     return client_configuration;
 }
 

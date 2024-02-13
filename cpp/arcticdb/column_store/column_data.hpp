@@ -133,6 +133,74 @@ struct ColumnData {
  */
 
   public:
+    template<typename TDT, bool constant>
+    class ColumnDataIterator: public boost::iterator_facade<
+            ColumnDataIterator<TDT, constant>,
+            std::conditional_t<constant, typename TDT::DataTypeTag::raw_type const, typename TDT::DataTypeTag::raw_type>,
+            boost::forward_traversal_tag
+            > {
+    using RawType = std::conditional_t<constant, const typename TDT::DataTypeTag::raw_type, typename TDT::DataTypeTag::raw_type>;
+    public:
+        ColumnDataIterator() = delete;
+
+        // Used to construct [c]begin iterators
+        explicit ColumnDataIterator(ColumnData* parent):
+        parent_(parent)
+        {
+            increment_block();
+        }
+
+        // Used to construct [c]end iterators
+        explicit ColumnDataIterator(ColumnData* parent, RawType* end_ptr):
+                parent_(parent),
+                ptr_(end_ptr) {}
+
+        template <class OtherValue, bool OtherConst>
+        ColumnDataIterator(ColumnDataIterator<OtherValue, OtherConst> const& other):
+        parent_(other.parent_),
+        opt_block_(other.opt_block_),
+        remaining_values_in_block_(other.remaining_values_in_block_),
+        ptr_(other.ptr_) {}
+    private:
+        friend class boost::iterator_core_access;
+        template <class, bool> friend class ColumnDataIterator;
+
+        void increment() {
+            if (ARCTICDB_LIKELY(remaining_values_in_block_ > 0)) {
+                ++ptr_;
+                --remaining_values_in_block_;
+            } else {
+                increment_block();
+            }
+        }
+
+        void increment_block() {
+            opt_block_ = parent_->next<TDT>();
+            if(ARCTICDB_LIKELY(opt_block_.has_value())) {
+                remaining_values_in_block_ = opt_block_->row_count();
+                if constexpr(constant) {
+                    ptr_ = reinterpret_cast<RawType*>(opt_block_->data());
+                } else {
+                    ptr_ = const_cast<RawType*>(opt_block_->data());
+                }
+            }
+        }
+
+        template <typename OtherValue, bool OtherConst>
+        bool equal(ColumnDataIterator<OtherValue, OtherConst> const& other) const {
+            return parent_ == other.parent_ && ptr_ == other.ptr_;
+        }
+
+        RawType& dereference() const {
+            return *ptr_;
+        }
+
+        ColumnData* parent_{nullptr};
+        std::optional<TypedBlockData<TDT>> opt_block_{std::nullopt};
+        std::size_t remaining_values_in_block_{0};
+        RawType* ptr_{nullptr};
+    };
+
     ColumnData(
         const ChunkedBuffer* data,
         const Buffer* shapes,
@@ -146,6 +214,40 @@ struct ColumnData {
         bit_vector_(bit_vector){}
 
     ARCTICDB_MOVE_COPY_DEFAULT(ColumnData)
+
+    template<typename TDT>
+    ColumnDataIterator<TDT, false> begin() {
+        return ColumnDataIterator<TDT, false>(this);
+    }
+
+    template<typename TDT>
+    ColumnDataIterator<TDT, true> cbegin() {
+        return ColumnDataIterator<TDT, true>(this);
+    }
+
+    template<typename TDT>
+    ColumnDataIterator<TDT, false> end() {
+        using RawType = typename TDT::DataTypeTag::raw_type;
+        RawType* end_ptr{nullptr};
+        if(!data_->blocks().empty()) {
+            auto block = data_->blocks().at(num_blocks() - 1);
+            auto typed_block_data = next_typed_block<TDT>(block);
+            end_ptr = typed_block_data.data() + typed_block_data.row_count();
+        }
+        return ColumnDataIterator<TDT, false>(this, end_ptr);
+    }
+
+    template<typename TDT>
+    ColumnDataIterator<TDT, true> cend() {
+        using RawType = typename TDT::DataTypeTag::raw_type;
+        const RawType* end_ptr{nullptr};
+        if(!data_->blocks().empty()) {
+            auto block = data_->blocks().at(num_blocks() - 1);
+            auto typed_block_data = next_typed_block<TDT>(block);
+            end_ptr = typed_block_data.data() + typed_block_data.row_count();
+        }
+        return ColumnDataIterator<TDT, true>(this, end_ptr);
+    }
 
     TypeDescriptor type() const {
         return type_;

@@ -310,6 +310,8 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
     py::enum_<OperationType>(version, "OperationType")
             .value("ABS", OperationType::ABS)
             .value("NEG", OperationType::NEG)
+            .value("ISNULL", OperationType::ISNULL)
+            .value("NOTNULL", OperationType::NOTNULL)
             .value("IDENTITY", OperationType::IDENTITY)
             .value("NOT", OperationType::NOT)
             .value("ADD", OperationType::ADD)
@@ -380,6 +382,13 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
     py::class_<UpdateQuery>(version, "PythonVersionStoreUpdateQuery")
             .def(py::init())
             .def_readwrite("row_filter",&UpdateQuery::row_filter);
+
+    py::class_<KeySizesInfo>(version, "KeySizesInfo")
+            .def(py::init())
+            .def_readonly("count", &KeySizesInfo::count)
+            .def_readonly("compressed_size", &KeySizesInfo::compressed_size)
+            .def_readonly("uncompressed_size", &KeySizesInfo::uncompressed_size)
+            .doc() = "Count of keys and their compressed and uncompressed sizes in bytes.";
 
     py::class_<PythonVersionStore>(version, "PythonVersionStore")
         .def(py::init([](const std::shared_ptr<storage::Library>& library, std::optional<std::string>) {
@@ -480,6 +489,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("update",
              &PythonVersionStore::update,
              py::call_guard<SingleThreadMutexHolder>(), "Update the most recent version of a dataframe")
+       .def("indexes_sorted",
+             &PythonVersionStore::indexes_sorted,
+             py::call_guard<SingleThreadMutexHolder>(), "Returns the sorted indexes of a symbol")
         .def("snapshot",
              &PythonVersionStore::snapshot,
              py::call_guard<SingleThreadMutexHolder>(), "Create a snapshot")
@@ -494,6 +506,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             py::call_guard<SingleThreadMutexHolder>(),  "Remove an item from a snapshot")
         .def("clear",
              &PythonVersionStore::clear,
+             py::arg("continue_on_error") = true,
              py::call_guard<SingleThreadMutexHolder>(), "Delete everything. Don't use this unless you want to delete everything")
         .def("empty",
              &PythonVersionStore::empty,
@@ -506,6 +519,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              py::call_guard<SingleThreadMutexHolder>(), "Get a list of all the versions for a symbol which are tombstoned")
         .def("delete_storage",
              &PythonVersionStore::delete_storage,
+             py::arg("continue_on_error") = true,
              py::call_guard<SingleThreadMutexHolder>(), "Delete everything. Don't use this unless you want to delete everything")
         .def("write_versioned_dataframe",
              &PythonVersionStore::write_versioned_dataframe,
@@ -540,7 +554,14 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              py::call_guard<SingleThreadMutexHolder>(), "Get the most recent update time for a list of stream ids")
          .def("scan_object_sizes",
               &PythonVersionStore::scan_object_sizes,
-            py::call_guard<SingleThreadMutexHolder>(), "Scan the sizes of object")
+              py::call_guard<SingleThreadMutexHolder>(),
+              "Scan the compressed sizes of all objects in the library. Sizes are in bytes. Returns a dict "
+              "{KeyType: KeySizesInfo}")
+        .def("scan_object_sizes_by_stream",
+             &PythonVersionStore::scan_object_sizes_by_stream,
+             py::call_guard<SingleThreadMutexHolder>(),
+             "Scan the compressed sizes of all objects in the library, grouped by stream ID and KeyType. Sizes are in bytes. "
+             "Returns a dict {symbol_id: {KeyType: KeySizesInfo}")
         .def("find_version",
              &PythonVersionStore::get_version_to_read,
              py::call_guard<SingleThreadMutexHolder>(), "Check if a specific stream has been written to previously")

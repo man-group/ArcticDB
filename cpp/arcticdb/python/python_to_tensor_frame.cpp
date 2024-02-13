@@ -48,9 +48,10 @@ std::variant<StringEncodingError, PyStringWrapper> pystring_to_buffer(PyObject *
 }
 
 std::tuple<ValueType, uint8_t, ssize_t> determine_python_object_type(PyObject* obj) {
-    if(is_py_boolean(obj))
+    if (is_py_boolean(obj)) {
+        normalization::raise<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>("Nullable booleans are not supported at the moment");
         return {ValueType::PYBOOL, 1, 1};
-
+    }
     return {ValueType::BYTES, 8, 1};
 }
 
@@ -153,7 +154,6 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
                 empty = true;
                 all_nans = true;
                 util::check(c_style, "Non contiguous columns with first element as None not supported yet.");
-                PyObject** current_object = obj;
                 const auto* end = obj + size;
                 while(current_object < end) {
 
@@ -178,6 +178,9 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
             } else if (PYBIND11_BYTES_CHECK(sample)) {
                 val_type = ValueType::ASCII_DYNAMIC;
             } else if(is_py_array(sample)) {
+                normalization::raise<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(
+                    "Array types are not supported at the moment"
+                );
                 std::tie(val_type, val_bytes, ndim) = determine_python_array_type(current_object, current_object + element_count);
             } else {
                 std::tie(val_type, val_bytes, ndim) = determine_python_object_type(sample);
@@ -196,18 +199,18 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
     return {nbytes, arr->nd, strides.data(), shapes.data(), dt, descr->elsize, data, ndim};
 }
 
-InputTensorFrame py_ndf_to_frame(
+std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
     const StreamId& stream_name,
     const py::tuple &item,
     const py::object &norm_meta,
     const py::object &user_meta) {
     ARCTICDB_SUBSAMPLE_DEFAULT(NormalizeFrame)
-    InputTensorFrame res;
-    res.desc.set_id(stream_name);
-    res.num_rows = 0u;
-    python_util::pb_from_python(norm_meta, res.norm_meta);
+    auto res = std::make_shared<InputTensorFrame>();
+    res->desc.set_id(stream_name);
+    res->num_rows = 0u;
+    python_util::pb_from_python(norm_meta, res->norm_meta);
     if (!user_meta.is_none())
-        python_util::pb_from_python(user_meta, res.user_meta);
+        python_util::pb_from_python(user_meta, res->user_meta);
 
     // Fill index
     auto idx_names = item[0].cast<std::vector<std::string>>();
@@ -217,30 +220,29 @@ InputTensorFrame py_ndf_to_frame(
                 idx_names.size(), idx_vals.size());
 
     if (idx_names.empty()) {
-        res.index = stream::RowCountIndex();
-        res.desc.set_index_type(IndexDescriptor::ROWCOUNT);
+        res->index = stream::RowCountIndex();
+        res->desc.set_index_type(IndexDescriptor::ROWCOUNT);
     } else {
         util::check(idx_names.size() == 1, "Multi-indexed dataframes not handled");
         auto index_tensor = obj_to_tensor(idx_vals[0].ptr());
         util::check(index_tensor.ndim() == 1, "Multi-dimensional indexes not handled");
         util::check(index_tensor.shape() != nullptr, "Index tensor expected to contain shapes");
         std::string index_column_name = !idx_names.empty() ? idx_names[0] : "index";
-        res.num_rows = index_tensor.shape(0);
+        res->num_rows = index_tensor.shape(0);
         //TODO handle string indexes
         if (index_tensor.data_type() == DataType::NANOSECONDS_UTC64) {
 
-            res.desc.set_index_field_count(1);
-            res.desc.set_index_type(IndexDescriptor::TIMESTAMP);
+            res->desc.set_index_field_count(1);
+            res->desc.set_index_type(IndexDescriptor::TIMESTAMP);
 
-            res.desc.add_scalar_field(index_tensor.dt_, index_column_name);
-            res.index = stream::TimeseriesIndex(index_column_name);
-            res.index_tensor = std::move(index_tensor);
+            res->desc.add_scalar_field(index_tensor.dt_, index_column_name);
+            res->index = stream::TimeseriesIndex(index_column_name);
+            res->index_tensor = std::move(index_tensor);
         } else {
-            // Just treat this field as a simple field, since we can't really handle it
-            res.index = stream::RowCountIndex();
-            res.desc.set_index_type(IndexDescriptor::ROWCOUNT);
-            res.desc.add_scalar_field(index_tensor.dt_, index_column_name);
-            res.field_tensors.push_back(std::move(index_tensor));
+            res->index = stream::RowCountIndex();
+            res->desc.set_index_type(IndexDescriptor::ROWCOUNT);
+            res->desc.add_scalar_field(index_tensor.dt_, index_column_name);
+            res->field_tensors.push_back(std::move(index_tensor));
         }
     }
 
@@ -249,54 +251,54 @@ InputTensorFrame py_ndf_to_frame(
     auto col_vals = item[3].cast<std::vector<py::object>>();
     auto sorted = item[4].cast<SortedValue>();
 
-    res.set_sorted(sorted);
+    res->set_sorted(sorted);
 
     for (auto i = 0u; i < col_vals.size(); ++i) {
         auto tensor = obj_to_tensor(col_vals[i].ptr());
-        res.num_rows = std::max(res.num_rows, static_cast<ssize_t>(tensor.shape(0)));
+        res->num_rows = std::max(res->num_rows, static_cast<ssize_t>(tensor.shape(0)));
         if(tensor.expanded_dim() == 1) {
-            res.desc.add_field(scalar_field(tensor.data_type(), col_names[i]));
+            res->desc.add_field(scalar_field(tensor.data_type(), col_names[i]));
         } else if(tensor.expanded_dim() == 2) {
-            res.desc.add_field(FieldRef{TypeDescriptor{tensor.data_type(), Dimension::Dim1}, col_names[i]});
+            res->desc.add_field(FieldRef{TypeDescriptor{tensor.data_type(), Dimension::Dim1}, col_names[i]});
         }
-        res.field_tensors.push_back(std::move(tensor));
+        res->field_tensors.push_back(std::move(tensor));
     }
 
-    ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res.desc);
-    res.set_index_range();
+    ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res->desc);
+    res->set_index_range();
     return res;
 }
 
-InputTensorFrame py_none_to_frame() {
+std::shared_ptr<InputTensorFrame> py_none_to_frame() {
     ARCTICDB_SUBSAMPLE_DEFAULT(NormalizeNoneFrame)
-    InputTensorFrame res;
-    res.num_rows = 0u;
+    auto res = std::make_shared<InputTensorFrame>();
+    res->num_rows = 0u;
 
     arcticdb::proto::descriptors::NormalizationMetadata::MsgPackFrame msg;
     msg.set_size_bytes(1);
     msg.set_version(1);
-    res.norm_meta.mutable_msg_pack_frame()->CopyFrom(msg);
+    res->norm_meta.mutable_msg_pack_frame()->CopyFrom(msg);
 
     // Fill index
-    res.index = stream::RowCountIndex();
-    res.desc.set_index_type(IndexDescriptor::ROWCOUNT);
+    res->index = stream::RowCountIndex();
+    res->desc.set_index_type(IndexDescriptor::ROWCOUNT);
 
     // Fill tensors
     auto col_name = "bytes";
     auto sorted = SortedValue::UNKNOWN;
 
-    res.set_sorted(sorted);
+    res->set_sorted(sorted);
 
     const stride_t strides = 8;
     const shape_t shapes = 1;
     constexpr int ndim = 1;
     auto tensor = NativeTensor{8, ndim, &strides, &shapes, DataType::UINT64, 8, none_char, ndim};
-    res.num_rows = std::max(res.num_rows, static_cast<ssize_t>(tensor.shape(0)));
-    res.desc.add_field(scalar_field(tensor.data_type(), col_name));
-    res.field_tensors.push_back(std::move(tensor));
+    res->num_rows = std::max(res->num_rows, static_cast<ssize_t>(tensor.shape(0)));
+    res->desc.add_field(scalar_field(tensor.data_type(), col_name));
+    res->field_tensors.push_back(std::move(tensor));
 
-    ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res.desc);
-    res.set_index_range();
+    ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res->desc);
+    res->set_index_range();
     return res;
 }
 

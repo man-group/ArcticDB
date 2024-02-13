@@ -125,6 +125,7 @@ message NormalizationMetadata {
         bool is_not_range_index = 4;
         int64 start = 5; // Used for RangeIndex
         int64 step = 6; // Used for RangeIndex
+        bool is_int = 7;
     }
 
     message PandasMultiIndex {
@@ -134,6 +135,7 @@ message NormalizationMetadata {
         string name = 4; // RangeIndex are not represented as a field, hence no name is associated
         string tz = 5;
         repeated uint32 fake_field_pos = 6;
+        bool is_int = 7;
     }
 
     message PandasMultiColumn {

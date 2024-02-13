@@ -5,13 +5,6 @@ on:
     branches: ["master"]
   pull_request:
     branches: ["**"]
-    paths:
-      - .github/workflows/*.yml
-      - build_tooling/**
-      - cpp/**
-      - python/**
-      - setup.*
-      - pyproject.toml
   workflow_dispatch:
     inputs:
       persistent_storage:
@@ -155,7 +148,6 @@ jobs:
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
       cibw_image_tag: ${{needs.cibw_docker_image.outputs.tag}}
       matrix: ${{needs.common_config.outputs.linux_matrix}}
-      compile-override: compile-on-ec2
 
   build-python-wheels-linux:
     # Then use the cached compilation artifacts to build other python versions concurrently in cibuildwheels
@@ -194,7 +186,6 @@ jobs:
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
       persistent_storage: ${{inputs.persistent_storage}}
-      compile-override: compile-on-ec2
       pytest_xdist_mode: ${{matrix.pytest_xdist_mode}}
 
   cpp-test-windows:

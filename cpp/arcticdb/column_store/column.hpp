@@ -9,18 +9,21 @@
 
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/column_store/column_data.hpp>
-#include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/entity/native_tensor.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/bitset.hpp>
 #include <arcticdb/util/cursored_buffer.hpp>
 #include <arcticdb/util/flatten_utils.hpp>
-#include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/sparse_utils.hpp>
 
 #include <folly/container/Enumerate.h>
+// Compilation fails on Mac if cstdio is not included prior to folly/Function.h due to a missing definition of memalign in folly/Memory.h
+#ifdef __APPLE__
+#include <cstdio>
+#endif
+#include <folly/Function.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 
@@ -61,17 +64,15 @@ constexpr bool is_narrowing_conversion() {
 struct JiveTable {
     explicit JiveTable(size_t num_rows) :
         orig_pos_(num_rows),
-        sorted_pos_(num_rows),
-        unsorted_rows_(bv_size(num_rows)) {
+        sorted_pos_(num_rows) {
     }
 
     std::vector<uint32_t> orig_pos_;
     std::vector<uint32_t> sorted_pos_;
-    util::BitSet unsorted_rows_;
-    size_t num_unsorted_ = 0;
 };
 
 class Column;
+class StringPool;
 
 template <typename T>
 JiveTable create_jive_table(const Column& col);
@@ -397,7 +398,10 @@ public:
     void append_sparse_map(const util::BitMagic& bv, position_t at_row);
     void append(const Column& other, position_t at_row);
 
-    void sort_external(const JiveTable& jive_table);
+    // Sorts the column by an external column's jive_table.
+    // pre_allocated_space can be reused across different calls to sort_external to avoid unnecessary allocations.
+    // It has to be the same size as the jive_table.
+    void sort_external(const JiveTable& jive_table, std::vector<uint32_t>& pre_allocated_space);
 
     void mark_absent_rows(size_t num_rows);
 
@@ -420,7 +424,7 @@ public:
 
     // The following two methods inflate (reduplicate) numpy string arrays that are potentially multi-dimensional,
     // i.e where the value is not a string but an array of strings
-    void inflate_string_array(const TensorType<OffsetString::offset_t> &string_refs,
+    void inflate_string_array(const TensorType<position_t> &string_refs,
                               CursoredBuffer<ChunkedBuffer> &data,
                               CursoredBuffer<Buffer> &shapes,
                               std::vector<position_t> &offsets,
@@ -526,6 +530,19 @@ public:
             return std::nullopt;
 
         return *data_.buffer().ptr_cast<T>(bytes_offset(*physical_row), sizeof(T));
+    }
+
+    // Copies all physical scalars to a std::vector<T>. This is useful if you require many random access operations
+    // and you would like to avoid the overhead of computing the exact location every time.
+    template<typename T>
+    std::vector<T> clone_scalars_to_vector() const {
+        auto values = std::vector<T>();
+        values.reserve(row_count());
+        const auto& buffer = data_.buffer();
+        for (auto i=0u; i<row_count(); ++i){
+            values.push_back(*buffer.ptr_cast<T>(i*item_size(), sizeof(T)));
+        }
+        return values;
     }
 
     // N.B. returning a value not a reference here, so it will need to be pre-checked when data is sparse or it
@@ -634,6 +651,81 @@ public:
         return *res;
     }
 
+    /*
+     * !!!!!!!!!!----------IMPORTANT----------!!!!!!!!!!
+     * When adding new uses of these static methods, add an internal::check<...>(f.heapAllocatedMemory() == 0,...)
+     * and run all of the tests in CI on all supported platforms. We do not want these checks in the released code,
+     * but also do not want any passed in lambdas to be heap allocated.
+     */
+
+    template<typename input_tdt>
+    static void for_each(const Column& input_column,
+                          folly::Function<void(typename input_tdt::DataTypeTag::raw_type)>&& f) {
+        auto input_data = input_column.data();
+        std::for_each(input_data.cbegin<input_tdt>(), input_data.cend<input_tdt>(), [&f](auto input_value) {
+            f(input_value);
+        });
+    }
+
+    template<typename input_tdt, typename output_tdt>
+    static void transform(const Column& input_column,
+                          Column& output_column,
+                          folly::Function<typename output_tdt::DataTypeTag::raw_type(typename input_tdt::DataTypeTag::raw_type)>&& f) {
+        auto input_data = input_column.data();
+        auto output_data = output_column.data();
+        std::transform(input_data.cbegin<input_tdt>(), input_data.cend<input_tdt>(), output_data.begin<output_tdt>(), std::move(f));
+    }
+
+    template<typename left_input_tdt, typename right_input_tdt, typename output_tdt>
+    static void transform(const Column& left_input_column,
+                          const Column& right_input_column,
+                          Column& output_column,
+                          folly::Function<typename output_tdt::DataTypeTag::raw_type(typename left_input_tdt::DataTypeTag::raw_type, typename right_input_tdt::DataTypeTag::raw_type)>&& f) {
+        auto left_input_data = left_input_column.data();
+        auto right_input_data = right_input_column.data();
+        auto output_data = output_column.data();
+        std::transform(left_input_data.cbegin<left_input_tdt>(), left_input_data.cend<left_input_tdt>(), right_input_data.cbegin<right_input_tdt>(), output_data.begin<output_tdt>(), [&f](auto left_value, auto right_value) {
+            return f(left_value, right_value);
+        });
+    }
+
+    template<typename input_tdt>
+    static void transform(const Column& input_column,
+                          util::BitSet& output_bitset,
+                          folly::Function<bool(typename input_tdt::DataTypeTag::raw_type)>&& f) {
+        auto input_data = input_column.data();
+        util::BitSet::bulk_insert_iterator inserter(output_bitset);
+        auto pos = 0u;
+        std::for_each(input_data.cbegin<input_tdt>(), input_data.cend<input_tdt>(), [&inserter, &pos, &f](auto input_value) {
+            if (f(input_value)) {
+                inserter = pos;
+            }
+            ++pos;
+        });
+        inserter.flush();
+    }
+
+    template<typename left_input_tdt, typename right_input_tdt>
+    static void transform(const Column& left_input_column,
+                          const Column& right_input_column,
+                          util::BitSet& output_bitset,
+                          folly::Function<bool(typename left_input_tdt::DataTypeTag::raw_type, typename right_input_tdt::DataTypeTag::raw_type)>&& f) {
+        auto left_input_data = left_input_column.data();
+        auto right_it = right_input_column.data().cbegin<right_input_tdt>();
+        util::BitSet::bulk_insert_iterator inserter(output_bitset);
+        auto pos = 0u;
+        std::for_each(left_input_data.cbegin<left_input_tdt>(), left_input_data.cend<left_input_tdt>(), [&right_it, &inserter, &pos, &f](auto left_value) {
+            auto right_value = *right_it++;
+            if (f(left_value, right_value)) {
+                inserter = pos;
+            }
+            ++pos;
+        });
+        inserter.flush();
+    }
+
+    // end IMPORTANT
+
     static std::vector<std::shared_ptr<Column>> split(const std::shared_ptr<Column>& column, size_t num_rows);
 
     static std::shared_ptr<Column> truncate(const std::shared_ptr<Column>& column, size_t start_row, size_t end_row);
@@ -652,6 +744,9 @@ private:
     void set_sparse_bit_for_row(size_t sparse_location);
     bool empty() const;
     void regenerate_offsets() const;
+
+    // Permutes the physical column storage based on the given sorted_pos.
+    void physical_sort_external(std::vector<uint32_t> &&sorted_pos);
 
     [[nodiscard]] util::BitMagic& sparse_map();
     const util::BitMagic& sparse_map() const;
@@ -676,21 +771,16 @@ template <typename T>
 JiveTable create_jive_table(const Column& col) {
     JiveTable output(col.row_count());
     std::iota(std::begin(output.orig_pos_), std::end(output.orig_pos_), 0);
-    std::iota(std::begin(output.sorted_pos_), std::end(output.sorted_pos_), 0);
 
+    // Calls to scalar_at are expensive, so we precompute them to speed up the sort compare function.
+    auto values = col.template clone_scalars_to_vector<T>();
     std::sort(std::begin(output.orig_pos_), std::end(output.orig_pos_),[&](const auto& a, const auto& b) -> bool {
-        return col.template scalar_at<T>(a) < col.template scalar_at<T>(b);
+        return values[a] < values[b];
     });
 
-    std::sort(std::begin(output.sorted_pos_), std::end(output.sorted_pos_),[&](const auto& a, const auto& b) -> bool {
-        return output.orig_pos_[a] < output.orig_pos_[b];
-    });
-
-    for(auto pos : folly::enumerate(output.sorted_pos_)) {
-        if(pos.index != *pos) {
-            output.unsorted_rows_.set(bv_size(pos.index), true);
-            ++output.num_unsorted_;
-        }
+    // Obtain the sorted_pos_ by reversing the orig_pos_ permutation
+    for (auto i=0u; i<output.orig_pos_.size(); ++i){
+        output.sorted_pos_[output.orig_pos_[i]] = i;
     }
 
     return output;

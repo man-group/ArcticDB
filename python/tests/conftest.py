@@ -17,6 +17,7 @@ import random
 import re
 import time
 from datetime import datetime
+from functools import partial
 
 from arcticdb.storage_fixtures.api import StorageFixture
 from arcticdb.storage_fixtures.azure import AzuriteStorageFixtureFactory
@@ -25,7 +26,7 @@ from arcticdb.storage_fixtures.s3 import MotoS3StorageFixtureFactory, real_s3_fr
 from arcticdb.storage_fixtures.mongo import auto_detect_server
 from arcticdb.storage_fixtures.in_memory import InMemoryStorageFixture
 from arcticdb.version_store._normalization import MsgPackNormalizer
-from arcticdb.util.test import configure_test_logger
+from arcticdb.util.test import create_df
 from tests.util.mark import (
     AZURE_TESTS_MARK,
     MONGO_TESTS_MARK,
@@ -38,8 +39,6 @@ hypothesis.settings.register_profile("ci_windows", max_examples=100)
 hypothesis.settings.register_profile("dev", max_examples=100)
 
 hypothesis.settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))
-
-configure_test_logger()
 
 # Use a smaller memory mapped limit for all tests
 MsgPackNormalizer.MMAP_DEFAULT_SIZE = 20 * (1 << 20)
@@ -183,6 +182,22 @@ def arctic_client(request, encoding_version):
     assert not ac.list_libraries()
     return ac
 
+
+@pytest.fixture(
+    scope="function",
+    params=[
+        "s3",
+        "mem",
+        pytest.param("azurite", marks=AZURE_TESTS_MARK),
+        pytest.param("mongo", marks=MONGO_TESTS_MARK),
+        pytest.param("real_s3", marks=REAL_S3_TESTS_MARK),
+    ],
+)
+def arctic_client_no_lmdb(request, encoding_version):
+    storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage")
+    ac = storage_fixture.create_arctic(encoding_version=encoding_version)
+    assert not ac.list_libraries()
+    return ac
 
 @pytest.fixture
 def arctic_library(arctic_client, lib_name):
@@ -624,39 +639,19 @@ def basic_store_tiny_segment_dynamic(basic_store_factory):
 
 
 # endregion
-
-
 @pytest.fixture
 def one_col_df():
-    def create(start=0) -> pd.DataFrame:
-        return pd.DataFrame({"x": np.arange(start, start + 10, dtype=np.int64)})
-
-    return create
+    return partial(create_df, columns=1)
 
 
 @pytest.fixture
 def two_col_df():
-    def create(start=0) -> pd.DataFrame:
-        return pd.DataFrame(
-            {"x": np.arange(start, start + 10, dtype=np.int64), "y": np.arange(start + 10, start + 20, dtype=np.int64)}
-        )
-
-    return create
+    return partial(create_df, columns=2)
 
 
 @pytest.fixture
 def three_col_df():
-    def create(start=0) -> pd.DataFrame:
-        return pd.DataFrame(
-            {
-                "x": np.arange(start, start + 10, dtype=np.int64),
-                "y": np.arange(start + 10, start + 20, dtype=np.int64),
-                "z": np.arange(start + 20, start + 30, dtype=np.int64),
-            },
-            index=np.arange(start, start + 10, dtype=np.int64),
-        )
-
-    return create
+    return partial(create_df, columns=3)
 
 
 def get_val(col):

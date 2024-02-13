@@ -107,7 +107,7 @@ public:
         return add_field(field.type_, field.name_);
     }
 
-    std::string_view add_field(TypeDescriptor type, std::string_view name);
+    std::string_view add_field(const TypeDescriptor& type, std::string_view name);
 
     // Note that this is expensive and is primarily intended for testing, where drop_column
     // is a good way of creating dynamic schema from a large dataframe

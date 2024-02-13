@@ -48,14 +48,14 @@ public:
     virtual VersionedItem update_internal(
         const StreamId& stream_id,
         const UpdateQuery & query,
-        InputTensorFrame&& frame,
+        const std::shared_ptr<InputTensorFrame>& frame,
         bool upsert,
         bool dynamic_schema,
         bool prune_previous_versions) = 0;
 
     virtual VersionedItem append_internal(
         const StreamId& stream_id,
-        InputTensorFrame&& frame,
+        const std::shared_ptr<InputTensorFrame>& frame,
         bool upsert,
         bool prune_previous_versions,
         bool validate_index) = 0;
@@ -70,7 +70,7 @@ public:
 
     virtual void append_incomplete_frame(
         const StreamId& stream_id,
-        InputTensorFrame&& frame) const = 0;
+        const std::shared_ptr<InputTensorFrame>& frame) const = 0;
 
     virtual void append_incomplete_segment(
         const StreamId& stream_id,
@@ -82,7 +82,7 @@ public:
 
     virtual void write_parallel_frame(
         const StreamId& stream_id,
-        InputTensorFrame&& frame) const = 0;
+        const std::shared_ptr<InputTensorFrame>& frame) const = 0;
 
     virtual bool has_stream(
         const StreamId & stream_id
@@ -116,7 +116,7 @@ public:
 
     virtual VersionedItem write_versioned_dataframe_internal(
         const StreamId& stream_id,
-        InputTensorFrame&& frame,
+        const std::shared_ptr<InputTensorFrame>& frame,
         bool prune_previous_versions,
         bool allow_sparse,
         bool validate_index
@@ -159,7 +159,7 @@ public:
     virtual StorageLockWrapper get_storage_lock(
         const StreamId& stream_id) = 0;
 
-    virtual void delete_storage() = 0;
+    virtual void delete_storage(const bool continue_on_error = true) = 0;
 
     virtual void configure(
         const storage::LibraryDescriptor::VariantStoreConfig & cfg) = 0;
