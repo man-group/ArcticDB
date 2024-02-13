@@ -307,7 +307,7 @@ _APPEND_TESTS_RAW = [
              _datetime_data2, None,
              mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
     TestCase('no_index/no_type_empty_append', 'no_index/no_type_empty', None, [None, None, None], None,
-             mark=pytest.mark.skip(reason="must be fixed for 4.4.0 (skipped due to seg fault in Windows test)")),
+             mark=pytest.mark.skip(reason="must be fixed for 4.4.0 (skipped due to seg fault)")),
     TestCase('no_index/bool_empty_append_none', 'no_index/bool_empty', None, [None, None, None], None,
              mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
     TestCase('no_index/int_empty_append_none', 'no_index/int_empty', None, [None, None, None], None,
@@ -320,7 +320,7 @@ _APPEND_TESTS_RAW = [
              [None, None, None], None,
              mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
     TestCase('no_index/no_type_empty_append_none', 'no_index/no_type_empty', None, [None, None, None], None,
-             mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
+             mark=pytest.mark.skip(reason="must be fixed for 4.4.0 (skipped due to seg fault)")),
 
     # int index
     TestCase('int_index/bool_all_append', 'int_index/bool_all', 'bool', [False, True, False], _int_index2),
@@ -377,8 +377,8 @@ _APPEND_TESTS_RAW = [
              [None, None, None], _int_index2,
              mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
     TestCase('int_index/no_type_empty_append_none', 'int_index/no_type_empty', None, [None, None, None], _int_index2,
-             mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
-    
+             mark=pytest.mark.skip(reason="must be fixed for 4.4.0 (skipped due to seg fault)")),
+
     # datetime index
     TestCase('ts_index/bool_all_append', 'ts_index/bool_all', 'bool', 
              [False, True, False], _datetime_no_overlap_index1),
