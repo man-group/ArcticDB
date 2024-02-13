@@ -990,7 +990,7 @@ class NativeVersionStore:
         `read_metadata` calls in succession as some constant-time operations can be executed only once rather than once
         for each element of `symbols`.
         
-        If a `symbol` or its `as_of`in the query does not exist then the symbol will not be present in the resulting dict.
+        If a `symbol` or its `as_of` in the query does not exist then the symbol will not be present in the resulting dict.
         Consider using `Library#read_metadata_batch` instead, which has improved error handling behaviour.
 
         Parameters
