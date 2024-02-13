@@ -236,7 +236,7 @@ enum class DataType : uint8_t {
     UNKNOWN = 0,
 };
 
-std::string_view datatype_to_str(DataType dt);
+constexpr std::string_view datatype_to_str(DataType dt);
 
 constexpr DataType combine_data_type(ValueType v, SizeBits b = SizeBits::UNKNOWN_SIZE_BITS) {
     return static_cast<DataType>(detail::combine_val_bits(v, b));
@@ -843,7 +843,7 @@ struct formatter<FieldRef> {
 
     template<typename FormatContext>
     auto format(const FieldRef& f, FormatContext &ctx) const {
-        return format_to(ctx.out(), "{}: {}", f.type_, f.name_);
+        return fmt::v9::format_to(ctx.out(), "{}: {}", f.type_, f.name_);
     }
 };
 

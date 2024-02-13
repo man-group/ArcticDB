@@ -413,17 +413,17 @@ namespace fmt {
     auto format(arcticdb::LoadType l, FormatContext &ctx) const {
         switch(l) {
         case arcticdb::LoadType::NOT_LOADED:
-            return format_to(ctx.out(), "NOT_LOADED");
+            return fmt::v9::format_to(ctx.out(), "NOT_LOADED");
         case arcticdb::LoadType::LOAD_LATEST:
-            return format_to(ctx.out(), "LOAD_LATEST");
+            return fmt::v9::format_to(ctx.out(), "LOAD_LATEST");
         case arcticdb::LoadType::LOAD_LATEST_UNDELETED:
-            return format_to(ctx.out(), "LOAD_LATEST_UNDELETED");
+            return fmt::v9::format_to(ctx.out(), "LOAD_LATEST_UNDELETED");
         case arcticdb::LoadType::LOAD_DOWNTO:
-            return format_to(ctx.out(), "LOAD_DOWNTO");
+            return fmt::v9::format_to(ctx.out(), "LOAD_DOWNTO");
         case arcticdb::LoadType::LOAD_UNDELETED:
-            return format_to(ctx.out(), "LOAD_UNDELETED");
+            return fmt::v9::format_to(ctx.out(), "LOAD_UNDELETED");
         case arcticdb::LoadType::LOAD_ALL:
-            return format_to(ctx.out(), "LOAD_ALL");
+            return fmt::v9::format_to(ctx.out(), "LOAD_ALL");
         default:
             arcticdb::util::raise_rte("Unrecognized load type {}", int(l));
         }

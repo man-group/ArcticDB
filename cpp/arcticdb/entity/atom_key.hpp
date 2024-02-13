@@ -231,25 +231,13 @@ constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
 template<typename FormatContext>
 auto format(const FormattableRef <arcticdb::entity::AtomKey, FormatTag> &f, FormatContext &ctx) const {
     const auto &key = f.ref;
-    return format_to(ctx.out(), FMT_STRING(FormatTag::format),
+    return fmt::v9::format_to(ctx.out(), FMT_STRING(FormatTag::format),
                     key.type(), key.id(), key.version_id(),
                      key.content_hash(), key.creation_ts(), tokenized_index(key.start_index()), tokenized_index(key.end_index()));
 }
 
 };
 
-template<>
-struct formatter<AtomKey> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
-
-    template<typename FormatContext>
-    auto format(const arcticdb::entity::AtomKey &key, FormatContext &ctx) const {
-        formatter<FormattableRef < arcticdb::entity::AtomKey, DefaultAtomKeyFormat>>
-        f;
-        return f.format(formattable(key), ctx);
-    }
-};
 }
 
 namespace std {

@@ -71,20 +71,6 @@ namespace arcticdb::entity {
 } // namespace arcticdb::entity
 
 
-namespace fmt {
-template<>
-struct formatter<RefKey> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
-
-    template<typename FormatContext>
-    auto format(const RefKey &k, FormatContext &ctx) const {
-        return format_to(ctx.out(), "{}:{}", k.type(), k.id());
-    }
-};
-
-} //namespace fmt
-
 //TODO this is operating on the pretty-printed version and is needlessly inefficient
 namespace std {
 template<>

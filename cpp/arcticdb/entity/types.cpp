@@ -16,7 +16,7 @@ Dimension as_dim_checked(uint8_t d) {
     return static_cast<Dimension>(d);
 }
 
-std::string_view datatype_to_str(const DataType dt) {
+constexpr std::string_view datatype_to_str(const DataType dt) {
     switch (dt) {
 #define TO_STR(ARG) case DataType::ARG: return std::string_view(#ARG);
         TO_STR(UINT8)
