@@ -71,9 +71,20 @@ def pd_merge_replace(df1, df2):
 
 def pd_delete_replace(df1, df2, date_range=None):
     # this is intended to be equivalent to arcticdb update
-    date_range_delete = date_range if date_range else (df2.index[0], df2.index[-1])
-    keep_mask = (df1.index < date_range_delete[0]) | (df1.index > date_range_delete[1])
-    df1_use = df1[keep_mask]
+    # df1 empty -> use df2
+    if len(df1) == 0:
+        return df2
+    # df2 empty -> use df1
+    if len(df2) == 0:
+        return df1
+    date_range_delete = date_range
+    if not date_range and len(df2) > 0:
+        last_row_idx = -1 if len(df2) > 1 else 0
+        date_range_delete = (df2.index[0], df2.index[last_row_idx])
+    df1_use = df1
+    if date_range_delete:
+        keep_mask = (df1.index < date_range_delete[0]) | (df1.index > date_range_delete[1])
+        df1_use = df1[keep_mask]
     return pd_merge_replace(df1_use, df2)
 
 
@@ -99,6 +110,8 @@ def compare_dfs(df1: pd.DataFrame, df2: pd.DataFrame):
     for c in df1.columns:
         if (df1[c] != df2[c]).any():
             return f"no match: data values differ for column {c}: {df1[c].values} vs {df2[c].values}"
+        if df1[c].dtype != df2[c].dtype:
+            return f"no match: data types differ for column {c}: {df1[c].dtype} vs {df2[c].dtype}"
     return f"no match: undetermined reason"
 
 
@@ -462,6 +475,18 @@ _APPEND_TESTS_RAW = [
     TestCase('ts_index/no_type_empty_append_none', 'ts_index/no_type_empty', None,
              [None, None, None], _datetime_no_overlap_index1,
              mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
+    TestCase('ts_index/bool_all_append_empty', 'ts_index/bool_all', 'bool', [], None,
+             mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
+    TestCase('ts_index/int_all_append_empty', 'ts_index/int_all', 'int', [], None,
+             mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
+    TestCase('ts_index/float_all_append_empty', 'ts_index/float_all', 'float', [], None,
+             mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
+    TestCase('ts_index/str_all_append_empty', 'ts_index/str_all', 'str', [], None,
+             mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
+    TestCase('ts_index/datetime_all_append_empty', 'ts_index/datetime_all', 'datetime64[ns]', [], None,
+             mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
+    TestCase('ts_index/none_all_append_empty', 'ts_index/none_all', None, [], None,
+             mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
 ]
 
 _APPEND_TESTS = TestCase.pytest_param_list(_APPEND_TESTS_RAW)
@@ -509,6 +534,13 @@ _UPDATE_TESTS_RAW = [
              mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
     TestCase('ts_index/none_all_update_str', 'ts_index/none_all', 'str',
              ['b1', 'b2', 'b3'], _datetime_overlap_index1,
+             mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
+    TestCase('ts_index/bool_all_update_empty', 'ts_index/bool_all', 'bool', [], None),
+    TestCase('ts_index/int_all_update_empty', 'ts_index/int_all', 'int', [], None),
+    TestCase('ts_index/float_all_update_empty', 'ts_index/float_all', 'float', [], None),
+    TestCase('ts_index/str_all_update_empty', 'ts_index/str_all', 'str', [], None),
+    TestCase('ts_index/datetime_all_update_empty', 'ts_index/datetime_all', 'datetime64[ns]', [], None),
+    TestCase('ts_index/none_all_update_empty', 'ts_index/none_all', None, [], None,
              mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
 ]
 
