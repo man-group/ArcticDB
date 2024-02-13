@@ -843,7 +843,7 @@ struct formatter<FieldRef> {
 
     template<typename FormatContext>
     auto format(const FieldRef& f, FormatContext &ctx) const {
-        return format_to(ctx.out(), "{}: {}", f.type_, f.name_);
+        return fmt::format_to(ctx.out(), "{}: {}", f.type_, f.name_);
     }
 };
 

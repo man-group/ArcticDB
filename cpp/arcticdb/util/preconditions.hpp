@@ -187,7 +187,7 @@ struct formatter<A, std::enable_if_t<std::is_invocable_v<A>,char>> {
 
     template <typename FormatContext>
     auto format(const A &a, FormatContext &ctx) const {
-        return format_to(ctx.out(), "~({})", a());
+        return fmt::format_to(ctx.out(), "~({})", a());
     }
 };
 }
