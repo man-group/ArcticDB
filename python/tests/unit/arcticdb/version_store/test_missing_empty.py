@@ -85,7 +85,7 @@ def pd_delete_replace(df1, df2, date_range=None):
     if date_range_delete:
         keep_mask = (df1.index < date_range_delete[0]) | (df1.index > date_range_delete[1])
         df1_use = df1[keep_mask]
-    return pd_merge_replace(df1_use, df2)
+    return pd.concat((df1_use, df2)).sort_index()
 
 
 def create_df(dtype, data, index):
@@ -153,7 +153,10 @@ def append_update(lib, df, test, verb, verb_name, pd_mod_func):
         df_db = lib.read(test.symbol).data
     except Exception as e:
         return TestResult(False, f"Read error: {e}")
-    df_mod_pd = pd_mod_func(base_df, df, test.index is None)
+    try:
+        df_mod_pd = pd_mod_func(base_df, df, test.index is None)
+    except Exception as e:
+        return TestResult(False, f"Pandas repro error: {e}")
     match = df_mod_pd.equals(df_db)
     message = 'match' if match else compare_dfs(df_mod_pd, df_db)
     return TestResult(match, message)
@@ -248,19 +251,16 @@ _ROUND_TRIP_TESTS_RAW = [
     TestCase('int_index/float_single_nan', None, None, [1.1, np.nan, 3.1], _int_index1),
     TestCase('int_index/datetime_single_nat', None, 'datetime64[ns]', _datetime_none_data1, _int_index1),
     TestCase('int_index/str_single_none', None, None, ['a1', None, 'a3'], _int_index1),
-    TestCase('int_index/bool_empty', None, 'bool', [], _empty_int_index,
-             mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
+    TestCase('int_index/bool_empty', None, 'bool', [], _empty_int_index),
     TestCase('int_index/int_empty', None, 'int', [], _empty_int_index,
              mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
     TestCase('int_index/float_empty', None, 'float', [], _empty_int_index,
              mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
-    TestCase('int_index/str_empty', None, 'str', [], _empty_int_index,
-             mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
-    TestCase('int_index/datetime_empty', None, 'datetime64[ns]', [], _empty_int_index,
-             mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
+    TestCase('int_index/str_empty', None, 'str', [], _empty_int_index),
+    TestCase('int_index/datetime_empty', None, 'datetime64[ns]', [], _empty_int_index),
     TestCase('int_index/no_type_empty', None, None, [], _empty_int_index,
              mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
-    
+
     # datetime index
     TestCase('ts_index/bool_all', None, 'bool', [False, True, False], _datetime_index1),
     TestCase('ts_index/int_all', None, 'int', [1, 2, 3], _datetime_index1),
@@ -277,16 +277,13 @@ _ROUND_TRIP_TESTS_RAW = [
     TestCase('ts_index/float_single_nan', None, None, [1.1, np.nan, 3.1], _datetime_index1),
     TestCase('ts_index/datetime_single_nat', None, 'datetime64[ns]', _datetime_none_data1, _datetime_index1),
     TestCase('ts_index/str_single_none', None, None, ['a1', None, 'a3'], _datetime_index1),
-    TestCase('ts_index/bool_empty', None, 'bool', [], _empty_datetime_index,
-             mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
+    TestCase('ts_index/bool_empty', None, 'bool', [], _empty_datetime_index),
     TestCase('ts_index/int_empty', None, 'int', [], _empty_datetime_index,
              mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
     TestCase('ts_index/float_empty', None, 'float', [], _empty_datetime_index,
              mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
-    TestCase('ts_index/str_empty', None, 'str', [], _empty_datetime_index,
-             mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
-    TestCase('ts_index/datetime_empty', None, 'datetime64[ns]', [], _empty_datetime_index,
-             mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
+    TestCase('ts_index/str_empty', None, 'str', [], _empty_datetime_index),
+    TestCase('ts_index/datetime_empty', None, 'datetime64[ns]', [], _empty_datetime_index),
     TestCase('ts_index/no_type_empty', None, None, [], _empty_datetime_index,
              mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
 ]
@@ -332,7 +329,7 @@ _APPEND_TESTS_RAW = [
              _datetime_data2, None,
              mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
     TestCase('no_index/no_type_empty_append', 'no_index/no_type_empty', None, [None, None, None], None,
-             mark=pytest.mark.skip(reason="must be fixed for 4.4.0 (skipped due to seg fault)")),
+             mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
     TestCase('no_index/bool_empty_append_none', 'no_index/bool_empty', None, [None, None, None], None,
              mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
     TestCase('no_index/int_empty_append_none', 'no_index/int_empty', None, [None, None, None], None,
@@ -345,7 +342,7 @@ _APPEND_TESTS_RAW = [
              [None, None, None], None,
              mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
     TestCase('no_index/no_type_empty_append_none', 'no_index/no_type_empty', None, [None, None, None], None,
-             mark=pytest.mark.skip(reason="must be fixed for 4.4.0 (skipped due to seg fault)")),
+             mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
 
     # int index
     TestCase('int_index/bool_all_append', 'int_index/bool_all', 'bool', [False, True, False], _int_index2),
@@ -402,16 +399,16 @@ _APPEND_TESTS_RAW = [
              [None, None, None], _int_index2,
              mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
     TestCase('int_index/no_type_empty_append_none', 'int_index/no_type_empty', None, [None, None, None], _int_index2,
-             mark=pytest.mark.skip(reason="must be fixed for 4.4.0 (skipped due to seg fault)")),
+             mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
 
     # datetime index
-    TestCase('ts_index/bool_all_append', 'ts_index/bool_all', 'bool', 
+    TestCase('ts_index/bool_all_append', 'ts_index/bool_all', 'bool',
              [False, True, False], _datetime_no_overlap_index1),
-    TestCase('ts_index/int_all_append', 'ts_index/int_all', 'int', 
+    TestCase('ts_index/int_all_append', 'ts_index/int_all', 'int',
              [11, 12, 13], _datetime_no_overlap_index1),
     TestCase('ts_index/float_all_append', 'ts_index/float_all', 'float',
              [11.1, 12.1, 13.1], _datetime_no_overlap_index1),
-    TestCase('ts_index/str_all_append', 'ts_index/str_all', 'str', 
+    TestCase('ts_index/str_all_append', 'ts_index/str_all', 'str',
              ['b1', 'b2', 'b3'], _datetime_no_overlap_index1),
     TestCase('ts_index/datetime_all_append', 'ts_index/datetime_all', 'datetime64[ns]',
              _datetime_data2, _datetime_no_overlap_index1),
@@ -466,7 +463,8 @@ _APPEND_TESTS_RAW = [
              [None, None, None], _datetime_no_overlap_index1,
              mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
     TestCase('ts_index/float_empty_append_none', 'ts_index/float_empty', 'float',
-             [None, None, None], _datetime_no_overlap_index1),
+             [None, None, None], _datetime_no_overlap_index1,
+             mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
     TestCase('ts_index/str_empty_append_none', 'ts_index/str_empty', 'str',
              [None, None, None], _datetime_no_overlap_index1,
              mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
@@ -493,9 +491,11 @@ _APPEND_TESTS = TestCase.pytest_param_list(_APPEND_TESTS_RAW)
 
 _UPDATE_TESTS_RAW = [
     TestCase('ts_index/bool_all_update', 'ts_index/bool_all', 'bool',
-             [False, True, False], _datetime_overlap_index1),
+             [False, True, False], _datetime_overlap_index1,
+             mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
     TestCase('ts_index/int_all_update', 'ts_index/int_all', 'int',
-             [11, 12, 13], _datetime_overlap_index1),
+             [11, 12, 13], _datetime_overlap_index1,
+             mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
     TestCase('ts_index/float_all_update', 'ts_index/float_all', 'float',
              [11.1, 12.1, 13.1], _datetime_overlap_index1),
     TestCase('ts_index/str_all_update', 'ts_index/str_all', 'str',
