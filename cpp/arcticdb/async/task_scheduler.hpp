@@ -16,10 +16,6 @@
 #include <arcticdb/async/base_task.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 
-// Compilation fails on Mac if cstdio is not included prior to folly/Function.h due to a missing definition of memalign in folly/Memory.h
-#ifdef __APPLE__
-#include <cstdio>
-#endif
 #include <folly/executors/FutureExecutor.h>
 #include <folly/executors/CPUThreadPoolExecutor.h>
 #include <folly/executors/IOThreadPoolExecutor.h>
@@ -71,7 +67,7 @@ public:
                 ARCTICDB_SAMPLE_THREAD();
               func();
             });
-
+    
   }
 // we use a modern version of folly when consuming dependencies from conda
 #ifdef ARCTICDB_USING_CONDA
