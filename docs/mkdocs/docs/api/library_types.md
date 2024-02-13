@@ -1,15 +1,15 @@
 ::: arcticdb.version_store.library.NormalizableType
 
-::: arcticdb.version_store.library.ReadInfoRequest
+::: arcticdb.ReadInfoRequest
 
-::: arcticdb.version_store.library.ReadRequest
+::: arcticdb.ReadRequest
 
 ::: arcticdb.version_store.library.SymbolDescription
 
 ::: arcticdb.version_store.library.SymbolVersion
 
-::: arcticdb.version_store.library.VersionedItem
+::: arcticdb.VersionedItem
 
 ::: arcticdb.version_store.library.VersionInfo
 
-::: arcticdb.version_store.library.WritePayload
+::: arcticdb.WritePayload
