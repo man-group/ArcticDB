@@ -142,7 +142,7 @@ struct ColumnData {
     using RawType = std::conditional_t<constant, const typename TDT::DataTypeTag::raw_type, typename TDT::DataTypeTag::raw_type>;
     public:
         ColumnDataIterator() = delete;
-
+        // blah
         // Used to construct [c]begin iterators
         explicit ColumnDataIterator(ColumnData* parent):
         parent_(parent)
