@@ -43,12 +43,12 @@ public:
     MockS3Client(){}
 
     // Can be used to trigger a simulated failure inside MockS3Client. For example:
-    // auto object_to_trigger_put_failure = get_failure_trigger("test", S3Operation::PUT, Aws::S3::S3Errors::NETWORK_FAILURE);
+    // auto object_to_trigger_put_failure = get_failure_trigger("test", S3Operation::PUT, Aws::S3::S3Errors::NETWORK_FAILURE, false);
     // mock_s3_client.put_object(object_to_trigger_put_failure, segment, bucket_name); // This will return a network failure.
     //
-    // The returned name looks like "{s3_object_name}#Failure_{operation_to_fail}_{error_to_fail_with}".
-    // For example: "symbol_1#Failure_Delete_99" will trigger a delete failure with code 99.
-    static std::string get_failure_trigger(const std::string& s3_object_name, S3Operation operation_to_fail, Aws::S3::S3Errors error_to_fail_with);
+    // The returned name looks like "{s3_object_name}#Failure_{operation_to_fail}_{error_to_fail_with}_{retryable}".
+    // For example: "symbol_1#Failure_Delete_99_1" will trigger a delete failure with code 99 which is retryable.
+    static std::string get_failure_trigger(const std::string& s3_object_name, S3Operation operation_to_fail, Aws::S3::S3Errors error_to_fail_with, bool retryable=true);
 
     S3Result<std::monostate> head_object(const std::string& s3_object_name, const std::string& bucket_name) const override;
 

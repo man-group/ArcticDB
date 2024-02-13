@@ -63,6 +63,10 @@ private:
 
 class KeyNotFoundException : public ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND> {
 public:
+    explicit KeyNotFoundException(std::string message) :
+            ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(message) {
+    }
+
     explicit KeyNotFoundException(Composite<VariantKey>&& keys) :
         ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(fmt::format("Not found: {}", keys)),
         keys_(std::make_shared<Composite<VariantKey>>(std::move(keys))) {
