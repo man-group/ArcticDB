@@ -131,6 +131,7 @@ class ManagedMongoDBServer(StorageFixtureFactory):
     def __str__(self):
         return f"{type(self).__name__}[{self.mongo_uri}]"
 
+
 def is_mongo_host_running(host):
     import requests
     try:
@@ -139,22 +140,25 @@ def is_mongo_host_running(host):
         return False
     return res.status_code == 200 and "mongodb" in res.text.lower()
 
+
 def auto_detect_server():
     """Use the Server specified by the CI_MONGO_HOST env var. If not set, try localhost before falling back to starting
     a dedicated instance on a random port."""
-
-    mongo_host = os.getenv("CI_MONGO_HOST")
+    CI_MONGO_HOST = "CI_MONGO_HOST"
+    mongo_host = os.getenv(CI_MONGO_HOST)
     if mongo_host:
         host = f"{mongo_host}:27017"
-        assert is_mongo_host_running(host)
-        return ExternalMongoDBServer(f"mongodb://{host}")
+        if is_mongo_host_running(host):
+            return ExternalMongoDBServer(f"mongodb://{host}")
+        else:
+            logger.log(logging.INFO, f"Could not connect to {CI_MONGO_HOST}={mongo_host}, so will try localhost.")
     else:
-        logger.log(logging.INFO, "No env var, so try localhost then will fall back to managed instance.")
+        logger.log(logging.INFO, f"Env var {CI_MONGO_HOST} not set, so will try localhost.")
 
     host = "localhost:27017"
     if is_mongo_host_running(host):
         return ExternalMongoDBServer(f"mongodb://{host}")
     else:
-        logger.log(logging.INFO, "No localhost, so falling back to managed instance.")
+        logger.log(logging.INFO, "Could not connect to localhost, so falling back to managed instance.")
 
     return ManagedMongoDBServer()
