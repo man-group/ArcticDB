@@ -225,6 +225,7 @@ def get_s3_proto(
     is_https=False,
     region=None,
     use_virtual_addressing=False,
+    use_mock_storage_for_testing=None,
 ):
     env = cfg.env_by_id[env_name]
     s3 = S3Config()
@@ -240,6 +241,8 @@ def get_s3_proto(
         s3.https = is_https
     if use_virtual_addressing is not None:
         s3.use_virtual_addressing = use_virtual_addressing
+    if use_mock_storage_for_testing is not None:
+        s3.use_mock_storage_for_testing = use_mock_storage_for_testing
     # adding time to prefix - so that the s3 root folder is unique and we can delete and recreate fast
     if with_prefix:
         if isinstance(with_prefix, str):
@@ -270,6 +273,7 @@ def add_s3_library_to_env(
     is_https=False,
     region=None,
     use_virtual_addressing=False,
+    use_mock_storage_for_testing=None,
 ):
     env = cfg.env_by_id[env_name]
     if with_prefix and isinstance(with_prefix, str) and (with_prefix.endswith("/") or "//" in with_prefix):
@@ -290,6 +294,7 @@ def add_s3_library_to_env(
         is_https=is_https,
         region=region,
         use_virtual_addressing=use_virtual_addressing,
+        use_mock_storage_for_testing=use_mock_storage_for_testing,
     )
 
     _add_lib_desc_to_env(env, lib_name, sid, description)
