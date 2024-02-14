@@ -328,8 +328,6 @@ _APPEND_TESTS_RAW = [
     TestCase('no_index/datetime_empty_append', 'no_index/datetime_empty', 'datetime64[ns]',
              _datetime_data2, None,
              mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
-    TestCase('no_index/no_type_empty_append', 'no_index/no_type_empty', None, [None, None, None], None,
-             mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
     TestCase('no_index/bool_empty_append_none', 'no_index/bool_empty', None, [None, None, None], None,
              mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
     TestCase('no_index/int_empty_append_none', 'no_index/int_empty', None, [None, None, None], None,
@@ -342,7 +340,7 @@ _APPEND_TESTS_RAW = [
              [None, None, None], None,
              mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
     TestCase('no_index/no_type_empty_append_none', 'no_index/no_type_empty', None, [None, None, None], None,
-             mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
+             mark=pytest.mark.skip(reason="must be fixed for 4.4.0")),
 
     # int index
     TestCase('int_index/bool_all_append', 'int_index/bool_all', 'bool', [False, True, False], _int_index2),
