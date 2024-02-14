@@ -41,7 +41,7 @@ dependencies:
   #  - rocksdb
   # ArcticDB is currently incompatible with fmt 10
   - fmt < 10
-  - folly
+  - folly==2023.09.25.00
   # Vendored build dependencies (see `cpp/thirdparty` and `cpp/vcpkg.json`)
   # Versions must be kept in sync
   - xxhash==0.8.2
