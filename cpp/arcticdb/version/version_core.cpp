@@ -283,7 +283,7 @@ VersionedItem delete_range_impl(
         std::move(intersect_before),
         std::move(intersect_after),
         strictly_after(orig_filter_range, unaffected_keys)};
-    auto flattened_slice_and_keys = flatten_and_fix_rows(boost::span{groups}, row_count);
+    auto flattened_slice_and_keys = flatten_and_fix_rows(groups, row_count);
 
     std::sort(std::begin(flattened_slice_and_keys), std::end(flattened_slice_and_keys));
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
@@ -387,7 +387,7 @@ VersionedItem update_impl(
         std::move(new_slice_and_keys),
         std::move(intersect_after),
         strictly_after(orig_filter_range, unaffected_keys)};
-    auto flattened_slice_and_keys = flatten_and_fix_rows(boost::span{groups}, row_count);
+    auto flattened_slice_and_keys = flatten_and_fix_rows(groups, row_count);
 
     util::check(unaffected_keys.size() + new_keys_size + (affected_keys.size() * 2) >= flattened_slice_and_keys.size(),
                 "Output size mismatch: {} + {} + (2 * {}) < {}",

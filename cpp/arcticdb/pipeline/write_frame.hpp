@@ -9,7 +9,7 @@
 
 #include <arcticdb/entity/index_range.hpp>
 
-#include <vector>
+
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <folly/futures/Future.h>
@@ -18,8 +18,6 @@
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/pipeline/pipeline_common.hpp>
-
-#include<boost/core/span.hpp>
 
 namespace arcticdb::pipelines {
 
@@ -74,7 +72,21 @@ std::optional<SliceAndKey> rewrite_partial_segment(
         AffectedSegmentPart affected_part,
         const std::shared_ptr<Store>& store);
 
-// TODO: Use std::span when C++20 is enabled
-std::vector<SliceAndKey> flatten_and_fix_rows(boost::span<const std::vector<SliceAndKey>> groups, size_t& global_count);
+
+/// Used, when updating a segment, to convert all 5 affected groups into a single list of slices
+/// The 5 groups are:
+/// * Segments before the update range which do not intersect with it and are not affected by
+///   the update
+/// * Segments before the update range which are intersecting with it and are partially affected
+///   by the update.
+/// * Segments which are fully contained inside the update range
+/// * Segments after the update range which are intersecting with it and are partially affected
+///   by the update
+/// * Segments after the update range which do not intersect with it and are not affected by the
+///   update
+std::vector<SliceAndKey> flatten_and_fix_rows(
+    const std::array<std::vector<SliceAndKey>, 5>& groups,
+    size_t& global_count
+);
 
 } //namespace arcticdb::pipelines

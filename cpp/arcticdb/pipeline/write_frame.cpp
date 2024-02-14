@@ -27,6 +27,8 @@
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/entity/merge_descriptors.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
+#include <vector>
+#include <array>
 
 namespace arcticdb::pipelines {
 
@@ -361,7 +363,7 @@ std::optional<SliceAndKey> rewrite_partial_segment(
     return SliceAndKey{std::move(new_slice), std::get<AtomKey>(std::move(fut_key).get())};
 }
 
-std::vector<SliceAndKey> flatten_and_fix_rows(boost::span<const std::vector<SliceAndKey>> groups, size_t& global_count) {
+std::vector<SliceAndKey> flatten_and_fix_rows(const std::array<std::vector<SliceAndKey>, 5>& groups, size_t& global_count) {
     std::vector<SliceAndKey> output;
     output.reserve(groups.size());
     global_count = 0;
