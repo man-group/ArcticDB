@@ -9,6 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import os
 import tempfile
 import time
+import logging
 from typing import TYPE_CHECKING, Optional
 
 from .api import *
@@ -20,6 +21,9 @@ from arcticdb.adapters.prefixing_library_adapter_decorator import PrefixingLibra
 # All storage client libraries to be imported on-demand to speed up start-up of ad-hoc test runs
 if TYPE_CHECKING:
     from pymongo import MongoClient
+
+logger = logging.getLogger("Mongo Storage Fixture")
+logging.basicConfig(level=logging.DEBUG)
 
 
 class MongoDatabase(StorageFixture):
@@ -46,6 +50,7 @@ class MongoDatabase(StorageFixture):
         self.client = client or MongoClient(mongo_uri)
         if not name:
             while True:
+                logger.log(logging.INFO, "Searching for new name")
                 name = f"MongoFixture{int(time.time() * 1e6)}"
                 if name not in self.client.list_database_names():
                     break
@@ -127,15 +132,33 @@ class ManagedMongoDBServer(StorageFixtureFactory):
         return f"{type(self).__name__}[{self.mongo_uri}]"
 
 
-def auto_detect_server():
-    """Use the Server specified by the CI_MONGO_HOST env var or localhost, if available, falling back to starting a
-    dedicated instance on a random port."""
+def is_mongo_host_running(host):
     import requests
+    try:
+        res = requests.get(f"http://{host}")
+    except requests.exceptions.ConnectionError:
+        return False
+    return res.status_code == 200 and "mongodb" in res.text.lower()
 
-    mongo_host = os.getenv("CI_MONGO_HOST")
+
+def auto_detect_server():
+    """Use the Server specified by the CI_MONGO_HOST env var. If not set, try localhost before falling back to starting
+    a dedicated instance on a random port."""
+    CI_MONGO_HOST = "CI_MONGO_HOST"
+    mongo_host = os.getenv(CI_MONGO_HOST)
     if mongo_host:
-        res = requests.get(f"http://{mongo_host}:27017")
-        assert res.status_code == 200 and "mongodb" in res.text.lower()
-        return ExternalMongoDBServer(f"mongodb://{mongo_host}:27017")
+        host = f"{mongo_host}:27017"
+        if is_mongo_host_running(host):
+            return ExternalMongoDBServer(f"mongodb://{host}")
+        else:
+            logger.log(logging.INFO, f"Could not connect to {CI_MONGO_HOST}={mongo_host}, so will try localhost.")
     else:
-        return ManagedMongoDBServer()
+        logger.log(logging.INFO, f"Env var {CI_MONGO_HOST} not set, so will try localhost.")
+
+    host = "localhost:27017"
+    if is_mongo_host_running(host):
+        return ExternalMongoDBServer(f"mongodb://{host}")
+    else:
+        logger.log(logging.INFO, "Could not connect to localhost, so falling back to managed instance.")
+
+    return ManagedMongoDBServer()
