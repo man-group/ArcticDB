@@ -69,6 +69,7 @@ class TestCanAppendToEmptyColumn:
         )
 
     def test_bool(self, lmdb_version_store_static_and_dynamic, boolean_dtype):
+        # Note: if dtype is bool pandas will convert None to False
         df_non_empty = pd.DataFrame({"col1": np.array([True, False, True], dtype=boolean_dtype)})
         lmdb_version_store_static_and_dynamic.append("sym", df_non_empty)
         expected_result = pd.DataFrame({"col1": np.array([None, None, True, False, True], dtype=boolean_dtype)})
@@ -185,6 +186,7 @@ class TestCanAppendEmptyToColumn:
         )
 
     def test_bool(self, lmdb_version_store_static_and_dynamic, boolean_dtype):
+        # Note: if dtype is bool pandas will convert None to False
         df_initial = pd.DataFrame({"col1": np.array([True, False, True], dtype=boolean_dtype)})
         df_with_none = pd.DataFrame({"col1": np.array([None, None])})
         lmdb_version_store_static_and_dynamic.write("sym", df_initial)
@@ -295,6 +297,7 @@ class TestCanUpdateWithEmpty:
         )
 
     def test_bool(self, lmdb_version_store_static_and_dynamic, boolean_dtype):
+        # Note: if dtype is bool pandas will convert None to False
         lmdb_version_store_static_and_dynamic.write(
             "sym",
             pd.DataFrame({"col": [True, True, True, True]}, dtype=boolean_dtype, index=self.index())
@@ -418,6 +421,7 @@ class TestCanUpdateEmpty:
         )
 
     def test_bool(self, lmdb_version_store_static_and_dynamic, boolean_dtype):
+        # Note: if dtype is bool pandas will convert None to False
         lmdb_version_store_static_and_dynamic.update(
             "sym",
             pd.DataFrame({"col": [True, False]}, dtype=boolean_dtype, index=self.update_index())
