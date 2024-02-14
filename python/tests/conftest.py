@@ -22,7 +22,7 @@ from functools import partial
 from arcticdb.storage_fixtures.api import StorageFixture
 from arcticdb.storage_fixtures.azure import AzuriteStorageFixtureFactory
 from arcticdb.storage_fixtures.lmdb import LmdbStorageFixture
-from arcticdb.storage_fixtures.s3 import MotoS3StorageFixtureFactory, real_s3_from_environment_variables
+from arcticdb.storage_fixtures.s3 import MotoS3StorageFixtureFactory, real_s3_from_environment_variables, mock_s3_with_error_simulation
 from arcticdb.storage_fixtures.mongo import auto_detect_server
 from arcticdb.storage_fixtures.in_memory import InMemoryStorageFixture
 from arcticdb.version_store._normalization import MsgPackNormalizer
@@ -109,6 +109,17 @@ def s3_storage_factory():
 @pytest.fixture
 def s3_storage(s3_storage_factory):
     with s3_storage_factory.create_fixture() as f:
+        yield f
+
+
+@pytest.fixture
+def mock_s3_storage_with_error_simulation_factory():
+    return mock_s3_with_error_simulation()
+
+
+@pytest.fixture
+def mock_s3_storage_with_error_simulation(mock_s3_storage_with_error_simulation_factory):
+    with mock_s3_storage_with_error_simulation_factory.create_fixture() as f:
         yield f
 
 
@@ -217,6 +228,11 @@ def s3_store_factory(lib_name, s3_storage):
 
 
 @pytest.fixture
+def mock_s3_store_with_error_simulation_factory(lib_name, mock_s3_storage_with_error_simulation):
+    return mock_s3_storage_with_error_simulation.create_version_store_factory(lib_name)
+
+
+@pytest.fixture
 def real_s3_store_factory(lib_name, real_s3_storage):
     return real_s3_storage.create_version_store_factory(lib_name)
 
@@ -246,6 +262,11 @@ def real_s3_version_store(real_s3_store_factory):
 @pytest.fixture(scope="function")
 def real_s3_version_store_dynamic_schema(real_s3_store_factory):
     return real_s3_store_factory(dynamic_strings=True, dynamic_schema=True)
+
+
+@pytest.fixture
+def mock_s3_store_with_error_simulation(mock_s3_store_with_error_simulation_factory):
+    return mock_s3_store_with_error_simulation_factory()
 
 
 @pytest.fixture
