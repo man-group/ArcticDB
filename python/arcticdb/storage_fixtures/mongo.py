@@ -22,8 +22,15 @@ from arcticdb.adapters.prefixing_library_adapter_decorator import PrefixingLibra
 if TYPE_CHECKING:
     from pymongo import MongoClient
 
+# Configure the root logger to INFO, since all ArcticDB loggers default to INFO
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Mongo Storage Fixture")
-logging.basicConfig(level=logging.DEBUG)
+log_level = os.getenv("ARCTICDB_mongo_test_fixture_loglevel")
+if log_level:
+    log_level = log_level.upper()
+    assert log_level in {"DEBUG", "INFO", "WARN", "ERROR"}, \
+        "Log level must be one of DEBUG, INFO, WARN, ERROR"
+    logger.setLevel(getattr(logging, log_level))
 
 
 class MongoDatabase(StorageFixture):
@@ -50,7 +57,7 @@ class MongoDatabase(StorageFixture):
         self.client = client or MongoClient(mongo_uri)
         if not name:
             while True:
-                logger.log(logging.INFO, "Searching for new name")
+                logger.debug("Searching for new name")
                 name = f"MongoFixture{int(time.time() * 1e6)}"
                 if name not in self.client.list_database_names():
                     break
@@ -151,14 +158,14 @@ def auto_detect_server():
         if is_mongo_host_running(host):
             return ExternalMongoDBServer(f"mongodb://{host}")
         else:
-            logger.log(logging.INFO, f"Could not connect to {CI_MONGO_HOST}={mongo_host}, so will try localhost.")
+            logger.debug(f"Could not connect to {CI_MONGO_HOST}={mongo_host}, so will try localhost.")
     else:
-        logger.log(logging.INFO, f"Env var {CI_MONGO_HOST} not set, so will try localhost.")
+        logger.debug(f"Env var {CI_MONGO_HOST} not set, so will try localhost.")
 
     host = "localhost:27017"
     if is_mongo_host_running(host):
         return ExternalMongoDBServer(f"mongodb://{host}")
     else:
-        logger.log(logging.INFO, "Could not connect to localhost, so falling back to managed instance.")
+        logger.debug("Could not connect to localhost, so falling back to managed instance.")
 
     return ManagedMongoDBServer()
