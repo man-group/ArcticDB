@@ -11,10 +11,15 @@
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/lmdb/lmdb_storage.hpp>
 #include <arcticdb/storage/memory/memory_storage.hpp>
+#include <arcticdb/storage/s3/s3_storage.hpp>
+#include <arcticdb/storage/s3/mock_s3_client.hpp>
 #include <arcticdb/util/buffer.hpp>
 
 #include <filesystem>
 #include <memory>
+
+using namespace arcticdb;
+using namespace storage;
 
 inline const fs::path TEST_DATABASES_PATH = "./test_databases";
 
@@ -63,11 +68,23 @@ public:
 };
 
 class MemoryStorageFactory : public StorageFactory {
+public:
     std::unique_ptr<arcticdb::storage::Storage> create() override {
         arcticdb::proto::memory_storage::Config cfg;
         arcticdb::storage::LibraryPath library_path{"a", "b"};
 
         return std::make_unique<arcticdb::storage::memory::MemoryStorage>(library_path, arcticdb::storage::OpenMode::WRITE, cfg);
+    }
+};
+
+class S3MockStorageFactory : public StorageFactory {
+public:
+    std::unique_ptr<arcticdb::storage::Storage> create() override {
+        arcticdb::proto::s3_storage::Config cfg;
+        cfg.set_use_mock_storage_for_testing(true);
+        arcticdb::storage::LibraryPath library_path("lib", '.');
+
+        return std::make_unique<arcticdb::storage::s3::S3Storage>(library_path, arcticdb::storage::OpenMode::WRITE, cfg);
     }
 };
 
@@ -181,4 +198,77 @@ TEST_F(LMDBStorageTestBase, WriteMapFullError) {
         storage->write(std::move(kv));
     },  ::lmdb::map_full_error);
 
+}
+
+// S3 error handling with mock client
+// Note: Exception handling is different for S3 as compared to other storages.
+// S3 does not return an error if you rewrite an existing key. It overwrites it.
+// S3 does not return an error if you update a key that doesn't exist. It creates it.
+
+TEST(S3MockStorageTest, TestReadKeyNotFoundException) {
+    S3MockStorageFactory factory;
+    auto storage = factory.create();
+
+    std::string failureSymbol = s3::MockS3Client::get_failure_trigger("sym", s3::S3Operation::GET, Aws::S3::S3Errors::NO_SUCH_KEY);
+    auto k = entity::atom_key_builder().gen_id(0).build<entity::KeyType::VERSION>(failureSymbol);
+
+    ASSERT_THROW({
+        storage->read(k, storage::ReadKeyOpts{});
+    },  arcticdb::storage::KeyNotFoundException);
+
+}
+
+// Check that Permission exception is thrown when Access denied or invalid access key error occurs on various calls
+TEST(S3MockStorageTest, TestPermissionErrorException) {
+    S3MockStorageFactory factory;
+    auto storage = factory.create();
+
+    std::string failureSymbol = s3::MockS3Client::get_failure_trigger("sym1", s3::S3Operation::GET, Aws::S3::S3Errors::ACCESS_DENIED);
+    AtomKeyImpl k = entity::atom_key_builder().gen_id(0).build<entity::KeyType::VERSION>(failureSymbol);
+
+    ASSERT_THROW({
+        storage->read(k, storage::ReadKeyOpts{});
+    },  PermissionException);
+
+    failureSymbol = s3::MockS3Client::get_failure_trigger("sym2", s3::S3Operation::DELETE, Aws::S3::S3Errors::ACCESS_DENIED);
+    k = entity::atom_key_builder().gen_id(0).build<entity::KeyType::VERSION>(failureSymbol);
+
+    ASSERT_THROW({
+        storage->remove(k, storage::RemoveOpts{});
+    },  PermissionException);
+
+    failureSymbol = s3::MockS3Client::get_failure_trigger("sym3", s3::S3Operation::PUT, Aws::S3::S3Errors::INVALID_ACCESS_KEY_ID);
+    k = entity::atom_key_builder().gen_id(0).build<entity::KeyType::VERSION>(failureSymbol);
+    KeySegmentPair kv = KeySegmentPair(k);
+    kv.segment().header().set_start_ts(1234);
+    kv.segment().set_buffer(std::make_shared<arcticdb::Buffer>());
+
+    ASSERT_THROW({
+        storage->update(std::move(kv), storage::UpdateOpts{});
+    },  PermissionException);
+
+}
+
+TEST(S3MockStorageTest, TestS3RetryableException) {
+    S3MockStorageFactory factory;
+    auto storage = factory.create();
+
+    std::string failureSymbol = s3::MockS3Client::get_failure_trigger("sym1", s3::S3Operation::GET, Aws::S3::S3Errors::NETWORK_CONNECTION);
+    AtomKeyImpl k = entity::atom_key_builder().gen_id(0).build<entity::KeyType::VERSION>(failureSymbol);
+
+    ASSERT_THROW({
+        storage->read(k, storage::ReadKeyOpts{});
+    },  S3RetryableException);
+}
+
+TEST(S3MockStorageTest, TestUnexpectedS3ErrorException ) {
+    S3MockStorageFactory factory;
+    auto storage = factory.create();
+
+    std::string failureSymbol = s3::MockS3Client::get_failure_trigger("sym1", s3::S3Operation::GET, Aws::S3::S3Errors::NETWORK_CONNECTION, false);
+    AtomKeyImpl k = entity::atom_key_builder().gen_id(0).build<entity::KeyType::VERSION>(failureSymbol);
+
+    ASSERT_THROW({
+        storage->read(k, storage::ReadKeyOpts{});
+    },  UnexpectedS3ErrorException);
 }

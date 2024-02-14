@@ -44,47 +44,57 @@ namespace s3 {
         template<class It>
         using Range = folly::Range<It>;
 
-        class UnexpectedS3ErrorException : public std::exception {
-        public:
-            UnexpectedS3ErrorException(const std::string& message):message(message){}
-            const char* what() const noexcept override {
-                return message.c_str();
-            }
-        private:
-            std::string message;
-        };
-
         inline void raise_s3_exception(const Aws::S3::S3Error& err){
             std::string error_message;
+            auto type = err.GetErrorType();
+            // s3_client.HeadObject returns RESOURCE_NOT_FOUND if a key is not found.
+            if(type == Aws::S3::S3Errors::NO_SUCH_KEY || type == Aws::S3::S3Errors::RESOURCE_NOT_FOUND) {
+                throw KeyNotFoundException(fmt::format("Key Not Found Error: S3Error#{} {}: {}",
+                                                       int(err.GetErrorType()),
+                                                       err.GetExceptionName().c_str(),
+                                                       err.GetMessage().c_str()));
+            }
+
+            if(type == Aws::S3::S3Errors::ACCESS_DENIED || type == Aws::S3::S3Errors::INVALID_ACCESS_KEY_ID || type == Aws::S3::S3Errors::SIGNATURE_DOES_NOT_MATCH) {
+                raise<ErrorCode::E_PERMISSION>(fmt::format("Permission error: S3Error#{} {}: {}",
+                                                           int(err.GetErrorType()),
+                                                           err.GetExceptionName().c_str(),
+                                                           err.GetMessage().c_str()));
+            }
+
+            if(err.ShouldRetry()) {
+                raise<ErrorCode::E_S3_RETRYABLE>(fmt::format("Retry-able error: S3Error#{} {}: {}",
+                                                           int(err.GetErrorType()),
+                                                           err.GetExceptionName().c_str(),
+                                                           err.GetMessage().c_str()));
+            }
+
             // We create a more detailed error explanation in case of NETWORK_CONNECTION errors to remedy #880.
-            if (err.GetErrorType() == Aws::S3::S3Errors::NETWORK_CONNECTION){
-                error_message = fmt::format("Got an unexpected network error: {}: {}. "
+            if (type == Aws::S3::S3Errors::NETWORK_CONNECTION) {
+                error_message = fmt::format("Unexpected network error: S3Error#{}: {} {} "
                                             "This could be due to a connectivity issue or too many open Arctic instances. "
                                             "Having more than one open Arctic instance is not advised, you should reuse them. "
                                             "If you absolutely need many open Arctic instances, consider increasing `ulimit -n`.",
+                                            int(err.GetErrorType()),
                                             err.GetExceptionName().c_str(),
                                             err.GetMessage().c_str());
             }
             else {
-                error_message = fmt::format("Got unexpected error: '{}' {}: {}",
+                error_message = fmt::format("Unexpected error: S3Error#{} {}: {}",
                                             int(err.GetErrorType()),
                                             err.GetExceptionName().c_str(),
                                             err.GetMessage().c_str());
             }
 
             log::storage().error(error_message);
-            throw UnexpectedS3ErrorException(error_message);
+            raise<ErrorCode::E_UNEXPECTED_S3_ERROR>(error_message);
         }
 
         inline bool is_expected_error_type(Aws::S3::S3Errors err) {
-            return err == Aws::S3::S3Errors::NO_SUCH_KEY
-                   || err == Aws::S3::S3Errors::NO_SUCH_BUCKET
-                   || err == Aws::S3::S3Errors::INVALID_ACCESS_KEY_ID
-                   || err == Aws::S3::S3Errors::ACCESS_DENIED
-                   || err == Aws::S3::S3Errors::RESOURCE_NOT_FOUND;
+            return err == Aws::S3::S3Errors::NO_SUCH_KEY || err == Aws::S3::S3Errors::RESOURCE_NOT_FOUND || err == Aws::S3::S3Errors::NO_SUCH_BUCKET;
         }
 
-        inline void raise_if_unexpected_error(const Aws::S3::S3Error& err){
+        inline void raise_if_unexpected_error(const Aws::S3::S3Error& err) {
             if (!is_expected_error_type(err.GetErrorType())) {
                 raise_s3_exception(err);
             }
@@ -115,6 +125,7 @@ namespace s3 {
 
                             if (!put_object_result.is_success()) {
                                 auto& error = put_object_result.get_error();
+                                // No DuplicateKeyException is thrown because S3 overwrites the given key if it already exists.
                                 raise_s3_exception(error);
                             }
                         }
@@ -128,7 +139,7 @@ namespace s3 {
                 const std::string &bucket_name,
                 S3ClientWrapper &s3_client,
                 KeyBucketizer &&bucketizer) {
-            // s3 updates the key if it already exists (our buckets don't have versioning)
+            // s3 updates the key if it already exists. We skip the check for key not found to save a round-trip.
             do_write_impl(std::move(kvs), root_folder, bucket_name, s3_client, std::move(bucketizer));
         }
 
@@ -297,7 +308,7 @@ namespace s3 {
                                         key_type,
                                         error.GetExceptionName().c_str(),
                                         error.GetMessage().c_str());
-                    // We don't raise on expected errors like NoSuchBucket because we want to return an empty list
+                    // We don't raise on expected errors like NoSuchKey because we want to return an empty list
                     // instead of raising.
                     raise_if_unexpected_error(error);
                     return;

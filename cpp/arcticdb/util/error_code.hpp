@@ -79,6 +79,9 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
     ERROR_CODE(5001, E_DUPLICATE_KEY) \
     ERROR_CODE(5002, E_SYMBOL_NOT_FOUND) \
     ERROR_CODE(5003, E_LMDB_MAP_FULL) \
+    ERROR_CODE(5004, E_PERMISSION) \
+    ERROR_CODE(5005, E_UNEXPECTED_S3_ERROR) \
+    ERROR_CODE(5006, E_S3_RETRYABLE) \
     ERROR_CODE(6000, E_UNSORTED_DATA) \
     ERROR_CODE(7000, E_INVALID_USER_ARGUMENT) \
     ERROR_CODE(7001, E_INVALID_DECIMAL_STRING)   \
@@ -152,6 +155,9 @@ using NormalizationException = ArcticCategorizedException<ErrorCategory::NORMALI
 using NoSuchVersionException = ArcticSpecificException<ErrorCode::E_NO_SUCH_VERSION>;
 using StorageException = ArcticCategorizedException<ErrorCategory::STORAGE>;
 using MissingDataException = ArcticCategorizedException<ErrorCategory::MISSING_DATA>;
+using PermissionException = ArcticSpecificException<ErrorCode::E_PERMISSION>;
+using UnexpectedS3ErrorException = ArcticSpecificException<ErrorCode::E_UNEXPECTED_S3_ERROR>;
+using S3RetryableException = ArcticSpecificException<ErrorCode::E_S3_RETRYABLE>;
 using SortingException = ArcticCategorizedException<ErrorCategory::SORTING>;
 using UnsortedDataException = ArcticSpecificException<ErrorCode::E_UNSORTED_DATA>;
 using UserInputException = ArcticCategorizedException<ErrorCategory::USER_INPUT>;
@@ -161,6 +167,21 @@ using CodecException = ArcticCategorizedException<ErrorCategory::CODEC>;
 template<ErrorCode error_code>
 [[noreturn]] void throw_error(const std::string& msg) {
     throw ArcticCategorizedException<get_error_category(error_code)>(msg);
+}
+
+template<>
+[[noreturn]] inline void throw_error<ErrorCode::E_PERMISSION>(const std::string& msg) {
+    throw ArcticSpecificException<ErrorCode::E_PERMISSION>(msg);
+}
+
+template<>
+[[noreturn]] inline void throw_error<ErrorCode::E_UNEXPECTED_S3_ERROR>(const std::string& msg) {
+    throw ArcticSpecificException<ErrorCode::E_UNEXPECTED_S3_ERROR>(msg);
+}
+
+template<>
+[[noreturn]] inline void throw_error<ErrorCode::E_S3_RETRYABLE>(const std::string& msg) {
+    throw ArcticSpecificException<ErrorCode::E_S3_RETRYABLE>(msg);
 }
 
 template<>
