@@ -35,9 +35,8 @@ std::string MockAzureClient::get_failure_trigger(
 }
 
 Azure::Core::RequestFailedException get_exception(const std::string &message, Azure::Core::Http::HttpStatusCode status_code) {
-    auto exception = Azure::Core::RequestFailedException(message);
-    exception.ReasonPhrase = message;
-    exception.StatusCode = status_code;
+    auto rawResponse = std::make_unique<Azure::Core::Http::RawResponse>(0, 0, status_code, message);
+    auto exception = Azure::Core::RequestFailedException(rawResponse);
     return exception;
 }
 
@@ -48,7 +47,7 @@ std::optional<Azure::Core::RequestFailedException> has_failure_trigger(const std
     try {
         auto failure_code_string = blob_name.substr(position + failure_string_for_operation.size());
         auto status_code = Azure::Core::Http::HttpStatusCode(std::stoi(failure_code_string));
-        auto error_message = fmt::format("Simulated Error, message: {}{}", failure_string_for_operation, (int) status_code);
+        auto error_message = fmt::format("Simulated Error, message: #{}_{}", failure_string_for_operation, (int) status_code);
         return get_exception(error_message, status_code);
     } catch (std::exception& e) {
         return std::nullopt;
@@ -58,16 +57,21 @@ std::optional<Azure::Core::RequestFailedException> has_failure_trigger(const std
 void MockAzureClient::write_blob(
         const std::string &blob_name,
         arcticdb::Segment &&segment,
-        const Azure::Storage::Blobs::UploadBlockBlobFromOptions &upload_option,
-        unsigned int request_timeout) {
+        const Azure::Storage::Blobs::UploadBlockBlobFromOptions&,
+        unsigned int) {
+
+    auto maybe_exception = has_failure_trigger(blob_name, AzureOperation::WRITE);
+    if (maybe_exception.has_value()) {
+        throw maybe_exception.value();
+    }
 
     azure_contents.insert_or_assign(blob_name, std::move(segment));
 }
 
 Segment MockAzureClient::read_blob(
         const std::string& blob_name,
-        const Azure::Storage::Blobs::DownloadBlobToOptions& download_option,
-        unsigned int request_timeout) {
+        const Azure::Storage::Blobs::DownloadBlobToOptions&,
+        unsigned int) {
 
     auto maybe_exception = has_failure_trigger(blob_name, AzureOperation::READ);
     if (maybe_exception.has_value()) {
@@ -76,7 +80,7 @@ Segment MockAzureClient::read_blob(
 
     auto pos = azure_contents.find(blob_name);
     if (pos == azure_contents.end()){
-        std::string message = fmt::format("Simulated Error, message:{}{}", "Read", (int) Azure::Core::Http::HttpStatusCode::NotFound);
+        std::string message = fmt::format("Simulated Error, message: #{}_{}", "Read", (int) Azure::Core::Http::HttpStatusCode::NotFound);
         throw get_exception(message, Azure::Core::Http::HttpStatusCode::NotFound);
     }
     return pos->second;
@@ -84,7 +88,7 @@ Segment MockAzureClient::read_blob(
 
 void MockAzureClient::delete_blobs(
         const std::vector<std::string>& blob_names,
-        unsigned int request_timeout) {
+        unsigned int) {
     for (auto& blob_name : blob_names) {
         auto maybe_exception = has_failure_trigger(blob_name, AzureOperation::DELETE);
         if (maybe_exception.has_value()) {
@@ -104,16 +108,27 @@ bool MockAzureClient::blob_exists(const std::string& blob_name) {
     return azure_contents.find(blob_name) != azure_contents.end();
 }
 
+constexpr auto page_size = 10;
 Azure::Storage::Blobs::ListBlobsPagedResponse MockAzureClient::list_blobs(const std::string& prefix) {
-    // Terribly inefficient but fine for tests.
-    auto matching_names = std::vector<std::string>();
+    Azure::Storage::Blobs::ListBlobsPagedResponse output;
+    int count_matches = 0;
+
     for (auto& key : azure_contents){
         if (key.first.rfind(prefix, 0) == 0){
-            matching_names.emplace_back(key.first);
+            auto blob_name = key.first;
+            auto maybe_exception = has_failure_trigger(blob_name, AzureOperation::READ);
+            if (maybe_exception.has_value()) {
+                throw maybe_exception.value();
+            }
+            Azure::Storage::Blobs::Models::BlobItem blobItem;
+            blobItem.Name = blob_name;
+            output.Blobs.emplace_back(blobItem);
+            if(count_matches % page_size == 0) output.MoveToNextPage();
+            count_matches++;
         }
     }
 
-
+    return output;
 }
 
 }
