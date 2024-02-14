@@ -80,6 +80,7 @@ class S3Bucket(StorageFixture):
             with_prefix=with_prefix,
             is_https=self.factory.endpoint.startswith("s3s:"),
             region=self.factory.region,
+            use_mock_storage_for_testing=self.factory.use_mock_storage_for_testing,
         )
         return cfg
 
@@ -121,6 +122,7 @@ class BaseS3StorageFixtureFactory(StorageFixtureFactory):
     default_bucket: Optional[str] = None
     default_prefix: Optional[str] = None
     clean_bucket_on_fixture_exit = True
+    use_mock_storage_for_testing = None  # If set to true allows error simulation
 
     def __str__(self):
         return f"{type(self).__name__}[{self.default_bucket or self.endpoint}]"
@@ -158,6 +160,21 @@ def real_s3_from_environment_variables(*, shared_path: bool):
         out.default_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX")
     else:
         out.default_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX")
+    return out
+
+
+def mock_s3_with_error_simulation():
+    """Creates a mock s3 storage fixture which can simulate errors depending on symbol names.
+
+    The mock s3 is an internal ArctcDB construct and is intended to only test storage failures.
+    For how to trigger failures you can refer to the documentation in mock_s3_client.hpp.
+    """
+    out = BaseS3StorageFixtureFactory()
+    out.use_mock_storage_for_testing = True
+    # We set some values which don't matter since we're using the mock storage
+    out.default_key = Key("access key", "secret key", "unknown user")
+    out.endpoint = "http://test"
+    out.region = "us-east-1"
     return out
 
 
