@@ -448,7 +448,7 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::truncate(
 
         if (is_sequence_type(column_type) && reconstruct_string_pool) {
             ChunkedBuffer& truncated_buffer = truncated_column->data().buffer();
-            for (size_t row = 0; row < truncated_column->row_count(); ++row) {
+            for (position_t row = 0; row < truncated_column->row_count(); ++row) {
                 const entity::position_t offset_val = get_offset_string_at(row, truncated_buffer);
                 if (is_a_string(offset_val)) {
                     const std::string_view string = get_string_from_pool(offset_val, *string_pool_);
