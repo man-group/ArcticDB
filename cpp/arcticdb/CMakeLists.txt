@@ -444,7 +444,10 @@ set(arcticdb_srcs
         version/version_utils.cpp
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
-        )
+        storage/azure/azure_client_wrapper.hpp
+        storage/azure/azure_real_client.hpp
+        storage/azure/azure_real_client.cpp
+)
 
 if(${ARCTICDB_INCLUDE_ROCKSDB})
     list (APPEND arcticdb_srcs
