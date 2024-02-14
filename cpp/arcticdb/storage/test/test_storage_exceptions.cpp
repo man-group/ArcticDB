@@ -13,6 +13,7 @@
 #include <arcticdb/storage/memory/memory_storage.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/storage/s3/mock_s3_client.hpp>
+#include <arcticdb/storage/azure/azure_storage.hpp>
 #include <arcticdb/util/buffer.hpp>
 
 #include <filesystem>
@@ -85,6 +86,18 @@ public:
         arcticdb::storage::LibraryPath library_path("lib", '.');
 
         return std::make_unique<arcticdb::storage::s3::S3Storage>(library_path, arcticdb::storage::OpenMode::WRITE, cfg);
+    }
+};
+
+class AzureMockStorageFactory : public StorageFactory {
+public:
+
+    std::unique_ptr<arcticdb::storage::Storage> create() override {
+        arcticdb::proto::azure_storage::Config cfg;
+        cfg.set_use_mock_storage_for_testing(true);
+
+        arcticdb::storage::LibraryPath library_path("lib", '/');
+        return std::make_unique<arcticdb::storage::azure::AzureStorage>(library_path, arcticdb::storage::OpenMode::WRITE, cfg);
     }
 };
 

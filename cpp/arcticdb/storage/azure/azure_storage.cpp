@@ -33,6 +33,7 @@
 
 #include <arcticdb/storage/azure/azure_client_wrapper.hpp>
 #include <arcticdb/storage/azure/azure_real_client.hpp>
+#include <arcticdb/storage/azure/azure_mock_client.hpp>
 
 #undef GetMessage
 
@@ -291,7 +292,12 @@ AzureStorage::AzureStorage(const LibraryPath &library_path, OpenMode mode, const
     Storage(library_path, mode),
     root_folder_(object_store_utils::get_root_folder(library_path)),
     request_timeout_(conf.request_timeout() == 0 ? 60000 : conf.request_timeout()) {
-        azure_client_ = std::make_unique<RealAzureClient>(conf);
+        if(conf.use_mock_storage_for_testing()) {
+            azure_client_ = std::make_unique<MockAzureClient>();
+        }
+        else {
+            azure_client_ = std::make_unique<RealAzureClient>(conf);
+        }
         if (conf.ca_cert_path().empty())
             ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using default CA cert path");
         else
