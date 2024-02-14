@@ -11,6 +11,7 @@ import pandas as pd
 import random
 import numpy as np
 from datetime import datetime
+from threading import Lock
 
 LARGE_DF_SIZE = 100000
 SLEEP = 1
@@ -27,6 +28,7 @@ def write_small_df_and_prune_previous(lib, symbol):
 
 
 def append_small_df(lib, symbol):
+    print(f"Scenario: append_small_df symbol={symbol}")
     lib.append(symbol, sample_dataframe(size=3, seed=None), write_if_missing=True)
 
 
@@ -38,6 +40,7 @@ def delete_symbol(lib, _):
     symbols = lib.list_symbols()
     if len(symbols) > 0:
         symbol = random.choice(symbols)
+        print(f"Scenario: delete_symbol symbol={symbol}")
         lib.delete(symbol)
 
 
@@ -54,11 +57,13 @@ def delete_specific_version(lib, _):
     if len(undeleted_versions) > 0:
         symbol = random.choice(list(undeleted_versions.keys()))
         version = random.choice(undeleted_versions[symbol])
+        print(f"Scenario: Deleting version: {version} of symbol: {symbol}")
         lib.delete_version(symbol, version)
 
 
 def snapshot_new_name(lib, _):
     snapshot_name = "snapshot-{}".format(datetime.utcnow().isoformat())
+    print(f"Scenario: Creating snapshot: {snapshot_name}")
     lib.snapshot(snapshot_name)
 
 
@@ -144,8 +149,14 @@ def read_random_symbol_version(lib, unused):
             lib.read(sym, as_of=int(version_info["version"]))
 
 
+counter_lock = Lock()
+counter = 0
+
 def get_new_symbol(func, lib):
-    return func.__name__ + datetime.utcnow().isoformat()
+    global counter
+    with counter_lock:
+        counter += 1
+    return f"{func.__name__}-{counter}"
 
 
 def get_existing_symbol(func, lib):
@@ -164,11 +175,10 @@ def get_symbol(func, lib):
     return symbol_func(func, lib)
 
 
-def run_scenario(func, lib, with_snapshots, verbose):
+def run_scenario(func, lib, with_snapshots, verbose, symbol=None):
     try:
-        symbol = get_symbol(func, lib)
-        if verbose:
-            print("Running function {} symbol {}".format(func.__name__, symbol))
+        if symbol is None:
+            symbol = get_symbol(func, lib)
         func(lib, symbol)
         if with_snapshots:
             lib.snapshot("snapshot" + datetime.utcnow().isoformat())
