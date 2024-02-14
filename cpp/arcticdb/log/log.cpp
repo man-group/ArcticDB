@@ -287,7 +287,7 @@ bool Loggers::configure(const arcticdb::proto::logger::LoggersConfig &conf, bool
                     util::as_opt(sink_conf.daily_file().utc_rotation_minute()).value_or(0)
                 ));
                 break;
-            default:util::raise_error_msg("Unsupported sink_conf {}", sink_conf);
+            default:util::raise_rte("Unsupported sink_conf {}", sink_conf.DebugString());
         }
     }
 

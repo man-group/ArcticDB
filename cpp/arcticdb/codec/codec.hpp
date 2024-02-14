@@ -8,13 +8,18 @@
 #pragma once
 
 #include <arcticdb/codec/core.hpp>
-#include <arcticdb/codec/segment.hpp>
-#include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/entity/types.hpp>
+#include <arcticdb/codec/encoding_version.hpp>
+#include <arcticdb/entity/protobufs.hpp>
+#include <arcticdb/entity/stream_descriptor.hpp>
+#include <arcticdb/codec/segment_header.hpp>
 
 namespace arcticdb {
 
-using ShapesBlockTDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension::Dim0>>;
+class Segment;
+class SegmentInMemory;
+
+using ShapesBlockTDT = entity::TypeDescriptorTag<entity::DataTypeTag<entity::DataType::INT64>, entity::DimensionTag<entity::Dimension::Dim0>>;
 
 Segment encode_dispatch(
     SegmentInMemory&& in_mem_seg,
@@ -22,7 +27,7 @@ Segment encode_dispatch(
     EncodingVersion encoding_version);
 
 Buffer decode_encoded_fields(
-    const arcticdb::proto::encoding::SegmentHeader& hdr,
+    const SegmentHeader& hdr,
     const uint8_t* data,
     const uint8_t* begin ARCTICDB_UNUSED);
 
@@ -30,13 +35,13 @@ SegmentInMemory decode_segment(Segment&& segment);
 
 void decode_into_memory_segment(
     const Segment& segment,
-    arcticdb::proto::encoding::SegmentHeader& hdr,
+    SegmentHeader& hdr,
     SegmentInMemory& res,
-    StreamDescriptor& desc);
+    entity::StreamDescriptor& desc);
 
 template<class DataSink, typename EncodedFieldType>
 std::size_t decode_field(
-    const TypeDescriptor &td,
+    const entity::TypeDescriptor &td,
     const EncodedFieldType &field,
     const uint8_t *input,
     DataSink &data_sink,

@@ -10,6 +10,7 @@
 #include <arcticdb/codec/segment.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/stream/protobuf_mappings.hpp>
+#include <arcticdb/codec/protobuf_encoding.hpp>
 #include <arcticdb/storage/common.hpp>
 #include <arcticdb/util/pb_util.hpp>
 #include <arcticdb/util/dump_bytes.hpp>
@@ -44,7 +45,8 @@ struct ZstdBlockEncoder {
         std::size_t compressed_bytes = ZSTD_compress(out, out_capacity, in, block_utils.bytes_, opts.level());
         hasher(in, block_utils.count_);
         pos += compressed_bytes;
-        out_codec.mutable_zstd()->MergeFrom(opts);
+        copy_codec(*out_codec.mutable_zstd(), opts);
+
         return compressed_bytes;
     }
 };

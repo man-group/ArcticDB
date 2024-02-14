@@ -11,6 +11,7 @@
 #include <arcticdb/util/pb_util.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/util/preconditions.hpp>
+#include <arcticdb/codec/encoded_field.hpp>
 #include <numeric>
 
 namespace arcticdb::encoding_sizes {
@@ -51,13 +52,12 @@ template <typename NDArrayEncodedFieldType> std::size_t shape_compressed_size(co
         return shape_uncompressed_size(nda) + data_uncompressed_size(nda) + bitmap_serialized_size(nda);
     }
 
-    template <typename EncodedFieldType>
-    std::size_t field_compressed_size(const EncodedFieldType &field) {
+    std::size_t field_compressed_size(const EncodedFieldImpl &field) {
     switch (field.encoding_case()) {
-        case EncodedFieldType::kNdarray:
+        case EncodedFieldType::NDARRAY:
             return ndarray_field_compressed_size(field.ndarray());
-            default:
-                util::raise_error_msg("Unsupported encoding {}", field);
+        default:
+            util::raise_rte("Unsupported encoding {}", field);
     }
 }
 

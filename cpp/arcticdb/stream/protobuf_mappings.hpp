@@ -60,4 +60,5 @@ inline void ensure_rowcount_norm_meta(arcticdb::proto::descriptors::Normalizatio
     }
 }
 
+
 } //namespace arcticdb

@@ -97,7 +97,6 @@ TEST_P(SimpleTestSuite, Example) {
     ac::entity::AtomKey k = ac::entity::atom_key_builder().gen_id(1).build<ac::entity::KeyType::TABLE_DATA>(999);
 
     as::KeySegmentPair kv(k);
-    kv.segment().header().set_start_ts(1234);
     kv.segment().set_buffer(std::make_shared<Buffer>());
 
     storage->write(std::move(kv));
@@ -110,10 +109,8 @@ TEST_P(SimpleTestSuite, Example) {
         res.segment() = std::move(seg);
         res.segment().force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
     }, storage::ReadKeyOpts{});
-    ASSERT_EQ(res.segment().header().start_ts(), 1234);
 
     res = storage->read(k, as::ReadKeyOpts{});
-    ASSERT_EQ(res.segment().header().start_ts(), 1234);
 
     bool executed = false;
     storage->iterate_type(arcticdb::entity::KeyType::TABLE_DATA,
@@ -124,7 +121,6 @@ TEST_P(SimpleTestSuite, Example) {
     ASSERT_TRUE(executed);
 
     as::KeySegmentPair update_kv(k);
-    update_kv.segment().header().set_start_ts(4321);
     update_kv.segment().set_buffer(std::make_shared<Buffer>());
 
     storage->update(std::move(update_kv), as::UpdateOpts{});
@@ -135,10 +131,8 @@ TEST_P(SimpleTestSuite, Example) {
         update_res.segment() = std::move(seg);
         update_res.segment().force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
     }, as::ReadKeyOpts{});
-    ASSERT_EQ(update_res.segment().header().start_ts(), 4321);
 
     update_res = storage->read(k, as::ReadKeyOpts{});
-    ASSERT_EQ(update_res.segment().header().start_ts(), 4321);
 
     executed = false;
     storage->iterate_type(arcticdb::entity::KeyType::TABLE_DATA,
@@ -185,7 +179,6 @@ TEST_P(SimpleTestSuite, Strings) {
     ac::entity::AtomKey k = ac::entity::atom_key_builder().gen_id(1).build<ac::entity::KeyType::TABLE_DATA>(999);
     auto save_k = k;
     as::KeySegmentPair kv(std::move(k), std::move(seg));
-    kv.segment().header().set_start_ts(1234);
     storage->write(std::move(kv));
 
     as::KeySegmentPair res;
@@ -194,7 +187,6 @@ TEST_P(SimpleTestSuite, Strings) {
         res.segment() = std::move(seg);
         res.segment().force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
     }, as::ReadKeyOpts{});
-    ASSERT_EQ(res.segment().header().start_ts(), 1234);
 
     SegmentInMemory res_mem = decode_segment(std::move(res.segment()));
     ASSERT_EQ(s.string_at(0, 1), res_mem.string_at(0, 1));

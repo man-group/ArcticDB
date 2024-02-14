@@ -74,7 +74,7 @@ namespace arcticdb {
             if constexpr (std::is_same_v<EncodedFieldType, arcticdb::EncodedField>)
                 util::check_magic<ColumnMagic>(input);
 
-            if (field->encoding_case() == EncodedFieldType::kNdarray) {
+            if (field->encoding_case() == EncodedFieldType::NDARRAY) {
                 const auto &ndarray_field = field->ndarray();
                 const auto num_blocks = ndarray_field.values_size();
                 util::check(num_blocks <= 1, "Unexpected number of empty type blocks: {}", num_blocks);
@@ -83,7 +83,7 @@ namespace arcticdb {
                     input += block_info.out_bytes();
                 }
             } else {
-                util::raise_error_msg("Unsupported encoding {}", *field);
+                util::raise_rte("Unsupported encoding {}", *field);
             }
         });
     }

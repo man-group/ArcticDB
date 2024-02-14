@@ -28,7 +28,6 @@
 #else
     #include <arcticdb/util/third_party/robin_hood.hpp>
 #endif
-#include <arcticdb/codec/variant_encoded_field_collection.hpp>
 #include <arcticdb/util/magic_num.hpp>
 #include <google/protobuf/util/message_differencer.h>
 #include <folly/SpinLock.h>
@@ -261,7 +260,7 @@ void decode_or_expand_impl(
 
 size_t get_field_range_compressed_size(size_t start_idx, size_t num_fields,
                                        const arcticdb::proto::encoding::SegmentHeader& hdr,
-                                       const VariantEncodedFieldCollection& fields) {
+                                       const EncodedFieldCollection& fields) {
     size_t total = 0ULL;
     const size_t magic_num_size = EncodingVersion(hdr.encoding_version()) == EncodingVersion::V2 ? sizeof(ColumnMagic) : 0u;
     ARCTICDB_DEBUG(log::version(), "Skipping between {} and {}", start_idx, start_idx + num_fields);
@@ -306,7 +305,7 @@ void advance_skipped_cols(
         size_t source_col,
         size_t first_col_offset,
         size_t index_fieldcount,
-        const VariantEncodedFieldCollection& fields,
+        const EncodedFieldCollection& fields,
         const arcticdb::proto::encoding::SegmentHeader& hdr) {
     const auto next_col = prev_col_offset + 1;
     auto skipped_cols = source_col - next_col;
@@ -347,7 +346,7 @@ void decode_into_frame_static(
     ARCTICDB_DEBUG(log::version(), "Num fields: {}", seg.header().fields_size());
     const EncodingVersion encoding_version = EncodingVersion(hdr.encoding_version());
     const bool has_magic_nums = encoding_version == EncodingVersion::V2;
-    VariantEncodedFieldCollection fields(seg);
+    EncodedFieldCollection fields(seg);
 
     // data == end in case we have empty data types (e.g. {EMPTYVAL, Dim0}, {EMPTYVAL, Dim1}) for which we store nothing
     // in storage as they can be reconstructed in the type handler on the read path.
@@ -421,7 +420,7 @@ void decode_into_frame_dynamic(
     const bool has_magic_numbers = encdoing_version == EncodingVersion::V2;
 
     if (data != end) {
-        VariantEncodedFieldCollection fields(seg);
+        EncodedFieldCollection fields(seg);
         auto index_field = fields.at(0u);
         decode_index_field(frame, index_field, data, begin, end, context, encdoing_version);
 

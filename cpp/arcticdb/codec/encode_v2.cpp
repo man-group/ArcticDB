@@ -22,7 +22,7 @@ namespace arcticdb {
 
     void encode_sparse_map(
         ColumnData& column_data,
-        std::variant<EncodedField*, arcticdb::proto::encoding::EncodedField*> variant_field,
+        std::variant<EncodedFieldImpl*, arcticdb::proto::encoding::EncodedField*> variant_field,
         Buffer& out,
         std::ptrdiff_t& pos
     );
@@ -46,7 +46,7 @@ namespace arcticdb {
         static void encode(
             const arcticdb::proto::encoding::VariantCodec &codec_opts,
             ColumnData& column_data,
-            std::variant<EncodedField*, arcticdb::proto::encoding::EncodedField*> variant_field,
+            std::variant<EncodedFieldImpl*, arcticdb::proto::encoding::EncodedField*> variant_field,
             Buffer& out,
             std::ptrdiff_t& pos);
         static std::pair<size_t, size_t> max_compressed_size(
@@ -55,13 +55,13 @@ namespace arcticdb {
     private:
         static void encode_shapes(
             const ColumnData& column_data,
-            std::variant<EncodedField*, arcticdb::proto::encoding::EncodedField*> variant_field,
+            std::variant<EncodedFieldImpl*, arcticdb::proto::encoding::EncodedField*> variant_field,
             Buffer& out,
             std::ptrdiff_t& pos_in_buffer);
         static void encode_blocks(
             const arcticdb::proto::encoding::VariantCodec &codec_opts,
             ColumnData& column_data,
-            std::variant<EncodedField*, arcticdb::proto::encoding::EncodedField*> variant_field,
+            std::variant<EncodedFieldImpl*, arcticdb::proto::encoding::EncodedField*> variant_field,
             Buffer& out,
             std::ptrdiff_t& pos);
     };
@@ -80,7 +80,7 @@ namespace arcticdb {
     void ColumnEncoderV2::encode(
         const arcticdb::proto::encoding::VariantCodec& codec_opts,
         ColumnData& column_data,
-        std::variant<EncodedField*, arcticdb::proto::encoding::EncodedField*> variant_field,
+        std::variant<EncodedFieldImpl*, arcticdb::proto::encoding::EncodedField*> variant_field,
         Buffer& out,
         std::ptrdiff_t& pos
     ) {
@@ -91,7 +91,7 @@ namespace arcticdb {
 
     void ColumnEncoderV2::encode_shapes(
         const ColumnData& column_data,
-        std::variant<EncodedField*, arcticdb::proto::encoding::EncodedField*> variant_field,
+        std::variant<EncodedFieldImpl*, arcticdb::proto::encoding::EncodedField*> variant_field,
         Buffer& out,
         std::ptrdiff_t& pos_in_buffer
     ) {
@@ -110,7 +110,7 @@ namespace arcticdb {
     void ColumnEncoderV2::encode_blocks(
         const arcticdb::proto::encoding::VariantCodec &codec_opts,
         ColumnData& column_data,
-        std::variant<EncodedField*, arcticdb::proto::encoding::EncodedField*> variant_field,
+        std::variant<EncodedFieldImpl*, arcticdb::proto::encoding::EncodedField*> variant_field,
         Buffer& out,
         std::ptrdiff_t& pos
     ) {

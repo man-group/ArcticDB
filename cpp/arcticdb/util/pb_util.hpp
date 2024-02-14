@@ -12,18 +12,13 @@
 #include <google/protobuf/any.h>
 #include <google/protobuf/any.pb.h>
 #include <google/protobuf/util/message_differencer.h>
+#include <arcticdb/util/preconditions.hpp>
 #include <folly/Range.h>
 
 #include <exception>
 #include <optional>
 
 namespace arcticdb::util {
-
-template<class Msg, class ExcType=std::invalid_argument>
-[[noreturn]] void raise_error_msg(const char *pattern, const Msg &msg) {
-   // google::protobuf::TextFormat::PrintToString(msg, &s);
-    throw ExcType(fmt::format(pattern, msg.DebugString()));
-}
 
 namespace {
 constexpr char TYPE_URL[] = "cxx.arctic.org";
@@ -37,7 +32,7 @@ void pack_to_any(const Msg &msg, google::protobuf::Any &any) {
 inline folly::StringPiece get_arcticdb_pb_type_name(const google::protobuf::Any &any) {
     folly::StringPiece sp{any.type_url()};
     if (!sp.startsWith(TYPE_URL)) {
-        raise_error_msg("Not a valid arcticc proto msg", any);
+        util::raise_rte("Not a valid arcticc proto msg", any.DebugString());
     }
     return sp.subpiece(sizeof(TYPE_URL), sp.size());
 }

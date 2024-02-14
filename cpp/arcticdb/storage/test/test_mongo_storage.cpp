@@ -36,7 +36,6 @@ TEST(MongoStorage, ClientSession) {
     ac::entity::AtomKey k = ac::entity::atom_key_builder().gen_id(1).build<ac::entity::KeyType::TABLE_DATA>("999");
 
     as::KeySegmentPair kv(k);
-    kv.segment().header().set_start_ts(1234);
 
     storage.write(std::move(kv));
 
@@ -47,10 +46,8 @@ TEST(MongoStorage, ClientSession) {
         res.segment() = std::move(seg);
         res.segment().force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
     }, as::ReadKeyOpts{});
-    ASSERT_EQ(res.segment().header().start_ts(), 1234);
 
     res = storage.read(k, as::ReadKeyOpts{});
-    ASSERT_EQ(res.segment().header().start_ts(), 1234);
 
     bool executed = false;
     storage.iterate_type(ac::entity::KeyType::TABLE_DATA,
@@ -67,7 +64,6 @@ TEST(MongoStorage, ClientSession) {
     ASSERT_TRUE(executed);
 
     as::KeySegmentPair update_kv(k);
-    update_kv.segment().header().set_start_ts(4321);
 
     storage.update(std::move(update_kv), as::UpdateOpts{});
 
@@ -78,10 +74,8 @@ TEST(MongoStorage, ClientSession) {
         update_res.segment() = std::move(seg);
         update_res.segment().force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
     }, as::ReadKeyOpts{});
-    ASSERT_EQ(update_res.segment().header().start_ts(), 4321);
 
     update_res = storage.read(k, as::ReadKeyOpts{});
-    ASSERT_EQ(update_res.segment().header().start_ts(), 4321);
 
     executed = false;
     storage.iterate_type(ac::entity::KeyType::TABLE_DATA,
@@ -93,7 +87,6 @@ TEST(MongoStorage, ClientSession) {
 
     ac::entity::AtomKey numeric_k = ac::entity::atom_key_builder().gen_id(1).build<ac::entity::KeyType::STREAM_GROUP>(999);
     as::KeySegmentPair numeric_kv(numeric_k);
-    numeric_kv.segment().header().set_start_ts(7890);
 
     storage.write(std::move(numeric_kv));
 
@@ -104,8 +97,6 @@ TEST(MongoStorage, ClientSession) {
         numeric_res.segment() = std::move(seg);
         numeric_res.segment().force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
     }, as::ReadKeyOpts{});
-    ASSERT_EQ(numeric_res.segment().header().start_ts(), 7890);
 
     numeric_res = storage.read(numeric_k, as::ReadKeyOpts{});
-    ASSERT_EQ(numeric_res.segment().header().start_ts(), 7890);
 }

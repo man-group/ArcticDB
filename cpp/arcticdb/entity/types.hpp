@@ -25,7 +25,6 @@
 #include <optional>
 #include <variant>
 
-
 #ifdef _WIN32
 // `ssize_t` is defined in `sys/types.h` but it is not ISO C (it simply is POSIX), hence its is not defined natively by MSVC.
 // See: https://learn.microsoft.com/en-us/windows/win32/winprog/windows-data-types
@@ -611,7 +610,7 @@ inline arcticdb::proto::descriptors::StreamDescriptor_FieldDescriptor field_prot
 struct IndexDescriptor {
         using Proto = arcticdb::proto::descriptors::IndexDescriptor;
 
-    Proto data_;
+
     using Type = arcticdb::proto::descriptors::IndexDescriptor::Type;
 
     static const Type UNKNOWN = arcticdb::proto::descriptors::IndexDescriptor_Type_UNKNOWN;
@@ -621,34 +620,40 @@ struct IndexDescriptor {
 
     using TypeChar = char;
 
+    uint32_t field_count_;
+    Type type_;
+
     IndexDescriptor() = default;
-    IndexDescriptor(size_t field_count, Type type) {
-        data_.set_kind(type);
-        data_.set_field_count(static_cast<uint32_t>(field_count));
+    IndexDescriptor(uint32_t field_count, Type type) :
+        field_count_(field_count),
+        type_(type) {
     }
 
-    explicit IndexDescriptor(arcticdb::proto::descriptors::IndexDescriptor data)
-        : data_(std::move(data)) {
+    [[nodiscard]] Proto to_proto() { //TODO move elsewhere
+        Proto proto;
+        proto.set_kind(type_);
+        proto.set_field_count(field_count_);
+        return proto;
     }
 
-    bool uninitialized() const {
-        return data_.field_count() == 0 && data_.kind() == Type::IndexDescriptor_Type_UNKNOWN;
+    [[nodiscard]] bool uninitialized() const {
+        return field_count() == 0 && type_ == Type::IndexDescriptor_Type_UNKNOWN;
     }
 
-    const Proto& proto() const  {
-        return data_;
+    uint32_t field_count() const {
+        return field_count_;
     }
 
-    size_t field_count() const {
-        return static_cast<size_t>(data_.field_count());
-    }
-
-    Type type() const {
-        return data_.kind();
+    [[nodiscard]] Type type() const {
+        return type_;
     }
 
     void set_type(Type type) {
-        data_.set_kind(type);
+        type_ = type;
+    }
+
+    void set_field_count(uint32_t field_count) {
+        field_count_ = field_count;
     }
 
     ARCTICDB_MOVE_COPY_DEFAULT(IndexDescriptor)
@@ -694,18 +699,6 @@ struct FieldRef {
         return left.type_ == right.type_ && left.name_ == right.name_;
     }
 };
-
-inline void set_id(arcticdb::proto::descriptors::StreamDescriptor& pb_desc, StreamId id) {
-    std::visit([&pb_desc](auto &&arg) {
-        using IdType = std::decay_t<decltype(arg)>;
-        if constexpr (std::is_same_v<IdType, NumericId>)
-            pb_desc.set_num_id(arg);
-        else if constexpr (std::is_same_v<IdType, StringId>)
-            pb_desc.set_str_id(arg);
-        else
-            util::raise_rte("Encoding unknown descriptor type");
-    }, id);
-}
 
 struct Field {
     uint32_t size_ = 0;
