@@ -46,8 +46,6 @@ namespace fg = folly::gen;
 
 namespace detail {
 
-static const size_t BATCH_SUBREQUEST_LIMIT = 256; //https://github.com/Azure/azure-sdk-for-python/blob/767facc39f2487504bcde4e627db16a79f96b297/sdk/storage/azure-storage-blob/azure/storage/blob/_container_client.py#L1608
-
 template<class KeyBucketizer>
 void do_write_impl(
     Composite<KeySegmentPair>&& kvs,

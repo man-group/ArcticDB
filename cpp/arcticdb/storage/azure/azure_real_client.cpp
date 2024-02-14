@@ -84,6 +84,11 @@ Segment RealAzureClient::read_blob(
 void RealAzureClient::delete_blobs(
         const std::vector<std::string>& blob_names,
         unsigned int request_timeout) {
+
+    util::check(blob_names.size() <= BATCH_SUBREQUEST_LIMIT,
+                "Azure delete batch size {} exceeds maximum permitted batch size of {}",
+                blob_names.size(),
+                BATCH_SUBREQUEST_LIMIT);
     auto batch = container_client.CreateBatch();
 
     for (auto& blob_name: blob_names) {

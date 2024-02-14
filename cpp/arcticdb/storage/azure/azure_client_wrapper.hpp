@@ -16,6 +16,8 @@
 
 namespace arcticdb::storage::azure {
 
+static const size_t BATCH_SUBREQUEST_LIMIT = 256; //https://github.com/Azure/azure-sdk-for-python/blob/767facc39f2487504bcde4e627db16a79f96b297/sdk/storage/azure-storage-blob/azure/storage/blob/_container_client.py#L1608
+
     // An abstract class, which is responsible for sending the requests and parsing the responses from Azure.
     // It can be derived as either a real connection to Azure or a mock used for unit tests.
 class AzureClientWrapper {
