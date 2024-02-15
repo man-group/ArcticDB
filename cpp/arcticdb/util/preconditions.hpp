@@ -23,8 +23,8 @@ struct Raise {
 
     template<typename...Args>
     [[noreturn]] constexpr void operator()(fmt::format_string<Args...> format, Args&&...args) const {
-        constexpr std::string combo_format = fmt::format(FMT_COMPILE("{} {}"), error_code_data<code>.name_, format);
-        constexpr std::string msg = fmt::format(combo_format, std::forward<Args>(args)...);
+        constexpr auto combo_format = fmt::format(FMT_COMPILE("{} {}"), error_code_data<code>.name_, format);
+        std::string msg = fmt::format(combo_format, std::forward<Args>(args)...);
         if constexpr(error_category == ErrorCategory::INTERNAL)
             log::root().error(msg);
         throw_error<code>(msg);
@@ -32,8 +32,8 @@ struct Raise {
 
     template<typename FormatString, typename...Args>
     [[noreturn]] constexpr void operator()(FormatString format, Args&&...args) const {
-        constexpr std::string combo_format = fmt::format(FMT_COMPILE("{} {}"), error_code_data<code>.name_, format);
-        constexpr std::string msg = fmt::format(combo_format, std::forward<Args>(args)...);
+        auto combo_format = fmt::format(FMT_COMPILE("{} {}"), error_code_data<code>.name_, format);
+        std::string msg = fmt::format(combo_format, std::forward<Args>(args)...);
         if constexpr(error_category == ErrorCategory::INTERNAL)
             log::root().error(msg);
         throw_error<code>(msg);
