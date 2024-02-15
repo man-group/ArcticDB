@@ -1110,6 +1110,15 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#s3storageusewininet" class="md-nav__link">
+    <span class="md-ellipsis">
+      S3Storage.UseWinINet
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#versionstorenumcputhreads-and-versionstorenumiothreads" class="md-nav__link">
     <span class="md-ellipsis">
       VersionStore.NumCPUThreads and VersionStore.NumIOThreads
@@ -1662,6 +1671,15 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#s3storageusewininet" class="md-nav__link">
+    <span class="md-ellipsis">
+      S3Storage.UseWinINet
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#versionstorenumcputhreads-and-versionstorenumiothreads" class="md-nav__link">
     <span class="md-ellipsis">
       VersionStore.NumCPUThreads and VersionStore.NumIOThreads
@@ -1756,6 +1774,15 @@
 <p>Values:
 * 0: Do not perform SSL verification.
 * 1: Perform SSL verification.</p>
+<h3 id="s3storageusewininet">S3Storage.UseWinINet<a class="headerlink" href="#s3storageusewininet" title="Permanent link">&para;</a></h3>
+<p>This setting only has an effect on the Windows operating system.</p>
+<p>Control whether the client should use the WinINet HTTP backend rather than the default WinHTTP backend.</p>
+<p>WinINet can provide better error messages in AWS SDK debug logs, for example for diagnosing SSL issues. See the logging
+configuration section below for notes on how to set up AWS SDK debug logs.</p>
+<p>The INet backend does not allow SSL verification to be disabled with the current AWS SDK.</p>
+<p>Values:
+* 0: Use WinHTTP
+* 1: Use WinINet</p>
 <h3 id="versionstorenumcputhreads-and-versionstorenumiothreads">VersionStore.NumCPUThreads and VersionStore.NumIOThreads<a class="headerlink" href="#versionstorenumcputhreads-and-versionstorenumiothreads" title="Permanent link">&para;</a></h3>
 <p>ArcticDB uses two threadpools in order to manage computational resources:</p>
 <ul>

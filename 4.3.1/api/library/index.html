@@ -2162,7 +2162,7 @@ explicitly state support for single-symbol concurrent writes.</p>
     <span class="n">metadata</span><span class="p">:</span> <span class="n"><span title="typing.Any">Any</span></span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">prune_previous_versions</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="n">validate_index</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.version_store.library.VersionedItem">VersionedItem</a></span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></span><span class="p">]</span>
 </code></pre></div>
 
   <div class="doc doc-contents ">
@@ -2284,7 +2284,7 @@ This tests that the data is sorted in ascending order, using Pandas DataFrame.in
         <tr>
           <td>
               <span class="doc-returns-annotation">
-                  <code><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.version_store.library.VersionedItem">VersionedItem</a></code>
+                  <code><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></code>
               </span>
           </td>
           <td class="doc-returns-details">
@@ -2369,10 +2369,10 @@ This tests that the data is sorted in ascending order, using Pandas DataFrame.in
 
 <a href="#arcticdb.version_store.library.Library.append_batch" class="headerlink" title="Permanent link">&para;</a></h3>
 <div class="doc-signature highlight"><pre><span></span><code><span class="n">append_batch</span><span class="p">(</span>
-    <span class="n">append_payloads</span><span class="p">:</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store.library.WritePayload" href="../library_types/#arcticdb.version_store.library.WritePayload">WritePayload</a></span><span class="p">],</span>
+    <span class="n">append_payloads</span><span class="p">:</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store.library.WritePayload" href="../library_types/#arcticdb.WritePayload">WritePayload</a></span><span class="p">],</span>
     <span class="n">prune_previous_versions</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="n">validate_index</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><span title="typing.Union">Union</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.version_store.library.VersionedItem">VersionedItem</a></span><span class="p">,</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb_ext.version_store.DataError" href="../exceptions/#arcticdb.DataError">DataError</a></span><span class="p">]]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><span title="typing.Union">Union</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></span><span class="p">,</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb_ext.version_store.DataError" href="../exceptions/#arcticdb.DataError">DataError</a></span><span class="p">]]</span>
 </code></pre></div>
 
   <div class="doc doc-contents ">
@@ -2456,7 +2456,7 @@ This tests that the data is sorted in ascending order, using Pandas DataFrame.in
         <tr>
           <td>
               <span class="doc-returns-annotation">
-                  <code><span title="typing.List">List</span>[<span title="typing.Union">Union</span>[<a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.version_store.library.VersionedItem">VersionedItem</a>, <a class="autorefs autorefs-internal" title="arcticdb_ext.version_store.DataError" href="../exceptions/#arcticdb.DataError">DataError</a>]]</code>
+                  <code><span title="typing.List">List</span>[<span title="typing.Union">Union</span>[<a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a>, <a class="autorefs autorefs-internal" title="arcticdb_ext.version_store.DataError" href="../exceptions/#arcticdb.DataError">DataError</a>]]</code>
               </span>
           </td>
           <td class="doc-returns-details">
@@ -2524,7 +2524,7 @@ error_code, error_category, and exception_string properties.</p>
 <a href="#arcticdb.version_store.library.Library.defragment_symbol_data" class="headerlink" title="Permanent link">&para;</a></h3>
 <div class="doc-signature highlight"><pre><span></span><code><span class="n">defragment_symbol_data</span><span class="p">(</span>
     <span class="n">symbol</span><span class="p">:</span> <span class="n">str</span><span class="p">,</span> <span class="n">segment_size</span><span class="p">:</span> <span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span><span class="n">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.version_store.library.VersionedItem">VersionedItem</a></span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></span>
 </code></pre></div>
 
   <div class="doc doc-contents ">
@@ -2600,7 +2600,7 @@ It is for achieving smallest no. of segment after compaction. Please refer to be
         <tr>
           <td>
               <span class="doc-returns-annotation">
-                  <code><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.version_store.library.VersionedItem">VersionedItem</a></code>
+                  <code><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></code>
               </span>
           </td>
           <td class="doc-returns-details">
@@ -3165,7 +3165,7 @@ new timeseries. Append collects the staged data and appends them to the latest v
 
 <a href="#arcticdb.version_store.library.Library.get_description_batch" class="headerlink" title="Permanent link">&para;</a></h3>
 <div class="doc-signature highlight"><pre><span></span><code><span class="n">get_description_batch</span><span class="p">(</span>
-    <span class="n">symbols</span><span class="p">:</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><span title="typing.Union">Union</span></span><span class="p">[</span><span class="n">str</span><span class="p">,</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store.library.ReadInfoRequest" href="../library_types/#arcticdb.version_store.library.ReadInfoRequest">ReadInfoRequest</a></span><span class="p">]]</span>
+    <span class="n">symbols</span><span class="p">:</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><span title="typing.Union">Union</span></span><span class="p">[</span><span class="n">str</span><span class="p">,</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store.library.ReadInfoRequest" href="../library_types/#arcticdb.ReadInfoRequest">ReadInfoRequest</a></span><span class="p">]]</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><span title="typing.Union">Union</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store.library.SymbolDescription" href="../library_types/#arcticdb.version_store.library.SymbolDescription">SymbolDescription</a></span><span class="p">,</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb_ext.version_store.DataError" href="../exceptions/#arcticdb.DataError">DataError</a></span><span class="p">]]</span>
 </code></pre></div>
 
@@ -3192,7 +3192,7 @@ new timeseries. Append collects the staged data and appends them to the latest v
             <p>
                 <span class="doc-param-annotation">
                   <b>TYPE:</b>
-                    <code><span title="typing.List">List</span>[<span title="typing.Union">Union</span>[str, <a class="autorefs autorefs-internal" title="arcticdb.version_store.library.ReadInfoRequest" href="../library_types/#arcticdb.version_store.library.ReadInfoRequest">ReadInfoRequest</a>]]</code>
+                    <code><span title="typing.List">List</span>[<span title="typing.Union">Union</span>[str, <a class="autorefs autorefs-internal" title="arcticdb.version_store.library.ReadInfoRequest" href="../library_types/#arcticdb.ReadInfoRequest">ReadInfoRequest</a>]]</code>
                 </span>
             </p>
           </td>
@@ -3413,7 +3413,7 @@ considers symbols that are live in the library as of the current time.</p>
     <span class="n">n</span><span class="p">:</span> <span class="n">int</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span>
     <span class="n">as_of</span><span class="p">:</span> <span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span><span class="n"><span title="arcticdb.version_store.library.AsOf">AsOf</span></span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">columns</span><span class="p">:</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.version_store.library.VersionedItem">VersionedItem</a></span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></span>
 </code></pre></div>
 
   <div class="doc doc-contents ">
@@ -3996,7 +3996,7 @@ many snapshots.</p>
     <span class="n">row_range</span><span class="p">:</span> <span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span><span class="n"><span title="typing.Tuple">Tuple</span></span><span class="p">[</span><span class="n">int</span><span class="p">,</span> <span class="n">int</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">columns</span><span class="p">:</span> <span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span><span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">query_builder</span><span class="p">:</span> <span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store.processing.QueryBuilder" href="../query_builder/#arcticdb.QueryBuilder">QueryBuilder</a></span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.version_store.library.VersionedItem">VersionedItem</a></span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></span>
 </code></pre></div>
 
   <div class="doc doc-contents ">
@@ -4196,9 +4196,9 @@ documentation for the QueryBuilder class (<code>from arcticdb import QueryBuilde
 
 <a href="#arcticdb.version_store.library.Library.read_batch" class="headerlink" title="Permanent link">&para;</a></h3>
 <div class="doc-signature highlight"><pre><span></span><code><span class="n">read_batch</span><span class="p">(</span>
-    <span class="n">symbols</span><span class="p">:</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><span title="typing.Union">Union</span></span><span class="p">[</span><span class="n">str</span><span class="p">,</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store.library.ReadRequest" href="../library_types/#arcticdb.version_store.library.ReadRequest">ReadRequest</a></span><span class="p">]],</span>
+    <span class="n">symbols</span><span class="p">:</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><span title="typing.Union">Union</span></span><span class="p">[</span><span class="n">str</span><span class="p">,</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store.library.ReadRequest" href="../library_types/#arcticdb.ReadRequest">ReadRequest</a></span><span class="p">]],</span>
     <span class="n">query_builder</span><span class="p">:</span> <span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store.processing.QueryBuilder" href="../query_builder/#arcticdb.QueryBuilder">QueryBuilder</a></span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><span title="typing.Union">Union</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.version_store.library.VersionedItem">VersionedItem</a></span><span class="p">,</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb_ext.version_store.DataError" href="../exceptions/#arcticdb.DataError">DataError</a></span><span class="p">]]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><span title="typing.Union">Union</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></span><span class="p">,</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb_ext.version_store.DataError" href="../exceptions/#arcticdb.DataError">DataError</a></span><span class="p">]]</span>
 </code></pre></div>
 
   <div class="doc doc-contents ">
@@ -4224,7 +4224,7 @@ documentation for the QueryBuilder class (<code>from arcticdb import QueryBuilde
             <p>
                 <span class="doc-param-annotation">
                   <b>TYPE:</b>
-                    <code><span title="typing.List">List</span>[<span title="typing.Union">Union</span>[str, <a class="autorefs autorefs-internal" title="arcticdb.version_store.library.ReadRequest" href="../library_types/#arcticdb.version_store.library.ReadRequest">ReadRequest</a>]]</code>
+                    <code><span title="typing.List">List</span>[<span title="typing.Union">Union</span>[str, <a class="autorefs autorefs-internal" title="arcticdb.version_store.library.ReadRequest" href="../library_types/#arcticdb.ReadRequest">ReadRequest</a>]]</code>
                 </span>
             </p>
           </td>
@@ -4264,7 +4264,7 @@ then none of the <code>symbols</code> may have their own query_builder specified
         <tr>
           <td>
               <span class="doc-returns-annotation">
-                  <code><span title="typing.List">List</span>[<span title="typing.Union">Union</span>[<a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.version_store.library.VersionedItem">VersionedItem</a>, <a class="autorefs autorefs-internal" title="arcticdb_ext.version_store.DataError" href="../exceptions/#arcticdb.DataError">DataError</a>]]</code>
+                  <code><span title="typing.List">List</span>[<span title="typing.Union">Union</span>[<a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a>, <a class="autorefs autorefs-internal" title="arcticdb_ext.version_store.DataError" href="../exceptions/#arcticdb.DataError">DataError</a>]]</code>
               </span>
           </td>
           <td class="doc-returns-details">
@@ -4352,7 +4352,7 @@ any other internal exception occurs, the same DataError object is also returned.
 <a href="#arcticdb.version_store.library.Library.read_metadata" class="headerlink" title="Permanent link">&para;</a></h3>
 <div class="doc-signature highlight"><pre><span></span><code><span class="n">read_metadata</span><span class="p">(</span>
     <span class="n">symbol</span><span class="p">:</span> <span class="n">str</span><span class="p">,</span> <span class="n">as_of</span><span class="p">:</span> <span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span><span class="n"><span title="arcticdb.version_store.library.AsOf">AsOf</span></span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.version_store.library.VersionedItem">VersionedItem</a></span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></span>
 </code></pre></div>
 
   <div class="doc doc-contents ">
@@ -4419,7 +4419,7 @@ the different forms this parameter can take.</p>
         <tr>
           <td>
               <span class="doc-returns-annotation">
-                  <code><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.version_store.library.VersionedItem">VersionedItem</a></code>
+                  <code><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></code>
               </span>
           </td>
           <td class="doc-returns-details">
@@ -4447,8 +4447,8 @@ will be None.</p>
 
 <a href="#arcticdb.version_store.library.Library.read_metadata_batch" class="headerlink" title="Permanent link">&para;</a></h3>
 <div class="doc-signature highlight"><pre><span></span><code><span class="n">read_metadata_batch</span><span class="p">(</span>
-    <span class="n">symbols</span><span class="p">:</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><span title="typing.Union">Union</span></span><span class="p">[</span><span class="n">str</span><span class="p">,</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store.library.ReadInfoRequest" href="../library_types/#arcticdb.version_store.library.ReadInfoRequest">ReadInfoRequest</a></span><span class="p">]]</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><span title="typing.Union">Union</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.version_store.library.VersionedItem">VersionedItem</a></span><span class="p">,</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb_ext.version_store.DataError" href="../exceptions/#arcticdb.DataError">DataError</a></span><span class="p">]]</span>
+    <span class="n">symbols</span><span class="p">:</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><span title="typing.Union">Union</span></span><span class="p">[</span><span class="n">str</span><span class="p">,</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store.library.ReadInfoRequest" href="../library_types/#arcticdb.ReadInfoRequest">ReadInfoRequest</a></span><span class="p">]]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><span title="typing.Union">Union</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></span><span class="p">,</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb_ext.version_store.DataError" href="../exceptions/#arcticdb.DataError">DataError</a></span><span class="p">]]</span>
 </code></pre></div>
 
   <div class="doc doc-contents ">
@@ -4474,7 +4474,7 @@ will be None.</p>
             <p>
                 <span class="doc-param-annotation">
                   <b>TYPE:</b>
-                    <code><span title="typing.List">List</span>[<span title="typing.Union">Union</span>[str, <a class="autorefs autorefs-internal" title="arcticdb.version_store.library.ReadInfoRequest" href="../library_types/#arcticdb.version_store.library.ReadInfoRequest">ReadInfoRequest</a>]]</code>
+                    <code><span title="typing.List">List</span>[<span title="typing.Union">Union</span>[str, <a class="autorefs autorefs-internal" title="arcticdb.version_store.library.ReadInfoRequest" href="../library_types/#arcticdb.ReadInfoRequest">ReadInfoRequest</a>]]</code>
                 </span>
             </p>
           </td>
@@ -4495,7 +4495,7 @@ will be None.</p>
         <tr>
           <td>
               <span class="doc-returns-annotation">
-                  <code><span title="typing.List">List</span>[<span title="typing.Union">Union</span>[<a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.version_store.library.VersionedItem">VersionedItem</a>, <a class="autorefs autorefs-internal" title="arcticdb_ext.version_store.DataError" href="../exceptions/#arcticdb.DataError">DataError</a>]]</code>
+                  <code><span title="typing.List">List</span>[<span title="typing.Union">Union</span>[<a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a>, <a class="autorefs autorefs-internal" title="arcticdb_ext.version_store.DataError" href="../exceptions/#arcticdb.DataError">DataError</a>]]</code>
               </span>
           </td>
           <td class="doc-returns-details">
@@ -4779,7 +4779,7 @@ new timeseries. Append collects the staged data and appends them to the latest v
     <span class="n">n</span><span class="p">:</span> <span class="n">int</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span>
     <span class="n">as_of</span><span class="p">:</span> <span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span><span class="n"><span title="typing.Union">Union</span></span><span class="p">[</span><span class="n">int</span><span class="p">,</span> <span class="n">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">columns</span><span class="p">:</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.version_store.library.VersionedItem">VersionedItem</a></span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></span>
 </code></pre></div>
 
   <div class="doc doc-contents ">
@@ -4915,7 +4915,7 @@ new timeseries. Append collects the staged data and appends them to the latest v
         <span class="n"><span title="typing.Tuple">Tuple</span></span><span class="p">[</span><span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span><span class="n"><span title="arcticdb.supported_types.Timestamp">Timestamp</span></span><span class="p">],</span> <span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span><span class="n"><span title="arcticdb.supported_types.Timestamp">Timestamp</span></span><span class="p">]]</span>
     <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">prune_previous_versions</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.version_store.library.VersionedItem">VersionedItem</a></span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></span>
 </code></pre></div>
 
   <div class="doc doc-contents ">
@@ -5091,7 +5091,7 @@ modified, even if <code>data</code> covers a wider date range.</p>
     <span class="n">prune_previous_versions</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="n">staged</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="n">validate_index</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.version_store.library.VersionedItem">VersionedItem</a></span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></span>
 </code></pre></div>
 
   <div class="doc doc-contents ">
@@ -5242,7 +5242,7 @@ This tests that the data is sorted in ascending order, using Pandas DataFrame.in
         <tr>
           <td>
               <span class="doc-returns-annotation">
-                  <code><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.version_store.library.VersionedItem">VersionedItem</a></code>
+                  <code><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></code>
               </span>
           </td>
           <td class="doc-returns-details">
@@ -5332,10 +5332,10 @@ This tests that the data is sorted in ascending order, using Pandas DataFrame.in
 
 <a href="#arcticdb.version_store.library.Library.write_batch" class="headerlink" title="Permanent link">&para;</a></h3>
 <div class="doc-signature highlight"><pre><span></span><code><span class="n">write_batch</span><span class="p">(</span>
-    <span class="n">payloads</span><span class="p">:</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store.library.WritePayload" href="../library_types/#arcticdb.version_store.library.WritePayload">WritePayload</a></span><span class="p">],</span>
+    <span class="n">payloads</span><span class="p">:</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store.library.WritePayload" href="../library_types/#arcticdb.WritePayload">WritePayload</a></span><span class="p">],</span>
     <span class="n">prune_previous_versions</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="n">validate_index</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><span title="typing.Union">Union</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.version_store.library.VersionedItem">VersionedItem</a></span><span class="p">,</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb_ext.version_store.DataError" href="../exceptions/#arcticdb.DataError">DataError</a></span><span class="p">]]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><span title="typing.Union">Union</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></span><span class="p">,</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb_ext.version_store.DataError" href="../exceptions/#arcticdb.DataError">DataError</a></span><span class="p">]]</span>
 </code></pre></div>
 
   <div class="doc doc-contents ">
@@ -5415,7 +5415,7 @@ This tests that the data is sorted in ascending order, using Pandas DataFrame.in
         <tr>
           <td>
               <span class="doc-returns-annotation">
-                  <code><span title="typing.List">List</span>[<span title="typing.Union">Union</span>[<a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.version_store.library.VersionedItem">VersionedItem</a>, <a class="autorefs autorefs-internal" title="arcticdb_ext.version_store.DataError" href="../exceptions/#arcticdb.DataError">DataError</a>]]</code>
+                  <code><span title="typing.List">List</span>[<span title="typing.Union">Union</span>[<a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a>, <a class="autorefs autorefs-internal" title="arcticdb_ext.version_store.DataError" href="../exceptions/#arcticdb.DataError">DataError</a>]]</code>
               </span>
           </td>
           <td class="doc-returns-details">
@@ -5510,7 +5510,7 @@ error_code, error_category, and exception_string properties.</p>
 
 
 <a href="#arcticdb.version_store.library.Library.write_metadata" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><span class="n">write_metadata</span><span class="p">(</span><span class="n">symbol</span><span class="p">:</span> <span class="n">str</span><span class="p">,</span> <span class="n">metadata</span><span class="p">:</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.version_store.library.VersionedItem">VersionedItem</a></span>
+<div class="doc-signature highlight"><pre><span></span><code><span class="n">write_metadata</span><span class="p">(</span><span class="n">symbol</span><span class="p">:</span> <span class="n">str</span><span class="p">,</span> <span class="n">metadata</span><span class="p">:</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></span>
 </code></pre></div>
 
   <div class="doc doc-contents ">
@@ -5575,7 +5575,7 @@ metadata.</p>
         <tr>
           <td>
               <span class="doc-returns-annotation">
-                  <code><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.version_store.library.VersionedItem">VersionedItem</a></code>
+                  <code><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></code>
               </span>
           </td>
           <td class="doc-returns-details">
@@ -5604,7 +5604,7 @@ metadata.</p>
 <div class="doc-signature highlight"><pre><span></span><code><span class="n">write_metadata_batch</span><span class="p">(</span>
     <span class="n">write_metadata_payloads</span><span class="p">:</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><span title="arcticdb.version_store.library.WriteMetadataPayload">WriteMetadataPayload</span></span><span class="p">],</span>
     <span class="n">prune_previous_versions</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><span title="typing.Union">Union</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.version_store.library.VersionedItem">VersionedItem</a></span><span class="p">,</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb_ext.version_store.DataError" href="../exceptions/#arcticdb.DataError">DataError</a></span><span class="p">]]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><span title="typing.Union">Union</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></span><span class="p">,</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb_ext.version_store.DataError" href="../exceptions/#arcticdb.DataError">DataError</a></span><span class="p">]]</span>
 </code></pre></div>
 
   <div class="doc doc-contents ">
@@ -5673,7 +5673,7 @@ readable before another symbol.</p>
         <tr>
           <td>
               <span class="doc-returns-annotation">
-                  <code><span title="typing.List">List</span>[<span title="typing.Union">Union</span>[<a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.version_store.library.VersionedItem">VersionedItem</a>, <a class="autorefs autorefs-internal" title="arcticdb_ext.version_store.DataError" href="../exceptions/#arcticdb.DataError">DataError</a>]]</code>
+                  <code><span title="typing.List">List</span>[<span title="typing.Union">Union</span>[<a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a>, <a class="autorefs autorefs-internal" title="arcticdb_ext.version_store.DataError" href="../exceptions/#arcticdb.DataError">DataError</a>]]</code>
               </span>
           </td>
           <td class="doc-returns-details">
@@ -5747,7 +5747,7 @@ error_code, error_category, and exception_string properties.</p>
     <span class="n">metadata</span><span class="p">:</span> <span class="n"><span title="typing.Any">Any</span></span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">prune_previous_versions</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="n">staged</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.version_store.library.VersionedItem">VersionedItem</a></span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></span>
 </code></pre></div>
 
   <div class="doc doc-contents ">
@@ -5864,7 +5864,7 @@ the Pickle library. There are significant downsides to storing data in this way:
         <tr>
           <td>
               <span class="doc-returns-annotation">
-                  <code><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.version_store.library.VersionedItem">VersionedItem</a></code>
+                  <code><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></code>
               </span>
           </td>
           <td class="doc-returns-details">
@@ -5903,10 +5903,10 @@ the Pickle library. There are significant downsides to storing data in this way:
 
 <a href="#arcticdb.version_store.library.Library.write_pickle_batch" class="headerlink" title="Permanent link">&para;</a></h3>
 <div class="doc-signature highlight"><pre><span></span><code><span class="n">write_pickle_batch</span><span class="p">(</span>
-    <span class="n">payloads</span><span class="p">:</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store.library.WritePayload" href="../library_types/#arcticdb.version_store.library.WritePayload">WritePayload</a></span><span class="p">],</span>
+    <span class="n">payloads</span><span class="p">:</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store.library.WritePayload" href="../library_types/#arcticdb.WritePayload">WritePayload</a></span><span class="p">],</span>
     <span class="n">prune_previous_versions</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="n">staged</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.version_store.library.VersionedItem">VersionedItem</a></span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></span><span class="p">]</span>
 </code></pre></div>
 
   <div class="doc doc-contents ">
@@ -5985,7 +5985,7 @@ the Pickle library. There are significant downsides to storing data in this way:
         <tr>
           <td>
               <span class="doc-returns-annotation">
-                  <code><span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.version_store.library.VersionedItem">VersionedItem</a>]</code>
+                  <code><span title="typing.List">List</span>[<a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a>]</code>
               </span>
           </td>
           <td class="doc-returns-details">

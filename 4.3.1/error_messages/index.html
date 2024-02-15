@@ -1947,6 +1947,21 @@ what they mean, and what (if anything) can be done to resolve the issue.</p>
 <td>The LMDB map is full.</td>
 <td>Close and reopen your LMDB backed Arctic instance with a larger map size. For example to open <code>/tmp/a/b/</code> with a map size of 5GB, use <code>adb.Arctic("lmdb:///tmp/a/b?map_size=5GB")</code>. Also see the <a href="http://www.lmdb.tech/doc/group__mdb.html#gaa2506ec8dab3d969b0e609cd82e619e5">LMDB documentation</a>.</td>
 </tr>
+<tr>
+<td>5004</td>
+<td>Don't have permissions to carry out the operation.</td>
+<td>Ensure that you have the permissions to perform the requested operation on the given key.</td>
+</tr>
+<tr>
+<td>5005</td>
+<td>An unexpected S3 error occurred. e.g. Network error, Service not available, Throttling failure etc.</td>
+<td>Varies depending on the type of failure.</td>
+</tr>
+<tr>
+<td>5006</td>
+<td>An unexpected S3 error occurred which is retryable.</td>
+<td>Varies depending on the type of failure.</td>
+</tr>
 </tbody>
 </table>
 <h3 id="sorting-errors">Sorting Errors<a class="headerlink" href="#sorting-errors" title="Permanent link">&para;</a></h3>
