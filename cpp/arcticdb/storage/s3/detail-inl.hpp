@@ -193,6 +193,15 @@ namespace s3 {
                 throw KeyNotFoundException(Composite<VariantKey>{std::move(failed_reads)});
         }
 
+        struct FailedDelete {
+            VariantKey failed_key;
+            std::string error_message;
+
+            FailedDelete(VariantKey&& failed_key, std::string&& error_message):
+                failed_key(failed_key),
+                error_message(error_message) {}
+        };
+
         template<class KeyBucketizer>
         void do_remove_impl(Composite<VariantKey> &&ks,
                             const std::string &root_folder,
@@ -202,7 +211,7 @@ namespace s3 {
             ARCTICDB_SUBSAMPLE(S3StorageDeleteBatch, 0)
             auto fmt_db = [](auto &&k) { return variant_key_type(k); };
             std::vector<std::string> to_delete;
-            std::vector<VariantKey> failed_deletes;
+            std::vector<FailedDelete> failed_deletes;
             static const size_t delete_object_limit =
                     std::min(DELETE_OBJECTS_LIMIT,
                              static_cast<size_t>(ConfigsMap::instance()->get_int("S3Storage.DeleteBatchSize", 1000)));
@@ -222,12 +231,13 @@ namespace s3 {
                                                            to_delete.size(),
                                                            variant_key_view(*k));
                                     for (auto& bad_key: delete_object_result.get_output().failed_deletes) {
-                                        auto bad_key_name = bad_key.substr(key_type_dir.size(),
-                                                                           std::string::npos);
+                                        auto bad_key_name = bad_key.s3_object_name.substr(key_type_dir.size(),
+                                                                                          std::string::npos);
                                         failed_deletes.emplace_back(
                                                 variant_key_from_bytes(
                                                         reinterpret_cast<const uint8_t *>(bad_key_name.data()),
-                                                        bad_key_name.size(), group.key()));
+                                                        bad_key_name.size(), group.key()),
+                                                std::move(bad_key.error_message));
                                     }
                                 } else {
                                     auto& error = delete_object_result.get_error();
@@ -240,8 +250,19 @@ namespace s3 {
 
             util::check(to_delete.empty(), "Have {} segment that have not been removed",
                         to_delete.size());
-            if (!failed_deletes.empty())
-                throw KeyNotFoundException(Composite<VariantKey>(std::move(failed_deletes)));
+            if (!failed_deletes.empty()) {
+                auto failed_deletes_message = std::ostringstream();
+                for (auto i=0u; i<failed_deletes.size(); ++i){
+                    auto& failed = failed_deletes[i];
+                    failed_deletes_message<<fmt::format("'{}' failed with '{}'", to_serialized_key(failed.failed_key), failed.error_message);
+                    if (i != failed_deletes.size()){
+                        failed_deletes_message<<", ";
+                    }
+                }
+                auto error_message = fmt::format("Failed to delete some of the objects: {}.",
+                                                 failed_deletes_message.str());
+                raise<ErrorCode::E_UNEXPECTED_S3_ERROR>(error_message);
+            }
         }
 
         inline auto default_prefix_handler() {

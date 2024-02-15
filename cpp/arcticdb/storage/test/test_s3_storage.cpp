@@ -312,7 +312,7 @@ TEST_F(S3StorageFixture, test_remove) {
     // Remove 2 and local fail on 3
     ASSERT_THROW(
         remove_in_store(store, {"symbol_2", MockS3Client::get_failure_trigger("symbol_3", S3Operation::DELETE_LOCAL, Aws::S3::S3Errors::NETWORK_CONNECTION)}),
-        KeyNotFoundException);
+        UnexpectedS3ErrorException);
     remaining = std::set<std::string>{"symbol_3", "symbol_4"};
     ASSERT_EQ(list_in_store(store), remaining);
 
