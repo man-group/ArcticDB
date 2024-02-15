@@ -763,6 +763,8 @@ if(${TEST})
             storage/test/test_mongo_storage.cpp
             storage/test/test_s3_storage.cpp
             storage/test/test_storage_factory.cpp
+            storage/test/test_storage_exceptions.cpp
+            storage/test/test_azure_storage.cpp
             stream/test/stream_test_common.cpp
             stream/test/test_aggregator.cpp
             stream/test/test_append_map.cpp
@@ -797,8 +799,6 @@ if(${TEST})
             version/test/test_version_store.cpp
             version/test/test_sorting_info_state_machine.cpp
             version/test/version_map_model.hpp
-            storage/test/test_storage_exceptions.cpp
-            storage/test/test_azure_storage.cpp
     )
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
