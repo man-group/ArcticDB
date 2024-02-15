@@ -514,7 +514,8 @@ void encode_sparse_map(
     Buffer& out,
     std::ptrdiff_t& pos
 ) {
-    if (column_data.bit_vector() != nullptr && column_data.bit_vector()->count() > 0)   {
+    if (column_data.bit_vector() != nullptr && column_data.bit_vector()->count() > 0) {
+        util::check(!is_empty_type(column_data.type().data_type()), "Empty typed columns should not have sparse maps");
         ARCTICDB_DEBUG(log::codec(), "Sparse map count = {} pos = {}", column_data.bit_vector()->count(), pos);
         const size_t sparse_bm_bytes = encode_bitmap(*column_data.bit_vector(), out, pos);
         util::variant_match(variant_field, [&](auto field) {

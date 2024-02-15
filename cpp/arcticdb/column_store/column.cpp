@@ -323,6 +323,9 @@ void Column::default_initialize_rows(size_t start_pos, size_t num_rows, bool ens
 }
 
 void Column::set_row_data(size_t row_id) {
+    if (is_empty_type(type_.data_type())) {
+        return;
+    }
     last_logical_row_ = row_id;
     const auto last_stored_row = row_count() - 1;
     if(sparse_map_) {
@@ -592,10 +595,7 @@ std::shared_ptr<Column> Column::truncate(const std::shared_ptr<Column>& column, 
     auto buffer = ::arcticdb::truncate(column->data_.buffer(), start_byte, end_byte);
     auto res = std::make_shared<Column>(column->type(), column->allow_sparse_, std::move(buffer));
     if (column->is_sparse()) {
-        util::BitMagic output_sparse_map = is_empty_type(column->type().data_type())
-            ? util::BitMagic{}
-            : truncate_sparse_map(column->sparse_map(), start_row, end_row);
-        res->set_sparse_map(std::move(output_sparse_map));
+        res->set_sparse_map(truncate_sparse_map(column->sparse_map(), start_row, end_row));
     }
     res->set_row_data(end_row - (start_row + 1));
     return res;
