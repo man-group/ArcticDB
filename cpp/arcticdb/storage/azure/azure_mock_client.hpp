@@ -20,7 +20,7 @@ namespace arcticdb::storage::azure {
 enum class AzureOperation{
     READ,
     WRITE,
-    DELETE, // Triggers a global failure (i.e. delete_objects will fail for all objects if one of them triggers a delete failure)
+    DELETE, // delete_blobs will fail for all objects if one of them triggers a delete failure
     LIST,
     EXISTS,
 };

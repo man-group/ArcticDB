@@ -98,9 +98,10 @@ void MockAzureClient::delete_blobs(
         if (maybe_exception.has_value()) {
             throw maybe_exception.value();
         }
-        else {
-            azure_contents.erase(blob_name);
-        }
+    }
+
+    for (auto& blob_name : blob_names) {
+        azure_contents.erase(blob_name);
     }
 }
 
