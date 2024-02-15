@@ -119,10 +119,12 @@ Azure::Storage::Blobs::ListBlobsPagedResponse MockAzureClient::list_blobs(const 
     for (auto& key : azure_contents){
         if (key.first.rfind(prefix, 0) == 0){
             auto blob_name = key.first;
+
             auto maybe_exception = has_failure_trigger(blob_name, AzureOperation::LIST);
             if (maybe_exception.has_value()) {
                 throw maybe_exception.value();
             }
+
             Azure::Storage::Blobs::Models::BlobItem blobItem;
             blobItem.Name = blob_name;
             output.Blobs.push_back(blobItem);
