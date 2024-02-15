@@ -70,6 +70,25 @@ namespace arcticdb::entity {
     };
 } // namespace arcticdb::entity
 
+template<>
+struct fmt::formatter<arcticdb::entity::RefKey>
+{
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx)
+    {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    auto format(const arcticdb::entity::RefKey& number, FormatContext& ctx)
+    {
+        // FIXME: this needs to be reviewed and adapted depending on what's expected
+        if (number.type() == KeyType::UNDEFINED)
+            return fmt::format_to(ctx.out(), "UNDEFINED");
+
+        return fmt::format_to(ctx.out(), "{}{{{}}}", number.type(), number.id());
+    }
+};
 
 //TODO this is operating on the pretty-printed version and is needlessly inefficient
 namespace std {
