@@ -108,23 +108,18 @@ bool MockAzureClient::blob_exists(const std::string& blob_name) {
     return azure_contents.find(blob_name) != azure_contents.end();
 }
 
-constexpr auto page_size = 10;
 Azure::Storage::Blobs::ListBlobsPagedResponse MockAzureClient::list_blobs(const std::string& prefix) {
     Azure::Storage::Blobs::ListBlobsPagedResponse output;
-    int count_matches = 0;
-
     for (auto& key : azure_contents){
         if (key.first.rfind(prefix, 0) == 0){
             auto blob_name = key.first;
-            auto maybe_exception = has_failure_trigger(blob_name, AzureOperation::READ);
+            auto maybe_exception = has_failure_trigger(blob_name, AzureOperation::LIST);
             if (maybe_exception.has_value()) {
                 throw maybe_exception.value();
             }
             Azure::Storage::Blobs::Models::BlobItem blobItem;
             blobItem.Name = blob_name;
-            output.Blobs.emplace_back(blobItem);
-            if(count_matches % page_size == 0) output.MoveToNextPage();
-            count_matches++;
+            output.Blobs.push_back(blobItem);
         }
     }
 
