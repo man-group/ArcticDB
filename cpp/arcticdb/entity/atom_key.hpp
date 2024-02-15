@@ -221,22 +221,34 @@ inline AtomKey null_key() {
 // format. Transformation of keys for persistence is handled elsewhere.
 namespace fmt {
 
-using namespace arcticdb::entity;
+    template<class FormatTag>
+    struct formatter<arcticdb::entity::FormattableRef< arcticdb::entity::AtomKey, FormatTag>> {
+        template<typename ParseContext>
+        constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
 
-template<class FormatTag>
-struct formatter<FormattableRef < AtomKey, FormatTag>> {
-template<typename ParseContext>
-constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+        template<typename FormatContext>
+        auto format(const arcticdb::entity::FormattableRef<arcticdb::entity::AtomKey, FormatTag>& f, FormatContext& ctx) const {
+            const auto& key = f.ref;
+            return fmt::v9::format_to(ctx.out(), FMT_STRING(FormatTag::format),
+                key.type(), key.id(), key.version_id(),
+                key.content_hash(), key.creation_ts(), tokenized_index(key.start_index()), tokenized_index(key.end_index()));
+        }
 
-template<typename FormatContext>
-auto format(const FormattableRef <arcticdb::entity::AtomKey, FormatTag> &f, FormatContext &ctx) const {
-    const auto &key = f.ref;
-    return fmt::v9::format_to(ctx.out(), FMT_STRING(FormatTag::format),
-                    key.type(), key.id(), key.version_id(),
-                     key.content_hash(), key.creation_ts(), tokenized_index(key.start_index()), tokenized_index(key.end_index()));
-}
+    };
 
-};
+    template<>
+    struct formatter<arcticdb::entity::AtomKey> {
+        template<typename ParseContext>
+        constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
+
+        template<typename FormatContext>
+        auto format(const arcticdb::entity::AtomKey& value, FormatContext& ctx) const {
+            using RefType = arcticdb::entity::FormattableRef< arcticdb::entity::AtomKey >;
+            formatter<RefType> f;
+            return f.format(RefType{ value }, ctx);
+        }
+
+    };
 
 }
 
