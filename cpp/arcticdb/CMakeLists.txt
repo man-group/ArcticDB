@@ -414,8 +414,8 @@ set(arcticdb_srcs
         storage/mongo/mongo_storage.cpp
         storage/s3/nfs_backed_storage.cpp
         storage/s3/s3_api.cpp
-        storage/s3/real_s3_client.cpp
-        storage/s3/mock_s3_client.cpp
+        storage/s3/s3_real_client.cpp
+        storage/s3/s3_mock_client.cpp
         storage/s3/s3_storage.cpp
         storage/s3/s3_storage_tool.cpp
         storage/storage_factory.cpp
@@ -799,6 +799,7 @@ if(${TEST})
             version/test/test_version_store.cpp
             version/test/test_sorting_info_state_machine.cpp
             version/test/version_map_model.hpp
+            storage/test/common.hpp
     )
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755

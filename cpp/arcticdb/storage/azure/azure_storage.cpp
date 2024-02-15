@@ -293,9 +293,10 @@ AzureStorage::AzureStorage(const LibraryPath &library_path, OpenMode mode, const
     root_folder_(object_store_utils::get_root_folder(library_path)),
     request_timeout_(conf.request_timeout() == 0 ? 60000 : conf.request_timeout()) {
         if(conf.use_mock_storage_for_testing()) {
+            ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using Mock Azure storage");
             azure_client_ = std::make_unique<MockAzureClient>();
-        }
-        else {
+        } else {
+            ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using Real Azure storage");
             azure_client_ = std::make_unique<RealAzureClient>(conf);
         }
         if (conf.ca_cert_path().empty())

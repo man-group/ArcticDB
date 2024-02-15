@@ -27,9 +27,6 @@ enum class AzureOperation{
 
 class MockAzureClient : public AzureClientWrapper {
 
-private:
-    // Stores a mapping from blob_name to a Segment.
-    std::map<std::string, Segment> azure_contents;
 public:
 
     void write_blob(
@@ -55,6 +52,11 @@ public:
             const std::string& s3_object_name,
             AzureOperation operation_to_fail,
             Azure::Core::Http::HttpStatusCode error_to_fail_with);
+
+private:
+    // Stores a mapping from blob_name to a Segment.
+    std::map<std::string, Segment> azure_contents;
+
 };
 
 }
