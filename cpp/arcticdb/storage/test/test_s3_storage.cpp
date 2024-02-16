@@ -10,12 +10,11 @@
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/s3/s3_api.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
-#include <arcticdb/storage/s3/mock_s3_client.hpp>
+#include <arcticdb/storage/s3/s3_mock_client.hpp>
 #include <arcticdb/storage/s3/detail-inl.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/variant_key.hpp>
-#include <arcticdb/stream/test/stream_test_common.hpp>
-#include <arcticdb/codec/codec.hpp>
+#include <arcticdb/storage/test/common.hpp>
 
 #include <aws/core/Aws.h>
 
@@ -226,52 +225,6 @@ protected:
     S3Storage store;
 };
 
-VariantKey get_test_key(std::string name){
-    auto builder = atom_key_builder();
-    return builder.build<KeyType::TABLE_DATA>(name);
-}
-
-Segment get_test_segment(){
-    auto segment_in_memory = get_test_frame<arcticdb::stream::TimeseriesIndex>("symbol", {}, 10, 0).segment_;
-    auto codec_opts = proto::encoding::VariantCodec();
-    return encode_dispatch(std::move(segment_in_memory), codec_opts, EncodingVersion::V2);
-}
-
-void write_in_store(S3Storage& store, std::string symbol){
-    auto variant_key = get_test_key(symbol);
-    store.write(KeySegmentPair(std::move(variant_key), get_test_segment()));
-}
-
-bool exists_in_store(S3Storage& store, std::string symbol){
-    auto variant_key = get_test_key(symbol);
-    return store.key_exists(variant_key);
-}
-
-std::string read_in_store(S3Storage& store, std::string symbol){
-    auto variant_key = get_test_key(symbol);
-    auto opts = ReadKeyOpts{};
-    auto result = store.read(std::move(variant_key), opts);
-    return std::get<StringId>(result.atom_key().id());
-}
-
-void remove_in_store(S3Storage& store, std::vector<std::string> symbols){
-    auto to_remove = std::vector<VariantKey>();
-    for (auto& symbol : symbols){
-        to_remove.emplace_back(get_test_key(symbol));
-    }
-    auto opts = RemoveOpts();
-    store.remove(Composite(std::move(to_remove)), opts);
-}
-
-std::set<std::string> list_in_store(S3Storage& store){
-    auto keys = std::set<std::string>();
-    store.iterate_type(KeyType::TABLE_DATA, [&keys](VariantKey&& key){
-        auto atom_key = std::get<AtomKey>(key);
-        keys.emplace(std::get<StringId>(atom_key.id()));
-    });
-    return keys;
-}
-
 TEST_F(S3StorageFixture, test_key_exists){
     write_in_store(store, "symbol");
 
@@ -312,7 +265,7 @@ TEST_F(S3StorageFixture, test_remove) {
     // Remove 2 and local fail on 3
     ASSERT_THROW(
         remove_in_store(store, {"symbol_2", MockS3Client::get_failure_trigger("symbol_3", S3Operation::DELETE_LOCAL, Aws::S3::S3Errors::NETWORK_CONNECTION)}),
-        KeyNotFoundException);
+        UnexpectedS3ErrorException);
     remaining = std::set<std::string>{"symbol_3", "symbol_4"};
     ASSERT_EQ(list_in_store(store), remaining);
 

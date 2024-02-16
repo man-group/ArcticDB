@@ -5,7 +5,7 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/storage/s3/mock_s3_client.hpp>
+#include <arcticdb/storage/s3/s3_mock_client.hpp>
 #include <arcticdb/storage/s3/s3_client_wrapper.hpp>
 
 #include <arcticdb/util/preconditions.hpp>
@@ -117,7 +117,7 @@ S3Result<DeleteOutput> MockS3Client::delete_objects(
     for (auto& s3_object_name : s3_object_names){
         auto maybe_error = has_failure_trigger(s3_object_name, S3Operation::DELETE_LOCAL);
         if (maybe_error.has_value()) {
-            output.failed_deletes.emplace_back(s3_object_name);
+            output.failed_deletes.push_back({s3_object_name, "Sample error message"});
         }
         else {
             s3_contents.erase({bucket_name, s3_object_name});
