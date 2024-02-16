@@ -58,7 +58,7 @@ namespace arcticdb::entity {
         std::string_view view() const { if(str_.empty()) set_string(); return std::string_view{str_}; }
 
         void set_string() const {
-            str_ = fmt::format("{}", *this);
+            str_ = ""; // fmt::format("{}", *this);
         }
     private:
 

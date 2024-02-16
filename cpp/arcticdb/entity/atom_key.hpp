@@ -111,7 +111,7 @@ class AtomKeyImpl {
     }
 
     void set_string() const {
-        str_ = fmt::format("{}", *this);
+        str_ = ""; //fmt::format("{}", *this);
     }
 
     std::string_view view() const { if(str_.empty()) set_string(); return {str_}; }
@@ -224,15 +224,18 @@ namespace fmt {
     template<class FormatTag>
     struct formatter<arcticdb::entity::FormattableRef< arcticdb::entity::AtomKey, FormatTag>> {
         template<typename ParseContext>
-        constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
+        constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
 
         template<typename FormatContext>
-        auto format(const arcticdb::entity::FormattableRef<arcticdb::entity::AtomKey, FormatTag>& f, FormatContext& ctx) const {
-            const auto& key = f.ref;
+        auto format(const arcticdb::entity::FormattableRef<arcticdb::entity::AtomKey, FormatTag> &f,
+                    FormatContext &ctx) const {
+            const auto &key = f.ref;
             return fmt::format_to(ctx.out(), FMT_STRING(FormatTag::format),
-                key.type(), key.id(), key.version_id(),
-                key.content_hash(), key.creation_ts(), tokenized_index(key.start_index()), tokenized_index(key.end_index()));
+                                  key.type(), key.id(), key.version_id(),
+                                  key.content_hash(), key.creation_ts(), tokenized_index(key.start_index()),
+                                  tokenized_index(key.end_index()));
         }
+    };
 
     template<>
     struct formatter<arcticdb::entity::AtomKey> {

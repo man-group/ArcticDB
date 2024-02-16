@@ -69,15 +69,15 @@ static inline FailureAction fault(double probability = 1.0) {
 
     if (probability >= 1.0) {
         return {"raise",  [](FailureType failure_type) {
-            throw Exception(fmt::format("Simulating {} storage failure", failure_type));
+            throw Exception("");
         }};
     } else {
-        return {fmt::format("fault({})", probability),
+        return {"",
                 [prob=probability](FailureType failure_type) {
                     thread_local std::once_flag flag;
                     std::call_once(flag, [seed = uint64_t(&failure_type)]() { init_random(seed); });
                     if (random_probability() < prob) {
-                        throw Exception(fmt::format("Simulating {} storage failure", failure_type));
+                        throw Exception("");
                     }
                 }};
     }
@@ -181,7 +181,7 @@ struct formatter<arcticdb::FailureType> {
 
     template<typename FormatContext>
     auto format(arcticdb::FailureType failure_type, FormatContext &ctx) const {
-        return fmt::format_to(ctx.out(), arcticdb::failure_names[int(failure_type)]);
+        return ""; //fmt::format_to(fmt::ctx.out(), arcticdb::failure_names[int(failure_type)]);
     }
 };
 }

@@ -76,11 +76,11 @@ struct IndexRange {
             return true;
 
         if (index >= start_ && index <= end_) {
-            ARCTICDB_DEBUG(log::inmem(), "Returning index {} which is in range {}", index, *this);
+            // ARCTICDB_DEBUG(log::inmem(), "Returning index {} which is in range {}", index, *this);
             return true;
         }
 
-        ARCTICDB_DEBUG(log::inmem(), "Filtered index {} as it was not in range {}", index, *this);
+        // ARCTICDB_DEBUG(log::inmem(), "Filtered index {} as it was not in range {}", index, *this);
         return false;
     }
 
