@@ -12,7 +12,7 @@
 #include <arcticdb/storage/lmdb/lmdb_storage.hpp>
 #include <arcticdb/storage/memory/memory_storage.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
-#include <arcticdb/storage/s3/mock_s3_client.hpp>
+#include <arcticdb/storage/s3/s3_mock_client.hpp>
 #include <arcticdb/util/buffer.hpp>
 
 #include <filesystem>

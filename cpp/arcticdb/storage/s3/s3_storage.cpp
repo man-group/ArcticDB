@@ -39,8 +39,8 @@
 
 #include <boost/interprocess/streams/bufferstream.hpp>
 
-#include <arcticdb/storage/s3/real_s3_client.hpp>
-#include <arcticdb/storage/s3/mock_s3_client.hpp>
+#include <arcticdb/storage/s3/s3_real_client.hpp>
+#include <arcticdb/storage/s3/s3_mock_client.hpp>
 #include <arcticdb/storage/s3/detail-inl.hpp>
 
 #undef GetMessage
