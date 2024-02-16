@@ -323,7 +323,7 @@ storage::KeySegmentPair MongoClientImpl::read_segment(const std::string &databas
             StorageFailureSimulator::instance()->go(FailureType::READ);
 
         auto result = collection.find_one(document{} << "key" << fmt::format("{}", key) << "stream_id" <<
-                                                                                                      fmt::format("{}", stream_id) << finalize);
+                                                                                                       fmt::format("{}", stream_id) << finalize);
         if (result) {
             const auto &doc = result->view();
             auto size = doc["total_size"].get_int64().value;
@@ -383,10 +383,10 @@ void MongoClientImpl::remove_keyvalue(const std::string &database_name,
     mongocxx::stdx::optional<mongocxx::result::delete_result> result;
     if (std::holds_alternative<RefKey>(key)) {
         result = collection.delete_many(document{} << "key" << fmt::format("{}", key) << "stream_id" <<
-                                                  fmt::format("{}", variant_key_id(key)) << finalize);
+                                                   fmt::format("{}", variant_key_id(key)) << finalize);
     } else {
         result = collection.delete_one(document{} << "key" << fmt::format("{}", key) << "stream_id" <<
-                                                 fmt::format("{}", variant_key_id(key)) << finalize);
+                                                  fmt::format("{}", variant_key_id(key)) << finalize);
     }
     ARCTICDB_SUBSAMPLE(MongoStorageRemoveDelOne, 0)
     if (result) {
