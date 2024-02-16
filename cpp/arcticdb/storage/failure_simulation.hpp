@@ -68,7 +68,7 @@ static inline FailureAction fault(double probability = 1.0) {
     util::check_arg(probability >= 0, "Bad probability: {}", probability);
 
     if (probability >= 1.0) {
-        return {"raise",  [](FailureType failure_type) {
+        return {"raise",  [](FailureType /* failure_type */) {
             throw Exception("");
         }};
     } else {
