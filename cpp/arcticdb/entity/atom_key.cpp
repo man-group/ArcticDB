@@ -13,12 +13,12 @@
 namespace fmt {
 
     template<class FormatTag>
-    struct formatter<arcticdb::entity::FormattableRef< arcticdb::entity::AtomKey, FormatTag>> {
+    struct formatter<arcticdb::entity::FormattableRef< arcticdb::entity::AtomKeyImpl, FormatTag>> {
     template<typename ParseContext>
     constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
 
     template<typename FormatContext>
-    auto format(const arcticdb::entity::FormattableRef<arcticdb::entity::AtomKey, FormatTag> &f,
+    auto format(const arcticdb::entity::FormattableRef<arcticdb::entity::AtomKeyImpl, FormatTag> &f,
                 FormatContext &ctx) const {
         const auto &key = f.ref;
         return fmt::format_to(ctx.out(), FMT_STRING(FormatTag::format),
@@ -29,13 +29,13 @@ namespace fmt {
 };
 
 template<>
-struct formatter<arcticdb::entity::AtomKey> {
+struct formatter<arcticdb::entity::AtomKeyImpl> {
     template<typename ParseContext>
     constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
 
     template<typename FormatContext>
-    auto format(const arcticdb::entity::AtomKey& value, FormatContext& ctx) const {
-        using RefType = arcticdb::entity::FormattableRef< arcticdb::entity::AtomKey >;
+    auto format(const arcticdb::entity::AtomKeyImpl& value, FormatContext& ctx) const {
+        using RefType = arcticdb::entity::FormattableRef< arcticdb::entity::AtomKeyImpl >;
         formatter<RefType> f;
         return f.format(RefType{ value }, ctx);
     }

@@ -204,7 +204,7 @@ set(arcticdb_srcs
         entity/performance_tracing.hpp
         entity/protobuf_mappings.hpp
         entity/read_result.hpp
-        entity/ref_key.hpp
+        entity/ref_key.cpp
         entity/serialized_key.hpp
         entity/type_conversion.hpp
         entity/types.hpp
