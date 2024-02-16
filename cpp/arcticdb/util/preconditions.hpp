@@ -22,18 +22,18 @@ struct Raise {
     static_assert(get_error_category(code) == error_category);
 
     template<typename...Args>
-    [[noreturn]] constexpr void operator()(fmt::format_string<Args...> format, Args&&...args) const {
-        constexpr auto combo_format = fmt::format(FMT_COMPILE("{} {}"), error_code_data<code>.name_, format);
-        std::string msg = fmt::format(combo_format, std::forward<Args>(args)...);
+    [[noreturn]] void operator()(fmt::format_string<Args...> format, Args&&...args) const {
+        std::string combo_format = fmt::format(FMT_COMPILE("{} {}"), error_code_data<code>.name_, format);
+        std::string msg = fmt::format(fmt::runtime(combo_format), std::forward<Args>(args)...);
         if constexpr(error_category == ErrorCategory::INTERNAL)
             log::root().error(msg);
         throw_error<code>(msg);
     }
 
     template<typename FormatString, typename...Args>
-    [[noreturn]] constexpr void operator()(FormatString format, Args&&...args) const {
-        auto combo_format = fmt::format(FMT_COMPILE("{} {}"), error_code_data<code>.name_, format);
-        std::string msg = fmt::format(combo_format, std::forward<Args>(args)...);
+    [[noreturn]] void operator()(FormatString format, Args&&...args) const {
+        std::string combo_format = fmt::format(FMT_COMPILE("{} {}"), error_code_data<code>.name_, format);
+        std::string msg = fmt::format(fmt::runtime(combo_format), std::forward<Args>(args)...);
         if constexpr(error_category == ErrorCategory::INTERNAL)
             log::root().error(msg);
         throw_error<code>(msg);
@@ -187,7 +187,7 @@ struct formatter<A, std::enable_if_t<std::is_invocable_v<A>,char>> {
 
     template <typename FormatContext>
     auto format(const A &a, FormatContext &ctx) const {
-        return fmt::v9::format_to(ctx.out(), "~({})", a());
+        return fmt::format_to(ctx.out(), "~({})", a());
     }
 };
 }

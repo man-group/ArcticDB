@@ -229,12 +229,10 @@ namespace fmt {
         template<typename FormatContext>
         auto format(const arcticdb::entity::FormattableRef<arcticdb::entity::AtomKey, FormatTag>& f, FormatContext& ctx) const {
             const auto& key = f.ref;
-            return fmt::v9::format_to(ctx.out(), FMT_STRING(FormatTag::format),
+            return fmt::format_to(ctx.out(), FMT_STRING(FormatTag::format),
                 key.type(), key.id(), key.version_id(),
                 key.content_hash(), key.creation_ts(), tokenized_index(key.start_index()), tokenized_index(key.end_index()));
         }
-
-    };
 
     template<>
     struct formatter<arcticdb::entity::AtomKey> {

@@ -143,7 +143,7 @@ TEST_F(IngestionStressStore, ScalarIntDynamicSchema) {
     FieldCollection columns_first;
     FieldCollection columns_second;
     for (timestamp i = 0; i < timestamp(NumColumnsFirstWrite); ++i) {
-        columns_first.add_field(scalar_field(DataType::UINT64,  fmt::format("col_{}", i)));
+        columns_first.add_field(scalar_field(DataType::UINT64, fmt::format("col_{}", i)));
     }
 
     const auto index = as::TimeseriesIndex::default_index();
@@ -167,7 +167,7 @@ TEST_F(IngestionStressStore, ScalarIntDynamicSchema) {
 
     // Now try and write rows with more columns
     for (timestamp i = 0; i < timestamp(NumColumnsSecondWrite); ++i) {
-        columns_second.add_field(scalar_field(DataType::UINT64,  fmt::format("col_{}", i)));
+        columns_second.add_field(scalar_field(DataType::UINT64, fmt::format("col_{}", i)));
     }
     auto new_descriptor = index.create_stream_descriptor(symbol, columns_second.clone());
 

@@ -436,10 +436,10 @@ struct formatter<VersionQuery> {
     template<typename FormatContext>
     auto format(const VersionQuery& q, FormatContext& ctx) const {
         return arcticdb::util::variant_match(q.content_,
-                [&ctx](const SpecificVersionQuery& s) { return fmt::v9::format_to(ctx.out(), "version {}", s.version_id_); },
-                [&ctx](const SnapshotVersionQuery& s) { return fmt::v9::format_to(ctx.out(), "snapshot '{}'", s.name_); },
-                [&ctx](const TimestampVersionQuery& t) { return fmt::v9::format_to(ctx.out(), "{}", t.timestamp_); },
-                [&ctx](const std::monostate&) { return fmt::v9::format_to(ctx.out(), "latest"); });
+                [&ctx](const SpecificVersionQuery& s) { return fmt::format_to(ctx.out(), "version {}", s.version_id_); },
+                [&ctx](const SnapshotVersionQuery& s) { return fmt::format_to(ctx.out(), "snapshot '{}'", s.name_); },
+                [&ctx](const TimestampVersionQuery& t) { return fmt::format_to(ctx.out(), "{}", t.timestamp_); },
+                [&ctx](const std::monostate&) { return fmt::format_to(ctx.out(), "latest"); });
     }
 };
 }

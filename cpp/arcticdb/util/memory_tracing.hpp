@@ -56,9 +56,9 @@ struct formatter<arcticdb::util::MemBytes> {
 
         auto suffixes = MemBytes::suffixes();
         if (count - floor(count) == 0.0)
-            return fmt::v9::format_to(ctx.out(), "{:d}{:s}", (int) count, suffixes[s]);
+            return fmt::format_to(ctx.out(), "{:d}{:s}", (int) count, suffixes[s]);
         else
-            return fmt::v9::format_to(ctx.out(), "{:.1f}{:s}", count, suffixes[s]);
+            return fmt::format_to(ctx.out(), "{:.1f}{:s}", count, suffixes[s]);
     }
 };
 

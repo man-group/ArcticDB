@@ -289,7 +289,7 @@ struct fmt::formatter<arcticdb::entity::KeyType> {
     template<typename FormatContext>
     auto format(const arcticdb::entity::KeyType k, FormatContext &ctx) const {
         using namespace arcticdb::entity;
-        return  fmt::format_to(ctx.out(), "{}", key_type_short_name(k));
+        return fmt::format_to(ctx.out(), "{}", key_type_short_name(k));
     }
 };
 

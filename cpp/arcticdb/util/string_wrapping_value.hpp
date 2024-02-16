@@ -62,7 +62,7 @@ struct formatter<StringWrappingValue<BaseType>> {
 
     template<typename FormatContext>
     auto format(const StringWrappingValue<BaseType> &srv, FormatContext &ctx) const {
-        return fmt::v9::format_to(ctx.out(), "{}", srv.value);
+        return fmt::format_to(ctx.out(), "{}", srv.value);
     }
 };
 

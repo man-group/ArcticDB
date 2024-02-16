@@ -327,9 +327,9 @@ struct formatter<arcticdb::entity::StreamDescriptor> {
     template<typename FormatContext>
     auto format(const arcticdb::entity::StreamDescriptor &sd, FormatContext &ctx) const {
         if(!sd.fields_ptr())
-            return fmt::v9::format_to(ctx.out(), "TSD<tsid={}, idx={}, fields=empty>", sd.id(), sd.index());
+            return fmt::format_to(ctx.out(), "TSD<tsid={}, idx={}, fields=empty>", sd.id(), sd.index());
 
-        return fmt::v9::format_to(ctx.out(), "TSD<tsid={}, idx={}, fields={}>", sd.id(), sd.index(), sd.fields());
+        return fmt::format_to(ctx.out(), "TSD<tsid={}, idx={}, fields={}>", sd.id(), sd.index(), sd.fields());
     }
 };
 
@@ -340,7 +340,7 @@ struct formatter<arcticdb::entity::StreamDescriptor::Proto> {
 
     template<typename FormatContext>
     auto format(const arcticdb::entity::StreamDescriptor::Proto &sd, FormatContext &ctx) const {
-        return fmt::v9::format_to(ctx.out(), "{}", sd.DebugString());
+        return fmt::format_to(ctx.out(), "{}", sd.DebugString());
     }
 };
 

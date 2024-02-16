@@ -31,7 +31,7 @@ bool is_py_boolean(PyObject* obj) {
 std::variant<StringEncodingError, PyStringWrapper> pystring_to_buffer(PyObject *obj, bool is_owned) {
     if(is_unicode(obj)) {
         return StringEncodingError(
-            fmt::format("Unexpected unicode in Python object with type {}", obj->ob_type->tp_name));
+           fmt::format("Unexpected unicode in Python object with type {}", obj->ob_type->tp_name));
     }
     char *buffer;
     ssize_t length;
@@ -85,7 +85,7 @@ std::tuple<ValueType, uint8_t, ssize_t> determine_python_array_type(PyObject** b
 std::variant<StringEncodingError, PyStringWrapper> py_unicode_to_buffer(PyObject *obj, std::optional<ScopedGILLock>& scoped_gil_lock) {
     if(!is_unicode(obj)) {
         return StringEncodingError(
-                fmt::format("Unexpected non-unicode in Python object with type {}", obj->ob_type->tp_name));
+               fmt::format("Unexpected non-unicode in Python object with type {}", obj->ob_type->tp_name));
     }
     if (PyUnicode_IS_COMPACT_ASCII(obj)) {
         return PyStringWrapper(reinterpret_cast<char *>(PyUnicode_DATA(obj)), PyUnicode_GET_LENGTH(obj));

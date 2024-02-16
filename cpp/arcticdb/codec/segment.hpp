@@ -293,7 +293,7 @@ struct formatter<arcticdb::EncodingVersion> {
             break;
         default:break;
         }
-        return fmt::v9::format_to(ctx.out(), "{:c}", c);
+        return fmt::format_to(ctx.out(), "{:c}", c);
     }
 };
 

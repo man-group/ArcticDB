@@ -150,11 +150,11 @@ public:
         interval_results results{};
         (*it).second->get_results(results);
         if(results.count > 1) {
-            auto buffer =  fmt::format("{}:\truns: {}\ttotal time: {:.6f}\tmean: {:.6f}",
+            auto buffer = fmt::format("{}:\truns: {}\ttotal time: {:.6f}\tmean: {:.6f}",
                 (*it).first.c_str(), results.count, results.total,  results.mean);
             ret.assign(buffer);
         } else {
-            auto buffer =  fmt::format("{}\t{:.6f}", (*it).first.c_str(), results.total);
+            auto buffer = fmt::format("{}\t{:.6f}", (*it).first.c_str(), results.total);
             ret.assign(buffer);
         }
         return ret;

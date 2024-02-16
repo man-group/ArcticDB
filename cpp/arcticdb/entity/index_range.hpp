@@ -163,7 +163,7 @@ struct formatter<arcticdb::entity::TimestampRange> {
 
     template<typename FormatContext>
     auto format(const arcticdb::entity::TimestampRange &r, FormatContext &ctx) const {
-        return fmt::v9::format_to(ctx.out(), "{}-{}", r.first, r.second);
+        return fmt::format_to(ctx.out(), "{}-{}", r.first, r.second);
     }
 };
 
