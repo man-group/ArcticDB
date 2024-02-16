@@ -194,7 +194,7 @@ set(arcticdb_srcs
         column_store/memory_segment_impl.hpp
         column_store/row_ref.hpp
         column_store/string_pool.hpp
-        entity/atom_key.hpp
+        entity/atom_key.cpp
         entity/frame_and_descriptor.hpp
         entity/index_range.hpp
         entity/key.hpp
