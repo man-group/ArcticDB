@@ -170,16 +170,11 @@ struct formatter<arcticdb::entity::TimestampRange> {
 template<>
 struct formatter<arcticdb::entity::IndexRange> {
     template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
 
     template<typename FormatContext>
     auto format(const arcticdb::entity::IndexRange& r, FormatContext& ctx) const {
-        // FIXME: this is temporary and should be modified to match the expected output
-        return fmt::v9::format_to(ctx.out(), "{}{},{}{}"
-            , r.start_closed_ ? '[' : '('
-            , r.start_, r.end_
-            , r.end_closed_ ? ']' : ')'
-        );
+        return fmt::format_to(ctx.out(), "{}-{}", r.start_, r.end_);
     }
 };
 
