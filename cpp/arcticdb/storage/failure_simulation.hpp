@@ -27,12 +27,13 @@ enum class FailureType : int {
     DELETE,
 };
 
-static const char* failure_names[] = {
+/* static const char* failure_names[] = {
         "WRITE",
         "READ",
         "ITERATE",
         "DELETE",
 };
+*/
 
 /** Function holder with a description. */
 struct FailureAction {
