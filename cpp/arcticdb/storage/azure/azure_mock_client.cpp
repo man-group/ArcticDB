@@ -34,7 +34,7 @@ std::string MockAzureClient::get_failure_trigger(
     return fmt::format("{}#Failure_{}_{}", blob_name, operation_to_string(operation_to_fail), (int)error_to_fail_with);
 }
 
-Azure::Core::RequestFailedException get_exception(const std::string &message, Azure::Core::Http::HttpStatusCode status_code) {
+Azure::Core::RequestFailedException get_exception(const std::string& message, Azure::Core::Http::HttpStatusCode status_code) {
     auto rawResponse = std::make_unique<Azure::Core::Http::RawResponse>(0, 0, status_code, message);
     auto exception = Azure::Core::RequestFailedException(rawResponse);
 
@@ -58,8 +58,8 @@ std::optional<Azure::Core::RequestFailedException> has_failure_trigger(const std
 }
 
 void MockAzureClient::write_blob(
-        const std::string &blob_name,
-        arcticdb::Segment &&segment,
+        const std::string& blob_name,
+        arcticdb::Segment&& segment,
         const Azure::Storage::Blobs::UploadBlockBlobFromOptions&,
         unsigned int) {
 

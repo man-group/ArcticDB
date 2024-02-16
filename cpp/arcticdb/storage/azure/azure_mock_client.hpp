@@ -49,7 +49,7 @@ public:
     Azure::Storage::Blobs::ListBlobsPagedResponse list_blobs(const std::string& prefix) override;
 
     static std::string get_failure_trigger(
-            const std::string& s3_object_name,
+            const std::string& blob_name,
             AzureOperation operation_to_fail,
             Azure::Core::Http::HttpStatusCode error_to_fail_with);
 
