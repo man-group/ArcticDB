@@ -8,6 +8,9 @@ enable_testing()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# We do not need any compilers' extensions, so we disable them.
+set(CMAKE_CXX_EXTENSIONS OFF)
+
 option(
     ARCTICDB_USING_CONDA
     "Whether ArcticDB's build system relies on conda for resolving its dependencies."
