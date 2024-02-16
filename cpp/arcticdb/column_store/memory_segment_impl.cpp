@@ -442,23 +442,22 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::truncate(
     }
 
     for (const auto&& [idx, column] : folly::enumerate(columns_)) {
-        const DataType column_type = column->type().data_type();
+        const TypeDescriptor column_type = column->type();
         const Field& field = descriptor_->field(idx);
         std::shared_ptr<Column> truncated_column = Column::truncate(column, start_row, end_row);
-
-        if (is_sequence_type(column_type) && reconstruct_string_pool) {
-            ChunkedBuffer& truncated_buffer = truncated_column->data().buffer();
-            for (position_t row = 0; row < truncated_column->row_count(); ++row) {
-                const entity::position_t offset_val = get_offset_string_at(row, truncated_buffer);
-                if (is_a_string(offset_val)) {
-                    const std::string_view string = get_string_from_pool(offset_val, *string_pool_);
-                    const StringPool::offset_t new_offset = output->string_pool().get(string).offset();
-                    set_offset_string_at(row, truncated_buffer, new_offset);
-                }
+        column_type.visit_tag([&](auto tag) {
+            if constexpr (is_sequence_type(decltype(tag)::data_type())) {
+                Column::transform<decltype(tag), decltype(tag)>(
+                    *truncated_column,
+                    *truncated_column,
+                    [this, &output](auto string_pool_offset) {
+                        const std::string_view string = get_string_from_pool(string_pool_offset, *string_pool_);
+                        return output->string_pool().get(string).offset();
+                    }
+                );
             }
-        }
-
-        output->add_column(field, truncated_column);
+        });
+        output->add_column(field, std::move(truncated_column));
     }
     output->attach_descriptor(descriptor_);
     return output;

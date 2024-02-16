@@ -669,6 +669,9 @@ public:
      * When adding new uses of these static methods, add an internal::check<...>(f.heapAllocatedMemory() == 0,...)
      * and run all of the tests in CI on all supported platforms. We do not want these checks in the released code,
      * but also do not want any passed in lambdas to be heap allocated.
+     *
+     * TODO: Use type-deduced functor (with enable_if to verify it's in/out types) in all functions similar to transform.
+     *   In case C++20 is available use concepts.
      */
 
     template<typename input_tdt>
@@ -680,13 +683,21 @@ public:
         });
     }
 
-    template<typename input_tdt, typename output_tdt>
+    template <
+        typename input_tdt,
+        typename output_tdt,
+        typename FunctorT,
+        typename = std::enable_if_t<std::is_invocable_r_v<
+            typename output_tdt::DataTypeTag::raw_type,
+            FunctorT,
+            typename input_tdt::DataTypeTag::raw_type>>>
     static void transform(const Column& input_column,
                           Column& output_column,
-                          folly::Function<typename output_tdt::DataTypeTag::raw_type(typename input_tdt::DataTypeTag::raw_type)>&& f) {
+                          FunctorT&& f
+    ) {
         auto input_data = input_column.data();
         auto output_data = output_column.data();
-        std::transform(input_data.cbegin<input_tdt>(), input_data.cend<input_tdt>(), output_data.begin<output_tdt>(), std::move(f));
+        std::transform(input_data.cbegin<input_tdt>(), input_data.cend<input_tdt>(), output_data.begin<output_tdt>(), std::forward<FunctorT>(f));
     }
 
     template<typename left_input_tdt, typename right_input_tdt, typename output_tdt>
