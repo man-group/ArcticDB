@@ -75,7 +75,7 @@ struct formatter<arcticdb::entity::VariantKey> {
 
     template<typename FormatContext>
     auto format(const arcticdb::entity::VariantKey &k, FormatContext &ctx) const {
-        return format_to(ctx.out(), "{}", variant_key_view(k));
+        return fmt::format_to(ctx.out(), "{}", variant_key_view(k));
     }
 };
 

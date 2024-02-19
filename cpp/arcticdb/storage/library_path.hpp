@@ -146,7 +146,7 @@ struct formatter<DefaultStringViewable> {
 
     template<typename FormatContext>
     auto format(const DefaultStringViewable &dsv, FormatContext &ctx) const {
-        return format_to(ctx.out(), "{}", std::string_view{dsv});
+        return fmt::format_to(ctx.out(), "{}", std::string_view{dsv});
     }
 };
 
@@ -160,7 +160,7 @@ struct formatter<LibraryPath> {
     template<typename FormatContext>
     auto format(const LibraryPath &lib, FormatContext &ctx) const {
         auto out = ctx.out();
-        format_to(out, "{}", lib.to_delim_path());
+        fmt::format_to(out, "{}", lib.to_delim_path());
 
         return out;
     }

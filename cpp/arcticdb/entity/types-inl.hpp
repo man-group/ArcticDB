@@ -100,7 +100,7 @@ struct formatter<arcticdb::entity::DataType> {
 
     template<typename FormatContext>
     auto format(arcticdb::entity::DataType dt, FormatContext &ctx) const {
-        return format_to(ctx.out(), datatype_to_str(dt));
+        return fmt::format_to(ctx.out(), fmt::runtime(datatype_to_str(dt)));
     }
 };
 
@@ -111,7 +111,7 @@ struct formatter<arcticdb::entity::Dimension> {
 
     template<typename FormatContext>
     auto format(arcticdb::entity::Dimension dim, FormatContext &ctx) const {
-        return format_to(ctx.out(), "{}", static_cast<uint32_t >(dim));
+        return fmt::format_to(ctx.out(), "{}", static_cast<uint32_t >(dim));
     }
 };
 
@@ -122,7 +122,7 @@ struct formatter<arcticdb::entity::TypeDescriptor> {
 
     template<typename FormatContext>
     auto format(const arcticdb::entity::TypeDescriptor &td, FormatContext &ctx) const {
-        return format_to(ctx.out(), "TD<type={}, dim={}>", td.data_type_, td.dimension_);
+        return fmt::format_to(ctx.out(), "TD<type={}, dim={}>", td.data_type_, td.dimension_);
     }
 };
 
@@ -134,7 +134,7 @@ struct formatter<arcticdb::entity::StreamId> {
     template<typename FormatContext>
     auto format(const arcticdb::entity::StreamId& tsid, FormatContext& ctx) const {
         return std::visit([&ctx](auto&& val) {
-            return format_to(ctx.out(), "{}", val);
+            return fmt::format_to(ctx.out(), "{}", val);
             }, tsid);
     }
 };

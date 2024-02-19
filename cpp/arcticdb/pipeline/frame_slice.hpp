@@ -309,7 +309,7 @@ struct formatter<T, std::enable_if_t<std::is_base_of_v<arcticdb::pipelines::Axis
 
     template <typename FormatContext>
     auto format(const T &rg, FormatContext &ctx) const {
-        return format_to(ctx.out(), "Range[{:d}, {:d}]", rg.first, rg.second);
+        return fmt::format_to(ctx.out(), "Range[{:d}, {:d}]", rg.first, rg.second);
     }
 };
 
@@ -320,7 +320,7 @@ struct formatter<T, std::enable_if_t<std::is_base_of_v<arcticdb::pipelines::Fram
 
     template <typename FormatContext>
     auto format(const T &slice, FormatContext &ctx) const {
-        return format_to(ctx.out(), "Rows: {}\tColumns: {}", slice.row_range, slice.col_range);
+        return fmt::format_to(ctx.out(), "Rows: {}\tColumns: {}", slice.row_range, slice.col_range);
     }
 };
 
@@ -331,7 +331,7 @@ struct formatter<arcticdb::pipelines::SliceAndKey> {
 
     template<typename FormatContext>
     auto format(arcticdb::pipelines::SliceAndKey sk, FormatContext &ctx) const {
-        return format_to(ctx.out(), "{}{}", sk.slice(), sk.key());
+        return fmt::format_to(ctx.out(), "{}{}", sk.slice(), sk.key());
     }
 };
 

@@ -142,7 +142,7 @@ namespace fmt {
 
         template<typename FormatContext>
         auto format(const StreamSink::PartialKey &pk, FormatContext &ctx) const {
-            return format_to(ctx.out(), "'{}:{}:{}:{}:{}",
+            return fmt::format_to(ctx.out(), "'{}:{}:{}:{}:{}",
                              pk.key_type, pk.stream_id, pk.version_id, pk.start_index, pk.end_index);
         }
     };
