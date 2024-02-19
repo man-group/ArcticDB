@@ -27,13 +27,29 @@ enum class FailureType : int {
     DELETE,
 };
 
-/* static const char* failure_names[] = {
+static const char* failure_names[] = {
         "WRITE",
         "READ",
         "ITERATE",
         "DELETE",
 };
-*/
+
+}
+
+namespace fmt {
+    template<>
+    struct formatter<arcticdb::FailureType> {
+        template<typename ParseContext>
+        constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+        template<typename FormatContext>
+        auto format(const arcticdb::FailureType failure_type, FormatContext &ctx) const {
+            return fmt::format_to(ctx.out(), fmt::runtime(arcticdb::failure_names[int(failure_type)]));
+        }
+    };
+}
+
+namespace arcticdb {
 
 /** Function holder with a description. */
 struct FailureAction {
@@ -69,16 +85,16 @@ static inline FailureAction fault(double probability = 1.0) {
     util::check_arg(probability >= 0, "Bad probability: {}", probability);
 
     if (probability >= 1.0) {
-        return {"raise",  [](FailureType /* failure_type */) {
-            throw Exception("");
+        return {"raise",  [](FailureType failure_type) {
+            throw Exception(fmt::format("Simulating {} storage failure", failure_type));
         }};
     } else {
-        return {"",
+        return {fmt::format("fault({})", probability),
                 [prob=probability](FailureType failure_type) {
                     thread_local std::once_flag flag;
                     std::call_once(flag, [seed = uint64_t(&failure_type)]() { init_random(seed); });
                     if (random_probability() < prob) {
-                        throw Exception("");
+                        throw Exception(fmt::format("Simulating {} storage failure", failure_type));
                     }
                 }};
     }
@@ -174,15 +190,3 @@ private:
 
 } //namespace arcticdb
 
-namespace fmt {
-template<>
-struct formatter<arcticdb::FailureType> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
-
-    template<typename FormatContext>
-    auto format(arcticdb::FailureType failure_type, FormatContext &ctx) const {
-        return ""; //fmt::format_to(fmt::ctx.out(), arcticdb::failure_names[int(failure_type)]);
-    }
-};
-}
