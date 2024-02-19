@@ -57,36 +57,70 @@ class TestResult:
         return 'PASS' if self.result else 'FAIL'
 
 
-def return_left(left, right):
-    return left
+def pd_mask_index_range(df, index_range, keep_range):
+    if not index_range:
+        return df
+    # either keep or remove data in the index range, according to keep_range
+    keep_mask = ((df.index >= index_range[0]) & (df.index <= index_range[1])
+                 if keep_range else
+                 (df.index < index_range[0]) | (df.index > index_range[1])
+                 )
+    return df[keep_mask]
 
 
-def pd_merge_replace(df1, df2):
-    # returns a df that has index from the union of (df1, df2) and values overriden with df2 where its index has values
-    df_union = df1.combine(df2, return_left)
-    df2_mask = df_union.index.isin(df2.index)
-    df_union[df2_mask] = df2
-    return df_union
+def pd_remove_secondary_index_levels(df):
+    # not a multi-index
+    if len(df.index.names) == 1:
+        return df
+    return df.reset_index(level=df.index.names[1:])
+
+
+def pd_restore_secondary_index_levels(df, original_level_names):
+    # not a multi-index
+    if len(original_level_names) == 1:
+        return df
+    return df.set_index(original_level_names[1:], append=True)
+
+
+def pd_mask_index_range_restore_index(df, index_range, keep_range, original_level_names):
+    df_masked = pd_mask_index_range(df, index_range, keep_range)
+    return pd_restore_secondary_index_levels(df_masked, original_level_names)
 
 
 def pd_delete_replace(df1, df2, date_range=None):
     # this is intended to be equivalent to arcticdb update
+    df1_primary = pd_remove_secondary_index_levels(df1)
+    df2_primary = pd_remove_secondary_index_levels(df2)
     # df1 empty -> use df2
     if len(df1) == 0:
-        return df2
+        return pd_mask_index_range_restore_index(df2_primary, date_range, keep_range=True,
+                                                 original_level_names=df2.index.names)
     # df2 empty -> use df1
     if len(df2) == 0:
-        return df1
-    date_range_delete = date_range
-    if not date_range and len(df2) > 0:
-        last_row_idx = -1 if len(df2) > 1 else 0
-        date_range_delete = (df2.index[0], df2.index[last_row_idx])
-    df1_use = df1
+        return pd_mask_index_range_restore_index(df1_primary, date_range, keep_range=False,
+                                                 original_level_names=df2.index.names)
+    df2_use = df2_primary
+    date_range_delete = None
+    if date_range:
+        date_range_delete = date_range
+        # date_range is the data to keep in df2, which needs to be applied if the date_range is specified
+        df2_use = pd_mask_index_range(df2_primary, date_range_delete, keep_range=True)
+    elif len(df2_use) > 0:
+        # special case when df2 contains only 1 row (0 rows handled above)
+        last_row_idx = -1 if len(df2_use) > 1 else 0
+        date_range_delete = (df2_use.index[0], df2_use.index[last_row_idx])
+    df1_before = df1_primary
+    df1_after = None
     if date_range_delete:
-        keep_mask = (df1.index < date_range_delete[0]) | (df1.index > date_range_delete[1])
-        df1_use = df1[keep_mask]
-    return pd.concat((df1_use, df2)).sort_index()
-
+        df1_before = df1_primary[df1_primary.index < date_range_delete[0]]
+        df1_after = df1_primary[df1_primary.index > date_range_delete[1]]
+        pd_mask_index_range(df1_primary, date_range_delete, keep_range=False)
+    to_concat = ((df1_before, df2_use, df1_after)
+                 if df1_after is not None else
+                 (df1_before, df2_use)
+                 )
+    # concat preserves types over other methods eg int -> float (due to temp NaN creation)
+    return pd_restore_secondary_index_levels(pd.concat(to_concat), df1.index.names)
 
 def create_df(dtype, data, index):
     if dtype is None:
@@ -167,7 +201,7 @@ def pd_append(base_df, df, ignore_index):
 
 
 def pd_update(base_df, df, ignore_index):
-    return df.combine_first(base_df)
+    return pd_delete_replace(base_df, df)
 
 
 def append(lib, df, test):
@@ -514,8 +548,7 @@ _UPDATE_TESTS_RAW = [
              [None, None, None], _datetime_overlap_index1,
              mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
     TestCase('ts_index/float_all_update_none', 'ts_index/float_all', 'float',
-             [None, None, None], _datetime_overlap_index1,
-             mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
+             [None, None, None], _datetime_overlap_index1),
     TestCase('ts_index/datetime_all_update_none', 'ts_index/datetime_all', 'datetime64[ns]',
              [None, None, None], _datetime_overlap_index1,
              mark=pytest.mark.xfail(reason="must be fixed for 4.4.0")),
@@ -548,7 +581,9 @@ _UPDATE_TESTS_RAW = [
 
 _UPDATE_TESTS = TestCase.pytest_param_list(_UPDATE_TESTS_RAW)
 
-_BASE_TEST_LOOKUP = {test.name: test for test in _ROUND_TRIP_TESTS_RAW}
+_ALL_TESTS_RAW = _ROUND_TRIP_TESTS_RAW + _APPEND_TESTS_RAW + _UPDATE_TESTS_RAW
+
+_TEST_LOOKUP = {test.name: test for test in _ALL_TESTS_RAW}
 
 
 @pytest.mark.parametrize("test_case", _ROUND_TRIP_TESTS)
@@ -563,27 +598,49 @@ def test_empty_missing_round_trip_lmdb_dynamic_schema(lmdb_version_store_dynamic
 
 @pytest.mark.parametrize("test_case", _APPEND_TESTS)
 def test_empty_missing_append_lmdb(lmdb_version_store, test_case: TestCase):
-    if test_case.base_name not in _BASE_TEST_LOOKUP:
+    if test_case.base_name not in _TEST_LOOKUP:
         pytest.fail(f"Base test case {test_case.base_name} not found")
-    run_test(lmdb_version_store, test_case, append, _BASE_TEST_LOOKUP[test_case.base_name])
+    run_test(lmdb_version_store, test_case, append, _TEST_LOOKUP[test_case.base_name])
 
 
 @pytest.mark.parametrize("test_case", _APPEND_TESTS)
 def test_empty_missing_append_lmdb_dynamic_schema(lmdb_version_store_dynamic_schema, test_case: TestCase):
-    if test_case.base_name not in _BASE_TEST_LOOKUP:
+    if test_case.base_name not in _TEST_LOOKUP:
         pytest.fail(f"Base test case {test_case.base_name} not found")
-    run_test(lmdb_version_store_dynamic_schema, test_case, append, _BASE_TEST_LOOKUP[test_case.base_name])
+    run_test(lmdb_version_store_dynamic_schema, test_case, append, _TEST_LOOKUP[test_case.base_name])
 
 
 @pytest.mark.parametrize("test_case", _UPDATE_TESTS)
 def test_empty_missing_update_lmdb(lmdb_version_store, test_case: TestCase):
-    if test_case.base_name not in _BASE_TEST_LOOKUP:
+    if test_case.base_name not in _TEST_LOOKUP:
         pytest.fail(f"Base test case {test_case.base_name} not found")
-    run_test(lmdb_version_store, test_case, update, _BASE_TEST_LOOKUP[test_case.base_name])
+    run_test(lmdb_version_store, test_case, update, _TEST_LOOKUP[test_case.base_name])
 
 
 @pytest.mark.parametrize("test_case", _UPDATE_TESTS)
 def test_empty_missing_update_lmdb_dynamic_schema(lmdb_version_store_dynamic_schema, test_case: TestCase):
-    if test_case.base_name not in _BASE_TEST_LOOKUP:
+    if test_case.base_name not in _TEST_LOOKUP:
         pytest.fail(f"Base test case {test_case.base_name} not found")
-    run_test(lmdb_version_store_dynamic_schema, test_case, update, _BASE_TEST_LOOKUP[test_case.base_name])
+    run_test(lmdb_version_store_dynamic_schema, test_case, update, _TEST_LOOKUP[test_case.base_name])
+
+
+# to run a single test, edit the following 2 lines to contain the test and action you want to test,
+# then run one of the two unit tests below
+_SINGLE_TEST = [None]            # [_TEST_LOOKUP["ts_index/float_all_update_none"]]
+_SINGLE_TEST_ACTION = update     # round_trip | append | update
+
+
+@pytest.mark.parametrize("test_case", _SINGLE_TEST)
+def test_empty_missing_single_lmdb(lmdb_version_store, test_case: TestCase):
+    if test_case:
+        if test_case.base_name and test_case.base_name not in _TEST_LOOKUP:
+            pytest.fail(f"Base test case {test_case.base_name} not found")
+        run_test(lmdb_version_store, test_case, _SINGLE_TEST_ACTION, _TEST_LOOKUP[test_case.base_name])
+
+
+@pytest.mark.parametrize("test_case", _SINGLE_TEST)
+def test_empty_missing_single_lmdb_dynamic_schema(lmdb_version_store_dynamic_schema, test_case: TestCase):
+    if test_case:
+        if test_case.base_name and test_case.base_name not in _TEST_LOOKUP:
+            pytest.fail(f"Base test case {test_case.base_name} not found")
+        run_test(lmdb_version_store_dynamic_schema, test_case, _SINGLE_TEST_ACTION, _TEST_LOOKUP[test_case.base_name])
