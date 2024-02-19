@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <fmt/format.h>
 #include <arcticdb/entity/key.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/index_range.hpp>
@@ -130,8 +131,57 @@ using AtomKey = AtomKeyImpl;
  */
 using IndexTypeKey = AtomKey;
 
-inline AtomKeyBuilder atom_key_builder();
+inline AtomKeyBuilder atom_key_builder() {
+    return AtomKeyBuilder{};
+}
 
-inline AtomKey null_key();
+inline AtomKey null_key() {
+    return atom_key_builder().build("", KeyType::UNDEFINED);
+}
 
 } // namespace arcticdb::entity
+
+// The formatting below deals with the display of keys in logs etc., i.e. in a human-readable
+// format. Transformation of keys for persistence is handled elsewhere.
+namespace fmt {
+
+    template<class FormatTag>
+    struct formatter<arcticdb::entity::FormattableRef< arcticdb::entity::AtomKeyImpl, FormatTag>> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const arcticdb::entity::FormattableRef<arcticdb::entity::AtomKeyImpl, FormatTag> &f,
+                FormatContext &ctx) const {
+        const auto &key = f.ref;
+        return fmt::format_to(ctx.out(), FMT_STRING(FormatTag::format),
+                              key.type(), key.id(), key.version_id(),
+                              key.content_hash(), key.creation_ts(), tokenized_index(key.start_index()),
+                              tokenized_index(key.end_index()));
+    }
+};
+
+template<>
+struct formatter<arcticdb::entity::AtomKeyImpl> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const arcticdb::entity::AtomKeyImpl& value, FormatContext& ctx) const {
+        using RefType = arcticdb::entity::FormattableRef< arcticdb::entity::AtomKeyImpl >;
+        formatter<RefType> f;
+        return f.format(RefType{ value }, ctx);
+    }
+
+};
+
+}
+
+namespace std {
+    template<>
+    struct hash<arcticdb::entity::AtomKeyImpl> {
+        inline arcticdb::HashedValue operator()(const arcticdb::entity::AtomKeyImpl &k) const noexcept {
+            return k.get_cached_hash();
+        }
+    };
+}

@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <fmt/format.h>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/key.hpp>
 
@@ -47,4 +48,28 @@ namespace arcticdb::entity {
 
     };
 } // namespace arcticdb::entity
+
+template<>
+struct fmt::formatter<arcticdb::entity::RefKey>
+{
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const arcticdb::entity::RefKey& number, FormatContext& ctx) {
+        return fmt::format_to(ctx.out(), "{}:{}", number.type(), number.id());
+    }
+};
+
+//TODO this is operating on the pretty-printed version and is needlessly inefficient
+namespace std {
+    template<>
+    struct hash<arcticdb::entity::RefKey> {
+        inline arcticdb::HashedValue operator()(const arcticdb::entity::RefKey &k) const noexcept {
+            auto view = k.view();
+            return arcticdb::hash(const_cast<uint8_t * >(reinterpret_cast<const uint8_t *>(view.data())), view.size());
+        }
+    };
+}
+
 
