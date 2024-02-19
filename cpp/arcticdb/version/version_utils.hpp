@@ -375,17 +375,6 @@ inline SortedValue deduce_sorted(SortedValue existing_frame, SortedValue input_f
     return final_state;
 }
 
-inline FrameAndDescriptor frame_and_descriptor_from_segment(SegmentInMemory&& seg) {
-    TimeseriesDescriptor tsd;
-    auto& tsd_proto = tsd.mutable_proto();
-    tsd_proto.set_total_rows(seg.row_count());
-    const auto& seg_descriptor = seg.descriptor();
-    tsd_proto.mutable_stream_descriptor()->CopyFrom(seg_descriptor.proto());
-    if(seg.descriptor().index().type() == IndexDescriptor::ROWCOUNT)
-        ensure_rowcount_norm_meta(*tsd_proto.mutable_normalization(), seg_descriptor.id());
-    else
-        ensure_timeseries_norm_meta(*tsd.mutable_proto().mutable_normalization(), seg_descriptor.id(), false);
-    return {SegmentInMemory(std::move(seg)), tsd, {}, {}};
-}
+FrameAndDescriptor frame_and_descriptor_from_segment(SegmentInMemory&& seg);
 
 } // namespace arcticdb

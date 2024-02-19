@@ -22,6 +22,7 @@
 #include <mongocxx/model/replace_one.hpp>
 #include <mongocxx/config/version.hpp>
 #include <arcticdb/util/composite.hpp>
+#include <arcticdb/storage/failure_simulation.hpp>
 
 namespace arcticdb::storage::mongo {
 
