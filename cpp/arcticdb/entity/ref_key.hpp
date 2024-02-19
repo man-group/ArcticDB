@@ -71,5 +71,3 @@ struct hash<arcticdb::entity::RefKey> {
     }
 };
 }
-
-
