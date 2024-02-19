@@ -450,9 +450,12 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::truncate(
                 Column::transform<decltype(tag), decltype(tag)>(
                     *truncated_column,
                     *truncated_column,
-                    [this, &output](auto string_pool_offset) {
-                        const std::string_view string = get_string_from_pool(string_pool_offset, *string_pool_);
-                        return output->string_pool().get(string).offset();
+                    [this, &output](auto string_pool_offset) -> arcticdb::OffsetString::offset_t {
+                        if (is_a_string(string_pool_offset)) {
+                            const std::string_view string = get_string_from_pool(string_pool_offset, *string_pool_);
+                            return output->string_pool().get(string).offset();
+                        }
+                        return string_pool_offset;
                     }
                 );
             }
