@@ -1,5 +1,8 @@
 # .git-blame-ignore-revs
 
+# Build time improvements
+9d2c8ef41589a4e8635b972911d25c0125dc3728
+
 # Moving implementation from column.hpp to column.cpp
 # Reordering/removing some inclusions
 801cf4b6f0f9ec0a997311fbdc14639537d3bbb6
