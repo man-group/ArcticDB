@@ -13,6 +13,8 @@
 #include <arcticdb/storage/memory/memory_storage.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/storage/s3/s3_mock_client.hpp>
+#include <arcticdb/storage/azure/azure_storage.hpp>
+#include <arcticdb/storage/azure/azure_mock_client.hpp>
 #include <arcticdb/storage/test/common.hpp>
 #include <arcticdb/util/buffer.hpp>
 
@@ -86,6 +88,17 @@ public:
         arcticdb::storage::LibraryPath library_path("lib", '.');
 
         return std::make_unique<arcticdb::storage::s3::S3Storage>(library_path, arcticdb::storage::OpenMode::DELETE, cfg);
+    }
+};
+
+class AzureMockStorageFactory : public StorageFactory {
+public:
+    std::unique_ptr<arcticdb::storage::Storage> create() override {
+        arcticdb::proto::azure_storage::Config cfg;
+        cfg.set_use_mock_storage_for_testing(true);
+        arcticdb::storage::LibraryPath library_path("lib", '/');
+
+        return std::make_unique<arcticdb::storage::azure::AzureStorage>(library_path,arcticdb::storage::OpenMode::DELETE, cfg);
     }
 };
 
@@ -191,10 +204,9 @@ TEST(S3MockStorageTest, TestReadKeyNotFoundException) {
     S3MockStorageFactory factory;
     auto storage = factory.create();
 
-    std::string failureSymbol = s3::MockS3Client::get_failure_trigger("sym", s3::S3Operation::GET, Aws::S3::S3Errors::NO_SUCH_KEY);
-
+    ASSERT_TRUE(!exists_in_store(*storage, "sym"));
     ASSERT_THROW({
-        read_in_store(*storage, failureSymbol);
+        read_in_store(*storage, "sym");
     },  arcticdb::storage::KeyNotFoundException);
 
 }
@@ -219,7 +231,7 @@ TEST(S3MockStorageTest, TestPermissionErrorException) {
     failureSymbol = s3::MockS3Client::get_failure_trigger("sym3", s3::S3Operation::PUT, Aws::S3::S3Errors::INVALID_ACCESS_KEY_ID);
 
     ASSERT_THROW({
-        update_in_store(*storage, {failureSymbol});
+        update_in_store(*storage, failureSymbol);
     },  StoragePermissionException);
 
 }
@@ -244,4 +256,59 @@ TEST(S3MockStorageTest, TestUnexpectedS3ErrorException ) {
     ASSERT_THROW({
         read_in_store(*storage, failureSymbol);
     },  UnexpectedS3ErrorException);
+}
+
+// Azure error testing with mock client
+TEST(AzureMockStorageTest, TestReadKeyNotFoundException) {
+    AzureMockStorageFactory factory;
+    auto storage = factory.create();
+
+    ASSERT_TRUE(!exists_in_store(*storage, "sym"));
+    ASSERT_THROW({
+        read_in_store(*storage, "sym");
+    },  arcticdb::storage::KeyNotFoundException);
+
+}
+
+// Check that Permission exception is thrown when http Forbidden status code is returned
+TEST(AzureMockStorageTest, TestPermissionErrorException) {
+    AzureMockStorageFactory factory;
+    auto storage = factory.create();
+    write_in_store(*storage, "sym1");
+
+    std::string failureSymbol = azure::MockAzureClient::get_failure_trigger("sym1", azure::AzureOperation::WRITE,
+                                                                            azure::AzureErrorCode_to_string(azure::AzureErrorCode::UnauthorizedBlobOverwrite),
+                                                                            Azure::Core::Http::HttpStatusCode::Forbidden);
+    ASSERT_THROW({
+        update_in_store(*storage, failureSymbol);
+    },  StoragePermissionException);
+
+    failureSymbol = azure::MockAzureClient::get_failure_trigger("sym1", azure::AzureOperation::DELETE,
+                                                                azure::AzureErrorCode_to_string(azure::AzureErrorCode::UnauthorizedBlobOverwrite),
+                                                                Azure::Core::Http::HttpStatusCode::Forbidden);
+    ASSERT_THROW({
+        remove_in_store(*storage, {failureSymbol});
+    },  StoragePermissionException);
+
+}
+
+TEST(AzureMockStorageTest, TestUnexpectedAzureErrorException ) {
+    AzureMockStorageFactory factory;
+    auto storage = factory.create();
+
+    std::string failureSymbol = azure::MockAzureClient::get_failure_trigger("sym1@#~?.&$", azure::AzureOperation::READ,
+                                                                            azure::AzureErrorCode_to_string(azure::AzureErrorCode::InvalidBlobOrBlock),
+                                                                            Azure::Core::Http::HttpStatusCode::BadRequest);
+
+    ASSERT_THROW({
+        read_in_store(*storage, failureSymbol);
+    },  UnexpectedAzureException);
+
+    failureSymbol = azure::MockAzureClient::get_failure_trigger("sym1", azure::AzureOperation::READ,
+                                                                "",
+                                                                Azure::Core::Http::HttpStatusCode::InternalServerError);
+
+    ASSERT_THROW({
+        read_in_store(*storage, failureSymbol);
+    },  UnexpectedAzureException);
 }

@@ -50,7 +50,8 @@ std::optional<Azure::Core::RequestFailedException> has_failure_trigger(const std
     if (position == std::string::npos) return std::nullopt;
 
     try {
-        auto error_code = blob_name.substr(position + failure_string_for_operation.size(), blob_name.find_last_of('_'));
+        auto start = position + failure_string_for_operation.size();
+        auto error_code = blob_name.substr(start, blob_name.find_last_of('_') - start);
         auto status_code_string = blob_name.substr(blob_name.find_last_of('_') + 1);
         auto status_code = Azure::Core::Http::HttpStatusCode(std::stoi(status_code_string));
         auto error_message = fmt::format("Simulated Error, message: operation {}, error code {} statuscode {}",

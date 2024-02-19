@@ -25,17 +25,19 @@ enum AzureErrorCode {
     ContainerNotFound,
     BlobOperationNotSupported,
     UnauthorizedBlobOverwrite,
+    InvalidBlobOrBlock,
     OtherError
 };
 
 inline std::string AzureErrorCode_to_string(AzureErrorCode error) {
-        if(error == AzureErrorCode::BlobAlreadyExists) return "BlobAlreadyExists";
-        if(error ==  AzureErrorCode::BlobNotFound) return "BlobNotFound";
-        if(error ==  AzureErrorCode::ContainerNotFound) return "ContainerNotFound";
-        if(error ==  AzureErrorCode::BlobOperationNotSupported) return "BlobOperationNotSupported";
-        if(error ==  AzureErrorCode::UnauthorizedBlobOverwrite) return "UnauthorizedBlobOverwrite";
+    if(error == AzureErrorCode::BlobAlreadyExists) return "BlobAlreadyExists";
+    if(error ==  AzureErrorCode::BlobNotFound) return "BlobNotFound";
+    if(error ==  AzureErrorCode::ContainerNotFound) return "ContainerNotFound";
+    if(error ==  AzureErrorCode::BlobOperationNotSupported) return "BlobOperationNotSupported";
+    if(error ==  AzureErrorCode::UnauthorizedBlobOverwrite) return "UnauthorizedBlobOverwrite";
+    if(error ==  AzureErrorCode::InvalidBlobOrBlock) return "InvalidBlobOrBlock";
 
-        return "Other Unspecified error";
+    return "Other Unspecified error";
 }
 
     // An abstract class, which is responsible for sending the requests and parsing the responses from Azure.
