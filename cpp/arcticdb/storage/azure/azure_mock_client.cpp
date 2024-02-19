@@ -30,13 +30,16 @@ std::string operation_to_string(AzureOperation operation){
 std::string MockAzureClient::get_failure_trigger(
         const std::string& blob_name,
         AzureOperation operation_to_fail,
+        std::string error_code,
         Azure::Core::Http::HttpStatusCode error_to_fail_with) {
-    return fmt::format("{}#Failure_{}_{}", blob_name, operation_to_string(operation_to_fail), (int)error_to_fail_with);
+    return fmt::format("{}#Failure_{}_{}_{}", blob_name, operation_to_string(operation_to_fail), error_code, (int)error_to_fail_with);
 }
 
-Azure::Core::RequestFailedException get_exception(const std::string& message, Azure::Core::Http::HttpStatusCode status_code) {
+Azure::Core::RequestFailedException get_exception(const std::string& message, std::string error_code, Azure::Core::Http::HttpStatusCode status_code) {
     auto rawResponse = std::make_unique<Azure::Core::Http::RawResponse>(0, 0, status_code, message);
+    rawResponse->SetHeader("x-ms-error-code", error_code);
     auto exception = Azure::Core::RequestFailedException(rawResponse);
+    exception.ErrorCode = error_code;
 
     return exception;
 }
@@ -47,11 +50,13 @@ std::optional<Azure::Core::RequestFailedException> has_failure_trigger(const std
     if (position == std::string::npos) return std::nullopt;
 
     try {
-        auto failure_code_string = blob_name.substr(position + failure_string_for_operation.size());
-        auto status_code = Azure::Core::Http::HttpStatusCode(std::stoi(failure_code_string));
-        auto error_message = fmt::format("Simulated Error, message: #{}_{}", failure_string_for_operation, (int) status_code);
+        auto error_code = blob_name.substr(position + failure_string_for_operation.size(), blob_name.find_last_of('_'));
+        auto status_code_string = blob_name.substr(blob_name.find_last_of('_') + 1);
+        auto status_code = Azure::Core::Http::HttpStatusCode(std::stoi(status_code_string));
+        auto error_message = fmt::format("Simulated Error, message: operation {}, error code {} statuscode {}",
+                                         failure_string_for_operation, error_code, (int) status_code);
 
-        return get_exception(error_message, status_code);
+        return get_exception(error_message, error_code, status_code);
     } catch (std::exception&) {
         return std::nullopt;
     }
@@ -82,9 +87,10 @@ Segment MockAzureClient::read_blob(
     }
 
     auto pos = azure_contents.find(blob_name);
-    if (pos == azure_contents.end()){
-        std::string message = fmt::format("Simulated Error, message: #{}_{}", "Read", (int) Azure::Core::Http::HttpStatusCode::NotFound);
-        throw get_exception(message, Azure::Core::Http::HttpStatusCode::NotFound);
+    if (pos == azure_contents.end()) {
+        auto error_code = AzureErrorCode_to_string(AzureErrorCode::BlobNotFound);
+        std::string message = fmt::format("Simulated Error, message: Read failed {} {}", error_code, (int) Azure::Core::Http::HttpStatusCode::NotFound);
+        throw get_exception(message, error_code, Azure::Core::Http::HttpStatusCode::NotFound);
     }
 
     return pos->second;
