@@ -69,27 +69,27 @@ void raise_azure_exception(const Azure::Core::RequestFailedException& e) {
         throw KeyNotFoundException(fmt::format("Key Not Found Error: AzureError#{} {}: {}",
                                                int(status_code),
                                                error_code,
-                                               e.what()));
+                                               e.ReasonPhrase));
     }
 
     if(status_code == Azure::Core::Http::HttpStatusCode::Unauthorized || status_code == Azure::Core::Http::HttpStatusCode::Forbidden) {
         raise<ErrorCode::E_PERMISSION>(fmt::format("Permission error: AzureError#{} {}: {}",
                                                    int(status_code),
                                                    error_code,
-                                                   e.what()));
+                                                   e.ReasonPhrase));
     }
 
     if((int) status_code >= 500) {
         error_message = fmt::format("Unexpected Server Error: AzureError#{} {}: {}",
                                     int(status_code),
                                     error_code,
-                                    e.what());
+                                    e.ReasonPhrase);
     }
     else {
         error_message = fmt::format("Unexpected Error: AzureError#{} {}: {}",
                                     int(status_code),
                                     error_code,
-                                    e.what());
+                                    e.ReasonPhrase);
     }
 
     raise<ErrorCode::E_UNEXPECTED_AZURE_ERROR>(error_message);
