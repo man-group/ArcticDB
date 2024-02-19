@@ -8,7 +8,6 @@
 #pragma once
 
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/util/cursor.hpp>
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/util/preconditions.hpp>
@@ -18,17 +17,15 @@
 #include <arcticdb/util/magic_num.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/column_store/column_map.hpp>
-#include <arcticdb/pipeline/string_pool_utils.hpp>
-#include <arcticdb/util/format_date.hpp>
-#include <arcticdb/stream/index.hpp>
-#include <arcticdb/util/hash.hpp>
 #include <arcticdb/entity/stream_descriptor.hpp>
 
-#include <google/protobuf/message.h>
-#include <google/protobuf/any.h>
-#include <google/protobuf/any.pb.h>
 #include <boost/iterator/iterator_facade.hpp>
 #include <folly/container/Enumerate.h>
+
+namespace google::protobuf
+{
+    class Any;
+}
 
 namespace arcticdb {
 
@@ -56,14 +53,6 @@ inline void check_output_bitset(const arcticdb::util::BitSet& output,
 }
 } // namespace anon
 
-inline bool operator==(const Field::Proto& left, const Field::Proto& right) {
-    google::protobuf::util::MessageDifferencer diff;
-    return diff.Compare(left, right);
-}
-
-inline bool operator<(const Field::Proto& left, const Field::Proto& right) {
-    return left.name() < right.name();
-}
 
 class SegmentInMemoryImpl {
 public:
@@ -380,21 +369,15 @@ public:
 
 
 
-    SegmentInMemoryImpl() = default;
+    SegmentInMemoryImpl();
 
     explicit SegmentInMemoryImpl(
-        const StreamDescriptor &desc,
+        const StreamDescriptor& desc,
         size_t expected_column_size,
         bool presize,
-        bool allow_sparse) :
-        descriptor_(std::make_shared<StreamDescriptor>(StreamDescriptor{desc.id(), desc.index()})),
-        allow_sparse_(allow_sparse) {
-        on_descriptor_change(desc, expected_column_size, presize, allow_sparse);
-    }
+        bool allow_sparse);
 
-    ~SegmentInMemoryImpl() {
-        ARCTICDB_TRACE(log::version(), "Destroying segment in memory");
-    }
+    ~SegmentInMemoryImpl();
 
     iterator begin() { return iterator{this}; }
 
@@ -734,24 +717,11 @@ public:
 
     StringPool &string_pool() { return *string_pool_; } //TODO protected
 
-    void set_metadata(google::protobuf::Any &&meta) {
-        util::check_arg(!metadata_, "Cannot override previously set metadata");
-        if (meta.ByteSizeLong())
-            metadata_ = std::make_unique<google::protobuf::Any>(std::move(meta));
-    }
+    void set_metadata(google::protobuf::Any&& meta);
+    void override_metadata(google::protobuf::Any&& meta);
+    bool has_metadata() const;
 
-    void override_metadata(google::protobuf::Any &&meta) {
-        if (meta.ByteSizeLong())
-            metadata_ = std::make_unique<google::protobuf::Any>(std::move(meta));
-    }
-
-    bool has_metadata() {
-        return static_cast<bool>(metadata_);
-    }
-
-    const google::protobuf::Any *metadata() const {
-        return metadata_.get();
-    }
+    const google::protobuf::Any* metadata() const;
 
     bool is_index_sorted() const;
 

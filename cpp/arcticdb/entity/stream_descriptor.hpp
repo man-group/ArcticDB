@@ -7,8 +7,13 @@
 
 #pragma once
 
-#include <arcticdb/entity/field_collection.hpp>
+
+#include <proto/arcticc/pb2/proto/descriptors.pb.h>
+#include <google/protobuf/util/message_differencer.h>
 #include <folly/gen/Base.h>
+
+#include <arcticdb/entity/field_collection_proto.hpp>
+#include <arcticdb/util/variant.hpp>
 
 namespace arcticdb::entity {
 

@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <memory>
 #include <variant>
+#include <optional>
 
 namespace arcticdb {
 

@@ -8,10 +8,28 @@
 #include <arcticdb/column_store/memory_segment_impl.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/entity/type_utils.hpp>
-#include <arcticdb/stream/index.hpp>
-#include <arcticdb/util/format_date.hpp>
+
+#include <google/protobuf/any.h>
+#include <google/protobuf/any.pb.h>
+
 
 namespace arcticdb {
+
+    SegmentInMemoryImpl::SegmentInMemoryImpl() = default;
+
+    SegmentInMemoryImpl::SegmentInMemoryImpl( const StreamDescriptor& desc, size_t expected_column_size, bool presize, bool allow_sparse)
+        : descriptor_(std::make_shared<StreamDescriptor>(StreamDescriptor{ desc.id(), desc.index() }))
+        , allow_sparse_(allow_sparse)
+    {
+        on_descriptor_change(desc, expected_column_size, presize, allow_sparse);
+    }
+
+    SegmentInMemoryImpl::~SegmentInMemoryImpl()
+    {
+        ARCTICDB_TRACE(log::version(), "Destroying segment in memory");
+    }
+
+
 // Append any columns that exist both in this segment and in the 'other' segment onto the
 // end of the column in this segment. Any columns that exist in this segment but not in the
 // one being appended will be default-valued (or sparse) in this segment. Any columns in the
@@ -596,6 +614,25 @@ void SegmentInMemoryImpl::set_timeseries_descriptor(TimeseriesDescriptor&& tsd) 
     google::protobuf::Any any;
     any.PackFrom(tsd.proto());
     set_metadata(std::move(any));
+}
+
+void SegmentInMemoryImpl::set_metadata(google::protobuf::Any&& meta) {
+    util::check_arg(!metadata_, "Cannot override previously set metadata");
+    if (meta.ByteSizeLong())
+        metadata_ = std::make_unique<google::protobuf::Any>(std::move(meta));
+}
+
+void SegmentInMemoryImpl::override_metadata(google::protobuf::Any&& meta) {
+    if (meta.ByteSizeLong())
+        metadata_ = std::make_unique<google::protobuf::Any>(std::move(meta));
+}
+
+bool SegmentInMemoryImpl::has_metadata() const {
+    return static_cast<bool>(metadata_);
+}
+
+const google::protobuf::Any* SegmentInMemoryImpl::metadata() const {
+    return metadata_.get();
 }
 
 }

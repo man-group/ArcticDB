@@ -1,24 +1,14 @@
 #pragma once
-#include <arcticdb/codec/codec.hpp>
+
+#include <functional>
+
 #include <arcticdb/entity/key.hpp>
-#include <arcticdb/entity/ref_key.hpp>
-#include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/entity/variant_key.hpp>
-#include <arcticdb/storage/common.hpp>
 #include <arcticdb/storage/library_path.hpp>
 #include <arcticdb/storage/open_mode.hpp>
-#include <arcticdb/storage/failure_simulation.hpp>
-#include <arcticdb/storage/storage_options.hpp>
-#include <arcticdb/util/type_traits.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
+#include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/util/composite.hpp>
-#include <arcticdb/entity/protobufs.hpp>
-#include <boost/callable_traits.hpp>
-#include <type_traits>
-#include <iterator>
-#include <array>
-#include <string_view>
-#include <storage/key_segment_pair.hpp>
 #include <util/composite.hpp>
 
 namespace arcticdb::storage {

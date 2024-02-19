@@ -15,6 +15,7 @@
 #include <arcticdb/storage/storage_exceptions.hpp>
 #include <arcticdb/storage/open_mode.hpp>
 #include <arcticdb/storage/storages.hpp>
+#include <arcticdb/storage/failure_simulation.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/composite.hpp>
 

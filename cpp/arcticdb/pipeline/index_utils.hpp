@@ -12,6 +12,7 @@
 #include <arcticdb/entity/versioned_item.hpp>
 #include <arcticdb/pipeline/pipeline_common.hpp>
 #include <arcticdb/entity/variant_key.hpp>
+#include <arcticdb/stream/index.hpp>
 
 #include <folly/futures/Future.h>
 

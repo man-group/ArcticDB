@@ -8,17 +8,10 @@
 #pragma once
 
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/util/cursor.hpp>
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/entity/performance_tracing.hpp>
-#include <arcticdb/util/magic_num.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/column_store/memory_segment_impl.hpp>
-
-#include <google/protobuf/message.h>
-#include <google/protobuf/any.h>
-#include <google/protobuf/any.pb.h>
 
 namespace arcticdb {
 

@@ -9,20 +9,11 @@
 
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/constructors.hpp>
-#include <arcticdb/util/variant.hpp>
-#include <arcticdb/log/log.hpp>
-#include <google/protobuf/util/message_differencer.h>
 
-#include <fmt/format.h>
-
-#include <algorithm>
 #include <cstdint>
 #include <vector>
 #include <string>
-#include <exception>
 #include <type_traits>
-#include <iostream>
-#include <optional>
 #include <variant>
 
 
@@ -33,13 +24,6 @@
 using ssize_t = SSIZE_T;
 #endif
 
-// TODO: Forward declare further and move the inclusion of `descriptors.pb.h` in `types.cpp`.
-#include <descriptors.pb.h>
-
-namespace arcticdb::proto {
-    namespace descriptors = arcticc::pb2::descriptors_pb2;
-}
-
 namespace arcticdb::entity {
 
 enum class SortedValue : uint8_t {
@@ -48,32 +32,6 @@ enum class SortedValue : uint8_t {
     ASCENDING = 2,
     DESCENDING = 3,
 };
-
-inline arcticdb::proto::descriptors::SortedValue sorted_value_to_proto(SortedValue sorted) {
-    switch (sorted) {
-    case SortedValue::UNSORTED:
-        return arcticdb::proto::descriptors::SortedValue::UNSORTED;
-    case SortedValue::DESCENDING:
-        return arcticdb::proto::descriptors::SortedValue::DESCENDING;
-    case SortedValue::ASCENDING:
-        return arcticdb::proto::descriptors::SortedValue::ASCENDING;
-    default:
-        return arcticdb::proto::descriptors::SortedValue::UNKNOWN;
-    }
-}
-
-inline SortedValue sorted_value_from_proto(arcticdb::proto::descriptors::SortedValue sorted_proto) {
-    switch (sorted_proto) {
-    case arcticdb::proto::descriptors::SortedValue::UNSORTED:
-        return SortedValue::UNSORTED;
-    case arcticdb::proto::descriptors::SortedValue::DESCENDING:
-        return SortedValue::DESCENDING;
-    case arcticdb::proto::descriptors::SortedValue::ASCENDING:
-        return SortedValue::ASCENDING;
-    default:
-        return SortedValue::UNKNOWN;
-    }
-}
 
 using NumericId = int64_t;
 using StringId = std::string;
@@ -445,22 +403,11 @@ Dimension as_dim_checked(uint8_t d);
 
 struct TypeDescriptor;
 
-inline void set_data_type(DataType data_type, arcticdb::proto::descriptors::TypeDescriptor& type_desc) {
-    type_desc.set_size_bits(
-        static_cast<arcticdb::proto::descriptors::TypeDescriptor_SizeBits>(
-            static_cast<std::uint8_t>(slice_bit_size(data_type))));
-    type_desc.set_value_type(
-        static_cast<arcticdb::proto::descriptors::TypeDescriptor_ValueType>(
-            static_cast<std::uint8_t>(slice_value_type(data_type))));
-}
-
 inline void set_data_type(DataType data_type, TypeDescriptor& type_desc);
 
 struct TypeDescriptor {
     DataType data_type_;
     Dimension dimension_;
-
-    using Proto = arcticdb::proto::descriptors::TypeDescriptor;
 
     TypeDescriptor(DataType dt, uint8_t dim) : data_type_(dt), dimension_(as_dim_checked(dim)) {}
     constexpr TypeDescriptor(DataType dt, Dimension dim) : data_type_(dt), dimension_(dim) {}
@@ -490,18 +437,6 @@ struct TypeDescriptor {
         return dimension_;
     }
 
-    explicit operator Proto() const {
-        return proto();
-    }
-
-    [[nodiscard]] Proto proto() const {
-        arcticdb::proto::descriptors::TypeDescriptor output;
-        output.set_dimension(static_cast<std::uint32_t>(dimension_));
-        set_data_type(data_type_, output);
-
-        return output;
-    }
-
     void set_size_bits(SizeBits new_size_bits) {
         data_type_ = combine_data_type(slice_value_type(data_type_), new_size_bits);
     }
@@ -510,6 +445,7 @@ struct TypeDescriptor {
         return get_byte_count(slice_bit_size(data_type_));
     }
 };
+
 
 /// @brief Check if the type must contain data
 /// Some types are allowed not to have any data, e.g. empty arrays or the empty type (which by design denotes the
@@ -560,27 +496,6 @@ struct TypeDescriptorTag {
     }
 };
 
-inline DataType get_data_type(const arcticdb::proto::descriptors::TypeDescriptor& type_desc) {
-    return combine_data_type(
-        static_cast<ValueType>(static_cast<uint8_t >(type_desc.value_type())),
-        static_cast<SizeBits>(static_cast<uint8_t >(type_desc.size_bits()))
-        );
-}
-
-inline TypeDescriptor type_desc_from_proto(const arcticdb::proto::descriptors::TypeDescriptor& type_desc) {
-    return {
-        combine_data_type(
-            static_cast<ValueType>(static_cast<uint8_t >(type_desc.value_type())),
-            static_cast<SizeBits>(static_cast<uint8_t >(type_desc.size_bits()))
-        ),
-        static_cast<Dimension>(static_cast<uint8_t>(type_desc.dimension()))
-    };
-}
-
-inline DataType data_type_from_proto(const arcticdb::proto::descriptors::TypeDescriptor& type_desc) {
-    return type_desc_from_proto(type_desc).data_type();
-}
-
 template <typename DTT>
 using ScalarTagType = TypeDescriptorTag<DTT, DimensionTag<Dimension::Dim0>>;
 
@@ -590,93 +505,6 @@ struct ScalarTypeInfo {
     static constexpr auto data_type = TDT::DataTypeTag::data_type;
     using RawType = typename TDT::DataTypeTag::raw_type;
 };
-
-inline arcticdb::proto::descriptors::StreamDescriptor_FieldDescriptor field_proto(DataType dt, Dimension dim, std::string_view name) {
-    arcticdb::proto::descriptors::StreamDescriptor_FieldDescriptor output;
-    if(!name.empty())
-        output.set_name(name.data(), name.size());
-
-    auto output_desc = output.mutable_type_desc();
-    output_desc->set_dimension(static_cast<uint32_t>(dim));
-    output_desc->set_size_bits(static_cast<arcticdb::proto::descriptors::TypeDescriptor_SizeBits>(
-                                                  static_cast<std::uint8_t>(slice_bit_size(dt))));
-
-    output_desc->set_value_type(
-        static_cast<arcticdb::proto::descriptors::TypeDescriptor_ValueType>(
-            static_cast<std::uint8_t>(slice_value_type(dt))));
-
-    return output;
-}
-
-struct IndexDescriptor {
-        using Proto = arcticdb::proto::descriptors::IndexDescriptor;
-
-    Proto data_;
-    using Type = arcticdb::proto::descriptors::IndexDescriptor::Type;
-
-    static const Type UNKNOWN = arcticdb::proto::descriptors::IndexDescriptor_Type_UNKNOWN;
-    static const Type ROWCOUNT = arcticdb::proto::descriptors::IndexDescriptor_Type_ROWCOUNT;
-    static const Type STRING = arcticdb::proto::descriptors::IndexDescriptor_Type_STRING;
-    static const Type TIMESTAMP = arcticdb::proto::descriptors::IndexDescriptor_Type_TIMESTAMP;
-
-    using TypeChar = char;
-
-    IndexDescriptor() = default;
-    IndexDescriptor(size_t field_count, Type type) {
-        data_.set_kind(type);
-        data_.set_field_count(static_cast<uint32_t>(field_count));
-    }
-
-    explicit IndexDescriptor(arcticdb::proto::descriptors::IndexDescriptor data)
-        : data_(std::move(data)) {
-    }
-
-    bool uninitialized() const {
-        return data_.field_count() == 0 && data_.kind() == Type::IndexDescriptor_Type_UNKNOWN;
-    }
-
-    const Proto& proto() const  {
-        return data_;
-    }
-
-    size_t field_count() const {
-        return static_cast<size_t>(data_.field_count());
-    }
-
-    Type type() const {
-        return data_.kind();
-    }
-
-    void set_type(Type type) {
-        data_.set_kind(type);
-    }
-
-    ARCTICDB_MOVE_COPY_DEFAULT(IndexDescriptor)
-
-    friend bool operator==(const IndexDescriptor& left, const IndexDescriptor& right) {
-        return left.type() == right.type();
-    }
-};
-
-constexpr IndexDescriptor::TypeChar to_type_char(IndexDescriptor::Type type) {
-    switch (type) {
-    case IndexDescriptor::TIMESTAMP:return 'T';
-    case IndexDescriptor::ROWCOUNT:return 'R';
-    case IndexDescriptor::STRING:return 'S';
-    case IndexDescriptor::UNKNOWN:return 'U';
-    default:util::raise_rte("Unknown index type: {}", int(type));
-    }
-}
-
-constexpr IndexDescriptor::Type from_type_char(IndexDescriptor::TypeChar type) {
-    switch (type) {
-    case 'T': return IndexDescriptor::TIMESTAMP;
-    case 'R': return IndexDescriptor::ROWCOUNT;
-    case 'S': return IndexDescriptor::STRING;
-    case 'U': return IndexDescriptor::UNKNOWN;
-    default:util::raise_rte("Unknown index type: {}", int(type));
-    }
-}
 
 struct FieldRef {
     TypeDescriptor type_;
@@ -695,17 +523,6 @@ struct FieldRef {
     }
 };
 
-inline void set_id(arcticdb::proto::descriptors::StreamDescriptor& pb_desc, StreamId id) {
-    std::visit([&pb_desc](auto &&arg) {
-        using IdType = std::decay_t<decltype(arg)>;
-        if constexpr (std::is_same_v<IdType, NumericId>)
-            pb_desc.set_num_id(arg);
-        else if constexpr (std::is_same_v<IdType, StringId>)
-            pb_desc.set_str_id(arg);
-        else
-            util::raise_rte("Encoding unknown descriptor type");
-    }, id);
-}
 
 struct Field {
     uint32_t size_ = 0;
@@ -715,7 +532,7 @@ struct Field {
 
     ARCTICDB_NO_MOVE_OR_COPY(Field)
 
-    using Proto = arcticdb::proto::descriptors::StreamDescriptor_FieldDescriptor;
+
 
 private:
     explicit Field(const FieldRef& ref) {

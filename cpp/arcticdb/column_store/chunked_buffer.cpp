@@ -7,6 +7,8 @@
 
 #include <arcticdb/column_store/chunked_buffer.hpp>
 
+#include <optional>
+
 namespace arcticdb {
 
 template <size_t BlockSize>
