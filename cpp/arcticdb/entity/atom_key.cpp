@@ -139,13 +139,6 @@ AtomKeyBuilder &AtomKeyBuilder::content_hash(ContentHash v) {
     return *this;
 }
 
-template<KeyType KT>
-AtomKeyImpl AtomKeyBuilder::build(StreamId id) {
-    return {
-        std::move(id), version_id_, creation_ts_, content_hash_, index_start_, index_end_, KT
-    };
-}
-
 AtomKeyImpl AtomKeyBuilder::build(StreamId id, KeyType key_type) {
     return {
         std::move(id), version_id_, creation_ts_, content_hash_, index_start_, index_end_, key_type
