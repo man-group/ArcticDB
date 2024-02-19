@@ -9,7 +9,7 @@
 
 #include <arcticdb/util/simple_string_hash.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
-#include <arcticdb/storage/s3/real_s3_client.hpp>
+#include <arcticdb/storage/s3/s3_real_client.hpp>
 #include <arcticdb/storage/s3/s3_client_wrapper.hpp>
 
 namespace arcticdb::storage::nfs_backed {

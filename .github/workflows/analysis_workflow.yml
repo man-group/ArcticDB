@@ -4,6 +4,9 @@ on:
     inputs:
       run_all_benchmarks:
         type: boolean
+      force_publish_result:
+        description: Force publish result (requries admin access)
+        type: boolean
 
   schedule: # Schdeule the job to run at 12 a.m. daily
     - cron: '0 0 * * *'
@@ -262,14 +265,13 @@ jobs:
           python -m asv continuous -v --show-stderr origin/master HEAD -f 1.15
 
       - name: Publish results
-        if: github.event_name != 'pull_request' || github.ref == 'refs/heads/master'
+        if: inputs.force_publish_result == true || github.event_name == 'schedule'
         shell: bash -el {0}
         run: |
           git config --global user.name "${GITHUB_ACTOR}"
           git config --global user.email "${GITHUB_ACTOR_ID}+${GITHUB_ACTOR}@users.noreply.github.com"
 
           git fetch --tags --all
-          git pull
 
           python -m asv publish -v
 
