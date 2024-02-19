@@ -17,43 +17,74 @@
 #include <string>
 #include <numeric>
 
+
 namespace arcticdb::storage {
 
-// Using StringViewable to make it easily pluggable with a custom internalized string class
-class DefaultStringViewable : public std::shared_ptr<std::string> {
-  public:
-    using std::shared_ptr<std::string>::shared_ptr;
+    // Using StringViewable to make it easily pluggable with a custom internalized string class
+    class DefaultStringViewable : public std::shared_ptr<std::string> {
+        public:
+            using std::shared_ptr<std::string>::shared_ptr;
 
-    template<class ...Args>
-    DefaultStringViewable(Args &&...args) : std::shared_ptr<std::string>::shared_ptr(
-        std::make_shared<std::string>(args...)),
-                                            hash_(arcticdb::hash(std::string_view{*this})) {}
+            template<class ...Args>
+            DefaultStringViewable(Args &&...args) : std::shared_ptr<std::string>::shared_ptr(
+                    std::make_shared<std::string>(args...)),
+                                                    hash_(arcticdb::hash(std::string_view{*this})) {}
 
-    DefaultStringViewable(const DefaultStringViewable &that) :
-        std::shared_ptr<std::string>::shared_ptr(that), hash_(that.hash_) {}
+            DefaultStringViewable(const DefaultStringViewable &that) :
+                    std::shared_ptr<std::string>::shared_ptr(that), hash_(that.hash_) {}
 
-    operator std::string_view() const {
-        return *this->get();
-    }
+            operator std::string_view() const {
+                return *this->get();
+            }
 
-    operator std::string() const {
-        return *this->get();
-    }
+            operator std::string() const {
+                return *this->get();
+            }
 
-    auto hash() const {
-        return hash_;
-    }
+            auto hash() const {
+                return hash_;
+            }
 
-    DefaultStringViewable operator=(const DefaultStringViewable&) = delete;
+            DefaultStringViewable operator=(const DefaultStringViewable&) = delete;
 
-  private:
-    HashedValue hash_;
-};
+        private:
+            HashedValue hash_;
+        };
 
-inline bool operator==(const DefaultStringViewable &l, const DefaultStringViewable &r) {
-    return static_cast<std::shared_ptr<std::string>>(l) == static_cast<std::shared_ptr<std::string>>(r)
-        || (l.hash() == r.hash() && std::string_view{l} == std::string_view{r});
+        inline bool operator==(const DefaultStringViewable &l, const DefaultStringViewable &r) {
+            return static_cast<std::shared_ptr<std::string>>(l) == static_cast<std::shared_ptr<std::string>>(r)
+                   || (l.hash() == r.hash() && std::string_view{l} == std::string_view{r});
+        }
+
 }
+
+namespace fmt {
+
+    template<>
+    struct formatter<arcticdb::storage::DefaultStringViewable> {
+        template<typename ParseContext>
+        constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+        template<typename FormatContext>
+        auto format(const arcticdb::storage::DefaultStringViewable &dsv, FormatContext &ctx) const {
+            return fmt::format_to(ctx.out(), "{}", std::string_view{dsv});
+        }
+    };
+
+}
+
+namespace std {
+    template<>
+    struct hash<arcticdb::storage::DefaultStringViewable> {
+
+        inline arcticdb::HashedValue operator()(const arcticdb::storage::DefaultStringViewable &v) const noexcept {
+            return v.hash();
+        }
+    };
+
+}
+
+namespace arcticdb::storage {
 
 template<class StringViewable=DefaultStringViewable>
 class LibraryPathImpl {
@@ -135,54 +166,34 @@ using LibraryPath = LibraryPathImpl<DefaultStringViewable>;
 
 } //namespace arcticdb::storage
 
+
 namespace fmt {
 
-using namespace arcticdb::storage;
+    template<>
+    struct formatter<arcticdb::storage::LibraryPath> {
+        template<typename ParseContext>
+        constexpr auto parse(ParseContext &ctx) {
+            return ctx.begin();
+        }
 
-template<>
-struct formatter<DefaultStringViewable> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+        template<typename FormatContext>
+        auto format(const arcticdb::storage::LibraryPath &lib, FormatContext &ctx) const {
+            auto out = ctx.out();
+            fmt::format_to(out, "{}", lib.to_delim_path());
 
-    template<typename FormatContext>
-    auto format(const DefaultStringViewable &dsv, FormatContext &ctx) const {
-        return fmt::format_to(ctx.out(), "{}", std::string_view{dsv});
-    }
-};
-
-template<>
-struct formatter<LibraryPath> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext &ctx) {
-        return ctx.begin();
-    }
-
-    template<typename FormatContext>
-    auto format(const LibraryPath &lib, FormatContext &ctx) const {
-        auto out = ctx.out();
-        fmt::format_to(out, "{}", lib.to_delim_path());
-
-        return out;
-    }
-};
+            return out;
+        }
+    };
 
 }
 
 namespace std {
-template<>
-struct hash<arcticdb::storage::DefaultStringViewable> {
 
-    inline arcticdb::HashedValue operator()(const arcticdb::storage::DefaultStringViewable &v) const noexcept {
-        return v.hash();
-    }
-};
-
-template<class StringViewable>
-struct hash<arcticdb::storage::LibraryPathImpl<StringViewable>> {
-
-    inline arcticdb::HashedValue operator()(const arcticdb::storage::LibraryPathImpl<StringViewable> &v) const noexcept {
-        return v.hash();
-    }
-};
+    template<class StringViewable>
+    struct hash<arcticdb::storage::LibraryPathImpl<StringViewable>> {
+        inline arcticdb::HashedValue operator()(const arcticdb::storage::LibraryPathImpl<StringViewable> &v) const noexcept {
+            return v.hash();
+        }
+    };
 
 }
