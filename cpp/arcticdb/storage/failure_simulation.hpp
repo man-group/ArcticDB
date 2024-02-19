@@ -37,16 +37,16 @@ static const char* failure_names[] = {
 }
 
 namespace fmt {
-    template<>
-    struct formatter<arcticdb::FailureType> {
-        template<typename ParseContext>
-        constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+template<>
+struct formatter<arcticdb::FailureType> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
 
-        template<typename FormatContext>
-        auto format(const arcticdb::FailureType failure_type, FormatContext &ctx) const {
-            return fmt::format_to(ctx.out(), fmt::runtime(arcticdb::failure_names[int(failure_type)]));
-        }
-    };
+    template<typename FormatContext>
+    auto format(const arcticdb::FailureType failure_type, FormatContext &ctx) const {
+        return fmt::format_to(ctx.out(), fmt::runtime(arcticdb::failure_names[int(failure_type)]));
+    }
+};
 }
 
 namespace arcticdb {
