@@ -8,6 +8,7 @@
 #pragma once
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/bitset.hpp>
+#include <optional>
 
 namespace arcticdb::pipelines {
     struct PipelineContextRow;

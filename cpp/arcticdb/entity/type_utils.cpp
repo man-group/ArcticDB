@@ -8,6 +8,7 @@
 
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/entity/types.hpp>
+#include <arcticdb/entity/types_proto.hpp>
 
 namespace arcticdb {
     bool trivially_compatible_types(const entity::TypeDescriptor& left, const entity::TypeDescriptor& right) {

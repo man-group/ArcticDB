@@ -27,8 +27,10 @@
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/entity/merge_descriptors.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
+#include <arcticdb/util/format_date.hpp>
 #include <vector>
 #include <array>
+
 
 namespace arcticdb::pipelines {
 

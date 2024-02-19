@@ -217,10 +217,13 @@ set(arcticdb_srcs
         entity/type_conversion.hpp
         entity/types.hpp
         entity/type_utils.hpp
+        entity/types_proto.hpp
         entity/types-inl.hpp
         entity/variant_key.hpp
         entity/versioned_item.hpp
         entity/descriptor_item.hpp
+        entity/field_collection.hpp
+        entity/field_collection_proto.hpp
         log/log.hpp
         log/trace.hpp
         pipeline/column_mapping.hpp
@@ -379,12 +382,14 @@ set(arcticdb_srcs
         column_store/string_pool.cpp
         entity/data_error.cpp
         entity/field_collection.cpp
+        entity/field_collection_proto.cpp
         entity/key.cpp
         entity/merge_descriptors.cpp
         entity/metrics.cpp
         entity/performance_tracing.cpp
         entity/types.cpp
         entity/type_utils.cpp
+        entity/types_proto.cpp
         log/log.cpp
         pipeline/column_mapping.cpp
         pipeline/column_stats.cpp
