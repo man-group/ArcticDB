@@ -246,20 +246,20 @@ jobs:
         if: inputs.run_all_benchmarks == true
         shell: bash -el {0}
         run: |
-          python -m asv run -v --show-stderr HASHFILE:python/hashes_to_benchmark.txt
+          python -m asv run -v --show-stderr --strict HASHFILE:python/hashes_to_benchmark.txt
 
       - name: Benchmark only latest commit
         if: github.event_name != 'pull_request' && inputs.run_all_benchmarks == false
         shell: bash -el {0}
         run: |
-          python -m asv run -v --show-stderr HEAD^!
+          python -m asv run -v --show-stderr --strict HEAD^!
           git log HEAD^..HEAD --oneline -n1 --decorate=no | awk '{print $1;}' >> python/hashes_to_benchmark.txt
 
       - name: Benchmark against master
         if: github.event_name == 'pull_request' && inputs.run_all_benchmarks == false
         shell: bash -el {0}
         run: |
-          python -m asv continuous -v --show-stderr origin/master HEAD -f 1.15
+          python -m asv continuous -v --show-stderr --strict origin/master HEAD -f 1.15
 
       - name: Publish results
         if: github.event_name != 'pull_request' || github.ref == 'refs/heads/master'
