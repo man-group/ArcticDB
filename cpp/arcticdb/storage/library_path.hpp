@@ -127,7 +127,7 @@ class LibraryPathImpl {
 
     std::string to_delim_path(char delim = '.') const {
         auto rg = as_range();
-        auto delim_fold = [=, this](std::string a, DefaultStringViewable b) {
+        auto delim_fold = [=](std::string a, DefaultStringViewable b) {
             return std::move(a) + delim + fmt::format("{}", b);
         };
 
