@@ -471,6 +471,8 @@ if(NOT ${ARCTICDB_USING_CONDA})
 endif()
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
+target_compile_features(arcticdb_core_object PUBLIC cxx_std_20)
+set_property(TARGET arcticdb_core_object PROPERTY CXX_STANDARD 20)
 
 if (WIN32)
     target_compile_options(
@@ -625,6 +627,8 @@ target_include_directories(arcticdb_core_static PUBLIC
 target_link_libraries(arcticdb_core_static PUBLIC ${arcticdb_core_libraries})
 
 add_library(arcticdb_core SHARED $<TARGET_OBJECTS:arcticdb_core_object>)
+target_compile_features(arcticdb_core PUBLIC cxx_std_20)
+set_property(TARGET arcticdb_core PROPERTY CXX_STANDARD 20)
 
 target_link_libraries(arcticdb_core PRIVATE
         ${arcticdb_core_libraries}
@@ -888,6 +892,8 @@ if(${TEST})
             processing/test/benchmark_clause.cpp)
 
     add_executable(benchmarks ${benchmark_srcs})
+    target_compile_features(benchmarks PUBLIC cxx_std_20)
+    set_property(TARGET benchmarks PROPERTY CXX_STANDARD 20)
 
     target_link_libraries(benchmarks
             PUBLIC

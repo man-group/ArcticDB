@@ -1,4 +1,10 @@
-cmake_minimum_required(VERSION 3.21) # TARGET_RUNTIME_DLLS
+cmake_minimum_required(VERSION 3.28) # TARGET_RUNTIME_DLLS
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake" ${CMAKE_MODULE_PATH})
 cmake_policy(SET CMP0048 NEW)
@@ -58,10 +64,11 @@ if(WIN32)
     # sccache needs the /Z7 format, but the linker will still produce .pdb files.
     # Guide to MSVC compilation warnings https://learn.microsoft.com/en-us/cpp/error-messages/compiler-warnings/compiler-warnings-c4000-through-c4199?view=msvc-170
     add_compile_options(
-        /DWIN32 /D_WINDOWS /GR /EHsc /bigobj /Z7 /wd4244 /wd4267
+        /std:c++20 /DWIN32 /D_WINDOWS /GR /EHsc /bigobj /Z7 /wd4244 /wd4267
         "$<$<CONFIG:Debug>:/RTC1;/Od;/MTd>"
         "$<$<CONFIG:Release>:/MT;/Ox>"
     )
+
 else()
     if(${ARCTICDB_USING_CONDA})
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wextra")
@@ -86,9 +93,6 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(FIND_LIBRARY_USE_LIB64_PATHS ON)
 include(PythonUtils) # Must be called before Pybind (third_party) to override its finding mechanism
