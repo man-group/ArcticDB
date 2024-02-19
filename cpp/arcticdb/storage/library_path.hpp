@@ -20,41 +20,41 @@
 
 namespace arcticdb::storage {
 
-    // Using StringViewable to make it easily pluggable with a custom internalized string class
-    class DefaultStringViewable : public std::shared_ptr<std::string> {
-        public:
-            using std::shared_ptr<std::string>::shared_ptr;
+// Using StringViewable to make it easily pluggable with a custom internalized string class
+class DefaultStringViewable : public std::shared_ptr<std::string> {
+    public:
+        using std::shared_ptr<std::string>::shared_ptr;
 
-            template<class ...Args>
-            DefaultStringViewable(Args &&...args) : std::shared_ptr<std::string>::shared_ptr(
-                    std::make_shared<std::string>(args...)),
-                                                    hash_(arcticdb::hash(std::string_view{*this})) {}
+        template<class ...Args>
+        DefaultStringViewable(Args &&...args) : std::shared_ptr<std::string>::shared_ptr(
+                std::make_shared<std::string>(args...)),
+                                                hash_(arcticdb::hash(std::string_view{*this})) {}
 
-            DefaultStringViewable(const DefaultStringViewable &that) :
-                    std::shared_ptr<std::string>::shared_ptr(that), hash_(that.hash_) {}
+        DefaultStringViewable(const DefaultStringViewable &that) :
+                std::shared_ptr<std::string>::shared_ptr(that), hash_(that.hash_) {}
 
-            operator std::string_view() const {
-                return *this->get();
-            }
+        operator std::string_view() const {
+            return *this->get();
+        }
 
-            operator std::string() const {
-                return *this->get();
-            }
+        operator std::string() const {
+            return *this->get();
+        }
 
-            auto hash() const {
-                return hash_;
-            }
+        auto hash() const {
+            return hash_;
+        }
 
-            DefaultStringViewable operator=(const DefaultStringViewable&) = delete;
+        DefaultStringViewable operator=(const DefaultStringViewable&) = delete;
 
         private:
             HashedValue hash_;
         };
 
-        inline bool operator==(const DefaultStringViewable &l, const DefaultStringViewable &r) {
-            return static_cast<std::shared_ptr<std::string>>(l) == static_cast<std::shared_ptr<std::string>>(r)
-                   || (l.hash() == r.hash() && std::string_view{l} == std::string_view{r});
-        }
+inline bool operator==(const DefaultStringViewable &l, const DefaultStringViewable &r) {
+    return static_cast<std::shared_ptr<std::string>>(l) == static_cast<std::shared_ptr<std::string>>(r)
+           || (l.hash() == r.hash() && std::string_view{l} == std::string_view{r});
+}
 
 }
 

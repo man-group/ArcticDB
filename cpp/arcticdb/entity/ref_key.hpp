@@ -63,13 +63,13 @@ struct fmt::formatter<arcticdb::entity::RefKey>
 
 //TODO this is operating on the pretty-printed version and is needlessly inefficient
 namespace std {
-    template<>
-    struct hash<arcticdb::entity::RefKey> {
-        inline arcticdb::HashedValue operator()(const arcticdb::entity::RefKey &k) const noexcept {
-            auto view = k.view();
-            return arcticdb::hash(const_cast<uint8_t * >(reinterpret_cast<const uint8_t *>(view.data())), view.size());
-        }
-    };
+template<>
+struct hash<arcticdb::entity::RefKey> {
+    inline arcticdb::HashedValue operator()(const arcticdb::entity::RefKey &k) const noexcept {
+        auto view = k.view();
+        return arcticdb::hash(const_cast<uint8_t * >(reinterpret_cast<const uint8_t *>(view.data())), view.size());
+    }
+};
 }
 
 
