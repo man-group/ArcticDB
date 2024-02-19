@@ -109,7 +109,7 @@ struct S3IOStream : public std::iostream {
 };
 
 Aws::IOStreamFactory S3StreamFactory() {
-    return [=, this]() { return Aws::New<S3IOStream>(""); };
+    return [=]() { return Aws::New<S3IOStream>(""); };
 }
 
 S3Result<Segment> RealS3Client::get_object(

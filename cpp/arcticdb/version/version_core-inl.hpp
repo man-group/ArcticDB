@@ -65,7 +65,7 @@ void merge_frames_for_keys_impl(
         index_range = std::get<IndexRange>(query.row_filter);
 
     auto compare =
-        [=, this](const std::unique_ptr <StreamMergeWrapper> &left, const std::unique_ptr <StreamMergeWrapper> &right) {
+        [=](const std::unique_ptr <StreamMergeWrapper> &left, const std::unique_ptr <StreamMergeWrapper> &right) {
             return pipelines::index::index_value_from_row(left->row(), IndexDescriptor::TIMESTAMP, 0) > pipelines::index::index_value_from_row(right->row(), IndexDescriptor::TIMESTAMP, 0);
         };
 
