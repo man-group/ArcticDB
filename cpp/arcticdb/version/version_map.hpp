@@ -891,27 +891,6 @@ public:
     }
 
 private:
-    // Backwards compat stuff
-    AtomKey rewrite_old_journal_keys(std::shared_ptr<Store> store, const StreamId &stream_id, const std::shared_ptr<VersionMapEntry>& entry) {
-        util::check(!entry->keys_.empty(), "Can't rewrite empty version journal entry");
-        auto version_id = entry->keys_[0].version_id();
-        entry->head_ = std::make_optional(write_entry_to_storage(store, stream_id, version_id, entry));
-        write_symbol_ref(store, *entry->keys_.cbegin(), std::nullopt, entry->head_.value());
-        return entry->head_.value();
-    }
-
-    std::shared_ptr<VersionMapEntry> load_from_old_journal_keys(std::shared_ptr<StreamSource> store, const StreamId &stream_id) {
-        ARCTICDB_DEBUG(log::version(), "Attempting to iterate old journal keys");
-        auto match_stream_id = [&stream_id](const AtomKey &k) { return k.id() == stream_id; };
-        auto old_entry = build_version_map_entry_with_predicate_iteration(store, match_stream_id, stream_id,
-                                                                          {KeyType::VERSION_JOURNAL});
-        auto index_keys = old_entry->get_indexes(false);
-        std::sort(index_keys.begin(), index_keys.end(), std::greater<>());
-        auto entry = std::make_shared<VersionMapEntry>();
-        entry->keys_.assign(index_keys.begin(), index_keys.end());
-        return entry;
-    }
-
     std::pair<VersionId, std::vector<AtomKey>> tombstone_from_key_or_all_internal(std::shared_ptr<Store> store,
                                                             const StreamId& stream_id,
                                                             std::optional<AtomKey> first_key_to_tombstone = std::nullopt,

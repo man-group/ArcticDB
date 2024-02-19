@@ -1720,11 +1720,6 @@ VersionedItem LocalVersionedEngine::sort_merge_internal(
     return versioned_item;
 }
 
-bool LocalVersionedEngine::has_stream(const StreamId & stream_id){
-    auto opt = get_latest_undeleted_version(store(), version_map(),  stream_id, VersionQuery{}, ReadOptions{});
-    return opt.has_value();
-}
-
 StorageLockWrapper LocalVersionedEngine::get_storage_lock(const StreamId& stream_id) {
     return StorageLockWrapper{stream_id, store_};
 }

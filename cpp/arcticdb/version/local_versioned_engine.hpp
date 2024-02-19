@@ -149,10 +149,6 @@ public:
         const StreamId& stream_id,
         const std::shared_ptr<InputTensorFrame>& frame) const override;
 
-    bool has_stream(
-        const StreamId & stream_id
-    ) override;
-
     void delete_tree(
         const std::vector<IndexTypeKey>& idx_to_be_deleted,
         const PreDeleteChecks& checks = default_pre_delete_checks

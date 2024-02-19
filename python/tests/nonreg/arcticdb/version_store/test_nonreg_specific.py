@@ -21,9 +21,15 @@ def test_version_ref_key_access(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     sym = "test_version_ref_key_access"
     lib.write(sym, 1)
-    time.sleep(10)
+    lib.write(sym, 2)
     print("Write completed", flush=True)
-    lib.read(sym)
+    time.sleep(10)
+    lib.delete(sym)
+    # lib.delete(sym)
+    # lib.delete("non-existent sym")
+    # lib_tool = lib.library_tool()
+    # for key_type in lib_tool.key_types():
+    #     print(lib_tool.find_keys_for_symbol(key_type, sym))
 
 def test_read_keys(object_and_mem_and_lmdb_version_store_dynamic_schema):
     lib = object_and_mem_and_lmdb_version_store_dynamic_schema
