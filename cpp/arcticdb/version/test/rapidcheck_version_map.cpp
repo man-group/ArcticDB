@@ -34,7 +34,6 @@ template <typename Model>
 void check_latest_undeleted_versions(const Model&  s0, MapStorePair &sut, std::string symbol) {
     using namespace arcticdb;
     pipelines::VersionQuery version_query;
-    version_query.set_skip_compat(true),
     version_query.set_iterate_on_failure(true);
     auto prev = get_latest_undeleted_version(sut.store_, sut.map_, symbol, version_query, ReadOptions{});
     auto sut_version_id = prev ? prev->version_id() : 0;

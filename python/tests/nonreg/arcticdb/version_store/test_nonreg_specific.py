@@ -10,11 +10,20 @@ import pandas as pd
 import datetime
 import pytest
 import sys
+import time
 
 from arcticdb.util.test import assert_frame_equal, assert_series_equal
 from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor
 from tests.util.date import DateRange
+
+def test_version_ref_key_access(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_version_ref_key_access"
+    lib.write(sym, 1)
+    time.sleep(10)
+    print("Write completed", flush=True)
+    lib.read(sym)
 
 def test_read_keys(object_and_mem_and_lmdb_version_store_dynamic_schema):
     lib = object_and_mem_and_lmdb_version_store_dynamic_schema

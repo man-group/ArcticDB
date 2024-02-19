@@ -1447,7 +1447,6 @@ class NativeVersionStore:
 
     def _get_version_query(self, as_of: VersionQueryInput, **kwargs):
         version_query = _PythonVersionStoreVersionQuery()
-        version_query.set_skip_compat(_assume_true("skip_compat", kwargs))
         version_query.set_iterate_on_failure(_assume_false("iterate_on_failure", kwargs))
 
         if isinstance(as_of, str):

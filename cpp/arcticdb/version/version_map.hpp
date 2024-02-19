@@ -224,7 +224,6 @@ public:
 
     void write_version(std::shared_ptr<Store> store, const AtomKey &key) {
         LoadParameter load_param{LoadType::LOAD_LATEST};
-        load_param.skip_compat_ = false;
         auto entry = check_reload(store, key.id(), load_param,  __FUNCTION__);
 
         do_write(store, key, entry);
@@ -488,9 +487,6 @@ public:
             return get_entry(stream_id);
         }
 
-        if (!load_param.skip_compat_ && !has_stored_entry(store, stream_id))
-            do_backwards_compat_check(store, stream_id);
-
         return storage_reload(store, stream_id, load_param, load_param.iterate_on_failure_);
     }
 
@@ -695,10 +691,6 @@ private:
 
         version_agg.commit();
         return journal_key;
-    }
-
-    bool has_stored_entry(const std::shared_ptr<StreamSource>& store, const StreamId &stream_id) const {
-        return static_cast<bool>(get_symbol_ref_key(store, stream_id));
     }
 
     std::shared_ptr<VersionMapEntry> storage_reload(
@@ -917,17 +909,6 @@ private:
         std::sort(index_keys.begin(), index_keys.end(), std::greater<>());
         auto entry = std::make_shared<VersionMapEntry>();
         entry->keys_.assign(index_keys.begin(), index_keys.end());
-        return entry;
-    }
-
-    std::shared_ptr<VersionMapEntry> do_backwards_compat_check(std::shared_ptr<Store> store, const StreamId& stream_id) {
-        ARCTICDB_TRACE(log::version(), "Didn't find a ref entry, scanning for old-style journal keys");
-        auto entry = get_entry(stream_id);
-        if (auto old_entry = load_from_old_journal_keys(store, stream_id); !old_entry->keys_.empty()) {
-            entry->keys_ = std::move(old_entry->keys_);
-            entry->head_ = rewrite_old_journal_keys(store, stream_id, entry);
-            delete_keys_of_type_for_stream_sync(store, stream_id, KeyType::VERSION_JOURNAL);
-        }
         return entry;
     }
 

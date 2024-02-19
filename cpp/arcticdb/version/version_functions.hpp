@@ -16,7 +16,6 @@ namespace arcticdb {
 
 inline void set_load_param_options(LoadParameter& load_param, const pipelines::VersionQuery& version_query, const ReadOptions& read_options) {
     load_param.use_previous_ = read_options.read_previous_on_failure_.value_or(false);
-    load_param.skip_compat_ = version_query.skip_compat_.value_or(true);
     load_param.iterate_on_failure_ = version_query.iterate_on_failure_.value_or(false);
 }
 
@@ -142,7 +141,6 @@ inline bool has_undeleted_version(
     const std::shared_ptr<VersionMap> &version_map,
     const StreamId &id) {
     pipelines::VersionQuery version_query;
-    version_query.set_skip_compat(true),
     version_query.set_iterate_on_failure(false);
     auto maybe_undeleted = get_latest_undeleted_version(store, version_map, id, version_query, ReadOptions{});
     return static_cast<bool>(maybe_undeleted);

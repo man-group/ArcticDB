@@ -178,32 +178,20 @@ inline void check_is_version(const AtomKey &key) {
     util::check(key.type() == KeyType::VERSION, "Expected version key type but got {}", key);
 }
 
-inline std::optional<RefKey> get_symbol_ref_key(
-    const std::shared_ptr<StreamSource> &store,
-    const StreamId &stream_id) {
-    auto ref_key = RefKey{stream_id, KeyType::VERSION_REF};
-    if (store->key_exists_sync(ref_key))
-        return std::make_optional(std::move(ref_key));
-
-    // Old style ref_key
-    ARCTICDB_DEBUG(log::version(), "Ref key {} not found, trying old style ref key", ref_key);
-    ref_key = RefKey{stream_id, KeyType::VERSION, true};
-    if (!store->key_exists_sync(ref_key))
-        return std::nullopt;
-
-    ARCTICDB_DEBUG(log::version(), "Found old-style ref key", ref_key);
-    return std::make_optional(std::move(ref_key));
-}
-
 inline void read_symbol_ref(const std::shared_ptr<StreamSource>& store, const StreamId &stream_id, VersionMapEntry &entry) {
-    auto maybe_ref_key = get_symbol_ref_key(store, stream_id);
-    if (!maybe_ref_key)
-        return;
-
-    auto [key, seg] = store->read_sync(*maybe_ref_key);
+    std::pair<entity::VariantKey, SegmentInMemory> key_seg_pair;
+    try {
+        key_seg_pair = store->read_sync(RefKey{stream_id, KeyType::VERSION_REF});
+    } catch (const storage::KeyNotFoundException&) {
+        try {
+            key_seg_pair = store->read_sync(RefKey{stream_id, KeyType::VERSION, true});
+        } catch (const storage::KeyNotFoundException&) {
+            return;
+        }
+    }
 
     LoadProgress load_progress;
-    entry.head_ = read_segment_with_keys(seg, entry, load_progress);
+    entry.head_ = read_segment_with_keys(key_seg_pair.second, entry, load_progress);
 }
 
 inline void write_symbol_ref(std::shared_ptr<StreamSink> store,

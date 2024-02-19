@@ -63,7 +63,6 @@ struct LoadParameter {
     std::optional<SignedVersionId> load_until_ = std::nullopt;
     std::optional<timestamp> load_from_time_ = std::nullopt;
     bool use_previous_ = false;
-    bool skip_compat_ = true;
     bool iterate_on_failure_ = false;
 
     void validate() const {
