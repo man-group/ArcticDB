@@ -173,8 +173,8 @@ void do_read_impl(Composite<VariantKey> && ks,
                     ARCTICDB_DEBUG(log::storage(), "Read key {}: {}", variant_key_type(k), variant_key_view(k));
                 }
                 catch (const Azure::Core::RequestFailedException& e) {
+                    raise_if_unexpected_error(e);
                     if (!opts.dont_warn_about_missing_key) {
-                        raise_if_unexpected_error(e);
                         log::storage().warn("Failed to read azure segment with key '{}' {} {}: {}",
                                                 k,
                                                 blob_name,
