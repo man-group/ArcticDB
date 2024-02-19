@@ -35,7 +35,7 @@ std::string MockAzureClient::get_failure_trigger(
     return fmt::format("{}#Failure_{}_{}_{}", blob_name, operation_to_string(operation_to_fail), error_code, (int)error_to_fail_with);
 }
 
-Azure::Core::RequestFailedException get_exception(const std::string& message, std::string error_code, Azure::Core::Http::HttpStatusCode status_code) {
+Azure::Core::RequestFailedException get_exception(const std::string& message, const std::string& error_code, Azure::Core::Http::HttpStatusCode status_code) {
     auto rawResponse = std::make_unique<Azure::Core::Http::RawResponse>(0, 0, status_code, message);
     rawResponse->SetHeader("x-ms-error-code", error_code);
     auto exception = Azure::Core::RequestFailedException(rawResponse);
