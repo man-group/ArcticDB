@@ -87,8 +87,9 @@ void raise_azure_exception(const Azure::Core::RequestFailedException& e) {
     raise<ErrorCode::E_UNEXPECTED_AZURE_ERROR>(error_message);
 }
 
-bool is_expected_error_type(const std::string &error_code, Azure::Core::Http::HttpStatusCode status_code) {
-    return status_code == Azure::Core::Http::HttpStatusCode::NotFound && error_code == AzureErrorCode_to_string(AzureErrorCode::BlobNotFound);
+bool is_expected_error_type(const std::string& error_code, Azure::Core::Http::HttpStatusCode status_code) {
+    return (status_code == Azure::Core::Http::HttpStatusCode::NotFound && error_code == AzureErrorCode_to_string(AzureErrorCode::BlobNotFound)) ||
+           (status_code == Azure::Core::Http::HttpStatusCode::NotFound && error_code == AzureErrorCode_to_string(AzureErrorCode::ContainerNotFound));
 }
 
 void raise_if_unexpected_error(const Azure::Core::RequestFailedException& e) {
