@@ -18,6 +18,8 @@
 #ifdef ARCTICDB_USING_CONDA
     #include <lmdb++.h>
 #else
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     #include <third_party/lmdbxx/lmdb++.h>
 #endif
 
