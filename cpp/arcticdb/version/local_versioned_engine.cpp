@@ -445,7 +445,7 @@ std::vector<std::variant<DescriptorItem, DataError>> LocalVersionedEngine::batch
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_error_.has_value(),
                                                     "ReadOptions::batch_throw_on_error_ should always be set here");
 
-    auto version_futures = batch_get_versions_async(store(), version_map(), stream_ids, version_queries, read_options.read_previous_on_failure_);
+    auto version_futures = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<DescriptorItem>> descriptor_futures;
     for (auto&& [idx, version_fut]: folly::enumerate(version_futures)) {
         descriptor_futures.emplace_back(
@@ -1119,7 +1119,7 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::te
     const ReadOptions &read_options) {
     py::gil_scoped_release release_gil;
 
-    auto versions = batch_get_versions_async(store(), version_map(), stream_ids, version_queries, read_options.read_previous_on_failure_);
+    auto versions = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<ReadVersionOutput>> read_versions_futs;
     for (auto&& [idx, version] : folly::enumerate(versions)) {
         auto read_query = read_queries.empty() ? ReadQuery{} : read_queries[idx];
@@ -1664,7 +1664,7 @@ std::vector<std::variant<std::pair<VariantKey, std::optional<google::protobuf::A
     // This read option should always be set when calling batch_read_metadata
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_error_.has_value(),
                                                     "ReadOptions::batch_throw_on_error_ should always be set here");
-    auto version_futures = batch_get_versions_async(store(), version_map(), stream_ids, version_queries, read_options.read_previous_on_failure_);
+    auto version_futures = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<std::pair<VariantKey, std::optional<google::protobuf::Any>>>> metadata_futures;
     for (auto&& [idx, version]: folly::enumerate(version_futures)) {
         metadata_futures.emplace_back(get_metadata_async(std::move(version), stream_ids[idx], version_queries[idx]));
