@@ -157,7 +157,7 @@ ENDIF()
 
 set(CMAKE_INSTALL_RPATH "\\$ORIGIN/lib")
 
-if (NOT WIN32)
+if (NOT MSVC)
     if(NOT ${ARCTICDB_USING_CONDA})
         # Compilers on conda-forge are relatively strict.
         # For now, we do not want to treat warnings as errors for those builds.
@@ -166,6 +166,13 @@ if (NOT WIN32)
     add_compile_options("-ggdb")
     add_compile_options("-fvisibility=hidden")
     add_compile_options("-fno-omit-frame-pointer")
+else()
+    add_compile_options(
+        /WX
+        /wd4250 # Suppress inherits via dominance warning
+        /we4189 # Unused local variable is an error
+        /we4100 # Unused function parameter is an error
+    )
 endif ()
 
 ## Core library without python bindings ##
@@ -200,6 +207,7 @@ set(arcticdb_srcs
         entity/key.hpp
         entity/metrics.hpp
         entity/data_error.hpp
+        entity/descriptors.hpp
         entity/native_tensor.hpp
         entity/performance_tracing.hpp
         entity/protobuf_mappings.hpp
@@ -208,6 +216,7 @@ set(arcticdb_srcs
         entity/serialized_key.hpp
         entity/type_conversion.hpp
         entity/types.hpp
+        entity/type_utils.hpp
         entity/types_proto.hpp
         entity/types-inl.hpp
         entity/variant_key.hpp
@@ -235,7 +244,6 @@ set(arcticdb_srcs
         pipeline/read_options.hpp
         pipeline/read_pipeline.hpp
         pipeline/slicing.hpp
-        pipeline/string_pool_utils.hpp
         pipeline/string_pool_utils.hpp
         pipeline/value.hpp
         pipeline/value_set.hpp
@@ -380,8 +388,10 @@ set(arcticdb_srcs
         entity/metrics.cpp
         entity/performance_tracing.cpp
         entity/types.cpp
+        entity/type_utils.cpp
         entity/types_proto.cpp
         log/log.cpp
+        pipeline/column_mapping.cpp
         pipeline/column_stats.cpp
         pipeline/frame_slice.cpp
         pipeline/frame_utils.cpp

@@ -8,15 +8,17 @@
 #pragma once
 
 #include <arcticdb/stream/stream_source.hpp>
-#include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
 #include <arcticdb/pipeline/read_options.hpp>
 #include <arcticdb/util/bitset.hpp>
-#include <arcticdb/util/buffer_holder.hpp>
 
 #include <folly/futures/Future.h>
 
 #include <memory>
+
+namespace arcticdb {
+    struct BufferHolder;
+}
 
 namespace arcticdb::pipelines {
 

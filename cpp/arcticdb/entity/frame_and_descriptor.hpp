@@ -8,7 +8,6 @@
 #pragma once
 
 #include <arcticdb/column_store/memory_segment.hpp>
-#include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/buffer_holder.hpp>
 
 namespace arcticdb {
