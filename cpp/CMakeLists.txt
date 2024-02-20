@@ -1,7 +1,13 @@
 cmake_minimum_required(VERSION 3.21) # TARGET_RUNTIME_DLLS
+cmake_policy(SET CMP0048 NEW)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# We do not need any compilers' extensions, so we disable them.
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake" ${CMAKE_MODULE_PATH})
-cmake_policy(SET CMP0048 NEW)
 project(arcticdb VERSION 0.0.1)
 
 enable_testing()
@@ -86,11 +92,6 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-# We do not need any compilers' extensions, so we disable them.
-set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(FIND_LIBRARY_USE_LIB64_PATHS ON)
 include(PythonUtils) # Must be called before Pybind (third_party) to override its finding mechanism
