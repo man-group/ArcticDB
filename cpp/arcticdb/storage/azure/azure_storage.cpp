@@ -77,12 +77,12 @@ void raise_azure_exception(const Azure::Core::RequestFailedException& e) {
     }
 
     if((int) status_code >= 500) {
-        error_message = fmt::format("Unexpected Server Error: AzureError#{} {}: {}",
-                                    int(status_code), error_code, e.ReasonPhrase);
+        error_message = fmt::format("Unexpected Server Error: AzureError#{} {}: {} {}",
+                                    int(status_code), error_code, e.ReasonPhrase, e.what());
     }
     else {
-        error_message = fmt::format("Unexpected Error: AzureError#{} {}: {}",
-                                    int(status_code), error_code, e.ReasonPhrase);
+        error_message = fmt::format("Unexpected Error: AzureError#{} {}: {} {}",
+                                    int(status_code), error_code, e.ReasonPhrase, e.what());
     }
 
     raise<ErrorCode::E_UNEXPECTED_AZURE_ERROR>(error_message);
