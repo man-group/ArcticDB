@@ -51,12 +51,13 @@ namespace detail {
 //  This issue has been raised on the sdk repo. Once fixed, we should no longer need the following function and would just read e.ErrorCode.
 std::string get_error_code(const Azure::Core::RequestFailedException& e) {
     auto error_code = e.ErrorCode;
-    auto headers_map = e.RawResponse->GetHeaders();
 
-    if(error_code.empty() && headers_map.find("x-ms-error-code") != headers_map.end()) {
-        error_code = headers_map["x-ms-error-code"];
+    if(error_code.empty() && e.RawResponse ) {
+        auto headers_map = e.RawResponse->GetHeaders();
+        if(headers_map.find("x-ms-error-code") != headers_map.end()) {
+            error_code = headers_map["x-ms-error-code"];
+        }
     }
-
     return error_code;
 }
 
