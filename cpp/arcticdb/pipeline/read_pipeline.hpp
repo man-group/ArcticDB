@@ -10,6 +10,7 @@
 #include <variant>
 
 #include <folly/futures/Future.h>
+#include <folly/container/F14Set.h>
 #include <boost/noncopyable.hpp>
 
 #include <arcticdb/entity/types.hpp>
