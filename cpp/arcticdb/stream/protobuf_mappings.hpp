@@ -8,7 +8,7 @@
 #pragma once
 
 #include <arcticdb/entity/protobufs.hpp>
-#include <arcticdb/entity/types.hpp>
+#include <arcticdb/entity/types_proto.hpp>
 
 #include <google/protobuf/text_format.h>
 

@@ -127,62 +127,15 @@ struct formatter<arcticdb::entity::TypeDescriptor> {
 };
 
 template<>
-struct formatter<arcticdb::entity::Field> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
-
-    template<typename FormatContext>
-    constexpr auto format(const arcticdb::entity::Field &fd, FormatContext &ctx) const {
-        if (!fd.name().empty())
-            return fmt::format_to(ctx.out(), "FD<name={}, type={}>", fd.name(), fd.type());
-        else
-            return fmt::format_to(ctx.out(), "FD<type={}>", fd.type());
-    }
-};
-
-template<>
-struct formatter<arcticdb::entity::IndexDescriptor> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
-
-    template<typename FormatContext>
-    constexpr auto format(const arcticdb::entity::IndexDescriptor &idx, FormatContext &ctx) const {
-        return fmt::format_to(ctx.out(), "IDX<size={}, kind={}>", idx.field_count(), static_cast<char>(idx.type()));
-    }
-};
-template<>
 struct formatter<arcticdb::entity::StreamId> {
     template<typename ParseContext>
-    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+    constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
 
     template<typename FormatContext>
     constexpr auto format(const arcticdb::entity::StreamId &tsid, FormatContext &ctx) const {
         return std::visit([&ctx](auto &&val) {
             return fmt::format_to(ctx.out(), "{}", val);
         }, tsid);
-    }
-};
-
-template<>
-struct formatter<arcticdb::proto::descriptors::TypeDescriptor> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
-
-    template<typename FormatContext>
-    constexpr auto format(const arcticdb::proto::descriptors::TypeDescriptor& type_desc, FormatContext &ctx) const {
-        auto td = arcticdb::entity::type_desc_from_proto(type_desc);
-        return fmt::format_to(ctx.out(), "{}", td);
-    }
-};
-
-template<>
-struct formatter<arcticdb::proto::descriptors::StreamDescriptor_FieldDescriptor> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
-
-    template<typename FormatContext>
-    constexpr auto format(const arcticdb::proto::descriptors::StreamDescriptor_FieldDescriptor& field_desc, FormatContext &ctx) const {
-        return fmt::format_to(ctx.out(), "{}: {}", field_desc.name(), field_desc.type_desc());
     }
 };
 }
