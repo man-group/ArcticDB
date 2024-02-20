@@ -30,7 +30,7 @@ std::string operation_to_string(AzureOperation operation){
 std::string MockAzureClient::get_failure_trigger(
         const std::string& blob_name,
         AzureOperation operation_to_fail,
-        std::string error_code,
+        const std::string& error_code,
         Azure::Core::Http::HttpStatusCode error_to_fail_with) {
     return fmt::format("{}#Failure_{}_{}_{}", blob_name, operation_to_string(operation_to_fail), error_code, (int)error_to_fail_with);
 }

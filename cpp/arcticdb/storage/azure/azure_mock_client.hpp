@@ -51,7 +51,7 @@ public:
     static std::string get_failure_trigger(
             const std::string& blob_name,
             AzureOperation operation_to_fail,
-            std::string error_code,
+            const std::string& error_code,
             Azure::Core::Http::HttpStatusCode error_to_fail_with);
 
 private:

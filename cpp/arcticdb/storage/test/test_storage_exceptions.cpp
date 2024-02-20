@@ -130,7 +130,7 @@ TEST_P(GenericStorageTest, WriteDuplicateKeyException) {
 }
 
 TEST_P(GenericStorageTest, ReadKeyNotFoundException) {
-    ASSERT_TRUE(!exists_in_store(*storage, "sym"));
+    ASSERT_FALSE(exists_in_store(*storage, "sym"));
     ASSERT_THROW({
         read_in_store(*storage, "sym");
     },  arcticdb::storage::KeyNotFoundException);
@@ -138,7 +138,7 @@ TEST_P(GenericStorageTest, ReadKeyNotFoundException) {
 }
 
 TEST_P(GenericStorageTest, UpdateKeyNotFoundException) {
-    ASSERT_TRUE(!exists_in_store(*storage, "sym"));
+    ASSERT_FALSE(exists_in_store(*storage, "sym"));
     ASSERT_THROW({
         update_in_store(*storage, "sym");
     },  arcticdb::storage::KeyNotFoundException);
@@ -146,7 +146,7 @@ TEST_P(GenericStorageTest, UpdateKeyNotFoundException) {
 }
 
 TEST_P(GenericStorageTest, RemoveKeyNotFoundException) {
-    ASSERT_TRUE(!exists_in_store(*storage, "sym"));
+    ASSERT_FALSE(exists_in_store(*storage, "sym"));
     ASSERT_THROW({
         remove_in_store(*storage, {"sym"});
     },  arcticdb::storage::KeyNotFoundException);
@@ -204,7 +204,7 @@ TEST(S3MockStorageTest, TestReadKeyNotFoundException) {
     S3MockStorageFactory factory;
     auto storage = factory.create();
 
-    ASSERT_TRUE(!exists_in_store(*storage, "sym"));
+    ASSERT_FALSE(exists_in_store(*storage, "sym"));
     ASSERT_THROW({
         read_in_store(*storage, "sym");
     },  arcticdb::storage::KeyNotFoundException);
@@ -263,7 +263,7 @@ TEST(AzureMockStorageTest, TestReadKeyNotFoundException) {
     AzureMockStorageFactory factory;
     auto storage = factory.create();
 
-    ASSERT_TRUE(!exists_in_store(*storage, "sym"));
+    ASSERT_FALSE(exists_in_store(*storage, "sym"));
     ASSERT_THROW({
         read_in_store(*storage, "sym");
     },  arcticdb::storage::KeyNotFoundException);

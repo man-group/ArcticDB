@@ -48,14 +48,14 @@ namespace fg = folly::gen;
 namespace detail {
 
 // TODO: fix this temporary workaround to read error code. azure-sdk-cpp client sometimes doesn't properly set the error code.
-//  This issue has been raised on the sdk repo. Once fixed, we should no longer need the following function and would just read e.ErrorCode.
+//  This issue has been raised on the sdk repo https://github.com/Azure/azure-sdk-for-cpp/issues/5369. Once fixed, we should no longer need the following function and would just read e.ErrorCode.
 std::string get_error_code(const Azure::Core::RequestFailedException& e) {
     auto error_code = e.ErrorCode;
 
     if(error_code.empty() && e.RawResponse ) {
         auto headers_map = e.RawResponse->GetHeaders();
-        if(headers_map.find("x-ms-error-code") != headers_map.end()) {
-            error_code = headers_map["x-ms-error-code"];
+        if(auto ec = headers_map.find("x-ms-error-code") ; ec != headers_map.end()) {
+            error_code = ec->second;
         }
     }
     return error_code;
@@ -68,29 +68,28 @@ void raise_azure_exception(const Azure::Core::RequestFailedException& e) {
 
     if(status_code == Azure::Core::Http::HttpStatusCode::NotFound && error_code == AzureErrorCode_to_string(AzureErrorCode::BlobNotFound)) {
         throw KeyNotFoundException(fmt::format("Key Not Found Error: AzureError#{} {}: {}",
-                                               int(status_code), error_code, e.ReasonPhrase));
+                                               static_cast<int>(status_code), error_code, e.ReasonPhrase));
     }
 
     if(status_code == Azure::Core::Http::HttpStatusCode::Unauthorized || status_code == Azure::Core::Http::HttpStatusCode::Forbidden) {
         raise<ErrorCode::E_PERMISSION>(fmt::format("Permission error: AzureError#{} {}: {}",
-                                                   int(status_code), error_code, e.ReasonPhrase));
+                                                   static_cast<int>(status_code), error_code, e.ReasonPhrase));
     }
 
-    if((int) status_code >= 500) {
+    if(static_cast<int>(status_code) >= 500) {
         error_message = fmt::format("Unexpected Server Error: AzureError#{} {}: {} {}",
-                                    int(status_code), error_code, e.ReasonPhrase, e.what());
-    }
-    else {
+                                    static_cast<int>(status_code), error_code, e.ReasonPhrase, e.what());
+    } else {
         error_message = fmt::format("Unexpected Error: AzureError#{} {}: {} {}",
-                                    int(status_code), error_code, e.ReasonPhrase, e.what());
+                                    static_cast<int>(status_code), error_code, e.ReasonPhrase, e.what());
     }
 
     raise<ErrorCode::E_UNEXPECTED_AZURE_ERROR>(error_message);
 }
 
 bool is_expected_error_type(const std::string& error_code, Azure::Core::Http::HttpStatusCode status_code) {
-    return (status_code == Azure::Core::Http::HttpStatusCode::NotFound && error_code == AzureErrorCode_to_string(AzureErrorCode::BlobNotFound)) ||
-           (status_code == Azure::Core::Http::HttpStatusCode::NotFound && error_code == AzureErrorCode_to_string(AzureErrorCode::ContainerNotFound));
+    return status_code == Azure::Core::Http::HttpStatusCode::NotFound && (error_code == AzureErrorCode_to_string(AzureErrorCode::BlobNotFound) ||
+                                                                          error_code == AzureErrorCode_to_string(AzureErrorCode::ContainerNotFound));
 }
 
 void raise_if_unexpected_error(const Azure::Core::RequestFailedException& e) {
