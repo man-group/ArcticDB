@@ -14,8 +14,7 @@
 
 namespace arcticdb {
 
-inline void set_load_param_options(LoadParameter& load_param, const pipelines::VersionQuery& version_query, const ReadOptions& read_options) {
-    load_param.use_previous_ = read_options.read_previous_on_failure_.value_or(false);
+inline void set_load_param_options(LoadParameter& load_param, const pipelines::VersionQuery& version_query, const ReadOptions&) {
     load_param.iterate_on_failure_ = version_query.iterate_on_failure_.value_or(false);
 }
 

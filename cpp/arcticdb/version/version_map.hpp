@@ -150,7 +150,9 @@ public:
         std::optional<VersionId> latest_version;
         LoadProgress load_progress;
         util::check(ref_entry.keys_.size() >= 2, "Invalid number of keys in ref entry: {}", ref_entry.keys_.size());
-        if (key_exists_in_ref_entry(load_params, ref_entry, std::nullopt, load_progress)) {
+        if (key_exists_in_ref_entry(load_params, ref_entry)) {
+            load_progress.loaded_until_ = ref_entry.loaded_until_;
+            load_progress.oldest_loaded_index_version_ = ref_entry.loaded_until_;
             entry->keys_.push_back(ref_entry.keys_[0]);
         } else {
             do {
@@ -537,7 +539,102 @@ public:
         folly::collect(key_futs).get();
     }
 
+    /**
+     * Public for testability only.
+     *
+     * @param stream_id symbol to check
+     * @param load_param the load type
+     * @return whether we have a cached entry suitable for the load type, so do not need to go to storage
+     */
+    bool has_cached_entry(const StreamId &stream_id, const LoadParameter& load_param) const {
+        LoadType requested_load_type = load_param.load_type_;
+        util::check(requested_load_type < LoadType::UNKNOWN, "Unexpected load type requested {}", requested_load_type);
+
+        load_param.validate();
+        MapType::const_iterator entry_it;
+        if(!find_entry(entry_it, stream_id)) {
+            return false;
+        }
+
+        const timestamp reload_interval = reload_interval_.value_or(
+                ConfigsMap::instance()->get_int("VersionMap.ReloadInterval", DEFAULT_RELOAD_INTERVAL));
+
+        const auto& entry = entry_it->second;
+        if (const timestamp cache_timing = now() - entry->last_reload_time_; cache_timing > reload_interval) {
+            ARCTICDB_DEBUG(log::version(),
+                           "Latest read time {} too long ago for last acceptable cached timing {} (cache period {}) for symbol {}",
+                           entry->last_reload_time_, cache_timing, reload_interval, stream_id);
+
+            return false;
+        }
+
+        if (requested_load_type == LoadType::NOT_LOADED) {
+            return true;
+        }
+
+        LoadType cached_load_type = entry->load_type_;
+
+        switch(cached_load_type) {
+            case LoadType::NOT_LOADED:
+                break;
+            case LoadType::LOAD_LATEST:
+                // Future: This case and LOAD_LATEST_UNDELETED could be optimized: use cache if request is
+                // LOAD_FROM_TIME for a later time than the cached entry.
+                if (requested_load_type == LoadType::LOAD_LATEST) {
+                    return true;
+                }
+                if (requested_load_type == LoadType::LOAD_DOWNTO) {
+                    return loaded_as_far_as_load_until(*entry, load_param);
+                }
+                break;
+            case LoadType::LOAD_LATEST_UNDELETED:
+                if (requested_load_type == LoadType::LOAD_LATEST_UNDELETED
+                    || requested_load_type == LoadType::LOAD_LATEST
+                    || requested_load_type == LoadType::NOT_LOADED) {
+                    return true;
+                }
+
+                if (requested_load_type == LoadType::LOAD_DOWNTO) {
+                    return loaded_as_far_as_load_until(*entry, load_param);
+                }
+                break;
+            case LoadType::LOAD_DOWNTO:
+                if (requested_load_type == LoadType::LOAD_DOWNTO) {
+                    return loaded_as_far_as_load_until(*entry, load_param);
+                }
+
+                if (requested_load_type == LoadType::LOAD_LATEST_UNDELETED) {
+                    auto opt_latest = entry->get_first_index(false);
+                    return opt_latest.has_value();
+                }
+
+                if (requested_load_type == LoadType::LOAD_LATEST) {
+                    auto opt_latest = entry->get_first_index(true);
+                    return opt_latest.has_value();
+                }
+
+                return requested_load_type == LoadType::NOT_LOADED;
+            case LoadType::LOAD_FROM_TIME:
+                // Future: This case could be optimized: use cache if it is LOAD_FROM_TIME for earlier time or
+                // LOAD_DOWNTO for a version with an earlier timestamp
+
+                // LOAD_FROM_TIME keeps looking till it finds an undeleted version, even that is earlier than the
+                // search time requested
+                return requested_load_type == LoadType::NOT_LOADED
+                    || requested_load_type == LoadType::LOAD_LATEST_UNDELETED
+                    || requested_load_type == LoadType::LOAD_LATEST;
+            case LoadType::LOAD_UNDELETED:
+                return requested_load_type != LoadType::LOAD_ALL;
+            case LoadType::LOAD_ALL:
+                return true;
+            default:
+                util::raise_rte("Unexpected load type in cache {}", cached_load_type);
+        }
+        return false;
+    }
+
 private:
+
     std::shared_ptr<VersionMapEntry> compact_entry(
             std::shared_ptr<Store> store,
             const StreamId& stream_id,
@@ -600,62 +697,34 @@ private:
         return true;
     }
 
-    bool has_cached_entry(const StreamId &stream_id, const LoadParameter& load_param) const {
-        load_param.validate();
-        MapType::const_iterator entry_it;
-        if(!find_entry(entry_it, stream_id))
-            return false;
-
-        const timestamp reload_interval = reload_interval_.value_or(ConfigsMap::instance()->get_int("VersionMap.ReloadInterval", DEFAULT_RELOAD_INTERVAL));
-
-        const auto& entry = entry_it->second;
-        if (const timestamp cache_timing = now() - entry->last_reload_time_; cache_timing > reload_interval) {
-            ARCTICDB_DEBUG(log::version(),
-                    "Latest read time {} too long ago for last acceptable cached timing {} (cache period {}) for symbol {}",
-                    entry->last_reload_time_, cache_timing, reload_interval, stream_id);
-
-            return false;
-        }
-
-        // TODO: Fix #587
-        if (entry->load_type_ < load_param.load_type_) {
-            ARCTICDB_DEBUG(log::version(), "Required load type {} exceeds existing load type {}, will reload {}",
-                           load_param.load_type_, entry->load_type_, stream_id);
-            return false;
-        }
-
-        if(entry->load_type_ == LoadType::LOAD_DOWNTO) {
-            if (load_param.load_type_ == LoadType::LOAD_UNDELETED) {
-                return false;
+    /**
+     * Whether entry contains as much of the version map as specified by load_param. Checks whether
+     * loaded_until_ in entry is earlier than that specified in load_param.
+     *
+     * @param entry the version map state to check
+     * @param load_param the load request to test for completeness
+     * @return true if and only if entry already contains data at least as far back as load_param requests
+     */
+    bool loaded_as_far_as_load_until(const VersionMapEntry& entry, const LoadParameter& load_param) const {
+        if (is_positive_version_query(load_param)) {
+            if (entry.loaded_until_ <= static_cast<VersionId>(load_param.load_until_.value())) {
+                ARCTICDB_DEBUG(log::version(), "Loaded as far as required value {}, have {}",
+                               load_param.load_until_.value(), entry.loaded_until_);
+                return true;
             }
-            if (load_param.load_type_ == LoadType::LOAD_DOWNTO ) {
-                if (is_positive_version_query(load_param)) {
-                    if (entry->loaded_until_ > static_cast<VersionId>(load_param.load_until_.value())) {
-                        ARCTICDB_DEBUG(log::version(), "Not loaded as far as required value {}, only have {}",
-                                       load_param.load_until_.value(), entry->loaded_until_);
-                        return false;
-                    }
-                } else {
-                    auto opt_latest = entry->get_first_index(true);
-                    if (opt_latest.has_value()) {
-                        auto opt_version_id = get_version_id_negative_index(opt_latest->version_id(), *load_param.load_until_);
-                        if (opt_version_id.has_value() && entry->loaded_until_ > *opt_version_id) {
-                            ARCTICDB_DEBUG(log::version(), "Not loaded as far as required value {}, only have {} and there are {} total versions",
-                                           load_param.load_until_.value(), entry->loaded_until_, opt_latest->version_id());
-                            return false;
-                        }
-                    }
+        } else {
+            auto opt_latest = entry.get_first_index(true);
+            if (opt_latest.has_value()) {
+                auto opt_version_id = get_version_id_negative_index(opt_latest->version_id(),
+                                                                    *load_param.load_until_);
+                if (opt_version_id.has_value() && entry.loaded_until_ <= *opt_version_id) {
+                    ARCTICDB_DEBUG(log::version(), "Loaded as far as required value {}, have {} and there are {} total versions",
+                                   load_param.load_until_.value(), entry.loaded_until_, opt_latest->version_id());
+                    return true;
                 }
-
             }
         }
-
-        if(load_param.load_type_ == LoadType::LOAD_UNDELETED && !entry->tombstone_all_ &&
-           entry->load_type_ != LoadType::LOAD_UNDELETED)
-            return false;
-
-        ARCTICDB_DEBUG(log::version(), "{} Using cached entry for symbol {}", uintptr_t(this), stream_id);
-        return true;
+        return false;
     }
 
     std::shared_ptr<VersionMapEntry>& get_entry(const StreamId& stream_id) {

@@ -255,8 +255,7 @@ std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions_async(
     const std::shared_ptr<Store>& store,
     const std::shared_ptr<VersionMap>& version_map,
     const std::vector<StreamId>& symbols,
-    const std::vector<pipelines::VersionQuery>& version_queries,
-    const std::optional<bool>& use_previous_on_error);
+    const std::vector<pipelines::VersionQuery>& version_queries);
 
 inline std::vector<folly::Future<folly::Unit>> batch_write_version(
     const std::shared_ptr<Store> &store,
