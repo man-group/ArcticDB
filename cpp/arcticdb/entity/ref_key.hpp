@@ -97,6 +97,7 @@ struct hash<arcticdb::entity::RefKey> {
 namespace arcticdb::entity
 {
     // Note: this needs to be defined after formatters.
+    inline
     void RefKey::set_string() const {
         str_ = fmt::format("{}", *this);
     }
