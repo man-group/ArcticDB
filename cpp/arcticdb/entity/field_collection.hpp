@@ -10,6 +10,7 @@
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <util/cursored_buffer.hpp>
 #include <util/buffer.hpp>
+#include <entity/types.hpp>
 #include <arcticdb/column_store/column_data.hpp>
 
 namespace arcticdb {
@@ -191,13 +192,6 @@ public:
     }
 };
 
-inline FieldCollection fields_from_proto(const arcticdb::proto::descriptors::StreamDescriptor& desc) {
-    FieldCollection output;
-    for(const auto& field : desc.fields())
-        output.add_field(type_desc_from_proto(field.type_desc()), field.name());
-
-    return output;
-}
 
 template <typename RangeType>
 FieldCollection fields_from_range(const RangeType& fields) {
@@ -206,13 +200,6 @@ FieldCollection fields_from_range(const RangeType& fields) {
         output.add({field.type(), field.name()});
     }
     return output;
-}
-
-inline void proto_from_fields(const FieldCollection& fields, arcticdb::proto::descriptors::StreamDescriptor& desc) {
-    for(const auto& field : fields) {
-        auto new_field = desc.add_fields();
-        new_field->MergeFrom(field_proto(field.type().data_type(), field.type().dimension(), field.name()));
-    }
 }
 
 

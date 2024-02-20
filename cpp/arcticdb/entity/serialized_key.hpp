@@ -17,6 +17,7 @@
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/util/buffer.hpp>
 #include <arcticdb/util/cursored_buffer.hpp>
+#include <arcticdb/util/string_utils.hpp>
 
 namespace arcticdb::entity {
 

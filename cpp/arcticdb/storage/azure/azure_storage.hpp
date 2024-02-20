@@ -10,6 +10,7 @@
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_factory.hpp>
 #include <arcticdb/storage/object_store_utils.hpp>
+#include <arcticdb/storage/azure/azure_client_wrapper.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/composite.hpp>
@@ -29,11 +30,6 @@ class AzureStorage final : public Storage {
     using Config = arcticdb::proto::azure_storage::Config;
 
     AzureStorage(const LibraryPath &lib, OpenMode mode, const Config &conf);
-
-    /**
-     * Full object path in Azure bucket.
-     */
-    std::string get_key_path(const VariantKey& key) const;
 
   protected:
     void do_write(Composite<KeySegmentPair>&& kvs) final;
@@ -59,7 +55,8 @@ class AzureStorage final : public Storage {
     std::string do_key_path(const VariantKey&) const final { return {}; };
 
   private:
-    Azure::Storage::Blobs::BlobContainerClient container_client_;
+    std::unique_ptr<AzureClientWrapper> azure_client_;
+
     std::string root_folder_;
     unsigned int request_timeout_;
     Azure::Storage::Blobs::UploadBlockBlobFromOptions upload_option_;

@@ -208,10 +208,13 @@ set(arcticdb_srcs
         entity/serialized_key.hpp
         entity/type_conversion.hpp
         entity/types.hpp
+        entity/types_proto.hpp
         entity/types-inl.hpp
         entity/variant_key.hpp
         entity/versioned_item.hpp
         entity/descriptor_item.hpp
+        entity/field_collection.hpp
+        entity/field_collection_proto.hpp
         log/log.hpp
         log/trace.hpp
         pipeline/column_mapping.hpp
@@ -371,11 +374,13 @@ set(arcticdb_srcs
         column_store/string_pool.cpp
         entity/data_error.cpp
         entity/field_collection.cpp
+        entity/field_collection_proto.cpp
         entity/key.cpp
         entity/merge_descriptors.cpp
         entity/metrics.cpp
         entity/performance_tracing.cpp
         entity/types.cpp
+        entity/types_proto.cpp
         log/log.cpp
         pipeline/column_stats.cpp
         pipeline/frame_slice.cpp
@@ -414,11 +419,16 @@ set(arcticdb_srcs
         storage/mongo/mongo_storage.cpp
         storage/s3/nfs_backed_storage.cpp
         storage/s3/s3_api.cpp
-        storage/s3/real_s3_client.cpp
-        storage/s3/mock_s3_client.cpp
+        storage/s3/s3_real_client.cpp
+        storage/s3/s3_mock_client.cpp
         storage/s3/s3_storage.cpp
         storage/s3/s3_storage_tool.cpp
         storage/storage_factory.cpp
+        storage/azure/azure_client_wrapper.hpp
+        storage/azure/azure_real_client.hpp
+        storage/azure/azure_real_client.cpp
+        storage/azure/azure_mock_client.hpp
+        storage/azure/azure_mock_client.cpp
         stream/aggregator.cpp
         stream/append_map.cpp
         toolbox/library_tool.cpp
@@ -444,7 +454,7 @@ set(arcticdb_srcs
         version/version_utils.cpp
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
-        )
+)
 
 if(${ARCTICDB_INCLUDE_ROCKSDB})
     list (APPEND arcticdb_srcs
@@ -758,6 +768,8 @@ if(${TEST})
             storage/test/test_mongo_storage.cpp
             storage/test/test_s3_storage.cpp
             storage/test/test_storage_factory.cpp
+            storage/test/test_storage_exceptions.cpp
+            storage/test/test_azure_storage.cpp
             stream/test/stream_test_common.cpp
             stream/test/test_aggregator.cpp
             stream/test/test_append_map.cpp
@@ -792,8 +804,8 @@ if(${TEST})
             version/test/test_version_store.cpp
             version/test/test_sorting_info_state_machine.cpp
             version/test/version_map_model.hpp
-            storage/test/test_storage_exceptions.cpp
-            )
+            storage/test/common.hpp
+    )
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 

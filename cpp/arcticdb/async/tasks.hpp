@@ -22,6 +22,7 @@
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/processing/processing_unit.hpp>
 #include <arcticdb/util/constructors.hpp>
+#include <arcticdb/codec/codec.hpp>
 
 #include <type_traits>
 

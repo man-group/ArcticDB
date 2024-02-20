@@ -5,7 +5,7 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/storage/s3/real_s3_client.hpp>
+#include <arcticdb/storage/s3/s3_real_client.hpp>
 #include <arcticdb/storage/s3/s3_client_wrapper.hpp>
 
 #include <aws/s3/S3Client.h>
@@ -27,6 +27,10 @@
 #include <aws/s3/model/ObjectIdentifier.h>
 
 #include <boost/interprocess/streams/bufferstream.hpp>
+
+// GetMessage macro on windows shadows AWS's GetMessage:
+// https://github.com/aws/aws-sdk-cpp/issues/402
+#undef GetMessage
 
 namespace arcticdb::storage{
 
@@ -187,11 +191,9 @@ S3Result<DeleteOutput> RealS3Client::delete_objects(
     }
     // AN-256: Per AWS S3 documentation, deleting non-exist objects is not an error, so not handling
     // RemoveOpts.ignores_missing_key_
-    std::vector<std::string> failed_deletes;
+    std::vector<FailedDelete> failed_deletes;
     for (const auto &failed_key: outcome.GetResult().GetErrors()) {
-        // TODO: We only use GetKey(), so we should use QUIET:
-        // https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteObjects.html
-        failed_deletes.emplace_back(failed_key.GetKey());
+        failed_deletes.push_back({failed_key.GetKey(), failed_key.GetMessage()});
     }
 
     DeleteOutput result = {failed_deletes};

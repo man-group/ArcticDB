@@ -50,8 +50,12 @@ struct ListObjectsOutput{
     std::optional<std::string> next_continuation_token;
 };
 
+struct FailedDelete{
+    std::string s3_object_name;
+    std::string error_message;
+};
 struct DeleteOutput{
-    std::vector<std::string> failed_deletes;
+    std::vector<FailedDelete> failed_deletes;
 };
 
 // An abstract class, which is responsible for sending the requests and parsing the responses from S3.
@@ -75,6 +79,8 @@ public:
             const std::string& prefix,
             const std::string& bucket_name,
             const std::optional<std::string> continuation_token) const = 0;
+
+    virtual ~S3ClientWrapper() = default;
 };
 
 }
