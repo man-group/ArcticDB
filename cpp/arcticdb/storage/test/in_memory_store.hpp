@@ -325,7 +325,7 @@ namespace arcticdb {
         size_t num_atom_keys_of_type(KeyType key_type) const {
             util::check(!is_ref_key_class(key_type), "Num atom keys of type for ref key doesn't make sense");
             return std::count_if(seg_by_atom_key_.cbegin(), seg_by_atom_key_.cend(),
-                                 [=, this](auto &entry) { return entry.first.type() == key_type; });
+                                 [=](auto &entry) { return entry.first.type() == key_type; });
         }
 
         void move_storage(KeyType , timestamp , size_t ) override {
@@ -334,7 +334,7 @@ namespace arcticdb {
         size_t num_ref_keys_of_type(KeyType key_type) const {
             util::check(is_ref_key_class(key_type), "Num ref keys of type for non-ref key doesn't make sense");
             return std::count_if(seg_by_ref_key_.cbegin(), seg_by_ref_key_.cend(),
-                                 [=, this](auto &entry) { return entry.first.type() == key_type; });
+                                 [=](auto &entry) { return entry.first.type() == key_type; });
         }
 
         HashedValue content_hash_ = 0x42;
