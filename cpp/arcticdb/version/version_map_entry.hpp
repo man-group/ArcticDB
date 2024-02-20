@@ -20,23 +20,19 @@ namespace arcticdb {
 using namespace arcticdb::entity;
 using namespace arcticdb::stream;
 
-enum class LoadType :
-        uint32_t {
+enum class LoadType : uint32_t {
     NOT_LOADED = 0,
-    LOAD_LATEST = 1,
-    LOAD_LATEST_UNDELETED = 2,
-    LOAD_DOWNTO = 3,
-    LOAD_UNDELETED = 4,
-    LOAD_FROM_TIME = 5,
-    LOAD_ALL = 6
+    LOAD_LATEST,
+    LOAD_LATEST_UNDELETED,
+    LOAD_DOWNTO,
+    LOAD_FROM_TIME,
+    LOAD_UNDELETED,
+    LOAD_ALL,
+    UNKNOWN
 };
 
 inline constexpr bool is_latest_load_type(LoadType load_type) {
     return load_type == LoadType::LOAD_LATEST || load_type == LoadType::LOAD_LATEST_UNDELETED;
-}
-
-inline constexpr bool is_partial_load_type(LoadType load_type) {
-    return load_type == LoadType::LOAD_DOWNTO || load_type == LoadType::LOAD_FROM_TIME;
 }
 
 struct LoadParameter {
@@ -62,7 +58,6 @@ struct LoadParameter {
     LoadType load_type_ = LoadType::NOT_LOADED;
     std::optional<SignedVersionId> load_until_ = std::nullopt;
     std::optional<timestamp> load_from_time_ = std::nullopt;
-    bool use_previous_ = false;
     bool iterate_on_failure_ = false;
 
     void validate() const {

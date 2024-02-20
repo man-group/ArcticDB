@@ -310,7 +310,7 @@ inline bool looking_for_undeleted(const LoadParameter& load_params, const std::s
     }
 }
 
-inline bool key_exists_in_ref_entry(const LoadParameter& load_params, const VersionMapEntry& ref_entry, const std::optional<AtomKey>&, LoadProgress&) {
+inline bool key_exists_in_ref_entry(const LoadParameter& load_params, const VersionMapEntry& ref_entry) {
     if (is_latest_load_type(load_params.load_type_) && is_index_key_type(ref_entry.keys_[0].type())) {
         ARCTICDB_DEBUG(log::version(), "Not following version chain as key for {} exists in ref entry", ref_entry.head_->id());
         return true;
