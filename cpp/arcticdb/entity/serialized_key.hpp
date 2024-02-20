@@ -184,7 +184,7 @@ struct formatter<KeyDescriptor> {
 
     template<typename FormatContext>
     auto format(const KeyDescriptor &kd, FormatContext &ctx) const {
-        return format_to(ctx.out(), FMT_COMPILE("{}{}{}{}"), kd.identifier, char(kd.id_type), char(kd.index_type),
+        return fmt::format_to(ctx.out(), FMT_COMPILE("{}{}{}{}"), kd.identifier, char(kd.id_type), char(kd.index_type),
                          char(kd.format_type));
     }
 };
