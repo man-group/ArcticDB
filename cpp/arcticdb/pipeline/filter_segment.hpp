@@ -9,8 +9,6 @@
 
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/util/bitset.hpp>
-#include <folly/container/Enumerate.h>
-#include <arcticdb/entity/types.hpp>
 
 namespace arcticdb {
 
@@ -19,12 +17,6 @@ inline SegmentInMemory filter_segment(const SegmentInMemory& input,
                                       bool filter_down_stringpool=false,
                                       bool validate=false) {
     return input.filter(filter_bitset, filter_down_stringpool, validate);
-}
-
-inline SegmentInMemory truncate_segment(const SegmentInMemory& input,
-                                        size_t start,
-                                        size_t end) {
-    return input.truncate(start, end);
 }
 
 inline std::vector<SegmentInMemory> partition_segment(const SegmentInMemory& input,

@@ -7,12 +7,9 @@
 
 #pragma once
 
-#include <arcticdb/stream/index.hpp>
-#include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/index_range.hpp>
 
-#include <vector>
-#include <variant>
+
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <folly/futures/Future.h>
@@ -63,15 +60,33 @@ folly::Future<entity::AtomKey> append_frame(
         bool ignore_sort_order
 );
 
+enum class AffectedSegmentPart {
+    START,
+    END
+};
+
 std::optional<SliceAndKey> rewrite_partial_segment(
         const SliceAndKey& existing,
         IndexRange index_range,
         VersionId version_id,
-        bool before,
+        AffectedSegmentPart affected_part,
         const std::shared_ptr<Store>& store);
 
+
+/// Used, when updating a segment, to convert all 5 affected groups into a single list of slices
+/// The 5 groups are:
+/// * Segments before the update range which do not intersect with it and are not affected by
+///   the update
+/// * Segments before the update range which are intersecting with it and are partially affected
+///   by the update.
+/// * Segments which are fully contained inside the update range
+/// * Segments after the update range which are intersecting with it and are partially affected
+///   by the update
+/// * Segments after the update range which do not intersect with it and are not affected by the
+///   update
 std::vector<SliceAndKey> flatten_and_fix_rows(
-        const std::vector<std::vector<SliceAndKey>>& groups,
-        size_t& global_count);
+    const std::array<std::vector<SliceAndKey>, 5>& groups,
+    size_t& global_count
+);
 
 } //namespace arcticdb::pipelines

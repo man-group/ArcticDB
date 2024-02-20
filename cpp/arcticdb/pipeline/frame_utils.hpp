@@ -195,7 +195,7 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
                     agg.set_array(col, t);
                 }
             }
-        } else if constexpr(is_py_bool_type(dt)) {
+        } else if constexpr(is_bool_object_type(dt)) {
             normalization::check<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(tag.dimension() == Dimension::Dim0,
                 "Multidimensional nullable booleans are not supported");
             auto data = const_cast<void *>(tensor.data());
@@ -209,12 +209,9 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
 
             const auto num_values = bitset.count();
             auto bool_buffer = ChunkedBuffer::presized(num_values * sizeof(uint8_t));
-            auto en = bitset.first();
-            auto en_end = bitset.end();
             auto bool_ptr = bool_buffer.ptr_cast<uint8_t>(0u, num_values);
-            while (en < en_end) {
-                *bool_ptr = static_cast<uint8_t>(PyObject_IsTrue(ptr_data[*en]));
-                ++en;
+            for (auto it = bitset.first(); it < bitset.end(); ++it) {
+                *bool_ptr = static_cast<uint8_t>(PyObject_IsTrue(ptr_data[*it]));
                 ++bool_ptr;
             }
             if(bitset.count() > 0)

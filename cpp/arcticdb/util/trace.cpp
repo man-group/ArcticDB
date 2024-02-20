@@ -11,20 +11,16 @@
 #include <cxxabi.h>
 #endif
 
-#include <iostream>
-
 namespace arcticdb {
 
-    std::string get_type_name(const std::type_info & ti){
+    std::string get_type_name(const std::type_info& ti){
 #ifndef _WIN32
         char* demangled = abi::__cxa_demangle(ti.name(), nullptr, nullptr, nullptr);
         std::string ret = demangled;
         free(demangled);
         return ret;
 #else
-        //TODO: Implement get_name_type for windows
-        return std::string("");
+        return ti.name();
 #endif
     }
-
 }
