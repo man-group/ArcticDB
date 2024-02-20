@@ -57,6 +57,7 @@ inline bool operator==(const DefaultStringViewable &l, const DefaultStringViewab
 
 }
 
+// Formatters are defined here since they are used in implementations bellow.
 namespace fmt {
 
 template<>

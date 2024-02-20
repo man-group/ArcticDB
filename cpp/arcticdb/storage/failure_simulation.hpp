@@ -36,6 +36,7 @@ static const char* failure_names[] = {
 
 }
 
+// Formatters are defined here since they are used in implementations bellow.
 namespace fmt {
 template<>
 struct formatter<arcticdb::FailureType> {
