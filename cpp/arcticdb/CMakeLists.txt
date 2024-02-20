@@ -194,7 +194,7 @@ set(arcticdb_srcs
         column_store/memory_segment_impl.hpp
         column_store/row_ref.hpp
         column_store/string_pool.hpp
-        entity/atom_key.cpp
+        entity/atom_key.hpp
         entity/frame_and_descriptor.hpp
         entity/index_range.hpp
         entity/key.hpp
@@ -204,7 +204,7 @@ set(arcticdb_srcs
         entity/performance_tracing.hpp
         entity/protobuf_mappings.hpp
         entity/read_result.hpp
-        entity/ref_key.cpp
+        entity/ref_key.hpp
         entity/serialized_key.hpp
         entity/type_conversion.hpp
         entity/types.hpp
