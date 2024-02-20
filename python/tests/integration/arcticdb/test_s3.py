@@ -22,6 +22,5 @@ def test_s3_storage_failures(mock_s3_store_with_error_simulation):
     with pytest.raises(StorageException, match="Unexpected network error: S3Error#99"):
         lib.write(symbol_fail_write, df)
 
-    lib.write(symbol_fail_read, df)
     with pytest.raises(StorageException, match="Unexpected error: S3Error#17"):
         lib.read(symbol_fail_read)
