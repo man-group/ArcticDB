@@ -575,6 +575,269 @@ TEST(VersionMap, StorageLogging) {
     ASSERT_EQ(tomb_keys, 3u);
 }
 
+TEST(VersionMap, CacheInvalidationLoadDownTo) {
+    using namespace arcticdb;
+    // Given - symbol with 2 versions - load downto version 1
+    // never time-invalidate the cache so we can test our other cache invalidation logic
+    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId id{"test"};
+
+    auto version_map = std::make_shared<VersionMap>();
+
+    auto entry = version_map->check_reload(
+            store,
+            id,
+            LoadParameter{LoadType::NOT_LOADED},
+            __FUNCTION__);
+
+    auto key1 = atom_key_with_version(id, 0, 1696590624524585339);
+    version_map->do_write(store, key1, entry);
+    write_symbol_ref(store, key1, std::nullopt, entry->head_.value());
+    auto key2 = atom_key_with_version(id, 1, 1696590624387628801);
+    version_map->do_write(store, key2, entry);
+    write_symbol_ref(store, key2, std::nullopt, entry->head_.value());
+
+    entry = version_map->check_reload(
+            store,
+            id,
+            LoadParameter{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(1)},
+            __FUNCTION__);
+
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_LATEST_UNDELETED}));
+
+    // When - we delete version 1 and reload
+    uint64_t ver_to_delete = 1;
+    auto tombstone = version_map->write_tombstone(store, ver_to_delete, id, entry);
+    entry->tombstones_.try_emplace(ver_to_delete, std::move(tombstone));
+
+    ASSERT_FALSE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_LATEST_UNDELETED}));
+
+    LoadParameter load_param{LoadType::LOAD_LATEST_UNDELETED};
+    const auto latest_undeleted_entry = version_map->check_reload(store, id, load_param, __FUNCTION__);
+
+    // Then - version 0 should be returned
+    ASSERT_TRUE(latest_undeleted_entry->get_first_index(false).has_value());
+}
+
+TEST(VersionMap, CacheInvalidationLoadDownToFurther) {
+    using namespace arcticdb;
+    // Given - symbol with 2 versions - load downto version 1
+    // never time-invalidate the cache so we can test our other cache invalidation logic
+    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId id{"test"};
+
+    auto version_map = std::make_shared<VersionMap>();
+
+    auto entry = version_map->check_reload(
+            store,
+            id,
+            LoadParameter{LoadType::NOT_LOADED},
+            __FUNCTION__);
+
+    auto key1 = atom_key_with_version(id, 0, 1696590624524585339);
+    version_map->do_write(store, key1, entry);
+    write_symbol_ref(store, key1, std::nullopt, entry->head_.value());
+    auto key2 = atom_key_with_version(id, 1, 1696590624387628801);
+    version_map->do_write(store, key2, entry);
+    write_symbol_ref(store, key2, std::nullopt, entry->head_.value());
+
+    entry = version_map->check_reload(
+            store,
+            id,
+            LoadParameter{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(1)},
+            __FUNCTION__);
+
+    ASSERT_FALSE(version_map->has_cached_entry(id,
+                                               LoadParameter{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(0)}));
+    ASSERT_EQ(entry->get_indexes(false).size(), 1);
+
+    // When - we load down to version 0
+    const auto reloaded = version_map->check_reload(
+            store,
+            id,
+            LoadParameter{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(0)},
+            __FUNCTION__);
+
+    // Then - version 0 should be returned
+    ASSERT_EQ(entry->get_indexes(false).size(), 2);
+    ASSERT_TRUE(
+            version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(0)}));
+}
+
+TEST(VersionMap, CacheInvalidationLoadDownToAfterLoadLatest) {
+    using namespace arcticdb;
+    // Given - symbol with 2 versions - load down to version 1
+    // never time-invalidate the cache so we can test our other cache invalidation logic
+    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId id{"test"};
+
+    auto version_map = std::make_shared<VersionMap>();
+
+    auto entry = version_map->check_reload(
+            store,
+            id,
+            LoadParameter{LoadType::NOT_LOADED},
+            __FUNCTION__);
+
+    auto key1 = atom_key_with_version(id, 0, 1696590624524585339);
+    version_map->do_write(store, key1, entry);
+    write_symbol_ref(store, key1, std::nullopt, entry->head_.value());
+    auto key2 = atom_key_with_version(id, 1, 1696590624387628801);
+    version_map->do_write(store, key2, entry);
+    write_symbol_ref(store, key2, std::nullopt, entry->head_.value());
+
+    // When - we load down to version 0
+    const auto reloaded = version_map->check_reload(
+            store,
+            id,
+            LoadParameter{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(0)},
+            __FUNCTION__);
+
+    // Then - version 0 should be returned
+    ASSERT_EQ(reloaded->get_indexes(false).size(), 2);
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(0)}));
+}
+
+TEST(VersionMap, CacheInvalidationAfterLoadLatestUndeleted) {
+    using namespace arcticdb;
+    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId id{"test"};
+
+    auto version_map = std::make_shared<VersionMap>();
+
+    auto entry = version_map->check_reload(
+            store,
+            id,
+            LoadParameter{LoadType::NOT_LOADED},
+            __FUNCTION__);
+
+    auto key1 = atom_key_with_version(id, 0, 1696590624524585339);
+    version_map->do_write(store, key1, entry);
+    write_symbol_ref(store, key1, std::nullopt, entry->head_.value());
+
+    auto key2 = atom_key_with_version(id, 1, 1696590624524585339);
+    version_map->do_write(store, key2, entry);
+    write_symbol_ref(store, key2, std::nullopt, entry->head_.value());
+
+    entry = version_map->check_reload(
+            store,
+            id,
+            LoadParameter{LoadType::LOAD_LATEST_UNDELETED},
+            __FUNCTION__);
+
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_LATEST_UNDELETED}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_LATEST}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::NOT_LOADED}));
+    ASSERT_FALSE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_ALL}));
+    ASSERT_FALSE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_FROM_TIME, static_cast<timestamp>(1234)}));
+    ASSERT_FALSE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_UNDELETED}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(1)}));
+
+    const auto reloaded = version_map->check_reload(
+            store,
+            id,
+            LoadParameter{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(0)},
+            __FUNCTION__);
+
+    ASSERT_EQ(entry->get_indexes(false).size(), 1);
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(0)}));
+}
+
+TEST(VersionMap, CacheInvalidationAfterLoadFromTime) {
+    using namespace arcticdb;
+    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId id{"test"};
+
+    auto version_map = std::make_shared<VersionMap>();
+
+    auto entry = version_map->check_reload(
+            store,
+            id,
+            LoadParameter{LoadType::NOT_LOADED},
+            __FUNCTION__);
+
+    auto key1 = atom_key_with_version(id, 0, 1696590624524585339);
+    version_map->do_write(store, key1, entry);
+    write_symbol_ref(store, key1, std::nullopt, entry->head_.value());
+
+    auto key2 = atom_key_with_version(id, 1, 1696590624524585339);
+    version_map->do_write(store, key2, entry);
+    write_symbol_ref(store, key2, std::nullopt, entry->head_.value());
+
+    entry = version_map->check_reload(
+            store,
+            id,
+            LoadParameter{LoadType::LOAD_FROM_TIME, static_cast<timestamp>(123)},
+            __FUNCTION__);
+
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_LATEST_UNDELETED}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_LATEST}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::NOT_LOADED}));
+    ASSERT_FALSE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_ALL}));
+    ASSERT_FALSE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_FROM_TIME, static_cast<timestamp>(1234)}));
+    ASSERT_FALSE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_UNDELETED}));
+    ASSERT_FALSE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(1)}));
+
+    const auto reloaded = version_map->check_reload(
+            store,
+            id,
+            LoadParameter{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(0)},
+            __FUNCTION__);
+
+    ASSERT_EQ(entry->get_indexes(false).size(), 2);
+}
+
+TEST(VersionMap, CacheInvalidationAfterLoadUndeleted) {
+    using namespace arcticdb;
+    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId id{"test"};
+
+    auto version_map = std::make_shared<VersionMap>();
+
+    auto entry = version_map->check_reload(
+            store,
+            id,
+            LoadParameter{LoadType::LOAD_UNDELETED},
+            __FUNCTION__);
+
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_LATEST_UNDELETED}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_LATEST}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::NOT_LOADED}));
+    ASSERT_FALSE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_ALL}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_FROM_TIME, static_cast<timestamp>(1234)}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_UNDELETED}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(1)}));
+}
+
+TEST(VersionMap, CacheInvalidationAfterLoadAll) {
+    using namespace arcticdb;
+    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId id{"test"};
+
+    auto version_map = std::make_shared<VersionMap>();
+
+    auto entry = version_map->check_reload(
+            store,
+            id,
+            LoadParameter{LoadType::LOAD_ALL},
+            __FUNCTION__);
+
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_LATEST_UNDELETED}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_LATEST}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::NOT_LOADED}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_ALL}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_FROM_TIME, static_cast<timestamp>(1234)}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_UNDELETED}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(1)}));
+}
+
 #define GTEST_COUT std::cerr << "[          ] [ INFO ]"
 
 TEST_F(VersionMapStore, StressTestWrite) {
