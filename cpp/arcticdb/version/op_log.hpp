@@ -46,7 +46,7 @@ namespace fmt {
 
         template<typename FormatContext>
         auto format(const arcticdb::OpLog &op_log, FormatContext &ctx) const {
-            return format_to(ctx.out(),
+            return fmt::format_to(ctx.out(),
                              "{} {} v{} at {}",
                              op_log.action(),
                              op_log.id(),
