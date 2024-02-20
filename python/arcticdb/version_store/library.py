@@ -13,6 +13,8 @@ from enum import Enum, auto
 from typing import Optional, Any, Tuple, Dict, AnyStr, Union, List, Iterable, NamedTuple
 from numpy import datetime64
 
+from arcticc.pb2.descriptors_pb2 import TypeDescriptor
+
 from arcticdb.options import LibraryOptions
 from arcticdb.supported_types import Timestamp
 from arcticdb.util._versions import IS_PANDAS_TWO
@@ -104,8 +106,8 @@ class VersionInfo(NamedTuple):
 class NameWithDType(NamedTuple):
     """A named tuple. A name and dtype description pair."""
 
-    name: str
-    dtype: str
+    name: Union[Optional[str], List[Optional[str]]]
+    dtype: Union[TypeDescriptor, List[TypeDescriptor]]
 
 
 class SymbolDescription(NamedTuple):
