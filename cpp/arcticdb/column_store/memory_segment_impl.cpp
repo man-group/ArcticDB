@@ -8,6 +8,7 @@
 #include <arcticdb/column_store/memory_segment_impl.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/entity/type_utils.hpp>
+#include <arcticdb/pipeline/string_pool_utils.hpp>
 
 #include <google/protobuf/any.h>
 #include <google/protobuf/any.pb.h>
@@ -436,8 +437,11 @@ bool operator==(const SegmentInMemoryImpl& left, const SegmentInMemoryImpl& righ
     return true;
 }
 
-// Inclusive of start_row, exclusive of end_row
-std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::truncate(size_t start_row, size_t end_row) const {
+std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::truncate(
+    size_t start_row,
+    size_t end_row,
+    bool reconstruct_string_pool
+) const {
     auto num_values = end_row - start_row;
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
             is_sparse() || (start_row < row_count() && end_row <= row_count()),
@@ -446,24 +450,43 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::truncate(size_t start_
     auto output = std::make_shared<SegmentInMemoryImpl>();
 
     output->set_row_data(num_values - 1);
-    output->set_string_pool(string_pool_);
     output->set_compacted(compacted_);
+    if (!reconstruct_string_pool) {
+        output->set_string_pool(string_pool_);
+    }
     if (metadata_) {
         google::protobuf::Any metadata;
         metadata.CopyFrom(*metadata_);
         output->set_metadata(std::move(metadata));
     }
 
-    for(const auto&& [idx, column] : folly::enumerate(columns_)) {
-        auto truncated_column = Column::truncate(column, start_row, end_row);
-        output->add_column(descriptor_->field(idx), truncated_column);
+    for (const auto&& [idx, column] : folly::enumerate(columns_)) {
+        const TypeDescriptor column_type = column->type();
+        const Field& field = descriptor_->field(idx);
+        std::shared_ptr<Column> truncated_column = Column::truncate(column, start_row, end_row);
+        column_type.visit_tag([&](auto tag) {
+            if constexpr (is_sequence_type(decltype(tag)::data_type())) {
+                Column::transform<decltype(tag), decltype(tag)>(
+                    *truncated_column,
+                    *truncated_column,
+                    [this, &output](auto string_pool_offset) -> arcticdb::OffsetString::offset_t {
+                        if (is_a_string(string_pool_offset)) {
+                            const std::string_view string = get_string_from_pool(string_pool_offset, *string_pool_);
+                            return output->string_pool().get(string).offset();
+                        }
+                        return string_pool_offset;
+                    }
+                );
+            }
+        });
+        output->add_column(field, std::move(truncated_column));
     }
     output->attach_descriptor(descriptor_);
     return output;
 }
 
-// Combine 2 segments that hold different columns associated with the same rows
-// If unique_column_names is true, any columns from other with names matching those in this are ignored
+/// @brief Combine 2 segments that hold different columns associated with the same rows
+/// @param[in] unique_column_names If true, any columns from other with names matching those in this are ignored
 void SegmentInMemoryImpl::concatenate(SegmentInMemoryImpl&& other, bool unique_column_names) {
         internal::check<ErrorCode::E_INVALID_ARGUMENT>(
                 row_count() == other.row_count(),

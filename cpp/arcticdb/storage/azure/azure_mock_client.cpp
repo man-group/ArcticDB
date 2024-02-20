@@ -52,7 +52,7 @@ std::optional<Azure::Core::RequestFailedException> has_failure_trigger(const std
         auto error_message = fmt::format("Simulated Error, message: #{}_{}", failure_string_for_operation, (int) status_code);
 
         return get_exception(error_message, status_code);
-    } catch (std::exception& e) {
+    } catch (std::exception&) {
         return std::nullopt;
     }
 }
