@@ -247,35 +247,8 @@ folly::Future<entity::AtomKey> append_frame(
     .thenValue([dynamic_schema, slices_to_write=std::move(existing_slices), frame=frame, index_segment_reader=std::move(index_segment_reader), key=std::move(key), store](auto&& slice_and_keys_to_append) mutable {
         slices_to_write.insert(std::end(slices_to_write), std::make_move_iterator(std::begin(slice_and_keys_to_append)), std::make_move_iterator(std::end(slice_and_keys_to_append)));
         std::sort(std::begin(slices_to_write), std::end(slices_to_write));
-        if(dynamic_schema) {
-            auto merged_descriptor = merge_descriptors(
-                frame->desc,
-                std::vector<std::shared_ptr<FieldCollection>>{index_segment_reader.tsd().fields_ptr()},
-                {}
-            );
-            merged_descriptor.set_sorted(deduce_sorted(index_segment_reader.get_sorted(), frame->desc.get_sorted()));
-            auto tsd = make_timeseries_descriptor(
-                frame->num_rows + frame->offset,
-                std::move(merged_descriptor),
-                std::move(frame->norm_meta),
-                std::move(frame->user_meta),
-                std::nullopt,
-                std::nullopt,
-                frame->bucketize_dynamic
-            );
-            return index::write_index(stream::index_type_from_descriptor(frame->desc), std::move(tsd), std::move(slices_to_write), key, store);
-        } else {
-            const FieldCollection& new_fields{index_segment_reader.tsd().fields()};
-            for (size_t i = 0; i < new_fields.size(); ++i) {
-                const Field& new_field = new_fields.at(i);
-                TypeDescriptor& original_type = frame->desc.mutable_field(i).mutable_type();
-                if (is_empty_type(original_type.data_type()) && !is_empty_type(new_field.type().data_type())) {
-                    original_type = new_field.type();
-                }
-            }
-            frame->desc.set_sorted(deduce_sorted(index_segment_reader.get_sorted(), frame->desc.get_sorted()));
-            return index::write_index(frame, std::move(slices_to_write), key, store);
-        }
+        auto tsd = index::get_merged_tsd(frame->num_rows + frame->offset, dynamic_schema, index_segment_reader.tsd(), frame);
+        return index::write_index(stream::index_type_from_descriptor(tsd.as_stream_descriptor()), std::move(tsd), std::move(slices_to_write), key, store);
     });
 }
 

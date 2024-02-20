@@ -9,6 +9,8 @@
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/pipeline/index_writer.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
+#include <arcticdb/version/version_utils.hpp>
+#include <arcticdb/entity/merge_descriptors.hpp>
 
 namespace arcticdb::pipelines::index {
 
@@ -75,6 +77,55 @@ std::pair<index::IndexSegmentReader, std::vector<SliceAndKey>> read_index_to_vec
         slice_and_keys.push_back(row);
 
     return {std::move(index_segment_reader), std::move(slice_and_keys)};
+}
+
+TimeseriesDescriptor get_merged_tsd(
+        int row_count,
+        bool dynamic_schema,
+        const TimeseriesDescriptor& existing_tsd,
+        const std::shared_ptr<pipelines::InputTensorFrame>& new_frame) {
+    auto existing_descriptor = existing_tsd.as_stream_descriptor();
+    auto merged_descriptor = existing_descriptor;
+    if (existing_tsd.proto().total_rows() == 0){
+        // If the existing dataframe is empty, we use the descriptor of the new_frame
+        merged_descriptor = new_frame->desc;
+    }
+    else if (dynamic_schema) {
+        // In case of dynamic schema
+        merged_descriptor = merge_descriptors(
+                existing_descriptor,
+                std::vector<std::shared_ptr<FieldCollection>>{new_frame->desc.fields_ptr()},
+                {}
+        );
+    } else {
+        // In case of static schema, we only promote empty types and fixed->dynamic strings
+        const auto &new_fields = new_frame->desc.fields();
+        for (size_t i = 0; i < new_fields.size(); ++i) {
+            const auto &new_type = new_fields.at(i).type();
+            TypeDescriptor &result_type = merged_descriptor.mutable_field(i).mutable_type();
+            // We allow promoting empty types
+            if (is_empty_type(result_type.data_type()) && !is_empty_type(new_type.data_type())) {
+                result_type = new_type;
+            }
+            // We allow promoting fixed strings to dynamic strings
+            else if (is_sequence_type(result_type.data_type()) &&
+                     is_sequence_type(new_type.data_type()) &&
+                     !is_dynamic_string_type(result_type.data_type()) &&
+                     is_dynamic_string_type(new_type.data_type())) {
+                result_type = new_type;
+            }
+        }
+    }
+    merged_descriptor.set_sorted(deduce_sorted(existing_descriptor.get_sorted(), new_frame->desc.get_sorted()));
+    return make_timeseries_descriptor(
+            row_count,
+            std::move(merged_descriptor),
+            std::move(new_frame->norm_meta),
+            std::move(new_frame->user_meta),
+            std::nullopt,
+            std::nullopt,
+            new_frame->bucketize_dynamic
+    );
 }
 
 } //namespace arcticdb::pipelines::index
