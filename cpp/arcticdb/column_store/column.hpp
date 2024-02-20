@@ -664,63 +664,68 @@ public:
         size_t end_row
     );
 
-    /*
-     * !!!!!!!!!!----------IMPORTANT----------!!!!!!!!!!
-     * When adding new uses of these static methods, add an internal::check<...>(f.heapAllocatedMemory() == 0,...)
-     * and run all of the tests in CI on all supported platforms. We do not want these checks in the released code,
-     * but also do not want any passed in lambdas to be heap allocated.
-     *
-     * TODO: Use type-deduced functor (with enable_if to verify it's in/out types) in all functions similar to transform.
-     *   In case C++20 is available use concepts.
-     */
-
-    template<typename input_tdt>
-    static void for_each(const Column& input_column,
-                          folly::Function<void(typename input_tdt::DataTypeTag::raw_type)>&& f) {
+    template <
+        typename input_tdt,
+        typename functor,
+        typename = std::enable_if_t<std::is_invocable_r_v<void, functor, typename input_tdt::DataTypeTag::raw_type>>>
+    static void for_each(const Column& input_column, functor&& f) {
         auto input_data = input_column.data();
-        std::for_each(input_data.cbegin<input_tdt>(), input_data.cend<input_tdt>(), [&f](auto input_value) {
-            f(input_value);
-        });
+        std::for_each(input_data.cbegin<input_tdt>(), input_data.cend<input_tdt>(), std::forward<functor>(f));
     }
 
     template <
         typename input_tdt,
         typename output_tdt,
-        typename FunctorT,
+        typename functor,
         typename = std::enable_if_t<std::is_invocable_r_v<
             typename output_tdt::DataTypeTag::raw_type,
-            FunctorT,
+            functor,
             typename input_tdt::DataTypeTag::raw_type>>>
-    static void transform(const Column& input_column,
-                          Column& output_column,
-                          FunctorT&& f
-    ) {
+    static void transform(const Column& input_column, Column& output_column, functor&& f) {
         auto input_data = input_column.data();
         auto output_data = output_column.data();
-        std::transform(input_data.cbegin<input_tdt>(), input_data.cend<input_tdt>(), output_data.begin<output_tdt>(), std::forward<FunctorT>(f));
+        std::transform(
+            input_data.cbegin<input_tdt>(),
+            input_data.cend<input_tdt>(),
+            output_data.begin<output_tdt>(),
+            std::forward<functor>(f)
+        );
     }
 
-    template<typename left_input_tdt, typename right_input_tdt, typename output_tdt>
+    template<
+        typename left_input_tdt,
+        typename right_input_tdt,
+        typename output_tdt,
+        typename functor,
+        typename = std::enable_if_t<std::is_invocable_r_v<
+            typename output_tdt::DataTypeTag::raw_type,
+            functor,
+            typename left_input_tdt::DataTypeTag::raw_type,
+            typename right_input_tdt::DataTypeTag::raw_type>>>
     static void transform(const Column& left_input_column,
                           const Column& right_input_column,
                           Column& output_column,
-                          folly::Function<typename output_tdt::DataTypeTag::raw_type(typename left_input_tdt::DataTypeTag::raw_type, typename right_input_tdt::DataTypeTag::raw_type)>&& f) {
+                          functor&& f) {
         auto left_input_data = left_input_column.data();
         auto right_input_data = right_input_column.data();
         auto output_data = output_column.data();
-        std::transform(left_input_data.cbegin<left_input_tdt>(), left_input_data.cend<left_input_tdt>(), right_input_data.cbegin<right_input_tdt>(), output_data.begin<output_tdt>(), [&f](auto left_value, auto right_value) {
-            return f(left_value, right_value);
-        });
+        std::transform(left_input_data.cbegin<left_input_tdt>(), left_input_data.cend<left_input_tdt>(), right_input_data.cbegin<right_input_tdt>(), output_data.begin<output_tdt>(), std::forward<functor>(f));
     }
 
-    template<typename input_tdt>
+    template <
+        typename input_tdt,
+        typename functor,
+        typename = std::enable_if_t<std::is_invocable_r_v<bool, functor, typename input_tdt::DataTypeTag::raw_type>>>
     static void transform(const Column& input_column,
                           util::BitSet& output_bitset,
-                          folly::Function<bool(typename input_tdt::DataTypeTag::raw_type)>&& f) {
+                          functor&& f) {
         auto input_data = input_column.data();
         util::BitSet::bulk_insert_iterator inserter(output_bitset);
         auto pos = 0u;
-        std::for_each(input_data.cbegin<input_tdt>(), input_data.cend<input_tdt>(), [&inserter, &pos, &f](auto input_value) {
+        std::for_each(
+            input_data.cbegin<input_tdt>(),
+            input_data.cend<input_tdt>(),
+            [&inserter, &pos, f = std::forward<functor>(f)](auto input_value) {
             if (f(input_value)) {
                 inserter = pos;
             }
@@ -729,16 +734,27 @@ public:
         inserter.flush();
     }
 
-    template<typename left_input_tdt, typename right_input_tdt>
+    template <
+        typename left_input_tdt,
+        typename right_input_tdt,
+        typename functor,
+        typename = std::enable_if_t<std::is_invocable_r_v<
+            bool,
+            functor,
+            typename left_input_tdt::DataTypeTag::raw_type,
+            typename right_input_tdt::DataTypeTag::raw_type>>>
     static void transform(const Column& left_input_column,
                           const Column& right_input_column,
                           util::BitSet& output_bitset,
-                          folly::Function<bool(typename left_input_tdt::DataTypeTag::raw_type, typename right_input_tdt::DataTypeTag::raw_type)>&& f) {
+                          functor&& f) {
         auto left_input_data = left_input_column.data();
         auto right_it = right_input_column.data().cbegin<right_input_tdt>();
         util::BitSet::bulk_insert_iterator inserter(output_bitset);
         auto pos = 0u;
-        std::for_each(left_input_data.cbegin<left_input_tdt>(), left_input_data.cend<left_input_tdt>(), [&right_it, &inserter, &pos, &f](auto left_value) {
+        std::for_each(
+            left_input_data.cbegin<left_input_tdt>(),
+            left_input_data.cend<left_input_tdt>(),
+            [&right_it, &inserter, &pos, f = std::forward<functor>(f)](auto left_value) {
             auto right_value = *right_it++;
             if (f(left_value, right_value)) {
                 inserter = pos;
@@ -747,8 +763,6 @@ public:
         });
         inserter.flush();
     }
-
-    // end IMPORTANT
 
 private:
 
