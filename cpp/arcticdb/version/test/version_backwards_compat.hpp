@@ -9,6 +9,24 @@
 
 namespace arcticdb {
 
+inline std::optional<RefKey> get_symbol_ref_key(
+    const std::shared_ptr<StreamSource> &store,
+    const StreamId &stream_id) {
+    auto ref_key = RefKey{stream_id, KeyType::VERSION_REF};
+    if (store->key_exists_sync(ref_key))
+        return std::make_optional(std::move(ref_key));
+
+    // Old style ref_key
+    ARCTICDB_DEBUG(log::version(), "Ref key {} not found, trying old style ref key", ref_key);
+    ref_key = RefKey{stream_id, KeyType::VERSION, true};
+    if (!store->key_exists_sync(ref_key))
+        return std::nullopt;
+
+    ARCTICDB_DEBUG(log::version(), "Found old-style ref key", ref_key);
+    return std::make_optional(std::move(ref_key));
+}
+
+
 std::deque<AtomKey> backwards_compat_delete_all_versions(
     const std::shared_ptr<Store>& store,
     std::shared_ptr<VersionMap>& version_map,
