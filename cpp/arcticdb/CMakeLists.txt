@@ -172,7 +172,6 @@ else()
         /wd4250 # Suppress inherits via dominance warning
         /we4189 # Unused local variable is an error
         /we4100 # Unused function parameter is an error
-        /we9025 # The presence of overriden flags is an error
     )
 endif ()
 
