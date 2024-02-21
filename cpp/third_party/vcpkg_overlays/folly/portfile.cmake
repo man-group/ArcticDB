@@ -19,7 +19,6 @@ vcpkg_from_github(
         fix-windows-minmax.patch
         fix-deps.patch
         dont-inherit-cpp-version.patch
-        00d03be3736d92a2bcbf28cbad96617b7b6533f3.patch
 )
 
 file(REMOVE "${SOURCE_PATH}/CMake/FindFmt.cmake")
