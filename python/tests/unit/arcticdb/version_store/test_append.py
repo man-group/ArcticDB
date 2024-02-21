@@ -60,6 +60,20 @@ def test_append_string_of_different_sizes(lmdb_version_store):
     assert_frame_equal(vit.data, expected)
 
 
+def test_append_dynamic_schema_add_column(lmdb_version_store_dynamic_schema):
+    symbol = "symbol"
+    lib = lmdb_version_store_dynamic_schema
+    df_1 = pd.DataFrame(data={"a": [1.0, 2.0]}, index=pd.date_range("2018-01-01", periods=2))
+    df_2 = pd.DataFrame(data={"b": [3.0, 4.0]}, index=pd.date_range("2018-01-03", periods=2))
+
+    lib.write(symbol, df_1)
+    lib.append(symbol, df_2)
+
+    expected_df = pd.concat([df_1, df_2])
+    result_df = lib.read(symbol).data
+    assert_frame_equal(result_df, expected_df)
+
+
 def test_append_snapshot_delete(lmdb_version_store):
     symbol = "test_append_snapshot_delete"
     if sys.platform == "win32":
