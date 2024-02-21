@@ -353,7 +353,6 @@ void decode_v2(
 
         for (std::size_t i = 0; i < fields_size; ++i) {
             const auto& encoded_field = encoded_fields.at(i);
-            log::version().debug("{}", dump_bytes(begin, (data - begin) + encoding_sizes::field_compressed_size(encoded_field), 100u));
             const auto& field_name = desc.fields(i).name();
             util::check(data!=end, "Reached end of input block with {} fields to decode", fields_size-i);
             if(auto col_index = res.column_index(field_name)) {
