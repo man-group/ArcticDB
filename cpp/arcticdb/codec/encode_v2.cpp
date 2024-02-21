@@ -319,13 +319,24 @@ namespace arcticdb {
                 auto column_field = new(encoded_fields_buffer.data() + encoded_field_pos) EncodedField;
                 ARCTICDB_TRACE(log::codec(),"Beginning encoding of column {}: ({}) to position {}", column_index, in_mem_seg.descriptor().field(column_index).name(), pos);
                 auto column_data = in_mem_seg.column_data(column_index);
-                encoder.encode(codec_opts, column_data, column_field, *out_buffer, pos);
-                ARCTICDB_TRACE(log::codec(), "Encoded column {}: ({}) to position {}", column_index, in_mem_seg.descriptor().field(column_index).name(), pos);
+                if(column_data.num_blocks() > 0) {
+                    encoder.encode(codec_opts, column_data, column_field, *out_buffer, pos);
+                    ARCTICDB_TRACE(log::codec(),
+                                   "Encoded column {}: ({}) to position {}",
+                                   column_index,
+                                   in_mem_seg.descriptor().field(column_index).name(),
+                                   pos);
+                } else {
+                    util::check(!must_contain_data(column_data.type()), "Column {} of type {} contains no blocks", column_index, column_data.type());
+                    auto* ndarray = column_field->mutable_ndarray();
+                    ndarray->set_items_count(0);
+                }
                 encoded_field_pos += encoded_field_bytes(*column_field);
                 util::check(encoded_field_pos <= encoded_fields_buffer.bytes(),
-                    "Encoded field buffer overflow {} > {}",
-                    encoded_field_pos,
-                    encoded_fields_buffer.bytes());
+                            "Encoded field buffer overflow {} > {}",
+                            encoded_field_pos,
+                            encoded_fields_buffer.bytes());
+
             }
             write_magic<StringPoolMagic>(*out_buffer, pos);
             encode_string_pool<EncodingPolicyV2>(in_mem_seg, *segment_header, codec_opts, *out_buffer, pos);

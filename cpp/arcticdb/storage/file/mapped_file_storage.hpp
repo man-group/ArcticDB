@@ -43,7 +43,7 @@ class MappedFileStorage final : public SingleFileStorage {
 
     std::string do_key_path(const VariantKey&) const override { return {}; }
 
-    [[noreturn]] bool do_fast_delete() override;
+    bool do_fast_delete() override;
 
     [[noreturn]] void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix) override;
 
