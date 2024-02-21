@@ -68,12 +68,10 @@
       "inherits": ["common_vcpkg", "windows"],
       "description": "Debug features enabled, but linked against release Python",
       "architecture": {
-        "value": "x64",
-        "strategy": "external"
+        "value": "x64"
       },
       "toolset": {
-        "value": "host=x64",
-        "strategy": "external"
+        "value": "host=x64"
       },
       "cacheVariables": {
         "CMAKE_C_COMPILER": "cl",

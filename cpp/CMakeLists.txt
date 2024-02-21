@@ -57,10 +57,11 @@ if(WIN32)
     # We always generate the debug info on Windows since those are not in the final .dll.
     # sccache needs the /Z7 format, but the linker will still produce .pdb files.
     # Guide to MSVC compilation warnings https://learn.microsoft.com/en-us/cpp/error-messages/compiler-warnings/compiler-warnings-c4000-through-c4199?view=msvc-170
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
     add_compile_options(
         /DWIN32 /D_WINDOWS /GR /EHsc /bigobj /Z7 /wd4244 /wd4267
-        "$<$<CONFIG:Debug>:/RTC1;/Od;/MTd>"
-        "$<$<CONFIG:Release>:/MT;/Ox>"
+        "$<$<CONFIG:Debug>:/RTC1;/Od>"
+        "$<$<CONFIG:Release>:/Ox>"
     )
 else()
     if(${ARCTICDB_USING_CONDA})
