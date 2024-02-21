@@ -15,7 +15,6 @@ import pytest
 def int_dtype(request):
     yield request.param
 
-
 @pytest.fixture(params=["float" + s for s in ["32", "64"]])
 def float_dtype(request):
     yield request.param
@@ -34,7 +33,13 @@ def date_dtype(request):
     yield request.param
 
 
-class TestCanAppendToEmptyColumn:
+class TestCanAppendToColunWithNones:
+    """
+    Tests that it is possible to write a column containing None values and latter
+    append to it. Initially the type of the column must be empty type after the
+    append the column must be of the same type as the appended data
+    """
+
     @pytest.fixture(autouse=True)
     def create_empty_column(self, lmdb_version_store_static_and_dynamic):
         lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col1": 2 * [None]}))
@@ -148,6 +153,32 @@ class TestCanAppendToEmptyColumn:
             lmdb_version_store_static_and_dynamic.read("sym", row_range=[2,5]).data,
             df_non_empty
         )
+
+
+class TestCanAppendToEmptyColumn:
+    """
+    Tests that it's possible to append to a column which contains no rows.
+    The type of the columns (including the index column) is decided after
+    the first append.
+    """
+
+    @pytest.fixture(params=[[0,1,2], list(pd.date_range(start="1/1/2024", end="1/3/2024"))])
+    def append_index(self, request):
+        yield request.param
+
+    @pytest.fixture(params=[pd.RangeIndex(0,0), pd.DatetimeIndex([])])
+    def empty_index(self, request):
+        yield request.param
+
+    @pytest.fixture(autouse=True)
+    def create_empty_column(self, lmdb_version_store_static_and_dynamic, int_dtype, empty_index):
+        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col1": []}, dtype=int_dtype, index=empty_index))
+        yield
+
+    def test_integer(self, lmdb_version_store_static_and_dynamic, int_dtype, empty_index, append_index):
+        df_to_append = pd.DataFrame({"col1": [1,2,3]}, dtype=int_dtype, index=append_index)
+        lmdb_version_store_static_and_dynamic.append("sym", df_to_append)
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df_to_append)
 
 
 class TestCanAppendEmptyToColumn:
@@ -509,6 +540,7 @@ class TestCanUpdateEmpty:
                 dtype=date_dtype
             )
         )
+
 
 class TestEmptyTypesIsOverriden:
     def test_cannot_append_different_type_after_first_not_none(self, lmdb_version_store_static_and_dynamic):
