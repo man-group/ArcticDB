@@ -134,8 +134,18 @@ namespace arcticdb {
             for (std::size_t column_index = 0; column_index < in_mem_seg.num_columns(); ++column_index) {
                 auto column_data = in_mem_seg.column_data(column_index);
                 auto *encoded_field = segment_header->mutable_fields()->Add();
-                encoder.encode(codec_opts, column_data, encoded_field, *out_buffer, pos);
-                ARCTICDB_TRACE(log::codec(), "Encoded column {}: ({}) to position {}", column_index, in_mem_seg.descriptor().fields(column_index).name(), pos);
+                if(column_data.num_blocks() > 0) {
+                    encoder.encode(codec_opts, column_data, encoded_field, *out_buffer, pos);
+                    ARCTICDB_TRACE(log::codec(),
+                                   "Encoded column {}: ({}) to position {}",
+                                   column_index,
+                                   in_mem_seg.descriptor().fields(column_index).name(),
+                                   pos);
+                } else {
+                    util::check(!must_contain_data(column_data.type()), "Column {} of type {} contains no blocks", column_index, column_data.type());
+                    auto* ndarray = encoded_field->mutable_ndarray();
+                    ndarray->set_items_count(0);
+                }
             }
             encode_string_pool<EncodingPolicyV1>(in_mem_seg, *segment_header, codec_opts, *out_buffer, pos);
         }
