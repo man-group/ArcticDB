@@ -7,11 +7,7 @@
 
 #include <arcticdb/util/error_code.hpp>
 
-#ifdef ARCTICDB_USING_CONDA
-    #include <semimap/semimap.h>
-#else
-    #include <third_party/semimap/semimap.h>
-#endif
+#include <semimap/semimap.h>
 
 namespace arcticdb {
 

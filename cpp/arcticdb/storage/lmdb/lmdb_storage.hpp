@@ -15,12 +15,7 @@
 #include <folly/Range.h>
 #include <arcticdb/util/composite.hpp>
 
-#ifdef ARCTICDB_USING_CONDA
-    #include <lmdb++.h>
-#else
-    #include <third_party/lmdbxx/lmdb++.h>
-#endif
-
+#include <lmdb++.h>
 #include <filesystem>
 
 namespace fs = std::filesystem;

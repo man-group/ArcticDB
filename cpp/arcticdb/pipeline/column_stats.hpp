@@ -2,11 +2,7 @@
 
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/entity/protobufs.hpp>
-#ifdef ARCTICDB_USING_CONDA
-    #include <robin_hood.h>
-#else
-    #include <arcticdb/util/third_party/robin_hood.hpp>
-#endif
+#include <robin_hood.h>
 
 #include <map>
 #include <set>
