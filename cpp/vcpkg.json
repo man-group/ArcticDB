@@ -67,7 +67,7 @@
   ],
   "overrides": [
     { "name": "openssl", "version-string": "1.1.1n#1" },
-    { "name": "aws-sdk-cpp", "version": "1.11.201" },
+    { "name": "aws-sdk-cpp", "version": "1.11.225" },
     { "name": "aws-c-s3", "version": "0.3.24" },
     { "name": "bitmagic", "version": "7.12.3" },
     { "name": "boost-algorithm", "version": "1.80.0#1" },
