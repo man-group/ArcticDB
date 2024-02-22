@@ -192,6 +192,7 @@ jobs:
           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
 
   start_ec2_runner:
+    if: github.event_name == 'schedule'
     uses: ./.github/workflows/ec2_runner_jobs.yml
     secrets: inherit
     with:
@@ -199,8 +200,9 @@ jobs:
 
   benchmark_linux_medium:
     timeout-minutes: 1200
+    if: always() # We want to run this job even if the previous job fails/does not run
     needs: [start_ec2_runner, cibw_docker_image]
-    runs-on: ${{ needs.start_ec2_runner.outputs.label }}
+    runs-on: ${{ needs.start_ec2_runner.outputs.label || 'ubuntu-latest' }}
     container:
       image: ${{needs.cibw_docker_image.outputs.tag}}
     permissions:
@@ -288,7 +290,7 @@ jobs:
 
   stop-ec2-runner:
     needs: [start_ec2_runner, benchmark_linux_medium]
-    if: ${{ always() }}
+    if: ${{ always() && github.event_name != 'schedule' }}
     uses: ./.github/workflows/ec2_runner_jobs.yml
     secrets: inherit
     with:
