@@ -589,8 +589,7 @@ public:
                 break;
             case LoadType::LOAD_LATEST_UNDELETED:
                 if (requested_load_type == LoadType::LOAD_LATEST_UNDELETED
-                    || requested_load_type == LoadType::LOAD_LATEST
-                    || requested_load_type == LoadType::NOT_LOADED) {
+                    || requested_load_type == LoadType::LOAD_LATEST) {
                     return true;
                 }
 
@@ -613,7 +612,7 @@ public:
                     return opt_latest.has_value();
                 }
 
-                return requested_load_type == LoadType::NOT_LOADED;
+                return false;
             case LoadType::LOAD_FROM_TIME:
                 // Future: This case could be optimized: use cache if it is LOAD_FROM_TIME for earlier time or
                 // LOAD_DOWNTO for a version with an earlier timestamp
