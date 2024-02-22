@@ -240,9 +240,9 @@ jobs:
           echo /opt/python/cp36-cp36m/bin >> $GITHUB_PATH
 
       - name: Install ASV
-        shell: bash
+        shell: bash -el {0}
         run: |
-          git config --global --add safe.directory .
+          git config --global --add safe.directory ${{github.event_name == 'schedule' && '.' || '/__w/ArcticDB/ArcticDB'}}
           python -m pip install --upgrade pip
           pip install asv virtualenv
           python -m asv machine -v --yes --machine ArcticDB-Runner-Medium
