@@ -224,7 +224,6 @@ public:
 
     void write_version(std::shared_ptr<Store> store, const AtomKey &key) {
         LoadParameter load_param{LoadType::LOAD_LATEST};
-        load_param.skip_compat_ = false;
         auto entry = check_reload(store, key.id(), load_param,  __FUNCTION__);
 
         do_write(store, key, entry);
@@ -488,9 +487,6 @@ public:
             return get_entry(stream_id);
         }
 
-        if (!load_param.skip_compat_ && !has_stored_entry(store, stream_id))
-            do_backwards_compat_check(store, stream_id);
-
         return storage_reload(store, stream_id, load_param, load_param.iterate_on_failure_);
     }
 
@@ -697,10 +693,6 @@ private:
         return journal_key;
     }
 
-    bool has_stored_entry(const std::shared_ptr<StreamSource>& store, const StreamId &stream_id) const {
-        return static_cast<bool>(get_symbol_ref_key(store, stream_id));
-    }
-
     std::shared_ptr<VersionMapEntry> storage_reload(
         std::shared_ptr<Store> store,
         const StreamId& stream_id,
@@ -899,38 +891,6 @@ public:
     }
 
 private:
-    // Backwards compat stuff
-    AtomKey rewrite_old_journal_keys(std::shared_ptr<Store> store, const StreamId &stream_id, const std::shared_ptr<VersionMapEntry>& entry) {
-        util::check(!entry->keys_.empty(), "Can't rewrite empty version journal entry");
-        auto version_id = entry->keys_[0].version_id();
-        entry->head_ = std::make_optional(write_entry_to_storage(store, stream_id, version_id, entry));
-        write_symbol_ref(store, *entry->keys_.cbegin(), std::nullopt, entry->head_.value());
-        return entry->head_.value();
-    }
-
-    std::shared_ptr<VersionMapEntry> load_from_old_journal_keys(std::shared_ptr<StreamSource> store, const StreamId &stream_id) {
-        ARCTICDB_DEBUG(log::version(), "Attempting to iterate old journal keys");
-        auto match_stream_id = [&stream_id](const AtomKey &k) { return k.id() == stream_id; };
-        auto old_entry = build_version_map_entry_with_predicate_iteration(store, match_stream_id, stream_id,
-                                                                          {KeyType::VERSION_JOURNAL});
-        auto index_keys = old_entry->get_indexes(false);
-        std::sort(index_keys.begin(), index_keys.end(), std::greater<>());
-        auto entry = std::make_shared<VersionMapEntry>();
-        entry->keys_.assign(index_keys.begin(), index_keys.end());
-        return entry;
-    }
-
-    std::shared_ptr<VersionMapEntry> do_backwards_compat_check(std::shared_ptr<Store> store, const StreamId& stream_id) {
-        ARCTICDB_TRACE(log::version(), "Didn't find a ref entry, scanning for old-style journal keys");
-        auto entry = get_entry(stream_id);
-        if (auto old_entry = load_from_old_journal_keys(store, stream_id); !old_entry->keys_.empty()) {
-            entry->keys_ = std::move(old_entry->keys_);
-            entry->head_ = rewrite_old_journal_keys(store, stream_id, entry);
-            delete_keys_of_type_for_stream_sync(store, stream_id, KeyType::VERSION_JOURNAL);
-        }
-        return entry;
-    }
-
     std::pair<VersionId, std::vector<AtomKey>> tombstone_from_key_or_all_internal(std::shared_ptr<Store> store,
                                                             const StreamId& stream_id,
                                                             std::optional<AtomKey> first_key_to_tombstone = std::nullopt,

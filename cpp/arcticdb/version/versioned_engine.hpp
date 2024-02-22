@@ -84,10 +84,6 @@ public:
         const StreamId& stream_id,
         const std::shared_ptr<InputTensorFrame>& frame) const = 0;
 
-    virtual bool has_stream(
-        const StreamId & stream_id
-    ) = 0;
-
     /**
      * Delete the given index keys, and their associated data excluding those shared with keys not in the argument.
      *
