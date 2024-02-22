@@ -200,9 +200,9 @@ jobs:
 
   benchmark_linux_medium:
     timeout-minutes: 1200
-    if: always() # We want to run this job even if the previous job fails/does not run
+    if: github.event_name == 'schedule'
     needs: [start_ec2_runner, cibw_docker_image]
-    runs-on: ${{ needs.start_ec2_runner.outputs.label || 'ubuntu-latest' }}
+    runs-on: ${{ needs.start_ec2_runner.outputs.label }}
     container:
       image: ${{needs.cibw_docker_image.outputs.tag}}
     permissions:
@@ -242,7 +242,7 @@ jobs:
       - name: Install ASV
         shell: bash -el {0}
         run: |
-          git config --global --add safe.directory ${{github.event_name == 'schedule' && '.' || '/__w/ArcticDB/ArcticDB'}}
+          git config --global --add safe.directory .
           python -m pip install --upgrade pip
           pip install asv virtualenv
           python -m asv machine -v --yes --machine ArcticDB-Runner-Medium
@@ -290,7 +290,7 @@ jobs:
 
   stop-ec2-runner:
     needs: [start_ec2_runner, benchmark_linux_medium]
-    if: ${{ always() && github.event_name != 'schedule' }}
+    if: github.event_name == 'schedule'
     uses: ./.github/workflows/ec2_runner_jobs.yml
     secrets: inherit
     with:
