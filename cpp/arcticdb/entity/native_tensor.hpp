@@ -106,17 +106,17 @@ struct NativeTensor {
         return *this;
     }
 
-    [[nodiscard]] auto nbytes() const { return nbytes_; }
-    [[nodiscard]] auto ndim() const { return ndim_; }
-    [[nodiscard]] auto strides(size_t pos) const { return strides_[pos]; }
-    [[nodiscard]] const auto* strides() const { return strides_.data(); };
-    [[nodiscard]] auto shape(size_t pos) const { return shapes_[pos]; }
-    [[nodiscard]] auto elsize() const { return elsize_; }
-    [[nodiscard]] const auto* shape() const { return shapes_.data(); }
-    [[nodiscard]] auto data_type() const { return dt_; }
+    [[nodiscard]] int64_t nbytes() const { return nbytes_; }
+    [[nodiscard]] int ndim() const { return ndim_; }
+    [[nodiscard]] stride_t strides(size_t pos) const { return strides_[pos]; }
+    [[nodiscard]] const stride_t* strides() const { return strides_.data(); };
+    [[nodiscard]] stride_t shape(size_t pos) const { return shapes_[pos]; }
+    [[nodiscard]] stride_t elsize() const { return elsize_; }
+    [[nodiscard]] const stride_t* shape() const { return shapes_.data(); }
+    [[nodiscard]] DataType data_type() const { return dt_; }
     [[nodiscard]] const void* data() const { magic_.check(); return ptr; }
-    [[nodiscard]] auto extent(ssize_t dim) const { return shapes_[dim] * strides_[dim]; }
-    [[nodiscard]] auto expanded_dim() const { return expanded_dim_; }
+    [[nodiscard]] stride_t extent(ssize_t dim) const { return shapes_[dim] * strides_[dim]; }
+    [[nodiscard]] int expanded_dim() const { return expanded_dim_; }
     template<typename T>
     const T *ptr_cast(size_t pos) const {
         const bool dimension_condition = ndim() == 1;
