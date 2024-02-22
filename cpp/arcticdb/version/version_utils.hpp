@@ -192,6 +192,7 @@ inline void read_symbol_ref(const std::shared_ptr<StreamSource>& store, const St
 
     LoadProgress load_progress;
     entry.head_ = read_segment_with_keys(key_seg_pair.second, entry, load_progress);
+    entry.loaded_until_ = load_progress.loaded_until_;
 }
 
 inline void write_symbol_ref(std::shared_ptr<StreamSink> store,

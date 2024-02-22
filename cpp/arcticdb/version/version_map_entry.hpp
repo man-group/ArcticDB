@@ -327,7 +327,7 @@ struct VersionMapEntry {
     std::optional<AtomKey> head_;
     LoadType load_type_ = LoadType::NOT_LOADED;
     timestamp last_reload_time_ = 0;
-    VersionId loaded_until_ = 0;
+    VersionId loaded_until_ = std::numeric_limits<uint64_t>::max();
     std::deque<AtomKey> keys_;
     std::unordered_map<VersionId, AtomKey> tombstones_;
     std::optional<AtomKey> tombstone_all_;
