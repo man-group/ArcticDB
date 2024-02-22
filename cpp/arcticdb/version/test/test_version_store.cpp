@@ -377,21 +377,21 @@ TEST(VersionStore, TestReadTimestampAt) {
 
   auto version_map = version_store._test_get_version_map();
   version_map->write_version(mock_store, key1);
-  auto key = load_index_key_from_time(mock_store, version_map, id, timestamp(0), pipelines::VersionQuery{}, ReadOptions{});
+  auto key = load_index_key_from_time(mock_store, version_map, id, timestamp(0), pipelines::VersionQuery{});
   ASSERT_EQ(key.value().content_hash(), 3);
 
   version_map->write_version(mock_store, key2);
-  key = load_index_key_from_time(mock_store, version_map, id, timestamp(0), pipelines::VersionQuery{}, ReadOptions{});
+  key = load_index_key_from_time(mock_store, version_map, id, timestamp(0), pipelines::VersionQuery{});
   ASSERT_EQ(key.value().content_hash(), 3);
-  key = load_index_key_from_time(mock_store, version_map, id, timestamp(1), pipelines::VersionQuery{}, ReadOptions{});
+  key = load_index_key_from_time(mock_store, version_map, id, timestamp(1), pipelines::VersionQuery{});
   ASSERT_EQ(key.value().content_hash(), 4);
 
   version_map->write_version(mock_store, key3);
-  key = load_index_key_from_time(mock_store, version_map, id, timestamp(0), pipelines::VersionQuery{}, ReadOptions{});
+  key = load_index_key_from_time(mock_store, version_map, id, timestamp(0), pipelines::VersionQuery{});
   ASSERT_EQ(key.value().content_hash(), 3);
-  key = load_index_key_from_time(mock_store, version_map, id, timestamp(1), pipelines::VersionQuery{}, ReadOptions{});
+  key = load_index_key_from_time(mock_store, version_map, id, timestamp(1), pipelines::VersionQuery{});
   ASSERT_EQ(key.value().content_hash(), 4);
-  key = load_index_key_from_time(mock_store, version_map, id, timestamp(2), pipelines::VersionQuery{}, ReadOptions{});
+  key = load_index_key_from_time(mock_store, version_map, id, timestamp(2), pipelines::VersionQuery{});
   ASSERT_EQ(key.value().content_hash(), 5);
 }
 
@@ -409,7 +409,7 @@ TEST(VersionStore, TestReadTimestampAtInequality) {
 
   auto version_map = version_store._test_get_version_map();
   version_map->write_version(mock_store, key1);
-  auto key = load_index_key_from_time(mock_store, version_map, id, timestamp(1), pipelines::VersionQuery{}, ReadOptions{});
+  auto key = load_index_key_from_time(mock_store, version_map, id, timestamp(1), pipelines::VersionQuery{});
   ASSERT_EQ(static_cast<bool>(key), true);
   ASSERT_EQ(key.value().content_hash(), 3);
 }
@@ -534,7 +534,7 @@ TEST(VersionStore, UpdateAfter) {
         if(update_range.contains(i))
             expected += update_val;
 
-        auto val1 = seg.scalar_at<uint8_t >(i, 1);
+        auto val1 = seg.scalar_at<uint8_t>(i, 1);
         ASSERT_EQ(val1.value(), expected);
     }
 }
