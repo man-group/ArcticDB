@@ -8,14 +8,10 @@
 #pragma once
 
 #include <string>
-#include <ostream>
-#include <fstream>
-#include <fmt/format.h>
-#include <stdexcept>
 #include <typeinfo>
 
 namespace arcticdb {
 
-std::string get_type_name(const std::type_info & );
+std::string get_type_name(const std::type_info& type_info);
 
 }

@@ -795,7 +795,7 @@ Composite<EntityIds> RowRangeClause::process(Composite<EntityIds> &&entity_ids) 
                 if (end_ > row_range->start() && end_ < row_range->end()) {
                     end_row = end_ - (row_range->start());
                 }
-                auto truncated_segment = truncate_segment(*proc.segments_->at(idx), start_row, end_row);
+                auto truncated_segment = proc.segments_->at(idx)->truncate(start_row, end_row, false);
                 auto num_rows = truncated_segment.is_null() ? 0 : truncated_segment.row_count();
                 proc.row_ranges_->at(idx) = std::make_shared<pipelines::RowRange>(proc.row_ranges_->at(idx)->first, proc.row_ranges_->at(idx)->first + num_rows);
                 auto num_cols = truncated_segment.is_null() ? 0 : truncated_segment.descriptor().field_count() - truncated_segment.descriptor().index().field_count();

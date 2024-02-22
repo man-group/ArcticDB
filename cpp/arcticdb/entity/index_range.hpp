@@ -164,7 +164,7 @@ struct formatter<TimestampRange> {
 
     template<typename FormatContext>
     auto format(const TimestampRange &r, FormatContext &ctx) const {
-        return format_to(ctx.out(), "{}-{}", r.first, r.second);
+        return fmt::format_to(ctx.out(), "{}-{}", r.first, r.second);
     }
 };
 
@@ -175,7 +175,7 @@ struct formatter<IndexRange> {
 
     template<typename FormatContext>
     auto format(const IndexRange &r, FormatContext &ctx) const {
-        return format_to(ctx.out(), "{}-{}", r.start_, r.end_);
+        return fmt::format_to(ctx.out(), "{}-{}", r.start_, r.end_);
     }
 };
 

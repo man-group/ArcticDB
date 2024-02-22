@@ -133,13 +133,8 @@ namespace
     };
 
     template<>
-    struct OutputType<DataTypeTag<DataType::PYBOOL8>, void> {
-        using type = ScalarTagType<DataTypeTag<DataType::PYBOOL8>>;
-    };
-
-    template<>
-    struct OutputType<DataTypeTag<DataType::PYBOOL64>, void> {
-        using type = ScalarTagType<DataTypeTag<DataType::PYBOOL64>>;
+    struct OutputType<DataTypeTag<DataType::BOOL_OBJECT8>, void> {
+        using type = ScalarTagType<DataTypeTag<DataType::BOOL_OBJECT8>>;
     };
 }
 
@@ -172,13 +167,13 @@ void SumAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_
     if (!data_type_.has_value() || *data_type_ == DataType::EMPTYVAL) {
         data_type_ = DataType::FLOAT64;
     }
-    entity::details::visit_type(*data_type_, [&input_column, unique_values, &groups, that=this] (auto global_type_desc_tag) {
+    entity::details::visit_type(*data_type_, [&input_column, unique_values, &groups, this] (auto global_type_desc_tag) {
         using GlobalInputType = decltype(global_type_desc_tag);
         if constexpr(!is_sequence_type(GlobalInputType::DataTypeTag::data_type)) {
             using GlobalTypeDescriptorTag =  typename OutputType<GlobalInputType>::type;
             using GlobalRawType = typename GlobalTypeDescriptorTag::DataTypeTag::raw_type;
-            that->aggregated_.resize(sizeof(GlobalRawType)* unique_values);
-            auto out_ptr = reinterpret_cast<GlobalRawType*>(that->aggregated_.data());
+            aggregated_.resize(sizeof(GlobalRawType)* unique_values);
+            auto out_ptr = reinterpret_cast<GlobalRawType*>(aggregated_.data());
             if (input_column.has_value()) {
                 entity::details::visit_type(input_column->column_->type().data_type(), [&input_column, &groups, &out_ptr] (auto type_desc_tag) {
                     using ColumnTagType = std::decay_t<decltype(type_desc_tag)>;
@@ -189,7 +184,11 @@ void SumAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_
                             while (auto block = col_data.next<TypeDescriptorTag<ColumnTagType, DimensionTag<entity::Dimension::Dim0>>>()) {
                                 auto ptr = reinterpret_cast<const ColumnType *>(block.value().data());
                                 for (auto i = 0u; i < block.value().row_count(); ++i, ++ptr, ++iter) {
-                                    out_ptr[groups[deref(iter)]] += GlobalRawType(*ptr);
+                                    if constexpr (std::is_same_v<GlobalRawType, bool>) {
+                                        out_ptr[groups[deref(iter)]] |= GlobalRawType(*ptr);
+                                    } else {
+                                        out_ptr[groups[deref(iter)]] += GlobalRawType(*ptr);
+                                    }
                                 }
                             }
                         };

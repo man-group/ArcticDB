@@ -62,7 +62,7 @@ struct formatter<arcticdb::storage::OpenMode> {
                 break;
 
         }
-        return format_to(ctx.out(), "{:c}", c);
+        return fmt::format_to(ctx.out(), "{:c}", c);
     }
 };
 

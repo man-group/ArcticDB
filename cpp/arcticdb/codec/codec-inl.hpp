@@ -18,10 +18,6 @@
 
 #include <arcticdb/util/bitset.hpp>
 
-#include <arcticdb/util/buffer.hpp>
-
-#include <google/protobuf/text_format.h>
-
 #include <type_traits>
 
 namespace arcticdb {
@@ -135,6 +131,7 @@ std::size_t decode_ndarray(
         }
 
         if(field.sparse_map_bytes()) {
+            util::check(!is_empty_type(type_desc_tag.data_type()), "Empty typed columns should not have sparse map");
             util::check_magic<util::BitMagicStart>(data_in);
             const auto bitmap_size = field.sparse_map_bytes() - util::combined_bit_magic_delimiters_size();
             bv = util::deserialize_bytes_to_bitmap(data_in, bitmap_size);

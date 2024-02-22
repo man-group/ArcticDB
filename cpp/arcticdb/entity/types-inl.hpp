@@ -18,7 +18,7 @@ namespace arcticdb::entity {
 namespace details {
 
 template<class DimType, class Callable>
-auto visit_dim(DataType dt, Callable &&c) {
+constexpr auto visit_dim(DataType dt, Callable &&c) {
     switch (dt) {
 #define DT_CASE(__T__) case DataType::__T__: \
         return c(TypeDescriptorTag<DataTypeTag<DataType::__T__>, DimType>());
@@ -39,8 +39,7 @@ auto visit_dim(DataType dt, Callable &&c) {
         DT_CASE(UTF_FIXED64)
         DT_CASE(UTF_DYNAMIC64)
         DT_CASE(EMPTYVAL)
-        DT_CASE(PYBOOL8)
-        DT_CASE(PYBOOL64)
+        DT_CASE(BOOL_OBJECT8)
 #undef DT_CASE
         default: util::raise_rte("Invalid dtype '{}' in visit dim", datatype_to_str(dt));
     }
@@ -68,7 +67,7 @@ auto visit_type(DataType dt, Callable &&c) {
         DT_CASE(UTF_FIXED64)
         DT_CASE(UTF_DYNAMIC64)
         DT_CASE(EMPTYVAL)
-        DT_CASE(PYBOOL8)
+        DT_CASE(BOOL_OBJECT8)
 #undef DT_CASE
     default: util::raise_rte("Invalid dtype '{}' in visit type", datatype_to_str(dt));
     }
@@ -77,7 +76,7 @@ auto visit_type(DataType dt, Callable &&c) {
 } // namespace details
 
 template<class Callable>
-auto TypeDescriptor::visit_tag(Callable &&callable) const {
+constexpr auto TypeDescriptor::visit_tag(Callable &&callable) const {
     switch (dimension_) {
         case Dimension::Dim0: return details::visit_dim<DimensionTag<Dimension::Dim0>>(data_type_, callable);
         case Dimension::Dim1: return details::visit_dim<DimensionTag<Dimension::Dim1>>(data_type_, callable);
@@ -100,7 +99,7 @@ struct formatter<arcticdb::entity::DataType> {
 
     template<typename FormatContext>
     auto format(arcticdb::entity::DataType dt, FormatContext &ctx) const {
-        return format_to(ctx.out(), datatype_to_str(dt));
+        return fmt::format_to(ctx.out(), datatype_to_str(dt));
     }
 };
 
@@ -111,7 +110,7 @@ struct formatter<arcticdb::entity::Dimension> {
 
     template<typename FormatContext>
     auto format(arcticdb::entity::Dimension dim, FormatContext &ctx) const {
-        return format_to(ctx.out(), "{}", static_cast<uint32_t >(dim));
+        return fmt::format_to(ctx.out(), "{}", static_cast<uint32_t >(dim));
     }
 };
 
@@ -122,22 +121,21 @@ struct formatter<arcticdb::entity::TypeDescriptor> {
 
     template<typename FormatContext>
     auto format(const arcticdb::entity::TypeDescriptor &td, FormatContext &ctx) const {
-        return format_to(ctx.out(), "TD<type={}, dim={}>", td.data_type_, td.dimension_);
+        return fmt::format_to(ctx.out(), "TD<type={}, dim={}>", td.data_type_, td.dimension_);
     }
 };
 
 template<>
 struct formatter<arcticdb::entity::StreamId> {
     template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
 
     template<typename FormatContext>
-    auto format(const arcticdb::entity::StreamId& tsid, FormatContext& ctx) const {
-        return std::visit([&ctx](auto&& val) {
-            return format_to(ctx.out(), "{}", val);
-            }, tsid);
+    auto format(const arcticdb::entity::StreamId &tsid, FormatContext &ctx) const {
+        return std::visit([&ctx](auto &&val) {
+            return fmt::format_to(ctx.out(), "{}", val);
+        }, tsid);
     }
 };
-
 
 }

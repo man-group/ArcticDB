@@ -960,13 +960,13 @@ void PythonVersionStore::delete_all_versions(const StreamId& stream_id) {
     ARCTICDB_SAMPLE(DeleteAllVersions, 0)
 
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_all_versions");
-    if (!has_stream(stream_id)) {
-        log::version().warn("Symbol: {} does not exist.", stream_id);
-        return;
-    }
 
     try {
         auto [version_id, all_index_keys] = version_map()->delete_all_versions(store(), stream_id);
+        if (all_index_keys.empty()) {
+            log::version().warn("Nothing to delete for symbol '{}'", stream_id);
+            return;
+        }
         if (cfg().symbol_list())
             symbol_list().remove_symbol(store(), stream_id, version_id);
 

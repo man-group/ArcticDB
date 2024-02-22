@@ -6,6 +6,7 @@
  */
 
 #include <arcticdb/entity/types.hpp>
+#include <arcticdb/util/type_handler.hpp>
 
 namespace arcticdb::entity {
 
@@ -36,11 +37,18 @@ std::string_view datatype_to_str(const DataType dt) {
         TO_STR(UTF_FIXED64)
         TO_STR(UTF_DYNAMIC64)
         TO_STR(EMPTYVAL)
-        TO_STR(PYBOOL8)
-        TO_STR(PYBOOL64)
+        TO_STR(BOOL_OBJECT8)
 #undef TO_STR
         default:return std::string_view("UNKNOWN");
     }
+}
+
+std::size_t sizeof_datatype(const TypeDescriptor& td) {
+    return td.visit_tag([](auto tdt) {
+        using RawType = typename std::decay_t<decltype(tdt)>::DataTypeTag::raw_type;
+        auto handler = TypeHandlerRegistry::instance()->get_handler(TypeDescriptor{tdt});
+        return handler ? handler->type_size() : sizeof(RawType);
+    });
 }
 
 } // namespace arcticdb

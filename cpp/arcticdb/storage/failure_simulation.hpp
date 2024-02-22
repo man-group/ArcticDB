@@ -181,7 +181,7 @@ struct formatter<arcticdb::FailureType> {
 
     template<typename FormatContext>
     auto format(arcticdb::FailureType failure_type, FormatContext &ctx) const {
-        return format_to(ctx.out(), arcticdb::failure_names[int(failure_type)]);
+        return fmt::format_to(ctx.out(), arcticdb::failure_names[int(failure_type)]);
     }
 };
 }

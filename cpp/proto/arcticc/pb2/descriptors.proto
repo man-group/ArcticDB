@@ -31,7 +31,7 @@ message TypeDescriptor {
         DYNAMIC_STRING = 11; // offset reference to deduplicated string pool
         DYNAMIC_UTF8 = 12;
         EMPTY = 13;
-        PYBOOL = 14; // Nullable boolean
+        BOOL_OBJECT = 14; // Nullable boolean
     }
 
     enum SizeBits {

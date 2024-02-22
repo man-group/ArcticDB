@@ -214,7 +214,7 @@ struct formatter<arcticdb::ActionType> {
 
     template<typename FormatContext>
     auto format(arcticdb::ActionType a, FormatContext &ctx) const {
-        return format_to(ctx.out(), "{}", a == arcticdb::ActionType::ADD ? "ADD" : "DELETE");
+        return fmt::format_to(ctx.out(), "{}", a == arcticdb::ActionType::ADD ? "ADD" : "DELETE");
     }
 };
 
@@ -225,7 +225,7 @@ struct formatter<arcticdb::SymbolEntryData> {
 
     template<typename FormatContext>
     auto format(const arcticdb::SymbolEntryData &s, FormatContext &ctx) const {
-        return format_to(ctx.out(), "[{},{}@{}]", s.reference_id_, s.action_, s.timestamp_);
+        return fmt::format_to(ctx.out(), "[{},{}@{}]", s.reference_id_, s.action_, s.timestamp_);
     }
 };
 

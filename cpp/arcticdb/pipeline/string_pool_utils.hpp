@@ -36,8 +36,16 @@ inline auto get_string_from_pool(entity::position_t offset_val, const StringPool
     return string_pool.get_const_view(offset_val);
 }
 
-inline std::variant<std::string_view, entity::position_t> get_string_from_buffer(size_t offset, const ChunkedBuffer& src, const StringPool& string_pool) {
-    auto offset_val = get_offset_string_at(offset, src);
+/// @brief Get the i-th string from a buffer
+/// @param string_pos The index of the string to be returned
+/// @return If the string at @p string_pos is actual string inside @p string_pool return a
+///  string view, otherwise return an (integer) placeholder representing not a string.
+inline std::variant<std::string_view, entity::position_t> get_string_from_buffer(
+    size_t string_pos,
+    const ChunkedBuffer& src,
+    const StringPool& string_pool
+) {
+    auto offset_val = get_offset_string_at(string_pos, src);
     if (offset_val == nan_placeholder() || offset_val == not_a_string())
         return offset_val;
     else

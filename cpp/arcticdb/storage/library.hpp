@@ -73,8 +73,11 @@ class Library {
         if (open_mode() < OpenMode::WRITE)
             throw PermissionException(library_path_, open_mode(), "write");
 
-        size_t ARCTICDB_UNUSED total_size = kvs.fold([] (size_t s, const KeySegmentPair& seg) { return s + seg.segment().total_segment_size(); }, size_t(0));
-        auto kv_count ARCTICDB_UNUSED = kvs.size();
+        [[maybe_unused]] const size_t total_size = kvs.fold(
+            [](size_t s, const KeySegmentPair& seg) { return s + seg.segment().total_segment_size(); },
+            size_t(0)
+        );
+        [[maybe_unused]] const auto kv_count = kvs.size();
         storages_->write(std::move(kvs));
         ARCTICDB_TRACE(log::storage(), "{} kv written, {} bytes", kv_count, total_size);
     }
@@ -84,8 +87,11 @@ class Library {
         if (open_mode() < OpenMode::WRITE)
             throw PermissionException(library_path_, open_mode(), "update");
 
-        size_t total_size ARCTICDB_UNUSED = kvs.fold([] (size_t s, const KeySegmentPair& seg) { return s + seg.segment().total_segment_size(); }, size_t(0));
-        auto kv_count ARCTICDB_UNUSED = kvs.size();
+        [[maybe_unused]] const size_t total_size = kvs.fold(
+            [](size_t s, const KeySegmentPair& seg) { return s + seg.segment().total_segment_size(); },
+            size_t(0)
+        );
+        [[maybe_unused]] const auto kv_count = kvs.size();
         storages_->update(std::move(kvs), opts);
         ARCTICDB_TRACE(log::storage(), "{} kv updated, {} bytes", kv_count, total_size);
     }

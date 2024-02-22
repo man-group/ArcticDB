@@ -82,7 +82,7 @@ public:
 
     void check(const FieldCollection &fields) const {
         const size_t fields_size = fields.size();
-        const int current_fields_size = int(field_count());
+        constexpr int current_fields_size = int(field_count());
 
         const TypeDescriptor &first_field_type = fields[0].type();
         const TypeDescriptor &current_first_field_type = this->field(0).type();

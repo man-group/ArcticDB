@@ -182,7 +182,9 @@ TEST(Pipeline, Basic) {
     Pipeline pipeline(ex);
     TestFilter even_filter{[](const SegmentInMemory::Row& row) {
         return row[0].visit([](auto val) {
-            if constexpr(std::is_integral_v<decltype(val)>)
+            if constexpr (std::is_same_v<bool, decltype(val)>)
+                return val == false;
+            else if constexpr(std::is_integral_v<decltype(val)>)
                 return val % 2 == 0;
             else
                 return false;

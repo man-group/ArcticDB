@@ -205,22 +205,35 @@ inline std::pair<std::vector<SliceAndKey>, std::vector<SliceAndKey>> intersectin
     const IndexRange& front_range,
     const IndexRange& back_range,
     VersionId version_id,
-    const std::shared_ptr<Store>& store) {
+    const std::shared_ptr<Store>& store
+) {
     std::vector<SliceAndKey> intersect_before;
     std::vector<SliceAndKey> intersect_after;
 
     for (const auto& affected_slice_and_key : affected_keys) {
         const auto& affected_range = affected_slice_and_key.key().index_range();
-        if (intersects(affected_range, front_range) && !overlaps(affected_range, front_range)
-        && is_before(affected_range, front_range)) {
-            auto front_overlap_key = rewrite_partial_segment(affected_slice_and_key, front_range, version_id, false, store);
+        if (intersects(affected_range, front_range) && !overlaps(affected_range, front_range) &&
+            is_before(affected_range, front_range)) {
+            auto front_overlap_key = rewrite_partial_segment(
+                affected_slice_and_key,
+                front_range,
+                version_id,
+                AffectedSegmentPart::START,
+                store
+            );
             if (front_overlap_key)
                 intersect_before.push_back(*front_overlap_key);
         }
 
-        if (intersects(affected_range, back_range) && !overlaps(affected_range, back_range)
-        && is_after(affected_range, back_range)) {
-            auto back_overlap_key = rewrite_partial_segment(affected_slice_and_key, back_range, version_id, true, store);
+        if (intersects(affected_range, back_range) && !overlaps(affected_range, back_range) &&
+            is_after(affected_range, back_range)) {
+            auto back_overlap_key = rewrite_partial_segment(
+                affected_slice_and_key,
+                back_range,
+                version_id,
+                AffectedSegmentPart::END,
+                store
+            );
             if (back_overlap_key)
                 intersect_after.push_back(*back_overlap_key);
         }
@@ -265,13 +278,12 @@ VersionedItem delete_range_impl(
     auto orig_filter_range = std::holds_alternative<std::monostate>(query.row_filter) ? get_query_index_range(index, index_range) : query.row_filter;
 
     size_t row_count = 0;
-    auto flattened_slice_and_keys = flatten_and_fix_rows(std::vector<std::vector<SliceAndKey>>{
+    const std::array<std::vector<SliceAndKey>, 5> groups{
         strictly_before(orig_filter_range, unaffected_keys),
         std::move(intersect_before),
         std::move(intersect_after),
-        strictly_after(orig_filter_range, unaffected_keys)},
-                                                         row_count
-                                                         );
+        strictly_after(orig_filter_range, unaffected_keys)};
+    auto flattened_slice_and_keys = flatten_and_fix_rows(groups, row_count);
 
     std::sort(std::begin(flattened_slice_and_keys), std::end(flattened_slice_and_keys));
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
@@ -369,14 +381,13 @@ VersionedItem update_impl(
 
     size_t row_count = 0;
     const size_t new_keys_size = new_slice_and_keys.size();
-    auto flattened_slice_and_keys = flatten_and_fix_rows(std::vector<std::vector<SliceAndKey>>{
+    const std::array<std::vector<SliceAndKey>, 5> groups{
         strictly_before(orig_filter_range, unaffected_keys),
         std::move(intersect_before),
         std::move(new_slice_and_keys),
         std::move(intersect_after),
-        strictly_after(orig_filter_range, unaffected_keys)},
-                                                         row_count
-                                                         );
+        strictly_after(orig_filter_range, unaffected_keys)};
+    auto flattened_slice_and_keys = flatten_and_fix_rows(groups, row_count);
 
     util::check(unaffected_keys.size() + new_keys_size + (affected_keys.size() * 2) >= flattened_slice_and_keys.size(),
                 "Output size mismatch: {} + {} + (2 * {}) < {}",

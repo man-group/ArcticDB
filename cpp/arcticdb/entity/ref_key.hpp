@@ -79,7 +79,7 @@ struct formatter<RefKey> {
 
     template<typename FormatContext>
     auto format(const RefKey &k, FormatContext &ctx) const {
-        return format_to(ctx.out(), "{}:{}", k.type(), k.id());
+        return fmt::format_to(ctx.out(), "{}:{}", k.type(), k.id());
     }
 };
 

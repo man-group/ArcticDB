@@ -440,14 +440,15 @@ def lmdb_version_store_v2(version_store_factory, lib_name):
     return version_store_factory(dynamic_strings=True, encoding_version=int(EncodingVersion.V2), name=library_name)
 
 
-@pytest.fixture
-def lmdb_version_store(lmdb_version_store_v1, lmdb_version_store_v2, encoding_version):
-    if encoding_version == EncodingVersion.V1:
-        return lmdb_version_store_v1
-    elif encoding_version == EncodingVersion.V2:
-        return lmdb_version_store_v2
-    else:
-        raise ValueError(f"Unexpected encoding version: {encoding_version}")
+@pytest.fixture(
+    scope="function",
+    params=(
+        "lmdb_version_store_v1",
+        "lmdb_version_store_v2",
+    )
+)
+def lmdb_version_store(request):
+    yield request.getfixturevalue(request.param)
 
 
 @pytest.fixture
@@ -692,6 +693,22 @@ def get_wide_df():
         return pd.DataFrame(index=[pd.Timestamp(ts)], data={str(col): get_val(col) for col in cols})
 
     return get_df
+
+
+@pytest.fixture(
+    scope="function",
+    params=(
+        "lmdb_version_store_v1",
+        "lmdb_version_store_v2",
+        "lmdb_version_store_dynamic_schema_v1",
+        "lmdb_version_store_dynamic_schema_v2",
+    ),
+)
+def lmdb_version_store_static_and_dynamic(request):
+    """
+    Designed to test all combinations between schema and encoding version for LMDB
+    """
+    yield request.getfixturevalue(request.param)
 
 
 @pytest.fixture(

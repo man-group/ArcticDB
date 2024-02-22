@@ -28,8 +28,9 @@
 #include <arcticdb/entity/merge_descriptors.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/util/format_date.hpp>
+#include <vector>
+#include <array>
 
-#include <pybind11/pybind11.h>
 
 namespace arcticdb::pipelines {
 
@@ -247,114 +248,141 @@ folly::Future<entity::AtomKey> append_frame(
         slices_to_write.insert(std::end(slices_to_write), std::make_move_iterator(std::begin(slice_and_keys_to_append)), std::make_move_iterator(std::end(slice_and_keys_to_append)));
         std::sort(std::begin(slices_to_write), std::end(slices_to_write));
         if(dynamic_schema) {
-            auto merged_descriptor =
-                merge_descriptors(frame->desc, std::vector< std::shared_ptr<FieldCollection>>{ index_segment_reader.tsd().fields_ptr()}, {});
+            auto merged_descriptor = merge_descriptors(
+                frame->desc,
+                std::vector<std::shared_ptr<FieldCollection>>{index_segment_reader.tsd().fields_ptr()},
+                {}
+            );
             merged_descriptor.set_sorted(deduce_sorted(index_segment_reader.get_sorted(), frame->desc.get_sorted()));
-            auto tsd =
-                make_timeseries_descriptor(frame->num_rows + frame->offset, std::move(merged_descriptor), std::move(frame->norm_meta), std::move(frame->user_meta), std::nullopt, std::nullopt, frame->bucketize_dynamic);
+            auto tsd = make_timeseries_descriptor(
+                frame->num_rows + frame->offset,
+                std::move(merged_descriptor),
+                std::move(frame->norm_meta),
+                std::move(frame->user_meta),
+                std::nullopt,
+                std::nullopt,
+                frame->bucketize_dynamic
+            );
             return index::write_index(stream::index_type_from_descriptor(frame->desc), std::move(tsd), std::move(slices_to_write), key, store);
         } else {
+            const FieldCollection& new_fields{index_segment_reader.tsd().fields()};
+            for (size_t i = 0; i < new_fields.size(); ++i) {
+                const Field& new_field = new_fields.at(i);
+                TypeDescriptor& original_type = frame->desc.mutable_field(i).mutable_type();
+                if (is_empty_type(original_type.data_type()) && !is_empty_type(new_field.type().data_type())) {
+                    original_type = new_field.type();
+                }
+            }
             frame->desc.set_sorted(deduce_sorted(index_segment_reader.get_sorted(), frame->desc.get_sorted()));
             return index::write_index(frame, std::move(slices_to_write), key, store);
         }
     });
 }
 
-void update_string_columns(const SegmentInMemory& original, SegmentInMemory output) {
-    util::check(original.descriptor() == output.descriptor(), "Update string column handling expects identical descriptors");
-    for (size_t column = 0; column < static_cast<size_t>(original.descriptor().fields().size()); ++column) {
-        auto &frame_field = original.field(column);
-        auto field_type = frame_field.type().data_type();
+/// @brief Find the row range of affected rows during a partial rewrite (on update)
+/// During partial rewrite the segment is either affected from the beginning to a
+/// certain row or from a certain row to the end. Thus the row range will always be
+/// either [0, row) or [row, end).
+static RowRange partial_rewrite_row_range(
+    const SegmentInMemory& segment,
+    const IndexRange& range,
+    AffectedSegmentPart affected_end
+) {
+    if (affected_end == AffectedSegmentPart::START) {
+        const timestamp start = std::get<timestamp>(range.start_);
+        auto bound = std::lower_bound(std::begin(segment), std::end(segment), start, [](const auto& row, timestamp t) {
+            return row.template index<TimeseriesIndex>() < t;
+        });
+        return {0, bound->row_pos()};
+    } else {
+        const timestamp end = std::get<timestamp>(range.end_);
+        auto bound = std::upper_bound(std::begin(segment), std::end(segment), end, [](timestamp t, const auto& row) {
+            return t < row.template index<TimeseriesIndex>();
+        });
+        return {bound->row_pos(), segment.row_count()};
+    }
+}
 
-        if (is_sequence_type(field_type)) {
-            auto &target = output.column(static_cast<position_t>(column)).data().buffer();
-            size_t end = output.row_count();
-            for(auto row = 0u; row < end; ++row) {
-                auto val = get_string_from_buffer(row, target, original.const_string_pool());
-                util::variant_match(val,
-                                    [&] (std::string_view sv) {
-                                        auto off_str = output.string_pool().get(sv);
-                                        set_offset_string_at(row, target, off_str.offset());
-                                    },
-                                    [&] (entity::position_t offset) {
-                                        set_offset_string_at(row, target, offset);
-                                    });
-
-            }
-        }
+/// @brief Find the index range of affected rows during a partial rewrite (on update)
+/// Similar to partial_rewrite_row_range the segment is affected either at the beginning
+/// or at the end.
+static IndexRange partial_rewrite_index_range(
+    const IndexRange& segment_range,
+    const IndexRange& update_range,
+    AffectedSegmentPart affected_part
+) {
+    if (affected_part == AffectedSegmentPart::START) {
+        util::check(
+            segment_range.start_ < update_range.start_,
+            "Unexpected index range in after: {} !< {}",
+            segment_range.start_,
+            update_range.start_
+        );
+        return {segment_range.start_, update_range.start_};
+    } else {
+        util::check(
+            segment_range.end_ > update_range.end_,
+            "Unexpected non-intersection of update indices: {} !> {}",
+            segment_range.end_,
+            update_range.end_
+        );
+        return {segment_range.end_, update_range.end_};
     }
 }
 
 std::optional<SliceAndKey> rewrite_partial_segment(
-        const SliceAndKey& existing,
-        IndexRange index_range,
-         VersionId version_id,
-         bool before,
-         const std::shared_ptr<Store>& store) {
-    const auto& key =  existing.key();
-    const auto& existing_range =key.index_range();
+    const SliceAndKey& existing,
+    IndexRange index_range,
+    VersionId version_id,
+    AffectedSegmentPart affected_part,
+    const std::shared_ptr<Store>& store
+) {
+    const auto& key = existing.key();
+    const IndexRange& existing_range = key.index_range();
     auto kv = store->read(key).get();
-    auto &segment = kv.second;
-
-    auto start = std::get<timestamp>(index_range.start_);
-    auto end = std::get<timestamp>(index_range.end_);
-
-    if(!before) {
-        util::check(existing_range.start_ < index_range.start_, "Unexpected index range in after: {} !< {}", existing_range.start_, index_range.start_);
-        auto bound = std::lower_bound(std::begin(segment), std::end(segment), start, [] ( auto& row, timestamp t) {return row.template index<TimeseriesIndex>() < t; });
-        size_t num_rows = std::distance(std::begin(segment), bound);
-        if(num_rows == 0)
-            return std::nullopt;
-
-        auto output = SegmentInMemory{segment.descriptor(), num_rows};
-        std::copy(std::begin(segment), bound, std::back_inserter(output));
-        update_string_columns(segment, output);
-        FrameSlice new_slice{
-            std::make_shared<StreamDescriptor>(output.descriptor()),
-            existing.slice_.col_range,
-            RowRange{0, num_rows},
-            existing.slice_.hash_bucket(),
-            existing.slice_.num_buckets()};
-        auto fut_key = store->write(key.type(), version_id, key.id(), existing_range.start_, index_range.start_, std::move(output));
-        return SliceAndKey{std::move(new_slice), std::get<AtomKey>(std::move(fut_key).get())};
+    const SegmentInMemory& segment = kv.second;
+    const IndexRange affected_index_range = partial_rewrite_index_range(existing_range, index_range, affected_part);
+    const RowRange affected_row_range = partial_rewrite_row_range(segment, index_range, affected_part);
+    const int64_t num_rows = affected_row_range.end() - affected_row_range.start();
+    if (num_rows <= 0) {
+        return std::nullopt;
     }
-    else {
-        util::check(existing_range.end_ > index_range.end_, "Unexpected non-intersection of update indices: {} !> {}", existing_range.end_ , index_range.end_);
-
-        auto bound = std::upper_bound(std::begin(segment), std::end(segment), end, [] ( timestamp t, auto& row) {
-            return t < row.template index<TimeseriesIndex>();
-        });
-        size_t num_rows = std::distance(bound, std::end(segment));
-        if(num_rows == 0)
-            return std::nullopt;
-
-        auto output = SegmentInMemory{segment.descriptor(), num_rows};
-        std::copy(bound, std::end(segment), std::back_inserter(output));
-        update_string_columns(segment, output);
-        FrameSlice new_slice{
-            std::make_shared<StreamDescriptor>(output.descriptor()),
-                    existing.slice_.col_range,
-                    RowRange{0, num_rows},
-                    existing.slice_.hash_bucket(),
-                    existing.slice_.num_buckets()};
-        auto fut_key = store->write(key.type(), version_id, key.id(), index_range.end_, existing_range.end_, std::move(output));
-        return SliceAndKey{std::move(new_slice), std::get<AtomKey>(std::move(fut_key).get())};
-    }
+    SegmentInMemory output = segment.truncate(affected_row_range.start(), affected_row_range.end(), true);
+    FrameSlice new_slice{
+        std::make_shared<StreamDescriptor>(output.descriptor()),
+        existing.slice_.col_range,
+        RowRange{0, num_rows},
+        existing.slice_.hash_bucket(),
+        existing.slice_.num_buckets()};
+    auto fut_key = store->write(
+        key.type(),
+        version_id,
+        key.id(),
+        affected_index_range.start_,
+        affected_index_range.end_,
+        std::move(output)
+    );
+    return SliceAndKey{std::move(new_slice), std::get<AtomKey>(std::move(fut_key).get())};
 }
 
-std::vector<SliceAndKey> flatten_and_fix_rows(const std::vector<std::vector<SliceAndKey>>& groups, size_t& global_count) {
+std::vector<SliceAndKey> flatten_and_fix_rows(const std::array<std::vector<SliceAndKey>, 5>& groups, size_t& global_count) {
     std::vector<SliceAndKey> output;
+    output.reserve(groups.size());
     global_count = 0;
-    for(auto group : groups) {
-        if(group.empty()) continue;
+    for (const std::vector<SliceAndKey>& group : groups) {
+        if (group.empty())
+            continue;
         auto group_start = group.begin()->slice_.row_range.first;
-        auto group_end = std::accumulate(std::begin(group), std::end(group), 0ULL, [](size_t a, const SliceAndKey& sk) { return std::max(a, sk.slice_.row_range.second); });
-        std::transform(std::begin(group), std::end(group), std::back_inserter(output), [&] (auto& sk) {
+        auto group_end = std::accumulate(std::begin(group), std::end(group), 0ULL, [](size_t a, const SliceAndKey& sk) {
+            return std::max(a, sk.slice_.row_range.second);
+        });
+        std::transform(std::begin(group), std::end(group), std::back_inserter(output), [&](SliceAndKey sk) {
             auto range_start = global_count + (sk.slice_.row_range.first - group_start);
             auto new_range = RowRange{range_start, range_start + (sk.slice_.row_range.diff())};
             sk.slice_.row_range = new_range;
-            return sk; });
-        global_count += (group_end - group_start) ;
+            return sk;
+        });
+        global_count += (group_end - group_start);
     }
     return output;
 }
