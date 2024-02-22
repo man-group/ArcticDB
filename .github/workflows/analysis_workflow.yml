@@ -192,7 +192,6 @@ jobs:
           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
 
   start_ec2_runner:
-    if: github.event_name == 'schedule'
     uses: ./.github/workflows/ec2_runner_jobs.yml
     secrets: inherit
     with:
@@ -200,7 +199,6 @@ jobs:
 
   benchmark_linux_medium:
     timeout-minutes: 1200
-    if: github.event_name == 'schedule'
     needs: [start_ec2_runner, cibw_docker_image]
     runs-on: ${{ needs.start_ec2_runner.outputs.label }}
     container:
@@ -240,7 +238,7 @@ jobs:
           echo /opt/python/cp36-cp36m/bin >> $GITHUB_PATH
 
       - name: Install ASV
-        shell: bash -el {0}
+        shell: bash
         run: |
           git config --global --add safe.directory .
           python -m pip install --upgrade pip
@@ -290,7 +288,7 @@ jobs:
 
   stop-ec2-runner:
     needs: [start_ec2_runner, benchmark_linux_medium]
-    if: github.event_name == 'schedule'
+    if: ${{ always() }}
     uses: ./.github/workflows/ec2_runner_jobs.yml
     secrets: inherit
     with:
