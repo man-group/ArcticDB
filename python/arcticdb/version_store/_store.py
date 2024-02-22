@@ -1761,8 +1761,7 @@ class NativeVersionStore:
         self, symbol: str, as_of: Optional[VersionQueryInput] = None, raise_on_missing: Optional[bool] = False, **kwargs
     ) -> Optional[VersionedItem]:
         version_query = self._get_version_query(as_of, **kwargs)
-        read_options = self._get_read_options(**kwargs)
-        version_handle = self.version_store.find_version(symbol, version_query, read_options)
+        version_handle = self.version_store.find_version(symbol, version_query)
 
         if version_handle is None and raise_on_missing:
             raise KeyError(f"Cannot find version for symbol={symbol},as_of={as_of}")
@@ -2321,8 +2320,7 @@ class NativeVersionStore:
             The data attribute will not be populated.
         """
         version_query = self._get_version_query(as_of, **kwargs)
-        read_options = self._get_read_options(**kwargs)
-        version_item, udm = self.version_store.read_metadata(symbol, version_query, read_options)
+        version_item, udm = self.version_store.read_metadata(symbol, version_query)
         meta = denormalize_user_metadata(udm, self._normalizer) if udm else None
 
         return VersionedItem(
@@ -2399,8 +2397,7 @@ class NativeVersionStore:
             True if the symbol is pickled, False otherwise.
         """
         version_query = self._get_version_query(as_of, **kwargs)
-        read_options = self._get_read_options(**kwargs)
-        dit = self.version_store.read_descriptor(symbol, version_query, read_options)
+        dit = self.version_store.read_descriptor(symbol, version_query)
         return self.is_pickled_descriptor(dit.timeseries_descriptor)
 
     def _get_time_range_from_ts(self, desc, min_ts, max_ts):
@@ -2444,7 +2441,6 @@ class NativeVersionStore:
         """
         given_version = max([v["version"] for v in self.list_versions(symbol)]) if version is None else version
         version_query = self._get_version_query(given_version)
-        read_options = self._get_read_options(**kwargs)
 
         i = self.version_store.read_index(symbol, version_query)
         frame_data = ReadResult(*i).frame_data
@@ -2455,7 +2451,7 @@ class NativeVersionStore:
         start_indices, end_indices = index_data[0], index_data[1]
         min_ts, max_ts = min(start_indices), max(end_indices)
         # to get timezone info
-        dit = self.version_store.read_descriptor(symbol, version_query, read_options)
+        dit = self.version_store.read_descriptor(symbol, version_query)
         return self._get_time_range_from_ts(dit.timeseries_descriptor, min_ts, max_ts)
 
     def name(self):
@@ -2477,9 +2473,8 @@ class NativeVersionStore:
         `int`
             The number of rows in the specified revision of the symbol.
         """
-        read_options = self._get_read_options(**kwargs)
         version_query = self._get_version_query(as_of)
-        dit = self.version_store.read_descriptor(symbol, version_query, read_options)
+        dit = self.version_store.read_descriptor(symbol, version_query)
         return dit.timeseries_descriptor.total_rows
 
     def lib_cfg(self):
@@ -2579,8 +2574,7 @@ class NativeVersionStore:
             - sorted, `str`
         """
         version_query = self._get_version_query(version)
-        read_options = _PythonVersionStoreReadOptions()
-        dit = self.version_store.read_descriptor(symbol, version_query, read_options)
+        dit = self.version_store.read_descriptor(symbol, version_query)
         return self._process_info(symbol, dit, version)
 
     def batch_get_info(
