@@ -2,7 +2,7 @@ name: Docs Build
 on:
   workflow_dispatch:
     inputs:
-      version: { type: string, required: false, description: "The version to build (used in git and pypi). git-tag='v{version}-docs'.  If not specified then use master and wheel from the last successful build."}
+      version: { type: string, required: false, description: "The version to build (used in git and pypi). git-tag='v{version}-docs'.  If not specified then use selected branch and wheel from the last successful build."}
       latest: { type: boolean, required: false, description: Alias this version as the 'latest' stable docs.  This should be set for the latest stable release.}
       deploy: { type: boolean, required: false, description: Push the built docs to the docs-pages branch on github.}
       
@@ -15,7 +15,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3.3.0
         with:
-          ref: ${{inputs.version && format('v{0}-docs', inputs.version) || 'master'}}
+          ref: ${{inputs.version && format('v{0}-docs', inputs.version) || github.ref}}
 
       - name: Fetch docs-pages branch
         if: ${{inputs.deploy}}
@@ -37,7 +37,7 @@ jobs:
           name: wheel-${{env.PY_IMPL}}-manylinux_x86_64
           workflow: build.yml
           workflow_conclusion: success
-          branch: master
+          branch: ${{github.ref}}
 
       - name: Install documentation dependencies (including ArcticDB)
         run: |
