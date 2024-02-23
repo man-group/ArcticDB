@@ -91,6 +91,7 @@ jobs:
         if: matrix.os == 'windows'
         uses: ilammy/msvc-dev-cmd@v1.12.1
         with:
+          # The version of the toolset is specified due to faulty version discovery.
           toolset: 14.39
 
       - name: Extra envs
