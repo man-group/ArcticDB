@@ -30,11 +30,7 @@ arcticdb::ScopedTimer runtime_sub_timer_##name = !_scoped_subtimer_##name_active
 
 #ifdef USE_REMOTERY
 
-#ifdef ARCTICDB_USING_CONDA
-    #include <remotery/Remotery.h>
-#else
-    #include <Remotery.h>
-#endif
+#include <remotery/Remotery.h>
 
 class RemoteryInstance {
   public:

@@ -18,11 +18,7 @@
     #undef copysign
 #endif
 
-#ifdef ARCTICDB_USING_CONDA
-    #include <robin_hood.h>
-#else
-    #include <arcticdb/util/third_party/robin_hood.hpp>
-#endif
+#include <robin_hood.h>
 
 #include <arcticdb/entity/types.hpp> // for entity::position_t
 #include <arcticdb/util/constants.hpp>

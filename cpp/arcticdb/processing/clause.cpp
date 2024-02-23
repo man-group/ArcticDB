@@ -20,11 +20,7 @@
 #include <arcticdb/pipeline/value_set.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/stream/segment_aggregator.hpp>
-#ifdef ARCTICDB_USING_CONDA
-    #include <robin_hood.h>
-#else
-    #include <arcticdb/util/third_party/robin_hood.hpp>
-#endif
+#include <robin_hood.h>
 
 namespace arcticdb {
 

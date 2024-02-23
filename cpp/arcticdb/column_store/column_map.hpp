@@ -14,11 +14,7 @@
 
 #include <folly/container/Enumerate.h>
 
-#ifdef ARCTICDB_USING_CONDA
-    #include <robin_hood.h>
-#else
-    #include <arcticdb/util/third_party/robin_hood.hpp>
-#endif
+#include <robin_hood.h>
 
 #include <optional>
 #include <string_view>

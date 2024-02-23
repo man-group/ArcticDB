@@ -56,8 +56,7 @@ if(NOT ${ARCTICDB_USING_CONDA})
     endif()
 else()
 
-    # ARCTICDB_USING_CONDA is used in header of the files including vendored
-    # sources to be able to use dependencies via conda at compile time.
+    # ARCTICDB_USING_CONDA is used to specified slightly adaptation of the dependencies for the conda builds.
     # TODO: rely on CMake directives instead of `ARCTICDB_USING_CONDA`.
     add_compile_definitions(ARCTICDB_USING_CONDA)
     # https://conda-forge.org/docs/maintainer/knowledge_base.html#newer-c-features-with-old-sdk
@@ -617,6 +616,15 @@ if (SSL_LINK)
 endif ()
 target_link_libraries(arcticdb_core_object PUBLIC ${arcticdb_core_libraries})
 
+if (NOT ARCTICDB_USING_CONDA)
+    # Some dependencies aren't distributed by vcpkg and are vendored in the source tree.
+    list(APPEND arcticdb_core_includes
+            ${CMAKE_CURRENT_SOURCE_DIR}/third_party
+            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/recycle/src/recycle
+            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/lmdbxx
+            ${CMAKE_CURRENT_SOURCE_DIR}/arcticdb/util/third_party
+    )
+endif()
 
 target_include_directories(arcticdb_core_object
         PRIVATE

@@ -13,11 +13,7 @@
 #include <arcticdb/processing/signed_unsigned_comparison.hpp>
 #include <arcticdb/util/constants.hpp>
 #include <arcticdb/util/preconditions.hpp>
-#ifdef ARCTICDB_USING_CONDA
-    #include <robin_hood.h>
-#else
-    #include <arcticdb/util/third_party/robin_hood.hpp>
-#endif
+#include <robin_hood.h>
 
 namespace arcticdb {
 // If reordering this enum, is_binary_operation may also need to be changed
