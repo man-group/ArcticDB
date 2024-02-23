@@ -16,6 +16,8 @@ from arcticdb.toolbox.library_tool import VariantKey, AtomKey, key_to_props_dict
 from arcticdb_ext import set_config_int, unset_config_int
 from arcticdb_ext.storage import KeyType, OpenMode
 from arcticdb_ext.tools import CompactionId, CompactionLockName
+from arcticdb.storage_fixtures.s3 import MotoS3StorageFixtureFactory
+from arcticdb_ext.exceptions import InternalException
 
 from multiprocessing import Pool
 from arcticdb_ext import set_config_int
@@ -345,3 +347,8 @@ def test_symbol_list_parallel_stress_with_delete(
     missing_symbols = expected_symbols - got_symbols
     for sym in missing_symbols:
         assert not lib.version_store.indexes_sorted(sym)
+
+
+def test_symbol_list_exception_and_printout(mock_s3_store_with_mock_storage_exception):  # moto is choosen just because it's easy to give storage error
+    with pytest.raises(InternalException, match="E_S3_RETRYABLE Retry-able error"):
+        mock_s3_store_with_mock_storage_exception.list_symbols()
