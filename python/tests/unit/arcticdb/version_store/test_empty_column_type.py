@@ -11,25 +11,57 @@ from pandas.testing import assert_frame_equal
 import numpy as np
 import pytest
 
-@pytest.fixture(params=[t + s for s in ["8", "16", "32", "64"] for t in ["int", "uint"]])
+class DtypeGenerator:
+    """
+    Class which can generate all dtypes which ArcticDB supports.
+    It can generate them by type category e.g. int, float, etc.
+    it can also generate a list of all available dtypes
+    """
+    
+    @staticmethod
+    def int_dtype():
+        return [t + s for s in ["8", "16", "32", "64"] for t in ["int", "uint"]]
+
+    @staticmethod
+    def float_dtype():
+        return ["float" + s for s in ["32", "64"]]
+    
+    @staticmethod
+    def bool_dtype():
+        return ["object", "bool"]
+    
+    @staticmethod
+    def date_dtype():
+        return ["datetime64[ns]"]
+    
+    @classmethod
+    def dtype(cls):
+        return [*cls.int_dtype(), *cls.float_dtype(), *cls.bool_dtype(), *cls.date_dtype()]
+
+@pytest.fixture(params=DtypeGenerator.int_dtype())
 def int_dtype(request):
     yield request.param
 
-@pytest.fixture(params=["float" + s for s in ["32", "64"]])
+@pytest.fixture(params=DtypeGenerator.float_dtype())
 def float_dtype(request):
     yield request.param
 
 
 # object is for nullable boolean
-@pytest.fixture(params=["object", "bool"])
+@pytest.fixture(params=DtypeGenerator.bool_dtype())
 def boolean_dtype(request):
     if request.param == "object":
         pytest.skip("Nullable booleans are temporary disabled")
     yield request.param
 
 
-@pytest.fixture(params=["datetime64[ns]"])
+@pytest.fixture(params=DtypeGenerator.date_dtype())
 def date_dtype(request):
+    yield request.param
+
+
+@pytest.fixture(params=DtypeGenerator.dtype())
+def dtype(request):
     yield request.param
 
 
@@ -162,7 +194,19 @@ class TestCanAppendToEmptyColumn:
     the first append.
     """
 
-    @pytest.fixture(params=[[0,1,2], list(pd.date_range(start="1/1/2024", end="1/3/2024"))])
+    @pytest.fixture(params=
+            [
+                pytest.param(
+                    pd.RangeIndex(0,2),
+                    marks=pytest.mark.xfail(
+                        reason="Appending row ranged columns to empty columns is not supported yet."
+                        "The index of empty df is of type datetime and it clashes with the row-range type."
+                        "The expected behavior is to allow this as long as the initial df is of 0 rows.")
+                    ),
+                list(pd.date_range(start="1/1/2024", end="1/3/2024"))
+                
+            ]
+    )
     def append_index(self, request):
         yield request.param
 
@@ -171,12 +215,17 @@ class TestCanAppendToEmptyColumn:
         yield request.param
 
     @pytest.fixture(autouse=True)
-    def create_empty_column(self, lmdb_version_store_static_and_dynamic, int_dtype, empty_index):
-        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col1": []}, dtype=int_dtype, index=empty_index))
+    def create_empty_column(self, lmdb_version_store_static_and_dynamic, dtype, empty_index):
+        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col1": []}, dtype=dtype, index=empty_index))
         yield
 
     def test_integer(self, lmdb_version_store_static_and_dynamic, int_dtype, empty_index, append_index):
         df_to_append = pd.DataFrame({"col1": [1,2,3]}, dtype=int_dtype, index=append_index)
+        lmdb_version_store_static_and_dynamic.append("sym", df_to_append)
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df_to_append)
+    
+    def test_float(self, lmdb_version_store_static_and_dynamic, float_dtype, empty_index, append_index):
+        df_to_append = pd.DataFrame({"col1": [1,2,3]}, dtype=float_dtype, index=append_index)
         lmdb_version_store_static_and_dynamic.append("sym", df_to_append)
         assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df_to_append)
 

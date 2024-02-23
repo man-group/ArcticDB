@@ -120,7 +120,7 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
     // In Pandas < 2, empty series dtype is `"float"`, but as of Pandas 2.0, empty series dtype is `"object"`
     // The Normalizer in Python cast empty `"float"` series to `"object"` so `EMPTY` is used here.
     // See: https://github.com/man-group/ArcticDB/pull/1049
-    auto val_type = (size == 0 && descr->kind == 'O') ? ValueType::EMPTY : get_value_type(descr->kind);
+    auto val_type = size == 0 ? ValueType::EMPTY : get_value_type(descr->kind);
     auto val_bytes = static_cast<uint8_t>(descr->elsize);
     const int64_t element_count = ndim == 1 ? int64_t(arr->dimensions[0]) : int64_t(arr->dimensions[0]) * int64_t(arr->dimensions[1]);
     const auto c_style = arr->strides[0] == val_bytes;
