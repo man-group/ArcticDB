@@ -1061,7 +1061,7 @@ std::unique_ptr<StringReducer> get_string_reducer(
             const auto alloc_width = get_max_string_size_in_column(column.data().buffer(), context, frame, frame_field, slice_map, true);
             string_reducer = std::make_unique<UnicodeConvertingStringReducer>(column, context, frame, frame_field, alloc_width);
         } else {
-            const auto alloc_width = get_max_string_size_in_column(column.data().buffer(), context, frame, frame_field, slice_map, true);
+            const auto alloc_width = get_max_string_size_in_column(column.data().buffer(), context, frame, frame_field, slice_map, frame.fixed_str_as_dyn());
             string_reducer = std::make_unique<FixedStringReducer>(column, context, frame, frame_field, alloc_width);
         }
     } else {

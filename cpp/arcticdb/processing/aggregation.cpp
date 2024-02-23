@@ -525,6 +525,9 @@ SegmentInMemory FirstAggregatorData::finalize(const ColumnName& output_column_na
             }
             res.add_column(scalar_field(data_type_.value(), output_column_name.value), col);
             col->set_row_data(unique_values - 1);
+            // Set `fixed_str_as_dyn` flag to `true` to get the max instead of first string size
+            // cf. `get_string_reducer` when reducing columns
+            res.set_fixed_str_as_dyn(true);
         });
     }
     return res;
@@ -598,6 +601,9 @@ SegmentInMemory LastAggregatorData::finalize(const ColumnName& output_column_nam
             }
             res.add_column(scalar_field(data_type_.value(), output_column_name.value), col);
             col->set_row_data(unique_values - 1);
+            // Set `fixed_str_as_dyn` flag to `true` to get the max instead of first string size
+            // cf. `get_string_reducer` when reducing columns
+            res.set_fixed_str_as_dyn(true);
         });
     }
     return res;

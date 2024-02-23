@@ -551,7 +551,11 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
     index_col->set_row_data(grouping_map.size() - 1);
 
     for (auto agg_data: folly::enumerate(aggregators_data)) {
-        seg.concatenate(agg_data->finalize(aggregators_.at(agg_data.index).get_output_column_name(), processing_config_.dynamic_schema_, num_unique));
+        auto inter_seg = agg_data->finalize(aggregators_.at(agg_data.index).get_output_column_name(), processing_config_.dynamic_schema_, num_unique);
+        if (inter_seg.fixed_str_as_dyn()) {
+            seg.set_fixed_str_as_dyn(true);
+        }
+        seg.concatenate(std::move(inter_seg));
     }
 
     seg.set_string_pool(string_pool);

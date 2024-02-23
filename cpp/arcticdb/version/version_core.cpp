@@ -858,7 +858,7 @@ void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<PipelineC
     }
 }
 
-void copy_frame_data_to_buffer(const SegmentInMemory& destination, size_t target_index, SegmentInMemory& source, size_t source_index, const RowRange& row_range) {
+void copy_frame_data_to_buffer(SegmentInMemory& destination, size_t target_index, SegmentInMemory& source, size_t source_index, const RowRange& row_range) {
     auto num_rows = row_range.diff();
     if (num_rows == 0) {
         return;
@@ -898,9 +898,13 @@ void copy_frame_data_to_buffer(const SegmentInMemory& destination, size_t target
     } else {
         util::raise_rte(type_promotion_error_msg.c_str());
     }
+
+    if (source.fixed_str_as_dyn()) {
+        destination.set_fixed_str_as_dyn(true);
+    }
 }
 
-void copy_segments_to_frame(const std::shared_ptr<Store>& store, const std::shared_ptr<PipelineContext>& pipeline_context, const SegmentInMemory& frame) {
+void copy_segments_to_frame(const std::shared_ptr<Store>& store, const std::shared_ptr<PipelineContext>& pipeline_context, SegmentInMemory& frame) {
     for (auto context_row : folly::enumerate(*pipeline_context)) {
         auto& slice_and_key = context_row->slice_and_key();
         auto& segment = slice_and_key.segment(store);
