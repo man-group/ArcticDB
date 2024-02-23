@@ -16,6 +16,7 @@ import platform
 import random
 import re
 import time
+import requests
 from datetime import datetime
 from functools import partial
 
@@ -223,6 +224,16 @@ def version_store_factory(lib_name, lmdb_storage):
 
 
 @pytest.fixture
+def s3_store_factory_mock_storage_exception(lib_name, s3_storage):
+    lib = s3_storage.create_version_store_factory(lib_name)
+    endpoint = s3_storage.factory.endpoint
+    requests.post(endpoint + "/rate_limit", b"0").raise_for_status()
+    yield lib
+    # When we then reset
+    requests.post(endpoint + "/rate_limit", b"-1").raise_for_status()
+
+
+@pytest.fixture
 def s3_store_factory(lib_name, s3_storage):
     return s3_storage.create_version_store_factory(lib_name)
 
@@ -267,6 +278,11 @@ def real_s3_version_store_dynamic_schema(real_s3_store_factory):
 @pytest.fixture
 def mock_s3_store_with_error_simulation(mock_s3_store_with_error_simulation_factory):
     return mock_s3_store_with_error_simulation_factory()
+
+
+@pytest.fixture
+def mock_s3_store_with_mock_storage_exception(s3_store_factory_mock_storage_exception):
+    return s3_store_factory_mock_storage_exception()
 
 
 @pytest.fixture
