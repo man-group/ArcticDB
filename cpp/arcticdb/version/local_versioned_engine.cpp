@@ -21,6 +21,7 @@
 #include <arcticdb/version/version_map_batch_methods.hpp>
 #include <arcticdb/util/container_filter_wrapper.hpp>
 #include <arcticdb/python/gil_lock.hpp>
+#include <arcticdb/version/symbol_metadata.hpp>
 
 namespace arcticdb::version_store {
 
@@ -607,6 +608,9 @@ VersionedItem LocalVersionedEngine::update_internal(
                 symbol_list().add_symbol(store_, stream_id, update_info.next_version_id_);
 
             version_map()->write_version(store(), versioned_item.key_, std::nullopt);
+            if(cfg_.metadata_cache())
+                write_symbol_metadata(store(), stream_id, versioned_item.key_.start_time(), versioned_item.key_.end_time(), versioned_item.key_.creation_ts());
+
             return versioned_item;
         } else {
             util::raise_rte("Cannot update non-existent symbol {}", stream_id);

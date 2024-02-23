@@ -476,7 +476,9 @@ set(arcticdb_srcs
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
         storage/mongo/mongo_client_wrapper.hpp
-)
+        version/symbol_metadata.hpp
+        version/metadata_cache.hpp
+        util/frame_adapter.hpp)
 
 if(${ARCTICDB_INCLUDE_ROCKSDB})
     list (APPEND arcticdb_srcs

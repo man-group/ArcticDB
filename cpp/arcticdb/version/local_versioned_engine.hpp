@@ -379,6 +379,10 @@ public:
         bool throw_on_error
     );
 
+    const std::shared_ptr<Store>& get_store() const {
+        return store_;
+    }
+
     VersionIdAndDedupMapInfo create_version_id_and_dedup_map(
         const version_store::UpdateInfo&& update_info, 
         const StreamId& stream_id, 
