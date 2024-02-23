@@ -56,7 +56,7 @@ namespace arcticdb::storage::rocksdb {
         using HandleType = ::rocksdb::ColumnFamilyHandle*;
         std::unordered_map<MapKeyType, HandleType> handles_by_key_type_;
 
-        inline static const std::string DEFAULT_ROCKSDB_NOT_OK_ERROR = "RocksDB status not OK: ";
+        inline static const std::string DEFAULT_ROCKSDB_NOT_OK_ERROR = "RocksDB Unexpected Error, RocksDB status not OK: ";
     };
 
     inline arcticdb::proto::storage::VariantStorage pack_config() {
