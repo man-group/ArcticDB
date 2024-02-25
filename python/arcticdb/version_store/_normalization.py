@@ -8,6 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import copy
 import datetime
 from datetime import timedelta
+import errno
 import math
 
 import numpy as np
@@ -937,6 +938,31 @@ def _packb(*args, **kwargs):
     return packb(*args, **kwargs)
 
 
+def allocate_buffer(max_size: int , attempts: int = 4, divisor: int = 2):
+    """Allocate a buffer of max_size, retrying up to attempts times on out-of-memory errors, reducing the size by divisor each time."""
+    assert max_size > 0
+    assert attempts > 0
+    assert divisor > 0
+
+    while attempts > 0:
+        try:
+            return mmap(-1, max_size)
+        except OSError as oserror:
+            log.error("Failed to allocate buffer with size: {}B, error: {}".format(max_size, oserror))
+            if (oserror.errno == errno.ENOMEM) or \
+                (oserror.errno == errno.EINVAL and hasattr(oserror, 'winerror') and oserror.winerror != 1450):
+                # looks like out-of-memory, try again with a smaller buffer
+                last_error = oserror
+                attempts -= 1
+                max_size = max_size // divisor
+            else:
+                # doesn't look like out-of-memory
+                raise
+
+    # no more attempts, re-raise the last error
+    raise last_error
+
+
 class MsgPackNormalizer(Normalizer):
     """
     Fall back plan for the time being to store arbitrary data
@@ -955,7 +981,7 @@ class MsgPackNormalizer(Normalizer):
         self.strict_mode = cfg.strict_mode if cfg is not None else False
 
     def normalize(self, obj, **kwargs):
-        buffer = mmap(-1, self._size)
+        buffer = allocate_buffer(self._size)
         try:
             return self._pack_with_buffer(obj, buffer)
         except:
@@ -967,7 +993,7 @@ class MsgPackNormalizer(Normalizer):
             self._msgpack_pack(obj, buffer)
         except ValueError as e:
             if str(e) == "data out of range":
-                raise ArcticDbNotYetImplemented("Fallback normalized msgpack size cannot exceed {}B".format(self._size))
+                raise ArcticDbNotYetImplemented("Fallback normalized msgpack size cannot exceed {}B".format(len(buffer)))
             else:
                 raise
 

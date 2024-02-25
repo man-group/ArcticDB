@@ -6,7 +6,9 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import datetime
+import errno
 from collections import namedtuple
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
@@ -24,6 +26,7 @@ from arcticdb.version_store._custom_normalizers import (
     CompositeCustomNormalizer,
 )
 from arcticdb.version_store._normalization import (
+    allocate_buffer,
     FrameData,
     MsgPackNormalizer,
     normalize_metadata,
@@ -557,3 +560,55 @@ def test_pyarrow_error(lmdb_version_store):
 
     with pytest.raises(ArcticDbNotYetImplemented, match=error_msg_intro):
         lmdb_version_store.write("test_pyarrow_error_mixed_df", mixed_df)
+
+
+def test_allocate_buffer():
+    b1 = allocate_buffer(100)
+    assert len(b1) == 100
+    assert hasattr(b1, "write") # Check that it's a buffer-like object
+    b2 = allocate_buffer(200)
+    assert len(b2) == 200
+    assert hasattr(b2, "write")
+
+
+def test_allocate_buffer_too_big():
+    try: 
+        # something so big it will definitely fail, a petabyte
+        allocate_buffer(2 << 50, attempts=1) 
+        raise AssertionError("Expected an exception")
+    except OSError as e:
+        if (e.errno == errno.ENOMEM):
+            pass # unix
+        elif (e.errno == errno.EINVAL and hasattr(e, "winerror") and e.winerror == 1450):
+            pass # windows
+        else:
+            # expected a memory error, but got something else
+            raise
+
+
+def test_allocation_buffer_too_big_then_very_small():
+    # something so big it will fail then divide all the way down to 2 bytes
+    b = allocate_buffer(2 << 50, attempts=2, divisor=2 << 49)
+    assert len(b) == 2
+    assert hasattr(b, "write")
+
+
+@patch("arcticdb.version_store._normalization.mmap")
+def test_allocate_buffer_calls_mmap_once_on_success(mmap):
+    allocate_buffer(16 << 20)
+    assert mmap.call_count == 1
+    assert mmap.call_args[0] == (-1, 16 << 20)
+
+
+@patch("arcticdb.version_store._normalization.mmap")
+def test_allocate_buffer_shrinks_mmap_on_out_of_memory(mmap):
+    mmap.side_effect = OSError(errno.ENOMEM, "Out of memory")
+    try:
+        allocate_buffer(16 << 20)
+    except OSError as e:
+        assert e.errno == errno.ENOMEM        
+        assert mmap.call_count == 4
+        assert mmap.call_args_list[0][0] == (-1, 16 << 20)
+        assert mmap.call_args_list[1][0] == (-1, 16 << 19)
+        assert mmap.call_args_list[2][0] == (-1, 16 << 18)
+        assert mmap.call_args_list[3][0] == (-1, 16 << 17)
