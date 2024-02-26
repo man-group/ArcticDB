@@ -171,6 +171,7 @@ struct formatter<arcticdb::entity::IndexRange> {
 
 namespace arcticdb::entity {
 
+// Note: this needs to be defined after formatters.
 inline bool IndexRange::accept(const IndexValue &index) {
     if (!specified_)
         return true;
