@@ -110,7 +110,7 @@ namespace arcticdb::storage::memory {
                 auto it = key_vec.find(k);
 
                 if(it != key_vec.end()) {
-                    ARCTICDB_DEBUG(log::storage(), "Read key {}: {}, with {} bytes of data", variant_key_type(k), variant_key_view(k));
+                    ARCTICDB_DEBUG(log::storage(), "Removed key {}: {}", variant_key_type(k), variant_key_view(k));
                     key_vec.erase(it);
                 } else if (!opts.ignores_missing_key_) {
                     throw KeyNotFoundException(std::move(k));

@@ -128,7 +128,7 @@ namespace fmt {
         template<typename FormatContext>
         auto format(const arcticdb::proto::descriptors::TypeDescriptor& type_desc, FormatContext& ctx) const {
             auto td = arcticdb::entity::type_desc_from_proto(type_desc);
-            return format_to(ctx.out(), "{}", td);
+            return fmt::format_to(ctx.out(), "{}", td);
         }
     };
 
@@ -139,7 +139,7 @@ namespace fmt {
 
         template<typename FormatContext>
         auto format(const arcticdb::proto::descriptors::StreamDescriptor_FieldDescriptor& field_desc, FormatContext& ctx) const {
-            return format_to(ctx.out(), "{}: {}", field_desc.name(), field_desc.type_desc());
+            return fmt::format_to(ctx.out(), "{}: {}", field_desc.name(), field_desc.type_desc());
         }
     };
 
@@ -150,7 +150,7 @@ namespace fmt {
 
         template<typename FormatContext>
         auto format(const arcticdb::entity::IndexDescriptor& idx, FormatContext& ctx) const {
-            return format_to(ctx.out(), "IDX<size={}, kind={}>", idx.field_count(), static_cast<char>(idx.type()));
+            return fmt::format_to(ctx.out(), "IDX<size={}, kind={}>", idx.field_count(), static_cast<char>(idx.type()));
         }
     };
 
@@ -162,9 +162,9 @@ namespace fmt {
         template<typename FormatContext>
         auto format(const arcticdb::entity::Field& fd, FormatContext& ctx) const {
             if (!fd.name().empty())
-                return format_to(ctx.out(), "FD<name={}, type={}>", fd.name(), fd.type());
+                return fmt::format_to(ctx.out(), "FD<name={}, type={}>", fd.name(), fd.type());
             else
-                return format_to(ctx.out(), "FD<type={}>", fd.type());
+                return fmt::format_to(ctx.out(), "FD<type={}>", fd.type());
         }
     };
 }

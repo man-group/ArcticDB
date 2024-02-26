@@ -83,7 +83,9 @@ struct OptimisticLockTask {
                 data_->contended_ = true;
             }
             else {
-                ++data_->vol_;
+                // As of C++20, '++' expression of 'volatile'-qualified type is deprecated.
+                const uint64_t vol_ = data_->vol_ + 1;
+                data_->vol_ = vol_;
                 ++data_->atomic_;
                 lock.unlock(data_->store_);
             }
@@ -129,7 +131,9 @@ struct PessimisticLockTask {
                 else
                     lock.lock(data_->store_);
 
-                ++data_->vol_;
+                // As of C++20, '++' expression of 'volatile'-qualified type is deprecated.
+                const uint64_t vol_ = data_->vol_ + 1;
+                data_->vol_ = vol_;
                 ++data_->atomic_;
                 lock.unlock(data_->store_);
             }
@@ -156,7 +160,9 @@ struct ForceReleaseLockTask {
 
         try {
             lock.lock_timeout(data_->store_, timeout_ms_);
-            ++data_->vol_;
+            // As of C++20, '++' expression of 'volatile'-qualified type is deprecated.
+            const uint64_t vol_ = data_->vol_ + 1;
+            data_->vol_ = vol_;
             ++data_->atomic_;
             // Dont unlock
         }
@@ -195,7 +201,9 @@ struct OptimisticForceReleaseLockTask {
             data_->timedout_ = true;
             data_->contended_ = true;
         } else {
-            ++data_->vol_;
+            // As of C++20, '++' expression of 'volatile'-qualified type is deprecated.
+            const uint64_t vol_ = data_->vol_ + 1;
+            data_->vol_ = vol_;
             ++data_->atomic_;
             // Dont unlock
         }
