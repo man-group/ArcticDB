@@ -2584,7 +2584,7 @@ def test_update_with_missing_version_key(version_store_factory):
     lmdb_version_store.update(symbol, df2)
 
     ver = lmdb_version_store.list_versions(symbol)[0]["version"]
-    lmdb_version_store.delete_version(symbol, ver)(lmdb_version_store, symbol)
+    lmdb_version_store.delete_version(symbol, ver)
 
     vit = lmdb_version_store.read(symbol, as_of=v1_write_time)
     assert_frame_equal(vit.data, df)
