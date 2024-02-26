@@ -383,7 +383,7 @@ struct SegmentSinkWrapperImpl {
             SchemaPolicy{
                 index.create_stream_descriptor(std::move(stream_id), fields_from_range(fields)), index
             },
-            [=, this](SegmentInMemory&& mem) {
+            [this](SegmentInMemory&& mem) {
                 sink_->segments_.push_back(std::move(mem));
             },
             typename AggregatorType::SegmentingPolicyType{}
