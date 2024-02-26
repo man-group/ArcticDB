@@ -24,6 +24,13 @@ namespace py = pybind11;
 namespace arcticdb {
 using namespace arcticdb::python_util;
 
+std::vector<FieldRef> field_collection_to_ref_vector(const FieldCollection& fields){
+    auto result = std::vector<FieldRef>();
+    result.reserve(fields.size());
+    std::transform(fields.begin(), fields.end(), std::back_inserter(result), [](const Field& field){return field.ref();});
+    return result;
+}
+
 void register_types(py::module &m) {
     py::enum_<DataType>(m, "DataType")
 #define DATA_TYPE(__DT__) .value(#__DT__, DataType::__DT__)
@@ -77,7 +84,6 @@ void register_types(py::module &m) {
                               .def("kind", &IndexDescriptor::type)
     );
 
-    //TODO re-add at the end
    python_util::add_repr(py::class_<StreamDescriptor>(m, "StreamDescriptor")
     .def(py::init([](StreamId stream_id, IndexDescriptor idx_desc, const std::vector<FieldRef>& fields) {
                                   auto index = stream::default_index_type_from_descriptor(idx_desc.proto());
@@ -86,7 +92,15 @@ void register_types(py::module &m) {
                                   });
                               }))
                               .def("id", &StreamDescriptor::id)
-                              //.def("fields", &StreamDescriptor::fields)
+                              .def("fields", [](const StreamDescriptor& desc){
+                                  return field_collection_to_ref_vector(desc.fields());
+                              })
+    );
+
+    python_util::add_repr(py::class_<TimeseriesDescriptor>(m, "TimeseriesDescriptor")
+                                  .def("fields", [](const TimeseriesDescriptor& desc){
+                                      return field_collection_to_ref_vector(desc.fields());
+                                  })
     );
 
     py::class_<PyTimestampRange>(m, "TimestampRange")

@@ -37,6 +37,12 @@ public:
 
     Segment read_to_segment(const VariantKey& key);
 
+    [[nodiscard]] std::optional<google::protobuf::Any> read_metadata(const VariantKey& key);
+
+    [[nodiscard]] StreamDescriptor read_descriptor(const VariantKey& key);
+
+    [[nodiscard]] TimeseriesDescriptor read_timeseries_descriptor(const VariantKey& key);
+
     void write(VariantKey key, Segment segment);
 
     void remove(VariantKey key);
