@@ -48,8 +48,9 @@ TEST_F(AzureMockStorageFixture, test_read){
 TEST_F(AzureMockStorageFixture, test_write){
     write_in_store(store, "symbol");
     ASSERT_THROW(
-            write_in_store(store, MockAzureClient::get_failure_trigger("symbol", AzureOperation::WRITE, Azure::Core::Http::HttpStatusCode::Unauthorized)),
-            arcticdb::ArcticException);
+            write_in_store(store, MockAzureClient::get_failure_trigger("symbol",
+               AzureOperation::WRITE, AzureErrorCode_to_string(AzureErrorCode::UnauthorizedBlobOverwrite),
+               Azure::Core::Http::HttpStatusCode::Unauthorized)),arcticdb::ArcticException);
 }
 
 TEST_F(AzureMockStorageFixture, test_remove) {
