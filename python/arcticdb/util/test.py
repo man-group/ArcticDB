@@ -11,12 +11,10 @@ from contextlib import contextmanager
 from typing import Mapping, Any, Optional, Iterable, NamedTuple, List, AnyStr
 import numpy as np
 import pandas as pd
-import pytest
 import string
 import random
 import time
 import attr
-from copy import deepcopy
 from functools import wraps
 
 from arcticdb.config import Defaults
@@ -126,22 +124,6 @@ def config_context(name, value):
             set_config_int(name, initial)
         else:
             unset_config_int(name)
-
-
-def param_dict(fields, cases=None, xfail=None):
-    _cases = deepcopy(cases) if cases else dict()
-    if _cases:
-        ids, params = zip(*list(sorted(_cases.items())))
-    else:
-        ids, params = [], []
-
-    if xfail is not None:
-        xfail_ids, xfail_params = zip(*list(sorted(xfail.items())))
-        xfail_marker = tuple(pytest.mark.xfail()(p) for p in xfail_params)
-        params = params + xfail_marker
-        ids = ids + xfail_ids
-
-    return pytest.mark.parametrize(fields, params, ids=ids)
 
 
 CustomThing = NamedTuple(

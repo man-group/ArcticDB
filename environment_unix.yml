@@ -63,7 +63,6 @@ dependencies:
   - numpy
   - pandas
   - attrs
-  - pytest
   - boto3
   - werkzeug
   - moto
@@ -80,3 +79,4 @@ dependencies:
   - pyarrow
   - asv
   - pymongo
+  - pytest

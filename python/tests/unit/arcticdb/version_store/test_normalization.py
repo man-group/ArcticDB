@@ -37,7 +37,6 @@ from arcticdb.version_store._normalization import (
 )
 from arcticdb.version_store._common import TimeFrame
 from arcticdb.util.test import (
-    param_dict,
     CustomThing,
     TestCustomNormalizer,
     assert_frame_equal,
@@ -45,6 +44,8 @@ from arcticdb.util.test import (
 )
 from arcticdb.util._versions import IS_PANDAS_ZERO, IS_PANDAS_TWO
 from arcticdb.exceptions import ArcticNativeException
+
+from tests.util.mark import param_dict
 
 params = {
     "simple_dict": {"a": "1", "b": 2, "c": 3.0, "d": True},
