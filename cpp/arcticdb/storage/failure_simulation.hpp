@@ -34,6 +34,24 @@ static const char* failure_names[] = {
         "DELETE",
 };
 
+}
+
+// Formatters are defined here since they are used in implementations bellow.
+namespace fmt {
+template<>
+struct formatter<arcticdb::FailureType> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const arcticdb::FailureType failure_type, FormatContext &ctx) const {
+        return fmt::format_to(ctx.out(), fmt::runtime(arcticdb::failure_names[int(failure_type)]));
+    }
+};
+}
+
+namespace arcticdb {
+
 /** Function holder with a description. */
 struct FailureAction {
     using Description = std::variant<const char*, std::string>;
@@ -173,15 +191,3 @@ private:
 
 } //namespace arcticdb
 
-namespace fmt {
-template<>
-struct formatter<arcticdb::FailureType> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
-
-    template<typename FormatContext>
-    auto format(arcticdb::FailureType failure_type, FormatContext &ctx) const {
-        return fmt::format_to(ctx.out(), arcticdb::failure_names[int(failure_type)]);
-    }
-};
-}

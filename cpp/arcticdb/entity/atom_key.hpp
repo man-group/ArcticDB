@@ -109,9 +109,7 @@ class AtomKeyImpl {
         return *hash_;
     }
 
-    void set_string() const {
-        str_ = fmt::format("{}", *this);
-    }
+    void set_string() const;
 
     std::string_view view() const { if(str_.empty()) set_string(); return {str_}; }
 
@@ -258,4 +256,12 @@ struct hash<arcticdb::entity::AtomKeyImpl> {
         return k.get_cached_hash();
     }
 };
+}
+
+namespace arcticdb::entity
+{
+    // This needs to be defined AFTER the formatter for AtomKeyImpl
+    inline void AtomKeyImpl::set_string() const {
+        str_ = fmt::format("{}", *this);
+    }
 }

@@ -18,6 +18,8 @@ vcpkg_from_github(
         boost-1.70.patch
         fix-windows-minmax.patch
         fix-deps.patch
+        dont-inherit-cpp-version.patch
+        ignore-uninitialized-local-variable-used.patch
 )
 
 file(REMOVE "${SOURCE_PATH}/CMake/FindFmt.cmake")

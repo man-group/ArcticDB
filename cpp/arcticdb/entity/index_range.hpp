@@ -71,18 +71,7 @@ struct IndexRange {
 
     // Indices of non-matching types will always be excluded, might want to assert though
     // as this should never happen
-    bool accept(const IndexValue &index) {
-        if (!specified_)
-            return true;
-
-        if (index >= start_ && index <= end_) {
-            ARCTICDB_DEBUG(log::inmem(), "Returning index {} which is in range {}", index, *this);
-            return true;
-        }
-
-        ARCTICDB_DEBUG(log::inmem(), "Filtered index {} as it was not in range {}", index, *this);
-        return false;
-    }
+    bool accept(const IndexValue &index);
 
     // N.B. Convenience function, variant construction will be too expensive for tight loops
     friend bool intersects(const IndexRange &left, const IndexRange& right) {
@@ -155,28 +144,45 @@ inline IndexRange universal_range(){ return IndexRange{std::numeric_limits<times
 } //namespace arcticdb::entity
 
 namespace fmt {
-using namespace arcticdb::entity;
 
 template<>
-struct formatter<TimestampRange> {
+struct formatter<arcticdb::entity::TimestampRange> {
     template<typename ParseContext>
     constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
 
     template<typename FormatContext>
-    auto format(const TimestampRange &r, FormatContext &ctx) const {
+    auto format(const arcticdb::entity::TimestampRange &r, FormatContext &ctx) const {
         return fmt::format_to(ctx.out(), "{}-{}", r.first, r.second);
     }
 };
 
 template<>
-struct formatter<IndexRange> {
+struct formatter<arcticdb::entity::IndexRange> {
     template<typename ParseContext>
     constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
 
     template<typename FormatContext>
-    auto format(const IndexRange &r, FormatContext &ctx) const {
+    auto format(const arcticdb::entity::IndexRange& r, FormatContext& ctx) const {
         return fmt::format_to(ctx.out(), "{}-{}", r.start_, r.end_);
     }
 };
 
 } //namespace fmt
+
+namespace arcticdb::entity {
+
+// Note: this needs to be defined after formatters.
+inline bool IndexRange::accept(const IndexValue &index) {
+    if (!specified_)
+        return true;
+
+    if (index >= start_ && index <= end_) {
+        ARCTICDB_DEBUG(log::inmem(), "Returning index {} which is in range {}", index, *this);
+        return true;
+    }
+
+    ARCTICDB_DEBUG(log::inmem(), "Filtered index {} as it was not in range {}", index, *this);
+    return false;
+}
+
+} // namespace arcticdb::entity
