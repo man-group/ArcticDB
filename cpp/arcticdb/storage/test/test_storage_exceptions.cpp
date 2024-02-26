@@ -189,13 +189,22 @@ INSTANTIATE_TEST_SUITE_P(
         AllStoragesCommonTests,
         GenericStorageTest,
         ::testing::Values(
-#ifdef ARCTICDB_INCLUDE_ROCKSDB
-                std::make_shared<RocksDBStorageFactory>(),
-#endif
                 std::make_shared<LMDBStorageFactory>(),
                 std::make_shared<MemoryStorageFactory>()
         )
 );
+
+#ifdef ARCTICDB_INCLUDE_ROCKSDB
+
+INSTANTIATE_TEST_SUITE_P(
+        RocksDBStoragesCommonTests,
+        GenericStorageTest,
+        ::testing::Values(
+                std::make_shared<RocksDBStorageFactory>()
+        )
+);
+
+#endif
 
 // LMDB Storage specific tests
 
