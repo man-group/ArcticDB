@@ -41,6 +41,19 @@ Segment LibraryTool::read_to_segment(const VariantKey& key) {
     return kv.segment();
 }
 
+std::optional<google::protobuf::Any> LibraryTool::read_metadata(const VariantKey& key){
+    return store_->read_metadata(key, storage::ReadKeyOpts{}).get().second;
+}
+
+StreamDescriptor LibraryTool::read_descriptor(const VariantKey& key){
+    auto metadata_and_descriptor = store_->read_metadata_and_descriptor(key, storage::ReadKeyOpts{}).get();
+    return std::get<StreamDescriptor>(metadata_and_descriptor);
+}
+
+TimeseriesDescriptor LibraryTool::read_timeseries_descriptor(const VariantKey& key){
+    return store_->read_timeseries_descriptor(key).get().second;
+}
+
 void LibraryTool::write(VariantKey key, Segment segment) {
     storage::KeySegmentPair kv{std::move(key), std::move(segment)};
     store_->write_compressed_sync(std::move(kv));

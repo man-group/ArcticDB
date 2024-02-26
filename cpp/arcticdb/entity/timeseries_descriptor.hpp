@@ -81,4 +81,32 @@ struct TimeseriesDescriptor {
   }
 };
 
-}
+} //namespace arcticdb
+
+namespace fmt {
+    template<>
+    struct formatter<arcticdb::TimeseriesDescriptor> {
+        template<typename ParseContext>
+        constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+        template<typename FormatContext>
+        auto format(const arcticdb::TimeseriesDescriptor &tsd, FormatContext &ctx) const {
+            if(!tsd.fields_ptr())
+                return fmt::format_to(ctx.out(), "TimeseriesDescriptor<fields=empty, proto={}>", tsd.proto());
+
+            return fmt::format_to(ctx.out(), "TimeseriesDescriptor<fields={}, proto={}>", tsd.fields(), tsd.proto());
+        }
+    };
+
+    template<>
+    struct formatter<arcticdb::TimeseriesDescriptor::Proto> {
+        template<typename ParseContext>
+        constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+        template<typename FormatContext>
+        auto format(const arcticdb::TimeseriesDescriptor::Proto &tsd, FormatContext &ctx) const {
+            return fmt::format_to(ctx.out(), "{}", tsd.ShortDebugString());
+        }
+    };
+
+} //namespace fmt
