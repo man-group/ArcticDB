@@ -269,10 +269,10 @@ def test_hypothesis_first_agg_strings(lmdb_version_store, df):
 def test_first_aggregation_numeric(local_object_version_store):
     df = DataFrame(
         {
-            "grouping_column": ["group_1", "group_2", "group_4", "group_2", "group_1", "group_3", "group_1"],
-            "get_first": [100.0, np.nan, np.nan, 2.7, 1.4, 5.8, 3.45],
+            "grouping_column": ["group_1", "group_2", "group_4", "group_2", "group_1", "group_3", "group_1", "group_5", "group_6", "group_6"],
+            "get_first": [100.0, np.nan, np.nan, 2.7, 1.4, 5.8, 3.45, None, None, 9.5],
         },
-        index=np.arange(7),
+        index=np.arange(10),
     )
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"get_first": "first"})
@@ -282,7 +282,7 @@ def test_first_aggregation_numeric(local_object_version_store):
     res = local_object_version_store.read(symbol, query_builder=q)
     res.data.sort_index(inplace=True)
 
-    df = pd.DataFrame({"get_first": [100.0, 2.7, 5.8, np.nan]}, index=["group_1", "group_2", "group_3", "group_4"])
+    df = pd.DataFrame({"get_first": [100.0, 2.7, 5.8, np.nan, None, 9.5]}, index=["group_1", "group_2", "group_3", "group_4", "group_5", "group_6"])
     df.index.rename("grouping_column", inplace=True)
     res.data.sort_index(inplace=True)
 
@@ -310,7 +310,6 @@ def test_first_aggregation_strings(version_store_factory, dynamic_strings):
 
     df = pd.DataFrame({"get_first": ["Hello", "this", "Homer"]}, index=["group_1", "group_2", "group_3"])
     df.index.rename("grouping_column", inplace=True)
-    res.data.sort_index(inplace=True)
 
     assert_frame_equal(res.data, df)
 
@@ -406,10 +405,10 @@ def test_hypothesis_last_agg_strings(lmdb_version_store, df):
 def test_last_aggregation_numeric(local_object_version_store):
     df = DataFrame(
         {
-            "grouping_column": ["group_1", "group_2", "group_4", "group_5", "group_2", "group_1", "group_3", "group_1", "group_5"],
-            "get_last": [100.0, 2.7, np.nan, np.nan, np.nan, 1.4, 5.8, 3.45, 6.9],
+            "grouping_column": ["group_1", "group_2", "group_4", "group_5", "group_2", "group_1", "group_3", "group_1", "group_5", "group_6", "group_7", "group_7"],
+            "get_last": [100.0, 2.7, np.nan, np.nan, np.nan, 1.4, 5.8, 3.45, 6.9, None, None, 7.8],
         },
-        index=np.arange(9),
+        index=np.arange(12),
     )
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"get_last": "last"})
@@ -419,7 +418,7 @@ def test_last_aggregation_numeric(local_object_version_store):
     res = local_object_version_store.read(symbol, query_builder=q)
     res.data.sort_index(inplace=True)
 
-    df = pd.DataFrame({"get_last": [3.45, 2.7, 5.8, np.nan, 6.9]}, index=["group_1", "group_2", "group_3", "group_4", "group_5"])
+    df = pd.DataFrame({"get_last": [3.45, 2.7, 5.8, np.nan, 6.9, None, 7.8]}, index=["group_1", "group_2", "group_3", "group_4", "group_5", "group_6", "group_7"])
     df.index.rename("grouping_column", inplace=True)
     res.data.sort_index(inplace=True)
 

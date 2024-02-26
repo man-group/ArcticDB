@@ -281,10 +281,10 @@ def test_first_aggregation_dynamic_numeric(s3_version_store_dynamic_schema_v2):
     lib = s3_version_store_dynamic_schema_v2
     df = DataFrame(
         {
-            "grouping_column": ["group_1", "group_2", "group_4", "group_2", "group_1", "group_3", "group_1"],
-            "get_first": [100.0, np.nan, np.nan, 2.7, 1.4, 5.8, 3.45],
+            "grouping_column": ["group_1", "group_2", "group_4", "group_2", "group_1", "group_3", "group_1", "group_5", "group_6", "group_6"],
+            "get_first": [100.0, np.nan, np.nan, 2.7, 1.4, 5.8, 3.45, None, None, 8.7],
         },
-        index=np.arange(7),
+        index=np.arange(10),
     )
     symbol = "test_first_aggregation_dynamic_numeric"
     expected, slices = make_dynamic(df)
@@ -372,10 +372,10 @@ def test_last_aggregation_dynamic_numeric(s3_version_store_dynamic_schema_v2):
     lib = s3_version_store_dynamic_schema_v2
     df = DataFrame(
         {
-            "grouping_column": ["group_1", "group_2", "group_4", "group_5", "group_2", "group_1", "group_3", "group_1", "group_5"],
-            "get_last": [100.0, 2.7, np.nan, np.nan, np.nan, 1.4, 5.8, 3.45, 6.9],
+            "grouping_column": ["group_1", "group_2", "group_4", "group_5", "group_2", "group_1", "group_3", "group_1", "group_5", "group_6", "group_7", "group_7"],
+            "get_last": [100.0, 2.7, np.nan, np.nan, np.nan, 1.4, 5.8, 3.45, 6.9, None, None, 8.4],
         },
-        index=np.arange(9),
+        index=np.arange(12),
     )
     symbol = "test_last_aggregation_dynamic_numeric"
     expected, slices = make_dynamic(df)
