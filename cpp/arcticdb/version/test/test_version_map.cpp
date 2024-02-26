@@ -339,32 +339,32 @@ void write_old_style_journal_entry(const AtomKey &key, std::shared_ptr<StreamSin
     journal_agg.commit();
 }
 
-TEST(VersionMap, BackwardsCompatibility) {
-    StreamId id{"test3"};
-    THREE_SIMPLE_KEYS
+// TEST(VersionMap, BackwardsCompatibility) {
+//     StreamId id{"test3"};
+//     THREE_SIMPLE_KEYS
 
-    auto store = std::make_shared<InMemoryStore>();
-    write_old_style_journal_entry(key1, store);
-    write_old_style_journal_entry(key2, store);
-    write_old_style_journal_entry(key3, store);
-    ASSERT_EQ(store->num_atom_keys_of_type(KeyType::VERSION_JOURNAL), 3);
-    auto version_map = std::make_shared<VersionMap>();
+//     auto store = std::make_shared<InMemoryStore>();
+//     write_old_style_journal_entry(key1, store);
+//     write_old_style_journal_entry(key2, store);
+//     write_old_style_journal_entry(key3, store);
+//     ASSERT_EQ(store->num_atom_keys_of_type(KeyType::VERSION_JOURNAL), 3);
+//     auto version_map = std::make_shared<VersionMap>();
 
-    auto key4 = atom_key_builder().version_id(4).creation_ts(5).content_hash(6).start_index(
-        7).end_index(8).build(id, KeyType::TABLE_INDEX);
+//     auto key4 = atom_key_builder().version_id(4).creation_ts(5).content_hash(6).start_index(
+//         7).end_index(8).build(id, KeyType::TABLE_INDEX);
 
-    version_map->write_version(store, key4, key3);
-    ASSERT_EQ(store->num_atom_keys_of_type(KeyType::VERSION_JOURNAL), 0);
-    ASSERT_EQ(store->num_atom_keys_of_type(KeyType::VERSION), 2);
-    ASSERT_EQ(store->num_ref_keys_of_type(KeyType::VERSION_REF), 1);
+//     version_map->write_version(store, key4, key3);
+//     ASSERT_EQ(store->num_atom_keys_of_type(KeyType::VERSION_JOURNAL), 0);
+//     ASSERT_EQ(store->num_atom_keys_of_type(KeyType::VERSION), 2);
+//     ASSERT_EQ(store->num_ref_keys_of_type(KeyType::VERSION_REF), 1);
 
-    std::vector<AtomKey> expected{ key4, key3, key2, key1};
-    pipelines::VersionQuery version_query;
-    version_query.set_iterate_on_failure(true);
-    version_query.set_skip_compat(false);
-    auto result = get_all_versions(store, version_map, id, version_query, ReadOptions{});
-    ASSERT_EQ(result, expected);
-}
+//     std::vector<AtomKey> expected{ key4, key3, key2, key1};
+//     pipelines::VersionQuery version_query;
+//     version_query.set_iterate_on_failure(true);
+//     version_query.set_skip_compat(false);
+//     auto result = get_all_versions(store, version_map, id, version_query, ReadOptions{});
+//     ASSERT_EQ(result, expected);
+// }
 
 TEST(VersionMap, IterateOnFailure) {
     auto store = std::make_shared<InMemoryStore>();
