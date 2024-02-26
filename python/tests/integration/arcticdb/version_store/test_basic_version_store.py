@@ -2564,7 +2564,7 @@ def test_missing_first_version_key_single(basic_store):
     ver = lib.list_versions(symbol)[0]["version"]
     lib.delete_version(symbol, ver)
 
-    vit = lib.read(symbol, as_of=pd.Timestamp(v1_write_time))
+    vit = lib.read(symbol)
     assert_frame_equal(df1, vit.data)
 
 
@@ -2605,7 +2605,7 @@ def test_append_with_missing_version_key(basic_store):
     ver = basic_store.list_versions(symbol)[0]["version"]
     basic_store.delete_version(symbol, ver)
 
-    vit = basic_store.read(symbol, as_of=v1_write_time)
+    vit = basic_store.read(symbol)
     assert_frame_equal(vit.data, df1)
 
 
@@ -2643,6 +2643,6 @@ def test_missing_first_version_key_batch(basic_store):
         ver = lib.list_versions(symbol)[0]["version"]
         lib.delete_version(symbol, ver)
 
-    vits = lib.batch_read(symbols, as_ofs=write_times)
+    vits = lib.batch_read(symbols)
     for x in range(num_items):
         assert_frame_equal(vits[symbols[x]].data, expected[x])
