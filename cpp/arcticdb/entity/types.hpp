@@ -193,7 +193,7 @@ enum class DataType : uint8_t {
     UNKNOWN = 0,
 };
 
-std::string_view datatype_to_str(const DataType dt);
+std::string_view datatype_to_str(DataType dt);
 
 constexpr DataType combine_data_type(ValueType v, SizeBits b = SizeBits::UNKNOWN_SIZE_BITS) {
     return static_cast<DataType>(detail::combine_val_bits(v, b));

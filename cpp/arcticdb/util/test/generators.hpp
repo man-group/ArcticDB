@@ -54,7 +54,7 @@ struct SinkWrapperImpl {
             SchemaPolicy{
                 index_.create_stream_descriptor(std::move(stream_id), fields), index_
             },
-            [=, this](
+            [this](
                 SegmentInMemory &&mem
             ) {
                 sink_->segments_.push_back(std::move(mem));
