@@ -18,6 +18,31 @@ namespace arcticdb::storage::azure {
 
 static const size_t BATCH_SUBREQUEST_LIMIT = 256; //https://github.com/Azure/azure-sdk-for-python/blob/767facc39f2487504bcde4e627db16a79f96b297/sdk/storage/azure-storage-blob/azure/storage/blob/_container_client.py#L1608
 
+// some common error codes as per https://learn.microsoft.com/en-us/rest/api/storageservices/blob-service-error-codes
+enum class AzureErrorCode {
+    BlobAlreadyExists,
+    BlobNotFound,
+    ContainerNotFound,
+    BlobOperationNotSupported,
+    UnauthorizedBlobOverwrite,
+    InvalidBlobOrBlock,
+    OtherError
+};
+
+inline std::string AzureErrorCode_to_string(AzureErrorCode error) {
+    switch (error) {
+        case AzureErrorCode::BlobAlreadyExists: return "BlobAlreadyExists";
+        case AzureErrorCode::BlobNotFound: return "BlobNotFound";
+        case AzureErrorCode::ContainerNotFound: return "ContainerNotFound";
+        case AzureErrorCode::BlobOperationNotSupported: return "BlobOperationNotSupported";
+        case AzureErrorCode::UnauthorizedBlobOverwrite: return "UnauthorizedBlobOverwrite";
+        case AzureErrorCode::InvalidBlobOrBlock: return "InvalidBlobOrBlock";
+        case AzureErrorCode::OtherError: return "Other Unspecified error";
+    }
+
+    return "Other Unspecified error";
+}
+
     // An abstract class, which is responsible for sending the requests and parsing the responses from Azure.
     // It can be derived as either a real connection to Azure or a mock used for unit tests.
 class AzureClientWrapper {
