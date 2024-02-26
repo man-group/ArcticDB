@@ -11,6 +11,8 @@ import pytest
 from typing import Union
 from datetime import date
 from numpy import datetime64
+from copy import deepcopy
+
 
 # TODO: Some tests are either segfaulting or failing on MacOS with conda builds.
 # This is meant to be used as a temporary flag to skip/xfail those tests.
@@ -60,3 +62,13 @@ def until(until_date: Union[datetime64, date, str], mark_decorator):
     ```
     """
     return mark_decorator if datetime64("today") <= datetime64(until_date) else _no_op_decorator
+
+
+def param_dict(fields, cases=None):
+    _cases = deepcopy(cases) if cases else dict()
+    if _cases:
+        ids, params = zip(*list(sorted(_cases.items())))
+    else:
+        ids, params = [], []
+
+    return pytest.mark.parametrize(fields, params, ids=ids)
