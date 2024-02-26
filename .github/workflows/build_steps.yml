@@ -91,7 +91,8 @@ jobs:
         if: matrix.os == 'windows'
         uses: ilammy/msvc-dev-cmd@v1.12.1
         with:
-          toolset: 14.37
+          # The version of the toolset is specified due to faulty version discovery.
+          toolset: 14.39
 
       - name: Extra envs
         # This has to come after msvc-dev-cmd to overwrite the bad VCPKG_ROOT it sets
