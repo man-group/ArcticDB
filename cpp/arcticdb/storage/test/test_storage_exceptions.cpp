@@ -11,7 +11,9 @@
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/lmdb/lmdb_storage.hpp>
 #include <arcticdb/storage/memory/memory_storage.hpp>
+#ifdef ARCTICDB_INCLUDE_ROCKSDB
 #include <arcticdb/storage/rocksdb/rocksdb_storage.hpp>
+#endif
 #include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/storage/s3/s3_mock_client.hpp>
 #include <arcticdb/storage/azure/azure_storage.hpp>
@@ -81,6 +83,7 @@ public:
     }
 };
 
+#ifdef ARCTICDB_INCLUDE_ROCKSDB
 class RocksDBStorageFactory : public StorageFactory {
 
 public:
@@ -107,6 +110,7 @@ public:
         }
     }
 };
+#endif
 
 class S3MockStorageFactory : public StorageFactory {
 public:
@@ -185,9 +189,11 @@ INSTANTIATE_TEST_SUITE_P(
         AllStoragesCommonTests,
         GenericStorageTest,
         ::testing::Values(
+#ifdef ARCTICDB_INCLUDE_ROCKSDB
+                std::make_shared<RocksDBStorageFactory>(),
+#endif
                 std::make_shared<LMDBStorageFactory>(),
-                std::make_shared<MemoryStorageFactory>(),
-                std::make_shared<RocksDBStorageFactory>()
+                std::make_shared<MemoryStorageFactory>()
         )
 );
 
