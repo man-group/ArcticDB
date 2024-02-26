@@ -154,7 +154,7 @@ public:
         util::check(ref_entry.keys_.size() >= 2, "Invalid empty ref entry");
         std::optional<AtomKey> cached_penultimate_index;
         if(ref_entry.keys_.size() == 3) {
-            util::check(is_index_or_tombstone(ref_entry.keys_[1]), "Expected index key in as second item in 3-item ref key, got {}", entry->keys_[1]);
+            util::check(is_index_or_tombstone(ref_entry.keys_[1]), "Expected index key in as second item in 3-item ref key, got {}", ref_entry.keys_[1]);
             cached_penultimate_index = ref_entry.keys_[1];
         }
 
