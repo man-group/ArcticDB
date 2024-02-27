@@ -108,6 +108,7 @@ nav:
 - Python API Reference: 
   - Introduction: 'api/index.md'
   - Arctic: 'api/arctic.md'
+  - Arctic URI: 'api/arctic_uri.md'
   - Library: 'api/library.md'
   - Library related objects: 'api/library_types.md'
   - Query Builder: 'api/query_builder.md'
