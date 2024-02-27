@@ -345,6 +345,10 @@ AggregationClause::AggregationClause(const std::string& grouping_column,
             aggregators_.emplace_back(MinAggregator(typed_column_name, typed_column_name));
         } else if (aggregation_operator == "count") {
             aggregators_.emplace_back(CountAggregator(typed_column_name, typed_column_name));
+        } else if (aggregation_operator == "first") {
+            aggregators_.emplace_back(FirstAggregator(typed_column_name, typed_column_name));
+        } else if (aggregation_operator == "last") {
+            aggregators_.emplace_back(LastAggregator(typed_column_name, typed_column_name));
         } else {
             user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Unknown aggregation operator provided: {}", aggregation_operator);
         }
