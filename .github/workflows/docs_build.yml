@@ -76,9 +76,7 @@ jobs:
           mike list
 
       - name: Checkout docs-pages branch
-        uses: actions/checkout@v3.3.0
-        with:
-          ref: 'docs-pages'
+        run: git checkout docs-pages
 
       - name: Deploy Docs to TestPypi
         uses: cloudflare/pages-action@v1.5.0
