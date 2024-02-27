@@ -114,7 +114,7 @@ void RocksDBStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts)
     do_write_internal(std::move(kvs));
 }
 
-void RocksDBStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts) {
+void RocksDBStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
     ARCTICDB_SAMPLE(RocksDBStorageRead, 0)
     auto grouper = [](auto &&k) { return variant_key_type(k); };
     std::vector<VariantKey> failed_reads;
@@ -128,10 +128,13 @@ void RocksDBStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visi
             auto s = db_->Get(::rocksdb::ReadOptions(), handle, ::rocksdb::Slice(k_str), &value);
             storage::check<ErrorCode::E_UNEXPECTED_ROCKSDB_ERROR>(s.IsNotFound() || s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
             if(s.IsNotFound()) {
-                log::storage().debug("Failed to read segment for key {}", variant_key_view(k));
+                log::storage().log(
+                        opts.dont_warn_about_missing_key ? spdlog::level::debug : spdlog::level::warn,
+                        "Failed to find segment for key '{}': {}",
+                        variant_key_view(k),
+                        s.ToString());
                 failed_reads.push_back(k);
-            }
-            else {
+            } else {
                 visitor(k, Segment::from_bytes(reinterpret_cast<uint8_t*>(value.data()), value.size()));
             }
         }
