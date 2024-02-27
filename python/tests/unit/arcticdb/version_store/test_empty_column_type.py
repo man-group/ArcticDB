@@ -13,11 +13,11 @@ import pytest
 
 class DtypeGenerator:
     """
-    Class which can generate all dtypes which ArcticDB supports.
-    It can generate them by type category e.g. int, float, etc.
-    it can also generate a list of all available dtypes
+    Class which can generate all dtypes which ArcticDB supports. It can generate them by type category e.g. int, float,
+    etc. It can also generate a list of all available dtypes
     """
-    
+
+
     @staticmethod
     def int_dtype():
         return [t + s for s in ["8", "16", "32", "64"] for t in ["int", "uint"]]
@@ -28,6 +28,7 @@ class DtypeGenerator:
     
     @staticmethod
     def bool_dtype():
+        # object is for nullable boolean
         return ["object", "bool"]
     
     @staticmethod
@@ -36,7 +37,7 @@ class DtypeGenerator:
     
     @classmethod
     def dtype(cls):
-        return [*cls.int_dtype(), *cls.float_dtype(), *cls.bool_dtype(), *cls.date_dtype()]
+        return list(set([*cls.int_dtype(), *cls.float_dtype(), *cls.bool_dtype(), *cls.date_dtype()]))
 
 @pytest.fixture(params=DtypeGenerator.int_dtype())
 def int_dtype(request):
@@ -47,7 +48,6 @@ def float_dtype(request):
     yield request.param
 
 
-# object is for nullable boolean
 @pytest.fixture(params=DtypeGenerator.bool_dtype())
 def boolean_dtype(request):
     if request.param == "object":
@@ -65,12 +65,17 @@ def dtype(request):
     yield request.param
 
 
+@pytest.fixture(params=[pd.RangeIndex(0,0), pd.DatetimeIndex([])])
+def empty_index(request):
+    yield request.param
+
+
 class TestCanAppendToColunWithNones:
     """
-    Tests that it is possible to write a column containing None values and latter
-    append to it. Initially the type of the column must be empty type after the
-    append the column must be of the same type as the appended data
+    Tests that it is possible to write a column containing None values and latter append to it. Initially the type of
+    the column must be empty type after the append the column must be of the same type as the appended data.
     """
+
 
     @pytest.fixture(autouse=True)
     def create_empty_column(self, lmdb_version_store_static_and_dynamic):
@@ -187,50 +192,15 @@ class TestCanAppendToColunWithNones:
         )
 
 
-class TestCanAppendToEmptyColumn:
+class TestCanAppendColumnWithNonesToColumn:
     """
-    Tests that it's possible to append to a column which contains no rows.
-    The type of the columns (including the index column) is decided after
-    the first append.
+    Tests if it's possible to append column consisted only of None values to another column. The type of the column
+    containing only None values should be empty type, thus we should be able to append it to any other column
+    regardless of its type. Appending column containing only None values should not change the type of a column. On
+    read the None values will be backfilled depending on the overall type of the column.
     """
 
-    @pytest.fixture(params=
-            [
-                pytest.param(
-                    pd.RangeIndex(0,2),
-                    marks=pytest.mark.xfail(
-                        reason="Appending row ranged columns to empty columns is not supported yet."
-                        "The index of empty df is of type datetime and it clashes with the row-range type."
-                        "The expected behavior is to allow this as long as the initial df is of 0 rows.")
-                    ),
-                list(pd.date_range(start="1/1/2024", end="1/3/2024"))
-                
-            ]
-    )
-    def append_index(self, request):
-        yield request.param
 
-    @pytest.fixture(params=[pd.RangeIndex(0,0), pd.DatetimeIndex([])])
-    def empty_index(self, request):
-        yield request.param
-
-    @pytest.fixture(autouse=True)
-    def create_empty_column(self, lmdb_version_store_static_and_dynamic, dtype, empty_index):
-        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col1": []}, dtype=dtype, index=empty_index))
-        yield
-
-    def test_integer(self, lmdb_version_store_static_and_dynamic, int_dtype, empty_index, append_index):
-        df_to_append = pd.DataFrame({"col1": [1,2,3]}, dtype=int_dtype, index=append_index)
-        lmdb_version_store_static_and_dynamic.append("sym", df_to_append)
-        assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df_to_append)
-    
-    def test_float(self, lmdb_version_store_static_and_dynamic, float_dtype, empty_index, append_index):
-        df_to_append = pd.DataFrame({"col1": [1,2,3]}, dtype=float_dtype, index=append_index)
-        lmdb_version_store_static_and_dynamic.append("sym", df_to_append)
-        assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df_to_append)
-
-
-class TestCanAppendEmptyToColumn:
     def test_integer(self, lmdb_version_store_static_and_dynamic, int_dtype):
         df_initial = pd.DataFrame({"col1": np.array([1,2,3], dtype=int_dtype)})
         lmdb_version_store_static_and_dynamic.write("sym", df_initial)
@@ -341,113 +311,12 @@ class TestCanAppendEmptyToColumn:
         )
 
 
-class TestCanUpdateWithEmpty:
-    def index(self):
-        return list(pd.date_range(start="1/1/2024", end="1/4/2024"))
-
-    def update_index(self):
-        return list(pd.date_range(start="1/2/2024", end="1/3/2024"))
-
-    def test_int(self, lmdb_version_store_static_and_dynamic, int_dtype):
-        lmdb_version_store_static_and_dynamic.write(
-            "sym",
-            pd.DataFrame({"col": [1, 2, 3, 4]}, dtype=int_dtype, index=self.index())
-        )
-        lmdb_version_store_static_and_dynamic.update(
-            "sym",
-            pd.DataFrame({"col": [None, None]}, index=self.update_index())
-        )
-        assert_frame_equal(
-            lmdb_version_store_static_and_dynamic.read("sym").data,
-            pd.DataFrame({"col": [1, 0, 0, 4]}, index=self.index(), dtype=int_dtype)
-        )
-
-    def test_float(self, lmdb_version_store_static_and_dynamic, float_dtype):
-        lmdb_version_store_static_and_dynamic.write(
-            "sym",
-            pd.DataFrame({"col": [1, 2, 3, 4]}, dtype=float_dtype, index=self.index())
-        )
-        lmdb_version_store_static_and_dynamic.update(
-            "sym",
-            pd.DataFrame({"col": [None, None]}, index=self.update_index())
-        )
-        assert_frame_equal(
-            lmdb_version_store_static_and_dynamic.read("sym").data,
-            pd.DataFrame({"col": [1, float("NaN"), float("NaN"), 4]}, index=self.index(), dtype=float_dtype)
-        )
-
-    def test_bool(self, lmdb_version_store_static_and_dynamic, boolean_dtype):
-        # Note: if dtype is bool pandas will convert None to False
-        lmdb_version_store_static_and_dynamic.write(
-            "sym",
-            pd.DataFrame({"col": [True, True, True, True]}, dtype=boolean_dtype, index=self.index())
-        )
-        lmdb_version_store_static_and_dynamic.update(
-            "sym",
-            pd.DataFrame({"col": [None, None]}, dtype=boolean_dtype, index=self.update_index())
-        )
-        assert_frame_equal(
-            lmdb_version_store_static_and_dynamic.read("sym").data,
-            pd.DataFrame({"col": [True, None, None, True]}, index=self.index(), dtype=boolean_dtype)
-        )
-
-    def test_string(self, lmdb_version_store_static_and_dynamic):
-        lmdb_version_store_static_and_dynamic.write(
-            "sym",
-            pd.DataFrame({"col": ["a", "longstr"*20, "b", "longstr"*20]}, index=self.index())
-        )
-        lmdb_version_store_static_and_dynamic.update(
-            "sym",
-            pd.DataFrame({"col": [None, None]}, index=self.update_index())
-        )
-        assert_frame_equal(
-            lmdb_version_store_static_and_dynamic.read("sym").data,
-            pd.DataFrame({"col": ["a", None, None, "longstr"*20]}, index=self.index())
-        )
-
-    def test_date(self, lmdb_version_store_static_and_dynamic, date_dtype):
-        lmdb_version_store_static_and_dynamic.write(
-            "sym",
-            pd.DataFrame(
-                {
-                    "col": [
-                        np.datetime64('2005-02'),
-                        np.datetime64('2005-03'),
-                        np.datetime64('2005-04'),
-                        np.datetime64('2005-05')
-                    ]
-                },
-                dtype=date_dtype,
-                index=self.index()
-            )
-        )
-        lmdb_version_store_static_and_dynamic.update(
-            "sym",
-            pd.DataFrame({"col": [None, None]}, index=self.update_index())
-        )
-        assert_frame_equal(
-            lmdb_version_store_static_and_dynamic.read("sym").data,
-            pd.DataFrame(
-                {
-                    "col": [
-                        np.datetime64('2005-02'),
-                        np.datetime64('NaT'),
-                        np.datetime64('NaT'),
-                        np.datetime64('2005-05')
-                    ]
-                },
-                index=self.index()
-            )
-        )
-
-
-class TestCanUpdateEmpty:
+class TestCanUpdateNones:
     """
-    Check that a column containing only empty type and date index can be updated and that
-    the type of the column will be changed to the type of the new data. The update range
-    is right in the middle of the initial date range, so there will be values unaffected
-    by the update. Check that on read the type of the unaffected entries will be changed
-    from empty to the new type of the column.
+    Check that a column containing only empty type and date index can be updated and that the type of the column will
+    be changed to the type of the new data. The update range is right in the middle of the initial date range, so
+    there will be values unaffected by the update. Check that on read the type of the unaffected entries will be
+    changed from empty to the new type of the column.
     """
 
 
@@ -590,6 +459,326 @@ class TestCanUpdateEmpty:
             )
         )
 
+
+class TestCanUpdateWithNone:
+    """
+    Tests if a subrange of column of any type can be updated with a subrange of None values. The overall type of the
+    column should not change. The None values will be backfilled depending on the type (NaN/NaT/None/0).
+    """
+
+
+    def index(self):
+        return list(pd.date_range(start="1/1/2024", end="1/4/2024"))
+
+    def update_index(self):
+        return list(pd.date_range(start="1/2/2024", end="1/3/2024"))
+
+    def test_int(self, lmdb_version_store_static_and_dynamic, int_dtype):
+        lmdb_version_store_static_and_dynamic.write(
+            "sym",
+            pd.DataFrame({"col": [1, 2, 3, 4]}, dtype=int_dtype, index=self.index())
+        )
+        lmdb_version_store_static_and_dynamic.update(
+            "sym",
+            pd.DataFrame({"col": [None, None]}, index=self.update_index())
+        )
+        assert_frame_equal(
+            lmdb_version_store_static_and_dynamic.read("sym").data,
+            pd.DataFrame({"col": [1, 0, 0, 4]}, index=self.index(), dtype=int_dtype)
+        )
+
+    def test_float(self, lmdb_version_store_static_and_dynamic, float_dtype):
+        lmdb_version_store_static_and_dynamic.write(
+            "sym",
+            pd.DataFrame({"col": [1, 2, 3, 4]}, dtype=float_dtype, index=self.index())
+        )
+        lmdb_version_store_static_and_dynamic.update(
+            "sym",
+            pd.DataFrame({"col": [None, None]}, index=self.update_index())
+        )
+        assert_frame_equal(
+            lmdb_version_store_static_and_dynamic.read("sym").data,
+            pd.DataFrame({"col": [1, float("NaN"), float("NaN"), 4]}, index=self.index(), dtype=float_dtype)
+        )
+
+    def test_bool(self, lmdb_version_store_static_and_dynamic, boolean_dtype):
+        # Note: if dtype is bool pandas will convert None to False
+        lmdb_version_store_static_and_dynamic.write(
+            "sym",
+            pd.DataFrame({"col": [True, True, True, True]}, dtype=boolean_dtype, index=self.index())
+        )
+        lmdb_version_store_static_and_dynamic.update(
+            "sym",
+            pd.DataFrame({"col": [None, None]}, dtype=boolean_dtype, index=self.update_index())
+        )
+        assert_frame_equal(
+            lmdb_version_store_static_and_dynamic.read("sym").data,
+            pd.DataFrame({"col": [True, None, None, True]}, index=self.index(), dtype=boolean_dtype)
+        )
+
+    def test_string(self, lmdb_version_store_static_and_dynamic):
+        lmdb_version_store_static_and_dynamic.write(
+            "sym",
+            pd.DataFrame({"col": ["a", "longstr"*20, "b", "longstr"*20]}, index=self.index())
+        )
+        lmdb_version_store_static_and_dynamic.update(
+            "sym",
+            pd.DataFrame({"col": [None, None]}, index=self.update_index())
+        )
+        assert_frame_equal(
+            lmdb_version_store_static_and_dynamic.read("sym").data,
+            pd.DataFrame({"col": ["a", None, None, "longstr"*20]}, index=self.index())
+        )
+
+    def test_date(self, lmdb_version_store_static_and_dynamic, date_dtype):
+        lmdb_version_store_static_and_dynamic.write(
+            "sym",
+            pd.DataFrame(
+                {
+                    "col": [
+                        np.datetime64('2005-02'),
+                        np.datetime64('2005-03'),
+                        np.datetime64('2005-04'),
+                        np.datetime64('2005-05')
+                    ]
+                },
+                dtype=date_dtype,
+                index=self.index()
+            )
+        )
+        lmdb_version_store_static_and_dynamic.update(
+            "sym",
+            pd.DataFrame({"col": [None, None]}, index=self.update_index())
+        )
+        assert_frame_equal(
+            lmdb_version_store_static_and_dynamic.read("sym").data,
+            pd.DataFrame(
+                {
+                    "col": [
+                        np.datetime64('2005-02'),
+                        np.datetime64('NaT'),
+                        np.datetime64('NaT'),
+                        np.datetime64('2005-05')
+                    ]
+                },
+                index=self.index()
+            )
+        )
+
+class TestCanAppendToEmptyColumn:
+    """
+    Tests that it's possible to append to a column which contains no rows. The type of the columns, including the index
+    column, is decided after the first append.
+    """
+
+
+    @pytest.fixture(params=
+            [
+                pytest.param(
+                    pd.RangeIndex(0,3),
+                    marks=pytest.mark.xfail(
+                        reason="Appending row ranged columns to empty columns is not supported yet."
+                        "The index of empty df is of type datetime and it clashes with the row-range type."
+                        "The expected behavior is to allow this as long as the initial df is of 0 rows.")
+                    ),
+                list(pd.date_range(start="1/1/2024", end="1/3/2024"))
+            ]
+    )
+    def append_index(self, request):
+        yield request.param
+
+    @pytest.fixture(autouse=True)
+    def create_empty_column(self, lmdb_version_store_static_and_dynamic, dtype, empty_index):
+        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col1": []}, dtype=dtype, index=empty_index))
+        yield
+
+    def test_integer(self, lmdb_version_store_static_and_dynamic, int_dtype, empty_index, dtype, append_index):
+        df_to_append = pd.DataFrame({"col1": [1,2,3]}, dtype=int_dtype, index=append_index)
+        lmdb_version_store_static_and_dynamic.append("sym", df_to_append)
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df_to_append)
+
+    def test_float(self, lmdb_version_store_static_and_dynamic, float_dtype, empty_index, append_index):
+        df_to_append = pd.DataFrame({"col1": [1.0,2.0,3.0]}, dtype=float_dtype, index=append_index)
+        lmdb_version_store_static_and_dynamic.append("sym", df_to_append)
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df_to_append)
+
+    def test_bool(self, lmdb_version_store_static_and_dynamic, boolean_dtype, empty_index, append_index):
+        df_to_append = pd.DataFrame({"col1": [True, False, None]}, dtype=boolean_dtype, index=append_index)
+        lmdb_version_store_static_and_dynamic.append("sym", df_to_append)
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df_to_append)
+
+    def test_empty(self, lmdb_version_store_static_and_dynamic, empty_index, append_index):
+        df_to_append = pd.DataFrame({"col1": [None, None, None]}, index=append_index)
+        lmdb_version_store_static_and_dynamic.append("sym", df_to_append)
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df_to_append)
+
+    def test_string(self, lmdb_version_store_static_and_dynamic, empty_index, append_index):
+        df_to_append = pd.DataFrame({"col1": ["short_string", None, 20 * "long_string"]}, index=append_index)
+        lmdb_version_store_static_and_dynamic.append("sym", df_to_append)
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df_to_append)
+
+    def test_date(self, lmdb_version_store_static_and_dynamic, date_dtype, empty_index, append_index):
+        df_to_append = pd.DataFrame(
+            {
+                "col1": np.array(
+                    [
+                        np.datetime64('2005-02'),
+                        np.datetime64('2005-03'),
+                        np.datetime64('2005-03')
+                    ]
+                )
+            },
+            dtype=date_dtype,
+            index=append_index
+        )
+        lmdb_version_store_static_and_dynamic.append("sym", df_to_append)
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df_to_append)
+
+
+class TestAppendingEmptyToColumnDoesNothing:
+    """
+    Test if it is possible to append empty column to an already existing column. The append should not change anything.
+    If dynamic schema is used the update should not create new columns. The update should not even reach the C++ layer.
+    """
+
+
+    @pytest.fixture(params=[pd.RangeIndex(0,3), list(pd.date_range(start="1/1/2024", end="1/3/2024"))])
+    def index(self, request):
+        yield request.param
+
+    def test_integer(self, lmdb_version_store_static_and_dynamic, index, int_dtype, empty_index, dtype):
+        df = pd.DataFrame({"col1": [1,2,3]}, dtype=int_dtype, index=index)
+        lmdb_version_store_static_and_dynamic.write("sym", df)
+        lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col": []}, dtype=dtype, index=empty_index))
+        read_result = lmdb_version_store_static_and_dynamic.read("sym")
+        assert_frame_equal(read_result.data, df)
+        assert read_result.version == 0
+
+    def test_float(self, lmdb_version_store_static_and_dynamic, index, float_dtype, empty_index, dtype):
+        df = pd.DataFrame({"col": [1,2,3]}, dtype=float_dtype, index=index)
+        lmdb_version_store_static_and_dynamic.write("sym", df)
+        lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col": []}, dtype=dtype, index=empty_index))
+        read_result = lmdb_version_store_static_and_dynamic.read("sym")
+        assert_frame_equal(read_result.data, df)
+        assert read_result.version == 0
+
+    def test_bool(self, lmdb_version_store_static_and_dynamic, index, boolean_dtype, empty_index, dtype):
+        df = pd.DataFrame({"col": [False, True, None]}, dtype=boolean_dtype, index=index)
+        lmdb_version_store_static_and_dynamic.write("sym", df)
+        lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col": []}, dtype=dtype, index=empty_index))
+        read_result = lmdb_version_store_static_and_dynamic.read("sym")
+        assert_frame_equal(read_result.data, df)
+        assert read_result.version == 0
+
+    def test_empty(self, lmdb_version_store_static_and_dynamic, index, empty_index, dtype):
+        df = pd.DataFrame({"col": [None, None, None]}, index=index)
+        lmdb_version_store_static_and_dynamic.write("sym", df)
+        lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col": []}, dtype=dtype, index=empty_index))
+        read_result = lmdb_version_store_static_and_dynamic.read("sym")
+        assert_frame_equal(read_result.data, df)
+        assert read_result.version == 0
+
+    def test_string(self, lmdb_version_store_static_and_dynamic, index, empty_index, dtype):
+        df = pd.DataFrame({"col": ["shord", 20*"long", None]}, index=index)
+        lmdb_version_store_static_and_dynamic.write("sym", df)
+        lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col": []}, dtype=dtype, index=empty_index))
+        read_result = lmdb_version_store_static_and_dynamic.read("sym")
+        assert_frame_equal(read_result.data, df)
+        assert read_result.version == 0
+
+    def test_date(self, lmdb_version_store_static_and_dynamic, date_dtype, index, empty_index, dtype):
+        df = pd.DataFrame(
+            {
+                "col1": np.array(
+                    [
+                        np.datetime64('2005-02'),
+                        np.datetime64('2005-03'),
+                        np.datetime64('2005-03')
+                    ]
+                )
+            }, dtype=date_dtype, index=index)
+        lmdb_version_store_static_and_dynamic.write("sym", df)
+        lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col": []}, dtype=dtype, index=empty_index))
+        read_result = lmdb_version_store_static_and_dynamic.read("sym")
+        assert_frame_equal(read_result.data, df)
+        assert read_result.version == 0
+
+    def test_empty_df_does_not_create_new_columns_in_dynamic_schema(self, lmdb_version_store_dynamic_schema, index):
+        df = pd.DataFrame({"col": [1,2,3]}, dtype="int32", index=index)
+        lmdb_version_store_dynamic_schema.write("sym", df)
+        to_append = pd.DataFrame(
+            {
+                "col_1": np.array([], dtype="int"),
+                "col_2": np.array([], dtype="float"),
+                "col_3": np.array([], dtype="object"),
+                "col_4": np.array([], dtype="str")
+            }
+        )
+        lmdb_version_store_dynamic_schema.append("sym", to_append)
+        read_result = lmdb_version_store_dynamic_schema.read("sym")
+        assert_frame_equal(read_result.data, df)
+        assert read_result.version == 0
+
+
+@pytest.mark.xfail(
+    "When the index is explicitly set to be empty array ArcticDB assumes it's row range index. It does this by checking"
+    "the type of the data in the tensor https://github.com/man-group/ArcticDB/blob/bb2278d845abef2b7e7101dc968f0974cf7bdde1/cpp/arcticdb/python/python_to_tensor_frame.cpp#L234"
+    "and if it's not NANOSECONDS_UTC64 it assumes it's row ranged index. Since the empty index reports a emptyval type"
+    "it assumes the index of type row range. This will be fixed by adding a special empty index type."
+)
+class TestCanUpdateEmptyColumn:
+    """
+    Test if it's possible to update a completely empty dataframe. The index type and the column type will be set after
+    the update. Before that the column type must be empty type and the index type is undecided (empty index type).
+    """
+
+    @pytest.fixture(autouse=True)
+    def create_empty_column(self, lmdb_version_store_static_and_dynamic, dtype, empty_index):
+        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col1": []}, dtype=dtype, index=empty_index))
+        yield
+
+    def update_index(self):
+        return list(pd.date_range(start="1/2/2024", end="1/4/2024"))
+
+    def test_integer(self, lmdb_version_store_static_and_dynamic, int_dtype):
+        df = pd.DataFrame({"col": [1,2,3]}, index=self.update_index(), dtype=int_dtype)
+        lmdb_version_store_static_and_dynamic.update("sym", df)
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df)
+
+    def test_float(self, lmdb_version_store_static_and_dynamic, float_dtype):
+        df = pd.DataFrame({"col": [1,2,3]}, index=self.update_index(), dtype=float_dtype)
+        lmdb_version_store_static_and_dynamic.update("sym", df)
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df)
+
+    def test_bool(self, lmdb_version_store_static_and_dynamic, boolean_dtype):
+        df = pd.DataFrame({"col": [True,False,None]}, index=self.update_index(), dtype=boolean_dtype)
+        lmdb_version_store_static_and_dynamic.update("sym", df)
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df)
+
+    def test_bool(self, lmdb_version_store_static_and_dynamic):
+        df = pd.DataFrame({"col": [None,None,None]}, index=self.update_index())
+        lmdb_version_store_static_and_dynamic.update("sym", df)
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df)
+
+    def test_string(self, lmdb_version_store_static_and_dynamic):
+        df = pd.DataFrame({"col": ["short",20*"long",None]}, index=self.update_index())
+        lmdb_version_store_static_and_dynamic.update("sym", df)
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df)
+
+    def test_date(self, lmdb_version_store_static_and_dynamic, date_dtype):
+        df = pd.DataFrame(
+            {
+                "col1": np.array(
+                    [
+                        np.datetime64('2005-02'),
+                        np.datetime64('2005-03'),
+                        np.datetime64('2005-03')
+                    ]
+                )
+            }, dtype=date_dtype, index=self.index()
+        )
+        lmdb_version_store_static_and_dynamic.update("sym", df)
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df)
 
 class TestEmptyTypesIsOverriden:
     def test_cannot_append_different_type_after_first_not_none(self, lmdb_version_store_static_and_dynamic):
