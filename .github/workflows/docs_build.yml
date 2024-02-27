@@ -66,7 +66,7 @@ jobs:
           git config --global user.name "${GITHUB_ACTOR}"
           git config --global user.email "${GITHUB_ACTOR_ID}+${GITHUB_ACTOR}@users.noreply.github.com"
           git_hash=$(git rev-parse --short HEAD)
-          mike deploy ${{inputs.version || 'dev'}} ${{inputs.latest && 'latest' || ''}} --update-aliases --branch docs-pages ${{inputs.deploy && '--push' || ''}} --message "Deploying docs: ${{inputs.version || 'dev'}} $git_hash ${{inputs.latest && '[latest]' || ''}}"
+          mike deploy ${{inputs.version || 'dev'}} ${{inputs.latest && inputs.version && 'latest' || ''}} --update-aliases --branch docs-pages ${{inputs.deploy && '--push' || ''}} --message "Deploying docs: ${{inputs.version || 'dev'}} $git_hash ${{inputs.latest && inputs.version && '[latest]' || ''}}"
           mike set-default latest --branch docs-pages ${{inputs.deploy && '--push' || ''}}
 
       - name: List docs versions after build
