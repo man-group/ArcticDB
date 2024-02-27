@@ -120,6 +120,7 @@ entity::VariantKey write_sync(
     const StreamId &stream_id,
     IndexValue start_index,
     IndexValue end_index,
+    timestamp creation_ts,
     SegmentInMemory &&segment) override {
 
     util::check(segment.descriptor().id() == stream_id,
@@ -128,10 +129,21 @@ entity::VariantKey write_sync(
                 segment.descriptor().id());
 
     auto encoded = EncodeAtomTask{
-        key_type, version_id, stream_id, start_index, end_index, current_timestamp(),
+        key_type, version_id, stream_id, start_index, end_index, creation_ts,
         std::move(segment), codec_, encoding_version_
     }();
     return WriteSegmentTask{library_}(std::move(encoded));
+}
+
+entity::VariantKey write_sync(
+    stream::KeyType key_type,
+    VersionId version_id,
+    const StreamId &stream_id,
+    IndexValue start_index,
+    IndexValue end_index,
+    SegmentInMemory &&segment) override {
+
+    return write_sync(key_type, version_id, stream_id, start_index, end_index, current_timestamp(), std::move(segment));
 }
 
 entity::VariantKey write_sync(PartialKey pk, SegmentInMemory &&segment) override {
@@ -157,7 +169,7 @@ void write_compressed_sync(storage::KeySegmentPair &&ks) override {
 
 folly::Future<entity::VariantKey> update(const entity::VariantKey &key,
                                          SegmentInMemory &&segment,
-                                         storage::UpdateOpts opts) override {
+                                         storage::StorageUpdateOptions opts) override {
     auto stream_id = variant_key_id(key);
     util::check(segment.descriptor().id() == stream_id,
                 "Descriptor id mismatch in variant key {} != {}",

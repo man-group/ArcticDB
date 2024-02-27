@@ -183,9 +183,9 @@ struct WriteSegmentTask : BaseTask {
 
 struct UpdateSegmentTask : BaseTask {
     std::shared_ptr<storage::Library> lib_;
-    storage::UpdateOpts opts_;
+    storage::StorageUpdateOptions opts_;
 
-    explicit UpdateSegmentTask(std::shared_ptr<storage::Library> lib, storage::UpdateOpts opts) :
+    explicit UpdateSegmentTask(std::shared_ptr<storage::Library> lib, storage::StorageUpdateOptions opts) :
         lib_(std::move(lib)),
         opts_(opts) {
     }

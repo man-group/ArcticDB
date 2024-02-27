@@ -34,6 +34,7 @@ VersionedItem write_dataframe_impl(
     VersionId version_id,
     const std::shared_ptr<InputTensorFrame>& frame,
     const WriteOptions& options,
+    version_store::TimeseriesInfo& ts_info,
     const std::shared_ptr<DeDupMap>& de_dup_map = std::make_shared<DeDupMap>(),
     bool allow_sparse = false,
     bool validate_index = false
@@ -46,30 +47,34 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
     const WriteOptions& options,
     const std::shared_ptr<DeDupMap>& de_dup_map,
     bool allow_sparse,
-    bool validate_index
+    bool validate_index,
+    TimeseriesInfo& info
 );
 
 folly::Future<AtomKey> async_append_impl(
     const std::shared_ptr<Store>& store,
     const UpdateInfo& update_info,
     const std::shared_ptr<InputTensorFrame>& frame,
-    const WriteOptions& options,
-    bool validate_index);
+    const WriteOptions& write_options,
+    const ModificationOptions& modification_options,
+    version_store::TimeseriesInfo& ts_info);
 
 VersionedItem append_impl(
     const std::shared_ptr<Store>& store,
     const UpdateInfo& update_info,
     const std::shared_ptr<InputTensorFrame>& frame,
     const WriteOptions& options,
-    bool validate_index);
+    const ModificationOptions& modification_options,
+    TimeseriesInfo& ts_info);
 
 VersionedItem update_impl(
     const std::shared_ptr<Store>& store,
     const UpdateInfo& update_info,
     const UpdateQuery & query,
     const std::shared_ptr<InputTensorFrame>& frame,
-    const WriteOptions&& options,
-    bool dynamic_schema);
+    const WriteOptions&& write_options,
+    const ModificationOptions& update_options,
+    TimeseriesInfo& ts_info);
 
 VersionedItem delete_range_impl(
     const std::shared_ptr<Store>& store,

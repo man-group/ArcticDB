@@ -104,12 +104,12 @@ public:
         return write(Composite<KeySegmentPair>{std::move(kv)});
     }
 
-    void update(Composite<KeySegmentPair> &&kvs, UpdateOpts opts) {
+    void update(Composite<KeySegmentPair> &&kvs, StorageUpdateOptions opts) {
         ARCTICDB_SAMPLE(StorageUpdate, 0)
         return do_update(std::move(kvs), opts);
     }
 
-    void update(KeySegmentPair &&kv, UpdateOpts opts) {
+    void update(KeySegmentPair &&kv, StorageUpdateOptions opts) {
         return update(Composite<KeySegmentPair>{std::move(kv)}, opts);
     }
 
@@ -167,7 +167,7 @@ public:
 private:
     virtual void do_write(Composite<KeySegmentPair>&& kvs) = 0;
 
-    virtual void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) = 0;
+    virtual void do_update(Composite<KeySegmentPair>&& kvs, StorageUpdateOptions opts) = 0;
 
     virtual void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) = 0;
 

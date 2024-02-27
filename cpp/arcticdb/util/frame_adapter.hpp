@@ -33,6 +33,9 @@ inline NativeTensor tensor_from_column(const Column &column) {
             column.ptr(),
             to_tensor_dim(dim)
         };
+        if constexpr(is_sequence_type(data_type)) {
+            tensor.set_is_native_type();
+        }
         return tensor;
     });
 }
@@ -58,6 +61,7 @@ struct SegmentToInputFrameAdapter {
             input_frame_->field_tensors.emplace_back(tensor_from_column(segment_.column(col++)));
 
         input_frame_->set_index_range();
+        input_frame_->set_string_pool(segment_.string_pool_ptr());
     }
 
     void synthesize_norm_meta() {

@@ -69,7 +69,7 @@ struct StreamSink {
     [[nodiscard]] virtual folly::Future<entity::VariantKey> update(
         const VariantKey &key,
         SegmentInMemory &&segment,
-        storage::UpdateOpts = storage::UpdateOpts{}) = 0;
+        storage::StorageUpdateOptions = storage::StorageUpdateOptions{}) = 0;
 
     struct PartialKey {
         KeyType key_type;
@@ -97,6 +97,15 @@ struct StreamSink {
     virtual entity::VariantKey write_sync(
         KeyType key_type,
         const StreamId &stream_id,
+        SegmentInMemory &&segment) = 0;
+
+    virtual entity::VariantKey write_sync(
+        stream::KeyType key_type,
+        VersionId version_id,
+        const StreamId &stream_id,
+        IndexValue start_index,
+        IndexValue end_index,
+        timestamp creation_ts,
         SegmentInMemory &&segment) = 0;
 
     struct BatchWriteArgs {

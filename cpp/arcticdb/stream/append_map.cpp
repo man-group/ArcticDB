@@ -182,7 +182,7 @@ SegmentInMemory incomplete_segment_from_frame(
 
         if (has_index) {
             util::check(static_cast<bool>(index_tensor), "Expected index tensor for index type {}", agg.descriptor().index());
-            auto opt_error = aggregator_set_data(agg.descriptor().field(0).type(), index_tensor.value(), agg, 0, num_rows, offset_in_frame, slice_num_for_column,
+            auto opt_error = aggregator_set_data(*frame, agg.descriptor().field(0).type(), index_tensor.value(), agg, 0, num_rows, offset_in_frame, slice_num_for_column,
                                 num_rows, allow_sparse);
             if (opt_error.has_value()) {
                 opt_error->raise(agg.descriptor().field(0).name());
@@ -192,7 +192,7 @@ SegmentInMemory incomplete_segment_from_frame(
         for(auto col = 0u; col < field_tensors.size(); ++col) {
             auto dest_col = col + agg.descriptor().index().field_count();
             auto &tensor = field_tensors[col];
-            auto opt_error = aggregator_set_data(agg.descriptor().field(dest_col).type(), tensor, agg, dest_col, num_rows, offset_in_frame, slice_num_for_column,
+            auto opt_error = aggregator_set_data(*frame,agg.descriptor().field(dest_col).type(), tensor, agg, dest_col, num_rows, offset_in_frame, slice_num_for_column,
                                 num_rows, allow_sparse);
             if (opt_error.has_value()) {
                 opt_error->raise(agg.descriptor().field(dest_col).name());

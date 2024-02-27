@@ -127,7 +127,7 @@ TEST_P(SimpleTestSuite, Example) {
     update_kv.segment().header().set_start_ts(4321);
     update_kv.segment().set_buffer(std::make_shared<Buffer>());
 
-    storage->update(std::move(update_kv), as::UpdateOpts{});
+    storage->update(std::move(update_kv), as::StorageUpdateOptions{});
 
     as::KeySegmentPair update_res;
     storage->read(k, [&](auto &&k, auto &&seg) {

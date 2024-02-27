@@ -5,20 +5,16 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/entity/native_tensor.hpp>
-#include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/pipeline/index_writer.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
-#include <arcticdb/stream/protobuf_mappings.hpp>
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/entity/protobufs.hpp>
-#include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/python/python_types.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
@@ -28,6 +24,7 @@
 #include <arcticdb/entity/merge_descriptors.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/util/format_date.hpp>
+#include <arcticdb/version/version_store_objects.hpp>
 #include <vector>
 #include <array>
 
@@ -187,16 +184,17 @@ folly::Future<std::vector<SliceAndKey>> slice_and_write(
     return write_slices(frame, std::move(slices), slicing, std::move(key), sink, de_dup_map, sparsify_floats);
 }
 
-folly::Future<entity::AtomKey>
-write_frame(
+folly::Future<entity::AtomKey> write_frame(
         IndexPartialKey&& key,
         const std::shared_ptr<InputTensorFrame>& frame,
         const SlicingPolicy &slicing,
         const std::shared_ptr<Store>& store,
+        version_store::TimeseriesInfo& ts_info,
         const std::shared_ptr<DeDupMap>& de_dup_map,
         bool sparsify_floats) {
     ARCTICDB_SAMPLE_DEFAULT(WriteFrame)
     auto fut_slice_keys = slice_and_write(frame, slicing, IndexPartialKey{key}, store, de_dup_map, sparsify_floats);
+    ts_info.total_rows_ = frame->offset + frame->num_rows;
     // Write the keys of the slices into an index segment
     ARCTICDB_SUBSAMPLE_DEFAULT(WriteIndex)
     return std::move(fut_slice_keys).thenValue([frame=frame, key = std::move(key), &store](auto&& slice_keys) mutable {
@@ -210,12 +208,12 @@ folly::Future<entity::AtomKey> append_frame(
         const SlicingPolicy& slicing,
         index::IndexSegmentReader& index_segment_reader,
         const std::shared_ptr<Store>& store,
-        bool dynamic_schema,
-        bool ignore_sort_order)
+        const WriteOptions& options,
+        version_store::TimeseriesInfo& ts_info)
 {
     ARCTICDB_SAMPLE_DEFAULT(AppendFrame)
     util::variant_match(frame->index,
-                        [&index_segment_reader, &frame, ignore_sort_order](const TimeseriesIndex &) {
+                        [&index_segment_reader, &frame, ignore_sort_order=options.ignore_sort_order](const TimeseriesIndex &) {
                             util::check(frame->has_index(), "Cannot append timeseries without index");
                             util::check(static_cast<bool>(frame->index_tensor), "Got null index tensor in append_frame");
                             auto& frame_index = frame->index_tensor.value();
@@ -234,10 +232,11 @@ folly::Future<entity::AtomKey> append_frame(
                         }
     );
 
+    ts_info.total_rows_ = frame->offset + frame->num_rows;
     auto existing_slices = unfiltered_index(index_segment_reader);
     auto keys_fut = slice_and_write(frame, slicing, IndexPartialKey{key}, store);
     return std::move(keys_fut)
-    .thenValue([dynamic_schema, slices_to_write=std::move(existing_slices), frame=frame, index_segment_reader=std::move(index_segment_reader), key=std::move(key), store](auto&& slice_and_keys_to_append) mutable {
+    .thenValue([dynamic_schema=options.dynamic_schema, slices_to_write=std::move(existing_slices), frame=frame, index_segment_reader=std::move(index_segment_reader), key=std::move(key), store](auto&& slice_and_keys_to_append) mutable {
         slices_to_write.insert(std::end(slices_to_write), std::make_move_iterator(std::begin(slice_and_keys_to_append)), std::make_move_iterator(std::end(slice_and_keys_to_append)));
         std::sort(std::begin(slices_to_write), std::end(slices_to_write));
         auto tsd = index::get_merged_tsd(frame->num_rows + frame->offset, dynamic_schema, index_segment_reader.tsd(), frame);
@@ -298,7 +297,7 @@ static IndexRange partial_rewrite_index_range(
 
 std::optional<SliceAndKey> rewrite_partial_segment(
     const SliceAndKey& existing,
-    IndexRange index_range,
+    const IndexRange& index_range,
     VersionId version_id,
     AffectedSegmentPart affected_part,
     const std::shared_ptr<Store>& store

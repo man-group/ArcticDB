@@ -47,7 +47,7 @@ namespace arcticdb::storage::memory {
         });
     }
 
-    void MemoryStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) {
+    void MemoryStorage::do_update(Composite<KeySegmentPair>&& kvs, StorageUpdateOptions opts) {
         ARCTICDB_SAMPLE(MemoryStorageUpdate, 0)
 
         auto fmt_db = [](auto &&k) { return variant_key_type(k.variant_key()); };

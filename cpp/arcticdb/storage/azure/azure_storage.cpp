@@ -304,7 +304,7 @@ void AzureStorage::do_write(Composite<KeySegmentPair>&& kvs) {
     detail::do_write_impl(std::move(kvs), root_folder_, *azure_client_, FlatBucketizer{}, upload_option_, request_timeout_);
 }
 
-void AzureStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts) {
+void AzureStorage::do_update(Composite<KeySegmentPair>&& kvs, StorageUpdateOptions) {
     detail::do_update_impl(std::move(kvs), root_folder_, *azure_client_, FlatBucketizer{}, upload_option_, request_timeout_);
 }
 

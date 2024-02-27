@@ -23,6 +23,7 @@
 #include <arcticdb/pipeline/value_set.hpp>
 #include <arcticdb/python/adapt_read_dataframe.hpp>
 #include <arcticdb/version/schema_checks.hpp>
+#include <arcticdb/version/metadata_cache.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
 
 namespace arcticdb::version_store {
@@ -117,6 +118,13 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         [] (StreamId sid, const std::string(path), ReadQuery& read_query){
             return adapt_read_df(read_dataframe_from_file(sid, path, read_query));
         });
+
+    py::class_<SymbolMetadata>(version, "SymbolMetadata")
+        .def_property_readonly("update_time", [](const SymbolMetadata &self) { return self.update_time_; })
+        .def_property_readonly("start_index", [](const SymbolMetadata &self) { return self.start_index_; })
+        .def_property_readonly("end_index", [](const SymbolMetadata &self) { return self.end_index_; })
+        .def_property_readonly("total_rows", [](const SymbolMetadata &self) { return self.total_rows_; })
+        .def("__repr__", &SymbolMetadata::__repr__);
 
     using FrameDataWrapper = arcticdb::pipelines::FrameDataWrapper;
     py::class_<FrameDataWrapper, std::shared_ptr<FrameDataWrapper>>(version, "FrameDataWrapper")
@@ -435,7 +443,17 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
          .def("write_metadata",
              &PythonVersionStore::write_metadata,
              py::call_guard<SingleThreadMutexHolder>(), "Create a new version with new metadata and data from the last version")
-        .def("create_column_stats_version",
+        .def("get_symbol_info_cache",
+             [&](PythonVersionStore& v,  std::vector<StreamId> sids, timestamp from_time, uint64_t lookback_seconds){
+                 return get_symbol_metadata(v, sids, from_time, lookback_seconds);
+             },
+             py::call_guard<SingleThreadMutexHolder>(), "Drop column stats")
+        .def("compact_symbol_info_cache",
+             [&](PythonVersionStore& v){
+                 compact_symbol_metadata(v);
+             },
+             py::call_guard<SingleThreadMutexHolder>(), "Drop column stats")
+         .def("create_column_stats_version",
              &PythonVersionStore::create_column_stats_version,
              py::call_guard<SingleThreadMutexHolder>(), "Create column stats")
         .def("drop_column_stats_version",

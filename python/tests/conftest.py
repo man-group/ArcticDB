@@ -486,6 +486,11 @@ def lmdb_version_store_column_buckets(version_store_factory):
 
 
 @pytest.fixture
+def lmdb_version_store_metadata_cache(version_store_factory):
+    return version_store_factory(metadata_cache=True)
+
+
+@pytest.fixture
 def lmdb_version_store_dynamic_schema_v1(version_store_factory, lib_name):
     return version_store_factory(dynamic_schema=True, dynamic_strings=True)
 

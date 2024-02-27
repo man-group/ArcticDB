@@ -477,7 +477,7 @@ TEST(VersionMap, RewriteVersionKeys) {
     version_map->write_version(store, key3, key2);
 
     // the above write_version wont write index keys - only version keys
-    storage::UpdateOpts update_opts;
+    storage::StorageUpdateOptions update_opts;
     update_opts.upsert_ = true;
     store->update(key1, SegmentInMemory(), update_opts);
     store->update(key2, SegmentInMemory(), update_opts);

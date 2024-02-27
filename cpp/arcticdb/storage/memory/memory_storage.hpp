@@ -26,7 +26,7 @@ namespace arcticdb::storage::memory {
     private:
         void do_write(Composite<KeySegmentPair>&& kvs) final;
 
-        void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) final;
+        void do_update(Composite<KeySegmentPair>&& kvs, StorageUpdateOptions opts) final;
 
         void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) final;
 

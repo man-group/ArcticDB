@@ -19,8 +19,7 @@ folly::Future<entity::AtomKey> write_index(
     TimeseriesDescriptor &&metadata,
     std::vector<SliceAndKey> &&sk,
     const IndexPartialKey &partial_key,
-    const std::shared_ptr<stream::StreamSink> &sink
-    ) {
+    const std::shared_ptr<stream::StreamSink> &sink) {
     auto slice_and_keys = std::move(sk);
     IndexWriter<IndexType> writer(sink, partial_key, std::move(metadata));
     for (const auto &slice_and_key : slice_and_keys) {

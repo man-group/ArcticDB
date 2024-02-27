@@ -77,7 +77,8 @@ struct NativeTensor {
     dt_(other.dt_),
     elsize_(other.elsize_),
     ptr(other.ptr),
-    expanded_dim_(other.expanded_dim_){
+    expanded_dim_(other.expanded_dim_),
+    native_type_(other.native_type_){
         for (ssize_t i = 0; i < std::min(MaxDimensions, ndim_); ++i)
             shapes_[i] = other.shapes_[i];
 
@@ -94,6 +95,7 @@ struct NativeTensor {
         swap(left.elsize_, right.elsize_);
         swap(left.ptr, right.ptr);
         swap(left.expanded_dim_, right.expanded_dim_);
+        swap(left.native_type_, right.native_type_);
         for(ssize_t i = 0; i < MaxDimensions; ++i) {
             swap(left.shapes_[i], right.shapes_[i]);
             swap(left.strides_[i], right.strides_[i]);
@@ -134,6 +136,14 @@ struct NativeTensor {
         return (&(reinterpret_cast<const T *>(ptr)[signed_pos]));
     }
 
+    void set_is_native_type() {
+        native_type_ = true;
+    }
+
+    bool is_native_type() const {
+        return native_type_;
+    }
+
     // returns number of elements, not bytesize
     [[nodiscard]] ssize_t size() const {
         return calc_elements(shape(), ndim());
@@ -142,17 +152,18 @@ struct NativeTensor {
     NativeTensor &request() { return *this; }
 
     util::MagicNum<'T','n','s','r'> magic_;
-    int64_t nbytes_;
-    int ndim_;
+    int64_t nbytes_ = 0;
+    int ndim_ = 0;
     StrideContainer strides_ = {};
     StrideContainer shapes_ = {};
     DataType dt_;
-    stride_t elsize_;
-    const void *ptr;
+    stride_t elsize_ = 0;
+    const void *ptr = nullptr;
     /// @note: when iterating strides and shapes we should use the ndim as it is the dimension reported by the
     /// API providing the strides and shapes arrays, expanded_dim is what ArcticDB thinks of the tensor and using it
     /// can lead to out of bounds reads from strides and shapes.
-    int expanded_dim_;
+    int32_t expanded_dim_ = 0;
+    bool native_type_ = false;
 };
 
 template <ssize_t> ssize_t byte_offset_impl(const stride_t* ) { return 0; }

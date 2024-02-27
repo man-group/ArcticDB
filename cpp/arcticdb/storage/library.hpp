@@ -84,7 +84,7 @@ class Library {
         ARCTICDB_TRACE(log::storage(), "{} kv written, {} bytes", kv_count, total_size);
     }
 
-    void update(Composite<KeySegmentPair>&& kvs, storage::UpdateOpts opts) {
+    void update(Composite<KeySegmentPair>&& kvs, storage::StorageUpdateOptions opts) {
         ARCTICDB_SAMPLE(LibraryUpdate, 0)
         if (open_mode() < OpenMode::WRITE)
             throw PermissionException(library_path_, open_mode(), "update");

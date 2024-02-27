@@ -67,21 +67,18 @@ public:
         const StreamId& stream_id,
         const UpdateQuery & query,
         const std::shared_ptr<InputTensorFrame>& frame,
-        bool upsert,
-        bool dynamic_schema,
-        bool prune_previous_versions) override;
+        const ModificationOptions& update_options) override;
 
     VersionedItem append_internal(
         const StreamId& stream_id,
         const std::shared_ptr<InputTensorFrame>& frame,
-        bool upsert,
-        bool prune_previous_versions,
-        bool validate_index) override;
+        const ModificationOptions& options) override;
 
     VersionedItem delete_range_internal(
         const StreamId& stream_id,
         const UpdateQuery& query,
-        bool dynamic_schema) override;
+        bool dynamic_schema
+        ) override;
 
     void append_incomplete_segment(
         const StreamId& stream_id,
@@ -281,9 +278,7 @@ public:
     std::vector<std::variant<VersionedItem, DataError>> batch_append_internal(
         const std::vector<StreamId>& stream_ids,
         std::vector<std::shared_ptr<pipelines::InputTensorFrame>>&& frames,
-        bool prune_previous_versions,
-        bool validate_index,
-        bool upsert,
+        const ModificationOptions& options,
         bool throw_on_error);
 
     std::vector<ReadVersionOutput> batch_read_keys(
@@ -366,7 +361,7 @@ public:
         bool prune_previous_versions,
         bool add_new_symbol);
 
-    void write_version_and_prune_previous(
+    void write_version(
         bool prune_previous_versions,
         const AtomKey& new_version,
         const std::optional<IndexTypeKey>& previous_key);

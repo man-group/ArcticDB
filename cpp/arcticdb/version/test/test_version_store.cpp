@@ -48,7 +48,8 @@ auto write_version_frame(
     auto wrapper = get_test_simple_frame(stream_id, rows, start_val);
     auto& frame = wrapper.frame_;
     auto store = pvs._test_get_store();
-    auto var_key = write_frame(std::move(pk), frame, slicing, store, de_dup_map).get();
+    version_store::TimeseriesInfo ts_info;
+    auto var_key = write_frame(std::move(pk), frame, slicing, store, ts_info, de_dup_map).get();
     auto key = to_atom(var_key); // Moves
     if (update_version_map) {
         pvs._test_get_version_map()->write_version(store, key, previous_key);
@@ -440,7 +441,8 @@ TEST(VersionStore, UpdateWithin) {
     RowRange update_range{10, 15};
     size_t update_val{1};
     auto update_frame =  get_test_frame<stream::TimeseriesIndex>(symbol, fields, update_range.diff(), update_range.first, update_val);
-    version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
+    version_store::TimeseriesInfo ts_info;
+    version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), version_store::ModificationOptions{});
 
     ReadQuery read_query;
     auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
@@ -481,7 +483,8 @@ TEST(VersionStore, UpdateBefore) {
     RowRange update_range{0, 10};
     size_t update_val{1};
     auto update_frame =  get_test_frame<stream::TimeseriesIndex>(symbol, fields, update_range.diff(), update_range.first, update_val);
-    version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
+    version_store::TimeseriesInfo ts_info;
+    version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), version_store::ModificationOptions{});
 
     ReadQuery read_query;
     auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
@@ -522,7 +525,8 @@ TEST(VersionStore, UpdateAfter) {
     RowRange update_range{100, 110};
     size_t update_val{1};
     auto update_frame =  get_test_frame<stream::TimeseriesIndex>(symbol, fields, update_range.diff(), update_range.first, update_val);
-    version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
+    version_store::TimeseriesInfo ts_info;
+    version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), version_store::ModificationOptions{});
 
     ReadQuery read_query;
     auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
@@ -564,7 +568,8 @@ TEST(VersionStore, UpdateIntersectBefore) {
     size_t update_val{1};
     auto update_frame =
         get_test_frame<stream::TimeseriesIndex>(symbol, fields, update_range.diff(), update_range.first, update_val);
-    version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
+    version_store::TimeseriesInfo ts_info;
+    version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), version_store::ModificationOptions{});
 
     ReadQuery read_query;
     auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
@@ -600,13 +605,14 @@ TEST(VersionStore, UpdateIntersectAfter) {
     };
 
     auto test_frame = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
+    version_store::TimeseriesInfo ts_info;
     version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false, false);
 
     RowRange update_range{95, 105};
     size_t update_val{1};
     auto update_frame =
         get_test_frame<stream::TimeseriesIndex>(symbol, fields, update_range.diff(), update_range.first, update_val);
-    version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
+    version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), version_store::ModificationOptions{});
 
     ReadQuery read_query;
     auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
@@ -656,7 +662,8 @@ TEST(VersionStore, UpdateWithinSchemaChange) {
     };
 
     auto update_frame = get_test_frame<stream::TimeseriesIndex>(symbol, update_fields, update_range.diff(), update_range.first, update_val);
-    version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, true, false);
+    version_store::TimeseriesInfo ts_info;
+    version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), version_store::ModificationOptions{});
 
     ReadOptions read_options;
     read_options.set_dynamic_schema(true);
@@ -717,7 +724,10 @@ TEST(VersionStore, UpdateWithinTypeAndSchemaChange) {
     };
 
     auto update_frame = get_test_frame<stream::TimeseriesIndex>(symbol, update_fields, update_range.diff(), update_range.first, update_val);
-    version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, true, false);
+    version_store::ModificationOptions update_options;
+    update_options.dynamic_schema_ = true;
+    version_store::TimeseriesInfo ts_info;
+    version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), update_options);
 
     ReadOptions read_options;
     read_options.set_dynamic_schema(true);

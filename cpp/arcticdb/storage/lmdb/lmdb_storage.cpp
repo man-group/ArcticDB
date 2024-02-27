@@ -79,7 +79,7 @@ void LmdbStorage::do_write(Composite<KeySegmentPair>&& kvs) {
     txn.commit();
 }
 
-void LmdbStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) {
+void LmdbStorage::do_update(Composite<KeySegmentPair>&& kvs, StorageUpdateOptions opts) {
     ARCTICDB_SAMPLE(LmdbStorageUpdate, 0)
     std::lock_guard<std::mutex> lock{*write_mutex_};
     auto txn = ::lmdb::txn::begin(env());

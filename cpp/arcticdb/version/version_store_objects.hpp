@@ -92,4 +92,15 @@ struct UpdateInfo {
     VersionId next_version_id_;
 };
 
+struct ModificationOptions {
+    bool upsert_ = false;
+    bool dynamic_schema_ = false;
+    bool prune_previous_versions_ = false;
+    bool validate_index_ = true;
+};
+
+struct TimeseriesInfo {
+    size_t total_rows_ = 0U;
+};
+
 } // namespace

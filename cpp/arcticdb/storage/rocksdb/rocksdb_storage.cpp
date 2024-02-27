@@ -100,7 +100,7 @@ void RocksDBStorage::do_write(Composite<KeySegmentPair>&& kvs) {
     do_write_internal(std::move(kvs));
 }
 
-void RocksDBStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) {
+void RocksDBStorage::do_update(Composite<KeySegmentPair>&& kvs, StorageUpdateOptions opts) {
     ARCTICDB_SAMPLE(RocksDBStorageUpdate, 0)
 
     auto keys = kvs.transform([](const auto& kv){return kv.variant_key();});
