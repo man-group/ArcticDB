@@ -1,46 +1,103 @@
 import re
 from datetime import datetime
+from collections import defaultdict
 
-# Define a dictionary to store the data
-data_dict = {}
+log_file = "benchmark_reqs.txt"
 
-# Open the file
-with open("out.txt", "r") as file:
+key_strings = [
+    "vref",
+    "tdata",
+    "tindex",
+    "ver",
+    "vj",
+    "snap",
+    "sl",
+    "tall",
+    "tomb",
+    "cref",
+    "cstats",
+    "tref",
+    "log",
+    "logc",
+    "off",
+    "bref",
+    "met",
+    "aref",
+    "mref",
+    "lref",
+    "ttomb",
+    "app",
+    "pref",
+    "sref",
+    "sg",
+    "gen"
+]
+
+search_times = defaultdict(list)
+with open(log_file, "r") as file:
+    search_time = None
+    search_bucket = None
     for line in file:
-        # Extract the timestamp, operation, key and data size (if present)
-        match = re.match(
-            r"(\d{8} \d{2}:\d{2}:\d{2}\.\d{6}) \d+ D arcticdb.storage \| (\w+).*\'(.*)\'(?:, with (\d+) bytes of data)?",
-            line,
-        )
-        if match:
-            timestamp, operation, key, data_size = match.groups()
-            timestamp = datetime.strptime(timestamp, "%Y%m%d %H:%M:%S.%f")
-            print(timestamp)
-            # If the key is not in the dictionary, add it
-            if key not in data_dict:
-                data_dict[key] = {
-                    "start_time": timestamp,
-                    "end_time": None,
-                    "data_written": 0,
-                }
-            print(timestamp, operation, key, data_size)
-            # Update the end time and data written
-            if operation in ["Wrote", "Returning"]:
-                data_dict[key]["end_time"] = timestamp
-            if operation in ["Set", "Wrote"]:
-                data_dict[key]["data_written"] += int(data_size) if data_size else 0
+        if "Searching for objects in bucket" in line or "Looking for" in line or "Set s3 key" in line:
+            try:
+                temp = datetime.strptime(line.split()[1], "%H:%M:%S.%f")
+                search_time = temp
+            except:
+                print(line)
+            search_bucket = re.search(r'(bucket|object|key) (.*)', line).group(2)
+        elif ("Received object list" in line or "Returning" in line or "Wrote" in line) and search_time is not None:
+            receive_time = datetime.strptime(line.split()[1], "%H:%M:%S.%f")
+            time_diff = receive_time - search_time
+            search_times[search_bucket].append(time_diff.total_seconds())
+            search_time = None
+            search_bucket = None
 
-sorted_keys = sorted(data_dict, key=lambda k: data_dict[k]["start_time"])
+new_search_times = {
+    "vref": [],
+    "tdata": [],
+    "tindex": [],
+    "ver": [],
+    "vj": [],
+    "snap": [],
+    "sl": [],
+    "tall": [],
+    "tomb": [],
+    "cref": [],
+    "cstats": [],
+    "tref": [],
+    "log": [],
+    "logc": [],
+    "off": [],
+    "bref": [],
+    "met": [],
+    "aref": [],
+    "mref": [],
+    "lref": [],
+    "ttomb": [],
+    "app": [],
+    "pref": [],
+    "sref": [],
+    "sg": [],
+    "gen": []
+}
+for key in search_times:
+    for key_string in new_search_times:
+        if key_string in key:
+            new_search_times[key_string].extend(search_times[key])
+            break
+    else:
+        print(key)
+        exit(0)
+# print(new_search_times)
 
-# Calculate the time taken and data written for each key
-for key, value in data_dict.items():
-    time_taken = (
-        (value["end_time"] - value["start_time"]).microseconds
-        if value["end_time"]
-        else None
-    )
-    print(value["start_time"])
-    print(value["end_time"])
-    print(
-        f'Key: {key}\nTime taken: {time_taken} seconds\nData written: {value["data_written"]} bytes\n'
-    )
+# Calculate average and total times
+average_times = {bucket: sum(times) / len(times) for bucket, times in new_search_times.items() if len(times) > 0}
+total_times = {bucket: sum(times) for bucket, times in new_search_times.items()}
+
+print(f"For file: {log_file}")
+print("Average times:")
+for key in average_times:
+    print(f"{key}: {average_times[key]}")
+print("Total times:")
+for key in total_times:
+    print(f"{key}: {total_times[key]} for {len(new_search_times[key])} items")
