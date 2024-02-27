@@ -1,0 +1,119 @@
+20240227 01:56:28.584491 912296 D arcticdb.storage | Begin initializing AWS API
+20240227 01:56:28.696548 912296 D arcticdb.storage | Does not appear to be using AWS. Will set AWS_EC2_METADATA_DISABLED
+20240227 01:56:28.696766 912296 D arcticdb.storage | Using provided auth credentials
+20240227 01:56:28.696854 912296 D arcticdb.storage | Verify ssl: false
+20240227 01:56:28.699623 912296 D arcticdb.storage | S3 prefix found, using: gpetrov/experiments/_arctic_cfg
+20240227 01:56:28.700416 912296 D arcticdb.version | Created versioned engine at 140732269509344 for library path _arctic_cfg  with config ~()
+20240227 01:56:28.700680 912296 D arcticdb.storage | Looking for head of object gpetrov/experiments/_arctic_cfg/cref/*sUt*gpetrov_exp_2
+20240227 01:56:28.915255 912296 D arcticdb.storage | Returning head of object gpetrov/experiments/_arctic_cfg/cref/*sUt*gpetrov_exp_2
+20240227 01:56:28.915371 912296 D arcticdb.storage | Looking for object gpetrov/experiments/_arctic_cfg/cref/*sUt*gpetrov_exp_2
+20240227 01:56:28.986769 912296 D arcticdb.storage | Returning object gpetrov/experiments/_arctic_cfg/cref/*sUt*gpetrov_exp_2
+20240227 01:56:28.986920 912296 D arcticdb.storage | Using provided auth credentials
+20240227 01:56:28.986946 912296 D arcticdb.storage | Verify ssl: false
+20240227 01:56:28.988508 912296 D arcticdb.storage | S3 prefix found, using: gpetrov/experiments/gpetrov_exp_21708991031850679808
+20240227 01:56:28.988683 912296 D arcticdb.storage | Looking for object gpetrov/experiments/_arctic_cfg/cref/*sUt*gpetrov_exp_2
+20240227 01:56:29.062386 912296 D arcticdb.storage | Returning object gpetrov/experiments/_arctic_cfg/cref/*sUt*gpetrov_exp_2
+20240227 01:56:29.062842 912296 D arcticdb.version | Created versioned engine at 140732269510704 for library path gpetrov_exp_2  with config ~(write_options {
+  column_group_size: 127
+  segment_row_size: 100000
+  dynamic_strings: true
+  recursive_normalizers: true
+  use_tombstones: true
+  fast_tombstone_all: true
+}
+symbol_list: true
+)
+20240227 01:56:29.063886 912296 D arcticdb.version | Writing with pickle_on_failure=False, prune_previous_version=False, recursive_normalizers=True
+20240227 01:56:29.064303 912296 D arcticdb.version | Normalizer used: <bound method DataFrameNormalizer.normalize of <arcticdb.version_store._normalization.DataFrameNormalizer object at 0x7f82df6d0910>>
+20240227 01:56:29.064818 912296 D arcticdb.version | Command: write_versioned_dataframe
+20240227 01:56:29.064863 912296 D arcticdb.storage | Looking for object gpetrov/experiments/gpetrov_exp_21708991031850679808/vref/*sUt*1000000_rows
+20240227 01:56:29.296745 912296 D arcticdb.storage | Returning object gpetrov/experiments/gpetrov_exp_21708991031850679808/vref/*sUt*1000000_rows
+20240227 01:56:29.297444 912296 D arcticdb.schedule | Task scheduler created with 20 30
+20240227 01:56:29.307526 912351 D arcticdb.storage | Set s3 key gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789304178340*7918082054445750159*0*100000
+20240227 01:56:29.310737 912352 D arcticdb.storage | Set s3 key gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789307693589*4498884254215331244*200000*300000
+20240227 01:56:29.314054 912354 D arcticdb.storage | Set s3 key gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789311361721*3978457534029258375*100000*200000
+20240227 01:56:29.317518 912356 D arcticdb.storage | Set s3 key gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789314590249*16462309355170055548*900000*1000000
+20240227 01:56:29.320932 912358 D arcticdb.storage | Set s3 key gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789318181758*5577514938542485499*300000*400000
+20240227 01:56:29.324152 912360 D arcticdb.storage | Set s3 key gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789321497129*4861864634286688835*400000*500000
+20240227 01:56:29.327621 912362 D arcticdb.storage | Set s3 key gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789324757354*12642923092820561197*600000*700000
+20240227 01:56:29.330949 912364 D arcticdb.storage | Set s3 key gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789328193312*3632389993101789344*500000*600000
+20240227 01:56:29.334716 912366 D arcticdb.storage | Set s3 key gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789331696084*260671607807190485*700000*800000
+20240227 01:56:29.337656 912368 D arcticdb.storage | Set s3 key gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789335144037*16584251693814663638*800000*900000
+20240227 01:56:30.032346 912351 D arcticdb.storage | Wrote key 'gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789304178340*7918082054445750159*0*100000', with 650033 bytes of data
+20240227 01:56:30.173895 912360 D arcticdb.storage | Wrote key 'gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789321497129*4861864634286688835*400000*500000', with 650436 bytes of data
+20240227 01:56:30.205025 912366 D arcticdb.storage | Wrote key 'gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789331696084*260671607807190485*700000*800000', with 649076 bytes of data
+20240227 01:56:30.213632 912362 D arcticdb.storage | Wrote key 'gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789324757354*12642923092820561197*600000*700000', with 650484 bytes of data
+20240227 01:56:30.226530 912356 D arcticdb.storage | Wrote key 'gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789314590249*16462309355170055548*900000*1000000', with 650749 bytes of data
+20240227 01:56:30.241401 912352 D arcticdb.storage | Wrote key 'gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789307693589*4498884254215331244*200000*300000', with 651442 bytes of data
+20240227 01:56:30.252060 912368 D arcticdb.storage | Wrote key 'gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789335144037*16584251693814663638*800000*900000', with 649195 bytes of data
+20240227 01:56:30.254399 912354 D arcticdb.storage | Wrote key 'gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789311361721*3978457534029258375*100000*200000', with 650169 bytes of data
+20240227 01:56:30.265420 912364 D arcticdb.storage | Wrote key 'gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789328193312*3632389993101789344*500000*600000', with 651103 bytes of data
+20240227 01:56:30.389031 912358 D arcticdb.storage | Wrote key 'gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789318181758*5577514938542485499*300000*400000', with 652300 bytes of data
+20240227 01:56:30.390211 912383 D arcticdb.storage | Set s3 key gpetrov/experiments/gpetrov_exp_21708991031850679808/tindex/*sTt*1000000_rows*6*1708991790389545268*11461188759456934355*0*9
+20240227 01:56:30.537257 912383 D arcticdb.storage | Wrote key 'gpetrov/experiments/gpetrov_exp_21708991031850679808/tindex/*sTt*1000000_rows*6*1708991790389545268*11461188759456934355*0*9', with 1435 bytes of data
+20240227 01:56:30.537916 912296 D arcticdb.storage | Set s3 key gpetrov/experiments/gpetrov_exp_21708991031850679808/sl/*sSt*__add__*6*1708991790537868806*2860553951111725974*1000000_rows*_v2_
+20240227 01:56:30.686103 912296 D arcticdb.storage | Wrote key 'gpetrov/experiments/gpetrov_exp_21708991031850679808/sl/*sSt*__add__*6*1708991790537868806*2860553951111725974*1000000_rows*_v2_', with 165 bytes of data
+20240227 01:56:30.686200 912296 D arcticdb.storage | Looking for object gpetrov/experiments/gpetrov_exp_21708991031850679808/vref/*sUt*1000000_rows
+20240227 01:56:30.760050 912296 D arcticdb.storage | Returning object gpetrov/experiments/gpetrov_exp_21708991031850679808/vref/*sUt*1000000_rows
+20240227 01:56:30.760639 912296 D arcticdb.storage | Set s3 key gpetrov/experiments/gpetrov_exp_21708991031850679808/ver/*sTt*1000000_rows*6*1708991790760541003*17653736872272925010*0*0
+20240227 01:56:30.911338 912296 D arcticdb.storage | Wrote key 'gpetrov/experiments/gpetrov_exp_21708991031850679808/ver/*sTt*1000000_rows*6*1708991790760541003*17653736872272925010*0*0', with 614 bytes of data
+20240227 01:56:30.911757 912296 D arcticdb.storage | Set s3 key gpetrov/experiments/gpetrov_exp_21708991031850679808/vref/*sUt*1000000_rows
+20240227 01:56:31.060704 912296 D arcticdb.storage | Wrote key 'gpetrov/experiments/gpetrov_exp_21708991031850679808/vref/*sUt*1000000_rows', with 615 bytes of data
+20240227 01:56:31.061054 912296 D arcticdb.storage | Looking for object gpetrov/experiments/gpetrov_exp_21708991031850679808/vref/*sUt*1000000_rows
+20240227 01:56:31.138242 912296 D arcticdb.storage | Returning object gpetrov/experiments/gpetrov_exp_21708991031850679808/vref/*sUt*1000000_rows
+20240227 01:56:31.138527 912296 D arcticdb.version | Command: read_dataframe
+20240227 01:56:31.138577 912296 D arcticdb.storage | Looking for object gpetrov/experiments/gpetrov_exp_21708991031850679808/tindex/*sTt*1000000_rows*6*1708991790389545268*11461188759456934355*0*9
+20240227 01:56:31.214394 912296 D arcticdb.storage | Returning object gpetrov/experiments/gpetrov_exp_21708991031850679808/tindex/*sTt*1000000_rows*6*1708991790389545268*11461188759456934355*0*9
+20240227 01:56:31.214992 912296 D arcticdb.memory | /home/gpetrov/source/arcticdb_experiments/cpp/arcticdb/version/version_core.cpp (read_direct:677) size 3.3Gb resident 190.2Mb share 52.0Mb text 2.0Mb data/stack 1.2Gb
+20240227 01:56:31.215627 912384 D arcticdb.storage | Looking for object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789304178340*7918082054445750159*0*100000
+20240227 01:56:31.216041 912387 D arcticdb.storage | Looking for object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789311361721*3978457534029258375*100000*200000
+20240227 01:56:31.216408 912388 D arcticdb.storage | Looking for object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789307693589*4498884254215331244*200000*300000
+20240227 01:56:31.216584 912389 D arcticdb.storage | Looking for object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789318181758*5577514938542485499*300000*400000
+20240227 01:56:31.216714 912390 D arcticdb.storage | Looking for object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789321497129*4861864634286688835*400000*500000
+20240227 01:56:31.217013 912391 D arcticdb.storage | Looking for object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789328193312*3632389993101789344*500000*600000
+20240227 01:56:31.217173 912392 D arcticdb.storage | Looking for object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789324757354*12642923092820561197*600000*700000
+20240227 01:56:31.217361 912393 D arcticdb.storage | Looking for object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789331696084*260671607807190485*700000*800000
+20240227 01:56:31.217534 912394 D arcticdb.storage | Looking for object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789335144037*16584251693814663638*800000*900000
+20240227 01:56:31.217730 912395 D arcticdb.storage | Looking for object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789314590249*16462309355170055548*900000*1000000
+20240227 01:56:31.960356 912393 D arcticdb.storage | Returning object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789331696084*260671607807190485*700000*800000
+20240227 01:56:32.042098 912392 D arcticdb.storage | Returning object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789324757354*12642923092820561197*600000*700000
+20240227 01:56:32.155701 912395 D arcticdb.storage | Returning object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789314590249*16462309355170055548*900000*1000000
+20240227 01:56:32.340451 912390 D arcticdb.storage | Returning object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789321497129*4861864634286688835*400000*500000
+20240227 01:56:32.647363 912387 D arcticdb.storage | Returning object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789311361721*3978457534029258375*100000*200000
+20240227 01:56:32.836766 912389 D arcticdb.storage | Returning object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789318181758*5577514938542485499*300000*400000
+20240227 01:56:32.924199 912388 D arcticdb.storage | Returning object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789307693589*4498884254215331244*200000*300000
+20240227 01:56:33.277962 912394 D arcticdb.storage | Returning object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789335144037*16584251693814663638*800000*900000
+20240227 01:56:33.357165 912384 D arcticdb.storage | Returning object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789304178340*7918082054445750159*0*100000
+20240227 01:56:33.495951 912391 D arcticdb.storage | Returning object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789328193312*3632389993101789344*500000*600000
+20240227 01:56:33.497630 912296 D arcticdb.memory | /home/gpetrov/source/arcticdb_experiments/cpp/arcticdb/version/version_core.cpp (read_direct:681) size 4.0Gb resident 204.2Mb share 52.1Mb text 2.0Mb data/stack 1.3Gb
+20240227 01:56:33.502766 912296 D arcticdb.memory | /home/gpetrov/source/arcticdb_experiments/cpp/arcticdb/entity/read_result.hpp (create_python_read_result:53) size 4.0Gb resident 211.2Mb share 52.3Mb text 2.0Mb data/stack 1.3Gb
+20240227 01:56:33.502911 912296 D arcticdb.memory | /home/gpetrov/source/arcticdb_experiments/cpp/arcticdb/column_store/column_utils.hpp (initialize_array:122) size 4.0Gb resident 211.2Mb share 52.3Mb text 2.0Mb data/stack 1.3Gb
+20240227 01:56:33.502937 912296 D arcticdb.memory | /home/gpetrov/source/arcticdb_experiments/cpp/arcticdb/column_store/column_utils.hpp (initialize_array:126) size 4.0Gb resident 211.2Mb share 52.3Mb text 2.0Mb data/stack 1.3Gb
+20240227 01:56:33.503732 912296 D arcticdb.storage | Looking for object gpetrov/experiments/gpetrov_exp_21708991031850679808/vref/*sUt*1000000_rows
+20240227 01:56:33.578680 912296 D arcticdb.storage | Returning object gpetrov/experiments/gpetrov_exp_21708991031850679808/vref/*sUt*1000000_rows
+20240227 01:56:33.578810 912296 D arcticdb.version | Command: read_dataframe
+20240227 01:56:33.578836 912296 D arcticdb.storage | Looking for object gpetrov/experiments/gpetrov_exp_21708991031850679808/tindex/*sTt*1000000_rows*6*1708991790389545268*11461188759456934355*0*9
+20240227 01:56:33.648521 912296 D arcticdb.storage | Returning object gpetrov/experiments/gpetrov_exp_21708991031850679808/tindex/*sTt*1000000_rows*6*1708991790389545268*11461188759456934355*0*9
+20240227 01:56:33.648946 912396 D arcticdb.storage | Looking for object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789304178340*7918082054445750159*0*100000
+20240227 01:56:33.649177 912397 D arcticdb.storage | Looking for object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789311361721*3978457534029258375*100000*200000
+20240227 01:56:33.649714 912425 D arcticdb.storage | Looking for object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789307693589*4498884254215331244*200000*300000
+20240227 01:56:33.649820 912426 D arcticdb.storage | Looking for object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789318181758*5577514938542485499*300000*400000
+20240227 01:56:33.650082 912427 D arcticdb.storage | Looking for object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789321497129*4861864634286688835*400000*500000
+20240227 01:56:33.650208 912428 D arcticdb.storage | Looking for object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789328193312*3632389993101789344*500000*600000
+20240227 01:56:33.650357 912429 D arcticdb.storage | Looking for object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789324757354*12642923092820561197*600000*700000
+20240227 01:56:33.650398 912431 D arcticdb.storage | Looking for object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789335144037*16584251693814663638*800000*900000
+20240227 01:56:33.650373 912430 D arcticdb.storage | Looking for object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789331696084*260671607807190485*700000*800000
+20240227 01:56:33.650470 912351 D arcticdb.storage | Looking for object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789314590249*16462309355170055548*900000*1000000
+20240227 01:56:34.323582 912428 D arcticdb.storage | Returning object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789328193312*3632389993101789344*500000*600000
+20240227 01:56:34.355755 912430 D arcticdb.storage | Returning object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789331696084*260671607807190485*700000*800000
+20240227 01:56:34.606225 912351 D arcticdb.storage | Returning object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789314590249*16462309355170055548*900000*1000000
+20240227 01:56:34.868754 912427 D arcticdb.storage | Returning object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789321497129*4861864634286688835*400000*500000
+20240227 01:56:34.884054 912429 D arcticdb.storage | Returning object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789324757354*12642923092820561197*600000*700000
+20240227 01:56:34.885988 912396 D arcticdb.storage | Returning object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789304178340*7918082054445750159*0*100000
+20240227 01:56:35.118971 912425 D arcticdb.storage | Returning object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789307693589*4498884254215331244*200000*300000
+20240227 01:56:35.170657 912431 D arcticdb.storage | Returning object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789335144037*16584251693814663638*800000*900000
+20240227 01:56:35.504474 912426 D arcticdb.storage | Returning object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789318181758*5577514938542485499*300000*400000
+20240227 01:56:35.688310 912397 D arcticdb.storage | Returning object gpetrov/experiments/gpetrov_exp_21708991031850679808/tdata/*sTt*1000000_rows*6*1708991789311361721*3978457534029258375*100000*200000
+20240227 01:56:35.699416 912296 D arcticdb.memory | /home/gpetrov/source/arcticdb_experiments/cpp/arcticdb/entity/read_result.hpp (create_python_read_result:53) size 4.7Gb resident 296.5Mb share 53.3Mb text 2.0Mb data/stack 1.4Gb
+20240227 01:56:35.699573 912296 D arcticdb.memory | /home/gpetrov/source/arcticdb_experiments/cpp/arcticdb/column_store/column_utils.hpp (initialize_array:122) size 4.7Gb resident 296.5Mb share 53.3Mb text 2.0Mb data/stack 1.4Gb
+20240227 01:56:35.699592 912296 D arcticdb.memory | /home/gpetrov/source/arcticdb_experiments/cpp/arcticdb/column_store/column_utils.hpp (initialize_array:126) size 4.7Gb resident 296.5Mb share 53.3Mb text 2.0Mb data/stack 1.4Gb
