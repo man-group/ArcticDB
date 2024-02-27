@@ -194,6 +194,11 @@ template<>
 }
 
 template<>
+[[noreturn]] inline void throw_error<ErrorCode::E_UNEXPECTED_ROCKSDB_ERROR>(const std::string& msg) {
+    throw ArcticSpecificException<ErrorCode::E_UNEXPECTED_ROCKSDB_ERROR>(msg);
+}
+
+template<>
 [[noreturn]] inline void throw_error<ErrorCode::E_NO_SUCH_VERSION>(const std::string& msg) {
     throw ArcticSpecificException<ErrorCode::E_NO_SUCH_VERSION>(msg);
 }
