@@ -250,6 +250,10 @@ bool supports_prefix_matching() const override {
     return library_->supports_prefix_matching();
 }
 
+std::string key_path(const VariantKey& key) const {
+    return library_->key_path(key);
+}
+
 bool fast_delete() override {
     return library_->fast_delete();
 }
