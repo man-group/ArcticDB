@@ -9,6 +9,7 @@ on:
 jobs:
   docs_build:
     runs-on: ubuntu-latest
+    environment: TestPypi
     permissions:
       contents: write
     steps:
