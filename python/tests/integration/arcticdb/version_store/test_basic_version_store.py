@@ -2458,9 +2458,9 @@ def test_missing_first_version_key_single(basic_store):
     l = len(idx)
     df1 = pd.DataFrame({"a": range(l), "b": range(1, l + 1), "c": range(2, l + 2)}, index=idx)
 
-    lib.write(symbol, df1)
+    vit = lib.write(symbol, df1)
 
-    v1_write_time = pd.Timestamp.now()
+    v1_write_time = vit.timestamp
     time.sleep(1)
     df2 = pd.DataFrame({"d": range(1, l + 1), "e": range(2, l + 2), "f": range(3, l + 3)}, index=idx)
     lib.write(symbol, df2)
@@ -2478,8 +2478,8 @@ def test_update_with_missing_version_key(version_store_factory):
 
     idx = pd.date_range("1970-01-01", periods=100, freq="D")
     df = pd.DataFrame({"a": np.arange(len(idx), dtype="float")}, index=idx)
-    lmdb_version_store.write(symbol, df)
-    v1_write_time = pd.Timestamp.now()
+    vit = lmdb_version_store.write(symbol, df)
+    v1_write_time = vit.timestamp
     time.sleep(1)
 
     idx2 = pd.date_range("1970-01-12", periods=10, freq="D")
@@ -2488,17 +2488,15 @@ def test_update_with_missing_version_key(version_store_factory):
 
     remove_most_recent_version_key(lmdb_version_store, symbol)
 
-    vit = lmdb_version_store.read(symbol, as_of=v1_write_time)
+    vit = lmdb_version_store.read(symbol, as_of=pd.Timestamp(v1_write_time))
     assert_frame_equal(vit.data, df)
 
 
 def test_append_with_missing_version_key(basic_store):
     symbol = "test_append_with_missing_version_key"
     df1 = pd.DataFrame({"x": np.arange(1, 10, dtype=np.int64)})
-    basic_store.write(symbol, df1)
-    vit = basic_store.read(symbol)
-    assert_frame_equal(vit.data, df1)
-    v1_write_time = pd.Timestamp.now()
+    vit = basic_store.write(symbol, df1)
+    v1_write_time = vit.timestamp
     time.sleep(1)
 
     df2 = pd.DataFrame({"x": np.arange(11, 20, dtype=np.int64)})
@@ -2506,7 +2504,7 @@ def test_append_with_missing_version_key(basic_store):
 
     remove_most_recent_version_key(basic_store, symbol)
 
-    vit = basic_store.read(symbol, as_of=v1_write_time)
+    vit = basic_store.read(symbol, as_of=pd.Timestamp(v1_write_time))
     assert_frame_equal(vit.data, df1)
 
 
@@ -2526,9 +2524,9 @@ def test_missing_first_version_key_batch(basic_store):
         symbol = "symbol_{}".format(x)
         symbols.append(symbol)
 
-        lib.write(symbol, df1)
+        vit = lib.write(symbol, df1)
 
-        write_times.append(pd.Timestamp.now())
+        write_times.append(pd.Timestamp(vit.timestamp))
         expected.append(df1)
         time.sleep(1)
         df2 = pd.DataFrame(
