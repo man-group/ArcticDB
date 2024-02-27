@@ -27,6 +27,7 @@ theme:
   features:
     - navigation.tabs
     - navigation.sections
+    - content.code.copy
 
 extra:
   version:
