@@ -447,14 +447,15 @@ std::vector<std::variant<DescriptorItem, DataError>> LocalVersionedEngine::batch
 
     auto version_futures = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<DescriptorItem>> descriptor_futures;
-    for (auto&& [idx, version_fut]: folly::enumerate(version_futures)) {
+    for (size_t idx = 0; idx < version_futures.size(); ++idx) {
         descriptor_futures.emplace_back(
-            get_descriptor_async(std::move(version_fut), stream_ids[idx], version_queries[idx]));
+            get_descriptor_async(std::move(version_futures[idx]), stream_ids[idx], version_queries[idx]));
     }
     auto descriptors = folly::collectAll(descriptor_futures).get();
     std::vector<std::variant<DescriptorItem, DataError>> descriptors_or_errors;
     descriptors_or_errors.reserve(descriptors.size());
-    for (auto&& [idx, descriptor]: folly::enumerate(descriptors)) {
+    for (size_t idx = 0; idx < descriptors.size(); ++idx) {
+        auto& descriptor = descriptors[idx];
         if (descriptor.hasValue()) {
             descriptors_or_errors.emplace_back(std::move(descriptor.value()));
         } else {
@@ -650,9 +651,9 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
                                                                                                    stream_ids);
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(stream_ids.size() == stream_update_info_futures.size(), "stream_ids and stream_update_info_futures must be of the same size");
     std::vector<folly::Future<VersionedItem>> write_metadata_versions_futs;
-    for (const auto&& [idx, stream_update_info_fut] : folly::enumerate(stream_update_info_futures)) {
+    for (size_t idx = 0; idx < stream_update_info_futures.size(); ++idx) {
         write_metadata_versions_futs.push_back(
-            std::move(stream_update_info_fut)
+            std::move(stream_update_info_futures[idx])
             .thenValue([this, user_meta_proto = std::move(user_meta_protos[idx]), &stream_id = stream_ids[idx]](auto&& update_info) mutable -> folly::Future<IndexKeyAndUpdateInfo> {
                 auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
                 if (update_info.previous_index_key_.has_value()) {
@@ -680,7 +681,8 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
     auto write_metadata_versions = folly::collectAll(write_metadata_versions_futs).get();
     std::vector<std::variant<VersionedItem, DataError>> write_metadata_versions_or_errors;
     write_metadata_versions_or_errors.reserve(write_metadata_versions.size());
-    for (auto&& [idx, write_metadata_version]: folly::enumerate(write_metadata_versions)) {
+    for (size_t idx = 0; idx < write_metadata_versions.size(); ++idx) {
+        auto& write_metadata_version = write_metadata_versions[idx];
         if (write_metadata_version.hasValue()) {
             write_metadata_versions_or_errors.emplace_back(std::move(write_metadata_version.value()));
         } else {
@@ -1120,9 +1122,9 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::te
 
     auto versions = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<ReadVersionOutput>> read_versions_futs;
-    for (auto&& [idx, version] : folly::enumerate(versions)) {
+    for (size_t idx = 0; idx < versions.size(); ++idx) {
         auto read_query = read_queries.empty() ? ReadQuery{} : read_queries[idx];
-        read_versions_futs.emplace_back(std::move(version)
+        read_versions_futs.emplace_back(std::move(versions[idx])
             .thenValue([store = store()](auto&& maybe_index_key) {
                            missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
                                    maybe_index_key.has_value(),
@@ -1145,7 +1147,8 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::te
     auto read_versions = folly::collectAll(read_versions_futs).get();
     std::vector<std::variant<ReadVersionOutput, DataError>> read_versions_or_errors;
     read_versions_or_errors.reserve(read_versions.size());
-    for (auto&& [idx, read_version]: folly::enumerate(read_versions)) {
+    for (size_t idx = 0; idx < read_versions.size(); ++idx) {
+        auto& read_version = read_versions[idx];
         if (read_version.hasValue()) {
             read_versions_or_errors.emplace_back(std::move(read_version.value()));
         } else {
@@ -1323,9 +1326,8 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
                                                                                          stream_ids);
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(stream_ids.size() == update_info_futs.size(), "stream_ids and update_info_futs must be of the same size");
     std::vector<folly::Future<VersionedItem>> version_futures;
-    for(auto&& update_info_fut : folly::enumerate(update_info_futs)) {
-        auto idx = update_info_fut.index;
-        version_futures.push_back(std::move(*update_info_fut)
+    for (size_t idx = 0; idx < update_info_futs.size(); ++idx) {
+        version_futures.push_back(std::move(update_info_futs[idx])
             .thenValue([this, &stream_id = stream_ids[idx], &write_options](auto&& update_info){
                 return create_version_id_and_dedup_map(std::move(update_info), stream_id, write_options);
             }).via(&async::cpu_executor())
@@ -1356,7 +1358,8 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
     auto write_versions = folly::collectAll(version_futures).get();
     std::vector<std::variant<VersionedItem, DataError>> write_versions_or_errors;
     write_versions_or_errors.reserve(write_versions.size());
-    for (auto&& [idx, write_version]: folly::enumerate(write_versions)) {
+    for (size_t idx = 0; idx < write_versions.size(); ++idx) {
+        auto&& write_version = write_versions[idx];
         if (write_version.hasValue()) {
             write_versions_or_errors.emplace_back(std::move(write_version.value()));
         } else {
@@ -1439,9 +1442,9 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
                                                                                                     stream_ids);
     std::vector<folly::Future<VersionedItem>> append_versions_futs;
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(stream_ids.size() == stream_update_info_futures.size(), "stream_ids and stream_update_info_futures must be of the same size");
-    for (const auto&& [idx, stream_update_info_fut] : folly::enumerate(stream_update_info_futures)) {
+    for (size_t idx = 0; idx < stream_update_info_futures.size(); ++idx) {
         append_versions_futs.push_back(
-            std::move(stream_update_info_fut)
+            std::move(stream_update_info_futures[idx])
             .thenValue([this, frame = std::move(frames[idx]), validate_index, stream_id = stream_ids[idx], upsert](auto&& update_info) mutable -> folly::Future<IndexKeyAndUpdateInfo> {
                 auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
                 auto write_options = get_write_options();
@@ -1470,7 +1473,8 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
     auto append_versions = folly::collectAll(append_versions_futs).get();
     std::vector<std::variant<VersionedItem, DataError>> append_versions_or_errors;
     append_versions_or_errors.reserve(append_versions.size());
-    for (auto&& [idx, append_version]: folly::enumerate(append_versions)) {
+    for (size_t idx = 0; idx < append_versions.size(); ++idx) {
+        auto&& append_version = append_versions[idx];
         if (append_version.hasValue()) {
             append_versions_or_errors.emplace_back(std::move(append_version.value()));
         } else {
@@ -1509,12 +1513,12 @@ std::map<StreamId, VersionId> get_sym_versions_from_query(
     const std::vector<VersionQuery>& version_queries) {
     std::map<StreamId, VersionId> sym_versions;
     WarnVersionTypeNotHandled warner;
-    for(const auto& stream_id : folly::enumerate(stream_ids)) {
-        const auto& query = version_queries[stream_id.index].content_;
+    for(size_t i = 0; i < stream_ids.size(); i++) {
+        const auto& query = version_queries[i].content_;
         if(std::holds_alternative<SpecificVersionQuery>(query))
-            sym_versions[*stream_id] = std::get<SpecificVersionQuery>(query).version_id_;
-         else
-            warner.warn(*stream_id);
+            sym_versions[stream_ids[i]] = std::get<SpecificVersionQuery>(query).version_id_;
+        else
+            warner.warn(stream_ids[i]);
     }
     return sym_versions;
 }
@@ -1524,12 +1528,12 @@ std::map<StreamId, VersionVectorType> get_multiple_sym_versions_from_query(
     const std::vector<VersionQuery>& version_queries) {
     std::map<StreamId, VersionVectorType> sym_versions;
     WarnVersionTypeNotHandled warner;
-    for(const auto& stream_id : folly::enumerate(stream_ids)) {
-        const auto& query = version_queries[stream_id.index].content_;
+    for(size_t i = 0; i < stream_ids.size(); i++) {
+        const auto& query = version_queries[i].content_;
         if(std::holds_alternative<SpecificVersionQuery>(query))
-            sym_versions[*stream_id].push_back(std::get<SpecificVersionQuery>(query).version_id_);
+            sym_versions[stream_ids[i]].push_back(std::get<SpecificVersionQuery>(query).version_id_);
         else
-            warner.warn(*stream_id);
+            warner.warn(stream_ids[i]);
     }
     return sym_versions;
 }
@@ -1544,13 +1548,13 @@ std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> LocalVersionedEngine
     auto versions_to_restore = batch_get_specific_version(store(), version_map(), sym_versions);
     std::vector<folly::Future<std::pair<VersionedItem, TimeseriesDescriptor>>> fut_vec;
 
-    for(const auto& stream_id : folly::enumerate(stream_ids)) {
-        auto prev = previous->find(*stream_id);
+    for(size_t i = 0; i < stream_ids.size(); i++) {
+        auto prev = previous->find(stream_ids[i]);
         auto maybe_prev = prev == std::end(*previous) ? std::nullopt : std::make_optional<AtomKey>(to_atom(prev->second));
 
-        auto version = versions_to_restore->find(*stream_id);
-        util::check(version != std::end(*versions_to_restore), "Did not find version for symbol {}", *stream_id);
-        fut_vec.emplace_back(async::submit_io_task(AsyncRestoreVersionTask{store(), version_map(), *stream_id, to_atom(version->second), maybe_prev}));
+        auto version = versions_to_restore->find(stream_ids[i]);
+        util::check(version != std::end(*versions_to_restore), "Did not find version for symbol {}", stream_ids[i]);
+        fut_vec.emplace_back(async::submit_io_task(AsyncRestoreVersionTask{store(), version_map(), stream_ids[i], to_atom(version->second), maybe_prev}));
     }
     auto output = folly::collect(fut_vec).get();
 
@@ -1577,9 +1581,8 @@ std::vector<timestamp> LocalVersionedEngine::batch_get_update_times(
         const std::vector<VersionQuery>& version_queries) {
     util::check(stream_ids.size() == version_queries.size(), "Symbol vs version query size mismatch: {} != {}", stream_ids.size(), version_queries.size());
     std::vector<timestamp> results;
-    for(const auto& stream_id : folly::enumerate(stream_ids)) {
-        const auto& query = version_queries[stream_id.index];
-        results.emplace_back(get_update_time_internal(*stream_id, query));
+    for(size_t i = 0; i < stream_ids.size(); i++) {
+        results.emplace_back(get_update_time_internal(stream_ids[i], version_queries[i]));
     }
     return results;
 }
@@ -1642,14 +1645,15 @@ std::vector<std::variant<std::pair<VariantKey, std::optional<google::protobuf::A
                                                     "ReadOptions::batch_throw_on_error_ should always be set here");
     auto version_futures = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<std::pair<VariantKey, std::optional<google::protobuf::Any>>>> metadata_futures;
-    for (auto&& [idx, version]: folly::enumerate(version_futures)) {
-        metadata_futures.emplace_back(get_metadata_async(std::move(version), stream_ids[idx], version_queries[idx]));
+    for (size_t idx = 0; idx < version_futures.size(); ++idx) {
+        metadata_futures.emplace_back(get_metadata_async(std::move(version_futures[idx]), stream_ids[idx], version_queries[idx]));
     }
 
     auto metadatas = folly::collectAll(metadata_futures).get();
     std::vector<std::variant<std::pair<VariantKey, std::optional<google::protobuf::Any>>, DataError>> metadatas_or_errors;
     metadatas_or_errors.reserve(metadatas.size());
-    for (auto&& [idx, metadata]: folly::enumerate(metadatas)) {
+    for (size_t idx = 0; idx < metadatas.size(); ++idx) {
+        auto&& metadata = metadatas[idx];
         if (metadata.hasValue()) {
             metadatas_or_errors.emplace_back(std::move(metadata.value()));
         } else {

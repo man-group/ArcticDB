@@ -12,8 +12,6 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/offset_string.hpp>
 
-#include <folly/container/Enumerate.h>
-
 #include <ankerl/unordered_dense.h>
 
 #include <optional>
@@ -55,8 +53,9 @@ public:
     }
 
     void set_from_descriptor(const StreamDescriptor& descriptor) {
-        for(const auto& field : folly::enumerate(descriptor.fields())) {
-            insert(field->name(), field.index);
+        for(size_t i = 0; i < descriptor.fields().size(); i++) {
+            const auto& field = descriptor.fields()[i];
+            insert(field.name(), i);
         }
     }
 

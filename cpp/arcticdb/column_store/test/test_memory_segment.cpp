@@ -107,23 +107,27 @@ TEST(MemSegment, IterateAndGetValues) {
     auto frame_wrapper = get_test_timeseries_frame("test_get_values", 100, 0);
     auto& segment = frame_wrapper.segment_;
 
-    for( auto row : folly::enumerate(segment)) {
-        for(auto value : folly::enumerate(*row)) {
-            value->visit([&] (const auto& val) {
+    size_t row_index = 0;
+    for(auto row : segment) {
+        size_t value_index = 0;
+        for(auto value : row) {
+            value.visit([&] (const auto& val) {
                 using ValType = std::decay_t<decltype(val)>;
-                if( value.index == 0) {
-                    ASSERT_EQ(static_cast<ValType>(row.index), val);
+                if(value_index == 0) {
+                    ASSERT_EQ(static_cast<ValType>(row_index), val);
                 }
                 else {
                     if constexpr(std::is_integral_v<ValType>) {
-                        ASSERT_EQ(val, get_integral_value_for_offset<ValType>(0, row.index));
+                        ASSERT_EQ(val, get_integral_value_for_offset<ValType>(0, row_index));
                     }
                     if constexpr (std::is_floating_point_v<ValType>) {
-                        ASSERT_EQ(val, get_floating_point_value_for_offset<ValType>(0, row.index));
+                        ASSERT_EQ(val, get_floating_point_value_for_offset<ValType>(0, row_index));
                     }
                 }
             });
+        value_index++;
         }
+    row_index++;
     }
 }
 
@@ -136,12 +140,14 @@ TEST(MemSegment, IterateWithEmptyTypeColumn) {
     auto empty_column = std::make_shared<Column>(generate_empty_column());
     seg.add_column(scalar_field(empty_column->type().data_type(), "empty_column"), empty_column);
     seg.set_row_id(num_rows - 1);
-    for (auto&& [idx, row]: folly::enumerate(seg)) {
+    auto idx = 0;
+    for (auto&& row: seg) {
         ASSERT_EQ(static_cast<int64_t>(idx), row.scalar_at<int64_t>(0));
         // Exception should be thrown regardless of the type requested for empty type columns
         EXPECT_THROW([[maybe_unused]] auto v = row.scalar_at<int64_t>(1).has_value(), InternalException);
         EXPECT_THROW([[maybe_unused]] auto v = row.scalar_at<float>(1).has_value(), InternalException);
         EXPECT_THROW([[maybe_unused]] auto v = row.scalar_at<uint8_t>(1).has_value(), InternalException);
+        ++idx;
     }
 }
 
@@ -151,23 +157,27 @@ TEST(MemSegment, CopyViaIterator) {
     auto target = get_test_empty_timeseries_segment("to_sort", 0u);
     std::copy(std::begin(source), std::end(source), std::back_inserter(target));
 
-    for( auto row : folly::enumerate(target)) {
-        for(auto value : folly::enumerate(*row)) {
-            value->visit([&] (const auto& val) {
+    size_t row_index = 0;
+    for(auto row : target) {
+        size_t value_index = 0;
+        for(auto value : row) {
+            value.visit([&] (const auto& val) {
                 using ValType = std::decay_t<decltype(val)>;
-                if( value.index == 0) {
-                    ASSERT_EQ(static_cast<ValType>(row.index), val);
+                if(value_index == 0) {
+                    ASSERT_EQ(static_cast<ValType>(row_index), val);
                 }
                 else {
                     if constexpr(std::is_integral_v<ValType>) {
-                        ASSERT_EQ(val, get_integral_value_for_offset<ValType>(0, row.index));
+                        ASSERT_EQ(val, get_integral_value_for_offset<ValType>(0, row_index));
                     }
                     if constexpr (std::is_floating_point_v<ValType>) {
-                        ASSERT_EQ(val, get_floating_point_value_for_offset<ValType>(0, row.index));
+                        ASSERT_EQ(val, get_floating_point_value_for_offset<ValType>(0, row_index));
                     }
                 }
             });
+            value_index++;
         }
+        row_index++;
     }
 }
 
@@ -187,22 +197,26 @@ TEST(MemSegment, ModifyViaIterator) {
         }
     }
 
-    for (auto row : folly::enumerate(segment)) {
-        for (auto value : folly::enumerate(*row)) {
-            value->visit([&](const auto &val) {
+    size_t row_index = 0;
+    for (auto row : segment) {
+        size_t value_index = 0;
+        for (auto value : row) {
+            value.visit([&](const auto &val) {
                 using ValType = std::decay_t<decltype(val)>;
-                if (value.index == 0) {
-                    ASSERT_EQ(static_cast<ValType>(row.index + 1), val);
+                if (value_index == 0) {
+                    ASSERT_EQ(static_cast<ValType>(row_index + 1), val);
                 } else {
                     if constexpr(std::is_integral_v<ValType>) {
-                        ASSERT_EQ(val, get_integral_value_for_offset<ValType>(0, row.index) + 1);
+                        ASSERT_EQ(val, get_integral_value_for_offset<ValType>(0, row_index) + 1);
                     }
                     if constexpr (std::is_floating_point_v<ValType>) {
-                        ASSERT_EQ(val, get_floating_point_value_for_offset<ValType>(0, row.index) + 1);
+                        ASSERT_EQ(val, get_floating_point_value_for_offset<ValType>(0, row_index) + 1);
                     }
                 }
             });
+            value_index++;
         }
+        row_index++;
     }
 }
 
@@ -483,12 +497,14 @@ TEST(MemSegment, Filter) {
 
     auto filtered_seg = seg.filter(filter_bitset);
 
-    for (auto&& [idx, row]: folly::enumerate(filtered_seg)) {
+    size_t idx = 0;
+    for (auto row: filtered_seg) {
         ASSERT_EQ(static_cast<int64_t>(retained_rows[idx]), row.scalar_at<int64_t>(0));
         // Exception should be thrown regardless of the type requested for empty type columns
         EXPECT_THROW([[maybe_unused]] auto v = row.scalar_at<int64_t>(1).has_value(), InternalException);
         EXPECT_THROW([[maybe_unused]] auto v = row.scalar_at<float>(1).has_value(), InternalException);
         EXPECT_THROW([[maybe_unused]] auto v = row.scalar_at<uint8_t>(1).has_value(), InternalException);
+        ++idx;
     }
 }
 

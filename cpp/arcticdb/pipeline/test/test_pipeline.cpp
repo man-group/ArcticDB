@@ -99,8 +99,10 @@ struct TestProjection {
         desc.add_field(fd);
         auto col_index = segment.add_column(fd, 0, false);
         auto& column = segment.column(col_index);
-        for(auto&& row : folly::enumerate(segment)) {
-            column.set_scalar(row.index, projection_func_(*row));
+        size_t row_index = 0;
+        for(const auto& row : segment) {
+            column.set_scalar(row_index, projection_func_(row));
+            ++row_index;
         }
         return segment;
     }

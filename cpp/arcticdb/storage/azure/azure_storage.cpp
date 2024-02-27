@@ -216,8 +216,8 @@ void do_remove_impl(Composite<VariantKey>&& ks,
         (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach(
             [&root_folder, b=std::move(bucketizer), delete_object_limit=delete_object_limit, &batch_counter, &to_delete, &submit_batch] (auto&& group) {//bypass incorrect 'set but no used" error for delete_object_limit
                 auto key_type_dir = key_type_folder(root_folder, group.key());
-                for (auto k : folly::enumerate(group.values())) {
-                    auto blob_name = object_path(b.bucketize(key_type_dir, *k), *k);
+                for (auto k : group.values()) {
+                    auto blob_name = object_path(b.bucketize(key_type_dir, k), k);
                     to_delete.emplace_back(std::move(blob_name));
                     if (++batch_counter == delete_object_limit) {
                         submit_batch(to_delete);

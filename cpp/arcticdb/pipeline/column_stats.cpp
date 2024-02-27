@@ -36,8 +36,9 @@ SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& 
             }
         }
     }
-    for (const auto& type_descriptor: folly::enumerate(type_descriptors)) {
-        merged.add_column(FieldRef{*type_descriptor, field_names.at(type_descriptor.index)}, 0, false);
+    for (size_t index = 0; index < type_descriptors.size(); index++) {
+        auto &type_descriptor = type_descriptors.at(index);
+        merged.add_column(FieldRef{type_descriptor, field_names.at(index)}, 0, false);
     }
     for (auto &segment : segments) {
         merged.append(segment);

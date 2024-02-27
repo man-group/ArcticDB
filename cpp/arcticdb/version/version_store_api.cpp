@@ -443,7 +443,7 @@ void PythonVersionStore::snapshot(
     logger.set_level(spdlog::level::err);
     auto val = get_snapshot_key(store(), snap_name).has_value();
     logger.set_level(current_level);
-    
+
     util::check(!val, "Snapshot with name {} already exists", snap_name);
 
     auto index_keys = std::vector<AtomKey>();
@@ -797,10 +797,11 @@ std::vector<std::variant<ReadResult, DataError>> PythonVersionStore::batch_read(
     const std::vector<VersionQuery>& version_queries,
     std::vector<ReadQuery>& read_queries,
     const ReadOptions& read_options) {
-    
+
     auto read_versions_or_errors = batch_read_internal(stream_ids, version_queries, read_queries, read_options);
     std::vector<std::variant<ReadResult, DataError>> res;
-    for (auto&& [idx, read_version_or_error]: folly::enumerate(read_versions_or_errors)) {
+    for (size_t idx = 0; idx < read_versions_or_errors.size(); ++idx) {
+        auto& read_version_or_error = read_versions_or_errors[idx];
         util::variant_match(
                 read_version_or_error,
                 [&res] (ReadVersionOutput& read_version) {
@@ -1069,10 +1070,10 @@ std::vector<std::variant<std::pair<VersionedItem, py::object>, DataError>> Pytho
                 results.push_back(std::move(res));
             }else{
                 auto res = std::make_pair(std::move(version), py::none());
-                results.push_back(std::move(res));   
+                results.push_back(std::move(res));
             }
         } else {
-            results.push_back(std::get<DataError>(std::move(metadata_or_error)));   
+            results.push_back(std::get<DataError>(std::move(metadata_or_error)));
         }
     }
     return results;
@@ -1089,7 +1090,7 @@ std::vector<std::variant<DescriptorItem, DataError>> PythonVersionStore::batch_r
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries,
         const ReadOptions& read_options){
-    
+
     return batch_read_descriptor_internal(stream_ids, version_queries, read_options);
 }
 

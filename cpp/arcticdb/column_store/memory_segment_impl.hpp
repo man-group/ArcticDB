@@ -20,7 +20,6 @@
 #include <arcticdb/entity/stream_descriptor.hpp>
 
 #include <boost/iterator/iterator_facade.hpp>
-#include <folly/container/Enumerate.h>
 
 namespace google::protobuf
 {
@@ -438,11 +437,13 @@ public:
     }
 
     void push_back(const Row &row) {
-        for (auto it : folly::enumerate(row)) {
-            it->visit([&it, that=this](const auto &val) {
+        size_t index = 0;
+        for (auto it: row) {
+            it.visit([&it, &index, that=this](const auto &val) {
                 if(val)
-                    that->set_scalar(it.index, val.value());
+                    that->set_scalar(index, val);
             });
+            index++;
         }
         end_row();
     }

@@ -12,7 +12,6 @@
 #include <arcticdb/util/variant.hpp>
 
 #include <folly/Range.h>
-#include <folly/container/Enumerate.h>
 #include <boost/iterator/iterator_facade.hpp>
 
 #include <variant>

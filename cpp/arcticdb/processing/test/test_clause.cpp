@@ -60,8 +60,9 @@ TEST(Clause, Partition) {
 
     std::vector<std::unordered_set<int8_t>> tags = {{1, 3}, {2}};
     std::array<size_t, 2> sizes = {180, 90};
-    for (auto inner_seg : folly::enumerate(partitioned.as_range())){
-        segment_scalar_assert_all_values_equal<int8_t>(*inner_seg, ColumnName("int8"), tags[inner_seg.index], sizes[inner_seg.index]);
+    auto inner_segs = partitioned.as_range();
+    for (size_t i = 0; i < inner_segs.size(); i++) {
+        segment_scalar_assert_all_values_equal<int8_t>(inner_segs[i], ColumnName("int8"), tags[i], sizes[i]);
     }
 }
 
@@ -81,8 +82,9 @@ TEST(Clause, PartitionString) {
 
     std::vector<size_t> tags = {1, 3};
     std::vector<size_t> sizes = {120, 60};
-    for (auto inner_seg : folly::enumerate(partitioned.as_range())){
-        segment_string_assert_all_values_equal(*inner_seg, ColumnName("strings"), fmt::format("string_{}", tags[inner_seg.index]), sizes[inner_seg.index]);
+    auto inner_segs = partitioned.as_range();
+    for (size_t i = 0; i < inner_segs.size(); i++) {
+        segment_string_assert_all_values_equal(inner_segs[i], ColumnName("strings"), fmt::format("string_{}", tags[i]), sizes[i]);
     }
 }
 
@@ -423,20 +425,21 @@ TEST(Clause, Merge) {
         auto output_row = i % seg_size;
         const auto& expected_seg = copies[i % num_segs];
         auto expected_row = i / num_segs;
-        for(auto field : folly::enumerate(output_seg.descriptor().fields())) {
-            if(field.index == 1)
+        for (size_t field_index = 0; field_index < output_seg.descriptor().fields().size(); ++field_index) {
+            if (field_index == 1) {
                 continue;
-
-            visit_field(*field, [&output_seg, &expected_seg, output_row, expected_row, &field] (auto tdt) {
+            }
+            const auto& field = output_seg.descriptor().fields()[field_index];
+            visit_field(field, [&output_seg, &expected_seg, output_row, expected_row, field_index] (auto tdt) {
                 using DataTypeTag = typename decltype(tdt)::DataTypeTag;
                 if constexpr(is_sequence_type(DataTypeTag::data_type)) {
-                    const auto val1 = output_seg.string_at(output_row, position_t(field.index));
-                    const auto val2 = expected_seg.string_at(expected_row, position_t(field.index));
+                    const auto val1 = output_seg.string_at(output_row, position_t(field_index));
+                    const auto val2 = expected_seg.string_at(expected_row, position_t(field_index));
                     ASSERT_EQ(val1, val2);
                 } else {
                     using RawType = typename decltype(tdt)::DataTypeTag::raw_type;
-                    const auto val1 = output_seg.scalar_at<RawType>(output_row, field.index);
-                    const auto val2 = expected_seg.scalar_at<RawType>(expected_row, field.index);
+                    const auto val1 = output_seg.scalar_at<RawType>(output_row, field_index);
+                    const auto val2 = expected_seg.scalar_at<RawType>(expected_row, field_index);
                     ASSERT_EQ(val1, val2);
                 }
             });

@@ -287,5 +287,4 @@ std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions_async(
     const std::vector<StreamId>& symbols,
     const std::vector<pipelines::VersionQuery>& version_queries);
 
-
 } //namespace arcticdb

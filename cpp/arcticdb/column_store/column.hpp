@@ -18,7 +18,6 @@
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/sparse_utils.hpp>
 
-#include <folly/container/Enumerate.h>
 // Compilation fails on Mac if cstdio is not included prior to folly/Function.h due to a missing definition of memalign in folly/Memory.h
 #ifdef __APPLE__
 #include <cstdio>

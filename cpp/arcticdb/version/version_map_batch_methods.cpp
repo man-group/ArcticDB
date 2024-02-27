@@ -260,13 +260,14 @@ std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions_async(
 
     ankerl::unordered_dense::map<StreamId, StreamVersionData> version_data;
     for (const auto &symbol : folly::enumerate(symbols)) {
-        auto it = version_data.find(*symbol);
+        auto symbol = symbols[i];
+        auto it = version_data.find(symbol);
         if (it == version_data.end()) {
             version_data.insert(std::make_pair<StreamId, StreamVersionData>(
                 std::forward<StreamId>(StreamId{*symbol}),
                 std::forward<StreamVersionData>(StreamVersionData{version_queries[symbol.index]})));
         } else {
-            it->second.react(version_queries[symbol.index]);
+            it->second.react(version_queries[i]);
         }
     }
 
@@ -278,8 +279,9 @@ std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions_async(
 
     std::vector<folly::Future<std::optional<AtomKey>>> output;
     output.reserve(symbols.size());
-    for (const auto &symbol : folly::enumerate(symbols)) {
-        auto version_query = version_queries[symbol.index];
+    for (size_t i = 0; i < symbols.size(); i++) {
+        auto symbol = symbols[i];
+        auto version_query = version_queries[i];
         auto version_entry_fut = folly::Future<VersionEntryOrSnapshot>::makeEmpty();
         util::variant_match(version_query.content_,
             [&version_entry_fut, &snapshot_count_map, &snapshot_key_map, &snapshot_futures, &store](
@@ -294,11 +296,11 @@ std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions_async(
             },
             [&version_entry_fut, &version_data, &symbol, &version_futures, &store, &version_map](
                 const auto &) {
-                const auto it = version_data.find(*symbol);
-                util::check(it != version_data.end(), "Missing version data for symbol {}", *symbol);
+                const auto it = version_data.find(symbol);
+                util::check(it != version_data.end(), "Missing version data for symbol {}", symbol);
 
                 version_entry_fut = set_up_version_future(
-                    *symbol,
+                    symbol,
                     it->second,
                     version_futures,
                     store,
@@ -307,7 +309,7 @@ std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions_async(
             });
 
         output.push_back(std::move(version_entry_fut)
-             .thenValue([vq = version_query, sid = *symbol](auto version_or_snapshot) {
+             .thenValue([vq = version_query, sid = symbol](auto version_or_snapshot) {
                  return util::variant_match(version_or_snapshot,
                     [&vq](const std::shared_ptr<VersionMapEntry> &version_map_entry) {
                         return get_key_for_version_query(version_map_entry, vq);
