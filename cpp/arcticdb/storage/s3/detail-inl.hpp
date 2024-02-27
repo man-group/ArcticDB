@@ -153,10 +153,10 @@ namespace s3 {
                           ReadKeyOpts opts) {
             ARCTICDB_SAMPLE(S3StorageRead, 0)
             auto fmt_db = [](auto &&k) { return variant_key_type(k); };
-            std::vector<VariantKey> failed_reads;
+            std::vector<VariantKey> keys_not_found;
 
             (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach(
-                    [&s3_client, &bucket_name, &root_folder, b = std::move(bucketizer), &visitor, &failed_reads,
+                    [&s3_client, &bucket_name, &root_folder, b = std::move(bucketizer), &visitor, &keys_not_found,
                             opts = opts](auto &&group) {
 
                         for (auto &k: group.values()) {
@@ -185,12 +185,12 @@ namespace s3 {
                                     error.GetExceptionName().c_str(),
                                     error.GetMessage().c_str());
 
-                                failed_reads.push_back(k);
+                                keys_not_found.push_back(k);
                             }
                         }
                     });
-            if (!failed_reads.empty())
-                throw KeyNotFoundException(Composite<VariantKey>{std::move(failed_reads)});
+            if (!keys_not_found.empty())
+                throw KeyNotFoundException(Composite<VariantKey>{std::move(keys_not_found)});
         }
 
         struct FailedDelete {

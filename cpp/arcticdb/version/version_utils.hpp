@@ -180,11 +180,15 @@ inline void check_is_version(const AtomKey &key) {
 
 inline void read_symbol_ref(const std::shared_ptr<StreamSource>& store, const StreamId &stream_id, VersionMapEntry &entry) {
     std::pair<entity::VariantKey, SegmentInMemory> key_seg_pair;
+    // Trying to read a missing ref key is expected e.g. when writing a previously missing symbol.
+    // If the ref key is missing we keep the entry empty and should not raise warnings.
+    auto read_opts = storage::ReadKeyOpts{};
+    read_opts.dont_warn_about_missing_key=true;
     try {
-        key_seg_pair = store->read_sync(RefKey{stream_id, KeyType::VERSION_REF});
+        key_seg_pair = store->read_sync(RefKey{stream_id, KeyType::VERSION_REF}, read_opts);
     } catch (const storage::KeyNotFoundException&) {
         try {
-            key_seg_pair = store->read_sync(RefKey{stream_id, KeyType::VERSION, true});
+            key_seg_pair = store->read_sync(RefKey{stream_id, KeyType::VERSION, true}, read_opts);
         } catch (const storage::KeyNotFoundException&) {
             return;
         }
