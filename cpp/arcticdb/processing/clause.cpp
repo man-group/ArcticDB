@@ -8,13 +8,15 @@
 
 #include <folly/Poly.h>
 
-#include <arcticdb/processing/processing_unit.hpp>
-#include <arcticdb/processing/clause.hpp>
+#include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
-#include <arcticdb/pipeline/value_set.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
+#include <arcticdb/pipeline/value_set.hpp>
+#include <arcticdb/processing/clause.hpp>
+#include <arcticdb/processing/processing_unit.hpp>
 #include <arcticdb/stream/segment_aggregator.hpp>
 #include <arcticdb/util/composite.hpp>
+#include <arcticdb/util/offset_string.hpp>
 #include <ankerl/unordered_dense.h>
 
 namespace arcticdb {
