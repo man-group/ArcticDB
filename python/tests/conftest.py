@@ -129,7 +129,8 @@ def moto_s3_endpoint_and_credentials(_moto_s3_uri_module, aws_access_key, aws_se
     endpoint = _moto_s3_uri_module
     port = endpoint.rsplit(":", 1)[1]
     client = boto3.client(
-        service_name="s3", endpoint_url=endpoint, aws_access_key_id=aws_access_key, aws_secret_access_key=aws_secret_key
+        service_name="s3", endpoint_url=endpoint, aws_access_key_id=aws_access_key,
+        aws_secret_access_key=aws_secret_key, region_name="us-east-1"
     )
 
     bucket = f"test_bucket_{bucket_id}"
