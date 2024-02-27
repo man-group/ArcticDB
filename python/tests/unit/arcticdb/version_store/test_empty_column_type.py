@@ -79,17 +79,17 @@ class TestCanAppendToColunWithNones:
 
     @pytest.fixture(autouse=True)
     def create_empty_column(self, lmdb_version_store_static_and_dynamic):
-        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col1": 2 * [None]}))
+        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": 2 * [None]}))
         yield
 
     def test_integer(self, lmdb_version_store_static_and_dynamic, int_dtype):
-        df_non_empty = pd.DataFrame({"col1": np.array([1,2,3], dtype=int_dtype)})
+        df_non_empty = pd.DataFrame({"col": np.array([1,2,3], dtype=int_dtype)})
         lmdb_version_store_static_and_dynamic.append("sym", df_non_empty)
-        expected_result = pd.DataFrame({"col1": np.array([0,0,1,2,3], dtype=int_dtype)})
+        expected_result = pd.DataFrame({"col": np.array([0,0,1,2,3], dtype=int_dtype)})
         assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, expected_result)
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym", row_range=[0,2]).data,
-            pd.DataFrame({"col1": np.array([0,0], dtype=int_dtype)})
+            pd.DataFrame({"col": np.array([0,0], dtype=int_dtype)})
         )
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym", row_range=[2,5]).data,
@@ -97,13 +97,13 @@ class TestCanAppendToColunWithNones:
         )
 
     def test_float(self, lmdb_version_store_static_and_dynamic, float_dtype):
-        df_non_empty = pd.DataFrame({"col1": np.array([1,2,3], dtype=float_dtype)})
+        df_non_empty = pd.DataFrame({"col": np.array([1,2,3], dtype=float_dtype)})
         lmdb_version_store_static_and_dynamic.append("sym", df_non_empty)
-        expected_result = pd.DataFrame({"col1": np.array([float("NaN"),float("NaN"),1,2,3], dtype=float_dtype)})
+        expected_result = pd.DataFrame({"col": np.array([float("NaN"),float("NaN"),1,2,3], dtype=float_dtype)})
         assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, expected_result)
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym", row_range=[0,2]).data,
-            pd.DataFrame({"col1": np.array([float("NaN"),float("NaN")], dtype=float_dtype)})
+            pd.DataFrame({"col": np.array([float("NaN"),float("NaN")], dtype=float_dtype)})
         )
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym", row_range=[2,5]).data,
@@ -112,13 +112,13 @@ class TestCanAppendToColunWithNones:
 
     def test_bool(self, lmdb_version_store_static_and_dynamic, boolean_dtype):
         # Note: if dtype is bool pandas will convert None to False
-        df_non_empty = pd.DataFrame({"col1": np.array([True, False, True], dtype=boolean_dtype)})
+        df_non_empty = pd.DataFrame({"col": np.array([True, False, True], dtype=boolean_dtype)})
         lmdb_version_store_static_and_dynamic.append("sym", df_non_empty)
-        expected_result = pd.DataFrame({"col1": np.array([None, None, True, False, True], dtype=boolean_dtype)})
+        expected_result = pd.DataFrame({"col": np.array([None, None, True, False, True], dtype=boolean_dtype)})
         assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, expected_result)
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym", row_range=[0,2]).data,
-            pd.DataFrame({"col1": np.array([None, None], dtype=boolean_dtype)})
+            pd.DataFrame({"col": np.array([None, None], dtype=boolean_dtype)})
         )
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym", row_range=[2,5]).data,
@@ -126,13 +126,13 @@ class TestCanAppendToColunWithNones:
         )
 
     def test_empty(self, lmdb_version_store_static_and_dynamic):
-        df_non_empty = pd.DataFrame({"col1": np.array([None, None, None])})
+        df_non_empty = pd.DataFrame({"col": np.array([None, None, None])})
         lmdb_version_store_static_and_dynamic.append("sym", df_non_empty)
-        expected_result = pd.DataFrame({"col1": np.array([None, None, None, None, None])})
+        expected_result = pd.DataFrame({"col": np.array([None, None, None, None, None])})
         assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, expected_result)
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym", row_range=[0,2]).data,
-            pd.DataFrame({"col1": np.array([None, None])})
+            pd.DataFrame({"col": np.array([None, None])})
         )
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym", row_range=[2,5]).data,
@@ -140,13 +140,13 @@ class TestCanAppendToColunWithNones:
         )
 
     def test_string(self, lmdb_version_store_static_and_dynamic):
-        df_non_empty = pd.DataFrame({"col1": np.array(["some_string", "long_string"*100])})
+        df_non_empty = pd.DataFrame({"col": np.array(["some_string", "long_string"*100])})
         lmdb_version_store_static_and_dynamic.append("sym", df_non_empty)
-        expected_result = pd.DataFrame({"col1": np.array([None, None, "some_string", "long_string"*100])})
+        expected_result = pd.DataFrame({"col": np.array([None, None, "some_string", "long_string"*100])})
         assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, expected_result)
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym", row_range=[0,2]).data,
-            pd.DataFrame({"col1": np.array([None, None])})
+            pd.DataFrame({"col": np.array([None, None])})
         )
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym", row_range=[2,5]).data,
@@ -156,7 +156,7 @@ class TestCanAppendToColunWithNones:
     def test_date(self, lmdb_version_store_static_and_dynamic, date_dtype):
         df_non_empty = pd.DataFrame(
             {
-                "col1": np.array(
+                "col": np.array(
                     [
                         np.datetime64('2005-02'),
                         np.datetime64('2005-03'),
@@ -169,7 +169,7 @@ class TestCanAppendToColunWithNones:
         lmdb_version_store_static_and_dynamic.append("sym", df_non_empty)
         expected_result = pd.DataFrame(
             {
-                "col1": np.array(
+                "col": np.array(
                     [
                         np.datetime64('NaT'),
                         np.datetime64('NaT'),
@@ -184,7 +184,7 @@ class TestCanAppendToColunWithNones:
         assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, expected_result)
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym", row_range=[0,2]).data,
-            pd.DataFrame({"col1": np.array([np.datetime64('NaT'), np.datetime64('NaT')], dtype=date_dtype)})
+            pd.DataFrame({"col": np.array([np.datetime64('NaT'), np.datetime64('NaT')], dtype=date_dtype)})
         )
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym", row_range=[2,5]).data,
@@ -202,12 +202,12 @@ class TestCanAppendColumnWithNonesToColumn:
 
 
     def test_integer(self, lmdb_version_store_static_and_dynamic, int_dtype):
-        df_initial = pd.DataFrame({"col1": np.array([1,2,3], dtype=int_dtype)})
+        df_initial = pd.DataFrame({"col": np.array([1,2,3], dtype=int_dtype)})
         lmdb_version_store_static_and_dynamic.write("sym", df_initial)
-        lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col1": [None, None]}))
+        lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col": [None, None]}))
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym").data,
-            pd.DataFrame({"col1": np.array([1,2,3,0,0], dtype=int_dtype)})
+            pd.DataFrame({"col": np.array([1,2,3,0,0], dtype=int_dtype)})
         )
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym", row_range=[0,3]).data,
@@ -215,16 +215,16 @@ class TestCanAppendColumnWithNonesToColumn:
         )
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym", row_range=[3,5]).data,
-            pd.DataFrame({"col1": np.array([0,0], dtype=int_dtype)})
+            pd.DataFrame({"col": np.array([0,0], dtype=int_dtype)})
         )
 
     def test_float(self, lmdb_version_store_static_and_dynamic, float_dtype):
-        df_initial = pd.DataFrame({"col1": np.array([1,2,3], dtype=float_dtype)})
+        df_initial = pd.DataFrame({"col": np.array([1,2,3], dtype=float_dtype)})
         lmdb_version_store_static_and_dynamic.write("sym", df_initial)
-        lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col1": [None, None]}))
+        lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col": [None, None]}))
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym").data,
-            pd.DataFrame({"col1": np.array([1,2,3,float("NaN"),float("NaN")], dtype=float_dtype)})
+            pd.DataFrame({"col": np.array([1,2,3,float("NaN"),float("NaN")], dtype=float_dtype)})
         )
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym", row_range=[0,3]).data,
@@ -232,18 +232,18 @@ class TestCanAppendColumnWithNonesToColumn:
         )
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym", row_range=[3,5]).data,
-            pd.DataFrame({"col1": np.array([float("NaN"), float("NaN")], dtype=float_dtype)})
+            pd.DataFrame({"col": np.array([float("NaN"), float("NaN")], dtype=float_dtype)})
         )
 
     def test_bool(self, lmdb_version_store_static_and_dynamic, boolean_dtype):
         # Note: if dtype is bool pandas will convert None to False
-        df_initial = pd.DataFrame({"col1": np.array([True, False, True], dtype=boolean_dtype)})
-        df_with_none = pd.DataFrame({"col1": np.array([None, None])})
+        df_initial = pd.DataFrame({"col": np.array([True, False, True], dtype=boolean_dtype)})
+        df_with_none = pd.DataFrame({"col": np.array([None, None])})
         lmdb_version_store_static_and_dynamic.write("sym", df_initial)
         lmdb_version_store_static_and_dynamic.append("sym", df_with_none)
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym").data,
-            pd.DataFrame({"col1": np.array([True, False, True, None, None], dtype=boolean_dtype)})
+            pd.DataFrame({"col": np.array([True, False, True, None, None], dtype=boolean_dtype)})
         )
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym", row_range=[0,3]).data,
@@ -255,13 +255,13 @@ class TestCanAppendColumnWithNonesToColumn:
         )
 
     def test_string(self, lmdb_version_store_static_and_dynamic):
-        df_initial = pd.DataFrame({"col1": np.array(["some_string", "long_string"*100, ""])})
-        df_with_none = pd.DataFrame({"col1": np.array([None, None])})
+        df_initial = pd.DataFrame({"col": np.array(["some_string", "long_string"*100, ""])})
+        df_with_none = pd.DataFrame({"col": np.array([None, None])})
         lmdb_version_store_static_and_dynamic.write("sym", df_initial)
         lmdb_version_store_static_and_dynamic.append("sym", df_with_none)
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym").data,
-            pd.DataFrame({"col1": np.array(["some_string", "long_string"*100, "", None, None])})
+            pd.DataFrame({"col": np.array(["some_string", "long_string"*100, "", None, None])})
         )
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym", row_range=[0,3]).data,
@@ -275,7 +275,7 @@ class TestCanAppendColumnWithNonesToColumn:
     def test_date(self, lmdb_version_store_static_and_dynamic, date_dtype):
         df_initial = pd.DataFrame(
             {
-                "col1": np.array(
+                "col": np.array(
                     [
                         np.datetime64('2005-02'),
                         np.datetime64('2005-03'),
@@ -286,10 +286,10 @@ class TestCanAppendColumnWithNonesToColumn:
             dtype=date_dtype
         )
         lmdb_version_store_static_and_dynamic.write("sym", df_initial)
-        lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col1": np.array([None, None])}))
+        lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col": np.array([None, None])}))
         expected_result = pd.DataFrame(
             {
-                "col1": np.array(
+                "col": np.array(
                     [
                         np.datetime64('2005-02'),
                         np.datetime64('2005-03'),
@@ -307,7 +307,7 @@ class TestCanAppendColumnWithNonesToColumn:
         )
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym", row_range=[3,5]).data,
-            pd.DataFrame({"col1": np.array([np.datetime64('NaT'), np.datetime64('NaT')], dtype=date_dtype)})
+            pd.DataFrame({"col": np.array([np.datetime64('NaT'), np.datetime64('NaT')], dtype=date_dtype)})
         )
 
 
@@ -589,38 +589,38 @@ class TestCanAppendToEmptyColumn:
 
     @pytest.fixture(autouse=True)
     def create_empty_column(self, lmdb_version_store_static_and_dynamic, dtype, empty_index):
-        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col1": []}, dtype=dtype, index=empty_index))
+        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": []}, dtype=dtype, index=empty_index))
         yield
 
     def test_integer(self, lmdb_version_store_static_and_dynamic, int_dtype, empty_index, dtype, append_index):
-        df_to_append = pd.DataFrame({"col1": [1,2,3]}, dtype=int_dtype, index=append_index)
+        df_to_append = pd.DataFrame({"col": [1,2,3]}, dtype=int_dtype, index=append_index)
         lmdb_version_store_static_and_dynamic.append("sym", df_to_append)
         assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df_to_append)
 
     def test_float(self, lmdb_version_store_static_and_dynamic, float_dtype, empty_index, append_index):
-        df_to_append = pd.DataFrame({"col1": [1.0,2.0,3.0]}, dtype=float_dtype, index=append_index)
+        df_to_append = pd.DataFrame({"col": [1.0,2.0,3.0]}, dtype=float_dtype, index=append_index)
         lmdb_version_store_static_and_dynamic.append("sym", df_to_append)
         assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df_to_append)
 
     def test_bool(self, lmdb_version_store_static_and_dynamic, boolean_dtype, empty_index, append_index):
-        df_to_append = pd.DataFrame({"col1": [True, False, None]}, dtype=boolean_dtype, index=append_index)
+        df_to_append = pd.DataFrame({"col": [True, False, None]}, dtype=boolean_dtype, index=append_index)
         lmdb_version_store_static_and_dynamic.append("sym", df_to_append)
         assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df_to_append)
 
     def test_empty(self, lmdb_version_store_static_and_dynamic, empty_index, append_index):
-        df_to_append = pd.DataFrame({"col1": [None, None, None]}, index=append_index)
+        df_to_append = pd.DataFrame({"col": [None, None, None]}, index=append_index)
         lmdb_version_store_static_and_dynamic.append("sym", df_to_append)
         assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df_to_append)
 
     def test_string(self, lmdb_version_store_static_and_dynamic, empty_index, append_index):
-        df_to_append = pd.DataFrame({"col1": ["short_string", None, 20 * "long_string"]}, index=append_index)
+        df_to_append = pd.DataFrame({"col": ["short_string", None, 20 * "long_string"]}, index=append_index)
         lmdb_version_store_static_and_dynamic.append("sym", df_to_append)
         assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df_to_append)
 
     def test_date(self, lmdb_version_store_static_and_dynamic, date_dtype, empty_index, append_index):
         df_to_append = pd.DataFrame(
             {
-                "col1": np.array(
+                "col": np.array(
                     [
                         np.datetime64('2005-02'),
                         np.datetime64('2005-03'),
@@ -647,7 +647,7 @@ class TestAppendingEmptyToColumnDoesNothing:
         yield request.param
 
     def test_integer(self, lmdb_version_store_static_and_dynamic, index, int_dtype, empty_index, dtype):
-        df = pd.DataFrame({"col1": [1,2,3]}, dtype=int_dtype, index=index)
+        df = pd.DataFrame({"col": [1,2,3]}, dtype=int_dtype, index=index)
         lmdb_version_store_static_and_dynamic.write("sym", df)
         lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col": []}, dtype=dtype, index=empty_index))
         read_result = lmdb_version_store_static_and_dynamic.read("sym")
@@ -689,7 +689,7 @@ class TestAppendingEmptyToColumnDoesNothing:
     def test_date(self, lmdb_version_store_static_and_dynamic, date_dtype, index, empty_index, dtype):
         df = pd.DataFrame(
             {
-                "col1": np.array(
+                "col": np.array(
                     [
                         np.datetime64('2005-02'),
                         np.datetime64('2005-03'),
@@ -720,11 +720,11 @@ class TestAppendingEmptyToColumnDoesNothing:
         assert read_result.version == 0
 
 
-@pytest.mark.xfail(
-    "When the index is explicitly set to be empty array ArcticDB assumes it's row range index. It does this by checking"
-    "the type of the data in the tensor https://github.com/man-group/ArcticDB/blob/bb2278d845abef2b7e7101dc968f0974cf7bdde1/cpp/arcticdb/python/python_to_tensor_frame.cpp#L234"
-    "and if it's not NANOSECONDS_UTC64 it assumes it's row ranged index. Since the empty index reports a emptyval type"
-    "it assumes the index of type row range. This will be fixed by adding a special empty index type."
+@pytest.mark.xfail(reason="""When the index is explicitly set to be empty array ArcticDB assumes it's row range index.
+    It does this by checking the type of the data in the tensor
+    https://github.com/man-group/ArcticDB/blob/bb2278d845abef2b7e7101dc968f0974cf7bdde1/cpp/arcticdb/python/python_to_tensor_frame.cpp#L234
+    and if it's not NANOSECONDS_UTC64 it assumes it's row ranged index. Since the empty index reports a emptyval type
+    it assumes the index of type row range. This will be fixed by adding a special empty index type."""
 )
 class TestCanUpdateEmptyColumn:
     """
@@ -734,7 +734,7 @@ class TestCanUpdateEmptyColumn:
 
     @pytest.fixture(autouse=True)
     def create_empty_column(self, lmdb_version_store_static_and_dynamic, dtype, empty_index):
-        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col1": []}, dtype=dtype, index=empty_index))
+        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": []}, dtype=dtype, index=empty_index))
         yield
 
     def update_index(self):
@@ -768,7 +768,7 @@ class TestCanUpdateEmptyColumn:
     def test_date(self, lmdb_version_store_static_and_dynamic, date_dtype):
         df = pd.DataFrame(
             {
-                "col1": np.array(
+                "col": np.array(
                     [
                         np.datetime64('2005-02'),
                         np.datetime64('2005-03'),
