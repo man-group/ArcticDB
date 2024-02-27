@@ -69,6 +69,12 @@ jobs:
           mike deploy ${{inputs.version || 'dev'}} ${{inputs.latest && 'latest' || ''}} --update-aliases --branch docs-pages ${{inputs.deploy && '--push' || ''}} --message "Deploying docs: ${{inputs.version || 'dev'}} $git_hash ${{inputs.latest && '[latest]' || ''}}"
           mike set-default latest --branch docs-pages ${{inputs.deploy && '--push' || ''}}
 
+      - name: List docs versions after build
+        run: |
+          set -x
+          cd docs/mkdocs
+          mike list
+
       - name: Checkout docs-pages branch
         uses: actions/checkout@v3.3.0
         with:
@@ -83,8 +89,3 @@ jobs:
           directory: .
           branch: test
 
-      - name: List docs versions after deploy
-        run: |
-          set -x
-          cd docs/mkdocs
-          mike list
