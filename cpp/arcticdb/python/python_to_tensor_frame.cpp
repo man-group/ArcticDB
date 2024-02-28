@@ -230,8 +230,10 @@ std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
         util::check(index_tensor.shape() != nullptr, "Index tensor expected to contain shapes");
         std::string index_column_name = !idx_names.empty() ? idx_names[0] : "index";
         res->num_rows = index_tensor.shape(0);
-        //TODO handle string indexes
-        if (index_tensor.data_type() == DataType::NANOSECONDS_UTC64) {
+        // TODO handle string indexes
+        // Empty type check is added to preserve the current behavior which is that 0-rowed dataframes
+        // are assigned datetime index. This will be changed in further PR creating empty typed index.
+        if (index_tensor.data_type() == DataType::NANOSECONDS_UTC64 || is_empty_type(index_tensor.data_type())) {
 
             res->desc.set_index_field_count(1);
             res->desc.set_index_type(IndexDescriptor::TIMESTAMP);

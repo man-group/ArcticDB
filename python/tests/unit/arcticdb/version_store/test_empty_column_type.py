@@ -720,12 +720,6 @@ class TestAppendingEmptyToColumnDoesNothing:
         assert read_result.version == 0
 
 
-@pytest.mark.xfail(reason="""When the index is explicitly set to be empty array ArcticDB assumes it's row range index.
-    It does this by checking the type of the data in the tensor
-    https://github.com/man-group/ArcticDB/blob/bb2278d845abef2b7e7101dc968f0974cf7bdde1/cpp/arcticdb/python/python_to_tensor_frame.cpp#L234
-    and if it's not NANOSECONDS_UTC64 it assumes it's row ranged index. Since the empty index reports a emptyval type
-    it assumes the index of type row range. This will be fixed by adding a special empty index type."""
-)
 class TestCanUpdateEmptyColumn:
     """
     Test if it's possible to update a completely empty dataframe. The index type and the column type will be set after
@@ -775,7 +769,7 @@ class TestCanUpdateEmptyColumn:
                         np.datetime64('2005-03')
                     ]
                 )
-            }, dtype=date_dtype, index=self.index()
+            }, dtype=date_dtype, index=self.update_index()
         )
         lmdb_version_store_static_and_dynamic.update("sym", df)
         assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df)
