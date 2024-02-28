@@ -69,14 +69,14 @@ RocksDBStorage::RocksDBStorage(const LibraryPath &library_path, OpenMode mode, c
         db_options.create_if_missing = true;
         db_options.create_missing_column_families = true;
     } else {
-        util::raise_rte(DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
+        raise<ErrorCode::E_UNEXPECTED_ROCKSDB_ERROR>(DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
     }
 
     std::vector<::rocksdb::ColumnFamilyHandle*> handles;
     // Note: the "default" handle will be returned as well. It is necessary to delete this, but not
     // rocksdb's internal handle to the default column family as returned by DefaultColumnFamily().
     s = ::rocksdb::DB::Open(db_options, db_name, column_families, &handles, &db_);
-    util::check(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
+    storage::check<ErrorCode::E_UNEXPECTED_ROCKSDB_ERROR>(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
     util::check(handles.size() == column_families.size(), "Open returned wrong number of handles.");
     for (std::size_t i = 0; i < handles.size(); i++) {
         handles_by_key_type_.emplace(column_families[i].name, handles[i]);
@@ -87,11 +87,11 @@ RocksDBStorage::RocksDBStorage(const LibraryPath &library_path, OpenMode mode, c
 RocksDBStorage::~RocksDBStorage() {
     for (const auto& [key_type_name, handle]: handles_by_key_type_) {
         auto s = db_->DestroyColumnFamilyHandle(handle);
-        util::check(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
+        storage::check<ErrorCode::E_UNEXPECTED_ROCKSDB_ERROR>(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
     }
     handles_by_key_type_.clear();
     auto s = db_->Close();
-    util::check(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
+    storage::check<ErrorCode::E_UNEXPECTED_ROCKSDB_ERROR>(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
     delete db_;
 }
 
@@ -114,9 +114,10 @@ void RocksDBStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts)
     do_write_internal(std::move(kvs));
 }
 
-void RocksDBStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts) {
+void RocksDBStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
     ARCTICDB_SAMPLE(RocksDBStorageRead, 0)
     auto grouper = [](auto &&k) { return variant_key_type(k); };
+    std::vector<VariantKey> failed_reads;
 
     (fg::from(ks.as_range()) | fg::move | fg::groupBy(grouper)).foreach([&](auto &&group) {
         auto key_type_name = fmt::format("{}", group.key());
@@ -125,10 +126,21 @@ void RocksDBStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visi
             std::string k_str = to_serialized_key(k);
             std::string value;
             auto s = db_->Get(::rocksdb::ReadOptions(), handle, ::rocksdb::Slice(k_str), &value);
-            util::check(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
-            visitor(k, Segment::from_bytes(reinterpret_cast<uint8_t*>(value.data()), value.size()));
+            storage::check<ErrorCode::E_UNEXPECTED_ROCKSDB_ERROR>(s.IsNotFound() || s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
+            if(s.IsNotFound()) {
+                log::storage().log(
+                        opts.dont_warn_about_missing_key ? spdlog::level::debug : spdlog::level::warn,
+                        "Failed to find segment for key '{}': {}",
+                        variant_key_view(k),
+                        s.ToString());
+                failed_reads.push_back(k);
+            } else {
+                visitor(k, Segment::from_bytes(reinterpret_cast<uint8_t*>(value.data()), value.size()));
+            }
         }
     });
+    if(!failed_reads.empty())
+        throw KeyNotFoundException(Composite<VariantKey>(std::move(failed_reads)));
 }
 
 bool RocksDBStorage::do_key_exists(const VariantKey& key) {
@@ -141,7 +153,7 @@ bool RocksDBStorage::do_key_exists(const VariantKey& key) {
         return false;
     }
     auto s = db_->Get(::rocksdb::ReadOptions(), handle, ::rocksdb::Slice(k_str), &value);
-    util::check(s.IsNotFound() || s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
+    storage::check<ErrorCode::E_UNEXPECTED_ROCKSDB_ERROR>(s.IsNotFound() || s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
     return !s.IsNotFound();
 }
 
@@ -185,7 +197,7 @@ void RocksDBStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor&
         }
     }
     auto s = it->status();
-    util::check(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
+    storage::check<ErrorCode::E_UNEXPECTED_ROCKSDB_ERROR>(s.IsNotFound() || s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
 }
 
 std::vector<VariantKey> RocksDBStorage::do_remove_internal(Composite<VariantKey>&& ks, RemoveOpts opts) {
@@ -200,7 +212,7 @@ std::vector<VariantKey> RocksDBStorage::do_remove_internal(Composite<VariantKey>
             if (do_key_exists(k)) {
                 auto k_str = to_serialized_key(k);
                 auto s = db_->Delete(::rocksdb::WriteOptions(), handle, ::rocksdb::Slice(k_str));
-                util::check(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
+                storage::check<ErrorCode::E_UNEXPECTED_ROCKSDB_ERROR>(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
                 ARCTICDB_DEBUG(log::storage(), "Deleted segment for key {}", variant_key_view(k));
             } else if (!opts.ignores_missing_key_) {
                 log::storage().warn("Failed to delete segment for key {}", variant_key_view(k));
@@ -230,7 +242,7 @@ void RocksDBStorage::do_write_internal(Composite<KeySegmentPair>&& kvs) {
                 throw DuplicateKeyException(kv.variant_key());
             }
             auto s = db_->Put(::rocksdb::WriteOptions(), handle, ::rocksdb::Slice(k_str), ::rocksdb::Slice(seg_data));
-            util::check(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
+            storage::check<ErrorCode::E_UNEXPECTED_ROCKSDB_ERROR>(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
         }
     });
 }
