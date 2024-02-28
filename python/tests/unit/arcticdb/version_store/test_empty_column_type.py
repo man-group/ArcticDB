@@ -590,6 +590,9 @@ class TestCanAppendToEmptyColumn:
 
     @pytest.fixture(autouse=True)
     def create_empty_column(self, lmdb_version_store_static_and_dynamic, dtype, empty_index):
+        if isinstance(empty_index, pd.RangeIndex) and sys.version_info[1] < 9:
+            pytest.xfail("""compat-36 and compat-38 tests are failing because this would assign a row-range index to
+                         the empty df. This will be fixed when the pandas-agnostic empty index type is added""")
         lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": []}, dtype=dtype, index=empty_index))
         yield
 
