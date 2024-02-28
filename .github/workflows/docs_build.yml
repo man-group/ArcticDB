@@ -2,23 +2,29 @@ name: Docs Build
 on:
   workflow_dispatch:
     inputs:
-      version: { type: string, required: false, description: "The version to build (used in git and pypi). git-tag='v{version}-docs'.  If not specified then use master and wheel from the last successful build."}
+      version: { type: string, required: false, description: "The version to build (used in git and pypi). git-tag='v{version}-docs'.  If not specified then use selected branch and wheel from the last successful build."}
       latest: { type: boolean, required: false, description: Alias this version as the 'latest' stable docs.  This should be set for the latest stable release.}
       deploy: { type: boolean, required: false, description: Push the built docs to the docs-pages branch on github.}
       
 jobs:
   docs_build:
     runs-on: ubuntu-latest
+    environment: TestPypi
     permissions:
       contents: write
     steps:
+      - name: Check inputs
+        run: |
+          if [ -z "${{ inputs.version }}" ] && ${{ inputs.latest }}; then
+            echo "Cannot label dev build as latest. Failing the job."
+            exit 1
+          fi
       - name: Checkout
         uses: actions/checkout@v3.3.0
         with:
-          ref: ${{inputs.version && format('v{0}-docs', inputs.version) || 'master'}}
+          ref: ${{inputs.version && format('v{0}-docs', inputs.version) || github.ref}}
 
       - name: Fetch docs-pages branch
-        if: ${{inputs.deploy}}
         run: git fetch origin docs-pages --depth=1
 
       - name: Detect runner Python implementation
@@ -37,7 +43,7 @@ jobs:
           name: wheel-${{env.PY_IMPL}}-manylinux_x86_64
           workflow: build.yml
           workflow_conclusion: success
-          branch: master
+          branch: ${{github.ref}}
 
       - name: Install documentation dependencies (including ArcticDB)
         run: |
@@ -69,8 +75,21 @@ jobs:
           mike deploy ${{inputs.version || 'dev'}} ${{inputs.latest && 'latest' || ''}} --update-aliases --branch docs-pages ${{inputs.deploy && '--push' || ''}} --message "Deploying docs: ${{inputs.version || 'dev'}} $git_hash ${{inputs.latest && '[latest]' || ''}}"
           mike set-default latest --branch docs-pages ${{inputs.deploy && '--push' || ''}}
 
-      - name: List docs versions after deploy
+      - name: List docs versions after build
         run: |
           set -x
           cd docs/mkdocs
           mike list
+
+      - name: Checkout docs-pages branch
+        run: git checkout docs-pages
+
+      - name: Deploy Docs to TestPypi
+        uses: cloudflare/pages-action@v1.5.0
+        with:
+          apiToken: ${{secrets.CLOUDFLARE_API_TOKEN}}
+          accountId: ${{vars.CLOUDFLARE_ACCOUNT_ID}}
+          projectName: ${{vars.CLOUDFLARE_PAGES_PROJECT}}
+          directory: .
+          branch: test
+
