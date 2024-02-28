@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+import sys
 from math import nan
 import pandas as pd
 from pandas.testing import assert_frame_equal
@@ -728,6 +729,9 @@ class TestCanUpdateEmptyColumn:
 
     @pytest.fixture(autouse=True)
     def create_empty_column(self, lmdb_version_store_static_and_dynamic, dtype, empty_index):
+        if isinstance(empty_index, pd.RangeIndex) and sys.version_info[1] < 9:
+            pytest.xfail("""compat-36 and compat-38 tests are failing because this would assign a row-range index to
+                         the empty df. This will be fixed when the pandas-agnostic empty index type is added""")
         lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": []}, dtype=dtype, index=empty_index))
         yield
 

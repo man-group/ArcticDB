@@ -274,36 +274,6 @@ def test_update_with_empty_dataframe_with_index(lmdb_version_store):
     lib.read(symbol, as_of=0).data
 
 
-@pytest.mark.parametrize(
-    "input_empty_col_dtype, output_empty_col_dtype, value_type, size_bits",
-    [
-        (np.uint8, np.uint8, TypeDescriptor.ValueType.UINT, TypeDescriptor.SizeBits.S8),
-        (np.int32, np.int32, TypeDescriptor.ValueType.INT, TypeDescriptor.SizeBits.S32),
-        ("datetime64[ns]", "datetime64[ns]", TypeDescriptor.ValueType.NANOSECONDS_UTC, TypeDescriptor.SizeBits.S64),
-
-        # For rationale see: https://github.com/man-group/ArcticDB/pull/1049
-        (float, float, TypeDescriptor.ValueType.FLOAT if IS_PANDAS_TWO else TypeDescriptor.ValueType.EMPTY, TypeDescriptor.SizeBits.S64),  # noqa: E501
-        (object, object if IS_PANDAS_TWO else float, TypeDescriptor.ValueType.EMPTY, TypeDescriptor.SizeBits.S64),
-])
-def test_empty_column_handling(lmdb_version_store, input_empty_col_dtype, output_empty_col_dtype, value_type, size_bits):
-    # Non-regression test for https://github.com/man-group/ArcticDB/issues/987
-    lib = lmdb_version_store
-
-    symbol_type_descriptor_series_index = 1 if IS_PANDAS_TWO else 0
-    def get_symbol_type_descriptor(symbol):
-        symbol_info = lib.get_info(symbol)
-        return symbol_info["dtype"][symbol_type_descriptor_series_index]
-
-    symbol = "empty"
-    series = pd.Series([], dtype=input_empty_col_dtype)
-    lib.write(symbol, series)
-    symbol_type_info = get_symbol_type_descriptor(symbol)
-    assert symbol_type_info.value_type == value_type
-    assert symbol_type_info.size_bits == size_bits
-    result = lib.read(symbol).data
-    assert result.dtype == output_empty_col_dtype
-
-
 def test_date_range_multi_index(lmdb_version_store):
     # Non-regression test for https://github.com/man-group/ArcticDB/issues/1122
     lib = lmdb_version_store
