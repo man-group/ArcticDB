@@ -13,21 +13,9 @@
 
 namespace arcticdb::storage::mongo {
 
-template<class Output, class Result>
-struct MongoResult{
-    std::variant<Output, Result> result;
+struct UpdateResult { std::optional<int> modified_count; };
 
-    [[nodiscard]] bool is_success() const {
-        return std::holds_alternative<Output>(result);
-    }
-
-    Result& get_error(){
-        return std::get<Result>(result);
-    }
-    Output& get_output(){
-        return std::get<Output>(result);
-    }
-};
+struct DeleteResult { std::optional<int> delete_count; };
 
 class MongoClientWrapper {
 public:
@@ -38,7 +26,7 @@ public:
             const std::string &collection_name,
             storage::KeySegmentPair&& kv) = 0;
 
-    virtual std::optional<int> update_segment(
+    virtual UpdateResult update_segment(
             const std::string &database_name,
             const std::string &collection_name,
             storage::KeySegmentPair&& kv,
@@ -49,16 +37,15 @@ public:
             const std::string &collection_name,
             const entity::VariantKey &key) = 0;
 
-    virtual std::optional<int> remove_keyvalue(
+    virtual DeleteResult remove_keyvalue(
             const std::string &database_name,
             const std::string &collection_name,
             const entity::VariantKey &key) = 0;
 
-    virtual void iterate_type(
+    virtual std::vector<VariantKey> list_keys(
             const std::string &database_name,
             const std::string &collection_name,
             KeyType key_type,
-            folly::Function<void(entity::VariantKey &&)>&& visitor,
             const std::optional<std::string> &prefix) = 0;
 
     virtual void ensure_collection(

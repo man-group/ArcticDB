@@ -52,9 +52,9 @@ void MongoStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) {
         for (auto &kv : group.values()) {
             auto collection = collection_name(kv.key_type());
             std::string potential_error_msg = fmt::format("Mongo error while updating key {}", kv.key_view());
-            auto modified_count = client_->update_segment(db_, collection, std::move(kv), opts.upsert_);
-            util::check(modified_count.has_value(), potential_error_msg);
-            util::check(opts.upsert_ || modified_count > 0, "update called with upsert=false but key does not exist");
+            auto result = client_->update_segment(db_, collection, std::move(kv), opts.upsert_);
+            util::check(result.modified_count.has_value(), potential_error_msg);
+            util::check(opts.upsert_ || result.modified_count.value() > 0, "update called with upsert=false but key does not exist");
         }
     });
 }
@@ -106,9 +106,9 @@ void MongoStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
     (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
         for (auto &k : group.values()) {
             auto collection = collection_name(variant_key_type(k));
-            auto deleted_count = client_->remove_keyvalue(db_, collection, k);
-            if (deleted_count) {
-                util::warn(deleted_count == 1, "Expect to delete a single document with key {}",
+            auto result = client_->remove_keyvalue(db_, collection, k);
+            if (result.delete_count.has_value()) {
+                util::warn(result.delete_count.value() == 1, "Expect to delete a single document with key {}",
                            k);
             } else
                 throw std::runtime_error(fmt::format("Mongo error deleting data for key {}", k));
@@ -120,7 +120,10 @@ void MongoStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& v
     auto collection = collection_name(key_type);
     auto func = folly::Function<void(entity::VariantKey&&)>(visitor);
     ARCTICDB_SAMPLE(MongoStorageItType, 0)
-    client_->iterate_type(db_, collection, key_type, std::move(func), prefix);
+    auto keys = client_->list_keys(db_, collection, key_type, prefix);
+    for (auto &key : keys) {
+        func(std::move(key));
+    }
 }
 
 bool MongoStorage::do_key_exists(const VariantKey& key) {

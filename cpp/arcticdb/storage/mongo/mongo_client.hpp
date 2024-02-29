@@ -32,7 +32,7 @@ class MongoClient : public MongoClientWrapper {
         const std::string &collection_name,
         storage::KeySegmentPair&& kv) override;
 
-    std::optional<int> update_segment(
+    UpdateResult update_segment(
         const std::string &database_name,
         const std::string &collection_name,
         storage::KeySegmentPair&& kv,
@@ -43,16 +43,15 @@ class MongoClient : public MongoClientWrapper {
         const std::string &collection_name,
         const entity::VariantKey &key) override;
 
-    std::optional<int> remove_keyvalue(
+    DeleteResult remove_keyvalue(
         const std::string &database_name,
         const std::string &collection_name,
         const entity::VariantKey &key) override;
 
-    void iterate_type(
+    std::vector<VariantKey> list_keys(
         const std::string &database_name,
         const std::string &collection_name,
         KeyType key_type,
-        folly::Function<void(entity::VariantKey &&)>&& visitor,
         const std::optional<std::string> &prefix
         ) override;
 
