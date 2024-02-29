@@ -11,6 +11,9 @@
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/lmdb/lmdb_storage.hpp>
 #include <arcticdb/storage/memory/memory_storage.hpp>
+#ifdef ARCTICDB_INCLUDE_ROCKSDB
+#include <arcticdb/storage/rocksdb/rocksdb_storage.hpp>
+#endif
 #include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/storage/s3/s3_mock_client.hpp>
 #include <arcticdb/storage/azure/azure_storage.hpp>
@@ -79,6 +82,35 @@ public:
         return std::make_unique<arcticdb::storage::memory::MemoryStorage>(library_path, arcticdb::storage::OpenMode::DELETE, cfg);
     }
 };
+
+#ifdef ARCTICDB_INCLUDE_ROCKSDB
+class RocksDBStorageFactory : public StorageFactory {
+
+public:
+    std::unique_ptr<arcticdb::storage::Storage> create() override {
+        arcticdb::proto::rocksdb_storage::Config cfg;
+
+        fs::path db_name = "test_rocksdb";
+        cfg.set_path((TEST_DATABASES_PATH / db_name).generic_string());
+
+        arcticdb::storage::LibraryPath library_path("lib", '/');
+
+        return std::make_unique<arcticdb::storage::rocksdb::RocksDBStorage>(library_path, arcticdb::storage::OpenMode::DELETE, cfg);
+    }
+
+    void setup() override {
+        if (!fs::exists(TEST_DATABASES_PATH)) {
+            fs::create_directories(TEST_DATABASES_PATH);
+        }
+    }
+
+    void clear_setup() override {
+        if (fs::exists(TEST_DATABASES_PATH)) {
+            fs::remove_all(TEST_DATABASES_PATH);
+        }
+    }
+};
+#endif
 
 class S3MockStorageFactory : public StorageFactory {
 public:
@@ -161,6 +193,18 @@ INSTANTIATE_TEST_SUITE_P(
                 std::make_shared<MemoryStorageFactory>()
         )
 );
+
+#ifdef ARCTICDB_INCLUDE_ROCKSDB
+
+INSTANTIATE_TEST_SUITE_P(
+        RocksDBStoragesCommonTests,
+        GenericStorageTest,
+        ::testing::Values(
+                std::make_shared<RocksDBStorageFactory>()
+        )
+);
+
+#endif
 
 // LMDB Storage specific tests
 

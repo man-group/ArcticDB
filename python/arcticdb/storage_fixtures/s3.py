@@ -221,8 +221,12 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
                         return [b"Limit accepted"]
 
                     if self._reqs_till_rate_limit == 0:
-                        start_response("503 Slow down", [("Content-Type", "text/plain")])
-                        return [b"Simulating rate limit"]
+                        response_body = (b'<?xml version="1.0" encoding="UTF-8"?><Error><Code>SlowDown</Code><Message>Please reduce your request rate.</Message>'
+                                         b'<RequestId>176C22715A856A29</RequestId><HostId>9Gjjt1m+cjU4OPvX9O9/8RuvnG41MRb/18Oux2o5H5MY7ISNTlXN+Dz9IG62/ILVxhAGI0qyPfg=</HostId></Error>')
+                        start_response(
+                            "503 Slow Down", [("Content-Type", "text/xml"), ("Content-Length", str(len(response_body)))]
+                        )
+                        return [response_body]
                     else:
                         self._reqs_till_rate_limit -= 1
 

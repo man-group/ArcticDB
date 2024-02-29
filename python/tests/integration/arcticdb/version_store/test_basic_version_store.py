@@ -1963,7 +1963,7 @@ def test_snapshot_empty_segment(basic_store):
     assert lib.has_symbol("c") is False
 
 
-def test_columns_as_nparrary(basic_store, sym):
+def test_columns_as_nparray(basic_store, sym):
     lib = basic_store
     d = {"col1": [1, 2], "col2": [3, 4]}
     lib.write(sym, pd.DataFrame(data=d))

@@ -46,7 +46,7 @@ TEST(ExponentialBackoff, Fails) {
 
 TEST(ExponentialBackoff, FailsSpecificError) {
     ThrowNTimes<MySpecialError> test{232};
-    ASSERT_THROW(arcticdb::ExponentialBackoff<MySpecialError>(100, 1000).go(test, []() {
+    ASSERT_THROW(arcticdb::ExponentialBackoff<MySpecialError>(100, 1000).go(test, [](const auto &) {
         throw MyEvenMoreSpecialError("arg");
     }), MyEvenMoreSpecialError);
     ASSERT_TRUE(g_called < 10);
@@ -54,7 +54,7 @@ TEST(ExponentialBackoff, FailsSpecificError) {
 
 TEST(ExponentialBackoff, UncaughtExceptionEscapes) {
     ThrowNTimes<std::runtime_error> test{232};
-    ASSERT_THROW(arcticdb::ExponentialBackoff<MySpecialError>(100, 1000).go(test, []() {
+    ASSERT_THROW(arcticdb::ExponentialBackoff<MySpecialError>(100, 1000).go(test, [](const auto &) {
         throw MyEvenMoreSpecialError("bad news bear");
     }), std::runtime_error);
     ASSERT_EQ(g_called, 1);

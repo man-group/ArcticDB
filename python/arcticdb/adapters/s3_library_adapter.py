@@ -19,10 +19,14 @@ from arcticdb_ext.storage import StorageOverride, S3Override, CONFIG_LIBRARY_NAM
 from arcticdb.encoding_version import EncodingVersion
 from collections import namedtuple
 from dataclasses import dataclass, fields
-from distutils.util import strtobool
 
 PARSED_QUERY = namedtuple("PARSED_QUERY", ["region"])
 USE_AWS_CRED_PROVIDERS_TOKEN = "_RBAC_"
+
+
+def strtobool(value: str) -> bool:
+  value = value.lower()
+  return value in ("y", "yes", "on", "1", "true", "t")
 
 
 @dataclass

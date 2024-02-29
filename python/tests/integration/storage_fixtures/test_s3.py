@@ -18,8 +18,10 @@ def test_rate_limit(s3_storage_factory: MotoS3StorageFixtureFactory):  # Don't n
     for _ in range(3):
         resp = requests.head(s3.endpoint)
         assert resp.status_code == 503
-        assert resp.reason == "Slow down"
+        assert resp.reason == "Slow Down"
 
+    # TODO: If this test fails before this point, rate limit doesn't get reset and other tests which
+    # share the same session will fail as well
     # When we then reset
     requests.post(s3.endpoint + "/rate_limit", b"-1").raise_for_status()
 
