@@ -35,7 +35,9 @@ void MongoStorage::do_write(Composite<KeySegmentPair>&& kvs) {
     (fg::from(kvs.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
         for (auto &kv : group.values()) {
             auto collection = collection_name(kv.key_type());
-            client_->write_segment(db_, collection, std::move(kv));
+            std::string potential_error_msg = fmt::format("Mongo error while putting key {}", kv.key_view());
+            auto success = client_->write_segment(db_, collection, std::move(kv));
+            util::check(success, potential_error_msg);
         }
     });
 }
@@ -49,7 +51,10 @@ void MongoStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) {
     (fg::from(kvs.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
         for (auto &kv : group.values()) {
             auto collection = collection_name(kv.key_type());
-            client_->update_segment(db_, collection, std::move(kv), opts.upsert_);
+            std::string potential_error_msg = fmt::format("Mongo error while updating key {}", kv.key_view());
+            auto modified_count = client_->update_segment(db_, collection, std::move(kv), opts.upsert_);
+            util::check(modified_count.has_value(), potential_error_msg);
+            util::check(opts.upsert_ || modified_count > 0, "update called with upsert=false but key does not exist");
         }
     });
 }
@@ -62,12 +67,22 @@ void MongoStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visito
 
     (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
         for (auto &k : group.values()) {
-                auto collection = collection_name(variant_key_type(k));
+            auto collection = collection_name(variant_key_type(k));
+            try {
                 auto kv = client_->read_segment(db_, collection, k);
-                if(kv.has_segment())
-                    visitor(k, std::move(kv.segment()));
+                // later we will add the key to failed_reads in this case
+                if(!kv.has_value()) {
+                    throw std::runtime_error(fmt::format("Missing key in mongo: {}", k));
+                }
+                if (kv.value().has_segment())
+                    visitor(k, std::move(kv.value().segment()));
                 else
-                   failed_reads.push_back(k);
+                    failed_reads.push_back(k);
+            }
+            catch(const std::exception &ex) {
+                log::storage().info("Segment read error: {}", ex.what());
+                throw storage::KeyNotFoundException{Composite<VariantKey>{VariantKey{k}}};
+            }
         }
     });
 
@@ -91,7 +106,12 @@ void MongoStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
     (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
         for (auto &k : group.values()) {
             auto collection = collection_name(variant_key_type(k));
-            client_->remove_keyvalue(db_, collection, k);
+            auto deleted_count = client_->remove_keyvalue(db_, collection, k);
+            if (deleted_count) {
+                util::warn(deleted_count == 1, "Expect to delete a single document with key {}",
+                           k);
+            } else
+                throw std::runtime_error(fmt::format("Mongo error deleting data for key {}", k));
         }
     });
 }
@@ -105,7 +125,13 @@ void MongoStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& v
 
 bool MongoStorage::do_key_exists(const VariantKey& key) {
     auto collection = collection_name(variant_key_type(key));
-    return client_->key_exists(db_, collection, key);
+    try {
+        return client_->key_exists(db_, collection, key);
+    }
+    catch(const std::exception& ex) {
+        log::storage().error(fmt::format("Key exists error: {}", ex.what()));
+        throw;
+    }
 }
 
 

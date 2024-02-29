@@ -9,13 +9,14 @@
 #include <fmt/format.h>
 
 #include <arcticdb/storage/storage.hpp>
+#include <arcticdb/storage/mongo/mongo_client_wrapper.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 
 namespace arcticdb::storage::mongo {
 
 class MongoClientImpl;
 
-class MongoClient {
+class MongoClient : public MongoClientWrapper {
     using Config = arcticdb::proto::mongo_storage::Config;
   public:
     explicit MongoClient(
@@ -24,28 +25,28 @@ class MongoClient {
         uint64_t max_pool_size,
         uint64_t selection_timeout_ms);
 
-    ~MongoClient();
+    ~MongoClient() override;
 
-    void write_segment(
+    bool write_segment(
         const std::string &database_name,
         const std::string &collection_name,
-        storage::KeySegmentPair&& kv);
+        storage::KeySegmentPair&& kv) override;
 
-    void update_segment(
+    std::optional<int> update_segment(
         const std::string &database_name,
         const std::string &collection_name,
         storage::KeySegmentPair&& kv,
-        bool upsert);
+        bool upsert) override;
 
-    storage::KeySegmentPair read_segment(
+    std::optional<KeySegmentPair> read_segment(
         const std::string &database_name,
         const std::string &collection_name,
-        const entity::VariantKey &key);
+        const entity::VariantKey &key) override;
 
-    void remove_keyvalue(
+    std::optional<int> remove_keyvalue(
         const std::string &database_name,
         const std::string &collection_name,
-        const entity::VariantKey &key);
+        const entity::VariantKey &key) override;
 
     void iterate_type(
         const std::string &database_name,
@@ -53,20 +54,20 @@ class MongoClient {
         KeyType key_type,
         folly::Function<void(entity::VariantKey &&)>&& visitor,
         const std::optional<std::string> &prefix
-        );
+        ) override;
 
     void ensure_collection(
         std::string_view database_name,
-        std::string_view collection_name);
+        std::string_view collection_name) override;
 
     void drop_collection(
             std::string database_name,
-            std::string collection_name);
+            std::string collection_name) override;
 
     bool key_exists(
         const std::string &database_name,
         const std::string &collection_name,
-        const  entity::VariantKey &key);
+        const  entity::VariantKey &key) override;
 
 private:
     MongoClientImpl* client_;
