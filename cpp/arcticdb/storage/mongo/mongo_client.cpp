@@ -263,19 +263,17 @@ bool MongoClientImpl::write_segment(const std::string &database_name,
     ARCTICDB_SUBSAMPLE(MongoStorageWriteGetCol, 0)
     mongocxx::database database = client->database(database_name.c_str());
     auto collection = database[collection_name];
-    std::optional<std::variant<mongocxx::result::insert_one, mongocxx::result::bulk_write>> result;
+
     ARCTICDB_SUBSAMPLE(MongoStorageWriteInsertOne, 0)
     if(std::holds_alternative<RefKey>(kv.variant_key())) {
         mongocxx::model::replace_one replace{document{} << "key" << fmt::format("{}", kv.ref_key()) << finalize, doc.view()};
         replace.upsert(true);
         auto bulk_write = collection.create_bulk_write();
         bulk_write.append(replace);
-        result = bulk_write.execute();
+        return bulk_write.execute().has_value();
     } else {
-        result = collection.insert_one(doc.view());
+        return collection.insert_one(doc.view()).has_value();
     }
-
-    return result.has_value();
 }
 
 std::optional<int> MongoClientImpl::update_segment(const std::string &database_name,
