@@ -38,7 +38,10 @@ class DtypeGenerator:
     
     @classmethod
     def dtype(cls):
-        return list(set([*cls.int_dtype(), *cls.float_dtype(), *cls.bool_dtype(), *cls.date_dtype()]))
+        # There are no overlaps in dtypes at the moment but since having additional dtype might increase the test count
+        # by a lot we err on the safe side and filter the dtypes so that they are unique. Note dtypes are sorted so that
+        # the fixture name is deterministic, otherwise the CI might fail to run the tests in parallel.
+        return sorted(list(set([*cls.int_dtype(), *cls.float_dtype(), *cls.bool_dtype(), *cls.date_dtype()])))
 
 @pytest.fixture(params=DtypeGenerator.int_dtype())
 def int_dtype(request):
