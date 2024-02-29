@@ -70,7 +70,7 @@ void MongoStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visito
             auto collection = collection_name(variant_key_type(k));
             try {
                 auto kv = client_->read_segment(db_, collection, k);
-                // later we will add the key to failed_reads in this case
+                // later we should add the key to failed_reads in this case
                 if(!kv.has_value()) {
                     throw std::runtime_error(fmt::format("Missing key in mongo: {}", k));
                 }
