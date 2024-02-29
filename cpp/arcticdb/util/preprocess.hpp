@@ -26,3 +26,9 @@
 #define ARCTICDB_LIKELY
 #define ARCTICDB_UNLIKELY
 #endif
+
+#ifdef _MSC_VER
+#define ARCTICDB_FORCE_INLINE __forceinline
+#elif defined(__GNUC__)
+#define ARCTICDB_FORCE_INLINE inline __attribute__((__always_inline__))
+#else
