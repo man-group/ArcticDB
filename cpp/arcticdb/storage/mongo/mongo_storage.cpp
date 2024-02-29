@@ -35,9 +35,9 @@ void MongoStorage::do_write(Composite<KeySegmentPair>&& kvs) {
     (fg::from(kvs.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
         for (auto &kv : group.values()) {
             auto collection = collection_name(kv.key_type());
-            std::string potential_error_msg = fmt::format("Mongo error while putting key {}", kv.key_view());
+            auto key_view = kv.key_view();
             auto success = client_->write_segment(db_, collection, std::move(kv));
-            util::check(success, potential_error_msg);
+            util::check(success, "Mongo error while putting key {}", key_view);
         }
     });
 }
@@ -51,9 +51,9 @@ void MongoStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) {
     (fg::from(kvs.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
         for (auto &kv : group.values()) {
             auto collection = collection_name(kv.key_type());
-            std::string potential_error_msg = fmt::format("Mongo error while updating key {}", kv.key_view());
+            auto key_view = kv.key_view();
             auto result = client_->update_segment(db_, collection, std::move(kv), opts.upsert_);
-            util::check(result.modified_count.has_value(), potential_error_msg);
+            util::check(result.modified_count.has_value(), "Mongo error while updating key {}", key_view);
             util::check(opts.upsert_ || result.modified_count.value() > 0, "update called with upsert=false but key does not exist");
         }
     });
