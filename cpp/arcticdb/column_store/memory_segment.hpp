@@ -134,10 +134,10 @@ public:
         impl_->init_column_map();
     }
 
-    template<class T, template<class> class Tensor, std::enable_if_t<
-            std::is_integral_v<T> || std::is_floating_point_v<T>,
+    template<class Tensor, std::enable_if_t<
+            std::is_integral_v<typename Tensor::value_type> || std::is_floating_point_v<typename Tensor::value_type>,
             int> = 0>
-    void set_array(position_t pos, Tensor<T> &val) {
+    void set_array(position_t pos, Tensor &val) {
         impl_->set_array(pos, val);
     }
 

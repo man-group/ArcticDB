@@ -317,10 +317,10 @@ public:
         return std::move(shapes_.buffer());
     }
 
-    template<class T, template<class> class Tensor, std::enable_if_t<
-            std::is_integral_v<T> || std::is_floating_point_v<T>,
+    template<class Tensor, std::enable_if_t<
+            std::is_integral_v<typename Tensor::value_type> || std::is_floating_point_v<typename Tensor::value_type>,
             int> = 0>
-    void set_array(ssize_t row_offset, Tensor<T> &val) {
+    void set_array(ssize_t row_offset, Tensor &val) {
         ARCTICDB_SAMPLE(ColumnSetArray, RMTSF_Aggregate)
         magic_.check();
         util::check_arg(last_logical_row_ + 1 == row_offset, "set_array expected row {}, actual {} ", last_logical_row_ + 1, row_offset);
@@ -329,6 +329,7 @@ public:
         memcpy(shapes_.ptr(), val.shape(), val.ndim() * sizeof(shape_t));
         auto info = val.request();
         util::FlattenHelper flatten(val);
+        using T = typename Tensor::value_type;
         auto data_ptr = reinterpret_cast<T*>(data_.ptr());
         flatten.flatten(data_ptr, reinterpret_cast<const T *>(info.ptr));
         update_offsets(val.nbytes());

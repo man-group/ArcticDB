@@ -18,8 +18,8 @@ namespace arcticdb::util {
 
 using namespace arcticdb::entity;
 
-template<class T, template<class> class Tensor>
-inline bool has_funky_strides(Tensor<T> &a) {
+template<class Tensor, class T = typename Tensor::value_type>
+inline bool has_funky_strides(Tensor& a) {
     for (ssize_t i = 0; i < a.ndim(); ++i) {
         if (a.strides(i) < 0 || a.strides(i) % a.itemsize() != 0)
             return true;
@@ -49,25 +49,25 @@ struct stride_advance_optimistic {
     }
 };
 
-template<class T, template<class> class Tensor>
-auto shape_and_strides(Tensor<T> &array, ssize_t dim) {
+template<class Tensor>
+auto shape_and_strides(Tensor&array, ssize_t dim) {
     auto total_dim = array.ndim();
     shape_t sh = array.shape(total_dim - size_t(dim));
     stride_t sd = array.strides(total_dim - size_t(dim));
     return std::make_pair(sh, sd);
 }
 
-template<class T, template<class> class Tensor, typename AdvanceFunc>
+template<class Tensor, typename AdvanceFunc>
 class FlattenHelperImpl {
-    Tensor<T> &array_;
+    Tensor &array_;
     AdvanceFunc advance_func_;
 
 public:
-    explicit FlattenHelperImpl(Tensor<T> &a) : array_(a) {}
+    explicit FlattenHelperImpl(Tensor &a) : array_(a) {}
 
-    using raw_type = T;
+    using raw_type = typename Tensor::value_type;
 
-    void flatten(T *&dest, const T *src, ssize_t dim) const {
+    void flatten(raw_type *&dest, const raw_type*src, ssize_t dim) const {
         auto [sh, sd] = shape_and_strides(array_, dim);
 
         for (shape_t i = 0; i < sh; ++i) {
@@ -81,21 +81,21 @@ public:
     }
 };
 
-template<class T, template<class> class Tensor>
+template<class Tensor>
 class FlattenHelper {
-    Tensor<T> &array_;
+    Tensor &array_;
 
   public:
-    explicit FlattenHelper(Tensor<T> &a) : array_(a) {}
+    explicit FlattenHelper(Tensor &a) : array_(a) {}
 
-    using raw_type = T;
+    using raw_type = typename Tensor::value_type;
 
-    void flatten(T *&dest, const T *src) const {
+    void flatten(raw_type*&dest, const raw_type*src) const {
         if(has_funky_strides(array_)) {
-            FlattenHelperImpl<T, Tensor, stride_advance_conservative<T>> flh{array_};
+            FlattenHelperImpl<Tensor, stride_advance_conservative<raw_type>> flh{array_};
             flh.flatten(dest, src, array_.ndim());
         } else {
-            FlattenHelperImpl<T, Tensor, stride_advance_optimistic<T>> flh{array_};
+            FlattenHelperImpl<Tensor, stride_advance_optimistic<raw_type>> flh{array_};
             flh.flatten(dest, src, array_.ndim());
         }
     }

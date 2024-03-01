@@ -60,7 +60,8 @@ struct NativeTensor {
         if(shapes[0] == 0)
             ARCTICDB_DEBUG(log::version(), "Supplied tensor is empty");
 
-        for (ssize_t i = 0; i < std::min(MaxDimensions, ndim); ++i)
+        strides_[ndim - 1] = static_cast<ssize_t>(get_type_size(dt_));
+        for(ssize_t i = 0; i < std::min(MaxDimensions, ndim); ++i)
             shapes_[i] = shapes[i];
 
         if(strides == nullptr) {
@@ -166,6 +167,8 @@ ssize_t byte_offset_impl(const stride_t* strides, ssize_t i, Ix... index) {
 //TODO is the conversion to a typed tensor really necessary for the codec part?
 template<typename T>
 struct TypedTensor : public NativeTensor {
+    using value_type = T;
+
     static size_t itemsize() { return sizeof(T); }
 
     std::array<stride_t, 2> f_style_strides() {
