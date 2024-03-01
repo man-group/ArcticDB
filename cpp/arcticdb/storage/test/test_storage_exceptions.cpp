@@ -260,19 +260,19 @@ TEST(S3MockStorageTest, TestPermissionErrorException) {
     S3MockStorageFactory factory;
     auto storage = factory.create();
 
-    std::string failureSymbol = s3::MockS3Client::get_failure_trigger("sym1", s3::S3Operation::GET, Aws::S3::S3Errors::ACCESS_DENIED);
+    std::string failureSymbol = s3::MockS3Client::get_failure_trigger("sym1", StorageOperation::READ, Aws::S3::S3Errors::ACCESS_DENIED);
 
     ASSERT_THROW({
         read_in_store(*storage, failureSymbol);
     },  StoragePermissionException);
 
-    failureSymbol = s3::MockS3Client::get_failure_trigger("sym2", s3::S3Operation::DELETE, Aws::S3::S3Errors::ACCESS_DENIED);
+    failureSymbol = s3::MockS3Client::get_failure_trigger("sym2", StorageOperation::DELETE, Aws::S3::S3Errors::ACCESS_DENIED);
 
     ASSERT_THROW({
         remove_in_store(*storage, {failureSymbol});
     },  StoragePermissionException);
 
-    failureSymbol = s3::MockS3Client::get_failure_trigger("sym3", s3::S3Operation::PUT, Aws::S3::S3Errors::INVALID_ACCESS_KEY_ID);
+    failureSymbol = s3::MockS3Client::get_failure_trigger("sym3", StorageOperation::WRITE, Aws::S3::S3Errors::INVALID_ACCESS_KEY_ID);
 
     ASSERT_THROW({
         update_in_store(*storage, failureSymbol);
@@ -284,7 +284,7 @@ TEST(S3MockStorageTest, TestS3RetryableException) {
     S3MockStorageFactory factory;
     auto storage = factory.create();
 
-    std::string failureSymbol = s3::MockS3Client::get_failure_trigger("sym1", s3::S3Operation::GET, Aws::S3::S3Errors::NETWORK_CONNECTION);
+    std::string failureSymbol = s3::MockS3Client::get_failure_trigger("sym1", StorageOperation::READ, Aws::S3::S3Errors::NETWORK_CONNECTION);
 
     ASSERT_THROW({
         read_in_store(*storage, failureSymbol);
@@ -295,7 +295,7 @@ TEST(S3MockStorageTest, TestUnexpectedS3ErrorException ) {
     S3MockStorageFactory factory;
     auto storage = factory.create();
 
-    std::string failureSymbol = s3::MockS3Client::get_failure_trigger("sym1", s3::S3Operation::GET, Aws::S3::S3Errors::NETWORK_CONNECTION, false);
+    std::string failureSymbol = s3::MockS3Client::get_failure_trigger("sym1", StorageOperation::READ, Aws::S3::S3Errors::NETWORK_CONNECTION, false);
 
     ASSERT_THROW({
         read_in_store(*storage, failureSymbol);
@@ -320,14 +320,14 @@ TEST(AzureMockStorageTest, TestPermissionErrorException) {
     auto storage = factory.create();
     write_in_store(*storage, "sym1");
 
-    std::string failureSymbol = azure::MockAzureClient::get_failure_trigger("sym1", azure::AzureOperation::WRITE,
+    std::string failureSymbol = azure::MockAzureClient::get_failure_trigger("sym1", StorageOperation::WRITE,
                                                                             azure::AzureErrorCode_to_string(azure::AzureErrorCode::UnauthorizedBlobOverwrite),
                                                                             Azure::Core::Http::HttpStatusCode::Forbidden);
     ASSERT_THROW({
         update_in_store(*storage, failureSymbol);
     },  StoragePermissionException);
 
-    failureSymbol = azure::MockAzureClient::get_failure_trigger("sym1", azure::AzureOperation::DELETE,
+    failureSymbol = azure::MockAzureClient::get_failure_trigger("sym1", StorageOperation::DELETE,
                                                                 azure::AzureErrorCode_to_string(azure::AzureErrorCode::UnauthorizedBlobOverwrite),
                                                                 Azure::Core::Http::HttpStatusCode::Forbidden);
     ASSERT_THROW({
@@ -340,7 +340,7 @@ TEST(AzureMockStorageTest, TestUnexpectedAzureErrorException ) {
     AzureMockStorageFactory factory;
     auto storage = factory.create();
 
-    std::string failureSymbol = azure::MockAzureClient::get_failure_trigger("sym1@#~?.&$", azure::AzureOperation::READ,
+    std::string failureSymbol = azure::MockAzureClient::get_failure_trigger("sym1@#~?.&$", StorageOperation::READ,
                                                                             azure::AzureErrorCode_to_string(azure::AzureErrorCode::InvalidBlobOrBlock),
                                                                             Azure::Core::Http::HttpStatusCode::BadRequest);
 
@@ -348,7 +348,7 @@ TEST(AzureMockStorageTest, TestUnexpectedAzureErrorException ) {
         read_in_store(*storage, failureSymbol);
     },  UnexpectedAzureException);
 
-    failureSymbol = azure::MockAzureClient::get_failure_trigger("sym1", azure::AzureOperation::READ,
+    failureSymbol = azure::MockAzureClient::get_failure_trigger("sym1", StorageOperation::READ,
                                                                 "",
                                                                 Azure::Core::Http::HttpStatusCode::InternalServerError);
 

@@ -231,7 +231,7 @@ TEST_F(S3StorageFixture, test_key_exists){
     ASSERT_TRUE(exists_in_store(store, "symbol"));
     ASSERT_FALSE(exists_in_store(store, "symbol-not-present"));
     ASSERT_THROW(
-        exists_in_store(store, MockS3Client::get_failure_trigger("symbol", S3Operation::HEAD, Aws::S3::S3Errors::NETWORK_CONNECTION, false)),
+        exists_in_store(store, MockS3Client::get_failure_trigger("symbol", StorageOperation::EXISTS, Aws::S3::S3Errors::NETWORK_CONNECTION, false)),
         UnexpectedS3ErrorException);
 }
 
@@ -241,14 +241,14 @@ TEST_F(S3StorageFixture, test_read){
     ASSERT_EQ(read_in_store(store, "symbol"), "symbol");
     ASSERT_THROW(read_in_store(store, "symbol-not-present"), KeyNotFoundException);
     ASSERT_THROW(
-        read_in_store(store, MockS3Client::get_failure_trigger("symbol", S3Operation::GET, Aws::S3::S3Errors::THROTTLING, false)),
+        read_in_store(store, MockS3Client::get_failure_trigger("symbol", StorageOperation::READ, Aws::S3::S3Errors::THROTTLING, false)),
         UnexpectedS3ErrorException);
 }
 
 TEST_F(S3StorageFixture, test_write){
     write_in_store(store, "symbol");
     ASSERT_THROW(
-        write_in_store(store, MockS3Client::get_failure_trigger("symbol", S3Operation::PUT, Aws::S3::S3Errors::NETWORK_CONNECTION, false)),
+        write_in_store(store, MockS3Client::get_failure_trigger("symbol", StorageOperation::WRITE, Aws::S3::S3Errors::NETWORK_CONNECTION, false)),
         UnexpectedS3ErrorException);
 }
 
@@ -264,14 +264,14 @@ TEST_F(S3StorageFixture, test_remove) {
 
     // Remove 2 and local fail on 3
     ASSERT_THROW(
-        remove_in_store(store, {"symbol_2", MockS3Client::get_failure_trigger("symbol_3", S3Operation::DELETE_LOCAL, Aws::S3::S3Errors::NETWORK_CONNECTION)}),
+        remove_in_store(store, {"symbol_2", MockS3Client::get_failure_trigger("symbol_3", StorageOperation::DELETE_LOCAL, Aws::S3::S3Errors::NETWORK_CONNECTION)}),
         UnexpectedS3ErrorException);
     remaining = std::set<std::string>{"symbol_3", "symbol_4"};
     ASSERT_EQ(list_in_store(store), remaining);
 
     // Attempt to remove 3 and 4, should fail entirely
     ASSERT_THROW(
-        remove_in_store(store, {"symbol_3", MockS3Client::get_failure_trigger("symbol_4", S3Operation::DELETE, Aws::S3::S3Errors::NETWORK_CONNECTION, false)}),
+        remove_in_store(store, {"symbol_3", MockS3Client::get_failure_trigger("symbol_4", StorageOperation::DELETE, Aws::S3::S3Errors::NETWORK_CONNECTION, false)}),
         UnexpectedS3ErrorException);
     ASSERT_EQ(list_in_store(store), remaining);
 }
@@ -285,7 +285,7 @@ TEST_F(S3StorageFixture, test_list) {
     }
     ASSERT_EQ(list_in_store(store), symbols);
 
-    write_in_store(store, MockS3Client::get_failure_trigger("symbol_99", S3Operation::LIST, Aws::S3::S3Errors::NETWORK_CONNECTION, false));
+    write_in_store(store, MockS3Client::get_failure_trigger("symbol_99", StorageOperation::LIST, Aws::S3::S3Errors::NETWORK_CONNECTION, false));
 
     ASSERT_THROW(list_in_store(store), UnexpectedS3ErrorException);
 }

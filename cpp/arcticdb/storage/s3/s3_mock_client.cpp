@@ -8,8 +8,6 @@
 #include <arcticdb/storage/s3/s3_mock_client.hpp>
 #include <arcticdb/storage/s3/s3_client_wrapper.hpp>
 
-#include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/util/pb_util.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/util/buffer_pool.hpp>
 
@@ -23,27 +21,15 @@ using namespace object_store_utils;
 
 namespace s3 {
 
-std::string operation_to_string(S3Operation operation){
-    switch (operation) {
-        case S3Operation::HEAD: return "Head";
-        case S3Operation::GET: return "Get";
-        case S3Operation::PUT: return "Put";
-        case S3Operation::DELETE: return "Delete";
-        case S3Operation::DELETE_LOCAL: return "Delete_local";
-        case S3Operation::LIST: return "List";
-    }
-    util::raise_rte("Invalid s3 operation");
-}
-
 std::string MockS3Client::get_failure_trigger(
         const std::string& s3_object_name,
-        S3Operation operation_to_fail,
+        StorageOperation operation_to_fail,
         Aws::S3::S3Errors error_to_fail_with,
         bool retryable) {
     return fmt::format("{}#Failure_{}_{}_{}", s3_object_name, operation_to_string(operation_to_fail), (int)error_to_fail_with, (int) retryable);
 }
 
-std::optional<Aws::S3::S3Error> has_failure_trigger(const std::string& s3_object_name, S3Operation operation){
+std::optional<Aws::S3::S3Error> object_has_failure_trigger(const std::string& s3_object_name, StorageOperation operation) {
     auto failure_string_for_operation = "#Failure_" + operation_to_string(operation) + "_";
     auto position = s3_object_name.rfind(failure_string_for_operation);
     if (position == std::string::npos) return std::nullopt;
@@ -60,17 +46,34 @@ std::optional<Aws::S3::S3Error> has_failure_trigger(const std::string& s3_object
 
 const auto not_found_error = Aws::S3::S3Error(Aws::Client::AWSError<Aws::S3::S3Errors>(Aws::S3::S3Errors::RESOURCE_NOT_FOUND, false));
 
+std::optional<Aws::S3::S3Error> MockS3Client::has_failure_trigger(const std::pair<std::string, std::string>& key, StorageOperation op) const {
+    return object_has_failure_trigger(key.second, op);
+}
+
+std::pair<std::string, std::string> get_key(const std::string& bucket_name, const std::string& s3_object_name) {
+    return {bucket_name, s3_object_name};
+}
+
+std::vector<std::pair<std::string, std::string>> get_keys(const std::string& bucket_name, const std::vector<std::string>& objects) {
+    std::vector<std::pair<std::string, std::string>> keys;
+    for (auto& object : objects) {
+        keys.emplace_back(get_key(bucket_name, object));
+    }
+    return keys;
+}
+
+Aws::S3::S3Error MockS3Client::missing_key_failure() const { return not_found_error; }
+
+bool MockS3Client::matches_prefix(const std::pair<std::string, std::string>& key, const std::string& prefix) const {
+    return key.second.rfind(prefix, 0) == 0;
+}
+
 S3Result<std::monostate> MockS3Client::head_object(
         const std::string& s3_object_name,
         const std::string &bucket_name) const {
-    auto maybe_error = has_failure_trigger(s3_object_name, S3Operation::HEAD);
-    if (maybe_error.has_value()) {
-        return {maybe_error.value()};
-    }
-
-    if (s3_contents.find({bucket_name, s3_object_name}) == s3_contents.end()){
-        return {not_found_error};
-    }
+    auto result = exists_internal(get_key(bucket_name, s3_object_name));
+    if(!result.is_success()) return {result.get_error()};
+    if(!result.get_output()) return {not_found_error};
     return {std::monostate()};
 }
 
@@ -78,51 +81,25 @@ S3Result<std::monostate> MockS3Client::head_object(
 S3Result<Segment> MockS3Client::get_object(
         const std::string &s3_object_name,
         const std::string &bucket_name) const {
-    auto maybe_error = has_failure_trigger(s3_object_name, S3Operation::GET);
-    if (maybe_error.has_value()) {
-        return {maybe_error.value()};
-    }
-
-    auto pos = s3_contents.find({bucket_name, s3_object_name});
-    if (pos == s3_contents.end()){
-        return {not_found_error};
-    }
-    return {pos->second};
+    return {read_internal(get_key(bucket_name, s3_object_name)).result};
 }
 
 S3Result<std::monostate> MockS3Client::put_object(
         const std::string &s3_object_name,
         Segment &&segment,
         const std::string &bucket_name) {
-    auto maybe_error = has_failure_trigger(s3_object_name, S3Operation::PUT);
-    if (maybe_error.has_value()) {
-        return {maybe_error.value()};
-    }
-
-    s3_contents.insert_or_assign({bucket_name, s3_object_name}, std::move(segment));
-
-    return {std::monostate()};
+    return {write_internal(get_key(bucket_name, s3_object_name), std::move(segment)).result};
 }
 
 S3Result<DeleteOutput> MockS3Client::delete_objects(
         const std::vector<std::string>& s3_object_names,
         const std::string& bucket_name) {
-    for (auto& s3_object_name : s3_object_names){
-        auto maybe_error = has_failure_trigger(s3_object_name, S3Operation::DELETE);
-        if (maybe_error.has_value()) {
-            return {maybe_error.value()};
-        }
-    }
+    auto result = delete_internal(get_keys(bucket_name, s3_object_names));
+    if (!result.is_success()) return {result.get_error()};
 
     DeleteOutput output;
-    for (auto& s3_object_name : s3_object_names){
-        auto maybe_error = has_failure_trigger(s3_object_name, S3Operation::DELETE_LOCAL);
-        if (maybe_error.has_value()) {
-            output.failed_deletes.push_back({s3_object_name, "Sample error message"});
-        }
-        else {
-            s3_contents.erase({bucket_name, s3_object_name});
-        }
+    for (auto& key : result.get_output()){
+        output.failed_deletes.push_back({key.second, "Sample error message"});
     }
     return {output};
 }
@@ -136,7 +113,7 @@ S3Result<ListObjectsOutput> MockS3Client::list_objects(
         const std::optional<std::string> continuation_token) const {
     // Terribly inefficient but fine for tests.
     auto matching_names = std::vector<std::string>();
-    for (auto& key : s3_contents){
+    for (auto& key : contents_){
         if (key.first.first == bucket_name && key.first.second.rfind(name_prefix, 0) == 0){
             matching_names.emplace_back(key.first.second);
         }
@@ -157,7 +134,7 @@ S3Result<ListObjectsOutput> MockS3Client::list_objects(
     for (auto i=start_from; i < end_to; ++i){
         auto& s3_object_name = matching_names[i];
 
-        auto maybe_error = has_failure_trigger(s3_object_name, S3Operation::LIST);
+        auto maybe_error = object_has_failure_trigger(s3_object_name, StorageOperation::LIST);
         if (maybe_error.has_value()) return {maybe_error.value()};
 
         output.s3_object_names.emplace_back(s3_object_name);

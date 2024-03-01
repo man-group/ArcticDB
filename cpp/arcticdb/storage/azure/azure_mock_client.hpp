@@ -14,18 +14,11 @@
 
 #include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/storage/azure/azure_client_wrapper.hpp>
+#include <arcticdb/storage/storage_mock_client.hpp>
 
 namespace arcticdb::storage::azure {
 
-enum class AzureOperation{
-    READ,
-    WRITE,
-    DELETE, // delete_blobs will fail for all objects if one of them triggers a delete failure
-    LIST,
-    EXISTS,
-};
-
-class MockAzureClient : public AzureClientWrapper {
+class MockAzureClient : public AzureClientWrapper, public MockStorageClient<std::string, Azure::Core::RequestFailedException> {
 
 public:
 
@@ -50,14 +43,17 @@ public:
 
     static std::string get_failure_trigger(
             const std::string& blob_name,
-            AzureOperation operation_to_fail,
+            StorageOperation operation_to_fail,
             const std::string& error_code,
             Azure::Core::Http::HttpStatusCode error_to_fail_with);
 
-private:
-    // Stores a mapping from blob_name to a Segment.
-    std::map<std::string, Segment> azure_contents;
+    std::optional<Azure::Core::RequestFailedException> has_failure_trigger(
+            const std::string& blob_name,
+            StorageOperation op) const override;
 
+    Azure::Core::RequestFailedException missing_key_failure() const override;
+
+    bool matches_prefix(const std::string& blob_name, const std::string& prefix) const override;
 };
 
 }
