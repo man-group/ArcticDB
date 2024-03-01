@@ -13,8 +13,10 @@
 
 namespace arcticdb::storage::mongo {
 
+// modified_count set to null_opt signals update failed (mongo docs are unclear on what error causes this)
 struct UpdateResult { std::optional<int> modified_count; };
 
+// delete_count set to null_opt signals delete failed (mongo docs are unclear on what error causes this)
 struct DeleteResult { std::optional<int> delete_count; };
 
 class MongoClientWrapper {
