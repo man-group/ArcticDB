@@ -464,6 +464,7 @@ set(arcticdb_srcs
         version/version_utils.cpp
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
+        storage/mongo/mongo_client_wrapper.hpp
 )
 
 if(${ARCTICDB_INCLUDE_ROCKSDB})
