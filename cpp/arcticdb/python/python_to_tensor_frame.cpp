@@ -50,8 +50,9 @@ std::variant<StringEncodingError, PyStringWrapper> pystring_to_buffer(PyObject *
 std::tuple<ValueType, uint8_t, ssize_t> determine_python_object_type(PyObject* obj) {
     if (is_py_boolean(obj)) {
         normalization::raise<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>("Nullable booleans are not supported at the moment");
-        return {ValueType::PYBOOL, 1, 1};
+        return {ValueType::BOOL_OBJECT, 1, 1};
     }
+
     return {ValueType::BYTES, 8, 1};
 }
 

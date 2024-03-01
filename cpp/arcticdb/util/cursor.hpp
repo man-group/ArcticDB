@@ -70,7 +70,7 @@ struct formatter<arcticdb::Cursor> {
 
     template<typename FormatContext>
     auto format(const arcticdb::Cursor &c, FormatContext &ctx) const {
-        return format_to(ctx.out(), "{}", c.pos());
+        return fmt::format_to(ctx.out(), "{}", c.pos());
     }
 };
 

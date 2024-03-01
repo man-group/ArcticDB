@@ -291,8 +291,7 @@ void register_type_handlers() {
     for(const DataType& data_type : allowed_array_types) {
         TypeHandlerRegistry::instance()->register_handler(TypeDescriptor{data_type, Dimension::Dim1}, arcticdb::ArrayHandler());
     }
-    TypeHandlerRegistry::instance()->register_handler(TypeDescriptor{DataType::PYBOOL64, Dimension::Dim0}, arcticdb::BoolHandler());
-    TypeHandlerRegistry::instance()->register_handler(TypeDescriptor{DataType::PYBOOL8, Dimension::Dim0}, arcticdb::BoolHandler());
+    TypeHandlerRegistry::instance()->register_handler(TypeDescriptor{DataType::BOOL_OBJECT8, Dimension::Dim0}, arcticdb::BoolHandler());
 }
 
 PYBIND11_MODULE(arcticdb_ext, m) {

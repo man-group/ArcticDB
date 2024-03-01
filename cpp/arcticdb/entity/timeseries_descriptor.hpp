@@ -7,7 +7,6 @@
 
 #pragma once
 
-#include <proto/arcticc/pb2/proto/descriptors.pb.h>
 #include <arcticdb/entity/field_collection.hpp>
 #include <arcticdb/entity/stream_descriptor.hpp>
 

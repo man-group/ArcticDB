@@ -280,9 +280,9 @@ namespace fmt {
 
         template<typename FormatContext>
         auto format(const arcticdb::Composite<T> &c, FormatContext &ctx) const {
-            auto it = format_to(ctx.out(), "Composite: ");
+            auto it = fmt::format_to(ctx.out(), "Composite: ");
             c.broadcast([&it] (const auto& v) {
-                it = format_to(it, "{}, ", v);
+                it = fmt::format_to(it, "{}, ", v);
             });
             return it;
         }

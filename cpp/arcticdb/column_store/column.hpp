@@ -222,7 +222,7 @@ public:
             // it pointers to an array type (at numpy arrays at the moment). When we allocate a column for an array we
             // need to allocate space for one pointer per row. This also affects how we handle arrays to python as well.
             // Check cpp/arcticdb/column_store/column_utils.hpp::array_at and cpp/arcticdb/column_store/column.hpp::Column
-            data_(expected_rows * (type.dimension() == Dimension::Dim0 ? get_type_size(type.data_type()) : sizeof(void*)), presize),
+            data_(expected_rows * entity::sizeof_datatype(type), presize),
             type_(type),
             allow_sparse_(allow_sparse){
         ARCTICDB_TRACE(log::inmem(), "Creating column with descriptor {}", type);
@@ -244,9 +244,9 @@ public:
         sparse_map().set_range(0, bv_size(to_row), true);
     }
 
-    std::optional<util::BitMagic>& opt_sparse_map() {
-        return sparse_map_;
-    }
+    [[nodiscard]] util::BitMagic& sparse_map();
+    [[nodiscard]] const util::BitMagic& sparse_map() const;
+    [[nodiscard]] std::optional<util::BitMagic>& opt_sparse_map();
 
     template<typename TagType>
     auto begin() const {
@@ -651,52 +651,81 @@ public:
         return *res;
     }
 
-    /*
-     * !!!!!!!!!!----------IMPORTANT----------!!!!!!!!!!
-     * When adding new uses of these static methods, add an internal::check<...>(f.heapAllocatedMemory() == 0,...)
-     * and run all of the tests in CI on all supported platforms. We do not want these checks in the released code,
-     * but also do not want any passed in lambdas to be heap allocated.
-     */
+    [[nodiscard]] static std::vector<std::shared_ptr<Column>> split(
+        const std::shared_ptr<Column>& column,
+        size_t num_rows
+    );
+    /// @brief Produces a new column containing only the data in range [start_row, end_row)
+    /// @param[in] start_row Inclusive start of the row range
+    /// @param[in] end_row Exclusive end of the row range
+    [[nodiscard]] static std::shared_ptr<Column> truncate(
+        const std::shared_ptr<Column>& column,
+        size_t start_row,
+        size_t end_row
+    );
 
-    template<typename input_tdt>
-    static void for_each(const Column& input_column,
-                          folly::Function<void(typename input_tdt::DataTypeTag::raw_type)>&& f) {
+    template <
+        typename input_tdt,
+        typename functor,
+        typename = std::enable_if_t<std::is_invocable_r_v<void, functor, typename input_tdt::DataTypeTag::raw_type>>>
+    static void for_each(const Column& input_column, functor&& f) {
         auto input_data = input_column.data();
-        std::for_each(input_data.cbegin<input_tdt>(), input_data.cend<input_tdt>(), [&f](auto input_value) {
-            f(input_value);
-        });
+        std::for_each(input_data.cbegin<input_tdt>(), input_data.cend<input_tdt>(), std::forward<functor>(f));
     }
 
-    template<typename input_tdt, typename output_tdt>
-    static void transform(const Column& input_column,
-                          Column& output_column,
-                          folly::Function<typename output_tdt::DataTypeTag::raw_type(typename input_tdt::DataTypeTag::raw_type)>&& f) {
+    template <
+        typename input_tdt,
+        typename output_tdt,
+        typename functor,
+        typename = std::enable_if_t<std::is_invocable_r_v<
+            typename output_tdt::DataTypeTag::raw_type,
+            functor,
+            typename input_tdt::DataTypeTag::raw_type>>>
+    static void transform(const Column& input_column, Column& output_column, functor&& f) {
         auto input_data = input_column.data();
         auto output_data = output_column.data();
-        std::transform(input_data.cbegin<input_tdt>(), input_data.cend<input_tdt>(), output_data.begin<output_tdt>(), std::move(f));
+        std::transform(
+            input_data.cbegin<input_tdt>(),
+            input_data.cend<input_tdt>(),
+            output_data.begin<output_tdt>(),
+            std::forward<functor>(f)
+        );
     }
 
-    template<typename left_input_tdt, typename right_input_tdt, typename output_tdt>
+    template<
+        typename left_input_tdt,
+        typename right_input_tdt,
+        typename output_tdt,
+        typename functor,
+        typename = std::enable_if_t<std::is_invocable_r_v<
+            typename output_tdt::DataTypeTag::raw_type,
+            functor,
+            typename left_input_tdt::DataTypeTag::raw_type,
+            typename right_input_tdt::DataTypeTag::raw_type>>>
     static void transform(const Column& left_input_column,
                           const Column& right_input_column,
                           Column& output_column,
-                          folly::Function<typename output_tdt::DataTypeTag::raw_type(typename left_input_tdt::DataTypeTag::raw_type, typename right_input_tdt::DataTypeTag::raw_type)>&& f) {
+                          functor&& f) {
         auto left_input_data = left_input_column.data();
         auto right_input_data = right_input_column.data();
         auto output_data = output_column.data();
-        std::transform(left_input_data.cbegin<left_input_tdt>(), left_input_data.cend<left_input_tdt>(), right_input_data.cbegin<right_input_tdt>(), output_data.begin<output_tdt>(), [&f](auto left_value, auto right_value) {
-            return f(left_value, right_value);
-        });
+        std::transform(left_input_data.cbegin<left_input_tdt>(), left_input_data.cend<left_input_tdt>(), right_input_data.cbegin<right_input_tdt>(), output_data.begin<output_tdt>(), std::forward<functor>(f));
     }
 
-    template<typename input_tdt>
+    template <
+        typename input_tdt,
+        typename functor,
+        typename = std::enable_if_t<std::is_invocable_r_v<bool, functor, typename input_tdt::DataTypeTag::raw_type>>>
     static void transform(const Column& input_column,
                           util::BitSet& output_bitset,
-                          folly::Function<bool(typename input_tdt::DataTypeTag::raw_type)>&& f) {
+                          functor&& f) {
         auto input_data = input_column.data();
         util::BitSet::bulk_insert_iterator inserter(output_bitset);
         auto pos = 0u;
-        std::for_each(input_data.cbegin<input_tdt>(), input_data.cend<input_tdt>(), [&inserter, &pos, &f](auto input_value) {
+        std::for_each(
+            input_data.cbegin<input_tdt>(),
+            input_data.cend<input_tdt>(),
+            [&inserter, &pos, f = std::forward<functor>(f)](auto input_value) {
             if (f(input_value)) {
                 inserter = pos;
             }
@@ -705,16 +734,27 @@ public:
         inserter.flush();
     }
 
-    template<typename left_input_tdt, typename right_input_tdt>
+    template <
+        typename left_input_tdt,
+        typename right_input_tdt,
+        typename functor,
+        typename = std::enable_if_t<std::is_invocable_r_v<
+            bool,
+            functor,
+            typename left_input_tdt::DataTypeTag::raw_type,
+            typename right_input_tdt::DataTypeTag::raw_type>>>
     static void transform(const Column& left_input_column,
                           const Column& right_input_column,
                           util::BitSet& output_bitset,
-                          folly::Function<bool(typename left_input_tdt::DataTypeTag::raw_type, typename right_input_tdt::DataTypeTag::raw_type)>&& f) {
+                          functor&& f) {
         auto left_input_data = left_input_column.data();
         auto right_it = right_input_column.data().cbegin<right_input_tdt>();
         util::BitSet::bulk_insert_iterator inserter(output_bitset);
         auto pos = 0u;
-        std::for_each(left_input_data.cbegin<left_input_tdt>(), left_input_data.cend<left_input_tdt>(), [&right_it, &inserter, &pos, &f](auto left_value) {
+        std::for_each(
+            left_input_data.cbegin<left_input_tdt>(),
+            left_input_data.cend<left_input_tdt>(),
+            [&right_it, &inserter, &pos, f = std::forward<functor>(f)](auto left_value) {
             auto right_value = *right_it++;
             if (f(left_value, right_value)) {
                 inserter = pos;
@@ -723,12 +763,6 @@ public:
         });
         inserter.flush();
     }
-
-    // end IMPORTANT
-
-    static std::vector<std::shared_ptr<Column>> split(const std::shared_ptr<Column>& column, size_t num_rows);
-
-    static std::shared_ptr<Column> truncate(const std::shared_ptr<Column>& column, size_t start_row, size_t end_row);
 
 private:
 
@@ -747,9 +781,6 @@ private:
 
     // Permutes the physical column storage based on the given sorted_pos.
     void physical_sort_external(std::vector<uint32_t> &&sorted_pos);
-
-    [[nodiscard]] util::BitMagic& sparse_map();
-    const util::BitMagic& sparse_map() const;
 
     // Members
     CursoredBuffer<ChunkedBuffer> data_;

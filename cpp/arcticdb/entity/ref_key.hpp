@@ -57,9 +57,7 @@ namespace arcticdb::entity {
 
         std::string_view view() const { if(str_.empty()) set_string(); return std::string_view{str_}; }
 
-        void set_string() const {
-            str_ = fmt::format("{}", *this);
-        }
+        void set_string() const;
     private:
 
         StreamId id_;
@@ -79,7 +77,7 @@ struct formatter<RefKey> {
 
     template<typename FormatContext>
     auto format(const RefKey &k, FormatContext &ctx) const {
-        return format_to(ctx.out(), "{}:{}", k.type(), k.id());
+        return fmt::format_to(ctx.out(), "{}:{}", k.type(), k.id());
     }
 };
 
@@ -94,4 +92,12 @@ struct hash<arcticdb::entity::RefKey> {
         return arcticdb::hash(const_cast<uint8_t * >(reinterpret_cast<const uint8_t *>(view.data())), view.size());
     }
 };
+}
+
+namespace arcticdb::entity
+{
+    // Note: this needs to be defined after formatters.
+    inline void RefKey::set_string() const {
+        str_ = fmt::format("{}", *this);
+    }
 }

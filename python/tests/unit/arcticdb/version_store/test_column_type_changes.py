@@ -43,18 +43,8 @@ def test_changing_numeric_type(version_store_factory, dynamic_schema):
         assert_frame_equal(expected_update, received_update)
 
 
-@pytest.mark.parametrize("dynamic_schema, dynamic_strings_first", [
-    (True, True),
-    (True, False),
-    pytest.param(False,
-                 True,
-                 marks=pytest.mark.xfail(
-                     reason="""Issue with appending/updating a dynamic string column with fixed-width strings
-                     https://github.com/man-group/ArcticDB/issues/1204"""
-                 )
-                 ),
-    (False, False),
-])
+@pytest.mark.parametrize("dynamic_schema", [True, False])
+@pytest.mark.parametrize("dynamic_strings_first", [True, False])
 def test_changing_string_type(version_store_factory, dynamic_schema, dynamic_strings_first):
     lib = version_store_factory(dynamic_strings=True, dynamic_schema=dynamic_schema)
     sym_append = "test_changing_string_type_append"

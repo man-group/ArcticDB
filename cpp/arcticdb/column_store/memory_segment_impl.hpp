@@ -752,8 +752,8 @@ public:
 
     SegmentInMemoryImpl clone() const;
 
-    void set_string_pool(const std::shared_ptr<StringPool>& string_pool) {
-        string_pool_ = string_pool;
+    void set_string_pool(std::shared_ptr<StringPool> string_pool) {
+        string_pool_ = std::move(string_pool);
     }
 
     std::shared_ptr<SegmentInMemoryImpl> get_output_segment(size_t num_values, bool pre_allocate=true) const;
@@ -778,8 +778,18 @@ public:
 
     void set_timeseries_descriptor(TimeseriesDescriptor&& tsd);
 
-    // Inclusive of start_row, exclusive of end_row
-    std::shared_ptr<SegmentInMemoryImpl> truncate(size_t start_row, size_t end_row) const;
+    /// @brief Construct a copy of the segment containing only rows in [start_row; end_row)
+    /// @param start_row Start of the row range (inclusive)
+    /// @param end_Row End of the row range (exclusive)
+    /// @param reconstruct_string_pool When truncating some of the strings values of the original
+    ///  segment might not be referenced in the resulting segment. In this case, reconstructing the
+    ///  string pool will save some memory. Note that reconstructing the string pool is an expensive
+    ///  operation and should be avoided if possible.
+    std::shared_ptr<SegmentInMemoryImpl> truncate(
+        size_t start_row,
+        size_t end_row,
+        bool reconstruct_string_pool
+    ) const;
 
     // Partitions the segment into n new segments. Each row in the starting segment is mapped to one of the output segments
     // by the row_to_segment vector (std::nullopt means the row is not included in any output segment).

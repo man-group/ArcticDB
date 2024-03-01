@@ -11,8 +11,14 @@
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/lmdb/lmdb_storage.hpp>
 #include <arcticdb/storage/memory/memory_storage.hpp>
+#ifdef ARCTICDB_INCLUDE_ROCKSDB
+#include <arcticdb/storage/rocksdb/rocksdb_storage.hpp>
+#endif
 #include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/storage/s3/s3_mock_client.hpp>
+#include <arcticdb/storage/azure/azure_storage.hpp>
+#include <arcticdb/storage/azure/azure_mock_client.hpp>
+#include <arcticdb/storage/test/common.hpp>
 #include <arcticdb/util/buffer.hpp>
 
 #include <filesystem>
@@ -51,7 +57,7 @@ public:
 
         arcticdb::storage::LibraryPath library_path{"a", "b"};
 
-        return std::make_unique<arcticdb::storage::lmdb::LmdbStorage>(library_path, arcticdb::storage::OpenMode::WRITE, cfg);
+        return std::make_unique<arcticdb::storage::lmdb::LmdbStorage>(library_path, arcticdb::storage::OpenMode::DELETE, cfg);
     }
 
     void setup() override {
@@ -73,9 +79,38 @@ public:
         arcticdb::proto::memory_storage::Config cfg;
         arcticdb::storage::LibraryPath library_path{"a", "b"};
 
-        return std::make_unique<arcticdb::storage::memory::MemoryStorage>(library_path, arcticdb::storage::OpenMode::WRITE, cfg);
+        return std::make_unique<arcticdb::storage::memory::MemoryStorage>(library_path, arcticdb::storage::OpenMode::DELETE, cfg);
     }
 };
+
+#ifdef ARCTICDB_INCLUDE_ROCKSDB
+class RocksDBStorageFactory : public StorageFactory {
+
+public:
+    std::unique_ptr<arcticdb::storage::Storage> create() override {
+        arcticdb::proto::rocksdb_storage::Config cfg;
+
+        fs::path db_name = "test_rocksdb";
+        cfg.set_path((TEST_DATABASES_PATH / db_name).generic_string());
+
+        arcticdb::storage::LibraryPath library_path("lib", '/');
+
+        return std::make_unique<arcticdb::storage::rocksdb::RocksDBStorage>(library_path, arcticdb::storage::OpenMode::DELETE, cfg);
+    }
+
+    void setup() override {
+        if (!fs::exists(TEST_DATABASES_PATH)) {
+            fs::create_directories(TEST_DATABASES_PATH);
+        }
+    }
+
+    void clear_setup() override {
+        if (fs::exists(TEST_DATABASES_PATH)) {
+            fs::remove_all(TEST_DATABASES_PATH);
+        }
+    }
+};
+#endif
 
 class S3MockStorageFactory : public StorageFactory {
 public:
@@ -84,7 +119,18 @@ public:
         cfg.set_use_mock_storage_for_testing(true);
         arcticdb::storage::LibraryPath library_path("lib", '.');
 
-        return std::make_unique<arcticdb::storage::s3::S3Storage>(library_path, arcticdb::storage::OpenMode::WRITE, cfg);
+        return std::make_unique<arcticdb::storage::s3::S3Storage>(library_path, arcticdb::storage::OpenMode::DELETE, cfg);
+    }
+};
+
+class AzureMockStorageFactory : public StorageFactory {
+public:
+    std::unique_ptr<arcticdb::storage::Storage> create() override {
+        arcticdb::proto::azure_storage::Config cfg;
+        cfg.set_use_mock_storage_for_testing(true);
+        arcticdb::storage::LibraryPath library_path("lib", '/');
+
+        return std::make_unique<arcticdb::storage::azure::AzureStorage>(library_path,arcticdb::storage::OpenMode::DELETE, cfg);
     }
 };
 
@@ -106,54 +152,35 @@ protected:
 };
 
 TEST_P(GenericStorageTest, WriteDuplicateKeyException) {
-    arcticdb::entity::AtomKey k = arcticdb::entity::atom_key_builder().gen_id(0).build<arcticdb::entity::KeyType::VERSION>("sym");
+    write_in_store(*storage, "sym");
 
-    arcticdb::storage::KeySegmentPair kv(k);
-    kv.segment().set_buffer(std::make_shared<arcticdb::Buffer>());
-
-    storage->write(std::move(kv));
-
-    ASSERT_TRUE(storage->key_exists(k));
-
-    arcticdb::storage::KeySegmentPair kv1(k);
-    kv1.segment().set_buffer(std::make_shared<arcticdb::Buffer>());
-
+    ASSERT_TRUE(exists_in_store(*storage, "sym"));
     ASSERT_THROW({
-        storage->write(std::move(kv1));
+        write_in_store(*storage, "sym");
     },  arcticdb::storage::DuplicateKeyException);
 
 }
 
 TEST_P(GenericStorageTest, ReadKeyNotFoundException) {
-    arcticdb::entity::AtomKey k = arcticdb::entity::atom_key_builder().gen_id(0).build<arcticdb::entity::KeyType::VERSION>("sym");
-
-    ASSERT_TRUE(!storage->key_exists(k));
+    ASSERT_FALSE(exists_in_store(*storage, "sym"));
     ASSERT_THROW({
-        storage->read(k, arcticdb::storage::ReadKeyOpts{});
+        read_in_store(*storage, "sym");
     },  arcticdb::storage::KeyNotFoundException);
 
 }
 
 TEST_P(GenericStorageTest, UpdateKeyNotFoundException) {
-    arcticdb::entity::AtomKey k = arcticdb::entity::atom_key_builder().gen_id(0).build<arcticdb::entity::KeyType::VERSION>("sym");
-
-    arcticdb::storage::KeySegmentPair kv(k);
-    kv.segment().header().set_start_ts(1234);
-    kv.segment().set_buffer(std::make_shared<arcticdb::Buffer>());
-
-    ASSERT_TRUE(!storage->key_exists(k));
+    ASSERT_FALSE(exists_in_store(*storage, "sym"));
     ASSERT_THROW({
-        storage->update(std::move(kv), arcticdb::storage::UpdateOpts{});
+        update_in_store(*storage, "sym");
     },  arcticdb::storage::KeyNotFoundException);
 
 }
 
 TEST_P(GenericStorageTest, RemoveKeyNotFoundException) {
-    arcticdb::entity::AtomKey k = arcticdb::entity::atom_key_builder().gen_id(0).build<arcticdb::entity::KeyType::VERSION>("sym");
-
-    ASSERT_TRUE(!storage->key_exists(k));
+    ASSERT_FALSE(exists_in_store(*storage, "sym"));
     ASSERT_THROW({
-        storage->remove(k, arcticdb::storage::RemoveOpts{});
+        remove_in_store(*storage, {"sym"});
     },  arcticdb::storage::KeyNotFoundException);
 
 }
@@ -166,6 +193,18 @@ INSTANTIATE_TEST_SUITE_P(
                 std::make_shared<MemoryStorageFactory>()
         )
 );
+
+#ifdef ARCTICDB_INCLUDE_ROCKSDB
+
+INSTANTIATE_TEST_SUITE_P(
+        RocksDBStoragesCommonTests,
+        GenericStorageTest,
+        ::testing::Values(
+                std::make_shared<RocksDBStorageFactory>()
+        )
+);
+
+#endif
 
 // LMDB Storage specific tests
 
@@ -209,11 +248,9 @@ TEST(S3MockStorageTest, TestReadKeyNotFoundException) {
     S3MockStorageFactory factory;
     auto storage = factory.create();
 
-    std::string failureSymbol = s3::MockS3Client::get_failure_trigger("sym", s3::S3Operation::GET, Aws::S3::S3Errors::NO_SUCH_KEY);
-    auto k = entity::atom_key_builder().gen_id(0).build<entity::KeyType::VERSION>(failureSymbol);
-
+    ASSERT_FALSE(exists_in_store(*storage, "sym"));
     ASSERT_THROW({
-        storage->read(k, storage::ReadKeyOpts{});
+        read_in_store(*storage, "sym");
     },  arcticdb::storage::KeyNotFoundException);
 
 }
@@ -224,28 +261,22 @@ TEST(S3MockStorageTest, TestPermissionErrorException) {
     auto storage = factory.create();
 
     std::string failureSymbol = s3::MockS3Client::get_failure_trigger("sym1", s3::S3Operation::GET, Aws::S3::S3Errors::ACCESS_DENIED);
-    AtomKeyImpl k = entity::atom_key_builder().gen_id(0).build<entity::KeyType::VERSION>(failureSymbol);
 
     ASSERT_THROW({
-        storage->read(k, storage::ReadKeyOpts{});
-    },  PermissionException);
+        read_in_store(*storage, failureSymbol);
+    },  StoragePermissionException);
 
     failureSymbol = s3::MockS3Client::get_failure_trigger("sym2", s3::S3Operation::DELETE, Aws::S3::S3Errors::ACCESS_DENIED);
-    k = entity::atom_key_builder().gen_id(0).build<entity::KeyType::VERSION>(failureSymbol);
 
     ASSERT_THROW({
-        storage->remove(k, storage::RemoveOpts{});
-    },  PermissionException);
+        remove_in_store(*storage, {failureSymbol});
+    },  StoragePermissionException);
 
     failureSymbol = s3::MockS3Client::get_failure_trigger("sym3", s3::S3Operation::PUT, Aws::S3::S3Errors::INVALID_ACCESS_KEY_ID);
-    k = entity::atom_key_builder().gen_id(0).build<entity::KeyType::VERSION>(failureSymbol);
-    KeySegmentPair kv = KeySegmentPair(k);
-    kv.segment().header().set_start_ts(1234);
-    kv.segment().set_buffer(std::make_shared<arcticdb::Buffer>());
 
     ASSERT_THROW({
-        storage->update(std::move(kv), storage::UpdateOpts{});
-    },  PermissionException);
+        update_in_store(*storage, failureSymbol);
+    },  StoragePermissionException);
 
 }
 
@@ -254,10 +285,9 @@ TEST(S3MockStorageTest, TestS3RetryableException) {
     auto storage = factory.create();
 
     std::string failureSymbol = s3::MockS3Client::get_failure_trigger("sym1", s3::S3Operation::GET, Aws::S3::S3Errors::NETWORK_CONNECTION);
-    AtomKeyImpl k = entity::atom_key_builder().gen_id(0).build<entity::KeyType::VERSION>(failureSymbol);
 
     ASSERT_THROW({
-        storage->read(k, storage::ReadKeyOpts{});
+        read_in_store(*storage, failureSymbol);
     },  S3RetryableException);
 }
 
@@ -266,9 +296,63 @@ TEST(S3MockStorageTest, TestUnexpectedS3ErrorException ) {
     auto storage = factory.create();
 
     std::string failureSymbol = s3::MockS3Client::get_failure_trigger("sym1", s3::S3Operation::GET, Aws::S3::S3Errors::NETWORK_CONNECTION, false);
-    AtomKeyImpl k = entity::atom_key_builder().gen_id(0).build<entity::KeyType::VERSION>(failureSymbol);
 
     ASSERT_THROW({
-        storage->read(k, storage::ReadKeyOpts{});
+        read_in_store(*storage, failureSymbol);
     },  UnexpectedS3ErrorException);
+}
+
+// Azure error testing with mock client
+TEST(AzureMockStorageTest, TestReadKeyNotFoundException) {
+    AzureMockStorageFactory factory;
+    auto storage = factory.create();
+
+    ASSERT_FALSE(exists_in_store(*storage, "sym"));
+    ASSERT_THROW({
+        read_in_store(*storage, "sym");
+    },  arcticdb::storage::KeyNotFoundException);
+
+}
+
+// Check that Permission exception is thrown when http Forbidden status code is returned
+TEST(AzureMockStorageTest, TestPermissionErrorException) {
+    AzureMockStorageFactory factory;
+    auto storage = factory.create();
+    write_in_store(*storage, "sym1");
+
+    std::string failureSymbol = azure::MockAzureClient::get_failure_trigger("sym1", azure::AzureOperation::WRITE,
+                                                                            azure::AzureErrorCode_to_string(azure::AzureErrorCode::UnauthorizedBlobOverwrite),
+                                                                            Azure::Core::Http::HttpStatusCode::Forbidden);
+    ASSERT_THROW({
+        update_in_store(*storage, failureSymbol);
+    },  StoragePermissionException);
+
+    failureSymbol = azure::MockAzureClient::get_failure_trigger("sym1", azure::AzureOperation::DELETE,
+                                                                azure::AzureErrorCode_to_string(azure::AzureErrorCode::UnauthorizedBlobOverwrite),
+                                                                Azure::Core::Http::HttpStatusCode::Forbidden);
+    ASSERT_THROW({
+        remove_in_store(*storage, {failureSymbol});
+    },  StoragePermissionException);
+
+}
+
+TEST(AzureMockStorageTest, TestUnexpectedAzureErrorException ) {
+    AzureMockStorageFactory factory;
+    auto storage = factory.create();
+
+    std::string failureSymbol = azure::MockAzureClient::get_failure_trigger("sym1@#~?.&$", azure::AzureOperation::READ,
+                                                                            azure::AzureErrorCode_to_string(azure::AzureErrorCode::InvalidBlobOrBlock),
+                                                                            Azure::Core::Http::HttpStatusCode::BadRequest);
+
+    ASSERT_THROW({
+        read_in_store(*storage, failureSymbol);
+    },  UnexpectedAzureException);
+
+    failureSymbol = azure::MockAzureClient::get_failure_trigger("sym1", azure::AzureOperation::READ,
+                                                                "",
+                                                                Azure::Core::Http::HttpStatusCode::InternalServerError);
+
+    ASSERT_THROW({
+        read_in_store(*storage, failureSymbol);
+    },  UnexpectedAzureException);
 }

@@ -10,17 +10,22 @@
 #include <util/type_handler.hpp>
 
 namespace arcticdb {
-    namespace py = pybind11;
+    struct ColumnMapping;
+
     struct EmptyHandler {
         /// @see arcticdb::ITypeHandler
         void handle_type(
             const uint8_t*& data,
             uint8_t* dest,
             const VariantField& encoded_field,
-            const entity::TypeDescriptor& type_descriptor,
             size_t dest_bytes,
             std::shared_ptr<BufferHolder> buffers,
-            EncodingVersion encding_version);
+            EncodingVersion encding_version,
+            const ColumnMapping& columnMapping
+        );
+
+        int type_size() const;
+        void default_initialize(void* dest, size_t byte_size) const;
     };
 
     struct BoolHandler {
@@ -29,24 +34,26 @@ namespace arcticdb {
             const uint8_t *&data,
             uint8_t *dest,
             const VariantField &encoded_field,
-            const entity::TypeDescriptor &type_descriptor,
             size_t dest_bytes,
             std::shared_ptr<BufferHolder> buffers,
-            EncodingVersion encding_version);
+            EncodingVersion encding_version,
+            const ColumnMapping& columnMapping
+        );
+        int type_size() const;
+        void default_initialize(void* dest, size_t byte_size) const;
     };
 
     struct DecimalHandler {
         void handle_type(
-                const uint8_t*& data,
-                uint8_t* dest,
-                const VariantField& encoded_field,
-                const entity::TypeDescriptor& type_descriptor,
-                size_t dest_bytes,
-                std::shared_ptr<BufferHolder> buffers
+            const uint8_t*& data,
+            uint8_t* dest,
+            const VariantField& encoded_field,
+            size_t dest_bytes,
+            std::shared_ptr<BufferHolder> buffers,
+            EncodingVersion encding_version,
+            const ColumnMapping& m
         );
-
-        std::shared_ptr<std::mutex> mutex_ = std::make_shared<std::mutex>();
-        std::shared_ptr<py::object> decimal_ = std::make_shared<py::object>(py::module_::import("decimal").attr("Decimal"));
+        int type_size() const;
     };
 
     struct ArrayHandler {
@@ -55,10 +62,13 @@ namespace arcticdb {
             const uint8_t*& data,
             uint8_t* dest,
             const VariantField& encoded_field,
-            const entity::TypeDescriptor& type_descriptor,
             size_t dest_bytes,
             std::shared_ptr<BufferHolder> buffers,
-            EncodingVersion encding_version);
+            EncodingVersion encding_version,
+            const ColumnMapping& columnMapping
+        );
+        int type_size() const;
+        void default_initialize(void* dest, size_t byte_size) const;
         static std::mutex initialize_array_mutex;
     };
 } //namespace arcticdb

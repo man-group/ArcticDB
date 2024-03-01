@@ -32,11 +32,11 @@ StreamDescriptor merge_descriptors(
             util::variant_match(temp_idx, [&merged_fields, &merged_fields_map] (const auto& idx) {
                 using IndexType = std::decay_t<decltype(idx)>;
                 merged_fields.emplace_back(idx.name());
-                merged_fields_map.try_emplace(idx.name(), static_cast<TypeDescriptor>(typename IndexType::TypeDescTag{}));
+                merged_fields_map.try_emplace(idx.name(), TypeDescriptor{typename IndexType::TypeDescTag{}});
             });
-        }
-        else
+        } else {
             util::raise_rte("Descriptor has uninitialized index and no default supplied");
+        }
     } else {
         index = index_type_from_descriptor(original);
     }

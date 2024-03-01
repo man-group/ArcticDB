@@ -99,7 +99,6 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("set_snap_name", &VersionQuery::set_snap_name)
         .def("set_timestamp", &VersionQuery::set_timestamp)
         .def("set_version", &VersionQuery::set_version)
-        .def("set_skip_compat", &VersionQuery::set_skip_compat)
         .def("set_iterate_on_failure", &VersionQuery::set_iterate_on_failure);
 
     py::class_<ReadOptions>(version, "PythonVersionStoreReadOptions")

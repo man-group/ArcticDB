@@ -92,7 +92,7 @@ enum class ValueType : uint8_t {
     // When data is appended, the column type is inferred from the data and the column is promoted to the inferred type.
     EMPTY = 13,
     /// Nullable booleans
-    PYBOOL = 14,
+    BOOL_OBJECT = 14,
     COUNT // Not a real value type, should not be added to proto descriptor. Used to count the number of items in the enum
 };
 
@@ -189,8 +189,7 @@ enum class DataType : uint8_t {
     UTF_FIXED64 = detail::combine_val_bits(ValueType::UTF8_FIXED, SizeBits::S64),
     UTF_DYNAMIC64 = detail::combine_val_bits(ValueType::UTF_DYNAMIC, SizeBits::S64),
     EMPTYVAL = detail::combine_val_bits(ValueType::EMPTY, SizeBits::S64),
-    PYBOOL8 = detail::combine_val_bits(ValueType::PYBOOL, SizeBits::S8),
-    PYBOOL64 = detail::combine_val_bits(ValueType::PYBOOL, SizeBits::S64),
+    BOOL_OBJECT8 = detail::combine_val_bits(ValueType::BOOL_OBJECT, SizeBits::S8),
     UNKNOWN = 0,
 };
 
@@ -244,8 +243,8 @@ constexpr bool is_bool_type(DataType dt) {
     return slice_value_type(dt) == ValueType::BOOL;
 }
 
-constexpr bool is_py_bool_type(DataType dt) {
-    return slice_value_type(dt) == ValueType::PYBOOL;
+constexpr bool is_bool_object_type(DataType dt) {
+    return slice_value_type(dt) == ValueType::BOOL_OBJECT;
 }
 
 constexpr bool is_unsigned_type(DataType dt) {
@@ -373,8 +372,7 @@ DATA_TYPE_TAG(ASCII_DYNAMIC64, std::uint64_t)
 DATA_TYPE_TAG(UTF_FIXED64, std::uint64_t)
 DATA_TYPE_TAG(UTF_DYNAMIC64, std::uint64_t)
 DATA_TYPE_TAG(EMPTYVAL, std::uint64_t)
-DATA_TYPE_TAG(PYBOOL8, uint8_t)
-DATA_TYPE_TAG(PYBOOL64, std::uint64_t)
+DATA_TYPE_TAG(BOOL_OBJECT8, uint8_t)
 #undef DATA_TYPE_TAG
 
 enum class Dimension : uint8_t {
@@ -419,7 +417,7 @@ struct TypeDescriptor {
     ARCTICDB_MOVE_COPY_DEFAULT(TypeDescriptor)
 
     template<typename Callable>
-    auto visit_tag(Callable &&callable) const;
+    constexpr auto visit_tag(Callable &&callable) const;
 
     bool operator==(const TypeDescriptor &o) const {
         return data_type_ == o.data_type_ && dimension_ == o.dimension_;
@@ -439,6 +437,10 @@ struct TypeDescriptor {
 
     void set_size_bits(SizeBits new_size_bits) {
         data_type_ = combine_data_type(slice_value_type(data_type_), new_size_bits);
+    }
+
+    [[nodiscard]] SizeBits get_size_bits() const {
+        return slice_bit_size(data_type_);
     }
 
     [[nodiscard]] constexpr int get_type_byte_size() const {
@@ -463,11 +465,9 @@ constexpr bool is_numpy_array(TypeDescriptor td) {
 }
 
 constexpr bool is_pyobject_type(TypeDescriptor td) {
-    return is_dynamic_string_type(slice_value_type(td.data_type())) ||
-           slice_value_type(td.data_type()) == ValueType::PYBOOL ||
-           is_numpy_array(td);
+	return is_dynamic_string_type(slice_value_type(td.data_type())) || is_bool_object_type(td.data_type()) ||
+		is_numpy_array(td);
 }
-
 
 inline void set_data_type(DataType data_type, TypeDescriptor& type_desc) {
     type_desc.data_type_ = data_type;
@@ -484,15 +484,19 @@ struct TypeDescriptorTag {
     using DataTypeTag = DT;
     using DimensionTag = D;
     explicit constexpr operator TypeDescriptor() const {
-        return TypeDescriptor{DataTypeTag::data_type, DimensionTag::value};
+        return type_descriptor();
     }
 
-    [[nodiscard]] constexpr Dimension dimension() const {
+    [[nodiscard]] static constexpr Dimension dimension() {
         return DimensionTag::value;
     }
 
-    [[nodiscard]] constexpr DataType data_type() const {
+    [[nodiscard]] static constexpr DataType data_type() {
         return DataTypeTag::data_type;
+    }
+
+    [[nodiscard]] static constexpr TypeDescriptor type_descriptor() {
+        return TypeDescriptor{DataTypeTag::data_type, DimensionTag::value};
     }
 };
 
@@ -624,6 +628,7 @@ inline bool operator!=(const Field& l, const Field& r) {
     return !(l == r);
 }
 
+std::size_t sizeof_datatype(const TypeDescriptor& td);
 } // namespace arcticdb::entity
 
 // StreamId ordering - numbers before strings
@@ -660,7 +665,7 @@ struct formatter<FieldRef> {
 
     template<typename FormatContext>
     auto format(const FieldRef& f, FormatContext &ctx) const {
-        return format_to(ctx.out(), "{}: {}", f.type_, f.name_);
+        return fmt::format_to(ctx.out(), "{}: {}", f.type_, f.name_);
     }
 };
 

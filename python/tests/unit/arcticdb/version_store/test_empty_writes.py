@@ -146,19 +146,34 @@ def test_empty_series(lmdb_version_store_dynamic_schema, sym):
     assert_series_equal(lmdb_version_store_dynamic_schema.read(sym).data, ser, check_index_type=False)
 
 
-@pytest.mark.parametrize("dtype", ["int64", "float64"])
-def test_append_empty_series(lmdb_version_store_dynamic_schema, sym, dtype):
-    ser = pd.Series([])
+@pytest.mark.parametrize("dtype, existing_empty, append_empty", [
+    ("int64", True, False),
+    ("float64", True, False),
+    ("float64", False, True),
+    ("float64", True, True),
+])
+def test_append_empty_series(lmdb_version_store_dynamic_schema, sym, dtype, existing_empty, append_empty):
+    empty_ser = pd.Series([])
+    non_empty_ser = pd.Series([1, 2, 3], dtype=dtype)
+    if existing_empty:
+        ser = empty_ser
+    else:
+        ser = non_empty_ser
     lmdb_version_store_dynamic_schema.write(sym, ser)
     assert not lmdb_version_store_dynamic_schema.is_symbol_pickled(sym)
 
     # ArcticDB stores empty columns under a dedicated `EMPTYVAL` type, so the types are not going to match with pandas
-    # until the first append.
-    assert_series_equal(lmdb_version_store_dynamic_schema.read(sym).data, ser, check_index_type=False)
+    # if the series is empty.
+    assert_series_equal(lmdb_version_store_dynamic_schema.read(sym).data, ser, check_index_type=(len(ser) > 0))
 
-    new_ser = pd.Series([1, 2, 3], dtype=dtype)
+    if append_empty:
+        new_ser = empty_ser
+    else:
+        new_ser = non_empty_ser
     lmdb_version_store_dynamic_schema.append(sym, new_ser)
-    assert_series_equal(lmdb_version_store_dynamic_schema.read(sym).data, new_ser)
+
+    result_ser = pd.concat([ser, new_ser])
+    assert_series_equal(lmdb_version_store_dynamic_schema.read(sym).data, result_ser, check_index_type=(len(result_ser) > 0))
 
 
 def test_entirely_empty_column(lmdb_version_store):

@@ -20,23 +20,19 @@ namespace arcticdb {
 using namespace arcticdb::entity;
 using namespace arcticdb::stream;
 
-enum class LoadType :
-        uint32_t {
+enum class LoadType : uint32_t {
     NOT_LOADED = 0,
-    LOAD_LATEST = 1,
-    LOAD_LATEST_UNDELETED = 2,
-    LOAD_DOWNTO = 3,
-    LOAD_UNDELETED = 4,
-    LOAD_FROM_TIME = 5,
-    LOAD_ALL = 6
+    LOAD_LATEST,
+    LOAD_LATEST_UNDELETED,
+    LOAD_DOWNTO,
+    LOAD_FROM_TIME,
+    LOAD_UNDELETED,
+    LOAD_ALL,
+    UNKNOWN
 };
 
 inline constexpr bool is_latest_load_type(LoadType load_type) {
     return load_type == LoadType::LOAD_LATEST || load_type == LoadType::LOAD_LATEST_UNDELETED;
-}
-
-inline constexpr bool is_partial_load_type(LoadType load_type) {
-    return load_type == LoadType::LOAD_DOWNTO || load_type == LoadType::LOAD_FROM_TIME;
 }
 
 struct LoadParameter {
@@ -62,8 +58,6 @@ struct LoadParameter {
     LoadType load_type_ = LoadType::NOT_LOADED;
     std::optional<SignedVersionId> load_until_ = std::nullopt;
     std::optional<timestamp> load_from_time_ = std::nullopt;
-    bool use_previous_ = false;
-    bool skip_compat_ = true;
     bool iterate_on_failure_ = false;
 
     void validate() const {
@@ -333,7 +327,7 @@ struct VersionMapEntry {
     std::optional<AtomKey> head_;
     LoadType load_type_ = LoadType::NOT_LOADED;
     timestamp last_reload_time_ = 0;
-    VersionId loaded_until_ = 0;
+    VersionId loaded_until_ = std::numeric_limits<uint64_t>::max();
     std::deque<AtomKey> keys_;
     std::unordered_map<VersionId, AtomKey> tombstones_;
     std::optional<AtomKey> tombstone_all_;
@@ -413,17 +407,17 @@ namespace fmt {
     auto format(arcticdb::LoadType l, FormatContext &ctx) const {
         switch(l) {
         case arcticdb::LoadType::NOT_LOADED:
-            return format_to(ctx.out(), "NOT_LOADED");
+            return fmt::format_to(ctx.out(), "NOT_LOADED");
         case arcticdb::LoadType::LOAD_LATEST:
-            return format_to(ctx.out(), "LOAD_LATEST");
+            return fmt::format_to(ctx.out(), "LOAD_LATEST");
         case arcticdb::LoadType::LOAD_LATEST_UNDELETED:
-            return format_to(ctx.out(), "LOAD_LATEST_UNDELETED");
+            return fmt::format_to(ctx.out(), "LOAD_LATEST_UNDELETED");
         case arcticdb::LoadType::LOAD_DOWNTO:
-            return format_to(ctx.out(), "LOAD_DOWNTO");
+            return fmt::format_to(ctx.out(), "LOAD_DOWNTO");
         case arcticdb::LoadType::LOAD_UNDELETED:
-            return format_to(ctx.out(), "LOAD_UNDELETED");
+            return fmt::format_to(ctx.out(), "LOAD_UNDELETED");
         case arcticdb::LoadType::LOAD_ALL:
-            return format_to(ctx.out(), "LOAD_ALL");
+            return fmt::format_to(ctx.out(), "LOAD_ALL");
         default:
             arcticdb::util::raise_rte("Unrecognized load type {}", int(l));
         }

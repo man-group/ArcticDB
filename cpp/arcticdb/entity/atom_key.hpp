@@ -109,9 +109,7 @@ class AtomKeyImpl {
         return *hash_;
     }
 
-    void set_string() const {
-        str_ = fmt::format("{}", *this);
-    }
+    void set_string() const;
 
     std::string_view view() const { if(str_.empty()) set_string(); return {str_}; }
 
@@ -230,7 +228,7 @@ constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
 template<typename FormatContext>
 auto format(const FormattableRef <arcticdb::entity::AtomKey, FormatTag> &f, FormatContext &ctx) const {
     const auto &key = f.ref;
-    return format_to(ctx.out(), FMT_STRING(FormatTag::format),
+    return fmt::format_to(ctx.out(), FMT_STRING(FormatTag::format),
                     key.type(), key.id(), key.version_id(),
                      key.content_hash(), key.creation_ts(), tokenized_index(key.start_index()), tokenized_index(key.end_index()));
 }
@@ -258,4 +256,12 @@ struct hash<arcticdb::entity::AtomKeyImpl> {
         return k.get_cached_hash();
     }
 };
+}
+
+namespace arcticdb::entity
+{
+    // This needs to be defined AFTER the formatter for AtomKeyImpl
+    inline void AtomKeyImpl::set_string() const {
+        str_ = fmt::format("{}", *this);
+    }
 }
