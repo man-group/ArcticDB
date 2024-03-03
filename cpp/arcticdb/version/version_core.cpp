@@ -333,7 +333,6 @@ VersionedItem update_impl(
     sorted_data_check_update(*frame, index_segment_reader);
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
     (void)check_and_mark_slices(index_segment_reader, dynamic_schema, false, std::nullopt, bucketize_dynamic);
-    auto combined_sorting_info = deduce_sorted(frame->desc.get_sorted(), index_segment_reader.get_sorted());
     fix_descriptor_mismatch_or_throw(UPDATE, dynamic_schema, index_segment_reader, *frame);
 
     std::vector<FilterQuery<index::IndexSegmentReader>> queries =
@@ -394,16 +393,8 @@ VersionedItem update_impl(
                 unaffected_keys.size(), new_keys_size, affected_keys.size(), flattened_slice_and_keys.size());
 
     std::sort(std::begin(flattened_slice_and_keys), std::end(flattened_slice_and_keys));
-    auto existing_desc = index_segment_reader.tsd().as_stream_descriptor();
-    auto desc = merge_descriptors(existing_desc, std::vector<std::shared_ptr<FieldCollection>>{ frame->desc.fields_ptr() }, {});
-    desc.set_sorted(combined_sorting_info);
-    auto time_series = make_timeseries_descriptor(row_count, std::move(desc), std::move(frame->norm_meta), std::move(frame->user_meta), std::nullopt, std::nullopt, bucketize_dynamic);
-    auto index = index_type_from_descriptor(time_series.as_stream_descriptor());
-
-    auto version_key_fut = util::variant_match(index, [&time_series, &flattened_slice_and_keys, &stream_id, &update_info, &store] (auto idx) {
-        using IndexType = decltype(idx);
-        return index::write_index<IndexType>(std::move(time_series), std::move(flattened_slice_and_keys), IndexPartialKey{stream_id, update_info.next_version_id_}, store);
-    });
+    auto tsd = index::get_merged_tsd(row_count, dynamic_schema, index_segment_reader.tsd(), frame);
+    auto version_key_fut = index::write_index(stream::index_type_from_descriptor(tsd.as_stream_descriptor()), std::move(tsd), std::move(flattened_slice_and_keys), IndexPartialKey{stream_id, update_info.next_version_id_}, store);
     auto version_key = std::move(version_key_fut).get();
     auto versioned_item = VersionedItem(to_atom(std::move(version_key)));
     ARCTICDB_DEBUG(log::version(), "updated stream_id: {} , version_id: {}", stream_id, update_info.next_version_id_);

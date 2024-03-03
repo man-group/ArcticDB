@@ -22,7 +22,7 @@ namespace arcticdb::util {
 template<class Msg, class ExcType=std::invalid_argument>
 [[noreturn]] void raise_error_msg(const char *pattern, const Msg &msg) {
    // google::protobuf::TextFormat::PrintToString(msg, &s);
-    throw ExcType(fmt::format(pattern, msg.DebugString()));
+    throw ExcType(fmt::format(fmt::runtime(pattern), msg.DebugString()));
 }
 
 namespace {

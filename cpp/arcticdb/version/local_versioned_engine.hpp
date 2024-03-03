@@ -99,20 +99,17 @@ public:
 
     std::optional<VersionedItem> get_latest_version(
         const StreamId &stream_id,
-        const VersionQuery& version_query,
-        const ReadOptions& read_options);
+        const VersionQuery& version_query);
 
     std::optional<VersionedItem> get_specific_version(
         const StreamId &stream_id,
         SignedVersionId signed_version_id,
-        const VersionQuery& version_query,
-        const ReadOptions& read_options);
+        const VersionQuery& version_query);
 
     std::optional<VersionedItem> get_version_at_time(
         const StreamId& stream_id,
         timestamp as_of,
-        const VersionQuery& version_query,
-        const ReadOptions& read_options);
+        const VersionQuery& version_query);
 
     std::optional<VersionedItem> get_version_from_snapshot(
         const StreamId& stream_id,
@@ -125,8 +122,7 @@ public:
 
     std::optional<VersionedItem> get_version_to_read(
         const StreamId& stream_id,
-        const VersionQuery& version_query,
-        const ReadOptions& read_options
+        const VersionQuery& version_query
     );
 
     FrameAndDescriptor read_dataframe_internal(
@@ -142,8 +138,7 @@ public:
 
     DescriptorItem read_descriptor_internal(
             const StreamId& stream_id,
-            const VersionQuery& version_query,
-            const ReadOptions& read_options);
+            const VersionQuery& version_query);
 
     void write_parallel_frame(
         const StreamId& stream_id,
@@ -327,8 +322,7 @@ public:
 
     std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> read_metadata_internal(
         const StreamId& stream_id,
-        const VersionQuery& version_query,
-        const ReadOptions& read_options);
+        const VersionQuery& version_query);
 
     bool is_symbol_fragmented(const StreamId& stream_id, std::optional<size_t> segment_size) override;
 

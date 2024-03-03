@@ -136,4 +136,12 @@ std::pair<index::IndexSegmentReader, std::vector<SliceAndKey>> read_index_to_vec
     const std::shared_ptr<Store>& store,
     const AtomKey& index_key);
 
+// Combines the stream descriptors of an existing index key and a new frame.
+// Can be used to get the metadata for [write_index] when updating or appending.
+TimeseriesDescriptor get_merged_tsd(
+    int row_count,
+    bool dynamic_schema,
+    const TimeseriesDescriptor& existing_tsd,
+    const std::shared_ptr<pipelines::InputTensorFrame>& new_frame);
+
 } //namespace arcticdb::pipelines::index

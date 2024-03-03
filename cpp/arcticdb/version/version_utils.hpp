@@ -180,11 +180,15 @@ inline void check_is_version(const AtomKey &key) {
 
 inline void read_symbol_ref(const std::shared_ptr<StreamSource>& store, const StreamId &stream_id, VersionMapEntry &entry) {
     std::pair<entity::VariantKey, SegmentInMemory> key_seg_pair;
+    // Trying to read a missing ref key is expected e.g. when writing a previously missing symbol.
+    // If the ref key is missing we keep the entry empty and should not raise warnings.
+    auto read_opts = storage::ReadKeyOpts{};
+    read_opts.dont_warn_about_missing_key=true;
     try {
-        key_seg_pair = store->read_sync(RefKey{stream_id, KeyType::VERSION_REF});
+        key_seg_pair = store->read_sync(RefKey{stream_id, KeyType::VERSION_REF}, read_opts);
     } catch (const storage::KeyNotFoundException&) {
         try {
-            key_seg_pair = store->read_sync(RefKey{stream_id, KeyType::VERSION, true});
+            key_seg_pair = store->read_sync(RefKey{stream_id, KeyType::VERSION, true}, read_opts);
         } catch (const storage::KeyNotFoundException&) {
             return;
         }
@@ -192,6 +196,7 @@ inline void read_symbol_ref(const std::shared_ptr<StreamSource>& store, const St
 
     LoadProgress load_progress;
     entry.head_ = read_segment_with_keys(key_seg_pair.second, entry, load_progress);
+    entry.loaded_until_ = load_progress.loaded_until_;
 }
 
 inline void write_symbol_ref(std::shared_ptr<StreamSink> store,
@@ -310,7 +315,7 @@ inline bool looking_for_undeleted(const LoadParameter& load_params, const std::s
     }
 }
 
-inline bool key_exists_in_ref_entry(const LoadParameter& load_params, const VersionMapEntry& ref_entry, const std::optional<AtomKey>&, LoadProgress&) {
+inline bool key_exists_in_ref_entry(const LoadParameter& load_params, const VersionMapEntry& ref_entry) {
     if (is_latest_load_type(load_params.load_type_) && is_index_key_type(ref_entry.keys_[0].type())) {
         ARCTICDB_DEBUG(log::version(), "Not following version chain as key for {} exists in ref entry", ref_entry.head_->id());
         return true;

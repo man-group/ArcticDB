@@ -14,8 +14,7 @@
 
 namespace arcticdb {
 
-inline void set_load_param_options(LoadParameter& load_param, const pipelines::VersionQuery& version_query, const ReadOptions& read_options) {
-    load_param.use_previous_ = read_options.read_previous_on_failure_.value_or(false);
+inline void set_load_param_options(LoadParameter& load_param, const pipelines::VersionQuery &version_query) {
     load_param.iterate_on_failure_ = version_query.iterate_on_failure_.value_or(false);
 }
 
@@ -23,11 +22,10 @@ inline std::optional<AtomKey> get_latest_undeleted_version(
     const std::shared_ptr<Store> &store,
     const std::shared_ptr<VersionMap> &version_map,
     const StreamId &stream_id,
-    const pipelines::VersionQuery& version_query,
-    const ReadOptions& read_options) {
+    const pipelines::VersionQuery& version_query) {
     ARCTICDB_RUNTIME_SAMPLE(GetLatestUndeletedVersion, 0)
     LoadParameter load_param{LoadType::LOAD_LATEST_UNDELETED};
-    set_load_param_options(load_param, version_query, read_options);
+    set_load_param_options(load_param, version_query);
     const auto entry = version_map->check_reload(store, stream_id, load_param, __FUNCTION__);
     return entry->get_first_index(false);
 }
@@ -36,11 +34,10 @@ inline std::optional<AtomKey> get_latest_version(
     const std::shared_ptr<Store> &store,
     const std::shared_ptr<VersionMap> &version_map,
     const StreamId &stream_id,
-    const pipelines::VersionQuery& version_query,
-    const ReadOptions& read_options) {
+    const pipelines::VersionQuery& version_query) {
     ARCTICDB_SAMPLE(GetLatestVersion, 0)
     LoadParameter load_param{LoadType::LOAD_LATEST};
-    set_load_param_options(load_param, version_query, read_options);
+    set_load_param_options(load_param, version_query);
     auto entry = version_map->check_reload(store, stream_id, load_param, __FUNCTION__);
     return entry->get_first_index(true);
 }
@@ -50,11 +47,10 @@ inline version_store::UpdateInfo get_latest_undeleted_version_and_next_version_i
         const std::shared_ptr<Store> &store,
         const std::shared_ptr<VersionMap> &version_map,
         const StreamId &stream_id,
-        const pipelines::VersionQuery& version_query,
-        const ReadOptions& read_options) {
+        const pipelines::VersionQuery& version_query) {
     ARCTICDB_SAMPLE(GetLatestUndeletedVersionAndHighestVersionId, 0)
     LoadParameter load_param{LoadType::LOAD_LATEST_UNDELETED};
-    set_load_param_options(load_param, version_query, read_options);
+        set_load_param_options(load_param, version_query);
     auto entry = version_map->check_reload(store, stream_id, load_param, __FUNCTION__);
     auto latest_version = entry->get_first_index(true);
     auto latest_undeleted_version = entry->get_first_index(false);
@@ -66,12 +62,11 @@ inline std::vector<AtomKey> get_all_versions(
     const std::shared_ptr<Store> &store,
     const std::shared_ptr<VersionMap> &version_map,
     const StreamId &stream_id,
-    const pipelines::VersionQuery& version_query,
-    const ReadOptions& read_option
+    const pipelines::VersionQuery& version_query
     ) {
     ARCTICDB_SAMPLE(GetAllVersions, 0)
     LoadParameter load_param{LoadType::LOAD_UNDELETED};
-    set_load_param_options(load_param, version_query, read_option);
+    set_load_param_options(load_param, version_query);
     auto entry = version_map->check_reload(store, stream_id, load_param, __FUNCTION__);
     return entry->get_indexes(false);
 }
@@ -82,11 +77,10 @@ inline std::optional<AtomKey> get_specific_version(
         const StreamId &stream_id,
         SignedVersionId signed_version_id,
         const pipelines::VersionQuery& version_query,
-        const ReadOptions& read_option,
         bool include_deleted = false) {
     LoadParameter load_param{LoadType::LOAD_DOWNTO, signed_version_id};
     auto entry = version_map->check_reload(store, stream_id, load_param, __FUNCTION__);
-    set_load_param_options(load_param, version_query, read_option);
+    set_load_param_options(load_param, version_query);
     VersionId version_id;
     if (signed_version_id >= 0) {
         version_id = static_cast<VersionId>(signed_version_id);
@@ -142,7 +136,7 @@ inline bool has_undeleted_version(
     const StreamId &id) {
     pipelines::VersionQuery version_query;
     version_query.set_iterate_on_failure(false);
-    auto maybe_undeleted = get_latest_undeleted_version(store, version_map, id, version_query, ReadOptions{});
+    auto maybe_undeleted = get_latest_undeleted_version(store, version_map, id, version_query);
     return static_cast<bool>(maybe_undeleted);
 }
 
@@ -160,10 +154,9 @@ inline std::unordered_map<VersionId, bool> get_all_tombstoned_versions(
     const std::shared_ptr<Store> &store,
     const std::shared_ptr<VersionMap> &version_map,
     const StreamId &stream_id,
-    const pipelines::VersionQuery& version_query,
-    const ReadOptions& read_option) {
+    const pipelines::VersionQuery& version_query) {
     LoadParameter load_param{LoadType::LOAD_ALL};
-    set_load_param_options(load_param, version_query, read_option);
+    set_load_param_options(load_param, version_query);
     auto entry = version_map->check_reload(store, stream_id, load_param, __FUNCTION__);
     std::unordered_map<VersionId, bool> result;
     for (auto key: entry->get_tombstoned_indexes())
@@ -178,12 +171,11 @@ inline version_store::TombstoneVersionResult tombstone_version(
     const StreamId &stream_id,
     VersionId version_id,
     const pipelines::VersionQuery& version_query,
-    const ReadOptions& read_options,
     bool allow_tombstoning_beyond_latest_version=false,
     const std::optional<timestamp>& creation_ts=std::nullopt) {
     ARCTICDB_DEBUG(log::version(), "Tombstoning version {} for stream {}", version_id, stream_id);
     LoadParameter load_param{LoadType::LOAD_UNDELETED};
-    set_load_param_options(load_param, version_query, read_options);
+    set_load_param_options(load_param, version_query);
     auto entry = version_map->check_reload(store, stream_id, load_param, __FUNCTION__);
     // Might as well do the previous/next version check while we find the required version_id.
     // But if entry is empty, it's possible the load failed (since iterate_on_failure=false above), so set the flag
@@ -204,7 +196,7 @@ inline version_store::TombstoneVersionResult tombstone_version(
             util::raise_rte("Version {} for symbol {} is already deleted", version_id, stream_id);
         } else {
             if (!allow_tombstoning_beyond_latest_version) {
-                auto latest_key = get_latest_version(store, version_map, stream_id, version_query, read_options);
+                auto latest_key = get_latest_version(store, version_map, stream_id, version_query);
                 if (!latest_key || latest_key->version_id() < version_id)
                     util::raise_rte("Can't delete version {} for symbol {} - it's higher than the latest version",
                             stream_id, version_id);
@@ -247,10 +239,9 @@ inline std::optional<AtomKey> load_index_key_from_time(
     const std::shared_ptr<VersionMap> &version_map,
     const StreamId &stream_id,
     timestamp from_time,
-    const pipelines::VersionQuery& version_query,
-    const ReadOptions& read_options) {
+    const pipelines::VersionQuery& version_query) {
     LoadParameter load_param{LoadType::LOAD_FROM_TIME, from_time};
-    set_load_param_options(load_param, version_query, read_options);
+    set_load_param_options(load_param, version_query);
     auto entry = version_map->check_reload(store, stream_id, load_param, __FUNCTION__);
     auto indexes = entry->get_indexes(false);
     return get_index_key_from_time(from_time, indexes);
@@ -260,10 +251,9 @@ inline std::vector<AtomKey> get_index_and_tombstone_keys(
     const std::shared_ptr<Store> &store,
     const std::shared_ptr<VersionMap> &version_map,
     const StreamId &stream_id,
-    const pipelines::VersionQuery& version_query,
-    const ReadOptions& read_options) {
+    const pipelines::VersionQuery& version_query) {
     LoadParameter load_param{LoadType::LOAD_ALL};
-    set_load_param_options(load_param, version_query, read_options);
+    set_load_param_options(load_param, version_query);
     const auto entry = version_map->check_reload(store, stream_id, load_param, __FUNCTION__);
     std::vector<AtomKey> res;
     std::copy_if(std::begin(entry->keys_), std::end(entry->keys_), std::back_inserter(res),

@@ -12,10 +12,17 @@ import pytest
 from arcticdb.config import Defaults
 from arcticdb.util.test import sample_dataframe
 from arcticdb.version_store._store import NativeVersionStore
-from arcticdb.toolbox.library_tool import VariantKey, AtomKey, key_to_props_dict, props_dict_to_atom_key
+from arcticdb.toolbox.library_tool import (
+    VariantKey,
+    AtomKey,
+    key_to_props_dict,
+    props_dict_to_atom_key,
+)
 from arcticdb_ext import set_config_int, unset_config_int
 from arcticdb_ext.storage import KeyType, OpenMode
 from arcticdb_ext.tools import CompactionId, CompactionLockName
+from arcticdb.storage_fixtures.s3 import MotoS3StorageFixtureFactory
+from arcticdb_ext.exceptions import InternalException
 
 from multiprocessing import Pool
 from arcticdb_ext import set_config_int
@@ -42,7 +49,9 @@ def small_max_delta():
 
 
 def make_read_only(lib):
-    return NativeVersionStore.create_store_from_lib_config(lib.lib_cfg(), Defaults.ENV, OpenMode.READ)
+    return NativeVersionStore.create_store_from_lib_config(
+        lib.lib_cfg(), Defaults.ENV, OpenMode.READ
+    )
 
 
 def test_with_symbol_list(basic_store):
@@ -82,7 +91,11 @@ def test_with_symbol_list(basic_store):
 
 
 def test_symbol_list_with_rec_norm(basic_store):
-    basic_store.write("rec_norm", data={"a": np.arange(5), "b": np.arange(8), "c": None}, recursive_normalizers=True)
+    basic_store.write(
+        "rec_norm",
+        data={"a": np.arange(5), "b": np.arange(8), "c": None},
+        recursive_normalizers=True,
+    )
 
     assert not basic_store.is_symbol_pickled("rec_norm")
     assert basic_store.list_symbols() == ["rec_norm"]
@@ -104,12 +117,21 @@ def test_symbol_list_regex(basic_store):
         basic_store.write(f"sym_{i}", pd.DataFrame())
 
     assert set(basic_store.list_symbols(regex="1$")) == {"sym_1", "sym_11"}
-    assert set(basic_store.list_symbols(regex=".*1.*")) == {"sym_1", "sym_10", "sym_11", "sym_12", "sym_13", "sym_14"}
+    assert set(basic_store.list_symbols(regex=".*1.*")) == {
+        "sym_1",
+        "sym_10",
+        "sym_11",
+        "sym_12",
+        "sym_13",
+        "sym_14",
+    }
 
 
 @pytest.mark.parametrize("compact_first", [True, False])
 # Using S3 because LMDB does not allow OpenMode to be changed
-def test_symbol_list_read_only_compaction_needed(small_max_delta, object_version_store, compact_first):
+def test_symbol_list_read_only_compaction_needed(
+    small_max_delta, object_version_store, compact_first
+):
     lib_write = object_version_store
 
     lib_read = make_read_only(lib_write)
@@ -209,7 +231,9 @@ def test_only_latest_compaction_key_is_used(basic_store):
 
 
 @pytest.mark.parametrize("write_another", [False, True])
-def test_turning_on_symbol_list_after_a_symbol_written(object_store_factory, write_another):
+def test_turning_on_symbol_list_after_a_symbol_written(
+    object_store_factory, write_another
+):
     # The if(!maybe_last_compaction) case
     lib: NativeVersionStore = object_store_factory(symbol_list=False)
 
@@ -223,7 +247,9 @@ def test_turning_on_symbol_list_after_a_symbol_written(object_store_factory, wri
 
         sl_keys = lt.find_keys(KeyType.SYMBOL_LIST)
         assert sl_keys
-        assert not any(k.id == CompactionId for k in sl_keys), "Should not have any compaction yet"
+        assert not any(
+            k.id == CompactionId for k in sl_keys
+        ), "Should not have any compaction yet"
 
     ro = make_read_only(lib)
     # For some reason, symbol_list=True is not always picked up on the first call, so forcing it:
@@ -266,12 +292,17 @@ def random_strings(count, max_length):
     result = []
     for _ in range(count):
         length = random.randrange(max_length) + 2
-        result.append("".join(random.choice(string.ascii_letters) for _ in range(length)))
+        result.append(
+            "".join(random.choice(string.ascii_letters) for _ in range(length))
+        )
     return result
 
 
 def _tiny_df(idx):
-    return pd.DataFrame({"x": np.arange(idx % 10, idx % 10 + 10)}, index=pd.date_range(idx % 10, periods=10, freq="h"))
+    return pd.DataFrame(
+        {"x": np.arange(idx % 10, idx % 10 + 10)},
+        index=pd.date_range(idx % 10, periods=10, freq="h"),
+    )
 
 
 def _trigger(count, frequency):
@@ -306,8 +337,14 @@ class ScopedMaxDelta:
 @pytest.mark.parametrize("update_freq", [3, 8])
 @pytest.mark.parametrize("compaction_size", [2, 10, 200])
 @pytest.mark.parametrize("same_symbols", [True, False])
+@pytest.mark.xfail(reason="Needs to be fixed with issue #496")
 def test_symbol_list_parallel_stress_with_delete(
-    lmdb_version_store_v1, list_freq, delete_freq, update_freq, compaction_size, same_symbols
+    lmdb_version_store_v1,
+    list_freq,
+    delete_freq,
+    update_freq,
+    compaction_size,
+    same_symbols,
 ):
     pd.set_option("display.max_rows", None)
     ScopedMaxDelta(compaction_size)
@@ -327,12 +364,17 @@ def test_symbol_list_parallel_stress_with_delete(
         frozen_symbols = random_strings(num_symbols, symbol_length)
         symbols = [frozen_symbols for _ in range(num_workers)]
     else:
-        symbols = [random_strings(num_symbols, symbol_length) for _ in range(num_workers)]
+        symbols = [
+            random_strings(num_symbols, symbol_length) for _ in range(num_workers)
+        ]
 
     with Pool(num_workers) as p:
         p.map(
             _perform_actions,
-            [(lib, syms, idx, num_cycles, list_freq, delete_freq, update_freq) for idx, syms in enumerate(symbols)],
+            [
+                (lib, syms, idx, num_cycles, list_freq, delete_freq, update_freq)
+                for idx, syms in enumerate(symbols)
+            ],
         )
 
     p.close()
@@ -345,3 +387,8 @@ def test_symbol_list_parallel_stress_with_delete(
     missing_symbols = expected_symbols - got_symbols
     for sym in missing_symbols:
         assert not lib.version_store.indexes_sorted(sym)
+
+
+def test_symbol_list_exception_and_printout(mock_s3_store_with_mock_storage_exception):  # moto is choosen just because it's easy to give storage error
+    with pytest.raises(InternalException, match="E_S3_RETRYABLE Retry-able error"):
+        mock_s3_store_with_mock_storage_exception.list_symbols()

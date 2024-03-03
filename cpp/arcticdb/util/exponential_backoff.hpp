@@ -43,21 +43,28 @@ struct ExponentialBackoff {
 
     template <typename Callable>
     auto go(Callable&& callable) {
-        return go(std::forward<Callable>(callable), [](){ util::raise_rte("Exhausted retry attempts"); });
+        //Throw exception with error msg, as user may turn off warn or in juypter notebook
+        return go(std::forward<Callable>(callable), 
+            [](const HandledExceptionType &e){ 
+                util::raise_rte("Exhausted retry attempts, likely due to errors given by the storage: {}", e.what()); 
+            });
     }
 
     template<typename Callable, typename FailurePolicy>
     auto go(Callable&& c, FailurePolicy&& failure_policy) {
+        std::optional<HandledExceptionType> last_exception; //HandledExceptionType may have the default ctor deleted
         do {
             try {
                 return c();
             }
-            catch (HandledExceptionType&) {
-                log::storage().info("Caught error in backoff, retrying");
+            catch (HandledExceptionType &e) {
+                log::storage().warn("Caught error in backoff, retrying, likely due to errors given by the storage {}",
+                e.what());
+                last_exception = e;
             }
         } while(wait());
 
-        failure_policy();
+        failure_policy(last_exception.value());
         ARCTICDB_UNREACHABLE
     }
 };

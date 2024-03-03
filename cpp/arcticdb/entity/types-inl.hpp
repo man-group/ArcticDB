@@ -98,8 +98,8 @@ struct formatter<arcticdb::entity::DataType> {
     constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
 
     template<typename FormatContext>
-    auto format(arcticdb::entity::DataType dt, FormatContext &ctx) const {
-        return fmt::format_to(ctx.out(), datatype_to_str(dt));
+    constexpr auto format(const arcticdb::entity::DataType dt, FormatContext &ctx) const {
+        return fmt::format_to(ctx.out(), "{}", datatype_to_str(dt));
     }
 };
 
@@ -109,7 +109,7 @@ struct formatter<arcticdb::entity::Dimension> {
     constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
 
     template<typename FormatContext>
-    auto format(arcticdb::entity::Dimension dim, FormatContext &ctx) const {
+    constexpr auto format(const arcticdb::entity::Dimension dim, FormatContext &ctx) const {
         return fmt::format_to(ctx.out(), "{}", static_cast<uint32_t >(dim));
     }
 };
@@ -120,7 +120,7 @@ struct formatter<arcticdb::entity::TypeDescriptor> {
     constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
 
     template<typename FormatContext>
-    auto format(const arcticdb::entity::TypeDescriptor &td, FormatContext &ctx) const {
+    constexpr auto format(const arcticdb::entity::TypeDescriptor &td, FormatContext &ctx) const {
         return fmt::format_to(ctx.out(), "TD<type={}, dim={}>", td.data_type_, td.dimension_);
     }
 };
@@ -131,11 +131,10 @@ struct formatter<arcticdb::entity::StreamId> {
     constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
 
     template<typename FormatContext>
-    auto format(const arcticdb::entity::StreamId &tsid, FormatContext &ctx) const {
+    constexpr auto format(const arcticdb::entity::StreamId &tsid, FormatContext &ctx) const {
         return std::visit([&ctx](auto &&val) {
             return fmt::format_to(ctx.out(), "{}", val);
         }, tsid);
     }
 };
-
 }

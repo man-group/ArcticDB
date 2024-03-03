@@ -55,6 +55,38 @@ inline bool operator==(const DefaultStringViewable &l, const DefaultStringViewab
         || (l.hash() == r.hash() && std::string_view{l} == std::string_view{r});
 }
 
+}
+
+// Formatters are defined here since they are used in implementations bellow.
+namespace fmt {
+
+template<>
+struct formatter<arcticdb::storage::DefaultStringViewable> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const arcticdb::storage::DefaultStringViewable &dsv, FormatContext &ctx) const {
+        return fmt::format_to(ctx.out(), "{}", std::string_view{dsv});
+    }
+};
+
+}
+
+namespace std {
+
+template<>
+struct hash<arcticdb::storage::DefaultStringViewable> {
+
+    inline arcticdb::HashedValue operator()(const arcticdb::storage::DefaultStringViewable &v) const noexcept {
+        return v.hash();
+    }
+};
+
+}
+
+namespace arcticdb::storage {
+
 template<class StringViewable=DefaultStringViewable>
 class LibraryPathImpl {
     static constexpr std::uint8_t NUM_LIBRARY_PARTS = 3;
@@ -135,30 +167,18 @@ using LibraryPath = LibraryPathImpl<DefaultStringViewable>;
 
 } //namespace arcticdb::storage
 
+
 namespace fmt {
 
-using namespace arcticdb::storage;
-
 template<>
-struct formatter<DefaultStringViewable> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
-
-    template<typename FormatContext>
-    auto format(const DefaultStringViewable &dsv, FormatContext &ctx) const {
-        return fmt::format_to(ctx.out(), "{}", std::string_view{dsv});
-    }
-};
-
-template<>
-struct formatter<LibraryPath> {
+struct formatter<arcticdb::storage::LibraryPath> {
     template<typename ParseContext>
     constexpr auto parse(ParseContext &ctx) {
         return ctx.begin();
     }
 
     template<typename FormatContext>
-    auto format(const LibraryPath &lib, FormatContext &ctx) const {
+    auto format(const arcticdb::storage::LibraryPath &lib, FormatContext &ctx) const {
         auto out = ctx.out();
         fmt::format_to(out, "{}", lib.to_delim_path());
 
@@ -169,17 +189,9 @@ struct formatter<LibraryPath> {
 }
 
 namespace std {
-template<>
-struct hash<arcticdb::storage::DefaultStringViewable> {
-
-    inline arcticdb::HashedValue operator()(const arcticdb::storage::DefaultStringViewable &v) const noexcept {
-        return v.hash();
-    }
-};
 
 template<class StringViewable>
 struct hash<arcticdb::storage::LibraryPathImpl<StringViewable>> {
-
     inline arcticdb::HashedValue operator()(const arcticdb::storage::LibraryPathImpl<StringViewable> &v) const noexcept {
         return v.hash();
     }

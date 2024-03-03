@@ -182,8 +182,7 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     std::pair<VersionedItem, py::object> read_metadata(
         const StreamId& stream_id,
-        const VersionQuery& version_query,
-        const ReadOptions& read_options
+        const VersionQuery& version_query
     );
 
     std::vector<std::variant<DescriptorItem, DataError>> batch_read_descriptor(
@@ -193,8 +192,7 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     DescriptorItem read_descriptor(
         const StreamId& stream_id,
-        const VersionQuery& version_query,
-        const ReadOptions& read_options);
+        const VersionQuery& version_query);
 
     ReadResult read_index(
         const StreamId& stream_id,
