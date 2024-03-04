@@ -73,22 +73,20 @@ S3Result<std::monostate> MockS3Client::head_object(
         const std::string &bucket_name) const {
     auto result = exists_internal(get_key(bucket_name, s3_object_name));
     if(!result.is_success()) return {result.get_error()};
-    if(!result.get_output()) return {not_found_error};
-    return {std::monostate()};
+    return result.get_output() ? S3Result<std::monostate>{std::monostate()} : S3Result<std::monostate>{not_found_error};
 }
-
 
 S3Result<Segment> MockS3Client::get_object(
         const std::string &s3_object_name,
         const std::string &bucket_name) const {
-    return {read_internal(get_key(bucket_name, s3_object_name)).result};
+    return read_internal(get_key(bucket_name, s3_object_name));
 }
 
 S3Result<std::monostate> MockS3Client::put_object(
         const std::string &s3_object_name,
         Segment &&segment,
         const std::string &bucket_name) {
-    return {write_internal(get_key(bucket_name, s3_object_name), std::move(segment)).result};
+    return write_internal(get_key(bucket_name, s3_object_name), std::move(segment));
 }
 
 S3Result<DeleteOutput> MockS3Client::delete_objects(
@@ -98,13 +96,12 @@ S3Result<DeleteOutput> MockS3Client::delete_objects(
     if (!result.is_success()) return {result.get_error()};
 
     DeleteOutput output;
-    for (auto& key : result.get_output()){
+    for (auto& key : result.get_output())
         output.failed_deletes.push_back({key.second, "Sample error message"});
-    }
     return {output};
 }
 
-// Using a fixed page size since it's only being used for simple tests.
+// Using a page size as this is how the real client works. Therefore, the logic is different from StorageMockClient.
 // If we ever need to configure it we should move it to the s3 proto config instead.
 constexpr auto page_size = 10;
 S3Result<ListObjectsOutput> MockS3Client::list_objects(

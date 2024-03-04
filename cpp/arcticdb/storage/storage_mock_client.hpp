@@ -120,6 +120,7 @@ public:
         }
         return {contents_.find(key) != contents_.end()};
     }
+
 protected:
     std::map<Key, Segment> contents_;
 };
