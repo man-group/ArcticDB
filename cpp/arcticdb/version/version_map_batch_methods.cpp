@@ -139,7 +139,7 @@ inline std::optional<AtomKey> get_key_for_version_query(
 struct SnapshotCountMap {
     std::unordered_map<SnapshotId, size_t> snapshot_counts_;
 
-    explicit SnapshotCountMap(const robin_hood::unordered_flat_map<StreamId, StreamVersionData> &version_data) {
+    explicit SnapshotCountMap(const ankerl::unordered_dense::map<StreamId, StreamVersionData> &version_data) {
         for (const auto &[_, info] : version_data) {
             for (const auto &snapshot : info.snapshots_) {
                 const auto it = snapshot_counts_.find(snapshot);
@@ -173,7 +173,7 @@ using SplitterType = folly::FutureSplitter<VersionEntryOrSnapshot>;
 using SnapshotKeyMap = std::unordered_map<SnapshotId, std::optional<VariantKey>>;
 
 folly::Future<VersionEntryOrSnapshot> set_up_snapshot_future(
-    robin_hood::unordered_flat_map<StreamId, SplitterType> &snapshot_futures,
+    ankerl::unordered_dense::map<StreamId, SplitterType> &snapshot_futures,
     const std::shared_ptr<SnapshotCountMap> &snapshot_count_map,
     const std::shared_ptr<SnapshotKeyMap> &snapshot_key_map,
     const pipelines::SnapshotVersionQuery &snapshot_query,
@@ -215,7 +215,7 @@ folly::Future<VersionEntryOrSnapshot> set_up_snapshot_future(
 folly::Future<VersionEntryOrSnapshot> set_up_version_future(
     const StreamId &symbol,
     const StreamVersionData &version_data,
-    robin_hood::unordered_flat_map<StreamId, SplitterType> &version_futures,
+    ankerl::unordered_dense::map<StreamId, SplitterType> &version_futures,
     const std::shared_ptr<Store> &store,
     const std::shared_ptr<VersionMap> &version_map
 ) {
@@ -258,13 +258,13 @@ std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions_async(
                 symbols.size(),
                 version_queries.size());
 
-    robin_hood::unordered_flat_map<StreamId, StreamVersionData> version_data;
+    ankerl::unordered_dense::map<StreamId, StreamVersionData> version_data;
     for (const auto &symbol : folly::enumerate(symbols)) {
         auto it = version_data.find(*symbol);
         if (it == version_data.end()) {
-            version_data.insert(robin_hood::pair<StreamId, StreamVersionData>(
-                *symbol,
-                StreamVersionData{version_queries[symbol.index]}));
+            version_data.insert(std::make_pair<StreamId, StreamVersionData>(
+                std::forward<StreamId>(StreamId{*symbol}),
+                std::forward<StreamVersionData>(StreamVersionData{version_queries[symbol.index]})));
         } else {
             it->second.react(version_queries[symbol.index]);
         }
@@ -273,8 +273,8 @@ std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions_async(
     auto snapshot_count_map = std::make_shared<SnapshotCountMap>(version_data);
     auto snapshot_key_map = std::make_shared<SnapshotKeyMap>(get_keys_for_snapshots(store, snapshot_count_map->snapshots()));
 
-    robin_hood::unordered_flat_map<StreamId, SplitterType> snapshot_futures;
-    robin_hood::unordered_flat_map<StreamId, SplitterType> version_futures;
+    ankerl::unordered_dense::map<StreamId, SplitterType> snapshot_futures;
+    ankerl::unordered_dense::map<StreamId, SplitterType> version_futures;
 
     std::vector<folly::Future<std::optional<AtomKey>>> output;
     output.reserve(symbols.size());

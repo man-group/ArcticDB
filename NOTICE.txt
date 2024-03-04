@@ -100,10 +100,6 @@ https://github.com/hogliux/semimap/blob/master/LICENSE.md
 This product includes software from the spdlog project (MIT).
 * Copyright (c) 2016 Gabi Melman.
 
-This product includes software from robin_hood hashmap and hashset (MIT)
-* Copyright (c) 2018-2021 Martin Ankerl
-* https://github.com/martinus/robin-hood-hashing
-
 This product include software from azure-sdk-for-cpp (MIT)
 * Copyright (c) Microsoft Corporation.
 * https://github.com/Azure/azure-sdk-for-cpp

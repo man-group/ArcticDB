@@ -27,6 +27,7 @@ find_package(LZ4 REQUIRED)
 find_package(prometheus-cpp CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 find_package(double-conversion REQUIRED)
+find_package(unordered_dense CONFIG REQUIRED)
 
 if(NOT WIN32 AND ${SSL_LINK})
     find_package(Kerberos REQUIRED)
@@ -73,7 +74,6 @@ else()
 
     find_package(recycle REQUIRED)
     find_package(msgpack-c REQUIRED)
-    find_package(robin_hood REQUIRED)
     find_package(LMDB REQUIRED)
     find_package(LMDBXX REQUIRED)
 
@@ -473,13 +473,6 @@ if(${ARCTICDB_INCLUDE_ROCKSDB})
     )
 endif()
 
-# Exclude vendored sources when using conda.
-if(NOT ${ARCTICDB_USING_CONDA})
-    list (APPEND arcticdb_srcs
-        util/third_party/robin_hood.hpp
-    )
-endif()
-
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
 if (WIN32)
@@ -527,6 +520,7 @@ set (arcticdb_core_libraries
         arcticdb_proto
         prometheus-cpp::push
         prometheus-cpp::pull
+        unordered_dense::unordered_dense
         ${standard_libraries}
         fmt::fmt
         protobuf::libprotobuf

@@ -5,6 +5,7 @@
     "fmt",
     "spdlog",
     "pcre",
+    "unordered-dense",
     {
       "name": "xxhash",
       "$version reason": "Must match version in conda build for interoperability"
