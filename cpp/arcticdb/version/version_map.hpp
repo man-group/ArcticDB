@@ -159,6 +159,8 @@ public:
         }
 
         if (key_exists_in_ref_entry(load_params, ref_entry, cached_penultimate_index, load_progress)) {
+            load_progress.loaded_until_ = ref_entry.loaded_until_;
+            load_progress.oldest_loaded_index_version_ = ref_entry.loaded_until_;
             entry->keys_.push_back(ref_entry.keys_[0]);
             if(cached_penultimate_index)
                 entry->keys_.push_back(*cached_penultimate_index);
@@ -716,19 +718,19 @@ private:
      */
     bool loaded_as_far_as_load_until(const VersionMapEntry& entry, const LoadParameter& load_param) const {
         if (is_positive_version_query(load_param)) {
-            if (entry.loaded_until_ <= static_cast<VersionId>(load_param.load_until_.value())) {
+            if (entry.loaded_until_ <= static_cast<VersionId>(load_param.load_until_version_.value())) {
                 ARCTICDB_DEBUG(log::version(), "Loaded as far as required value {}, have {}",
-                               load_param.load_until_.value(), entry.loaded_until_);
+                               load_param.load_until_version_.value(), entry.loaded_until_);
                 return true;
             }
         } else {
             auto opt_latest = entry.get_first_index(true).first;
             if (opt_latest.has_value()) {
                 auto opt_version_id = get_version_id_negative_index(opt_latest->version_id(),
-                                                                    *load_param.load_until_);
+                                                                    *load_param.load_until_version_);
                 if (opt_version_id.has_value() && entry.loaded_until_ <= *opt_version_id) {
                     ARCTICDB_DEBUG(log::version(), "Loaded as far as required value {}, have {} and there are {} total versions",
-                                   load_param.load_until_.value(), entry.loaded_until_, opt_latest->version_id());
+                                   load_param.load_until_version_.value(), entry.loaded_until_, opt_latest->version_id());
                     return true;
                 }
             }

@@ -35,11 +35,11 @@ void StreamVersionData::do_react(const pipelines::SpecificVersionQuery &specific
         load_param_ = LoadParameter{LoadType::LOAD_DOWNTO, specific_version.version_id_};
         break;
     case LoadType::LOAD_DOWNTO:
-        util::check(load_param_.load_until_.has_value(),
+        util::check(load_param_.load_until_version_.has_value(),
                     "Expect LOAD_DOWNTO to have version specified");
         if ((specific_version.version_id_ >= 0 && is_positive_version_query(load_param_)) ||
-            (specific_version.version_id_ < 0 && load_param_.load_until_.value() < 0)) {
-            load_param_.load_until_ = std::min(load_param_.load_until_.value(), specific_version.version_id_);
+            (specific_version.version_id_ < 0 && load_param_.load_until_version_.value() < 0)) {
+            load_param_.load_until_version_ = std::min(load_param_.load_until_version_.value(), specific_version.version_id_);
         } else {
             load_param_ = LoadParameter{LoadType::LOAD_UNDELETED};
         }

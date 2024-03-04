@@ -13,7 +13,7 @@ TEST(StreamVersionData, SpecificVersion) {
     stream_version_data.react(query_2);
     ASSERT_EQ(stream_version_data.count_, 2);
     ASSERT_EQ(stream_version_data.load_param_.load_type_, LoadType::LOAD_DOWNTO);
-    ASSERT_EQ(stream_version_data.load_param_.load_until_, 4);
+    ASSERT_EQ(stream_version_data.load_param_.load_until_version_, 4);
 }
 
 TEST(StreamVersionData, SpecificVersionReversed) {
@@ -25,7 +25,7 @@ TEST(StreamVersionData, SpecificVersionReversed) {
     stream_version_data.react(query_2);
     ASSERT_EQ(stream_version_data.count_, 2);
     ASSERT_EQ(stream_version_data.load_param_.load_type_, LoadType::LOAD_DOWNTO);
-    ASSERT_EQ(stream_version_data.load_param_.load_until_, 4);
+    ASSERT_EQ(stream_version_data.load_param_.load_until_version_, 4);
 }
 
 TEST(StreamVersionData, Timestamp) {
@@ -67,7 +67,7 @@ TEST(StreamVersionData, Latest) {
     stream_version_data.react(query_1);
     ASSERT_EQ(stream_version_data.count_, 1);
     ASSERT_EQ(stream_version_data.load_param_.load_type_, LoadType::LOAD_LATEST_UNDELETED);
-    ASSERT_EQ(stream_version_data.load_param_.load_until_.has_value(), false);
+    ASSERT_EQ(stream_version_data.load_param_.load_until_version_.has_value(), false);
 }
 
 TEST(StreamVersionData, SpecificToTimestamp) {
@@ -81,7 +81,7 @@ TEST(StreamVersionData, SpecificToTimestamp) {
     stream_version_data.react(query_2);
     ASSERT_EQ(stream_version_data.count_, 2);
     ASSERT_EQ(stream_version_data.load_param_.load_type_, LoadType::LOAD_UNDELETED);
-    ASSERT_EQ(stream_version_data.load_param_.load_until_.has_value(), false);
+    ASSERT_EQ(stream_version_data.load_param_.load_until_version_.has_value(), false);
     ASSERT_EQ(stream_version_data.load_param_.load_from_time_.has_value(), false);
 }
 
@@ -96,6 +96,6 @@ TEST(StreamVersionData, TimestampToSpecific) {
     stream_version_data.react(query_2);
     ASSERT_EQ(stream_version_data.count_, 2);
     ASSERT_EQ(stream_version_data.load_param_.load_type_, LoadType::LOAD_UNDELETED);
-    ASSERT_EQ(stream_version_data.load_param_.load_until_.has_value(), false);
+    ASSERT_EQ(stream_version_data.load_param_.load_until_version_.has_value(), false);
     ASSERT_EQ(stream_version_data.load_param_.load_from_time_.has_value(), false);
 }
