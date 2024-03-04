@@ -51,7 +51,7 @@ struct LoadParameter {
                 load_from_time_ = load_from_time_or_until;
                 break;
             case LoadType::LOAD_DOWNTO:
-                load_until_ = load_from_time_or_until;
+                load_until_version_ = load_from_time_or_until;
                 break;
             default:
                 internal::raise<ErrorCode::E_ASSERTION_FAILURE>("LoadParameter constructor with load_from_time_or_until parameter {} provided invalid load_type {}",
@@ -60,13 +60,13 @@ struct LoadParameter {
     }
 
     LoadType load_type_ = LoadType::NOT_LOADED;
-    std::optional<SignedVersionId> load_until_ = std::nullopt;
+    std::optional<SignedVersionId> load_until_version_ = std::nullopt;
     std::optional<timestamp> load_from_time_ = std::nullopt;
     bool iterate_on_failure_ = false;
 
     void validate() const {
-        util::check((load_type_ == LoadType::LOAD_DOWNTO) == load_until_.has_value(),
-                    "Invalid load parameter: load_type {} with load_util {}", int(load_type_), load_until_.value_or(VersionId{}));
+        util::check((load_type_ == LoadType::LOAD_DOWNTO) == load_until_version_.has_value(),
+                    "Invalid load parameter: load_type {} with load_util {}", int(load_type_), load_until_version_.value_or(VersionId{}));
         util::check((load_type_ == LoadType::LOAD_FROM_TIME) == load_from_time_.has_value(),
             "Invalid load parameter: load_type {} with load_from_time_ {}", int(load_type_), load_from_time_.value_or(timestamp{}));
     }

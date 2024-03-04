@@ -235,20 +235,20 @@ inline std::optional<VersionId> get_version_id_negative_index(VersionId latest, 
 std::unordered_map<StreamId, size_t> get_num_version_entries(const std::shared_ptr<Store> &store, size_t batch_size);
 
 inline bool is_positive_version_query(const LoadParameter& load_params) {
-    return load_params.load_until_.value() >= 0;
+    return load_params.load_until_version_.value() >= 0;
 }
 
 inline bool loaded_until_version_id(const LoadParameter &load_params, const LoadProgress& load_progress, const std::optional<VersionId>& latest_version) {
-    if (!load_params.load_until_)
+    if (!load_params.load_until_version_)
         return false;
 
     if (is_positive_version_query(load_params)) {
-        if (load_progress.loaded_until_ > static_cast<VersionId>(*load_params.load_until_)) {
+        if (load_progress.loaded_until_ > static_cast<VersionId>(*load_params.load_until_version_)) {
             return false;
         }
     } else {
         if (latest_version.has_value()) {
-            if (auto opt_version_id = get_version_id_negative_index(*latest_version, *load_params.load_until_);
+            if (auto opt_version_id = get_version_id_negative_index(*latest_version, *load_params.load_until_version_);
                 opt_version_id && load_progress.loaded_until_ > *opt_version_id) {
                     return false;
             }
@@ -259,7 +259,7 @@ inline bool loaded_until_version_id(const LoadParameter &load_params, const Load
     ARCTICDB_DEBUG(log::version(),
                    "Exiting load downto because loaded to version {} for request {} with {} total versions",
                    load_progress.loaded_until_,
-                   *load_params.load_until_,
+                   *load_params.load_until_version_,
                    latest_version.value()
                   );
     return true;
@@ -321,9 +321,9 @@ inline bool looking_for_undeleted(const LoadParameter& load_params, const std::s
 
 inline bool penultimate_key_contains_required_version_id(const AtomKey& key, const LoadParameter& load_params) {
     if(is_positive_version_query(load_params)) {
-        return key.version_id() <= static_cast<VersionId>(load_params.load_until_.value());
+        return key.version_id() <= static_cast<VersionId>(load_params.load_until_version_.value());
     } else {
-        return *load_params.load_until_ == -1;
+        return *load_params.load_until_version_ == -1;
     }
 }
 
