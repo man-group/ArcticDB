@@ -51,7 +51,7 @@ public:
 
     Aws::S3::S3Error missing_key_failure() const override;
 
-    bool matches_prefix(const std::pair<std::string, std::string>& key, const std::string& prefix) const override;
+    bool matches_prefix(const std::pair<std::string, std::string>& key, const std::pair<std::string, std::string>& prefix) const override;
 
     S3Result<std::monostate> head_object(const std::string& s3_object_name, const std::string& bucket_name) const override;
 

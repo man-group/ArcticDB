@@ -64,8 +64,8 @@ std::vector<std::pair<std::string, std::string>> get_keys(const std::string& buc
 
 Aws::S3::S3Error MockS3Client::missing_key_failure() const { return not_found_error; }
 
-bool MockS3Client::matches_prefix(const std::pair<std::string, std::string>& key, const std::string& prefix) const {
-    return key.second.rfind(prefix, 0) == 0;
+bool MockS3Client::matches_prefix(const std::pair<std::string, std::string>& key, const std::pair<std::string, std::string>& prefix) const {
+    return key.first == prefix.first && key.second.rfind(prefix.second, 0) == 0;
 }
 
 S3Result<std::monostate> MockS3Client::head_object(

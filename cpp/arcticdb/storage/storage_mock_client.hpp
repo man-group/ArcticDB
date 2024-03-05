@@ -57,7 +57,7 @@ public:
 
     virtual Failure missing_key_failure() const = 0;
 
-    virtual bool matches_prefix(const Key& key, const std::string& prefix) const = 0;
+    virtual bool matches_prefix(const Key& key, const Key& prefix) const = 0;
 
     StorageResult<Segment, Failure> read_internal(const Key& key) const {
         if (auto failure = has_failure_trigger(key, StorageOperation::READ); failure.has_value()) {
@@ -98,7 +98,7 @@ public:
         return {failed_deletes};
     }
 
-    StorageResult<std::vector<Key>, Failure> list_internal(const std::string& prefix) const {
+    StorageResult<std::vector<Key>, Failure> list_internal(const Key& prefix) const {
         std::vector<Key> output;
 
         for (auto& key : contents_) {
@@ -114,11 +114,15 @@ public:
         return {output};
     }
 
+    bool has_key(const Key& key) const {
+        return contents_.find(key) != contents_.end();
+    }
+
     StorageResult<bool, Failure> exists_internal(const Key& key) const {
         if (auto failure = has_failure_trigger(key, StorageOperation::EXISTS); failure.has_value()) {
             return {failure.value()};
         }
-        return {contents_.find(key) != contents_.end()};
+        return {has_key(key)};
     }
 
 protected:

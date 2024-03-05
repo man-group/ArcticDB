@@ -13,6 +13,21 @@
 
 namespace arcticdb::storage::mongo {
 
+// Some relevant error codes from mongo (not exhaustive). See https://www.mongodb.com/docs/manual/reference/error-codes/
+enum class MongoError {
+    NoSuchKey = 2,
+    HostUnreachable = 6,
+    HostNotFound = 7,
+    UnknownError = 8,
+    UserNotFound = 11,
+    UnAuthorized = 13,
+    ExceededTimeLimit = 50,
+    WriteConflict = 112,
+    KeyNotFound = 211,
+    DuplicateKey = 11000,
+    NoAcknowledge = 50000, // custom error code for simulating no server acknowledgement
+};
+
 // modified_count set to null_opt signals update failed (mongo docs are unclear on what error causes this)
 struct UpdateResult { std::optional<int> modified_count; };
 

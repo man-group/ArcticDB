@@ -477,6 +477,8 @@ set(arcticdb_srcs
         version/version_map_batch_methods.cpp
         storage/mongo/mongo_client_wrapper.hpp
         storage/storage_mock_client.hpp
+        storage/mongo/mongo_mock_client.hpp
+        storage/mongo/mongo_mock_client.cpp
 )
 
 if(${ARCTICDB_INCLUDE_ROCKSDB})
