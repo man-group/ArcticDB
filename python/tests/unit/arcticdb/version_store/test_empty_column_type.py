@@ -74,7 +74,7 @@ def empty_index(request):
     yield request.param
 
 
-class TestCanAppendToColunWithNones:
+class TestCanAppendToColumnWithNones:
     """
     Tests that it is possible to write a column containing None values and latter append to it. Initially the type of
     the column must be empty type after the append the column must be of the same type as the appended data.
@@ -498,11 +498,11 @@ class TestCanUpdateWithNone:
         )
         lmdb_version_store_static_and_dynamic.update(
             "sym",
-            pd.DataFrame({"col": [None, None]}, index=self.update_index())
+            pd.DataFrame({"col": [None, np.nan]}, index=self.update_index(), dtype=float_dtype)
         )
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym").data,
-            pd.DataFrame({"col": [1, float("NaN"), float("NaN"), 4]}, index=self.index(), dtype=float_dtype)
+            pd.DataFrame({"col": [1, np.nan, np.nan, 4]}, index=self.index(), dtype=float_dtype)
         )
 
     def test_bool(self, lmdb_version_store_static_and_dynamic, boolean_dtype):
