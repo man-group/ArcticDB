@@ -46,7 +46,7 @@ std::pair<size_t, size_t> get_offset_and_size(size_t pos, const SegmentInMemory&
     auto result = std::make_pair(
         segment.scalar_at<uint64_t>(pos, as_pos(FieldType::offset)).value(),
         segment.scalar_at<uint64_t>(pos, as_pos(FieldType::size)).value());
-    ARCTICDB_DEBUG(log::storage(), "At pos {}, multi segment header found offset and size {}:{}", result.first, result.second);
+    ARCTICDB_DEBUG(log::storage(), "At pos {}, multi segment header found offset and size {}:{}", pos, result.first, result.second);
     return result;
 }
 
