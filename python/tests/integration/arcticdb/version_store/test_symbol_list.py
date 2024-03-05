@@ -7,14 +7,18 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import numpy as np
 import pytest
+import requests
 
 from arcticdb.config import Defaults
 from arcticdb.util.test import sample_dataframe
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.toolbox.library_tool import VariantKey, AtomKey, key_to_props_dict, props_dict_to_atom_key
+from arcticdb.version_store.helper import get_s3_uri_from_endpoint
+from arcticdb.arctic import Arctic
 from arcticdb_ext import set_config_int, unset_config_int
 from arcticdb_ext.storage import KeyType, OpenMode
 from arcticdb_ext.tools import CompactionId, CompactionLockName
+from arcticdb_ext.exceptions import InternalException
 
 
 @pytest.fixture(autouse=True)
@@ -244,3 +248,19 @@ def test_lock_contention(small_max_delta, lmdb_version_store, mode):
         assert lt.find_keys(KeyType.SYMBOL_LIST) == orig_sl
     else:
         assert lt.find_keys(KeyType.SYMBOL_LIST) != orig_sl
+
+
+def test_symbol_list_exception_and_printout(moto_s3_endpoint_and_credentials):
+    endpoint, port, bucket, aws_access_key, aws_secret_key = moto_s3_endpoint_and_credentials
+    uri = get_s3_uri_from_endpoint(endpoint, bucket, aws_access_key, aws_secret_key, port)
+    ac = Arctic(uri)
+    assert ac.list_libraries() == []
+    lib_name = "pytest_test_lib"
+    lib = ac.create_library(lib_name)
+    requests.post(endpoint + "/rate_limit", b"0").raise_for_status()
+    try:
+        with pytest.raises(InternalException, match="E_S3_RETRYABLE Retry-able error"):
+            lib.list_symbols()
+    finally:
+        requests.post(endpoint + "/rate_limit", b"-1").raise_for_status()
+        ac.delete_library(lib_name)

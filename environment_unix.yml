@@ -62,7 +62,7 @@ dependencies:
   - pytest
   - boto3
   - werkzeug
-  - moto
+  - moto==4.2.13
   - pytest-server-fixtures
   - msgpack-python
   # Pinned to avoid test disruption (in phase with the pin in setup.cfg)

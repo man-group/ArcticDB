@@ -396,6 +396,8 @@ namespace s3 {
 
                 } else {
                     const auto &error = list_objects_outcome.GetError();
+                    if (error.ShouldRetry())
+                        raise<ErrorCode::E_S3_RETRYABLE>("Retry-able error while iterating keys of type {}: S3Error#{} {}: {}", key_type, int(error.GetErrorType()), error.GetExceptionName().c_str(), error.GetMessage().c_str());
                     log::storage().warn("Failed to iterate key type with key '{}' {}: {}",
                                         key_type,
                                         error.GetExceptionName().c_str(),

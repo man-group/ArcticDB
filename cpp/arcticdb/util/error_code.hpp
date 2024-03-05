@@ -72,6 +72,7 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
     ERROR_CODE(5000, E_KEY_NOT_FOUND) \
     ERROR_CODE(5001, E_DUPLICATE_KEY) \
     ERROR_CODE(5002, E_SYMBOL_NOT_FOUND) \
+    ERROR_CODE(5006, E_S3_RETRYABLE) \
     ERROR_CODE(6000, E_UNSORTED_DATA) \
     ERROR_CODE(7000, E_INVALID_USER_ARGUMENT) \
     ERROR_CODE(7001, E_INVALID_DECIMAL_STRING)   \
@@ -138,6 +139,7 @@ using SchemaException = ArcticCategorizedException<ErrorCategory::SCHEMA>;
 using NormalizationException = ArcticCategorizedException<ErrorCategory::NORMALIZATION>;
 using NoSuchVersionException = ArcticSpecificException<ErrorCode::E_NO_SUCH_VERSION>;
 using StorageException = ArcticCategorizedException<ErrorCategory::STORAGE>;
+using S3RetryableException = ArcticSpecificException<ErrorCode::E_S3_RETRYABLE>;
 using MissingDataException = ArcticCategorizedException<ErrorCategory::MISSING_DATA>;
 using SortingException = ArcticCategorizedException<ErrorCategory::SORTING>;
 using UnsortedDataException = ArcticSpecificException<ErrorCode::E_UNSORTED_DATA>;
@@ -157,6 +159,11 @@ template<>
 template<>
 [[noreturn]] inline void throw_error<ErrorCode::E_UNSORTED_DATA>(const std::string& msg) {
     throw ArcticSpecificException<ErrorCode::E_UNSORTED_DATA>(msg);
+}
+
+template<>
+[[noreturn]] inline void throw_error<ErrorCode::E_S3_RETRYABLE>(const std::string& msg) {
+    throw ArcticSpecificException<ErrorCode::E_S3_RETRYABLE>(msg);
 }
 
 }

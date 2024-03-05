@@ -6,6 +6,7 @@ import pandas as pd
 from arcticdb import Arctic
 from arcticdb.scripts.update_storage import run
 from arcticdb.options import LibraryOptions
+from arcticdb.version_store.helper import get_s3_uri_from_endpoint
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
 from arcticc.pb2.azure_storage_pb2 import Config as AzureConfig
 from arcticdb.util.test import assert_frame_equal
@@ -40,17 +41,7 @@ def _get_azure_storage_config(cfg):
 def test_upgrade_script_dryrun_s3(moto_s3_endpoint_and_credentials):
     # Given
     endpoint, port, bucket, aws_access_key, aws_secret_key = moto_s3_endpoint_and_credentials
-    uri = (
-        endpoint.replace("http://", "s3://").rsplit(":", 1)[0]
-        + ":"
-        + bucket
-        + "?access="
-        + aws_access_key
-        + "&secret="
-        + aws_secret_key
-        + "&port="
-        + port
-    )
+    uri = get_s3_uri_from_endpoint(endpoint, bucket, aws_access_key, aws_secret_key, port)
 
     ac = Arctic(uri)
     create_library_config(ac, LIB_NAME)
@@ -68,17 +59,7 @@ def test_upgrade_script_dryrun_s3(moto_s3_endpoint_and_credentials):
 
 def test_upgrade_script_s3(moto_s3_endpoint_and_credentials):
     endpoint, port, bucket, aws_access_key, aws_secret_key = moto_s3_endpoint_and_credentials
-    uri = (
-        endpoint.replace("http://", "s3://").rsplit(":", 1)[0]
-        + ":"
-        + bucket
-        + "?access="
-        + aws_access_key
-        + "&secret="
-        + aws_secret_key
-        + "&port="
-        + port
-    )
+    uri = get_s3_uri_from_endpoint(endpoint, bucket, aws_access_key, aws_secret_key, port)
 
     ac = Arctic(uri)
     create_library_config(ac, LIB_NAME)

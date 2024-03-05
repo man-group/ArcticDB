@@ -28,7 +28,7 @@ import numpy as np
 import pandas as pd
 import random
 from datetime import datetime
-from typing import Optional, Any, Dict
+from typing import Optional, Any, Dict, Union
 import subprocess
 from pathlib import Path
 import socket
@@ -62,20 +62,71 @@ MsgPackNormalizer.MMAP_DEFAULT_SIZE = 20 * (1 << 20)
 
 
 def run_server(port):
+
+    class _HostDispatcherApplication(DomainDispatcherApplication):
+            """The stand-alone server needs a way to distinguish between S3 and IAM. We use the host for that"""
+
+            _MAP = {"s3.us-east-1.amazonaws.com": "s3", "localhost": "s3", "127.0.0.1": "iam"}
+
+            _reqs_till_rate_limit = -1
+
+            def get_backend_for_host(self, host):
+                return self._MAP.get(host, host)
+
+            def __call__(self, environ, start_response):
+                path_info: bytes = environ.get("PATH_INFO", "")
+
+                with self.lock:
+                    if path_info in ("/rate_limit", b"/rate_limit"):
+                        length = int(environ["CONTENT_LENGTH"])
+                        body = environ["wsgi.input"].read(length).decode("ascii")
+                        self._reqs_till_rate_limit = int(body)
+                        start_response("200 OK", [("Content-Type", "text/plain")])
+                        return [b"Limit accepted"]
+
+                    if self._reqs_till_rate_limit == 0:
+                        response_body = (b'<?xml version="1.0" encoding="UTF-8"?><Error><Code>SlowDown</Code><Message>Please reduce your request rate.</Message>'
+                                         b'<RequestId>176C22715A856A29</RequestId><HostId>9Gjjt1m+cjU4OPvX9O9/8RuvnG41MRb/18Oux2o5H5MY7ISNTlXN+Dz9IG62/ILVxhAGI0qyPfg=</HostId></Error>')
+                        start_response(
+                            "503 Slow Down", [("Content-Type", "text/xml"), ("Content-Length", str(len(response_body)))]
+                        )
+                        return [response_body]
+                    else:
+                        self._reqs_till_rate_limit -= 1
+
+                return super().__call__(environ, start_response)
+            
     werkzeug.run_simple(
-        "0.0.0.0", port, DomainDispatcherApplication(create_backend_app, service="s3"), threaded=True, ssl_context=None
+        "0.0.0.0", port, _HostDispatcherApplication(create_backend_app), threaded=True, ssl_context=None
     )
 
 
-@pytest.fixture(scope="module")
+ProcessUnion = Union[multiprocessing.Process, subprocess.Popen]
+
+def wait_for_server_to_come_up(url: str, service: str, process: ProcessUnion, *, timeout=20, sleep=0.2, req_timeout=1):
+    deadline = time.time() + timeout
+    alive = (lambda: process.poll() is None) if isinstance(process, subprocess.Popen) else process.is_alive
+    while True:
+        assert time.time() < deadline, f"Timed out waiting for {service} process to start"
+        assert alive(), service + " process died shortly after start up"
+        time.sleep(sleep)
+        try:
+            response = requests.get(url, timeout=req_timeout)  # head() confuses Mongo
+            if response.status_code < 500:  # We might not have permission, so not requiring 2XX response
+                break
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+            pass
+
+
+@pytest.fixture(scope="session")
 def _moto_s3_uri_module():
     port = get_ephemeral_port()
     p = multiprocessing.Process(target=run_server, args=(port,))
     p.start()
+    endpoint = f"http://localhost:{port}"
+    wait_for_server_to_come_up(endpoint, "moto", p)
 
-    time.sleep(0.5)
-
-    yield f"http://localhost:{port}"
+    yield endpoint
 
     try:
         # terminate sends SIGTERM - no need to be polite here so...
