@@ -151,6 +151,16 @@ DeleteResult MockMongoClient::remove_keyvalue(
     return is_no_ack_failure(result) ? DeleteResult{std::nullopt} : DeleteResult{1};
 }
 
+bool MockMongoClient::key_exists(
+        const std::string& database_name,
+        const std::string& collection_name,
+        const  entity::VariantKey& k) {
+    auto key = make_key(database_name, collection_name, k);
+    auto result = exists_internal(key);
+    throw_if_exception(result);
+    return result.is_success() && result.get_output();
+}
+
 std::vector<VariantKey> MockMongoClient::list_keys(
         const std::string& database_name,
         const std::string& collection_name,
@@ -175,23 +185,17 @@ std::vector<VariantKey> MockMongoClient::list_keys(
 }
 
 void MockMongoClient::ensure_collection(std::string_view, std::string_view ) {
-    // a database, collections is always guaranteed to be created if not existent
+    // a database, collection is always guaranteed to be created if not existent
 }
 
-void MockMongoClient::drop_collection(
-        std::string,
-        std::string ) {
-    // TODO: implement
-}
-
-bool MockMongoClient::key_exists(
-        const std::string& database_name,
-        const std::string& collection_name,
-        const  entity::VariantKey& k) {
-    auto key = make_key(database_name, collection_name, k);
-    auto result = exists_internal(key);
-    throw_if_exception(result);
-    return result.is_success() && result.get_output();
+void MockMongoClient::drop_collection(std::string database_name, std::string collection_name) {
+    for (auto it = contents_.begin(); it != contents_.end(); ) {
+        if (get<0>(it->first) == database_name && get<1>(it->first) == collection_name) {
+            it = contents_.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 } // namespace arcticdb::storage::mongo

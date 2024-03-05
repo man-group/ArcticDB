@@ -452,3 +452,18 @@ TEST(MongoMockStorageTest, test_list) {
 
     ASSERT_THROW(list_in_store(*store), std::runtime_error); // should throw MongoUnexpectedException after exception normalization
 }
+
+TEST(MongoMockStorageTest, drop_collection) {
+    MongoMockStorageFactory factory;
+    auto store = factory.create();
+    auto symbols = std::set<std::string>();
+    for (int i = 10; i < 25; ++i) {
+        auto symbol = fmt::format("symbol_{}", i);
+        write_in_store(*store, symbol);
+        symbols.emplace(symbol);
+    }
+    ASSERT_EQ(list_in_store(*store), symbols);
+
+    store->fast_delete();   // calls drop_collection
+    ASSERT_EQ(list_in_store(*store), std::set<std::string>{});
+}
