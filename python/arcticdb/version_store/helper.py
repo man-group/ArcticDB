@@ -425,3 +425,17 @@ def get_arctic_native_lib(lib_fqn):
         raise LibraryNotFound(lib_fqn)
     lib, path = m.group(1), m.group(2)
     return ArcticFileConfig(config_path=path)[lib]
+
+
+def get_s3_uri_from_endpoint(endpoint, bucket, aws_access_key, aws_secret_key, port):
+    return (
+        endpoint.replace("http://", "s3://").rsplit(":", 1)[0]
+        + ":"
+        + bucket
+        + "?access="
+        + aws_access_key
+        + "&secret="
+        + aws_secret_key
+        + "&port="
+        + port
+    )

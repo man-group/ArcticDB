@@ -18,6 +18,7 @@ from arcticdb.exceptions import MismatchingLibraryOptions
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb.options import LibraryOptions
 from arcticdb import QueryBuilder, DataError
+from arcticdb.version_store.helper import get_s3_uri_from_endpoint
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
 
 import math
@@ -103,17 +104,7 @@ def test_do_not_persist_s3_details(moto_s3_endpoint_and_credentials):
         return s3_config
 
     endpoint, port, bucket, aws_access_key, aws_secret_key = moto_s3_endpoint_and_credentials
-    uri = (
-        endpoint.replace("http://", "s3://").rsplit(":", 1)[0]
-        + ":"
-        + bucket
-        + "?access="
-        + aws_access_key
-        + "&secret="
-        + aws_secret_key
-        + "&port="
-        + port
-    )
+    uri = get_s3_uri_from_endpoint(endpoint, bucket, aws_access_key, aws_secret_key, port)
 
     ac = Arctic(uri)
     ac.create_library("test")
