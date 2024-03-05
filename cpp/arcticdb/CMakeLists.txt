@@ -448,6 +448,10 @@ set(arcticdb_srcs
         storage/azure/azure_real_client.cpp
         storage/azure/azure_mock_client.hpp
         storage/azure/azure_mock_client.cpp
+        storage/mongo/mongo_client_wrapper.hpp
+        storage/storage_mock_client.hpp
+        storage/mongo/mongo_mock_client.hpp
+        storage/mongo/mongo_mock_client.cpp
         stream/aggregator.cpp
         stream/append_map.cpp
         stream/piloted_clock.cpp
@@ -475,10 +479,6 @@ set(arcticdb_srcs
         version/version_utils.cpp
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
-        storage/mongo/mongo_client_wrapper.hpp
-        storage/storage_mock_client.hpp
-        storage/mongo/mongo_mock_client.hpp
-        storage/mongo/mongo_mock_client.cpp
 )
 
 if(${ARCTICDB_INCLUDE_ROCKSDB})

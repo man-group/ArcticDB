@@ -28,10 +28,10 @@ enum class MongoError {
     NoAcknowledge = 50000, // custom error code for simulating no server acknowledgement
 };
 
-// modified_count set to null_opt signals update failed (mongo docs are unclear on what error causes this)
+// modified_count set to null_opt signals update failed. mongocxx returns nullopt if server does not acknowledge the operation
 struct UpdateResult { std::optional<int> modified_count; };
 
-// delete_count set to null_opt signals delete failed (mongo docs are unclear on what error causes this)
+// delete_count set to null_opt signals delete failed. mongocxx returns nullopt if server does not acknowledge the operation
 struct DeleteResult { std::optional<int> delete_count; };
 
 class MongoClientWrapper {
