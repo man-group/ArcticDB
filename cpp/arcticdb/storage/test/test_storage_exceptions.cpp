@@ -275,14 +275,8 @@ TEST(S3MockStorageTest, TestPermissionErrorException) {
     failureSymbol = s3::MockS3Client::get_failure_trigger("sym3", s3::S3Operation::PUT, Aws::S3::S3Errors::INVALID_ACCESS_KEY_ID);
 
     ASSERT_THROW({
-<<<<<<< HEAD
         update_in_store(*storage, failureSymbol);
     },  StoragePermissionException);
-=======
-        storage->update(std::move(kv), storage::StorageUpdateOptions{});
-    },  PermissionException);
->>>>>>> eed4ea88 (Metadata caching)
-
 }
 
 TEST(S3MockStorageTest, TestS3RetryableException) {

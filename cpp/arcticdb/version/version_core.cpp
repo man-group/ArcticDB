@@ -327,8 +327,7 @@ VersionedItem update_impl(
     const UpdateQuery& query,
     const std::shared_ptr<InputTensorFrame>& frame,
     const WriteOptions&& options,
-    const version_store::ModificationOptions& update_options,
-    version_store::TimeseriesInfo& ts_info) {
+    const version_store::ModificationOptions& update_options) {
     util::check(update_info.previous_index_key_.has_value(), "Cannot update as there is no previous index key to update into");
     const StreamId stream_id = frame->desc.id();
     ARCTICDB_DEBUG(log::version(), "Update versioned dataframe for stream_id: {} , version_id = {}", stream_id, update_info.previous_index_key_->version_id());
@@ -338,8 +337,8 @@ VersionedItem update_impl(
     util::check(index_desc.kind() == IndexDescriptor::TIMESTAMP, "Update not supported for non-timeseries indexes");
     sorted_data_check_update(*frame, index_segment_reader);
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
-    (void)check_and_mark_slices(index_segment_reader, update_options.dynamic_schema_,, false, std::nullopt, bucketize_dynamic);
-    fix_descriptor_mismatch_or_throw(UPDATE, update_options.dynamic_schema_,, index_segment_reader, *frame);
+    (void)check_and_mark_slices(index_segment_reader, update_options.dynamic_schema_, false, std::nullopt, bucketize_dynamic);
+    fix_descriptor_mismatch_or_throw(UPDATE, update_options.dynamic_schema_, index_segment_reader, *frame);
 
     std::vector<FilterQuery<index::IndexSegmentReader>> queries =
         build_update_query_filters<index::IndexSegmentReader>(query.row_filter, frame->index, frame->index_range, update_options.dynamic_schema_, index_segment_reader.bucketize_dynamic());

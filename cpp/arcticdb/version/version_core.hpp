@@ -73,8 +73,7 @@ VersionedItem update_impl(
     const UpdateQuery & query,
     const std::shared_ptr<InputTensorFrame>& frame,
     const WriteOptions&& write_options,
-    const ModificationOptions& update_options,
-    TimeseriesInfo& ts_info);
+    const ModificationOptions& update_options);
 
 VersionedItem delete_range_impl(
     const std::shared_ptr<Store>& store,

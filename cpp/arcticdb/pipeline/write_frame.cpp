@@ -84,6 +84,7 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
         if (frame_->desc.index().field_count() > 0) {
             util::check(static_cast<bool>(frame_->index_tensor), "Got null index tensor in write_slices");
             auto opt_error = aggregator_set_data(
+                *frame_,
                 frame_->desc.fields(0).type(),
                 frame_->index_tensor.value(),
                 agg, 0, rows_to_write, offset_in_frame, slice_num_for_column_, regular_slice_size, false);
@@ -97,6 +98,7 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
             auto& fd = slice_.non_index_field(col);
             auto& tensor = frame_->field_tensors[slice_.absolute_field_col(col)];
             auto opt_error = aggregator_set_data(
+                *frame_,
                 fd.type(),
                 tensor, agg, abs_col, rows_to_write, offset_in_frame, slice_num_for_column_,
                 regular_slice_size, sparsify_floats_);

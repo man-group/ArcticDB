@@ -91,7 +91,7 @@ void MappedFileStorage::do_write(Composite<KeySegmentPair>&& kvs) {
     });
 }
 
-void MappedFileStorage::do_update(Composite<KeySegmentPair>&&, UpdateOpts) {
+void MappedFileStorage::do_update(Composite<KeySegmentPair>&&, storage::StorageUpdateOptions) {
     util::raise_rte("Update not implemented for file storages");
 }
 

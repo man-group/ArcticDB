@@ -31,7 +31,7 @@ class MappedFileStorage final : public SingleFileStorage {
 
     void do_write(Composite<KeySegmentPair>&& kvs) override;
 
-    [[noreturn]] void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) override;
+    [[noreturn]] void do_update(Composite<KeySegmentPair>&& kvs, storage::StorageUpdateOptions opts) override;
 
     void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, storage::ReadKeyOpts opts) override;
 

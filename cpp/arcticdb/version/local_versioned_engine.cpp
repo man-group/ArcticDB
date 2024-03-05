@@ -568,7 +568,6 @@ VersionedItem LocalVersionedEngine::update_internal(
     const UpdateQuery& query,
     const std::shared_ptr<InputTensorFrame>& frame,
     const ModificationOptions& options) {
-    TimeseriesInfo ts_info;
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: update");
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(),
                                                                         version_map(),
@@ -587,8 +586,7 @@ VersionedItem LocalVersionedEngine::update_internal(
                                           query,
                                           frame,
                                           get_write_options(),
-                                          options,
-                                          ts_info);
+                                          options);
 
         write_version(options.prune_previous_versions_, versioned_item.key_, update_info.previous_index_key_);
         return versioned_item;
@@ -736,7 +734,8 @@ VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
     if(cfg().symbol_list())
         symbol_list().add_symbol(store(), stream_id, versioned_item.key_.version_id());
 
-    write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, deleted ? std::nullopt : maybe_prev);
+    write_version(prune_previous_versions, versioned_item.key_, deleted ? std::nullopt : maybe_prev);
+
     if(cfg().metadata_cache())
         write_symbol_metadata(store(), stream_id, versioned_item.key_.start_time(), versioned_item.key_.end_time(), ts_info.total_rows_, versioned_item.key_.creation_ts());
 
@@ -1421,7 +1420,6 @@ VersionedItem LocalVersionedEngine::append_internal(
     } else {
         if(options.upsert_) {
             auto write_options = get_write_options();
-            version_store::TimeseriesInfo ts_info;
             auto versioned_item =  write_dataframe_impl(store_,
                                                         update_info.next_version_id_,
                                                         frame,

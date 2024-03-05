@@ -77,7 +77,7 @@ std::unordered_map<entity::StreamId, SymbolMetadata> get_symbol_metadata(
 
         auto version_map = std::make_shared<VersionMap>();
         auto version_futures =
-            batch_get_versions_async(engine.get_store(), version_map, missing_symbols, version_queries, false);
+            batch_get_versions_async(engine.get_store(), version_map, missing_symbols, version_queries);
         std::vector<folly::Future<DescriptorItem>> descriptor_futures;
         for (auto &&[idx, version_fut] : folly::enumerate(version_futures)) {
             descriptor_futures.emplace_back(
