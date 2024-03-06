@@ -16,17 +16,21 @@
 
 namespace arcticdb {
 
-template<typename NormalizationMetadata, typename InnerFunction, typename FieldType=google::protobuf::FieldDescriptor *>
-auto get_pandas_common_via_reflection(NormalizationMetadata norm_meta, InnerFunction &&inner_function)
--> decltype(inner_function(norm_meta, std::declval<FieldType>(), std::declval<FieldType>())) {
+template<typename InnerFunction, typename FieldType=google::protobuf::FieldDescriptor *>
+    auto get_pandas_common_via_reflection(
+        proto::descriptors::NormalizationMetadata norm_meta,
+        InnerFunction&& inner_function
+    ) -> decltype(inner_function(norm_meta, std::declval<FieldType>(), std::declval<FieldType>())) {
     try {
-        if (norm_meta.input_type_case() != NormalizationMetadata::INPUT_TYPE_NOT_SET) {
-            if (auto one_of = NormalizationMetadata::descriptor()->field(norm_meta.input_type_case()); one_of) {
+        if (norm_meta.input_type_case() != proto::descriptors::NormalizationMetadata::INPUT_TYPE_NOT_SET) {
+            if (auto one_of = proto::descriptors::NormalizationMetadata::descriptor()->field(norm_meta.input_type_case()); one_of) {
                 log::storage().info("Inefficient NormalizationMetadata.input_type.{} access via reflection",
                                     one_of->name());
                 if (auto msg_type = one_of->message_type(); msg_type) {
                     if (auto common_field = msg_type->FindFieldByName("common"); common_field) {
-                        normalization::check<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(common_field->message_type() == NormalizationMetadata::Pandas::descriptor(),
+                        normalization::check<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(
+                            common_field->message_type() ==
+                                proto::descriptors::NormalizationMetadata::Pandas::descriptor(),
                                     "{}.common must be Pandas", one_of->name());
                         return inner_function(norm_meta, one_of, common_field);
                     }
@@ -40,80 +44,54 @@ auto get_pandas_common_via_reflection(NormalizationMetadata norm_meta, InnerFunc
     return std::nullopt;
 }
 
-template<typename NormalizationMetadata>
 std::optional<std::decay_t<std::reference_wrapper<const arcticdb::proto::descriptors::NormalizationMetadata_Pandas>>>
-get_common_pandas(const NormalizationMetadata &norm_meta) {
+get_common_pandas(const proto::descriptors::NormalizationMetadata& norm_meta) {
     using Pandas = const arcticdb::proto::descriptors::NormalizationMetadata_Pandas;
     switch (norm_meta.input_type_case()) {
-    case NormalizationMetadata::kDf:return std::make_optional(std::reference_wrapper<Pandas>(norm_meta.df().common()));
-    case NormalizationMetadata::kSeries:
-        return std::make_optional(
-            std::reference_wrapper<Pandas>(norm_meta.series().common()));
-    case NormalizationMetadata::kTs:return std::make_optional(std::reference_wrapper<Pandas>(norm_meta.ts().common()));
-
-    case NormalizationMetadata::kMsgPackFrame:
-    case NormalizationMetadata::kNp:return std::nullopt;
-
+    case proto::descriptors::NormalizationMetadata::kDf:
+        return std::make_optional(std::reference_wrapper<Pandas>(norm_meta.df().common()));
+    case proto::descriptors::NormalizationMetadata::kSeries:
+        return std::make_optional(std::reference_wrapper<Pandas>(norm_meta.series().common()));
+    case proto::descriptors::NormalizationMetadata::kTs:
+        return std::make_optional(std::reference_wrapper<Pandas>(norm_meta.ts().common()));
+    case proto::descriptors::NormalizationMetadata::kMsgPackFrame:
+    case proto::descriptors::NormalizationMetadata::kNp: return std::nullopt;
     default:
-        return get_pandas_common_via_reflection(norm_meta, [](auto &norm_meta, auto one_of, auto common_field) {
-            auto &one_of_msg = norm_meta.GetReflection()->GetMessage(norm_meta, one_of);
-            auto &common_msg = one_of_msg.GetReflection()->GetMessage(one_of_msg, common_field);
+        return get_pandas_common_via_reflection(norm_meta, [](auto& norm_meta, auto one_of, auto common_field) {
+            auto& one_of_msg = norm_meta.GetReflection()->GetMessage(norm_meta, one_of);
+            auto& common_msg = one_of_msg.GetReflection()->GetMessage(one_of_msg, common_field);
             return std::make_optional(std::reference_wrapper<Pandas>(
-                *reinterpret_cast<Pandas *>(const_cast<::google::protobuf::Message *>(&common_msg))));
+                *reinterpret_cast<Pandas*>(const_cast<::google::protobuf::Message*>(&common_msg))
+            ));
         });
     }
 }
 
-template<typename NormalizationMetadata>
 std::optional<std::decay_t<std::reference_wrapper<arcticdb::proto::descriptors::NormalizationMetadata_Pandas>>>
-get_common_pandas(NormalizationMetadata
-                  &norm_meta) {
+get_common_pandas(proto::descriptors::NormalizationMetadata& norm_meta) {
     using Pandas = arcticdb::proto::descriptors::NormalizationMetadata_Pandas;
-    switch (norm_meta.
-        input_type_case()
-        ) {
-    case NormalizationMetadata::kDf:
-        return
-            std::make_optional(std::reference_wrapper<Pandas>(*norm_meta.mutable_df()->mutable_common())
-            );
-    case NormalizationMetadata::kSeries:
-        return
-            std::make_optional(std::reference_wrapper<Pandas>(*norm_meta.mutable_series()->mutable_common())
-            );
-    case NormalizationMetadata::kTs:
-        return
-            std::make_optional(std::reference_wrapper<Pandas>(*norm_meta.mutable_ts()->mutable_common())
-            );
-
-    case NormalizationMetadata::kMsgPackFrame:
-    case NormalizationMetadata::kNp:
-        return
-            std::nullopt;
-
+    switch (norm_meta.input_type_case()) {
+    case proto::descriptors::NormalizationMetadata::kDf:
+        return std::make_optional(std::reference_wrapper<Pandas>(*norm_meta.mutable_df()->mutable_common()));
+    case proto::descriptors::NormalizationMetadata::kSeries:
+        return std::make_optional(std::reference_wrapper<Pandas>(*norm_meta.mutable_series()->mutable_common()));
+    case proto::descriptors::NormalizationMetadata::kTs:
+        return std::make_optional(std::reference_wrapper<Pandas>(*norm_meta.mutable_ts()->mutable_common()));
+    case proto::descriptors::NormalizationMetadata::kMsgPackFrame:
+    case proto::descriptors::NormalizationMetadata::kNp: return std::nullopt;
     default:
-        return
-            get_pandas_common_via_reflection(norm_meta,
-                 [](
-                     auto &norm_meta,
-                     auto one_of,
-                     auto common_field
-                 ) {
-                     auto &one_of_msg =
-                         norm_meta.GetReflection()->GetMessage(norm_meta, one_of);
-                     auto &common_msg =
-                         one_of_msg.GetReflection()->GetMessage(one_of_msg, common_field);
-                     return
-                         std::make_optional
-                             (std::reference_wrapper<Pandas>(*reinterpret_cast<Pandas *>(const_cast<::google::protobuf::Message *>(&common_msg)))
-                             );
-                 }
-            );
+        return get_pandas_common_via_reflection(norm_meta, [](auto& norm_meta, auto one_of, auto common_field) {
+            auto& one_of_msg = norm_meta.GetReflection()->GetMessage(norm_meta, one_of);
+            auto& common_msg = one_of_msg.GetReflection()->GetMessage(one_of_msg, common_field);
+            return std::make_optional(std::reference_wrapper<Pandas>(
+                *reinterpret_cast<Pandas*>(const_cast<::google::protobuf::Message*>(&common_msg))
+            ));
+        });
     }
 }
 
-template<class NormalizationMetadata>
-bool check_pandas_like(const NormalizationMetadata &old_norm,
-                       NormalizationMetadata &new_norm,
+bool check_pandas_like(const proto::descriptors::NormalizationMetadata& old_norm,
+                       proto::descriptors::NormalizationMetadata& new_norm,
                        size_t old_length) {
     auto old_pandas = get_common_pandas(old_norm);
     auto new_pandas = get_common_pandas(new_norm);

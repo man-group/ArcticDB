@@ -123,4 +123,58 @@ namespace arcticdb::entity {
             }, id);
     }
 
+    IndexDescriptor::IndexDescriptor(size_t field_count, Type type) {
+        data_.set_kind(type);
+        data_.set_field_count(static_cast<uint32_t>(field_count));
+    }
+
+    IndexDescriptor::IndexDescriptor(arcticdb::proto::descriptors::IndexDescriptor data)
+        : data_(std::move(data)) {
+    }
+
+    bool IndexDescriptor::uninitialized() const {
+        return data_.field_count() == 0 && data_.kind() == Type::IndexDescriptor_Type_UNKNOWN;
+    }
+
+    const IndexDescriptor::Proto& IndexDescriptor::proto() const {
+        return data_;
+    }
+
+    size_t IndexDescriptor::field_count() const {
+        return static_cast<size_t>(data_.field_count());
+    }
+
+    IndexDescriptor::Type IndexDescriptor::type() const {
+        return data_.kind();
+    }
+
+    void IndexDescriptor::set_type(Type type) {
+        data_.set_kind(type);
+    }
+
+    bool operator==(const IndexDescriptor& left, const IndexDescriptor& right) {
+        return left.type() == right.type();
+    }
+
+    IndexDescriptor::TypeChar to_type_char(IndexDescriptor::Type type) {
+        switch (type) {
+        case IndexDescriptor::EMPTY: return 'E';
+        case IndexDescriptor::TIMESTAMP: return 'T';
+        case IndexDescriptor::ROWCOUNT: return 'R';
+        case IndexDescriptor::STRING: return 'S';
+        case IndexDescriptor::UNKNOWN: return 'U';
+        default: util::raise_rte("Unknown index type: {}", int(type));
+        }
+    }
+
+    IndexDescriptor::Type from_type_char(IndexDescriptor::TypeChar type) {
+        switch (type) {
+        case 'E': return IndexDescriptor::EMPTY;
+        case 'T': return IndexDescriptor::TIMESTAMP;
+        case 'R': return IndexDescriptor::ROWCOUNT;
+        case 'S': return IndexDescriptor::STRING;
+        case 'U': return IndexDescriptor::UNKNOWN;
+        default: util::raise_rte("Unknown index type: {}", int(type));
+        }
+    }
 } // namespace arcticdb

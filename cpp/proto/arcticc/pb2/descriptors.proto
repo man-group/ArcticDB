@@ -57,6 +57,8 @@ message TypeDescriptor {
 message IndexDescriptor {
     enum Type {
         UNKNOWN = 0;
+        // Used then the dataframe has 0 rows. Convertible to any other type
+        EMPTY = 69; // 'E'
         ROWCOUNT = 82; // 'R'
         STRING = 83; // 'S'
         TIMESTAMP = 84; //  'T'

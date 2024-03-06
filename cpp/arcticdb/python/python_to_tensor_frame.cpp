@@ -16,15 +16,15 @@
 #include <pybind11/numpy.h>
 
 namespace arcticdb::convert {
-const char none_char[8] = {'\300', '\000', '\000', '\000', '\000', '\000', '\000', '\000'};
+constexpr const char none_char[8] = {'\300', '\000', '\000', '\000', '\000', '\000', '\000', '\000'};
 
 using namespace arcticdb::pipelines;
 
-bool is_unicode(PyObject *obj) {
+[[nodiscard]] static inline bool is_unicode(PyObject *obj) {
     return PyUnicode_Check(obj);
 }
 
-bool is_py_boolean(PyObject* obj) {
+[[nodiscard]] static inline bool is_py_boolean(PyObject* obj) {
     return PyBool_Check(obj);
 }
 
@@ -47,7 +47,7 @@ std::variant<StringEncodingError, PyStringWrapper> pystring_to_buffer(PyObject *
     return api.PyArray_Check_(obj);
 }
 
-std::tuple<ValueType, uint8_t, ssize_t> determine_python_object_type(PyObject* obj) {
+[[nodiscard]] static std::tuple<ValueType, uint8_t, ssize_t> determine_python_object_type(PyObject* obj) {
     if (is_py_boolean(obj)) {
         normalization::raise<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>("Nullable booleans are not supported at the moment");
         return {ValueType::BOOL_OBJECT, 1, 1};
@@ -62,7 +62,7 @@ std::tuple<ValueType, uint8_t, ssize_t> determine_python_object_type(PyObject* o
 /// @todo We will iterate over all arrays in a column in aggregator_set_data anyways, so this is redundant, however
 ///     the type is determined at the point when obj_to_tensor is called. We need to make it possible to change the
 ///     the column type in aggregator_set_data in order not to iterate all arrays twice.
-std::tuple<ValueType, uint8_t, ssize_t> determine_python_array_type(PyObject** begin, PyObject** end) {
+[[nodiscard]] static std::tuple<ValueType, uint8_t, ssize_t> determine_python_array_type(PyObject** begin, PyObject** end) {
         auto none = py::none{};
         while(begin != end) {
         if(none.ptr() == *begin) {
@@ -233,7 +233,7 @@ std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
         // TODO handle string indexes
         // Empty type check is added to preserve the current behavior which is that 0-rowed dataframes
         // are assigned datetime index. This will be changed in further PR creating empty typed index.
-        if (index_tensor.data_type() == DataType::NANOSECONDS_UTC64 || is_empty_type(index_tensor.data_type())) {
+        if (index_tensor.data_type() == DataType::NANOSECONDS_UTC64) {
 
             res->desc.set_index_field_count(1);
             res->desc.set_index_type(IndexDescriptor::TIMESTAMP);
@@ -241,6 +241,11 @@ std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
             res->desc.add_scalar_field(index_tensor.dt_, index_column_name);
             res->index = stream::TimeseriesIndex(index_column_name);
             res->index_tensor = std::move(index_tensor);
+        } else if (is_empty_type(index_tensor.data_type())) {
+            res->index = EmptyIndex{};
+            res->desc.set_index_type(IndexDescriptor::EMPTY);
+            res->desc.add_scalar_field(index_tensor.dt_, index_column_name);
+            res->field_tensors.push_back(std::move(index_tensor));
         } else {
             res->index = stream::RowCountIndex();
             res->desc.set_index_type(IndexDescriptor::ROWCOUNT);

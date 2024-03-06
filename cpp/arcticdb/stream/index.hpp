@@ -15,6 +15,7 @@
 #include <arcticdb/pipeline/index_fields.hpp>
 #include <arcticdb/entity/stream_descriptor.hpp>
 #include <arcticdb/entity/type_utils.hpp>
+#include <arcticdb/column_store/memory_segment.hpp>
 
 #include <folly/Range.h>
 
@@ -260,10 +261,6 @@ class RowCountIndex : public BaseIndex<RowCountIndex> {
 
     static constexpr IndexDescriptor::Type type() { return IndexDescriptor::ROWCOUNT; }
 
-    void check(const FieldCollection& ) const {
-        // No index defined
-    }
-
     template<typename SegmentType>
     static IndexValue start_value_for_segment(const SegmentType &segment) {
         return static_cast<timestamp>(segment.offset());
@@ -296,10 +293,47 @@ class RowCountIndex : public BaseIndex<RowCountIndex> {
     static constexpr const char *name() { return "row_count"; }
 };
 
-using Index = std::variant<stream::TimeseriesIndex, stream::RowCountIndex, stream::TableIndex>;
+class EmptyIndex : public BaseIndex<EmptyIndex> {
+public:
+    using TypeDescTag = TypeDescriptorTag<DataTypeTag<DataType::EMPTYVAL>, DimensionTag<Dimension::Dim0>>;
+    static constexpr size_t field_count() {
+        return 0;
+    }
+
+    static constexpr IndexDescriptor::Type type() {
+        return IndexDescriptor::EMPTY;
+    }
+
+    static constexpr const char* name() {
+        return "empty";
+    }
+
+    static constexpr EmptyIndex default_index() {
+        return {};
+    }
+
+    [[nodiscard]] static IndexValue start_value_for_segment(const SegmentInMemory& segment) {
+        return static_cast<timestamp>(segment.offset());
+    }
+
+    [[nodiscard]] static IndexValue end_value_for_segment(const SegmentInMemory& segment) {
+        return static_cast<timestamp>(segment.offset());
+    }
+
+    [[nodiscard]] static IndexValue start_value_for_keys_segment(const SegmentInMemory& segment) {
+        return static_cast<timestamp>(segment.offset());
+    }
+
+    [[nodiscard]] static IndexValue end_value_for_keys_segment(const SegmentInMemory& segment) {
+        return static_cast<timestamp>(segment.offset());
+    }
+};
+
+using Index = std::variant<stream::TimeseriesIndex, stream::RowCountIndex, stream::TableIndex, stream::EmptyIndex>;
 
 inline Index index_type_from_descriptor(const StreamDescriptor &desc) {
     switch (desc.index().proto().kind()) {
+    case IndexDescriptor::EMPTY: return EmptyIndex{};
     case IndexDescriptor::TIMESTAMP:
         return TimeseriesIndex::make_from_descriptor(desc);
     case IndexDescriptor::STRING:
@@ -312,6 +346,7 @@ inline Index index_type_from_descriptor(const StreamDescriptor &desc) {
 
 inline Index default_index_type_from_descriptor(const IndexDescriptor::Proto &desc) {
     switch (desc.kind()) {
+    case IndexDescriptor::EMPTY: return EmptyIndex{};
     case IndexDescriptor::TIMESTAMP:
         return TimeseriesIndex::default_index();
     case IndexDescriptor::STRING:
@@ -326,6 +361,7 @@ inline Index default_index_type_from_descriptor(const IndexDescriptor::Proto &de
 // Only to be used for visitation to get field count etc as the name is not set
 inline Index variant_index_from_type(IndexDescriptor::Type type) {
     switch (type) {
+    case IndexDescriptor::EMPTY: return EmptyIndex{};
     case IndexDescriptor::TIMESTAMP:
         return TimeseriesIndex{TimeseriesIndex::DefaultName};
     case IndexDescriptor::STRING:
