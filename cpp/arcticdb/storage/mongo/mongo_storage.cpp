@@ -150,8 +150,7 @@ MongoStorage::MongoStorage(
     if(config.use_mock_storage_for_testing()) {
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using Mock Mongo storage");
         client_ = std::make_unique<MockMongoClient>();
-    }
-    else {
+    } else {
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using Real Mongo storage");
         client_ = std::make_unique<MongoClient>(
                 config,

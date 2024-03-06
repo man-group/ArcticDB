@@ -27,10 +27,11 @@ std::string MockMongoClient::get_failure_trigger(
 template <typename exception_type>
 MongoFailure create_failure(const std::string& message, MongoError error_code) {
     static_assert(std::is_base_of<mongocxx::operation_exception, exception_type>::value, "exception_type must be a subclass of mongocxx::operation_exception");
-    if(error_code == MongoError::NoAcknowledge) return {std::monostate()};
+    if(error_code == MongoError::NoAcknowledge)
+        return {no_ack_failure()};
 
     bsoncxx::document::value empty_doc_value = bsoncxx::builder::basic::document{}.extract();
-    auto ec = std::error_code((int)error_code, std::generic_category());
+    auto ec = std::error_code(static_cast<int>(error_code), std::generic_category());
 
     return {exception_type(ec, std::move(empty_doc_value), message)};
 }
@@ -60,7 +61,8 @@ std::optional<MongoFailure> MockMongoClient::has_failure_trigger(
     auto key_id = key.doc_key.id_string();
     auto failure_string_for_operation = "#Failure_" + operation_to_string(operation) + "_";
     auto position = key_id.rfind(failure_string_for_operation);
-    if (position == std::string::npos) return std::nullopt;
+    if (position == std::string::npos)
+        return std::nullopt;
 
     try {
         auto start = position + failure_string_for_operation.size();
@@ -75,7 +77,7 @@ std::optional<MongoFailure> MockMongoClient::has_failure_trigger(
 }
 
 MongoFailure MockMongoClient::missing_key_failure() const {
-    return {std::monostate()};
+    return {no_ack_failure()};
 }
 
 bool MockMongoClient::matches_prefix(const MongoKey& key, const MongoKey& prefix) const {
@@ -120,8 +122,12 @@ UpdateResult MockMongoClient::update_segment(
         bool upsert) {
     auto key = make_key(database_name, collection_name, kv.variant_key());
     auto key_found = has_key(key);
-    if(!upsert && !key_found) return {0}; // upsert is false, don't update and return 0 as modified_count
-    if(!write_segment(database_name, collection_name, std::move(kv))) return {std::nullopt};
+
+    if(!upsert && !key_found)
+        return {0}; // upsert is false, don't update and return 0 as modified_count
+    if(!write_segment(database_name, collection_name, std::move(kv)))
+        return {std::nullopt};
+
     return {key_found ? 1 : 0};
 }
 
@@ -132,7 +138,8 @@ std::optional<KeySegmentPair> MockMongoClient::read_segment(
     auto key = make_key(database_name, collection_name, k);
     auto result = read_internal(key);
     throw_if_exception(result);
-    if(is_no_ack_failure(result)) return std::nullopt;
+    if(is_no_ack_failure(result))
+        return std::nullopt;
 
     Segment segment = result.get_output();
     VariantKey variant = k;
@@ -148,7 +155,8 @@ DeleteResult MockMongoClient::remove_keyvalue(
     auto result = delete_internal({key});
     throw_if_exception(result);
 
-    if(!key_found) return {0}; // key not found, return 0 as deleted_count
+    if(!key_found)
+        return {0}; // key not found, return 0 as deleted_count
     return is_no_ack_failure(result) ? DeleteResult{std::nullopt} : DeleteResult{1};
 }
 
@@ -174,7 +182,8 @@ std::vector<VariantKey> MockMongoClient::list_keys(
     auto result = list_internal(k);
 
     throw_if_exception(result);
-    if(is_no_ack_failure(result)) return {};
+    if(is_no_ack_failure(result))
+        return {};
 
     auto output_list = result.get_output();
     std::vector<VariantKey> keys;

@@ -21,7 +21,7 @@ std::string MockAzureClient::get_failure_trigger(
         StorageOperation operation_to_fail,
         const std::string& error_code,
         Azure::Core::Http::HttpStatusCode error_to_fail_with) {
-    return fmt::format("{}#Failure_{}_{}_{}", blob_name, operation_to_string(operation_to_fail), error_code, (int)error_to_fail_with);
+    return fmt::format("{}#Failure_{}_{}_{}", blob_name, operation_to_string(operation_to_fail), error_code, static_cast<int>(error_to_fail_with));
 }
 
 Azure::Core::RequestFailedException get_exception(const std::string& message, const std::string& error_code, Azure::Core::Http::HttpStatusCode status_code) {
@@ -36,7 +36,8 @@ Azure::Core::RequestFailedException get_exception(const std::string& message, co
 std::optional<Azure::Core::RequestFailedException> MockAzureClient::has_failure_trigger(const std::string& blob_name, StorageOperation operation) const {
     auto failure_string_for_operation = "#Failure_" + operation_to_string(operation) + "_";
     auto position = blob_name.rfind(failure_string_for_operation);
-    if (position == std::string::npos) return std::nullopt;
+    if (position == std::string::npos)
+        return std::nullopt;
 
     try {
         auto start = position + failure_string_for_operation.size();
@@ -44,7 +45,7 @@ std::optional<Azure::Core::RequestFailedException> MockAzureClient::has_failure_
         auto status_code_string = blob_name.substr(blob_name.find_last_of('_') + 1);
         auto status_code = Azure::Core::Http::HttpStatusCode(std::stoi(status_code_string));
         auto error_message = fmt::format("Simulated Error, message: operation {}, error code {} statuscode {}",
-                                         operation_to_string(operation), error_code, (int) status_code);
+                                         operation_to_string(operation), error_code, static_cast<int>(status_code));
 
         return get_exception(error_message, error_code, status_code);
     } catch (std::exception&) {
@@ -55,7 +56,7 @@ std::optional<Azure::Core::RequestFailedException> MockAzureClient::has_failure_
 Azure::Core::RequestFailedException MockAzureClient::missing_key_failure() const {
     auto error_code = AzureErrorCode_to_string(AzureErrorCode::BlobNotFound);
     std::string message = fmt::format("Simulated Error, message: Failed to find blob, {} {}", error_code,
-                                      (int) Azure::Core::Http::HttpStatusCode::NotFound);
+                                      static_cast<int>(Azure::Core::Http::HttpStatusCode::NotFound));
     return get_exception(message, error_code, Azure::Core::Http::HttpStatusCode::NotFound);
 }
 

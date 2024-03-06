@@ -39,13 +39,15 @@ struct MongoKey {
     }
 };
 
+using no_ack_failure = std::monostate;
+
 struct MongoFailure {
     // holds std::monostate if it is a no acknowledgement failure because in case of an acknowledgement from server
     // the mongo apis don't throw an exception
-    std::variant<mongocxx::operation_exception, std::monostate> failure;
+    std::variant<mongocxx::operation_exception, no_ack_failure> failure;
 
     [[nodiscard]] bool is_no_ack_failure() const {
-        return std::holds_alternative<std::monostate>(failure);
+        return std::holds_alternative<no_ack_failure>(failure);
     }
 
     mongocxx::operation_exception get_exception() const {
