@@ -30,7 +30,7 @@ std::string MockS3Client::get_failure_trigger(
                        static_cast<int>(error_to_fail_with), static_cast<int>(retryable));
 }
 
-std::optional<Aws::S3::S3Error> object_has_failure_trigger(const std::string& s3_object_name, StorageOperation operation) {
+std::optional<Aws::S3::S3Error> has_failure_trigger(const std::string& s3_object_name, StorageOperation operation) {
     auto failure_string_for_operation = "#Failure_" + operation_to_string(operation) + "_";
     auto position = s3_object_name.rfind(failure_string_for_operation);
     if (position == std::string::npos)
@@ -49,65 +49,73 @@ std::optional<Aws::S3::S3Error> object_has_failure_trigger(const std::string& s3
 
 const auto not_found_error = Aws::S3::S3Error(Aws::Client::AWSError<Aws::S3::S3Errors>(Aws::S3::S3Errors::RESOURCE_NOT_FOUND, false));
 
-std::optional<Aws::S3::S3Error> MockS3Client::has_failure_trigger(const S3Key& key, StorageOperation op) const {
-    return object_has_failure_trigger(key.s3_object_name, op);
-}
-
-S3Key get_key(const std::string& bucket_name, const std::string& s3_object_name) {
-    return {bucket_name, s3_object_name};
-}
-
-std::vector<S3Key> get_keys(const std::string& bucket_name, const std::vector<std::string>& objects) {
-    std::vector<S3Key> keys;
-    for (auto& object : objects) {
-        keys.emplace_back(get_key(bucket_name, object));
-    }
-    return keys;
-}
-
-Aws::S3::S3Error MockS3Client::missing_key_failure() const { return not_found_error; }
-
-bool MockS3Client::matches_prefix(const S3Key& key, const S3Key& prefix) const {
-    return key.bucket_name == prefix.bucket_name && key.s3_object_name.rfind(prefix.s3_object_name, 0) == 0;
-}
-
 S3Result<std::monostate> MockS3Client::head_object(
         const std::string& s3_object_name,
         const std::string &bucket_name) const {
-    auto result = exists_internal(get_key(bucket_name, s3_object_name));
-    if(!result.is_success())
-        return {result.get_error()};
+    auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::EXISTS);
+    if (maybe_error.has_value()) {
+        return {maybe_error.value()};
+    }
 
-    return result.get_output() ? S3Result<std::monostate>{std::monostate()} : S3Result<std::monostate>{not_found_error};
+    if (s3_contents.find({bucket_name, s3_object_name}) == s3_contents.end()){
+        return {not_found_error};
+    }
+    return {std::monostate()};
 }
+
 
 S3Result<Segment> MockS3Client::get_object(
         const std::string &s3_object_name,
         const std::string &bucket_name) const {
-    return read_internal(get_key(bucket_name, s3_object_name));
+    auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::READ);
+    if (maybe_error.has_value()) {
+        return {maybe_error.value()};
+    }
+
+    auto pos = s3_contents.find({bucket_name, s3_object_name});
+    if (pos == s3_contents.end()){
+        return {not_found_error};
+    }
+    return {pos->second};
 }
 
 S3Result<std::monostate> MockS3Client::put_object(
         const std::string &s3_object_name,
         Segment &&segment,
         const std::string &bucket_name) {
-    return write_internal(get_key(bucket_name, s3_object_name), std::move(segment));
+    auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::WRITE);
+    if (maybe_error.has_value()) {
+        return {maybe_error.value()};
+    }
+
+    s3_contents.insert_or_assign({bucket_name, s3_object_name}, std::move(segment));
+
+    return {std::monostate()};
 }
 
 S3Result<DeleteOutput> MockS3Client::delete_objects(
         const std::vector<std::string>& s3_object_names,
         const std::string& bucket_name) {
-    auto result = delete_internal(get_keys(bucket_name, s3_object_names));
-    if (!result.is_success())
-        return {result.get_error()};
+    for (auto& s3_object_name : s3_object_names){
+        auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::DELETE);
+        if (maybe_error.has_value()) {
+            return {maybe_error.value()};
+        }
+    }
 
     DeleteOutput output;
-    for (auto& key : result.get_output())
-        output.failed_deletes.push_back({key.s3_object_name, "Sample error message"});
+    for (auto& s3_object_name : s3_object_names){
+        auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::DELETE_LOCAL);
+        if (maybe_error.has_value()) {
+            output.failed_deletes.push_back({s3_object_name, "Sample error message"});
+        } else {
+            s3_contents.erase({bucket_name, s3_object_name});
+        }
+    }
     return {output};
 }
 
-// Using a page size as this is how the real client works. Therefore, the logic is different from StorageMockClient.
+// Using a fixed page size since it's only being used for simple tests.
 // If we ever need to configure it we should move it to the s3 proto config instead.
 constexpr auto page_size = 10;
 S3Result<ListObjectsOutput> MockS3Client::list_objects(
@@ -116,8 +124,8 @@ S3Result<ListObjectsOutput> MockS3Client::list_objects(
         const std::optional<std::string> continuation_token) const {
     // Terribly inefficient but fine for tests.
     auto matching_names = std::vector<std::string>();
-    for (auto& key : contents_){
-        if (matches_prefix(key.first, {bucket_name, name_prefix})) {
+    for (auto& key : s3_contents) {
+        if (key.first.bucket_name == bucket_name && key.first.s3_object_name.rfind(name_prefix, 0) == 0){
             matching_names.emplace_back(key.first.s3_object_name);
         }
     }
@@ -137,9 +145,8 @@ S3Result<ListObjectsOutput> MockS3Client::list_objects(
     for (auto i=start_from; i < end_to; ++i){
         auto& s3_object_name = matching_names[i];
 
-        auto maybe_error = object_has_failure_trigger(s3_object_name, StorageOperation::LIST);
-        if (maybe_error.has_value())
-            return {maybe_error.value()};
+        auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::LIST);
+        if (maybe_error.has_value()) return {maybe_error.value()};
 
         output.s3_object_names.emplace_back(s3_object_name);
     }

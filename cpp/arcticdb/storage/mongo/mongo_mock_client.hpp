@@ -56,22 +56,13 @@ struct MongoFailure {
 
 };
 
-class MockMongoClient : public MongoClientWrapper,
-                        public MockStorageClient<MongoKey, MongoFailure> {
+class MockMongoClient : public MongoClientWrapper {
 
 public:
     static std::string get_failure_trigger(
             const std::string& key,
             StorageOperation operation_to_fail,
             MongoError error_code);
-
-    std::optional<MongoFailure> has_failure_trigger(
-            const MongoKey& key,
-            StorageOperation op) const override;
-
-    MongoFailure missing_key_failure() const override;
-
-    bool matches_prefix(const MongoKey& key, const MongoKey& prefix) const override;
 
     bool write_segment(
             const std::string& database_name,
@@ -112,6 +103,10 @@ public:
     void drop_collection(
             std::string database_name,
             std::string collection_name) override;
+private:
+    std::map<MongoKey, Segment> mongo_contents;
+
+    bool has_key(const MongoKey& key);
 };
 
 }

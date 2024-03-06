@@ -33,7 +33,7 @@ Azure::Core::RequestFailedException get_exception(const std::string& message, co
     return exception;
 }
 
-std::optional<Azure::Core::RequestFailedException> MockAzureClient::has_failure_trigger(const std::string& blob_name, StorageOperation operation) const {
+std::optional<Azure::Core::RequestFailedException> has_failure_trigger(const std::string& blob_name, StorageOperation operation) {
     auto failure_string_for_operation = "#Failure_" + operation_to_string(operation) + "_";
     auto position = blob_name.rfind(failure_string_for_operation);
     if (position == std::string::npos)
@@ -53,62 +53,81 @@ std::optional<Azure::Core::RequestFailedException> MockAzureClient::has_failure_
     }
 }
 
-Azure::Core::RequestFailedException MockAzureClient::missing_key_failure() const {
-    auto error_code = AzureErrorCode_to_string(AzureErrorCode::BlobNotFound);
-    std::string message = fmt::format("Simulated Error, message: Failed to find blob, {} {}", error_code,
-                                      static_cast<int>(Azure::Core::Http::HttpStatusCode::NotFound));
-    return get_exception(message, error_code, Azure::Core::Http::HttpStatusCode::NotFound);
-}
-
-template<typename Output>
-void throw_if_error(StorageResult<Output, Azure::Core::RequestFailedException> result) {
-    if (!result.is_success()) {
-        throw result.get_error();
-    }
-}
-
-bool MockAzureClient::matches_prefix(const std::string& blob_name, const std::string& prefix) const {
-    return blob_name.find(prefix) == 0;
-}
-
 void MockAzureClient::write_blob(
         const std::string& blob_name,
         arcticdb::Segment&& segment,
         const Azure::Storage::Blobs::UploadBlockBlobFromOptions&,
         unsigned int) {
-    throw_if_error(write_internal(blob_name, std::move(segment)));
+
+    auto maybe_exception = has_failure_trigger(blob_name, StorageOperation::WRITE);
+    if (maybe_exception.has_value()) {
+        throw maybe_exception.value();
+    }
+
+    azure_contents.insert_or_assign(blob_name, std::move(segment));
 }
 
 Segment MockAzureClient::read_blob(
         const std::string& blob_name,
         const Azure::Storage::Blobs::DownloadBlobToOptions&,
         unsigned int) {
-    auto result = read_internal(blob_name);
-    throw_if_error(result);
-    return result.get_output();
+
+    auto maybe_exception = has_failure_trigger(blob_name, StorageOperation::READ);
+    if (maybe_exception.has_value()) {
+        throw maybe_exception.value();
+    }
+
+    auto pos = azure_contents.find(blob_name);
+    if (pos == azure_contents.end()) {
+        auto error_code = AzureErrorCode_to_string(AzureErrorCode::BlobNotFound);
+        std::string message = fmt::format("Simulated Error, message: Read failed {} {}", error_code, static_cast<int>(Azure::Core::Http::HttpStatusCode::NotFound));
+        throw get_exception(message, error_code, Azure::Core::Http::HttpStatusCode::NotFound);
+    }
+
+    return pos->second;
 }
 
 void MockAzureClient::delete_blobs(
         const std::vector<std::string>& blob_names,
         unsigned int) {
-    throw_if_error(delete_internal(blob_names));
+    for (auto& blob_name : blob_names) {
+        auto maybe_exception = has_failure_trigger(blob_name, StorageOperation::DELETE);
+        if (maybe_exception.has_value()) {
+            throw maybe_exception.value();
+        }
+    }
+
+    for (auto& blob_name : blob_names) {
+        azure_contents.erase(blob_name);
+    }
 }
 
 bool MockAzureClient::blob_exists(const std::string& blob_name) {
-    auto result = exists_internal(blob_name);
-    throw_if_error(result);
-    return result.get_output();
+    auto maybe_exception = has_failure_trigger(blob_name, StorageOperation::EXISTS);
+    if (maybe_exception.has_value()) {
+        throw maybe_exception.value();
+    }
+
+    return azure_contents.find(blob_name) != azure_contents.end();
 }
 
 Azure::Storage::Blobs::ListBlobsPagedResponse MockAzureClient::list_blobs(const std::string& prefix) {
-    auto result = list_internal(prefix);
-    throw_if_error(result);
     Azure::Storage::Blobs::ListBlobsPagedResponse output;
-    for(auto& blob_name : result.get_output()) {
-        Azure::Storage::Blobs::Models::BlobItem blobItem;
-        blobItem.Name = blob_name;
-        output.Blobs.push_back(blobItem);
+    for (auto& key : azure_contents){
+        if (key.first.rfind(prefix, 0) == 0){
+            auto blob_name = key.first;
+
+            auto maybe_exception = has_failure_trigger(blob_name, StorageOperation::LIST);
+            if (maybe_exception.has_value()) {
+                throw maybe_exception.value();
+            }
+
+            Azure::Storage::Blobs::Models::BlobItem blobItem;
+            blobItem.Name = blob_name;
+            output.Blobs.push_back(blobItem);
+        }
     }
+
     return output;
 }
 

@@ -18,7 +18,7 @@
 
 namespace arcticdb::storage::azure {
 
-class MockAzureClient : public AzureClientWrapper, public MockStorageClient<std::string, Azure::Core::RequestFailedException> {
+class MockAzureClient : public AzureClientWrapper {
 
 public:
 
@@ -47,13 +47,9 @@ public:
             const std::string& error_code,
             Azure::Core::Http::HttpStatusCode error_to_fail_with);
 
-    std::optional<Azure::Core::RequestFailedException> has_failure_trigger(
-            const std::string& blob_name,
-            StorageOperation op) const override;
-
-    Azure::Core::RequestFailedException missing_key_failure() const override;
-
-    bool matches_prefix(const std::string& blob_name, const std::string& prefix) const override;
+private:
+    // Stores a mapping from blob_name to a Segment.
+    std::map<std::string, Segment> azure_contents;
 };
 
 }

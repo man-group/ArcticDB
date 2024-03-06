@@ -38,7 +38,7 @@ struct S3Key {
 // A mock S3ClientWrapper which can simulate failures.
 // The MockS3Client stores the segments in memory to simulate regular S3 behavior for unit tests.
 // The MockS3Client can simulate storage failures by using the get_failure_trigger for s3_object_names.
-class MockS3Client : public S3ClientWrapper, public MockStorageClient<S3Key, Aws::S3::S3Error> {
+class MockS3Client : public S3ClientWrapper {
 public:
     MockS3Client(){}
 
@@ -53,14 +53,6 @@ public:
             StorageOperation operation_to_fail,
             Aws::S3::S3Errors error_to_fail_with,
             bool retryable=true);
-
-    std::optional<Aws::S3::S3Error> has_failure_trigger(
-            const S3Key& key,
-            StorageOperation op) const override;
-
-    Aws::S3::S3Error missing_key_failure() const override;
-
-    bool matches_prefix(const S3Key& key, const S3Key& prefix) const override;
 
     S3Result<std::monostate> head_object(const std::string& s3_object_name, const std::string& bucket_name) const override;
 
@@ -79,6 +71,9 @@ public:
             const std::string& prefix,
             const std::string& bucket_name,
             const std::optional<std::string> continuation_token) const override;
+
+private:
+    std::map<S3Key, Segment> s3_contents;
 };
 
 }

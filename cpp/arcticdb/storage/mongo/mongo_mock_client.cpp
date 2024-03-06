@@ -55,9 +55,9 @@ MongoFailure get_failure(const std::string& message, StorageOperation operation,
     }
 }
 
-std::optional<MongoFailure> MockMongoClient::has_failure_trigger(
+std::optional<MongoFailure> has_failure_trigger(
         const MongoKey& key,
-        StorageOperation operation) const {
+        StorageOperation operation) {
     auto key_id = key.doc_key.id_string();
     auto failure_string_for_operation = "#Failure_" + operation_to_string(operation) + "_";
     auto position = key_id.rfind(failure_string_for_operation);
@@ -76,43 +76,40 @@ std::optional<MongoFailure> MockMongoClient::has_failure_trigger(
     }
 }
 
-MongoFailure MockMongoClient::missing_key_failure() const {
-    return {no_ack_failure()};
-}
-
-bool MockMongoClient::matches_prefix(const MongoKey& key, const MongoKey& prefix) const {
-
-    return key.database_name == prefix.database_name && key.collection_name == prefix.collection_name &&
-           key.doc_key.id_string().find(prefix.doc_key.id_string()) == 0;
-}
-
-MongoKey make_key(
+bool matches_prefix(
+        const MongoKey& key,
         const std::string& database_name,
         const std::string& collection_name,
-        const storage::VariantKey& key) {
-    return MongoKey(database_name, collection_name, key);
+        const std::string& prefix) {
+
+    return key.database_name == database_name && key.collection_name == collection_name &&
+           key.doc_key.id_string().find(prefix) == 0;
 }
 
-template<typename Output>
-bool is_no_ack_failure(StorageResult<Output, MongoFailure>& result) {
-    return !result.is_success() && result.get_error().is_no_ack_failure();
-}
-
-template<typename Output>
-void throw_if_exception(StorageResult<Output, MongoFailure>& result) {
-    if(!result.is_success() && !result.get_error().is_no_ack_failure()) {
-        throw result.get_error().get_exception();
+void throw_if_exception(MongoFailure& failure) {
+    if(!failure.is_no_ack_failure()) {
+        throw failure.get_exception();
     }
+}
+
+bool MockMongoClient::has_key(const MongoKey& key) {
+    return mongo_contents.find(key) != mongo_contents.end();
 }
 
 bool MockMongoClient::write_segment(
         const std::string& database_name,
         const std::string& collection_name,
         storage::KeySegmentPair&& kv) {
-    auto key = make_key(database_name, collection_name, kv.variant_key());
-    auto result = write_internal(key, std::move(kv.segment()));
-    throw_if_exception(result);
-    return !is_no_ack_failure(result);
+    auto key = MongoKey(database_name, collection_name, kv.variant_key());
+
+    auto failure = has_failure_trigger(key, StorageOperation::WRITE);
+    if (failure.has_value()) {
+        throw_if_exception(failure.value());
+        return false;
+    }
+
+    mongo_contents.insert_or_assign(key, std::move(kv.segment()));
+    return true;
 }
 
 UpdateResult MockMongoClient::update_segment(
@@ -120,8 +117,7 @@ UpdateResult MockMongoClient::update_segment(
         const std::string& collection_name,
         storage::KeySegmentPair&& kv,
         bool upsert) {
-    auto key = make_key(database_name, collection_name, kv.variant_key());
-    auto key_found = has_key(key);
+    auto key_found = has_key(MongoKey(database_name, collection_name, kv.variant_key()));
 
     if(!upsert && !key_found)
         return {0}; // upsert is false, don't update and return 0 as modified_count
@@ -134,40 +130,53 @@ UpdateResult MockMongoClient::update_segment(
 std::optional<KeySegmentPair> MockMongoClient::read_segment(
         const std::string& database_name,
         const std::string& collection_name,
-        const entity::VariantKey& k) {
-    auto key = make_key(database_name, collection_name, k);
-    auto result = read_internal(key);
-    throw_if_exception(result);
-    if(is_no_ack_failure(result))
+        const entity::VariantKey& key) {
+    auto mongo_key = MongoKey(database_name, collection_name, key);
+    auto failure = has_failure_trigger(mongo_key, StorageOperation::READ);
+    if (failure.has_value()) {
+        throw_if_exception(failure.value());
         return std::nullopt;
+    }
 
-    Segment segment = result.get_output();
-    VariantKey variant = k;
-    return KeySegmentPair(std::move(variant), std::move(segment));
+    auto it = mongo_contents.find(mongo_key);
+    if (it == mongo_contents.end()) {
+        return std::nullopt;
+    }
+
+    return KeySegmentPair(std::move(mongo_key.doc_key.key), std::move(it->second));
 }
 
 DeleteResult MockMongoClient::remove_keyvalue(
         const std::string& database_name,
         const std::string& collection_name,
-        const entity::VariantKey& k) {
-    auto key = make_key(database_name, collection_name, k);
-    auto key_found = has_key(key);
-    auto result = delete_internal({key});
-    throw_if_exception(result);
+        const entity::VariantKey& key) {
+    auto mongo_key = MongoKey(database_name, collection_name, key);
+    auto failure = has_failure_trigger(mongo_key, StorageOperation::DELETE);
+    if (failure.has_value()) {
+        throw_if_exception(failure.value());
+        return {std::nullopt};
+    }
 
+    auto key_found = has_key(mongo_key);
     if(!key_found)
         return {0}; // key not found, return 0 as deleted_count
-    return is_no_ack_failure(result) ? DeleteResult{std::nullopt} : DeleteResult{1};
+
+    mongo_contents.erase(mongo_key);
+    return {1};
 }
 
 bool MockMongoClient::key_exists(
         const std::string& database_name,
         const std::string& collection_name,
-        const  entity::VariantKey& k) {
-    auto key = make_key(database_name, collection_name, k);
-    auto result = exists_internal(key);
-    throw_if_exception(result);
-    return result.is_success() && result.get_output();
+        const  entity::VariantKey& key) {
+    auto mongo_key = MongoKey(database_name, collection_name, key);
+    auto failure = has_failure_trigger(mongo_key, StorageOperation::EXISTS);
+    if (failure.has_value()) {
+        throw_if_exception(failure.value());
+        return false;
+    }
+
+    return has_key(mongo_key);
 }
 
 std::vector<VariantKey> MockMongoClient::list_keys(
@@ -175,23 +184,21 @@ std::vector<VariantKey> MockMongoClient::list_keys(
         const std::string& collection_name,
         KeyType,
         const std::optional<std::string>& prefix) {
-    auto builder = arcticdb::atom_key_builder();
-    // it does not matter that we always create a key of type TABLE_DATA, matches_prefix only compares the prefix string value
-    auto prefix_key = builder.build<arcticdb::entity::KeyType::TABLE_DATA>(prefix.has_value() ? prefix.value() : "");
-    MongoKey k(database_name, collection_name, prefix_key);
-    auto result = list_internal(k);
+    std::string prefix_str = prefix.has_value() ? prefix.value() : "";
+    std::vector<VariantKey> output;
 
-    throw_if_exception(result);
-    if(is_no_ack_failure(result))
-        return {};
-
-    auto output_list = result.get_output();
-    std::vector<VariantKey> keys;
-    for(auto&& key : output_list) {
-        keys.push_back(key.doc_key.key);
+    for (auto& key : mongo_contents) {
+        if (matches_prefix(key.first, database_name, collection_name, prefix_str)) {
+            auto failure = has_failure_trigger(key.first, StorageOperation::LIST);
+            if (failure.has_value()) {
+                throw_if_exception(failure.value());
+                return {};
+            }
+            output.push_back(key.first.doc_key.key);
+        }
     }
 
-    return keys;
+    return output;
 }
 
 void MockMongoClient::ensure_collection(std::string_view, std::string_view ) {
@@ -199,9 +206,9 @@ void MockMongoClient::ensure_collection(std::string_view, std::string_view ) {
 }
 
 void MockMongoClient::drop_collection(std::string database_name, std::string collection_name) {
-    for (auto it = contents_.begin(); it != contents_.end(); ) {
+    for (auto it = mongo_contents.begin(); it != mongo_contents.end(); ) {
         if (it->first.database_name == database_name && it->first.collection_name == collection_name) {
-            it = contents_.erase(it);
+            it = mongo_contents.erase(it);
         } else {
             ++it;
         }
