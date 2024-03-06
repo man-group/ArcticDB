@@ -16,7 +16,7 @@ SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& 
     merged.init_column_map();
 
     // Maintain the order of the columns in the input segments
-    robin_hood::unordered_flat_map<std::string, size_t> field_name_to_index;
+    ankerl::unordered_dense::map<std::string, size_t> field_name_to_index;
     std::vector<TypeDescriptor> type_descriptors;
     std::vector<std::string> field_names;
     for (auto &segment : segments) {
@@ -96,7 +96,7 @@ std::string to_segment_column_name(const std::string& column,
 // Expected to be of the form "<operation>(<column name>)"
 std::pair<std::string, ColumnStatType> from_segment_column_name_v1(std::string_view pattern) {
     const semi::map<std::string, ColumnStatType> name_to_type_map;
-    const robin_hood::unordered_flat_map<std::string, ColumnStatTypeInternal> operator_string_to_type {
+    const ankerl::unordered_dense::map<std::string, ColumnStatTypeInternal> operator_string_to_type {
         {"MIN", ColumnStatTypeInternal::MIN},
         {"MAX", ColumnStatTypeInternal::MAX}
     };
@@ -191,12 +191,12 @@ void ColumnStats::drop(const ColumnStats& to_drop, bool warn_if_missing) {
     }
 }
 
-robin_hood::unordered_flat_set<std::string> ColumnStats::segment_column_names() const {
+ankerl::unordered_dense::set<std::string> ColumnStats::segment_column_names() const {
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(version_.has_value(), "Cannot construct column stat column names without specified versions");
     struct Tag{};
     using ExternalToInternalColumnStatType = semi::static_map<ColumnStatType, std::unordered_set<ColumnStatTypeInternal>, Tag>;
     ExternalToInternalColumnStatType::get(ColumnStatType::MINMAX) = std::unordered_set<ColumnStatTypeInternal>{ColumnStatTypeInternal::MIN, ColumnStatTypeInternal::MAX};
-    robin_hood::unordered_flat_set<std::string> res;
+    ankerl::unordered_dense::set<std::string> res;
     for (const auto& [column, column_stat_types]: column_stats_) {
         for (const auto& column_stat_type: column_stat_types) {
             for (const auto& column_stat_type_internal: ExternalToInternalColumnStatType::get(column_stat_type)) {
