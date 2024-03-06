@@ -83,37 +83,40 @@ std::unordered_map<entity::StreamId, SymbolMetadata> get_symbol_metadata(
             descriptor_futures.emplace_back(
                 engine.get_descriptor_async(std::move(version_fut), missing_symbols[idx], version_queries[idx]));
         }
-        auto descriptors = folly::collect(descriptor_futures).get();
+        auto descriptors = folly::collectAll(descriptor_futures).get();
         for (const auto &item : descriptors) {
-            arcticdb::proto::descriptors::TimeSeriesDescriptor tsd;
-            item.timeseries_descriptor()->UnpackTo(&tsd);
-            output.try_emplace(item.symbol(),
-                               item.creation_ts(),
-                               as_time(*item.start_index()),
-                               as_time(*item.end_index()),
-                               tsd.total_rows());
+            if(item.hasValue()) {
+                arcticdb::proto::descriptors::TimeSeriesDescriptor tsd;
+                item->timeseries_descriptor()->UnpackTo(&tsd);
+                output.try_emplace(item->symbol(),
+                                   item->creation_ts(),
+                                   as_time(*item->start_index()),
+                                   as_time(*item->end_index()),
+                                   tsd.total_rows());
+            }
         }
     }
     return output;
 }
 
-void compact_symbol_metadata(
+VersionedItem compact_symbol_metadata(
     version_store::LocalVersionedEngine &engine) {
     auto [segment, keys] = compact_metadata_keys(engine.get_store());
     const auto compacted_rows = segment.row_count();
     if(compacted_rows == 0) {
         util::check(keys.empty(), "No rows in metadata cache segment but collected {} keys", keys.size());
         ARCTICDB_DEBUG(log::version(), "Compact symbol metadata found no keys to compact");
-        return;
+        return VersionedItem{};
     }
 
     SegmentToInputFrameAdapter frame_adapter(std::move(segment));
     version_store::ModificationOptions options;
     options.upsert_ = true;
     version_store::TimeseriesInfo ts_info;
-    engine.append_internal(StringId{MetadataSymbol}, frame_adapter.input_frame_, options);
+    auto versioned_item = engine.append_internal(StringId{MetadataSymbol}, frame_adapter.input_frame_, options);
     ARCTICDB_DEBUG(log::version(), "Compact symbol metadata found {} keys and compacted {} rows", keys.size(), compacted_rows);
-    //delete_keys(engine.get_store(), std::move(keys), {});
+    delete_keys(engine.get_store(), std::move(keys), {});
+    return versioned_item;
 }
 
 } // namespace arcticdb

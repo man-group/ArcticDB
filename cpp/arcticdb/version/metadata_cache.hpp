@@ -16,7 +16,7 @@ std::unordered_map<entity::StreamId, SymbolMetadata> get_symbol_metadata(
     timestamp from_time,
     uint64_t lookback_seconds);
 
-void compact_symbol_metadata(
+VersionedItem compact_symbol_metadata(
     version_store::LocalVersionedEngine &engine);
 
 } // namespace arcticdb

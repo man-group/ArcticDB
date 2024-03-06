@@ -64,6 +64,10 @@ std::pair<SegmentInMemory, std::vector<AtomKey>> compact_metadata_keys(const std
     using namespace arcticdb::stream;
 
     auto keys = scan_metadata_keys(store, [] (const auto&) { return true; });
+    std::sort(std::begin(keys), std::end(keys), [] (const auto& l, const auto& r) {
+        return l.creation_ts() < r.creation_ts();
+    });
+
     using AggregatorType = Aggregator<stream::TimeseriesIndex, FixedSchema, NeverSegmentPolicy>;
     SegmentInMemory output;
     AggregatorType agg{FixedSchema{symbol_metadata_descriptor(), symbol_metadata_index()}, [&output](auto&& segment) {

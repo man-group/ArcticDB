@@ -359,7 +359,8 @@ public:
         AtomKey&& index_key,
         UpdateInfo&& stream_update_info,
         bool prune_previous_versions,
-        bool add_new_symbol);
+        bool add_new_symbol,
+        bool add_metadata_cache);
 
     void write_version(
         bool prune_previous_versions,

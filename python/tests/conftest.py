@@ -487,7 +487,7 @@ def lmdb_version_store_column_buckets(version_store_factory):
 
 @pytest.fixture
 def lmdb_version_store_metadata_cache(version_store_factory):
-    return version_store_factory(metadata_cache=True)
+    return version_store_factory(lmdb_config={"map_size": 2**30}, metadata_cache=True)
 
 
 @pytest.fixture

@@ -421,7 +421,7 @@ folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor_async(
     return  std::move(version_fut)
     .thenValue([this, &stream_id, &version_query](std::optional<AtomKey>&& key){
         missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(key.has_value(),
-        "Unable to retrieve descriptor data. {}@{}: version not found", stream_id, version_query);
+        "Unable to retrieve descriptor data in get_descriptor_async. {}@{}: version not found", stream_id, version_query);
         return get_descriptor(std::move(key.value()));
     }).via(&async::cpu_executor());
 }
@@ -678,7 +678,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
             })
             .thenValue([this, prune_previous_versions](auto&& index_key_and_update_info){
                 auto&& [index_key, update_info] = index_key_and_update_info;
-                return write_index_key_to_version_map_async(version_map(), std::move(index_key), std::move(update_info), prune_previous_versions, !update_info.previous_index_key_.has_value());
+                return write_index_key_to_version_map_async(version_map(), std::move(index_key), std::move(update_info), prune_previous_versions, !update_info.previous_index_key_.has_value(), cfg().metadata_cache());
             }));
     }
 
@@ -1259,7 +1259,8 @@ folly::Future<VersionedItem> LocalVersionedEngine::write_index_key_to_version_ma
     AtomKey&& index_key,
     UpdateInfo&& stream_update_info,
     bool prune_previous_versions,
-    bool add_new_symbol = true) {
+    bool add_new_symbol,
+    bool add_metadata_cache) {
 
     folly::Future<folly::Unit> write_version_fut;
 
@@ -1272,12 +1273,21 @@ folly::Future<VersionedItem> LocalVersionedEngine::write_index_key_to_version_ma
         write_version_fut = async::submit_io_task(WriteVersionTask{store(), version_map, index_key, stream_update_info.previous_index_key_});
     }
 
+    if(add_metadata_cache) {
+        write_version_fut = std::move(write_version_fut).then([this, index_key] (auto&&) {
+            return async::submit_io_task(WriteSymbolMetadataTask{store(), index_key.id(), index_key.start_index(), index_key.end_index(), 0, index_key.creation_ts()});
+        });
+    };
+
     if(add_new_symbol){
         write_version_fut = std::move(write_version_fut)
         .then([this, index_key_id = index_key.id(), reference_id = index_key.version_id()](auto &&) {
             return async::submit_io_task(WriteSymbolTask(store(), symbol_list_ptr(), index_key_id, reference_id));
         });
     }
+
+
+
     return std::move(write_version_fut)
     .thenValue([index_key = std::move(index_key)](auto &&) mutable {
         return VersionedItem(std::move(index_key));
@@ -1365,7 +1375,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
             })
             .thenValue([this, prune_previous_versions](auto&& index_key_and_update_info){
                 auto&& [index_key, update_info] = index_key_and_update_info;
-                return write_index_key_to_version_map_async(version_map(), std::move(index_key), std::move(update_info), prune_previous_versions);
+                return write_index_key_to_version_map_async(version_map(), std::move(index_key), std::move(update_info), prune_previous_versions, true, cfg().metadata_cache());
             })
         );
     }
@@ -1476,7 +1486,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
             })
             .thenValue([this, prune_previous_versions=options.prune_previous_versions_](auto&& index_key_and_update_info)  -> folly::Future<VersionedItem> {
                 auto&& [index_key, update_info] = index_key_and_update_info;
-                return write_index_key_to_version_map_async(version_map(), std::move(index_key), std::move(update_info), prune_previous_versions);
+                return write_index_key_to_version_map_async(version_map(), std::move(index_key), std::move(update_info), prune_previous_versions, true, cfg().metadata_cache());
             })
         );
     }
