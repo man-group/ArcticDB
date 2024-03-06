@@ -11,6 +11,7 @@
 #include <folly/system/ThreadName.h>
 #include <arcticdb/util/preprocess.hpp>
 #include <arcticdb/util/pb_util.hpp>
+#include <ankerl/unordered_dense.h>
 
 std::shared_ptr<RemoteryInstance> RemoteryInstance::instance(){
     std::call_once(RemoteryInstance::init_flag_, &RemoteryInstance::init);
@@ -60,7 +61,7 @@ RemoteryInstance::~RemoteryInstance() {
 
 namespace arcticdb::detail {
     struct ThreadNameCache {
-        std::unordered_map<const char *, std::string> fqn_by_task_name_;
+        ankerl::unordered_dense::map<const char *, std::string> fqn_by_task_name_;
         std::string thread_name_;
 
         ThreadNameCache():fqn_by_task_name_(),thread_name_(folly::getCurrentThreadName().value_or("Thread")){}

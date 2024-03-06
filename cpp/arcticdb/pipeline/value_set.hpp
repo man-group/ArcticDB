@@ -13,6 +13,7 @@
 #include <unordered_set>
 #include <variant>
 #include <vector>
+#include <ankerl/unordered_dense.h>
 
 #include <pybind11/numpy.h>
 
@@ -97,7 +98,7 @@ private:
     };
 
     std::shared_ptr<std::unordered_set<std::string>> typed_set_string_;
-    std::unordered_map<size_t, std::shared_ptr<std::unordered_set<std::string>>> typed_set_fixed_width_strings_;
+    ankerl::unordered_dense::map<size_t, std::shared_ptr<std::unordered_set<std::string>>> typed_set_fixed_width_strings_;
 
     typed_set<uint8_t> typed_set_uint8_t_;
     typed_set<uint16_t> typed_set_uint16_t_;

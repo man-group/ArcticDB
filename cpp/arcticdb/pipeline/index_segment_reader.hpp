@@ -11,6 +11,7 @@
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/index_fields.hpp>
+#include <ankerl/unordered_dense.h>
 
 #include <boost/noncopyable.hpp>
 
@@ -81,7 +82,7 @@ struct IndexSegmentReader {
     }
 
 private:
-    mutable std::unordered_map<ColRange, std::shared_ptr<StreamDescriptor>, AxisRange::Hasher> descriptor_by_col_group_;
+    mutable ankerl::unordered_dense::map<ColRange, std::shared_ptr<StreamDescriptor>, AxisRange::Hasher> descriptor_by_col_group_;
     SegmentInMemory seg_;
     TimeseriesDescriptor tsd_;
 };
