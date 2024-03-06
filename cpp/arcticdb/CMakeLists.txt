@@ -448,8 +448,8 @@ set(arcticdb_srcs
         storage/azure/azure_real_client.cpp
         storage/azure/azure_mock_client.hpp
         storage/azure/azure_mock_client.cpp
-        storage/mongo/mongo_client_wrapper.hpp
         storage/storage_mock_client.hpp
+        storage/mongo/mongo_client_wrapper.hpp
         storage/mongo/mongo_mock_client.hpp
         storage/mongo/mongo_mock_client.cpp
         stream/aggregator.cpp

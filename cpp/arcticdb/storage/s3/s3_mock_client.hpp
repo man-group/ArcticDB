@@ -26,10 +26,19 @@
 
 namespace arcticdb::storage::s3 {
 
+struct S3Key {
+    std::string bucket_name;
+    std::string s3_object_name;
+
+    bool operator<(const S3Key& other) const {
+        return std::tie(bucket_name, s3_object_name) < std::tie(other.bucket_name, other.s3_object_name);
+    }
+};
+
 // A mock S3ClientWrapper which can simulate failures.
 // The MockS3Client stores the segments in memory to simulate regular S3 behavior for unit tests.
 // The MockS3Client can simulate storage failures by using the get_failure_trigger for s3_object_names.
-class MockS3Client : public S3ClientWrapper, public MockStorageClient<std::pair<std::string, std::string>, Aws::S3::S3Error> {
+class MockS3Client : public S3ClientWrapper, public MockStorageClient<S3Key, Aws::S3::S3Error> {
 public:
     MockS3Client(){}
 
@@ -46,12 +55,12 @@ public:
             bool retryable=true);
 
     std::optional<Aws::S3::S3Error> has_failure_trigger(
-            const std::pair<std::string, std::string>& key,
+            const S3Key& key,
             StorageOperation op) const override;
 
     Aws::S3::S3Error missing_key_failure() const override;
 
-    bool matches_prefix(const std::pair<std::string, std::string>& key, const std::pair<std::string, std::string>& prefix) const override;
+    bool matches_prefix(const S3Key& key, const S3Key& prefix) const override;
 
     S3Result<std::monostate> head_object(const std::string& s3_object_name, const std::string& bucket_name) const override;
 

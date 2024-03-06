@@ -1,4 +1,4 @@
-/* Copyright 2023 Man Group Operations Limited
+/* Copyright 2024 Man Group Operations Limited
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
@@ -55,9 +55,9 @@ MongoFailure get_failure(const std::string& message, StorageOperation operation,
 }
 
 std::optional<MongoFailure> MockMongoClient::has_failure_trigger(
-        const mongo_document_key& key,
+        const MongoKey& key,
         StorageOperation operation) const {
-    auto key_id = get<2>(key);
+    auto key_id = key.doc_key.id_string();
     auto failure_string_for_operation = "#Failure_" + operation_to_string(operation) + "_";
     auto position = key_id.rfind(failure_string_for_operation);
     if (position == std::string::npos) return std::nullopt;
@@ -78,16 +78,17 @@ MongoFailure MockMongoClient::missing_key_failure() const {
     return {std::monostate()};
 }
 
-bool MockMongoClient::matches_prefix(const mongo_document_key& key, const mongo_document_key& prefix) const {
+bool MockMongoClient::matches_prefix(const MongoKey& key, const MongoKey& prefix) const {
 
-    return get<0>(key) == get<0>(prefix) && get<1>(key) == get<1>(prefix) && get<2>(key).find(get<2>(prefix)) == 0;
+    return key.database_name == prefix.database_name && key.collection_name == prefix.collection_name &&
+           key.doc_key.id_string().find(prefix.doc_key.id_string()) == 0;
 }
 
-mongo_document_key make_key(
+MongoKey make_key(
         const std::string& database_name,
         const std::string& collection_name,
         const storage::VariantKey& key) {
-    return {database_name, collection_name, fmt::format("{}", variant_key_id(key))};
+    return MongoKey(database_name, collection_name, key);
 }
 
 template<typename Output>
@@ -166,7 +167,10 @@ std::vector<VariantKey> MockMongoClient::list_keys(
         const std::string& collection_name,
         KeyType,
         const std::optional<std::string>& prefix) {
-    mongo_document_key k = {database_name, collection_name, prefix.has_value() ? prefix.value() : ""};
+    auto builder = arcticdb::atom_key_builder();
+    // it does not matter that we always create a key of type TABLE_DATA, matches_prefix only compares the prefix string value
+    auto prefix_key = builder.build<arcticdb::entity::KeyType::TABLE_DATA>(prefix.has_value() ? prefix.value() : "");
+    MongoKey k(database_name, collection_name, prefix_key);
     auto result = list_internal(k);
 
     throw_if_exception(result);
@@ -175,10 +179,7 @@ std::vector<VariantKey> MockMongoClient::list_keys(
     auto output_list = result.get_output();
     std::vector<VariantKey> keys;
     for(auto&& key : output_list) {
-        auto builder = arcticdb::atom_key_builder();
-        // as a limitation we only support TABLE_DATA type key this is because entire Variant Key is not saved in the map. This is ok for testing purposes.
-        // saving entire key made it problematic to encode errors in the key as the id could be numeric too which wouldn't allow the string #Failure_...
-        keys.push_back(builder.build<arcticdb::entity::KeyType::TABLE_DATA>(get<2>(key)));
+        keys.push_back(key.doc_key.key);
     }
 
     return keys;
@@ -190,7 +191,7 @@ void MockMongoClient::ensure_collection(std::string_view, std::string_view ) {
 
 void MockMongoClient::drop_collection(std::string database_name, std::string collection_name) {
     for (auto it = contents_.begin(); it != contents_.end(); ) {
-        if (get<0>(it->first) == database_name && get<1>(it->first) == collection_name) {
+        if (it->first.database_name == database_name && it->first.collection_name == collection_name) {
             it = contents_.erase(it);
         } else {
             ++it;

@@ -46,16 +46,16 @@ std::optional<Aws::S3::S3Error> object_has_failure_trigger(const std::string& s3
 
 const auto not_found_error = Aws::S3::S3Error(Aws::Client::AWSError<Aws::S3::S3Errors>(Aws::S3::S3Errors::RESOURCE_NOT_FOUND, false));
 
-std::optional<Aws::S3::S3Error> MockS3Client::has_failure_trigger(const std::pair<std::string, std::string>& key, StorageOperation op) const {
-    return object_has_failure_trigger(key.second, op);
+std::optional<Aws::S3::S3Error> MockS3Client::has_failure_trigger(const S3Key& key, StorageOperation op) const {
+    return object_has_failure_trigger(key.s3_object_name, op);
 }
 
-std::pair<std::string, std::string> get_key(const std::string& bucket_name, const std::string& s3_object_name) {
+S3Key get_key(const std::string& bucket_name, const std::string& s3_object_name) {
     return {bucket_name, s3_object_name};
 }
 
-std::vector<std::pair<std::string, std::string>> get_keys(const std::string& bucket_name, const std::vector<std::string>& objects) {
-    std::vector<std::pair<std::string, std::string>> keys;
+std::vector<S3Key> get_keys(const std::string& bucket_name, const std::vector<std::string>& objects) {
+    std::vector<S3Key> keys;
     for (auto& object : objects) {
         keys.emplace_back(get_key(bucket_name, object));
     }
@@ -64,8 +64,8 @@ std::vector<std::pair<std::string, std::string>> get_keys(const std::string& buc
 
 Aws::S3::S3Error MockS3Client::missing_key_failure() const { return not_found_error; }
 
-bool MockS3Client::matches_prefix(const std::pair<std::string, std::string>& key, const std::pair<std::string, std::string>& prefix) const {
-    return key.first == prefix.first && key.second.rfind(prefix.second, 0) == 0;
+bool MockS3Client::matches_prefix(const S3Key& key, const S3Key& prefix) const {
+    return key.bucket_name == prefix.bucket_name && key.s3_object_name.rfind(prefix.s3_object_name, 0) == 0;
 }
 
 S3Result<std::monostate> MockS3Client::head_object(
@@ -97,7 +97,7 @@ S3Result<DeleteOutput> MockS3Client::delete_objects(
 
     DeleteOutput output;
     for (auto& key : result.get_output())
-        output.failed_deletes.push_back({key.second, "Sample error message"});
+        output.failed_deletes.push_back({key.s3_object_name, "Sample error message"});
     return {output};
 }
 
@@ -111,8 +111,8 @@ S3Result<ListObjectsOutput> MockS3Client::list_objects(
     // Terribly inefficient but fine for tests.
     auto matching_names = std::vector<std::string>();
     for (auto& key : contents_){
-        if (key.first.first == bucket_name && key.first.second.rfind(name_prefix, 0) == 0){
-            matching_names.emplace_back(key.first.second);
+        if (matches_prefix(key.first, {bucket_name, name_prefix})) {
+            matching_names.emplace_back(key.first.s3_object_name);
         }
     }
 

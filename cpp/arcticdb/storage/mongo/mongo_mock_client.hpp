@@ -1,4 +1,4 @@
-/* Copyright 2023 Man Group Operations Limited
+/* Copyright 2024 Man Group Operations Limited
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
@@ -13,6 +13,31 @@
 #include <mongocxx/exception/operation_exception.hpp>
 
 namespace arcticdb::storage::mongo {
+
+struct MongoDocumentKey {
+    VariantKey key;
+
+    std::string id_string() const {
+        return fmt::format("{}", variant_key_id(key));
+    }
+};
+
+struct MongoKey {
+    std::string database_name;
+    std::string collection_name;
+    MongoDocumentKey doc_key;
+
+    MongoKey(const std::string& database_name, const std::string& collection_name, const VariantKey& key) :
+            database_name(database_name), collection_name(collection_name), doc_key(key) { }
+
+    bool operator<(const MongoKey& other) const {
+        std::string id_string = doc_key.id_string();
+        std::string other_id_string = other.doc_key.id_string();
+
+        return std::tie(database_name, collection_name, id_string) <
+               std::tie(other.database_name, other.collection_name, other_id_string);
+    }
+};
 
 struct MongoFailure {
     // holds std::monostate if it is a no acknowledgement failure because in case of an acknowledgement from server
@@ -29,10 +54,8 @@ struct MongoFailure {
 
 };
 
-// the key is composed of the database name, collection name and the variant key
-using mongo_document_key = std::tuple<std::string, std::string, std::string>;
 class MockMongoClient : public MongoClientWrapper,
-                        public MockStorageClient<mongo_document_key, MongoFailure> {
+                        public MockStorageClient<MongoKey, MongoFailure> {
 
 public:
     static std::string get_failure_trigger(
@@ -41,12 +64,12 @@ public:
             MongoError error_code);
 
     std::optional<MongoFailure> has_failure_trigger(
-            const mongo_document_key& key,
+            const MongoKey& key,
             StorageOperation op) const override;
 
     MongoFailure missing_key_failure() const override;
 
-    bool matches_prefix(const mongo_document_key& key, const mongo_document_key& prefix) const override;
+    bool matches_prefix(const MongoKey& key, const MongoKey& prefix) const override;
 
     bool write_segment(
             const std::string& database_name,
