@@ -20,23 +20,34 @@ namespace arcticdb {
 using namespace arcticdb::entity;
 using namespace arcticdb::stream;
 
-enum class LoadType :
-        uint32_t {
+enum class LoadType : uint32_t {
     NOT_LOADED = 0,
-    LOAD_LATEST = 1,
-    LOAD_LATEST_UNDELETED = 2,
-    LOAD_DOWNTO = 3,
-    LOAD_UNDELETED = 4,
-    LOAD_FROM_TIME = 5,
-    LOAD_ALL = 6
+    LOAD_LATEST,
+    LOAD_LATEST_UNDELETED,
+    LOAD_DOWNTO,
+    LOAD_FROM_TIME,
+    LOAD_UNDELETED,
+    LOAD_ALL,
+    UNKNOWN
+};
+
+inline constexpr bool is_partial_load_type(LoadType load_type) {
+    return load_type == LoadType::LOAD_DOWNTO || load_type == LoadType::LOAD_FROM_TIME;
+}
+
+enum class VersionStatus {
+    LIVE,
+    TOMBSTONED,
+    NEVER_EXISTED
+};
+
+struct VersionDetails {
+    std::optional<AtomKey> key_;
+    VersionStatus version_status_;
 };
 
 inline constexpr bool is_latest_load_type(LoadType load_type) {
     return load_type == LoadType::LOAD_LATEST || load_type == LoadType::LOAD_LATEST_UNDELETED;
-}
-
-inline constexpr bool is_partial_load_type(LoadType load_type) {
-    return load_type == LoadType::LOAD_DOWNTO || load_type == LoadType::LOAD_FROM_TIME;
 }
 
 struct LoadParameter {
@@ -51,7 +62,7 @@ struct LoadParameter {
                 load_from_time_ = load_from_time_or_until;
                 break;
             case LoadType::LOAD_DOWNTO:
-                load_until_ = load_from_time_or_until;
+                load_until_version_ = load_from_time_or_until;
                 break;
             default:
                 internal::raise<ErrorCode::E_ASSERTION_FAILURE>("LoadParameter constructor with load_from_time_or_until parameter {} provided invalid load_type {}",
@@ -60,14 +71,13 @@ struct LoadParameter {
     }
 
     LoadType load_type_ = LoadType::NOT_LOADED;
-    std::optional<SignedVersionId> load_until_ = std::nullopt;
+    std::optional<SignedVersionId> load_until_version_ = std::nullopt;
     std::optional<timestamp> load_from_time_ = std::nullopt;
-    bool use_previous_ = false;
     bool iterate_on_failure_ = false;
 
     void validate() const {
-        util::check((load_type_ == LoadType::LOAD_DOWNTO) == load_until_.has_value(),
-                    "Invalid load parameter: load_type {} with load_util {}", int(load_type_), load_until_.value_or(VersionId{}));
+        util::check((load_type_ == LoadType::LOAD_DOWNTO) == load_until_version_.has_value(),
+                    "Invalid load parameter: load_type {} with load_util {}", int(load_type_), load_until_version_.value_or(VersionId{}));
         util::check((load_type_ == LoadType::LOAD_FROM_TIME) == load_from_time_.has_value(),
             "Invalid load parameter: load_type {} with load_from_time_ {}", int(load_type_), load_from_time_.value_or(timestamp{}));
     }
@@ -107,8 +117,8 @@ inline AtomKey index_to_tombstone(VersionId version_id, const StreamId& stream_i
         .version_id(version_id)
         .creation_ts(creation_ts)
         .content_hash(0)
-        .start_index(0)
-        .end_index(0)
+        .start_index(NumericIndex{0}) // TODO why not the one from the index key?
+        .end_index(NumericIndex{0})
         .build(stream_id, KeyType::TOMBSTONE);
 }
 
@@ -245,12 +255,28 @@ struct VersionMapEntry {
         return output;
     }
 
-    std::optional<AtomKey> get_first_index(bool include_deleted) const {
-        std::optional<AtomKey> output;
+    std::pair<std::optional<AtomKey>, bool> get_first_index(bool include_deleted) const {
         for (const auto &key: keys_) {
-            if (is_index_key_type(key.type()) && (include_deleted || !is_tombstoned(key))) {
-                output = key;
-                break;
+            if (is_index_key_type(key.type())) {
+                const auto tombstoned = is_tombstoned(key);
+                if(!tombstoned || include_deleted)
+                    return {key, tombstoned};
+            }
+        }
+        return {std::nullopt, false};
+    }
+
+    std::optional<AtomKey> get_second_undeleted_index() const {
+        std::optional<AtomKey> output;
+        bool found_first = false;
+        for (const auto &key: keys_) {
+            if (is_index_key_type(key.type()) && !is_tombstoned(key)) {
+                if(!found_first) {
+                    found_first = true;
+                } else {
+                    output = key;
+                    break;
+                }
             }
         }
         return output;
@@ -332,7 +358,7 @@ struct VersionMapEntry {
     std::optional<AtomKey> head_;
     LoadType load_type_ = LoadType::NOT_LOADED;
     timestamp last_reload_time_ = 0;
-    VersionId loaded_until_ = 0;
+    VersionId loaded_until_ = std::numeric_limits<uint64_t>::max();
     std::deque<AtomKey> keys_;
     std::unordered_map<VersionId, AtomKey> tombstones_;
     std::optional<AtomKey> tombstone_all_;
@@ -373,23 +399,32 @@ inline std::optional<VersionId> get_next_version_in_entry(const std::shared_ptr<
     return std::nullopt;
 }
 
-inline std::optional<AtomKey> find_index_key_for_version_id(
+inline VersionDetails find_index_key_for_version_id_and_tombstone_status(
     VersionId version_id,
-    const std::shared_ptr<VersionMapEntry>& entry,
-    bool included_deleted = true) {
+    const std::shared_ptr<VersionMapEntry>& entry) {
     auto key = std::find_if(std::begin(entry->keys_), std::end(entry->keys_), [version_id] (const auto& key) {
         return is_index_key_type(key.type()) && key.version_id() == version_id;
     });
     if(key == std::end(entry->keys_))
-        return std::nullopt;
+        return VersionDetails{std::nullopt, VersionStatus::NEVER_EXISTED};
+    return VersionDetails{*key, entry->is_tombstoned(*key) ? VersionStatus::TOMBSTONED : VersionStatus::LIVE};
+}
 
-    return included_deleted || !entry->is_tombstoned(*key) ? std::make_optional(*key) : std::nullopt;
+inline std::optional<AtomKey> find_index_key_for_version_id(
+    VersionId version_id,
+    const std::shared_ptr<VersionMapEntry>& entry,
+    bool included_deleted = true) {
+    auto version_details = find_index_key_for_version_id_and_tombstone_status(version_id, entry);
+    if ((version_details.version_status_ == VersionStatus::TOMBSTONED && included_deleted) || version_details.version_status_ == VersionStatus::LIVE)
+        return version_details.key_;
+    else
+        return std::nullopt;
 }
 
 inline std::optional<std::pair<AtomKey, AtomKey>> get_latest_key_pair(const std::shared_ptr<VersionMapEntry>& entry) {
     if (entry->head_ && !entry->keys_.empty()) {
         auto journal_key = entry->head_.value();
-        auto index_key = entry->get_first_index(false);
+        auto index_key = entry->get_first_index(false).first;
         util::check(static_cast<bool>(index_key), "Did not find undeleted version");
         return std::make_pair(std::move(*index_key), std::move(journal_key));
     }

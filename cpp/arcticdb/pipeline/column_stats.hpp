@@ -2,11 +2,7 @@
 
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/entity/protobufs.hpp>
-#ifdef ARCTICDB_USING_CONDA
-    #include <robin_hood.h>
-#else
-    #include <arcticdb/util/third_party/robin_hood.hpp>
-#endif
+#include <ankerl/unordered_dense.h>
 
 #include <map>
 #include <set>
@@ -31,7 +27,7 @@ public:
     explicit ColumnStats(const FieldCollection& column_stats_fields);
 
     void drop(const ColumnStats& to_drop, bool warn_if_missing=true);
-    robin_hood::unordered_flat_set<std::string> segment_column_names() const;
+    ankerl::unordered_dense::set<std::string> segment_column_names() const;
 
     std::unordered_map<std::string, std::unordered_set<std::string>> to_map() const;
     std::optional<Clause> clause() const;

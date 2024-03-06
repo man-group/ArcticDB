@@ -17,7 +17,7 @@ struct ContextData {
 };
 
 struct FrameSliceMap {
-    robin_hood::unordered_flat_map<std::string_view, std::map<RowRange, ContextData>> columns_;
+    ankerl::unordered_dense::map<std::string_view, std::map<RowRange, ContextData>> columns_;
     std::shared_ptr<PipelineContext> context_;
 
     FrameSliceMap(std::shared_ptr<PipelineContext> context, bool dynamic_schema) :

@@ -91,9 +91,8 @@ class ChunkedBufferImpl {
     ChunkedBufferImpl() = default;
 
     explicit ChunkedBufferImpl(size_t size) {
-        add_block(size != 0 ? size : DefaultBlockSize, 0u);
-        if(size != 0)
-            block_offsets_.push_back(0);
+        if(size > 0)
+            add_block(std::max(size, DefaultBlockSize), 0UL);
     }
 
     ChunkedBufferImpl &operator=(ChunkedBufferImpl &&other) noexcept {
@@ -164,8 +163,11 @@ class ChunkedBufferImpl {
     // the buffer to stay regular sized for as long as possible, which greatly improves random access performance, and
     // will also be beneficial with the slab allocator.
     uint8_t* ensure(size_t requested_size, bool aligned=false) {
-        if (requested_size == 0 || requested_size <= bytes_)
+        if (requested_size != 0 && requested_size <= bytes_)
             return last_block().end();
+
+        if(requested_size == 0)
+            return nullptr;
 
         uint8_t* res;
         auto extra_size = requested_size - bytes_;
@@ -400,7 +402,6 @@ class ChunkedBufferImpl {
 
     size_t bytes_ = 0;
     size_t regular_sized_until_ = 0;
-//#define DEBUG_BUILD
 #ifndef DEBUG_BUILD
     boost::container::small_vector<BlockType *, 1> blocks_;
     boost::container::small_vector<size_t, 1> block_offsets_;

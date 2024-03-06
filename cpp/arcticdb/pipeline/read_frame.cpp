@@ -23,11 +23,7 @@
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/pipeline/column_mapping.hpp>
-#ifdef ARCTICDB_USING_CONDA
-    #include <robin_hood.h>
-#else
-    #include <arcticdb/util/third_party/robin_hood.hpp>
-#endif
+#include <ankerl/unordered_dense.h>
 #include <arcticdb/codec/variant_encoded_field_collection.hpp>
 #include <arcticdb/util/magic_num.hpp>
 #include <google/protobuf/util/message_differencer.h>
@@ -887,7 +883,7 @@ class DynamicStringReducer : public StringReducer {
         auto none = std::make_unique<py::none>(py::none{});
         LockPolicy::unlock(*lock_);
         size_t none_count = 0u;
-        std::unordered_map<entity::position_t, std::pair<PyObject*, std::unique_ptr<std::mutex>>> local_map;
+        ankerl::unordered_dense::map<entity::position_t, std::pair<PyObject*, folly::SpinLock>> local_map;
         local_map.reserve(end - row_);
         // TODO this is no good for non-contigous blocks, but we currently expect
         // output data to be contiguous

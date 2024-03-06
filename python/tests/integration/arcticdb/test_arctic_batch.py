@@ -180,6 +180,7 @@ def test_read_metadata_batch_missing_keys(arctic_library):
     df2 = pd.DataFrame({"a": [5, 7, 9]})
     lib.write("s2", df2, metadata={"meta2": 0})
     lib.write("s2", df2, metadata={"meta2": 1})
+    lib.write("s2", df2, metadata={"meta2": 2})
     df3 = pd.DataFrame({"a": [7, 9, 11]})
     lib.write("s3", df3, metadata={"meta3": 0})
 
@@ -782,9 +783,10 @@ def test_read_batch_missing_keys(arctic_library):
     df3 = pd.DataFrame({"a": [5, 7, 9]})
     lib.write("s1", df1)
     lib.write("s2", df2)
-    # Need two versions for this symbol as we're going to delete a version key, and the optimisation of storing the
-    # latest index key in the version ref key means it will still work if we just write one version key and then delete
-    # it
+    # Need three versions for this symbol as we're going to delete a version key, and the optimisation of storing the
+    # latest two index keys in the version ref key means it will still work if we just write one version key and then
+    # delete it
+    lib.write("s3", df3)
     lib.write("s3", df3)
     lib.write("s3", df3)
     lib_tool = lib._nvs.library_tool()
@@ -863,9 +865,10 @@ def test_read_batch_query_builder_missing_keys(arctic_library):
     df3 = pd.DataFrame({"a": [5, 7, 9]})
     lib.write("s1", df1)
     lib.write("s2", df2)
-    # Need two versions for this symbol as we're going to delete a version key, and the optimisation of storing the
-    # latest index key in the version ref key means it will still work if we just write one version key and then delete
-    # it
+    # Need three versions for this symbol as we're going to delete a version key, and the optimisation of storing the
+    # latest two index keys in the version ref key means it will still work if we just write one version key and then
+    # delete it
+    lib.write("s3", df3)
     lib.write("s3", df3)
     lib.write("s3", df3)
     lib_tool = lib._nvs.library_tool()
@@ -913,9 +916,10 @@ def test_get_description_batch_missing_keys(arctic_library):
     df3.index.rename("named_index", inplace=True)
 
     lib.write("s1", df1)
-    # Need two versions for this symbol as we're going to delete a version key, and the optimisation of storing the
-    # latest index key in the version ref key means it will still work if we just write one version key and then delete
-    # it
+    # Need three versions for this symbol as we're going to delete a version key, and the optimisation of storing the
+    # latest two index keys in the version ref key means it will still work if we just write one version key and then
+    # delete it
+    lib.write("s2", df2)
     lib.write("s2", df2)
     lib.write("s2", df2)
     lib.write("s3", df3)

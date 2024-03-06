@@ -27,6 +27,7 @@ find_package(LZ4 REQUIRED)
 find_package(prometheus-cpp CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 find_package(double-conversion REQUIRED)
+find_package(unordered_dense CONFIG REQUIRED)
 
 if(NOT WIN32 AND ${SSL_LINK})
     find_package(Kerberos REQUIRED)
@@ -73,7 +74,6 @@ else()
 
     find_package(recycle REQUIRED)
     find_package(msgpack-c REQUIRED)
-    find_package(robin_hood REQUIRED)
     find_package(LMDB REQUIRED)
     find_package(LMDBXX REQUIRED)
 
@@ -264,6 +264,8 @@ set(arcticdb_srcs
         storage/constants.hpp
         storage/common.hpp
         storage/config_resolvers.hpp
+        storage/coalesced/multi_segment_header.hpp
+        storage/coalesced/multi_segment_utils.hpp
         storage/failure_simulation.hpp
         storage/library.hpp
         storage/library_index.hpp
@@ -276,6 +278,10 @@ set(arcticdb_srcs
         storage/mongo/mongo_instance.hpp
         storage/mongo/mongo_storage.hpp
         storage/object_store_utils.hpp
+        storage/file/file_store.hpp
+        storage/file/mapped_file_storage.hpp
+        storage/file/file_store.hpp
+        storage/single_file_storage.hpp
         storage/s3/nfs_backed_storage.hpp
         storage/s3/s3_client_wrapper.hpp
         storage/s3/s3_storage_tool.hpp
@@ -288,6 +294,7 @@ set(arcticdb_srcs
         stream/aggregator-inl.hpp
         stream/append_map.hpp
         stream/merge_utils.hpp
+        stream/piloted_clock.hpp
         stream/index_aggregator.hpp
         stream/index.hpp
         stream/merge.hpp
@@ -326,6 +333,7 @@ set(arcticdb_srcs
         util/magic_num.hpp
         util/movable_priority_queue.hpp
         util/movable_priority_queue.hpp
+        util/memory_mapped_file.hpp
         util/name_validation.hpp
         util/offset_string.hpp
         util/offset_string.hpp
@@ -424,6 +432,7 @@ set(arcticdb_srcs
         storage/library_manager.cpp
         storage/azure/azure_storage.cpp
         storage/lmdb/lmdb_storage.cpp
+        storage/file/mapped_file_storage.cpp
         storage/mongo/mongo_client.cpp
         storage/mongo/mongo_instance.cpp
         storage/mongo/mongo_storage.cpp
@@ -441,6 +450,7 @@ set(arcticdb_srcs
         storage/azure/azure_mock_client.cpp
         stream/aggregator.cpp
         stream/append_map.cpp
+        stream/piloted_clock.cpp
         toolbox/library_tool.cpp
         util/allocator.cpp
         util/buffer_pool.cpp
@@ -448,6 +458,7 @@ set(arcticdb_srcs
         util/decimal.cpp
         util/error_code.cpp
         util/global_lifetimes.cpp
+        util/memory_mapped_file.hpp
         util/name_validation.cpp
         util/offset_string.cpp
         util/offset_string.cpp
@@ -464,19 +475,13 @@ set(arcticdb_srcs
         version/version_utils.cpp
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
+        storage/mongo/mongo_client_wrapper.hpp
 )
 
 if(${ARCTICDB_INCLUDE_ROCKSDB})
     list (APPEND arcticdb_srcs
         storage/rocksdb/rocksdb_storage.hpp
         storage/rocksdb/rocksdb_storage.cpp
-    )
-endif()
-
-# Exclude vendored sources when using conda.
-if(NOT ${ARCTICDB_USING_CONDA})
-    list (APPEND arcticdb_srcs
-        util/third_party/robin_hood.hpp
     )
 endif()
 
@@ -527,6 +532,7 @@ set (arcticdb_core_libraries
         arcticdb_proto
         prometheus-cpp::push
         prometheus-cpp::pull
+        unordered_dense::unordered_dense
         ${standard_libraries}
         fmt::fmt
         protobuf::libprotobuf

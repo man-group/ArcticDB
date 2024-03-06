@@ -16,6 +16,7 @@ import platform
 import random
 import re
 import time
+import requests
 from datetime import datetime
 from functools import partial
 
@@ -223,6 +224,19 @@ def version_store_factory(lib_name, lmdb_storage):
 
 
 @pytest.fixture
+def s3_store_factory_mock_storage_exception(lib_name, s3_storage):
+    lib = s3_storage.create_version_store_factory(lib_name)
+    endpoint = s3_storage.factory.endpoint
+    # `rate_limit` in the uri will trigger the code injected to moto to give http 503 slow down response
+    # The following interger is for how many requests until 503 repsonse is sent
+    # -1 means the 503 response is disabled
+    # Setting persisted throughout the lifetime of moto server, so it needs to be reset
+    requests.post(endpoint + "/rate_limit", b"0").raise_for_status()
+    yield lib
+    requests.post(endpoint + "/rate_limit", b"-1").raise_for_status()
+
+
+@pytest.fixture
 def s3_store_factory(lib_name, s3_storage):
     return s3_storage.create_version_store_factory(lib_name)
 
@@ -267,6 +281,11 @@ def real_s3_version_store_dynamic_schema(real_s3_store_factory):
 @pytest.fixture
 def mock_s3_store_with_error_simulation(mock_s3_store_with_error_simulation_factory):
     return mock_s3_store_with_error_simulation_factory()
+
+
+@pytest.fixture
+def mock_s3_store_with_mock_storage_exception(s3_store_factory_mock_storage_exception):
+    return s3_store_factory_mock_storage_exception()
 
 
 @pytest.fixture

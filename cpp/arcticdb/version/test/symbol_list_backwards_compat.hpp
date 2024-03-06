@@ -135,7 +135,7 @@ folly::Future<VariantKey> backwards_compat_write(
         any.PackFrom(metadata);
         list_segment.set_metadata(std::move(any));
     }
-    return store->write(KeyType::SYMBOL_LIST, 0, stream_id, creation_ts, 0, 0, std::move(list_segment));
+    return store->write(KeyType::SYMBOL_LIST, 0, stream_id, creation_ts, NumericIndex{0}, NumericIndex{0}, std::move(list_segment));
 }
 
 void backwards_compat_write_journal(const std::shared_ptr<Store>& store, const StreamId& symbol, std::string action) {

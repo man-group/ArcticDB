@@ -35,6 +35,7 @@ auto write_version_frame(
     size_t rows = 1000000,
     bool update_version_map = false,
     size_t start_val = 0,
+    const std::optional<arcticdb::entity::AtomKey>& previous_key = std::nullopt,
     const std::shared_ptr<arcticdb::DeDupMap>& de_dup_map = std::make_shared<arcticdb::DeDupMap>()
 ) {
     using namespace arcticdb;
@@ -50,7 +51,7 @@ auto write_version_frame(
     auto var_key = write_frame(std::move(pk), frame, slicing, store, de_dup_map).get();
     auto key = to_atom(var_key); // Moves
     if (update_version_map) {
-        pvs._test_get_version_map()->write_version(store, key);
+        pvs._test_get_version_map()->write_version(store, key, previous_key);
     }
 
     return key;
@@ -64,7 +65,6 @@ TEST(PythonVersionStore, FreesMemory) {
 
     {
         auto version_store = get_test_engine<version_store::PythonVersionStore>();
-
         write_version_frame({"test_versioned_engine_write"}, 0, version_store, 10);
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
@@ -109,8 +109,8 @@ TEST(PythonVersionStore, DeleteAllVersions) {
     auto [version_store, mock_store] = python_version_store_in_memory();
 
     StreamId stream_id{"test_versioned_engine_delete_sym"};
-    write_version_frame(stream_id, 0, version_store, 15, true, 2);
-    write_version_frame(stream_id, 1, version_store, 1, true, 0);
+    auto k1 = write_version_frame(stream_id, 0, version_store, 15, true, 2);
+    write_version_frame(stream_id, 1, version_store, 1, true, 0, k1);
 
     version_store.delete_all_versions(stream_id);
     ASSERT_EQ(mock_store->num_atom_keys_of_type(KeyType::TABLE_INDEX), 0);
@@ -128,9 +128,9 @@ TEST(PythonVersionStore, IterationVsRefWrite) {
 
     auto version_map = version_store._test_get_version_map();
 
-    write_version_frame(stream_id, 0, version_store, 1000000, true);
-    write_version_frame(stream_id, 1, version_store, 1000000, true);
-    write_version_frame(stream_id, 2, version_store, 1000000, true);
+    auto k1 = write_version_frame(stream_id, 0, version_store, 1000000, true, 0);
+    auto k2 = write_version_frame(stream_id, 1, version_store, 1000000, true, 1, k1);
+    write_version_frame(stream_id, 2, version_store, 1000000, true, 2, k2);
 
     auto iter_entry = std::make_shared<VersionMapEntry>();
     auto ref_entry = std::make_shared<VersionMapEntry>();
@@ -363,7 +363,6 @@ TEST_F(VersionStoreTest, StressBatchReadUncompressed) {
 
 
 TEST(VersionStore, TestReadTimestampAt) {
-
   using namespace arcticdb;
   using namespace arcticdb::storage;
   using namespace arcticdb::stream;
@@ -376,22 +375,22 @@ TEST(VersionStore, TestReadTimestampAt) {
   auto [version_store, mock_store] = python_version_store_in_memory();
 
   auto version_map = version_store._test_get_version_map();
-  version_map->write_version(mock_store, key1);
-  auto key = load_index_key_from_time(mock_store, version_map, id, timestamp(0), pipelines::VersionQuery{}, ReadOptions{});
+  version_map->write_version(mock_store, key1, std::nullopt);
+  auto key = load_index_key_from_time(mock_store, version_map, id, timestamp(0), pipelines::VersionQuery{});
   ASSERT_EQ(key.value().content_hash(), 3);
 
-  version_map->write_version(mock_store, key2);
-  key = load_index_key_from_time(mock_store, version_map, id, timestamp(0), pipelines::VersionQuery{}, ReadOptions{});
+  version_map->write_version(mock_store, key2, key1);
+  key = load_index_key_from_time(mock_store, version_map, id, timestamp(0), pipelines::VersionQuery{});
   ASSERT_EQ(key.value().content_hash(), 3);
-  key = load_index_key_from_time(mock_store, version_map, id, timestamp(1), pipelines::VersionQuery{}, ReadOptions{});
+  key = load_index_key_from_time(mock_store, version_map, id, timestamp(1), pipelines::VersionQuery{});
   ASSERT_EQ(key.value().content_hash(), 4);
 
-  version_map->write_version(mock_store, key3);
-  key = load_index_key_from_time(mock_store, version_map, id, timestamp(0), pipelines::VersionQuery{}, ReadOptions{});
+  version_map->write_version(mock_store, key3, key2);
+  key = load_index_key_from_time(mock_store, version_map, id, timestamp(0), pipelines::VersionQuery{});
   ASSERT_EQ(key.value().content_hash(), 3);
-  key = load_index_key_from_time(mock_store, version_map, id, timestamp(1), pipelines::VersionQuery{}, ReadOptions{});
+  key = load_index_key_from_time(mock_store, version_map, id, timestamp(1), pipelines::VersionQuery{});
   ASSERT_EQ(key.value().content_hash(), 4);
-  key = load_index_key_from_time(mock_store, version_map, id, timestamp(2), pipelines::VersionQuery{}, ReadOptions{});
+  key = load_index_key_from_time(mock_store, version_map, id, timestamp(2), pipelines::VersionQuery{});
   ASSERT_EQ(key.value().content_hash(), 5);
 }
 
@@ -408,8 +407,8 @@ TEST(VersionStore, TestReadTimestampAtInequality) {
   auto [version_store, mock_store] = python_version_store_in_memory();
 
   auto version_map = version_store._test_get_version_map();
-  version_map->write_version(mock_store, key1);
-  auto key = load_index_key_from_time(mock_store, version_map, id, timestamp(1), pipelines::VersionQuery{}, ReadOptions{});
+  version_map->write_version(mock_store, key1, std::nullopt);
+  auto key = load_index_key_from_time(mock_store, version_map, id, timestamp(1), pipelines::VersionQuery{});
   ASSERT_EQ(static_cast<bool>(key), true);
   ASSERT_EQ(key.value().content_hash(), 3);
 }
@@ -534,7 +533,7 @@ TEST(VersionStore, UpdateAfter) {
         if(update_range.contains(i))
             expected += update_val;
 
-        auto val1 = seg.scalar_at<uint8_t >(i, 1);
+        auto val1 = seg.scalar_at<uint8_t>(i, 1);
         ASSERT_EQ(val1.value(), expected);
     }
 }

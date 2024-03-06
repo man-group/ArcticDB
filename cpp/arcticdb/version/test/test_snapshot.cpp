@@ -29,7 +29,7 @@ TEST(SnapshotCreate, Basic) {
     InstanceUri instance_uri("localhost");
     auto library_path = LibraryPath::from_delim_path("test.test", '.');
     auto temp_path = std::filesystem::temp_directory_path();
-    auto library = std::make_shared<Library>(create_library(library_path, OpenMode::WRITE, arcticdb::storage::lmdb::pack_config(temp_path)));
+    auto library = create_library(library_path, OpenMode::WRITE, arcticdb::storage::lmdb::pack_config(temp_path));
     auto version_store = std::make_shared<version_store::PythonVersionStore>(library);
     auto store = version_store->_test_get_store();
 

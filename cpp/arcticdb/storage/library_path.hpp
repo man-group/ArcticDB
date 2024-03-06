@@ -45,7 +45,7 @@ class DefaultStringViewable : public std::shared_ptr<std::string> {
     }
 
   private:
-    HashedValue hash_;
+   HashedValue hash_;
 };
 
 inline bool operator==(const DefaultStringViewable &l, const DefaultStringViewable &r) {

@@ -42,9 +42,11 @@ ArcticDB is designed from the outset to be resilient; there is no single point o
 
 |                       | PyPI (Python 3.6 - 3.11) | conda-forge (Python 3.8 - 3.11) |
 | --------------------- | - | - |
-| Linux                 | ✔️ | ✔️ |
-| Windows               | ✔️ | ➖ |
+| Linux (Intel/AMD)     | ✔️ | ✔️ |
+| Windows (Intel/AMD)   | ✔️ | ➖ |
 | MacOS                 | ➖ | Beta️ |
+
+For conda-forge see the [release-info](https://github.com/conda-forge/arcticdb-feedstock/?tab=readme-ov-file#current-release-info).
 
 ### Storage compatibility
 

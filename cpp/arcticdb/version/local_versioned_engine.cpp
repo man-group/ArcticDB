@@ -23,15 +23,20 @@
 #include <arcticdb/python/gil_lock.hpp>
 
 namespace arcticdb::version_store {
+
 template<class ClockType>
 LocalVersionedEngine::LocalVersionedEngine(
         const std::shared_ptr<storage::Library>& library,
         const ClockType&) :
     store_(std::make_shared<async::AsyncStore<ClockType>>(library, codec::default_lz4_codec(), encoding_version(library->config()))),
     symbol_list_(std::make_shared<SymbolList>(version_map_)){
+    initialize(library);
+}
+
+void LocalVersionedEngine::initialize(const std::shared_ptr<storage::Library>& library) {
     configure(library->config());
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Created versioned engine at {} for library path {}  with config {}", uintptr_t(this),
-                         library->library_path(), [&cfg=cfg_]{  return util::format(cfg); });
+                           library->library_path(), [&cfg=cfg_]{  return util::format(cfg); });
 #ifdef USE_REMOTERY
     auto temp = RemoteryInstance::instance();
 #endif
@@ -89,7 +94,7 @@ void LocalVersionedEngine::create_column_stats_version_internal(
     ColumnStats& column_stats,
     const VersionQuery& version_query,
     const ReadOptions& read_options) {
-    auto versioned_item = get_version_to_read(stream_id, version_query, read_options);
+    auto versioned_item = get_version_to_read(stream_id, version_query);
     missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
             versioned_item.has_value(),
             "create_column_stats_version_internal: version not found for stream '{}'",
@@ -114,7 +119,7 @@ void LocalVersionedEngine::drop_column_stats_version_internal(
     const StreamId& stream_id,
     const std::optional<ColumnStats>& column_stats_to_drop,
     const VersionQuery& version_query) {
-    auto versioned_item = get_version_to_read(stream_id, version_query, ReadOptions{});
+    auto versioned_item = get_version_to_read(stream_id, version_query);
     missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
             versioned_item.has_value(),
             "drop_column_stats_version_internal: version not found for stream '{}'",
@@ -131,7 +136,7 @@ FrameAndDescriptor LocalVersionedEngine::read_column_stats_internal(
 ReadVersionOutput LocalVersionedEngine::read_column_stats_version_internal(
     const StreamId& stream_id,
     const VersionQuery& version_query) {
-    auto versioned_item = get_version_to_read(stream_id, version_query, ReadOptions{});
+    auto versioned_item = get_version_to_read(stream_id, version_query);
     missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
             versioned_item.has_value(),
             "read_column_stats_version_internal: version not found for stream '{}'",
@@ -149,7 +154,7 @@ ColumnStats LocalVersionedEngine::get_column_stats_info_internal(
 ColumnStats LocalVersionedEngine::get_column_stats_info_version_internal(
     const StreamId& stream_id,
     const VersionQuery& version_query) {
-    auto versioned_item = get_version_to_read(stream_id, version_query, ReadOptions{});
+    auto versioned_item = get_version_to_read(stream_id, version_query);
     missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
             versioned_item.has_value(),
             "get_column_stats_info_version_internal: version not found for stream '{}'",
@@ -204,9 +209,8 @@ std::string LocalVersionedEngine::dump_versions(const StreamId& stream_id) {
 
 std::optional<VersionedItem> LocalVersionedEngine::get_latest_version(
     const StreamId &stream_id,
-    const VersionQuery& version_query,
-    const ReadOptions& read_options) {
-    auto key = get_latest_undeleted_version(store(), version_map(), stream_id,  version_query, read_options);
+    const VersionQuery& version_query) {
+    auto key = get_latest_undeleted_version(store(), version_map(), stream_id,  version_query);
     if (!key) {
         ARCTICDB_DEBUG(log::version(), "get_latest_version didn't find version for stream_id: {}", stream_id);
         return std::nullopt;
@@ -217,16 +221,15 @@ std::optional<VersionedItem> LocalVersionedEngine::get_latest_version(
 std::optional<VersionedItem> LocalVersionedEngine::get_specific_version(
     const StreamId &stream_id,
     SignedVersionId signed_version_id,
-    const VersionQuery& version_query,
-    const ReadOptions& read_options) {
+    const VersionQuery& version_query) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: get_specific_version");
-    auto key = ::arcticdb::get_specific_version(store(), version_map(), stream_id, signed_version_id, version_query, read_options);
+    auto key = ::arcticdb::get_specific_version(store(), version_map(), stream_id, signed_version_id, version_query);
     if (!key) {
         VersionId version_id;
         if (signed_version_id >= 0) {
             version_id = static_cast<VersionId>(signed_version_id);
         } else {
-            auto opt_latest_key = ::arcticdb::get_latest_version(store(), version_map(), stream_id, version_query, read_options);
+            auto [opt_latest_key, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id, version_query);
             if (opt_latest_key.has_value()) {
                 auto opt_version_id = get_version_id_negative_index(opt_latest_key->version_id(), signed_version_id);
                 if (opt_version_id.has_value()) {
@@ -259,11 +262,10 @@ std::optional<VersionedItem> LocalVersionedEngine::get_specific_version(
 std::optional<VersionedItem> LocalVersionedEngine::get_version_at_time(
     const StreamId& stream_id,
     timestamp as_of,
-    const VersionQuery& version_query,
-    const ReadOptions& read_options
+    const VersionQuery& version_query
     ) {
 
-    auto index_key = load_index_key_from_time(store(), version_map(), stream_id, as_of, version_query, read_options);
+    auto index_key = load_index_key_from_time(store(), version_map(), stream_id, as_of, version_query);
     if (!index_key) {
         auto index_keys = get_index_keys_in_snapshots(store(), stream_id);
         auto vector_index_keys = std::vector<AtomKey>(index_keys.begin(), index_keys.end());
@@ -304,21 +306,20 @@ std::optional<VersionedItem> LocalVersionedEngine::get_version_from_snapshot(
 
 std::optional<VersionedItem> LocalVersionedEngine::get_version_to_read(
     const StreamId &stream_id,
-    const VersionQuery &version_query,
-    const ReadOptions& read_options
+    const VersionQuery &version_query
     ) {
     return util::variant_match(version_query.content_,
-       [&stream_id, &version_query, &read_options, this](const SpecificVersionQuery &specific) {
-            return get_specific_version(stream_id, specific.version_id_, version_query, read_options);
+       [&stream_id, &version_query, this](const SpecificVersionQuery &specific) {
+            return get_specific_version(stream_id, specific.version_id_, version_query);
         },
         [&stream_id, this](const SnapshotVersionQuery &snapshot) {
             return get_version_from_snapshot(stream_id, snapshot.name_);
         },
-        [&stream_id, &version_query, &read_options, this](const TimestampVersionQuery &timestamp) {
-            return get_version_at_time(stream_id, timestamp.timestamp_, version_query, read_options);
+        [&stream_id, &version_query, this](const TimestampVersionQuery &timestamp) {
+            return get_version_at_time(stream_id, timestamp.timestamp_, version_query);
         },
-        [&stream_id, &version_query, &read_options, this](const std::monostate &) {
-            return get_latest_version(stream_id, version_query, read_options);
+        [&stream_id, &version_query, this](const std::monostate &) {
+            return get_latest_version(stream_id, version_query);
     }
     );
 }
@@ -326,7 +327,7 @@ std::optional<VersionedItem> LocalVersionedEngine::get_version_to_read(
 IndexRange LocalVersionedEngine::get_index_range(
     const StreamId &stream_id,
     const VersionQuery& version_query) {
-    auto version = get_version_to_read(stream_id, version_query, ReadOptions{});
+    auto version = get_version_to_read(stream_id, version_query);
     if(!version)
         return unspecified_range();
 
@@ -338,7 +339,7 @@ ReadVersionOutput LocalVersionedEngine::read_dataframe_version_internal(
     const VersionQuery& version_query,
     ReadQuery& read_query,
     const ReadOptions& read_options) {
-    auto version = get_version_to_read(stream_id, version_query, ReadOptions{});
+    auto version = get_version_to_read(stream_id, version_query);
     std::variant<VersionedItem, StreamId> identifier;
     if(!version) {
         if(opt_false(read_options.incompletes_)) {
@@ -426,11 +427,10 @@ folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor_async(
 
 DescriptorItem LocalVersionedEngine::read_descriptor_internal(
     const StreamId& stream_id,
-    const VersionQuery& version_query,
-    const ReadOptions& read_options
+    const VersionQuery& version_query
     ) {
     ARCTICDB_SAMPLE(ReadDescriptor, 0)
-    auto version = get_version_to_read(stream_id, version_query, read_options);
+    auto version = get_version_to_read(stream_id, version_query);
     missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(version.has_value(),
         "Unable to retrieve descriptor data. {}@{}: version not found", stream_id, version_query);
     return get_descriptor(std::move(version->key_)).get();
@@ -445,7 +445,7 @@ std::vector<std::variant<DescriptorItem, DataError>> LocalVersionedEngine::batch
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_error_.has_value(),
                                                     "ReadOptions::batch_throw_on_error_ should always be set here");
 
-    auto version_futures = batch_get_versions_async(store(), version_map(), stream_ids, version_queries, read_options.read_previous_on_failure_);
+    auto version_futures = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<DescriptorItem>> descriptor_futures;
     for (auto&& [idx, version_fut]: folly::enumerate(version_futures)) {
         descriptor_futures.emplace_back(
@@ -486,7 +486,7 @@ std::shared_ptr<DeDupMap> LocalVersionedEngine::get_de_dup_map(
     ){
     auto de_dup_map = std::make_shared<DeDupMap>();
     if (write_options.de_duplication) {
-        auto maybe_undeleted_prev = get_latest_undeleted_version(store(), version_map(), stream_id, VersionQuery{}, ReadOptions{});
+        auto maybe_undeleted_prev = get_latest_undeleted_version(store(), version_map(), stream_id, VersionQuery{});
         if (maybe_undeleted_prev) {
             // maybe_undeleted_prev is index key
             auto data_keys = get_data_keys(store(), {maybe_undeleted_prev.value()}, storage::ReadKeyOpts{});
@@ -511,7 +511,7 @@ std::shared_ptr<DeDupMap> LocalVersionedEngine::get_de_dup_map(
 
 
 VersionedItem LocalVersionedEngine::sort_index(const StreamId& stream_id, bool dynamic_schema) {
-    auto maybe_prev = get_latest_undeleted_version(store(), version_map(), stream_id, VersionQuery{}, ReadOptions{});
+    auto maybe_prev = get_latest_undeleted_version(store(), version_map(), stream_id, VersionQuery{});
     util::check(maybe_prev.has_value(), "Cannot delete from non-existent symbol {}", stream_id);
     auto version_id = get_next_version_from_key(*maybe_prev);
     auto [index_segment_reader, slice_and_keys] = index::read_index_to_vector(store(), *maybe_prev);
@@ -542,7 +542,7 @@ VersionedItem LocalVersionedEngine::sort_index(const StreamId& stream_id, bool d
         bucketize_dynamic);
 
     auto versioned_item = pipelines::index::index_and_version(index, store(), time_series, std::move(slice_and_keys), stream_id, version_id).get();
-    version_map()->write_version(store(), versioned_item.key_);
+    version_map()->write_version(store(), versioned_item.key_, maybe_prev);
     ARCTICDB_DEBUG(log::version(), "sorted index of stream_id: {} , version_id: {}", stream_id, version_id);
     return versioned_item;
 }
@@ -551,14 +551,14 @@ VersionedItem LocalVersionedEngine::delete_range_internal(
     const StreamId& stream_id,
     const UpdateQuery & query,
     bool dynamic_schema) {
-    auto maybe_prev = get_latest_undeleted_version(store(), version_map(), stream_id, VersionQuery{}, ReadOptions{});
+    auto maybe_prev = get_latest_undeleted_version(store(), version_map(), stream_id, VersionQuery{});
     util::check(maybe_prev.has_value(), "Cannot delete from non-existent symbol {}", stream_id);
     auto versioned_item = delete_range_impl(store(),
                                             *maybe_prev,
                                             query,
                                             get_write_options(),
                                             dynamic_schema);
-    version_map()->write_version(store(), versioned_item.key_);
+    version_map()->write_version(store(), versioned_item.key_, maybe_prev);
     return versioned_item;
 }
 
@@ -573,8 +573,7 @@ VersionedItem LocalVersionedEngine::update_internal(
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(),
                                                                         version_map(),
                                                                         stream_id,
-                                                                        VersionQuery{},
-                                                                        ReadOptions{});
+                                                                        VersionQuery{});
     if (update_info.previous_index_key_.has_value()) {
         if (frame->empty()) {
             ARCTICDB_DEBUG(log::version(), "Updating existing data with an empty item has no effect. \n"
@@ -607,7 +606,7 @@ VersionedItem LocalVersionedEngine::update_internal(
             if(cfg_.symbol_list())
                 symbol_list().add_symbol(store_, stream_id, update_info.next_version_id_);
 
-            version_map()->write_version(store(), versioned_item.key_);
+            version_map()->write_version(store(), versioned_item.key_, std::nullopt);
             return versioned_item;
         } else {
             util::raise_rte("Cannot update non-existent symbol {}", stream_id);
@@ -623,8 +622,7 @@ VersionedItem LocalVersionedEngine::write_versioned_metadata_internal(
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(),
                                                                         version_map(),
                                                                         stream_id,
-                                                                        VersionQuery{},
-                                                                        ReadOptions{});
+                                                                        VersionQuery{});
     if(update_info.previous_index_key_.has_value()) {
         ARCTICDB_DEBUG(log::version(), "write_versioned_dataframe for stream_id: {}", stream_id);
         auto index_key = UpdateMetadataTask{store(), update_info, std::move(user_meta)}();
@@ -637,6 +635,7 @@ VersionedItem LocalVersionedEngine::write_versioned_metadata_internal(
         auto versioned_item = write_versioned_dataframe_internal(stream_id, frame, prune_previous_versions, false, false);
         if(cfg_.symbol_list())
             symbol_list().add_symbol(store_, stream_id, update_info.next_version_id_);
+
         return versioned_item;
     }
 }
@@ -710,7 +709,7 @@ VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
     ARCTICDB_SAMPLE(WriteVersionedDataFrame, 0)
     py::gil_scoped_release release_gil;
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write_versioned_dataframe");
-    auto maybe_prev = ::arcticdb::get_latest_version(store(), version_map(), stream_id, VersionQuery{}, ReadOptions{});
+    auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id, VersionQuery{});
     auto version_id = get_next_version_from_key(maybe_prev);
     ARCTICDB_DEBUG(log::version(), "write_versioned_dataframe for stream_id: {} , version_id = {}", stream_id, version_id);
     auto write_options = get_write_options();
@@ -728,7 +727,7 @@ VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
     if(cfg().symbol_list())
         symbol_list().add_symbol(store(), stream_id, versioned_item.key_.version_id());
 
-    write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, maybe_prev);
+    write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, deleted ? std::nullopt : maybe_prev);
     return versioned_item;
 }
 
@@ -737,10 +736,10 @@ std::pair<VersionedItem, TimeseriesDescriptor> LocalVersionedEngine::restore_ver
     const VersionQuery& version_query
     ) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: restore_version");
-    auto version_to_restore = get_version_to_read(stream_id, version_query, ReadOptions{});
+    auto version_to_restore = get_version_to_read(stream_id, version_query);
     missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(static_cast<bool>(version_to_restore),
                                                  "Unable to restore {}@{}: version not found", stream_id, version_query);
-    auto maybe_prev = ::arcticdb::get_latest_version(store(), version_map(), stream_id, VersionQuery{}, ReadOptions{});
+    auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id, VersionQuery{});
     ARCTICDB_DEBUG(log::version(), "restore for stream_id: {} , version_id = {}", stream_id, version_to_restore->key_.version_id());
     return AsyncRestoreVersionTask{store(), version_map(), stream_id, version_to_restore->key_, maybe_prev}().get();
 }
@@ -753,7 +752,7 @@ VersionedItem LocalVersionedEngine::write_individual_segment(
     ARCTICDB_SAMPLE(WriteVersionedDataFrame, 0)
 
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write_versioned_dataframe");
-    auto maybe_prev = ::arcticdb::get_latest_version(store(), version_map(), stream_id, VersionQuery{}, ReadOptions{});
+    auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id, VersionQuery{});
     auto version_id = get_next_version_from_key(maybe_prev);
     ARCTICDB_DEBUG(log::version(), "write_versioned_dataframe for stream_id: {} , version_id = {}", stream_id, version_id);
     auto index = index_type_from_descriptor(segment.descriptor());
@@ -770,7 +769,7 @@ VersionedItem LocalVersionedEngine::write_individual_segment(
     auto index_key_fut = index::write_index(index, std::move(descriptor), std::move(sk), IndexPartialKey{stream_id, version_id}, store_);
     auto versioned_item = VersionedItem{to_atom(std::move(index_key_fut).get())};
 
-    write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, maybe_prev);
+    write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, deleted ? std::nullopt : maybe_prev);
     return versioned_item;
 }
 
@@ -1007,7 +1006,7 @@ VersionedItem LocalVersionedEngine::compact_incomplete_dynamic(
     bool prune_previous_versions) {
     log::version().debug("Compacting incomplete symbol {}", stream_id);
 
-    auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id, VersionQuery{}, ReadOptions{});
+    auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id, VersionQuery{});
     auto versioned_item =  compact_incomplete_impl(
             store_, stream_id, user_meta, update_info,
             append, convert_int_to_float, via_iteration, sparsify, get_write_options());
@@ -1023,7 +1022,7 @@ VersionedItem LocalVersionedEngine::compact_incomplete_dynamic(
 
 bool LocalVersionedEngine::is_symbol_fragmented(const StreamId& stream_id, std::optional<size_t> segment_size) {
     auto update_info = get_latest_undeleted_version_and_next_version_id(
-            store(), version_map(), stream_id, VersionQuery{}, ReadOptions{});
+            store(), version_map(), stream_id, VersionQuery{});
     auto options = get_write_options();
     auto pre_defragmentation_info = get_pre_defragmentation_info(
         store(), stream_id, update_info, options, segment_size.value_or(options.segment_row_size));
@@ -1035,18 +1034,18 @@ VersionedItem LocalVersionedEngine::defragment_symbol_data(const StreamId& strea
 
     // Currently defragmentation only for latest version - is there a use-case to allow compaction for older data?
     auto update_info = get_latest_undeleted_version_and_next_version_id(
-        store(), version_map(), stream_id, VersionQuery{}, ReadOptions{});
+        store(), version_map(), stream_id, VersionQuery{});
 
     auto options = get_write_options();
     auto versioned_item = defragment_symbol_data_impl(
             store(), stream_id, update_info, options,
             segment_size.has_value() ? *segment_size : options.segment_row_size);
 
-    version_map_->write_version(store_, versioned_item.key_);
+    version_map_->write_version(store_, versioned_item.key_, update_info.previous_index_key_);
 
     if(cfg_.symbol_list())
         symbol_list().add_symbol(store_, stream_id, versioned_item.key_.version_id());
-    
+
     return versioned_item;
 }
 
@@ -1119,7 +1118,7 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::te
     const ReadOptions &read_options) {
     py::gil_scoped_release release_gil;
 
-    auto versions = batch_get_versions_async(store(), version_map(), stream_ids, version_queries, read_options.read_previous_on_failure_);
+    auto versions = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<ReadVersionOutput>> read_versions_futs;
     for (auto&& [idx, version] : folly::enumerate(versions)) {
         auto read_query = read_queries.empty() ? ReadQuery{} : read_queries[idx];
@@ -1240,29 +1239,7 @@ void LocalVersionedEngine::write_version_and_prune_previous(
         delete_unreferenced_pruned_indexes(pruned_indexes, new_version).get();
     }
     else {
-        version_map()->write_version(store(), new_version);
-    }
-}
-
-std::vector<folly::Future<folly::Unit>> LocalVersionedEngine::batch_write_version_and_prune_if_needed(
-    const std::vector<AtomKey>& index_keys,
-    const std::vector<UpdateInfo>& stream_update_info_vector,
-    bool prune_previous_versions) {
-    if(prune_previous_versions) {
-        std::vector<folly::Future<folly::Unit>> pruned_keys_futures;
-        auto pruned_versions_futures = batch_write_and_prune_previous(store(), version_map(), index_keys, stream_update_info_vector);
-        for(auto&& [idx, pruned_version_fut] : folly::enumerate(pruned_versions_futures)) {
-            pruned_keys_futures.push_back(
-                std::move(pruned_version_fut)
-                .thenValue([this, &index_key = index_keys[idx]](auto&& atom_key_vec){
-                    return delete_unreferenced_pruned_indexes(std::move(atom_key_vec), index_key);
-                })
-            );
-        }
-        return pruned_keys_futures;
-    }
-    else {
-        return batch_write_version(store(), version_map(), index_keys);
+        version_map()->write_version(store(), new_version, previous_key);
     }
 }
 
@@ -1281,7 +1258,7 @@ folly::Future<VersionedItem> LocalVersionedEngine::write_index_key_to_version_ma
             return delete_unreferenced_pruned_indexes(std::move(atom_key_vec), index_key);
         });
     } else {
-        write_version_fut = async::submit_io_task(WriteVersionTask{store(), version_map, index_key});
+        write_version_fut = async::submit_io_task(WriteVersionTask{store(), version_map, index_key, stream_update_info.previous_index_key_});
     }
 
     if(add_new_symbol){
@@ -1321,8 +1298,8 @@ std::vector<folly::Future<AtomKey>> LocalVersionedEngine::batch_write_internal(
 }
 
 VersionIdAndDedupMapInfo LocalVersionedEngine::create_version_id_and_dedup_map(
-    const version_store::UpdateInfo&& update_info, 
-    const StreamId& stream_id, 
+    const version_store::UpdateInfo&& update_info,
+    const StreamId& stream_id,
     const WriteOptions& write_options){
     if(cfg().write_options().de_duplication()) {
         return VersionIdAndDedupMapInfo{update_info.next_version_id_, get_de_dup_map(stream_id, update_info.previous_index_key_, write_options), std::move(update_info)};
@@ -1408,8 +1385,7 @@ VersionedItem LocalVersionedEngine::append_internal(
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(),
                                                                         version_map(),
                                                                         stream_id,
-                                                                        VersionQuery{},
-                                                                        ReadOptions{});
+                                                                        VersionQuery{});
 
     if(update_info.previous_index_key_.has_value()) {
         if (frame->empty()) {
@@ -1441,7 +1417,7 @@ VersionedItem LocalVersionedEngine::append_internal(
             if(cfg_.symbol_list())
                 symbol_list().add_symbol(store_, stream_id, update_info.next_version_id_);
 
-            version_map()->write_version(store(), versioned_item.key_);
+            version_map()->write_version(store(), versioned_item.key_, std::nullopt);
             return versioned_item;
         } else {
             util::raise_rte( "Cannot append to non-existent symbol {}", stream_id);
@@ -1590,7 +1566,7 @@ timestamp LocalVersionedEngine::get_update_time_internal(
         const StreamId& stream_id,
         const VersionQuery& version_query
         ) {
-    auto version = get_version_to_read(stream_id, version_query, ReadOptions{});
+    auto version = get_version_to_read(stream_id, version_query);
     if(!version)
         throw storage::NoDataFoundException(fmt::format("get_update_time: version not found for symbol", stream_id));
     return version->key_.creation_ts();
@@ -1655,7 +1631,7 @@ folly::Future<std::pair<VariantKey, std::optional<google::protobuf::Any>>> Local
         return std::make_pair(std::move(*opt_key), std::move(meta_proto));
     });
 }
- 
+
 std::vector<std::variant<std::pair<VariantKey, std::optional<google::protobuf::Any>>, DataError>> LocalVersionedEngine::batch_read_metadata_internal(
     const std::vector<StreamId>& stream_ids,
     const std::vector<VersionQuery>& version_queries,
@@ -1664,7 +1640,7 @@ std::vector<std::variant<std::pair<VariantKey, std::optional<google::protobuf::A
     // This read option should always be set when calling batch_read_metadata
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_error_.has_value(),
                                                     "ReadOptions::batch_throw_on_error_ should always be set here");
-    auto version_futures = batch_get_versions_async(store(), version_map(), stream_ids, version_queries, read_options.read_previous_on_failure_);
+    auto version_futures = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<std::pair<VariantKey, std::optional<google::protobuf::Any>>>> metadata_futures;
     for (auto&& [idx, version]: folly::enumerate(version_futures)) {
         metadata_futures.emplace_back(get_metadata_async(std::move(version), stream_ids[idx], version_queries[idx]));
@@ -1697,10 +1673,9 @@ std::vector<std::variant<std::pair<VariantKey, std::optional<google::protobuf::A
 
 std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> LocalVersionedEngine::read_metadata_internal(
     const StreamId& stream_id,
-    const VersionQuery& version_query,
-    const ReadOptions& read_options
+    const VersionQuery& version_query
     ) {
-    auto version = get_version_to_read(stream_id, version_query, read_options);
+    auto version = get_version_to_read(stream_id, version_query);
     std::optional<AtomKey> key = version.has_value() ? std::make_optional<AtomKey>(version->key_) : std::nullopt;
     return get_metadata(std::move(key)).get();
 }
@@ -1714,9 +1689,9 @@ VersionedItem LocalVersionedEngine::sort_merge_internal(
     bool via_iteration,
     bool sparsify
     ) {
-    auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id, VersionQuery{}, ReadOptions{});
+    auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id, VersionQuery{});
     auto versioned_item = sort_merge_impl(store_, stream_id, user_meta, update_info, append, convert_int_to_float, via_iteration, sparsify);
-    version_map()->write_version(store(), versioned_item.key_);
+    version_map()->write_version(store(), versioned_item.key_, update_info.previous_index_key_);
     return versioned_item;
 }
 
@@ -1756,7 +1731,7 @@ timestamp LocalVersionedEngine::latest_timestamp(const std::string& symbol) {
     if(auto latest_incomplete = latest_incomplete_timestamp(store(), symbol); latest_incomplete)
         return *latest_incomplete;
 
-    if(auto latest_key = get_latest_version(symbol, VersionQuery{}, ReadOptions{}); latest_key)
+    if(auto latest_key = get_latest_version(symbol, VersionQuery{}); latest_key)
         return latest_key->key_.end_time();
 
     return -1;
@@ -1846,6 +1821,7 @@ void LocalVersionedEngine::force_release_lock(const StreamId& name) {
 WriteOptions LocalVersionedEngine::get_write_options() const  {
     return  WriteOptions::from_proto(cfg().write_options());
 }
+
 
 std::shared_ptr<VersionMap> LocalVersionedEngine::_test_get_version_map() {
     return version_map();

@@ -29,6 +29,7 @@
 #include <arcticdb/pipeline/pipeline_utils.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/version/snapshot.hpp>
+#include <storage/file/file_store.hpp>
 
 #include <regex>
 
@@ -51,7 +52,7 @@ VersionedItem PythonVersionStore::write_dataframe_specific_version(
     ARCTICDB_SAMPLE(WriteDataFrame, 0)
 
     ARCTICDB_DEBUG(log::version(), "write_dataframe_specific_version stream_id: {} , version_id: {}", stream_id, version_id);
-    if (auto version_key = ::arcticdb::get_specific_version(store(), version_map(), stream_id, version_id, VersionQuery{}, ReadOptions{}); version_key) {
+    if (auto version_key = ::arcticdb::get_specific_version(store(), version_map(), stream_id, version_id, VersionQuery{}); version_key) {
         log::version().warn("Symbol stream_id: {} already exists with version_id: {}", stream_id, version_id);
         return {std::move(*version_key)};
     }
@@ -62,7 +63,7 @@ VersionedItem PythonVersionStore::write_dataframe_specific_version(
         convert::py_ndf_to_frame(stream_id, item, norm, user_meta),
         get_write_options());
 
-    version_map()->write_version(store(), versioned_item.key_);
+    version_map()->write_version(store(), versioned_item.key_, std::nullopt);
     if(cfg().symbol_list())
         symbol_list().add_symbol(store(), stream_id, version_id);
 
@@ -79,25 +80,6 @@ std::vector<std::shared_ptr<InputTensorFrame>> create_input_tensor_frames(
     for (size_t idx = 0; idx < stream_ids.size(); idx++) {
         output.emplace_back(convert::py_ndf_to_frame(stream_ids[idx], items[idx], norms[idx], user_metas[idx]));
     }
-    return output;
-}
-
-std::vector<VersionedItem> PythonVersionStore::batch_write_index_keys_to_version_map(
-    const std::vector<AtomKey>& index_keys,
-    const std::vector<UpdateInfo>& stream_update_info_vector,
-    bool prune_previous_versions) {
-
-    folly::collect(batch_write_version_and_prune_if_needed(index_keys, stream_update_info_vector, prune_previous_versions)).get();
-    std::vector<VersionedItem> output(index_keys.size());
-    for(auto key : folly::enumerate(index_keys))
-        output[key.index] = *key;
-
-    std::vector<folly::Future<folly::Unit>> symbol_write_futs;
-    for(const auto& item : output) {
-        symbol_write_futs.emplace_back(async::submit_io_task(WriteSymbolTask(store(), symbol_list_ptr(), item.key_.id(), item.key_.version_id())));
-    }
-    folly::collect(symbol_write_futs).wait();
-
     return output;
 }
 
@@ -212,7 +194,7 @@ VersionResultVector get_latest_versions_for_symbols(
 ) {
     VersionResultVector res;
     for (auto &s_id: stream_ids) {
-            const auto& opt_version_key = get_latest_undeleted_version(store, version_map, s_id, version_query, ReadOptions{});
+            const auto& opt_version_key = get_latest_undeleted_version(store, version_map, s_id, version_query);
             if (opt_version_key) {
                 res.emplace_back(
                     s_id,
@@ -237,7 +219,7 @@ VersionResultVector get_all_versions_for_symbols(
     VersionResultVector res;
     std::unordered_set<std::pair<StreamId, VersionId>> unpruned_versions;
     for (auto &s_id: stream_ids) {
-            auto all_versions = get_all_versions(store, version_map, s_id, VersionQuery{}, ReadOptions{});
+            auto all_versions = get_all_versions(store, version_map, s_id, VersionQuery{});
             unpruned_versions = {};
             for (const auto &entry: all_versions) {
                 unpruned_versions.emplace(s_id, entry.version_id());
@@ -446,7 +428,8 @@ void PythonVersionStore::snapshot(
     const SnapshotId &snap_name,
     const py::object &user_meta,
     const std::vector<StreamId> &skip_symbols,
-    std::map<StreamId, VersionId> &versions
+    std::map<StreamId, VersionId> &versions,
+    bool allow_partial_snapshot
     ) {
     ARCTICDB_SAMPLE(CreateSnapshot, 0)
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: snapshot");
@@ -473,15 +456,32 @@ void PythonVersionStore::snapshot(
         std::set_difference(all_symbols.begin(), all_symbols.end(), skip_symbols_set.begin(),
                 skip_symbols_set.end(), std::back_inserter(filtered_symbols));
 
-        if (filtered_symbols.empty()) {
-            log::version().warn("No valid symbols in the library, skipping creation for snapshot: {}", snap_name);
-            return;
-        }
+        missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
+            !filtered_symbols.empty(),
+            "No valid symbols in the library, skipping creation for snapshot: {}", snap_name
+        );
 
         auto sym_index_map = batch_get_latest_version(store(), version_map(), filtered_symbols, false);
         index_keys = utils::values(*sym_index_map);
     } else {
-        auto sym_index_map = batch_get_specific_version(store(), version_map(), versions);
+        auto sym_index_map = batch_get_specific_version(store(), version_map(), versions, BatchGetVersionOption::LIVE_AND_TOMBSTONED_VER_REF_IN_OTHER_SNAPSHOT);
+        if (allow_partial_snapshot) {
+            missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
+                !sym_index_map->empty(),
+                "None of the symbol-version pairs specified in versions exist, skipping creation for snapshot: {}",
+                snap_name
+            );
+        } else {
+            if (sym_index_map->size() != versions.size()) {
+                std::string error_msg = fmt::format("Snapshot {} will not be created. Specified symbol-version pairs do not exist in the library: ", snap_name);
+                for (const auto &kv : versions) {
+                    if (!sym_index_map->count(kv.first)) {
+                        error_msg += fmt::format("{}:{} ", kv.first, kv.second);
+                    }
+                }
+                missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(error_msg);
+            }
+        }
         index_keys = utils::values(*sym_index_map);
         auto missing = filter_keys_on_existence(
                 utils::copy_of_values_as<VariantKey>(*sym_index_map), store(), false);
@@ -510,7 +510,7 @@ VersionedItem PythonVersionStore::write_partitioned_dataframe(
     const std::vector<std::string>& partition_value
     ) {
     ARCTICDB_SAMPLE(WritePartitionedDataFrame, 0)
-    auto maybe_prev = ::arcticdb::get_latest_version(store(), version_map(), stream_id, VersionQuery{}, ReadOptions{});
+    auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id, VersionQuery{});
     auto version_id = get_next_version_from_key(maybe_prev);
 
     //    TODO: We are not actually partitioning stuff atm, just assuming a single partition is passed for now.
@@ -537,8 +537,8 @@ VersionedItem PythonVersionStore::write_partitioned_dataframe(
         multi_key_fut = store->write(KeyType::PARTITION,
                                      version_id,  // version_id
                                      stream_id,
-                                     0,  // start_index
-                                     0,  // end_index
+                                     NumericIndex{0},  // start_index
+                                     NumericIndex{0},  // end_index
                                      std::forward<decltype(segment)>(segment)).wait();
     });
 
@@ -563,7 +563,7 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
     ARCTICDB_SAMPLE(WriteVersionedMultiKey, 0)
 
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write_versioned_composite_data");
-    auto maybe_prev = ::arcticdb::get_latest_version(store(), version_map(), stream_id, VersionQuery{}, ReadOptions{});
+    auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id, VersionQuery{});
     auto version_id = get_next_version_from_key(maybe_prev);
     ARCTICDB_DEBUG(log::version(), "write_versioned_composite_data for stream_id: {} , version_id = {}", stream_id, version_id);
     // TODO: Assuming each sub key is always going to have the same version attached to it.
@@ -741,7 +741,7 @@ void PythonVersionStore::write_parallel(
 }
 
 std::unordered_map<VersionId, bool> PythonVersionStore::get_all_tombstoned_versions(const StreamId &stream_id) {
-    return ::arcticdb::get_all_tombstoned_versions(store(), version_map(), stream_id, VersionQuery{}, ReadOptions{});
+    return ::arcticdb::get_all_tombstoned_versions(store(), version_map(), stream_id, VersionQuery{});
 }
 
 FrameAndDescriptor create_frame(const StreamId& target_id, SegmentInMemory seg, const ReadOptions& read_options) {
@@ -908,7 +908,7 @@ void PythonVersionStore::delete_version(
         const StreamId& stream_id,
         VersionId version_id) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_version");
-    auto result = ::arcticdb::tombstone_version(store(), version_map(), stream_id, version_id, VersionQuery{}, ReadOptions{});
+    auto result = ::arcticdb::tombstone_version(store(), version_map(), stream_id, version_id, VersionQuery{});
 
     if (!result.keys_to_delete.empty() && !cfg().write_options().delayed_deletes()) {
         delete_tree(result.keys_to_delete, result);
@@ -922,7 +922,7 @@ void PythonVersionStore::delete_version(
 void PythonVersionStore::fix_symbol_trees(const std::vector<StreamId>& symbols) {
     auto snaps = get_master_snapshots_map(store());
     for (const auto& sym : symbols) {
-        auto index_keys_from_symbol_tree = get_all_versions(store(), version_map(), sym, VersionQuery{}, ReadOptions{});
+        auto index_keys_from_symbol_tree = get_all_versions(store(), version_map(), sym, VersionQuery{});
         for(const auto& [key, map] : snaps[sym]) {
             index_keys_from_symbol_tree.push_back(key);
         }
@@ -943,7 +943,7 @@ void PythonVersionStore::prune_previous_versions(const StreamId& stream_id) {
             LoadParameter{LoadType::LOAD_UNDELETED},
             __FUNCTION__);
     storage::check<ErrorCode::E_SYMBOL_NOT_FOUND>(!entry->empty(), "Symbol {} is not found", stream_id);
-    auto latest = entry->get_first_index(false);
+    auto [latest, deleted] = entry->get_first_index(false);
     util::check(static_cast<bool>(latest), "Failed to find latest index");
     auto prev_id = get_prev_version_in_entry(entry, latest->version_id());
     if (!prev_id) {
@@ -951,7 +951,7 @@ void PythonVersionStore::prune_previous_versions(const StreamId& stream_id) {
         return;
     }
 
-    auto previous = ::arcticdb::get_specific_version(store(), version_map(), stream_id, *prev_id, VersionQuery{}, ReadOptions{});
+    auto previous = ::arcticdb::get_specific_version(store(), version_map(), stream_id, *prev_id, VersionQuery{});
     auto [_, pruned_indexes] = version_map()->tombstone_from_key_or_all(store(), stream_id, previous);
     delete_unreferenced_pruned_indexes(pruned_indexes, *latest).get();
 }
@@ -960,7 +960,6 @@ void PythonVersionStore::delete_all_versions(const StreamId& stream_id) {
     ARCTICDB_SAMPLE(DeleteAllVersions, 0)
 
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_all_versions");
-
     try {
         auto [version_id, all_index_keys] = version_map()->delete_all_versions(store(), stream_id);
         if (all_index_keys.empty()) {
@@ -1017,13 +1016,12 @@ py::object metadata_protobuf_to_pyobject(const std::optional<google::protobuf::A
 
 std::pair<VersionedItem, py::object> PythonVersionStore::read_metadata(
     const StreamId& stream_id,
-    const VersionQuery& version_query,
-    const ReadOptions& read_options
+    const VersionQuery& version_query
     ) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: read_metadata");
     ARCTICDB_SAMPLE(ReadMetadata, 0)
 
-    auto metadata = read_metadata_internal(stream_id, version_query, read_options);
+    auto metadata = read_metadata_internal(stream_id, version_query);
     if(!metadata.first.has_value())
         throw NoDataFoundException(fmt::format("read_metadata: version not found for symbol", stream_id));
 
@@ -1082,10 +1080,9 @@ std::vector<std::variant<std::pair<VersionedItem, py::object>, DataError>> Pytho
 
 DescriptorItem PythonVersionStore::read_descriptor(
     const StreamId& stream_id,
-    const VersionQuery& version_query,
-    const ReadOptions& read_options
+    const VersionQuery& version_query
     ) {
-    return read_descriptor_internal(stream_id, version_query, read_options);
+    return read_descriptor_internal(stream_id, version_query);
 }
 
 std::vector<std::variant<DescriptorItem, DataError>> PythonVersionStore::batch_read_descriptor(
@@ -1102,7 +1099,7 @@ ReadResult PythonVersionStore::read_index(
     ) {
     ARCTICDB_SAMPLE(ReadIndex, 0)
 
-    auto version = get_version_to_read(stream_id, version_query, ReadOptions{});
+    auto version = get_version_to_read(stream_id, version_query);
     if(!version)
         throw NoDataFoundException(fmt::format("read_index: version not found for symbol '{}'", stream_id));
 
@@ -1111,7 +1108,7 @@ ReadResult PythonVersionStore::read_index(
 }
 
 std::vector<AtomKey> PythonVersionStore::get_version_history(const StreamId& stream_id) {
-    return get_index_and_tombstone_keys(store(), version_map(), stream_id, VersionQuery{}, ReadOptions{});
+    return get_index_and_tombstone_keys(store(), version_map(), stream_id, VersionQuery{});
 }
 
 void PythonVersionStore::_compact_version_map(const StreamId& id) {
@@ -1152,6 +1149,31 @@ bool PythonVersionStore::empty() {
         return false;
     }
     return true;
+}
+
+void write_dataframe_to_file(
+        const StreamId& stream_id,
+        const std::string& path,
+        const py::tuple& item,
+        const py::object& norm,
+        const py::object& user_meta) {
+    ARCTICDB_SAMPLE(WriteDataframeToFile, 0)
+    auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta);
+    write_dataframe_to_file_internal(stream_id, frame, path, WriteOptions{}, codec::default_lz4_codec(), EncodingVersion::V2);
+}
+
+ReadResult read_dataframe_from_file(
+        const StreamId &stream_id,
+        const std::string& path,
+        ReadQuery& read_query) {
+    auto opt_version_and_frame = read_dataframe_from_file_internal(
+        stream_id,
+        path,
+        read_query,
+        ReadOptions{},
+        codec::default_lz4_codec());
+
+    return create_python_read_result(opt_version_and_frame.versioned_item_, std::move(opt_version_and_frame.frame_and_descriptor_));
 }
 
 void PythonVersionStore::force_delete_symbol(const StreamId& stream_id) {

@@ -144,9 +144,9 @@ TEST_P(SymbolListWithReadFailures, VersionMapSource) {
     auto key3 = atom_key_builder().version_id(3).creation_ts(4).content_hash(5).start_index(
             6).end_index(7).build(symbol_2, KeyType::TABLE_INDEX);
 
-    version_map->write_version(store, key1);
-    version_map->write_version(store, key2);
-    version_map->write_version(store, key3);
+    version_map->write_version(store, key1, std::nullopt);
+    version_map->write_version(store, key2, key1);
+    version_map->write_version(store, key3, key2);
 
     setup_failure_sim_if_any();
     std::vector<StreamId> symbols = symbol_list->get_symbols(store);
@@ -235,7 +235,7 @@ TEST_P(SymbolListWithWriteFailures, InitialCompact) {
         auto symbol = fmt::format("sym{}", i);
         auto key1 = atom_key_builder().version_id(1).creation_ts(2).content_hash(3).start_index(
                 4).end_index(5).build(symbol, KeyType::TABLE_INDEX);
-        version_map->write_version(store, key1);
+        version_map->write_version(store, key1, std::nullopt);
         expected.emplace_back(symbol);
     }
 
@@ -303,7 +303,7 @@ private:
             live_symbols_.insert(symbol);
             SymbolList::add_symbol(store_, symbol, 0);
             versions_.try_emplace(symbol, 0);
-            version_map_->write_version(store_, atom_key_builder().version_id(0).build(symbol, KeyType::TABLE_INDEX));
+            version_map_->write_version(store_, atom_key_builder().version_id(0).build(symbol, KeyType::TABLE_INDEX), std::nullopt);
             ARCTICDB_DEBUG(log::version(), "Adding {}", symbol);
         }
     };
@@ -324,7 +324,7 @@ private:
             live_symbols_.insert(*symbol);
             ++versions_[*symbol];
             SymbolList::add_symbol(store_, *symbol, versions_[*symbol]);
-            version_map_->write_version(store_, atom_key_builder().version_id(versions_[*symbol]).build(*symbol, KeyType::TABLE_INDEX));
+            version_map_->write_version(store_, atom_key_builder().version_id(versions_[*symbol]).build(*symbol, KeyType::TABLE_INDEX), std::nullopt);
             ARCTICDB_DEBUG(log::version(), "Re-adding {}@{}", *symbol, versions_[*symbol]);
         }
     };
@@ -876,10 +876,13 @@ struct CheckSymbolsTask {
 TEST_F(SymbolListSuite, AddAndCompact) {
     log::version().set_pattern("%Y%m%d %H:%M:%S.%f %t %L %n | %v");
     std::vector<Future<Unit>> futures;
+    std::optional<AtomKey> previous_key;
     for(auto x = 0; x < 1000; ++x) {
         auto symbol = fmt::format("symbol_{}", x);
         SymbolList::add_symbol(store, symbol, 0);
-        version_map->write_version(store, atom_key_builder().build(symbol, KeyType::TABLE_INDEX));
+        auto key = atom_key_builder().build(symbol, KeyType::TABLE_INDEX);
+        version_map->write_version(store, key, previous_key);
+        previous_key = key;
     }
     (void)symbol_list->get_symbol_set(store);
     auto versions = std::make_shared<ReferenceVersionMap>();
@@ -905,7 +908,7 @@ TEST_P(SymbolListRace, Run) {
     } else {
         auto key1 = atom_key_builder().version_id(1).creation_ts(2).content_hash(3).start_index(
                 4).end_index(5).build(symbol_1, KeyType::TABLE_INDEX);
-        version_map->write_version(store, key1);
+        version_map->write_version(store, key1, std::nullopt);
     }
 
     // Variables for capturing the symbol list state before compaction:
@@ -920,7 +923,7 @@ TEST_P(SymbolListRace, Run) {
                 store->remove_keys(get_symbol_list_keys(), {});
             }
             if (add_new2) {
-                store->write(KeyType::SYMBOL_LIST, 0, StringId{CompactionId}, PilotedClock::nanos_since_epoch(), 0, 0,
+                store->write(KeyType::SYMBOL_LIST, 0, StringId{ CompactionId }, PilotedClock::nanos_since_epoch(), NumericIndex{0}, NumericIndex{0},
                         SegmentInMemory{});
             }
             if (add_other2) {

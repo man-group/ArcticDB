@@ -38,8 +38,8 @@ inline entity::VariantKey write_multi_index_entry(
         multi_key_fut = store->write(KeyType::MULTI_KEY,
                                      version_id,  // version_id
                                      stream_id,
-                                     0,  // start_index
-                                     0,  // end_index
+                                     NumericIndex{0},  // start_index
+                                     NumericIndex{0},  // end_index
                                      std::forward<decltype(segment)>(segment)).wait();
     });
 
@@ -83,7 +83,7 @@ inline std::optional<AtomKey> read_segment_with_keys(
 
     for (; row < ssize_t(seg.row_count()); ++row) {
         auto key = read_key_row(seg, row);
-        ARCTICDB_DEBUG(log::version(), "Reading key {}", key);
+        ARCTICDB_TRACE(log::version(), "Reading key {}", key);
 
         if (is_index_key_type(key.type())) {
             entry.keys_.push_back(key);
@@ -180,11 +180,15 @@ inline void check_is_version(const AtomKey &key) {
 
 inline void read_symbol_ref(const std::shared_ptr<StreamSource>& store, const StreamId &stream_id, VersionMapEntry &entry) {
     std::pair<entity::VariantKey, SegmentInMemory> key_seg_pair;
+    // Trying to read a missing ref key is expected e.g. when writing a previously missing symbol.
+    // If the ref key is missing we keep the entry empty and should not raise warnings.
+    auto read_opts = storage::ReadKeyOpts{};
+    read_opts.dont_warn_about_missing_key=true;
     try {
-        key_seg_pair = store->read_sync(RefKey{stream_id, KeyType::VERSION_REF});
+        key_seg_pair = store->read_sync(RefKey{stream_id, KeyType::VERSION_REF}, read_opts);
     } catch (const storage::KeyNotFoundException&) {
         try {
-            key_seg_pair = store->read_sync(RefKey{stream_id, KeyType::VERSION, true});
+            key_seg_pair = store->read_sync(RefKey{stream_id, KeyType::VERSION, true}, read_opts);
         } catch (const storage::KeyNotFoundException&) {
             return;
         }
@@ -192,14 +196,17 @@ inline void read_symbol_ref(const std::shared_ptr<StreamSource>& store, const St
 
     LoadProgress load_progress;
     entry.head_ = read_segment_with_keys(key_seg_pair.second, entry, load_progress);
+    entry.loaded_until_ = load_progress.loaded_until_;
 }
 
 inline void write_symbol_ref(std::shared_ptr<StreamSink> store,
                              const AtomKey &latest_index,
-                             const std::optional<AtomKey>&,
+                             const std::optional<AtomKey>& previous_key,
                              const AtomKey &journal_key) {
     check_is_index_or_tombstone(latest_index);
     check_is_version(journal_key);
+    if(previous_key)
+        check_is_index_or_tombstone(*previous_key);
 
     ARCTICDB_DEBUG(log::version(), "Version map writing symbol ref for latest index: {} journal key {}", latest_index,
                    journal_key);
@@ -209,6 +216,8 @@ inline void write_symbol_ref(std::shared_ptr<StreamSink> store,
         store->write_sync(KeyType::VERSION_REF, latest_index.id(), std::move(segment));
     });
     ref_agg.add_key(latest_index);
+    if(previous_key && is_index_key_type(latest_index.type()))
+        ref_agg.add_key(*previous_key);
 
     ref_agg.add_key(journal_key);
     ref_agg.commit();
@@ -226,20 +235,20 @@ inline std::optional<VersionId> get_version_id_negative_index(VersionId latest, 
 std::unordered_map<StreamId, size_t> get_num_version_entries(const std::shared_ptr<Store> &store, size_t batch_size);
 
 inline bool is_positive_version_query(const LoadParameter& load_params) {
-    return load_params.load_until_.value() >= 0;
+    return load_params.load_until_version_.value() >= 0;
 }
 
 inline bool loaded_until_version_id(const LoadParameter &load_params, const LoadProgress& load_progress, const std::optional<VersionId>& latest_version) {
-    if (!load_params.load_until_)
+    if (!load_params.load_until_version_)
         return false;
 
     if (is_positive_version_query(load_params)) {
-        if (load_progress.loaded_until_ > static_cast<VersionId>(*load_params.load_until_)) {
+        if (load_progress.loaded_until_ > static_cast<VersionId>(*load_params.load_until_version_)) {
             return false;
         }
     } else {
         if (latest_version.has_value()) {
-            if (auto opt_version_id = get_version_id_negative_index(*latest_version, *load_params.load_until_);
+            if (auto opt_version_id = get_version_id_negative_index(*latest_version, *load_params.load_until_version_);
                 opt_version_id && load_progress.loaded_until_ > *opt_version_id) {
                     return false;
             }
@@ -250,7 +259,7 @@ inline bool loaded_until_version_id(const LoadParameter &load_params, const Load
     ARCTICDB_DEBUG(log::version(),
                    "Exiting load downto because loaded to version {} for request {} with {} total versions",
                    load_progress.loaded_until_,
-                   *load_params.load_until_,
+                   *load_params.load_until_version_,
                    latest_version.value()
                   );
     return true;
@@ -258,7 +267,7 @@ inline bool loaded_until_version_id(const LoadParameter &load_params, const Load
 
 inline void set_latest_version(const std::shared_ptr<VersionMapEntry>& entry, std::optional<VersionId>& latest_version) {
     if (!latest_version) {
-        auto latest = entry->get_first_index(true);
+        auto latest = entry->get_first_index(true).first;
         if(latest)
             latest_version = latest->version_id();
     }
@@ -280,8 +289,8 @@ inline bool loaded_until_timestamp(const LoadParameter &load_params, const LoadP
 }
 
 inline bool load_latest_ongoing(const LoadParameter &load_params, const std::shared_ptr<VersionMapEntry> &entry) {
-    if (!(load_params.load_type_ == LoadType::LOAD_LATEST_UNDELETED && entry->get_first_index(false)) &&
-        !(load_params.load_type_ == LoadType::LOAD_LATEST && entry->get_first_index(true)))
+    if (!(load_params.load_type_ == LoadType::LOAD_LATEST_UNDELETED && entry->get_first_index(false).first) &&
+        !(load_params.load_type_ == LoadType::LOAD_LATEST && entry->get_first_index(true).first))
         return true;
 
     ARCTICDB_DEBUG(log::version(), "Exiting because we found a non-deleted index in load latest");
@@ -310,10 +319,29 @@ inline bool looking_for_undeleted(const LoadParameter& load_params, const std::s
     }
 }
 
-inline bool key_exists_in_ref_entry(const LoadParameter& load_params, const VersionMapEntry& ref_entry, const std::optional<AtomKey>&, LoadProgress&) {
-    if (is_latest_load_type(load_params.load_type_) && is_index_key_type(ref_entry.keys_[0].type())) {
-        ARCTICDB_DEBUG(log::version(), "Not following version chain as key for {} exists in ref entry", ref_entry.head_->id());
+inline bool penultimate_key_contains_required_version_id(const AtomKey& key, const LoadParameter& load_params) {
+    if(is_positive_version_query(load_params)) {
+        return key.version_id() <= static_cast<VersionId>(load_params.load_until_version_.value());
+    } else {
+        return *load_params.load_until_version_ == -1;
+    }
+}
+
+inline bool key_exists_in_ref_entry(const LoadParameter& load_params, const VersionMapEntry& ref_entry, std::optional<AtomKey>& cached_penultimate_key, LoadProgress& load_progress) {
+    if (is_latest_load_type(load_params.load_type_) && is_index_key_type(ref_entry.keys_[0].type()))
         return true;
+
+    if(cached_penultimate_key && is_partial_load_type(load_params.load_type_)) {
+        load_params.validate();
+        if(load_params.load_type_ == LoadType::LOAD_DOWNTO && penultimate_key_contains_required_version_id(*cached_penultimate_key, load_params)) {
+            load_progress.loaded_until_ = cached_penultimate_key->version_id();
+            return true;
+        }
+
+        if(load_params.load_type_ == LoadType::LOAD_FROM_TIME &&cached_penultimate_key->creation_ts() <= load_params.load_from_time_.value()) {
+            load_progress.loaded_until_ = cached_penultimate_key->version_id();
+            return true;
+        }
     }
 
     return false;

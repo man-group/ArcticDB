@@ -37,105 +37,84 @@ namespace arcticdb::pipelines {
 using namespace arcticdb::entity;
 using namespace arcticdb::stream;
 
-struct WriteToSegmentTask : public async::BaseTask {
+WriteToSegmentTask::WriteToSegmentTask(
+    std::shared_ptr<InputTensorFrame> frame,
+    FrameSlice slice,
+    const SlicingPolicy& slicing,
+    folly::Function<stream::StreamSink::PartialKey(const FrameSlice&)>&& partial_key_gen,
+    size_t slice_num_for_column,
+    Index index,
+    bool sparsify_floats
+    ) :
+    frame_(std::move(frame)),
+    slice_(std::move(slice)),
+    slicing_(slicing),
+    partial_key_gen_(std::move(partial_key_gen)),
+    slice_num_for_column_(slice_num_for_column),
+    index_(std::move(index)),
+    sparsify_floats_(sparsify_floats) {
+    slice_.check_magic();
+}
 
-    std::shared_ptr<InputTensorFrame> frame_;
-    const FrameSlice slice_;
-    const SlicingPolicy slicing_;
-    folly::Function<stream::StreamSink::PartialKey(const FrameSlice&)> partial_key_gen_;
-    size_t slice_num_for_column_;
-    Index index_;
-    bool sparsify_floats_;
-    util::MagicNum<'W', 's', 'e', 'g'> magic_;
+std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToSegmentTask::operator() () {
+    slice_.check_magic();
+    magic_.check();
+    return util::variant_match(index_, [this](auto& idx) {
+        using IdxType = std::decay_t<decltype(idx)>;
+        using SingleSegmentAggregator = Aggregator<IdxType, FixedSchema, NeverSegmentPolicy>;
 
-    WriteToSegmentTask(
-        std::shared_ptr<InputTensorFrame> frame,
-        FrameSlice slice,
-        const SlicingPolicy& slicing,
-        folly::Function<stream::StreamSink::PartialKey(const FrameSlice&)>&& partial_key_gen,
-        size_t slice_num_for_column,
-        Index index,
-        bool sparsify_floats
-        ) :
-        frame_(std::move(frame)),
-        slice_(std::move(slice)),
-        slicing_(slicing),
-        partial_key_gen_(std::move(partial_key_gen)),
-        slice_num_for_column_(slice_num_for_column),
-        index_(std::move(index)),
-        sparsify_floats_(sparsify_floats) {
-        slice_.check_magic();
-    }
+        ARCTICDB_SUBSAMPLE_AGG(WriteSliceCopyToSegment)
+        std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> output;
 
-    std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> operator() () {
-        slice_.check_magic();
-        magic_.check();
-        return util::variant_match(index_, [this](auto& idx) {
-            using IdxType = std::decay_t<decltype(idx)>;
-            using SingleSegmentAggregator = Aggregator<IdxType, FixedSchema, NeverSegmentPolicy>;
+        auto key = partial_key_gen_(slice_);
+        SingleSegmentAggregator agg{FixedSchema{*slice_.desc(), frame_->index}, [key=std::move(key), slice=slice_, &output](auto&& segment) {
+            output = std::make_tuple(key, std::forward<SegmentInMemory>(segment), slice);
+        }};
 
-            ARCTICDB_SUBSAMPLE_AGG(WriteSliceCopyToSegment)
-            std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> output;
+        auto regular_slice_size = util::variant_match(slicing_,
+            [&](const NoSlicing&) {
+                return slice_.row_range.second - slice_.row_range.first;
+            },
+            [&](const auto& slicer) {
+                return slicer.row_per_slice();
+            });
 
-            auto key = partial_key_gen_(slice_);
-            SingleSegmentAggregator agg{FixedSchema{*slice_.desc(), frame_->index}, [key=std::move(key), slice=slice_, &output](auto&& segment) {
-                output = std::make_tuple(key, std::forward<SegmentInMemory>(segment), slice);
-            }};
+        // Offset is used for index value in row-count index
+        auto offset_in_frame = slice_begin_pos(slice_, *frame_);
+        agg.set_offset(offset_in_frame);
 
-            auto regular_slice_size = util::variant_match(slicing_,
-                [&](const NoSlicing&) {
-                    return slice_.row_range.second - slice_.row_range.first;
-                },
-                [&](const auto& slicer) {
-                    return slicer.row_per_slice();
-                });
-
-            // Offset is used for index value in row-count index
-            auto offset_in_frame = slice_begin_pos(slice_, *frame_);
-            agg.set_offset(offset_in_frame);
-
-            auto rows_to_write = slice_.row_range.second - slice_.row_range.first;
-            if (frame_->desc.index().field_count() > 0) {
-                util::check(static_cast<bool>(frame_->index_tensor), "Got null index tensor in write_slices");
-                auto opt_error = aggregator_set_data(
-                    frame_->desc.fields(0).type(),
-                    frame_->index_tensor.value(),
-                    agg, 0, rows_to_write, offset_in_frame, slice_num_for_column_, regular_slice_size, false);
-                if (opt_error.has_value()) {
-                    opt_error->raise(frame_->desc.fields(0).name(), offset_in_frame);
-                }
+        auto rows_to_write = slice_.row_range.second - slice_.row_range.first;
+        if (frame_->desc.index().field_count() > 0) {
+            util::check(static_cast<bool>(frame_->index_tensor), "Got null index tensor in write_slices");
+            auto opt_error = aggregator_set_data(
+                frame_->desc.fields(0).type(),
+                frame_->index_tensor.value(),
+                agg, 0, rows_to_write, offset_in_frame, slice_num_for_column_, regular_slice_size, false);
+            if (opt_error.has_value()) {
+                opt_error->raise(frame_->desc.fields(0).name(), offset_in_frame);
             }
+        }
 
-            for (size_t col = 0, end = slice_.col_range.diff(); col < end; ++col) {
-                auto abs_col = col + frame_->desc.index().field_count();
-                auto& fd = slice_.non_index_field(col);
-                auto& tensor = frame_->field_tensors[slice_.absolute_field_col(col)];
-                auto opt_error = aggregator_set_data(
-                    fd.type(),
-                    tensor, agg, abs_col, rows_to_write, offset_in_frame, slice_num_for_column_,
-                    regular_slice_size, sparsify_floats_);
-                if (opt_error.has_value()) {
-                    opt_error->raise(fd.name(), offset_in_frame);
-                }
+        for (size_t col = 0, end = slice_.col_range.diff(); col < end; ++col) {
+            auto abs_col = col + frame_->desc.index().field_count();
+            auto& fd = slice_.non_index_field(col);
+            auto& tensor = frame_->field_tensors[slice_.absolute_field_col(col)];
+            auto opt_error = aggregator_set_data(
+                fd.type(),
+                tensor, agg, abs_col, rows_to_write, offset_in_frame, slice_num_for_column_,
+                regular_slice_size, sparsify_floats_);
+            if (opt_error.has_value()) {
+                opt_error->raise(fd.name(), offset_in_frame);
             }
+        }
 
-            agg.end_block_write(rows_to_write);
-            agg.commit();
-            return output;
-        });
-    }
-};
+        agg.end_block_write(rows_to_write);
+        agg.commit();
+        return output;
+    });
+}
 
-folly::Future<std::vector<SliceAndKey>> write_slices(
-        const std::shared_ptr<InputTensorFrame> &frame,
-        std::vector<FrameSlice>&& slices,
-        const SlicingPolicy &slicing,
-        IndexPartialKey&& key,
-        const std::shared_ptr<stream::StreamSink>& sink,
-        const std::shared_ptr<DeDupMap>& de_dup_map,
-        bool sparsify_floats) {
-    ARCTICDB_SAMPLE(WriteSlices, 0)
-
+std::vector<std::pair<FrameSlice, size_t>> get_slice_and_rowcount(const std::vector<FrameSlice>& slices) {
     std::vector<std::pair<FrameSlice, size_t>> slice_and_rowcount;
     slice_and_rowcount.reserve(slices.size());
     size_t slice_num_for_column = 0;
@@ -150,6 +129,20 @@ folly::Future<std::vector<SliceAndKey>> write_slices(
         slice_and_rowcount.emplace_back(slice, slice_num_for_column);
         ++slice_num_for_column;
     }
+    return slice_and_rowcount;
+}
+
+folly::Future<std::vector<SliceAndKey>> write_slices(
+        const std::shared_ptr<InputTensorFrame> &frame,
+        std::vector<FrameSlice>&& slices,
+        const SlicingPolicy &slicing,
+        IndexPartialKey&& key,
+        const std::shared_ptr<stream::StreamSink>& sink,
+        const std::shared_ptr<DeDupMap>& de_dup_map,
+        bool sparsify_floats) {
+    ARCTICDB_SAMPLE(WriteSlices, 0)
+
+    auto slice_and_rowcount = get_slice_and_rowcount(slices);
 
     const auto write_window = ConfigsMap::instance()->get_int("VersionStore.BatchWriteWindow", 2 * async::TaskScheduler::instance()->io_thread_count());
     return folly::collect(folly::window(std::move(slice_and_rowcount), [de_dup_map, frame, slicing, key=std::move(key), sink, sparsify_floats](auto&& slice) {

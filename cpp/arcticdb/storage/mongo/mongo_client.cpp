@@ -186,32 +186,31 @@ class MongoClientImpl {
         pool_(mongocxx::uri(connection_string_)){
 }
 
-    void write_segment(
+    bool write_segment(
         const std::string &database_name,
         const std::string &collection_name,
         storage::KeySegmentPair&& kv);
 
-    void update_segment(
+    UpdateResult update_segment(
         const std::string &database_name,
         const std::string &collection_name,
         storage::KeySegmentPair&& kv,
         bool upsert);
 
-    storage::KeySegmentPair read_segment(
+    std::optional<KeySegmentPair> read_segment(
         const std::string &database_name,
         const std::string &collection_name,
         const  entity::VariantKey &key);
 
-    void remove_keyvalue(
+    DeleteResult remove_keyvalue(
         const std::string &database_name,
         const std::string &collection_name,
         const  entity::VariantKey &key);
 
-    void iterate_type(
+    std::vector<VariantKey> list_keys(
         const std::string &database_name,
         const std::string &collection_name,
         KeyType key_type,
-        folly::Function<void(entity::VariantKey &&)>&& visitor,
         const std::optional<std::string> &prefix
     );
 
@@ -249,7 +248,7 @@ class MongoClientImpl {
     mongocxx::pool pool_;
 };
 
-void MongoClientImpl::write_segment(const std::string &database_name,
+bool MongoClientImpl::write_segment(const std::string &database_name,
                                     const std::string &collection_name,
                                     storage::KeySegmentPair &&kv) {
     using namespace bsoncxx::builder::stream;
@@ -270,15 +269,13 @@ void MongoClientImpl::write_segment(const std::string &database_name,
         replace.upsert(true);
         auto bulk_write = collection.create_bulk_write();
         bulk_write.append(replace);
-        auto result = bulk_write.execute();
-        util::check(bool(result), "Mongo error while putting key {}", kv.key_view());
+        return bulk_write.execute().has_value();
     } else {
-        auto result = collection.insert_one(doc.view());
-        util::check(bool(result), "Mongo error while putting key {}", kv.key_view());
+        return collection.insert_one(doc.view()).has_value();
     }
 }
 
-void MongoClientImpl::update_segment(const std::string &database_name,
+UpdateResult MongoClientImpl::update_segment(const std::string &database_name,
                                     const std::string &collection_name,
                                     storage::KeySegmentPair &&kv,
                                     bool upsert) {
@@ -300,11 +297,10 @@ void MongoClientImpl::update_segment(const std::string &database_name,
     auto bulk_write = collection.create_bulk_write();
     bulk_write.append(replace);
     auto result = bulk_write.execute();
-    util::check(bool(result), "Mongo error while updating key {}", kv.key_view());
-    util::check(upsert || result->modified_count() > 0, "update called with upsert=false but key does not exist");
+    return {result ? std::optional<int>(result->modified_count()) : std::nullopt};
 }
 
-storage::KeySegmentPair MongoClientImpl::read_segment(const std::string &database_name,
+std::optional<KeySegmentPair> MongoClientImpl::read_segment(const std::string &database_name,
                                                    const std::string &collection_name,
                                                    const  entity::VariantKey &key) {
     using namespace bsoncxx::builder::stream;
@@ -317,31 +313,25 @@ storage::KeySegmentPair MongoClientImpl::read_segment(const std::string &databas
     auto database = client->database(database_name); //TODO maybe cache
     auto collection = database[collection_name];
 
-    try {
-        ARCTICDB_SUBSAMPLE(MongoStorageReadFindOne, 0)
-        auto stream_id = variant_key_id(key);
-        if(StorageFailureSimulator::instance()->configured())
-            StorageFailureSimulator::instance()->go(FailureType::READ);
+    ARCTICDB_SUBSAMPLE(MongoStorageReadFindOne, 0)
+    auto stream_id = variant_key_id(key);
+    if(StorageFailureSimulator::instance()->configured())
+        StorageFailureSimulator::instance()->go(FailureType::READ);
 
-        auto result = collection.find_one(document{} << "key" << fmt::format("{}", key) << "stream_id" <<
-                                                                                                       fmt::format("{}", stream_id) << finalize);
-        if (result) {
-            const auto &doc = result->view();
-            auto size = doc["total_size"].get_int64().value;
-            entity::VariantKey stored_key{ detail::variant_key_from_document(doc, key) };
-            util::check(stored_key == key, "Key mismatch: {} != {}");
-            return storage::KeySegmentPair(
-                    std::move(stored_key),
-                    Segment::from_bytes(const_cast<uint8_t *>(result->view()["data"].get_binary().bytes), std::size_t(size), true)
-            );
-        } else {
-            // find_one returned nothing, if this was an exception it would fall through to the catch below.
-            throw std::runtime_error(fmt::format("Missing key in mongo: {} for symbol: {}", key, stream_id));
-        }
-    }
-    catch(const std::exception& ex) {
-        log::storage().info("Segment read error: {}", ex.what());
-        throw storage::KeyNotFoundException{Composite<VariantKey>{VariantKey{key}}};
+    auto result = collection.find_one(document{} << "key" << fmt::format("{}", key) << "stream_id" <<
+                                                                                                   fmt::format("{}", stream_id) << finalize);
+    if (result) {
+        const auto &doc = result->view();
+        auto size = doc["total_size"].get_int64().value;
+        entity::VariantKey stored_key{ detail::variant_key_from_document(doc, key) };
+        util::check(stored_key == key, "Key mismatch: {} != {}");
+        return storage::KeySegmentPair(
+                std::move(stored_key),
+                Segment::from_bytes(const_cast<uint8_t *>(result->view()["data"].get_binary().bytes), std::size_t(size), true)
+        );
+    } else {
+        // find_one returned nothing, returns null_opt which would be handled by the caller to throw a KeyNotFoundException
+        return std::nullopt;
     }
 }
 
@@ -358,19 +348,13 @@ bool MongoClientImpl::key_exists(const std::string &database_name,
     auto database = client->database(database_name); //TODO maybe cache
     auto collection = database[collection_name];
 
-    try {
-        ARCTICDB_SUBSAMPLE(MongoStorageKeyExistsFindOne, 0)
-        auto result = collection.find_one(document{} << "key" << fmt::format("{}", key) << finalize);
-        return static_cast<bool>(result);
-    }
-    catch(const std::exception& ex) {
-        log::storage().error(fmt::format("Key exists error: {}", ex.what()));
-        throw;
-    }
+    ARCTICDB_SUBSAMPLE(MongoStorageKeyExistsFindOne, 0)
+    auto result = collection.find_one(document{} << "key" << fmt::format("{}", key) << finalize);
+    return static_cast<bool>(result);
 }
 
 
-void MongoClientImpl::remove_keyvalue(const std::string &database_name,
+DeleteResult MongoClientImpl::remove_keyvalue(const std::string &database_name,
                                                  const std::string &collection_name,
                                                  const entity::VariantKey &key) {
     using namespace bsoncxx::builder::stream;
@@ -390,25 +374,19 @@ void MongoClientImpl::remove_keyvalue(const std::string &database_name,
                                                   fmt::format("{}", variant_key_id(key)) << finalize);
     }
     ARCTICDB_SUBSAMPLE(MongoStorageRemoveDelOne, 0)
-    if (result) {
-        std::int32_t deleted_count = result->deleted_count();
-        util::warn(deleted_count == 1, "Expect to delete a single document with key {}",
-                   key); // possible values are 0 and 1 here when returned from delete_one
-    } else
-        throw std::runtime_error(fmt::format("Mongo error deleting data for key {}", key));
-
+    return {result ? std::optional<int>(result->deleted_count()) : std::nullopt};
 }
 
-void MongoClientImpl::iterate_type(const std::string &database_name,
+std::vector<VariantKey> MongoClientImpl::list_keys(const std::string &database_name,
                                const std::string &collection_name,
                                KeyType key_type,
-                               folly::Function<void(entity::VariantKey &&)>&& visitor,
                                const std::optional<std::string> &prefix
                                ) {
     using namespace bsoncxx::builder::stream;
     using bsoncxx::builder::stream::document;
     ARCTICDB_SUBSAMPLE(MongoStorageItTypeGetClient, 0)
     auto client = get_client();
+    std::vector<VariantKey> keys;
     ARCTICDB_SUBSAMPLE(MongoStorageItTypeGetCol, 0)
     auto collection = client->database(database_name)[collection_name];
     ARCTICDB_SUBSAMPLE(MongoStorageItTypeFindAll, 0)
@@ -418,16 +396,16 @@ void MongoClientImpl::iterate_type(const std::string &database_name,
             collection.find({});
 
     for (auto &doc : cursor) {
-        if(!is_ref_key_class(key_type)) {
-            auto key = detail::atom_key_from_document(doc, key_type);
-            visitor(std::move(key));
-        }
-        else {
-            auto key = detail::ref_key_from_document(doc, key_type);
-            visitor(std::move(key));
-        }
+        VariantKey key;
+        if(!is_ref_key_class(key_type))
+            key = detail::atom_key_from_document(doc, key_type);
+        else
+            key = detail::ref_key_from_document(doc, key_type);
+        keys.emplace_back(key);
         ARCTICDB_SUBSAMPLE(MongoStorageItTypeNext, 0)
     }
+
+    return keys;
 }
 
 void MongoClientImpl::ensure_collection(std::string_view database_name, std::string_view collection_name) {
@@ -469,38 +447,37 @@ MongoClient::~MongoClient() {
     delete client_;
 }
 
-void MongoClient::write_segment(const std::string &database_name,
+bool MongoClient::write_segment(const std::string &database_name,
                                  const std::string &collection_name,
                                  storage::KeySegmentPair &&kv) {
-    client_->write_segment(database_name, collection_name, std::move(kv));
+    return client_->write_segment(database_name, collection_name, std::move(kv));
 }
 
-void MongoClient::update_segment(const std::string &database_name,
+UpdateResult MongoClient::update_segment(const std::string &database_name,
                                 const std::string &collection_name,
                                 storage::KeySegmentPair &&kv,
                                 bool upsert) {
-    client_->update_segment(database_name, collection_name, std::move(kv), upsert);
+    return client_->update_segment(database_name, collection_name, std::move(kv), upsert);
 }
 
-storage::KeySegmentPair MongoClient::read_segment(const std::string &database_name,
+std::optional<KeySegmentPair> MongoClient::read_segment(const std::string &database_name,
                                              const std::string &collection_name,
                                              const entity::VariantKey &key) {
     return client_->read_segment(database_name, collection_name, key);
 }
 
-void MongoClient::remove_keyvalue(const std::string &database_name,
+DeleteResult MongoClient::remove_keyvalue(const std::string &database_name,
                                   const std::string &collection_name,
                                   const entity::VariantKey &key) {
-    client_->remove_keyvalue(database_name, collection_name, key);
+    return client_->remove_keyvalue(database_name, collection_name, key);
 }
 
-void MongoClient::iterate_type(const std::string &database_name,
+std::vector<VariantKey> MongoClient::list_keys(const std::string &database_name,
                                const std::string &collection_name,
                                KeyType key_type,
-                               folly::Function<void(entity::VariantKey &&)>&& visitor,
                                const std::optional<std::string> &prefix
                                ) {
-    client_->iterate_type(database_name, collection_name, key_type, std::move(visitor), prefix);
+    return client_->list_keys(database_name, collection_name, key_type, prefix);
 }
 
 void MongoClient::ensure_collection(std::string_view database_name, std::string_view collection_name) {

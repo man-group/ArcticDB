@@ -231,6 +231,8 @@ struct EncodedField {
     uint64_t items_count_ = 0u;
     std::array<EncodedBlock, 1> blocks_;
 
+    static constexpr size_t MinimumSize = sizeof(type_) + sizeof(shapes_count_) + sizeof(values_count_) + sizeof(sparse_map_bytes_) + sizeof(items_count_);
+
     static constexpr EncodedFieldType kNdarray = EncodedFieldType::kNdarray;
 
     static constexpr size_t Size =

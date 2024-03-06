@@ -14,6 +14,7 @@ SET(PROTO_IN_FILES
         s3_storage.proto
         azure_storage.proto
         nfs_backed_storage.proto
+        mapped_file_storage.proto
         logger.proto
         )
 

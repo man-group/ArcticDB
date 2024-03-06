@@ -52,11 +52,14 @@ struct KeySizesInfo {
 class LocalVersionedEngine : public VersionedEngine {
 
 public:
+    LocalVersionedEngine() = default;
+
     template<class ClockType = util::SysClock>
     explicit LocalVersionedEngine(
         const std::shared_ptr<storage::Library>& library,
-        const ClockType& = util::SysClock{} // Only used to allow the template variable to be inferred
-        );
+        const ClockType& = ClockType{});
+
+
 
     virtual ~LocalVersionedEngine() = default;
 
@@ -99,20 +102,17 @@ public:
 
     std::optional<VersionedItem> get_latest_version(
         const StreamId &stream_id,
-        const VersionQuery& version_query,
-        const ReadOptions& read_options);
+        const VersionQuery& version_query);
 
     std::optional<VersionedItem> get_specific_version(
         const StreamId &stream_id,
         SignedVersionId signed_version_id,
-        const VersionQuery& version_query,
-        const ReadOptions& read_options);
+        const VersionQuery& version_query);
 
     std::optional<VersionedItem> get_version_at_time(
         const StreamId& stream_id,
         timestamp as_of,
-        const VersionQuery& version_query,
-        const ReadOptions& read_options);
+        const VersionQuery& version_query);
 
     std::optional<VersionedItem> get_version_from_snapshot(
         const StreamId& stream_id,
@@ -125,8 +125,7 @@ public:
 
     std::optional<VersionedItem> get_version_to_read(
         const StreamId& stream_id,
-        const VersionQuery& version_query,
-        const ReadOptions& read_options
+        const VersionQuery& version_query
     );
 
     FrameAndDescriptor read_dataframe_internal(
@@ -142,8 +141,7 @@ public:
 
     DescriptorItem read_descriptor_internal(
             const StreamId& stream_id,
-            const VersionQuery& version_query,
-            const ReadOptions& read_options);
+            const VersionQuery& version_query);
 
     void write_parallel_frame(
         const StreamId& stream_id,
@@ -327,8 +325,7 @@ public:
 
     std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> read_metadata_internal(
         const StreamId& stream_id,
-        const VersionQuery& version_query,
-        const ReadOptions& read_options);
+        const VersionQuery& version_query);
 
     bool is_symbol_fragmented(const StreamId& stream_id, std::optional<size_t> segment_size) override;
 
@@ -373,11 +370,6 @@ public:
         bool prune_previous_versions,
         const AtomKey& new_version,
         const std::optional<IndexTypeKey>& previous_key);
-
-    std::vector<folly::Future<folly::Unit>> batch_write_version_and_prune_if_needed(
-        const std::vector<AtomKey>& index_keys,
-        const std::vector<UpdateInfo>& stream_update_info_vector,
-        bool prune_previous_versions);
 
     std::vector<std::variant<VersionedItem, DataError>> batch_write_versioned_dataframe_internal(
         const std::vector<StreamId>& stream_ids,
@@ -453,6 +445,7 @@ protected:
         const std::vector<VersionQuery>& version_queries);
 
 private:
+    void initialize(const std::shared_ptr<storage::Library>& library);
 
     std::shared_ptr<Store> store_;
     arcticdb::proto::storage::VersionStoreConfig cfg_;
