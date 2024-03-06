@@ -18,11 +18,7 @@
     #undef copysign
 #endif
 
-#ifdef ARCTICDB_USING_CONDA
-    #include <robin_hood.h>
-#else
-    #include <arcticdb/util/third_party/robin_hood.hpp>
-#endif
+#include <ankerl/unordered_dense.h>
 
 #include <arcticdb/entity/types.hpp> // for entity::position_t
 #include <arcticdb/util/constants.hpp>
@@ -56,7 +52,7 @@ constexpr bool is_a_string(OffsetString::offset_t offset) {
 }
 
 // Given a set of string pool offsets, removes any that represent None or NaN
-void remove_nones_and_nans(robin_hood::unordered_set<OffsetString::offset_t>& offsets);
+void remove_nones_and_nans(ankerl::unordered_dense::set<OffsetString::offset_t>& offsets);
 
 
 template <typename LockPtrType>

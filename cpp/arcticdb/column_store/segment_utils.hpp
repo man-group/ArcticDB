@@ -8,16 +8,12 @@
 #pragma once
 
 #include <arcticdb/column_store/column.hpp>
-#ifdef ARCTICDB_USING_CONDA
-    #include <robin_hood.h>
-#else
-    #include <arcticdb/util/third_party/robin_hood.hpp>
-#endif
+#include <ankerl/unordered_dense.h>
 #include <arcticdb/util/configs_map.hpp>
 
 namespace arcticdb {
-robin_hood::unordered_set<entity::position_t> unique_values_for_string_column(const Column &column) {
-    robin_hood::unordered_set<entity::position_t> output_set;
+ankerl::unordered_dense::set<entity::position_t> unique_values_for_string_column(const Column &column) {
+    ankerl::unordered_dense::set<entity::position_t> output_set;
     // Guessing that unique values is a third of the column length
     static auto map_reserve_ratio = ConfigsMap::instance()->get_int("UniqueColumns.AllocationRatio", 3);
     output_set.reserve(column.row_count() / map_reserve_ratio);
