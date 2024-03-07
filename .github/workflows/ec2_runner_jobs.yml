@@ -25,12 +25,11 @@ jobs:
       ec2-instance-id: ${{ steps.start-ec2-runner.outputs.ec2-instance-id }}
     steps:
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1.7.0
+        uses: aws-actions/configure-aws-credentials@v1
         with:
           aws-access-key-id: ${{ secrets.AWS_S3_ACCESS_KEY }}
           aws-secret-access-key: ${{ secrets.AWS_S3_SECRET_KEY }}
           aws-region: "eu-west-1"
-          aws-default-region: "eu-west-1"
       - name: Start EC2 runner
         id: start-ec2-runner
         uses: machulav/ec2-github-runner@v2.3.3
@@ -49,12 +48,11 @@ jobs:
     continue-on-error: true
     steps:
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1.7.0
+        uses: aws-actions/configure-aws-credentials@v1
         with:
           aws-access-key-id: ${{ secrets.AWS_S3_ACCESS_KEY }}
           aws-secret-access-key: ${{ secrets.AWS_S3_SECRET_KEY }}
           aws-region: "eu-west-1"
-          aws-default-region: "eu-west-1"
       - name: Stop EC2 runner
         uses: machulav/ec2-github-runner@v2.3.3
         with:
