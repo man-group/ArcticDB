@@ -27,9 +27,9 @@ std::string MockMongoClient::get_failure_trigger(
 template <typename exception_type>
 MongoFailure create_failure(const std::string& message, MongoError error_code) {
     static_assert(std::is_base_of<mongocxx::operation_exception, exception_type>::value, "exception_type must be a subclass of mongocxx::operation_exception");
-    if(error_code == MongoError::NoAcknowledge)
+    if (error_code == MongoError::NoAcknowledge) {
         return {no_ack_failure()};
-
+    }
     bsoncxx::document::value empty_doc_value = bsoncxx::builder::basic::document{}.extract();
     auto ec = std::error_code(static_cast<int>(error_code), std::generic_category());
 
@@ -61,8 +61,9 @@ std::optional<MongoFailure> has_failure_trigger(
     auto key_id = key.doc_key.id_string();
     auto failure_string_for_operation = "#Failure_" + operation_to_string(operation) + "_";
     auto position = key_id.rfind(failure_string_for_operation);
-    if (position == std::string::npos)
+    if (position == std::string::npos) {
         return std::nullopt;
+    }
 
     try {
         auto start = position + failure_string_for_operation.size();
@@ -87,7 +88,7 @@ bool matches_prefix(
 }
 
 void throw_if_exception(MongoFailure& failure) {
-    if(!failure.is_no_ack_failure()) {
+    if (!failure.is_no_ack_failure()) {
         throw failure.get_exception();
     }
 }
@@ -119,10 +120,12 @@ UpdateResult MockMongoClient::update_segment(
         bool upsert) {
     auto key_found = has_key(MongoKey(database_name, collection_name, kv.variant_key()));
 
-    if(!upsert && !key_found)
+    if (!upsert && !key_found) {
         return {0}; // upsert is false, don't update and return 0 as modified_count
-    if(!write_segment(database_name, collection_name, std::move(kv)))
+    }
+    if (!write_segment(database_name, collection_name, std::move(kv))) {
         return {std::nullopt};
+    }
 
     return {key_found ? 1 : 0};
 }
@@ -158,8 +161,9 @@ DeleteResult MockMongoClient::remove_keyvalue(
     }
 
     auto key_found = has_key(mongo_key);
-    if(!key_found)
+    if (!key_found) {
         return {0}; // key not found, return 0 as deleted_count
+    }
 
     mongo_contents.erase(mongo_key);
     return {1};
