@@ -118,15 +118,19 @@ UpdateResult MockMongoClient::update_segment(
         const std::string& collection_name,
         storage::KeySegmentPair&& kv,
         bool upsert) {
-    auto key_found = has_key(MongoKey(database_name, collection_name, kv.variant_key()));
+    auto key = MongoKey(database_name, collection_name, kv.variant_key());
 
-    if (!upsert && !key_found) {
-        return {0}; // upsert is false, don't update and return 0 as modified_count
-    }
-    if (!write_segment(database_name, collection_name, std::move(kv))) {
+    auto failure = has_failure_trigger(key, StorageOperation::WRITE);
+    if (failure.has_value()) {
+        throw_if_exception(failure.value());
         return {std::nullopt};
     }
 
+    auto key_found = has_key(key);
+    if(!upsert && !key_found)
+        return {0}; // upsert is false, don't update and return 0 as modified_count
+
+    mongo_contents.insert_or_assign(key, std::move(kv.segment()));
     return {key_found ? 1 : 0};
 }
 

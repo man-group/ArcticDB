@@ -390,19 +390,19 @@ TEST(MongoMockStorageTest, TestPermissionErrorException) {
 
     ASSERT_THROW({
                      read_in_store(*storage, failureSymbol);
-                 },  KeyNotFoundException);  // should throw permission error after exception normalization
+                 },  StoragePermissionException);
 
-    failureSymbol = mongo::MockMongoClient::get_failure_trigger("sym2", StorageOperation::DELETE, mongo::MongoError::UserNotFound);
+    failureSymbol = mongo::MockMongoClient::get_failure_trigger("sym2", StorageOperation::DELETE, mongo::MongoError::AuthenticationFailed);
     write_in_store(*storage, failureSymbol);
     ASSERT_THROW({
                      remove_in_store(*storage, {failureSymbol});
-                 },  std::runtime_error);  // should throw permission error after exception normalization
+                 },  StoragePermissionException);
 
     failureSymbol = mongo::MockMongoClient::get_failure_trigger("sym3", StorageOperation::WRITE, mongo::MongoError::UnAuthorized);
 
     ASSERT_THROW({
                      update_in_store(*storage, failureSymbol);
-                 },  std::runtime_error); // should throw permission error after exception normalization
+                 },  StoragePermissionException);
 
 }
 
@@ -414,7 +414,7 @@ TEST(MongoMockStorageTest, MongoUnexpectedException) {
 
     ASSERT_THROW({
                      read_in_store(*storage, failureSymbol);
-                 },  std::runtime_error); // should throw MongoUnexpectedException after exception normalization
+                 },  UnexpectedMongoException);
 }
 
 TEST(MongoMockStorageTest, test_remove) {
@@ -432,8 +432,13 @@ TEST(MongoMockStorageTest, test_remove) {
     // Attempt to remove 2, 3 and 4, should succeed till 3.
     ASSERT_THROW(
             remove_in_store(*store, {"symbol_2", "symbol_3", mongo::MockMongoClient::get_failure_trigger("symbol_4", StorageOperation::DELETE, mongo::MongoError::HostUnreachable)}),
-            std::runtime_error);    // Should throw MongoUnexpectedException after exception normalization
+            UnexpectedMongoException);
     remaining = std::set<std::string>{"symbol_4"};
+    ASSERT_EQ(list_in_store(*store), remaining);
+
+    ASSERT_THROW(
+            remove_in_store(*store, {"symbol_non_existent"}),
+            KeyNotFoundException); // removing non-existent keys should throw KeyNotFoundException in Mongo storage
     ASSERT_EQ(list_in_store(*store), remaining);
 }
 
@@ -450,7 +455,7 @@ TEST(MongoMockStorageTest, test_list) {
 
     write_in_store(*store, mongo::MockMongoClient::get_failure_trigger("symbol_99", StorageOperation::LIST, mongo::MongoError::HostNotFound));
 
-    ASSERT_THROW(list_in_store(*store), std::runtime_error); // should throw MongoUnexpectedException after exception normalization
+    ASSERT_THROW(list_in_store(*store), UnexpectedMongoException);
 }
 
 TEST(MongoMockStorageTest, drop_collection) {
