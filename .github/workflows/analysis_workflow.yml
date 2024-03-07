@@ -4,9 +4,7 @@ on:
     inputs:
       run_all_benchmarks:
         type: boolean
-      force_publish_result:
-        description: Force publish result (requries admin access)
-        type: boolean
+        default: false
 
   schedule: # Schdeule the job to run at 12 a.m. daily
     - cron: '0 0 * * *'
@@ -16,12 +14,78 @@ on:
     - "**/*.md"
 
 jobs:
+  get_commits_to_benchmark:
+    name: Get tag commits  
+    runs-on: ubuntu-latest  
+    steps:  
+      - name: Checkout code 
+        uses: actions/checkout@v3.3.0
+        with:
+          fetch-depth: 0
+
+      - name: Get tags
+        id: get_tags
+        run: | 
+          python3 build_tooling/get_commits_for_benchmark.py ${{ inputs.run_all_benchmarks == true && '--run_all_benchmarks' || ''}}
+    outputs:
+      matrix: ${{ steps.get_tags.outputs.commits }}
+
   cibw_docker_image:
     uses: ./.github/workflows/cibw_docker_image.yml
     permissions: {packages: write}
     with:
         cibuildwheel_ver: "2.12.1"
         force_update: false
+
+  benchmark_commits:
+    needs: [get_commits_to_benchmark, cibw_docker_image]  
+    strategy:
+      fail-fast: false
+      matrix: 
+        commits: ${{ fromJson(needs.get_commits_to_benchmark.outputs.matrix)}}  
+    name: Benchmark commit ${{ matrix.commits }}
+    uses: ./.github/workflows/benchmark_commits.yml
+    secrets: inherit
+    with:
+      commit: ${{ matrix.commits }}
+      cibw_image_tag: ${{ needs.cibw_docker_image.outputs.tag }}
+      run_all_benchmarks: ${{ inputs.run_all_benchmarks || false }}
+
+  publish_benchmark_results_to_gh_pages:  
+    name: Publish benchmark results to gh-pages
+    if: github.ref == 'refs/heads/master'
+    needs: [benchmark_commits]  
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v3.3.0
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.ARCTICDB_TEST_PAT }}
+
+      - name: Set persistent storage variables
+        uses: ./.github/actions/set_persistent_storage_env_vars
+        with:
+          bucket: "arcticdb-ci-benchmark-results"
+          aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
+          aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
+
+      - name: Install ArcticDB[Testing]
+        shell: bash -el {0}
+        run: |
+          pip install arcticdb[Testing]
+
+      - name: Publish results to Github Pages
+        shell: bash -el {0}
+        run: |
+          git config --global --add safe.directory /__w/ArcticDB/ArcticDB
+          git config --global user.name "${GITHUB_ACTOR}"
+          git config --global user.email "${GITHUB_ACTOR_ID}+${GITHUB_ACTOR}@users.noreply.github.com"
+          python build_tooling/transform_asv_results.py --mode extract
+          python -m asv publish -v
+          python -m asv gh-pages -v --rewrite
 
   code_coverage:
     needs: [cibw_docker_image]  
@@ -190,108 +254,3 @@ jobs:
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.ARCTICDB_DEV_WEBHOOK_URL }}
           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
-
-  start_ec2_runner:
-    uses: ./.github/workflows/ec2_runner_jobs.yml
-    secrets: inherit
-    with:
-      job_type: start
-
-  benchmark_linux_medium:
-    timeout-minutes: 1200
-    needs: [start_ec2_runner, cibw_docker_image]
-    runs-on: ${{ needs.start_ec2_runner.outputs.label }}
-    container:
-      image: ${{needs.cibw_docker_image.outputs.tag}}
-    permissions:
-      contents: write # Technically not necessary since the ARCTICDB_TEST_PAT token override exists
-    env:
-      # this is potentially overflowing the cache, so should be looked into after we address issue #1057
-      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
-      VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
-      VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
-      CMAKE_C_COMPILER_LAUNCHER: sccache
-      CMAKE_CXX_COMPILER_LAUNCHER: sccache
-
-    steps:
-      - uses: actions/checkout@v3.3.0
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.ARCTICDB_TEST_PAT }}
-
-      - name: Set persistent storage variables
-        uses: ./.github/actions/set_persistent_storage_env_vars
-        with:
-          aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
-          aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
-
-      - name: Configure sccache
-        uses: mozilla-actions/sccache-action@v0.0.3
-        with:
-          version: "v0.4.0"
-        
-      # We are changing the python here because we want to use the default python to build (it is devel version)
-      # and this python for the rest of the testing
-      - name: Select Python (Linux)
-        run: |
-          ls /opt/python  
-          echo /opt/python/cp36-cp36m/bin >> $GITHUB_PATH
-
-      - name: Install ASV
-        shell: bash
-        run: |
-          git config --global --add safe.directory .
-          python -m pip install --upgrade pip
-          pip install asv virtualenv
-          python -m asv machine -v --yes --machine ArcticDB-Runner-Medium
-
-      - name: Benchmark all commits
-        if: inputs.run_all_benchmarks == true
-        shell: bash -el {0}
-        run: |
-          python -m asv run -v --show-stderr HASHFILE:python/hashes_to_benchmark.txt
-
-      - name: Benchmark only latest commit
-        if: github.event_name != 'pull_request' && inputs.run_all_benchmarks == false
-        shell: bash -el {0}
-        run: |
-          python -m asv run -v --show-stderr HEAD^!
-          git log HEAD^..HEAD --oneline -n1 --decorate=no | awk '{print $1;}' >> python/hashes_to_benchmark.txt
-
-      - name: Benchmark against master
-        if: github.event_name == 'pull_request' && inputs.run_all_benchmarks == false
-        shell: bash -el {0}
-        run: |
-          python -m asv continuous -v --show-stderr origin/master HEAD -f 1.15
-
-      - name: Publish results
-        if: inputs.force_publish_result == true || github.event_name == 'schedule'
-        shell: bash -el {0}
-        run: |
-          git config --global user.name "${GITHUB_ACTOR}"
-          git config --global user.email "${GITHUB_ACTOR_ID}+${GITHUB_ACTOR}@users.noreply.github.com"
-
-          git fetch --tags --all
-
-          python -m asv publish -v
-
-          if ${{ github.event_name != 'pull_request' }} ; then
-            git add python/.asv/results/*
-            git add python/hashes_to_benchmark.txt
-            git commit -m "Update ASV Results and hashes to test"
-            git push origin HEAD
-          fi
-
-          if ${{ github.ref == 'refs/heads/master' }} ; then
-            python -m asv gh-pages -v --rewrite
-          fi
-
-  stop-ec2-runner:
-    needs: [start_ec2_runner, benchmark_linux_medium]
-    if: ${{ always() }}
-    uses: ./.github/workflows/ec2_runner_jobs.yml
-    secrets: inherit
-    with:
-      job_type: stop
-      label: ${{ needs.start_ec2_runner.outputs.label }}
-      ec2-instance-id: ${{ needs.start_ec2_runner.outputs.ec2-instance-id }}

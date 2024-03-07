@@ -1,0 +1,95 @@
+name: __benchmark_commits
+on:
+  workflow_call:
+    inputs:
+      run_all_benchmarks: {required: true, type: boolean, description: Run all benchmarks or just the one for the given commit}
+      commit:             {required: true, type: string, description: commit hash that will be benchmarked}
+      cibw_image_tag:     {required: true, type: string, description: Linux only. As built by cibw_docker_image.yml workflow}
+jobs:
+  start_ec2_runner:
+    uses: ./.github/workflows/ec2_runner_jobs.yml
+    secrets: inherit
+    with:
+      job_type: start
+
+  benchmark_commit:
+    needs: [start_ec2_runner]
+    if: |
+      always() &&
+      !cancelled()
+    runs-on: ${{ needs.start_ec2_runner.outputs.label }}
+    container: ${{ inputs.cibw_image_tag}}
+    env:
+      # this is potentially overflowing the cache, so should be looked into after we address issue #1057
+      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
+      VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
+      VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
+      CMAKE_C_COMPILER_LAUNCHER: sccache
+      CMAKE_CXX_COMPILER_LAUNCHER: sccache
+    defaults:
+      run: {shell: bash}
+    steps:  
+      - uses: actions/checkout@v3.3.0
+        with:
+          fetch-depth: 0
+          submodules: recursive
+          token: ${{ secrets.ARCTICDB_TEST_PAT }}
+
+      - name: Configure sccache
+        uses: mozilla-actions/sccache-action@v0.0.3
+        with:
+          version: "v0.4.0"
+        
+      # We are changing the python here because we want to use the default python to build (it is devel version)
+      # and this python for the rest of the testing
+      - name: Select Python (Linux)
+        run: |
+          ls /opt/python  
+          echo /opt/python/cp36-cp36m/bin >> $GITHUB_PATH
+
+
+      - name: Set persistent storage variables
+        uses: ./.github/actions/set_persistent_storage_env_vars
+        with:
+          bucket: "arcticdb-ci-benchmark-results"
+          aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
+          aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
+          strategy_branch: "${{ inputs.commit }}"
+
+      - name: Install ASV
+        shell: bash -el {0}
+        run: |
+          git config --global --add safe.directory .
+          python -m pip install --upgrade pip
+          pip install asv virtualenv
+          python -m asv machine -v --yes --machine ArcticDB-Medium-Runner
+
+      - name: Benchmark given commit
+        if: github.event_name != 'pull_request' || inputs.run_all_benchmarks == true
+        shell: bash -el {0}
+        run: | 
+          git config --global --add safe.directory .
+          python -m asv run -v --show-stderr ${{ inputs.commit }}^!
+        
+      - name: Benchmark against master
+        if: github.event_name == 'pull_request' && inputs.run_all_benchmarks == false
+        shell: bash -el {0}
+        run: |
+          python -m asv continuous -v --show-stderr origin/master HEAD -f 1.15
+
+      - name: Add results to ArcticDB database
+        shell: bash -el {0}
+        run: |
+          pip install arcticdb[Testing]
+          python build_tooling/transform_asv_results.py --mode save ${{ github.ref != 'refs/heads/master' && format('--arcticdb_library {0}_asv_results', github.ref_name) || ''}}
+
+  stop-ec2-runner:
+    needs: [start_ec2_runner, benchmark_commit]
+    if: |
+      always()
+    uses: ./.github/workflows/ec2_runner_jobs.yml
+    secrets: inherit
+    with:
+      job_type: stop
+      label: ${{ needs.start_ec2_runner.outputs.label }}
+      ec2-instance-id: ${{ needs.start_ec2_runner.outputs.ec2-instance-id }}
