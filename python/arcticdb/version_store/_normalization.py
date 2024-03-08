@@ -7,9 +7,9 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import copy
 import datetime
-from datetime import timedelta
+from datetime import timedelta, timezone
 import math
-
+import pytz
 import numpy as np
 import os
 import sys
@@ -21,7 +21,12 @@ from pandas.api.types import is_integer_dtype
 from arcticc.pb2.descriptors_pb2 import UserDefinedMetadata, NormalizationMetadata, MsgPackSerialization
 from arcticc.pb2.storage_pb2 import VersionStoreConfig
 from collections import Counter
-from arcticdb.exceptions import ArcticNativeException, ArcticDbNotYetImplemented, NormalizationException, SortingException
+from arcticdb.exceptions import (
+    ArcticNativeException,
+    ArcticDbNotYetImplemented,
+    NormalizationException,
+    SortingException,
+)
 from arcticdb.supported_types import DateRangeInput, time_types as supported_time_types
 from arcticdb.util._versions import IS_PANDAS_TWO, IS_PANDAS_ZERO
 from arcticdb.version_store.read_result import ReadResult
@@ -911,8 +916,15 @@ class MsgPackNormalizer(Normalizer):
 
     def _custom_pack(self, obj):
         if isinstance(obj, pd.Timestamp):
-            tz = obj.tz.zone if obj.tz is not None else None
-            return ExtType(MsgPackSerialization.PD_TIMESTAMP, packb([obj.value, tz]))
+            offset = obj.tzinfo.utcoffset(obj).total_seconds() if obj.tzinfo else 0
+            if obj.tz and hasattr(obj.tz, "zone"):
+                tz = obj.tz.zone
+            else:
+                tz = obj.tzname()
+
+            return ExtType(
+                MsgPackSerialization.PD_TIMESTAMP, packb([obj.value, tz, offset])
+            )
 
         if isinstance(obj, datetime.datetime):
             return ExtType(MsgPackSerialization.PY_DATETIME, packb(_to_tz_timestamp(obj)))
@@ -928,7 +940,24 @@ class MsgPackNormalizer(Normalizer):
     def _ext_hook(self, code, data):
         if code == MsgPackSerialization.PD_TIMESTAMP:
             data = unpackb(data, raw=False)
-            return pd.Timestamp(data[0], tz=data[1]) if data[1] is not None else pd.Timestamp(data[0])
+            if len(data) == 2:
+                # We used to store only the value and the timezone as a string
+                # This is covering this legacy case, where we don't have the offset
+                val, tz = data
+                offset = 0
+                if tz:
+                    # We need to convert the string tz to a timedelta to denormalize to a datetime.timezone
+                    obj = pd.Timestamp(val, tz=tz)
+                    offset = obj.tzinfo.utcoffset(obj).total_seconds()
+            else:
+                # This covers the current case where we store the value, the timezone and the offset
+                # Should be changed if the _custom_pack method is changed
+                val, tz, offset = data[:3]
+
+            if tz is None:
+                return pd.Timestamp(val)
+
+            return pd.Timestamp(val, tz=timezone(timedelta(seconds=offset), tz))
 
         if code == MsgPackSerialization.PY_DATETIME:
             data = unpackb(data, raw=False)
@@ -1248,8 +1277,7 @@ def restrict_data_to_date_range_only(data: T, *, start: Timestamp, end: Timestam
         if not getattr(data, "timezone", None):
             start, end = _strip_tz(start, end)
         data = data[
-            start.to_pydatetime(warn=False)
-            - timedelta(microseconds=1) : end.to_pydatetime(warn=False)
+            start.to_pydatetime(warn=False) - timedelta(microseconds=1) : end.to_pydatetime(warn=False)
             + timedelta(microseconds=1)
         ]
     return data
