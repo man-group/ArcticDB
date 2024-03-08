@@ -14,9 +14,8 @@
 #include <arcticdb/util/exponential_backoff.hpp>
 #include <arcticdb/util/configs_map.hpp>
 
-#include <folly/system/ThreadId.h>
-
 #include <mutex>
+#include <thread>
 
 namespace arcticdb {
 
@@ -67,7 +66,8 @@ struct StorageLockTimeout : public std::runtime_error {
 };
 
 inline uint64_t get_thread_id() {
-    return folly::getCurrentThreadID();
+    auto thread_id = std::this_thread::get_id();
+    return std::hash<std::thread::id>()(thread_id);
 }
 
 template <class ClockType = util::SysClock>
