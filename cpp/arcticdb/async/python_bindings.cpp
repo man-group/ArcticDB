@@ -23,6 +23,7 @@ void register_bindings(py::module &m) {
         }), "Number of threads used to execute tasks");
 
     async.def("print_scheduler_stats", &print_scheduler_stats);
+    async.def("reinit_task_scheduler", &TaskScheduler::init);  // for testing with new thread pool sizes
 }
 
 } // namespace arcticdb::async

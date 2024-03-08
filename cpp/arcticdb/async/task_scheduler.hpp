@@ -227,18 +227,6 @@ class TaskScheduler {
         return io_exec_;
     }
 
-    void re_init() {
-        ARCTICDB_RUNTIME_DEBUG(log::schedule(), "Reinitializing task scheduler: {} {}", cpu_thread_count_, io_thread_count_);
-        ARCTICDB_RUNTIME_DEBUG(log::schedule(), "IO exec num threads: {}", io_exec_.numActiveThreads());
-        ARCTICDB_RUNTIME_DEBUG(log::schedule(), "CPU exec num threads: {}", cpu_exec_.numActiveThreads());
-        set_active_threads(0);
-        set_max_threads(0);
-        io_exec_.set_thread_factory(std::make_shared<InstrumentedNamedFactory>("IOPool"));
-        cpu_exec_.set_thread_factory(std::make_shared<InstrumentedNamedFactory>("CPUPool"));
-        io_exec_.setNumThreads(io_thread_count_);
-        cpu_exec_.setNumThreads(cpu_thread_count_);
-    }
-
     size_t cpu_thread_count() const {
         return cpu_thread_count_;
     }

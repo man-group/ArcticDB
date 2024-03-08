@@ -68,5 +68,3 @@ void print_scheduler_stats() {
 }
 
 } // namespace arcticdb
-
-
