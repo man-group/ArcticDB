@@ -16,7 +16,8 @@ void ProcessingUnit::apply_filter(
                                                     "ProcessingUnit::apply_filter requires all of segments, row_ranges, and col_ranges to be present");
     auto filter_down_stringpool = optimisation == PipelineOptimisation::MEMORY;
 
-    for (auto&& [idx, segment]: folly::enumerate(*segments_)) {
+    for (size_t idx = 0, segment_size = segments_.value().size(); idx < segment_size; idx++) {
+        auto&& segment = segments_->at(idx);
         auto seg = filter_segment(*segment,
                                   bitset,
                                   filter_down_stringpool);
@@ -33,7 +34,8 @@ void ProcessingUnit::truncate(size_t start_row, size_t end_row) {
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(segments_.has_value() && row_ranges_.has_value() && col_ranges_.has_value(),
                                                     "ProcessingUnit::truncate requires all of segments, row_ranges, and col_ranges to be present");
 
-    for (auto&& [idx, segment]: folly::enumerate(*segments_)) {
+    for (size_t idx = 0, segment_size = segments_.value().size(); idx < segment_size; idx++) {
+        auto&& segment = segments_->at(idx);
         auto seg = segment->truncate(start_row, end_row, false);
         auto num_rows = seg.is_null() ? 0 : seg.row_count();
         row_ranges_->at(idx) = std::make_shared<pipelines::RowRange>(row_ranges_->at(idx)->first, row_ranges_->at(idx)->first + num_rows);

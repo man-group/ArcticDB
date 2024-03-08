@@ -161,8 +161,8 @@ inline std::optional<Aws::Utils::Array<Aws::String>> parse_no_proxy_env_var(cons
         hosts.push_back(host);
     }
     Aws::Utils::Array<Aws::String> non_proxy_hosts{hosts.size()};
-    for (const auto& tmp: folly::enumerate(hosts)) {
-        non_proxy_hosts[tmp.index] = *tmp;
+    for (size_t i = 0; i < hosts.size(); i++) {
+        non_proxy_hosts[i] = hosts[i];
     }
     return non_proxy_hosts;
 }

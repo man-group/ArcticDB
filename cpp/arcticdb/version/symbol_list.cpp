@@ -74,7 +74,8 @@ std::vector<SymbolListEntry> load_previous_from_version_keys(
     auto res = folly::collect(batch_get_latest_undeleted_and_latest_versions_async(store, data.version_map_, stream_ids)).get();
 
     std::vector<SymbolListEntry> symbols;
-    for(auto&& [idx, opt_key_pair]: folly::enumerate(res)) {
+    for(size_t idx = 0, res_size = res.size(); idx < res_size; idx++) {
+        auto&& opt_key_pair = res[idx];
         const auto& [maybe_undeleted, _]  = opt_key_pair;
         if(maybe_undeleted) {
             const auto version_id = maybe_undeleted->version_id();

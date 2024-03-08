@@ -115,7 +115,8 @@ namespace arcticdb {
             auto proc = std::forward<ProcessingUnit>(p);
             internal::check<ErrorCode::E_ASSERTION_FAILURE>(proc.segments_.has_value() && proc.row_ranges_.has_value() && proc.col_ranges_.has_value(),
                                                             "collect_segments requires all of segments, row_ranges, and col_ranges to be present");
-            for (auto&& [idx, segment]: folly::enumerate(*proc.segments_)) {
+            for (size_t idx = 0; idx < proc.segments_.value().size(); idx++) {
+                auto segment = proc.segments_->at(idx);
                 pipelines::FrameSlice frame_slice(*proc.col_ranges_->at(idx), *proc.row_ranges_->at(idx));
                 output.emplace_back(std::move(*segment), std::move(frame_slice));
             }
@@ -193,9 +194,11 @@ namespace arcticdb {
                     std::vector<ProcessingUnit> procs{static_cast<bucket_id>(num_buckets)};
                     BucketizerType bucketizer(num_buckets);
                     auto [row_to_bucket, bucket_counts] = get_buckets(partitioning_column, grouper, bucketizer);
-                    for (auto&& [input_idx, seg]: folly::enumerate(input.segments_.value())) {
+                    for (size_t input_idx = 0; input_idx < input.segments_.value().size(); input_idx++) {
+                        auto seg = input.segments_.value().at(input_idx);
                         auto new_segs = partition_segment(*seg, row_to_bucket, bucket_counts);
-                        for (auto && [output_idx, new_seg]: folly::enumerate(new_segs)) {
+                        for (size_t output_idx = 0; output_idx < new_segs.size(); output_idx++) {
+                            auto && new_seg = new_segs.at(output_idx);
                             if (bucket_counts.at(output_idx) > 0) {
                                 if (!procs.at(output_idx).segments_.has_value()) {
                                     procs.at(output_idx).segments_ = std::make_optional<std::vector<std::shared_ptr<SegmentInMemory>>>();
@@ -208,7 +211,8 @@ namespace arcticdb {
                             }
                         }
                     }
-                    for (auto&& [idx, proc]: folly::enumerate(procs)) {
+                    for (size_t idx = 0; idx < procs.size(); idx++) {
+                        auto &proc = procs.at(idx);
                         if (bucket_counts.at(idx) > 0) {
                             proc.bucket_ = idx;
                             output.push_back(std::move(proc));

@@ -483,20 +483,20 @@ Composite<EntityIds> process_clauses(
                                            &clauses,
                                            comp_entity_ids = std::move(comp_entity_ids)](std::vector<pipelines::SegmentAndSlice>&& segment_and_slices) mutable {
                             auto entity_ids = std::get<EntityIds>(comp_entity_ids[0]);
-                            for (auto&& [idx, segment_and_slice]: folly::enumerate(segment_and_slices)) {
+                            for (size_t idx = 0; idx < segment_and_slices.size(); idx++) {
                                 std::lock_guard<std::mutex> lock(entity_added_mtx[entity_ids[idx]]);
                                 if (!entity_added[entity_ids[idx]]) {
                                     component_manager->add(
-                                            std::make_shared<SegmentInMemory>(std::move(segment_and_slice.segment_in_memory_)),
+                                            std::make_shared<SegmentInMemory>(std::move(segment_and_slices[idx].segment_in_memory_)),
                                             entity_ids[idx], segment_proc_unit_counts[entity_ids[idx]]);
                                     component_manager->add(
-                                            std::make_shared<RowRange>(std::move(segment_and_slice.ranges_and_key_.row_range_)),
+                                            std::make_shared<RowRange>(std::move(segment_and_slices[idx].ranges_and_key_.row_range_)),
                                             entity_ids[idx]);
                                     component_manager->add(
-                                            std::make_shared<ColRange>(std::move(segment_and_slice.ranges_and_key_.col_range_)),
+                                            std::make_shared<ColRange>(std::move(segment_and_slices[idx].ranges_and_key_.col_range_)),
                                             entity_ids[idx]);
                                     component_manager->add(
-                                            std::make_shared<AtomKey>(std::move(segment_and_slice.ranges_and_key_.key_)),
+                                            std::make_shared<AtomKey>(std::move(segment_and_slices[idx].ranges_and_key_.key_)),
                                             entity_ids[idx]);
                                     entity_added[entity_ids[idx]] = true;
                                 }
@@ -901,11 +901,11 @@ void copy_frame_data_to_buffer(const SegmentInMemory& destination, size_t target
 }
 
 void copy_segments_to_frame(const std::shared_ptr<Store>& store, const std::shared_ptr<PipelineContext>& pipeline_context, const SegmentInMemory& frame) {
-    for (auto context_row : folly::enumerate(*pipeline_context)) {
-        auto& slice_and_key = context_row->slice_and_key();
+    for (auto context_row : *pipeline_context) {
+        auto& slice_and_key = context_row.slice_and_key();
         auto& segment = slice_and_key.segment(store);
         const auto index_field_count = get_index_field_count(frame);
-        for (auto idx = 0u; idx < index_field_count && context_row->fetch_index(); ++idx) {
+        for (auto idx = 0u; idx < index_field_count && context_row.fetch_index(); ++idx) {
             copy_frame_data_to_buffer(frame, idx, segment, idx, slice_and_key.slice_.row_range);
         }
 
@@ -915,12 +915,12 @@ void copy_segments_to_frame(const std::shared_ptr<Store>& store, const std::shar
                 "Column range does not match segment descriptor field count in copy_segments_to_frame: {} != {}",
                 field_count, segment.descriptor().field_count());
         for (auto field_col = index_field_count; field_col < field_count; ++field_col) {
-            const auto& field_name = context_row->descriptor().fields(field_col).name();
+            const auto& field_name = context_row.descriptor().fields(field_col).name();
             auto frame_loc_opt = frame.column_index(field_name);
             if (!frame_loc_opt)
                 continue;
 
-            copy_frame_data_to_buffer(frame, *frame_loc_opt, segment, field_col, context_row->slice_and_key().slice_.row_range);
+            copy_frame_data_to_buffer(frame, *frame_loc_opt, segment, field_col, context_row.slice_and_key().slice_.row_range);
         }
     }
 }
@@ -1194,8 +1194,8 @@ VersionedItem collate_and_write(
         for(auto sk = std::begin(pipeline_context->slice_and_keys_); sk < end; ++sk)
             writer.add(sk->key(), sk->slice());
 
-        for (auto key : folly::enumerate(keys)) {
-            writer.add(to_atom(*key), slices[key.index]);
+        for (auto i = 0u; i < keys.size(); ++i) {
+            writer.add(to_atom(keys[i]), slices[i]);
         }
         auto index_key =  writer.commit();
         return VersionedItem{to_atom(std::move(index_key).get())};

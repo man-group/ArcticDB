@@ -228,8 +228,9 @@ std::unordered_map<SnapshotId, std::optional<VariantKey>> all_ref_keys(
     ) {
     std::unordered_map<SnapshotId, std::optional<VariantKey>> output;
     output.reserve(snap_names.size());
-    for(auto name : folly::enumerate(snap_names))
-        output.try_emplace(*name, ref_keys[name.index]);
+    for (size_t i = 0; i < snap_names.size(); i++) {
+        output.try_emplace(snap_names[i], ref_keys[i]);
+    }
 
     return output;
 }
@@ -241,9 +242,9 @@ std::unordered_map<SnapshotId, std::optional<VariantKey>> get_snapshot_keys_via_
     const std::shared_ptr<Store>& store
     ){
     std::unordered_map<SnapshotId, std::optional<VariantKey>> output;
-    for (auto snap : folly::enumerate(snap_names)) {
-        if (!ref_key_exists[snap.index])
-            output.try_emplace(*snap, std::nullopt);
+    for (size_t i = 0; i < snap_names.size(); i++) {
+        if (!ref_key_exists[i])
+            output.try_emplace(snap_names[i], std::nullopt);
     }
 
     store->iterate_type(KeyType::SNAPSHOT, [&output](VariantKey &&vk) {
@@ -251,9 +252,9 @@ std::unordered_map<SnapshotId, std::optional<VariantKey>> get_snapshot_keys_via_
             it->second = std::move(vk);
     });
 
-    for (auto snap : folly::enumerate(snap_names)) {
-        if (ref_key_exists[snap.index])
-            output.try_emplace(*snap, ref_keys[snap.index]);
+    for (size_t i = 0; i < snap_names.size(); i++) {
+        if (ref_key_exists[i])
+            output.try_emplace(snap_names[i], ref_keys[i]);
     }
     return output;
 }

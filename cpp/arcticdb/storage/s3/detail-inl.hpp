@@ -220,16 +220,17 @@ namespace s3 {
                     [&s3_client, &root_folder, &bucket_name, &to_delete, b = std::move(
                             bucketizer), &failed_deletes](auto &&group) {
                         auto key_type_dir = key_type_folder(root_folder, group.key());
-                        for (auto k: folly::enumerate(group.values())) {
-                            auto s3_object_name = object_path(b.bucketize(key_type_dir, *k), *k);
+                        for (size_t i = 0; i < group.values().size(); i++) {
+                            auto k = group.values()[i];
+                            auto s3_object_name = object_path(b.bucketize(key_type_dir, k), k);
                             to_delete.emplace_back(std::move(s3_object_name));
 
-                            if (to_delete.size() == delete_object_limit || k.index + 1 == group.size()) {
+                            if (to_delete.size() == delete_object_limit || i + 1 == group.size()) {
                                 auto delete_object_result = s3_client.delete_objects(to_delete, bucket_name);
                                 if (delete_object_result.is_success()) {
                                     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Deleted {} objects, one of which with key '{}'",
                                                            to_delete.size(),
-                                                           variant_key_view(*k));
+                                                           variant_key_view(k));
                                     for (auto& bad_key: delete_object_result.get_output().failed_deletes) {
                                         auto bad_key_name = bad_key.s3_object_name.substr(key_type_dir.size(),
                                                                                           std::string::npos);

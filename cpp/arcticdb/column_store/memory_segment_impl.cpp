@@ -188,17 +188,18 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::filter(const util::Bit
 
     // Index is built to make rank queries faster
     std::unique_ptr<util::BitIndex> filter_idx;
-    for(const auto& column : folly::enumerate(columns())) {
-        (*column)->type().visit_tag([&] (auto type_desc_tag){
+    for(size_t index = 0, columns_size = columns().size(); index < columns_size; index++) {
+        const auto& column = columns_[index];
+        column->type().visit_tag([&] (auto type_desc_tag){
             using TypeDescriptorTag =  decltype(type_desc_tag);
             using DataTypeTag = typename TypeDescriptorTag::DataTypeTag;
             using RawType = typename DataTypeTag::raw_type;
             const util::BitSet* final_bitset;
             util::BitSet bitset_including_sparse;
 
-            auto sparse_map = (*column)->opt_sparse_map();
+            auto sparse_map = column->opt_sparse_map();
             std::unique_ptr<util::BitIndex> sparse_idx;
-            auto output_col_idx = column.index;
+            auto output_col_idx = index;
             if (is_input_sparse || sparse_map) {
                 filter_idx = std::make_unique<util::BitIndex>();
                 filter_bitset.build_rs_index(filter_idx.get());
@@ -209,13 +210,13 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::filter(const util::Bit
                     sparse_idx = std::make_unique<util::BitIndex>();
                     sparse_map.value().build_rs_index(sparse_idx.get());
                 } else {
-                    bitset_including_sparse.resize((*column)->row_count());
+                    bitset_including_sparse.resize(column->row_count());
                 }
                 if (bitset_including_sparse.count() == 0) {
                     // No values are set in the sparse column, skip it
                     return;
                 }
-                output_col_idx = output->add_column(field(column.index), bitset_including_sparse.count(), true);
+                output_col_idx = output->add_column(field(index), bitset_including_sparse.count(), true);
                 final_bitset = &bitset_including_sparse;
             } else {
                 final_bitset = &filter_bitset;
@@ -224,7 +225,7 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::filter(const util::Bit
             if (sparse_map)
                 output_col.opt_sparse_map() = std::make_optional<util::BitSet>();
             auto output_ptr = reinterpret_cast<RawType*>(output_col.ptr());
-            auto input_data =  (*column)->data();
+            auto input_data =  column->data();
 
             auto bitset_iter = final_bitset->first();
             auto row_count_so_far = 0;
@@ -356,11 +357,12 @@ std::vector<std::shared_ptr<SegmentInMemoryImpl>> SegmentInMemoryImpl::partition
         return output;
     }
 
-    for (const auto& segment_count: folly::enumerate(segment_counts)) {
-        if (*segment_count > 0) {
-            auto& seg = output.at(segment_count.index);
-            seg = get_output_segment(*segment_count);
-            seg->set_row_data(*segment_count - 1);
+    for (size_t idx = 0, segment_counts_size = segment_counts.size(); idx < segment_counts_size; idx++) {
+        const auto& segment_count = segment_counts.at(idx);
+        if (segment_count > 0) {
+            auto& seg = output.at(idx);
+            seg = get_output_segment(segment_count);
+            seg->set_row_data(segment_count - 1);
             seg->set_string_pool(string_pool_);
             seg->set_compacted(compacted_);
             if (metadata_) {
@@ -371,21 +373,23 @@ std::vector<std::shared_ptr<SegmentInMemoryImpl>> SegmentInMemoryImpl::partition
         }
     }
 
-    for(const auto& column : folly::enumerate(columns())) {
-        (*column)->type().visit_tag([&] (auto type_desc_tag){
+    for(size_t idx = 0, columns_size = columns().size(); idx < columns_size; idx++) {
+        const auto& column = columns_[idx];
+        column->type().visit_tag([&] (auto type_desc_tag){
             using TypeDescriptorTag = decltype(type_desc_tag);
             using ColumnTagType = typename TypeDescriptorTag::DataTypeTag;
             using RawType = typename ColumnTagType::raw_type;
 
-            auto output_col_idx = column.index;
+            auto output_col_idx = idx;
             std::vector<RawType*> output_ptrs{output.size(), nullptr};
-            for (const auto& segment: folly::enumerate(output)) {
-                if (static_cast<bool>(*segment)) {
-                    output_ptrs.at(segment.index) = reinterpret_cast<RawType*>((*segment)->column(output_col_idx).ptr());
+            for (size_t seg_idx = 0; seg_idx < output.size(); seg_idx++) {
+                const auto& segment = output.at(seg_idx);
+                if (static_cast<bool>(segment)) {
+                    output_ptrs.at(seg_idx) = reinterpret_cast<RawType*>((segment)->column(output_col_idx).ptr());
                 }
             }
 
-            auto input_data =  (*column)->data();
+            auto input_data = column->data();
             size_t overall_idx = 0;
             while(auto block = input_data.next<TypeDescriptorTag>()) {
                 auto input_ptr = reinterpret_cast<const RawType*>(block.value().data());
@@ -460,7 +464,8 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::truncate(
         output->set_metadata(std::move(metadata));
     }
 
-    for (const auto&& [idx, column] : folly::enumerate(columns_)) {
+    for (size_t idx = 0, columns_size = columns_.size(); idx < columns_size; idx++) {
+        const auto& column = columns_[idx];
         const TypeDescriptor column_type = column->type();
         const Field& field = descriptor_->field(idx);
         std::shared_ptr<Column> truncated_column = Column::truncate(column, start_row, end_row);
@@ -492,9 +497,10 @@ void SegmentInMemoryImpl::concatenate(SegmentInMemoryImpl&& other, bool unique_c
                 row_count() == other.row_count(),
                 "Cannot concatenate segments with differing row counts: {} {}",
                 row_count(), other.row_count());
-    for (const auto& field: folly::enumerate(other.fields())) {
-        if (!unique_column_names || !column_index(field->name()).has_value()) {
-            add_column(*field, other.column_ptr(field.index));
+    for (size_t idx = 0, fields_size = other.fields().size(); idx < fields_size; idx++) {
+        const auto& field = other.fields()[idx];
+        if (!unique_column_names || !column_index(field.name()).has_value()) {
+            add_column(field, other.column_ptr(idx));
         }
     }
 }

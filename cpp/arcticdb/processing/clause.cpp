@@ -34,7 +34,8 @@ std::vector<std::vector<size_t>> structure_by_row_slice(std::vector<RangesAndKey
     ranges_and_keys.erase(ranges_and_keys.begin(), ranges_and_keys.begin() + start_from);
     std::vector<std::vector<size_t>> res;
     RowRange previous_row_range;
-    for (const auto& [idx, ranges_and_key]: folly::enumerate(ranges_and_keys)) {
+    for (size_t idx = 0, ranges_and_keys_size = ranges_and_keys.size(); idx < ranges_and_keys_size; idx++) {
+        const auto& ranges_and_key = ranges_and_keys[idx];
         RowRange current_row_range{ranges_and_key.row_range_};
         if (current_row_range != previous_row_range) {
             res.emplace_back();
@@ -51,7 +52,8 @@ std::vector<std::vector<size_t>> structure_by_column_slice(std::vector<RangesAnd
     });
     std::vector<std::vector<size_t>> res;
     ColRange previous_col_range;
-    for (const auto& [idx, ranges_and_key]: folly::enumerate(ranges_and_keys)) {
+    for (size_t idx = 0, ranges_and_keys_size = ranges_and_keys.size(); idx < ranges_and_keys_size; idx++) {
+        const auto& ranges_and_key = ranges_and_keys[idx];
         ColRange current_col_range{ranges_and_key.col_range_};
         if (current_col_range != previous_col_range) {
             res.emplace_back();
@@ -135,8 +137,8 @@ EntityIds push_entities(std::shared_ptr<ComponentManager> component_manager, Pro
     }
     if (proc.row_ranges_.has_value()) {
         if (res.has_value()) {
-            for (const auto& [idx, row_range]: folly::enumerate(*proc.row_ranges_)) {
-                component_manager->add(row_range, res->at(idx));
+            for (size_t idx = 0; idx < proc.row_ranges_->size(); idx++) {
+                component_manager->add(proc.row_ranges_->at(idx), res->at(idx));
             }
         } else {
             res = std::make_optional<EntityIds>();
@@ -147,8 +149,8 @@ EntityIds push_entities(std::shared_ptr<ComponentManager> component_manager, Pro
     }
     if (proc.col_ranges_.has_value()) {
         if (res.has_value()) {
-            for (const auto& [idx, col_range]: folly::enumerate(*proc.col_ranges_)) {
-                component_manager->add(col_range, res->at(idx));
+            for (size_t idx = 0; idx < proc.col_ranges_->size(); idx++) {
+                component_manager->add(proc.col_ranges_->at(idx), res->at(idx));
             }
         } else {
             res = std::make_optional<EntityIds>();
@@ -159,8 +161,8 @@ EntityIds push_entities(std::shared_ptr<ComponentManager> component_manager, Pro
     }
     if (proc.atom_keys_.has_value()) {
         if (res.has_value()) {
-            for (const auto& [idx, atom_key]: folly::enumerate(*proc.atom_keys_)) {
-                component_manager->add(atom_key, res->at(idx));
+            for (size_t idx = 0; idx < proc.atom_keys_->size(); idx++) {
+                component_manager->add(proc.atom_keys_->at(idx), res->at(idx));
             }
         } else {
             res = std::make_optional<EntityIds>();
@@ -375,16 +377,17 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
 
     // Work out the common type between the processing units for the columns being aggregated
     for (auto& proc: procs_as_range) {
-        for (auto agg_data: folly::enumerate(aggregators_data)) {
+        for (size_t index = 0, size = aggregators_data.size(); index < size ; index++) {
+            auto& agg_data = aggregators_data.at(index);
             // Check that segments row ranges are the same
             internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                 std::all_of(proc.row_ranges_->begin(), proc.row_ranges_->end(), [&] (const auto& row_range) {return row_range->start() == proc.row_ranges_->at(0)->start();}),
                 "Expected all data segments in one processing unit to have the same row ranges");
 
-            auto input_column_name = aggregators_.at(agg_data.index).get_input_column_name();
+            auto input_column_name = aggregators_.at(index).get_input_column_name();
             auto input_column = proc.get(input_column_name);
             if (std::holds_alternative<ColumnWithStrings>(input_column)) {
-                agg_data->add_data_type(std::get<ColumnWithStrings>(input_column).column_->type().data_type());
+                agg_data.add_data_type(std::get<ColumnWithStrings>(input_column).column_->type().data_type());
             }
         }
     }
@@ -483,8 +486,8 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
 
                                                 num_unique = next_group_id;
                                                 util::check(num_unique != 0, "Got zero unique values");
-                                                for (auto agg_data: folly::enumerate(aggregators_data)) {
-                                                    auto input_column_name = aggregators_.at(agg_data.index).get_input_column_name();
+                                                for (size_t i = 0; i < aggregators_data.size(); i++) {
+                                                    auto input_column_name = aggregators_.at(i).get_input_column_name();
                                                     auto input_column = proc_.get(input_column_name);
                                                     std::optional<ColumnWithStrings> opt_input_column;
                                                     if (std::holds_alternative<ColumnWithStrings>(input_column)) {
@@ -494,7 +497,7 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
                                                             opt_input_column.emplace(std::move(column_with_strings));
                                                         }
                                                     }
-                                                    agg_data->aggregate(opt_input_column, row_to_group, num_unique);
+                                                    aggregators_data.at(i).aggregate(opt_input_column, row_to_group, num_unique);
                                                 }
                                             });
             } else {
@@ -527,10 +530,10 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
     });
     index_col->set_row_data(grouping_map.size() - 1);
 
-    for (auto agg_data: folly::enumerate(aggregators_data)) {
-        seg.concatenate(agg_data->finalize(aggregators_.at(agg_data.index).get_output_column_name(), processing_config_.dynamic_schema_, num_unique));
+    for (size_t i = 0; i < aggregators_data.size(); i++) {
+        auto& agg_data = aggregators_data.at(i);
+        seg.concatenate(agg_data.finalize(aggregators_.at(i).get_output_column_name(), processing_config_.dynamic_schema_, num_unique));
     }
-
     seg.set_string_pool(string_pool);
     seg.set_row_id(num_unique - 1);
     return Composite<EntityIds>(push_entities(component_manager_, ProcessingUnit(std::move(seg))));
@@ -549,7 +552,8 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
         size_t min_start_col = std::numeric_limits<size_t>::max();
         size_t max_end_col = 0;
         std::optional<SegmentInMemory> output_seg;
-        for (auto&& [idx, segment]: folly::enumerate(proc.segments_.value())) {
+        for (size_t idx = 0; idx < proc.segments_->size(); idx++) {
+            auto& segment = proc.segments_->at(idx);
             min_start_row = std::min(min_start_row, proc.row_ranges_->at(idx)->start());
             max_end_row = std::max(max_end_row, proc.row_ranges_->at(idx)->end());
             min_start_col = std::min(min_start_col, proc.col_ranges_->at(idx)->start());
@@ -575,7 +579,8 @@ Composite<EntityIds> SplitClause::process(Composite<EntityIds>&& entity_ids) con
     Composite<EntityIds> ret;
     procs.broadcast([this, &ret](auto &&p) {
         auto proc = std::forward<decltype(p)>(p);
-        for (auto&& [idx, seg]: folly::enumerate(proc.segments_.value())) {
+        for (size_t idx = 0; idx < proc.segments_->size(); idx++) {
+            auto& seg = proc.segments_->at(idx);
             auto split_segs = seg->split(rows_);
             size_t start_row = proc.row_ranges_->at(idx)->start();
             size_t end_row = 0;
@@ -664,7 +669,8 @@ Composite<EntityIds> MergeClause::process(Composite<EntityIds>&& entity_ids) con
     size_t min_start_col = std::numeric_limits<size_t>::max();
     size_t max_end_col = 0;
     procs.broadcast([&input_streams, &min_start_row, &max_end_row, &min_start_col, &max_end_col](auto&& proc) {
-        for (auto&& [idx, segment]: folly::enumerate(proc.segments_.value())) {
+        for (size_t idx = 0; idx < proc.segments_->size(); idx++) {
+            auto& segment = proc.segments_->at(idx);
             size_t start_row = proc.row_ranges_->at(idx)->start();
             min_start_row = start_row < min_start_row ? start_row : min_start_row;
             size_t end_row = proc.row_ranges_->at(idx)->end();
@@ -724,12 +730,12 @@ Composite<EntityIds> ColumnStatsGenerationClause::process(Composite<EntityIds>&&
                     start_indexes.insert(key->start_index());
                     end_indexes.insert(key->end_index());
                 }
-                for (auto agg_data : folly::enumerate(aggregators_data)) {
-                    auto input_column_name = column_stats_aggregators_->at(agg_data.index).get_input_column_name();
+                for (size_t i = 0; i < aggregators_data.size(); i++) {
+                    auto input_column_name = column_stats_aggregators_->at(i).get_input_column_name();
                     auto input_column = proc.get(input_column_name);
                     if (std::holds_alternative<ColumnWithStrings>(input_column)) {
                         auto input_column_with_strings = std::get<ColumnWithStrings>(input_column);
-                        agg_data->aggregate(input_column_with_strings);
+                        aggregators_data.at(i).aggregate(input_column_with_strings);
                     } else {
                         if (!processing_config_.dynamic_schema_)
                             internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
@@ -759,8 +765,9 @@ Composite<EntityIds> ColumnStatsGenerationClause::process(Composite<EntityIds>&&
     seg.descriptor().set_index(IndexDescriptor(0, IndexDescriptor::ROWCOUNT));
     seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, start_index_column_name), start_index_col);
     seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, end_index_column_name), end_index_col);
-    for (const auto& agg_data: folly::enumerate(aggregators_data)) {
-        seg.concatenate(agg_data->finalize(column_stats_aggregators_->at(agg_data.index).get_output_column_names()));
+    for (size_t i = 0; i < aggregators_data.size(); i++) {
+        auto& agg_data = aggregators_data.at(i);
+        seg.concatenate(agg_data.finalize(column_stats_aggregators_->at(i).get_output_column_names()));
     }
     seg.set_row_id(0);
     return Composite<EntityIds>(push_entities(component_manager_, ProcessingUnit(std::move(seg))));
@@ -779,7 +786,8 @@ Composite<EntityIds> RowRangeClause::process(Composite<EntityIds> &&entity_ids) 
     auto procs = gather_entities(component_manager_, std::move(entity_ids));
     Composite<EntityIds> output;
     procs.broadcast([&output, this](ProcessingUnit &proc) {
-        for (auto&& [idx, row_range]: folly::enumerate(proc.row_ranges_.value())) {
+        for (size_t idx = 0; idx < proc.row_ranges_->size(); idx++) {
+            auto row_range = proc.row_ranges_->at(idx);
             if ((start_ > row_range->start() && start_ < row_range->end()) ||
                 (end_ > row_range->start() && end_ < row_range->end())) {
                 // Zero-indexed within this slice
