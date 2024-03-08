@@ -5,6 +5,8 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
+#include <random>
+
 #include <benchmark/benchmark.h>
 
 #include <arcticdb/processing/clause.hpp>
@@ -86,5 +88,89 @@ static void BM_merge_ordered(benchmark::State& state){
     }
 }
 
+template <typename integer>
+void BM_hash_grouping_int(benchmark::State& state) {
+    auto num_rows = state.range(0);
+    auto num_unique_values = state.range(1);
+    auto num_buckets = state.range(2);
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<integer> dis(std::numeric_limits<integer>::lowest(), std::numeric_limits<integer>::max());
+    std::vector<integer> unique_values;
+    unique_values.reserve(num_unique_values);
+    for (auto idx = 0; idx < num_unique_values; ++idx) {
+        unique_values.emplace_back(dis(gen));
+    }
+
+    std::uniform_int_distribution<size_t> unique_values_dis(0, num_unique_values - 1);
+
+    std::vector<integer> data;
+    data.reserve(num_rows);
+    for(int idx = 0; idx < num_rows; ++idx) {
+        data.emplace_back(unique_values[unique_values_dis(gen)]);
+    }
+
+    constexpr auto data_type = data_type_from_raw_type<integer>();
+    Column column(make_scalar_type(data_type), num_rows, true, false);
+    memcpy(column.ptr(), data.data(), num_rows * sizeof(integer));
+    ColumnWithStrings col_with_strings(std::move(column), {});
+
+    grouping::HashingGroupers::Grouper<ScalarTagType<DataTypeTag<data_type>>> grouper;
+    grouping::ModuloBucketizer bucketizer(num_buckets);
+
+    for (auto _ : state) {
+        auto buckets = get_buckets(col_with_strings, grouper, bucketizer);
+    }
+}
+
+void BM_hash_grouping_string(benchmark::State& state) {
+    auto num_rows = state.range(0);
+    auto num_unique_values = state.range(1);
+    auto num_buckets = state.range(2);
+    auto string_length = state.range(3);
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    const std::string character_set{"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789`¬!\"£$%^&*()_+-=[]{};:'@#~,<.>/? "};
+    std::uniform_int_distribution<> dis(0, character_set.size() - 1);
+    std::vector<std::string> unique_values;
+    unique_values.reserve(num_unique_values);
+    for (auto idx = 0; idx < num_unique_values; ++idx) {
+        std::string builder;
+        builder.reserve(string_length);
+        for (auto idx_2 = 0; idx_2 < string_length; ++idx_2) {
+            builder += character_set[dis(gen)];
+        }
+        unique_values.emplace_back(builder);
+    }
+
+    std::uniform_int_distribution<size_t> unique_values_dis(0, num_unique_values - 1);
+
+    Column column(make_scalar_type(DataType::UTF_DYNAMIC64), false);
+    auto string_pool = std::make_shared<StringPool>();
+    for (auto idx = 0; idx < num_rows; ++idx) {
+        std::string_view str{unique_values[unique_values_dis(gen)]};
+        OffsetString ofstr = string_pool->get(str);
+        column.set_scalar(idx, ofstr.offset());
+    }
+
+    ColumnWithStrings col_with_strings(std::move(column), string_pool);
+
+    grouping::HashingGroupers::Grouper<ScalarTagType<DataTypeTag<DataType::UTF_DYNAMIC64>>> grouper;
+    grouping::ModuloBucketizer bucketizer(num_buckets);
+
+    for (auto _ : state) {
+        auto buckets = get_buckets(col_with_strings, grouper, bucketizer);
+    }
+}
+
 BENCHMARK(BM_merge_interleaved)->Args({10'000, 100});
 BENCHMARK(BM_merge_ordered)->Args({10'000, 100});
+
+BENCHMARK(BM_hash_grouping_int<int8_t>)->Args({100'000, 10, 2})->Args({100'000, 100'000, 2});
+BENCHMARK(BM_hash_grouping_int<int16_t>)->Args({100'000, 10, 2})->Args({100'000, 100'000, 2});
+BENCHMARK(BM_hash_grouping_int<int32_t>)->Args({100'000, 10, 2})->Args({100'000, 100'000, 2});
+BENCHMARK(BM_hash_grouping_int<int64_t>)->Args({100'000, 10, 2})->Args({100'000, 100'000, 2});
+
+BENCHMARK(BM_hash_grouping_string)->Args({100'000, 10, 2, 10})->Args({100'000, 100'000, 2, 10})->Args({100'000, 10, 2, 100})->Args({100'000, 100'000, 2, 100});
