@@ -131,6 +131,67 @@ inline Column generate_empty_column() {
     return column;
 }
 
+// Generate a segment in memory suitable for testing filters and projections with sparse columns:
+// * sparse_floats_1 - a sparse column of doubles with 5 rows including missing values and NaNs
+// * sparse_floats_2 - a sparse column of doubles with 10 rows including missing values and NaNs
+// * dense_floats_1 - a dense column of doubles with 7 rows
+// * dense_floats_2 - a dense column of doubles with 15 rows
+// * sparse_bools - a sparse column of bools with 4 rows including missing values
+// The columns deliberately have differing row counts, as the sparse map bitset in a sparse column is not padded with
+// zeros to the end of the SegmentInMemory, they just stop at the last row which contains a value
+// The two dense columns of differing lengths are to cover the corner case where a column is "sparse", but happens to
+// have the first n values populated, and so appears dense, but with fewer rows than the containing SegmentInMemory
+inline SegmentInMemory generate_filter_and_project_testing_sparse_segment() {
+    SegmentInMemory seg;
+    using FTDT = ScalarTagType<DataTypeTag<DataType::FLOAT64>>;
+    using BTDT = ScalarTagType<DataTypeTag<DataType::BOOL8>>;
+    auto sparse_floats_1 = std::make_shared<Column>(static_cast<TypeDescriptor>(FTDT{}), 0, false, true);
+    auto sparse_floats_2 = std::make_shared<Column>(static_cast<TypeDescriptor>(FTDT{}), 0, false, true);
+    auto dense_floats_1 = std::make_shared<Column>(static_cast<TypeDescriptor>(FTDT{}), 0, false, false);
+    auto dense_floats_2 = std::make_shared<Column>(static_cast<TypeDescriptor>(FTDT{}), 0, false, false);
+    auto sparse_bools = std::make_shared<Column>(static_cast<TypeDescriptor>(BTDT{}), 0, false, true);
+
+    constexpr auto nan = std::numeric_limits<double>::quiet_NaN();
+
+    // Row 0 - both sparse float columns have non-NaN values
+    sparse_floats_1->set_scalar<double>(0, 1.0);
+    sparse_floats_2->set_scalar<double>(0, 2.0);
+    // Row 1 - 1 non-NaN value, 1 missing
+    sparse_floats_1->set_scalar<double>(1, 3.0);
+    // Row 2 - 1 NaN value, 1 missing
+    sparse_floats_2->set_scalar<double>(2, nan);
+    // Row 3 - both missing
+    // Row 4 - 1 NaN value, 1 non-NaN value
+    sparse_floats_1->set_scalar<double>(4, 4.0);
+    sparse_floats_2->set_scalar<double>(4, nan);
+
+    // Add another 5 rows to sparse_floats_2 so that the 2 sparse float columns are of differing lengths
+    sparse_floats_2->set_scalar<double>(5, 5.0);
+    sparse_floats_2->set_scalar<double>(9, nan);
+
+    // Dense float column values are just 10*idx
+    for (auto idx = 0; idx < 7; idx++) {
+        dense_floats_1->set_scalar<double>(idx, 10.0 * static_cast<double>(idx));
+    }
+    for (auto idx = 0; idx < 15; idx++) {
+        dense_floats_2->set_scalar<double>(idx, 10.0 * static_cast<double>(idx));
+    }
+
+    // Sparse bool column goes missing, true, missing, false
+    sparse_bools->set_scalar<bool>(1, true);
+    sparse_bools->set_scalar<bool>(3, false);
+
+    seg.add_column(scalar_field(sparse_floats_1->type().data_type(), "sparse_floats_1"), sparse_floats_1);
+    seg.add_column(scalar_field(sparse_floats_2->type().data_type(), "sparse_floats_2"), sparse_floats_2);
+    seg.add_column(scalar_field(dense_floats_1->type().data_type(), "dense_floats_1"), dense_floats_1);
+    seg.add_column(scalar_field(dense_floats_2->type().data_type(), "dense_floats_2"), dense_floats_2);
+    seg.add_column(scalar_field(sparse_bools->type().data_type(), "sparse_bools"), sparse_bools);
+
+    // 1 less than the number of rows in the largest column
+    seg.set_row_id(14);
+    return seg;
+}
+
 // Generate a segment in memory suitable for testing groupby's empty type column behaviour with 5 columns:
 // * int_repeating_values - an int64_t column with unique_values repeating values
 // * empty_<agg> - an empty column for each supported aggregation

@@ -91,8 +91,12 @@ class ChunkedBufferImpl {
     ChunkedBufferImpl() = default;
 
     explicit ChunkedBufferImpl(size_t size) {
-        if(size > 0)
+        if(size > 0) {
+            if (size > DefaultBlockSize) {
+                handle_transition_to_irregular();
+            }
             add_block(std::max(size, DefaultBlockSize), 0UL);
+        }
     }
 
     ChunkedBufferImpl &operator=(ChunkedBufferImpl &&other) noexcept {
