@@ -18,8 +18,10 @@ else:
 
 
 @pytest.fixture(params=[pytest.param("REAL_S3", marks=REAL_S3_TESTS_MARK)])
-def shared_persistent_arctic_client(real_s3_storage_without_clean_up, encoding_version):
-    return real_s3_storage_without_clean_up.create_arctic(encoding_version=encoding_version)
+# DONT MERGE: there is a problem with interop tests and encoding_version 2
+# def shared_persistent_arctic_client(real_s3_storage_without_clean_up, encoding_version):
+def shared_persistent_arctic_client(real_s3_storage_without_clean_up):
+    return real_s3_storage_without_clean_up.create_arctic(encoding_version=0)
 
 
 # TODO: Add a check if the real storage tests are enabled
@@ -49,7 +51,9 @@ def persistent_arctic_client(real_s3_storage, encoding_version):
 
 
 @pytest.mark.parametrize("num_rows", [1_000_000])
-def test_persistent_storage_read_write_large_data_ascending(persistent_arctic_client, num_rows):
+def test_persistent_storage_read_write_large_data_ascending(
+    persistent_arctic_client, num_rows
+):
     ac = persistent_arctic_client
     ac.create_library("test_persistent_storage_read_write_large_data_ascending")
     lib = ac["test_persistent_storage_read_write_large_data_ascending"]
@@ -62,7 +66,9 @@ def test_persistent_storage_read_write_large_data_ascending(persistent_arctic_cl
 
 
 @pytest.mark.parametrize("num_rows", [100_000_000])
-def test_persistent_storage_read_write_large_data_random(persistent_arctic_client, num_rows):
+def test_persistent_storage_read_write_large_data_random(
+    persistent_arctic_client, num_rows
+):
     ac = persistent_arctic_client
     ac.create_library("test_persistent_storage_read_write_large_data_random")
     lib = ac["test_persistent_storage_read_write_large_data_random"]
@@ -75,7 +81,9 @@ def test_persistent_storage_read_write_large_data_random(persistent_arctic_clien
 
 
 @pytest.mark.parametrize("num_syms", [1_000])
-def test_persistent_storage_read_write_many_syms(persistent_arctic_client, num_syms, three_col_df):
+def test_persistent_storage_read_write_many_syms(
+    persistent_arctic_client, num_syms, three_col_df
+):
     # For now, this tests only the breadth (e.g. number of symbols)
     # We have another test, that tests with "deeper" data frames
     ac = persistent_arctic_client

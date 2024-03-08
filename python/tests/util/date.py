@@ -6,8 +6,12 @@ testing.
 """
 
 import datetime
+from datetime import timezone, timedelta
+import dateutil as du
+import pytz
 from enum import Enum
 from dateutil.parser import parse as _parse
+from pandas._libs.tslibs.timezones import get_timezone
 
 
 def parse(string, agnostic=False, **kwargs):
@@ -263,3 +267,54 @@ class DateRange(GeneralSlice):
         self.end = state["end"]
         self.interval = state.get("interval") or CLOSED_CLOSED
         self.step = 1
+
+
+TIMEZONES_TO_TEST = [
+    None,
+    "UTC",
+    "Europe/Amsterdam",
+    "America/New_York",
+    "Australia/Sydney",
+    "Asia/Tokyo",
+    "Asia/Shanghai",
+    "America/Sao_Paulo",
+    timezone(timedelta(seconds=0), "UTC"),
+    timezone(timedelta(seconds=3600), "Europe/Amsterdam"),
+    timezone(timedelta(days=-1, seconds=68400), "America/New_York"),
+    timezone(timedelta(seconds=36000), "Australia/Sydney"),
+    timezone(timedelta(seconds=32400), "Asia/Tokyo"),
+    timezone(timedelta(seconds=28800), "Asia/Shanghai"),
+    timezone(timedelta(days=-1, seconds=75600), "America/Sao_Paulo"),
+    pytz.UTC,
+    pytz.timezone("Europe/Amsterdam"),
+    pytz.timezone("America/New_York"),
+    pytz.timezone("Australia/Sydney"),
+    pytz.timezone("Asia/Tokyo"),
+    pytz.timezone("Asia/Shanghai"),
+    pytz.timezone("America/Sao_Paulo"),
+    du.tz.gettz("UTC"),
+    du.tz.gettz("Europe/Amsterdam"),
+    du.tz.gettz("America/New_York"),
+    du.tz.gettz("Australia/Sydney"),
+    du.tz.gettz("Asia/Tokyo"),
+    du.tz.gettz("Asia/Shanghai"),
+    du.tz.gettz("America/Sao_Paulo"),
+]
+
+DATES_TO_TEST = [
+    "1969-12-31",
+    "1970-01-01",
+    "2024-03-10",  # Without DST
+    "2024-03-11",  # With DST
+]
+
+
+def compare_tz_info(res, expected):
+    if expected.tzinfo is None:
+        return str(res.tzinfo) == "None"
+    if str(res.tzinfo) == "UTC":
+        return str(res.tzinfo) == expected.tzname()
+    else:
+        # workaround to handle the case where the timezone is dateutil
+        # then the format is ...zoneinfo/<timezone>
+        return str(get_timezone(expected.tzinfo)).endswith(str(res.tzinfo))

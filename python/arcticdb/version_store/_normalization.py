@@ -5,11 +5,13 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import copy
 import datetime
-from datetime import timedelta
+from datetime import timedelta, timezone
+import dateutil.tz
 import math
-
+import pytz
 import numpy as np
 import os
 import sys
@@ -18,10 +20,19 @@ import pickle
 from abc import ABCMeta, abstractmethod
 
 from pandas.api.types import is_integer_dtype
-from arcticc.pb2.descriptors_pb2 import UserDefinedMetadata, NormalizationMetadata, MsgPackSerialization
+from arcticc.pb2.descriptors_pb2 import (
+    UserDefinedMetadata,
+    NormalizationMetadata,
+    MsgPackSerialization,
+)
 from arcticc.pb2.storage_pb2 import VersionStoreConfig
 from collections import Counter
-from arcticdb.exceptions import ArcticNativeException, ArcticDbNotYetImplemented, NormalizationException, SortingException
+from arcticdb.exceptions import (
+    ArcticNativeException,
+    ArcticDbNotYetImplemented,
+    NormalizationException,
+    SortingException,
+)
 from arcticdb.supported_types import DateRangeInput, time_types as supported_time_types
 from arcticdb.util._versions import IS_PANDAS_TWO, IS_PANDAS_ZERO
 from arcticdb.version_store.read_result import ReadResult
@@ -73,12 +84,23 @@ NormalizedInput = NamedTuple("NormalizedInput", [("item", NPDDataFrame), ("metad
 
 # To simplify unit testing of serialization logic. This maps the cpp _FrameData exposed object
 class FrameData(
-    NamedTuple("FrameData", [("data", List[np.ndarray]), ("names", List[str]), ("index_columns", List[str])])
+    NamedTuple(
+        "FrameData",
+        [
+            ("data", List[np.ndarray]),
+            ("names", List[str]),
+            ("index_columns", List[str]),
+        ],
+    )
 ):
     @staticmethod
     def from_npd_df(df):
         # type: (NPDDataFrame)->FrameData
-        return FrameData(df.index_values + df.columns_values, names=df.column_names, index_columns=df.index_names)
+        return FrameData(
+            df.index_values + df.columns_values,
+            names=df.column_names,
+            index_columns=df.index_names,
+        )
 
     @staticmethod
     def from_cpp(fd):
@@ -155,7 +177,25 @@ def get_timezone_from_metadata(norm_meta):
     return None
 
 
-def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_column_type=None, norm_meta=None):
+def normalize_tz(dt):
+    tz = _ensure_str_timezone(get_timezone(dt.tzinfo)) if dt.tzinfo is not None else dt.tzname()
+
+    # workaround to handle the case where the timezone is dateutil
+    # then the format is ...zoneinfo/<timezone>
+    if tz is not None and "zoneinfo" in tz:
+        index = tz.find("zoneinfo/")
+        tz = tz[index + len("zoneinfo/") :]
+    return tz
+
+
+def _to_primitive(
+    arr,
+    arr_name,
+    dynamic_strings,
+    string_max_len=None,
+    coerce_column_type=None,
+    norm_meta=None,
+):
     arr_dtype_as_str = str(arr.dtype)
     if "pyarrow" in arr_dtype_as_str:
         raise ArcticDbNotYetImplemented(
@@ -269,7 +309,8 @@ def _to_tz_timestamp(dt):
         second=dt.second,
         microsecond=dt.microsecond,
     ).value
-    tz = dt.tzinfo.zone if dt.tzinfo is not None else None
+
+    tz = normalize_tz(dt)
     return [ts, tz]
 
 
@@ -281,7 +322,14 @@ def _from_tz_timestamp(ts, tz):
 _range_index_props_are_public = hasattr(RangeIndex, "start")
 
 
-def _normalize_single_index(index, index_names, index_norm, dynamic_strings=None, string_max_len=None, empty_types=False):
+def _normalize_single_index(
+    index,
+    index_names,
+    index_norm,
+    dynamic_strings=None,
+    string_max_len=None,
+    empty_types=False,
+):
     # index: pd.Index or np.ndarray -> np.ndarray
     index_tz = None
     is_empty = len(index) == 0
@@ -306,7 +354,11 @@ def _normalize_single_index(index, index_names, index_norm, dynamic_strings=None
             index_vals = index.values
         ix_vals = [
             _to_primitive(
-                index_vals, index_names, dynamic_strings, coerce_column_type=coerce_type, string_max_len=string_max_len
+                index_vals,
+                index_names,
+                dynamic_strings,
+                coerce_column_type=coerce_type,
+                string_max_len=string_max_len,
             )
         ]
         if index_names[0] is None:
@@ -317,16 +369,16 @@ def _normalize_single_index(index, index_names, index_norm, dynamic_strings=None
                 index_norm.fake_field_pos.append(0)
             log.debug("Index has no name, defaulting to 'index'")
         if isinstance(index, DatetimeIndex) and index.tz is not None:
-            index_tz = get_timezone(index.tz)
+            index_tz = index
         elif (
             len(index) > 0
             and (isinstance(index[0], datetime.datetime) or isinstance(index[0], pd.Timestamp))
             and index[0].tzinfo is not None
         ):
-            index_tz = get_timezone(index[0].tzinfo)
+            index_tz = index[0]
 
         if index_tz is not None:
-            index_norm.tz = _ensure_str_timezone(index_tz)
+            index_norm.tz = normalize_tz(index_tz)
 
         if not isinstance(index_names[0], int) and not isinstance(index_names[0], str):
             raise NormalizationException(
@@ -341,14 +393,14 @@ def _normalize_single_index(index, index_names, index_norm, dynamic_strings=None
         return [str(name) for name in index_names], ix_vals
 
 
-def _ensure_str_timezone(index_tz):
-    if isinstance(index_tz, datetime.tzinfo) and check_is_utc_if_newer_pandas(index_tz):
+def _ensure_str_timezone(tz):
+    if isinstance(tz, datetime.tzinfo) and check_is_utc_if_newer_pandas(tz):
         # Pandas started to treat UTC as a special case and give back the tzinfo object for it. We coerce it back to
         # a str to avoid special cases for it further along our pipeline. The breaking change was:
         # https://github.com/jbrockmendel/pandas/commit/94ce05d1bcc3c99e992c48cc99d0fd2726f43102#diff-3dba9e959e6ad7c394f0662a0e6477593fca446a6924437701ecff82b0b20b55
         return "UTC"
     else:
-        return index_tz
+        return str(tz)
 
 
 def _denormalize_single_index(item, norm_meta):
@@ -361,7 +413,12 @@ def _denormalize_single_index(item, norm_meta):
                 if hasattr(norm_meta.index, "step") and norm_meta.index.step != 0:
                     stop = norm_meta.index.start + norm_meta.index.step * len(item.data[0])
                     name = norm_meta.index.name if norm_meta.index.name else None
-                    return RangeIndex(start=norm_meta.index.start, stop=stop, step=norm_meta.index.step, name=name)
+                    return RangeIndex(
+                        start=norm_meta.index.start,
+                        stop=stop,
+                        step=norm_meta.index.step,
+                        name=name,
+                    )
                 else:
                     return DatetimeIndex([])
             else:
@@ -532,7 +589,7 @@ class _PandasNormalizer(Normalizer):
             for f in fields:
                 current_index = index.levels[f]
                 if isinstance(current_index, DatetimeIndex) and current_index.tz is not None:
-                    index_norm.timezone[f] = _ensure_str_timezone(get_timezone(current_index.tz))
+                    index_norm.timezone[f] = normalize_tz(current_index.tz)
                 else:
                     index_norm.timezone[f] = ""
                 if index.names[f] is None:
@@ -549,7 +606,14 @@ class _PandasNormalizer(Normalizer):
             is_categorical = len(df.select_dtypes(include="category").columns) > 0
             index = DatetimeIndex([]) if IS_PANDAS_TWO and empty_df and not is_categorical else index
 
-        return _normalize_single_index(index, list(index.names), index_norm, dynamic_strings, string_max_len, empty_types=empty_types)
+        return _normalize_single_index(
+            index,
+            list(index.names),
+            index_norm,
+            dynamic_strings,
+            string_max_len,
+            empty_types=empty_types,
+        )
 
     def _index_from_records(self, item, norm_meta):
         # type: (NormalizationMetadata.Pandas, _SUPPORTED_NATIVE_RETURN_TYPES, Bool)->Union[Index, DatetimeIndex, MultiIndex]
@@ -579,13 +643,21 @@ class SeriesNormalizer(_PandasNormalizer):
     def __init__(self):
         self._df_norm = DataFrameNormalizer()
 
-    def normalize(self, item, string_max_len=None, dynamic_strings=False, coerce_columns=None, empty_types=False, **kwargs):
+    def normalize(
+        self,
+        item,
+        string_max_len=None,
+        dynamic_strings=False,
+        coerce_columns=None,
+        empty_types=False,
+        **kwargs,
+    ):
         df, norm = self._df_norm.normalize(
             item.to_frame(),
             dynamic_strings=dynamic_strings,
             string_max_len=string_max_len,
             coerce_columns=coerce_columns,
-            empty_types=empty_types
+            empty_types=empty_types,
         )
         norm.series.CopyFrom(norm.df)
         if item.name:
@@ -681,8 +753,15 @@ class DataFrameNormalizer(_PandasNormalizer):
                     # Note: empty datetime cannot be cast to float64
                     # TODO: Remove the casting after empty types become the only option
                     # Issue: https://github.com/man-group/ArcticDB/issues/1562
-                    block = make_block(values=a.reshape((1, _len)), placement=(column_placement_in_block,))
-                    yield block.astype(np.float64) if _len == 0 and block.dtype == np.dtype('object') and not IS_PANDAS_TWO else block
+                    block = make_block(
+                        values=a.reshape((1, _len)),
+                        placement=(column_placement_in_block,),
+                    )
+                    yield (
+                        block.astype(np.float64)
+                        if _len == 0 and block.dtype == np.dtype("object") and not IS_PANDAS_TWO
+                        else block
+                    )
                     column_placement_in_block += 1
 
             if cols is None or len(cols) == 0:
@@ -810,7 +889,15 @@ class DataFrameNormalizer(_PandasNormalizer):
 
         return df
 
-    def normalize(self, item, string_max_len=None, dynamic_strings=False, coerce_columns=None, empty_types=False, **kwargs):
+    def normalize(
+        self,
+        item,
+        string_max_len=None,
+        dynamic_strings=False,
+        coerce_columns=None,
+        empty_types=False,
+        **kwargs,
+    ):
         # type: (DataFrame, Optional[int])->NormalizedInput
         norm_meta = NormalizationMetadata()
         norm_meta.df.common.mark = True
@@ -826,7 +913,11 @@ class DataFrameNormalizer(_PandasNormalizer):
             raise ArcticDbNotYetImplemented("MultiIndex column are not supported yet")
 
         index_names, ix_vals = self._index_to_records(
-            item, norm_meta.df.common, dynamic_strings, string_max_len=string_max_len, empty_types=empty_types
+            item,
+            norm_meta.df.common,
+            dynamic_strings,
+            string_max_len=string_max_len,
+            empty_types=empty_types,
         )
         # The first branch of this if is faster, but does not work with null/duplicated column names
         if item.columns.is_unique and not item.columns.hasnans:
@@ -877,6 +968,7 @@ class MsgPackNormalizer(Normalizer):
     """
     Fall back plan for the time being to store arbitrary data
     """
+
     def __init__(self, cfg=None):
         self.strict_mode = cfg.strict_mode if cfg is not None else False
 
@@ -911,7 +1003,7 @@ class MsgPackNormalizer(Normalizer):
 
     def _custom_pack(self, obj):
         if isinstance(obj, pd.Timestamp):
-            tz = obj.tz.zone if obj.tz is not None else None
+            tz = normalize_tz(obj)
             return ExtType(MsgPackSerialization.PD_TIMESTAMP, packb([obj.value, tz]))
 
         if isinstance(obj, datetime.datetime):
@@ -928,7 +1020,7 @@ class MsgPackNormalizer(Normalizer):
     def _ext_hook(self, code, data):
         if code == MsgPackSerialization.PD_TIMESTAMP:
             data = unpackb(data, raw=False)
-            return pd.Timestamp(data[0], tz=data[1]) if data[1] is not None else pd.Timestamp(data[0])
+            return pd.Timestamp(data[0], tz=data[1])
 
         if code == MsgPackSerialization.PY_DATETIME:
             data = unpackb(data, raw=False)
@@ -982,13 +1074,26 @@ class Pickler(object):
 
 
 class TimeFrameNormalizer(Normalizer):
-    def normalize(self, item, string_max_len=None, dynamic_strings=False, coerce_columns=None, empty_types=False, **kwargs):
+    def normalize(
+        self,
+        item,
+        string_max_len=None,
+        dynamic_strings=False,
+        coerce_columns=None,
+        empty_types=False,
+        **kwargs,
+    ):
         norm_meta = NormalizationMetadata()
         norm_meta.ts.mark = True
         index_norm = norm_meta.ts.common.index
         index_norm.is_physically_stored = len(item.times) > 0 and not isinstance(item.times, RangeIndex)
         index_names, ix_vals = _normalize_single_index(
-            item.times, ["times"], index_norm, dynamic_strings, string_max_len, empty_types=empty_types
+            item.times,
+            ["times"],
+            index_norm,
+            dynamic_strings,
+            string_max_len,
+            empty_types=empty_types,
         )
         columns_names, columns_vals = _normalize_columns(
             item.columns_names,
@@ -1036,7 +1141,10 @@ class KnownTypeFallbackOnError(Normalizer):
         try:
             return self._delegate.normalize(item, **kwargs)
         except:
-            log.error("First class type({}) normalization failed, falling back to generic serialization.", type(item))
+            log.error(
+                "First class type({}) normalization failed, falling back to generic serialization.",
+                type(item),
+            )
             log.debug("item {}:", item)
             return self._failure_handler.normalize(item, **kwargs)
 
@@ -1060,7 +1168,15 @@ class CompositeNormalizer(Normalizer):
         self.msg_pack_denorm = MsgPackNormalizer()  # must exist for deserialization
         self.fallback_normalizer = fallback_normalizer
 
-    def _normalize(self, item, string_max_len=None, dynamic_strings=False, coerce_columns=None, empty_types=False, **kwargs):
+    def _normalize(
+        self,
+        item,
+        string_max_len=None,
+        dynamic_strings=False,
+        coerce_columns=None,
+        empty_types=False,
+        **kwargs,
+    ):
         normalizer = self.get_normalizer_for_type(item)
 
         if not normalizer:
@@ -1110,7 +1226,14 @@ class CompositeNormalizer(Normalizer):
         return None
 
     def normalize(
-        self, item, string_max_len=None, pickle_on_failure=False, dynamic_strings=False, coerce_columns=None, empty_types=False, **kwargs
+        self,
+        item,
+        string_max_len=None,
+        pickle_on_failure=False,
+        dynamic_strings=False,
+        coerce_columns=None,
+        empty_types=False,
+        **kwargs,
     ):
         """
         :param item: Item to be normalized to something Arctic Native understands.
@@ -1129,9 +1252,17 @@ class CompositeNormalizer(Normalizer):
                 **kwargs,
             )
         except Exception as ex:
-            log.debug("Could not normalize item of type: {} with the default normalizer due to {}", type(item), ex)
+            log.debug(
+                "Could not normalize item of type: {} with the default normalizer due to {}",
+                type(item),
+                ex,
+            )
             if pickle_on_failure:
-                log.debug("pickle_on_failure flag set, normalizing the item with MsgPackNormalizer", type(item), ex)
+                log.debug(
+                    "pickle_on_failure flag set, normalizing the item with MsgPackNormalizer",
+                    type(item),
+                    ex,
+                )
                 return self.fallback_normalizer.normalize(item)
             else:
                 raise
@@ -1161,8 +1292,8 @@ _NORMALIZER = CompositeNormalizer()
 normalize = _NORMALIZER.normalize
 denormalize = _NORMALIZER.denormalize
 
-_MAX_USER_DEFINED_META = 16 << 20 # 16MB
-_WARN_USER_DEFINED_META = 8 << 20 # 8MB
+_MAX_USER_DEFINED_META = 16 << 20  # 16MB
+_WARN_USER_DEFINED_META = 8 << 20  # 8MB
 
 
 def _init_msgpack_metadata():
@@ -1188,9 +1319,11 @@ def normalize_metadata(d):
     packed = _msgpack_metadata._msgpack_packb(d)
     size = len(packed)
     if size > _MAX_USER_DEFINED_META:
-        raise ArcticDbNotYetImplemented(f'User defined metadata cannot exceed {_MAX_USER_DEFINED_META}B')
+        raise ArcticDbNotYetImplemented(f"User defined metadata cannot exceed {_MAX_USER_DEFINED_META}B")
     if size > _WARN_USER_DEFINED_META:
-        log.warn(f'User defined metadata is above warning size ({_WARN_USER_DEFINED_META}B), metadata cannot exceed {_MAX_USER_DEFINED_META}B.  Current size: {size}B.')
+        log.warn(
+            f"User defined metadata is above warning size ({_WARN_USER_DEFINED_META}B), metadata cannot exceed {_MAX_USER_DEFINED_META}B.  Current size: {size}B."
+        )
 
     udm = UserDefinedMetadata()
     udm.inline_payload = packed
@@ -1248,8 +1381,7 @@ def restrict_data_to_date_range_only(data: T, *, start: Timestamp, end: Timestam
         if not getattr(data, "timezone", None):
             start, end = _strip_tz(start, end)
         data = data[
-            start.to_pydatetime(warn=False)
-            - timedelta(microseconds=1) : end.to_pydatetime(warn=False)
+            start.to_pydatetime(warn=False) - timedelta(microseconds=1) : end.to_pydatetime(warn=False)
             + timedelta(microseconds=1)
         ]
     return data
