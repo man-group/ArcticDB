@@ -172,7 +172,6 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::filter(const util::Bit
                                                    bool filter_down_stringpool,
                                                    bool validate) const {
     bool is_input_sparse = is_sparse();
-    util::check(is_input_sparse || row_count() == filter_bitset.size(), "Filter input sizes do not match: {} != {}", row_count(), filter_bitset.size());
     auto num_values = filter_bitset.count();
     if(num_values == 0)
         return std::shared_ptr<SegmentInMemoryImpl>{};
@@ -461,15 +460,15 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::truncate(
     }
 
     for (const auto&& [idx, column] : folly::enumerate(columns_)) {
-        const TypeDescriptor column_type = column->type();
         const Field& field = descriptor_->field(idx);
         std::shared_ptr<Column> truncated_column = Column::truncate(column, start_row, end_row);
-        column_type.visit_tag([&](auto tag) {
-            if constexpr (is_sequence_type(decltype(tag)::data_type())) {
-                Column::transform<decltype(tag), decltype(tag)>(
+        details::visit_type(column->type().data_type(), [&](auto col_tag) {
+            using type_info = ScalarTypeInfo<decltype(col_tag)>;
+            if constexpr (is_sequence_type(type_info::data_type)) {
+                Column::transform<typename type_info::TDT, typename type_info::TDT>(
                     *truncated_column,
                     *truncated_column,
-                    [this, &output](auto string_pool_offset) -> arcticdb::OffsetString::offset_t {
+                    [this, &output](auto string_pool_offset) -> typename type_info::RawType {
                         if (is_a_string(string_pool_offset)) {
                             const std::string_view string = get_string_from_pool(string_pool_offset, *string_pool_);
                             return output->string_pool().get(string).offset();

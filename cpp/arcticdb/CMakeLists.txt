@@ -89,12 +89,13 @@ else()
     message(STATUS "NEW_FOLLY_DEPS" ${NEW_FOLLY_DEPS})
     list(REMOVE_ITEM NEW_FOLLY_DEPS "/usr/local/opt/openssl/include" )
     set_target_properties(Folly::folly_deps PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${NEW_FOLLY_DEPS}")
-
-    add_library(xxHash STATIC IMPORTED)
-    set_target_properties(xxHash PROPERTIES IMPORTED_LOCATION ${xxHash_LIBRARY})
-    set_target_properties(xxHash PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${xxHash_INCLUDE_DIR})
-
 endif()
+
+# Have to statically link xxhash as inlining causes non-deterministic hashing, and cannot dynamically link
+# # since `XXH_state_t` which we rely on is only available when statically linking.
+add_library(xxHash STATIC IMPORTED)
+set_target_properties(xxHash PROPERTIES IMPORTED_LOCATION ${xxHash_LIBRARY})
+set_target_properties(xxHash PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${xxHash_INCLUDE_DIR})
 
 # RocksDB can be manually excluded with set(ARCTICDB_INCLUDE_ROCKSDB 0)
 # Default is to include on PyPI builds and exclude on conda builds
@@ -195,6 +196,7 @@ set(arcticdb_srcs
         column_store/block.hpp
         column_store/chunked_buffer.hpp
         column_store/column_data.hpp
+        column_store/column_data_random_accessor.hpp
         column_store/column.hpp
         column_store/column_utils.hpp
         column_store/memory_segment.hpp
@@ -533,6 +535,7 @@ endif()
 set (arcticdb_core_libraries
         pybind11::module # Transitively includes Python::Module or Python::Python as appropriate
         arcticdb_proto
+        xxHash::xxHash
         prometheus-cpp::push
         prometheus-cpp::pull
         unordered_dense::unordered_dense
@@ -560,11 +563,7 @@ endif()
 # on their origin (i.e. vendored source or packages on conda-forge).
 if(${ARCTICDB_USING_CONDA})
 
-    # We must use dynamic libraries, except for xxHash, which must be statically linked.
-    # since `XXH_state_t` which we rely on is only available when statically linking.
-    # For all builds except linux conda's, we inline the functions so that xxhash does not need linking at all.
     list (APPEND arcticdb_core_libraries
-        xxHash::xxHash
         pcre
         msgpack-c
         ${LMDB_LIBRARIES}
@@ -762,6 +761,7 @@ if(${TEST})
             codec/test/test_codec.cpp
             column_store/test/ingestion_stress_test.cpp
             column_store/test/test_column.cpp
+            column_store/test/test_column_data_random_accessor.cpp
             column_store/test/test_index_filtering.cpp
             column_store/test/test_memory_segment.cpp
             entity/test/test_atom_key.cpp
@@ -777,6 +777,7 @@ if(${TEST})
             processing/test/test_clause.cpp
             processing/test/test_component_manager.cpp
             processing/test/test_expression.cpp
+            processing/test/test_filter_and_project_sparse.cpp
             processing/test/test_has_valid_type_promotion.cpp
             processing/test/test_operation_dispatch.cpp
             processing/test/test_set_membership.cpp
@@ -922,6 +923,7 @@ if(${TEST})
             column_store/test/rapidcheck_column_store.cpp
             column_store/test/rapidcheck_chunked_buffer.cpp
             column_store/test/rapidcheck_column.cpp
+            column_store/test/rapidcheck_column_data_random_accessor.cpp
             column_store/test/rapidcheck_column_map.cpp
             column_store/test/test_chunked_buffer.cpp
             stream/test/stream_test_common.cpp

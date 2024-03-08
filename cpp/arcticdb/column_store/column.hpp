@@ -9,6 +9,7 @@
 
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/column_store/column_data.hpp>
+#include <arcticdb/column_store/column_data_random_accessor.hpp>
 #include <arcticdb/entity/native_tensor.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/entity/types.hpp>
@@ -27,6 +28,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 
+#include <concepts>
 #include <numeric>
 #include <optional>
 
@@ -76,6 +78,12 @@ class StringPool;
 
 template <typename T>
 JiveTable create_jive_table(const Column& col);
+
+void initialise_output_column(const Column& input_column, Column& output_column);
+
+void initialise_output_column(const Column& left_input_column, const Column& right_input_column, Column& output_column);
+
+void initialise_output_bitset(const util::BitSet& input_bitset, bool sparse_missing_value_output, util::BitSet& output_bitset);
 
 class Column {
 
@@ -247,6 +255,7 @@ public:
     [[nodiscard]] util::BitMagic& sparse_map();
     [[nodiscard]] const util::BitMagic& sparse_map() const;
     [[nodiscard]] std::optional<util::BitMagic>& opt_sparse_map();
+    [[nodiscard]] std::optional<util::BitMagic> opt_sparse_map() const;
 
     template<typename TagType>
     auto begin() const {
@@ -603,27 +612,28 @@ public:
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(!is_sparse(),
                                                         "Column::search_sorted not supported with sparse columns");
         std::optional<size_t> res;
-        type().visit_tag([this, &res, val, from_right](auto type_desc_tag){
-            using TDT = decltype(type_desc_tag);
-            using RawType = typename TDT::DataTypeTag::raw_type;
-            if constexpr(std::is_same_v<T, RawType>) {
+        auto column_data = data();
+        details::visit_type(type().data_type(), [this, &res, &column_data, val, from_right](auto type_desc_tag) {
+            using type_info = ScalarTypeInfo<decltype(type_desc_tag)>;
+            auto accessor = random_accessor<typename type_info::TDT>(&column_data);
+            if constexpr(std::is_same_v<T, typename type_info::RawType>) {
                 int64_t low{0};
                 int64_t high{row_count() -1};
                 while (!res.has_value()) {
                     auto mid{low + (high - low) / 2};
-                    auto mid_value = *scalar_at<RawType>(mid);
+                    auto mid_value = accessor.at(mid);
                     if (val == mid_value) {
                         // At least one value in the column exactly matches the input val
                         // Search to the right/left for the last/first such value
                         if (from_right) {
-                            while (++mid <= high && val == *scalar_at<RawType>(mid)) {}
+                            while (++mid <= high && val == accessor.at(mid)) {}
                             res = mid;
                         } else {
-                            while (--mid >= low && val == *scalar_at<RawType>(mid)) {}
+                            while (--mid >= low && val == accessor.at(mid)) {}
                             res = mid + 1;
                         }
                     } else if (val > mid_value) {
-                        if (mid + 1 <= high && val >= *scalar_at<RawType>(mid + 1)) {
+                        if (mid + 1 <= high && val >= accessor.at(mid + 1)) {
                             // Narrow the search interval
                             low = mid + 1;
                         } else {
@@ -631,7 +641,7 @@ public:
                             res = mid + 1;
                         }
                     } else { // val < mid_value
-                        if (mid - 1 >= low && val <= *scalar_at<RawType>(mid + 1)) {
+                        if (mid - 1 >= low && val <= accessor.at(mid + 1)) {
                             // Narrow the search interval
                             high = mid - 1;
                         } else {
@@ -665,24 +675,37 @@ public:
     );
 
     template <
-        typename input_tdt,
-        typename functor,
-        typename = std::enable_if_t<std::is_invocable_r_v<void, functor, typename input_tdt::DataTypeTag::raw_type>>>
+            typename input_tdt,
+            typename functor>
+    requires std::is_invocable_r_v<void, functor, typename input_tdt::DataTypeTag::raw_type>
     static void for_each(const Column& input_column, functor&& f) {
         auto input_data = input_column.data();
         std::for_each(input_data.cbegin<input_tdt>(), input_data.cend<input_tdt>(), std::forward<functor>(f));
     }
 
     template <
+            typename input_tdt,
+            typename functor>
+    requires std::is_invocable_r_v<void, functor, typename ColumnData::Enumeration<typename input_tdt::DataTypeTag::raw_type>>
+    static void for_each_enumerated(const Column& input_column, functor&& f) {
+        auto input_data = input_column.data();
+        if (input_column.is_sparse()) {
+            std::for_each(input_data.cbegin<input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>(), input_data.cend<input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>(),
+                          std::forward<functor>(f));
+        } else {
+            std::for_each(input_data.cbegin<input_tdt, IteratorType::ENUMERATED, IteratorDensity::DENSE>(), input_data.cend<input_tdt, IteratorType::ENUMERATED, IteratorDensity::DENSE>(),
+                          std::forward<functor>(f));
+        }
+    }
+
+    template <
         typename input_tdt,
         typename output_tdt,
-        typename functor,
-        typename = std::enable_if_t<std::is_invocable_r_v<
-            typename output_tdt::DataTypeTag::raw_type,
-            functor,
-            typename input_tdt::DataTypeTag::raw_type>>>
+        typename functor>
+    requires std::is_invocable_r_v<typename output_tdt::DataTypeTag::raw_type, functor, typename input_tdt::DataTypeTag::raw_type>
     static void transform(const Column& input_column, Column& output_column, functor&& f) {
         auto input_data = input_column.data();
+        initialise_output_column(input_column, output_column);
         auto output_data = output_column.data();
         std::transform(
             input_data.cbegin<input_tdt>(),
@@ -693,74 +716,177 @@ public:
     }
 
     template<
-        typename left_input_tdt,
-        typename right_input_tdt,
-        typename output_tdt,
-        typename functor,
-        typename = std::enable_if_t<std::is_invocable_r_v<
+            typename left_input_tdt,
+            typename right_input_tdt,
+            typename output_tdt,
+            typename functor>
+    requires std::is_invocable_r_v<
             typename output_tdt::DataTypeTag::raw_type,
             functor,
             typename left_input_tdt::DataTypeTag::raw_type,
-            typename right_input_tdt::DataTypeTag::raw_type>>>
+            typename right_input_tdt::DataTypeTag::raw_type>
     static void transform(const Column& left_input_column,
                           const Column& right_input_column,
                           Column& output_column,
                           functor&& f) {
         auto left_input_data = left_input_column.data();
         auto right_input_data = right_input_column.data();
+        initialise_output_column(left_input_column, right_input_column, output_column);
         auto output_data = output_column.data();
-        std::transform(left_input_data.cbegin<left_input_tdt>(), left_input_data.cend<left_input_tdt>(), right_input_data.cbegin<right_input_tdt>(), output_data.begin<output_tdt>(), std::forward<functor>(f));
+        auto output_it = output_data.begin<output_tdt>();
+
+        if (!left_input_column.is_sparse() && !right_input_column.is_sparse()) {
+            // Both dense, use std::transform over the shorter column to avoid going out-of-bounds
+            if (left_input_column.row_count() <= right_input_column.row_count()) {
+                std::transform(left_input_data.cbegin<left_input_tdt>(),
+                               left_input_data.cend<left_input_tdt>(),
+                               right_input_data.cbegin<right_input_tdt>(),
+                               output_it,
+                               std::forward<functor>(f));
+            } else {
+                std::transform(right_input_data.cbegin<left_input_tdt>(),
+                               right_input_data.cend<left_input_tdt>(),
+                               left_input_data.cbegin<right_input_tdt>(),
+                               output_it,
+                               std::forward<functor>(f));
+            }
+        } else if (left_input_column.is_sparse() && right_input_column.is_sparse()) {
+            // Both sparse, only project rows in the intersection of on-bits from both sparse maps
+            auto left_accessor = random_accessor<left_input_tdt>(&left_input_data);
+            auto right_accessor = random_accessor<right_input_tdt>(&right_input_data);
+            // TODO: experiment with more efficient bitset traversal methods
+            // https://github.com/tlk00/BitMagic/tree/master/samples/bvsample25
+            auto end_bit = output_column.sparse_map().end();
+            for (auto set_bit = output_column.sparse_map().first(); set_bit < end_bit; ++set_bit) {
+                *output_it++ = f(left_accessor.at(*set_bit), right_accessor.at(*set_bit));
+            }
+        } else if (left_input_column.is_sparse() && !right_input_column.is_sparse()) {
+            // One sparse, one dense. Use the enumerating forward iterator over the sparse column as it is more efficient than random access
+            auto right_accessor = random_accessor<right_input_tdt>(&right_input_data);
+            const auto right_column_row_count = right_input_column.row_count();
+            for (auto left_it = left_input_data.cbegin<left_input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
+                 left_it != left_input_data.cend<left_input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>() && left_it->idx() < right_column_row_count;
+                 ++left_it) {
+                *output_it++ = f(left_it->value(), right_accessor.at(left_it->idx()));
+            }
+        } else if (!left_input_column.is_sparse() && right_input_column.is_sparse()) {
+            // One sparse, one dense. Use the enumerating forward iterator over the sparse column as it is more efficient than random access
+            auto left_accessor = random_accessor<left_input_tdt>(&left_input_data);
+            const auto left_column_row_count = left_input_column.row_count();
+            for (auto right_it = right_input_data.cbegin<right_input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
+                 right_it != right_input_data.cend<right_input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>() && right_it->idx() < left_column_row_count;
+                 ++right_it) {
+                *output_it++ = f(left_accessor.at(right_it->idx()), right_it->value());
+            }
+        }
     }
 
     template <
-        typename input_tdt,
-        typename functor,
-        typename = std::enable_if_t<std::is_invocable_r_v<bool, functor, typename input_tdt::DataTypeTag::raw_type>>>
+            typename input_tdt,
+            std::predicate<typename input_tdt::DataTypeTag::raw_type> functor>
     static void transform(const Column& input_column,
                           util::BitSet& output_bitset,
+                          bool sparse_missing_value_output,
                           functor&& f) {
-        auto input_data = input_column.data();
+        if (input_column.is_sparse()) {
+            initialise_output_bitset(input_column.sparse_map(), sparse_missing_value_output, output_bitset);
+        } else {
+            // This allows for empty/full result optimisations, technically bitsets are always dynamically sized
+            output_bitset.resize(input_column.row_count());
+        }
         util::BitSet::bulk_insert_iterator inserter(output_bitset);
-        auto pos = 0u;
-        std::for_each(
-            input_data.cbegin<input_tdt>(),
-            input_data.cend<input_tdt>(),
-            [&inserter, &pos, f = std::forward<functor>(f)](auto input_value) {
-            if (f(input_value)) {
-                inserter = pos;
+        Column::for_each_enumerated<input_tdt>(input_column, [&inserter, f = std::forward<functor>(f)](auto enumerated_it) {
+            if (f(enumerated_it.value())) {
+                inserter = enumerated_it.idx();
             }
-            ++pos;
         });
         inserter.flush();
     }
 
     template <
-        typename left_input_tdt,
-        typename right_input_tdt,
-        typename functor,
-        typename = std::enable_if_t<std::is_invocable_r_v<
-            bool,
-            functor,
-            typename left_input_tdt::DataTypeTag::raw_type,
-            typename right_input_tdt::DataTypeTag::raw_type>>>
+            typename left_input_tdt,
+            typename right_input_tdt,
+            std::relation<typename left_input_tdt::DataTypeTag::raw_type, typename right_input_tdt::DataTypeTag::raw_type> functor>
     static void transform(const Column& left_input_column,
                           const Column& right_input_column,
                           util::BitSet& output_bitset,
+                          bool sparse_missing_value_output,
                           functor&& f) {
         auto left_input_data = left_input_column.data();
-        auto right_it = right_input_column.data().cbegin<right_input_tdt>();
+        auto right_input_data = right_input_column.data();
         util::BitSet::bulk_insert_iterator inserter(output_bitset);
-        auto pos = 0u;
-        std::for_each(
-            left_input_data.cbegin<left_input_tdt>(),
-            left_input_data.cend<left_input_tdt>(),
-            [&right_it, &inserter, &pos, f = std::forward<functor>(f)](auto left_value) {
-            auto right_value = *right_it++;
-            if (f(left_value, right_value)) {
-                inserter = pos;
+
+        if (!left_input_column.is_sparse() && !right_input_column.is_sparse()) {
+            // Both dense, use std::for_each over the shorter column to avoid going out-of-bounds
+            auto rows = std::max(left_input_column.last_row(), right_input_column.last_row()) + 1;
+            output_bitset.resize(rows);
+            if (sparse_missing_value_output && left_input_column.row_count() != right_input_column.row_count()) {
+                // Dense columns of different lengths, and missing values should be on in the output bitset
+                output_bitset.set_range(std::min(left_input_column.last_row(), right_input_column.last_row()) + 1, rows - 1);
             }
-            ++pos;
-        });
+            auto pos = 0u;
+            if (left_input_column.row_count() <= right_input_column.row_count()) {
+                auto right_it = right_input_data.cbegin<right_input_tdt>();
+                std::for_each(
+                        left_input_data.cbegin<left_input_tdt>(),
+                        left_input_data.cend<left_input_tdt>(),
+                        [&right_it, &inserter, &pos, f = std::forward<functor>(f)](auto left_value) {
+                            if (f(left_value, *right_it++)) {
+                                inserter = pos;
+                            }
+                            ++pos;
+                        });
+            } else {
+                auto left_it = left_input_data.cbegin<left_input_tdt>();
+                std::for_each(
+                        right_input_data.cbegin<right_input_tdt>(),
+                        right_input_data.cend<right_input_tdt>(),
+                        [&left_it, &inserter, &pos, f = std::forward<functor>(f)](auto right_value) {
+                            if (f(*left_it++, right_value)) {
+                                inserter = pos;
+                            }
+                            ++pos;
+                        });
+            }
+        } else if (left_input_column.is_sparse() && right_input_column.is_sparse()) {
+            // Both sparse, only check the intersection of on-bits from both sparse maps
+            auto bits_to_check = left_input_column.sparse_map() & right_input_column.sparse_map();
+            initialise_output_bitset(bits_to_check, sparse_missing_value_output, output_bitset);
+            auto left_accessor = random_accessor<left_input_tdt>(&left_input_data);
+            auto right_accessor = random_accessor<right_input_tdt>(&right_input_data);
+            // TODO: experiment with more efficient bitset traversal methods
+            // https://github.com/tlk00/BitMagic/tree/master/samples/bvsample25
+            auto end_bit = bits_to_check.end();
+            for (auto set_bit = bits_to_check.first(); set_bit < end_bit; ++set_bit) {
+                if(f(left_accessor.at(*set_bit), right_accessor.at(*set_bit))) {
+                    inserter = *set_bit;
+                }
+            }
+        } else if (left_input_column.is_sparse() && !right_input_column.is_sparse()) {
+            // One sparse, one dense. Use the enumerating forward iterator over the sparse column as it is more efficient than random access
+            initialise_output_bitset(left_input_column.sparse_map(), sparse_missing_value_output, output_bitset);
+            auto right_accessor = random_accessor<right_input_tdt>(&right_input_data);
+            const auto right_column_row_count = right_input_column.row_count();
+            for (auto left_it = left_input_data.cbegin<left_input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
+                 left_it != left_input_data.cend<left_input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>() && left_it->idx() < right_column_row_count;
+                 ++left_it) {
+                if(f(left_it->value(), right_accessor.at(left_it->idx()))) {
+                    inserter = left_it->idx();
+                }
+            }
+        } else if (!left_input_column.is_sparse() && right_input_column.is_sparse()) {
+            // One sparse, one dense. Use the enumerating forward iterator over the sparse column as it is more efficient than random access
+            initialise_output_bitset(right_input_column.sparse_map(), sparse_missing_value_output, output_bitset);
+            auto left_accessor = random_accessor<left_input_tdt>(&left_input_data);
+            const auto left_column_row_count = left_input_column.row_count();
+            for (auto right_it = right_input_data.cbegin<right_input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
+                 right_it != right_input_data.cend<right_input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>() && right_it->idx() < left_column_row_count;
+                 ++right_it) {
+                if(f(left_accessor.at(right_it->idx()), right_it->value())) {
+                    inserter = right_it->idx();
+                }
+            }
+        }
         inserter.flush();
     }
 
