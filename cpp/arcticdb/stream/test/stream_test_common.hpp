@@ -273,8 +273,12 @@ TestTensorFrame get_test_frame(const StreamId &id,
     output.frame_->desc.set_sorted(SortedValue::ASCENDING);
 
     fill_test_frame(output.segment_, *output.frame_, num_rows, start_val, opt_row_offset);
-
     output.frame_->set_index_range();
+    if constexpr (std::is_same_v<IndexType, TimeseriesIndex>) {
+        ensure_timeseries_norm_meta(output.frame_->norm_meta, id, false);
+    } else {
+        ensure_rowcount_norm_meta(output.frame_->norm_meta, id);
+    }
 
     return output;
 }

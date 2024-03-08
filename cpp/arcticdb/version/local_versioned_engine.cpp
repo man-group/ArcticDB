@@ -654,6 +654,8 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
                                                                                                    stream_ids);
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(stream_ids.size() == stream_update_info_futures.size(), "stream_ids and stream_update_info_futures must be of the same size");
     std::vector<folly::Future<VersionedItem>> write_metadata_versions_futs;
+    std::vector<TimeseriesInfo> ts_infos;
+    ts_infos.resize(stream_ids.size());
     for (const auto&& [idx, stream_update_info_fut] : folly::enumerate(stream_update_info_futures)) {
         write_metadata_versions_futs.push_back(
             std::move(stream_update_info_fut)
@@ -676,9 +678,9 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
                     return IndexKeyAndUpdateInfo{std::move(index_key), std::move(update_info)};
                 });
             })
-            .thenValue([this, prune_previous_versions](auto&& index_key_and_update_info){
+            .thenValue([this, prune_previous_versions, &ts_info=ts_infos[idx]](auto&& index_key_and_update_info){
                 auto&& [index_key, update_info] = index_key_and_update_info;
-                return write_index_key_to_version_map_async(version_map(), std::move(index_key), std::move(update_info), prune_previous_versions, !update_info.previous_index_key_.has_value(), cfg().metadata_cache());
+                return write_index_key_to_version_map_async(version_map(), std::move(index_key), std::move(update_info), prune_previous_versions, !update_info.previous_index_key_.has_value(), cfg().metadata_cache(), ts_info);
             }));
     }
 
@@ -1260,7 +1262,8 @@ folly::Future<VersionedItem> LocalVersionedEngine::write_index_key_to_version_ma
     UpdateInfo&& stream_update_info,
     bool prune_previous_versions,
     bool add_new_symbol,
-    bool add_metadata_cache) {
+    bool add_metadata_cache,
+    const TimeseriesInfo& ts_info) {
 
     folly::Future<folly::Unit> write_version_fut;
 
@@ -1274,8 +1277,8 @@ folly::Future<VersionedItem> LocalVersionedEngine::write_index_key_to_version_ma
     }
 
     if(add_metadata_cache) {
-        write_version_fut = std::move(write_version_fut).then([this, index_key] (auto&&) {
-            return async::submit_io_task(WriteSymbolMetadataTask{store(), index_key.id(), index_key.start_index(), index_key.end_index(), 0, index_key.creation_ts()});
+        write_version_fut = std::move(write_version_fut).then([this, index_key, &ts_info] (auto&&) {
+            return async::submit_io_task(WriteSymbolMetadataTask{store(), index_key.id(), index_key.start_index(), index_key.end_index(), ts_info.total_rows_, index_key.creation_ts()});
         });
     };
 
@@ -1348,9 +1351,8 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
                                                                                          stream_ids);
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(stream_ids.size() == update_info_futs.size(), "stream_ids and update_info_futs must be of the same size");
     std::vector<folly::Future<VersionedItem>> version_futures;
-    for(auto&& update_info_fut : folly::enumerate(update_info_futs)) {
-        auto idx = update_info_fut.index;
-        version_futures.push_back(std::move(*update_info_fut)
+    for(auto&& [idx, update_info_fut] : folly::enumerate(update_info_futs)) {
+        version_futures.push_back(std::move(update_info_fut)
             .thenValue([this, &stream_id=stream_ids[idx], &write_options](auto&& update_info){
                 return create_version_id_and_dedup_map(std::move(update_info), stream_id, write_options);
             }).via(&async::cpu_executor())
@@ -1373,9 +1375,9 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
                         return IndexKeyAndUpdateInfo{std::move(index_key), std::move(update_info)};
                     });
             })
-            .thenValue([this, prune_previous_versions](auto&& index_key_and_update_info){
+            .thenValue([this, prune_previous_versions, &ts_info=ts_infos[idx]](auto&& index_key_and_update_info){
                 auto&& [index_key, update_info] = index_key_and_update_info;
-                return write_index_key_to_version_map_async(version_map(), std::move(index_key), std::move(update_info), prune_previous_versions, true, cfg().metadata_cache());
+                return write_index_key_to_version_map_async(version_map(), std::move(index_key), std::move(update_info), prune_previous_versions, true, cfg().metadata_cache(), ts_info);
             })
         );
     }
@@ -1462,14 +1464,15 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
                                                                                                     version_map(),
                                                                                                     stream_ids);
     std::vector<folly::Future<VersionedItem>> append_versions_futs;
+    std::vector<TimeseriesInfo> ts_infos;
+    ts_infos.resize(stream_ids.size());
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(stream_ids.size() == stream_update_info_futures.size(), "stream_ids and stream_update_info_futures must be of the same size");
     for (const auto&& [idx, stream_update_info_fut] : folly::enumerate(stream_update_info_futures)) {
         append_versions_futs.push_back(
             std::move(stream_update_info_fut)
-            .thenValue([this, frame = std::move(frames[idx]), validate_index=options.validate_index_, stream_id=stream_ids[idx], upsert=options.upsert_](auto&& update_info) mutable -> folly::Future<IndexKeyAndUpdateInfo> {
+            .thenValue([this, frame=std::move(frames[idx]), validate_index=options.validate_index_, stream_id=stream_ids[idx], upsert=options.upsert_, &ts_info=ts_infos[idx]](auto&& update_info) mutable -> folly::Future<IndexKeyAndUpdateInfo> {
                 auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
                 auto write_options = get_write_options();
-                TimeseriesInfo ts_info;
                 if (update_info.previous_index_key_.has_value()) {
                     index_key_fut = async_append_impl(store(), update_info, frame, write_options, ModificationOptions{}, ts_info);
                 } else {
@@ -1484,9 +1487,9 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
                     return IndexKeyAndUpdateInfo{std::move(index_key), std::move(update_info)};
                 });
             })
-            .thenValue([this, prune_previous_versions=options.prune_previous_versions_](auto&& index_key_and_update_info)  -> folly::Future<VersionedItem> {
+            .thenValue([this, prune_previous_versions=options.prune_previous_versions_, &ts_info= ts_infos[idx]](auto&& index_key_and_update_info)  -> folly::Future<VersionedItem> {
                 auto&& [index_key, update_info] = index_key_and_update_info;
-                return write_index_key_to_version_map_async(version_map(), std::move(index_key), std::move(update_info), prune_previous_versions, true, cfg().metadata_cache());
+                return write_index_key_to_version_map_async(version_map(), std::move(index_key), std::move(update_info), prune_previous_versions, true, cfg().metadata_cache(), ts_info);
             })
         );
     }

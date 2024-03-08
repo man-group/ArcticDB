@@ -36,7 +36,7 @@ auto get_pandas_common_via_reflection(NormalizationMetadata norm_meta, InnerFunc
     } catch (const std::exception &e) {
         log::storage().info("get_common_pandas() reflection exception: {}", e.what());
     }
-    log::storage().warn("New NormalizationMetadata.input_type access failure. Cannot check.");
+    log::storage().warn("New NormalizationMetadata.input_type access failure. Cannot check: {}", norm_meta.DebugString());
     return std::nullopt;
 }
 

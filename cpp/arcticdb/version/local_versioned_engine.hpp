@@ -360,7 +360,8 @@ public:
         UpdateInfo&& stream_update_info,
         bool prune_previous_versions,
         bool add_new_symbol,
-        bool add_metadata_cache);
+        bool add_metadata_cache,
+        const TimeseriesInfo& ts_info);
 
     void write_version(
         bool prune_previous_versions,

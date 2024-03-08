@@ -663,7 +663,9 @@ TEST(VersionStore, UpdateWithinSchemaChange) {
 
     auto update_frame = get_test_frame<stream::TimeseriesIndex>(symbol, update_fields, update_range.diff(), update_range.first, update_val);
     version_store::TimeseriesInfo ts_info;
-    version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), version_store::ModificationOptions{});
+    version_store::ModificationOptions options;
+    options.dynamic_schema_ = true;
+    version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), options);
 
     ReadOptions read_options;
     read_options.set_dynamic_schema(true);
