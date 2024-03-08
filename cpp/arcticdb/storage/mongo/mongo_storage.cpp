@@ -42,7 +42,7 @@ void MongoStorage::do_write(Composite<KeySegmentPair>&& kvs) {
     });
 }
 
-void MongoStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) {
+void MongoStorage::do_update(Composite<KeySegmentPair>&& kvs, StorageUpdateOptions opts) {
     namespace fg = folly::gen;
     auto fmt_db = [](auto &&kv) { return kv.key_type(); };
 

@@ -42,7 +42,7 @@ struct ReadKeyOpts {
  * - MongoStorage::do_update
  * - MemoryStorage::do_update
  */
-struct UpdateOpts {
+struct StorageUpdateOptions {
     bool upsert_ = false;
 };
 

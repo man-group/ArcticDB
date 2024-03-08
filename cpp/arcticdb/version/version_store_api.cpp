@@ -57,11 +57,13 @@ VersionedItem PythonVersionStore::write_dataframe_specific_version(
         return {std::move(*version_key)};
     }
 
+    version_store::TimeseriesInfo ts_info;
     auto versioned_item = write_dataframe_impl(
         store(),
         VersionId(version_id),
         convert::py_ndf_to_frame(stream_id, item, norm, user_meta),
-        get_write_options());
+        get_write_options(),
+        ts_info);
 
     version_map()->write_version(store(), versioned_item.key_, std::nullopt);
     if(cfg().symbol_list())
@@ -106,7 +108,11 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_ap
     bool upsert,
     bool throw_on_error) {
     auto frames = create_input_tensor_frames(stream_ids, items, norms, user_metas);
-    return batch_append_internal(stream_ids, std::move(frames), prune_previous_versions, validate_index, upsert, throw_on_error);
+    ModificationOptions options;
+    options.upsert_ = upsert;
+    options.validate_index_ = validate_index;
+    options.prune_previous_versions_ = prune_previous_versions;
+    return batch_append_internal(stream_ids, std::move(frames), options, throw_on_error);
 }
 
 void PythonVersionStore::_clear_symbol_list_keys() {
@@ -522,11 +528,13 @@ VersionedItem PythonVersionStore::write_partitioned_dataframe(
     std::vector<entity::AtomKey> index_keys;
     for (size_t idx = 0; idx < partitioned_dfs.size(); idx++) {
         auto subkeyname = fmt::format("{}-{}", stream_id, partition_value[idx]);
+        version_store::TimeseriesInfo ts_info;
         auto versioned_item = write_dataframe_impl(
             store(),
             version_id,
             convert::py_ndf_to_frame(subkeyname, partitioned_dfs[idx], norm_meta, py::none()),
             write_options,
+            ts_info,
             de_dup_map,
             false);
         index_keys.emplace_back(versioned_item.key_);
@@ -583,7 +591,7 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
     auto index_keys = folly::collect(batch_write_internal(std::move(version_ids), sub_keys, std::move(frames), std::move(de_dup_maps), false)).get();
     auto multi_key = write_multi_index_entry(store(), index_keys, stream_id, metastruct, user_meta, version_id);
     auto versioned_item = VersionedItem(to_atom(std::move(multi_key)));
-    write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, maybe_prev);
+    write_version(prune_previous_versions, versioned_item.key_, maybe_prev);
 
     if(cfg().symbol_list())
         symbol_list().add_symbol(store(), stream_id, version_id);
@@ -614,8 +622,11 @@ VersionedItem PythonVersionStore::append(
     bool upsert,
     bool prune_previous_versions,
     bool validate_index) {
-    return append_internal(stream_id, convert::py_ndf_to_frame(stream_id, item, norm, user_meta), upsert,
-                           prune_previous_versions, validate_index);
+    version_store::ModificationOptions options;
+    options.upsert_ = upsert;
+    options.prune_previous_versions_ = prune_previous_versions;
+    options.validate_index_ = validate_index;
+    return append_internal(stream_id, convert::py_ndf_to_frame(stream_id, item, norm, user_meta), options);
 }
 
 VersionedItem PythonVersionStore::update(
@@ -627,9 +638,12 @@ VersionedItem PythonVersionStore::update(
         bool upsert,
         bool dynamic_schema,
         bool prune_previous_versions) {
+    ModificationOptions options;
+    options.upsert_ = upsert;
+    options.dynamic_schema_ = dynamic_schema;
+    options.prune_previous_versions_ = prune_previous_versions;
     return update_internal(stream_id, query,
-                           convert::py_ndf_to_frame(stream_id, item, norm, user_meta), upsert,
-                           dynamic_schema, prune_previous_versions);
+                           convert::py_ndf_to_frame(stream_id, item, norm, user_meta), options);
 }
 
 VersionedItem PythonVersionStore::delete_range(

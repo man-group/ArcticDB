@@ -125,7 +125,7 @@ void NfsBackedStorage::do_write(Composite<KeySegmentPair>&& kvs) {
     s3::detail::do_write_impl(std::move(enc), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
 }
 
-void NfsBackedStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts) {
+void NfsBackedStorage::do_update(Composite<KeySegmentPair>&& kvs, StorageUpdateOptions) {
     auto enc = kvs.transform([] (auto&& key_seg) {
         return KeySegmentPair{encode_object_id(key_seg.variant_key()), std::move(key_seg.segment())};
     });

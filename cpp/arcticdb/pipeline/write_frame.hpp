@@ -19,6 +19,10 @@
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/pipeline/pipeline_common.hpp>
 
+namespace arcticdb::version_store {
+struct TimeseriesInfo;
+}
+
 namespace arcticdb::pipelines {
 
 using namespace arcticdb::stream;
@@ -69,6 +73,7 @@ folly::Future<entity::AtomKey> write_frame(
     const std::shared_ptr<InputTensorFrame>& frame,
     const SlicingPolicy &slicing,
     const std::shared_ptr<Store> &store,
+    version_store::TimeseriesInfo& ts_info,
     const std::shared_ptr<DeDupMap>& de_dup_map = std::make_shared<DeDupMap>(),
     bool allow_sparse = false
 );
@@ -79,8 +84,8 @@ folly::Future<entity::AtomKey> append_frame(
         const SlicingPolicy& slicing,
         index::IndexSegmentReader &index_segment_reader,
         const std::shared_ptr<Store>& store,
-        bool dynamic_schema,
-        bool ignore_sort_order
+        const WriteOptions& options,
+        version_store::TimeseriesInfo& ts_info
 );
 
 enum class AffectedSegmentPart {
@@ -90,7 +95,7 @@ enum class AffectedSegmentPart {
 
 std::optional<SliceAndKey> rewrite_partial_segment(
         const SliceAndKey& existing,
-        IndexRange index_range,
+        const IndexRange& index_range,
         VersionId version_id,
         AffectedSegmentPart affected_part,
         const std::shared_ptr<Store>& store);

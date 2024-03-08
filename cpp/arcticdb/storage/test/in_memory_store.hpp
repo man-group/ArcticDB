@@ -100,7 +100,7 @@ namespace arcticdb {
         folly::Future<VariantKey>
         update(const VariantKey& key,
                 SegmentInMemory &&segment,
-                storage::UpdateOpts opts
+                storage::StorageUpdateOptions opts
         ) override {
             if (!opts.upsert_) {
                 util::check_rte(key_exists(key).get(), "update called with upsert=false but key does not exist");
@@ -131,6 +131,17 @@ namespace arcticdb {
                 IndexValue end_index,
                 SegmentInMemory &&segment) override {
             return write(key_type, version_id, stream_id, start_index, end_index, std::move(segment)).get();
+        }
+
+        entity::VariantKey write_sync(
+            stream::KeyType ,
+            VersionId ,
+            const StreamId& ,
+            IndexValue ,
+            IndexValue ,
+            timestamp ,
+            SegmentInMemory &&) override {
+            util::raise_rte("Not implemented");
         }
 
         entity::VariantKey write_sync(PartialKey pk, SegmentInMemory &&segment) override {

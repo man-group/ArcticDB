@@ -173,6 +173,7 @@ void Column::append_sparse_map(const util::BitMagic& bv, position_t at_row) {
 void Column::append(const Column& other, position_t at_row) {
     if (other.row_count() == 0)
         return;
+
     util::check(type() == other.type(), "Cannot append column type {} to column type {}", type(), other.type());
     const bool was_sparse = is_sparse();
     const bool was_empty = empty();

@@ -36,6 +36,7 @@ struct ReadVersionOutput {
     FrameAndDescriptor frame_and_descriptor_;
 };
 
+
 /**
  * The VersionedEngine interface contains methods that are portable between languages.
  *
@@ -49,16 +50,12 @@ public:
         const StreamId& stream_id,
         const UpdateQuery & query,
         const std::shared_ptr<InputTensorFrame>& frame,
-        bool upsert,
-        bool dynamic_schema,
-        bool prune_previous_versions) = 0;
+        const ModificationOptions& update_options) = 0;
 
     virtual VersionedItem append_internal(
         const StreamId& stream_id,
         const std::shared_ptr<InputTensorFrame>& frame,
-        bool upsert,
-        bool prune_previous_versions,
-        bool validate_index) = 0;
+        const ModificationOptions& options) = 0;
 
     virtual VersionedItem delete_range_internal(
         const StreamId& stream_id,
@@ -91,13 +88,11 @@ public:
      */
     virtual void delete_tree(
         const std::vector<IndexTypeKey>& idx_to_be_deleted,
-        const PreDeleteChecks& checks
-    ) = 0;
+        const PreDeleteChecks& checks) = 0;
 
-    virtual std::pair<VersionedItem,   TimeseriesDescriptor> restore_version(
+    virtual std::pair<VersionedItem, TimeseriesDescriptor> restore_version(
         const StreamId& id,
-        const VersionQuery& version_query
-        ) = 0;
+        const VersionQuery& version_query) = 0;
 
     virtual FrameAndDescriptor read_dataframe_internal(
         const std::variant<VersionedItem, StreamId>& identifier,
@@ -115,23 +110,19 @@ public:
         const std::shared_ptr<InputTensorFrame>& frame,
         bool prune_previous_versions,
         bool allow_sparse,
-        bool validate_index
-    ) = 0;
+        bool validate_index) = 0;
 
-    /** Test-specific cut-down version of write_versioned_dataframe_internal */
     virtual VersionedItem write_individual_segment(
         const StreamId& stream_id,
         SegmentInMemory&& segment,
-        bool prune_previous_versions
-    ) = 0;
+        bool prune_previous_versions) = 0;
 
     virtual std::set<StreamId> list_streams_internal(
         std::optional<SnapshotId> snap_name,
         const std::optional<std::string>& regex,
         const std::optional<std::string>& prefix,
         const std::optional<bool>& opt_use_symbol_list,
-        const std::optional<bool>& opt_all_symbols
-    ) = 0;
+        const std::optional<bool>& opt_all_symbols) = 0;
 
     virtual IndexRange get_index_range(
         const StreamId &stream_id,

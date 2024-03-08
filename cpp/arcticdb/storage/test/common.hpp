@@ -32,7 +32,7 @@ inline void write_in_store(Storage &store, std::string symbol) {
 
 inline void update_in_store(Storage &store, std::string symbol) {
     auto variant_key = get_test_key(symbol);
-    store.update(KeySegmentPair(std::move(variant_key), get_test_segment()), arcticdb::storage::UpdateOpts{});
+    store.update(KeySegmentPair(std::move(variant_key), get_test_segment()), arcticdb::storage::StorageUpdateOptions{});
 }
 
 inline bool exists_in_store(Storage &store, std::string symbol) {

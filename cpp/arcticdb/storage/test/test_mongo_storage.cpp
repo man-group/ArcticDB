@@ -69,7 +69,7 @@ TEST(MongoStorage, ClientSession) {
     as::KeySegmentPair update_kv(k);
     update_kv.segment().header().set_start_ts(4321);
 
-    storage.update(std::move(update_kv), as::UpdateOpts{});
+    storage.update(std::move(update_kv), as::StorageUpdateOptions{});
 
     as::KeySegmentPair update_res;
 

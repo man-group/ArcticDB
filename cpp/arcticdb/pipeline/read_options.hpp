@@ -11,6 +11,12 @@
 #include <arcticdb/util/optional_defaults.hpp>
 
 namespace arcticdb {
+
+enum class OutputType : uint16_t {
+    PURE_PYTHON,
+    NATIVE
+};
+
 struct ReadOptions {
     std::optional<bool> force_strings_to_fixed_;
     std::optional<bool> force_strings_to_object_;
@@ -20,6 +26,8 @@ struct ReadOptions {
     std::optional<bool> set_tz_;
     std::optional<bool> optimise_string_memory_;
     std::optional<bool> batch_throw_on_error_;
+
+    OutputType output_type_ = OutputType::PURE_PYTHON;
 
     void set_force_strings_to_fixed(const std::optional<bool>& force_strings_to_fixed) {
         force_strings_to_fixed_ = force_strings_to_fixed;
@@ -55,6 +63,10 @@ struct ReadOptions {
 
     void set_batch_throw_on_error(bool batch_throw_on_error) {
         batch_throw_on_error_ = batch_throw_on_error;
+    }
+
+    void set_output_type(OutputType output_type) {
+        output_type_ = output_type;
     }
 };
 } //namespace arcticdb

@@ -14,6 +14,10 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/flatten_utils.hpp>
 
+namespace arcticdb {
+class StringPool;
+}
+
 namespace arcticdb::pipelines {
 
 using namespace arcticdb::entity;
@@ -39,6 +43,15 @@ struct InputTensorFrame {
     ssize_t num_rows = 0;
     mutable ssize_t offset = 0;
     mutable bool bucketize_dynamic = 0;
+    std::shared_ptr<StringPool> string_pool_;
+
+    void set_string_pool(std::shared_ptr<StringPool> string_pool) {
+        string_pool_ = std::move(string_pool);
+    }
+
+    const std::shared_ptr<StringPool>& string_pool() const {
+        return string_pool_;
+    }
 
     void set_offset(ssize_t off) const {
         offset = off;

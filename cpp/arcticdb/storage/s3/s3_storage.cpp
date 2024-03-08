@@ -66,7 +66,7 @@ void S3Storage::do_write(Composite<KeySegmentPair>&& kvs) {
     detail::do_write_impl(std::move(kvs), root_folder_, bucket_name_, *s3_client_, FlatBucketizer{});
 }
 
-void S3Storage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts) {
+void S3Storage::do_update(Composite<KeySegmentPair>&& kvs, StorageUpdateOptions) {
     detail::do_update_impl(std::move(kvs), root_folder_, bucket_name_, *s3_client_, FlatBucketizer{});
 }
 

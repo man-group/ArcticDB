@@ -119,6 +119,7 @@ message VersionStoreConfig {
     EventLoggerConfig event_logger_config = 9;
     bool storage_fallthrough = 10;
     uint32 encoding_version = 11;
+    bool metadata_cache = 12;
 }
 
 message ReadPermissions {

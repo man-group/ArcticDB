@@ -28,7 +28,7 @@ namespace arcticdb::storage::rocksdb {
     private:
         void do_write(Composite<KeySegmentPair>&& kvs) final override;
 
-        void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) final override;
+        void do_update(Composite<KeySegmentPair>&& kvs, StorageUpdateOptions opts) final override;
 
         void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) final override;
 

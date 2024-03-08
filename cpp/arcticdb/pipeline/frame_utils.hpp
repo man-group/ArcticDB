@@ -95,6 +95,7 @@ RawType* flatten_tensor(
 
 template<typename Aggregator>
 std::optional<convert::StringEncodingError> aggregator_set_data(
+    const pipelines::InputTensorFrame& frame,
     const TypeDescriptor& type_desc,
     const entity::NativeTensor& tensor,
     Aggregator& agg,
@@ -146,28 +147,45 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
                 column.allocate_data(rows_to_write * sizeof(entity::position_t));
                 auto out_ptr = reinterpret_cast<entity::position_t*>(column.buffer().data());
                 auto& string_pool = agg.segment().string_pool();
-                for (size_t s = 0; s < rows_to_write; ++s, ++ptr_data) {
-                    if (*ptr_data == none.ptr()) {
-                        *out_ptr++ = not_a_string();
-                    } else if(is_py_nan(*ptr_data)){
-                        *out_ptr++ = nan_placeholder();
-                    } else {
-                        if constexpr (is_utf_type(slice_value_type(dt))) {
-                            wrapper_or_error = convert::py_unicode_to_buffer(*ptr_data, scoped_gil_lock);
+                if(tensor.is_native_type()) {
+                    auto offset_data = reinterpret_cast<StringPool::offset_t*>(data);
+                    offset_data += row;
+                    auto input_string_pool = frame.string_pool();
+                    util::check(static_cast<bool>(input_string_pool) || frame.empty(), "Expected string pool for native sequence types");
+                    for (size_t s = 0; s < rows_to_write; ++s, ++ptr_data) {
+                        if (*offset_data == not_a_string() || *offset_data == nan_placeholder()) {
+                            *out_ptr++ =*offset_data;
                         } else {
-                            wrapper_or_error = convert::pystring_to_buffer(*ptr_data, false);
-                        }
-                        // Cannot use util::variant_match as only one of the branches would have a return type
-                        if (std::holds_alternative<convert::PyStringWrapper>(wrapper_or_error)) {
-                            convert::PyStringWrapper wrapper(std::move(std::get<convert::PyStringWrapper>(wrapper_or_error)));
-                            const auto offset = string_pool.get(wrapper.buffer_, wrapper.length_);
+                            const auto view = input_string_pool->get_view(reinterpret_cast<StringPool::offset_t>(*offset_data));
+                            const auto offset = string_pool.get(view);
                             *out_ptr++ = offset.offset();
-                        } else if (std::holds_alternative<convert::StringEncodingError>(wrapper_or_error)) {
-                            auto error = std::get<convert::StringEncodingError>(wrapper_or_error);
-                            error.row_index_in_slice_ = s;
-                            return std::optional<convert::StringEncodingError>(error);
+                        }
+                    }
+                } else {
+                    for (size_t s = 0; s < rows_to_write; ++s, ++ptr_data) {
+                        if (*ptr_data == none.ptr()) {
+                            *out_ptr++ = not_a_string();
+                        } else if (is_py_nan(*ptr_data)) {
+                            *out_ptr++ = nan_placeholder();
                         } else {
-                            internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected variant alternative");
+                            if constexpr (is_utf_type(slice_value_type(dt))) {
+                                wrapper_or_error = convert::py_unicode_to_buffer(*ptr_data, scoped_gil_lock);
+                            } else {
+                                wrapper_or_error = convert::pystring_to_buffer(*ptr_data, false);
+                            }
+                            // Cannot use util::variant_match as only one of the branches would have a return type
+                            if (std::holds_alternative<convert::PyStringWrapper>(wrapper_or_error)) {
+                                convert::PyStringWrapper
+                                    wrapper(std::move(std::get<convert::PyStringWrapper>(wrapper_or_error)));
+                                const auto offset = string_pool.get(wrapper.buffer_, wrapper.length_);
+                                *out_ptr++ = offset.offset();
+                            } else if (std::holds_alternative<convert::StringEncodingError>(wrapper_or_error)) {
+                                auto error = std::get<convert::StringEncodingError>(wrapper_or_error);
+                                error.row_index_in_slice_ = s;
+                                return std::optional<convert::StringEncodingError>(error);
+                            } else {
+                                internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected variant alternative");
+                            }
                         }
                     }
                 }

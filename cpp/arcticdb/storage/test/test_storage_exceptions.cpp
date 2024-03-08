@@ -277,7 +277,6 @@ TEST(S3MockStorageTest, TestPermissionErrorException) {
     ASSERT_THROW({
         update_in_store(*storage, failureSymbol);
     },  StoragePermissionException);
-
 }
 
 TEST(S3MockStorageTest, TestS3RetryableException) {

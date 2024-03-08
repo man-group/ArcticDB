@@ -46,7 +46,7 @@ class Storages {
         primary().write(std::move(kvs));
     }
 
-    void update(Composite<KeySegmentPair>&& kvs, storage::UpdateOpts opts) {
+    void update(Composite<KeySegmentPair>&& kvs, storage::StorageUpdateOptions opts) {
         ARCTICDB_SAMPLE(StoragesUpdate, 0)
         primary().update(std::move(kvs), opts);
     }
