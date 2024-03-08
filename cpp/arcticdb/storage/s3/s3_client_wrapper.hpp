@@ -16,6 +16,7 @@
 
 #include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/storage/storage_utils.hpp>
+#include <arcticdb/storage/storage_mock_client.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
 #include <arcticdb/util/exponential_backoff.hpp>
 #include <arcticdb/util/configs_map.hpp>
@@ -28,20 +29,7 @@ using namespace object_store_utils;
 namespace s3{
 
 template<class Output>
-struct S3Result{
-    std::variant<Output, Aws::S3::S3Error> result;
-
-    bool is_success() const {
-        return std::holds_alternative<Output>(result);
-    }
-
-    Aws::S3::S3Error& get_error(){
-        return std::get<Aws::S3::S3Error>(result);
-    }
-    Output& get_output(){
-        return std::get<Output>(result);
-    }
-};
+using S3Result = StorageResult<Output, Aws::S3::S3Error>;
 
 struct ListObjectsOutput{
     std::vector<std::string> s3_object_names;

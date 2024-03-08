@@ -9,6 +9,7 @@
 
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_factory.hpp>
+#include <arcticdb/storage/mongo/mongo_client_wrapper.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/composite.hpp>
 #include <folly/Range.h>
@@ -48,7 +49,7 @@ class MongoStorage final : public Storage {
     std::string collection_name(KeyType k);
 
     std::shared_ptr<MongoInstance> instance_;
-    std::shared_ptr<MongoClient> client_;
+    std::shared_ptr<MongoClientWrapper> client_;
     std::string db_;
     std::string prefix_;
 };
