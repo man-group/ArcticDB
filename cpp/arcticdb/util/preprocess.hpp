@@ -32,3 +32,5 @@
 #elif defined(__GNUC__)
 #define ARCTICDB_FORCE_INLINE inline __attribute__((__always_inline__))
 #else
+#define ARCTIDDB_FORCE_INLINE //Todo Clang?
+#endif

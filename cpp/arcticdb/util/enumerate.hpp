@@ -38,25 +38,25 @@ public:
         using iterator_category = std::input_iterator_tag;
 
         ARCTICDB_FORCE_INLINE constexpr explicit Proxy(const Enumerator& enumerator) : 
-            index_(enumerator.idx_), 
-            ref_(*enumerator.it_) {}
+            index(enumerator.idx_), 
+            ref(*enumerator.it_) {}
 
-        ARCTICDB_FORCE_INLINE constexpr reference operator*() { return ref_; }
+        ARCTICDB_FORCE_INLINE constexpr reference operator*() { return ref; }
         ARCTICDB_FORCE_INLINE constexpr pointer operator->() {
-            return std::addressof(ref_);
+            return std::addressof(ref);
         }
 
         ARCTICDB_FORCE_INLINE constexpr typename ConstType<reference>::type
         operator*() const {
-            return ref_;
+            return ref;
         }
         ARCTICDB_FORCE_INLINE constexpr typename ConstType<pointer>::type operator->()
         const {
-            return std::addressof(ref_);
+            return std::addressof(ref);
         }
 
-        const size_t index_;
-        reference ref_;
+        const size_t index;
+        reference ref;
     };
 
     ARCTICDB_FORCE_INLINE constexpr Proxy operator*() const { return Proxy(*this); }
