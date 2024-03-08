@@ -883,7 +883,7 @@ class DynamicStringReducer : public StringReducer {
         auto none = std::make_unique<py::none>(py::none{});
         LockPolicy::unlock(*lock_);
         size_t none_count = 0u;
-        ankerl::unordered_dense::map<entity::position_t, std::pair<PyObject*, folly::SpinLock>> local_map;
+        ankerl::unordered_dense::map<entity::position_t, std::pair<PyObject*, std::unique_ptr<std::mutex>>> local_map;
         local_map.reserve(end - row_);
         // TODO this is no good for non-contigous blocks, but we currently expect
         // output data to be contiguous
