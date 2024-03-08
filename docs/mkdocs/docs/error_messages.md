@@ -168,17 +168,17 @@ ArcticDB exceptions are exposed in `arcticdb.exceptions` and sit in a hierarchy:
 RuntimeError
 └-- ArcticException
     |-- ArcticDbNotYetImplemented
-    |-- DuplicateKeyException
     |-- MissingDataException
     |-- NoDataFoundException
     |-- NoSuchVersionException
     |-- NormalizationException
-    |-- PermissionException
     |-- SchemaException
     |-- SortingException
     |   └-- UnsortedDataException
     |-- StorageException
     |   └-- LmdbMapFullError
+    |   └-- PermissionException
+    |   └-- DuplicateKeyException
     |-- StreamDescriptorMismatch
     └-- InternalException
 ```

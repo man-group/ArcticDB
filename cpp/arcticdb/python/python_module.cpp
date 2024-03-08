@@ -236,6 +236,9 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
             internal_exception(msg.c_str());
         }
     });
+    // DuplicateKeyException and PermissionException are subclasses of StorageException so keep the hierarchy in Python too
+    py::register_exception<storage::DuplicateKeyException>(m, "DuplicateKeyException", storage_exception.ptr());
+    py::register_exception<PermissionException>(m, "PermissionException", storage_exception.ptr());
 
     py::register_exception<SchemaException>(m, "SchemaException", compat_exception.ptr());
     py::register_exception<NormalizationException>(m, "NormalizationException", compat_exception.ptr());

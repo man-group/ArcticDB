@@ -196,7 +196,7 @@ public:
 
                 follow_version_chain(store, ref_entry, entry, load_params);
                 break;
-            } catch (const std::exception &err) {
+            } catch (const storage::KeyNotFoundException &err) {
                 if (--max_trials <= 0) {
                     throw;
                 }

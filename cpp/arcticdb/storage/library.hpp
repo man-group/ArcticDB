@@ -72,8 +72,9 @@ class Library {
 
     void write(Composite<KeySegmentPair>&& kvs) {
         ARCTICDB_SAMPLE(LibraryWrite, 0)
-        if (open_mode() < OpenMode::WRITE)
-            throw PermissionException(library_path_, open_mode(), "write");
+        if (open_mode() < OpenMode::WRITE) {
+            throw LibraryPermissionException(library_path_, open_mode(), "write");
+        }
 
         [[maybe_unused]] const size_t total_size = kvs.fold(
             [](size_t s, const KeySegmentPair& seg) { return s + seg.segment().total_segment_size(); },
@@ -86,8 +87,9 @@ class Library {
 
     void update(Composite<KeySegmentPair>&& kvs, storage::UpdateOpts opts) {
         ARCTICDB_SAMPLE(LibraryUpdate, 0)
-        if (open_mode() < OpenMode::WRITE)
-            throw PermissionException(library_path_, open_mode(), "update");
+        if (open_mode() < OpenMode::WRITE) {
+            throw LibraryPermissionException(library_path_, open_mode(), "update");
+        }
 
         [[maybe_unused]] const size_t total_size = kvs.fold(
             [](size_t s, const KeySegmentPair& seg) { return s + seg.segment().total_segment_size(); },
@@ -104,8 +106,9 @@ class Library {
     }
 
     void remove(Composite<VariantKey>&& ks, storage::RemoveOpts opts) {
-        if (open_mode() < arcticdb::storage::OpenMode::DELETE)
-            throw PermissionException(library_path_, open_mode(), "delete");
+        if (open_mode() < arcticdb::storage::OpenMode::DELETE) {
+            throw LibraryPermissionException(library_path_, open_mode(), "delete");
+        }
 
         ARCTICDB_SAMPLE(LibraryRemove, 0)
         storages_->remove(std::move(ks), opts);

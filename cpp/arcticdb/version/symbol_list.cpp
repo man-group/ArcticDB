@@ -755,7 +755,7 @@ std::set<StreamId> SymbolList::load(
             } else {
                 ARCTICDB_RUNTIME_DEBUG(log::symbol(),"Not compacting the symbol list due to lock contention");
             }
-        } catch (const storage::PermissionException& ex) {
+        } catch (const storage::LibraryPermissionException& ex) {
             // Note: this only reflects AN's permission check and is not thrown by the Storage
             ARCTICDB_RUNTIME_DEBUG(log::symbol(),"Not compacting the symbol list due to lack of permission", ex.what());
         } catch (const std::exception& ex) {

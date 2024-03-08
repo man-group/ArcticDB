@@ -277,19 +277,19 @@ TEST(S3MockStorageTest, TestPermissionErrorException) {
 
     ASSERT_THROW({
         read_in_store(*storage, failureSymbol);
-    },  StoragePermissionException);
+    },  PermissionException);
 
     failureSymbol = s3::MockS3Client::get_failure_trigger("sym2", StorageOperation::DELETE, Aws::S3::S3Errors::ACCESS_DENIED);
 
     ASSERT_THROW({
         remove_in_store(*storage, {failureSymbol});
-    },  StoragePermissionException);
+    },  PermissionException);
 
     failureSymbol = s3::MockS3Client::get_failure_trigger("sym3", StorageOperation::WRITE, Aws::S3::S3Errors::INVALID_ACCESS_KEY_ID);
 
     ASSERT_THROW({
         update_in_store(*storage, failureSymbol);
-    },  StoragePermissionException);
+    },  PermissionException);
 
 }
 
@@ -338,14 +338,14 @@ TEST(AzureMockStorageTest, TestPermissionErrorException) {
                                                                             Azure::Core::Http::HttpStatusCode::Forbidden);
     ASSERT_THROW({
         update_in_store(*storage, failureSymbol);
-    },  StoragePermissionException);
+    },  PermissionException);
 
     failureSymbol = azure::MockAzureClient::get_failure_trigger("sym1", StorageOperation::DELETE,
                                                                 azure::AzureErrorCode_to_string(azure::AzureErrorCode::UnauthorizedBlobOverwrite),
                                                                 Azure::Core::Http::HttpStatusCode::Forbidden);
     ASSERT_THROW({
         remove_in_store(*storage, {failureSymbol});
-    },  StoragePermissionException);
+    },  PermissionException);
 
 }
 
@@ -390,19 +390,19 @@ TEST(MongoMockStorageTest, TestPermissionErrorException) {
 
     ASSERT_THROW({
                      read_in_store(*storage, failureSymbol);
-                 },  StoragePermissionException);
+                 },  PermissionException);
 
     failureSymbol = mongo::MockMongoClient::get_failure_trigger("sym2", StorageOperation::DELETE, mongo::MongoError::AuthenticationFailed);
     write_in_store(*storage, failureSymbol);
     ASSERT_THROW({
                      remove_in_store(*storage, {failureSymbol});
-                 },  StoragePermissionException);
+                 },  PermissionException);
 
     failureSymbol = mongo::MockMongoClient::get_failure_trigger("sym3", StorageOperation::WRITE, mongo::MongoError::UnAuthorized);
 
     ASSERT_THROW({
                      update_in_store(*storage, failureSymbol);
-                 },  StoragePermissionException);
+                 },  PermissionException);
 
 }
 
