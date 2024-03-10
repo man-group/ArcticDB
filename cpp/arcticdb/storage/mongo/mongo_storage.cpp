@@ -21,6 +21,7 @@
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/storage/storage.hpp>
 #include <mongocxx/exception/operation_exception.hpp>
+#include <bsoncxx/json.hpp>
 
 namespace arcticdb::storage::mongo {
 
@@ -38,15 +39,14 @@ std::string MongoStorage::collection_name(KeyType k) {
 void raise_mongo_exception(const mongocxx::operation_exception& e) {
     auto error_code = e.code().value();
 
-    if(error_code == static_cast<int>(MongoError::NoSuchKey) || error_code == static_cast<int>(MongoError::KeyNotFound)) {
+    if (error_code == static_cast<int>(MongoError::NoSuchKey) || error_code == static_cast<int>(MongoError::KeyNotFound)) {
         throw KeyNotFoundException(fmt::format("Key Not Found Error: MongoError#{}: {}", error_code, e.what()));
     }
 
-    if(error_code == static_cast<int>(MongoError::UnAuthorized) || error_code == static_cast<int>(MongoError::AuthenticationFailed)) {
+    if (error_code == static_cast<int>(MongoError::UnAuthorized) || error_code == static_cast<int>(MongoError::AuthenticationFailed)) {
         raise<ErrorCode::E_PERMISSION>(fmt::format("Permission error: MongoError#{}: {}", error_code, e.what()));
     }
 
-    // TODO: read server message and log it
     raise<ErrorCode::E_UNEXPECTED_MONGO_ERROR>(fmt::format("Unexpected Mongo Error: MongoError#{}: {} {} {}",
                                                            error_code, e.code().category().name(), e.code().message(), e.what()));
 }
@@ -58,7 +58,7 @@ bool is_expected_error_type(int error_code) {
 void raise_if_unexpected_error(const mongocxx::operation_exception& e) {
     auto error_code = e.code().value();
 
-    if(!is_expected_error_type(error_code)) {
+    if (!is_expected_error_type(error_code)) {
         raise_mongo_exception(e);
     }
 }
@@ -76,7 +76,7 @@ void MongoStorage::do_write(Composite<KeySegmentPair>&& kvs) {
             try {
                 auto success = client_->write_segment(db_, collection, std::move(kv));
                 storage::check<ErrorCode::E_MONGO_BULK_OP_NO_REPLY>(success, "Mongo did not acknowledge write for key {}", key_view);
-            } catch(const mongocxx::operation_exception& ex) {
+            } catch (const mongocxx::operation_exception& ex) {
                 raise_mongo_exception(ex);
             }
         }
@@ -102,7 +102,7 @@ void MongoStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) {
                     throw storage::KeyNotFoundException(
                             fmt::format("update called with upsert=false but key does not exist: {}", key_view));
                 }
-            } catch(const mongocxx::operation_exception& ex) {
+            } catch (const mongocxx::operation_exception& ex) {
                 raise_mongo_exception(ex);
             }
         }
@@ -121,14 +121,14 @@ void MongoStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visito
             try {
                 auto kv = client_->read_segment(db_, collection, k);
                 // later we should add the key to failed_reads in this case
-                if(!kv.has_value() || !kv.value().has_segment()) {
+                if (!kv.has_value() || !kv.value().has_segment()) {
                     keys_not_found.push_back(k);
                 }
                 else {
                     visitor(k, std::move(kv.value().segment()));
                 }
 
-            } catch(const mongocxx::operation_exception& ex) {
+            } catch (const mongocxx::operation_exception& ex) {
                 raise_if_unexpected_error(ex);
 
                 log::storage().log(
@@ -142,8 +142,9 @@ void MongoStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visito
         }
     });
 
-    if(!keys_not_found.empty())
+    if (!keys_not_found.empty()) {
         throw KeyNotFoundException(Composite<VariantKey>{std::move(keys_not_found)});
+    }
 }
 
 bool MongoStorage::do_fast_delete() {
@@ -154,7 +155,7 @@ bool MongoStorage::do_fast_delete() {
     return true;
 }
 
-void MongoStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
+void MongoStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) {
     namespace fg = folly::gen;
     auto fmt_db = [](auto &&k) { return variant_key_type(k); };
     ARCTICDB_SAMPLE(MongoStorageRemove, 0)
@@ -170,15 +171,16 @@ void MongoStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
                 util::warn(result.delete_count.value() == 1,
                            "Expected to delete a single document with key {} deleted {} documents",
                            k, result.delete_count.value());
-                if (result.delete_count.value() == 0)
+                if (result.delete_count.value() == 0 && !opts.ignores_missing_key_) {
                     keys_not_found.push_back(k);
-            } catch(const mongocxx::operation_exception& ex) {
+                }
+            } catch (const mongocxx::operation_exception& ex) {
                 // mongo delete does not throw exception if key not found, it returns 0 as delete count
                 raise_mongo_exception(ex);
             }
         }
     });
-    if(!keys_not_found.empty()) {
+    if (!keys_not_found.empty()) {
         throw KeyNotFoundException(std::move(keys_not_found));
     }
 }
@@ -190,7 +192,7 @@ void MongoStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& v
     std::vector<VariantKey> keys;
     try {
         keys = client_->list_keys(db_, collection, key_type, prefix);
-    } catch(const mongocxx::operation_exception& ex) {
+    } catch (const mongocxx::operation_exception& ex) {
         // We don't raise when key is not found because we want to return an empty list instead of raising.
         raise_if_unexpected_error(ex);
         log::storage().warn("Failed to iterate key type with key '{}' {}: {}",
@@ -207,10 +209,11 @@ bool MongoStorage::do_key_exists(const VariantKey& key) {
     auto collection = collection_name(variant_key_type(key));
     try {
         return client_->key_exists(db_, collection, key);
-    } catch(const std::exception& ex) {
-        log::storage().error(fmt::format("Key exists error: {}", ex.what()));
-        throw;
+    } catch (const mongocxx::operation_exception& ex) {
+        raise_if_unexpected_error(ex);
     }
+
+    return false;
 }
 
 

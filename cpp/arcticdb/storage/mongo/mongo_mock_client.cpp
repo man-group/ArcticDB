@@ -127,8 +127,9 @@ UpdateResult MockMongoClient::update_segment(
     }
 
     auto key_found = has_key(key);
-    if(!upsert && !key_found)
+    if (!upsert && !key_found) {
         return {0}; // upsert is false, don't update and return 0 as modified_count
+    }
 
     mongo_contents.insert_or_assign(key, std::move(kv.segment()));
     return {key_found ? 1 : 0};
