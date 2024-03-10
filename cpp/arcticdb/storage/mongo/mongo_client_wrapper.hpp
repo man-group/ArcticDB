@@ -1,4 +1,4 @@
-/* Copyright 2023 Man Group Operations Limited
+/* Copyright 2024 Man Group Operations Limited
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
@@ -13,10 +13,25 @@
 
 namespace arcticdb::storage::mongo {
 
-// modified_count set to null_opt signals update failed (mongo docs are unclear on what error causes this)
+// Some relevant error codes from mongo (not exhaustive). See https://www.mongodb.com/docs/manual/reference/error-codes/
+enum class MongoError {
+    NoSuchKey = 2,
+    HostUnreachable = 6,
+    HostNotFound = 7,
+    UnknownError = 8,
+    UserNotFound = 11,
+    UnAuthorized = 13,
+    ExceededTimeLimit = 50,
+    WriteConflict = 112,
+    KeyNotFound = 211,
+    DuplicateKey = 11000,
+    NoAcknowledge = 50000, // custom error code for simulating no server acknowledgement
+};
+
+// modified_count set to null_opt signals update failed. mongocxx returns nullopt if server does not acknowledge the operation
 struct UpdateResult { std::optional<int> modified_count; };
 
-// delete_count set to null_opt signals delete failed (mongo docs are unclear on what error causes this)
+// delete_count set to null_opt signals delete failed. mongocxx returns nullopt if server does not acknowledge the operation
 struct DeleteResult { std::optional<int> delete_count; };
 
 class MongoClientWrapper {

@@ -18,9 +18,9 @@ namespace arcticdb {
 AtomKey make_test_index_key(std::string id,
                            VersionId version_id,
                            KeyType key_type,
-                           const IndexValue& index_start = 0,
-                           const IndexValue& index_end = 0,
-                           timestamp creation_ts = PilotedClock::nanos_since_epoch()) {
+    const IndexValue& index_start = NumericIndex{0},
+    const IndexValue& index_end = NumericIndex{0},
+     timestamp creation_ts = PilotedClock::nanos_since_epoch()) {
     return atom_key_builder().version_id(version_id).start_index(index_start).end_index(index_end).creation_ts(
             creation_ts)
         .content_hash(0).build(id, key_type);
@@ -36,9 +36,9 @@ struct MapStorePair {
 
     void write_version(const std::string &id) {
         log::version().info("MapStorePair, write version {}", id);
-        auto prev = get_latest_version(store_, map_, id, pipelines::VersionQuery{});
+        auto prev = get_latest_version(store_, map_, id, pipelines::VersionQuery{}).first;
         auto version_id = prev ? prev->version_id() + 1 : 0;
-        map_->write_version(store_, make_test_index_key(id, version_id, KeyType::TABLE_INDEX));
+        map_->write_version(store_, make_test_index_key(id, version_id, KeyType::TABLE_INDEX), prev);
     }
 
     void delete_all_versions(const std::string &id) {
@@ -51,7 +51,7 @@ struct MapStorePair {
 
     void write_and_prune_previous(const std::string &id) {
         log::version().info("MapStorePair, write_and_prune_previous version {}", id);
-        auto prev = get_latest_version(store_, map_, id, pipelines::VersionQuery{});
+        auto prev = get_latest_version(store_, map_, id, pipelines::VersionQuery{}).first;
         auto version_id = prev ? prev->version_id() + 1 : 0;
 
         if(tombstones_)

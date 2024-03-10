@@ -8,11 +8,7 @@
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/column_store/segment_utils.hpp>
-#ifdef ARCTICDB_USING_CONDA
-    #include <robin_hood.h>
-#else
-    #include <arcticdb/util/third_party/robin_hood.hpp>
-#endif
+#include <ankerl/unordered_dense.h>
 
 #include <pybind11/pybind11.h>
 
@@ -148,7 +144,7 @@ OffsetString StringPool::get(std::string_view s, bool deduplicate) {
     OffsetString str(block_.insert(s.data(), s.size()), this);
 
     if(deduplicate)
-        map_.insert(robin_hood::pair(block_.at(str.offset()), str.offset()));
+        map_.insert(std::make_pair(block_.at(str.offset()), str.offset()));
 
     return str;
 }
@@ -162,7 +158,7 @@ OffsetString StringPool::get(const char *data, size_t size, bool deduplicate) {
 
     OffsetString str(block_.insert(s.data(), s.size()), this);
     if(deduplicate)
-        map_.insert(robin_hood::pair(StringType(str), str.offset()));
+        map_.insert(std::make_pair(StringType(str), str.offset()));
 
     return str;
 }
@@ -211,7 +207,7 @@ py::buffer_info StringPool::as_buffer_info() const {
 std::optional<position_t> StringPool::get_offset_for_column(std::string_view string, const Column& column) {
     auto unique_values = unique_values_for_string_column(column);
     remove_nones_and_nans(unique_values);
-    robin_hood::unordered_flat_map<std::string_view, offset_t> col_values;
+    ankerl::unordered_dense::map<std::string_view, offset_t> col_values;
     col_values.reserve(unique_values.size());
     for(auto pos : unique_values) {
         col_values.emplace(block_.const_at(pos), pos);
@@ -223,16 +219,16 @@ std::optional<position_t> StringPool::get_offset_for_column(std::string_view str
     return output;
 }
 
-robin_hood::unordered_set<position_t> StringPool::get_offsets_for_column(const std::shared_ptr<std::unordered_set<std::string>>& strings, const Column& column) {
+ankerl::unordered_dense::set<position_t> StringPool::get_offsets_for_column(const std::shared_ptr<std::unordered_set<std::string>>& strings, const Column& column) {
     auto unique_values = unique_values_for_string_column(column);
     remove_nones_and_nans(unique_values);
-    robin_hood::unordered_flat_map<std::string_view, offset_t> col_values;
+    ankerl::unordered_dense::map<std::string_view, offset_t> col_values;
     col_values.reserve(unique_values.size());
     for(auto pos : unique_values) {
         col_values.emplace(block_.const_at(pos), pos);
     }
 
-    robin_hood::unordered_set<position_t> output;
+    ankerl::unordered_dense::set<position_t> output;
     for(const auto& string : *strings) {
         auto loc = col_values.find(string);
         if(loc != col_values.end())

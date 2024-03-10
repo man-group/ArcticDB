@@ -41,7 +41,7 @@ TEST(IngestionStress, ScalarInt) {
 
     const auto index = as::TimeseriesIndex::default_index();
     as::FixedSchema schema{
-        index.create_stream_descriptor(123, fields_from_range(std::move(columns))), index
+        index.create_stream_descriptor(NumericId{123}, fields_from_range(std::move(columns))), index
     };
 
     SegmentsSink sink;

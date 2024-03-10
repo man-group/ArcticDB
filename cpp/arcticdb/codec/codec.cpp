@@ -44,6 +44,17 @@ constexpr TypeDescriptor encoded_blocks_type_desc() {
     };
 }
 
+SizeResult max_compressed_size_dispatch(
+    const SegmentInMemory& in_mem_seg,
+    const arcticdb::proto::encoding::VariantCodec &codec_opts,
+    EncodingVersion encoding_version) {
+    if(encoding_version == EncodingVersion::V2) {
+        return max_compressed_size_v2(in_mem_seg, codec_opts);
+    } else {
+        return max_compressed_size_v1(in_mem_seg, codec_opts);
+    }
+}
+
 Segment encode_dispatch(
     SegmentInMemory&& in_mem_seg,
     const arcticdb::proto::encoding::VariantCodec &codec_opts,
@@ -131,8 +142,7 @@ std::optional<google::protobuf::Any> decode_metadata_from_segment(const Segment 
     const uint8_t* data = segment.buffer().data();
 
     const auto begin = data;
-    const auto has_magic_numbers = EncodingVersion(hdr.encoding_version()) == EncodingVersion::V2;
-    if(has_magic_numbers)
+    if(const auto has_magic_numbers = EncodingVersion(hdr.encoding_version()) == EncodingVersion::V2; has_magic_numbers)
         util::check_magic<MetadataMagic>(data);
 
     return decode_metadata(hdr, data, begin);
@@ -211,7 +221,7 @@ std::optional<FieldCollection> decode_descriptor_fields(
 }
 
 std::optional<std::tuple<google::protobuf::Any, arcticdb::proto::descriptors::TimeSeriesDescriptor, FieldCollection>> decode_timeseries_descriptor(
-    arcticdb::proto::encoding::SegmentHeader& hdr,
+    const arcticdb::proto::encoding::SegmentHeader& hdr,
     const uint8_t* data,
     const uint8_t* begin,
     const uint8_t* end) {
@@ -328,8 +338,7 @@ void decode_v2(
         data += encoding_sizes::field_compressed_size(hdr.descriptor_field());
 
     util::check_magic<IndexMagic>(data);
-    auto index_fields = decode_index_fields(hdr, data, begin, end);
-    if(index_fields)
+    if(auto index_fields = decode_index_fields(hdr, data, begin, end); index_fields)
         res.set_index_fields(std::make_shared<FieldCollection>(std::move(*index_fields)));
 
     util::check(hdr.has_column_fields(), "Expected column fields in v2 encoding");
@@ -337,15 +346,13 @@ void decode_v2(
     if (data!=end) {
         auto encoded_fields_buffer = decode_encoded_fields(hdr, encoded_fields_ptr, begin);
         const auto fields_size = desc.fields().size();
-        //util::check(fields_size == static_cast<size_t>(hdr.fields_size()), "Mismatch between descriptor and header field size: {} != {}", fields_size, hdr.fields_size());
         const auto start_row = res.row_count();
         EncodedFieldCollection encoded_fields(std::move(encoded_fields_buffer));
         const auto seg_row_count = fields_size ? ssize_t(encoded_fields.at(0).ndarray().items_count()) : 0L;
         res.init_column_map();
 
-        for (std::size_t i = 0; i < static_cast<size_t>(fields_size); ++i) {
+        for (std::size_t i = 0; i < fields_size; ++i) {
             const auto& encoded_field = encoded_fields.at(i);
-            //log::version().debug("{}", dump_bytes(begin, (data - begin) + encoding_sizes::field_compressed_size(*encoded_field), 100u));
             const auto& field_name = desc.fields(i).name();
             util::check(data!=end, "Reached end of input block with {} fields to decode", fields_size-i);
             if(auto col_index = res.column_index(field_name)) {
@@ -363,7 +370,8 @@ void decode_v2(
 
         res.set_row_data(static_cast<ssize_t>(start_row + seg_row_count-1));
         res.set_compacted(segment.header().compacted());
-    }}
+    }
+}
 
 void decode_v1(
     const Segment& segment,
@@ -518,7 +526,7 @@ void encode_sparse_map(
         util::check(!is_empty_type(column_data.type().data_type()), "Empty typed columns should not have sparse maps");
         ARCTICDB_DEBUG(log::codec(), "Sparse map count = {} pos = {}", column_data.bit_vector()->count(), pos);
         const size_t sparse_bm_bytes = encode_bitmap(*column_data.bit_vector(), out, pos);
-        util::variant_match(variant_field, [&](auto field) {
+        util::variant_match(variant_field, [sparse_bm_bytes](auto field) {
             field->mutable_ndarray()->set_sparse_map_bytes(static_cast<int>(sparse_bm_bytes));
         });
     }

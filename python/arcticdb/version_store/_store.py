@@ -102,6 +102,7 @@ class VersionedItem:
     version: int = attr.ib()
     metadata: Any = attr.ib(default=None)
     host: Optional[str] = attr.ib(default=None)
+    timestamp: Optional[int] = attr.ib(default=0)
 
     def __iter__(self):  # Backwards compatible with the old NamedTuple implementation
         warnings.warn("Don't iterate VersionedItem. Use attrs.astuple() explicitly", SyntaxWarning, stacklevel=2)
@@ -563,6 +564,7 @@ class NativeVersionStore:
                 metadata=metadata,
                 data=None,
                 host=self.env,
+                timestamp=vit.timestamp
             )
 
     def _resolve_dynamic_strings(self, kwargs):
@@ -682,6 +684,7 @@ class NativeVersionStore:
                         metadata=metadata,
                         data=None,
                         host=self.env,
+                        timestamp=vit.timestamp
                     )
 
     def update(
@@ -780,6 +783,7 @@ class NativeVersionStore:
                 metadata=metadata,
                 data=None,
                 host=self.env,
+                timestamp=vit.timestamp
             )
 
     def create_column_stats(
@@ -1045,6 +1049,7 @@ class NativeVersionStore:
                             version=vitem.version,
                             metadata=meta,
                             host=self.env,
+                            timestamp=vitem.timestamp
                         )
                     )
         return meta_items
@@ -1100,6 +1105,7 @@ class NativeVersionStore:
                 version=vitem.version,
                 metadata=meta,
                 host=self.env,
+                timestamp=vitem.timestamp
             )
 
         return results_dict
@@ -1113,6 +1119,7 @@ class NativeVersionStore:
             version=v.version,
             metadata=None,
             host=self.env,
+            timestamp=v.timestamp
         )
 
     def batch_write(
@@ -1441,6 +1448,7 @@ class NativeVersionStore:
                 version=result.version.version,
                 metadata=meta,
                 host=self.env,
+                timestamp=result.version.timestamp
             )
             for result, meta in zip(read_results, metadatas)
         ]
@@ -1753,6 +1761,7 @@ class NativeVersionStore:
                 version=vitem.version,
                 metadata=vitem.metadata,
                 host=vitem.host,
+                timestamp=vitem.timestamp
             )
 
         return vitem
@@ -1815,6 +1824,7 @@ class NativeVersionStore:
             version=read_result.version.version,
             metadata=meta,
             host=self.env,
+            timestamp=read_result.version.timestamp
         )
 
     def list_symbols_with_incomplete_data(self) -> List[str]:
@@ -1921,6 +1931,7 @@ class NativeVersionStore:
             version=read_result.version.version,
             metadata=meta,
             host=self.env,
+            timestamp=read_result.version.timestamp
         )
 
     def list_versions(
@@ -2058,6 +2069,7 @@ class NativeVersionStore:
         metadata: Optional[Any] = None,
         skip_symbols: Optional[List[str]] = None,
         versions: Optional[Dict[str, int]] = None,
+        allow_partial_snapshot: Optional[bool] = False,
     ):
         """
         Create a named snapshot of the data within a library.
@@ -2066,6 +2078,8 @@ class NativeVersionStore:
         the snapshot. The symbols and versions contained within the snapshot will persist regardless of new symbols
         and versions written to the library post snapshot creation.
 
+        ``NoSuchVersionException`` will be thrown if no symbol exist in the library
+        
         Parameters
         ----------
         snap_name : `str`
@@ -2076,6 +2090,11 @@ class NativeVersionStore:
             Optional list of symbols to be excluded from the snapshot.
         versions: `Optional[Dict[str, int]]`, default=None
             Optional dictionary of versions of the symbols to include in the snapshot.
+        allow_partial_snapshot: Optional[bool], default=False
+            Changes the behaviour if either a symbol or the version of symbol specified in versions does not exist or has been deleted in the library:
+            - True: the snapshot will be created with all of the symbol-version pairs that do exist from the versions dict
+                    If none of the symbol-verison pairs exists, ``NoSuchVersionException`` will be thrown
+            - False: ``NoSuchVersionException`` will be thrown
         """
         if not skip_symbols:
             skip_symbols = []
@@ -2083,7 +2102,7 @@ class NativeVersionStore:
             versions = {}
         metadata = normalize_metadata(metadata) if metadata else None
 
-        self.version_store.snapshot(snap_name, metadata, skip_symbols, versions)
+        self.version_store.snapshot(snap_name, metadata, skip_symbols, versions, allow_partial_snapshot)
 
     def delete_snapshot(self, snap_name: str):
         """
@@ -2330,6 +2349,7 @@ class NativeVersionStore:
             version=version_item.version,
             metadata=meta,
             host=self.env,
+            timestamp=version_item.timestamp
         )
 
     def get_type(self) -> str:
@@ -2761,6 +2781,7 @@ class NativeVersionStore:
             metadata=None,
             data=None,
             host=self.env,
+            timestamp=result.timestamp
         )
 
     def library(self):

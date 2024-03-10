@@ -16,6 +16,7 @@
 #include <arcticdb/storage/mongo/mongo_instance.hpp>
 #include <arcticdb/entity/index_range.hpp>
 #include <arcticdb/storage/mongo/mongo_client.hpp>
+#include <arcticdb/storage/mongo/mongo_mock_client.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/storage/storage.hpp>
@@ -145,13 +146,18 @@ MongoStorage::MongoStorage(
     OpenMode mode,
     const Config &config) :
     Storage(lib, mode),
-    instance_(MongoInstance::instance()),
-    client_(std::make_unique<MongoClient>(
-        config,
-        ConfigsMap::instance()->get_int("MongoClient.MinPoolSize", 100),
-        ConfigsMap::instance()->get_int("MongoClient.MaxPoolSize", 1000),
-        ConfigsMap::instance()->get_int("MongoClient.SelectionTimeoutMs", 120000))
-        ) {
+    instance_(MongoInstance::instance()) {
+    if(config.use_mock_storage_for_testing()) {
+        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using Mock Mongo storage");
+        client_ = std::make_unique<MockMongoClient>();
+    } else {
+        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using Real Mongo storage");
+        client_ = std::make_unique<MongoClient>(
+                config,
+                ConfigsMap::instance()->get_int("MongoClient.MinPoolSize", 100),
+                ConfigsMap::instance()->get_int("MongoClient.MaxPoolSize", 1000),
+                ConfigsMap::instance()->get_int("MongoClient.SelectionTimeoutMs", 120000));
+    }
     instance_.reset(); //Just want to ensure singleton here, not hang onto it
     auto key_rg = lib.as_range();
     auto it = key_rg.begin();

@@ -52,11 +52,14 @@ struct KeySizesInfo {
 class LocalVersionedEngine : public VersionedEngine {
 
 public:
+    LocalVersionedEngine() = default;
+
     template<class ClockType = util::SysClock>
     explicit LocalVersionedEngine(
         const std::shared_ptr<storage::Library>& library,
-        const ClockType& = util::SysClock{} // Only used to allow the template variable to be inferred
-        );
+        const ClockType& = ClockType{});
+
+
 
     virtual ~LocalVersionedEngine() = default;
 
@@ -368,11 +371,6 @@ public:
         const AtomKey& new_version,
         const std::optional<IndexTypeKey>& previous_key);
 
-    std::vector<folly::Future<folly::Unit>> batch_write_version_and_prune_if_needed(
-        const std::vector<AtomKey>& index_keys,
-        const std::vector<UpdateInfo>& stream_update_info_vector,
-        bool prune_previous_versions);
-
     std::vector<std::variant<VersionedItem, DataError>> batch_write_versioned_dataframe_internal(
         const std::vector<StreamId>& stream_ids,
         std::vector<std::shared_ptr<pipelines::InputTensorFrame>>&& frames,
@@ -447,6 +445,7 @@ protected:
         const std::vector<VersionQuery>& version_queries);
 
 private:
+    void initialize(const std::shared_ptr<storage::Library>& library);
 
     std::shared_ptr<Store> store_;
     arcticdb::proto::storage::VersionStoreConfig cfg_;

@@ -132,7 +132,6 @@ namespace arcticdb {
             Bucketizer& bucketizer) {
         schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(!col.column_->is_sparse(),
                                                             "GroupBy not supported with sparse columns");
-        auto input_data = col.column_->data();
         // Mapping from row to bucket
         // std::nullopt only for Nones and NaNs in string/float columns
         std::vector<std::optional<uint8_t>> row_to_bucket;
@@ -141,25 +140,17 @@ namespace arcticdb {
         // Use to skip empty buckets, and presize columns in the output ProcessingUnit
         std::vector<uint64_t> bucket_counts(bucketizer.num_buckets(), 0);
 
-        using TypeDescriptorTag = typename Grouper::GrouperDescriptor;
-        using RawType = typename TypeDescriptorTag::DataTypeTag::raw_type;
-
-        while (auto block = input_data.next<TypeDescriptorTag>()) {
-            const auto row_count = block->row_count();
-            auto ptr = reinterpret_cast<const RawType*>(block->data());
-            for(auto i = 0u; i < row_count; ++i, ++ptr){
-                if constexpr(std::is_same_v<typename Grouper::GrouperDescriptor, TypeDescriptorTag>) {
-                    auto opt_group = grouper.group(*ptr, col.string_pool_);
-                    if (opt_group.has_value()) {
-                        auto bucket = bucketizer.bucket(*opt_group);
-                        row_to_bucket.emplace_back(bucket);
-                        ++bucket_counts[bucket];
-                    } else {
-                        row_to_bucket.emplace_back(std::nullopt);
-                    }
-                }
+        using TDT = typename Grouper::GrouperDescriptor;
+        Column::for_each<TDT>(*col.column_, [&] (auto val) {
+            auto opt_group = grouper.group(val, col.string_pool_);
+            if (opt_group.has_value()) {
+                auto bucket = bucketizer.bucket(*opt_group);
+                row_to_bucket.emplace_back(bucket);
+                ++bucket_counts[bucket];
+            } else {
+                row_to_bucket.emplace_back(std::nullopt);
             }
-        }
+        });
         return {std::move(row_to_bucket), std::move(bucket_counts)};
     }
 

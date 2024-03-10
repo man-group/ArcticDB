@@ -46,24 +46,13 @@ VariantData transform_to_bitset(const VariantData& data) {
                 util::raise_rte("ValueSet inputs cannot be input to boolean operations");
             },
             [&] (const ColumnWithStrings& column_with_strings) -> VariantData {
-                util::BitSet output_bitset(static_cast<util::BitSetSizeType>(column_with_strings.column_->row_count()));
-                column_with_strings.column_->type().visit_tag([&column_with_strings, &output_bitset] (auto column_desc_tag) {
-                    using ColumnDescriptorType = std::decay_t<decltype(column_desc_tag)>;
-                    using ColumnTagType =  typename ColumnDescriptorType::DataTypeTag;
-                    using ColumnType =  typename ColumnTagType::raw_type;
-                    if constexpr (is_bool_type(ColumnTagType::data_type)) {
-                        auto column_data = column_with_strings.column_->data();
-                        util::BitSet::bulk_insert_iterator inserter(output_bitset);
-                        auto pos = 0u;
-                        while (auto block = column_data.next<ColumnDescriptorType>()) {
-                            auto ptr = reinterpret_cast<const ColumnType*>(block->data());
-                            const auto row_count = block->row_count();
-                            for (auto i = 0u; i < row_count; ++i, ++pos) {
-                                if(*ptr++)
-                                    inserter = pos;
-                            }
-                        }
-                        inserter.flush();
+                util::BitSet output_bitset;
+                details::visit_type(column_with_strings.column_->type().data_type(), [&column_with_strings, &output_bitset](auto col_tag) {
+                    using type_info = ScalarTypeInfo<decltype(col_tag)>;
+                    if constexpr (is_bool_type(type_info::data_type)) {
+                        Column::transform<typename type_info::TDT>(*column_with_strings.column_, output_bitset, false, [](auto input_value) -> bool {
+                            return input_value;
+                        });
                     } else {
                         util::raise_rte("Cannot convert column of type {} to a bitset", column_with_strings.column_->type());
                     }

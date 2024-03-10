@@ -44,7 +44,7 @@ TEST(VersionMap, Basic) {
 
     auto version_map = std::make_shared<VersionMap>();
     version_map->set_validate(true);
-    version_map->write_version(store, key1);
+    version_map->write_version(store, key1, std::nullopt);
     ASSERT_EQ(store->num_atom_keys(), 1);
     ASSERT_EQ(store->num_ref_keys(), 1);
 
@@ -71,17 +71,17 @@ TEST(VersionMap, WithPredecessors) {
 
     auto version_map = std::make_shared<VersionMap>();
     version_map->set_validate(true);
-    version_map->write_version(store, key1);
+    version_map->write_version(store, key1, std::nullopt);
     pipelines::VersionQuery version_query;
     version_query.set_iterate_on_failure(false);
     auto latest = get_latest_undeleted_version(store, version_map, id, version_query);
     ASSERT_TRUE(latest);
     ASSERT_EQ(latest.value(), key1);
-    version_map->write_version(store, key2);
+    version_map->write_version(store, key2, key1);
 
     latest = get_latest_undeleted_version(store, version_map, id, version_query);
     ASSERT_EQ(latest.value(), key2);
-    version_map->write_version(store, key3);
+    version_map->write_version(store, key3, key2);
 
     std::vector<AtomKey> expected{ key3, key2, key1};
     auto result = get_all_versions(store, version_map, id, version_query);
@@ -101,19 +101,19 @@ TEST(VersionMap, TombstoneDelete) {
 
     auto version_map = std::make_shared<VersionMap>();
     version_map->set_validate(true);
-    version_map->write_version(store, key1);
+    version_map->write_version(store, key1, std::nullopt);
     auto latest = get_latest_undeleted_version(store, version_map, id, version_query);
     ASSERT_TRUE(latest);
     ASSERT_EQ(latest.value(), key1);
-    version_map->write_version(store, key2);
+    version_map->write_version(store, key2, key1);
 
     latest = get_latest_undeleted_version(store, version_map, id, version_query);
     ASSERT_EQ(latest.value(), key2);
-    version_map->write_version(store, key3);
+    version_map->write_version(store, key3, key2);
 
     latest = get_latest_undeleted_version(store, version_map, id, version_query);
     ASSERT_EQ(latest.value(), key3);
-    version_map->write_version(store, key4);
+    version_map->write_version(store, key4, key3);
 
     auto del_res = tombstone_version(store, version_map, id, VersionId{2}, pipelines::VersionQuery{});
 
@@ -160,19 +160,19 @@ TEST(VersionMap, PingPong) {
     auto key1 = atom_key_builder().version_id(1).creation_ts(2).content_hash(3).start_index(
         4).end_index(5).build(id, KeyType::TABLE_INDEX);
 
-    left->write_version(store, key1);
+    left->write_version(store, key1, std::nullopt);
     auto latest = get_latest_undeleted_version(store, right, id, pipelines::VersionQuery{});
     ASSERT_EQ(latest.value(), key1);
 
     auto key2 = atom_key_builder().version_id(2).creation_ts(3).content_hash(4).start_index(
         5).end_index(6).build(id, KeyType::TABLE_INDEX);
 
-    right->write_version(store, key2);
+    right->write_version(store, key2, key1);
 
     auto key3 = atom_key_builder().version_id(3).creation_ts(4).content_hash(5).start_index(
         6).end_index(7).build(id, KeyType::TABLE_INDEX);
 
-    left->write_version(store, key3);
+    left->write_version(store, key3, key2);
 
     std::vector<AtomKey> expected{ key3, key2, key1};
     auto left_result = get_all_versions(store, left, id, pipelines::VersionQuery{});
@@ -189,15 +189,15 @@ TEST(VersionMap, TestLoadsRefAndIteration) {
 
     auto key1 = atom_key_builder().version_id(1).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(3).start_index( \
         4).end_index(5).build(id, KeyType::TABLE_INDEX);
-    version_map->write_version(store, key1);
+    version_map->write_version(store, key1, std::nullopt);
 
     auto key2 = atom_key_builder().version_id(2).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(4).start_index(  \
         5).end_index(6).build(id, KeyType::TABLE_INDEX);
-    version_map->write_version(store, key2);
+    version_map->write_version(store, key2, key1);
 
     auto key3 = atom_key_builder().version_id(3).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(5).start_index(  \
         6).end_index(7).build(id, KeyType::TABLE_INDEX);
-    version_map->write_version(store, key3);
+    version_map->write_version(store, key3, key2);
 
     ScopedConfig reload_interval("VersionMap.ReloadInterval", 0); // always reload
 
@@ -228,9 +228,9 @@ TEST(VersionMap, TestCompact) {
 
     auto version_map = std::make_shared<VersionMap>();
     version_map->set_validate(true);
-    version_map->write_version(store, key1);
-    version_map->write_version(store, key2);
-    version_map->write_version(store, key3);
+    version_map->write_version(store, key1, std::nullopt);
+    version_map->write_version(store, key2, key1);
+    version_map->write_version(store, key3, key2);
 
     ScopedConfig max_blocks("VersionMap.MaxVersionBlocks", 1);
     ScopedConfig reload_interval("VersionMap.ReloadInterval", 0); // always reload
@@ -251,9 +251,9 @@ TEST(VersionMap, TestCompactWithDelete) {
 
     auto version_map = std::make_shared<VersionMap>();
     version_map->set_validate(true);
-    version_map->write_version(store, key1);
-    version_map->write_version(store, key2);
-    version_map->write_version(store, key3);
+    version_map->write_version(store, key1, std::nullopt);
+    version_map->write_version(store, key2, key1);
+    version_map->write_version(store, key3, key2);
     tombstone_version(store, version_map, id, 2, pipelines::VersionQuery{});
 
     ScopedConfig max_blocks("VersionMap.MaxVersionBlocks", 1);
@@ -276,11 +276,12 @@ TEST(VersionMap, TestLatestVersionWithDeleteTombstones) {
 
     auto version_map = std::make_shared<VersionMap>();
     version_map->set_validate(true);
-    version_map->write_version(store, key1);
-    version_map->write_version(store, key2);
-    version_map->write_version(store, key3);
+
+    version_map->write_version(store, key1, std::nullopt);
+    version_map->write_version(store, key2, key1);
+    version_map->write_version(store, key3, key2);
     tombstone_version(store, version_map, id, 2, pipelines::VersionQuery{});
-    auto maybe_prev = get_latest_version(store, version_map, id, pipelines::VersionQuery{});
+    auto [maybe_prev, deleted] = get_latest_version(store, version_map, id, pipelines::VersionQuery{});
     auto version_id = get_next_version_from_key(maybe_prev);
     ASSERT_EQ(version_id, 4);
 }
@@ -292,9 +293,9 @@ TEST(VersionMap, TestCompactWithDeleteTombstones) {
 
     auto version_map = std::make_shared<VersionMap>();
     version_map->set_validate(true);
-    version_map->write_version(store, key1);
-    version_map->write_version(store, key2);
-    version_map->write_version(store, key3);
+    version_map->write_version(store, key1, std::nullopt);
+    version_map->write_version(store, key2, key1);
+    version_map->write_version(store, key3, key2);
     tombstone_version(store, version_map, id, 2, pipelines::VersionQuery{});
 
     ScopedConfig max_blocks("VersionMap.MaxVersionBlocks", 1);
@@ -313,9 +314,9 @@ TEST(VersionMap, TombstoneAllTwice) {
 
     auto version_map = std::make_shared<VersionMap>();
     version_map->set_validate(true);
-    version_map->write_version(store, key1);
-    version_map->write_version(store, key2);
-    version_map->write_version(store, key3);
+    version_map->write_version(store, key1, std::nullopt);
+    version_map->write_version(store, key2, key1);
+    version_map->write_version(store, key3, key2);
     version_map->delete_all_versions(store, id);
     version_map->delete_all_versions(store, id);
     // Don't need a check condition, checking validation
@@ -326,8 +327,8 @@ void write_old_style_journal_entry(const AtomKey &key, std::shared_ptr<StreamSin
         store->write(KeyType::VERSION_JOURNAL,
                           key.version_id(),
                           key.id(),
-                          IndexValue(0),
-                          IndexValue(0),
+                          IndexValue(NumericIndex{0}),
+                          IndexValue(NumericIndex{0}),
                           std::move(segment)).wait();
     });
     journal_agg.add_key(key);
@@ -343,15 +344,15 @@ TEST(VersionMap, IterateOnFailure) {
     auto key1 =
         atom_key_builder().version_id(1).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(3).start_index(
             4).end_index(5).build(id, KeyType::TABLE_INDEX);
-    version_map->write_version(store, key1);
+    version_map->write_version(store, key1, std::nullopt);
     auto key2 =
         atom_key_builder().version_id(2).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(4).start_index(
             5).end_index(6).build(id, KeyType::TABLE_INDEX);
-    version_map->write_version(store, key2);
+    version_map->write_version(store, key2, key1);
     auto key3 =
         atom_key_builder().version_id(3).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(5).start_index(
             6).end_index(7).build(id, KeyType::TABLE_INDEX);
-    version_map->write_version(store, key3);
+    version_map->write_version(store, key3, key2);
 
     RefKey ref_key{id, KeyType::VERSION_REF};
     store->remove_key_sync(ref_key, storage::RemoveOpts{});
@@ -402,19 +403,19 @@ TEST(VersionMap, FixRefKey) {
     auto version_map = std::make_shared<VersionMap>();
     auto key1 = atom_key_builder().version_id(1).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(3).start_index( \
         4).end_index(5).build(id, KeyType::TABLE_INDEX);
-    version_map->write_version(store, key1);
+    version_map->write_version(store, key1, std::nullopt);
 
     auto key2 = atom_key_builder().version_id(2).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(4).start_index(  \
         5).end_index(6).build(id, KeyType::TABLE_INDEX);
-    version_map->write_version(store, key2);
+    version_map->write_version(store, key2, key1);
 
     auto key3 = atom_key_builder().version_id(3).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(5).start_index(  \
         6).end_index(7).build(id, KeyType::TABLE_INDEX);
-    version_map->write_version(store, key3);
+    version_map->write_version(store, key3, key2);
     ASSERT_TRUE(version_map->check_ref_key(store, id));
 
     auto key4 = key3;
-    version_map->write_version(store, key4);
+    version_map->write_version(store, key4, key3);
 
     ASSERT_FALSE(version_map->check_ref_key(store, id));
 
@@ -441,24 +442,22 @@ TEST(VersionMap, FixRefKeyTombstones) {
     auto version_map = std::make_shared<VersionMap>();
 
     auto key1 = atom_key_with_version(id, 0, 1696590624524585339);
-    version_map->write_version(store, key1);
+    version_map->write_version(store, key1, std::nullopt);
     auto key2 = atom_key_with_version(id, 0, 1696590624387628801);
-    version_map->write_version(store, key2);
+    version_map->write_version(store, key2, key1);
     auto key3 = atom_key_with_version(id, 0, 1696590624532320286);
-    version_map->write_version(store, key3);
+    version_map->write_version(store, key3, key2);
     auto key4 = atom_key_with_version(id, 0, 1696590624554476875);
-    version_map->write_version(store, key4);
+    version_map->write_version(store, key4, key3);
     auto key5 = atom_key_with_version(id, 1, 1696590624590123209);
-    version_map->write_version(store, key5);
+    version_map->write_version(store, key5, key4);
     auto key6 = atom_key_with_version(id, 0, 1696590624612743245);
     auto entry = version_map->check_reload(store, id, LoadParameter{LoadType::LOAD_LATEST},  __FUNCTION__);
     version_map->journal_single_key(store, key5, entry->head_.value());
 
     auto valid = version_map->check_ref_key(store, id);
     ASSERT_EQ(valid, false);
-
 }
-
 
 TEST(VersionMap, RewriteVersionKeys) {
     auto store = std::make_shared<InMemoryStore>();
@@ -467,15 +466,15 @@ TEST(VersionMap, RewriteVersionKeys) {
     auto version_map = std::make_shared<VersionMap>();
     auto key1 = atom_key_builder().version_id(1).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(3).start_index( \
         4).end_index(5).build(id, KeyType::TABLE_INDEX);
-    version_map->write_version(store, key1);
+    version_map->write_version(store, key1, std::nullopt);
 
     auto key2 = atom_key_builder().version_id(2).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(4).start_index(  \
         5).end_index(6).build(id, KeyType::TABLE_INDEX);
-    version_map->write_version(store, key2);
+    version_map->write_version(store, key2, key1);
 
     auto key3 = atom_key_builder().version_id(3).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(5).start_index(  \
         6).end_index(7).build(id, KeyType::TABLE_INDEX);
-    version_map->write_version(store, key3);
+    version_map->write_version(store, key3, key2);
 
     // the above write_version wont write index keys - only version keys
     storage::UpdateOpts update_opts;
@@ -520,9 +519,9 @@ TEST(VersionMap, RecoverDeleted) {
     store->add_segment(key3, SegmentInMemory{});
 
     auto version_map = std::make_shared<VersionMap>();
-    version_map->write_version(store, key1);
-    version_map->write_version(store, key2);
-    version_map->write_version(store, key3);
+    version_map->write_version(store, key1, std::nullopt);
+    version_map->write_version(store, key2, key1);
+    version_map->write_version(store, key3, key2);
     auto deleted = version_map->find_deleted_version_keys(store, id);
     ASSERT_TRUE(deleted.empty());
 
@@ -545,9 +544,9 @@ TEST(VersionMap, StorageLogging) {
 
     auto version_map = std::make_shared<VersionMap>();
     version_map->set_log_changes(true);
-    version_map->write_version(store, key1);
-    version_map->write_version(store, key2);
-    version_map->write_version(store, key3);
+    version_map->write_version(store, key1, std::nullopt);
+    version_map->write_version(store, key2, key1);
+    version_map->write_version(store, key3, key2);
 
     tombstone_version(store, version_map, id, key1.version_id(), pipelines::VersionQuery{});
     tombstone_version(store, version_map, id, key3.version_id(), pipelines::VersionQuery{});
@@ -623,7 +622,7 @@ TEST(VersionMap, CacheInvalidationLoadDownTo) {
     const auto latest_undeleted_entry = version_map->check_reload(store, id, load_param, __FUNCTION__);
 
     // Then - version 0 should be returned
-    ASSERT_TRUE(latest_undeleted_entry->get_first_index(false).has_value());
+    ASSERT_TRUE(latest_undeleted_entry->get_first_index(false).first.has_value());
 }
 
 TEST(VersionMap, CacheInvalidationLoadDownToFurther) {
@@ -935,43 +934,13 @@ TEST_F(VersionMapStore, StressTestWrite) {
     auto version_map = std::make_shared<VersionMap>();
     std::string timer_name("write_stress");
     interval_timer timer(timer_name);
+    std::optional<AtomKey> previous_key;
     for(const auto& key : keys) {
-        version_map->write_version(test_store_->_test_get_store(), key);
+        version_map->write_version(test_store_->_test_get_store(), key, previous_key);
+        previous_key = key;
     }
     timer.stop_timer(timer_name);
     GTEST_COUT << timer.display_all() << std::endl;
 }
 
-TEST_F(VersionMapStore, StressTestBatchSameSymbol) {
-    using namespace arcticdb;
-    std::vector<AtomKey> keys;
-    const size_t num_tests = 999;
-    StreamId id{"test"};
-    for (auto i = 0ULL; i < num_tests; ++i) {
-        keys.emplace_back(
-            atom_key_builder().version_id(i).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(i).start_index( \
-            4).end_index(5).build(id, KeyType::TABLE_INDEX));
-    }
-
-    auto store = test_store_->_test_get_store();
-    auto version_map = std::make_shared<VersionMap>();
-    folly::collect(batch_write_version(store, version_map, keys)).get();
-}
-
-TEST_F(VersionMapStore, StressTestBatchWrite) {
-    using namespace arcticdb;
-    std::vector<AtomKey> keys;
-    const size_t num_tests = 999;
-
-    for (auto i = 0ULL; i < num_tests; ++i) {
-        StreamId id{fmt::format("test_{}", i)};
-        keys.emplace_back(
-            atom_key_builder().version_id(i).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(i).start_index( \
-            4).end_index(5).build(id, KeyType::TABLE_INDEX));
-    }
-
-    auto store = test_store_->_test_get_store();
-    auto version_map = std::make_shared<VersionMap>();
-    folly::collect(batch_write_version(store, version_map, keys)).get();
-}
 } // namespace arcticdb

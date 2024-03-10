@@ -135,6 +135,18 @@ struct PredefragmentationInfo{
     size_t segments_need_compaction;
     std::optional<size_t> append_after;
 };
+SegmentInMemory prepare_output_frame(
+    std::vector<SliceAndKey>&& items,
+    const std::shared_ptr<PipelineContext>& pipeline_context,
+    const std::shared_ptr<Store>& store,
+    const ReadOptions& read_options);
+
+SegmentInMemory do_direct_read_or_process(
+    const std::shared_ptr<Store>& store,
+    ReadQuery& read_query,
+    const ReadOptions& read_options,
+    const std::shared_ptr<PipelineContext>& pipeline_context,
+    const std::shared_ptr<BufferHolder>& buffers);
 
 PredefragmentationInfo get_pre_defragmentation_info(
         const std::shared_ptr<Store>& store,

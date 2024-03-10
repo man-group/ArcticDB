@@ -12,6 +12,69 @@
 
 namespace arcticdb {
 
+void initialise_output_column(const Column& input_column, Column& output_column) {
+    if (&input_column != &output_column) {
+        size_t output_physical_rows;
+        if (input_column.is_sparse()) {
+            auto output_sparse_map = input_column.sparse_map();
+            output_physical_rows = output_sparse_map.count();
+            output_column.set_sparse_map(std::move(output_sparse_map));
+        } else {
+            output_physical_rows = input_column.row_count();
+        }
+        output_column.allocate_data(output_physical_rows * get_type_size(output_column.type().data_type()));
+        output_column.set_row_data(input_column.last_row());
+    }
+}
+
+void initialise_output_column(const Column& left_input_column, const Column& right_input_column, Column& output_column) {
+    if (&left_input_column != &output_column && &right_input_column != &output_column) {
+        size_t output_physical_rows;
+        std::optional<size_t> output_last_row;
+        if (!left_input_column.is_sparse() && !right_input_column.is_sparse()) {
+            // Both dense. Could be different lengths if the data is semantically sparse, but happens to be dense in the first n rows
+            output_physical_rows = std::min(left_input_column.row_count(), right_input_column.row_count());
+            output_last_row = std::min(left_input_column.last_row(), right_input_column.last_row());
+        } else {
+            // At least one sparse
+            util::BitSet output_sparse_map;
+            if (left_input_column.is_sparse() && right_input_column.is_sparse()) {
+                output_sparse_map = (left_input_column.sparse_map() & right_input_column.sparse_map());
+            } else if (left_input_column.is_sparse() && !right_input_column.is_sparse()) {
+                output_sparse_map = left_input_column.sparse_map();
+                // If the sparse column had more logical rows than the dense column, truncate the sparse map to the length of the dense column
+                if (left_input_column.last_row() > right_input_column.last_row()) {
+                    output_sparse_map.resize(right_input_column.row_count());
+                }
+            } else if (!left_input_column.is_sparse() && right_input_column.is_sparse()) {
+                output_sparse_map = right_input_column.sparse_map();
+                // If the sparse column had more logical rows than the dense column, truncate the sparse map to the length of the dense column
+                if (left_input_column.last_row() < right_input_column.last_row()) {
+                    output_sparse_map.resize(left_input_column.row_count());
+                }
+            }
+            output_physical_rows = output_sparse_map.count();
+            // Find the index of the last set bit (if any) for the output_last_row
+            util::BitSetSizeType last_set_bit;
+            if (output_sparse_map.find_reverse(last_set_bit)) {
+                output_last_row = static_cast<size_t>(last_set_bit);
+            }
+            output_column.set_sparse_map(std::move(output_sparse_map));
+        }
+        output_column.allocate_data(output_physical_rows * get_type_size(output_column.type().data_type()));
+        if (output_last_row.has_value()) {
+            output_column.set_row_data(*output_last_row);
+        }
+    }
+}
+
+void initialise_output_bitset(const util::BitSet& input_bitset, bool sparse_missing_value_output, util::BitSet& output_bitset) {
+    if (sparse_missing_value_output) {
+        output_bitset = input_bitset;
+        output_bitset.flip();
+    }
+}
+
 // Column operators
 bool operator==(const Column& left, const Column& right) {
     if (left.row_count() != right.row_count())
@@ -711,6 +774,10 @@ const util::BitMagic& Column::sparse_map() const {
 }
 
 std::optional<util::BitMagic>& Column::opt_sparse_map() {
+    return sparse_map_;
+}
+
+std::optional<util::BitMagic> Column::opt_sparse_map() const {
     return sparse_map_;
 }
 

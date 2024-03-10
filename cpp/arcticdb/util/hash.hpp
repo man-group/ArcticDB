@@ -12,23 +12,9 @@
 
 #include <folly/hash/Hash.h>
 
-// XXH_INLINE_ALL causes hashes to be non-deterministic with the linux conda build, needs investigating
-// https://github.com/man-group/ArcticDB/issues/1268
-#if defined(ARCTICDB_USING_CONDA) && defined(__linux__)
 #define XXH_STATIC_LINKING_ONLY
-#else
-// xxhash does some raw pointer manipulation that are safe, but compilers view as violating array bounds
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Warray-bounds"
-#define XXH_INLINE_ALL
-#endif
 #include <xxhash.h>
-#if defined(ARCTICDB_USING_CONDA) && defined(__linux__)
 #undef XXH_STATIC_LINKING_ONLY
-#else
-#undef XXH_INLINE_ALL
-#pragma GCC diagnostic pop
-#endif
 
 namespace arcticdb {
 

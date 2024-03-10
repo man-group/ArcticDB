@@ -35,11 +35,11 @@ void StreamVersionData::do_react(const pipelines::SpecificVersionQuery &specific
         load_param_ = LoadParameter{LoadType::LOAD_DOWNTO, specific_version.version_id_};
         break;
     case LoadType::LOAD_DOWNTO:
-        util::check(load_param_.load_until_.has_value(),
+        util::check(load_param_.load_until_version_.has_value(),
                     "Expect LOAD_DOWNTO to have version specified");
         if ((specific_version.version_id_ >= 0 && is_positive_version_query(load_param_)) ||
-            (specific_version.version_id_ < 0 && load_param_.load_until_.value() < 0)) {
-            load_param_.load_until_ = std::min(load_param_.load_until_.value(), specific_version.version_id_);
+            (specific_version.version_id_ < 0 && load_param_.load_until_version_.value() < 0)) {
+            load_param_.load_until_version_ = std::min(load_param_.load_until_version_.value(), specific_version.version_id_);
         } else {
             load_param_ = LoadParameter{LoadType::LOAD_UNDELETED};
         }
@@ -88,7 +88,7 @@ std::optional<AtomKey> get_specific_version_from_entry(
     if (signed_version_id >= 0) {
         version_id = static_cast<VersionId>(signed_version_id);
     } else {
-        auto opt_latest = version_map_entry->get_first_index(true);
+        auto opt_latest = version_map_entry->get_first_index(true).first;
         if (opt_latest.has_value()) {
             auto opt_version_id = get_version_id_negative_index(opt_latest->version_id(),
                                                                 signed_version_id);
@@ -129,7 +129,7 @@ inline std::optional<AtomKey> get_key_for_version_query(
             return get_version_map_entry_by_timestamp(version_map_entry, timestamp_version);
         },
         [&version_map_entry](const std::monostate &) {
-           return version_map_entry->get_first_index(false);
+           return version_map_entry->get_first_index(false).first;
         },
         [](const auto &) -> std::optional<AtomKey> {
            util::raise_rte("Unsupported version query type");
@@ -139,7 +139,7 @@ inline std::optional<AtomKey> get_key_for_version_query(
 struct SnapshotCountMap {
     std::unordered_map<SnapshotId, size_t> snapshot_counts_;
 
-    explicit SnapshotCountMap(const robin_hood::unordered_flat_map<StreamId, StreamVersionData> &version_data) {
+    explicit SnapshotCountMap(const ankerl::unordered_dense::map<StreamId, StreamVersionData> &version_data) {
         for (const auto &[_, info] : version_data) {
             for (const auto &snapshot : info.snapshots_) {
                 const auto it = snapshot_counts_.find(snapshot);
@@ -173,7 +173,7 @@ using SplitterType = folly::FutureSplitter<VersionEntryOrSnapshot>;
 using SnapshotKeyMap = std::unordered_map<SnapshotId, std::optional<VariantKey>>;
 
 folly::Future<VersionEntryOrSnapshot> set_up_snapshot_future(
-    robin_hood::unordered_flat_map<StreamId, SplitterType> &snapshot_futures,
+    ankerl::unordered_dense::map<StreamId, SplitterType> &snapshot_futures,
     const std::shared_ptr<SnapshotCountMap> &snapshot_count_map,
     const std::shared_ptr<SnapshotKeyMap> &snapshot_key_map,
     const pipelines::SnapshotVersionQuery &snapshot_query,
@@ -215,7 +215,7 @@ folly::Future<VersionEntryOrSnapshot> set_up_snapshot_future(
 folly::Future<VersionEntryOrSnapshot> set_up_version_future(
     const StreamId &symbol,
     const StreamVersionData &version_data,
-    robin_hood::unordered_flat_map<StreamId, SplitterType> &version_futures,
+    ankerl::unordered_dense::map<StreamId, SplitterType> &version_futures,
     const std::shared_ptr<Store> &store,
     const std::shared_ptr<VersionMap> &version_map
 ) {
@@ -258,13 +258,13 @@ std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions_async(
                 symbols.size(),
                 version_queries.size());
 
-    robin_hood::unordered_flat_map<StreamId, StreamVersionData> version_data;
+    ankerl::unordered_dense::map<StreamId, StreamVersionData> version_data;
     for (const auto &symbol : folly::enumerate(symbols)) {
         auto it = version_data.find(*symbol);
         if (it == version_data.end()) {
-            version_data.insert(robin_hood::pair<StreamId, StreamVersionData>(
-                *symbol,
-                StreamVersionData{version_queries[symbol.index]}));
+            version_data.insert(std::make_pair<StreamId, StreamVersionData>(
+                std::forward<StreamId>(StreamId{*symbol}),
+                std::forward<StreamVersionData>(StreamVersionData{version_queries[symbol.index]})));
         } else {
             it->second.react(version_queries[symbol.index]);
         }
@@ -273,8 +273,8 @@ std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions_async(
     auto snapshot_count_map = std::make_shared<SnapshotCountMap>(version_data);
     auto snapshot_key_map = std::make_shared<SnapshotKeyMap>(get_keys_for_snapshots(store, snapshot_count_map->snapshots()));
 
-    robin_hood::unordered_flat_map<StreamId, SplitterType> snapshot_futures;
-    robin_hood::unordered_flat_map<StreamId, SplitterType> version_futures;
+    ankerl::unordered_dense::map<StreamId, SplitterType> snapshot_futures;
+    ankerl::unordered_dense::map<StreamId, SplitterType> version_futures;
 
     std::vector<folly::Future<std::optional<AtomKey>>> output;
     output.reserve(symbols.size());

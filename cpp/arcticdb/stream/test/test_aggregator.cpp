@@ -24,7 +24,7 @@ struct SegmentsSink {
 TEST(Aggregator, BasicAndSegmenting) {
     const auto index = as::TimeseriesIndex::default_index();
     as::FixedSchema schema{
-        index.create_stream_descriptor(123, {
+        index.create_stream_descriptor(NumericId{123}, {
             scalar_field(DataType::UINT8, "uint8"),
         }), index
     };

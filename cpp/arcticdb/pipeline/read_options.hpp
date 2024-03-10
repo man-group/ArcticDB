@@ -20,7 +20,6 @@ struct ReadOptions {
     std::optional<bool> set_tz_;
     std::optional<bool> optimise_string_memory_;
     std::optional<bool> batch_throw_on_error_;
-    std::optional<bool> read_previous_on_failure_;
 
     void set_force_strings_to_fixed(const std::optional<bool>& force_strings_to_fixed) {
         force_strings_to_fixed_ = force_strings_to_fixed;

@@ -24,11 +24,7 @@ namespace pybind11 {
 
 namespace py = pybind11;
 
-#ifdef ARCTICDB_USING_CONDA
-    #include <robin_hood.h>
-#else
-    #include <arcticdb/util/third_party/robin_hood.hpp>
-#endif
+#include <ankerl/unordered_dense.h>
 
 namespace arcticdb {
 
@@ -131,7 +127,7 @@ class StringPool {
   public:
     using offset_t = position_t;
     using StringType = std::string_view;
-    using MapType = robin_hood::unordered_flat_map<StringType, offset_t>;
+    using MapType = ankerl::unordered_dense::map<StringType, offset_t>;
 
     StringPool() = default;
     ~StringPool() = default;
@@ -174,7 +170,7 @@ class StringPool {
     py::buffer_info as_buffer_info() const;
 
     std::optional<position_t> get_offset_for_column(std::string_view str, const Column& column);
-    robin_hood::unordered_set<position_t> get_offsets_for_column(const std::shared_ptr<std::unordered_set<std::string>>& strings, const Column& column);
+    ankerl::unordered_dense::set<position_t> get_offsets_for_column(const std::shared_ptr<std::unordered_set<std::string>>& strings, const Column& column);
   private:
     MapType map_;
     mutable StringBlock block_;

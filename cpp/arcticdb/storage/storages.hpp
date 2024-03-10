@@ -12,6 +12,7 @@
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/util/composite.hpp>
 #include <arcticdb/util/configs_map.hpp>
+#include <arcticdb/storage/single_file_storage.hpp>
 
 #include <memory>
 #include <vector>
@@ -34,7 +35,7 @@ class Storages {
     Storages& operator=(const Storages&) = delete;
     Storages& operator=(Storages&&) = delete;
 
-    using StorageVector = std::vector<std::unique_ptr<Storage>>;
+    using StorageVector = std::vector<std::shared_ptr<Storage>>;
 
     Storages(StorageVector&& storages, OpenMode mode) :
         storages_(std::move(storages)), mode_(mode) {
@@ -128,7 +129,13 @@ class Storages {
 
         source.iterate_type(key_type, visitor);
    }
-
+    std::optional<std::shared_ptr<SingleFileStorage>> get_single_file_storage() const {
+        if (dynamic_cast<SingleFileStorage*>(storages_[0].get()) != nullptr) {
+            return std::dynamic_pointer_cast<SingleFileStorage>(storages_[0]);
+        } else {
+            return std::nullopt;
+        }
+    }
   private:
     Storage& primary() {
         util::check(!storages_.empty(), "No storages configured");
@@ -140,7 +147,7 @@ class Storages {
         return *storages_[0];
     }
 
-    std::vector<std::unique_ptr<Storage>> storages_;
+    std::vector<std::shared_ptr<Storage>> storages_;
     OpenMode mode_;
 };
 

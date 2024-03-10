@@ -127,19 +127,77 @@ private:
     const MemBlock *block_;  // pointer to the parent memblock from which this was created from.
 };
 
+enum class IteratorType {
+    REGULAR,
+    ENUMERATED
+};
+
+enum class IteratorDensity {
+    DENSE,
+    SPARSE
+};
+
 struct ColumnData {
 /*
  * ColumnData is just a thin wrapper that helps in iteration over all the blocks in the column
  */
+public:
 
-  public:
-    template<typename TDT, bool constant>
-    class ColumnDataIterator: public boost::iterator_facade<
-            ColumnDataIterator<TDT, constant>,
-            std::conditional_t<constant, typename TDT::DataTypeTag::raw_type const, typename TDT::DataTypeTag::raw_type>,
-            boost::forward_traversal_tag
-            > {
-    using RawType = std::conditional_t<constant, const typename TDT::DataTypeTag::raw_type, typename TDT::DataTypeTag::raw_type>;
+    template<typename RawType>
+    struct Enumeration {
+        ssize_t idx_{0};
+        RawType* ptr_{nullptr};
+
+        inline ssize_t idx() const {
+            return idx_;
+        }
+
+        inline RawType& value() {
+            debug::check<ErrorCode::E_ASSERTION_FAILURE>(ptr_ != nullptr, "Dereferencing nullptr in enumerating ColumnDataIterator");
+            return *ptr_;
+        };
+
+        inline const RawType& value() const {
+            debug::check<ErrorCode::E_ASSERTION_FAILURE>(ptr_ != nullptr, "Dereferencing nullptr in enumerating ColumnDataIterator");
+            return *ptr_;
+        };
+    };
+
+    // Wrapper to keep code in iterator clean when differentiating between regular and enumerating iterators
+    template<typename RawType>
+    struct PointerWrapper {
+        RawType* ptr_{nullptr};
+    };
+
+    template <class T, IteratorType iterator_type>
+    using IteratorValueType_t = typename std::conditional_t<
+            iterator_type == IteratorType::ENUMERATED,
+            Enumeration<T>,
+            PointerWrapper<T>
+    >;
+
+    template <class T, IteratorType iterator_type, bool constant>
+    using IteratorReferenceType_t = typename std::conditional_t<
+        iterator_type == IteratorType::ENUMERATED,
+            std::conditional_t<constant, const Enumeration<T>, Enumeration<T>>,
+            std::conditional_t<constant, const T, T>
+    >;
+
+    template<typename TDT, IteratorType iterator_type, IteratorDensity iterator_density, bool constant>
+    class ColumnDataIterator;
+
+    template<typename TDT, IteratorType iterator_type, IteratorDensity iterator_density, bool constant>
+    using base_iterator_type = boost::iterator_facade<
+        ColumnDataIterator<TDT, iterator_type, iterator_density, constant>,
+        IteratorValueType_t<typename TDT::DataTypeTag::raw_type, iterator_type>,
+        boost::forward_traversal_tag,
+        IteratorReferenceType_t<typename TDT::DataTypeTag::raw_type, iterator_type, constant>&
+    >;
+
+    template<typename TDT, IteratorType iterator_type, IteratorDensity iterator_density, bool constant>
+    class ColumnDataIterator: public base_iterator_type<TDT, iterator_type, iterator_density, constant> {
+        using base_type = base_iterator_type<TDT, iterator_type, iterator_density, constant>;
+        using RawType = typename TDT::DataTypeTag::raw_type;
     public:
         ColumnDataIterator() = delete;
 
@@ -148,29 +206,40 @@ struct ColumnData {
         parent_(parent)
         {
             increment_block();
+            if constexpr (iterator_type == IteratorType::ENUMERATED && iterator_density == IteratorDensity::SPARSE) {
+                // idx_ default-constructs to 0, which is correct for dense case
+                data_.idx_ = parent_->bit_vector()->get_first();
+            }
         }
 
         // Used to construct [c]end iterators
-        explicit ColumnDataIterator(ColumnData* parent, RawType* end_ptr):
-                parent_(parent),
-                ptr_(end_ptr) {}
+        explicit ColumnDataIterator(ColumnData* parent, typename TDT::DataTypeTag::raw_type* end_ptr):
+                parent_(parent) {
+            data_.ptr_ = end_ptr;
+        }
 
-        template <class OtherValue, bool OtherConst>
-        ColumnDataIterator(ColumnDataIterator<OtherValue, OtherConst> const& other):
-        parent_(other.parent_),
-        opt_block_(other.opt_block_),
-        remaining_values_in_block_(other.remaining_values_in_block_),
-        ptr_(other.ptr_) {}
+        template <bool OtherConst>
+        explicit ColumnDataIterator(const ColumnDataIterator<TDT, iterator_type, iterator_density, OtherConst>& other):
+            parent_(other.parent_),
+            opt_block_(other.opt_block_),
+            remaining_values_in_block_(other.remaining_values_in_block_),
+            data_(other.data_)
+        {}
+
     private:
         friend class boost::iterator_core_access;
-        template <class, bool> friend class ColumnDataIterator;
 
         void increment() {
-            if (ARCTICDB_LIKELY(remaining_values_in_block_ > 0)) {
-                ++ptr_;
-                --remaining_values_in_block_;
-            } else {
+            ++data_.ptr_;
+            if (ARCTICDB_UNLIKELY(--remaining_values_in_block_ == 0)) {
                 increment_block();
+            }
+            if constexpr (iterator_type == IteratorType::ENUMERATED) {
+                if constexpr (iterator_density == IteratorDensity::SPARSE) {
+                    data_.idx_ = parent_->bit_vector()->get_next(data_.idx_);
+                } else {
+                    ++data_.idx_;
+                }
             }
         }
 
@@ -178,27 +247,30 @@ struct ColumnData {
             opt_block_ = parent_->next<TDT>();
             if(ARCTICDB_LIKELY(opt_block_.has_value())) {
                 remaining_values_in_block_ = opt_block_->row_count();
-                if constexpr(constant) {
-                    ptr_ = reinterpret_cast<RawType*>(opt_block_->data());
-                } else {
-                    ptr_ = const_cast<RawType*>(opt_block_->data());
-                }
+                data_.ptr_ = const_cast<typename TDT::DataTypeTag::raw_type*>(opt_block_->data());
             }
         }
 
-        template <typename OtherValue, bool OtherConst>
-        bool equal(ColumnDataIterator<OtherValue, OtherConst> const& other) const {
-            return parent_ == other.parent_ && ptr_ == other.ptr_;
+        template <bool OtherConst>
+        bool equal(const ColumnDataIterator<TDT, iterator_type, iterator_density, OtherConst>& other) const {
+            debug::check<ErrorCode::E_ASSERTION_FAILURE>(parent_ == other.parent_,
+                                                         "ColumnDataIterator::equal called with different parent ColumnData*");
+            return data_.ptr_ == other.data_.ptr_;
         }
 
-        RawType& dereference() const {
-            return *ptr_;
+        base_type::reference dereference() const {
+            if constexpr (iterator_type == IteratorType::ENUMERATED) {
+                return data_;
+            } else {
+                debug::check<ErrorCode::E_ASSERTION_FAILURE>(data_.ptr_ != nullptr, "Dereferencing nullptr in ColumnDataIterator");
+                return *data_.ptr_;
+            }
         }
 
         ColumnData* parent_{nullptr};
         std::optional<TypedBlockData<TDT>> opt_block_{std::nullopt};
         std::size_t remaining_values_in_block_{0};
-        RawType* ptr_{nullptr};
+        base_type::value_type data_;
     };
 
     ColumnData(
@@ -215,18 +287,18 @@ struct ColumnData {
 
     ARCTICDB_MOVE_COPY_DEFAULT(ColumnData)
 
-    template<typename TDT>
-    ColumnDataIterator<TDT, false> begin() {
-        return ColumnDataIterator<TDT, false>(this);
+    template<typename TDT, IteratorType iterator_type=IteratorType::REGULAR, IteratorDensity iterator_density=IteratorDensity::DENSE>
+    ColumnDataIterator<TDT, iterator_type, iterator_density, false> begin() {
+        return ColumnDataIterator<TDT, iterator_type, iterator_density, false>(this);
     }
 
-    template<typename TDT>
-    ColumnDataIterator<TDT, true> cbegin() {
-        return ColumnDataIterator<TDT, true>(this);
+    template<typename TDT, IteratorType iterator_type=IteratorType::REGULAR, IteratorDensity iterator_density=IteratorDensity::DENSE>
+    ColumnDataIterator<TDT, iterator_type, iterator_density, true> cbegin() {
+        return ColumnDataIterator<TDT, iterator_type, iterator_density, true>(this);
     }
 
-    template<typename TDT>
-    ColumnDataIterator<TDT, false> end() {
+    template<typename TDT, IteratorType iterator_type=IteratorType::REGULAR, IteratorDensity iterator_density=IteratorDensity::DENSE>
+    ColumnDataIterator<TDT, iterator_type, iterator_density, false> end() {
         using RawType = typename TDT::DataTypeTag::raw_type;
         RawType* end_ptr{nullptr};
         if(!data_->blocks().empty()) {
@@ -234,19 +306,19 @@ struct ColumnData {
             auto typed_block_data = next_typed_block<TDT>(block);
             end_ptr = typed_block_data.data() + typed_block_data.row_count();
         }
-        return ColumnDataIterator<TDT, false>(this, end_ptr);
+        return ColumnDataIterator<TDT, iterator_type, iterator_density, false>(this, end_ptr);
     }
 
-    template<typename TDT>
-    ColumnDataIterator<TDT, true> cend() {
+    template<typename TDT, IteratorType iterator_type=IteratorType::REGULAR, IteratorDensity iterator_density=IteratorDensity::DENSE>
+    ColumnDataIterator<TDT, iterator_type, iterator_density, true> cend() {
         using RawType = typename TDT::DataTypeTag::raw_type;
-        const RawType* end_ptr{nullptr};
+        RawType* end_ptr{nullptr};
         if(!data_->blocks().empty()) {
             auto block = data_->blocks().at(num_blocks() - 1);
             auto typed_block_data = next_typed_block<TDT>(block);
-            end_ptr = typed_block_data.data() + typed_block_data.row_count();
+            end_ptr = const_cast<RawType*>(typed_block_data.data() + typed_block_data.row_count());
         }
-        return ColumnDataIterator<TDT, true>(this, end_ptr);
+        return ColumnDataIterator<TDT, iterator_type, iterator_density, true>(this, end_ptr);
     }
 
     TypeDescriptor type() const {

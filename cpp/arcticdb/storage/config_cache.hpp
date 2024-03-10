@@ -78,7 +78,7 @@ class ConfigCache {
         auto &descriptor = *maybe_descriptor;
 
         util::check(!descriptor.storage_ids_.empty(), "Can't configure library with no storage ids");
-        std::vector<std::unique_ptr<Storage>> storages;
+        std::vector<std::shared_ptr<Storage>> storages;
         for (const auto& storage_name : descriptor.storage_ids_) {
             // Otherwise see if we have the storage config.
             arcticdb::proto::storage::VariantStorage storage_conf;
