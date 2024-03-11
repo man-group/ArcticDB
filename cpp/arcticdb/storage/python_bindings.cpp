@@ -34,7 +34,7 @@ std::shared_ptr<LibraryIndex> create_library_index(const std::string &environmen
     return std::make_shared<LibraryIndex>(EnvironmentName{environment_name}, mem_resolver);
 }
 
-void register_bindings(py::module& storage, py::exception<arcticdb::ArcticException>&) {
+void register_bindings(py::module& storage) {
     storage.attr("CONFIG_LIBRARY_NAME") = py::str(arcticdb::storage::CONFIG_LIBRARY_NAME);
 
     py::enum_<KeyType>(storage, "KeyType")
