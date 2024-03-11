@@ -101,7 +101,6 @@ enum class EncodingVersion : uint16_t {
     COUNT = 2
 };
 
-
 constexpr static uint16_t MAGIC_NUMBER = 0xFA57;
 
 struct FixedHeader {
@@ -182,4 +181,4 @@ struct FrameDescriptor {
 
 
 #pragma pack(pop)
-}
+} //namespace arcticdb

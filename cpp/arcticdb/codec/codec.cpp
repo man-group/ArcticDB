@@ -346,7 +346,7 @@ void decode_v2(const Segment& segment,
         auto index_fields = decode_index_fields(hdr, data, begin, end);
         auto frame_metadata = extract_frame_metadata(hdr, res);
         util::check(index_fields.has_value(), "Failed to get index fields");
-            res.set_index_descriptorstd::make_shared<FieldCollection>(std::move(*index_fields)));
+            res.set_index_descriptor(std::make_shared<FieldCollection>(std::move(*index_fields)));
     }
 
     util::check(hdr.has_column_fields(), "Expected column fields in v2 encoding");
@@ -388,8 +388,7 @@ void decode_v2(const Segment& segment,
 void decode_v1(const Segment& segment,
             const SegmentHeader& hdr,
             SegmentInMemory& res,
-            StreamDescriptor& desc)
-{
+            StreamDescriptor& desc) {
     ARCTICDB_SAMPLE(DecodeSegment, 0)
     const uint8_t* data = segment.buffer().data();
     util::check(data != nullptr, "Got null data ptr from segment");
@@ -397,36 +396,39 @@ void decode_v1(const Segment& segment,
     const uint8_t* end = begin + segment.buffer().bytes();
     decode_metadata(hdr, data, begin, res);
 
-    if (data!=end) {
+    if (data != end) {
         const auto fields_size = desc.fields().size();
-        const auto& column_fields = hdr.body_fields();
-        util::check(fields_size == segment.fields_size(), "Mismatch between descriptor and header field size: {} != {}", fields_size, column_fields.size());
+        const auto &column_fields = hdr.body_fields();
+        util::check(fields_size == segment.fields_size(),
+                    "Mismatch between descriptor and header field size: {} != {}",
+                    fields_size,
+                    column_fields.size());
         const auto start_row = res.row_count();
         const auto seg_row_count = fields_size ? ssize_t(column_fields.at(0).ndarray().items_count()) : 0LL;
         res.init_column_map();
 
         for (std::size_t i = 0; i < fields_size; ++i) {
-            const auto& field = column_fields.at(i);
-            const auto& field_name = desc.fields(i).name();
-            util::check(data!=end, "Reached end of input block with {} fields to decode", fields_size-i);
-            if(auto col_index = res.column_index(field_name)) {
-                auto& col = res.column(static_cast<position_t>(*col_index));
+            const auto &field = column_fields.at(i);
+            const auto &field_name = desc.fields(i).name();
+            util::check(data != end, "Reached end of input block with {} fields to decode", fields_size - i);
+            if (auto col_index = res.column_index(field_name)) {
+                auto &col = res.column(static_cast<position_t>(*col_index));
                 data += decode_field(
                     res.field(*col_index).type(),
                     field,
                     data,
                     col,
                     col.opt_sparse_map(),
-                    to_encoding_version(hdr.encoding_version())
+                    hdr.encoding_version()
                 );
-            } else
+                ARCTICDB_TRACE(log::codec(), "Decoded column {} to position {}", i, data - begin);
+            } else {
                 data += encoding_sizes::field_compressed_size(field);
+                ARCTICDB_TRACE(log::codec(), "Skipped column {}, at position {}", i, data - begin);
             }
-            ARCTICDB_TRACE(log::codec(), "Decoded column {} to position {}", i, data - begin);
         }
-
         decode_string_pool(hdr, data, begin, end, res);
-        res.set_row_data(static_cast<ssize_t>(start_row + seg_row_count-1));
+        res.set_row_data(static_cast<ssize_t>(start_row + seg_row_count - 1));
         res.set_compacted(segment.header().compacted());
     }
 }
@@ -446,7 +448,7 @@ void decode_into_memory_segment(
 SegmentInMemory decode_segment(Segment&& s) {
     auto segment = std::move(s);
     auto &hdr = segment.header();
-    ARCTICDB_TRACE(log::codec(), "Decoding descriptor: {}", segment.header().stream_descriptor());
+    ARCTICDB_TRACE(log::codec(), "Decoding descriptor: {}", segment.descriptor());
     auto descriptor = segment.descriptor();
     descriptor.fields().regenerate_offsets();
     ARCTICDB_TRACE(log::codec(), "Creating segment");

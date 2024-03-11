@@ -162,8 +162,8 @@ inline size_t max_id_size(const VariantId& id) {
 }
 
 inline size_t max_index_size(const IndexDescriptor& index) {
-    switch(index.type()) {
-    case IndexDescriptor::STRING:
+    switch(index.type_) {
+    case IndexDescriptor::Type::STRING:
         return max_string_size();
     default:
         return sizeof(uint64_t);

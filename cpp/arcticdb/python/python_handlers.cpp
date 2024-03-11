@@ -151,20 +151,13 @@ namespace arcticdb {
     void ArrayHandler::handle_type(
         const uint8_t*& data,
         uint8_t* dest,
-<<<<<<< HEAD
-        const VariantField& encoded_field_info,
-        size_t,
-=======
         const EncodedFieldImpl& field,
         const entity::TypeDescriptor& type_descriptor,
         size_t dest_bytes,
->>>>>>> 59f95f03 (WIP descriptor changes)
         std::shared_ptr<BufferHolder> buffers,
         EncodingVersion encoding_version,
         const ColumnMapping& m
     ) {
-<<<<<<< HEAD
-        util::variant_match(encoded_field_info, [&](auto field){
             ARCTICDB_SAMPLE(HandleArray, 0)
             util::check(field->has_ndarray(), "Expected ndarray in array object handler");
 
@@ -215,52 +208,6 @@ namespace arcticdb {
                     }
 
                     ++last_row;
-=======
-        ARCTICDB_SAMPLE(HandleArray, 0)
-        util::check(field.has_ndarray(), "Expected ndarray in array object handler");
-        const auto row_count = dest_bytes / sizeof(PyObject*);
-
-        auto ptr_dest = reinterpret_cast<const PyObject**>(dest);
-        if(!field.ndarray().sparse_map_bytes()) {
-            log::version().info("Array handler has no values");
-            fill_with_none(ptr_dest, row_count);
-            return;
-        }
-        std::shared_ptr<Column> column = buffers->get_buffer(type_descriptor, true);
-        column->check_magic();
-        log::version().info("Column got buffer at {}", uintptr_t(column.get()));
-        auto bv = std::make_optional(util::BitSet{});
-        data += decode_field(type_descriptor, field, data, *column, bv, encoding_version);
-
-        auto last_row = 0u;
-        ARCTICDB_SUBSAMPLE(InitArrayAcquireGIL, 0)
-        const auto strides = static_cast<stride_t>(get_type_size(type_descriptor.data_type()));
-        const py::dtype py_dtype = generate_python_dtype(type_descriptor, strides);
-        type_descriptor.visit_tag([&] (auto tdt) {
-            const auto& blocks = column->blocks();
-            if(blocks.empty())
-                return;
-
-            auto block_it = blocks.begin();
-            const auto* shapes = column->shape_ptr();
-            auto block_pos = 0u;
-            const auto* ptr_src = (*block_it)->data();
-            constexpr stride_t stride = static_cast<TypeDescriptor>(tdt).get_type_byte_size();
-            for (auto en = bv->first(); en < bv->end(); ++en) {
-                const shape_t shape = shapes ? *shapes : 0;
-                const auto offset = *en;
-                ptr_dest = fill_with_none(ptr_dest, offset - last_row);
-                last_row = offset;
-                *ptr_dest++ = initialize_array(py_dtype,
-                    shape,
-                    stride,
-                    ptr_src + block_pos,
-                    column,
-                    initialize_array_mutex);
-                block_pos += shape * stride;
-                if(shapes) {
-                    ++shapes;
->>>>>>> 59f95f03 (WIP descriptor changes)
                 }
                 if(block_it != blocks.end() && block_pos == (*block_it)->bytes() && ++block_it != blocks.end()) {
                     ptr_src = (*block_it)->data();
@@ -272,7 +219,6 @@ namespace arcticdb {
 
             ARCTICDB_SUBSAMPLE(ArrayIncNones, 0)
             fill_with_none(ptr_dest, m.num_rows_ - last_row);
-        });
     }
 
     int ArrayHandler::type_size() const {

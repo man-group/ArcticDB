@@ -57,7 +57,7 @@ template <typename NDArrayEncodedFieldType> std::size_t shape_compressed_size(co
         case EncodedFieldType::NDARRAY:
             return ndarray_field_compressed_size(field.ndarray());
         default:
-            util::raise_error_msg("Unsupported encoding {}", field);
+            util::raise_rte("Unsupported encoding {}", field.DebugString());
 
     }
 }
@@ -103,7 +103,6 @@ std::size_t segment_uncompressed_size(const FieldCollectionType &fields) {
     }
     return total;
 }
-
 
 std::size_t represented_size(const arcticdb::proto::encoding::SegmentHeader& sh, size_t total_rows);
 

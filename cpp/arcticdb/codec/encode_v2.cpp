@@ -269,15 +269,9 @@ namespace arcticdb {
         auto encoded_field = segment_header.mutable_column_fields();
         segment_header.set_footer_offset(pos);
         write_magic<EncodedMagic>(out_buffer, pos);
-<<<<<<< HEAD
-        if(!encoded_blocks_buffer.empty())
-            BytesEncoder<EncodingPolicyV2>::encode(encoded_blocks_buffer, codec_opts, out_buffer, pos, encoded_field);
-
-=======
         Column encoded_fields_column(encoded_fields_type_desc(), false, encoded_fields.release_data(), encoded_fields.release_offsets());
         auto data = encoded_fields_column.data();
         ColumnEncoderV2::encode(codec_opts, data, encoded_field, out_buffer, pos);
->>>>>>> 59f95f03 (WIP descriptor changes)
         ARCTICDB_TRACE(log::codec(), "Encoded encoded blocks to position {}", pos);
     }
 

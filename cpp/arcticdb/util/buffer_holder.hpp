@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include <column_store/column.hpp>
+#include <arcticdb/column_store/column.hpp>
 #include <vector>
 
 namespace arcticdb {
@@ -22,4 +22,4 @@ struct BufferHolder {
         return column;
     }
 };
-}
+}  //namespace arcticdb

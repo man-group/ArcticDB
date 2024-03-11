@@ -477,4 +477,4 @@ private:
     std::shared_ptr<SegmentInMemoryImpl> impl_;
 };
 
-}
+} //namespace arcticdb

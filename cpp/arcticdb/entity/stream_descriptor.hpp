@@ -9,10 +9,10 @@
 
 #include <arcticdb/entity/field_collection.hpp>
 #include <arcticdb/memory_layout.hpp>
-#include <folly/gen/Base.h>
 
 #include <arcticdb/entity/field_collection_proto.hpp>
 #include <arcticdb/util/variant.hpp>
+#include <arcticdb/entity/types_proto.hpp>
 
 namespace arcticdb::entity {
 
@@ -35,7 +35,8 @@ struct FrameDescriptorImpl : public FrameDescriptor {
 };
 
 bool operator==(const FrameDescriptorImpl& left, const FrameDescriptorImpl& right) {
-    return left.index() == right.index(); }
+    return left.index() == right.index();
+}
 
 bool operator!=(const FrameDescriptorImpl& left, const FrameDescriptorImpl& right) {
     return !(left == right);
@@ -52,7 +53,6 @@ struct StreamDescriptor {
     StreamDescriptor(std::shared_ptr<FrameDescriptorImpl> data, std::shared_ptr<FieldCollection> fields) :
             data_(std::move(data)),
             fields_(std::move(fields)) {
-
     }
 
     [[nodiscard]] const FrameDescriptorImpl& data() const  {
@@ -253,7 +253,6 @@ struct StreamDescriptor {
     const Field& field(size_t pos) {
         return fields_->at(pos);
     }
-
 };
 
 template <class IndexType>
@@ -277,7 +276,7 @@ StreamDescriptor index_descriptor(const StreamId& stream_id, IndexType, const Ra
 
 template <typename IndexType>
 StreamDescriptor index_descriptor(StreamId stream_id, IndexType index_type, std::initializer_list<FieldRef> fields) {
-    return index_descriptor(stream_id, index_type, folly::gen::from(fields) | folly::gen::as<std::vector>());
+    return index_descriptor(stream_id, index_type, fields);
 }
 
 template <typename IndexType, typename RangeType>
@@ -299,16 +298,8 @@ StreamDescriptor stream_descriptor(const StreamId& stream_id, IndexType idx, Ran
 }
 
 template <typename IndexType>
-StreamDescriptor stream_descriptor(StreamId stream_id, IndexType index_type,
-                                          std::initializer_list<FieldRef> fields) {
-    std::vector<FieldRef> vec{fields};
-    return stream_descriptor(stream_id, index_type, folly::range(vec));
-}
-
-inline TypeDescriptor stream_id_descriptor(const StreamId &stream_id) {
-    return std::holds_alternative<NumericId>(stream_id) ?
-    TypeDescriptor(DataType::UINT64, 0) :
-    TypeDescriptor(DataType::ASCII_DYNAMIC64, 0);
+StreamDescriptor stream_descriptor(StreamId stream_id, IndexType index_type, std::initializer_list<FieldRef> fields) {
+    return stream_descriptor(stream_id, index_type, fields);
 }
 
 inline DataType stream_id_data_type(const StreamId &stream_id) {
@@ -323,7 +314,7 @@ inline FieldCollection field_collection_from_proto(google::protobuf::RepeatedPtr
     return output;
 }
 
-} //namespace arcticdb
+} //namespace arcticdb::entity
 
 namespace fmt {
 template<>

@@ -12,6 +12,7 @@
 #include <arcticdb/storage/mongo/mongo_client_wrapper.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/composite.hpp>
+#include <arcticdb/util/pb_util.hpp>
 #include <folly/Range.h>
 
 namespace arcticdb::storage::mongo {

@@ -140,6 +140,8 @@ SegmentHeader deserialize_segment_header_from_proto(const arcticdb::proto::encod
 
     if(header.has_column_fields())
         deserialize_proto_field(output, FieldOffset::COLUMN, buffer, header.column_fields(), pos);
+
+    return output;
 }
 
 void serialize_segment_header_to_proto(uint8_t* dst, const SegmentHeader& hdr) {

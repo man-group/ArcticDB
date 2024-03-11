@@ -2,10 +2,8 @@
 
 #include <arcticdb/codec/encoded_field.hpp>
 #include <arcticdb/codec/encoded_field_collection.hpp>
-#include <arcticdb/codec/codec.hpp>
+//#include <arcticdb/codec/codec.hpp>
 #include <arcticdb/util/cursored_buffer.hpp>
-#include <arcticdb/codec/encoding_version.hpp>
-
 
 namespace arcticdb {
 
@@ -232,6 +230,5 @@ public:
         body_fields_ = std::move(body_fields);
     }
 };
-
 
 } //namespace arcticdb

@@ -219,7 +219,6 @@ set(arcticdb_srcs
         entity/type_conversion.hpp
         entity/types.hpp
         entity/type_utils.hpp
-        entity/types_proto.hpp
         entity/types-inl.hpp
         entity/variant_key.hpp
         entity/versioned_item.hpp
@@ -301,7 +300,7 @@ set(arcticdb_srcs
         stream/index.hpp
         stream/merge.hpp
         stream/merge.hpp
-        stream/merge.hpp util/ref_counted_map.hpp
+        stream/merge.hpp
         stream/protobuf_mappings.hpp
         stream/row_builder.hpp
         stream/schema.hpp
@@ -344,8 +343,6 @@ set(arcticdb_srcs
         util/preconditions.hpp
         util/preprocess.hpp
         util/ranges_from_future.hpp
-        util/ref_counted_map.hpp
-        util/ref_counted_map.hpp
         util/regex_filter.hpp
         util/simple_string_hash.hpp
         util/slab_allocator.hpp
@@ -381,7 +378,6 @@ set(arcticdb_srcs
         codec/codec.cpp
         codec/encode_v1.cpp
         codec/encode_v2.cpp
-        codec/encoding_sizes.cpp
         codec/segment.cpp
         column_store/chunked_buffer.cpp
         column_store/column.cpp
@@ -398,7 +394,6 @@ set(arcticdb_srcs
         entity/performance_tracing.cpp
         entity/types.cpp
         entity/type_utils.cpp
-        entity/types_proto.cpp
         log/log.cpp
         pipeline/column_mapping.cpp
         pipeline/column_stats.cpp
@@ -483,10 +478,9 @@ set(arcticdb_srcs
         codec/segment_header.hpp
         codec/protobuf_mappings.hpp
         codec/encoded_field.cpp
-        codec/encoding_version.hpp
         memory_layout.hpp
         codec/protobuf_mappings.cpp
-        entity/protobuf_mappings.cpp)
+        entity/protobuf_mappings.cpp entity/types_proto.hpp entity/types_proto.cpp)
 
 if(${ARCTICDB_INCLUDE_ROCKSDB})
     list (APPEND arcticdb_srcs

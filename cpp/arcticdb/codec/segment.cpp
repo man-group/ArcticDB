@@ -255,6 +255,18 @@ std::pair<uint8_t*, size_t> Segment::try_internal_write(std::shared_ptr<Buffer>&
     }
 }
 
+[[nodiscard]] std::shared_ptr<FieldCollection> Segment::fields_ptr() const {
+    return desc_.fields_ptr();
+}
+
+[[nodiscard]] size_t Segment::fields_size() const {
+    return desc_.field_count();
+}
+
+[[nodiscard]] const Field& Segment::fields(size_t pos) const {
+    return desc_.fields(pos);
+}
+
 void Segment::write_to(std::uint8_t* dst, std::size_t hdr_sz) {
     ARCTICDB_SAMPLE(SegmentWriteToStorage, RMTSF_Aggregate)
     ARCTICDB_SUBSAMPLE(SegmentWriteHeader, RMTSF_Aggregate)

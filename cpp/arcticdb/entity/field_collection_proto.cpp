@@ -6,9 +6,9 @@
  */
 
 #include <arcticdb/entity/field_collection_proto.hpp>
+#include <arcticdb/entity/types_proto.hpp>
 
 namespace arcticdb {
-
 
 FieldCollection fields_from_proto(const arcticdb::proto::descriptors::StreamDescriptor& desc) {
     FieldCollection output;
@@ -17,7 +17,6 @@ FieldCollection fields_from_proto(const arcticdb::proto::descriptors::StreamDesc
 
     return output;
 }
-
 
 void proto_from_fields(const FieldCollection& fields, arcticdb::proto::descriptors::StreamDescriptor& desc) {
     for (const auto& field : fields) {

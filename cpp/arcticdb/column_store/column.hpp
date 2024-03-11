@@ -248,6 +248,8 @@ public:
 
     Column clone() const;
 
+    bool empty() const;
+
     bool is_sparse() const;
 
     bool sparse_permitted() const;

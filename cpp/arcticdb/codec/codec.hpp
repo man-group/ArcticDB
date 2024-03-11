@@ -10,11 +10,9 @@
 #include <arcticdb/codec/core.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/codec/encode_common.hpp>
-#include <arcticdb/codec/encoding_version.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/stream_descriptor.hpp>
 #include <arcticdb/codec/segment_header.hpp>
-
 
 namespace arcticdb {
 

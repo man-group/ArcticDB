@@ -7,16 +7,14 @@
 
 #pragma once
 
-#include "util/buffer.hpp"
 #include <arcticdb/storage/common.hpp>
-#include <arcticdb/codec/encoding_sizes.hpp>
 #include <arcticdb/codec/segment_header.hpp>
+#include <arcticdb/util/buffer_pool.hpp>
+#include <arcticdb/entity/stream_descriptor.hpp>
+#include <arcticdb/util/variant.hpp>
+
 #include <google/protobuf/io/zero_copy_stream_impl.h>
 #include <google/protobuf/arena.h>
-#include <arcticdb/util/buffer_pool.hpp>
-#include <arcticdb/entity/field_collection.hpp>
-#include <arcticdb/codec/encoding_version.hpp>
-#include <arcticdb/codec/segment_header.hpp>
 
 #include <iostream>
 #include <variant>
@@ -143,17 +141,11 @@ class Segment {
         return buffer_.is_uninitialized() || (buffer().bytes() == 0 && header_.empty());
     }
 
-    [[nodiscard]] std::shared_ptr<FieldCollection> fields_ptr() const {
-        return desc_.fields_ptr();
-    }
+    [[nodiscard]] std::shared_ptr<FieldCollection> fields_ptr() const;
 
-    [[nodiscard]] size_t fields_size() const {
-        return desc_.field_count();
-    }
+    [[nodiscard]] size_t fields_size() const;
 
-    [[nodiscard]] const Field& fields(size_t pos) const {
-        return desc_.fields(pos);
-    }
+    [[nodiscard]] const Field& fields(size_t pos) const;
 
     void force_own_buffer() {
         buffer_.force_own_buffer();

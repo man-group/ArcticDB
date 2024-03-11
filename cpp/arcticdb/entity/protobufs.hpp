@@ -34,4 +34,4 @@ namespace arcticdb::proto {
     namespace nfs_backed_storage = arcticc::pb2::nfs_backed_storage_pb2;
     namespace utils = arcticc::pb2::utils_pb2;
 
-} //namespace arcticdb
+} //namespace arcticdb::proto

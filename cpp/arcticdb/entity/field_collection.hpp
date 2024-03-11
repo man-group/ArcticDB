@@ -202,5 +202,4 @@ FieldCollection fields_from_range(const RangeType& fields) {
     return output;
 }
 
-
 } //namespace arcticdb

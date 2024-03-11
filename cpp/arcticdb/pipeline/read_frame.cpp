@@ -24,7 +24,6 @@
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/pipeline/column_mapping.hpp>
 #include <ankerl/unordered_dense.h>
-#include <arcticdb/codec/variant_encoded_field_collection.hpp>
 #include <arcticdb/util/magic_num.hpp>
 #include <google/protobuf/util/message_differencer.h>
 #include <folly/gen/Base.h>
@@ -242,31 +241,6 @@ size_t get_field_range_compressed_size(
     return total;
 }
 
-<<<<<<< HEAD
-void decode_or_expand(
-    const uint8_t*& data,
-    uint8_t* dest,
-    const VariantField& variant_field,
-    size_t dest_bytes,
-    std::shared_ptr<BufferHolder> buffers,
-    EncodingVersion encoding_version,
-    const ColumnMapping& m
-) {
-    util::variant_match(variant_field, [&](auto field) {
-        decode_or_expand_impl(
-            data,
-            dest,
-            *field,
-            dest_bytes,
-            buffers,
-            encoding_version,
-            m
-        );
-    });
-}
-
-=======
->>>>>>> 59f95f03 (WIP descriptor changes)
 void advance_field_size(
     const EncodedFieldImpl& field,
     const uint8_t*& data,
@@ -411,21 +385,12 @@ void decode_into_frame_dynamic(
     data = skip_heading_fields(hdr, data);
     context.set_descriptor(seg.descriptor());
     context.set_compacted(hdr.compacted());
-<<<<<<< HEAD
-    const EncodingVersion encdoing_version = EncodingVersion(hdr.encoding_version());
-    const bool has_magic_numbers = encdoing_version == EncodingVersion::V2;
-    VariantEncodedFieldCollection fields(seg);
 
-    // data == end in case we have empty data types (e.g. {EMPTYVAL, Dim0}, {EMPTYVAL, Dim1}) for which we store nothing
-    // in storage as they can be reconstructed in the type handler on the read path.
-    if (data != end || fields.size() > 0) {
-=======
     const auto encoding_version = hdr.encoding_version();
     const bool has_magic_numbers = encoding_version == EncodingVersion::V2;
 
     if (data != end) {
         const auto& fields = hdr.body_fields();
->>>>>>> 59f95f03 (WIP descriptor changes)
         auto index_field = fields.at(0u);
         decode_index_field(frame, index_field, data, begin, end, context, encoding_version);
 
@@ -443,7 +408,7 @@ void decode_into_frame_dynamic(
             auto dst_col = *frame_loc_opt;
             auto& buffer = frame.column(static_cast<position_t>(dst_col)).data().buffer();
             ColumnMapping m{frame, dst_col, field_col, context};
-<<<<<<< HEAD
+
             util::check(
                 static_cast<bool>(has_valid_type_promotion(m.source_type_desc_, m.dest_type_desc_)),
                 "Can't promote type {} to type {} in field {}",
@@ -477,18 +442,6 @@ void decode_into_frame_dynamic(
             // destination type.
             if (!trivially_compatible_types(m.source_type_desc_, m.dest_type_desc_) && !source_is_empty) {
                 m.dest_type_desc_.visit_tag([&buffer, &m, &data, encoded_field, buffers, encdoing_version] (auto dest_desc_tag) {
-=======
-            util::check(static_cast<bool>(has_valid_type_promotion(m.source_type_desc_, m.dest_type_desc_)), "Can't promote type {} to type {} in field {}",
-                        m.source_type_desc_, m.dest_type_desc_, m.frame_field_descriptor_.name());
-            ARCTICDB_TRACE(log::storage(), "Creating data slice at {} with total size {} ({} rows)", m.offset_bytes_, m.dest_bytes_,
-                           context.slice_and_key().slice_.row_range.diff());
-            util::check(data != end,
-                        "Reached end of input block with {} fields to decode",
-                        field_count - field_col);
-            decode_or_expand(data, buffer.data() + m.offset_bytes_, encoded_field, m.source_type_desc_, m.dest_bytes_, buffers, encoding_version);
-            if (!trivially_compatible_types(m.source_type_desc_, m.dest_type_desc_)) {
-                m.dest_type_desc_.visit_tag([&buffer, &m, buffers] (auto dest_desc_tag) {
->>>>>>> 59f95f03 (WIP descriptor changes)
                     using DestinationType =  typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
                     m.source_type_desc_.visit_tag([&buffer, &m] (auto src_desc_tag ) {
                         using SourceType =  typename decltype(src_desc_tag)::DataTypeTag::raw_type;
