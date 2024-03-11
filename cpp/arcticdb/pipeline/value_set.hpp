@@ -14,7 +14,6 @@
 #include <variant>
 #include <vector>
 
-#include <folly/container/F14Map.h>
 #include <pybind11/numpy.h>
 
 #include <arcticdb/entity/types.hpp>
@@ -98,7 +97,7 @@ private:
     };
 
     std::shared_ptr<std::unordered_set<std::string>> typed_set_string_;
-    folly::F14FastMap<size_t, std::shared_ptr<std::unordered_set<std::string>>> typed_set_fixed_width_strings_;
+    std::unordered_map<size_t, std::shared_ptr<std::unordered_set<std::string>>> typed_set_fixed_width_strings_;
 
     typed_set<uint8_t> typed_set_uint8_t_;
     typed_set<uint16_t> typed_set_uint16_t_;

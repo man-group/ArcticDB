@@ -269,7 +269,7 @@ inline std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKe
 struct StreamVersionData {
     size_t count_ = 0;
     LoadParameter load_param_ = LoadParameter{LoadType::NOT_LOADED};
-    folly::small_vector<SnapshotId, 1> snapshots_;
+    boost::container::small_vector<SnapshotId, 1> snapshots_;
 
     explicit StreamVersionData(const pipelines::VersionQuery& version_query);
     StreamVersionData() = default;
