@@ -11,7 +11,6 @@
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/index_fields.hpp>
-#include <folly/container/F14Map.h>
 
 #include <boost/noncopyable.hpp>
 
@@ -82,12 +81,7 @@ struct IndexSegmentReader {
     }
 
 private:
-#ifndef _WIN32
-    mutable folly::F14FastMap<ColRange, std::shared_ptr<StreamDescriptor>, AxisRange::Hasher> descriptor_by_col_group_;
-#else
-    //TODO: Fix this for windows - folly complains regarding private inheritance
     mutable std::unordered_map<ColRange, std::shared_ptr<StreamDescriptor>, AxisRange::Hasher> descriptor_by_col_group_;
-#endif
     SegmentInMemory seg_;
     TimeseriesDescriptor tsd_;
 };

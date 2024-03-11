@@ -6,7 +6,6 @@
  */
 
 #include <gtest/gtest.h>
-#include <folly/ScopeGuard.h>
 
 #include <arcticdb/stream/row_builder.hpp>
 #include <arcticdb/stream/aggregator.hpp>
