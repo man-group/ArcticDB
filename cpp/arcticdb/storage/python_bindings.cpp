@@ -34,7 +34,7 @@ std::shared_ptr<LibraryIndex> create_library_index(const std::string &environmen
     return std::make_shared<LibraryIndex>(EnvironmentName{environment_name}, mem_resolver);
 }
 
-void register_bindings(py::module& storage, py::exception<arcticdb::ArcticException>& base_exception) {
+void register_bindings(py::module& storage) {
     storage.attr("CONFIG_LIBRARY_NAME") = py::str(arcticdb::storage::CONFIG_LIBRARY_NAME);
 
     py::enum_<KeyType>(storage, "KeyType")
@@ -191,9 +191,6 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
             return library_index.get_library(path, open_mode, UserAuth{});
         })
         ;
-
-    py::register_exception<DuplicateKeyException>(storage, "DuplicateKeyException", base_exception.ptr());
-    py::register_exception<PermissionException>(storage, "PermissionException", base_exception.ptr());
 }
 
 } // namespace arcticdb::storage::apy

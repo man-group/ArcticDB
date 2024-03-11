@@ -21,6 +21,7 @@ enum class MongoError {
     UnknownError = 8,
     UserNotFound = 11,
     UnAuthorized = 13,
+    AuthenticationFailed = 18,
     ExceededTimeLimit = 50,
     WriteConflict = 112,
     KeyNotFound = 211,
