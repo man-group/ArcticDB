@@ -4,6 +4,11 @@
 
 #include <iterator>
 #include <arcticdb/util/preprocess.hpp>
+#if defined(_MSC_VER)
+#include <BaseTsd.h>
+typedef SSIZE_T ssize_t;
+#endif
+
 
 namespace arcticdb {
 
