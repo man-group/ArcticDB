@@ -237,6 +237,9 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
         }
     });
 
+    py::register_exception<storage::DuplicateKeyException>(m, "DuplicateKeyException", storage_exception.ptr());
+    py::register_exception<PermissionException>(m, "PermissionException", storage_exception.ptr());
+
     py::register_exception<SchemaException>(m, "SchemaException", compat_exception.ptr());
     py::register_exception<NormalizationException>(m, "NormalizationException", compat_exception.ptr());
     py::register_exception<MissingDataException>(m, "MissingDataException", compat_exception.ptr());
@@ -321,7 +324,7 @@ PYBIND11_MODULE(arcticdb_ext, m) {
     auto storage_submodule = m.def_submodule("storage", "Segment storage implementation apis");
     auto no_data_found_exception = py::register_exception<arcticdb::storage::NoDataFoundException>(
             storage_submodule, "NoDataFoundException", base_exception.ptr());
-    arcticdb::storage::apy::register_bindings(storage_submodule, base_exception);
+    arcticdb::storage::apy::register_bindings(storage_submodule);
 
     arcticdb::stream::register_bindings(m);
     arcticdb::toolbox::apy::register_bindings(m);
