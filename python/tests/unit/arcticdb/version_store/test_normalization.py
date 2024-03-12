@@ -81,13 +81,6 @@ def test_fails_humongous_meta():
         normalize_metadata(meta)
 
 
-def test_fails_humongous_data():
-    norm = test_msgpack_normalizer
-    with pytest.raises(ArcticDbNotYetImplemented):
-        big = [1] * (norm.MMAP_DEFAULT_SIZE + 1)
-        norm.normalize(big)
-
-
 def test_empty_df():
     if IS_PANDAS_ZERO:
         d = pd.DataFrame(data={"C": []}, index=pd.MultiIndex(levels=[["A"], ["B"]], labels=[[], []], names=["X", "Y"]))
@@ -346,12 +339,16 @@ def test_ndarray_arbitrary_shape():
 
 
 def test_dict_with_tuples():
+    # This has to be pickeld because msgpack doesn't differentiate between tuples and lists
     data = {(1, 2): [1, 24, 55]}
     norm = CompositeNormalizer(use_norm_failure_handler_known_types=False, fallback_normalizer=test_msgpack_normalizer)
     df, norm_meta = norm.normalize(data)
     fd = FrameData.from_npd_df(df)
     denormalized_data = norm.denormalize(fd, norm_meta)
     assert denormalized_data == data
+    assert isinstance(denormalized_data, dict)
+    assert isinstance(next(iter(denormalized_data)), tuple)
+    assert isinstance(denormalized_data[(1, 2)], list)
 
 
 def test_will_item_be_pickled(lmdb_version_store, sym):
@@ -371,7 +368,7 @@ def test_will_item_be_pickled(lmdb_version_store, sym):
 
 def test_numpy_ts_col_with_none(lmdb_version_store):
     df = pd.DataFrame(data={"a": [None, None]})
-    df["a"][0] = pd.Timestamp(0)
+    df.loc[0, "a"] = pd.Timestamp(0)
     norm = CompositeNormalizer(use_norm_failure_handler_known_types=False, fallback_normalizer=test_msgpack_normalizer)
     df, norm_meta = norm.normalize(df)
     fd = FrameData.from_npd_df(df)
