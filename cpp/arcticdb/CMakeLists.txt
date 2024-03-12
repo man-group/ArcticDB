@@ -433,6 +433,9 @@ set(arcticdb_srcs
         storage/failure_simulation.cpp
         storage/library_manager.cpp
         storage/azure/azure_storage.cpp
+        storage/lmdb/lmdb_client_wrapper.hpp
+        storage/lmdb/lmdb_real_client.hpp
+        storage/lmdb/lmdb_real_client.cpp
         storage/lmdb/lmdb_storage.cpp
         storage/file/mapped_file_storage.cpp
         storage/mongo/mongo_client.cpp
