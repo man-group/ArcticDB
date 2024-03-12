@@ -19,8 +19,8 @@
 namespace arcticdb {
 
 template<class T>
-inline size_t hash(T *d) {
-    return std::hash<T>{}(*d);
+inline size_t hash(T d) {
+    return std::hash<T>{}(d);
 }
 
 inline size_t hash(std::string_view sv) {
