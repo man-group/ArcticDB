@@ -9,10 +9,9 @@
 #include <aws/core/utils/memory/stl/AWSString.h>
 #include <aws/core/utils/logging/DefaultLogSystem.h>
 #include <aws/core/utils/logging/AWSLogging.h>
-#include <aws/core/platform/Environment.h>
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/log/log.hpp>
-#include <arcticdb/storage/s3/tcp_ping_ec2.hpp>
+#include <arcticdb/storage/s3/ec2_utils.hpp>
 #include <cstdlib>
 
 namespace arcticdb::storage::s3 {
@@ -32,13 +31,9 @@ S3ApiInstance::S3ApiInstance(Aws::Utils::Logging::LogLevel log_level) :
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Begin initializing AWS API");
     Aws::InitAPI(options_);
     // A workaround for https://github.com/aws/aws-sdk-cpp/issues/1410.
-    for (auto name : std::initializer_list<const char*>{
-            "AWS_EC2_METADATA_DISABLED", "AWS_DEFAULT_REGION", "AWS_REGION", "AWS_EC2_METADATA_SERVICE_ENDPOINT" }) {
-        if (!Aws::Environment::GetEnv(name).empty())
-            return;
-    }
-    if (ec2_metadata_endpoint_reachable())
+    if (is_running_inside_aws_fast()) {
         return;
+    }
     ARCTICDB_RUNTIME_DEBUG(log::storage(),
         "Does not appear to be using AWS. Will set AWS_EC2_METADATA_DISABLED");
 #ifdef WIN32
