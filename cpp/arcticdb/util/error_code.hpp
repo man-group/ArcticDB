@@ -78,14 +78,15 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
     ERROR_CODE(5000, E_KEY_NOT_FOUND) \
     ERROR_CODE(5001, E_DUPLICATE_KEY) \
     ERROR_CODE(5002, E_SYMBOL_NOT_FOUND) \
-    ERROR_CODE(5003, E_LMDB_MAP_FULL) \
-    ERROR_CODE(5004, E_PERMISSION) \
-    ERROR_CODE(5005, E_UNEXPECTED_S3_ERROR) \
-    ERROR_CODE(5006, E_S3_RETRYABLE) \
-    ERROR_CODE(5007, E_UNEXPECTED_AZURE_ERROR) \
-    ERROR_CODE(5008, E_UNEXPECTED_ROCKSDB_ERROR) \
-    ERROR_CODE(5009, E_MONGO_BULK_OP_NO_REPLY) \
-    ERROR_CODE(5010, E_UNEXPECTED_MONGO_ERROR) \
+    ERROR_CODE(5003, E_PERMISSION) \
+    ERROR_CODE(5010, E_LMDB_MAP_FULL) \
+    ERROR_CODE(5011, E_UNEXPECTED_LMDB_ERROR) \
+    ERROR_CODE(5020, E_UNEXPECTED_S3_ERROR) \
+    ERROR_CODE(5021, E_S3_RETRYABLE) \
+    ERROR_CODE(5030, E_UNEXPECTED_AZURE_ERROR) \
+    ERROR_CODE(5040, E_UNEXPECTED_ROCKSDB_ERROR) \
+    ERROR_CODE(5050, E_MONGO_BULK_OP_NO_REPLY) \
+    ERROR_CODE(5051, E_UNEXPECTED_MONGO_ERROR) \
     ERROR_CODE(6000, E_UNSORTED_DATA) \
     ERROR_CODE(7000, E_INVALID_USER_ARGUMENT) \
     ERROR_CODE(7001, E_INVALID_DECIMAL_STRING)   \
@@ -160,6 +161,8 @@ using NoSuchVersionException = ArcticSpecificException<ErrorCode::E_NO_SUCH_VERS
 using StorageException = ArcticCategorizedException<ErrorCategory::STORAGE>;
 using MissingDataException = ArcticCategorizedException<ErrorCategory::MISSING_DATA>;
 using PermissionException = ArcticSpecificException<ErrorCode::E_PERMISSION>;
+using LMDBMapFullException = ArcticSpecificException<ErrorCode::E_LMDB_MAP_FULL>;
+using UnexpectedLMDBErrorException = ArcticSpecificException<ErrorCode::E_UNEXPECTED_LMDB_ERROR>;
 using UnexpectedS3ErrorException = ArcticSpecificException<ErrorCode::E_UNEXPECTED_S3_ERROR>;
 using S3RetryableException = ArcticSpecificException<ErrorCode::E_S3_RETRYABLE>;
 using UnexpectedAzureException = ArcticSpecificException<ErrorCode::E_UNEXPECTED_AZURE_ERROR>;
@@ -180,6 +183,16 @@ template<ErrorCode error_code>
 template<>
 [[noreturn]] inline void throw_error<ErrorCode::E_PERMISSION>(const std::string& msg) {
     throw ArcticSpecificException<ErrorCode::E_PERMISSION>(msg);
+}
+
+template<>
+[[noreturn]] inline void throw_error<ErrorCode::E_UNEXPECTED_LMDB_ERROR>(const std::string& msg) {
+    throw ArcticSpecificException<ErrorCode::E_UNEXPECTED_LMDB_ERROR>(msg);
+}
+
+template<>
+[[noreturn]] inline void throw_error<ErrorCode::E_LMDB_MAP_FULL>(const std::string& msg) {
+    throw ArcticSpecificException<ErrorCode::E_LMDB_MAP_FULL>(msg);
 }
 
 template<>
