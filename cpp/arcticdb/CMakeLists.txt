@@ -549,7 +549,6 @@ set (arcticdb_core_libraries
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
         Azure::azure-identity
         Azure::azure-storage-blobs
-        highwayhash
 )
 
 if(${ARCTICDB_PYTHON_EXPLICIT_LINK})
@@ -613,7 +612,6 @@ list (APPEND arcticdb_core_libraries Threads::Threads) # comes last for weakrefe
 
 set(arcticdb_core_includes
     ${BITMAGIC_INCLUDE_DIRS}
-    "third_party/highwayhash"
 )
 
 if (SSL_LINK)
