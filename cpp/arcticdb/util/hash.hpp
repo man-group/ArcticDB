@@ -16,7 +16,7 @@
 #include <xxhash.h>
 #undef XXH_STATIC_LINKING_ONLY
 
-#include <highwayhash/highwayhash.h>
+//#include <highwayhash/highwayhash.h>
 
 namespace arcticdb {
 
@@ -40,30 +40,41 @@ constexpr std::size_t DEFAULT_SEED = 0x42;
 //}
 
 // Highwayhash
-using namespace highwayhash;
-HH_ALIGNAS(32) const HHKey key = {1, 2, 3, 4};
+//using namespace highwayhash;
+//HH_ALIGNAS(32) const HHKey key = {1, 2, 3, 4};
+
+//template<class T>
+//inline HHResult64 hash(T *d, std::size_t count) {
+//    HHResult64 result;
+//    HHStateT<HH_TARGET> state(key);
+//    HighwayHashT(&state, reinterpret_cast<const char*>(d), count * sizeof(T), &result);
+//    return result;
+//}
+//
+//template<class T>
+//inline HHResult64 hash(T *d) {
+//    HHResult64 result;
+//    HHStateT<HH_TARGET> state(key);
+//    HighwayHashT(&state, reinterpret_cast<const char*>(d), sizeof(T), &result);
+//    return result;
+//}
+//
+//inline HHResult64 hash(std::string_view sv) {
+//    HHResult64 result;
+//    HHStateT<HH_TARGET> state(key);
+//    HighwayHashT(&state, reinterpret_cast<const char*>(sv.data()), sv.size(), &result);
+//    return result;
+//}
+
+// std::hash
 
 template<class T>
-inline HHResult64 hash(T *d, std::size_t count) {
-    HHResult64 result;
-    HHStateT<HH_TARGET> state(key);
-    HighwayHashT(&state, reinterpret_cast<const char*>(d), count * sizeof(T), &result);
-    return result;
+inline size_t hash(T *d) {
+    return std::hash<T>{}(*d);
 }
 
-template<class T>
-inline HHResult64 hash(T *d) {
-    HHResult64 result;
-    HHStateT<HH_TARGET> state(key);
-    HighwayHashT(&state, reinterpret_cast<const char*>(d), sizeof(T), &result);
-    return result;
-}
-
-inline HHResult64 hash(std::string_view sv) {
-    HHResult64 result;
-    HHStateT<HH_TARGET> state(key);
-    HighwayHashT(&state, reinterpret_cast<const char*>(sv.data()), sv.size(), &result);
-    return result;
+inline size_t hash(std::string_view sv) {
+    return std::hash<std::string_view>{}(sv);
 }
 
 class HashAccum {
