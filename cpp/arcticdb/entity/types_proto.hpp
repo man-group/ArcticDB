@@ -71,6 +71,7 @@ namespace arcticdb::entity {
 
     IndexDescriptor::TypeChar to_type_char(IndexDescriptor::Type type);
     IndexDescriptor::Type from_type_char(IndexDescriptor::TypeChar type);
+    const char* index_type_to_str(IndexDescriptor::Type type);
 
     void set_id(arcticdb::proto::descriptors::StreamDescriptor& pb_desc, StreamId id);
 

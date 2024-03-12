@@ -29,33 +29,42 @@ struct StreamDescriptorMismatch : ArcticSpecificException<ErrorCode::E_DESCRIPTO
                                         fmt::join(existing.fields(), ", "), fmt::join(new_val.fields(), ", "))) {}
 };
 
+inline IndexDescriptor::Type get_common_index_type(const IndexDescriptor::Type& left, const IndexDescriptor::Type& right) {
+    if (left == right) {
+        return left;
+    }
+    if (left == IndexDescriptor::EMPTY) {
+        return right;
+    }
+    if (right == IndexDescriptor::EMPTY) {
+        return left;
+    }
+    return IndexDescriptor::UNKNOWN;
+}
+
 inline void check_normalization_index_match(NormalizationOperation operation,
                                      const StreamDescriptor &old_descriptor,
                                      const pipelines::InputTensorFrame &frame) {
-    auto old_idx_kind = old_descriptor.index().type();
-    bool new_is_timeseries = std::holds_alternative<TimeseriesIndex>(frame.index);
-
+    const IndexDescriptor::Type old_idx_kind = old_descriptor.index().type();
+    const IndexDescriptor::Type new_idx_kind = frame.desc.index().type();
     if (operation == UPDATE) {
+        const bool new_is_timeseries = std::holds_alternative<TimeseriesIndex>(frame.index);
         util::check_rte(old_idx_kind == IndexDescriptor::TIMESTAMP && new_is_timeseries,
                         "Update will not work as expected with a non-timeseries index");
     } else {
-        // TODO: AN-722
-        if (new_is_timeseries) {
-            if (old_idx_kind != IndexDescriptor::TIMESTAMP) {
-                log::version().warn("Appending a timeseries to a non-timeseries-indexed symbol may create a "
-                                    "confusing index and cause problems later");
-            }
-        } else {
-            if (old_idx_kind != IndexDescriptor::ROWCOUNT) {
-                // Backwards compatibility
-                log::version().warn("Appending a non-timeseries-indexed data to a timeseries symbol is highly "
-                                    "likely to cause corruption/unexpected behaviour.");
-            }
-        }
+        const IndexDescriptor::Type common_index_type = get_common_index_type(old_idx_kind, new_idx_kind);
+        normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+            common_index_type != IndexDescriptor::UNKNOWN,
+            "Cannot append {} index to {} index",
+            index_type_to_str(new_idx_kind),
+            index_type_to_str(old_idx_kind)
+        );
     }
 }
 
-inline bool columns_match(const StreamDescriptor &left, const StreamDescriptor &right) {
+inline bool columns_match(const StreamDescriptor& left, const StreamDescriptor& right) {
+    // TODO: handle empty index. If left is empty index df it will have one field (the first)
+    // less than right.
     if (left.fields().size() != right.fields().size())
         return false;
 

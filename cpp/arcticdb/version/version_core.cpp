@@ -102,7 +102,7 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
     frame->set_bucketize_dynamic(options.bucketize_dynamic);
     auto slicing_arg = get_slicing_policy(options, *frame);
     auto partial_key = IndexPartialKey{frame->desc.id(), version_id};
-    if (validate_index && !index_is_not_timeseries_or_is_sorted_ascending(frame)) {
+    if (validate_index && !index_is_not_timeseries_or_is_sorted_ascending(*frame)) {
         sorting::raise<ErrorCode::E_UNSORTED_DATA>("When calling write with validate_index enabled, input data must be sorted");
     }
     return write_frame(std::move(partial_key), frame, slicing_arg, store, de_dup_map, sparsify_floats);
@@ -121,12 +121,12 @@ IndexDescriptor::Proto check_index_match(const arcticdb::stream::Index& index, c
 }
 }
 
-void sorted_data_check_append(const std::shared_ptr<InputTensorFrame>& frame, index::IndexSegmentReader& index_segment_reader){
+void sorted_data_check_append(const InputTensorFrame& frame, index::IndexSegmentReader& index_segment_reader){
     if (!index_is_not_timeseries_or_is_sorted_ascending(frame)) {
         sorting::raise<ErrorCode::E_UNSORTED_DATA>("When calling append with validate_index enabled, input data must be sorted");
     }
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
-        !std::holds_alternative<stream::TimeseriesIndex>(frame->index) ||
+        !std::holds_alternative<stream::TimeseriesIndex>(frame.index) ||
         index_segment_reader.mutable_tsd().mutable_proto().stream_descriptor().sorted() == arcticdb::proto::descriptors::SortedValue::ASCENDING,
         "When calling append with validate_index enabled, the existing data must be sorted");
 }
@@ -145,11 +145,11 @@ folly::Future<AtomKey> async_append_impl(
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
     auto row_offset = index_segment_reader.tsd().proto().total_rows();
     util::check_rte(!index_segment_reader.is_pickled(), "Cannot append to pickled data");
-    if (validate_index) {
-        sorted_data_check_append(frame, index_segment_reader);
-    }
     frame->set_offset(static_cast<ssize_t>(row_offset));
     fix_descriptor_mismatch_or_throw(APPEND, options.dynamic_schema, index_segment_reader, *frame);
+    if (validate_index) {
+        sorted_data_check_append(*frame, index_segment_reader);
+    }
 
     frame->set_bucketize_dynamic(bucketize_dynamic);
     auto slicing_arg = get_slicing_policy(options, *frame);

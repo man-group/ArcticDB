@@ -177,4 +177,15 @@ namespace arcticdb::entity {
         default: util::raise_rte("Unknown index type: {}", int(type));
         }
     }
+
+    const char* index_type_to_str(IndexDescriptor::Type type) {
+        switch (type) {
+        case IndexDescriptor::EMPTY: return "Empty";
+        case IndexDescriptor::TIMESTAMP: return "Timestamp";
+        case IndexDescriptor::ROWCOUNT: return "Row count";
+        case IndexDescriptor::STRING: return "String";
+        case IndexDescriptor::UNKNOWN: return "Unknown";
+        default: util::raise_rte("Unknown index type: {}", int(type));
+        }
+    }
 } // namespace arcticdb

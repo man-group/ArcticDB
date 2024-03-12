@@ -220,10 +220,7 @@ std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
                 "Number idx names {} and values {} do not match",
                 idx_names.size(), idx_vals.size());
 
-    if (idx_names.empty()) {
-        res->index = stream::RowCountIndex();
-        res->desc.set_index_type(IndexDescriptor::ROWCOUNT);
-    } else {
+    if (idx_names.empty() == false) {
         util::check(idx_names.size() == 1, "Multi-indexed dataframes not handled");
         auto index_tensor = obj_to_tensor(idx_vals[0].ptr());
         util::check(index_tensor.ndim() == 1, "Multi-dimensional indexes not handled");
@@ -241,11 +238,6 @@ std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
             res->desc.add_scalar_field(index_tensor.dt_, index_column_name);
             res->index = stream::TimeseriesIndex(index_column_name);
             res->index_tensor = std::move(index_tensor);
-        } else if (is_empty_type(index_tensor.data_type())) {
-            res->index = EmptyIndex{};
-            res->desc.set_index_type(IndexDescriptor::EMPTY);
-            res->desc.add_scalar_field(index_tensor.dt_, index_column_name);
-            res->field_tensors.push_back(std::move(index_tensor));
         } else {
             res->index = stream::RowCountIndex();
             res->desc.set_index_type(IndexDescriptor::ROWCOUNT);
@@ -270,6 +262,21 @@ std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
             res->desc.add_field(FieldRef{TypeDescriptor{tensor.data_type(), Dimension::Dim1}, col_names[i]});
         }
         res->field_tensors.push_back(std::move(tensor));
+    }
+
+    // idx_names are passed by the python layer. They are empty in case row count index is used see:
+    // https://github.com/man-group/ArcticDB/blob/4184a467d9eee90600ddcbf34d896c763e76f78f/python/arcticdb/version_store/_normalization.py#L291
+    // Currently the python layers assign RowRange index to both empty dataframes and dataframes wich do not specify
+    // index explicitly. Thus we handle this case after all columns are read so that we know how many rows are there.
+    if (idx_names.empty()) {
+        if (res->num_rows > 0) {
+            res->index = stream::RowCountIndex();
+            res->desc.set_index_type(IndexDescriptor::ROWCOUNT);
+        } else {
+            res->index = stream::EmptyIndex();
+            res->desc.set_index_type(IndexDescriptor::EMPTY);
+        }
+
     }
 
     ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res->desc);

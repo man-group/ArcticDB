@@ -90,9 +90,59 @@ get_common_pandas(proto::descriptors::NormalizationMetadata& norm_meta) {
     }
 }
 
-bool check_pandas_like(const proto::descriptors::NormalizationMetadata& old_norm,
-                       proto::descriptors::NormalizationMetadata& new_norm,
-                       size_t old_length) {
+/// In case both indexes are row-ranged sanity checks will be performed:
+/// * Both indexes must have the same step
+/// * The new index must start at the point where the old one ends
+/// If the checks above pass update the new normalization index so that it spans the whole index (old + new)
+/// @throws In case the row-ranged indexes are incompatible
+void update_rowcount_normalization_data(
+    const proto::descriptors::NormalizationMetadata& old_norm,
+    proto::descriptors::NormalizationMetadata& new_norm,
+    size_t old_length
+) {
+    const auto old_pandas = get_common_pandas(old_norm);
+    const auto new_pandas = get_common_pandas(new_norm);
+    const auto* old_index = old_pandas->get().has_index() ? &old_pandas->get().index() : nullptr;
+    const auto* new_index = new_pandas->get().has_index() ? &new_pandas->get().index() : nullptr;
+    if (old_index) {
+        constexpr auto error_suffix =
+            " the existing version. Please convert both to use Int64Index if you need this to work.";
+        normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+            old_index->is_not_range_index() == new_index->is_not_range_index(),
+            "The argument uses a {} index which is incompatible with {}",
+            new_index->is_not_range_index() ? "non-range" : "range-style",
+            error_suffix
+        );
+
+        if (!old_index->is_not_range_index()) {
+            normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+                old_index->step() == new_index->step(),
+                "The new argument has a different RangeIndex step from {}",
+                error_suffix
+            );
+
+            size_t new_start = new_index->start();
+            if (new_start != 0) {
+                auto stop = old_index->start() + old_length * old_index->step();
+                normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+                    new_start == stop,
+                    "The appending data has a RangeIndex.start={} that is not contiguous with the {}"
+                    "stop ({}) of",
+                    error_suffix,
+                    new_start,
+                    stop
+                );
+            }
+
+            new_pandas->get().mutable_index()->set_start(old_index->start());
+        }
+    }
+}
+
+bool check_pandas_like(
+    const proto::descriptors::NormalizationMetadata& old_norm,
+    proto::descriptors::NormalizationMetadata& new_norm
+) {
     auto old_pandas = get_common_pandas(old_norm);
     auto new_pandas = get_common_pandas(new_norm);
     if (old_pandas || new_pandas) {
@@ -107,33 +157,6 @@ bool check_pandas_like(const proto::descriptors::NormalizationMetadata& old_norm
                         "The argument has an index type incompatible with the existing version:\nexisting={}\nargument={}",
                         util::newlines_to_spaces(old_norm),
                         util::newlines_to_spaces(new_norm));
-
-        if (old_index) {
-            constexpr auto
-                error_suffix = " the existing version. Please convert both to use Int64Index if you need this to work.";
-            normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(old_index->is_not_range_index() == new_index->is_not_range_index(),
-                            "The argument uses a {} index which is incompatible with {}",
-                            new_index->is_not_range_index() ? "non-range" : "range-style", error_suffix);
-
-            if (!old_index->is_not_range_index()) {
-                normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(old_index->step() == new_index->step(),
-                                "The new argument has a different RangeIndex step from {}", error_suffix);
-
-                size_t new_start = new_index->start();
-                if (new_start != 0) {
-                    auto stop = old_index->start() + old_length * old_index->step();
-                    normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(new_start == stop,
-                                    "The appending data has a RangeIndex.start={} that is not contiguous with the {}"
-                                    "stop ({}) of",
-                                    error_suffix,
-                                    new_start,
-                                    stop);
-                }
-
-                new_pandas->get().mutable_index()->set_start(old_index->start());
-            }
-        }
-
         // FUTURE: check PandasMultiIndex and many other descriptor types. Might be more efficiently implemented using
         // some structural comparison lib or do it via Python
         return true;
@@ -172,9 +195,14 @@ void fix_normalization_or_throw(
     const pipelines::InputTensorFrame &new_frame) {
     auto &old_norm = existing_isr.tsd().proto().normalization();
     auto &new_norm = new_frame.norm_meta;
-
-    if (check_pandas_like(old_norm, new_norm, existing_isr.tsd().proto().total_rows()))
+    if (check_pandas_like(old_norm, new_norm)) {
+        const IndexDescriptor::Type old_index_type = existing_isr.seg().descriptor().index().type();
+        const IndexDescriptor::Type new_index_type = new_frame.desc.index().type();
+        if (old_index_type == new_index_type && old_index_type == IndexDescriptor::ROWCOUNT) {
+            update_rowcount_normalization_data(old_norm, new_norm, existing_isr.tsd().proto().total_rows());
+        }
         return;
+    }
     if (is_append) {
         if (check_ndarray_append(old_norm, new_norm))
             return;

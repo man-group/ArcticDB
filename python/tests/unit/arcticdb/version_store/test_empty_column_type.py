@@ -576,18 +576,7 @@ class TestCanAppendToEmptyColumn:
     """
 
 
-    @pytest.fixture(params=
-            [
-                pytest.param(
-                    pd.RangeIndex(0,3),
-                    marks=pytest.mark.xfail(
-                        reason="Appending row ranged columns to empty columns is not supported yet."
-                        "The index of empty df is of type datetime and it clashes with the row-range type."
-                        "The expected behavior is to allow this as long as the initial df is of 0 rows.")
-                    ),
-                list(pd.date_range(start="1/1/2024", end="1/3/2024"))
-            ]
-    )
+    @pytest.fixture(params=[pd.RangeIndex(0,3), list(pd.date_range(start="1/1/2024", end="1/3/2024"))])
     def append_index(self, request):
         yield request.param
 
