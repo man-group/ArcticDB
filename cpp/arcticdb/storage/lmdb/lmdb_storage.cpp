@@ -321,11 +321,16 @@ LmdbStorage::LmdbStorage(const LibraryPath &library_path, OpenMode mode, const C
 
     auto txn = ::lmdb::txn::begin(env());
 
-    arcticdb::entity::foreach_key_type([&txn, this](KeyType&& key_type) {
-        std::string db_name = fmt::format("{}", key_type);
-        ::lmdb::dbi dbi = ::lmdb::dbi::open(txn, db_name.data(), MDB_CREATE);
-        dbi_by_key_type_.insert(std::make_pair(std::move(db_name), std::move(dbi)));
-    });
+    try {
+
+        arcticdb::entity::foreach_key_type([&txn, this](KeyType &&key_type) {
+            std::string db_name = fmt::format("{}", key_type);
+            ::lmdb::dbi dbi = ::lmdb::dbi::open(txn, db_name.data(), MDB_CREATE);
+            dbi_by_key_type_.insert(std::make_pair(std::move(db_name), std::move(dbi)));
+        });
+    } catch (const ::lmdb::error& ex) {
+        raise_lmdb_exception(ex);
+    }
 
     txn.commit();
 
@@ -355,6 +360,7 @@ LmdbStorage::LmdbStorage(LmdbStorage&& other)  noexcept
     dbi_by_key_type_(std::move(other.dbi_by_key_type_)),
     lib_dir_(std::move(other.lib_dir_)) {
     other.lib_dir_ = "";
+    lmdb_client_ = std::move(other.lmdb_client_);
 }
 
 LmdbStorage::~LmdbStorage() {
