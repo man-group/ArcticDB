@@ -17,11 +17,11 @@ jobs:
       SYMBOLS_ARTIFACT: /tmp/symbols.tar.zst # Use absolute path to workaround a bug in action-gh-release
     steps:
       # Copy and pasted from the pypi job below, until GitHub adds selective artifact download
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v3.8.2
         if: inputs.run_id <= 0
         with:
           node-version: 16
-      - run: npm install @actions/artifact
+      - run: npm install @actions/artifact@1
         if: inputs.run_id <= 0
       - id: download
         name: Fetch wheel artifacts
@@ -70,7 +70,7 @@ jobs:
 
       - id: changelog
         name: Release Changelog Builder
-        uses: mikepenz/release-changelog-builder-action@v3
+        uses: mikepenz/release-changelog-builder-action@v3.7.3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -104,11 +104,11 @@ jobs:
           GH_REPO: ${{github.repository}}
 
       # Above `gh` command don't work on the current run, so will have to hack:
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v3.8.2
         if: inputs.run_id <= 0
         with:
           node-version: 16
-      - run: npm install @actions/artifact
+      - run: npm install @actions/artifact@1
         if: inputs.run_id <= 0
       - name: Fetch wheel artifacts
         if: inputs.run_id <= 0
