@@ -44,27 +44,6 @@ void segment_string_assert_all_values_equal(const arcticdb::ProcessingUnit& proc
 
 }
 
-TEST(Clause, PartitionString) {
-    // This test is fragile as it depends on both the hash function used for grouping and the partitioning strategy
-    // Remove if either of these change and the test starts failing
-    using namespace arcticdb;
-    ScopedConfig num_buckets("Partition.NumBuckets", 16);
-    auto component_manager = std::make_shared<ComponentManager>();
-
-    PartitionClause<arcticdb::grouping::HashingGroupers, arcticdb::grouping::ModuloBucketizer> partition{"strings"};
-    partition.set_component_manager(component_manager);
-
-    auto proc_unit = ProcessingUnit{get_groupable_timeseries_segment("groupable", 30, {1,1,3,3,1,1})};
-    auto entity_ids = Composite<EntityIds>(push_entities(component_manager, std::move(proc_unit)));
-    auto partitioned = gather_entities(component_manager, partition.process(std::move(entity_ids)));
-
-    std::vector<size_t> tags = {1, 3};
-    std::vector<size_t> sizes = {120, 60};
-    for (auto inner_seg : folly::enumerate(partitioned.as_range())){
-        segment_string_assert_all_values_equal(*inner_seg, ColumnName("strings"), fmt::format("string_{}", tags[inner_seg.index]), sizes[inner_seg.index]);
-    }
-}
-
 TEST(Clause, PartitionEmptyColumn) {
     using namespace arcticdb;
     auto component_manager = std::make_shared<ComponentManager>();
