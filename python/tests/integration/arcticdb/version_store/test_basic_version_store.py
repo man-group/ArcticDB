@@ -28,7 +28,7 @@ from arcticdb.exceptions import (
     InternalException,
     UserInputException,
 )
-from arcticdb import QueryBuilder
+from arcticdb import QueryBuilder, ReadRequest
 from arcticdb.flattener import Flattener
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._custom_normalizers import CustomNormalizer, register_normalizer
@@ -2236,6 +2236,26 @@ def test_batch_read_version_doesnt_exist(basic_store):
     with pytest.raises(NoDataFoundException):
         _ = basic_store.batch_read([sym1, sym2], as_ofs=[0, 1])
 
+def test_read_batch_deleted_version_doesnt_exist(lmdb_storage): # try s3_storage too
+
+    ac = lmdb_storage.create_arctic()
+    lib = ac.create_library("adb_bugs")
+
+    N = 3
+    df = pd.DataFrame(
+        index=pd.date_range("20240101", periods=N),
+        data={'col': np.arange(0., N)}
+    )
+    sym1 = 'asof_slow_read'
+    for i in range(10):
+        lib.write(sym1, df)
+
+    lib.delete(sym1)
+    lib.write(sym1, df)
+    with pytest.raises(NoSuchVersionException):
+        lib.read(sym1, as_of=9)
+    v = lib.read_batch([ReadRequest(sym1, as_of=9)])
+    assert "E_NO_SUCH_VERSION" in v[0].exception_string
 
 def test_index_keys_start_end_index(basic_store, sym):
     idx = pd.date_range("2022-01-01", periods=100, freq="D")
