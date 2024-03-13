@@ -481,7 +481,7 @@ set(arcticdb_srcs
         version/version_utils.cpp
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
-)
+        util/enumerate.hpp)
 
 if(${ARCTICDB_INCLUDE_ROCKSDB})
     list (APPEND arcticdb_srcs
@@ -825,7 +825,7 @@ if(${TEST})
             version/test/test_sorting_info_state_machine.cpp
             version/test/version_map_model.hpp
             storage/test/common.hpp
-    )
+            util/test/test_enumerate.cpp)
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 
