@@ -28,7 +28,6 @@ inline size_t hash(std::string_view sv) {
 }
 
 using HashedValue = XXH64_hash_t;
-constexpr std::size_t DEFAULT_SEED = 0x42;
 
 class HashAccum {
   public:
@@ -50,6 +49,7 @@ class HashAccum {
     }
   private:
     XXH64_state_t state_ = XXH64_state_t{};
+    static constexpr std::size_t DEFAULT_SEED = 0x42;
 };
 
 } // namespace arcticdb
