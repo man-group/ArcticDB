@@ -31,7 +31,7 @@ namespace arcticdb {
         arcticdb::log::version().info("PrometheusInstance created");
     }
 
-    void PrometheusInstance::configure(const PrometheusConfig& config, const bool reconfigure) {
+    void PrometheusInstance::configure(const MetricsConfig& config, const bool reconfigure) {
         if (configured_ && !reconfigure) {
             arcticdb::log::version().warn("Prometheus already configured");
             return;
@@ -39,7 +39,7 @@ namespace arcticdb {
         
         cfg_ = config;
 
-        if (cfg_.model_ == PrometheusConfig::Model::PUSH) {
+        if (cfg_.model_ == MetricsConfig::Model::PUSH) {
             // IMP: This is the GROUPING_KEY - every push overwrites the previous grouping key
             auto labels = prometheus::Gateway::GetInstanceLabel(getHostName());
             mongo_instance_ = cfg_.instance;
@@ -51,7 +51,7 @@ namespace arcticdb {
 
             arcticdb::log::version().info("Prometheus Push created with settings {}", cfg_);
 
-        } else if (cfg_.model_ == PrometheusConfig::Model::PULL) {
+        } else if (cfg_.model_ == MetricsConfig::Model::PULL) {
 
             // create an http server ie "http://hostname:"+port()+"/metrics"
             std::string endpoint = cfg_.host + ":" + cfg_.port;

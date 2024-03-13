@@ -35,16 +35,16 @@ const std::string PROMETHEUS_ENV_LABEL = "env";
 const int SUMMARY_MAX_AGE = 30;
 const int SUMMARY_AGE_BUCKETS = 5;
 
-class PrometheusConfig {
+class MetricsConfig {
 public:
     enum class Model {
         NO_INIT,
         PUSH,
         PULL
     };
-    PrometheusConfig() : model_(Model::NO_INIT) {}
+    MetricsConfig() : model_(Model::NO_INIT) {}
 
-    PrometheusConfig(const std::string& host,
+    MetricsConfig(const std::string& host,
                      const std::string& port,
                      const std::string& job_name, 
                      const std::string& instance, 
@@ -56,12 +56,12 @@ public:
             , instance(instance)
             , prometheus_env(prometheus_env)
             , model_(model) {
-                util::check(!host.empty(), "PrometheusConfig: host is empty");
-                util::check(!port.empty(), "PrometheusConfig: port is empty");
-                util::check(!job_name.empty(), "PrometheusConfig: job_name is empty");
-                util::check(!instance.empty(), "PrometheusConfig: instance is empty");
-                util::check(!prometheus_env.empty(), "PrometheusConfig: instance is empty");
-                util::check(!prometheus_env.empty(), "PrometheusConfig: prometheus_env is empty");
+                util::check(!host.empty(), "MetricsConfig: host is empty");
+                util::check(!port.empty(), "MetricsConfig: port is empty");
+                util::check(!job_name.empty(), "MetricsConfig: job_name is empty");
+                util::check(!instance.empty(), "MetricsConfig: instance is empty");
+                util::check(!prometheus_env.empty(), "MetricsConfig: instance is empty");
+                util::check(!prometheus_env.empty(), "MetricsConfig: prometheus_env is empty");
             }
     
     std::string host;
@@ -104,11 +104,11 @@ public:
 
     int push();
 
-    void configure(const PrometheusConfig& config, const bool reconfigure = false);
+    void configure(const MetricsConfig& config, const bool reconfigure = false);
 
     private:
 
-        PrometheusConfig cfg_;
+        MetricsConfig cfg_;
 
         struct HistogramInfo {
             prometheus::Family<prometheus::Histogram>* histogram;
@@ -152,14 +152,14 @@ inline void log_prometheus_counter(const std::string& metric_name, const std::st
 } // Namespace arcticdb
 
 template<>
-struct fmt::formatter<arcticdb::PrometheusConfig> {
+struct fmt::formatter<arcticdb::MetricsConfig> {
 
     template<typename ParseContext>
     constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
 
     template<typename FormatContext>
-    auto format(const arcticdb::PrometheusConfig k, FormatContext &ctx) const {
-        return  fmt::format_to(ctx.out(), "PrometheusConfig: host={}, port={}, job_name={}, instance={}, prometheus_env={}, model={}",
+    auto format(const arcticdb::MetricsConfig k, FormatContext &ctx) const {
+        return  fmt::format_to(ctx.out(), "MetricsConfig: host={}, port={}, job_name={}, instance={}, prometheus_env={}, model={}",
                                k.host, k.port, k.job_name, k.instance, k.prometheus_env, static_cast<int>(k.model_));
     }
 };

@@ -276,14 +276,14 @@ void register_metrics(py::module && m){
 
     auto prometheus = m.def_submodule("prometheus");
     py::class_<arcticdb::PrometheusInstance, std::shared_ptr<arcticdb::PrometheusInstance>>(prometheus, "Instance");
-    
-    py::class_<arcticdb::PrometheusConfig, std::shared_ptr<arcticdb::PrometheusConfig>>(prometheus, "PrometheusConfig")
-    .def(py::init<const std::string&, const std::string&, const std::string&, const std::string&, const std::string&, const arcticdb::PrometheusConfig::Model>());
 
-    py::enum_<arcticdb::PrometheusConfig::Model>(prometheus, "PrometheusConfigModel")
-            .value("NO_INIT", arcticdb::PrometheusConfig::Model::NO_INIT)
-            .value("PUSH", arcticdb::PrometheusConfig::Model::PUSH)
-            .value("PULL", arcticdb::PrometheusConfig::Model::PULL)
+    py::class_<arcticdb::MetricsConfig, std::shared_ptr<arcticdb::MetricsConfig>>(prometheus, "MetricsConfig")
+    .def(py::init<const std::string&, const std::string&, const std::string&, const std::string&, const std::string&, const arcticdb::MetricsConfig::Model>());
+
+    py::enum_<arcticdb::MetricsConfig::Model>(prometheus, "MetricsConfigModel")
+            .value("NO_INIT", arcticdb::MetricsConfig::Model::NO_INIT)
+            .value("PUSH", arcticdb::MetricsConfig::Model::PUSH)
+            .value("PULL", arcticdb::MetricsConfig::Model::PULL)
             .export_values()
     ;
 }
