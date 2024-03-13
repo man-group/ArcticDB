@@ -28,7 +28,7 @@ namespace arcticdb {
     std::once_flag PrometheusInstance::init_flag_;
 
     PrometheusInstance::PrometheusInstance() : configured_(false) {
-        arcticdb::log::version().info("PrometheusInstance created");
+        arcticdb::log::version().debug("PrometheusInstance created");
     }
 
     void PrometheusInstance::configure(const MetricsConfig& config, const bool reconfigure) {
