@@ -275,11 +275,8 @@ void register_instrumentation(py::module && m){
 void register_metrics(py::module && m){
     auto prometheus = m.def_submodule("prometheus");
     py::class_<arcticdb::PrometheusInstance, std::shared_ptr<arcticdb::PrometheusInstance>>(prometheus, "Instance");
-    prometheus.def("configure", [](const py::object & py_config){
-        arcticdb::proto::utils::PrometheusConfig config;
-        arcticdb::python_util::pb_from_python(py_config, config);
-        arcticdb::PrometheusConfigInstance::instance()->config.CopyFrom(config);
-    });
+    py::class_<arcticdb::PrometheusConfig, std::shared_ptr<arcticdb::PrometheusConfig>>(prometheus, "PrometheusConfig")
+    .def(py::init<const std::string&, const std::string&, const std::string&, const std::string&, const std::string&, const int>());
 }
 
 /// Register handling of non-trivial types. For more information @see arcticdb::TypeHandlerRegistry and
