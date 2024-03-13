@@ -19,11 +19,11 @@
 namespace arcticdb::storage::lmdb {
 
 struct LmdbKey {
-    std::string db_name;
-    std::string path;
+    std::string db_name_;
+    std::string path_;
 
     bool operator<(const LmdbKey& other) const {
-        return std::tie(db_name, path) < std::tie(other.db_name, other.path);
+        return std::tie(db_name_, path_) < std::tie(other.db_name_, other.path_);
     }
 };
 
@@ -64,7 +64,7 @@ public:
             KeyType key_type) const override;
 
 private:
-    std::map<LmdbKey, Segment> lmdb_contents;
+    std::map<LmdbKey, Segment> lmdb_contents_;
 
     bool has_key(const LmdbKey& key) const;
 };

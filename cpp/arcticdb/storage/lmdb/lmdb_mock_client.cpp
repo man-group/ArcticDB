@@ -22,7 +22,7 @@ std::string MockLmdbClient::get_failure_trigger(
     return fmt::format("{}#Failure_{}_{}", path, operation_to_string(operation_to_fail), error_code);
 }
 
-std::string lmdb_operation_string(StorageOperation operation) {
+std::string_view lmdb_operation_string(StorageOperation operation) {
     switch (operation) {
         case StorageOperation::READ:
             return "mdb_get";
@@ -40,7 +40,7 @@ std::string lmdb_operation_string(StorageOperation operation) {
 }
 
 void raise_if_has_failure_trigger(const LmdbKey& key, StorageOperation operation) {
-    auto path = key.path;
+    auto path = key.path_;
     auto failure_string_for_operation = "#Failure_" + operation_to_string(operation) + "_";
     auto position = path.rfind(failure_string_for_operation);
 
@@ -63,12 +63,12 @@ void raise_if_has_failure_trigger(const LmdbKey& key, StorageOperation operation
     }
 }
 
-void raise_key_exists_error(std::string lmdb_op) {
+void raise_key_exists_error(const std::string& lmdb_op) {
     ::lmdb::error::raise(lmdb_op.data(), MDB_KEYEXIST);
 }
 
 bool MockLmdbClient::has_key(const LmdbKey& key) const {
-    return lmdb_contents.find(key) != lmdb_contents.end();
+    return lmdb_contents_.find(key) != lmdb_contents_.end();
 }
 
 bool MockLmdbClient::exists(const std::string& db_name, std::string& path, ::lmdb::txn&, ::lmdb::dbi&) const {
@@ -86,7 +86,7 @@ std::optional<Segment> MockLmdbClient::read(const std::string& db_name, std::str
         return std::nullopt;
     }
 
-    return lmdb_contents.at(key);
+    return lmdb_contents_.at(key);
 }
 
 void MockLmdbClient::write(const std::string& db_name, std::string& path, arcticdb::Segment&& segment,
@@ -95,9 +95,9 @@ void MockLmdbClient::write(const std::string& db_name, std::string& path, arctic
     raise_if_has_failure_trigger(key, StorageOperation::WRITE);
 
     if(has_key(key)) {
-        raise_key_exists_error(lmdb_operation_string(StorageOperation::WRITE));
+        raise_key_exists_error(std::string(lmdb_operation_string(StorageOperation::WRITE)));
     } else {
-        lmdb_contents.insert({key, segment});
+        lmdb_contents_.insert({key, segment});
     }
 }
 
@@ -109,7 +109,7 @@ bool MockLmdbClient::remove(const std::string& db_name, std::string& path, ::lmd
         return false;
     }
 
-    lmdb_contents.erase(key);
+    lmdb_contents_.erase(key);
     return true;
 }
 
@@ -117,13 +117,13 @@ std::vector<VariantKey> MockLmdbClient::list(const std::string& db_name, const s
                                              ::lmdb::dbi&, KeyType key_type) const {
     std::vector<VariantKey> found_keys;
 
-    for (const auto& [key, segment] : lmdb_contents) {
-        if (key.db_name == db_name && util::string_starts_with(prefix, key.path)) {
+    for (const auto& [key, segment] : lmdb_contents_) {
+        if (key.db_name_ == db_name && util::string_starts_with(prefix, key.path_)) {
             raise_if_has_failure_trigger(key, StorageOperation::LIST);
 
             auto k = variant_key_from_bytes(
-                    reinterpret_cast<const uint8_t *>(key.path.data()),
-                    key.path.size(),
+                    reinterpret_cast<const uint8_t *>(key.path_.data()),
+                    key.path_.size(),
                     key_type);
             found_keys.push_back(k);
         }

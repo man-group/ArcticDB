@@ -41,9 +41,7 @@ std::optional<Segment> RealLmdbClient::read(const std::string&, std::string& pat
 
 void RealLmdbClient::write(const std::string&, std::string& path, arcticdb::Segment&& seg,
                            ::lmdb::txn& txn, ::lmdb::dbi& dbi, int64_t overwrite_flag) {
-    MDB_val mdb_key;
-    mdb_key.mv_data = path.data();
-    mdb_key.mv_size = path.size();
+    MDB_val mdb_key{path.size(), path.data()};
 
     std::size_t hdr_sz = seg.segment_header_bytes_size();
     MDB_val mdb_val;
