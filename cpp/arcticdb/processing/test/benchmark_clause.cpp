@@ -96,11 +96,13 @@ void BM_hash_grouping_int(benchmark::State& state) {
 
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::uniform_int_distribution<integer> dis(std::numeric_limits<integer>::lowest(), std::numeric_limits<integer>::max());
+    // uniform_int_distribution (validly) undefined for int8_t in MSVC, hence the casting backwards and forwards
+    std::uniform_int_distribution<int64_t> dis(static_cast<int64_t>(std::numeric_limits<integer>::lowest()),
+                                               static_cast<int64_t>(std::numeric_limits<integer>::max()));
     std::vector<integer> unique_values;
     unique_values.reserve(num_unique_values);
     for (auto idx = 0; idx < num_unique_values; ++idx) {
-        unique_values.emplace_back(dis(gen));
+        unique_values.emplace_back(static_cast<integer>(dis(gen)));
     }
 
     std::uniform_int_distribution<size_t> unique_values_dis(0, num_unique_values - 1);
