@@ -37,29 +37,30 @@ const int SUMMARY_AGE_BUCKETS = 5;
 
 class PrometheusConfig {
 public:
-    enum Model {
-        NO_INIT = 0,
-        PUSH = 1,
-        WEB = 2
+    enum class Model {
+        NO_INIT,
+        PUSH,
+        PULL
     };
-    PrometheusConfig() : model(Model::NO_INIT) {}
+    PrometheusConfig() : model_(Model::NO_INIT) {}
 
     PrometheusConfig(const std::string& host,
                      const std::string& port,
                      const std::string& job_name, 
                      const std::string& instance, 
                      const std::string& prometheus_env, 
-                     const int model)
+                     const Model model)
             : host(host)
             , port(port)
             , job_name(job_name)
             , instance(instance)
             , prometheus_env(prometheus_env)
-            , model(static_cast<Model>(model)) {
+            , model_(model) {
                 util::check(!host.empty(), "PrometheusConfig: host is empty");
                 util::check(!port.empty(), "PrometheusConfig: port is empty");
                 util::check(!job_name.empty(), "PrometheusConfig: job_name is empty");
                 util::check(!instance.empty(), "PrometheusConfig: instance is empty");
+                util::check(!prometheus_env.empty(), "PrometheusConfig: instance is empty");
                 util::check(!prometheus_env.empty(), "PrometheusConfig: prometheus_env is empty");
             }
     
@@ -68,7 +69,7 @@ public:
     std::string job_name;
     std::string instance;
     std::string prometheus_env;
-    Model model;
+    Model model_;
 };
 
 class PrometheusInstance {
@@ -159,6 +160,6 @@ struct fmt::formatter<arcticdb::PrometheusConfig> {
     template<typename FormatContext>
     auto format(const arcticdb::PrometheusConfig k, FormatContext &ctx) const {
         return  fmt::format_to(ctx.out(), "PrometheusConfig: host={}, port={}, job_name={}, instance={}, prometheus_env={}, model={}",
-                               k.host, k.port, k.job_name, k.instance, k.prometheus_env, k.model);
+                               k.host, k.port, k.job_name, k.instance, k.prometheus_env, static_cast<int>(k.model_));
     }
 };
