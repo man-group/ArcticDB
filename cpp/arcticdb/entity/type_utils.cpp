@@ -148,20 +148,31 @@ namespace arcticdb {
         if (!maybe_common_type) {
             maybe_common_type = has_valid_type_promotion(right, left);
         }
-        if (!maybe_common_type && is_integer_type(left.data_type()) && is_integer_type(right.data_type())) {
-            auto left_size = slice_bit_size(left.data_type());
-            auto right_size = slice_bit_size(right.data_type());
-            if (right_size < entity::SizeBits::S64) {
-                auto target_type = entity::TypeDescriptor{
-                        combine_data_type(slice_value_type(right.data_type()), entity::SizeBits(uint8_t(right_size) + 1)),
-                        right.dimension()};
-                maybe_common_type = has_valid_type_promotion(left, target_type);
+        if (!maybe_common_type &&
+            left.dimension() == right.dimension() &&
+            is_integer_type(left.data_type()) &&
+            is_integer_type(right.data_type())) {
+            auto dimension = left.dimension();
+            auto left_type = left.data_type();
+            auto right_type = right.data_type();
+            auto left_size = slice_bit_size(left_type);
+            auto right_size = slice_bit_size(right_type);
+            // To get here we must have one signed and one unsigned type, with the width of the signed type <= the width of the unsigned type
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(is_signed_type(left_type) ^ is_signed_type(right_type),
+                                                            "Expected one signed and one unsigned int in has_valid_common_type");
+            if (is_signed_type(left_type)) {
+                internal::check<ErrorCode::E_ASSERTION_FAILURE>(left_size <= right_size,
+                                                                "Expected left_size <= right_size in has_valid_common_type");
+            } else {
+                // is_signed_type(right_type)
+                internal::check<ErrorCode::E_ASSERTION_FAILURE>(right_size <= left_size,
+                                                                "Expected right_size <= left_size in has_valid_common_type");
             }
-            if (!maybe_common_type && left_size < entity::SizeBits::S64) {
-                auto target_type = entity::TypeDescriptor{
-                        combine_data_type(slice_value_type(left.data_type()), entity::SizeBits(uint8_t(left_size) + 1)),
-                        left.dimension()};
-                maybe_common_type = has_valid_type_promotion(right, target_type);
+            auto target_size = entity::SizeBits(uint8_t(std::max(left_size, right_size)) + 1);
+            if (target_size < entity::SizeBits::COUNT) {
+                maybe_common_type = entity::TypeDescriptor{
+                        combine_data_type(entity::ValueType::INT, target_size),
+                        dimension};
             }
         }
         return maybe_common_type;
