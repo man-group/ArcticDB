@@ -148,6 +148,22 @@ namespace arcticdb {
         if (!maybe_common_type) {
             maybe_common_type = has_valid_type_promotion(right, left);
         }
+        if (!maybe_common_type && is_integer_type(left.data_type()) && is_integer_type(right.data_type())) {
+            auto left_size = slice_bit_size(left.data_type());
+            auto right_size = slice_bit_size(right.data_type());
+            if (right_size < entity::SizeBits::S64) {
+                auto target_type = entity::TypeDescriptor{
+                        combine_data_type(slice_value_type(right.data_type()), entity::SizeBits(uint8_t(right_size) + 1)),
+                        right.dimension()};
+                maybe_common_type = has_valid_type_promotion(left, target_type);
+            }
+            if (!maybe_common_type && left_size < entity::SizeBits::S64) {
+                auto target_type = entity::TypeDescriptor{
+                        combine_data_type(slice_value_type(left.data_type()), entity::SizeBits(uint8_t(left_size) + 1)),
+                        left.dimension()};
+                maybe_common_type = has_valid_type_promotion(right, target_type);
+            }
+        }
         return maybe_common_type;
     }
 
