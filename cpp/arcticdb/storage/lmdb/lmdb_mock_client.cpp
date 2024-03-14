@@ -63,7 +63,7 @@ void raise_if_has_failure_trigger(const LmdbKey& key, StorageOperation operation
     }
 }
 
-void raise_key_exists_error(const std::string& lmdb_op) {
+void raise_key_exists_error(std::string_view lmdb_op) {
     ::lmdb::error::raise(lmdb_op.data(), MDB_KEYEXIST);
 }
 
@@ -95,7 +95,7 @@ void MockLmdbClient::write(const std::string& db_name, std::string& path, arctic
     raise_if_has_failure_trigger(key, StorageOperation::WRITE);
 
     if(has_key(key)) {
-        raise_key_exists_error(std::string(lmdb_operation_string(StorageOperation::WRITE)));
+        raise_key_exists_error(lmdb_operation_string(StorageOperation::WRITE));
     } else {
         lmdb_contents_.insert({key, segment});
     }

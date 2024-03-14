@@ -22,8 +22,14 @@ struct LmdbKey {
     std::string db_name_;
     std::string path_;
 
-    bool operator<(const LmdbKey& other) const {
-        return std::tie(db_name_, path_) < std::tie(other.db_name_, other.path_);
+    bool operator==(const LmdbKey& other) const {
+        return std::pair(db_name_, path_) == std::pair(other.db_name_, other.path_);
+    }
+};
+
+struct LmdbKeyHash {
+    std::size_t operator()(const LmdbKey& k) const {
+        return std::hash<std::pair<std::string, std::string>>{}(std::pair(k.db_name_, k.path_));
     }
 };
 
@@ -64,7 +70,7 @@ public:
             KeyType key_type) const override;
 
 private:
-    std::map<LmdbKey, Segment> lmdb_contents_;
+    std::unordered_map<LmdbKey, Segment, LmdbKeyHash> lmdb_contents_;
 
     bool has_key(const LmdbKey& key) const;
 };
