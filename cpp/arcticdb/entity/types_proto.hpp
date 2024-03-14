@@ -6,6 +6,8 @@
  */
 
 #include <descriptors.pb.h>
+#include <arcticdb/memory_layout.hpp>
+#include <arcticdb/entity/types.hpp>
 
 namespace arcticdb::proto {
 namespace descriptors = arcticc::pb2::descriptors_pb2;

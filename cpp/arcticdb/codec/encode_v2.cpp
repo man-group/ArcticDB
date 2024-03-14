@@ -33,6 +33,12 @@ namespace arcticdb {
         pos += sizeof(MagicType);
     }
 
+    static void write_frame_data(Buffer& buffer, std::ptrdiff_t& pos, const FrameDescriptor& frame_desc) {
+        auto ptr = new (buffer.data() + pos) FrameDescriptor{};
+        *ptr = frame_desc;
+        pos += sizeof(FrameDescriptor);
+    }
+
     /// @brief Utility class used to encode and compute the max encoding size for regular data columns for V2 encoding
     /// What differs this from the already existing ColumnEncoder is that ColumnEncoder encodes the shapes of
     /// multidimensional data as part of each block. ColumnEncoder2 uses a better strategy and encodes the shapes for the
@@ -174,11 +180,15 @@ namespace arcticdb {
         ARCTICDB_TRACE(log::codec(), "Encoded field descriptors to position {}", pos);
 
         write_magic<IndexMagic>(out_buffer, pos);
-        if (in_mem_seg.index_fields()) {
+        if (in_mem_seg.has_index_descriptor()) {
+            const auto& tsd = in_mem_seg.index_descriptor();
+            write_frame_data(out_buffer, pos, *tsd.data_);
+
             ARCTICDB_TRACE(log::codec(), "Encoding index fields descriptors to position {}", pos);
             auto& index_field = segment_header.mutable_index_descriptor_field();
-            auto index_col = in_mem_seg.index_fields()->column_data();
-            ColumnEncoderV2::encode(codec_opts, index_col, index_field, out_buffer, pos);
+
+            auto index_field_data = tsd.fields().column_data();
+            ColumnEncoderV2::encode(codec_opts, index_field_data, index_field, out_buffer, pos);
             ARCTICDB_TRACE(log::codec(), "Encoded index field descriptors to position {}", pos);
         }
     }
@@ -190,7 +200,7 @@ namespace arcticdb {
 
         bytes += sizeof(EncodedBlock) * col.num_blocks();
         ARCTICDB_TRACE(log::version(), "Encoded block size: {} + shapes({}) + {} * {} = {}",
-            EncodedField::Size,
+            EncodedFieldImpl::Size,
             col.type().dimension() != entity::Dimension::Dim0 ? sizeof(EncodedBlock) : 0u,
             sizeof(EncodedBlock),
             col.num_blocks(),
@@ -226,16 +236,19 @@ namespace arcticdb {
         result.uncompressed_bytes_ += uncompressed;
         result.max_compressed_bytes_ += required;
 
-        // Calculate index fields size
-        if(in_mem_seg.index_fields()) {
-            auto index_field_data = in_mem_seg.index_fields()->column_data();
+        if(in_mem_seg.has_index_descriptor()) {
+            result.max_compressed_bytes_ += sizeof(FrameDescriptor);
+            result.uncompressed_bytes_ += sizeof(FrameDescriptor);
+
+            const auto& tsd = in_mem_seg.index_descriptor();
+            auto index_field_data = tsd.fields().column_data();
             const auto [idx_uncompressed, idx_required] = ColumnEncoderV2::max_compressed_size(codec_opts, index_field_data);
             result.uncompressed_bytes_ += idx_uncompressed;
             result.max_compressed_bytes_ += idx_required;
         }
     }
 
-    [[nodiscard]] static SizeResult max_compressed_size_v2(
+    [[nodiscard]] SizeResult max_compressed_size_v2(
             const SegmentInMemory& in_mem_seg,
             const arcticdb::proto::encoding::VariantCodec& codec_opts) {
         ARCTICDB_SAMPLE(GetSegmentCompressedSize, 0)
@@ -290,7 +303,7 @@ namespace arcticdb {
         auto [max_compressed_size, uncompressed_size, encoded_buffer_size] = max_compressed_size_v2(in_mem_seg, codec_opts);
         ARCTICDB_TRACE(log::codec(), "Estimated max buffer requirement: {}", max_compressed_size);
         auto out_buffer = std::make_shared<Buffer>(max_compressed_size + encoded_buffer_size, preamble);
-        ARCTICDB_TRACE(log::codec(), "Encoding descriptor: {}", segment_header->stream_descriptor().DebugString());
+        ARCTICDB_TRACE(log::codec(), "Encoding descriptor: {}", in_mem_seg.descriptor());
 
         auto descriptor_data = in_mem_seg.descriptor().data_ptr();
         descriptor_data->uncompressed_bytes_ = uncompressed_size;
@@ -311,7 +324,7 @@ namespace arcticdb {
                 ARCTICDB_TRACE(log::codec(),"Beginning encoding of column {}: ({}) to position {}", column_index, in_mem_seg.descriptor().field(column_index).name(), pos);
                 auto column_data = in_mem_seg.column_data(column_index);
                 if(column_data.num_blocks() > 0) {
-                    encoder.encode(codec_opts, column_data, column_field, *out_buffer, pos);
+                    encoder.encode(codec_opts, column_data, *column_field, *out_buffer, pos);
                     ARCTICDB_TRACE(log::codec(),
                                    "Encoded column {}: ({}) to position {}",
                                    column_index,
@@ -323,10 +336,6 @@ namespace arcticdb {
                     ndarray->set_items_count(0);
                 }
                 encoded_field_pos += encoded_field_bytes(*column_field);
-                util::check(encoded_field_pos <= encoded_fields_buffer.bytes(),
-                            "Encoded field buffer overflow {} > {}",
-                            encoded_field_pos,
-                            encoded_fields_buffer.bytes());
             }
             write_magic<StringPoolMagic>(*out_buffer, pos);
             encode_string_pool<EncodingPolicyV2>(in_mem_seg, segment_header, codec_opts, *out_buffer, pos);
@@ -336,10 +345,7 @@ namespace arcticdb {
         out_buffer->set_bytes(pos);
         descriptor_data->compressed_bytes_ = pos;
 
-        ARCTICDB_TRACE(log::codec(), "Encoded header: {}", tsd->DebugString());
-        ARCTICDB_DEBUG(log::codec(), "Block count {} header size {} ratio {}",
-            in_mem_seg.num_blocks(), segment_header->ByteSizeLong(),
-            in_mem_seg.num_blocks() ? segment_header->ByteSizeLong() / in_mem_seg.num_blocks() : 0);
+        ARCTICDB_TRACE(log::codec(), "Encoded header: {}", segment_header);
         return {std::move(segment_header), std::move(out_buffer), descriptor_data, in_mem_seg.descriptor().fields_ptr()};
     }
 }

@@ -9,7 +9,7 @@
 
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_factory.hpp>
-
+#include <arcticdb/util/pb_util.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 
 #include <folly/Range.h>

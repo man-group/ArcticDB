@@ -1753,8 +1753,8 @@ std::unordered_map<KeyType, KeySizesInfo> LocalVersionedEngine::scan_object_size
             key_size_calculators.emplace_back(std::forward<const VariantKey>(k), [&sizes_info] (auto&& ks) {
                 auto key_seg = std::move(ks);
                 sizes_info.compressed_size += key_seg.segment().total_segment_size();
-                auto desc = key_seg.segment().header().stream_descriptor();
-                sizes_info.uncompressed_size += desc.in_bytes();
+                const auto& desc = key_seg.segment().descriptor();
+                sizes_info.uncompressed_size += desc.uncompressed_bytes();
                 return key_seg.variant_key();
             });
         });
@@ -1786,8 +1786,8 @@ std::unordered_map<StreamId, std::unordered_map<KeyType, KeySizesInfo>> LocalVer
                 auto variant_key = key_seg.variant_key();
                 auto stream_id = variant_key_id(variant_key);
                 auto compressed_size = key_seg.segment().total_segment_size();
-                auto desc = key_seg.segment().header().stream_descriptor();
-                auto uncompressed_size = desc.in_bytes();
+                auto desc = key_seg.segment().descriptor();
+                auto uncompressed_size = desc.uncompressed_bytes();
 
                 {
                     std::lock_guard lock{mutex};

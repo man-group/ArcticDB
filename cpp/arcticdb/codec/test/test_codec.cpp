@@ -80,7 +80,7 @@ protected:
 template<typename EncodedFieldType>
 class FieldEncoderTestDim0 : public FieldEncoderTestDim0Base{};
 
-using EncodedFieldsType = ::testing::Types<arcticdb::proto::encoding::EncodedField, EncodedField>;
+using EncodedFieldsType = ::testing::Types<arcticdb::proto::encoding::EncodedField, EncodedFieldImpl>;
 TYPED_TEST_SUITE(FieldEncoderTestDim0, EncodedFieldsType);
 
 TYPED_TEST(FieldEncoderTestDim0, Passthrough_v1) {
@@ -133,10 +133,8 @@ class FieldEncoderTestFromColumnDim0 : public FieldEncoderTestDim0Base{};
 /// @brief Cartesian product between the type of the encoded field and the encoding version.
 /// (EncodedField, arcticdb::proto::encoding::EncodedField) x (EncodingVersion::V1, EncodingVersion::V2)
 using FieldVersionT = ::testing::Types<
-    std::pair<arcticdb::proto::encoding::EncodedField, ColumnEncoderV1>,
-	std::pair<arcticdb::proto::encoding::EncodedField, ColumnEncoderV2>,
-	std::pair<EncodedField, ColumnEncoderV1>,
-	std::pair<EncodedField, ColumnEncoderV2>>;
+    std::pair<EncodedFieldImpl, ColumnEncoderV1>,
+	std::pair<EncodedFieldImpl, ColumnEncoderV2>>;
 TYPED_TEST_SUITE(FieldEncoderTestFromColumnDim0, FieldVersionT);
 
 TYPED_TEST(FieldEncoderTestFromColumnDim0, Passthrough) {
@@ -156,7 +154,7 @@ TYPED_TEST(FieldEncoderTestFromColumnDim0, Passthrough) {
         column_data);
     Buffer out(max_compressed_size);
     column_data.reset();
-    ColumnEncoder::encode(TestFixture::passthorugh_encoding_options, column_data, &field, out, pos);
+    ColumnEncoder::encode(TestFixture::passthorugh_encoding_options, column_data, field, out, pos);
     auto& nd = field.ndarray();
     ASSERT_EQ(nd.items_count(), TestFixture::values.size());
     ASSERT_EQ(nd.shapes_size(), 0);
@@ -217,9 +215,9 @@ TEST_F(FieldEncoderTestDim1, PassthroughV1NativeField) {
         shapes.size(),
         nullptr);
     // one block for shapes and one for values
-    constexpr size_t encoded_field_size = EncodedField::Size + 2 * sizeof(EncodedBlock);
+    constexpr size_t encoded_field_size = EncodedFieldImpl::Size + 2 * sizeof(EncodedBlock);
     std::array<uint8_t, encoded_field_size> encoded_field_memory;
-    EncodedField* field = new(encoded_field_memory.data()) EncodedField;
+    EncodedFieldImpl* field = new(encoded_field_memory.data()) EncodedFieldImpl;
 
     Buffer out(Encoder::max_compressed_size(passthorugh_encoding_options, block));
     std::ptrdiff_t pos = 0;
@@ -302,9 +300,9 @@ TEST_F(FieldEncoderTestDim1, PassthroughV2NativeField) {
         shapes_block);
     const size_t total_max_compressed_size = values_max_compressed_size + shapes_max_compressed_size;
     // one block for shapes and one for values
-    constexpr size_t encoded_field_size = EncodedField::Size + 2 * sizeof(EncodedBlock);
+    constexpr size_t encoded_field_size = EncodedFieldImpl::Size + 2 * sizeof(EncodedBlock);
     std::array<uint8_t, encoded_field_size> encoded_field_memory;
-    EncodedField* field = new(encoded_field_memory.data()) EncodedField;
+    EncodedFieldImpl* field = new(encoded_field_memory.data()) EncodedFieldImpl;
     Buffer out(total_max_compressed_size);
     std::ptrdiff_t pos = 0;
     ShapesEncoder::encode_shapes(passthorugh_encoding_options, shapes_block, *field, out, pos);
@@ -356,30 +354,16 @@ protected:
     Buffer shapes_buffer;
 };
 
-TEST_F(TestMultiblockData_Dim1, EncodingVersion_1) {
-    arcticdb::proto::encoding::EncodedField encoded_field;
-    ColumnData column_data(&data_buffer, &shapes_buffer, type_descriptor, nullptr);
-    const auto [_, max_compressed_size] = ColumnEncoderV1::max_compressed_size(passthorugh_encoding_options, column_data);
-    Buffer out(max_compressed_size);
-    ptrdiff_t out_pos = 0;
-    column_data.reset();
-    ColumnEncoderV1::encode(passthorugh_encoding_options, column_data, &encoded_field, out, out_pos);
-    const auto ndarray = encoded_field.ndarray();
-    ASSERT_EQ(ndarray.shapes_size(), 2);
-    ASSERT_EQ(ndarray.values_size(), 2);
-    ASSERT_EQ(ndarray.items_count(), shapes_data.size());
-}
-
 TEST_F(TestMultiblockData_Dim1, EncodingVersion_2) {
-    constexpr size_t encoded_field_size = EncodedField::Size + 3 * sizeof(EncodedBlock);
+    constexpr size_t encoded_field_size = EncodedFieldImpl::Size + 3 * sizeof(EncodedBlock);
     std::array<uint8_t, encoded_field_size> encoded_field_owner;
-    EncodedField* encoded_field = new(encoded_field_owner.data()) EncodedField;
+    EncodedFieldImpl* encoded_field = new(encoded_field_owner.data()) EncodedFieldImpl;
     ColumnData column_data(&data_buffer, &shapes_buffer, type_descriptor, nullptr);
     const auto [_, max_compressed_size] = ColumnEncoderV2::max_compressed_size(passthorugh_encoding_options, column_data);
     Buffer out(max_compressed_size);
     ptrdiff_t out_pos = 0;
     column_data.reset();
-    ColumnEncoderV2::encode(passthorugh_encoding_options, column_data, encoded_field, out, out_pos);
+    ColumnEncoderV2::encode(passthorugh_encoding_options, column_data, *encoded_field, out, out_pos);
     const auto ndarray = encoded_field->ndarray();
     ASSERT_EQ(ndarray.shapes_size(), 1);
     ASSERT_EQ(ndarray.values_size(), 2);
@@ -490,8 +474,8 @@ TEST(Segment, KeepAlive) {
 
         auto seg1 = std::move(segment);
         Segment seg2{std::move(seg1)};
-        auto seg3 = seg2;
-        Segment seg4{seg3};
+        auto seg3 = seg2.clone();
+        Segment seg4{seg3.clone()};
 
         std::any_cast<TransactionalThing>(seg4.keepalive()).magic_.check();
     }

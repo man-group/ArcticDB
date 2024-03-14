@@ -21,6 +21,7 @@
 
 #include <folly/Range.h>
 #include <folly/Function.h>
+#include <folly/ScopeGuard.h>
 
 #include <typeinfo>
 

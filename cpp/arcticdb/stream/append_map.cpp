@@ -141,11 +141,7 @@ TimeseriesDescriptor pack_timeseries_descriptor(
     size_t total_rows,
     std::optional<AtomKey>&& next_key,
     arcticdb::proto::descriptors::NormalizationMetadata&& norm_meta) {
-    util::check(descriptor.proto().has_index(), "Stream descriptor without index in pack_timeseries_descriptor");
     auto tsd = make_timeseries_descriptor(total_rows, std::move(descriptor), std::move(norm_meta), std::nullopt, std::nullopt, std::move(next_key), false);
-    if(ConfigsMap::instance()->get_int("VersionStore.Encoding", 1) == 1) {
-        tsd.copy_to_self_proto();
-    }
     return tsd;
 }
 
@@ -173,7 +169,7 @@ SegmentInMemory incomplete_segment_from_frame(
         auto timeseries_desc = index_descriptor_from_frame(frame, existing_rows, std::move(prev_key));
         util::check(!timeseries_desc.fields().empty(), "Expected fields not to be empty in incomplete segment");
         auto norm_meta = timeseries_desc.proto().normalization();
-        StreamDescriptor descriptor(std::make_shared<StreamDescriptor::Proto>(std::move(*timeseries_desc.mutable_proto().mutable_stream_descriptor())), timeseries_desc.fields_ptr());
+        auto descriptor = timeseries_desc.as_stream_descriptor();
         SingleSegmentAggregator agg{FixedSchema{descriptor, index}, [&](auto&& segment) {
             auto tsd = pack_timeseries_descriptor(std::move(descriptor), existing_rows + num_rows, std::move(prev_key), std::move(norm_meta));
             segment.set_timeseries_descriptor(std::move(tsd));
@@ -327,7 +323,7 @@ std::pair<std::optional<AtomKey>, size_t> read_head(const std::shared_ptr<Stream
         output.first = decode_key(tsd.proto().next_key());
     }
 
-    output.second = tsd.proto().total_rows();
+    output.second = tsd.total_rows();
     return output;
 }
 
@@ -338,18 +334,18 @@ std::pair<TimeseriesDescriptor, std::optional<SegmentInMemory>> get_descriptor_a
     storage::ReadKeyOpts opts = storage::ReadKeyOpts{}) {
     if(load_data) {
         auto [key, seg] = store->read_sync(k, opts);
-        return std::make_pair(TimeseriesDescriptor{seg.timeseries_proto(), seg.index_fields()}, std::make_optional<SegmentInMemory>(seg));
+        return std::make_pair(seg.index_descriptor(), std::make_optional<SegmentInMemory>(seg));
     } else {
         auto [key, tsd] = store->read_timeseries_descriptor(k, opts).get();
         return std::make_pair(std::move(tsd), std::nullopt);
     }
 }
 
-AppendMapEntry create_entry(const arcticdb::proto::descriptors::TimeSeriesDescriptor& tsd) {
+AppendMapEntry create_entry(const TimeseriesDescriptor& tsd) {
     AppendMapEntry entry;
 
-    if(tsd.has_next_key())
-        entry.next_key_ = decode_key(tsd.next_key());
+    if(tsd.proto().has_next_key())
+        entry.next_key_ = decode_key(tsd.proto().next_key());
 
     entry.total_rows_ = tsd.total_rows();
     return entry;
@@ -359,7 +355,7 @@ AppendMapEntry entry_from_key(const std::shared_ptr<StreamSource>& store, const 
     auto opts = storage::ReadKeyOpts{};
     opts.dont_warn_about_missing_key = true;
     auto [tsd, seg] = get_descriptor_and_data(store, key, load_data, opts);
-    auto entry = create_entry(tsd.proto());
+    auto entry = create_entry(tsd);
     auto descriptor = std::make_shared<StreamDescriptor>();
     auto desc = std::make_shared<StreamDescriptor>(tsd.as_stream_descriptor());
     auto index_field_count = desc->index().field_count();

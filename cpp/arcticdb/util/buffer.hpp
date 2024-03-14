@@ -274,6 +274,14 @@ public:
             buffer_(std::forward<decltype(buf)>(buf)) {
     }
 
+    [[nodiscard]] VariantBuffer clone() const {
+        return util::variant_match(buffer_,
+                                   [] (const BufferView& bv) { auto b = std::make_shared<Buffer>(); bv.copy_to(*b); return VariantBuffer{std::move(b)}; },
+                                   [] (const std::shared_ptr<Buffer>& buf) { return VariantBuffer{ std::make_shared<Buffer>(buf->clone())}; },
+                                   [] (const std::monostate) -> VariantBuffer { util::raise_rte("Uninitialized buffer"); }
+                                   );
+    }
+
     template<typename BufferType>
     VariantBuffer& operator=(BufferType&& buf) {
         buffer_ = std::forward<decltype(buf)>(buf);

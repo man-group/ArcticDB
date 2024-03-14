@@ -17,49 +17,49 @@
 namespace arcticdb::encoding_sizes {
 
 template <typename NDArrayEncodedFieldType> std::size_t shape_compressed_size(const NDArrayEncodedFieldType &nda) {
-        return std::accumulate(std::begin(nda.shapes()), std::end(nda.shapes()), size_t(0),
-                               [] (size_t a, const auto& block) { return a + block.out_bytes(); });
-    }
+    return std::accumulate(std::begin(nda.shapes()), std::end(nda.shapes()), size_t(0),
+                           [] (size_t a, const auto& block) { return a + block.out_bytes(); });
+}
 
-    template <typename NDArrayEncodedFieldType> std::size_t data_compressed_size(const NDArrayEncodedFieldType &nda) {
-        return std::accumulate(std::begin(nda.values()), std::end(nda.values()), size_t(0),
-                               [] (size_t a, const auto& block) { return a + block.out_bytes(); });
-    }
+template <typename NDArrayEncodedFieldType> std::size_t data_compressed_size(const NDArrayEncodedFieldType &nda) {
+    return std::accumulate(std::begin(nda.values()), std::end(nda.values()), size_t(0),
+                           [] (size_t a, const auto& block) { return a + block.out_bytes(); });
+}
 
-    template <typename NDArrayEncodedFieldType> std::size_t shape_uncompressed_size(const NDArrayEncodedFieldType &nda) {
-        return std::accumulate(std::begin(nda.shapes()), std::end(nda.shapes()), size_t(0),
-                               [] (size_t a, const auto& block) { return a + block.in_bytes(); });
-    }
+template <typename NDArrayEncodedFieldType> std::size_t shape_uncompressed_size(const NDArrayEncodedFieldType &nda) {
+    return std::accumulate(std::begin(nda.shapes()), std::end(nda.shapes()), size_t(0),
+                           [] (size_t a, const auto& block) { return a + block.in_bytes(); });
+}
 
-    template <typename NDArrayEncodedFieldType>
-    std::size_t data_uncompressed_size(const NDArrayEncodedFieldType &nda) {
-        return  std::accumulate(std::begin(nda.values()), std::end(nda.values()), size_t(0),
-                               [] (size_t a, const auto& block) { return a + block.in_bytes(); });
-    }
+template <typename NDArrayEncodedFieldType>
+std::size_t data_uncompressed_size(const NDArrayEncodedFieldType &nda) {
+    return  std::accumulate(std::begin(nda.values()), std::end(nda.values()), size_t(0),
+                           [] (size_t a, const auto& block) { return a + block.in_bytes(); });
+}
 
-    template <typename NDArrayEncodedFieldType>
-    std::size_t bitmap_serialized_size(const NDArrayEncodedFieldType &nda) {
-        return  nda.sparse_map_bytes();
-    }
+template <typename NDArrayEncodedFieldType>
+std::size_t bitmap_serialized_size(const NDArrayEncodedFieldType &nda) {
+    return  nda.sparse_map_bytes();
+}
 
-    template <typename NDArrayEncodedFieldType>
-    std::size_t ndarray_field_compressed_size(const NDArrayEncodedFieldType &nda) {
-        return shape_compressed_size(nda) + data_compressed_size(nda) + bitmap_serialized_size(nda);
-    }
+template <typename NDArrayEncodedFieldType>
+std::size_t ndarray_field_compressed_size(const NDArrayEncodedFieldType &nda) {
+    return shape_compressed_size(nda) + data_compressed_size(nda) + bitmap_serialized_size(nda);
+}
 
-    template <typename NDArrayEncodedFieldType>
-    std::size_t uncompressed_size(const NDArrayEncodedFieldType &nda) {
-        return shape_uncompressed_size(nda) + data_uncompressed_size(nda) + bitmap_serialized_size(nda);
-    }
+template <typename NDArrayEncodedFieldType>
+std::size_t uncompressed_size(const NDArrayEncodedFieldType &nda) {
+    return shape_uncompressed_size(nda) + data_uncompressed_size(nda) + bitmap_serialized_size(nda);
+}
 
-    std::size_t field_compressed_size(const EncodedFieldImpl &field) {
-    switch (field.encoding_case()) {
-        case EncodedFieldType::NDARRAY:
-            return ndarray_field_compressed_size(field.ndarray());
-        default:
-            util::raise_rte("Unsupported encoding {}", field.DebugString());
+inline std::size_t field_compressed_size(const EncodedFieldImpl &field) {
+switch (field.encoding_case()) {
+    case EncodedFieldType::NDARRAY:
+        return ndarray_field_compressed_size(field.ndarray());
+    default:
+        util::raise_rte("Unsupported encoding {}", field.DebugString());
 
-    }
+}
 }
 
 template <typename FieldCollectionType>

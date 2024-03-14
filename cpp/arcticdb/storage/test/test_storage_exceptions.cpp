@@ -243,7 +243,6 @@ TEST_F(LMDBStorageTestBase, WriteMapFullError) {
 
     arcticdb::entity::AtomKey k = arcticdb::entity::atom_key_builder().gen_id(0).build<arcticdb::entity::KeyType::VERSION>("sym");
     arcticdb::storage::KeySegmentPair kv(k);
-    kv.segment().header().set_start_ts(1234);
     kv.segment().set_buffer(std::make_shared<arcticdb::Buffer>(40000));
 
     ASSERT_THROW({

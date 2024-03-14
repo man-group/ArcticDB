@@ -20,25 +20,27 @@ TimeseriesDescriptor make_timeseries_descriptor(
         std::optional<AtomKey>&& next_key,
         bool bucketize_dynamic
     ) {
-    arcticdb::proto::descriptors::TimeSeriesDescriptor time_series_descriptor;
-    time_series_descriptor.set_total_rows(total_rows);
-    *time_series_descriptor.mutable_stream_descriptor() = copy_stream_descriptor_to_proto(desc);
-    time_series_descriptor.mutable_normalization()->CopyFrom(norm_meta);
+
+    auto frame_desc = std::make_shared<FrameDescriptorImpl>();
+    frame_desc->total_rows_ = total_rows;
+    frame_desc->index_ = desc.index();
+    frame_desc->sorted_ = desc.sorted();
+    frame_desc->column_groups_ = bucketize_dynamic;
+
+    auto proto = std::make_shared<TimeseriesDescriptor::Proto>();
+    proto->mutable_normalization()->CopyFrom(norm_meta);
     auto user_meta = std::move(um);
     if(user_meta)
-      *time_series_descriptor.mutable_user_meta() = std::move(*user_meta);
+      *proto->mutable_user_meta() = std::move(*user_meta);
 
     if(prev_key)
-      *time_series_descriptor.mutable_next_key() = encode_key(prev_key.value());
+       proto->mutable_next_key()->CopyFrom(encode_key(prev_key.value()));
 
     if(next_key)
-      time_series_descriptor.mutable_next_key()->CopyFrom(encode_key(next_key.value()));
-
-    if(bucketize_dynamic)
-      time_series_descriptor.mutable_column_groups()->set_enabled(true);
+        proto->mutable_next_key()->CopyFrom(encode_key(next_key.value()));
 
     //TODO maybe need ensure_norm_meta?
-    return TimeseriesDescriptor{std::make_shared<TimeseriesDescriptor::Proto>(std::move(time_series_descriptor)), desc.fields_ptr()};
+    return TimeseriesDescriptor{std::move(frame_desc), std::move(proto), desc.fields_ptr()};
 }
 
 

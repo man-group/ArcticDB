@@ -22,9 +22,22 @@ struct TimeseriesDescriptor {
 
   TimeseriesDescriptor() = default;
 
-  TimeseriesDescriptor(std::shared_ptr<Proto> proto, std::shared_ptr<FieldCollection> fields) :
+  TimeseriesDescriptor(
+      std::shared_ptr<FrameDescriptorImpl> data,
+      std::shared_ptr<Proto> proto,
+      std::shared_ptr<FieldCollection> fields) :
+    data_(data),
     proto_(std::move(proto)),
     fields_(std::move(fields)) {
+  }
+
+  const FrameDescriptorImpl& frame_descriptor() const {
+      return *data_;
+  }
+
+  void set_stream_descriptor(const StreamDescriptor& desc) {
+      data_ = desc.data_ptr();
+      fields_ = desc.fields_ptr();
   }
 
   void set_total_rows(uint64_t rows) {
@@ -37,6 +50,10 @@ struct TimeseriesDescriptor {
 
   [[nodiscard]] SortedValue sorted() const {
       return data_->sorted_;
+  }
+
+  [[nodiscard]] IndexDescriptorImpl index() const {
+      return data_->index();
   }
 
   void set_sorted(SortedValue sorted) {
@@ -98,7 +115,12 @@ struct TimeseriesDescriptor {
   [[nodiscard]] TimeseriesDescriptor clone() const {
       auto proto = std::make_shared<Proto>();
       proto->CopyFrom(*proto_);
-      return {std::move(proto), std::make_shared<FieldCollection>(fields_->clone())};
+      auto frame_desc = std::make_shared<FrameDescriptorImpl>(data_->clone());
+      return {std::move(frame_desc), std::move(proto), std::make_shared<FieldCollection>(fields_->clone())};
+  }
+
+  [[nodiscard]] bool column_groups() const {
+      return data_->column_groups_;
   }
 
   [[nodiscard]] StreamDescriptor as_stream_descriptor() const {

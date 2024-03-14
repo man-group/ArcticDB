@@ -746,10 +746,6 @@ void Column::set_sparse_bit_for_row(size_t sparse_location) {
     sparse_map()[bv_size(sparse_location)] = true;
 }
 
-bool Column::empty() const {
-    return row_count() == 0;
-}
-
 void Column::regenerate_offsets() const {
     if (ARCTICDB_LIKELY(is_scalar() || !offsets_.empty()))
         return;

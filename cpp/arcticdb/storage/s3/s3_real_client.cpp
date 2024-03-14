@@ -145,10 +145,10 @@ S3Result<std::monostate> RealS3Client::put_object(
     std::shared_ptr<Buffer> tmp;
     auto hdr_size = segment.segment_header_bytes_size();
     auto [dst, write_size] = segment.try_internal_write(tmp, hdr_size);
-    util::check(arcticdb::Segment::FIXED_HEADER_SIZE + hdr_size + segment.buffer().bytes() <=
+    util::check(arcticdb::FIXED_HEADER_SIZE + hdr_size + segment.buffer().bytes() <=
                 write_size,
                 "Size disparity, fixed header size {} + variable header size {} + buffer size {}  >= total size {}",
-                arcticdb::Segment::FIXED_HEADER_SIZE,
+                arcticdb::FIXED_HEADER_SIZE,
                 hdr_size,
                 segment.buffer().bytes(),
                 write_size);

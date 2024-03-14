@@ -59,7 +59,7 @@ FieldCollection decode_fields(
     const uint8_t* begin) {
     FieldCollection fields;
     if (hdr.has_descriptor_field()) {
-        ARCTICDB_TRACE(log::codec(), "Decoding string pool");
+        ARCTICDB_TRACE(log::codec(), "Decoding descriptor");
         std::optional<util::BitMagic> bv;
         (void)decode_field(FieldCollection::type(),
             hdr.descriptor_field(),
@@ -68,7 +68,7 @@ FieldCollection decode_fields(
             bv,
             hdr.encoding_version());
 
-        ARCTICDB_TRACE(log::codec(), "Decoded string pool to position {}", data-begin);
+        ARCTICDB_TRACE(log::codec(), "Decoded descriptor to position {}", data-begin);
     }
     fields.regenerate_offsets();
     return fields;

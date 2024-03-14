@@ -99,21 +99,16 @@ public:
         return impl_->column_index(name);
     }
 
-
-    TimeseriesDescriptor index_descriptor() {
+    const TimeseriesDescriptor& index_descriptor() const {
         return impl_->index_descriptor();
+    }
+
+    bool has_index_descriptor() const {
+        return impl_->has_index_descriptor();
     }
 
     TimeseriesDescriptor&& detach_index_descriptor() {
         return impl_->detach_index_descriptor();
-    }
-
-    std::shared_ptr<arcticdb::proto::descriptors::TimeSeriesDescriptor> timeseries_proto() {
-        return impl_->timeseries_proto();
-    }
-
-    void set_index_descripto(TimeseriesDescriptor index_descriptor) {
-        impl_->set_index_descriptor(std::move(index_descriptor));
     }
 
     void init_column_map() const  {
@@ -464,10 +459,6 @@ public:
             output.emplace_back(SegmentInMemory{impl});
 
         return output;
-    }
-
-    StreamId get_index_col_name() const{
-        return impl_->get_index_col_name();
     }
 
 private:

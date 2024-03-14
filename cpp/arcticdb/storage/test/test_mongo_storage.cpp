@@ -85,7 +85,7 @@ TEST(MongoStorage, ClientSession) {
                          });
     ASSERT_TRUE(executed);
 
-    ac::entity::AtomKey numeric_k = ac::entity::atom_key_builder().gen_id(1).build<ac::entity::KeyType::STREAM_GROUP>(ac::entity::NumericId{999});
+    ac::entity::AtomKey numeric_k = ac::entity::atom_key_builder().gen_id(1).build<ac::entity::KeyType::STREAM_GROUP>(ac::NumericId{999});
     as::KeySegmentPair numeric_kv(numeric_k);
 
     storage.write(std::move(numeric_kv));

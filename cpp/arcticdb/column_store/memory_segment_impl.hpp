@@ -51,7 +51,7 @@ inline void check_output_bitset(const arcticdb::util::BitSet& output,
                                  "Mismatch in output bitset in filter_segment");
     }
 }
-} // namespace anon
+} // namespace
 
 
 class SegmentInMemoryImpl {
@@ -421,10 +421,6 @@ public:
         return *tsd_;
     }
 
-    void set_index_descriptor(TimeseriesDescriptor&& index_descriptor) {
-        tsd_ = std::move(index_descriptor);
-    }
-
     void end_block_write(ssize_t size) {
         row_id_ += size;
     }
@@ -762,13 +758,6 @@ public:
                                                 bool filter_down_stringpool=false,
                                                 bool validate=false) const;
 
-    std::shared_ptr<arcticdb::proto::descriptors::TimeSeriesDescriptor> timeseries_proto();
-
-    TimeseriesDescriptor index_descriptor() {
-        util::check(tsd_.has_value(), "No index descriptor on segment");
-        return *tsd_;
-    }
-
     bool has_index_descriptor() const {
         return tsd_.has_value();
     }
@@ -802,10 +791,6 @@ public:
 
     std::vector<std::shared_ptr<SegmentInMemoryImpl>> split(size_t rows) const;
 
-    StreamId get_index_col_name() const{
-        return descriptor().id();
-    }
-
 private:
     ssize_t row_id_ = -1;
     std::shared_ptr<StreamDescriptor> descriptor_ = std::make_shared<StreamDescriptor>();
@@ -820,7 +805,6 @@ private:
     util::MagicNum<'M', 'S', 'e', 'g'> magic_;
     std::optional<TimeseriesDescriptor> tsd_;
 };
-
 
 namespace {
 inline std::shared_ptr<SegmentInMemoryImpl> allocate_sparse_segment(const StreamId& id, const IndexDescriptorImpl& index) {

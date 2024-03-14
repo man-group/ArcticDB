@@ -27,10 +27,10 @@ namespace arcticdb::async {
                     }
                 }
 
-                return index_descriptor(StreamDescriptor::id_from_proto(desc.proto()), idx, fields);
+                return index_descriptor(desc.id(), idx, fields);
             }
             else {
-                return index_descriptor(StreamDescriptor::id_from_proto(desc.proto()), idx, desc.fields());
+                return index_descriptor(desc.id(), idx, desc.fields());
             }
         });
     }
@@ -42,7 +42,7 @@ namespace arcticdb::async {
                        seg.total_segment_size(),
                        key);
         auto &hdr = seg.header();
-        auto desc = StreamDescriptor(std::make_shared<StreamDescriptor::Proto>(std::move(*hdr.mutable_stream_descriptor())), seg.fields_ptr());
+        const auto& desc = seg.descriptor();
         auto descriptor = async::get_filtered_descriptor(desc, columns_to_decode_);
         ranges_and_key_.col_range_.second = ranges_and_key_.col_range_.first + (descriptor.field_count() - descriptor.index().field_count());
         ARCTICDB_TRACE(log::codec(), "Creating segment");
@@ -58,7 +58,7 @@ namespace arcticdb::async {
                       variant_key_view(sk.key()));
 
         auto &hdr = seg.header();
-        auto desc = StreamDescriptor(std::make_shared<StreamDescriptor::Proto>(std::move(*hdr.mutable_stream_descriptor())), seg.fields_ptr());
+        const auto& desc = seg.descriptor();
         auto descriptor = async::get_filtered_descriptor(desc, filter_columns_);
         sk.slice_.adjust_columns(descriptor.field_count() - descriptor.index().field_count());
 

@@ -50,7 +50,7 @@ inline size_t get_max_string_size(const pipelines::PipelineContextRow& context_r
 
 TimeseriesDescriptor make_timeseries_descriptor(
     size_t total_rows,
-    StreamDescriptor&& desc,
+    const StreamDescriptor& desc,
     arcticdb::proto::descriptors::NormalizationMetadata&& norm_meta,
     std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>&& um,
     std::optional<AtomKey>&& prev_key,

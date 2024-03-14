@@ -177,6 +177,16 @@ struct FrameDescriptor {
     uint64_t compressed_bytes_ = 0UL;
     uint64_t uncompressed_bytes_ = 0UL;
     IndexDescriptor index_;
+    bool column_groups_ = false;
+};
+
+enum class FieldOffset : uint8_t {
+    METADATA,
+    STRING_POOL,
+    DESCRIPTOR,
+    INDEX,
+    COLUMN,
+    COUNT
 };
 
 

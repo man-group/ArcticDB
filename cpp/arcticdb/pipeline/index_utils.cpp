@@ -86,7 +86,7 @@ TimeseriesDescriptor get_merged_tsd(
         const std::shared_ptr<pipelines::InputTensorFrame>& new_frame) {
     auto existing_descriptor = existing_tsd.as_stream_descriptor();
     auto merged_descriptor = existing_descriptor;
-    if (existing_tsd.proto().total_rows() == 0){
+    if (existing_tsd.total_rows() == 0){
         // If the existing dataframe is empty, we use the descriptor of the new_frame
         merged_descriptor = new_frame->desc;
     }

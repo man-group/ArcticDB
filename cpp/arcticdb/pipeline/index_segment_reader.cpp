@@ -24,20 +24,8 @@ IndexSegmentReader get_index_reader(const AtomKey &prev_index, const std::shared
     return index::IndexSegmentReader{std::move(seg)};
 }
 
-IndexSegmentReader::IndexSegmentReader(SegmentInMemory&& s) : seg_(std::move(s)) {
-    seg_.metadata()->UnpackTo(&tsd_.mutable_proto());
-    if(seg_.has_index_fields()) {
-        tsd_.mutable_fields() = seg_.detach_index_fields();
-        tsd_.mutable_fields().regenerate_offsets();
-    } else {
-        TimeseriesDescriptor::Proto tsd;
-        if(seg_.metadata()->UnpackTo(&tsd)) {
-            tsd_.mutable_fields() = fields_from_proto(tsd.stream_descriptor());
-        } else {
-            util::raise_rte("Unable to unpack index fields");
-        }
-    }
-    ARCTICDB_DEBUG(log::version(), "Decoded index segment descriptor: {}", tsd_.proto().DebugString());
+IndexSegmentReader::IndexSegmentReader(SegmentInMemory&& s) :
+    seg_(std::move(s)) {
 }
 
 const Column &IndexSegmentReader::column(Fields field) const {
@@ -59,7 +47,7 @@ IndexRange get_index_segment_range(
 }
 
 bool IndexSegmentReader::bucketize_dynamic() const {
-    return tsd().proto().has_column_groups() && tsd().proto().column_groups().enabled();
+    return tsd().column_groups();
 }
 
 SliceAndKey IndexSegmentReader::row(std::size_t r) const {
@@ -110,7 +98,7 @@ bool IndexSegmentReader::is_pickled() const {
 }
 
 bool IndexSegmentReader::has_timestamp_index() const {
-    return tsd_.proto().stream_descriptor().index().kind() == arcticdb::proto::descriptors::IndexDescriptor::Type::IndexDescriptorImpl_Type_TIMESTAMP;
+    return tsd_.frame_descriptor().index().type() == IndexDescriptor::Type::TIMESTAMP;
 }
 
 void check_column_and_date_range_filterable(const pipelines::index::IndexSegmentReader& index_segment_reader, const ReadQuery& read_query) {

@@ -13,20 +13,20 @@ void copy_codec(T& out_codec, const U& in_codec) {
     out_codec.MergeFrom(in_codec);
 }
 
-void copy_codec(ZstdCodec& codec, const arcticdb::proto::encoding::VariantCodec::Zstd& zstd) {
+inline void copy_codec(ZstdCodec& codec, const arcticdb::proto::encoding::VariantCodec::Zstd& zstd) {
     codec.level_ = zstd.level();
     codec.is_streaming_ = zstd.is_streaming();
 }
 
-void copy_codec(Lz4Codec& codec, const arcticdb::proto::encoding::VariantCodec::Lz4& lz4) {
+inline void copy_codec(Lz4Codec& codec, const arcticdb::proto::encoding::VariantCodec::Lz4& lz4) {
     codec.acceleration_ = lz4.acceleration();
 }
 
-void copy_codec(PassthroughCodec&, const arcticdb::proto::encoding::VariantCodec::Passthrough&) {
+inline void copy_codec(PassthroughCodec&, const arcticdb::proto::encoding::VariantCodec::Passthrough&) {
     // No data in passthrough
 }
 
-[[nodiscard]] arcticdb::proto::encoding::VariantCodec::CodecCase codec_case(Codec codec) {
+[[nodiscard]] inline arcticdb::proto::encoding::VariantCodec::CodecCase codec_case(Codec codec) {
     switch (codec) {
     case Codec::ZSTD:return arcticdb::proto::encoding::VariantCodec::kZstd;
     case Codec::LZ4:return arcticdb::proto::encoding::VariantCodec::kLz4;
@@ -43,16 +43,16 @@ void set_codec(Input& in, Output& out) {
 
 void block_from_proto(const arcticdb::proto::encoding::Block& input, EncodedBlock& output, bool is_shape);
 
-void set_lz4(const Lz4Codec& lz4_in, arcticdb::proto::encoding::VariantCodec::Lz4& lz4_out) {
+inline void set_lz4(const Lz4Codec& lz4_in, arcticdb::proto::encoding::VariantCodec::Lz4& lz4_out) {
     lz4_out.set_acceleration(lz4_in.acceleration_);
 }
 
-void set_zstd(const ZstdCodec& zstd_in, arcticdb::proto::encoding::VariantCodec::Zstd& zstd_out) {
+inline void set_zstd(const ZstdCodec& zstd_in, arcticdb::proto::encoding::VariantCodec::Zstd& zstd_out) {
     zstd_out.set_is_streaming(zstd_in.is_streaming_);
     zstd_out.set_level(zstd_in.level_);
 }
 
-void set_passthrough(const PassthroughCodec& passthrough_in, arcticdb::proto::encoding::VariantCodec::Passthrough& passthrough_out) {
+inline void set_passthrough(const PassthroughCodec& passthrough_in, arcticdb::proto::encoding::VariantCodec::Passthrough& passthrough_out) {
     passthrough_out.set_mark(passthrough_in.unused_);
 }
 

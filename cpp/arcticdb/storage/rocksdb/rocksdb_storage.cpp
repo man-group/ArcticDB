@@ -20,6 +20,7 @@
 #include <rocksdb/options.h>
 #include <rocksdb/utilities/options_util.h>
 #include <rocksdb/slice.h>
+#include <folly/gen/Base.h>
 
 namespace arcticdb::storage::rocksdb {
 

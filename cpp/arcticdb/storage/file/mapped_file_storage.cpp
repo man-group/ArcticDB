@@ -41,7 +41,7 @@ void MappedFileStorage::init() {
             EncodingVersion{
             static_cast<uint16_t>(config_.encoding_version())}).max_compressed_bytes_;
         StreamId id = config_.has_str_id() ? StreamId{} : NumericId{};
-        data_size += entity::max_key_size(id, IndexDescriptor{config_.index()});
+        data_size += entity::max_key_size(id, index_descriptor_from_proto(config_.index()));
         file_.create_file(config_.path(), data_size);
     } else {
         ARCTICDB_DEBUG(log::storage(), "Opening existing mapped file storage at path {}", config_.path());

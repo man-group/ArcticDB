@@ -76,7 +76,7 @@ S3Result<Segment> MockS3Client::get_object(
     if (pos == s3_contents.end()){
         return {not_found_error};
     }
-    return {pos->second};
+    return {pos->second.clone()};
 }
 
 S3Result<std::monostate> MockS3Client::put_object(

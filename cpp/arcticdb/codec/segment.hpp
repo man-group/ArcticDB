@@ -74,6 +74,12 @@ class Segment {
         desc_(std::move(data), std::move(fields)) {
     }
 
+    Segment(SegmentHeader&& header, VariantBuffer &&buffer, StreamDescriptor&& desc) :
+        header_(std::move(header)),
+        buffer_(std::move(buffer)),
+        desc_(std::move(desc)) {
+    }
+
     Segment(Segment &&that) noexcept {
         using std::swap;
         swap(header_, that.header_);
@@ -171,6 +177,10 @@ class Segment {
 
     [[nodiscard]] const StreamDescriptor& descriptor() const {
         return desc_;
+    }
+
+    Segment clone() const {
+        return Segment{header_.clone(), buffer_.clone(), desc_.clone()};
     }
 
   private:

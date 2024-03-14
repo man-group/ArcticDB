@@ -120,7 +120,7 @@ namespace arcticdb {
         auto out_buffer = std::make_shared<Buffer>(max_compressed_size, preamble);
         ColumnEncoderV1 encoder;
 
-        ARCTICDB_TRACE(log::codec(), "Encoding descriptor: {}", segment_header->stream_descriptor().DebugString());
+        ARCTICDB_TRACE(log::codec(), "Encoding descriptor: {}", in_mem_seg.descriptor());
         auto descriptor_data = in_mem_seg.descriptor().data_ptr();
         descriptor_data->uncompressed_bytes_ = uncompressed_size;
 
@@ -135,7 +135,7 @@ namespace arcticdb {
                 auto column_data = in_mem_seg.column_data(column_index);
                 auto* column_field = encoded_fields.add_field(column_index, encoded_field_pos);
                 if(column_data.num_blocks() > 0) {
-                    encoder.encode(codec_opts, column_data, column_field, *out_buffer, pos);
+                    encoder.encode(codec_opts, column_data, *column_field, *out_buffer, pos);
                     ARCTICDB_TRACE(log::codec(),
                                    "Encoded column {}: ({}) to position {}",
                                    column_index,

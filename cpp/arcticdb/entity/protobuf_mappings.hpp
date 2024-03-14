@@ -9,6 +9,7 @@
 
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/atom_key.hpp>
+#include <arcticdb/entity/types.hpp>
 
 namespace arcticdb {
 
@@ -26,8 +27,10 @@ entity::AtomKey decode_key(const arcticdb::proto::descriptors::AtomKey& input);
 
 arcticdb::proto::descriptors::TimeSeriesDescriptor copy_time_series_descriptor_to_proto(const TimeseriesDescriptor& tsd);
 
-static StreamId id_from_proto(const arcticdb::proto::descriptors::StreamDescriptor& proto);
-
 inline void set_id(arcticdb::proto::descriptors::StreamDescriptor& pb_desc, StreamId id);
+
+[[nodiscard]] arcticdb::proto::descriptors::IndexDescriptor index_descriptor_to_proto(const entity::IndexDescriptorImpl& index_descriptor);
+
+[[nodiscard]] entity::IndexDescriptorImpl index_descriptor_from_proto(const arcticdb::proto::descriptors::IndexDescriptor index_descriptor);
 
 } //namespace arcticdb

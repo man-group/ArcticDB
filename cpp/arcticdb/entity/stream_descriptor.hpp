@@ -34,11 +34,11 @@ struct FrameDescriptorImpl : public FrameDescriptor {
     }
 };
 
-bool operator==(const FrameDescriptorImpl& left, const FrameDescriptorImpl& right) {
+inline bool operator==(const FrameDescriptorImpl& left, const FrameDescriptorImpl& right) {
     return left.index() == right.index();
 }
 
-bool operator!=(const FrameDescriptorImpl& left, const FrameDescriptorImpl& right) {
+inline bool operator!=(const FrameDescriptorImpl& left, const FrameDescriptorImpl& right) {
     return !(left == right);
 }
 

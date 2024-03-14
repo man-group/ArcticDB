@@ -7,14 +7,6 @@
 
 namespace arcticdb {
 
-enum class FieldOffset : uint8_t {
-    METADATA,
-    STRING_POOL,
-    DESCRIPTOR,
-    INDEX,
-    COLUMN,
-    COUNT
-};
 
 static constexpr std::array<std::string_view, 5> offset_names_ = {
     "METADATA",
@@ -24,7 +16,7 @@ static constexpr std::array<std::string_view, 5> offset_names_ = {
     "COLUMN"
 };
 
-void write_fixed_header(std::uint8_t *dst, const FixedHeader& hdr) {
+inline void write_fixed_header(std::uint8_t *dst, const FixedHeader& hdr) {
     ARCTICDB_DEBUG(log::codec(), "Writing header with size {}", hdr.header_bytes);
     auto h = reinterpret_cast<FixedHeader*>(dst);
     *h = hdr;
@@ -44,6 +36,15 @@ public:
     ARCTICDB_MOVE_ONLY_DEFAULT(SegmentHeader)
 
     SegmentHeader() = default;
+
+    SegmentHeader clone() const {
+        SegmentHeader output(data_.encoding_version_);
+        output.data_ = data_;
+        output.header_fields_ = header_fields_.clone();
+        output.body_fields_ = body_fields_.clone();
+        output.offset_ = offset_;
+        return output;
+    }
 
     [[nodiscard]] bool empty() const {
         return header_fields_.empty();
@@ -232,3 +233,16 @@ public:
 };
 
 } //namespace arcticdb
+
+namespace fmt {
+template<>
+struct formatter<arcticdb::SegmentHeader> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const arcticdb::SegmentHeader &header, FormatContext &ctx) const {
+        return fmt::format_to(ctx.out(), "{}:{}", header.encoding_version(), header.bytes());
+    }
+};
+}

@@ -33,14 +33,14 @@ namespace arcticdb::storage::memory {
                                             key_vec.erase(it);
                                         }
 
-                                        key_vec.try_emplace(key, kv.segment());
+                                        key_vec.try_emplace(key, std::move(kv.segment()));
                                     },
                                     [&](const AtomKey &key) {
                                         if (key_vec.find(key) != key_vec.end()) {
                                             throw DuplicateKeyException(key);
                                         }
 
-                                        key_vec.try_emplace(key, kv.segment());
+                                        key_vec.try_emplace(key, std::move(kv.segment()));
                                     }
                 );
             }
@@ -66,7 +66,7 @@ namespace arcticdb::storage::memory {
                 if(it != key_vec.end()) {
                     key_vec.erase(it);
                 }
-                key_vec.insert(std::make_pair(kv.variant_key(), kv.segment()));
+                key_vec.insert(std::make_pair(kv.variant_key(), kv.segment().clone()));
             }
         });
     }
@@ -82,8 +82,7 @@ namespace arcticdb::storage::memory {
 
                 if(it != key_vec.end()) {
                     ARCTICDB_DEBUG(log::storage(), "Read key {}: {}", variant_key_type(k), variant_key_view(k));
-                    auto seg = it->second;
-                    visitor(k, std::move(seg));
+                    visitor(k, it->second.clone());
                 } else {
                     throw KeyNotFoundException(std::move(ks));
                 }

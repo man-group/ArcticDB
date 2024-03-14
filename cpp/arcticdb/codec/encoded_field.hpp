@@ -21,7 +21,6 @@ std::pair<const uint8_t*, const uint8_t*> get_segment_begin_end(
     const Segment &segment,
     const SegmentHeader& hdr);
 
-
 constexpr std::string_view codec_type_to_string(Codec codec) {
     switch(codec) {
     case Codec::LZ4:

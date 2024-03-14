@@ -34,10 +34,10 @@ Segment LibraryTool::read_to_segment(const VariantKey& key) {
     auto kv = std::visit([lib=lib_](const auto &k) { return lib->read(k); }, key);
     util::check(kv.has_segment(), "Failed to read key: {}", key);
     kv.segment().force_own_buffer();
-    return kv.segment();
+    return std::move(kv.segment());
 }
 
-void LibraryTool::write(VariantKey key, Segment segment) {
+void LibraryTool::write(VariantKey key, Segment& segment) {
     storage::KeySegmentPair kv{std::move(key), std::move(segment)};
     lib_->write(Composite<storage::KeySegmentPair>{std::move(kv)});
 }

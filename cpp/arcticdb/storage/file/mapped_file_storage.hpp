@@ -12,6 +12,7 @@
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/composite.hpp>
 #include <arcticdb/util/memory_mapped_file.hpp>
+#include <arcticdb/util/pb_util.hpp>
 #include <arcticdb/storage/coalesced/multi_segment_header.hpp>
 
 namespace fs = std::filesystem;
@@ -79,7 +80,7 @@ inline arcticdb::proto::storage::VariantStorage pack_config(
         size_t file_size,
         size_t items_count,
         const StreamId& id,
-        const IndexDescriptor& index_desc,
+        const IndexDescriptorImpl& index_desc,
         EncodingVersion encoding_version,
         const arcticdb::proto::encoding::VariantCodec& codec_opts) {
     arcticdb::proto::storage::VariantStorage output;
@@ -90,7 +91,7 @@ inline arcticdb::proto::storage::VariantStorage pack_config(
     util::variant_match(id,
                             [&cfg] (const StringId& str) { cfg.set_str_id(str); },
                             [&cfg] (const NumericId& n) { cfg.set_num_id(n); });
-    cfg.mutable_index()->CopyFrom(index_desc.proto()),
+    cfg.mutable_index()->CopyFrom(index_descriptor_to_proto(index_desc)),
     cfg.set_encoding_version(static_cast<uint32_t>(encoding_version));
     cfg.mutable_codec_opts()->CopyFrom(codec_opts);
     util::pack_to_any(cfg, *output.mutable_config());

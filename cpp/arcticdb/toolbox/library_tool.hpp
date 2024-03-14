@@ -36,7 +36,7 @@ public:
 
     Segment read_to_segment(const VariantKey& key);
 
-    void write(VariantKey key, Segment segment);
+    void write(VariantKey key, Segment& segment);
 
     void remove(VariantKey key);
 

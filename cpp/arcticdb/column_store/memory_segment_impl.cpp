@@ -323,14 +323,6 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::filter(const util::Bit
     return output;
 }
 
-std::shared_ptr<arcticdb::proto::descriptors::TimeSeriesDescriptor> SegmentInMemoryImpl::timeseries_proto() {
-    if(!tsd_) {
-        tsd_ = std::make_shared<arcticdb::proto::descriptors::TimeSeriesDescriptor>();
-        metadata_->UnpackTo(tsd_.get());
-    }
-    return tsd_;
-}
-
 std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::get_output_segment(size_t num_values, bool pre_allocate) const {
     std::shared_ptr<SegmentInMemoryImpl> output;
     if (is_sparse()) {

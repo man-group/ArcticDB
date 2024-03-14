@@ -365,7 +365,7 @@ struct DecodeSlicesTask : BaseTask {
         ARCTICDB_SAMPLE(DecodeSlicesTask, 0)
         auto sk_pairs = std::move(skp);
         return sk_pairs.transform([that=this] (auto&& ssp){
-            auto seg_slice_pair = std::forward<decltype(ssp)>(ssp);
+            auto seg_slice_pair = std::move(ssp);
             ARCTICDB_DEBUG(log::version(), "Decoding slice {}", seg_slice_pair.second.key());
             return that->decode_into_slice(std::move(seg_slice_pair));
         });
@@ -469,10 +469,7 @@ struct DecodeTimeseriesDescriptorTask : BaseTask {
         util::check(static_cast<bool>(maybe_desc), "Failed to decode timeseries descriptor");
         return std::make_pair(
             std::move(key_seg.variant_key()),
-            TimeseriesDescriptor{
-                std::make_shared<TimeseriesDescriptor::Proto>(std::move(std::get<1>(*maybe_desc))),
-                    std::make_shared<FieldCollection>(std::move(std::get<2>(*maybe_desc)))}
-            );
+            std::move(*maybe_desc));
 
     }
 };

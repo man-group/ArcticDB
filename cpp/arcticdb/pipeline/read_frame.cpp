@@ -190,12 +190,12 @@ void decode_or_expand(
     const uint8_t*& data,
     uint8_t* dest,
     const EncodedFieldImpl& encoded_field_info,
-    const TypeDescriptor& type_descriptor,
     size_t dest_bytes,
     std::shared_ptr<BufferHolder> buffers,
-	EncodingVersion encding_version) {
-    if(auto handler = TypeHandlerRegistry::instance()->get_handler(type_descriptor); handler) {
-        handler->handle_type(data, dest, encoded_field_info, type_descriptor, dest_bytes, std::move(buffers), encding_version);
+	EncodingVersion encoding_version,
+    const ColumnMapping& m) {
+    if(auto handler = TypeHandlerRegistry::instance()->get_handler(m.source_type_desc_); handler) {
+        handler->handle_type(data, dest, encoded_field_info, m.source_type_desc_, dest_bytes, std::move(buffers), encoding_version, m);
     } else {
         std::optional<util::BitMagic> bv;
         if (encoded_field_info.has_ndarray() && encoded_field_info.ndarray().sparse_map_bytes() > 0) {
@@ -203,7 +203,7 @@ void decode_or_expand(
             const auto bytes = encoding_sizes::data_uncompressed_size(ndarray);
             ChunkedBuffer sparse{bytes};
             SliceDataSink sparse_sink{sparse.data(), bytes};
-            data += decode_field(m.source_type_desc_, encoded_field_info, data, sparse_sink, bv, encding_version);
+            data += decode_field(m.source_type_desc_, encoded_field_info, data, sparse_sink, bv, encoding_version);
             m.source_type_desc_.visit_tag([dest, dest_bytes, &bv, &sparse](const auto tdt) {
                 using TagType = decltype(tdt);
                 using RawType = typename TagType::DataTypeTag::raw_type;
@@ -219,7 +219,7 @@ void decode_or_expand(
                     util::default_initialize<TagType>(dest + bytes, dest_bytes - bytes);
                 });
             }
-            data += decode_field(m.source_type_desc_, encoded_field_info, data, sink, bv, encding_version);
+            data += decode_field(m.source_type_desc_, encoded_field_info, data, sink, bv, encoding_version);
         }
     }
 }
@@ -234,7 +234,7 @@ size_t get_field_range_compressed_size(
     ARCTICDB_DEBUG(log::version(), "Skipping between {} and {}", start_idx, start_idx + num_fields);
     for(auto i = start_idx; i < start_idx + num_fields; ++i) {
         const auto& field = fields.at(i);
-        ARCTICDB_DEBUG(log::version(), "Adding {}", encoding_sizes::ndarray_field_compressed_size(field->ndarray()) + magic_num_size);
+        ARCTICDB_DEBUG(log::version(), "Adding {}", encoding_sizes::ndarray_field_compressed_size(field.ndarray()) + magic_num_size);
         total += encoding_sizes::ndarray_field_compressed_size(field.ndarray()) + magic_num_size;
     }
     ARCTICDB_DEBUG(log::version(), "Fields {} to {} contain {} bytes", start_idx, start_idx + num_fields, total);
@@ -294,7 +294,7 @@ void decode_into_frame_static(
     data = skip_heading_fields(hdr, data);
     context.set_descriptor(seg.descriptor());
     context.set_compacted(hdr.compacted());
-    ARCTICDB_DEBUG(log::version(), "Num fields: {}", seg.header().fields_size());
+    ARCTICDB_DEBUG(log::version(), "Num fields: {}", seg.descriptor().field_count());
     const auto encoding_version = hdr.encoding_version();
     const bool has_magic_nums = encoding_version == EncodingVersion::V2;
     const auto& fields = hdr.body_fields();
@@ -383,7 +383,7 @@ void decode_into_frame_dynamic(
     auto &hdr = seg.header();
     auto index_fieldcount = get_index_field_count(frame);
     data = skip_heading_fields(hdr, data);
-    context.set_descriptor(seg.descriptor());
+    context.set_descriptor(std::make_shared<StreamDescriptor>(seg.descriptor()));
     context.set_compacted(hdr.compacted());
 
     const auto encoding_version = hdr.encoding_version();
@@ -435,13 +435,12 @@ void decode_into_frame_dynamic(
                 encoded_field,
                 m.dest_bytes_,
                 buffers,
-                encdoing_version,
+                encoding_version,
                 m
             );
-            // decode_or_expand will invoke the empty type handler which will do backfilling with the default value depending on the
-            // destination type.
+
             if (!trivially_compatible_types(m.source_type_desc_, m.dest_type_desc_) && !source_is_empty) {
-                m.dest_type_desc_.visit_tag([&buffer, &m, &data, encoded_field, buffers, encdoing_version] (auto dest_desc_tag) {
+                m.dest_type_desc_.visit_tag([&buffer, &m, buffers] (auto dest_desc_tag) {
                     using DestinationType =  typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
                     m.source_type_desc_.visit_tag([&buffer, &m] (auto src_desc_tag ) {
                         using SourceType =  typename decltype(src_desc_tag)::DataTypeTag::raw_type;
@@ -616,7 +615,6 @@ public:
         std::shared_ptr<LockType> spinlock) :
         column_(column),
         frame_(std::move(frame)),
-        frame_field_(frame_field),
         row_(0),
         src_buffer_(column.data().buffer()),
         column_width_(alloc_width),

@@ -161,8 +161,8 @@ TEST_P(SimpleTestSuite, Strings) {
 
     google::protobuf::Any any;
     arcticdb::TimeseriesDescriptor metadata;
-    metadata.mutable_proto().set_total_rows(12);
-    metadata.mutable_proto().mutable_stream_descriptor()->CopyFrom(s.descriptor().proto());
+    metadata.set_total_rows(12);
+    metadata.set_stream_descriptor(s.descriptor());
     any.PackFrom(metadata.proto());
     s.set_metadata(std::move(any));
 

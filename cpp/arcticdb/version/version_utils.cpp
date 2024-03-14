@@ -48,10 +48,10 @@ std::unordered_map<StreamId, size_t> get_num_version_entries(const std::shared_p
 FrameAndDescriptor frame_and_descriptor_from_segment(SegmentInMemory&& seg) {
     TimeseriesDescriptor tsd;
     auto& tsd_proto = tsd.mutable_proto();
-    tsd_proto.set_total_rows(seg.row_count());
+    tsd.set_total_rows(seg.row_count());
     const auto& seg_descriptor = seg.descriptor();
-    tsd_proto.mutable_stream_descriptor()->CopyFrom(seg_descriptor.proto());
-    if (seg.descriptor().index().type() == IndexDescriptor::ROWCOUNT)
+    tsd.set_stream_descriptor(seg_descriptor);
+    if (seg_descriptor.index().type() == IndexDescriptor::Type::ROWCOUNT)
         ensure_rowcount_norm_meta(*tsd_proto.mutable_normalization(), seg_descriptor.id());
     else
         ensure_timeseries_norm_meta(*tsd.mutable_proto().mutable_normalization(), seg_descriptor.id(), false);

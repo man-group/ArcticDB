@@ -109,12 +109,12 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
 }
 
 namespace {
-IndexDescriptorImpl::Proto check_index_match(const arcticdb::stream::Index& index, const IndexDescriptorImpl::Proto& desc) {
+IndexDescriptorImpl check_index_match(const arcticdb::stream::Index& index, const IndexDescriptorImpl& desc) {
     if (std::holds_alternative<stream::TimeseriesIndex>(index))
-        util::check(desc.kind() == IndexDescriptorImpl::Type::TIMESTAMP,
+        util::check(desc.type() == IndexDescriptorImpl::Type::TIMESTAMP,
                     "Index mismatch, cannot update a non-timeseries-indexed frame with a timeseries");
     else
-        util::check(desc.kind() == IndexDescriptorImpl::Type::ROWCOUNT,
+        util::check(desc.type() == IndexDescriptorImpl::Type::ROWCOUNT,
                     "Index mismatch, cannot update a timeseries with a non-timeseries-indexed frame");
 
     return desc;
@@ -127,7 +127,7 @@ void sorted_data_check_append(const std::shared_ptr<InputTensorFrame>& frame, in
     }
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
         !std::holds_alternative<stream::TimeseriesIndex>(frame->index) ||
-        index_segment_reader.mutable_tsd().mutable_proto().stream_descriptor().sorted() == arcticdb::proto::descriptors::SortedValue::ASCENDING,
+        index_segment_reader.tsd().sorted() == SortedValue::ASCENDING,
         "When calling append with validate_index enabled, the existing data must be sorted");
 }
 
@@ -143,7 +143,7 @@ folly::Future<AtomKey> async_append_impl(
     ARCTICDB_DEBUG(log::version(), "append stream_id: {} , version_id: {}", stream_id, update_info.next_version_id_);
     auto index_segment_reader = index::get_index_reader(*(update_info.previous_index_key_), store);
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
-    auto row_offset = index_segment_reader.tsd().proto().total_rows();
+    auto row_offset = index_segment_reader.tsd().total_rows();
     util::check_rte(!index_segment_reader.is_pickled(), "Cannot append to pickled data");
     if (validate_index) {
         sorted_data_check_append(frame, index_segment_reader);
@@ -328,8 +328,8 @@ VersionedItem update_impl(
     ARCTICDB_DEBUG(log::version(), "Update versioned dataframe for stream_id: {} , version_id = {}", stream_id, update_info.previous_index_key_->version_id());
     auto index_segment_reader = index::get_index_reader(*(update_info.previous_index_key_), store);
     util::check_rte(!index_segment_reader.is_pickled(), "Cannot update pickled data");
-    auto index_desc = check_index_match(frame->index, index_segment_reader.tsd().proto().stream_descriptor().index());
-    util::check(index_desc.kind() == IndexDescriptorImpl::Type::TIMESTAMP, "Update not supported for non-timeseries indexes");
+    auto index_desc = check_index_match(frame->index, index_segment_reader.tsd().index());
+    util::check(index_desc.type() == IndexDescriptorImpl::Type::TIMESTAMP, "Update not supported for non-timeseries indexes");
     sorted_data_check_update(*frame, index_segment_reader);
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
     (void)check_and_mark_slices(index_segment_reader, dynamic_schema, false, std::nullopt, bucketize_dynamic);
@@ -691,7 +691,7 @@ void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDes
         std::vector<std::string> index_columns_to_add;
         for(const auto& index_column : index_columns) {
             if(std::find(std::begin(read_query.columns), std::end(read_query.columns), index_column) == std::end(read_query.columns))
-                index_columns_to_add.push_back(index_column);
+                index_columns_to_add.push_back(std::string(index_column));
         }
         read_query.columns.insert(std::begin(read_query.columns), std::begin(index_columns_to_add), std::end(index_columns_to_add));
     }
@@ -752,7 +752,7 @@ void read_indexed_keys_to_pipeline(
     add_index_columns_to_query(read_query, index_segment_reader.tsd());
 
     const auto& tsd = index_segment_reader.tsd();
-    read_query.calculate_row_filter(static_cast<int64_t>(tsd.proto().total_rows()));
+    read_query.calculate_row_filter(static_cast<int64_t>(tsd.total_rows()));
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
     pipeline_context->desc_ = tsd.as_stream_descriptor();
 
@@ -765,7 +765,7 @@ void read_indexed_keys_to_pipeline(
 
     pipeline_context->slice_and_keys_ = filter_index(index_segment_reader, combine_filter_functions(queries));
     pipeline_context->total_rows_ = pipeline_context->calc_rows();
-    pipeline_context->rows_ = index_segment_reader.tsd().proto().total_rows();
+    pipeline_context->rows_ = index_segment_reader.tsd().total_rows();
     pipeline_context->norm_meta_ = std::make_unique<arcticdb::proto::descriptors::NormalizationMetadata>(std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_normalization()));
     pipeline_context->user_meta_ = std::make_unique<arcticdb::proto::descriptors::UserDefinedMetadata>(std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_user_meta()));
     pipeline_context->bucketize_dynamic_ = bucketize_dynamic;
@@ -1079,7 +1079,7 @@ FrameAndDescriptor read_column_stats_impl(
     try {
         auto segment_in_memory = store->read(column_stats_key).get().second;
         TimeseriesDescriptor tsd;
-        tsd.mutable_proto().set_total_rows(segment_in_memory.row_count());
+        tsd.set_total_rows(segment_in_memory.row_count());
         tsd.set_stream_descriptor(segment_in_memory.descriptor());
         return {SegmentInMemory(std::move(segment_in_memory)), tsd, {}, {}};
     } catch (const std::exception& e) {
@@ -1178,8 +1178,8 @@ VersionedItem collate_and_write(
     TimeseriesDescriptor tsd;
 
     tsd.set_stream_descriptor(pipeline_context->descriptor());
+    tsd.set_total_rows(pipeline_context->total_rows_);
     auto& tsd_proto = tsd.mutable_proto();
-    tsd_proto.set_total_rows(pipeline_context->total_rows_);
     tsd_proto.mutable_normalization()->CopyFrom(*pipeline_context->norm_meta_);
     if(user_meta)
         tsd_proto.mutable_user_meta()->CopyFrom(*user_meta);

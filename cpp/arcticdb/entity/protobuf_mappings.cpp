@@ -44,14 +44,21 @@ inline SortedValue sorted_value_from_proto(arcticdb::proto::descriptors::SortedV
     }
 }
 
-[[nodiscard]] arcticdb::proto::descriptors::IndexDescriptor index_descriptor_to_proto(const IndexDescriptorImpl index_descriptor) {
+[[nodiscard]] arcticdb::proto::descriptors::IndexDescriptor index_descriptor_to_proto(const IndexDescriptorImpl& index_descriptor) {
     arcticdb::proto::descriptors::IndexDescriptor proto;
     proto.set_kind(static_cast<arcticdb::proto::descriptors::IndexDescriptor_Type>(index_descriptor.type_));
     proto.set_field_count(index_descriptor.field_count_);
     return proto;
 }
 
-inline arcticdb::proto::descriptors::AtomKey encode_key(const AtomKey &key) {
+[[nodiscard]] IndexDescriptorImpl index_descriptor_from_proto(const arcticdb::proto::descriptors::IndexDescriptor  index_descriptor) {
+    IndexDescriptorImpl output;
+    output.set_type(IndexDescriptor::Type(index_descriptor.kind()));
+    output.set_field_count(index_descriptor.field_count());
+    return output;
+}
+
+arcticdb::proto::descriptors::AtomKey encode_key(const AtomKey &key) {
     arcticdb::proto::descriptors::AtomKey output;
     util::variant_match(key.id(),
                         [&](const StringId &id) { output.set_string_id(id); },
@@ -71,7 +78,7 @@ inline arcticdb::proto::descriptors::AtomKey encode_key(const AtomKey &key) {
     return output;
 }
 
-inline AtomKey decode_key(const arcticdb::proto::descriptors::AtomKey& input) {
+AtomKey decode_key(const arcticdb::proto::descriptors::AtomKey& input) {
     StreamId stream_id = input.id_case() == input.kNumericId ? StreamId(input.numeric_id()) : StreamId(input.string_id());
     IndexValue index_start = input.index_start_case() == input.kNumericStart ? IndexValue(input.numeric_start()) : IndexValue(input.string_start());
     IndexValue index_end = input.index_end_case() == input.kNumericEnd ? IndexValue(input.numeric_end() ): IndexValue(input.string_end());
@@ -115,13 +122,6 @@ arcticdb::proto::descriptors::TimeSeriesDescriptor copy_time_series_descriptor_t
         set_data_type(field.type().data_type(), *new_field->mutable_type_desc());
     }
     return output;
-}
-
-static StreamId id_from_proto(const arcticdb::proto::descriptors::StreamDescriptor& proto) {
-    if(proto.id_case() == arcticdb::proto::descriptors::StreamDescriptor::kNumId)
-        return NumericId(proto.num_id());
-    else
-        return proto.str_id();
 }
 
 inline void set_id(arcticdb::proto::descriptors::StreamDescriptor& pb_desc, StreamId id) {
