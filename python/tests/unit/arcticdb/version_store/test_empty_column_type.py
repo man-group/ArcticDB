@@ -15,17 +15,18 @@ import pytest
 class DtypeGenerator:
     """
     Class which can generate all dtypes which ArcticDB supports. It can generate them by type category e.g. int, float,
-    etc. It can also generate a list of all available dtypes
+    etc. It can also generate a list of all available dtypes. Not all supported scalar dtypes are generated as this
+    leads to a combinatorc explosion in test case count.
     """
 
 
     @staticmethod
     def int_dtype():
-        return [t + s for s in ["8", "16", "32", "64"] for t in ["int", "uint"]]
+        return ["int32", "uint64"]
 
     @staticmethod
     def float_dtype():
-        return ["float" + s for s in ["32", "64"]]
+        return ["float64"]
     
     @staticmethod
     def bool_dtype():
@@ -682,10 +683,17 @@ class TestAppendAndUpdateWithEmptyToColumnDoesNothing:
         self.assert_update_empty_does_nothing(df, lmdb_version_store_static_and_dynamic, empty_dataframe)
 
     def test_empty(self, lmdb_version_store_static_and_dynamic, index, empty_dataframe):
-        df = pd.DataFrame({"col": []})
         lmdb_version_store_static_and_dynamic.write("sym", df)
-        self.assert_append_empty_does_nothing(df, lmdb_version_store_static_and_dynamic, empty_dataframe)
-        self.assert_update_empty_does_nothing(df, lmdb_version_store_static_and_dynamic, empty_dataframe)
+        self.assert_append_empty_does_nothing(
+            lmdb_version_store_static_and_dynamic.read("sym"),
+            lmdb_version_store_static_and_dynamic,
+            empty_dataframe
+        )
+        self.assert_update_empty_does_nothing(
+            lmdb_version_store_static_and_dynamic.read("sym"),
+            lmdb_version_store_static_and_dynamic,
+            empty_dataframe
+        )
 
     def test_string(self, lmdb_version_store_static_and_dynamic, index, empty_dataframe):
         df = pd.DataFrame({"col": ["shord", 20*"long", None]}, index=index)

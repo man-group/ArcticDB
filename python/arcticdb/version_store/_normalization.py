@@ -548,26 +548,15 @@ class _PandasNormalizer(Normalizer):
             n_rows = len(index)
             n_categorical_columns = len(df.select_dtypes(include="category").columns)
             if n_rows == 0 and n_categorical_columns == 0:
-                # Short term solution to get the internal ArcticDB empty index working
-                #
                 # In Pandas 1.0, an Index is used by default for any empty dataframe or series, except if
                 # there are categorical columns in which case a RangeIndex is used.
                 #
                 # In Pandas 2.0, RangeIndex is used by default for _any_ empty dataframe or series.
                 #
-                # Prior this change ArcticDB used DateTime index for empty dataframes, now the index in an empty
-                # dataframe will be the internal empty index. The empty index is not stored but reconstructed at read
-                # time the same way RangedIndex is. This affects the Python layer and the way columns are mapped to
-                # a dataframe. The 0-rowed RangeIndex will be converted to an empty index in the C++ layer.
-                #
-                # Things to consider:
-                # * is_not_range_index affects which columns are read and which column is the index column. If it is
-                #   false then the first column is assumed to be the index column and the python layer will add it to
-                #   the column array see: https://github.com/man-group/ArcticDB/blob/4184a467d9eee90600ddcbf34d896c763e76f78f/python/arcticdb/version_store/_store.py#L1908
-                #   if it's true this signals the python layer that the index is must be computed at read time and is
-                #   not returned from the C++ layer. The name of the field is confusing since with the introduction of
-                #   the internal EmptyIndex class the same behaviour (as with ranged index) must occur. We should either
-                #   rename or get rid of this field at all since it looks a bit redundant.
+                # In case of RangeIndex with 0 rows the C++ layer of ArcticDB will use the internal empty index type
+                # the index does not store a field and needs is_not_range_index to be False because of this logic:
+                # https://github.com/man-group/ArcticDB/blob/4184a467d9eee90600ddcbf34d896c763e76f78f/python/arcticdb/version_store/_store.py#L1908
+                # In future we need to revisit the protobuf structures for indexes to account for this
                 index = RangeIndex(0,0)
             index_norm = pd_norm.index
             index_norm.is_not_range_index = not isinstance(index, RangeIndex)
