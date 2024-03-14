@@ -128,9 +128,7 @@ namespace arcticdb {
             return std::nullopt;
         }
 
-        return entity::TypeDescriptor{
-            combine_data_type(slice_value_type(target_type), target_size),
-            target.dimension()};
+        return target;
     }
 
     std::optional<entity::TypeDescriptor> has_valid_type_promotion(
@@ -148,6 +146,9 @@ namespace arcticdb {
         if (!maybe_common_type) {
             maybe_common_type = has_valid_type_promotion(right, left);
         }
+        // has_valid_type_promotion checks if the second type can represent all values of the first type
+        // We also want to handle cases where there is a third type that can represent both
+        // In practice, this is only the case when there is one signed and one unsigned integer right now
         if (!maybe_common_type &&
             left.dimension() == right.dimension() &&
             is_integer_type(left.data_type()) &&
