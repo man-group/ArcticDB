@@ -46,6 +46,22 @@ def test_changing_numeric_type(version_store_factory, dynamic_schema):
         assert_frame_equal(expected_update, received_update)
 
 
+# TODO: Test encoding v2 as well
+# TODO: test append, update, and all combinations of numeric types
+def test_changing_numeric_type_2(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    sym_append = "test_changing_numeric_type_append"
+    df_write = pd.DataFrame({"col": np.arange(3, dtype=np.uint8)}, index=pd.date_range("2024-01-01", periods=3))
+    df_append = pd.DataFrame({"col": np.arange(1, dtype=np.int8)}, index=pd.date_range("2024-01-04", periods=1))
+
+    lib.write(sym_append, df_write)
+    lib.append(sym_append, df_append)
+
+    expected_append = pd.concat([df_write, df_append])
+    received_append = lib.read(sym_append).data
+    assert_frame_equal(expected_append, received_append)
+
+
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 @pytest.mark.parametrize("dynamic_strings_first", [True, False])
 def test_changing_string_type(version_store_factory, dynamic_schema, dynamic_strings_first):
