@@ -17,6 +17,9 @@ using ReadVisitor = std::function<void(const VariantKey&, Segment &&)>;
 
 class DuplicateKeyException : public ArcticSpecificException<ErrorCode::E_DUPLICATE_KEY> {
 public:
+    explicit DuplicateKeyException(std::string message) :
+        ArcticSpecificException<ErrorCode::E_DUPLICATE_KEY>(message) { }
+
     explicit DuplicateKeyException(VariantKey key) :
         ArcticSpecificException<ErrorCode::E_DUPLICATE_KEY>(std::string(variant_key_view(key))),
         key_(std::move(key)) {}

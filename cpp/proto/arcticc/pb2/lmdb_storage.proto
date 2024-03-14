@@ -19,6 +19,7 @@ message Config {
     uint64 map_size = 3;
     uint32 max_dbs = 4;
     uint32 max_readers = 5;
+    bool use_mock_storage_for_testing = 6;
 
     bool recreate_if_exists = 100; // defaults to false, useful for unit test or dev mode
 }
