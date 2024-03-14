@@ -110,7 +110,7 @@ std::variant<StringEncodingError, PyStringWrapper> py_unicode_to_buffer(PyObject
     }
 }
 
-NativeTensor obj_to_tensor(PyObject *ptr) {
+NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types_are_string) {
     auto& api = pybind11::detail::npy_api::get();
     util::check(api.PyArray_Check_(ptr), "Expected Python array");
     const auto arr = pybind11::detail::array_proxy(ptr);
@@ -189,6 +189,9 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
         }
     }
 
+    if(is_empty_type(val_type) && empty_types_are_string)
+        val_type = DataType::UTF_DYNAMIC;
+
     // When processing empty collections, the size bits have to be `SizeBits::S64`,
     // and we can't use `val_bytes` to get this information since some dtype have another `elsize` than 8.
     const SizeBits size_bits = is_empty_type(val_type) ? SizeBits::S64 : get_size_bits(val_bytes);
@@ -213,6 +216,8 @@ std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
     if (!user_meta.is_none())
         python_util::pb_from_python(user_meta, res->user_meta);
 
+    const auto new_empty_type_behaviour = ConfigsMap::instance()->get_int("Python.EmptyTypes", 0) != 0;
+
     // Fill index
     auto idx_names = item[0].cast<std::vector<std::string>>();
     auto idx_vals = item[2].cast<std::vector<py::object>>();
@@ -225,7 +230,7 @@ std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
         res->desc.set_index_type(IndexDescriptor::ROWCOUNT);
     } else {
         util::check(idx_names.size() == 1, "Multi-indexed dataframes not handled");
-        auto index_tensor = obj_to_tensor(idx_vals[0].ptr());
+        auto index_tensor = obj_to_tensor(idx_vals[0].ptr(), !new_empty_type_behaviour);
         util::check(index_tensor.ndim() == 1, "Multi-dimensional indexes not handled");
         util::check(index_tensor.shape() != nullptr, "Index tensor expected to contain shapes");
         std::string index_column_name = !idx_names.empty() ? idx_names[0] : "index";
@@ -257,7 +262,7 @@ std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
     res->set_sorted(sorted);
 
     for (auto i = 0u; i < col_vals.size(); ++i) {
-        auto tensor = obj_to_tensor(col_vals[i].ptr());
+        auto tensor = obj_to_tensor(col_vals[i].ptr(), !new_empty_type_behaviour);
         res->num_rows = std::max(res->num_rows, static_cast<ssize_t>(tensor.shape(0)));
         if(tensor.expanded_dim() == 1) {
             res->desc.add_field(scalar_field(tensor.data_type(), col_names[i]));
