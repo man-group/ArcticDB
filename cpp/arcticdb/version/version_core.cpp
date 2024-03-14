@@ -111,7 +111,8 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
 namespace {
 IndexDescriptor::Proto check_index_match(const arcticdb::stream::Index& index, const IndexDescriptor::Proto& desc) {
     if (std::holds_alternative<stream::TimeseriesIndex>(index))
-        util::check(desc.kind() == IndexDescriptor::TIMESTAMP,
+        util::check(
+            desc.kind() == IndexDescriptor::TIMESTAMP || desc.kind() == IndexDescriptor::EMPTY,
                     "Index mismatch, cannot update a non-timeseries-indexed frame with a timeseries");
     else
         util::check(desc.kind() == IndexDescriptor::ROWCOUNT,
@@ -329,7 +330,10 @@ VersionedItem update_impl(
     auto index_segment_reader = index::get_index_reader(*(update_info.previous_index_key_), store);
     util::check_rte(!index_segment_reader.is_pickled(), "Cannot update pickled data");
     auto index_desc = check_index_match(frame->index, index_segment_reader.tsd().proto().stream_descriptor().index());
-    util::check(index_desc.kind() == IndexDescriptor::TIMESTAMP, "Update not supported for non-timeseries indexes");
+    util::check(
+        index_desc.kind() == IndexDescriptor::TIMESTAMP || index_desc.kind() == IndexDescriptor::EMPTY,
+        "Update not supported for non-timeseries indexes"
+    );
     sorted_data_check_update(*frame, index_segment_reader);
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
     (void)check_and_mark_slices(index_segment_reader, dynamic_schema, false, std::nullopt, bucketize_dynamic);

@@ -49,7 +49,8 @@ inline void check_normalization_index_match(NormalizationOperation operation,
     const IndexDescriptor::Type new_idx_kind = frame.desc.index().type();
     if (operation == UPDATE) {
         const bool new_is_timeseries = std::holds_alternative<TimeseriesIndex>(frame.index);
-        util::check_rte(old_idx_kind == IndexDescriptor::TIMESTAMP && new_is_timeseries,
+        util::check_rte(
+            (old_idx_kind == IndexDescriptor::TIMESTAMP || old_idx_kind == IndexDescriptor::EMPTY) && new_is_timeseries,
                         "Update will not work as expected with a non-timeseries index");
     } else {
         const IndexDescriptor::Type common_index_type = get_common_index_type(old_idx_kind, new_idx_kind);
@@ -63,17 +64,21 @@ inline void check_normalization_index_match(NormalizationOperation operation,
 }
 
 inline bool columns_match(const StreamDescriptor& left, const StreamDescriptor& right) {
-    // TODO: handle empty index. If left is empty index df it will have one field (the first)
-    // less than right.
-    if (left.fields().size() != right.fields().size())
+    const int left_index_is_empty = left.index().type() == IndexDescriptor::EMPTY;
+    const int right_fields_offset = right.index().field_count() * left_index_is_empty;
+    // The empty index is compatible with all other index types. Differences in the index fields in this case is
+    // allowed. The index fields are always the first in the list.
+    if (left.fields().size() + right_fields_offset != right.fields().size()) {
         return false;
-
+    }
+    // In case the left index is empty index we want to skip name/type checking of the index fields which are always
+    // the first fields.
     for (auto i = 0; i < int(left.fields().size()); ++i) {
-        if (left.fields(i).name() != right.fields(i).name())
+        if (left.fields(i).name() != right.fields(i + right_fields_offset).name())
             return false;
 
-        const TypeDescriptor &left_type = left.fields(i).type();
-        const TypeDescriptor &right_type = right.fields(i).type();
+        const TypeDescriptor& left_type = left.fields(i).type();
+        const TypeDescriptor& right_type = right.fields(i + right_fields_offset).type();
 
         if (!trivially_compatible_types(left_type, right_type) &&
             !(is_empty_type(left_type.data_type()) || is_empty_type(right_type.data_type())))
