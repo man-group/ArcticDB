@@ -18,7 +18,7 @@ runs:
         cd python
         ln -s ../cpp/out/linux-${{ inputs.build_type }}-build/arcticdb/arcticdb_ext.cpython-36m-x86_64-linux-gnu.so
         export ARCTICDB_RAND_SEED=$RANDOM
-        python ${{inputs.other_params}} -m pytest -n ${{ inputs.threads }} tests
+        python ${{inputs.other_params}} -m pytest --timeout=3600 -n ${{ inputs.threads }} tests
       env:
         TEST_OUTPUT_DIR: ${{ runner.temp }}
         ARCTICDB_FAST_TESTS_ONLY: ${{ inputs.fast_tests_only }}

@@ -73,6 +73,7 @@ dependencies:
   - hypothesis < 6.73
   - pytest-sugar
   - pytest-xdist
+  - pytest-timeout
   # Python dependencies (for tests only)
   - azure-storage-blob
   - azure-identity

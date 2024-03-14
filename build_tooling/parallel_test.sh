@@ -18,7 +18,7 @@ catch=`{ which catchsegv 2>/dev/null || echo ; } | tail -n 1`
 
     export ARCTICDB_RAND_SEED=$RANDOM
 
-    $catch python -m pytest $PYTEST_XDIST_MODE -v --log-file="$TEST_OUTPUT_DIR/pytest-logger.$group.log" \
+    $catch python -m pytest --timeout=3600 $PYTEST_XDIST_MODE -v --log-file="$TEST_OUTPUT_DIR/pytest-logger.$group.log" \
         --junitxml="$TEST_OUTPUT_DIR/pytest.$group.xml" \
         --basetemp="$PARALLEL_TEST_ROOT/temp-pytest-output" \
         "$@" 2>&1 | sed -ur "s#^(tests/.*/([^/]+\.py))?#\2#"
