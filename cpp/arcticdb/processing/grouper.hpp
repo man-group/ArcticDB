@@ -56,10 +56,10 @@ public:
                 if (std::isnan(key)) {
                     return std::nullopt;
                 } else {
-                    return hash<RawType>(&key);
+                    return hash<RawType>(key);
                 }
             } else {
-                return hash<RawType>(&key);
+                return hash<RawType>(key);
             }
         }
     private:
