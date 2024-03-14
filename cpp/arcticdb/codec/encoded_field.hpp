@@ -348,15 +348,15 @@ struct EncodedFieldImpl : public EncodedField {
     }
 };
 
-inline size_t encoded_field_bytes(const EncodedField &encoded_field) {
-    return sizeof(EncodedField)
-        + (sizeof(EncodedBlock) * ((encoded_field.shapes_count_ + encoded_field.values_count_) - 1));
+inline size_t calc_field_bytes(size_t num_blocks) {
+    return sizeof(EncodedField) + (sizeof(EncodedBlock) * (num_blocks - 1));
 }
 
-
+inline size_t encoded_field_bytes(const EncodedField &encoded_field) {
+    return calc_field_bytes(encoded_field.shapes_count_ + encoded_field.values_count_);
+}
 
 } //namespace arcticc
-
 
 namespace fmt {
 template<>

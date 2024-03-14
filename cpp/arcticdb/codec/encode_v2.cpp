@@ -174,8 +174,9 @@ namespace arcticdb {
             Buffer& out_buffer,
             std::ptrdiff_t& pos) {
         ARCTICDB_TRACE(log::codec(), "Encoding field descriptors to position {}", pos);
-        auto& encoded_field = segment_header.mutable_descriptor_field();
         auto col = in_mem_seg.descriptor().fields().column_data();
+        auto& encoded_field = segment_header.mutable_descriptor_field(calc_num_blocks<EncodingPolicyV2>(col));
+
         ColumnEncoderV2::encode(codec_opts, col, encoded_field, out_buffer, pos);
         ARCTICDB_TRACE(log::codec(), "Encoded field descriptors to position {}", pos);
 
@@ -185,9 +186,9 @@ namespace arcticdb {
             write_frame_data(out_buffer, pos, *tsd.data_);
 
             ARCTICDB_TRACE(log::codec(), "Encoding index fields descriptors to position {}", pos);
-            auto& index_field = segment_header.mutable_index_descriptor_field();
-
             auto index_field_data = tsd.fields().column_data();
+            auto& index_field = segment_header.mutable_index_descriptor_field(calc_num_blocks<EncodingPolicyV2>(index_field_data));
+
             ColumnEncoderV2::encode(codec_opts, index_field_data, index_field, out_buffer, pos);
             ARCTICDB_TRACE(log::codec(), "Encoded index field descriptors to position {}", pos);
         }
@@ -279,11 +280,12 @@ namespace arcticdb {
             std::ptrdiff_t& pos,
             EncodedFieldCollection&& encoded_fields) {
         ARCTICDB_TRACE(log::codec(), "Encoding encoded blocks to position {}", pos);
-        auto encoded_field = segment_header.mutable_column_fields();
+
         segment_header.set_footer_offset(pos);
         write_magic<EncodedMagic>(out_buffer, pos);
         Column encoded_fields_column(encoded_fields_type_desc(), false, encoded_fields.release_data(), encoded_fields.release_offsets());
         auto data = encoded_fields_column.data();
+        auto encoded_field = segment_header.mutable_column_fields(calc_num_blocks<EncodingPolicyV2>(data));
         ColumnEncoderV2::encode(codec_opts, data, encoded_field, out_buffer, pos);
         ARCTICDB_TRACE(log::codec(), "Encoded encoded blocks to position {}", pos);
     }
@@ -314,15 +316,15 @@ namespace arcticdb {
         encode_field_descriptors(in_mem_seg, segment_header, codec_opts, *out_buffer, pos);
 
         EncodedFieldCollection encoded_fields(encoded_buffer_size, in_mem_seg.num_columns());
-        auto encoded_field_pos = 0u;
         ColumnEncoderV2 encoder;
         if(in_mem_seg.row_count() > 0) {
             ARCTICDB_TRACE(log::codec(), "Encoding fields");
             for (std::size_t column_index = 0; column_index < in_mem_seg.num_columns(); ++column_index) {
                 write_magic<ColumnMagic>(*out_buffer, pos);
-                auto* column_field = encoded_fields.add_field(column_index, encoded_field_pos);
-                ARCTICDB_TRACE(log::codec(),"Beginning encoding of column {}: ({}) to position {}", column_index, in_mem_seg.descriptor().field(column_index).name(), pos);
                 auto column_data = in_mem_seg.column_data(column_index);
+                auto* column_field = encoded_fields.add_field(column_data.num_blocks());
+                ARCTICDB_TRACE(log::codec(),"Beginning encoding of column {}: ({}) to position {}", column_index, in_mem_seg.descriptor().field(column_index).name(), pos);
+
                 if(column_data.num_blocks() > 0) {
                     encoder.encode(codec_opts, column_data, *column_field, *out_buffer, pos);
                     ARCTICDB_TRACE(log::codec(),
@@ -335,7 +337,6 @@ namespace arcticdb {
                     auto* ndarray = column_field->mutable_ndarray();
                     ndarray->set_items_count(0);
                 }
-                encoded_field_pos += encoded_field_bytes(*column_field);
             }
             write_magic<StringPoolMagic>(*out_buffer, pos);
             encode_string_pool<EncodingPolicyV2>(in_mem_seg, segment_header, codec_opts, *out_buffer, pos);

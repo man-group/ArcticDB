@@ -184,9 +184,10 @@ EncodedFieldCollection encoded_fields_from_proto(const arcticdb::proto::encoding
     const auto encoded_buffer_size = calc_proto_encoded_blocks_size(hdr);
     EncodedFieldCollection encoded_fields(encoded_buffer_size, hdr.fields_size());
     auto buffer = ChunkedBuffer::presized(encoded_buffer_size);
-    auto pos = 0U;
     for(auto&& [index, in_field] : folly::enumerate(hdr.fields())) {
-        auto* out_field = encoded_fields.add_field(pos, static_cast<shape_t>(index));
+        util::check(in_field.has_ndarray(), "Only ndarray supported at the moment");
+        const auto ndarray = in_field.ndarray();
+        auto* out_field = encoded_fields.add_field(ndarray.shapes_size() + ndarray.values_size());
         encoded_field_from_proto(in_field, *out_field);
     }
     return encoded_fields;

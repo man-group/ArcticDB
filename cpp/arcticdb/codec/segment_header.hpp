@@ -27,6 +27,7 @@ class SegmentHeader {
     EncodedFieldCollection header_fields_;
     EncodedFieldCollection body_fields_;
     std::array<uint32_t, 5> offset_ = {};
+    size_t field_count_ = 0U;
 
 public:
     explicit SegmentHeader(EncodingVersion encoding_version) {
@@ -142,29 +143,40 @@ public:
     }
 
     template <FieldOffset field_offset>
-    [[nodiscard]] EncodedFieldImpl& get_mutable_field() {
-        util::check(has_field(field_offset), "Field {} has not been set", offset_name(field_offset));
-        return header_fields_.at(offset_[as_pos(field_offset)]);
+    EncodedFieldImpl& create_field(size_t num_blocks) {
+        auto new_field = header_fields_.add_field(num_blocks);
+        set_offset(field_offset, field_count_++);
+        set_field(field_offset);
+        return *new_field;
     }
 
-    [[nodiscard]] EncodedFieldImpl& mutable_metadata_field() {
-        return get_mutable_field<FieldOffset::METADATA>();
+    template <FieldOffset field_offset>
+    [[nodiscard]] EncodedFieldImpl& get_mutable_field(size_t num_blocks) {
+        if(has_field(field_offset)) {
+            return header_fields_.at(offset_[as_pos(field_offset)]);
+        } else {
+            return create_field<field_offset>(num_blocks);
+        }
     }
 
-    [[nodiscard]] EncodedFieldImpl& mutable_string_pool_field() {
-        return get_mutable_field<FieldOffset::STRING_POOL>();
+    [[nodiscard]] EncodedFieldImpl& mutable_metadata_field(size_t num_blocks) {
+        return get_mutable_field<FieldOffset::METADATA>(num_blocks);
     }
 
-    [[nodiscard]] EncodedFieldImpl& mutable_descriptor_field() {
-        return get_mutable_field<FieldOffset::DESCRIPTOR>();
+    [[nodiscard]] EncodedFieldImpl& mutable_string_pool_field(size_t num_blocks) {
+        return get_mutable_field<FieldOffset::STRING_POOL>(num_blocks);
     }
 
-    [[nodiscard]] EncodedFieldImpl& mutable_index_descriptor_field() {
-        return get_mutable_field<FieldOffset::INDEX>();
+    [[nodiscard]] EncodedFieldImpl& mutable_descriptor_field(size_t num_blocks) {
+        return get_mutable_field<FieldOffset::DESCRIPTOR>(num_blocks);
     }
 
-    [[nodiscard]] EncodedFieldImpl& mutable_column_fields() {
-        return get_mutable_field<FieldOffset::COLUMN>();
+    [[nodiscard]] EncodedFieldImpl& mutable_index_descriptor_field(size_t num_blocks) {
+        return get_mutable_field<FieldOffset::INDEX>(num_blocks);
+    }
+
+    [[nodiscard]] EncodedFieldImpl& mutable_column_fields(size_t num_blocks) {
+        return get_mutable_field<FieldOffset::COLUMN>(num_blocks);
     }
 
     [[nodiscard]] EncodingVersion encoding_version() const {

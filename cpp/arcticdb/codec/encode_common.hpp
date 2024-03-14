@@ -34,6 +34,14 @@ struct EncodingPolicyType {
 };
 
 template<typename EncodingPolicyType>
+size_t calc_num_blocks(const ColumnData& column_data) {
+    if constexpr (EncodingPolicyType::version == EncodingVersion::V1)
+        return column_data.num_blocks() + (column_data.num_blocks() * !column_data.shapes()->empty());
+    else
+        return column_data.num_blocks() + !column_data.shapes()->empty();
+}
+
+template<typename EncodingPolicyType>
 struct BytesEncoder {
     using Encoder = TypedBlockEncoderImpl<TypedBlockData, ByteArrayTDT, EncodingPolicyType::version>;
     using BytesBlock = TypedBlockData<ByteArrayTDT>;
@@ -166,7 +174,7 @@ void encode_metadata(
     if (in_mem_seg.metadata()) {
         const auto bytes_count = static_cast<shape_t>(in_mem_seg.metadata()->ByteSizeLong());
         ARCTICDB_TRACE(log::codec(), "Encoding {} bytes of metadata", bytes_count);
-        auto encoded_field = segment_header.mutable_metadata_field();
+        auto encoded_field = segment_header.mutable_metadata_field(1);
 
         constexpr int max_stack_alloc = 1 << 11;
         bool malloced{false};
@@ -200,8 +208,8 @@ void encode_string_pool(
 ) {
     if (in_mem_seg.has_string_pool()) {
         ARCTICDB_TRACE(log::codec(), "Encoding string pool to position {}", pos);
-        auto encoded_field = segment_header.mutable_string_pool_field();
         auto col = in_mem_seg.string_pool_data();
+        auto encoded_field = segment_header.mutable_string_pool_field(calc_num_blocks<EncodingPolicyType>(col));
         EncodingPolicyType::ColumnEncoder::encode(codec_opts, col, encoded_field, out_buffer, pos);
         ARCTICDB_TRACE(log::codec(), "Encoded string pool to position {}", pos);
     }

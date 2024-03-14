@@ -26,6 +26,8 @@ constexpr TypeDescriptor encoded_fields_type_desc() {
 class EncodedFieldCollection {
     ChunkedBuffer data_;
     Buffer offsets_;
+    size_t count_ = 0U;
+    size_t offset_ = 0U;
 
 public:
     EncodedFieldCollection(ChunkedBuffer&& data, Buffer&& offsets) :
@@ -40,7 +42,7 @@ public:
 
     EncodedFieldCollection() = default;
 
-    EncodedFieldCollection clone() const {
+    [[nodiscard]] EncodedFieldCollection clone() const {
         return {data_.clone(), offsets_.clone()};
     }
 
@@ -71,27 +73,32 @@ public:
     }
 
     [[nodiscard]] const EncodedFieldImpl &at(size_t pos) const {
-        return *reinterpret_cast<const EncodedFieldImpl*>(data_.data() + get_offset(pos));
+        return *reinterpret_cast<const EncodedFieldImpl*>(data_.ptr_cast<const uint8_t>(get_offset(pos), sizeof(EncodedFieldImpl)));
     }
 
     [[nodiscard]] EncodedFieldImpl &at(size_t pos) {
-        return *reinterpret_cast<EncodedFieldImpl*>(data_.data() + get_offset(pos));
+        return *reinterpret_cast<EncodedFieldImpl*>(data_.ptr_cast<uint8_t>(get_offset(pos), sizeof(EncodedFieldImpl)));
     }
 
     [[nodiscard]] size_t size() const {
         return offsets_.bytes() / sizeof(uint64_t);
     }
 
-    [[nodiscard]] EncodedFieldImpl* add_field(size_t pos, uint64_t offset) {
-        *offsets_.ptr_cast<uint64_t>(pos, sizeof(uint64_t)) = offset;
-        return new (data_.data() + offset)EncodedFieldImpl;
+    [[nodiscard]] EncodedFieldImpl* add_field(size_t num_blocks) {
+        offsets_.ensure((count_ + 1) * sizeof(uint64_t));
+        *offsets_.ptr_cast<uint64_t>(count_, sizeof(uint64_t)) = offset_;
+        const auto required_bytes = calc_field_bytes(num_blocks);
+        data_.ensure(required_bytes);
+        return new (data_.ptr_cast<uint8_t>(offset_, required_bytes)) EncodedFieldImpl;
+        ++count_;
+        offset_ += required_bytes;
     }
 
     Buffer&& release_offsets() {
         return std::move(offsets_);
     }
 
-    ChunkedBuffer release_data() {
+    ChunkedBuffer&& release_data() {
         return std::move(data_);
     }
 
