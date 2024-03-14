@@ -149,7 +149,7 @@
     { "name": "boost-winapi", "version": "1.80.0#1" },
     { "name": "curl", "version": "8.4.0" },
     { "name": "double-conversion", "version": "3.2.1" },
-    { "name": "fmt", "version": "9.1.0#1" },
+    { "name": "fmt", "version": "10.2.1" },
     { "name": "folly", "version-string": "2022.10.31.00#3" },
     { "name": "gflags", "version": "2.2.2#5" },
     { "name": "glog", "version": "0.6.0#2" },
