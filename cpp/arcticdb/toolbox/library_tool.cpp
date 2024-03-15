@@ -18,6 +18,7 @@
 #include <arcticdb/util/key_utils.hpp>
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/version/version_utils.hpp>
+#include <cstdlib>
 
 namespace arcticdb::toolbox::apy {
 
@@ -112,5 +113,12 @@ std::vector<VariantKey> LibraryTool::find_keys_for_id(entity::KeyType kt, const 
 std::string LibraryTool::get_key_path(const VariantKey& key) {
     return store_->key_path(key);
 }
+
+std::optional<std::string> LibraryTool::inspect_env_variable(std::string name){
+    auto value = getenv(name.c_str());
+    if (value == nullptr) return std::nullopt;
+    return std::string(value);
+}
+
 
 } // namespace arcticdb::toolbox::apy
