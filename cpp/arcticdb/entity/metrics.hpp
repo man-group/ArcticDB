@@ -106,9 +106,9 @@ public:
 
     void configure(const MetricsConfig& config, const bool reconfigure = false);
 
+    MetricsConfig cfg_;
+    
     private:
-
-        MetricsConfig cfg_;
 
         struct HistogramInfo {
             prometheus::Family<prometheus::Histogram>* histogram;
