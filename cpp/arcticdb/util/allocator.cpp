@@ -15,7 +15,6 @@
 #include <folly/concurrency/ConcurrentHashMap.h>
 #include <folly/ThreadCachedInt.h>
 
-#include <fmt/std.h>
 
 namespace arcticdb {
 

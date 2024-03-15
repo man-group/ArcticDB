@@ -149,7 +149,7 @@
     { "name": "boost-winapi", "version": "1.80.0#1" },
     { "name": "curl", "version": "8.4.0" },
     { "name": "double-conversion", "version": "3.2.1" },
-    { "name": "fmt", "version": "10.2.1" },
+    { "name": "fmt", "version": "9.1.0#1" },
     { "name": "folly", "version-string": "2022.10.31.00#3" },
     { "name": "gflags", "version": "2.2.2#5" },
     { "name": "glog", "version": "0.6.0#2" },
@@ -165,7 +165,7 @@
     { "name": "protobuf", "version": "3.21.8" },
     { "name": "rapidcheck", "version": "2021-12-20" },
     { "name": "s2n", "version": "1.3.5" },
-    { "name": "spdlog", "version": "1.13.0" },
+    { "name": "spdlog", "version": "1.11.0" },
     { "name": "xxhash", "version": "0.8.2" },
     { "name": "zlib", "version": "1.2.13" },
     { "name": "zstd", "version": "1.5.2" }
