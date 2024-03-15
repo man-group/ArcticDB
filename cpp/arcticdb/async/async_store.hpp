@@ -250,6 +250,10 @@ bool supports_prefix_matching() const override {
     return library_->supports_prefix_matching();
 }
 
+std::string key_path(const VariantKey& key) const {
+    return library_->key_path(key);
+}
+
 bool fast_delete() override {
     return library_->fast_delete();
 }
@@ -321,7 +325,7 @@ std::vector<folly::Future<bool>> batch_key_exists(
             const std::shared_ptr<DeDupMap> &de_dup_map) override {
         using KeyOptSegment = std::pair<VariantKey, std::optional<Segment>>;
         return std::move(input_fut).thenValue([this] (auto&& input) {
-            auto [key, seg, slice] = std::move(input);
+            auto [key, seg, slice] = std::forward<decltype(input)>(input);
             auto key_seg = EncodeAtomTask{
                 std::move(key),
                 ClockType::nanos_since_epoch(),

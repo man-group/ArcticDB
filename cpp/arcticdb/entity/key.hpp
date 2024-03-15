@@ -275,7 +275,10 @@ auto foreach_key_type_write_precedence(Function&& func) {
         func(KeyType(type));
     }
 }
-
+inline KeyType key_type_from_int(int type_num) {
+    util::check(type_num > 0 && type_num < int(KeyType::UNDEFINED), "Unrecognized key type number {}", type_num);
+    return KeyType(type_num);
+}
 
 } // namespace arcticdb::entity
 

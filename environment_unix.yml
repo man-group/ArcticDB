@@ -42,11 +42,11 @@ dependencies:
   # ArcticDB is currently incompatible with fmt 10
   - fmt < 10
   - folly==2023.09.25.00
+  - unordered_dense
   # Vendored build dependencies (see `cpp/thirdparty` and `cpp/vcpkg.json`)
   # Versions must be kept in sync
   - xxhash==0.8.2
   - semimap
-  - robin_hood
   - rapidcheck
   - msgpack-c
   - recycle
@@ -73,6 +73,7 @@ dependencies:
   - hypothesis < 6.73
   - pytest-sugar
   - pytest-xdist
+  - pytest-timeout
   # Python dependencies (for tests only)
   - azure-storage-blob
   - azure-identity

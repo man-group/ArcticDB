@@ -48,6 +48,7 @@ namespace arcticdb {
             std::variant<EncodedField*, arcticdb::proto::encoding::EncodedField*> variant_field,
             Buffer& out,
             std::ptrdiff_t& pos_in_buffer);
+
         static void encode_blocks(
             const arcticdb::proto::encoding::VariantCodec &codec_opts,
             ColumnData& column_data,
@@ -450,7 +451,7 @@ TEST(SegmentEncoderTest, StressTestString) {
     SegmentsSink sink;
     auto index = as::TimeseriesIndex::default_index();
     as::FixedSchema schema{
-        index.create_stream_descriptor(123, {
+        index.create_stream_descriptor(NumericId{123}, {
             scalar_field(DataType::ASCII_DYNAMIC64, "col_1"),
             scalar_field(DataType::ASCII_DYNAMIC64, "col_2"),
             scalar_field(DataType::ASCII_DYNAMIC64, "col_3"),

@@ -16,23 +16,12 @@
 
 namespace arcticdb::storage::azure {
 
-std::string operation_to_string(AzureOperation operation){
-    switch (operation) {
-        case AzureOperation::READ: return "Read";
-        case AzureOperation::WRITE: return "Write";
-        case AzureOperation::DELETE: return "Delete";
-        case AzureOperation::LIST: return "List";
-        case AzureOperation::EXISTS: return "Exists";
-    }
-    util::raise_rte("Invalid Azure operation");
-}
-
 std::string MockAzureClient::get_failure_trigger(
         const std::string& blob_name,
-        AzureOperation operation_to_fail,
+        StorageOperation operation_to_fail,
         const std::string& error_code,
         Azure::Core::Http::HttpStatusCode error_to_fail_with) {
-    return fmt::format("{}#Failure_{}_{}_{}", blob_name, operation_to_string(operation_to_fail), error_code, (int)error_to_fail_with);
+    return fmt::format("{}#Failure_{}_{}_{}", blob_name, operation_to_string(operation_to_fail), error_code, static_cast<int>(error_to_fail_with));
 }
 
 Azure::Core::RequestFailedException get_exception(const std::string& message, const std::string& error_code, Azure::Core::Http::HttpStatusCode status_code) {
@@ -44,10 +33,11 @@ Azure::Core::RequestFailedException get_exception(const std::string& message, co
     return exception;
 }
 
-std::optional<Azure::Core::RequestFailedException> has_failure_trigger(const std::string& blob_name, AzureOperation operation) {
+std::optional<Azure::Core::RequestFailedException> has_failure_trigger(const std::string& blob_name, StorageOperation operation) {
     auto failure_string_for_operation = "#Failure_" + operation_to_string(operation) + "_";
     auto position = blob_name.rfind(failure_string_for_operation);
-    if (position == std::string::npos) return std::nullopt;
+    if (position == std::string::npos)
+        return std::nullopt;
 
     try {
         auto start = position + failure_string_for_operation.size();
@@ -55,7 +45,7 @@ std::optional<Azure::Core::RequestFailedException> has_failure_trigger(const std
         auto status_code_string = blob_name.substr(blob_name.find_last_of('_') + 1);
         auto status_code = Azure::Core::Http::HttpStatusCode(std::stoi(status_code_string));
         auto error_message = fmt::format("Simulated Error, message: operation {}, error code {} statuscode {}",
-                                         operation_to_string(operation), error_code, (int) status_code);
+                                         operation_to_string(operation), error_code, static_cast<int>(status_code));
 
         return get_exception(error_message, error_code, status_code);
     } catch (std::exception&) {
@@ -69,7 +59,7 @@ void MockAzureClient::write_blob(
         const Azure::Storage::Blobs::UploadBlockBlobFromOptions&,
         unsigned int) {
 
-    auto maybe_exception = has_failure_trigger(blob_name, AzureOperation::WRITE);
+    auto maybe_exception = has_failure_trigger(blob_name, StorageOperation::WRITE);
     if (maybe_exception.has_value()) {
         throw maybe_exception.value();
     }
@@ -82,7 +72,7 @@ Segment MockAzureClient::read_blob(
         const Azure::Storage::Blobs::DownloadBlobToOptions&,
         unsigned int) {
 
-    auto maybe_exception = has_failure_trigger(blob_name, AzureOperation::READ);
+    auto maybe_exception = has_failure_trigger(blob_name, StorageOperation::READ);
     if (maybe_exception.has_value()) {
         throw maybe_exception.value();
     }
@@ -90,7 +80,7 @@ Segment MockAzureClient::read_blob(
     auto pos = azure_contents.find(blob_name);
     if (pos == azure_contents.end()) {
         auto error_code = AzureErrorCode_to_string(AzureErrorCode::BlobNotFound);
-        std::string message = fmt::format("Simulated Error, message: Read failed {} {}", error_code, (int) Azure::Core::Http::HttpStatusCode::NotFound);
+        std::string message = fmt::format("Simulated Error, message: Read failed {} {}", error_code, static_cast<int>(Azure::Core::Http::HttpStatusCode::NotFound));
         throw get_exception(message, error_code, Azure::Core::Http::HttpStatusCode::NotFound);
     }
 
@@ -101,7 +91,7 @@ void MockAzureClient::delete_blobs(
         const std::vector<std::string>& blob_names,
         unsigned int) {
     for (auto& blob_name : blob_names) {
-        auto maybe_exception = has_failure_trigger(blob_name, AzureOperation::DELETE);
+        auto maybe_exception = has_failure_trigger(blob_name, StorageOperation::DELETE);
         if (maybe_exception.has_value()) {
             throw maybe_exception.value();
         }
@@ -113,7 +103,7 @@ void MockAzureClient::delete_blobs(
 }
 
 bool MockAzureClient::blob_exists(const std::string& blob_name) {
-    auto maybe_exception = has_failure_trigger(blob_name, AzureOperation::EXISTS);
+    auto maybe_exception = has_failure_trigger(blob_name, StorageOperation::EXISTS);
     if (maybe_exception.has_value()) {
         throw maybe_exception.value();
     }
@@ -127,7 +117,7 @@ Azure::Storage::Blobs::ListBlobsPagedResponse MockAzureClient::list_blobs(const 
         if (key.first.rfind(prefix, 0) == 0){
             auto blob_name = key.first;
 
-            auto maybe_exception = has_failure_trigger(blob_name, AzureOperation::LIST);
+            auto maybe_exception = has_failure_trigger(blob_name, StorageOperation::LIST);
             if (maybe_exception.has_value()) {
                 throw maybe_exception.value();
             }

@@ -14,19 +14,7 @@
 
 #include <folly/Range.h>
 #include <arcticdb/util/composite.hpp>
-
-// LMDB++ is using `std::is_pod` in `lmdb++.h`, which is deprecated as of C++20.
-// See: https://github.com/drycpp/lmdbxx/blob/0b43ca87d8cfabba392dfe884eb1edb83874de02/lmdb%2B%2B.h#L1068
-// See: https://en.cppreference.com/w/cpp/types/is_pod
-// This suppresses the warning.
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-#ifdef ARCTICDB_USING_CONDA
-    #include <lmdb++.h>
-#else
-    #include <third_party/lmdbxx/lmdb++.h>
-#endif
-#pragma GCC diagnostic pop
+#include <arcticdb/storage/lmdb/lmdb_client_wrapper.hpp>
 
 #include <filesystem>
 
@@ -77,6 +65,8 @@ class LmdbStorage final : public Storage {
     std::unordered_map<std::string, ::lmdb::dbi> dbi_by_key_type_;
 
     std::filesystem::path lib_dir_;
+
+    std::unique_ptr<LmdbClientWrapper> lmdb_client_;
 
     // For log warning only
     // Number of times an LMDB path has been opened. See also reinit_lmdb_warning.

@@ -5,6 +5,7 @@
     "fmt",
     "spdlog",
     "pcre",
+    "unordered-dense",
     {
       "name": "xxhash",
       "$version reason": "Must match version in conda build for interoperability"
@@ -146,7 +147,6 @@
     { "name": "boost-variant2", "version": "1.80.0#1" },
     { "name": "boost-vcpkg-helpers", "version": "1.80.0#1" },
     { "name": "boost-winapi", "version": "1.80.0#1" },
-    { "name": "civetweb", "version": "1.15#2" },
     { "name": "curl", "version": "8.4.0" },
     { "name": "double-conversion", "version": "3.2.1" },
     { "name": "fmt", "version": "9.1.0#1" },

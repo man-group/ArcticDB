@@ -13,11 +13,7 @@
 #include <arcticdb/processing/signed_unsigned_comparison.hpp>
 #include <arcticdb/util/constants.hpp>
 #include <arcticdb/util/preconditions.hpp>
-#ifdef ARCTICDB_USING_CONDA
-    #include <robin_hood.h>
-#else
-    #include <arcticdb/util/third_party/robin_hood.hpp>
-#endif
+#include <ankerl/unordered_dense.h>
 
 namespace arcticdb {
 // If reordering this enum, is_binary_operation may also need to be changed
@@ -462,20 +458,21 @@ bool operator()(int64_t t, const std::unordered_set<uint64_t>& u, UInt64SpecialH
 }
 
 #ifdef _WIN32
-// MSVC has bugs with template expansion when they are using `using`-declaration, as used by `robin_hood`.
+// MSVC has bugs with template expansion when they are using `using`-declaration,
+// as used by `ankerl::unordered_dense`.
 // Hence we explicitly define the concrete implementations here.
 template<typename T>
-bool operator()(T t, const robin_hood::unordered_set<uint64_t>& u) const {
+bool operator()(T t, const ankerl::unordered_dense::set<uint64_t>& u) const {
     return u.contains(t);
 }
 
 template<typename T>
-bool operator()(T t, const robin_hood::unordered_set<int64_t>& u) const {
+bool operator()(T t, const ankerl::unordered_dense::set<int64_t>& u) const {
     return u.contains(t);
 }
 #else
 template<typename T, typename U>
-bool operator()(T t, const robin_hood::unordered_set<U>& u) const {
+bool operator()(T t, const ankerl::unordered_dense::set<U>& u) const {
     return u.contains(t);
 }
 #endif
@@ -502,20 +499,21 @@ bool operator()(int64_t t, const std::unordered_set<uint64_t>& u, UInt64SpecialH
 }
 
 #ifdef _WIN32
-// MSVC has bugs with template expansion when they are using `using`-declaration, as used by `robin_hood`.
+// MSVC has bugs with template expansion when they are using `using`-declaration,
+// as used by `ankerl::unordered_dense`.
 // Hence we explicitly define the concrete implementations here.
 template<typename T>
-bool operator()(T t, const robin_hood::unordered_set<uint64_t>& u) const {
+bool operator()(T t, const ankerl::unordered_dense::set<uint64_t>& u) const {
     return !u.contains(t);
 }
 
 template<typename T>
-bool operator()(T t, const robin_hood::unordered_set<int64_t>& u) const {
+bool operator()(T t, const ankerl::unordered_dense::set<int64_t>& u) const {
     return !u.contains(t);
 }
 #else
 template<typename T, typename U>
-bool operator()(T t, const robin_hood::unordered_set<U>& u) const {
+bool operator()(T t, const ankerl::unordered_dense::set<U>& u) const {
     return !u.contains(t);
 }
 #endif

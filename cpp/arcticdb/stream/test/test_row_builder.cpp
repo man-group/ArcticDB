@@ -6,7 +6,6 @@
  */
 
 #include <gtest/gtest.h>
-#include <folly/ScopeGuard.h>
 
 #include <arcticdb/stream/row_builder.hpp>
 #include <arcticdb/stream/aggregator.hpp>
@@ -21,7 +20,7 @@ TEST(RowBuilder, Basic) {
     using namespace arcticdb;
     const auto index = as::TimeseriesIndex::default_index();
     as::FixedSchema schema{
-        index.create_stream_descriptor(123, {
+        index.create_stream_descriptor(NumericId{123}, {
             arcticdb::scalar_field(DataType::UINT8, "bbb"),
             arcticdb::scalar_field(DataType::INT8, "AAA"),
         }), index

@@ -23,7 +23,6 @@
 #include <folly/Function.h>
 #include <folly/Range.h>
 #include <folly/futures/Future.h>
-#include <folly/Likely.h>
 #include <boost/circular_buffer.hpp>
 
 #include <optional>

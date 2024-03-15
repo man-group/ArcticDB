@@ -13,6 +13,7 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/storage/storage.hpp>
+#include <arcticdb/async/async_store.hpp>
 #include <arcticdb/entity/read_result.hpp>
 
 #include <memory>
@@ -30,11 +31,17 @@ namespace py = pybind11;
 class LibraryTool {
 
 public:
-    explicit LibraryTool(std::shared_ptr<storage::Library> lib) : lib_(std::move(lib)) {}
+    explicit LibraryTool(std::shared_ptr<storage::Library> lib);
 
     ReadResult read(const VariantKey& key);
 
     Segment read_to_segment(const VariantKey& key);
+
+    [[nodiscard]] std::optional<google::protobuf::Any> read_metadata(const VariantKey& key);
+
+    [[nodiscard]] StreamDescriptor read_descriptor(const VariantKey& key);
+
+    [[nodiscard]] TimeseriesDescriptor read_timeseries_descriptor(const VariantKey& key);
 
     void write(VariantKey key, Segment segment);
 
@@ -53,7 +60,10 @@ public:
     void clear_ref_keys();
 
 private:
-    std::shared_ptr<storage::Library> lib_;
+    // TODO: Remove the shared_ptr and just keep the store.
+    // The only reason we use a shared_ptr for the store is to be able to pass it to delete_all_keys_of_type.
+    // We can remove the shared_ptr when delete_all_keys_of_type takes a const ref instead of a shared pointer.
+    std::shared_ptr<arcticdb::async::AsyncStore<util::SysClock>> store_;
 };
 
 } //namespace arcticdb::toolbox::apy

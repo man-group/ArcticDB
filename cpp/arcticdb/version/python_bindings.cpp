@@ -112,6 +112,12 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("set_batch_throw_on_error", &ReadOptions::set_batch_throw_on_error)
         .def_property_readonly("incompletes", &ReadOptions::get_incompletes);
 
+    version.def("write_dataframe_to_file", &write_dataframe_to_file);
+    version.def("read_dataframe_from_file",
+        [] (StreamId sid, const std::string(path), ReadQuery& read_query){
+            return adapt_read_df(read_dataframe_from_file(sid, path, read_query));
+        });
+
     using FrameDataWrapper = arcticdb::pipelines::FrameDataWrapper;
     py::class_<FrameDataWrapper, std::shared_ptr<FrameDataWrapper>>(version, "FrameDataWrapper")
             .def_property_readonly("data", &FrameDataWrapper::data);
@@ -184,6 +190,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
     // TODO: add repr.
     py::class_<VersionedItem>(version, "VersionedItem")
         .def_property_readonly("symbol", &VersionedItem::symbol)
+        .def_property_readonly("timestamp", &VersionedItem::timestamp)
         .def_property_readonly("version", &VersionedItem::version);
 
     py::class_<DescriptorItem>(version, "DescriptorItem")

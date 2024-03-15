@@ -16,6 +16,7 @@
 #include <arcticdb/storage/open_mode.hpp>
 #include <arcticdb/storage/storages.hpp>
 #include <arcticdb/storage/failure_simulation.hpp>
+#include <arcticdb/storage/single_file_storage.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/composite.hpp>
 
@@ -23,6 +24,7 @@
 #include <folly/concurrency/ConcurrentHashMap.h>
 #include <boost/core/noncopyable.hpp>
 #include <filesystem>
+
 
 
 #ifdef _WIN32
@@ -70,8 +72,9 @@ class Library {
 
     void write(Composite<KeySegmentPair>&& kvs) {
         ARCTICDB_SAMPLE(LibraryWrite, 0)
-        if (open_mode() < OpenMode::WRITE)
-            throw PermissionException(library_path_, open_mode(), "write");
+        if (open_mode() < OpenMode::WRITE) {
+            throw LibraryPermissionException(library_path_, open_mode(), "write");
+        }
 
         [[maybe_unused]] const size_t total_size = kvs.fold(
             [](size_t s, const KeySegmentPair& seg) { return s + seg.segment().total_segment_size(); },
@@ -84,8 +87,9 @@ class Library {
 
     void update(Composite<KeySegmentPair>&& kvs, storage::UpdateOpts opts) {
         ARCTICDB_SAMPLE(LibraryUpdate, 0)
-        if (open_mode() < OpenMode::WRITE)
-            throw PermissionException(library_path_, open_mode(), "update");
+        if (open_mode() < OpenMode::WRITE) {
+            throw LibraryPermissionException(library_path_, open_mode(), "update");
+        }
 
         [[maybe_unused]] const size_t total_size = kvs.fold(
             [](size_t s, const KeySegmentPair& seg) { return s + seg.segment().total_segment_size(); },
@@ -102,11 +106,16 @@ class Library {
     }
 
     void remove(Composite<VariantKey>&& ks, storage::RemoveOpts opts) {
-        if (open_mode() < arcticdb::storage::OpenMode::DELETE)
-            throw PermissionException(library_path_, open_mode(), "delete");
+        if (open_mode() < arcticdb::storage::OpenMode::DELETE) {
+            throw LibraryPermissionException(library_path_, open_mode(), "delete");
+        }
 
         ARCTICDB_SAMPLE(LibraryRemove, 0)
         storages_->remove(std::move(ks), opts);
+    }
+
+    std::optional<std::shared_ptr<SingleFileStorage>> get_single_file_storage() const {
+        return storages_->get_single_file_storage();
     }
 
     bool fast_delete() {
@@ -161,8 +170,8 @@ class Library {
     bool storage_fallthrough_ = false;
 };
 
-inline Library create_library(const LibraryPath& library_path, OpenMode mode, const std::vector<arcticdb::proto::storage::VariantStorage>& storage_configs) {
-    return Library{library_path, create_storages(library_path, mode, storage_configs)};
+inline std::shared_ptr<Library> create_library(const LibraryPath& library_path, OpenMode mode, const std::vector<arcticdb::proto::storage::VariantStorage>& storage_configs) {
+    return std::make_shared<Library>(library_path, create_storages(library_path, mode, storage_configs));
 }
 
 }

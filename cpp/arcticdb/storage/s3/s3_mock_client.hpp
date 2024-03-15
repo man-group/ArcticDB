@@ -10,6 +10,7 @@
 #include <aws/s3/S3Client.h>
 
 #include <arcticdb/storage/s3/s3_client_wrapper.hpp>
+#include <arcticdb/storage/storage_mock_client.hpp>
 
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/pb_util.hpp>
@@ -23,17 +24,16 @@
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/util/composite.hpp>
 
-namespace arcticdb::storage::s3{
+namespace arcticdb::storage::s3 {
 
-enum class S3Operation{
-    HEAD,
-    GET,
-    PUT,
-    DELETE, // Triggers a global failure (i.e. delete_objects will fail for all objects if one of them triggers a delete failure)
-    DELETE_LOCAL, // Triggers a local failure (i.e. delete_objects will fail just for this object and succeed for the rest)
-    LIST
+struct S3Key {
+    std::string bucket_name;
+    std::string s3_object_name;
+
+    bool operator<(const S3Key& other) const {
+        return std::tie(bucket_name, s3_object_name) < std::tie(other.bucket_name, other.s3_object_name);
+    }
 };
-
 
 // A mock S3ClientWrapper which can simulate failures.
 // The MockS3Client stores the segments in memory to simulate regular S3 behavior for unit tests.
@@ -43,12 +43,16 @@ public:
     MockS3Client(){}
 
     // Can be used to trigger a simulated failure inside MockS3Client. For example:
-    // auto object_to_trigger_put_failure = get_failure_trigger("test", S3Operation::PUT, Aws::S3::S3Errors::NETWORK_FAILURE, false);
+    // auto object_to_trigger_put_failure = get_failure_trigger("test", StorageOperation::WRITE, Aws::S3::S3Errors::NETWORK_FAILURE, false);
     // mock_s3_client.put_object(object_to_trigger_put_failure, segment, bucket_name); // This will return a network failure.
     //
     // The returned name looks like "{s3_object_name}#Failure_{operation_to_fail}_{error_to_fail_with}_{retryable}".
     // For example: "symbol_1#Failure_Delete_99_1" will trigger a delete failure with code 99 which is retryable.
-    static std::string get_failure_trigger(const std::string& s3_object_name, S3Operation operation_to_fail, Aws::S3::S3Errors error_to_fail_with, bool retryable=true);
+    static std::string get_failure_trigger(
+            const std::string& s3_object_name,
+            StorageOperation operation_to_fail,
+            Aws::S3::S3Errors error_to_fail_with,
+            bool retryable=true);
 
     S3Result<std::monostate> head_object(const std::string& s3_object_name, const std::string& bucket_name) const override;
 
@@ -67,9 +71,9 @@ public:
             const std::string& prefix,
             const std::string& bucket_name,
             const std::optional<std::string> continuation_token) const override;
+
 private:
-    // Stores a mapping from pair<bucket_name, s3_name> to a Segment.
-    std::map<std::pair<std::string, std::string>, Segment> s3_contents;
+    std::map<S3Key, Segment> s3_contents;
 };
 
 }

@@ -36,11 +36,11 @@ public:
     }
 
     [[nodiscard]] const EncodedField &at(size_t pos) const {
-        return *(buffer_.ptr_cast<EncodedField>(get_offset(pos), sizeof(EncodedField)));
+        return *(buffer_.ptr_cast<EncodedField>(get_offset(pos), EncodedField::MinimumSize));
     }
 
     [[nodiscard]] EncodedField &at(size_t pos) {
-        return *(buffer_.ptr_cast<EncodedField>(get_offset(pos), sizeof(EncodedField)));
+        return *(buffer_.ptr_cast<EncodedField>(get_offset(pos), EncodedField::MinimumSize));
     }
 
     [[nodiscard]] size_t size() const {

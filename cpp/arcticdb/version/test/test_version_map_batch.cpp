@@ -16,21 +16,24 @@ protected:
 
 namespace arcticdb {
 
-AtomKey test_index_key(StreamId id, VersionId version_id) {
+AtomKey test_index_key(const StreamId& id, VersionId version_id) {
     return atom_key_builder().version_id(version_id).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(3)
         .start_index(4).end_index(5).build(id, KeyType::TABLE_INDEX);
 }
 
 void add_versions_for_stream(
-    std::shared_ptr<VersionMap> version_map,
-    std::shared_ptr<Store> store,
-    StreamId stream_id,
+    const std::shared_ptr<VersionMap>& version_map,
+    const std::shared_ptr<Store>& store,
+    const StreamId& stream_id,
     size_t num_versions,
     size_t start = 0u) {
+    std::optional<AtomKey> previous_index_key;
     for(auto i = start; i < start + num_versions; ++i) {
-        version_map->write_version(store, test_index_key(stream_id, i));
+        auto index_key = test_index_key(stream_id, i);
+        version_map->write_version(store, test_index_key(stream_id, i), previous_index_key);
+        previous_index_key = index_key;
     }
-};
+}
 }
 
 TEST_F(VersionMapBatchStore, SimpleVersionIdQueries) {
@@ -145,7 +148,7 @@ TEST_F(VersionMapBatchStore, MultipleVersionsSameSymbolVersionIdQueries) {
 
     // Add queries
     for(uint64_t i = 0; i < num_versions; i++){
-        stream_ids.emplace_back(StreamId{"stream_0"});
+        stream_ids.emplace_back("stream_0");
         version_queries.emplace_back(VersionQuery{SpecificVersionQuery{static_cast<SignedVersionId>(i)}, false});
     }
 
@@ -178,7 +181,7 @@ TEST_F(VersionMapBatchStore, MultipleVersionsSameSymbolTimestampQueries) {
 
     // Add queries
     for(uint64_t i = 0; i < num_versions; i++){
-        stream_ids.emplace_back(StreamId{"stream_0"});
+        stream_ids.emplace_back("stream_0");
         version_queries.emplace_back(VersionQuery{SpecificVersionQuery{static_cast<SignedVersionId>(i)}, false});
     }
 

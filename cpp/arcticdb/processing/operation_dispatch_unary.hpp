@@ -41,8 +41,8 @@ VariantData unary_operator(const Value& val, Func&& func) {
     auto output = std::make_unique<Value>();
     output->data_type_ = val.data_type_;
 
-    details::visit_type(val.type().data_type(), [&](auto val_desc_tag) {
-        using type_info = ScalarTypeInfo<decltype(val_desc_tag)>;
+    details::visit_type(val.type().data_type(), [&](auto val_tag) {
+        using type_info = ScalarTypeInfo<decltype(val_tag)>;
         if constexpr (!is_numeric_type(type_info::data_type)) {
             util::raise_rte("Cannot perform arithmetic on {}", val.type());
         }
@@ -62,18 +62,21 @@ VariantData unary_operator(const Column& col, Func&& func) {
             "Empty column provided to unary operator");
     std::unique_ptr<Column> output_column;
 
-    details::visit_type(col.type().data_type(), [&](auto col_desc_tag) {
-        using type_info = ScalarTypeInfo<decltype(col_desc_tag)>;
-        if constexpr (!is_numeric_type(type_info::data_type)) {
+    details::visit_type(col.type().data_type(), [&](auto col_tag) {
+        using type_info = ScalarTypeInfo<decltype(col_tag)>;
+        if constexpr (is_numeric_type(type_info::data_type)) {
+            using TargetType = typename unary_arithmetic_promoted_type<typename type_info::RawType, std::remove_reference_t<Func>>::type;
+            constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
+            output_column = std::make_unique<Column>(make_scalar_type(output_data_type), true);
+            Column::transform<typename type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(col,
+                                                                                                     *output_column,
+                                                                                                     [&func](auto input_value) -> TargetType {
+                                                                                                         return func.apply(
+                                                                                                                 input_value);
+                                                                                                     });
+        } else {
             util::raise_rte("Cannot perform arithmetic on {}", col.type());
         }
-        using TargetType = typename unary_arithmetic_promoted_type<typename type_info::RawType, std::remove_reference_t<Func>>::type;
-        constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
-        output_column = std::make_unique<Column>(make_scalar_type(output_data_type), col.row_count(), true, false);
-        output_column->set_row_data(col.last_row());
-        Column::transform<typename type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(col, *output_column, [&func](auto input_value) {
-            return func.apply(input_value);
-        });
     });
     return {ColumnWithStrings(std::move(output_column))};
 }
@@ -108,10 +111,11 @@ VariantData unary_comparator(const Column& col, Func&& func) {
         }
     }
 
-    util::BitSet output_bitset(static_cast<util::BitSetSizeType>(col.row_count()));
-    details::visit_type(col.type().data_type(), [&](auto col_desc_tag) {
-        using type_info = ScalarTypeInfo<decltype(col_desc_tag)>;
-        Column::transform<typename type_info::TDT>(col, output_bitset, [&func](auto input_value) -> bool {
+    util::BitSet output_bitset;
+    constexpr auto sparse_missing_value_output = std::is_same_v<Func, IsNullOperator&&>;
+    details::visit_type(col.type().data_type(), [&](auto col_tag) {
+        using type_info = ScalarTypeInfo<decltype(col_tag)>;
+        Column::transform<typename type_info::TDT>(col, output_bitset, sparse_missing_value_output, [&func](auto input_value) -> bool {
             if constexpr (is_floating_point_type(type_info::data_type)) {
                 return func.apply(input_value);
             } else if constexpr (is_sequence_type(type_info::data_type)) {

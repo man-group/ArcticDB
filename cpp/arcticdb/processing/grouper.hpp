@@ -45,10 +45,10 @@ public:
                 } else {
                     if (is_a_string(key)) {
                         auto hashed_value = hash(sp->get_view(key));
-                        cache_.insert(robin_hood::pair(std::move(key), std::optional<size_t>(hashed_value)));
+                        cache_.insert(std::make_pair(std::move(key), std::optional<size_t>(hashed_value)));
                         return hashed_value;
                     } else {
-                        cache_.insert(robin_hood::pair(std::move(key), std::optional<size_t>()));
+                        cache_.insert(std::make_pair(std::move(key), std::optional<size_t>()));
                         return std::nullopt;
                     }
                 }
@@ -56,10 +56,10 @@ public:
                 if (std::isnan(key)) {
                     return std::nullopt;
                 } else {
-                    return hash<RawType>(&key, 1);
+                    return hash<RawType>(key);
                 }
             } else {
-                return hash<RawType>(&key, 1);
+                return hash<RawType>(key);
             }
         }
     private:
@@ -71,7 +71,7 @@ public:
         // 10.39 seconds without caching
         // 11.01 seconds with caching
         // Not worth worrying about right now
-        robin_hood::unordered_flat_map<RawType, std::optional<size_t>> cache_;
+        ankerl::unordered_dense::map<RawType, std::optional<size_t>> cache_;
     };
 };
 

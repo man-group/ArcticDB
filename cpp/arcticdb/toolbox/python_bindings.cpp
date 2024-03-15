@@ -35,6 +35,19 @@ void register_bindings(py::module &m) {
                 return std::make_shared<LibraryTool>(lib);
             }))
             .def("read_to_segment", &LibraryTool::read_to_segment)
+            .def("read_metadata", &LibraryTool::read_metadata)
+            .def("read_descriptor", &LibraryTool::read_descriptor, R"pbdoc(
+                Gives the <StreamDescriptor> for a Variant key. The Stream Descriptor contains the <FieldRef>s for all fields in
+                the value written for that key.
+
+                E.g. an Index key will have fields like 'start_index', 'end_index', 'creation_ts', etc.
+            )pbdoc")
+            .def("read_timeseries_descriptor", &LibraryTool::read_timeseries_descriptor, R"pbdoc(
+                Gives the <TimeseriesDescriptor> for a Variant key. The Timeseries Descriptor contains the <FieldRef>s for all
+                fields in the dataframe written for the corresponding symbol.
+
+                E.g. an Index key for a symbol which has columns "index" and "col" will have <FieldRef>s for those columns.
+            )pbdoc")
             .def("write", &LibraryTool::write)
             .def("remove", &LibraryTool::remove)
             .def("find_keys", &LibraryTool::find_keys)

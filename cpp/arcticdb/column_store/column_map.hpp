@@ -14,11 +14,7 @@
 
 #include <folly/container/Enumerate.h>
 
-#ifdef ARCTICDB_USING_CONDA
-    #include <robin_hood.h>
-#else
-    #include <arcticdb/util/third_party/robin_hood.hpp>
-#endif
+#include <ankerl/unordered_dense.h>
 
 #include <optional>
 #include <string_view>
@@ -28,7 +24,7 @@ namespace arcticdb {
 using namespace arcticdb::entity;
 
 class ColumnMap {
-    robin_hood::unordered_flat_map<std::string_view, size_t> column_offsets_;
+    ankerl::unordered_dense::map<std::string_view, size_t> column_offsets_;
     StringPool pool_;
 
 public:
@@ -42,7 +38,7 @@ public:
 
     void insert(std::string_view name, size_t index) {
         auto off_str = pool_.get(name);
-        column_offsets_.insert(robin_hood::pair<std::string_view, size_t>(pool_.get_view(off_str.offset()), index));
+        column_offsets_.insert(std::make_pair<std::string_view, size_t>(pool_.get_view(off_str.offset()), std::forward<size_t>(index)));
         column_offsets_[pool_.get_view(off_str.offset())] = index;
     }
 

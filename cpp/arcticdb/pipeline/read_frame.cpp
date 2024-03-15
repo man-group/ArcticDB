@@ -23,15 +23,10 @@
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/pipeline/column_mapping.hpp>
-#ifdef ARCTICDB_USING_CONDA
-    #include <robin_hood.h>
-#else
-    #include <arcticdb/util/third_party/robin_hood.hpp>
-#endif
+#include <ankerl/unordered_dense.h>
 #include <arcticdb/codec/variant_encoded_field_collection.hpp>
 #include <arcticdb/util/magic_num.hpp>
 #include <google/protobuf/util/message_differencer.h>
-#include <folly/SpinLock.h>
 #include <folly/gen/Base.h>
 #include <folly/concurrency/ConcurrentHashMap.h>
 
@@ -646,7 +641,7 @@ public:
     virtual void reduce(PipelineContextRow& context_row, size_t column_index) = 0;
 };
 
-using LockType = folly::SpinLock;
+using LockType = std::mutex;
 
 class EmptyDynamicStringReducer {
 protected:
@@ -888,7 +883,7 @@ class DynamicStringReducer : public StringReducer {
         auto none = std::make_unique<py::none>(py::none{});
         LockPolicy::unlock(*lock_);
         size_t none_count = 0u;
-        robin_hood::unordered_flat_map<entity::position_t, std::pair<PyObject*, folly::SpinLock>> local_map;
+        ankerl::unordered_dense::map<entity::position_t, std::pair<PyObject*, std::unique_ptr<std::mutex>>> local_map;
         local_map.reserve(end - row_);
         // TODO this is no good for non-contigous blocks, but we currently expect
         // output data to be contiguous
@@ -905,16 +900,16 @@ class DynamicStringReducer : public StringReducer {
                 if(it != local_map.end()) {
                     auto& object_and_lock = it->second;
                     *ptr_dest_ = object_and_lock.first;
-                    LockPolicy::lock(object_and_lock.second);
+                    LockPolicy::lock(*object_and_lock.second);
                     Py_INCREF(*ptr_dest_);
-                    LockPolicy::unlock(object_and_lock.second);
+                    LockPolicy::unlock(*object_and_lock.second);
                 } else {
                     const auto sv = get_string_from_pool(offset, string_pool);
                     LockPolicy::lock(*lock_);
                     *ptr_dest_ = StringCreator::create(sv, has_type_conversion);
                     LockPolicy::unlock(*lock_);
                     PyObject* dest = *ptr_dest_;
-                    local_map.insert(robin_hood::pair(std::move(offset), std::make_pair(std::move(dest), folly::SpinLock{})));
+                    local_map.insert(std::make_pair(std::move(offset), std::make_pair(std::move(dest), std::make_unique<std::mutex>())));
                 }
             }
         }

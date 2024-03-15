@@ -10,7 +10,7 @@
 #include <arcticdb/util/hash.hpp>
 #include <arcticdb/util/name_validation.hpp>
 
-#include <folly/small_vector.h>
+#include <boost/container/small_vector.hpp>
 #include <folly/Range.h>
 #include <fmt/format.h>
 #include <memory>
@@ -44,10 +44,8 @@ class DefaultStringViewable : public std::shared_ptr<std::string> {
         return hash_;
     }
 
-    DefaultStringViewable operator=(const DefaultStringViewable&) = delete;
-
   private:
-    HashedValue hash_;
+   HashedValue hash_;
 };
 
 inline bool operator==(const DefaultStringViewable &l, const DefaultStringViewable &r) {
@@ -152,7 +150,7 @@ class LibraryPathImpl {
         return accum.digest();
     }
 
-    folly::small_vector<StringViewable, NUM_LIBRARY_PARTS> parts_;
+    boost::container::small_vector<StringViewable, NUM_LIBRARY_PARTS> parts_;
     HashedValue hash_;
 };
 

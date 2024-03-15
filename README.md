@@ -1,3 +1,24 @@
+<table>
+<tr>
+<td>
+
+![Alt text](static/happybdayarcticdb.png)
+
+</td>
+<td>
+
+# 🚀 ArcticDB Hits 1,000 GitHub Stars on Our First Open Source Anniversary! 🚀
+
+Exciting news as we celebrate two milestones: ArcticDB's first year in the open-source community
+and reaching 1,000 GitHub stars! ⭐
+
+A huge thank you to all the contributors, supporters, and community members whose involvement has been
+pivotal to our success! 🙌
+
+</td>
+</tr>
+</table>
+
 <p align="center">
 <img src="https://github.com/man-group/ArcticDB/raw/master/static/ArcticDBCropped.png" width="40%">
 </p>
@@ -42,9 +63,11 @@ ArcticDB is designed from the outset to be resilient; there is no single point o
 
 |                       | PyPI (Python 3.6 - 3.11) | conda-forge (Python 3.8 - 3.11) |
 | --------------------- | - | - |
-| Linux                 | ✔️ | ✔️ |
-| Windows               | ✔️ | ➖ |
+| Linux (Intel/AMD)     | ✔️ | ✔️ |
+| Windows (Intel/AMD)   | ✔️ | ➖ |
 | MacOS                 | ➖ | Beta️ |
+
+For conda-forge see the [release-info](https://github.com/conda-forge/arcticdb-feedstock/?tab=readme-ov-file#current-release-info).
 
 ### Storage compatibility
 

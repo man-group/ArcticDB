@@ -20,11 +20,7 @@
 #include <arcticdb/pipeline/value_set.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/stream/segment_aggregator.hpp>
-#ifdef ARCTICDB_USING_CONDA
-    #include <robin_hood.h>
-#else
-    #include <arcticdb/util/third_party/robin_hood.hpp>
-#endif
+#include <ankerl/unordered_dense.h>
 
 namespace arcticdb {
 
@@ -191,17 +187,17 @@ std::vector<Composite<EntityIds>> single_partition(std::vector<Composite<EntityI
 class GroupingMap {
     using NumericMapType = std::variant<
             std::monostate,
-            std::shared_ptr<robin_hood::unordered_flat_map<bool, size_t>>,
-            std::shared_ptr<robin_hood::unordered_flat_map<uint8_t, size_t>>,
-            std::shared_ptr<robin_hood::unordered_flat_map<uint16_t, size_t>>,
-            std::shared_ptr<robin_hood::unordered_flat_map<uint32_t, size_t>>,
-            std::shared_ptr<robin_hood::unordered_flat_map<uint64_t, size_t>>,
-            std::shared_ptr<robin_hood::unordered_flat_map<int8_t, size_t>>,
-            std::shared_ptr<robin_hood::unordered_flat_map<int16_t, size_t>>,
-            std::shared_ptr<robin_hood::unordered_flat_map<int32_t, size_t>>,
-            std::shared_ptr<robin_hood::unordered_flat_map<int64_t, size_t>>,
-            std::shared_ptr<robin_hood::unordered_flat_map<float, size_t>>,
-            std::shared_ptr<robin_hood::unordered_flat_map<double, size_t>>>;
+            std::shared_ptr<ankerl::unordered_dense::map<bool, size_t>>,
+            std::shared_ptr<ankerl::unordered_dense::map<uint8_t, size_t>>,
+            std::shared_ptr<ankerl::unordered_dense::map<uint16_t, size_t>>,
+            std::shared_ptr<ankerl::unordered_dense::map<uint32_t, size_t>>,
+            std::shared_ptr<ankerl::unordered_dense::map<uint64_t, size_t>>,
+            std::shared_ptr<ankerl::unordered_dense::map<int8_t, size_t>>,
+            std::shared_ptr<ankerl::unordered_dense::map<int16_t, size_t>>,
+            std::shared_ptr<ankerl::unordered_dense::map<int32_t, size_t>>,
+            std::shared_ptr<ankerl::unordered_dense::map<int64_t, size_t>>,
+            std::shared_ptr<ankerl::unordered_dense::map<float, size_t>>,
+            std::shared_ptr<ankerl::unordered_dense::map<double, size_t>>>;
 
     NumericMapType map_;
 
@@ -217,16 +213,16 @@ public:
     }
 
     template<typename T>
-    std::shared_ptr<robin_hood::unordered_flat_map<T, size_t>> get() {
+    std::shared_ptr<ankerl::unordered_dense::map<T, size_t>> get() {
         return util::variant_match(map_,
                                    [that = this](const std::monostate &) {
-                                       that->map_ = std::make_shared<robin_hood::unordered_flat_map<T, size_t>>();
-                                       return std::get<std::shared_ptr<robin_hood::unordered_flat_map<T, size_t>>>(that->map_);
+                                       that->map_ = std::make_shared<ankerl::unordered_dense::map<T, size_t>>();
+                                       return std::get<std::shared_ptr<ankerl::unordered_dense::map<T, size_t>>>(that->map_);
                                    },
-                                   [](const std::shared_ptr<robin_hood::unordered_flat_map<T, size_t>> &ptr) {
+                                   [](const std::shared_ptr<ankerl::unordered_dense::map<T, size_t>> &ptr) {
                                        return ptr;
                                    },
-                                   [](const auto &) -> std::shared_ptr<robin_hood::unordered_flat_map<T, size_t>> {
+                                   [](const auto &) -> std::shared_ptr<ankerl::unordered_dense::map<T, size_t>> {
                                        schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
                                                "GroupBy does not support the grouping column type changing with dynamic schema");
                                    });
@@ -425,7 +421,7 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
                                                 // 11.14 seconds without caching
                                                 // 11.01 seconds with caching
                                                 // Not worth worrying about right now
-                                                robin_hood::unordered_flat_map<RawType, size_t> offset_to_group;
+                                                ankerl::unordered_dense::map<RawType, size_t> offset_to_group;
 
                                                 const bool is_sparse = col.column_->is_sparse();
                                                 using optional_iter_type = std::optional<decltype(input_data.bit_vector()->first())>;
@@ -457,7 +453,7 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
                                                                     val = offset;
                                                                 }
                                                                 RawType val_copy(val);
-                                                                offset_to_group.insert(robin_hood::pair<RawType, size_t>(offset, val_copy));
+                                                                offset_to_group.insert(std::make_pair<RawType, size_t>(std::forward<RawType>(offset), std::forward<RawType>(val_copy)));
                                                             }
                                                         } else {
                                                             val = *ptr;
@@ -473,7 +469,7 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
                                                         if (auto it = hash_to_group->find(val); it == hash_to_group->end()) {
                                                             row_to_group.emplace_back(next_group_id);
                                                             auto group_id = next_group_id++;
-                                                            hash_to_group->insert(robin_hood::pair<RawType, size_t>(val, group_id));
+                                                            hash_to_group->insert(std::make_pair<RawType, size_t>(std::forward<RawType>(val), std::forward<RawType>(group_id)));
                                                         } else {
                                                             row_to_group.emplace_back(it->second);
                                                         }
@@ -716,8 +712,8 @@ Composite<EntityIds> ColumnStatsGenerationClause::process(Composite<EntityIds>&&
         aggregators_data.emplace_back(agg.get_aggregator_data());
     }
 
-    robin_hood::unordered_set<IndexValue> start_indexes;
-    robin_hood::unordered_set<IndexValue> end_indexes;
+    ankerl::unordered_dense::set<IndexValue> start_indexes;
+    ankerl::unordered_dense::set<IndexValue> end_indexes;
 
     internal::check<ErrorCode::E_INVALID_ARGUMENT>(
             !procs.empty(),

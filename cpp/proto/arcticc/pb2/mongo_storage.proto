@@ -16,4 +16,5 @@ message Config {
 
     string uri = 1; //The path to the mongo server
     uint32 flags = 2; // default is 0
+    bool use_mock_storage_for_testing = 3;
 }

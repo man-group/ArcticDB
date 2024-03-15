@@ -28,5 +28,6 @@ struct VersionedItem {
 
     std::string symbol() const { return fmt::format("{}", key_.id()); }
     uint64_t version() const { return key_.version_id(); }
+    int64_t timestamp() const { return key_.creation_ts(); }
 };
 }

@@ -27,6 +27,7 @@ find_package(LZ4 REQUIRED)
 find_package(prometheus-cpp CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 find_package(double-conversion REQUIRED)
+find_package(unordered_dense CONFIG REQUIRED)
 
 if(NOT WIN32 AND ${SSL_LINK})
     find_package(Kerberos REQUIRED)
@@ -73,7 +74,6 @@ else()
 
     find_package(recycle REQUIRED)
     find_package(msgpack-c REQUIRED)
-    find_package(robin_hood REQUIRED)
     find_package(LMDB REQUIRED)
     find_package(LMDBXX REQUIRED)
 
@@ -89,12 +89,13 @@ else()
     message(STATUS "NEW_FOLLY_DEPS" ${NEW_FOLLY_DEPS})
     list(REMOVE_ITEM NEW_FOLLY_DEPS "/usr/local/opt/openssl/include" )
     set_target_properties(Folly::folly_deps PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${NEW_FOLLY_DEPS}")
-
-    add_library(xxHash STATIC IMPORTED)
-    set_target_properties(xxHash PROPERTIES IMPORTED_LOCATION ${xxHash_LIBRARY})
-    set_target_properties(xxHash PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${xxHash_INCLUDE_DIR})
-
 endif()
+
+# Have to statically link xxhash as inlining causes non-deterministic hashing, and cannot dynamically link
+# # since `XXH_state_t` which we rely on is only available when statically linking.
+add_library(xxHash STATIC IMPORTED)
+set_target_properties(xxHash PROPERTIES IMPORTED_LOCATION ${xxHash_LIBRARY})
+set_target_properties(xxHash PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${xxHash_INCLUDE_DIR})
 
 # RocksDB can be manually excluded with set(ARCTICDB_INCLUDE_ROCKSDB 0)
 # Default is to include on PyPI builds and exclude on conda builds
@@ -195,6 +196,7 @@ set(arcticdb_srcs
         column_store/block.hpp
         column_store/chunked_buffer.hpp
         column_store/column_data.hpp
+        column_store/column_data_random_accessor.hpp
         column_store/column.hpp
         column_store/column_utils.hpp
         column_store/memory_segment.hpp
@@ -264,18 +266,33 @@ set(arcticdb_srcs
         storage/constants.hpp
         storage/common.hpp
         storage/config_resolvers.hpp
+        storage/coalesced/multi_segment_header.hpp
+        storage/coalesced/multi_segment_utils.hpp
         storage/failure_simulation.hpp
         storage/library.hpp
         storage/library_index.hpp
         storage/library_manager.hpp
+        storage/storage_mock_client.hpp
+        storage/azure/azure_client_wrapper.hpp
+        storage/azure/azure_mock_client.hpp
+        storage/azure/azure_real_client.hpp
         storage/azure/azure_storage.hpp
+        storage/lmdb/lmdb_client_wrapper.hpp
+        storage/lmdb/lmdb_mock_client.hpp
+        storage/lmdb/lmdb_real_client.hpp
         storage/lmdb/lmdb_storage.hpp
         storage/memory/memory_storage.hpp
         storage/memory/memory_storage.cpp
         storage/mongo/mongo_client.hpp
         storage/mongo/mongo_instance.hpp
+        storage/mongo/mongo_client_wrapper.hpp
+        storage/mongo/mongo_mock_client.hpp
         storage/mongo/mongo_storage.hpp
         storage/object_store_utils.hpp
+        storage/file/file_store.hpp
+        storage/file/mapped_file_storage.hpp
+        storage/file/file_store.hpp
+        storage/single_file_storage.hpp
         storage/s3/nfs_backed_storage.hpp
         storage/s3/s3_client_wrapper.hpp
         storage/s3/s3_storage_tool.hpp
@@ -288,6 +305,7 @@ set(arcticdb_srcs
         stream/aggregator-inl.hpp
         stream/append_map.hpp
         stream/merge_utils.hpp
+        stream/piloted_clock.hpp
         stream/index_aggregator.hpp
         stream/index.hpp
         stream/merge.hpp
@@ -326,6 +344,7 @@ set(arcticdb_srcs
         util/magic_num.hpp
         util/movable_priority_queue.hpp
         util/movable_priority_queue.hpp
+        util/memory_mapped_file.hpp
         util/name_validation.hpp
         util/offset_string.hpp
         util/offset_string.hpp
@@ -423,9 +442,15 @@ set(arcticdb_srcs
         storage/failure_simulation.cpp
         storage/library_manager.cpp
         storage/azure/azure_storage.cpp
+        storage/azure/azure_real_client.cpp
+        storage/azure/azure_mock_client.cpp
+        storage/lmdb/lmdb_mock_client.cpp
+        storage/lmdb/lmdb_real_client.cpp
         storage/lmdb/lmdb_storage.cpp
+        storage/file/mapped_file_storage.cpp
         storage/mongo/mongo_client.cpp
         storage/mongo/mongo_instance.cpp
+        storage/mongo/mongo_mock_client.cpp
         storage/mongo/mongo_storage.cpp
         storage/s3/nfs_backed_storage.cpp
         storage/s3/s3_api.cpp
@@ -434,13 +459,9 @@ set(arcticdb_srcs
         storage/s3/s3_storage.cpp
         storage/s3/s3_storage_tool.cpp
         storage/storage_factory.cpp
-        storage/azure/azure_client_wrapper.hpp
-        storage/azure/azure_real_client.hpp
-        storage/azure/azure_real_client.cpp
-        storage/azure/azure_mock_client.hpp
-        storage/azure/azure_mock_client.cpp
         stream/aggregator.cpp
         stream/append_map.cpp
+        stream/piloted_clock.cpp
         toolbox/library_tool.cpp
         util/allocator.cpp
         util/buffer_pool.cpp
@@ -448,6 +469,7 @@ set(arcticdb_srcs
         util/decimal.cpp
         util/error_code.cpp
         util/global_lifetimes.cpp
+        util/memory_mapped_file.hpp
         util/name_validation.cpp
         util/offset_string.cpp
         util/offset_string.cpp
@@ -470,13 +492,6 @@ if(${ARCTICDB_INCLUDE_ROCKSDB})
     list (APPEND arcticdb_srcs
         storage/rocksdb/rocksdb_storage.hpp
         storage/rocksdb/rocksdb_storage.cpp
-    )
-endif()
-
-# Exclude vendored sources when using conda.
-if(NOT ${ARCTICDB_USING_CONDA})
-    list (APPEND arcticdb_srcs
-        util/third_party/robin_hood.hpp
     )
 endif()
 
@@ -525,8 +540,10 @@ endif()
 set (arcticdb_core_libraries
         pybind11::module # Transitively includes Python::Module or Python::Python as appropriate
         arcticdb_proto
+        xxHash::xxHash
         prometheus-cpp::push
         prometheus-cpp::pull
+        unordered_dense::unordered_dense
         ${standard_libraries}
         fmt::fmt
         protobuf::libprotobuf
@@ -551,11 +568,7 @@ endif()
 # on their origin (i.e. vendored source or packages on conda-forge).
 if(${ARCTICDB_USING_CONDA})
 
-    # We must use dynamic libraries, except for xxHash, which must be statically linked.
-    # since `XXH_state_t` which we rely on is only available when statically linking.
-    # For all builds except linux conda's, we inline the functions so that xxhash does not need linking at all.
     list (APPEND arcticdb_core_libraries
-        xxHash::xxHash
         pcre
         msgpack-c
         ${LMDB_LIBRARIES}
@@ -753,6 +766,7 @@ if(${TEST})
             codec/test/test_codec.cpp
             column_store/test/ingestion_stress_test.cpp
             column_store/test/test_column.cpp
+            column_store/test/test_column_data_random_accessor.cpp
             column_store/test/test_index_filtering.cpp
             column_store/test/test_memory_segment.cpp
             entity/test/test_atom_key.cpp
@@ -768,6 +782,7 @@ if(${TEST})
             processing/test/test_clause.cpp
             processing/test/test_component_manager.cpp
             processing/test/test_expression.cpp
+            processing/test/test_filter_and_project_sparse.cpp
             processing/test/test_has_valid_type_promotion.cpp
             processing/test/test_operation_dispatch.cpp
             processing/test/test_set_membership.cpp
@@ -913,6 +928,7 @@ if(${TEST})
             column_store/test/rapidcheck_column_store.cpp
             column_store/test/rapidcheck_chunked_buffer.cpp
             column_store/test/rapidcheck_column.cpp
+            column_store/test/rapidcheck_column_data_random_accessor.cpp
             column_store/test/rapidcheck_column_map.cpp
             column_store/test/test_chunked_buffer.cpp
             stream/test/stream_test_common.cpp

@@ -12,43 +12,22 @@
 
 #include <folly/hash/Hash.h>
 
-// XXH_INLINE_ALL causes hashes to be non-deterministic with the linux conda build, needs investigating
-// https://github.com/man-group/ArcticDB/issues/1268
-#if defined(ARCTICDB_USING_CONDA) && defined(__linux__)
 #define XXH_STATIC_LINKING_ONLY
-#else
-// xxhash does some raw pointer manipulation that are safe, but compilers view as violating array bounds
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Warray-bounds"
-#define XXH_INLINE_ALL
-#endif
 #include <xxhash.h>
-#if defined(ARCTICDB_USING_CONDA) && defined(__linux__)
 #undef XXH_STATIC_LINKING_ONLY
-#else
-#undef XXH_INLINE_ALL
-#pragma GCC diagnostic pop
-#endif
 
 namespace arcticdb {
 
+template<class T>
+inline size_t hash(T d) {
+    return std::hash<T>{}(d);
+}
+
+inline size_t hash(std::string_view sv) {
+    return std::hash<std::string_view>{}(sv);
+}
+
 using HashedValue = XXH64_hash_t;
-constexpr std::size_t DEFAULT_SEED = 0x42;
-
-template<class T, std::size_t seed = DEFAULT_SEED>
-HashedValue hash(T *d, std::size_t count) {
-    return XXH64(reinterpret_cast<const void *>(d), count * sizeof(T), seed);
-}
-
-// size argument to XXH64 being compile-time constant improves performance
-template<class T, std::size_t seed = DEFAULT_SEED>
-HashedValue hash(T *d) {
-    return XXH64(reinterpret_cast<const void *>(d), sizeof(T), seed);
-}
-
-inline HashedValue hash(std::string_view sv) {
-    return hash(sv.data(), sv.size());
-}
 
 class HashAccum {
   public:
@@ -70,6 +49,7 @@ class HashAccum {
     }
   private:
     XXH64_state_t state_ = XXH64_state_t{};
+    static constexpr std::size_t DEFAULT_SEED = 0x42;
 };
 
 } // namespace arcticdb

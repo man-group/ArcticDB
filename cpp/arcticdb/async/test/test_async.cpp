@@ -16,7 +16,6 @@
 #include <arcticdb/util/random.h>
 
 #include <fmt/format.h>
-#include <google/protobuf/text_format.h>
 
 #include <string>
 #include <vector>
@@ -44,7 +43,7 @@ TEST(Async, SinkBasic) {
 
     auto seg = ac::SegmentInMemory();
     aa::EncodeAtomTask enc{
-        ac::entity::KeyType::GENERATION, 6, 123, 456, 457, 999, std::move(seg), codec_opt, ac::EncodingVersion::V2
+        ac::entity::KeyType::GENERATION, ac::entity::VersionId{6}, ac::entity::NumericId{123}, ac::entity::NumericId{456}, ac::timestamp{457}, {ac::entity::NumericIndex{999}}, std::move(seg), codec_opt, ac::EncodingVersion::V2
     };
 
     auto v = sched.submit_cpu_task(std::move(enc)).via(&aa::io_executor()).thenValue(aa::WriteSegmentTask{lib}).get();
@@ -53,7 +52,7 @@ TEST(Async, SinkBasic) {
     auto default_content_hash = h.digest();
 
     ASSERT_EQ(ac::entity::atom_key_builder().gen_id(6).start_index(456).end_index(457).creation_ts(999)
-                  .content_hash(default_content_hash).build(123, ac::entity::KeyType::GENERATION),
+        .content_hash(default_content_hash).build(ac::entity::NumericId{123}, ac::entity::KeyType::GENERATION),
               to_atom(v)
     );
 }
@@ -76,8 +75,8 @@ TEST(Async, DeDupTest) {
 
     std::vector<std::pair<ast::StreamSink::PartialKey, ac::SegmentInMemory>> key_segments;
 
-    key_segments.emplace_back(ast::StreamSink::PartialKey{ac::entity::KeyType::TABLE_DATA, 1, "", 0, 1}, seg);
-    key_segments.emplace_back(ast::StreamSink::PartialKey{ac::entity::KeyType::TABLE_DATA, 2, "", 1, 2}, seg);
+    key_segments.emplace_back(ast::StreamSink::PartialKey{ ac::entity::KeyType::TABLE_DATA, 1, "", ac::entity::NumericIndex{0}, ac::entity::NumericIndex{1} }, seg);
+    key_segments.emplace_back(ast::StreamSink::PartialKey{ ac::entity::KeyType::TABLE_DATA, 2, "", ac::entity::NumericIndex{1}, ac::entity::NumericIndex{2} }, seg);
 
     ac::HashAccum h;
     auto default_content_hash = h.digest();
@@ -87,13 +86,13 @@ TEST(Async, DeDupTest) {
             .content_hash(default_content_hash).build("", ac::entity::KeyType::TABLE_DATA);
     de_dup_map->insert_key(k);
 
-    std::vector<folly::Future<arcticdb::pipelines::SliceAndKey>> slice_key_futs;
+    std::vector<folly::Future<arcticdb::pipelines::SliceAndKey>> slice_key_futures;
     for(auto& [key, segment] : key_segments) {
         auto input = std::make_tuple<ast::StreamSink::PartialKey, ac::SegmentInMemory, ap::FrameSlice>(std::move(key), std::move(segment), {});
         auto fut = folly::makeFuture(std::move(input));
-        slice_key_futs.emplace_back(store.async_write(std::move(fut), de_dup_map));
+        slice_key_futures.emplace_back(store.async_write(std::move(fut), de_dup_map));
     }
-    auto slice_keys = folly::collect(slice_key_futs).get();
+    auto slice_keys = folly::collect(slice_key_futures).get();
     std::vector<ac::AtomKey> keys;
     for(const auto& slice_key : slice_keys)
         keys.emplace_back(slice_key.key());
@@ -106,41 +105,15 @@ TEST(Async, DeDupTest) {
     ASSERT_EQ(2, to_atom(keys[1]).version_id());
 }
 
-struct DummyTask : arcticdb::async::BaseTask {
-    folly::Future<int> operator()() {
-        using namespace arcticdb;
-        init_random(42);
-        ::sleep(3);
-        auto x = 0;
-        for(auto i = 0; i < 250; ++i) {
-            x += random_int();
-        }
-        return x;
-    }
-};
-
-struct MetaTask : arcticdb::async::BaseTask {
-    folly::Future<int> operator()(int x) {
-        return x * 2;
-    }
-};
-
 struct MaybeThrowTask : arcticdb::async::BaseTask {
-    int id_;
     bool do_throw_;
-    MaybeThrowTask(int id, bool do_throw) :
-        id_(id),
+    explicit MaybeThrowTask(bool do_throw) :
         do_throw_(do_throw) {
     }
 
-    folly::Unit operator()() {
+    folly::Unit operator()() const {
         using namespace arcticdb;
-        if(do_throw_)
-            log::version().info("Thread {} throwing", id_);
-        else
-            log::version().info("Thread {} running", id_);
-
-        util::check(!do_throw_, "Had to throw");
+        util::check(!do_throw_, "Test intentionally throwing");
         return folly::Unit{};
     }
 };
@@ -152,7 +125,7 @@ TEST(Async, CollectWithThrow) {
    async::TaskScheduler sched{20};
    try {
        for(auto i = 0u; i < 1000; ++i) {
-           stuff.push_back(sched.submit_io_task(MaybeThrowTask(i, i==3)));
+           stuff.push_back(sched.submit_io_task(MaybeThrowTask(i==3)));
        }
        auto vec_fut = folly::collectAll(stuff).get();
    } catch(std::exception&) {
@@ -203,9 +176,9 @@ folly::Future<int> num_slices(folly::Future<int>&& f) {
 struct Thing : arcticdb::async::BaseTask {
     int x_;
 
-    Thing(int x) : x_(x) {}
+    explicit Thing(int x) : x_(x) {}
 
-    int operator ()() {
+    int operator ()() const {
         return x_ + 2;
     }
 };
@@ -214,11 +187,11 @@ auto multiplex(folly::Future<int> &&n) {
     using namespace arcticdb;
 
     return std::move(n).thenValue([](auto i) {
-        std::vector<folly::Future<int>> futs;
+        std::vector<folly::Future<int>> futures;
         for (auto x = 0; x < i; ++x) {
-            futs.push_back(async::submit_cpu_task(Thing{x}));
+            futures.push_back(async::submit_cpu_task(Thing{x}));
         }
-        return folly::collect(futs);
+        return folly::collect(futures);
     });
 }
 
@@ -230,5 +203,5 @@ TEST(Async, DynamicSizing) {
     auto f1 = num_slices(std::move(f));
     auto f2 = multiplex(std::move(f1));
     p.setValue(5);
-    auto v = std::move(f2).get();
+    (void)std::move(f2).get();
 }

@@ -87,7 +87,7 @@ jobs:
         run: |
           cd python
           export ARCTICDB_RAND_SEED=$RANDOM
-          python -m pytest -n ${{ steps.cpu-cores.outputs.count }} -v tests
+          python -m pytest --timeout=3600 -n ${{ steps.cpu-cores.outputs.count }} -v tests
         env:
           ARCTICDB_USING_CONDA: 1
           # Use the Mongo created in the service container above to test against
@@ -160,7 +160,7 @@ jobs:
         run: |
           cd python
           export ARCTICDB_RAND_SEED=$RANDOM
-          python -m pytest -n ${{ steps.cpu-cores.outputs.count }} tests
+          python -m pytest --timeout=3600 -n ${{ steps.cpu-cores.outputs.count }} tests
         env:
           ARCTICDB_USING_CONDA: 1
 
