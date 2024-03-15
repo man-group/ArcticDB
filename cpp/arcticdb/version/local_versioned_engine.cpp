@@ -1714,10 +1714,6 @@ void LocalVersionedEngine::configure(const storage::LibraryDescriptor::VariantSt
         if(cfg.write_options().has_sync_passive()) {
             version_map->set_log_changes(cfg.write_options().sync_passive().enabled());
         }
-        if (cfg.has_prometheus_config()) {
-            PrometheusConfigInstance::instance()->config.CopyFrom(cfg.prometheus_config());
-            ARCTICDB_DEBUG(log::version(), "prometheus configured");
-        }
         },
         [](const auto& conf){
         util::raise_rte(

@@ -27,45 +27,39 @@ namespace arcticdb {
     std::shared_ptr<PrometheusInstance> PrometheusInstance::instance_;
     std::once_flag PrometheusInstance::init_flag_;
 
-    std::shared_ptr<PrometheusConfigInstance> PrometheusConfigInstance::instance(){
-        std::call_once(PrometheusConfigInstance::init_flag_, &PrometheusConfigInstance::init);
-        return PrometheusConfigInstance::instance_;
+    PrometheusInstance::PrometheusInstance() : configured_(false) {
+        arcticdb::log::version().debug("PrometheusInstance created");
     }
 
-    std::shared_ptr<PrometheusConfigInstance> PrometheusConfigInstance::instance_;
-    std::once_flag PrometheusConfigInstance::init_flag_;
+    void PrometheusInstance::configure(const MetricsConfig& config, const bool reconfigure) {
+        if (configured_ && !reconfigure) {
+            arcticdb::log::version().warn("Prometheus already configured");
+            return;
+        }
+        
+        cfg_ = config;
 
-    PrometheusInstance::PrometheusInstance() {
-
-        auto cfg = PrometheusConfigInstance::instance()->config;
-
-        if (cfg.prometheus_model() == PrometheusConfigInstance::Proto::PUSH) {
-            // PUSH MODE
-            if (cfg.instance().empty() || cfg.host().empty() || cfg.port().empty() || cfg.job_name().empty()) {
-                util::raise_rte( "Invalid Push PrometheusConfig {}", arcticdb::util::format(cfg));
-            }
-
+        if (cfg_.model_ == MetricsConfig::Model::PUSH) {
             // IMP: This is the GROUPING_KEY - every push overwrites the previous grouping key
             auto labels = prometheus::Gateway::GetInstanceLabel(getHostName());
-            mongo_instance_ = cfg.instance();
+            mongo_instance_ = cfg_.instance;
             labels.try_emplace(MONGO_INSTANCE_LABEL, mongo_instance_);
-            labels.try_emplace(PROMETHEUS_ENV_LABEL, cfg.prometheus_env());
-            gateway_= std::make_shared<prometheus::Gateway>(cfg.host(), cfg.port(), cfg.job_name(), labels);
+            labels.try_emplace(PROMETHEUS_ENV_LABEL, cfg_.prometheus_env);
+            gateway_= std::make_shared<prometheus::Gateway>(cfg_.host, cfg_.port, cfg_.job_name, labels);
             registry_ = std::make_shared<prometheus::Registry>();
             gateway_->RegisterCollectable(registry_);
 
-            arcticdb::log::version().info("Prometheus Push created with settings {}", arcticdb::util::format(cfg));
+            arcticdb::log::version().info("Prometheus Push created with settings {}", cfg_);
 
-        } else if (cfg.prometheus_model()  == PrometheusConfigInstance::Proto::WEB) {
-
-            // WEB SERVER MODE
-            if (cfg.port().empty()) {
-                util::raise_rte( "PrometheusConfig web mode port not set {}", arcticdb::util::format(cfg));
-            }
+        } else if (cfg_.model_ == MetricsConfig::Model::PULL) {
 
             // create an http server ie "http://hostname:"+port()+"/metrics"
-            std::string hostname = getHostName();
-            std::string endpoint = hostname + ":" + cfg.port();
+            std::string endpoint = cfg_.host + ":" + cfg_.port;
+
+            if (exposer_.use_count() > 0) {
+                exposer_->RemoveCollectable(registry_, "/metrics");
+                exposer_.reset();
+            }
 
             // default to 2 threads
             exposer_ = std::make_shared<prometheus::Exposer>(endpoint, 2);
@@ -79,8 +73,10 @@ namespace arcticdb {
             arcticdb::log::version().info("Prometheus endpoint created on {}/metrics", endpoint);
         }
         else {
-            arcticdb::log::version().info("Prometheus not configured {}", arcticdb::util::format(cfg));
+            arcticdb::log::version().info("Prometheus not configured {}", cfg_);
         }
+
+        configured_ = true;
     }
 
     // new mechanism, labels at runtime
