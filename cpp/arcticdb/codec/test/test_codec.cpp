@@ -364,7 +364,7 @@ TEST_F(TestMultiblockData_Dim1, EncodingVersion_2) {
     ptrdiff_t out_pos = 0;
     column_data.reset();
     ColumnEncoderV2::encode(passthorugh_encoding_options, column_data, *encoded_field, out, out_pos);
-    const auto ndarray = encoded_field->ndarray();
+    const auto& ndarray = encoded_field->ndarray();
     ASSERT_EQ(ndarray.shapes_size(), 1);
     ASSERT_EQ(ndarray.values_size(), 2);
     ASSERT_EQ(ndarray.items_count(), shapes_data.size());

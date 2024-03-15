@@ -31,7 +31,7 @@ class BaseIndex {
   public:
     template<class RangeType>
     StreamDescriptor create_stream_descriptor(StreamId stream_id, RangeType&& fields) const {
-        return stream_descriptor(stream_id, *derived(), std::move(fields));
+        return stream_descriptor_from_range(stream_id, *derived(), std::move(fields));
     }
 
     [[nodiscard]] StreamDescriptor create_stream_descriptor(

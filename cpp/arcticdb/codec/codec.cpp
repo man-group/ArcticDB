@@ -38,7 +38,6 @@ constexpr TypeDescriptor metadata_type_desc() {
     };
 }
 
-
 SizeResult max_compressed_size_dispatch(
     const SegmentInMemory& in_mem_seg,
     const arcticdb::proto::encoding::VariantCodec &codec_opts,
@@ -159,12 +158,12 @@ EncodedFieldCollection decode_encoded_fields(
         const uint8_t* begin ARCTICDB_UNUSED) {
     ARCTICDB_TRACE(log::codec(), "Decoding encoded fields");
 
-    util::check(hdr.has_column_fields(), "Expected encoded field description to be set in header");
+    util::check(hdr.has_column_fields() && hdr.column_fields().has_ndarray(), "Expected encoded field description to be set in header");
     std::optional<util::BitMagic> bv;
     const auto uncompressed_size = encoding_sizes::uncompressed_size(hdr.column_fields());
     constexpr auto type_desc = encoded_fields_type_desc();
-    Column encoded_column(type_desc, uncompressed_size, true, false);
-    decode_field(type_desc, hdr.column_fields(), data, encoded_column, bv, hdr.encoding_version());
+    Column encoded_column(type_desc, uncompressed_size, false, false);
+    decode_ndarray(type_desc, hdr.column_fields().ndarray(), data, encoded_column, bv, hdr.encoding_version());
 
     ARCTICDB_TRACE(log::codec(), "Decoded encoded fields at position {}", data-begin);
     return {std::move(encoded_column.release_buffer()), std::move(encoded_column.release_shapes())};
@@ -178,7 +177,6 @@ FrameDescriptorImpl read_frame_descriptor(
     data += sizeof(FrameDescriptorImpl);
     return *frame_descriptor;
 }
-
 
 std::optional<FieldCollection> decode_index_fields(
     const SegmentHeader& hdr,
@@ -266,8 +264,6 @@ void exchange_timeseries_proto(const SourceType& source, DestType& destination) 
     if (source.has_multi_key_meta())
         *destination.mutable_multi_key_meta() = source.multi_key_meta();
 }
-
-
 
 std::optional<TimeseriesDescriptor> decode_timeseries_descriptor_v1(
     const SegmentHeader& hdr,
@@ -370,7 +366,7 @@ void decode_string_pool( const SegmentHeader& hdr,
         ARCTICDB_TRACE(log::codec(), "Decoding string pool");
         util::check(data!=end, "Reached end of input block with string pool fields to decode");
         std::optional<util::BitMagic> bv;
-        data += decode_field(string_pool_descriptor().type(),
+        data += decode_ndarray(string_pool_descriptor().type(),
                        hdr.string_pool_field(),
                        data,
                        res.string_pool(),
@@ -400,8 +396,8 @@ void decode_v2(const Segment& segment,
     util::check_magic<IndexMagic>(data);
 
     if(hdr.has_index_descriptor_field()) {
-        auto index_frame_descriptor = std::make_shared<FrameDescriptorImpl>(read_frame_descriptor(data, begin));
         auto frame_metadata = extract_frame_metadata(res);
+        auto index_frame_descriptor = std::make_shared<FrameDescriptorImpl>(read_frame_descriptor(data, begin));
         auto index_fields = decode_index_fields(hdr, data, begin, end);
         util::check(index_fields.has_value(), "Failed to get index fields");
         auto index_field_ptr = std::make_shared<FieldCollection>(std::move(*index_fields));
@@ -416,12 +412,11 @@ void decode_v2(const Segment& segment,
         const auto fields_size = desc.fields().size();
         const auto start_row = res.row_count();
         EncodedFieldCollection encoded_fields(std::move(encoded_fields_buffer));
-        const auto seg_row_count = fields_size ? ssize_t(encoded_fields.at(0).ndarray().items_count()) : 0L;
+        auto encoded_field = encoded_fields.begin();
+        const auto seg_row_count = fields_size ? ssize_t(encoded_field->ndarray().items_count()) : 0L;
         res.init_column_map();
 
         for (std::size_t i = 0; i < fields_size; ++i) {
-            const auto& encoded_field = encoded_fields.at(i);
-
 #ifdef DUMP_BYTES
             log::version().debug("{}", dump_bytes(begin, (data - begin) + encoding_sizes::field_compressed_size(*encoded_field), 100u));
 #endif
@@ -429,11 +424,11 @@ void decode_v2(const Segment& segment,
             util::check(data!=end, "Reached end of input block with {} fields to decode", fields_size-i);
             if(auto col_index = res.column_index(field_name)) {
                 auto& col = res.column(static_cast<position_t>(*col_index));
-                data += decode_field(res.field(*col_index).type(), encoded_field, data, col, col.opt_sparse_map(), hdr.encoding_version());
+                data += decode_field(res.field(*col_index).type(), *encoded_field, data, col, col.opt_sparse_map(), hdr.encoding_version());
             } else {
-                data += encoding_sizes::field_compressed_size(encoded_field) + sizeof(ColumnMagic);
+                data += encoding_sizes::field_compressed_size(*encoded_field) + sizeof(ColumnMagic);
             }
-
+            ++encoded_field;
             ARCTICDB_TRACE(log::codec(), "Decoded column {} to position {}", i, data-begin);
         }
 

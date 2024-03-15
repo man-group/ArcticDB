@@ -174,7 +174,7 @@ void encode_metadata(
     if (in_mem_seg.metadata()) {
         const auto bytes_count = static_cast<shape_t>(in_mem_seg.metadata()->ByteSizeLong());
         ARCTICDB_TRACE(log::codec(), "Encoding {} bytes of metadata", bytes_count);
-        auto encoded_field = segment_header.mutable_metadata_field(1);
+        auto& encoded_field = segment_header.mutable_metadata_field(1);
 
         constexpr int max_stack_alloc = 1 << 11;
         bool malloced{false};
@@ -209,7 +209,7 @@ void encode_string_pool(
     if (in_mem_seg.has_string_pool()) {
         ARCTICDB_TRACE(log::codec(), "Encoding string pool to position {}", pos);
         auto col = in_mem_seg.string_pool_data();
-        auto encoded_field = segment_header.mutable_string_pool_field(calc_num_blocks<EncodingPolicyType>(col));
+        auto& encoded_field = segment_header.mutable_string_pool_field(calc_num_blocks<EncodingPolicyType>(col));
         EncodingPolicyType::ColumnEncoder::encode(codec_opts, col, encoded_field, out_buffer, pos);
         ARCTICDB_TRACE(log::codec(), "Encoded string pool to position {}", pos);
     }

@@ -19,7 +19,7 @@ using namespace arcticdb::entity;
 constexpr TypeDescriptor encoded_fields_type_desc() {
     using namespace arcticdb::entity;
     return TypeDescriptor{
-        DataType::UINT8, Dimension::Dim1
+        DataType::UINT8, Dimension::Dim0
     };
 }
 
@@ -30,6 +30,31 @@ class EncodedFieldCollection {
     size_t offset_ = 0U;
 
 public:
+    struct EncodedFieldCollectionIterator {
+        size_t pos_ = 0UL;
+        ChunkedBuffer* buffer_ = nullptr;
+
+        EncodedFieldCollectionIterator(ChunkedBuffer* buffer) :
+            buffer_(buffer) {
+        }
+
+        EncodedFieldImpl& current() {
+            return *reinterpret_cast<EncodedFieldImpl*>(buffer_->ptr_cast<uint8_t>(pos_, sizeof(EncodedFieldImpl)));
+        }
+
+        EncodedFieldImpl& operator*() {
+            return current();
+        }
+
+        void operator++() {
+            pos_ += encoded_field_bytes(current());
+        }
+
+        EncodedFieldImpl* operator->() {
+            return &(current());
+        }
+    };
+
     EncodedFieldCollection(ChunkedBuffer&& data, Buffer&& offsets) :
         data_(std::move(data)),
         offsets_(std::move(offsets)) {
@@ -47,6 +72,10 @@ public:
     }
 
     ARCTICDB_MOVE_ONLY_DEFAULT(EncodedFieldCollection)
+
+    [[nodiscard]] EncodedFieldCollectionIterator begin() {
+        return {&data_};
+    }
 
     [[nodiscard]] bool empty() const {
         return data_.empty();
@@ -69,7 +98,13 @@ public:
     }
 
     [[nodiscard]] uint64_t get_offset(size_t pos) const {
-        return *offsets_.ptr_cast<uint64_t>(pos, sizeof(uint64_t));
+        const auto offset = *offsets_.ptr_cast<uint64_t>(pos * sizeof(uint64_t), sizeof(uint64_t));
+        log::version().info("Offset for position {}: {}", pos, offset);
+        return offset;
+    }
+
+    void write_offset(size_t pos, uint64_t value) {
+        *offsets_.ptr_cast<uint64_t>(pos * sizeof(uint64_t), sizeof(uint64_t)) = value;
     }
 
     [[nodiscard]] const EncodedFieldImpl &at(size_t pos) const {
@@ -86,12 +121,15 @@ public:
 
     [[nodiscard]] EncodedFieldImpl* add_field(size_t num_blocks) {
         offsets_.ensure((count_ + 1) * sizeof(uint64_t));
-        *offsets_.ptr_cast<uint64_t>(count_, sizeof(uint64_t)) = offset_;
+        write_offset(count_, offset_);
+        log::version().info("Wrote offset {}", get_offset(count_));
         const auto required_bytes = calc_field_bytes(num_blocks);
-        data_.ensure(required_bytes);
-        return new (data_.ptr_cast<uint8_t>(offset_, required_bytes)) EncodedFieldImpl;
+        data_.ensure(offset_ + required_bytes);
+        auto* field = new (data_.ptr_cast<uint8_t>(offset_, required_bytes)) EncodedFieldImpl;
+        log::version().info("Adding encoded field with {} blocks at position {}, {} bytes required", num_blocks, offset_, required_bytes);
         ++count_;
         offset_ += required_bytes;
+        return field;
     }
 
     Buffer&& release_offsets() {

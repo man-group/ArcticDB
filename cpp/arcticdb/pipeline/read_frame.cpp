@@ -302,7 +302,7 @@ void decode_into_frame_static(
     // data == end in case we have empty data types (e.g. {EMPTYVAL, Dim0}, {EMPTYVAL, Dim1}) for which we store nothing
     // in storage as they can be reconstructed in the type handler on the read path.
     if (data != end || !fields.empty()) {
-        auto index_field = fields.at(0u);
+        auto& index_field = fields.at(0u);
         decode_index_field(frame, index_field, data, begin, end, context, encoding_version);
 
         StaticColumnMappingIterator it(context, index_fieldcount);
@@ -314,7 +314,7 @@ void decode_into_frame_static(
             if(has_magic_nums)
                 util::check_magic_in_place<ColumnMagic>(data);
 
-            auto encoded_field = fields.at(it.source_field_pos());
+            auto& encoded_field = fields.at(it.source_field_pos());
             util::check(it.source_field_pos() < size_t(fields.size()), "Field index out of range: {} !< {}", it.source_field_pos(), fields.size());
             auto field_name = context.descriptor().fields(it.source_field_pos()).name();
             auto& buffer = frame.column(static_cast<ssize_t>(it.dest_col())).data().buffer();
@@ -391,13 +391,13 @@ void decode_into_frame_dynamic(
 
     if (data != end) {
         const auto& fields = hdr.body_fields();
-        auto index_field = fields.at(0u);
+        auto& index_field = fields.at(0u);
         decode_index_field(frame, index_field, data, begin, end, context, encoding_version);
 
         auto field_count = context.slice_and_key().slice_.col_range.diff() + index_fieldcount;
         for (auto field_col = index_fieldcount; field_col < field_count; ++field_col) {
             auto field_name = context.descriptor().fields(field_col).name();
-            auto encoded_field = fields.at(field_col);
+            auto& encoded_field = fields.at(field_col);
             auto frame_loc_opt = frame.column_index(field_name);
             if (!frame_loc_opt) {
                 // Column is not selected in the output frame.

@@ -44,10 +44,10 @@ void decode_into_memory_segment(
     SegmentInMemory& res,
     const entity::StreamDescriptor& desc);
 
-template<class DataSink, typename EncodedFieldType>
+template<class DataSink>
 std::size_t decode_field(
     const entity::TypeDescriptor &td,
-    const EncodedFieldType &field,
+    const EncodedFieldImpl &field,
     const uint8_t *input,
     DataSink &data_sink,
     std::optional<util::BitMagic>& bv,

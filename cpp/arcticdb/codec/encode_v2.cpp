@@ -179,8 +179,16 @@ namespace arcticdb {
 
         ColumnEncoderV2::encode(codec_opts, col, encoded_field, out_buffer, pos);
         ARCTICDB_TRACE(log::codec(), "Encoded field descriptors to position {}", pos);
+    }
 
-        write_magic<IndexMagic>(out_buffer, pos);
+    static void encode_index_descriptors(
+        const SegmentInMemory& in_mem_seg,
+        SegmentHeader& segment_header,
+        const arcticdb::proto::encoding::VariantCodec& codec_opts,
+        Buffer& out_buffer,
+        std::ptrdiff_t& pos) {
+        ARCTICDB_TRACE(log::codec(), "Encoding index descriptors to position {}", pos);
+
         if (in_mem_seg.has_index_descriptor()) {
             const auto& tsd = in_mem_seg.index_descriptor();
             write_frame_data(out_buffer, pos, *tsd.data_);
@@ -283,9 +291,9 @@ namespace arcticdb {
 
         segment_header.set_footer_offset(pos);
         write_magic<EncodedMagic>(out_buffer, pos);
-        Column encoded_fields_column(encoded_fields_type_desc(), false, encoded_fields.release_data(), encoded_fields.release_offsets());
+        Column encoded_fields_column(encoded_fields_type_desc(), false, encoded_fields.release_data());
         auto data = encoded_fields_column.data();
-        auto encoded_field = segment_header.mutable_column_fields(calc_num_blocks<EncodingPolicyV2>(data));
+        auto& encoded_field = segment_header.mutable_column_fields(calc_num_blocks<EncodingPolicyV2>(data));
         ColumnEncoderV2::encode(codec_opts, data, encoded_field, out_buffer, pos);
         ARCTICDB_TRACE(log::codec(), "Encoded encoded blocks to position {}", pos);
     }
@@ -298,6 +306,12 @@ namespace arcticdb {
 
         SegmentHeader segment_header{EncodingVersion::V2};
         segment_header.set_compacted(in_mem_seg.compacted());
+
+        if(in_mem_seg.has_index_descriptor()) {
+            google::protobuf::Any any;
+            util::pack_to_any(in_mem_seg.index_descriptor().proto(), any);
+            in_mem_seg.set_metadata(std::move(any));
+        }
 
         std::ptrdiff_t pos = 0;
         static auto block_to_header_ratio = ConfigsMap::instance()->get_int("Codec.EstimatedHeaderRatio", 75);
@@ -314,6 +328,8 @@ namespace arcticdb {
         encode_metadata<EncodingPolicyV2>(in_mem_seg, segment_header, codec_opts, *out_buffer, pos);
         write_magic<DescriptorMagic>(*out_buffer, pos);
         encode_field_descriptors(in_mem_seg, segment_header, codec_opts, *out_buffer, pos);
+        write_magic<IndexMagic>(*out_buffer, pos);
+        encode_index_descriptors(in_mem_seg, segment_header, codec_opts, *out_buffer, pos);
 
         EncodedFieldCollection encoded_fields(encoded_buffer_size, in_mem_seg.num_columns());
         ColumnEncoderV2 encoder;

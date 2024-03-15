@@ -11,7 +11,7 @@ std::pair<const uint8_t *, const uint8_t *> get_segment_begin_end(
     util::check(data != nullptr, "Got null data ptr from segment");
     const uint8_t *begin = data;
 
-    const auto fields_offset = hdr.get_offset(FieldOffset::COLUMN);
+    const auto fields_offset = hdr.footer_offset();
     const auto end = begin + fields_offset;
     return {begin, end};
 }

@@ -205,7 +205,7 @@ public:
     }
 
     static constexpr uint16_t field_mask(FieldOffset field_offset) {
-       return static_cast<uint16_t>(field_offset) << 1U;
+       return 1U << static_cast<uint16_t>(field_offset);
     }
 
     void set_field(FieldOffset field_offset) {

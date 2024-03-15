@@ -109,7 +109,7 @@ namespace arcticdb {
          */
         ARCTICDB_SAMPLE(EncodeSegment, 0)
         auto in_mem_seg = std::move(s);
-        SegmentHeader segment_header{EncodingVersion::V2};
+        SegmentHeader segment_header{EncodingVersion::V1};
         segment_header.set_compacted(in_mem_seg.compacted());
 
         std::ptrdiff_t pos = 0;

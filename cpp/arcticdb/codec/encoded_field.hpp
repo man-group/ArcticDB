@@ -166,6 +166,8 @@ struct EncodedFieldImpl : public EncodedField {
 
     EncodedFieldImpl() = default;
 
+    ARCTICDB_NO_MOVE_OR_COPY(EncodedFieldImpl)
+
     EncodedBlock *blocks() {
         return reinterpret_cast<EncodedBlock*>(&blocks_[0]);
     }

@@ -280,7 +280,7 @@ StreamDescriptor index_descriptor(StreamId stream_id, IndexType index_type, std:
 }
 
 template <typename IndexType, typename RangeType>
-StreamDescriptor stream_descriptor(const StreamId& stream_id, IndexType idx, RangeType fields) {
+StreamDescriptor stream_descriptor_from_range(const StreamId& stream_id, IndexType idx, RangeType fields) {
     StreamDescriptor output;
 
     output.set_id(stream_id);
@@ -299,7 +299,7 @@ StreamDescriptor stream_descriptor(const StreamId& stream_id, IndexType idx, Ran
 
 template <typename IndexType>
 StreamDescriptor stream_descriptor(StreamId stream_id, IndexType index_type, std::initializer_list<FieldRef> fields) {
-    return stream_descriptor(stream_id, index_type, fields);
+    return stream_descriptor_from_range(stream_id, index_type, fields);
 }
 
 inline DataType stream_id_data_type(const StreamId &stream_id) {
