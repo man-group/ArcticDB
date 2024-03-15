@@ -59,6 +59,8 @@ public:
 
     void clear_ref_keys();
 
+    std::optional<std::string> inspect_env_variable(std::string name);
+
 private:
     // TODO: Remove the shared_ptr and just keep the store.
     // The only reason we use a shared_ptr for the store is to be able to pass it to delete_all_keys_of_type.
