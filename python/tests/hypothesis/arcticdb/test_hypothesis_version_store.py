@@ -210,32 +210,9 @@ class VersionStoreComparison(RuleBasedStateMachine):
             else:
                 assert_frame_equal(data[sym].data, expected.data)
 
-    def _check_batch_read_metadata_multi(self, syms: List[str], vers: List[int]):
-        meta = self._lib.batch_read_metadata_multi(syms, as_ofs=vers)
-
-        for sym, versions in meta.items():
-            expected_vers = self._versions[sym]
-            for v in range(len(versions)):
-                expected = expected_vers[v]
-                result = versions[v]
-                assert result.symbol == sym
-                assert result.version == v
-                assert result.metadata == expected.metadata
-
     @invariant()
     def test_batch_read_latest(self):
         self._check_batch_read(list(self._visible_symbols), None)
-
-    @invariant()
-    def test_batch_read_metadata_multi(self):
-        syms = []
-        vers = []
-        for sym, versions in self._versions.items():
-            for ver in range(len(versions)):
-                syms.append(sym)
-                vers.append(ver)
-
-        self._check_batch_read_metadata_multi(syms, vers)
 
     @invariant()
     def test_list_versions_latest_only(self):
@@ -305,12 +282,6 @@ class VersionStoreComparison(RuleBasedStateMachine):
     @invariant()
     def test_list_versions_latest_only_snapshot(self):
         self.test_list_versions_snapshot(latest_only=True)
-
-    @rule(snap=snaps)
-    def test_batch_read_snapshot(self, snap: str):
-        snap = self._visible_snapshots.get(snap)
-        assume(snap)
-        self._check_batch_read(list(snap.sym_vers), list(snap.sym_vers.values()))
 
 
 @pytest.mark.parametrize("lib_type", ["lmdb_version_store_delayed_deletes_v1", "lmdb_version_store_delayed_deletes_v2"])

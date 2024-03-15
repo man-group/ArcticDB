@@ -81,7 +81,8 @@ void StreamVersionData::do_react(const pipelines::SnapshotVersionQuery &snapshot
 
 std::optional<AtomKey> get_specific_version_from_entry(
     const std::shared_ptr<VersionMapEntry>& version_map_entry,
-    const pipelines::SpecificVersionQuery& specific_version
+    const pipelines::SpecificVersionQuery& specific_version,
+    bool include_deleted = false
     ) {
     auto signed_version_id = specific_version.version_id_;
     VersionId version_id;
@@ -101,7 +102,7 @@ std::optional<AtomKey> get_specific_version_from_entry(
             return std::nullopt;
         }
     }
-    return find_index_key_for_version_id(version_id, version_map_entry);
+    return find_index_key_for_version_id(version_id, version_map_entry, include_deleted);
 }
 
 std::optional<AtomKey> get_version_map_entry_by_timestamp(
