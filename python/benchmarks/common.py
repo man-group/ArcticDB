@@ -37,6 +37,13 @@ def generate_random_floats_dataframe(num_rows, num_cols):
     return pd.DataFrame(data, columns=columns)
 
 
+def generate_random_floats_dataframe_with_index(num_rows, num_cols, freq="s", end_timestamp="1/1/2023"):
+    timestamps = pd.date_range(end=end_timestamp, periods=num_rows, freq=freq)
+    df = generate_random_floats_dataframe(num_rows, num_cols)
+    df.index = timestamps
+    return df
+
+
 def generate_benchmark_df(n, freq="min", end_timestamp="1/1/2023"):
     timestamps = pd.date_range(end=end_timestamp, periods=n, freq=freq)
     k = n // 10
