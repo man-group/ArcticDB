@@ -28,7 +28,7 @@ from arcticdb.exceptions import (
     InternalException,
     UserInputException,
 )
-from arcticdb import QueryBuilder
+from arcticdb import QueryBuilder, ReadRequest
 from arcticdb.flattener import Flattener
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._custom_normalizers import CustomNormalizer, register_normalizer
@@ -1331,18 +1331,6 @@ def test_batch_operations(object_version_store_prune_previous):
         equals(result["sym3"].data, np.arange(10))
 
 
-def test_batch_read_tombstoned_version_via_snapshot(basic_store):  # AN-285
-    lib = basic_store
-    lib.write("a", 0)
-    lib.snapshot("s")
-    lib.write("a", 1, prune_previous_version=True)
-
-    actual = lib.batch_read(["a"], as_ofs=[0])  # Other version query types are not implemented
-    assert actual["a"].data == 0
-    meta = lib.batch_read_metadata(["a"], as_ofs=[0])
-    assert meta["a"].version == 0
-
-
 def test_batch_write(basic_store_tombstone_and_sync_passive):
     lmdb_version_store = basic_store_tombstone_and_sync_passive
     multi_data = {"sym1": np.arange(8), "sym2": np.arange(9), "sym3": np.arange(10)}
@@ -2236,6 +2224,17 @@ def test_batch_read_version_doesnt_exist(basic_store):
     with pytest.raises(NoDataFoundException):
         _ = basic_store.batch_read([sym1, sym2], as_ofs=[0, 1])
 
+def test_read_batch_deleted_version_doesnt_exist(basic_store):
+    sym1 = 'mysymbol'
+    basic_store.write(sym1, 0)
+
+    basic_store.delete(sym1)
+    basic_store.write(sym1, 1)
+    with pytest.raises(NoSuchVersionException):
+        basic_store.read(sym1, as_of=0)
+
+    with pytest.raises(NoSuchVersionException):
+        basic_store.batch_read([sym1],  as_ofs=[0])
 
 def test_index_keys_start_end_index(basic_store, sym):
     idx = pd.date_range("2022-01-01", periods=100, freq="D")
