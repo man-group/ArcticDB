@@ -23,12 +23,14 @@ bool has_connection_to_ec2_imds(){
     }
     CURLcode res;
 
+    // We allow overriding the default 169.254.169.254 endpoint for tests.
+    auto imds_endpoint = ConfigsMap::instance()->get_string("EC2.TestIMDSEndpointOverride", "http://169.254.169.254");
     // Suggested approach by aws docs for IMDSv2 (https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instance-identity-documents.html):
     // curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"
     // The below libcurl options should mimic the command above.
     curl_slist *headers = nullptr;
     headers = curl_slist_append(headers, "X-aws-ec2-metadata-token-ttl-seconds: 21600");
-    curl_easy_setopt(curl, CURLOPT_URL, "http://169.254.169.254/latest/api/token");
+    curl_easy_setopt(curl, CURLOPT_URL, fmt::format("{}/latest/api/token", imds_endpoint).c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PUT");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
@@ -49,7 +51,7 @@ bool has_connection_to_ec2_imds(){
     // If attempting to connect via IMDSv2 fails we want to attempt a connection to IMDSv1:
     // curl http://169.254.169.254/latest/dynamic/instance-identity/document
     curl_easy_reset(curl);
-    curl_easy_setopt(curl, CURLOPT_URL, "http://169.254.169.254/latest/dynamic/instance-identity/document");
+    curl_easy_setopt(curl, CURLOPT_URL, fmt::format("{}/latest/dynamic/instance-identity/document", imds_endpoint).c_str());
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, timeout);
 
