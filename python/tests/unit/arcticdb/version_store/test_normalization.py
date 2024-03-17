@@ -7,7 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import datetime
 from collections import namedtuple
-
+from unittest.mock import patch
 import numpy as np
 import pandas as pd
 import dateutil as du
@@ -71,6 +71,13 @@ def test_user_meta_and_msg_pack(d):
     n = normalize_metadata(d)
     D = denormalize_user_metadata(n)
     assert d == D
+
+
+@patch("arcticdb.version_store._normalization.log")
+def test_warns_on_large_meta(log):
+    meta = {"a": "x" * 9 * 1024 * 1024}  # larger than 8MB
+    normalize_metadata(meta)
+    assert "User defined metadata is above warning size" in log.warn.call_args[0][0]
 
 
 def test_fails_humongous_meta():
