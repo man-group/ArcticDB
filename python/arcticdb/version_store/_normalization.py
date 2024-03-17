@@ -961,15 +961,15 @@ class MsgPackNormalizer(Normalizer):
 
     def _ext_hook(self, code, data):
         if code == MsgPackSerialization.PD_TIMESTAMP:
-            data = unpackb(data)
+            data = unpackb(data, raw=False)
             return pd.Timestamp(data[0], tz=data[1]) if data[1] is not None else pd.Timestamp(data[0])
 
         if code == MsgPackSerialization.PY_DATETIME:
-            data = unpackb(data)
+            data = unpackb(data, raw=False)
             return _from_tz_timestamp(data[0], data[1])
 
         if code == MsgPackSerialization.PY_TIMEDELTA:
-            data = unpackb(data)
+            data = unpackb(data, raw=False)
             return pd.Timedelta(data).to_pytimedelta()
 
         if code == MsgPackSerialization.PY_PICKLE_2:
