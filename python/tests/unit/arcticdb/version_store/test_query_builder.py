@@ -11,6 +11,7 @@ import pytest
 
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.util.test import assert_frame_equal
+from arcticdb_ext.exceptions import InternalException
 
 
 def test_reuse_querybuilder(lmdb_version_store_tiny_segment):
@@ -403,3 +404,23 @@ def test_querybuilder_pickling():
     import pickle
 
     assert pickle.loads(pickle.dumps(q)) == q
+
+
+def test_filter_sparse(lmdb_version_store):
+    # Remove this test and replace with more extensive tests once this issue is fixed:
+    # https://github.com/man-group/ArcticDB/issues/1404
+    lib = lmdb_version_store
+    sym = "test_filter_sparse"
+    df = pd.DataFrame({"col": [0.0, np.nan, 0.0]}, index=pd.date_range("2024-01-01", periods=3))
+    lib.write(sym, df, sparsify_floats=True)
+
+    # These 2 queries exercise different code paths
+    q = QueryBuilder()
+    q = q[q["col"].isnull()]
+    with pytest.raises(InternalException):
+        lib.read(sym, query_builder=q)
+
+    q = QueryBuilder()
+    q = q[q["col"] == np.float64(0.0)]
+    with pytest.raises(InternalException):
+        lib.read(sym, query_builder=q)
