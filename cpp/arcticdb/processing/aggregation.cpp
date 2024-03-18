@@ -517,9 +517,9 @@ SegmentInMemory FirstAggregatorData::finalize(const ColumnName& output_column_na
             if constexpr(is_sequence_type(InputType::DataTypeTag::data_type)) {
                 auto col_ptr = reinterpret_cast<RawType*>(col->ptr());
                 for (auto i = 0u; i < unique_values; ++i, ++col_ptr) {
-                    auto last_el = --str_offset_mapping_.upper_bound(std::make_pair(*col_ptr, i));
-                    if(last_el != str_offset_mapping_.end()) {
-                        *col_ptr = last_el->second;
+                    auto first_el = str_offset_mapping_.lower_bound(std::make_pair(*col_ptr, i));
+                    if(first_el != str_offset_mapping_.end()) {
+                        *col_ptr = first_el->second;
                     }
                 }
             }
@@ -593,9 +593,9 @@ SegmentInMemory LastAggregatorData::finalize(const ColumnName& output_column_nam
             if constexpr(is_sequence_type(InputType::DataTypeTag::data_type)) {
                 auto col_ptr = reinterpret_cast<RawType*>(col->ptr());
                 for (auto i = 0u; i < unique_values; ++i, ++col_ptr) {
-                    auto first_el = str_offset_mapping_.lower_bound(std::make_pair(*col_ptr, i));
-                    if(first_el != str_offset_mapping_.end()) {
-                        *col_ptr = first_el->second;
+                    auto last_el = --str_offset_mapping_.upper_bound(std::make_pair(*col_ptr, i));
+                    if(last_el != str_offset_mapping_.end()) {
+                        *col_ptr = last_el->second;
                     }
                 }
             }
