@@ -5,6 +5,8 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
+#include <variant>
+#include <cstdint>
 #include <arcticdb/version/symbol_list.hpp>
 #include <arcticdb/version/version_map_batch_methods.hpp>
 #include <arcticdb/entity/atom_key.hpp>
