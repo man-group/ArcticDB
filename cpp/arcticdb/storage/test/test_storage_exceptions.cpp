@@ -321,9 +321,9 @@ TEST_F(LMDBStorageTestBase, RemoveLibPath) {
     auto storage = factory.create();
     auto path = factory.get_lib_path();
 
-    storage->fast_delete();
+    storage->close();
     ASSERT_FALSE(fs::exists(path));
-    // Once we run fast_delete, any other operations should throw UnexpectedLMDBErrorException as lmdb env is closed
+    // Once we call close, any other operations should throw UnexpectedLMDBErrorException as lmdb env is closed
     ASSERT_THROW({
                      write_in_store(*storage, "sym1");
                  },  UnexpectedLMDBErrorException);

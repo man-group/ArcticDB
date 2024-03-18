@@ -217,6 +217,48 @@ void LmdbStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts opts)
         throw KeyNotFoundException(Composite<VariantKey>(std::move(failed_deletes)));
 }
 
+bool LmdbStorage::do_fast_delete() {
+    std::lock_guard<std::mutex> lock{*write_mutex_};
+    // bool is probably not the best return type here but it does help prevent the insane boilerplate for
+    // an additional function that checks whether this is supported (like the prefix matching)
+    auto dtxn = ::lmdb::txn::begin(env());
+    foreach_key_type([&] (KeyType key_type) {
+        if (key_type == KeyType::TOMBSTONE) {
+            // TOMBSTONE and LOCK both format to code 'x' - do not try to drop both
+            return;
+        }
+        auto db_name = fmt::format("{}", key_type);
+        ARCTICDB_SUBSAMPLE(LmdbStorageOpenDb, 0)
+        ARCTICDB_DEBUG(log::storage(), "dropping {}", db_name);
+        ::lmdb::dbi& dbi = dbi_by_key_type_.at(db_name);
+        try {
+            ::lmdb::dbi_drop(dtxn, dbi);
+        } catch (const ::lmdb::error& ex) {
+            raise_lmdb_exception(ex);
+        }
+    });
+
+    dtxn.commit();
+    return true;
+}
+
+void LmdbStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix) {
+    ARCTICDB_SAMPLE(LmdbStorageItType, 0);
+    auto txn = ::lmdb::txn::begin(env(), nullptr, MDB_RDONLY); // scoped abort on
+    std::string type_db = fmt::format("{}", key_type);
+    ::lmdb::dbi& dbi = dbi_by_key_type_.at(type_db);
+
+    try {
+        auto keys = lmdb_client_->list(type_db, prefix, txn, dbi, key_type);
+        for (auto &k: keys) {
+            ARCTICDB_SUBSAMPLE(LmdbStorageVisitKey, 0)
+            visitor(std::move(k));
+        }
+    } catch (const ::lmdb::error& ex) {
+        raise_lmdb_exception(ex);
+    }
+}
+
 void remove_db_files(const fs::path& lib_path) {
     std::vector<std::string> files = {"lock.mdb", "data.mdb"};
 
@@ -249,49 +291,9 @@ void remove_db_files(const fs::path& lib_path) {
     }
 }
 
-bool LmdbStorage::do_fast_delete() {
-    std::lock_guard<std::mutex> lock{*write_mutex_};
-    // bool is probably not the best return type here but it does help prevent the insane boilerplate for
-    // an additional function that checks whether this is supported (like the prefix matching)
-    auto dtxn = ::lmdb::txn::begin(env());
-    foreach_key_type([&] (KeyType key_type) {
-        if (key_type == KeyType::TOMBSTONE) {
-            // TOMBSTONE and LOCK both format to code 'x' - do not try to drop both
-            return;
-        }
-        auto db_name = fmt::format("{}", key_type);
-        ARCTICDB_SUBSAMPLE(LmdbStorageOpenDb, 0)
-        ARCTICDB_DEBUG(log::storage(), "dropping {}", db_name);
-        ::lmdb::dbi& dbi = dbi_by_key_type_.at(db_name);
-        try {
-            ::lmdb::dbi_drop(dtxn, dbi);
-        } catch (const ::lmdb::error& ex) {
-            raise_lmdb_exception(ex);
-        }
-    });
-
-    dtxn.commit();
-
+void LmdbStorage::close() {
     env_.reset();
     remove_db_files(lib_dir_);
-    return true;
-}
-
-void LmdbStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix) {
-    ARCTICDB_SAMPLE(LmdbStorageItType, 0);
-    auto txn = ::lmdb::txn::begin(env(), nullptr, MDB_RDONLY); // scoped abort on
-    std::string type_db = fmt::format("{}", key_type);
-    ::lmdb::dbi& dbi = dbi_by_key_type_.at(type_db);
-
-    try {
-        auto keys = lmdb_client_->list(type_db, prefix, txn, dbi, key_type);
-        for (auto &k: keys) {
-            ARCTICDB_SUBSAMPLE(LmdbStorageVisitKey, 0)
-            visitor(std::move(k));
-        }
-    } catch (const ::lmdb::error& ex) {
-        raise_lmdb_exception(ex);
-    }
 }
 
 

@@ -59,6 +59,10 @@ class Storages {
         return primary().fast_delete();
     }
 
+    void close() {
+        primary().close();
+    }
+
     bool key_exists(const VariantKey& key) {
         return primary().key_exists(key);
     }

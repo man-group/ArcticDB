@@ -122,6 +122,10 @@ class Library {
         return storages_->fast_delete();
     }
 
+    void close() {
+        storages_->close();
+    }
+
     bool key_exists(const VariantKey& key) {
         return storages_->key_exists(key);
     }
