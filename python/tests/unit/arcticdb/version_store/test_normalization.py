@@ -66,6 +66,29 @@ def test_msg_pack(d):
     assert d == D
 
 
+def test_msg_pack_legacy_1():
+    # test that we can read old data
+    # serialised data created with Python 3.6, msgpack 0.6.2, pandas 0.25.3
+    # this was before string and bytes types were seperated in msgpack
+    norm = test_msgpack_normalizer
+    packed = b'\x82\xa1a\xc7\x0b \x92\xcf\x15\t\x05:\xdfT\xc8\x00\xc0\xa1b\xc7\x1b \x92\xcf\x14\x9e\xc2\x84+~ \x00\xb0America/New_York'
+    data = norm._msgpack_unpackb(packed)
+    assert data == {'a': pd.Timestamp('2018-01-12 09:15:00'), 'b': pd.Timestamp('2017-01-31 00:00:00-0500', tz='America/New_York')}
+
+
+def test_msg_pack_legacy_2():
+    # test that we can read old data
+    # serialised data created with Python 3.6, msgpack 0.6.2, pandas 0.25.3
+    # this was before string and bytes types were seperated in msgpack
+    norm = test_msgpack_normalizer
+    packed = b'\xc7\x1b!\x92\xcf\x15\x93w\xb1\xd2\xa6\x8f\xe8\xb0America/New_York'
+    dt = datetime.datetime(2019, 4, 8, 10, 5, 2, 1)
+    nytz = pytz.timezone("America/New_York")
+    loc_dt = nytz.localize(dt)
+    data = norm._msgpack_unpackb(packed)
+    assert data == loc_dt
+
+
 @param_dict("d", params)
 def test_user_meta_and_msg_pack(d):
     n = normalize_metadata(d)
