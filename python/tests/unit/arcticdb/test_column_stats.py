@@ -384,8 +384,9 @@ def test_column_stats_dynamic_schema_types_changing(lmdb_version_store_tiny_segm
         {
             "int_widening": np.arange(0, 2, dtype=np.uint8),
             "int_narrowing": np.arange(-1002, -1000, dtype=np.int16),
-            "unsigned_to_signed_int": np.arange(1000, 1002, dtype=np.uint16),
-            "signed_to_unsigned_int": np.arange(-1002, -1000, dtype=np.int32),
+            "unsigned_to_wider_signed_int": np.arange(1000, 1002, dtype=np.uint16),
+            "wider_signed_to_unsigned_int": np.arange(-1002, -1000, dtype=np.int32),
+            "unsigned_to_signed_int_same_width": np.arange(1000, 1002, dtype=np.uint16),
             "int_to_float": np.arange(1000, 1002, dtype=np.uint16),
             "float_to_int": [1.5, 2.5],
         },
@@ -396,8 +397,9 @@ def test_column_stats_dynamic_schema_types_changing(lmdb_version_store_tiny_segm
         {
             "int_widening": np.arange(1000, 1002, dtype=np.uint16),
             "int_narrowing": np.arange(-2, 0, dtype=np.int8),
-            "unsigned_to_signed_int": np.arange(-1002, -1000, dtype=np.int32),
-            "signed_to_unsigned_int": np.arange(1000, 1002, dtype=np.uint16),
+            "unsigned_to_wider_signed_int": np.arange(-1002, -1000, dtype=np.int32),
+            "wider_signed_to_unsigned_int": np.arange(1000, 1002, dtype=np.uint16),
+            "unsigned_to_signed_int_same_width": np.arange(-1002, -1000, dtype=np.int16),
             "int_to_float": [1.5, 2.5],
             "float_to_int": np.arange(1000, 1002, dtype=np.uint16),
         },
@@ -420,22 +422,31 @@ def test_column_stats_dynamic_schema_types_changing(lmdb_version_store_tiny_segm
     expected_column_stats["v1.0_MIN(int_narrowing)"] = [df0["int_narrowing"].min(), df1["int_narrowing"].min()]
     expected_column_stats["v1.0_MAX(int_narrowing)"] = [df0["int_narrowing"].max(), df1["int_narrowing"].max()]
 
-    expected_column_stats["v1.0_MIN(unsigned_to_signed_int)"] = [
-        df0["unsigned_to_signed_int"].min(),
-        df1["unsigned_to_signed_int"].min(),
+    expected_column_stats["v1.0_MIN(unsigned_to_wider_signed_int)"] = [
+        df0["unsigned_to_wider_signed_int"].min(),
+        df1["unsigned_to_wider_signed_int"].min(),
     ]
-    expected_column_stats["v1.0_MAX(unsigned_to_signed_int)"] = [
-        df0["unsigned_to_signed_int"].max(),
-        df1["unsigned_to_signed_int"].max(),
+    expected_column_stats["v1.0_MAX(unsigned_to_wider_signed_int)"] = [
+        df0["unsigned_to_wider_signed_int"].max(),
+        df1["unsigned_to_wider_signed_int"].max(),
     ]
 
-    expected_column_stats["v1.0_MIN(signed_to_unsigned_int)"] = [
-        df0["signed_to_unsigned_int"].min(),
-        df1["signed_to_unsigned_int"].min(),
+    expected_column_stats["v1.0_MIN(wider_signed_to_unsigned_int)"] = [
+        df0["wider_signed_to_unsigned_int"].min(),
+        df1["wider_signed_to_unsigned_int"].min(),
     ]
-    expected_column_stats["v1.0_MAX(signed_to_unsigned_int)"] = [
-        df0["signed_to_unsigned_int"].max(),
-        df1["signed_to_unsigned_int"].max(),
+    expected_column_stats["v1.0_MAX(wider_signed_to_unsigned_int)"] = [
+        df0["wider_signed_to_unsigned_int"].max(),
+        df1["wider_signed_to_unsigned_int"].max(),
+    ]
+
+    expected_column_stats["v1.0_MIN(unsigned_to_signed_int_same_width)"] = [
+        df0["unsigned_to_signed_int_same_width"].min(),
+        df1["unsigned_to_signed_int_same_width"].min(),
+    ]
+    expected_column_stats["v1.0_MAX(unsigned_to_signed_int_same_width)"] = [
+        df0["unsigned_to_signed_int_same_width"].max(),
+        df1["unsigned_to_signed_int_same_width"].max(),
     ]
 
     expected_column_stats["v1.0_MIN(int_to_float)"] = [df0["int_to_float"].min(), df1["int_to_float"].min()]
@@ -446,8 +457,9 @@ def test_column_stats_dynamic_schema_types_changing(lmdb_version_store_tiny_segm
     column_stats_dict = {
         "int_widening": {"MINMAX"},
         "int_narrowing": {"MINMAX"},
-        "unsigned_to_signed_int": {"MINMAX"},
-        "signed_to_unsigned_int": {"MINMAX"},
+        "unsigned_to_wider_signed_int": {"MINMAX"},
+        "wider_signed_to_unsigned_int": {"MINMAX"},
+        "unsigned_to_signed_int_same_width": {"MINMAX"},
         "int_to_float": {"MINMAX"},
         "float_to_int": {"MINMAX"},
     }
@@ -462,11 +474,14 @@ def test_column_stats_dynamic_schema_types_changing(lmdb_version_store_tiny_segm
     assert column_stats.dtypes["v1.0_MIN(int_narrowing)"] == np.int16
     assert column_stats.dtypes["v1.0_MAX(int_narrowing)"] == np.int16
 
-    assert column_stats.dtypes["v1.0_MIN(unsigned_to_signed_int)"] == np.int32
-    assert column_stats.dtypes["v1.0_MAX(unsigned_to_signed_int)"] == np.int32
+    assert column_stats.dtypes["v1.0_MIN(unsigned_to_wider_signed_int)"] == np.int32
+    assert column_stats.dtypes["v1.0_MAX(unsigned_to_wider_signed_int)"] == np.int32
 
-    assert column_stats.dtypes["v1.0_MIN(signed_to_unsigned_int)"] == np.int32
-    assert column_stats.dtypes["v1.0_MAX(signed_to_unsigned_int)"] == np.int32
+    assert column_stats.dtypes["v1.0_MIN(wider_signed_to_unsigned_int)"] == np.int32
+    assert column_stats.dtypes["v1.0_MAX(wider_signed_to_unsigned_int)"] == np.int32
+
+    assert column_stats.dtypes["v1.0_MIN(unsigned_to_signed_int_same_width)"] == np.int32
+    assert column_stats.dtypes["v1.0_MAX(unsigned_to_signed_int_same_width)"] == np.int32
 
     assert column_stats.dtypes["v1.0_MIN(int_to_float)"] == np.float64
     assert column_stats.dtypes["v1.0_MAX(int_to_float)"] == np.float64

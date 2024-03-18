@@ -21,9 +21,9 @@ def test_changing_numeric_type(version_store_factory, dynamic_schema):
     lib = version_store_factory(dynamic_schema=dynamic_schema)
     sym_append = "test_changing_numeric_type_append"
     sym_update = "test_changing_numeric_type_update"
-    df_write = pd.DataFrame({"col": np.arange(3, dtype=np.uint8)}, index=pd.date_range("2024-01-01", periods=3))
-    df_append = pd.DataFrame({"col": np.arange(1, dtype=np.uint16)}, index=pd.date_range("2024-01-04", periods=1))
-    df_update = pd.DataFrame({"col": np.arange(1, dtype=np.uint16)}, index=pd.date_range("2024-01-02", periods=1))
+    df_write = pd.DataFrame({"col": np.arange(3, dtype=np.uint32)}, index=pd.date_range("2024-01-01", periods=3))
+    df_append = pd.DataFrame({"col": np.arange(1, dtype=np.int32)}, index=pd.date_range("2024-01-04", periods=1))
+    df_update = pd.DataFrame({"col": np.arange(1, dtype=np.int32)}, index=pd.date_range("2024-01-02", periods=1))
 
     lib.write(sym_append, df_write)
     lib.write(sym_update, df_write)
@@ -41,7 +41,7 @@ def test_changing_numeric_type(version_store_factory, dynamic_schema):
         received_append = lib.read(sym_append).data
         assert_frame_equal(expected_append, received_append)
 
-        expected_update = pd.DataFrame({"col": np.array([0, 0, 2], dtype=np.uint16)}, index=pd.date_range("2024-01-01", periods=3))
+        expected_update = pd.DataFrame({"col": np.array([0, 0, 2], dtype=np.int64)}, index=pd.date_range("2024-01-01", periods=3))
         received_update = lib.read(sym_update).data
         assert_frame_equal(expected_update, received_update)
 
