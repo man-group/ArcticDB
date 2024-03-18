@@ -148,3 +148,22 @@ TEST(HasValidTypePromotion, EverythingToEmpty) {
         }
     }
 }
+
+TEST(HasValidCommonType, UintInt) {
+    using namespace arcticdb;
+    using namespace arcticdb::entity;
+    TypeDescriptor uint32(ValueType::UINT, SizeBits::S32, Dimension::Dim0);
+    TypeDescriptor uint64(ValueType::UINT, SizeBits::S64, Dimension::Dim0);
+    TypeDescriptor int16(ValueType::INT, SizeBits::S16, Dimension::Dim0);
+    TypeDescriptor int32(ValueType::INT, SizeBits::S32, Dimension::Dim0);
+    TypeDescriptor int64(ValueType::INT, SizeBits::S64, Dimension::Dim0);
+    ASSERT_EQ(has_valid_common_type(uint32, int16), int64);
+    ASSERT_EQ(has_valid_common_type(uint32, int32), int64);
+    ASSERT_EQ(has_valid_common_type(uint32, int64), int64);
+    EXPECT_FALSE(has_valid_common_type(uint64, int64));
+    // has_valid_common_type should be symmetric, these assertions are as above with the arguments reversed
+    ASSERT_EQ(has_valid_common_type(int16, uint32), int64);
+    ASSERT_EQ(has_valid_common_type(int32, uint32), int64);
+    ASSERT_EQ(has_valid_common_type(int64, uint32), int64);
+    EXPECT_FALSE(has_valid_common_type(int64, uint64));
+}
