@@ -93,7 +93,7 @@ namespace arcticdb {
             return *this;
         }
 
-        void apply_filter(const util::BitSet& bitset, PipelineOptimisation optimisation);
+        void apply_filter(util::BitSet&& bitset, PipelineOptimisation optimisation);
 
         void truncate(size_t start_row, size_t end_row);
 
