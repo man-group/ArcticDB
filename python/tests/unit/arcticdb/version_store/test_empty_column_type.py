@@ -682,21 +682,23 @@ class TestAppendAndUpdateWithEmptyToColumnDoesNothing:
         self.assert_append_empty_does_nothing(df, lmdb_version_store_static_and_dynamic, empty_dataframe)
         self.assert_update_empty_does_nothing(df, lmdb_version_store_static_and_dynamic, empty_dataframe)
 
-    def test_empty(self, lmdb_version_store_static_and_dynamic, index, empty_dataframe):
+    @pytest.mark.parametrize("initial_empty_index", [pd.RangeIndex(0,0), pd.DatetimeIndex([])])
+    def test_empty(self, lmdb_version_store_static_and_dynamic, initial_empty_index, empty_dataframe):
+        df = pd.DataFrame({"col": []}, index=initial_empty_index)
         lmdb_version_store_static_and_dynamic.write("sym", df)
         self.assert_append_empty_does_nothing(
-            lmdb_version_store_static_and_dynamic.read("sym"),
+            lmdb_version_store_static_and_dynamic.read("sym").data,
             lmdb_version_store_static_and_dynamic,
             empty_dataframe
         )
         self.assert_update_empty_does_nothing(
-            lmdb_version_store_static_and_dynamic.read("sym"),
+            lmdb_version_store_static_and_dynamic.read("sym").data,
             lmdb_version_store_static_and_dynamic,
             empty_dataframe
         )
 
     def test_string(self, lmdb_version_store_static_and_dynamic, index, empty_dataframe):
-        df = pd.DataFrame({"col": ["shord", 20*"long", None]}, index=index)
+        df = pd.DataFrame({"col": ["short", 20*"long", None]}, index=index)
         lmdb_version_store_static_and_dynamic.write("sym", df)
         self.assert_append_empty_does_nothing(df, lmdb_version_store_static_and_dynamic, empty_dataframe)
         self.assert_update_empty_does_nothing(df, lmdb_version_store_static_and_dynamic, empty_dataframe)
