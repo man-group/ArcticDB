@@ -144,7 +144,7 @@ SegmentHeader deserialize_segment_header_from_proto(const arcticdb::proto::encod
     return output;
 }
 
-void serialize_segment_header_to_proto(uint8_t* dst, const SegmentHeader& hdr) {
+arcticdb::proto::encoding::SegmentHeader serialize_segment_header_to_proto(const SegmentHeader& hdr) {
     arcticdb::proto::encoding::SegmentHeader segment_header;
     if(hdr.has_metadata_field())
         proto_from_encoded_field(hdr.metadata_field(), *segment_header.mutable_metadata_field());
@@ -161,9 +161,10 @@ void serialize_segment_header_to_proto(uint8_t* dst, const SegmentHeader& hdr) {
     if(hdr.has_column_fields())
         proto_from_encoded_field(hdr.metadata_field(), *segment_header.mutable_metadata_field());
 
-    const auto hdr_size = segment_header.ByteSizeLong();
-    google::protobuf::io::ArrayOutputStream aos(dst + FIXED_HEADER_SIZE, static_cast<int>(hdr_size));
-    segment_header.SerializeToZeroCopyStream(&aos);
+    segment_header.set_compacted(hdr.compacted());
+    segment_header.set_encoding_version(static_cast<uint16_t>(hdr.encoding_version()));
+
+    return segment_header;
 }
 
 size_t calc_proto_encoded_blocks_size(const arcticdb::proto::encoding::SegmentHeader& hdr) {

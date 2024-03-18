@@ -143,15 +143,7 @@ S3Result<std::monostate> RealS3Client::put_object(
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Set s3 key {}", request.GetKey().c_str());
 
     std::shared_ptr<Buffer> tmp;
-    auto hdr_size = segment.segment_header_bytes_size();
-    auto [dst, write_size] = segment.try_internal_write(tmp, hdr_size);
-    util::check(arcticdb::FIXED_HEADER_SIZE + hdr_size + segment.buffer().bytes() <=
-                write_size,
-                "Size disparity, fixed header size {} + variable header size {} + buffer size {}  >= total size {}",
-                arcticdb::FIXED_HEADER_SIZE,
-                hdr_size,
-                segment.buffer().bytes(),
-                write_size);
+    auto [dst, write_size] = segment.serialize_header(tmp);
     auto body = std::make_shared<boost::interprocess::bufferstream>(
             reinterpret_cast<char *>(dst), write_size);
     util::check(body->good(), "Overflow of bufferstream with size {}", write_size);

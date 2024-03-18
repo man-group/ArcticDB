@@ -47,7 +47,6 @@ SegmentCompressedSize compressed(const SegmentHeader &seg_hdr) {
     if (seg_hdr.has_string_pool_field())
         string_pool_size = encoding_sizes::ndarray_field_compressed_size(seg_hdr.string_pool_field().ndarray());
 
-    util::check(seg_hdr.encoding_version() == EncodingVersion::V2, "Unexpected version 1 encoding in version 2 header");
     const auto buffer_size = seg_hdr.footer_offset() + sizeof(EncodedMagic) + encoding_sizes::ndarray_field_compressed_size(seg_hdr.column_fields().ndarray());
     return {string_pool_size, buffer_size, seg_hdr.footer_offset()};
 }
@@ -228,31 +227,66 @@ Segment Segment::from_buffer(const std::shared_ptr<Buffer>& buffer) {
 
 }
 
-void Segment::write_header(uint8_t* dst, size_t hdr_size) const {
+void Segment::write_proto_header(uint8_t* dst, arcticdb::proto::encoding::SegmentHeader header, size_t hdr_size) const {
     FixedHeader hdr = {MAGIC_NUMBER, HEADER_VERSION_V1, std::uint32_t(hdr_size)};
     write_fixed_header(dst, hdr);
-    if(!header_.has_metadata_field())
-        ARCTICDB_DEBUG(log::codec(), "Header has no metadata field");
+
+    google::protobuf::io::ArrayOutputStream aos(dst + FIXED_HEADER_SIZE, static_cast<int>(hdr_size));
+    header.SerializeToZeroCopyStream(&aos);
 }
 
-std::pair<uint8_t*, size_t> Segment::try_internal_write(std::shared_ptr<Buffer>& tmp, size_t hdr_size) {
+std::pair<uint8_t*, size_t> Segment::serialize_header_v2(std::shared_ptr<Buffer>&) {
+    const auto header_bytes = header_.bytes();
+    util::check(header_bytes == buffer_.preamble_bytes(), "Expected v2 header of size {} to fit exactly into buffer preamble of size {}", header_.bytes(), buffer_.preamble_bytes());
+    const auto &buffer = buffer_.get_owning_buffer();
+    header_.serialize_to_bytes(buffer->preamble());
+    return std::make_pair(buffer->preamble(), total_segment_size(header_bytes));
+}
+
+std::pair<uint8_t*, size_t> Segment::serialize_header_v1(std::shared_ptr<Buffer>& tmp) {
+    auto proto_header = serialize_segment_header_to_proto(header_);
+    const auto hdr_size = proto_header.ByteSizeLong();
     auto total_hdr_size = hdr_size + FIXED_HEADER_SIZE;
-    if(buffer_.is_owning() && buffer_.preamble_bytes() >= total_hdr_size) {
-        const auto& buffer = buffer_.get_owning_buffer();
+
+    if (buffer_.is_owning() && buffer_.preamble_bytes() >= total_hdr_size) {
+        const auto &buffer = buffer_.get_owning_buffer();
         auto base_ptr = buffer->preamble() + (buffer->preamble_bytes() - total_hdr_size);
-        util::check(base_ptr + total_hdr_size == buffer->data(), "Expected base ptr to align with data ptr, {} != {}", fmt::ptr(base_ptr + total_hdr_size), fmt::ptr(buffer->data()));
-        ARCTICDB_TRACE(log::codec(), "Buffer contents before header write: {}", dump_bytes(buffer->data(), buffer->bytes(), 100u));
-        write_header(base_ptr, hdr_size);
-        ARCTICDB_TRACE(log::storage(), "Header fits in internal buffer {:x} with {} bytes space: {}", uintptr_t (base_ptr), buffer->preamble_bytes() - total_hdr_size, dump_bytes(buffer->data(), buffer->bytes(), 100u));
+        util::check(base_ptr + total_hdr_size == buffer->data(),
+                    "Expected base ptr to align with data ptr, {} != {}",
+                    fmt::ptr(base_ptr + total_hdr_size),
+                    fmt::ptr(buffer->data()));
+        ARCTICDB_TRACE(log::codec(),
+                       "Buffer contents before header write: {}",
+                       dump_bytes(buffer->data(), buffer->bytes(), 100u));
+        write_proto_header(base_ptr, proto_header, hdr_size);
+        ARCTICDB_TRACE(log::storage(),
+                       "Header fits in internal buffer {:x} with {} bytes space: {}",
+                       uintptr_t (base_ptr),
+                       buffer->preamble_bytes() - total_hdr_size,
+                       dump_bytes(buffer->data(), buffer->bytes(), 100u));
         return std::make_pair(base_ptr, total_segment_size(hdr_size));
-    }
-    else {
+    } else {
         tmp = std::make_shared<Buffer>();
-        ARCTICDB_DEBUG(log::storage(), "Header doesn't fit in internal buffer, needed {} bytes but had {}, writing to temp buffer at {:x}", hdr_size, buffer_.preamble_bytes(), uintptr_t(tmp->data()));
+        ARCTICDB_DEBUG(log::storage(),
+                       "Header doesn't fit in internal buffer, needed {} bytes but had {}, writing to temp buffer at {:x}",
+                       hdr_size,
+                       buffer_.preamble_bytes(),
+                       uintptr_t(tmp->data()));
         tmp->ensure(total_segment_size(hdr_size));
-        write_to(tmp->preamble(), hdr_size);
+        auto* dst = tmp->preamble();
+        write_proto_header(dst, proto_header, hdr_size);
+        std::memcpy(dst + FIXED_HEADER_SIZE + hdr_size,
+                    buffer().data(),
+                    buffer().bytes());
         return std::make_pair(tmp->preamble(), total_segment_size(hdr_size));
     }
+}
+
+std::pair<uint8_t*, size_t> Segment::serialize_header(std::shared_ptr<Buffer>& tmp) {
+    if (header_.encoding_version() == EncodingVersion::V1)
+        return serialize_header_v1(tmp);
+    else
+        return serialize_header_v2(tmp);
 }
 
 [[nodiscard]] std::shared_ptr<FieldCollection> Segment::fields_ptr() const {
@@ -270,7 +304,14 @@ std::pair<uint8_t*, size_t> Segment::try_internal_write(std::shared_ptr<Buffer>&
 void Segment::write_to(std::uint8_t* dst, std::size_t hdr_sz) {
     ARCTICDB_SAMPLE(SegmentWriteToStorage, RMTSF_Aggregate)
     ARCTICDB_SUBSAMPLE(SegmentWriteHeader, RMTSF_Aggregate)
-    write_header(dst, hdr_sz);
+
+    if(header_.encoding_version() == EncodingVersion::V1) {
+        auto proto_header = serialize_segment_header_to_proto(header_);
+        const auto hdr_size = proto_header.ByteSizeLong();
+        auto total_hdr_size = hdr_size + FIXED_HEADER_SIZE;
+        write_proto_header(dst, proto_header, hdr_sz);
+    }
+
     ARCTICDB_SUBSAMPLE(SegmentWriteBody, RMTSF_Aggregate)
     ARCTICDB_DEBUG(log::codec(), "Writing {} bytes to body at offset {}",
                        buffer().bytes(),

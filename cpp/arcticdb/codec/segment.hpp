@@ -109,9 +109,9 @@ class Segment {
 
     void write_to(std::uint8_t *dst, std::size_t hdr_sz);
 
-    std::pair<uint8_t*, size_t> try_internal_write(std::shared_ptr<Buffer>& tmp, size_t hdr_size);
+    std::pair<uint8_t*, size_t> serialize_header(std::shared_ptr<Buffer>& tmp);
 
-    void write_header(uint8_t* dst, size_t hdr_size) const;
+    void write_proto_header(uint8_t* dst, arcticdb::proto::encoding::SegmentHeader header, size_t hdr_size) const;
 
     [[nodiscard]] std::size_t total_segment_size() const {
         return total_segment_size(segment_header_bytes_size());
@@ -184,6 +184,9 @@ class Segment {
     }
 
   private:
+    std::pair<uint8_t*, size_t> serialize_header_v1(std::shared_ptr<Buffer>& tmp);
+    std::pair<uint8_t*, size_t> serialize_header_v2(std::shared_ptr<Buffer>& tmp);
+
     SegmentHeader header_;
     VariantBuffer buffer_;
     StreamDescriptor desc_;

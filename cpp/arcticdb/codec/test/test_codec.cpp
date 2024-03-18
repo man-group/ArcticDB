@@ -469,7 +469,9 @@ bool TransactionalThing::destroyed = false;
 
 TEST(Segment, KeepAlive) {
     {
+        auto buf = std::make_shared<Buffer>();
         Segment segment;
+        segment.set_buffer(std::move(buf));
         segment.set_keepalive(std::any(TransactionalThing{}));
 
         auto seg1 = std::move(segment);
@@ -477,7 +479,7 @@ TEST(Segment, KeepAlive) {
         auto seg3 = seg2.clone();
         Segment seg4{seg3.clone()};
 
-        std::any_cast<TransactionalThing>(seg4.keepalive()).magic_.check();
+        std::any_cast<TransactionalThing>(seg2.keepalive()).magic_.check();
     }
     ASSERT_EQ(TransactionalThing::destroyed, true);
 }

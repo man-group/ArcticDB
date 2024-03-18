@@ -55,6 +55,12 @@ struct StreamDescriptor {
             fields_(std::move(fields)) {
     }
 
+    StreamDescriptor(std::shared_ptr<FrameDescriptorImpl> data, std::shared_ptr<FieldCollection> fields, StreamId stream_id) :
+        data_(std::move(data)),
+        fields_(std::move(fields)),
+        stream_id_(std::move(stream_id)) {
+    }
+
     [[nodiscard]] const FrameDescriptorImpl& data() const  {
         return *data_;
     }
@@ -152,7 +158,7 @@ struct StreamDescriptor {
     }
 
     [[nodiscard]] StreamDescriptor clone() const {
-        return StreamDescriptor{std::make_shared<FrameDescriptorImpl>(data_->clone()), std::make_shared<FieldCollection>(fields_->clone())};
+        return StreamDescriptor{std::make_shared<FrameDescriptorImpl>(data_->clone()), std::make_shared<FieldCollection>(fields_->clone()), stream_id_};
     };
 
     [[nodiscard]] const FieldCollection& fields() const {

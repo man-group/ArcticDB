@@ -66,7 +66,7 @@ void proto_from_encoded_field(const EncodedFieldImpl& input, arcticdb::proto::en
 
 SegmentHeader deserialize_segment_header_from_proto(const arcticdb::proto::encoding::SegmentHeader& header);
 
-void serialize_segment_header_to_proto(uint8_t* dst, const SegmentHeader& hdr);
+arcticdb::proto::encoding::SegmentHeader serialize_segment_header_to_proto(const SegmentHeader& hdr);
 
 size_t calc_proto_encoded_blocks_size(const arcticdb::proto::encoding::SegmentHeader& hdr);
 
