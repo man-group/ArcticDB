@@ -218,7 +218,6 @@ class Arctic:
         except LibraryNotFound:
             return
         lib._nvs.version_store.clear()
-        del lib
         lib_mgr_name = self._library_adapter.get_name_for_library_manager(name)
         self._library_manager.close_library_if_open(lib_mgr_name)
         try:

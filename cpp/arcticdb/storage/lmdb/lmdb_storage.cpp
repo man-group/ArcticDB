@@ -217,6 +217,38 @@ void LmdbStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts opts)
         throw KeyNotFoundException(Composite<VariantKey>(std::move(failed_deletes)));
 }
 
+void remove_db_files(const fs::path& lib_path) {
+    std::vector<std::string> files = {"lock.mdb", "data.mdb"};
+
+    for (const auto& file : files) {
+        fs::path file_path = lib_path / file;
+        try {
+            if (fs::exists(file_path)) {
+                fs::remove(file_path);
+            }
+        } catch (const std::filesystem::filesystem_error& e) {
+            raise<ErrorCode::E_UNEXPECTED_LMDB_ERROR>(
+                    fmt::format("Unexpected LMDB Error: Failed to remove LMDB file at path: {} error: {}",
+                                file_path.string(), e.what()));
+        }
+    }
+
+    if (fs::exists(lib_path)) {
+        if (!fs::is_empty(lib_path)) {
+            log::storage().warn(fmt::format("Skipping deletion of directory holding LMDB library during "
+                                            "library deletion as it contains files unrelated to LMDB"));
+        } else {
+            try {
+                fs::remove_all(lib_path);
+            } catch (const fs::filesystem_error& e) {
+                raise<ErrorCode::E_UNEXPECTED_LMDB_ERROR>(
+                        fmt::format("Unexpected LMDB Error: Failed to remove directory: {} error: {}",
+                                    lib_path.string(), e.what()));
+            }
+        }
+    }
+}
+
 bool LmdbStorage::do_fast_delete() {
     std::lock_guard<std::mutex> lock{*write_mutex_};
     // bool is probably not the best return type here but it does help prevent the insane boilerplate for
@@ -239,6 +271,9 @@ bool LmdbStorage::do_fast_delete() {
     });
 
     dtxn.commit();
+
+    env_.reset();
+    remove_db_files(lib_dir_);
     return true;
 }
 
