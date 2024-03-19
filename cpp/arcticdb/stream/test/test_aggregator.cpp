@@ -8,7 +8,6 @@
 #include <arcticdb/stream/row_builder.hpp>
 #include <arcticdb/stream/aggregator.hpp>
 
-#include <folly/ScopeGuard.h>
 #include <gtest/gtest.h>
 
 #include <memory>

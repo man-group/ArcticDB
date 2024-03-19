@@ -9,7 +9,6 @@
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/log/log.hpp>
 #include <folly/system/ThreadName.h>
-#include <folly/container/F14Map.h>
 #include <arcticdb/util/preprocess.hpp>
 #include <arcticdb/util/pb_util.hpp>
 
@@ -61,7 +60,7 @@ RemoteryInstance::~RemoteryInstance() {
 
 namespace arcticdb::detail {
     struct ThreadNameCache {
-        folly::F14FastMap<const char *, std::string> fqn_by_task_name_;
+        std::unordered_map<const char *, std::string> fqn_by_task_name_;
         std::string thread_name_;
 
         ThreadNameCache():fqn_by_task_name_(),thread_name_(folly::getCurrentThreadName().value_or("Thread")){}

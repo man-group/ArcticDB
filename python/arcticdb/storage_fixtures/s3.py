@@ -213,6 +213,12 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
                 path_info: bytes = environ.get("PATH_INFO", "")
 
                 with self.lock:
+                    # Mock ec2 imds responses for testing
+                    if path_info in ("/latest/dynamic/instance-identity/document", b"/latest/dynamic/instance-identity/document"):
+                        start_response("200 OK", [("Content-Type", "text/plain")])
+                        return [b"Something to prove imds is reachable"]
+
+                    # Allow setting up a rate limit
                     if path_info in ("/rate_limit", b"/rate_limit"):
                         length = int(environ["CONTENT_LENGTH"])
                         body = environ["wsgi.input"].read(length).decode("ascii")

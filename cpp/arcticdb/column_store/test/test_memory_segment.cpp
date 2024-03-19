@@ -481,7 +481,7 @@ TEST(MemSegment, Filter) {
         filter_bitset.set_bit(retained_row);
     }
 
-    auto filtered_seg = seg.filter(filter_bitset);
+    auto filtered_seg = seg.filter(std::move(filter_bitset));
 
     for (auto&& [idx, row]: folly::enumerate(filtered_seg)) {
         ASSERT_EQ(static_cast<int64_t>(retained_rows[idx]), row.scalar_at<int64_t>(0));

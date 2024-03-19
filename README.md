@@ -1,3 +1,24 @@
+<table>
+<tr>
+<td>
+
+![Alt text](static/happybdayarcticdb.png)
+
+</td>
+<td>
+
+# 🚀 ArcticDB Hits 1,000 GitHub Stars on Our First Open Source Anniversary! 🚀
+
+Exciting news as we celebrate two milestones: ArcticDB's first year in the open-source community
+and reaching 1,000 GitHub stars! ⭐
+
+A huge thank you to all the contributors, supporters, and community members whose involvement has been
+pivotal to our success! 🙌
+
+</td>
+</tr>
+</table>
+
 <p align="center">
 <img src="https://github.com/man-group/ArcticDB/raw/master/static/ArcticDBCropped.png" width="40%">
 </p>

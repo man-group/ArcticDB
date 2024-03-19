@@ -39,8 +39,7 @@ dependencies:
   - azure-storage-blobs-cpp
   # RocksDB is not supported on the conda build at the moment
   #  - rocksdb
-  # ArcticDB is currently incompatible with fmt 10
-  - fmt < 10
+  - fmt
   - folly==2023.09.25.00
   - unordered_dense
   # Vendored build dependencies (see `cpp/thirdparty` and `cpp/vcpkg.json`)
@@ -73,6 +72,7 @@ dependencies:
   - hypothesis < 6.73
   - pytest-sugar
   - pytest-xdist
+  - pytest-timeout
   # Python dependencies (for tests only)
   - azure-storage-blob
   - azure-identity

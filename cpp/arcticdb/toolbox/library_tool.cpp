@@ -18,10 +18,15 @@
 #include <arcticdb/util/key_utils.hpp>
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/version/version_utils.hpp>
+#include <cstdlib>
 
 namespace arcticdb::toolbox::apy {
 
 using namespace arcticdb::entity;
+
+LibraryTool::LibraryTool(std::shared_ptr<storage::Library> lib) {
+    store_ = std::make_shared<async::AsyncStore<util::SysClock>>(lib, codec::default_lz4_codec(), encoding_version(lib->config()));
+}
 
 ReadResult LibraryTool::read(const VariantKey& key) {
     auto segment = read_to_segment(key);
@@ -31,32 +36,44 @@ ReadResult LibraryTool::read(const VariantKey& key) {
 }
 
 Segment LibraryTool::read_to_segment(const VariantKey& key) {
-    auto kv = std::visit([lib=lib_](const auto &k) { return lib->read(k); }, key);
+    auto kv = store_->read_compressed_sync(key, storage::ReadKeyOpts{});
     util::check(kv.has_segment(), "Failed to read key: {}", key);
     kv.segment().force_own_buffer();
     return kv.segment();
 }
 
+std::optional<google::protobuf::Any> LibraryTool::read_metadata(const VariantKey& key){
+    return store_->read_metadata(key, storage::ReadKeyOpts{}).get().second;
+}
+
+StreamDescriptor LibraryTool::read_descriptor(const VariantKey& key){
+    auto metadata_and_descriptor = store_->read_metadata_and_descriptor(key, storage::ReadKeyOpts{}).get();
+    return std::get<StreamDescriptor>(metadata_and_descriptor);
+}
+
+TimeseriesDescriptor LibraryTool::read_timeseries_descriptor(const VariantKey& key){
+    return store_->read_timeseries_descriptor(key).get().second;
+}
+
 void LibraryTool::write(VariantKey key, Segment segment) {
     storage::KeySegmentPair kv{std::move(key), std::move(segment)};
-    lib_->write(Composite<storage::KeySegmentPair>{std::move(kv)});
+    store_->write_compressed_sync(std::move(kv));
 }
 
 void LibraryTool::remove(VariantKey key) {
-    lib_->remove(Composite<VariantKey>{std::move(key)}, storage::RemoveOpts{});
+    store_->remove_key_sync(std::move(key), storage::RemoveOpts{});
 }
 
 void LibraryTool::clear_ref_keys() {
-    auto store = std::make_shared<arcticdb::async::AsyncStore<util::SysClock>>(lib_, codec::default_lz4_codec(), encoding_version(lib_->config()));
-    delete_all_keys_of_type(KeyType::SNAPSHOT_REF, store, false);
+    delete_all_keys_of_type(KeyType::SNAPSHOT_REF, store_, false);
 }
 
 std::vector<VariantKey> LibraryTool::find_keys(entity::KeyType kt) {
     std::vector<VariantKey> res;
 
-    lib_->iterate_type(kt, [&](VariantKey &&found_key) {
+    store_->iterate_type(kt, [&](VariantKey &&found_key) {
         res.emplace_back(found_key);
-    });
+    }, "");
     return res;
 }
 
@@ -67,13 +84,12 @@ int LibraryTool::count_keys(entity::KeyType kt) {
         count++;
     };
 
-    lib_->iterate_type(kt, visitor);
+    store_->iterate_type(kt, visitor, "");
     return count;
 }
 
 std::vector<bool> LibraryTool::batch_key_exists(const std::vector<VariantKey>& keys) {
-    auto store = std::make_shared<arcticdb::async::AsyncStore<util::SysClock>>(lib_, codec::default_lz4_codec(), encoding_version(lib_->config()));
-    auto key_exists_fut = store->batch_key_exists(keys);
+    auto key_exists_fut = store_->batch_key_exists(keys);
     return folly::collect(key_exists_fut).get();
 }
 
@@ -90,12 +106,19 @@ std::vector<VariantKey> LibraryTool::find_keys_for_id(entity::KeyType kt, const 
         }
     };
 
-    lib_->iterate_type(kt, visitor, string_id);
+    store_->iterate_type(kt, visitor, string_id);
     return res;
 }
 
 std::string LibraryTool::get_key_path(const VariantKey& key) {
-    return lib_->key_path(key);
+    return store_->key_path(key);
 }
+
+std::optional<std::string> LibraryTool::inspect_env_variable(std::string name){
+    auto value = getenv(name.c_str());
+    if (value == nullptr) return std::nullopt;
+    return std::string(value);
+}
+
 
 } // namespace arcticdb::toolbox::apy

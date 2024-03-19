@@ -207,7 +207,7 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
 
     static py::exception<InternalException> internal_exception(m, "InternalException", compat_exception.ptr());
     static py::exception<StorageException> storage_exception(m, "StorageException", compat_exception.ptr());
-    static py::exception<::lmdb::map_full_error> lmdb_map_full_error(m, "LmdbMapFullError", storage_exception.ptr());
+    static py::exception<LMDBMapFullException> lmdb_map_full_exception(m, "LmdbMapFullError", storage_exception.ptr());
     static py::exception<UserInputException> user_input_exception(m, "UserInputException", compat_exception.ptr());
 
     py::register_exception_translator([](std::exception_ptr p) {
@@ -219,13 +219,13 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
             user_input_exception(e.what());
         } catch (const arcticdb::InternalException& e){
             internal_exception(e.what());
-        } catch (const ::lmdb::map_full_error& e) {
+        } catch (const LMDBMapFullException& e) {
             std::string msg = fmt::format("E5003: LMDB map is full. Close and reopen your LMDB backed Arctic instance with a "
                                           "larger map size. For example to open `/tmp/a/b/` with a map size of 5GB, "
                                           "use `Arctic(\"lmdb:///tmp/a/b?map_size=5GB\")`. Also see the "
                                           "[LMDB documentation](http://www.lmdb.tech/doc/group__mdb.html#gaa2506ec8dab3d969b0e609cd82e619e5). "
-                                          "LMDB info: code=[{}] origin=[{}] message=[{}]", e.code(), e.origin(), e.what());
-            lmdb_map_full_error(msg.c_str());
+                                          "LMDB info: message=[{}]", e.what());
+            lmdb_map_full_exception(msg.c_str());
         } catch (const StorageException& e) {
             storage_exception(e.what());
         } catch (const py::stop_iteration &e){
@@ -236,6 +236,9 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
             internal_exception(msg.c_str());
         }
     });
+
+    py::register_exception<storage::DuplicateKeyException>(m, "DuplicateKeyException", storage_exception.ptr());
+    py::register_exception<PermissionException>(m, "PermissionException", storage_exception.ptr());
 
     py::register_exception<SchemaException>(m, "SchemaException", compat_exception.ptr());
     py::register_exception<NormalizationException>(m, "NormalizationException", compat_exception.ptr());
@@ -273,13 +276,19 @@ void register_instrumentation(py::module && m){
 }
 
 void register_metrics(py::module && m){
+
     auto prometheus = m.def_submodule("prometheus");
     py::class_<arcticdb::PrometheusInstance, std::shared_ptr<arcticdb::PrometheusInstance>>(prometheus, "Instance");
-    prometheus.def("configure", [](const py::object & py_config){
-        arcticdb::proto::utils::PrometheusConfig config;
-        arcticdb::python_util::pb_from_python(py_config, config);
-        arcticdb::PrometheusConfigInstance::instance()->config.CopyFrom(config);
-    });
+
+    py::class_<arcticdb::MetricsConfig, std::shared_ptr<arcticdb::MetricsConfig>>(prometheus, "MetricsConfig")
+    .def(py::init<const std::string&, const std::string&, const std::string&, const std::string&, const std::string&, const arcticdb::MetricsConfig::Model>());
+
+    py::enum_<arcticdb::MetricsConfig::Model>(prometheus, "MetricsConfigModel")
+            .value("NO_INIT", arcticdb::MetricsConfig::Model::NO_INIT)
+            .value("PUSH", arcticdb::MetricsConfig::Model::PUSH)
+            .value("PULL", arcticdb::MetricsConfig::Model::PULL)
+            .export_values()
+    ;
 }
 
 /// Register handling of non-trivial types. For more information @see arcticdb::TypeHandlerRegistry and
@@ -321,7 +330,7 @@ PYBIND11_MODULE(arcticdb_ext, m) {
     auto storage_submodule = m.def_submodule("storage", "Segment storage implementation apis");
     auto no_data_found_exception = py::register_exception<arcticdb::storage::NoDataFoundException>(
             storage_submodule, "NoDataFoundException", base_exception.ptr());
-    arcticdb::storage::apy::register_bindings(storage_submodule, base_exception);
+    arcticdb::storage::apy::register_bindings(storage_submodule);
 
     arcticdb::stream::register_bindings(m);
     arcticdb::toolbox::apy::register_bindings(m);
