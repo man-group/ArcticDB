@@ -23,16 +23,16 @@ from functools import partial
 from arcticdb.storage_fixtures.api import StorageFixture
 from arcticdb.storage_fixtures.azure import AzuriteStorageFixtureFactory
 from arcticdb.storage_fixtures.lmdb import LmdbStorageFixture
-from arcticdb.storage_fixtures.s3 import MotoS3StorageFixtureFactory, real_s3_from_environment_variables, mock_s3_with_error_simulation
+from arcticdb.storage_fixtures.s3 import (
+    MotoS3StorageFixtureFactory,
+    real_s3_from_environment_variables,
+    mock_s3_with_error_simulation,
+)
 from arcticdb.storage_fixtures.mongo import auto_detect_server
 from arcticdb.storage_fixtures.in_memory import InMemoryStorageFixture
 from arcticdb.version_store._normalization import MsgPackNormalizer
 from arcticdb.util.test import create_df
-from tests.util.mark import (
-    AZURE_TESTS_MARK,
-    MONGO_TESTS_MARK,
-    REAL_S3_TESTS_MARK,
-)
+from tests.util.mark import AZURE_TESTS_MARK, MONGO_TESTS_MARK, REAL_S3_TESTS_MARK
 
 # region =================================== Misc. Constants & Setup ====================================
 hypothesis.settings.register_profile("ci_linux", max_examples=100)
@@ -211,6 +211,7 @@ def arctic_client_no_lmdb(request, encoding_version):
     assert not ac.list_libraries()
     return ac
 
+
 @pytest.fixture
 def arctic_library(arctic_client, lib_name):
     return arctic_client.create_library(lib_name)
@@ -363,11 +364,7 @@ def object_version_store_prune_previous(object_store_factory):
 
 
 @pytest.fixture(
-    scope="function",
-    params=[
-        "s3_store_factory",
-        pytest.param("azure_store_factory", marks=AZURE_TESTS_MARK),
-    ],
+    scope="function", params=["s3_store_factory", pytest.param("azure_store_factory", marks=AZURE_TESTS_MARK)]
 )
 def local_object_store_factory(request):
     """
@@ -396,12 +393,7 @@ def local_object_version_store_prune_previous(local_object_store_factory):
     return local_object_store_factory(prune_previous_version=True)
 
 
-@pytest.fixture(
-    params=[
-        "version_store_factory",
-        pytest.param("real_s3_store_factory", marks=REAL_S3_TESTS_MARK),
-    ],
-)
+@pytest.fixture(params=["version_store_factory", pytest.param("real_s3_store_factory", marks=REAL_S3_TESTS_MARK)])
 def version_store_and_real_s3_basic_store_factory(request):
     """
     Just the version_store and real_s3 specifically for the test test_interleaved_store_read
@@ -415,7 +407,7 @@ def version_store_and_real_s3_basic_store_factory(request):
         "version_store_factory",
         "in_memory_store_factory",
         pytest.param("real_s3_store_factory", marks=REAL_S3_TESTS_MARK),
-    ],
+    ]
 )
 def basic_store_factory(request):
     store_factory = request.getfixturevalue(request.param)
@@ -459,13 +451,7 @@ def lmdb_version_store_v2(version_store_factory, lib_name):
     return version_store_factory(dynamic_strings=True, encoding_version=int(EncodingVersion.V2), name=library_name)
 
 
-@pytest.fixture(
-    scope="function",
-    params=(
-        "lmdb_version_store_v1",
-        "lmdb_version_store_v2",
-    )
-)
+@pytest.fixture(scope="function", params=("lmdb_version_store_v1", "lmdb_version_store_v2"))
 def lmdb_version_store(request):
     yield request.getfixturevalue(request.param)
 
@@ -477,7 +463,7 @@ def lmdb_version_store_prune_previous(version_store_factory):
 
 @pytest.fixture
 def lmdb_version_store_big_map(version_store_factory):
-    return version_store_factory(lmdb_config={"map_size": 2**30})
+    return version_store_factory(lmdb_config={"map_size": 2 ** 30})
 
 
 @pytest.fixture
@@ -508,6 +494,18 @@ def lmdb_version_store_dynamic_schema(
         return lmdb_version_store_dynamic_schema_v2
     else:
         raise ValueError(f"Unexpected encoding version: {encoding_version}")
+
+
+@pytest.fixture
+def lmdb_version_store_empty_types(version_store_factory, lib_name):
+    library_name = lib_name + "_v2"
+    return version_store_factory(dynamic_strings=True, empty_types=True, name=library_name)
+
+
+@pytest.fixture
+def lmdb_version_store_empty_types_dynamic_schema(version_store_factory, lib_name):
+    library_name = lib_name + "_v2"
+    return version_store_factory(dynamic_schema=True, dynamic_strings=True, empty_types=True, name=library_name)
 
 
 @pytest.fixture
@@ -560,12 +558,12 @@ def lmdb_version_store_ignore_order(version_store_factory):
 
 @pytest.fixture
 def lmdb_version_store_small_segment(version_store_factory):
-    return version_store_factory(column_group_size=1000, segment_row_size=1000, lmdb_config={"map_size": 2**30})
+    return version_store_factory(column_group_size=1000, segment_row_size=1000, lmdb_config={"map_size": 2 ** 30})
 
 
 @pytest.fixture
 def lmdb_version_store_tiny_segment(version_store_factory):
-    return version_store_factory(column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2**30})
+    return version_store_factory(column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2 ** 30})
 
 
 @pytest.fixture
@@ -580,7 +578,7 @@ def basic_store_prune_previous(basic_store_factory):
 
 @pytest.fixture
 def basic_store_large_data(basic_store_factory):
-    return basic_store_factory(lmdb_config={"map_size": 2**30})
+    return basic_store_factory(lmdb_config={"map_size": 2 ** 30})
 
 
 @pytest.fixture
@@ -666,12 +664,12 @@ def basic_store_ignore_order(basic_store_factory):
 
 @pytest.fixture
 def basic_store_small_segment(basic_store_factory):
-    return basic_store_factory(column_group_size=1000, segment_row_size=1000, lmdb_config={"map_size": 2**30})
+    return basic_store_factory(column_group_size=1000, segment_row_size=1000, lmdb_config={"map_size": 2 ** 30})
 
 
 @pytest.fixture
 def basic_store_tiny_segment(basic_store_factory):
-    return basic_store_factory(column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2**30})
+    return basic_store_factory(column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2 ** 30})
 
 
 @pytest.fixture
