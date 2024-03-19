@@ -591,6 +591,33 @@ std::shared_ptr<VersionMapEntry> write_two_versions(std::shared_ptr<InMemoryStor
     return entry;
 }
 
+TEST(VersionMap, FollowingVersionChainEndEarly) {
+    auto store = std::make_shared<InMemoryStore>();
+    auto version_map = std::make_shared<VersionMap>();
+    StreamId id{"test"};
+
+    write_two_versions(store, version_map, id);
+    // Deleting should add a TOMBSTONE_ALL which should end searching for undeleted versions early.
+    version_map->delete_all_versions(store, id);
+
+    auto ref_entry = VersionMapEntry{};
+    read_symbol_ref(store, id, ref_entry);
+    auto follow_result = std::make_shared<VersionMapEntry>();
+
+    for (auto load_params: {
+        LoadParameter{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(0)},
+        LoadParameter{LoadType::LOAD_FROM_TIME, static_cast<timestamp>(0)},
+        LoadParameter{LoadType::LOAD_UNDELETED},
+        LoadParameter{LoadType::LOAD_LATEST_UNDELETED}
+    }) {
+        follow_result->clear();
+        version_map->follow_version_chain(store, ref_entry, follow_result, load_params);
+        // When loading with any of the specified load params we should end following the version chain early
+        // at version 1 because that's when we encounter the TOMBSTONE_ALL.
+        EXPECT_EQ(follow_result->loaded_until_, VersionId{1});
+    }
+}
+
 TEST(VersionMap, CacheInvalidationLoadDownTo) {
     using namespace arcticdb;
     // Given - symbol with 2 versions - load downto version 1
@@ -779,6 +806,7 @@ TEST(VersionMap, CacheInvalidationAfterLoadFromTimeTombstoned) {
             LoadParameter{LoadType::LOAD_FROM_TIME, static_cast<timestamp>(2)},
             __FUNCTION__);
 
+    // TODO: Verify this is true
     // LOAD_FROM_TIME always goes at least as far back as the latest undeleted version, even if that is earlier than
     // the specified load_from_time_or_until
     ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_LATEST_UNDELETED}));
