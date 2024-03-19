@@ -11,6 +11,7 @@ import pytest
 
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.util.test import assert_frame_equal
+from arcticdb_ext.exceptions import SchemaException
 
 
 def test_reuse_querybuilder(lmdb_version_store_tiny_segment):
@@ -403,3 +404,64 @@ def test_querybuilder_pickling():
     import pickle
 
     assert pickle.loads(pickle.dumps(q)) == q
+
+
+# Remove the following test and replace with more extensive ones once this issue is fixed:
+# https://github.com/man-group/ArcticDB/issues/1404
+def test_query_builder_sparse(lmdb_version_store):
+    lib = lmdb_version_store
+    sym = "test_filter_sparse"
+    df = pd.DataFrame(
+        {
+            "sparse_col": [0.0, np.nan, 0.0],
+            "dense_col": [0.0, 1.0, 2.0]
+         },
+        index=pd.date_range("2024-01-01", periods=3)
+    )
+    lib.write(sym, df, sparsify_floats=True)
+
+    # Filters
+    # These 2 filters exercise different code paths
+    q = QueryBuilder()
+    q = q[q["sparse_col"].isnull()]
+    with pytest.raises(SchemaException):
+        lib.read(sym, query_builder=q)
+    q = QueryBuilder()
+    q = q[q["sparse_col"] == np.float64(0.0)]
+    with pytest.raises(SchemaException):
+        lib.read(sym, query_builder=q)
+
+    # Projections
+    q = QueryBuilder().apply("projected_col", q["sparse_col"] + 1)
+    with pytest.raises(SchemaException):
+        lib.read(sym, query_builder=q)
+
+    # Groupbys
+    q = QueryBuilder().groupby("sparse_col").agg({"dense_col": "sum"})
+    with pytest.raises(SchemaException):
+        lib.read(sym, query_builder=q)
+
+    # Aggregations
+    q = QueryBuilder().groupby("dense_col").agg({"sparse_col": "sum"})
+    with pytest.raises(SchemaException):
+        lib.read(sym, query_builder=q)
+
+    # Date range
+    q = QueryBuilder().date_range((pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")))
+    with pytest.raises(SchemaException):
+        lib.read(sym, query_builder=q)
+
+    # Head
+    q = QueryBuilder()._head(2)
+    with pytest.raises(SchemaException):
+        lib.read(sym, query_builder=q)
+
+    # Tail
+    q = QueryBuilder()._tail(2)
+    with pytest.raises(SchemaException):
+        lib.read(sym, query_builder=q)
+
+    # Row range
+    q = QueryBuilder()._row_range((1, 2))
+    with pytest.raises(SchemaException):
+        lib.read(sym, query_builder=q)

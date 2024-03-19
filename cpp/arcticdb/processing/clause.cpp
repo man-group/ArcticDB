@@ -267,9 +267,9 @@ Composite<EntityIds> FilterClause::process(
         proc.set_expression_context(expression_context_);
         auto variant_data = proc.get(expression_context_->root_node_name_);
         util::variant_match(variant_data,
-                            [&proc, &output, this](const util::BitSet& bitset) {
+                            [&proc, &output, this](util::BitSet& bitset) {
                                 if (bitset.count() > 0) {
-                                    proc.apply_filter(bitset, optimisation_);
+                                    proc.apply_filter(std::move(bitset), optimisation_);
                                     output.push_back(push_entities(component_manager_, std::move(proc)));
                                 } else {
                                     log::version().debug("Filter returned empty result");
