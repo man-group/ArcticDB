@@ -314,6 +314,58 @@ def test_first_aggregation_strings(version_store_factory, dynamic_strings):
     assert_frame_equal(res.data, df)
 
 
+# TODO add a test with hypothesis and append for strings as well (when numeric will be working)
+# Same for last agg
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df1=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=numeric_type_strategies()),
+        ],
+        index=range_indexes(),
+    ),
+    df2=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=numeric_type_strategies()),
+        ],
+        index=range_indexes(),
+    ),
+    df3=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=numeric_type_strategies()),
+        ],
+        index=range_indexes(),
+    )
+)
+def test_hypothesis_first_agg_numeric_with_append(lmdb_version_store_tiny_segment, df1, df2, df3):
+    lib = lmdb_version_store_tiny_segment
+    assume(not df1.empty)
+    assume(not df2.empty)
+    assume(not df3.empty)
+
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"a": "first"})
+    df = pd.concat([df1, df2, df3], ignore_index=True)
+    expected = df.groupby("grouping_column").agg({"a": "first"})
+    expected.replace(
+        np.nan, np.inf, inplace=True
+    )  # New version of pandas treats values which exceeds limits as np.nan rather than np.inf, as in old version and arcticdb
+
+    symbol = "first_agg"
+    lib.write(symbol, df1)
+    lib.append(symbol, df2)
+    lib.append(symbol, df3)
+
+    vit = lib.read(symbol, query_builder=q)
+    vit.data.sort_index(inplace=True)
+
+    assert_frame_equal(expected, vit.data)
+
+
 def test_first_agg_numeric_with_append(local_object_version_store):
     lib = local_object_version_store
 
@@ -449,6 +501,56 @@ def test_last_aggregation_strings(version_store_factory, dynamic_strings):
     res.data.sort_index(inplace=True)
 
     assert_frame_equal(res.data, df)
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df1=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=numeric_type_strategies()),
+        ],
+        index=range_indexes(),
+    ),
+    df2=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=numeric_type_strategies()),
+        ],
+        index=range_indexes(),
+    ),
+    df3=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=numeric_type_strategies()),
+        ],
+        index=range_indexes(),
+    )
+)
+def test_hypothesis_last_agg_numeric_with_append(lmdb_version_store_tiny_segment, df1, df2, df3):
+    lib = lmdb_version_store_tiny_segment
+    assume(not df1.empty)
+    assume(not df2.empty)
+    assume(not df3.empty)
+
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"a": "last"})
+    df = pd.concat([df1, df2, df3], ignore_index=True)
+    expected = df.groupby("grouping_column").agg({"a": "last"})
+    expected.replace(
+        np.nan, np.inf, inplace=True
+    )  # New version of pandas treats values which exceeds limits as np.nan rather than np.inf, as in old version and arcticdb
+
+    symbol = "last_agg"
+    lib.write(symbol, df1)
+    lib.append(symbol, df2)
+    lib.append(symbol, df3)
+
+    vit = lib.read(symbol, query_builder=q)
+    vit.data.sort_index(inplace=True)
+
+    assert_frame_equal(expected, vit.data)
 
 
 def test_last_agg_numeric_with_append(local_object_version_store):
