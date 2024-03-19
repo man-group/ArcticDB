@@ -60,7 +60,7 @@ VersionedItem PythonVersionStore::write_dataframe_specific_version(
     auto versioned_item = write_dataframe_impl(
         store(),
         VersionId(version_id),
-        convert::py_ndf_to_frame(stream_id, item, norm, user_meta),
+        convert::py_ndf_to_frame(stream_id, item, norm, user_meta, cfg().write_options().empty_types()),
         get_write_options());
 
     version_map()->write_version(store(), versioned_item.key_, std::nullopt);
@@ -74,11 +74,12 @@ std::vector<std::shared_ptr<InputTensorFrame>> create_input_tensor_frames(
     const std::vector<StreamId>& stream_ids,
     const std::vector<py::tuple> &items,
     const std::vector<py::object> &norms,
-    const std::vector<py::object> &user_metas) {
+    const std::vector<py::object> &user_metas,
+    bool empty_types) {
     std::vector<std::shared_ptr<InputTensorFrame>> output;
     output.reserve(stream_ids.size());
     for (size_t idx = 0; idx < stream_ids.size(); idx++) {
-        output.emplace_back(convert::py_ndf_to_frame(stream_ids[idx], items[idx], norms[idx], user_metas[idx]));
+        output.emplace_back(convert::py_ndf_to_frame(stream_ids[idx], items[idx], norms[idx], user_metas[idx], empty_types));
     }
     return output;
 }
@@ -92,7 +93,7 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_wr
     bool validate_index,
     bool throw_on_error) {
 
-    auto frames = create_input_tensor_frames(stream_ids, items, norms, user_metas);
+    auto frames = create_input_tensor_frames(stream_ids, items, norms, user_metas, cfg().write_options().empty_types());
     return batch_write_versioned_dataframe_internal(stream_ids, std::move(frames), prune_previous_versions, validate_index, throw_on_error);
 }
 
@@ -105,7 +106,7 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_ap
     bool validate_index,
     bool upsert,
     bool throw_on_error) {
-    auto frames = create_input_tensor_frames(stream_ids, items, norms, user_metas);
+    auto frames = create_input_tensor_frames(stream_ids, items, norms, user_metas, cfg().write_options().empty_types());
     return batch_append_internal(stream_ids, std::move(frames), prune_previous_versions, validate_index, upsert, throw_on_error);
 }
 
@@ -525,7 +526,7 @@ VersionedItem PythonVersionStore::write_partitioned_dataframe(
         auto versioned_item = write_dataframe_impl(
             store(),
             version_id,
-            convert::py_ndf_to_frame(subkeyname, partitioned_dfs[idx], norm_meta, py::none()),
+            convert::py_ndf_to_frame(subkeyname, partitioned_dfs[idx], norm_meta, py::none(), cfg().write_options().empty_types()),
             write_options,
             de_dup_map,
             false);
@@ -579,7 +580,7 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
         de_dup_maps.emplace_back(de_dup_map);
     }
 
-    auto frames = create_input_tensor_frames(sub_keys, items, norm_metas, user_metas);
+    auto frames = create_input_tensor_frames(sub_keys, items, norm_metas, user_metas, cfg().write_options().empty_types());
     auto index_keys = folly::collect(batch_write_internal(std::move(version_ids), sub_keys, std::move(frames), std::move(de_dup_maps), false)).get();
     auto multi_key = write_multi_index_entry(store(), index_keys, stream_id, metastruct, user_meta, version_id);
     auto versioned_item = VersionedItem(to_atom(std::move(multi_key)));
@@ -600,7 +601,7 @@ VersionedItem PythonVersionStore::write_versioned_dataframe(
     bool sparsify_floats,
     bool validate_index) {
     ARCTICDB_SAMPLE(WriteVersionedDataframe, 0)
-    auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta);
+    auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta, cfg().write_options().empty_types());
     auto versioned_item = write_versioned_dataframe_internal(stream_id, frame, prune_previous_versions, sparsify_floats, validate_index);
 
     return versioned_item;
@@ -614,7 +615,7 @@ VersionedItem PythonVersionStore::append(
     bool upsert,
     bool prune_previous_versions,
     bool validate_index) {
-    return append_internal(stream_id, convert::py_ndf_to_frame(stream_id, item, norm, user_meta), upsert,
+    return append_internal(stream_id, convert::py_ndf_to_frame(stream_id, item, norm, user_meta, cfg().write_options().empty_types()), upsert,
                            prune_previous_versions, validate_index);
 }
 
@@ -628,7 +629,7 @@ VersionedItem PythonVersionStore::update(
         bool dynamic_schema,
         bool prune_previous_versions) {
     return update_internal(stream_id, query,
-                           convert::py_ndf_to_frame(stream_id, item, norm, user_meta), upsert,
+                           convert::py_ndf_to_frame(stream_id, item, norm, user_meta, cfg().write_options().empty_types()), upsert,
                            dynamic_schema, prune_previous_versions);
 }
 
@@ -650,7 +651,7 @@ void PythonVersionStore::append_incomplete(
     using namespace arcticdb::pipelines;
 
     // Turn the input into a standardised frame object
-    auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta);
+    auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta, cfg().write_options().empty_types());
     append_incomplete_frame(stream_id, frame);
 }
 
@@ -736,7 +737,7 @@ void PythonVersionStore::write_parallel(
     using namespace arcticdb::stream;
     using namespace arcticdb::pipelines;
 
-    auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta);
+    auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta, cfg().write_options().empty_types());
     write_parallel_frame(stream_id, frame);
 }
 
@@ -1158,7 +1159,7 @@ void write_dataframe_to_file(
         const py::object& norm,
         const py::object& user_meta) {
     ARCTICDB_SAMPLE(WriteDataframeToFile, 0)
-    auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta);
+    auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta, false);
     write_dataframe_to_file_internal(stream_id, frame, path, WriteOptions{}, codec::default_lz4_codec(), EncodingVersion::V2);
 }
 
