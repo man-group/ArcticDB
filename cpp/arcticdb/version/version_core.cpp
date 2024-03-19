@@ -864,6 +864,8 @@ void copy_frame_data_to_buffer(const SegmentInMemory& destination, size_t target
         return;
     }
     auto& src_column = source.column(static_cast<position_t>(source_index));
+    schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(!src_column.opt_sparse_map().has_value(),
+                                                   "QueryBuilder not yet supported with sparse data");
     auto& dst_column = destination.column(static_cast<position_t>(target_index));
     auto& buffer = dst_column.data().buffer();
     auto dst_rawtype_size = sizeof_datatype(dst_column.type());

@@ -168,9 +168,10 @@ void SegmentInMemoryImpl::drop_column(std::string_view name) {
     column_map_->erase(name);
 }
 
-std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::filter(const util::BitSet& filter_bitset,
+std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::filter(util::BitSet&& filter_bitset,
                                                    bool filter_down_stringpool,
                                                    bool validate) const {
+    filter_bitset.resize(row_count());
     bool is_input_sparse = is_sparse();
     auto num_values = filter_bitset.count();
     if(num_values == 0)
@@ -210,18 +211,19 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::filter(const util::Bit
                 } else {
                     bitset_including_sparse.resize((*column)->row_count());
                 }
-                if (bitset_including_sparse.count() == 0) {
-                    // No values are set in the sparse column, skip it
-                    return;
-                }
                 output_col_idx = output->add_column(field(column.index), bitset_including_sparse.count(), true);
                 final_bitset = &bitset_including_sparse;
             } else {
                 final_bitset = &filter_bitset;
             }
             auto& output_col = output->column(position_t(output_col_idx));
-            if (sparse_map)
+            if (sparse_map) {
                 output_col.opt_sparse_map() = std::make_optional<util::BitSet>();
+                if (final_bitset->count() == 0) {
+                    // No values are set in the sparse column, no more work to do
+                    return;
+                }
+            }
             auto output_ptr = reinterpret_cast<RawType*>(output_col.ptr());
             auto input_data =  (*column)->data();
 
@@ -585,7 +587,7 @@ std::vector<std::shared_ptr<SegmentInMemoryImpl>> SegmentInMemoryImpl::split(siz
         util::BitSetSizeType end = std::min(start + rows, total_rows);
         // set_range is close interval on [left, right]
         bitset.set_range(start, end - 1, true);
-        output.emplace_back(filter(bitset));
+        output.emplace_back(filter(std::move(bitset)));
     }
     return output;
 }
