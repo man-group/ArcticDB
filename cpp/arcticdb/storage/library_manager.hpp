@@ -32,7 +32,7 @@ namespace arcticdb::storage {
 
         [[nodiscard]] std::shared_ptr<Library> get_library(const LibraryPath& path, const StorageOverride& storage_override = StorageOverride{});
 
-        void close_library_if_open(const LibraryPath& path);
+        void cleanup_library_if_open(const LibraryPath& path);
 
         [[nodiscard]] std::vector<LibraryPath> get_library_paths() const;
 

@@ -46,7 +46,7 @@ class LmdbStorage final : public Storage {
 
     inline bool do_fast_delete() final;
 
-    void close() override;
+    void cleanup() override;
 
     void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix) final;
 
@@ -54,7 +54,8 @@ class LmdbStorage final : public Storage {
 
     ::lmdb::env& env() {
         if (!env_) {
-            raise<ErrorCode::E_UNEXPECTED_LMDB_ERROR>("Unexpected LMDB Error: Invalid operation: LMDB environment has been removed");
+            raise<ErrorCode::E_UNEXPECTED_LMDB_ERROR>("Unexpected LMDB Error: Invalid operation: LMDB environment has been removed. "
+                                                      "Possibly because the library has been deleted");
         }
         return *env_;
     }

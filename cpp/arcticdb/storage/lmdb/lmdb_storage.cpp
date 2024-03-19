@@ -291,7 +291,7 @@ void remove_db_files(const fs::path& lib_path) {
     }
 }
 
-void LmdbStorage::close() {
+void LmdbStorage::cleanup() {
     env_.reset();
     remove_db_files(lib_dir_);
 }

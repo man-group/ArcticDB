@@ -50,7 +50,7 @@ private:
 public:
     explicit LMDBStorageFactory(uint64_t map_size, bool use_mock = false) : map_size(map_size), use_mock(use_mock), db_path(TEST_DATABASES_PATH / "test_lmdb"), lib_name("test_lib") { }
 
-    explicit LMDBStorageFactory(bool use_mock = false) : LMDBStorageFactory(128ULL * (1ULL << 20), use_mock) { }
+    explicit LMDBStorageFactory(bool use_mock = false) : LMDBStorageFactory(128ULL * (1ULL << 20)  /* 128MB */, use_mock) { }
 
     std::unique_ptr<arcticdb::storage::Storage> create() override {
         arcticdb::proto::lmdb_storage::Config cfg;
@@ -321,7 +321,7 @@ TEST_F(LMDBStorageTestBase, RemoveLibPath) {
     auto storage = factory.create();
     auto path = factory.get_lib_path();
 
-    storage->close();
+    storage->cleanup();
     ASSERT_FALSE(fs::exists(path));
     // Once we call close, any other operations should throw UnexpectedLMDBErrorException as lmdb env is closed
     ASSERT_THROW({

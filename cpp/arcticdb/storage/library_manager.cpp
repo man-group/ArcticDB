@@ -156,10 +156,10 @@ std::shared_ptr<Library> LibraryManager::get_library(const LibraryPath& path, co
     return lib;
 }
 
-void LibraryManager::close_library_if_open(const LibraryPath &path) {
+void LibraryManager::cleanup_library_if_open(const LibraryPath &path) {
     std::lock_guard<std::mutex> lock{open_libraries_mutex_};
     if (auto it = open_libraries_.find(path); it != open_libraries_.end()) {
-        it->second->close();
+        it->second->cleanup();
         open_libraries_.erase(it);
     }
 }

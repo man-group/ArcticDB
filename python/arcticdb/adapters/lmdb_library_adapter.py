@@ -167,9 +167,6 @@ class LMDBLibraryAdapter(ArcticLibraryAdapter):
             env_cfg, _DEFAULT_ENV, name, encoding_version=library_options.encoding_version
         )
 
-    def cleanup_library(self, library_name: str):
-        pass
-
     def get_storage_override(self) -> StorageOverride:
         lmdb_override = LmdbOverride()
         lmdb_override.path = self._path

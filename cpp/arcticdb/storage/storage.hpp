@@ -152,7 +152,7 @@ public:
         return do_fast_delete();
     }
 
-    virtual void close() { }
+    virtual void cleanup() { }
 
     inline bool key_exists(const VariantKey &key) {
         return do_key_exists(key);

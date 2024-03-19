@@ -156,8 +156,8 @@ void register_bindings(py::module& storage) {
         .def("get_library", [](LibraryManager& library_manager, std::string_view library_path, const StorageOverride& storage_override){
             return library_manager.get_library(LibraryPath{library_path, '.'}, storage_override);
         }, py::arg("library_path"), py::arg("storage_override") = StorageOverride{})
-        .def("close_library_if_open", [](LibraryManager& library_manager, std::string_view library_path) {
-            return library_manager.close_library_if_open(LibraryPath{library_path, '.'});
+        .def("cleanup_library_if_open", [](LibraryManager& library_manager, std::string_view library_path) {
+            return library_manager.cleanup_library_if_open(LibraryPath{library_path, '.'});
         })
         .def("has_library", [](const LibraryManager& library_manager, std::string_view library_path){
             return library_manager.has_library(LibraryPath{library_path, '.'});
