@@ -23,10 +23,8 @@ using namespace arcticdb::stream;
 enum class LoadType : uint32_t {
     NOT_LOADED = 0,
     LOAD_LATEST,
-    LOAD_LATEST_UNDELETED,
     LOAD_DOWNTO,
     LOAD_FROM_TIME,
-    LOAD_UNDELETED,
     LOAD_ALL,
     UNKNOWN
 };
@@ -34,6 +32,12 @@ enum class LoadType : uint32_t {
 inline constexpr bool is_partial_load_type(LoadType load_type) {
     return load_type == LoadType::LOAD_DOWNTO || load_type == LoadType::LOAD_FROM_TIME;
 }
+
+// Used to specify whether we want to load all or only undeleted versions
+enum class ToLoad : uint32_t {
+    ANY,
+    UNDELETED
+};
 
 enum class VersionStatus {
     LIVE,
@@ -46,17 +50,16 @@ struct VersionDetails {
     VersionStatus version_status_;
 };
 
-inline constexpr bool is_latest_load_type(LoadType load_type) {
-    return load_type == LoadType::LOAD_LATEST || load_type == LoadType::LOAD_LATEST_UNDELETED;
-}
-
-struct LoadParameter {
-    explicit LoadParameter(LoadType load_type) :
-        load_type_(load_type) {
+// The LoadStrategy describes how to load versions from the version chain. It consists of:
+// load_type: Describes up to which point in the chain we need to go.
+// to_load: Whether to include tombstoned versions
+struct LoadStrategy {
+    explicit LoadStrategy(LoadType load_type, ToLoad to_load = ToLoad::ANY) :
+        load_type_(load_type), to_load_(to_load) {
     }
 
-    LoadParameter(LoadType load_type, int64_t load_from_time_or_until) :
-        load_type_(load_type) {
+    LoadStrategy(LoadType load_type, ToLoad to_load, int64_t load_from_time_or_until) :
+        load_type_(load_type), to_load_(to_load) {
         switch(load_type_) {
             case LoadType::LOAD_FROM_TIME:
                 load_from_time_ = load_from_time_or_until;
@@ -65,22 +68,96 @@ struct LoadParameter {
                 load_until_version_ = load_from_time_or_until;
                 break;
             default:
-                internal::raise<ErrorCode::E_ASSERTION_FAILURE>("LoadParameter constructor with load_from_time_or_until parameter {} provided invalid load_type {}",
+                internal::raise<ErrorCode::E_ASSERTION_FAILURE>("LoadStrategy constructor with load_from_time_or_until parameter {} provided invalid load_type {}",
                                                                 load_from_time_or_until, static_cast<uint32_t>(load_type));
         }
     }
 
     LoadType load_type_ = LoadType::NOT_LOADED;
+    ToLoad to_load_ = ToLoad::ANY;
     std::optional<SignedVersionId> load_until_version_ = std::nullopt;
     std::optional<timestamp> load_from_time_ = std::nullopt;
-    bool iterate_on_failure_ = false;
+
+    bool should_include_deleted() const {
+        switch (to_load_) {
+            case ToLoad::ANY:
+                return true;
+            case ToLoad::UNDELETED:
+                return false;
+            default:
+                util::raise_rte("Invalid to_load: {}", to_load_);
+        }
+    }
 
     void validate() const {
-        util::check((load_type_ == LoadType::LOAD_DOWNTO) == load_until_version_.has_value(),
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>((load_type_ == LoadType::LOAD_DOWNTO) == load_until_version_.has_value(),
                     "Invalid load parameter: load_type {} with load_util {}", int(load_type_), load_until_version_.value_or(VersionId{}));
-        util::check((load_type_ == LoadType::LOAD_FROM_TIME) == load_from_time_.has_value(),
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>((load_type_ == LoadType::LOAD_FROM_TIME) == load_from_time_.has_value(),
             "Invalid load parameter: load_type {} with load_from_time_ {}", int(load_type_), load_from_time_.value_or(timestamp{}));
     }
+};
+
+
+inline bool is_undeleted_strategy_subset(const LoadStrategy& left, const LoadStrategy& right){
+    switch (left.load_type_) {
+        case LoadType::NOT_LOADED:
+            return true;
+        case LoadType::LOAD_LATEST:
+            // LOAD_LATEST is not a subset of LOAD_DOWNTO because LOAD_DOWNTO may not reach the latest undeleted version.
+            return right.load_type_ != LoadType::NOT_LOADED && right.load_type_ != LoadType::LOAD_DOWNTO;
+        case LoadType::LOAD_DOWNTO:
+            if (right.load_type_ == LoadType::LOAD_ALL) {
+                return true;
+            }
+            if (right.load_type_ == LoadType::LOAD_DOWNTO && ((left.load_until_version_.value()>=0) == (right.load_until_version_.value()>=0))) {
+                // Left is subset of right only when the [load_until]s have same sign and left's version is >= right's version
+                return left.load_until_version_.value() >= right.load_until_version_.value();
+            }
+            break;
+        case LoadType::LOAD_FROM_TIME:
+            if (right.load_type_ == LoadType::LOAD_ALL){
+                return true;
+            }
+            if (right.load_type_ == LoadType::LOAD_FROM_TIME){
+                return left.load_from_time_.value() >= right.load_from_time_.value();
+            }
+            break;
+        case LoadType::LOAD_ALL:
+            return right.load_type_ == LoadType::LOAD_ALL;
+        default:
+            util::raise_rte("Invalid load type: {}", left.load_type_);
+    }
+    return false;
+}
+
+// Returns a strategy which is guaranteed to load all versions requested by left and right.
+// Works only on strategies with include_deleted=false.
+inline LoadStrategy union_of_undeleted_strategies(const LoadStrategy& left, const LoadStrategy& right){
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(!left.should_include_deleted(), "Trying to produce a union of undeleted strategies but left strategy includes deleted.");
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(!right.should_include_deleted(), "Trying to produce a union of undeleted strategies but right strategy includes deleted.");
+    if (is_undeleted_strategy_subset(left, right)){
+        return right;
+    }
+    if (is_undeleted_strategy_subset(right, left)){
+        return left;
+    }
+    // If none is subset of the other, then we should load all versions. We can't be less conservative because we can't
+    // know where to load to with strategies which have a different load type. E.g. for LOAD_FROM_TIME and LOAD_DOWNTO
+    // we can't know where to read to unless we know the version chain.
+    // A possible workaround for this is to restructure loading the version chain to get a set of LoadStrategies and stop
+    // searching only when all of them are satisfied.
+    return LoadStrategy{LoadType::LOAD_ALL, ToLoad::UNDELETED};
+}
+
+// LoadParameter is just a LoadStrategy and a boolean specified from VersionQuery.iterate_on_failure defaulting to false.
+struct LoadParameter {
+    LoadParameter(const LoadStrategy& load_strategy) : load_strategy_(load_strategy) {}
+    LoadParameter(LoadType load_type, ToLoad to_load) : load_strategy_(load_type, to_load) {}
+    LoadParameter(LoadType load_type, ToLoad to_load, int64_t load_from_time_or_until) :
+        load_strategy_(load_type, to_load, load_from_time_or_until) {}
+
+    LoadStrategy load_strategy_;
+    bool iterate_on_failure_ = false;
 };
 
 template<typename T>
@@ -144,9 +221,9 @@ struct VersionMapEntry {
       VersionMapEntry is all the data we have in-memory about each stream_id in the version map which in its essence
       is a map of StreamId: VersionMapEntry. It's created from the linked-list-like structure that we have in the
       storage, where the head_ points to the latest version and keys_ are basically all the index/version keys
-      loaded in memory in a deque - based on the load_type.
+      loaded in memory in a deque - based on the load_strategy.
 
-      load_type signifies the current state of the in memory structure vs the state on disk, where LOAD_LATEST will
+      load_strategy signifies the current state of the in memory structure vs the state on disk, where LOAD_LATEST will
       just load the latest version, and LOAD_ALL loads everything in memory by going through the linked list on disk.
 
       It also contains a map of version_ids and the tombstone key corresponding to it iff it has been pruned or
@@ -162,6 +239,7 @@ struct VersionMapEntry {
         if (keys_.empty())
             return;
 
+        // Sorting by creation_ts is safe from clock skew because we don't support parallel writes to the same symbol.
         std::sort(std::begin(keys_), std::end(keys_), [](const AtomKey &l, const AtomKey &r) {
             return l.creation_ts() > r.creation_ts();
         });
@@ -169,12 +247,12 @@ struct VersionMapEntry {
 
     void clear() {
         head_.reset();
-        load_type_ = LoadType::NOT_LOADED;
         last_reload_time_ = 0;
         tombstones_.clear();
         tombstone_all_.reset();
         keys_.clear();
         loaded_with_progress_ = LoadProgress{};
+        load_strategy_ = LoadStrategy{LoadType::NOT_LOADED};
     }
 
     bool empty() const {
@@ -191,7 +269,7 @@ struct VersionMapEntry {
         swap(left.last_reload_time_, right.last_reload_time_);
         swap(left.tombstone_all_, right.tombstone_all_);
         swap(left.head_, right.head_);
-        swap(left.load_type_, right.load_type_);
+        swap(left.load_strategy_, right.load_strategy_);
         swap(left.loaded_with_progress_, right.loaded_with_progress_);
     }
 
@@ -365,7 +443,7 @@ struct VersionMapEntry {
     }
 
     std::optional<AtomKey> head_;
-    LoadType load_type_ = LoadType::NOT_LOADED;
+    LoadStrategy load_strategy_ = LoadStrategy{LoadType::NOT_LOADED };
     timestamp last_reload_time_ = 0;
     LoadProgress loaded_with_progress_;
     std::deque<AtomKey> keys_;
@@ -452,24 +530,38 @@ namespace fmt {
         template<typename ParseContext>
         constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
 
-    template<typename FormatContext>
-    auto format(arcticdb::LoadType l, FormatContext &ctx) const {
-        switch(l) {
-        case arcticdb::LoadType::NOT_LOADED:
-            return fmt::format_to(ctx.out(), "NOT_LOADED");
-        case arcticdb::LoadType::LOAD_LATEST:
-            return fmt::format_to(ctx.out(), "LOAD_LATEST");
-        case arcticdb::LoadType::LOAD_LATEST_UNDELETED:
-            return fmt::format_to(ctx.out(), "LOAD_LATEST_UNDELETED");
-        case arcticdb::LoadType::LOAD_DOWNTO:
-            return fmt::format_to(ctx.out(), "LOAD_DOWNTO");
-        case arcticdb::LoadType::LOAD_UNDELETED:
-            return fmt::format_to(ctx.out(), "LOAD_UNDELETED");
-        case arcticdb::LoadType::LOAD_ALL:
-            return fmt::format_to(ctx.out(), "LOAD_ALL");
-        default:
-            arcticdb::util::raise_rte("Unrecognized load type {}", int(l));
+        template<typename FormatContext>
+        auto format(arcticdb::LoadType l, FormatContext &ctx) const {
+            switch (l) {
+                case arcticdb::LoadType::NOT_LOADED:
+                    return fmt::format_to(ctx.out(), "NOT_LOADED");
+                case arcticdb::LoadType::LOAD_LATEST:
+                    return fmt::format_to(ctx.out(), "LOAD_LATEST");
+                case arcticdb::LoadType::LOAD_DOWNTO:
+                    return fmt::format_to(ctx.out(), "LOAD_DOWNTO");
+                case arcticdb::LoadType::LOAD_ALL:
+                    return fmt::format_to(ctx.out(), "LOAD_ALL");
+                default:
+                    arcticdb::util::raise_rte("Unrecognized load type {}", int(l));
+            }
         }
-    }
-};
+    };
+
+    template<>
+    struct formatter<arcticdb::ToLoad> {
+        template<typename ParseContext>
+        constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+        template<typename FormatContext>
+        auto format(arcticdb::ToLoad l, FormatContext &ctx) const {
+            switch (l) {
+                case arcticdb::ToLoad::ANY:
+                    return fmt::format_to(ctx.out(), "ANY");
+                case arcticdb::ToLoad::UNDELETED:
+                    return fmt::format_to(ctx.out(), "UNDELETED");
+                default:
+                    arcticdb::util::raise_rte("Unrecognized to load {}", int(l));
+            }
+        }
+    };
 }

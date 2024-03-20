@@ -146,7 +146,7 @@ public:
         const std::shared_ptr<Store>& store,
         const VersionMapEntry& ref_entry,
         const std::shared_ptr<VersionMapEntry>& entry,
-        const LoadParameter& load_params) const {
+        const LoadStrategy& load_strategy) const {
         auto next_key = ref_entry.head_;
         entry->head_ = ref_entry.head_;
 
@@ -159,7 +159,7 @@ public:
             cached_penultimate_index = ref_entry.keys_[1];
         }
 
-        if (key_exists_in_ref_entry(load_params, ref_entry, cached_penultimate_index)) {
+        if (key_exists_in_ref_entry(load_strategy, ref_entry, cached_penultimate_index)) {
             load_progress = ref_entry.loaded_with_progress_;
             entry->keys_.push_back(ref_entry.keys_[0]);
             if(cached_penultimate_index)
@@ -171,10 +171,10 @@ public:
                 next_key = read_segment_with_keys(seg, entry, load_progress);
                 set_latest_version(entry, latest_version);
             } while (next_key
-            && !loaded_until_version_id(load_params, load_progress, latest_version)
-            && !loaded_until_timestamp(load_params, load_progress)
-            && load_latest_ongoing(load_params, entry)
-            && looking_for_undeleted(load_params, entry, load_progress));
+            && !loaded_until_version_id(load_strategy, load_progress, latest_version)
+            && !loaded_until_timestamp(load_strategy, load_progress)
+            && load_latest_ongoing(load_strategy, entry)
+            && looking_for_undeleted(load_strategy, entry, load_progress));
         }
         entry->loaded_with_progress_ = load_progress;
     }
@@ -182,9 +182,9 @@ public:
     void load_via_ref_key(
         std::shared_ptr<Store> store,
         const StreamId& stream_id,
-        const LoadParameter& load_params,
+        const LoadStrategy& load_strategy,
         const std::shared_ptr<VersionMapEntry>& entry) {
-        load_params.validate();
+        load_strategy.validate();
         static const auto max_trial_config = ConfigsMap::instance()->get_int("VersionMap.MaxReadRefTrials", 2);
         auto max_trials = max_trial_config;
         while (true) {
@@ -194,7 +194,7 @@ public:
                 if (ref_entry.empty())
                     return;
 
-                follow_version_chain(store, ref_entry, entry, load_params);
+                follow_version_chain(store, ref_entry, entry, load_strategy);
                 break;
             } catch (const std::exception &err) {
                 if (--max_trials <= 0) {
@@ -235,7 +235,7 @@ public:
     }
 
     void write_version(std::shared_ptr<Store> store, const AtomKey &key, const std::optional<AtomKey>& previous_key) {
-        LoadParameter load_param{LoadType::LOAD_LATEST};
+        LoadParameter load_param{LoadType::LOAD_LATEST, ToLoad::ANY};
         auto entry = check_reload(store, key.id(), load_param,  __FUNCTION__);
 
         do_write(store, key, entry);
@@ -259,7 +259,7 @@ public:
         auto entry = check_reload(
             store,
             stream_id,
-            LoadParameter{LoadType::LOAD_UNDELETED},
+            LoadParameter{LoadType::LOAD_ALL, ToLoad::UNDELETED},
             __FUNCTION__);
         auto output = tombstone_from_key_or_all_internal(store, stream_id, first_key_to_tombstone, entry);
 
@@ -273,7 +273,7 @@ public:
     }
 
     std::string dump_entry(const std::shared_ptr<Store>& store, const StreamId& stream_id) {
-        const auto entry = check_reload(store, stream_id, LoadParameter{LoadType::LOAD_ALL}, __FUNCTION__);
+        const auto entry = check_reload(store, stream_id, LoadParameter{LoadType::LOAD_ALL, ToLoad::ANY}, __FUNCTION__);
         return entry->dump();
     }
 
@@ -285,7 +285,7 @@ public:
         auto entry = check_reload(
                 store,
                 key.id(),
-                LoadParameter{LoadType::LOAD_UNDELETED},
+                LoadParameter{LoadType::LOAD_ALL, ToLoad::UNDELETED},
                 __FUNCTION__);
         auto [_, result] = tombstone_from_key_or_all_internal(store, key.id(), previous_key, entry);
 
@@ -324,7 +324,7 @@ public:
         // This method has no API, and is not tested in the rapidcheck tests, but could easily be enabled there.
         // It compacts the version map but skips any keys which have been deleted (to free up space).
         ARCTICDB_DEBUG(log::version(), "Version map compacting versions for stream {}", stream_id);
-        auto entry = check_reload(store, stream_id, LoadParameter{LoadType::LOAD_ALL}, __FUNCTION__);
+        auto entry = check_reload(store, stream_id, LoadParameter{LoadType::LOAD_ALL, ToLoad::ANY}, __FUNCTION__);
         if (!requires_compaction(entry))
             return;
 
@@ -439,7 +439,7 @@ public:
 
     void compact(std::shared_ptr<Store> store, const StreamId& stream_id) {
         ARCTICDB_DEBUG(log::version(), "Version map compacting versions for stream {}", stream_id);
-        auto entry = check_reload(store, stream_id, LoadParameter{LoadType::LOAD_ALL}, __FUNCTION__);
+        auto entry = check_reload(store, stream_id, LoadParameter{LoadType::LOAD_ALL, ToLoad::ANY}, __FUNCTION__);
         if (entry->empty()) {
             log::version().warn("Entry is empty in compact");
             return;
@@ -461,7 +461,7 @@ public:
 
     void overwrite_symbol_tree(
             std::shared_ptr<Store> store, const StreamId& stream_id, const std::vector<AtomKey>& index_keys) {
-        auto entry = check_reload(store, stream_id, LoadParameter{LoadType::LOAD_ALL}, __FUNCTION__);
+        auto entry = check_reload(store, stream_id, LoadParameter{LoadType::LOAD_ALL, ToLoad::ANY}, __FUNCTION__);
         auto old_entry = *entry;
         if (!index_keys.empty()) {
             entry->keys_.assign(std::begin(index_keys), std::end(index_keys));
@@ -484,11 +484,11 @@ public:
         const char* function ARCTICDB_UNUSED) {
         ARCTICDB_DEBUG(log::version(), "Check reload in function {} for id {}", function, stream_id);
 
-        if (has_cached_entry(stream_id, load_param)) {
+        if (has_cached_entry(stream_id, load_param.load_strategy_)) {
             return get_entry(stream_id);
         }
 
-        return storage_reload(store, stream_id, load_param, load_param.iterate_on_failure_);
+        return storage_reload(store, stream_id, load_param.load_strategy_, load_param.iterate_on_failure_);
     }
 
     /**
@@ -548,13 +548,13 @@ public:
      *
      * @param stream_id symbol to check
      * @param load_param the load type
-     * @return whether we have a cached entry suitable for the load type, so do not need to go to storage
+     * @return whether we have a cached entry suitable for the load strategy, so do not need to go to storage
      */
-    bool has_cached_entry(const StreamId &stream_id, const LoadParameter& load_param) const {
-        LoadType requested_load_type = load_param.load_type_;
+    bool has_cached_entry(const StreamId &stream_id, const LoadStrategy& requested_load_strategy) const {
+        LoadType requested_load_type = requested_load_strategy.load_type_;
         util::check(requested_load_type < LoadType::UNKNOWN, "Unexpected load type requested {}", requested_load_type);
 
-        load_param.validate();
+        requested_load_strategy.validate();
         MapType::const_iterator entry_it;
         if(!find_entry(entry_it, stream_id)) {
             return false;
@@ -572,35 +572,37 @@ public:
             return false;
         }
 
-        LoadType cached_load_type = entry->load_type_;
+        LoadType cached_load_type = entry->load_strategy_.load_type_;
 
         switch (requested_load_type) {
             case LoadType::NOT_LOADED:
                 return true;
             case LoadType::LOAD_LATEST: {
-                // If entry has at least one index we have the latest value cached
-                auto opt_latest = entry->get_first_index(true).first;
-                return opt_latest.has_value();
-            }
-            case LoadType::LOAD_LATEST_UNDELETED: {
-                // If entry has at least one undeleted index we have the latest_undeleted cached
-                // This check can be slow if we have thousands of deleted versions before the first undeleted. If that is
-                // ever a problem we can just store a boolean if we have an undeleted version.
-                auto opt_latest = entry->get_first_index(false).first;
+                // If entry has at least one (maybe undeleted) index we have the latest value cached
+
+                // This check can be slow if we have thousands of deleted versions before the first undeleted and we're
+                // looking for an undeleted version. If that is ever a problem we can just store a boolean whether
+                // we have an undeleted version.
+                auto opt_latest = entry->get_first_index(requested_load_strategy.should_include_deleted()).first;
                 return opt_latest.has_value();
             }
             case LoadType::LOAD_DOWNTO:
                 // We check whether the oldest loaded version is before or at the requested one
-                return loaded_as_far_as_version_id(*entry, load_param.load_until_version_.value());
-            case LoadType::LOAD_FROM_TIME:
-                // We check whether the earliest loaded timestamp is before or at the requested on
-                return entry->loaded_with_progress_.earliest_loaded_undeleted_timestamp_ <= load_param.load_from_time_.value();
-            case LoadType::LOAD_UNDELETED:
-                // We can have all undeleteded versions cached when cache was loaded by either loading all or all undeleted.
-                return cached_load_type==LoadType::LOAD_ALL || cached_load_type==LoadType::LOAD_UNDELETED;
+                return loaded_as_far_as_version_id(*entry, requested_load_strategy.load_until_version_.value());
+            case LoadType::LOAD_FROM_TIME: {
+                // We check whether the cached (deleted or undeleted) timestamp is before or at the requested one
+                auto cached_timestamp = requested_load_strategy.should_include_deleted() ?
+                                        entry->loaded_with_progress_.earliest_loaded_timestamp_ :
+                                        entry->loaded_with_progress_.earliest_loaded_undeleted_timestamp_;
+                return cached_timestamp <= requested_load_strategy.load_from_time_.value();
+            }
             case LoadType::LOAD_ALL:
-                // We can have all versions cached only when cache was loaded by loading all versions.
-                return cached_load_type==LoadType::LOAD_ALL;
+                // We can use cache when it was populated by a LOAD_ALL call, in which case it is only unsafe to use
+                // when the cache is of undeleted versions and the request is for all versions
+                if (cached_load_type==LoadType::LOAD_ALL){
+                    return entry->load_strategy_.should_include_deleted() || !requested_load_strategy.should_include_deleted();
+                }
+                return false;
             default:
                 util::raise_rte("Unexpected load type in cache {}", cached_load_type);
         }
@@ -740,7 +742,7 @@ private:
     std::shared_ptr<VersionMapEntry> storage_reload(
         std::shared_ptr<Store> store,
         const StreamId& stream_id,
-        const LoadParameter& load_param,
+        const LoadStrategy& load_strategy,
         bool iterate_on_failure) {
         /*
          * Goes to the storage for a given symbol, and recreates the VersionMapEntry from preferably the ref key
@@ -753,13 +755,13 @@ private:
         const auto clock_unsync_tolerance = ConfigsMap::instance()->get_int("VersionMap.UnsyncTolerance",
                                                                             DEFAULT_CLOCK_UNSYNC_TOLERANCE);
         entry->last_reload_time_ = Clock::nanos_since_epoch() - clock_unsync_tolerance;
-        entry->load_type_ = LoadType::NOT_LOADED; // FUTURE: to make more thread-safe with #368
+        entry->load_strategy_ = LoadStrategy{LoadType::NOT_LOADED}; // FUTURE: to make more thread-safe with #368
 
         try {
             auto temp = std::make_shared<VersionMapEntry>(*entry);
-            load_via_ref_key(store, stream_id, load_param, temp);
+            load_via_ref_key(store, stream_id, load_strategy, temp);
             std::swap(*entry, *temp);
-            entry->load_type_ = load_param.load_type_;
+            entry->load_strategy_ = load_strategy;
         }
         catch (const std::runtime_error &err) {
             if (iterate_on_failure) {
@@ -772,7 +774,7 @@ private:
         }
         if (iterate_on_failure && entry->empty()) {
             (void) load_via_iteration(store, stream_id, entry);
-            entry->load_type_ = LoadType::LOAD_ALL;
+            entry->load_strategy_ = LoadStrategy{LoadType::LOAD_ALL, ToLoad::ANY};
         }
 
         util::check(entry->keys_.empty() || entry->head_, "Non-empty VersionMapEntry should set head");
@@ -838,7 +840,7 @@ public:
 
         try {
             auto entry_ref = std::make_shared<VersionMapEntry>();
-            load_via_ref_key(store, stream_id, LoadParameter{LoadType::LOAD_ALL}, entry_ref);
+            load_via_ref_key(store, stream_id, LoadStrategy{LoadType::LOAD_ALL, ToLoad::ANY}, entry_ref);
             entry_ref->validate();
         } catch (const std::exception& err) {
             log::version().warn(
@@ -851,7 +853,7 @@ public:
 
     bool indexes_sorted(const std::shared_ptr<Store>& store, const StreamId& stream_id) {
         auto entry_ref = std::make_shared<VersionMapEntry>();
-        load_via_ref_key(store, stream_id, LoadParameter{LoadType::LOAD_ALL}, entry_ref);
+        load_via_ref_key(store, stream_id, LoadStrategy{LoadType::LOAD_ALL, ToLoad::ANY}, entry_ref);
         auto indexes = entry_ref->get_indexes(true);
         return std::is_sorted(std::cbegin(indexes), std::cend(indexes), [] (const auto& l, const auto& r) {
             return l > r;
@@ -942,7 +944,7 @@ private:
             entry = check_reload(
                     store,
                     stream_id,
-                    LoadParameter{LoadType::LOAD_UNDELETED},
+                    LoadParameter{LoadType::LOAD_ALL, ToLoad::UNDELETED},
                     __FUNCTION__);
         }
 

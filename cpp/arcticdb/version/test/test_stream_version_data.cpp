@@ -12,8 +12,9 @@ TEST(StreamVersionData, SpecificVersion) {
     VersionQuery query_2{SpecificVersionQuery{VersionId(4)}, false};
     stream_version_data.react(query_2);
     ASSERT_EQ(stream_version_data.count_, 2);
-    ASSERT_EQ(stream_version_data.load_param_.load_type_, LoadType::LOAD_DOWNTO);
-    ASSERT_EQ(stream_version_data.load_param_.load_until_version_, 4);
+    ASSERT_EQ(stream_version_data.load_param_.load_strategy_.load_type_, LoadType::LOAD_DOWNTO);
+    ASSERT_EQ(stream_version_data.load_param_.load_strategy_.to_load_, ToLoad::UNDELETED);
+    ASSERT_EQ(stream_version_data.load_param_.load_strategy_.load_until_version_, 4);
 }
 
 TEST(StreamVersionData, SpecificVersionReversed) {
@@ -24,8 +25,9 @@ TEST(StreamVersionData, SpecificVersionReversed) {
     VersionQuery query_2{SpecificVersionQuery{VersionId(12)}, false};
     stream_version_data.react(query_2);
     ASSERT_EQ(stream_version_data.count_, 2);
-    ASSERT_EQ(stream_version_data.load_param_.load_type_, LoadType::LOAD_DOWNTO);
-    ASSERT_EQ(stream_version_data.load_param_.load_until_version_, 4);
+    ASSERT_EQ(stream_version_data.load_param_.load_strategy_.load_type_, LoadType::LOAD_DOWNTO);
+    ASSERT_EQ(stream_version_data.load_param_.load_strategy_.to_load_, ToLoad::UNDELETED);
+    ASSERT_EQ(stream_version_data.load_param_.load_strategy_.load_until_version_, 4);
 }
 
 TEST(StreamVersionData, Timestamp) {
@@ -38,8 +40,9 @@ TEST(StreamVersionData, Timestamp) {
     VersionQuery query_2{TimestampVersionQuery{timestamp(4)}, false};
     stream_version_data.react(query_2);
     ASSERT_EQ(stream_version_data.count_, 2);
-    ASSERT_EQ(stream_version_data.load_param_.load_type_, LoadType::LOAD_FROM_TIME);
-    ASSERT_EQ(stream_version_data.load_param_.load_from_time_, 4);
+    ASSERT_EQ(stream_version_data.load_param_.load_strategy_.load_type_, LoadType::LOAD_FROM_TIME);
+    ASSERT_EQ(stream_version_data.load_param_.load_strategy_.to_load_, ToLoad::UNDELETED);
+    ASSERT_EQ(stream_version_data.load_param_.load_strategy_.load_from_time_, 4);
 }
 
 TEST(StreamVersionData, TimestampUnordered) {
@@ -54,8 +57,9 @@ TEST(StreamVersionData, TimestampUnordered) {
     VersionQuery query_3{TimestampVersionQuery{timestamp(4)}, false};
     stream_version_data.react(query_3);
     ASSERT_EQ(stream_version_data.count_, 3);
-    ASSERT_EQ(stream_version_data.load_param_.load_type_, LoadType::LOAD_FROM_TIME);
-    ASSERT_EQ(stream_version_data.load_param_.load_from_time_, 3);
+    ASSERT_EQ(stream_version_data.load_param_.load_strategy_.load_type_, LoadType::LOAD_FROM_TIME);
+    ASSERT_EQ(stream_version_data.load_param_.load_strategy_.to_load_, ToLoad::UNDELETED);
+    ASSERT_EQ(stream_version_data.load_param_.load_strategy_.load_from_time_, 3);
 }
 
 TEST(StreamVersionData, Latest) {
@@ -66,8 +70,9 @@ TEST(StreamVersionData, Latest) {
     VersionQuery query_1{std::monostate{}, false};
     stream_version_data.react(query_1);
     ASSERT_EQ(stream_version_data.count_, 1);
-    ASSERT_EQ(stream_version_data.load_param_.load_type_, LoadType::LOAD_LATEST_UNDELETED);
-    ASSERT_EQ(stream_version_data.load_param_.load_until_version_.has_value(), false);
+    ASSERT_EQ(stream_version_data.load_param_.load_strategy_.load_type_, LoadType::LOAD_LATEST);
+    ASSERT_EQ(stream_version_data.load_param_.load_strategy_.to_load_, ToLoad::UNDELETED);
+    ASSERT_EQ(stream_version_data.load_param_.load_strategy_.load_until_version_.has_value(), false);
 }
 
 TEST(StreamVersionData, SpecificToTimestamp) {
@@ -80,9 +85,10 @@ TEST(StreamVersionData, SpecificToTimestamp) {
     VersionQuery query_2{TimestampVersionQuery{timestamp(3)}, false};
     stream_version_data.react(query_2);
     ASSERT_EQ(stream_version_data.count_, 2);
-    ASSERT_EQ(stream_version_data.load_param_.load_type_, LoadType::LOAD_UNDELETED);
-    ASSERT_EQ(stream_version_data.load_param_.load_until_version_.has_value(), false);
-    ASSERT_EQ(stream_version_data.load_param_.load_from_time_.has_value(), false);
+    ASSERT_EQ(stream_version_data.load_param_.load_strategy_.load_type_, LoadType::LOAD_ALL);
+    ASSERT_EQ(stream_version_data.load_param_.load_strategy_.to_load_, ToLoad::UNDELETED);
+    ASSERT_EQ(stream_version_data.load_param_.load_strategy_.load_until_version_.has_value(), false);
+    ASSERT_EQ(stream_version_data.load_param_.load_strategy_.load_from_time_.has_value(), false);
 }
 
 TEST(StreamVersionData, TimestampToSpecific) {
@@ -95,7 +101,8 @@ TEST(StreamVersionData, TimestampToSpecific) {
     VersionQuery query_2{SpecificVersionQuery{VersionId(12)}, false};
     stream_version_data.react(query_2);
     ASSERT_EQ(stream_version_data.count_, 2);
-    ASSERT_EQ(stream_version_data.load_param_.load_type_, LoadType::LOAD_UNDELETED);
-    ASSERT_EQ(stream_version_data.load_param_.load_until_version_.has_value(), false);
-    ASSERT_EQ(stream_version_data.load_param_.load_from_time_.has_value(), false);
+    ASSERT_EQ(stream_version_data.load_param_.load_strategy_.load_type_, LoadType::LOAD_ALL);
+    ASSERT_EQ(stream_version_data.load_param_.load_strategy_.to_load_, ToLoad::UNDELETED);
+    ASSERT_EQ(stream_version_data.load_param_.load_strategy_.load_until_version_.has_value(), false);
+    ASSERT_EQ(stream_version_data.load_param_.load_strategy_.load_from_time_.has_value(), false);
 }
