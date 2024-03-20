@@ -16,43 +16,26 @@
 namespace arcticdb {
 namespace segment_size {
 
-std::tuple<size_t, size_t> compressed(const arcticdb::proto::encoding::SegmentHeader &seg_hdr) {
-    std::size_t buffer_size = 0;
-
-    size_t string_pool_size = 0;
-    if (seg_hdr.has_string_pool_field())
-        string_pool_size = encoding_sizes::ndarray_field_compressed_size(seg_hdr.string_pool_field().ndarray());
-
-    if (EncodingVersion(seg_hdr.encoding_version()) == EncodingVersion::V1) {
-        size_t metadata_size = 0;
-        if (seg_hdr.has_metadata_field())
-            metadata_size = encoding_sizes::ndarray_field_compressed_size(seg_hdr.metadata_field().ndarray());
-
-        buffer_size = encoding_sizes::segment_compressed_size(seg_hdr.fields()) + metadata_size + string_pool_size;
-    }
-    else
-        buffer_size = seg_hdr.column_fields().offset() + sizeof(EncodedMagic) + encoding_sizes::ndarray_field_compressed_size(seg_hdr.column_fields().ndarray());
-
-    return {string_pool_size, buffer_size};
-}
-
-struct SegmentCompressedSize {
-    size_t string_pool_size_ = 0U;
-    size_t total_buffer_size_ = 0U;
-    size_t body_size_ = 0U;
-};
 
 SegmentCompressedSize compressed(const SegmentHeader &seg_hdr) {
     size_t string_pool_size = 0;
+    std::size_t buffer_size = 0;
+
     if (seg_hdr.has_string_pool_field())
         string_pool_size = encoding_sizes::ndarray_field_compressed_size(seg_hdr.string_pool_field().ndarray());
 
-    const auto buffer_size = seg_hdr.footer_offset() + sizeof(EncodedMagic) + encoding_sizes::ndarray_field_compressed_size(seg_hdr.column_fields().ndarray());
+    size_t metadata_size = 0;
+    if (seg_hdr.has_metadata_field())
+        metadata_size = encoding_sizes::ndarray_field_compressed_size(seg_hdr.metadata_field().ndarray());
+
+    i
+        buffer_size = seg_hdr.footer_offset() + sizeof(EncodedMagic) + encoding_sizes::ndarray_field_compressed_size(seg_hdr.column_fields().ndarray());
+
     return {string_pool_size, buffer_size, seg_hdr.footer_offset()};
 }
 }
 
-FieldCollection decode_fields(
+FieldCollection decode_descriptor_fields(
     const SegmentHeader& hdr,
     const uint8_t* data,
     const uint8_t* begin) {
@@ -91,8 +74,7 @@ SegmentHeaderProtoWrapper decode_protobuf_header(const uint8_t* data, size_t hea
     return {seg_hdr, std::move(arena)};
 }
 
-template <typename SegmentHeaderType>
-FieldCollection deserialize_fields_collection(const uint8_t* src, const SegmentHeaderType& seg_hdr) {
+FieldCollection deserialize_descriptor_fields_collection(const uint8_t* src, const SegmentHeader& seg_hdr) {
     FieldCollection fields;
     const auto* fields_ptr = src;
     util::check_magic<MetadataMagic>(fields_ptr);
@@ -101,7 +83,7 @@ FieldCollection deserialize_fields_collection(const uint8_t* src, const SegmentH
 
     util::check_magic<DescriptorMagic>(fields_ptr);
     if(seg_hdr.has_descriptor_field() && seg_hdr.descriptor_field().has_ndarray())
-         fields = decode_fields(seg_hdr, fields_ptr, src);
+         fields = decode_descriptor_fields(seg_hdr, fields_ptr, src);
 
     return fields;
 }
@@ -113,7 +95,6 @@ EncodedFieldCollection deserialize_body_fields(const SegmentHeader& hdr, const u
 
     return EncodedFieldCollection{decode_encoded_fields(hdr, encoded_fields_ptr, data)};
 }
-
 
 std::tuple<SegmentHeader, FieldCollection, std::shared_ptr<FrameDescriptorImpl>, std::optional<SegmentHeaderProtoWrapper>> decode_header_and_fields(const uint8_t* src) {
     auto* fixed_hdr = reinterpret_cast<const FixedHeader*>(src);
@@ -135,12 +116,12 @@ std::tuple<SegmentHeader, FieldCollection, std::shared_ptr<FrameDescriptorImpl>,
        auto segment_header = deserialize_segment_header_from_proto(proto_wrapper->proto());
        util::check(segment_header.encoding_version() == EncodingVersion::V1, "Expected v1 header to contain legacy encoding version");
        field_collection_from_proto(std::move(*proto_wrapper->proto().mutable_stream_descriptor()->mutable_fields()));
-        return {std::move(segment_header), std::move(fields), std::move(data), std::move(proto_wrapper)};
+       return {std::move(segment_header), std::move(fields), std::move(data), std::move(proto_wrapper)};
     } else {
         SegmentHeader segment_header;
         segment_header.deserialize_from_bytes(header_ptr);
         util::check(segment_header.encoding_version() == EncodingVersion::V2, "Expected V2 encoding in binary header");
-        fields = deserialize_fields_collection(fields_ptr, segment_header);
+        fields = deserialize_descriptor_fields_collection(fields_ptr, segment_header);
         return {std::move(segment_header), std::move(fields), std::move(data), std::move(proto_wrapper)};
     }
 }
@@ -201,7 +182,6 @@ Segment Segment::from_bytes(const std::uint8_t* src, std::size_t readable_size, 
     return {std::move(seg_hdr), std::move(variant_buffer), std::move(desc_data), std::make_shared<FieldCollection>(std::move(fields))};
 }
 
-
 Segment Segment::from_buffer(const std::shared_ptr<Buffer>& buffer) {
     ARCTICDB_SAMPLE(SegmentFromBuffer, 0)
     auto* fixed_hdr = reinterpret_cast<FixedHeader*>(buffer->data());
@@ -224,10 +204,11 @@ Segment Segment::from_buffer(const std::shared_ptr<Buffer>& buffer) {
     buffer->set_preamble(FIXED_HEADER_SIZE + fixed_hdr->header_bytes);
     ARCTICDB_SUBSAMPLE(CreateSegment, 0)
     return{std::move(seg_hdr), buffer, std::move(desc_data), std::make_shared<FieldCollection>(std::move(fields))};
-
 }
 
-void Segment::write_proto_header(uint8_t* dst, arcticdb::proto::encoding::SegmentHeader header, size_t hdr_size) const {
+void Segment::write_proto_header(uint8_t* dst) const {
+    const auto hdr_size = proto_size();
+    const auto& header = header_proto();
     FixedHeader hdr = {MAGIC_NUMBER, HEADER_VERSION_V1, std::uint32_t(hdr_size)};
     write_fixed_header(dst, hdr);
 
@@ -240,7 +221,7 @@ std::pair<uint8_t*, size_t> Segment::serialize_header_v2(std::shared_ptr<Buffer>
     util::check(header_bytes == buffer_.preamble_bytes(), "Expected v2 header of size {} to fit exactly into buffer preamble of size {}", header_.bytes(), buffer_.preamble_bytes());
     const auto &buffer = buffer_.get_owning_buffer();
     header_.serialize_to_bytes(buffer->preamble());
-    return std::make_pair(buffer->preamble(), total_segment_size(header_bytes));
+    return std::make_pair(buffer->preamble(), total_segment_size());
 }
 
 std::pair<uint8_t*, size_t> Segment::serialize_header_v1(std::shared_ptr<Buffer>& tmp) {
@@ -258,13 +239,13 @@ std::pair<uint8_t*, size_t> Segment::serialize_header_v1(std::shared_ptr<Buffer>
         ARCTICDB_TRACE(log::codec(),
                        "Buffer contents before header write: {}",
                        dump_bytes(buffer->data(), buffer->bytes(), 100u));
-        write_proto_header(base_ptr, proto_header, hdr_size);
+        write_proto_header(base_ptr);
         ARCTICDB_TRACE(log::storage(),
                        "Header fits in internal buffer {:x} with {} bytes space: {}",
                        uintptr_t (base_ptr),
                        buffer->preamble_bytes() - total_hdr_size,
                        dump_bytes(buffer->data(), buffer->bytes(), 100u));
-        return std::make_pair(base_ptr, total_segment_size(hdr_size));
+        return std::make_pair(base_ptr, total_segment_size());
     } else {
         tmp = std::make_shared<Buffer>();
         ARCTICDB_DEBUG(log::storage(),
@@ -272,13 +253,13 @@ std::pair<uint8_t*, size_t> Segment::serialize_header_v1(std::shared_ptr<Buffer>
                        hdr_size,
                        buffer_.preamble_bytes(),
                        uintptr_t(tmp->data()));
-        tmp->ensure(total_segment_size(hdr_size));
+        tmp->ensure(total_segment_size());
         auto* dst = tmp->preamble();
-        write_proto_header(dst, proto_header, hdr_size);
+        write_proto_header(dst);
         std::memcpy(dst + FIXED_HEADER_SIZE + hdr_size,
                     buffer().data(),
                     buffer().bytes());
-        return std::make_pair(tmp->preamble(), total_segment_size(hdr_size));
+        return std::make_pair(tmp->preamble(), total_segment_size());
     }
 }
 
@@ -301,23 +282,28 @@ std::pair<uint8_t*, size_t> Segment::serialize_header(std::shared_ptr<Buffer>& t
     return desc_.fields(pos);
 }
 
-void Segment::write_to(std::uint8_t* dst, std::size_t hdr_sz) {
+const arcticdb::proto::encoding::SegmentHeader& Segment::header_proto() const {
+    util::check(header_.encoding_version() == EncodingVersion::V1, "Got proto request in V2 encoding");
+    if(!proto_)
+        proto_ = std::make_unique<arcticdb::proto::encoding::SegmentHeader>(serialize_segment_header_to_proto(header_));
+
+    return *proto_;
+}
+
+void Segment::write_to(std::uint8_t* dst) {
     ARCTICDB_SAMPLE(SegmentWriteToStorage, RMTSF_Aggregate)
     ARCTICDB_SUBSAMPLE(SegmentWriteHeader, RMTSF_Aggregate)
 
-    if(header_.encoding_version() == EncodingVersion::V1) {
-        auto proto_header = serialize_segment_header_to_proto(header_);
-        const auto hdr_size = proto_header.ByteSizeLong();
-        auto total_hdr_size = hdr_size + FIXED_HEADER_SIZE;
-        write_proto_header(dst, proto_header, hdr_sz);
-    }
+    size_t header_size = 0U;
+    if(header_.encoding_version() == EncodingVersion::V1)
+        write_proto_header(dst);
 
     ARCTICDB_SUBSAMPLE(SegmentWriteBody, RMTSF_Aggregate)
     ARCTICDB_DEBUG(log::codec(), "Writing {} bytes to body at offset {}",
                        buffer().bytes(),
-                       FIXED_HEADER_SIZE + hdr_sz);
+                       FIXED_HEADER_SIZE + header_size);
 
-    std::memcpy(dst + FIXED_HEADER_SIZE + hdr_sz,
+    std::memcpy(dst + FIXED_HEADER_SIZE + header_size,
                 buffer().data(),
                 buffer().bytes());
 }

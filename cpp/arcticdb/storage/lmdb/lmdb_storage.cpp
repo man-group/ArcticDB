@@ -47,10 +47,8 @@ void LmdbStorage::do_write_internal(Composite<KeySegmentPair>&& kvs, ::lmdb::txn
             mdb_key.mv_data = k.data();
             mdb_key.mv_size = k.size();
 
-            std::size_t hdr_sz = seg.segment_header_bytes_size();
-
             MDB_val mdb_val;
-            mdb_val.mv_size = seg.total_segment_size(hdr_sz);
+            mdb_val.mv_size = seg.total_segment_size();
             int64_t overwrite_flag = std::holds_alternative<RefKey>(kv.variant_key()) ? 0 : MDB_NOOVERWRITE;
             ARCTICDB_SUBSAMPLE(LmdbPut, 0)
             int res = ::mdb_put(txn.handle(), dbi.handle(), &mdb_key, &mdb_val, MDB_RESERVE | overwrite_flag);
@@ -63,8 +61,7 @@ void LmdbStorage::do_write_internal(Composite<KeySegmentPair>&& kvs, ::lmdb::txn
                                                      res, kv.key_view()));
             }
             ARCTICDB_SUBSAMPLE(LmdbMemCpy, 0)
-            // mdb_val now points to a reserved memory area we must write to
-            seg.write_to(reinterpret_cast<std::uint8_t *>(mdb_val.mv_data), hdr_sz);
+            seg.write_to(reinterpret_cast<std::uint8_t *>(mdb_val.mv_data));
         }
     });
 }

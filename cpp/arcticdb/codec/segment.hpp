@@ -23,7 +23,15 @@
 namespace arcticdb {
 
 namespace segment_size {
-std::tuple<size_t, size_t> compressed(const arcticdb::proto::encoding::SegmentHeader& seg_hdr);
+
+struct SegmentCompressedSize {
+    size_t string_pool_size_ = 0U;
+    size_t total_buffer_size_ = 0U;
+    size_t body_size_ = 0U;
+};
+
+
+SegmentCompressedSize compressed(const arcticdb::proto::encoding::SegmentHeader& seg_hdr);
 }
 
 template<typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
@@ -107,24 +115,28 @@ class Segment {
 
     static Segment from_bytes(const std::uint8_t *src, std::size_t readable_size, bool copy_data = false);
 
-    void write_to(std::uint8_t *dst, std::size_t hdr_sz);
+    void write_to(std::uint8_t *dst);
 
     std::pair<uint8_t*, size_t> serialize_header(std::shared_ptr<Buffer>& tmp);
 
-    void write_proto_header(uint8_t* dst, arcticdb::proto::encoding::SegmentHeader header, size_t hdr_size) const;
+    void write_proto_header(uint8_t* dst) const;
 
     [[nodiscard]] std::size_t total_segment_size() const {
-        return total_segment_size(segment_header_bytes_size());
+        return FIXED_HEADER_SIZE + segment_header_bytes_size() + buffer_bytes();
     }
 
-    [[nodiscard]] std::size_t total_segment_size(std::size_t hdr_size) const {
-        auto total = FIXED_HEADER_SIZE + hdr_size + buffer_bytes();
-        ARCTICDB_TRACE(log::storage(), "Total segment size {} + {} + {} = {}", FIXED_HEADER_SIZE, hdr_size, buffer_bytes(), total);
-        return total;
+    [[nodiscard]] size_t proto_size() const {
+        if(!proto_size_)
+            proto_size_ = header_proto().ByteSizeLong();
+
+        return *proto_size_;
     }
 
     [[nodiscard]] std::size_t segment_header_bytes_size() const {
-        return header_.bytes();
+        if(header_.encoding_version() == EncodingVersion::V1)
+            return proto_size();
+        else
+            return header_.bytes();
     }
 
     [[nodiscard]] std::size_t buffer_bytes() const {
@@ -152,6 +164,8 @@ class Segment {
     [[nodiscard]] size_t fields_size() const;
 
     [[nodiscard]] const Field& fields(size_t pos) const;
+
+    const arcticdb::proto::encoding::SegmentHeader& header_proto() const;
 
     void force_own_buffer() {
         buffer_.force_own_buffer();
@@ -191,6 +205,8 @@ class Segment {
     VariantBuffer buffer_;
     StreamDescriptor desc_;
     std::any keepalive_;
+    mutable std::unique_ptr<arcticdb::proto::encoding::SegmentHeader> proto_;
+    mutable std::optional<size_t> proto_size_ = 0UL;
 };
 
 } //namespace arcticdb

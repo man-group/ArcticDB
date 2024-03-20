@@ -135,12 +135,11 @@ auto build_document(storage::KeySegmentPair &kv) {
 
     const auto &key = kv.variant_key();
     const auto &segment = kv.segment();
-    const auto hdr_size = segment.segment_header_bytes_size();
-    const auto total_size = segment.total_segment_size(hdr_size);
+    const auto total_size = segment.total_segment_size();
     /*thread_local*/ std::vector<uint8_t> buffer{};
     buffer.resize(total_size);
     bsoncxx::types::b_binary data = {};
-    kv.segment().write_to(buffer.data(), hdr_size);
+    kv.segment().write_to(buffer.data());
     data.size = uint32_t(total_size);
     data.bytes = buffer.data();
 

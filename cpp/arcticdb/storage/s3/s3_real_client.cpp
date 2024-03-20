@@ -157,7 +157,7 @@ S3Result<std::monostate> RealS3Client::put_object(
     }
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Wrote key '{}', with {} bytes of data",
                            s3_object_name,
-                           segment.total_segment_size(hdr_size));
+                           segment.total_segment_size());
     return {std::monostate()};
 }
 
