@@ -231,21 +231,21 @@ inline std::optional<VersionId> get_version_id_negative_index(VersionId latest, 
 
 std::unordered_map<StreamId, size_t> get_num_version_entries(const std::shared_ptr<Store> &store, size_t batch_size);
 
-inline bool is_positive_version_query(const LoadParameter& load_params) {
-    return load_params.load_until_version_.value() >= 0;
+inline bool is_positive_version_query(const LoadStrategy& load_strategy) {
+    return load_strategy.load_until_version_.value() >= 0;
 }
 
-inline bool loaded_until_version_id(const LoadParameter &load_params, const LoadProgress& load_progress, const std::optional<VersionId>& latest_version) {
-    if (!load_params.load_until_version_)
+inline bool loaded_until_version_id(const LoadStrategy &load_strategy, const LoadProgress& load_progress, const std::optional<VersionId>& latest_version) {
+    if (!load_strategy.load_until_version_)
         return false;
 
-    if (is_positive_version_query(load_params)) {
-        if (load_progress.oldest_loaded_index_version_ > static_cast<VersionId>(*load_params.load_until_version_)) {
+    if (is_positive_version_query(load_strategy)) {
+        if (load_progress.oldest_loaded_index_version_ > static_cast<VersionId>(*load_strategy.load_until_version_)) {
             return false;
         }
     } else {
         if (latest_version.has_value()) {
-            if (auto opt_version_id = get_version_id_negative_index(*latest_version, *load_params.load_until_version_);
+            if (auto opt_version_id = get_version_id_negative_index(*latest_version, *load_strategy.load_until_version_);
                 opt_version_id && load_progress.oldest_loaded_index_version_ > *opt_version_id) {
                     return false;
             }
@@ -256,7 +256,7 @@ inline bool loaded_until_version_id(const LoadParameter &load_params, const Load
     ARCTICDB_DEBUG(log::version(),
                    "Exiting load downto because loaded to version {} for request {} with {} total versions",
                    load_progress.oldest_loaded_index_version_,
-                   *load_params.load_until_version_,
+                   *load_strategy.load_until_version_,
                    latest_version.value()
                   );
     return true;
@@ -274,28 +274,32 @@ static constexpr timestamp nanos_to_seconds(timestamp nanos) {
     return nanos / timestamp(10000000000);
 }
 
-inline bool loaded_until_timestamp(const LoadParameter &load_params, const LoadProgress& load_progress) {
-    if (!load_params.load_from_time_ || load_progress.earliest_loaded_undeleted_timestamp_ > *load_params.load_from_time_)
+inline bool loaded_until_timestamp(const LoadStrategy &load_strategy, const LoadProgress& load_progress) {
+    if (!load_strategy.load_from_time_)
+        return false;
+
+    auto loaded_deleted_or_undeleted_timestamp = load_strategy.should_include_deleted() ? load_progress.earliest_loaded_timestamp_ : load_progress.earliest_loaded_undeleted_timestamp_;
+
+    if (loaded_deleted_or_undeleted_timestamp > *load_strategy.load_from_time_)
         return false;
 
     ARCTICDB_DEBUG(log::version(),
                    "Exiting load from timestamp because request {} <= {}",
-                   *load_params.load_from_time_,
-                   load_progress.earliest_loaded_undeleted_timestamp_);
+                   loaded_deleted_or_undeleted_timestamp,
+                   *load_strategy.load_from_time_);
     return true;
 }
 
-inline bool load_latest_ongoing(const LoadParameter &load_params, const std::shared_ptr<VersionMapEntry> &entry) {
-    if (!(load_params.load_type_ == LoadType::LOAD_LATEST_UNDELETED && entry->get_first_index(false).first) &&
-        !(load_params.load_type_ == LoadType::LOAD_LATEST && entry->get_first_index(true).first))
+inline bool load_latest_ongoing(const LoadStrategy &load_strategy, const std::shared_ptr<VersionMapEntry> &entry) {
+    if (!(load_strategy.load_type_ == LoadType::LOAD_LATEST && entry->get_first_index(load_strategy.should_include_deleted()).first))
         return true;
 
-    ARCTICDB_DEBUG(log::version(), "Exiting because we found a non-deleted index in load latest");
+    ARCTICDB_DEBUG(log::version(), "Exiting because we found the latest version with include_deleted: {}", load_strategy.should_include_deleted());
     return false;
 }
 
-inline bool looking_for_undeleted(const LoadParameter& load_params, const std::shared_ptr<VersionMapEntry>& entry, const LoadProgress& load_progress) {
-    if(!(load_params.load_type_ == LoadType::LOAD_UNDELETED || load_params.load_type_ == LoadType::LOAD_LATEST_UNDELETED)) {
+inline bool looking_for_undeleted(const LoadStrategy& load_strategy, const std::shared_ptr<VersionMapEntry>& entry, const LoadProgress& load_progress) {
+    if(load_strategy.should_include_deleted()) {
         return true;
     }
 
@@ -316,25 +320,25 @@ inline bool looking_for_undeleted(const LoadParameter& load_params, const std::s
     }
 }
 
-inline bool penultimate_key_contains_required_version_id(const AtomKey& key, const LoadParameter& load_params) {
-    if(is_positive_version_query(load_params)) {
-        return key.version_id() <= static_cast<VersionId>(load_params.load_until_version_.value());
+inline bool penultimate_key_contains_required_version_id(const AtomKey& key, const LoadStrategy& load_strategy) {
+    if(is_positive_version_query(load_strategy)) {
+        return key.version_id() <= static_cast<VersionId>(load_strategy.load_until_version_.value());
     } else {
-        return *load_params.load_until_version_ == -1;
+        return *load_strategy.load_until_version_ == -1;
     }
 }
 
-inline bool key_exists_in_ref_entry(const LoadParameter& load_params, const VersionMapEntry& ref_entry, std::optional<AtomKey>& cached_penultimate_key) {
-    if (is_latest_load_type(load_params.load_type_) && is_index_key_type(ref_entry.keys_[0].type()))
+inline bool key_exists_in_ref_entry(const LoadStrategy& load_strategy, const VersionMapEntry& ref_entry, std::optional<AtomKey>& cached_penultimate_key) {
+    if (load_strategy.load_type_ == LoadType::LOAD_LATEST && is_index_key_type(ref_entry.keys_[0].type()))
         return true;
 
-    if(cached_penultimate_key && is_partial_load_type(load_params.load_type_)) {
-        load_params.validate();
-        if(load_params.load_type_ == LoadType::LOAD_DOWNTO && penultimate_key_contains_required_version_id(*cached_penultimate_key, load_params)) {
+    if(cached_penultimate_key && is_partial_load_type(load_strategy.load_type_)) {
+        load_strategy.validate();
+        if(load_strategy.load_type_ == LoadType::LOAD_DOWNTO && penultimate_key_contains_required_version_id(*cached_penultimate_key, load_strategy)) {
             return true;
         }
 
-        if(load_params.load_type_ == LoadType::LOAD_FROM_TIME &&cached_penultimate_key->creation_ts() <= load_params.load_from_time_.value()) {
+        if(load_strategy.load_type_ == LoadType::LOAD_FROM_TIME && cached_penultimate_key->creation_ts() <= load_strategy.load_from_time_.value()) {
             return true;
         }
     }
