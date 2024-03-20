@@ -304,10 +304,12 @@ namespace
     ) {
         SegmentInMemory res;
         if(!aggregated_.empty()) {
-            auto col = std::make_shared<Column>(make_scalar_type(dynamic_schema ? DataType::FLOAT64: data_type_.value()), unique_values, true, false);
+            constexpr auto dynamic_schema_data_type = DataType::FLOAT64;
+            using dynamic_schema_tdt = ScalarTagType<DataTypeTag<dynamic_schema_data_type>>;
+            auto col = std::make_shared<Column>(make_scalar_type(dynamic_schema ? dynamic_schema_data_type: data_type_.value()), unique_values, true, false);
             auto column_data = col->data();
             col->set_row_data(unique_values - 1);
-            res.add_column(scalar_field(dynamic_schema ? DataType::FLOAT64 : data_type_.value(), output_column_name.value), col);
+            res.add_column(scalar_field(dynamic_schema ? dynamic_schema_data_type : data_type_.value(), output_column_name.value), col);
             details::visit_type(*data_type_, [&aggregated_, &column_data, unique_values, dynamic_schema] (auto col_tag) {
                 using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
                 using MaybeValueType = MaybeValue<typename col_type_info::RawType, T>;
@@ -317,7 +319,7 @@ namespace
                     aggregated_.resize(new_size);
                     auto in_ptr = reinterpret_cast<MaybeValueType *>(aggregated_.data());
                     std::fill(in_ptr + prev_size, in_ptr + unique_values, MaybeValueType{});
-                    for (auto it = column_data.begin<ScalarTagType<DataTypeTag<DataType::FLOAT64>>>(); it != column_data.end<ScalarTagType<DataTypeTag<DataType::FLOAT64>>>(); ++it, ++in_ptr) {
+                    for (auto it = column_data.begin<dynamic_schema_tdt>(); it != column_data.end<dynamic_schema_tdt>(); ++it, ++in_ptr) {
                         *it = in_ptr->written_ ? static_cast<double>(in_ptr->value_)
                                                : std::numeric_limits<double>::quiet_NaN();
                     }
