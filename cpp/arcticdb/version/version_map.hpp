@@ -171,10 +171,10 @@ public:
                 next_key = read_segment_with_keys(seg, entry, load_progress);
                 set_latest_version(entry, latest_version);
             } while (next_key
-            && !loaded_until_version_id(load_strategy, load_progress, latest_version)
-            && !loaded_until_timestamp(load_strategy, load_progress)
-            && load_latest_ongoing(load_strategy, entry)
-            && looking_for_undeleted(load_strategy, entry, load_progress));
+            && continue_when_loading_version(load_strategy, load_progress, latest_version)
+            && continue_when_loading_from_time(load_strategy, load_progress)
+            && continue_when_loading_latest(load_strategy, entry)
+            && continue_when_loading_undeleted(load_strategy, entry, load_progress));
         }
         entry->loaded_with_progress_ = load_progress;
     }

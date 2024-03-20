@@ -235,22 +235,26 @@ inline bool is_positive_version_query(const LoadStrategy& load_strategy) {
     return load_strategy.load_until_version_.value() >= 0;
 }
 
-inline bool loaded_until_version_id(const LoadStrategy &load_strategy, const LoadProgress& load_progress, const std::optional<VersionId>& latest_version) {
+inline bool continue_when_loading_version(const LoadStrategy& load_strategy, const LoadProgress& load_progress, const std::optional<VersionId>& latest_version) {
     if (!load_strategy.load_until_version_)
-        return false;
+        // Should continue when not loading down to a version
+        return true;
 
     if (is_positive_version_query(load_strategy)) {
         if (load_progress.oldest_loaded_index_version_ > static_cast<VersionId>(*load_strategy.load_until_version_)) {
-            return false;
+            // Should continue when version was not reached
+            return true;
         }
     } else {
         if (latest_version.has_value()) {
             if (auto opt_version_id = get_version_id_negative_index(*latest_version, *load_strategy.load_until_version_);
                 opt_version_id && load_progress.oldest_loaded_index_version_ > *opt_version_id) {
-                    return false;
+                    // Should continue when version was not reached
+                    return true;
             }
         } else {
-            return false;
+            // Should continue if not yet reached any index key
+            return true;
         }
     }
     ARCTICDB_DEBUG(log::version(),
@@ -259,7 +263,7 @@ inline bool loaded_until_version_id(const LoadStrategy &load_strategy, const Loa
                    *load_strategy.load_until_version_,
                    latest_version.value()
                   );
-    return true;
+    return false;
 }
 
 inline void set_latest_version(const std::shared_ptr<VersionMapEntry>& entry, std::optional<VersionId>& latest_version) {
@@ -274,23 +278,23 @@ static constexpr timestamp nanos_to_seconds(timestamp nanos) {
     return nanos / timestamp(10000000000);
 }
 
-inline bool loaded_until_timestamp(const LoadStrategy &load_strategy, const LoadProgress& load_progress) {
+inline bool continue_when_loading_from_time(const LoadStrategy &load_strategy, const LoadProgress& load_progress) {
     if (!load_strategy.load_from_time_)
-        return false;
+        return true;
 
     auto loaded_deleted_or_undeleted_timestamp = load_strategy.should_include_deleted() ? load_progress.earliest_loaded_timestamp_ : load_progress.earliest_loaded_undeleted_timestamp_;
 
     if (loaded_deleted_or_undeleted_timestamp > *load_strategy.load_from_time_)
-        return false;
+        return true;
 
     ARCTICDB_DEBUG(log::version(),
                    "Exiting load from timestamp because request {} <= {}",
                    loaded_deleted_or_undeleted_timestamp,
                    *load_strategy.load_from_time_);
-    return true;
+    return false;
 }
 
-inline bool load_latest_ongoing(const LoadStrategy &load_strategy, const std::shared_ptr<VersionMapEntry> &entry) {
+inline bool continue_when_loading_latest(const LoadStrategy& load_strategy, const std::shared_ptr<VersionMapEntry> &entry) {
     if (!(load_strategy.load_type_ == LoadType::LOAD_LATEST && entry->get_first_index(load_strategy.should_include_deleted()).first))
         return true;
 
@@ -298,26 +302,29 @@ inline bool load_latest_ongoing(const LoadStrategy &load_strategy, const std::sh
     return false;
 }
 
-inline bool looking_for_undeleted(const LoadStrategy& load_strategy, const std::shared_ptr<VersionMapEntry>& entry, const LoadProgress& load_progress) {
-    if(load_strategy.should_include_deleted()) {
+inline bool continue_when_loading_undeleted(const LoadStrategy& load_strategy, const std::shared_ptr<VersionMapEntry>& entry, const LoadProgress& load_progress) {
+    if (load_strategy.should_include_deleted()){
         return true;
     }
 
     if(entry->tombstone_all_) {
-        const bool is_deleted_by_tombstone_all = entry->tombstone_all_->version_id() >= load_progress.oldest_loaded_index_version_;
-        if(is_deleted_by_tombstone_all) {
+        // We need the check below because it is possible to have a tombstone_all which doesn't cover all version keys after it.
+        // For example when we use prune_previous_versions (without write) we write a tombstone_all key which applies to keys
+        // before the previous one. So it's possible the version chain can look like:
+        // v0 <- v1 <- v2 <- tombstone_all(version=1)
+        // In this case we need to terminate at v1.
+        const bool is_deleted_by_tombstone_all =
+                entry->tombstone_all_->version_id() >= load_progress.oldest_loaded_index_version_;
+        if (is_deleted_by_tombstone_all) {
             ARCTICDB_DEBUG(
-                log::version(),
-                "Exiting because tombstone all key deletes all versions beyond: {} and the oldest loaded index has version: {}",
-                entry->tombstone_all_->version_id(),
-                load_progress.oldest_loaded_index_version_);
+                    log::version(),
+                    "Exiting because tombstone all key deletes all versions beyond: {} and the oldest loaded index has version: {}",
+                    entry->tombstone_all_->version_id(),
+                    load_progress.oldest_loaded_index_version_);
             return false;
-        } else {
-            return true;
         }
-    } else {
-        return true;
     }
+    return true;
 }
 
 inline bool penultimate_key_contains_required_version_id(const AtomKey& key, const LoadStrategy& load_strategy) {
