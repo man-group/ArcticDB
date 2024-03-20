@@ -167,26 +167,6 @@ class LMDBLibraryAdapter(ArcticLibraryAdapter):
             env_cfg, _DEFAULT_ENV, name, encoding_version=library_options.encoding_version
         )
 
-    def cleanup_library(self, library_name: str):
-        lmdb_files_removed = True
-        for file in ("lock.mdb", "data.mdb"):
-            path = os.path.join(self._path, library_name, file)
-            try:
-                os.remove(path)
-            except Exception as e:
-                lmdb_files_removed = False
-                _rm_errorhandler(None, path, e)
-        dir_path = os.path.join(self._path, library_name)
-        if os.path.exists(dir_path):
-            if os.listdir(dir_path):
-                log.warn(
-                    "Skipping deletion of directory holding LMDB library during library deletion as it contains "
-                    f"files unrelated to LMDB. LMDB files {'have' if lmdb_files_removed else 'have not'} been "
-                    f"removed. directory=[{dir_path}]"
-                )
-            else:
-                shutil.rmtree(os.path.join(self._path, library_name), onerror=_rm_errorhandler)
-
     def get_storage_override(self) -> StorageOverride:
         lmdb_override = LmdbOverride()
         lmdb_override.path = self._path
