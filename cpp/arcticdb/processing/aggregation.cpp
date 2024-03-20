@@ -436,7 +436,7 @@ void CountAggregatorData::aggregate(const std::optional<ColumnWithStrings>& inpu
             using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
             Column::for_each_enumerated<typename col_type_info::TDT>(*input_column->column_, [&groups, this](auto enumerating_it) {
                 if constexpr (is_floating_point_type(col_type_info::data_type)) {
-                    if (!std::isnan(static_cast<double>(enumerating_it.value()))) {
+                    if (ARCTICDB_LIKELY(!std::isnan(enumerating_it.value()))) {
                         auto& val = aggregated_[groups[enumerating_it.idx()]];
                         ++val;
                     }

@@ -38,8 +38,8 @@ def test_group_on_float_column_with_nans(lmdb_version_store):
 
 # TODO: Add first and last once un-feature flagged
 # TODO: Test v2 encoding as well
-# @pytest.mark.parametrize("aggregator", ("sum", "min", "max", "mean", "ccccc"))
-@pytest.mark.parametrize("aggregator", ("mean",))
+# @pytest.mark.parametrize("aggregator", ("sum", "min", "max", "mean", "count"))
+@pytest.mark.parametrize("aggregator", ("count",))
 def test_aggregate_float_columns_with_nans(lmdb_version_store_v1, aggregator):
     lib = lmdb_version_store_v1
     sym = "test_aggregate_float_columns_with_nans"
@@ -51,6 +51,8 @@ def test_aggregate_float_columns_with_nans(lmdb_version_store_v1, aggregator):
     )
     lib.write(sym, df)
     expected = df.groupby("grouping_column").agg({"agg_column": aggregator})
+    if aggregator == "count":
+        expected = expected.astype(np.uint64)
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"agg_column": aggregator})
     received = lib.read(sym, query_builder=q).data
