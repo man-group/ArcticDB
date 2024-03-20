@@ -49,6 +49,7 @@ def test_aggregate_float_columns_with_nans(lmdb_version_store, aggregator):
     )
     lib.write(sym, df)
     expected = df.groupby("grouping_column").agg({"agg_column": aggregator})
+    # We count in unsigned integers for obvious reasons
     if aggregator == "count":
         expected = expected.astype(np.uint64)
     q = QueryBuilder()
