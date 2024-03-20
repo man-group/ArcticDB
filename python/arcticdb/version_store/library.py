@@ -809,6 +809,11 @@ class Library:
         prune_previous_versions
             Removes previous (non-snapshotted) versions from the database when True.
 
+        Returns
+        -------
+        VersionedItem
+            Structure containing metadata and version number of the written symbol in the store.
+
         Examples
         --------
 
