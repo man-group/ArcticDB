@@ -13,6 +13,7 @@ jobs:
       job_type: start
 
   benchmark_commit:
+    timeout-minutes: 1200
     needs: [start_ec2_runner]
     if: |
       always() &&
