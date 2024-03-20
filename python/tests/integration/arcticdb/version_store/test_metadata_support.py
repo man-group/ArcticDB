@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import numpy as np
+import pandas as pd
 from pandas import DataFrame, Timestamp
 import pytest
 
@@ -157,3 +158,79 @@ def test_write_metadata_preexisting_symbol_no_pruning(basic_store, sym):
     assert lib.read(sym).data == 1
     assert lib.read(sym, as_of=0).metadata == metadata_v0
     assert lib.read(sym, as_of=0).data == 1
+
+
+def timestamp_indexed_df():
+    return pd.DataFrame({"col": [0]}, index=[pd.Timestamp("2024-01-01")])
+
+
+def test_rv_contains_metadata_write(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_write_rv_contains_metadata"
+    assert lib.write(sym, 1).metadata is None
+    metadata = {"some": "metadata"}
+    assert lib.write(sym, 1, metadata).metadata == metadata
+
+
+def test_rv_contains_metadata_append(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_rv_contains_metadata_append"
+    assert lib.append(sym, timestamp_indexed_df(), write_if_missing=True).metadata is None
+    metadata = {"some": "metadata"}
+    assert lib.append(sym, timestamp_indexed_df(), metadata, write_if_missing=True).metadata == metadata
+
+
+def test_rv_contains_metadata_update(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_rv_contains_metadata_update"
+    assert lib.update(sym, timestamp_indexed_df(), upsert=True).metadata is None
+    metadata = {"some": "metadata"}
+    assert lib.update(sym, timestamp_indexed_df(), metadata, upsert=True).metadata == metadata
+
+
+def test_rv_contains_metadata_write_metadata(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_rv_contains_metadata_write_metadata"
+    metadata = {"some": "metadata"}
+    assert lib.write_metadata(sym, metadata).metadata == metadata
+
+
+def test_rv_contains_metadata_batch_write(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym_0 = "test_rv_contains_metadata_batch_write_0"
+    sym_1 = "test_rv_contains_metadata_batch_write_1"
+    sym_2 = "test_rv_contains_metadata_batch_write_2"
+    vits = lib.batch_write([sym_0, sym_1, sym_2], 3 * [1])
+    assert all(vit.metadata is None for vit in vits)
+    metadata_0 = {"some": "metadata_0"}
+    metadata_2 = {"some": "metadata_2"}
+    vits = lib.batch_write([sym_0, sym_1, sym_2], 3 * [1], [metadata_0, None, metadata_2])
+    assert vits[0].metadata == metadata_0
+    assert vits[1].metadata is None
+    assert vits[2].metadata == metadata_2
+
+
+def test_rv_contains_metadata_batch_append(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym_0 = "test_rv_contains_metadata_batch_append_0"
+    sym_1 = "test_rv_contains_metadata_batch_append_1"
+    sym_2 = "test_rv_contains_metadata_batch_append_2"
+    vits = lib.batch_append([sym_0, sym_1, sym_2], 3 * [timestamp_indexed_df()], write_if_missing=True)
+    assert all(vit.metadata is None for vit in vits)
+    metadata_0 = {"some": "metadata_0"}
+    metadata_2 = {"some": "metadata_2"}
+    vits = lib.batch_append([sym_0, sym_1, sym_2], 3 * [timestamp_indexed_df()], [metadata_0, None, metadata_2], write_if_missing=True)
+    assert vits[0].metadata == metadata_0
+    assert vits[1].metadata is None
+    assert vits[2].metadata == metadata_2
+
+
+def test_rv_contains_metadata_batch_write_metadata(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym_0 = "test_rv_contains_metadata_batch_write_metadata_0"
+    sym_1 = "test_rv_contains_metadata_batch_write_metadata_1"
+    metadata_0 = {"some": "metadata_0"}
+    metadata_1 = {"some": "metadata_1"}
+    vits = lib.batch_write_metadata([sym_0, sym_1], [metadata_0, metadata_1])
+    assert vits[0].metadata == metadata_0
+    assert vits[1].metadata == metadata_1
