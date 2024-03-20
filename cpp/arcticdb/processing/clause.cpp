@@ -504,26 +504,26 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
 
     SegmentInMemory seg;
     auto index_col = std::make_shared<Column>(make_scalar_type(grouping_data_type), grouping_map.size(), true, false);
-    auto index_pos = seg.add_column(scalar_field(grouping_data_type, grouping_column_), index_col);
+    seg.add_column(scalar_field(grouping_data_type, grouping_column_), index_col);
     seg.descriptor().set_index(IndexDescriptor(0, IndexDescriptor::ROWCOUNT));
 
-    entity::details::visit_type(grouping_data_type, [&seg, &grouping_map, index_pos](auto data_type_tag) {
-        using DataTypeTagType = decltype(data_type_tag);
-        using RawType = typename DataTypeTagType::raw_type;
-        auto hashes = grouping_map.get<RawType>();
-        auto index_ptr = reinterpret_cast<RawType *>(seg.column(index_pos).ptr());
-        std::vector<std::pair<RawType, size_t>> elements;
+    details::visit_type(grouping_data_type, [&grouping_map, &index_col](auto data_type_tag) {
+        using col_type_info = ScalarTypeInfo<decltype(data_type_tag)>;
+        auto hashes = grouping_map.get<typename col_type_info::RawType>();
+        std::vector<std::pair<typename col_type_info::RawType, size_t>> elements;
         for (const auto &hash : *hashes)
             elements.push_back(std::make_pair(hash.first, hash.second));
 
         std::sort(std::begin(elements),
                   std::end(elements),
-                  [](const std::pair<RawType, size_t> &l, const std::pair<RawType, size_t> &r) {
+                  [](const std::pair<typename col_type_info::RawType, size_t> &l, const std::pair<typename col_type_info::RawType, size_t> &r) {
                       return l.second < r.second;
                   });
 
-        for (const auto &element : elements)
-            *index_ptr++ = element.first;
+        auto column_data = index_col->data();
+        std::transform(elements.cbegin(), elements.cend(), column_data.begin<typename col_type_info::TDT>(), [](const auto& element) {
+            return element.first;
+        });
     });
     index_col->set_row_data(grouping_map.size() - 1);
 
