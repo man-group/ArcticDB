@@ -313,7 +313,12 @@ LmdbStorage::LmdbStorage(const LibraryPath &library_path, OpenMode mode, const C
         lmdb_client_ = std::make_unique<RealLmdbClient>();
     }
     write_mutex_ = std::make_unique<std::mutex>();
-    env_ = std::make_unique<::lmdb::env>(::lmdb::env::create(conf.flags()));
+
+    uint32_t changeable_flags = MDB_NOSYNC|MDB_NOMETASYNC|MDB_MAPASYNC|MDB_NOMEMINIT;
+    uint32_t create_flags = changeable_flags & conf.flags();
+    uint32_t open_flags = ~changeable_flags & conf.flags();
+
+    env_ = std::make_unique<::lmdb::env>(::lmdb::env::create(create_flags));
     dbi_by_key_type_ = std::unordered_map<std::string, ::lmdb::dbi>{};
 
     fs::path root_path = conf.path().c_str();
@@ -354,7 +359,7 @@ LmdbStorage::LmdbStorage(const LibraryPath &library_path, OpenMode mode, const C
     env().set_mapsize(mapsize);
     env().set_max_dbs(or_else(static_cast<unsigned int>(conf.max_dbs()), 1024U));
     env().set_max_readers(or_else(conf.max_readers(), 1024U));
-    env().open(lib_dir_.generic_string().c_str(), MDB_NOTLS);
+    env().open(lib_dir_.generic_string().c_str(), MDB_NOTLS | open_flags);
 
     auto txn = ::lmdb::txn::begin(env());
 
