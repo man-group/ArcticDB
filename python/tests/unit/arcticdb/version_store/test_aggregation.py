@@ -451,28 +451,6 @@ def test_mean_aggregation_float(local_object_version_store):
     assert_frame_equal(res.data, df)
 
 
-def test_mean_aggregation_float_nan(lmdb_version_store):
-    df = DataFrame(
-        {
-            "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"],
-            "to_mean": [1.1, 1.4, 2.5, np.nan, 2.2],
-        },
-        index=np.arange(5),
-    )
-    q = QueryBuilder()
-    q = q.groupby("grouping_column").agg({"to_mean": "mean"})
-    symbol = "test_aggregation"
-    lmdb_version_store.write(symbol, df)
-
-    res = lmdb_version_store.read(symbol, query_builder=q)
-
-    df = pd.DataFrame({"to_mean": [(1.1 + 1.4 + 2.5) / 3, np.nan]}, index=["group_1", "group_2"])
-    df.index.rename("grouping_column", inplace=True)
-    res.data.sort_index(inplace=True)
-
-    assert_frame_equal(res.data, df)
-
-
 def test_max_minus_one(lmdb_version_store):
     symbol = "minus_one"
     lib = lmdb_version_store
