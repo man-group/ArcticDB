@@ -463,7 +463,7 @@ def lmdb_version_store_prune_previous(version_store_factory):
 
 @pytest.fixture
 def lmdb_version_store_big_map(version_store_factory):
-    return version_store_factory(lmdb_config={"map_size": 2 ** 30})
+    return version_store_factory(lmdb_config={"map_size": 2**30})
 
 
 @pytest.fixture
@@ -497,27 +497,53 @@ def lmdb_version_store_dynamic_schema(
 
 
 @pytest.fixture
-def lmdb_version_store_empty_types(version_store_factory, lib_name):
-    library_name = lib_name + "_v2"
+def lmdb_version_store_empty_types_v1(version_store_factory, lib_name):
+    library_name = lib_name + "_v1"
     return version_store_factory(dynamic_strings=True, empty_types=True, name=library_name)
 
 
 @pytest.fixture
-def lmdb_version_store_empty_types_dynamic_schema(version_store_factory, lib_name):
+def lmdb_version_store_empty_types_v2(version_store_factory, lib_name):
     library_name = lib_name + "_v2"
-    return version_store_factory(dynamic_schema=True, dynamic_strings=True, empty_types=True, name=library_name)
+    return version_store_factory(
+        dynamic_strings=True, empty_types=True, encoding_version=int(EncodingVersion.V2), name=library_name
+    )
+
+
+@pytest.fixture
+def lmdb_version_store_empty_types_dynamic_schema_v1(version_store_factory, lib_name):
+    library_name = lib_name + "_v1"
+    return version_store_factory(dynamic_strings=True, empty_types=True, dynamic_schema=True, name=library_name)
+
+
+@pytest.fixture
+def lmdb_version_store_empty_types_dynamic_schema_v2(version_store_factory, lib_name):
+    library_name = lib_name + "_v2"
+    return version_store_factory(
+        dynamic_strings=True,
+        empty_types=True,
+        dynamic_schema=True,
+        encoding_version=int(EncodingVersion.V2),
+        name=library_name,
+    )
 
 
 @pytest.fixture
 def lmdb_version_store_delayed_deletes_v1(version_store_factory):
-    return version_store_factory(delayed_deletes=True, dynamic_strings=True, prune_previous_version=True)
+    return version_store_factory(
+        delayed_deletes=True, dynamic_strings=True, empty_types=True, prune_previous_version=True
+    )
 
 
 @pytest.fixture
 def lmdb_version_store_delayed_deletes_v2(version_store_factory, lib_name):
     library_name = lib_name + "_v2"
     return version_store_factory(
-        dynamic_strings=True, delayed_deletes=True, encoding_version=int(EncodingVersion.V2), name=library_name
+        dynamic_strings=True,
+        delayed_deletes=True,
+        empty_types=True,
+        encoding_version=int(EncodingVersion.V2),
+        name=library_name,
     )
 
 
@@ -558,12 +584,12 @@ def lmdb_version_store_ignore_order(version_store_factory):
 
 @pytest.fixture
 def lmdb_version_store_small_segment(version_store_factory):
-    return version_store_factory(column_group_size=1000, segment_row_size=1000, lmdb_config={"map_size": 2 ** 30})
+    return version_store_factory(column_group_size=1000, segment_row_size=1000, lmdb_config={"map_size": 2**30})
 
 
 @pytest.fixture
 def lmdb_version_store_tiny_segment(version_store_factory):
-    return version_store_factory(column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2 ** 30})
+    return version_store_factory(column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2**30})
 
 
 @pytest.fixture
@@ -578,7 +604,7 @@ def basic_store_prune_previous(basic_store_factory):
 
 @pytest.fixture
 def basic_store_large_data(basic_store_factory):
-    return basic_store_factory(lmdb_config={"map_size": 2 ** 30})
+    return basic_store_factory(lmdb_config={"map_size": 2**30})
 
 
 @pytest.fixture
@@ -664,12 +690,12 @@ def basic_store_ignore_order(basic_store_factory):
 
 @pytest.fixture
 def basic_store_small_segment(basic_store_factory):
-    return basic_store_factory(column_group_size=1000, segment_row_size=1000, lmdb_config={"map_size": 2 ** 30})
+    return basic_store_factory(column_group_size=1000, segment_row_size=1000, lmdb_config={"map_size": 2**30})
 
 
 @pytest.fixture
 def basic_store_tiny_segment(basic_store_factory):
-    return basic_store_factory(column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2 ** 30})
+    return basic_store_factory(column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2**30})
 
 
 @pytest.fixture
@@ -715,10 +741,10 @@ def get_wide_df():
 @pytest.fixture(
     scope="function",
     params=(
-        "lmdb_version_store_v1",
-        "lmdb_version_store_v2",
-        "lmdb_version_store_dynamic_schema_v1",
-        "lmdb_version_store_dynamic_schema_v2",
+        "lmdb_version_store_empty_types_v1",
+        "lmdb_version_store_empty_types_v2",
+        "lmdb_version_store_empty_types_dynamic_schema_v1",
+        "lmdb_version_store_empty_types_dynamic_schema_v2",
     ),
 )
 def lmdb_version_store_static_and_dynamic(request):
