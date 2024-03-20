@@ -387,8 +387,15 @@ void MeanAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input
             if constexpr(!is_sequence_type(col_type_info::data_type)) {
                 Column::for_each_enumerated<typename col_type_info::TDT>(*input_column->column_, [&groups, this](auto enumerating_it) {
                     auto& fraction = fractions_[groups[enumerating_it.idx()]];
-                    fraction.numerator_ += double(enumerating_it.value());
-                    ++fraction.denominator_;
+                    if constexpr ((is_floating_point_type(col_type_info ::data_type))) {
+                        if (ARCTICDB_LIKELY(!std::isnan(enumerating_it.value()))) {
+                            fraction.numerator_ += double(enumerating_it.value());
+                            ++fraction.denominator_;
+                        }
+                    } else {
+                        fraction.numerator_ += double(enumerating_it.value());
+                        ++fraction.denominator_;
+                    }
                 });
             } else {
                 util::raise_rte("String aggregations not currently supported");
