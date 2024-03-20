@@ -168,21 +168,23 @@ void SumAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_
         data_type_ = DataType::FLOAT64;
     }
     details::visit_type(*data_type_, [&input_column, unique_values, &groups, this] (auto global_tag) {
-        using GlobalInputType = decltype(global_tag);
-        if constexpr(!is_sequence_type(GlobalInputType::DataTypeTag::data_type)) {
-            using GlobalTypeDescriptorTag =  typename OutputType<GlobalInputType>::type;
-            using GlobalRawType = typename GlobalTypeDescriptorTag::DataTypeTag::raw_type;
-            aggregated_.resize(sizeof(GlobalRawType)* unique_values);
-            auto out_ptr = reinterpret_cast<GlobalRawType*>(aggregated_.data());
+        using global_type_info = ScalarTypeInfo<decltype(global_tag)>;
+        if constexpr(!is_sequence_type(global_type_info::data_type)) {
+            aggregated_.resize(sizeof(typename global_type_info::RawType) * unique_values);
+            auto out_ptr = reinterpret_cast<typename global_type_info::RawType*>(aggregated_.data());
             if (input_column.has_value()) {
                 details::visit_type(input_column->column_->type().data_type(), [&input_column, &groups, &out_ptr] (auto col_tag) {
                     using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
                     if constexpr(!is_sequence_type(col_type_info::data_type)) {
                         Column::for_each_enumerated<typename col_type_info::TDT>(*input_column->column_, [&out_ptr, &groups](auto enumerating_it) {
-                            if constexpr (std::is_same_v<GlobalRawType, bool>) {
-                                out_ptr[groups[enumerating_it.idx()]] |= GlobalRawType(enumerating_it.value());
+                            if constexpr (is_bool_type(global_type_info::data_type)) {
+                                out_ptr[groups[enumerating_it.idx()]] |= typename global_type_info::RawType(enumerating_it.value());
+                            } else if constexpr (is_floating_point_type(col_type_info::data_type)) {
+                                if (ARCTICDB_LIKELY(!std::isnan(enumerating_it.value()))) {
+                                    out_ptr[groups[enumerating_it.idx()]] += typename global_type_info::RawType(enumerating_it.value());
+                                }
                             } else {
-                                out_ptr[groups[enumerating_it.idx()]] += GlobalRawType(enumerating_it.value());
+                                out_ptr[groups[enumerating_it.idx()]] += typename global_type_info::RawType(enumerating_it.value());
                             }
                         });
                     } else {
