@@ -45,23 +45,28 @@ class LMDBStorageFactory : public StorageFactory {
 private:
     uint64_t map_size;
     bool use_mock;
+    fs::path db_path;
+    std::string lib_name;
 public:
-    explicit LMDBStorageFactory(bool use_mock = false) : map_size(128ULL * (1ULL << 20) /* 128MB */), use_mock(use_mock) { }
+    explicit LMDBStorageFactory(uint64_t map_size, bool use_mock = false) : map_size(map_size), use_mock(use_mock), db_path(TEST_DATABASES_PATH / "test_lmdb"), lib_name("test_lib") { }
 
-    explicit LMDBStorageFactory(uint64_t map_size, bool use_mock = false) : map_size(map_size), use_mock(use_mock) { }
+    explicit LMDBStorageFactory(bool use_mock = false) : LMDBStorageFactory(128ULL * (1ULL << 20)  /* 128MB */, use_mock) { }
 
     std::unique_ptr<arcticdb::storage::Storage> create() override {
         arcticdb::proto::lmdb_storage::Config cfg;
 
-        fs::path db_name = "test_lmdb";
-        cfg.set_path((TEST_DATABASES_PATH / db_name).generic_string());
+        cfg.set_path((db_path).generic_string());
         cfg.set_map_size(map_size);
         cfg.set_recreate_if_exists(true);
         cfg.set_use_mock_storage_for_testing(use_mock);
 
-        arcticdb::storage::LibraryPath library_path{"a", "b"};
+        arcticdb::storage::LibraryPath library_path(lib_name, '/');
 
         return std::make_unique<arcticdb::storage::lmdb::LmdbStorage>(library_path, arcticdb::storage::OpenMode::DELETE, cfg);
+    }
+
+    fs::path get_lib_path() const {
+        return db_path / lib_name;
     }
 
     void setup() override {
@@ -309,6 +314,40 @@ TEST_F(LMDBStorageTestBase, MockUnexpectedLMDBErrorException) {
 
     remove_in_store(*storage, {failureSymbol});
     ASSERT_EQ(list_in_store(*storage), symbols);
+}
+
+TEST_F(LMDBStorageTestBase, RemoveLibPath) {
+    LMDBStorageFactory factory;
+    auto storage = factory.create();
+    auto path = factory.get_lib_path();
+
+    storage->cleanup();
+    ASSERT_FALSE(fs::exists(path));
+    // Once we call close, any other operations should throw UnexpectedLMDBErrorException as lmdb env is closed
+    ASSERT_THROW({
+                     write_in_store(*storage, "sym1");
+                 },  UnexpectedLMDBErrorException);
+
+    ASSERT_THROW({
+                     update_in_store(*storage, "sym1");
+                 },  UnexpectedLMDBErrorException);
+
+    ASSERT_THROW({
+                     remove_in_store(*storage, {"sym1"});
+                 },  UnexpectedLMDBErrorException);
+
+    ASSERT_THROW({
+                     read_in_store(*storage, "sym1");
+                 },  UnexpectedLMDBErrorException);
+
+    ASSERT_THROW({
+                     exists_in_store(*storage, "sym1");
+                 },  UnexpectedLMDBErrorException);
+
+    ASSERT_THROW({
+                     list_in_store(*storage);
+                 },  UnexpectedLMDBErrorException);
+
 }
 
 // S3 error handling with mock client

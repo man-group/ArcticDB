@@ -164,6 +164,12 @@ def test_map_size_bad_input(options):
 
     assert "Incorrect format for map_size" in str(e.value)
 
+def test_delete_library(lmdb_storage):
+    ac = lmdb_storage.create_arctic()
+    lib = ac.create_library("library")
+    ac.delete_library("library")
+    with pytest.raises(StorageException) as e:
+        lib.write("sym1", pd.DataFrame())
 
 @pytest.mark.parametrize("options", ["MAP_SIZE=1GB", "atlas_shape=1GB"])
 def test_lmdb_options_unknown_option(options):

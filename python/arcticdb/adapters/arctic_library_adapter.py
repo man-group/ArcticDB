@@ -62,9 +62,6 @@ class ArcticLibraryAdapter(ABC):
     def get_library_config(self, name: str, library_options: LibraryOptions):
         raise NotImplementedError
 
-    def cleanup_library(self, library_name: str):
-        pass
-
     def get_storage_override(self) -> StorageOverride:
         return StorageOverride()
 

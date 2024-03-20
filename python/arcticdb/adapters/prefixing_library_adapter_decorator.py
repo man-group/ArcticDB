@@ -59,10 +59,6 @@ class PrefixingLibraryAdapterDecorator(ArcticLibraryAdapter if TYPE_CHECKING els
         lib_mgr_name = self.get_name_for_library_manager(name)
         return self._inner.get_library_config(lib_mgr_name, library_options)
 
-    def cleanup_library(self, library_name: str):
-        lib_mgr_name = self.get_name_for_library_manager(library_name)
-        return self._inner.cleanup_library(lib_mgr_name)
-
     def __repr__(self):
         return repr(self._inner)
 
