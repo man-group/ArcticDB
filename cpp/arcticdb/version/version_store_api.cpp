@@ -966,7 +966,7 @@ void PythonVersionStore::prune_previous_versions(const StreamId& stream_id) {
     const std::shared_ptr<VersionMapEntry>& entry = version_map()->check_reload(
             store(),
             stream_id,
-            LoadParameter{LoadType::LOAD_UNDELETED},
+            LoadParameter{LoadType::LOAD_ALL, ToLoad::UNDELETED},
             __FUNCTION__);
     storage::check<ErrorCode::E_SYMBOL_NOT_FOUND>(!entry->empty(), "Symbol {} is not found", stream_id);
     auto [latest, deleted] = entry->get_first_index(false);
