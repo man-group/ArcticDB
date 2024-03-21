@@ -132,6 +132,12 @@ inline AtomKey get_tombstone_all_key(const AtomKey &latest, timestamp creation_t
         .build(latest.id(), KeyType::TOMBSTONE_ALL);
 }
 
+struct LoadProgress {
+    VersionId oldest_loaded_index_version_ = std::numeric_limits<VersionId>::max();
+    timestamp earliest_loaded_timestamp_ = std::numeric_limits<timestamp>::max();
+    timestamp earliest_loaded_undeleted_timestamp_ = std::numeric_limits<timestamp>::max();
+};
+
 struct VersionMapEntry {
     /*
       VersionMapEntry is all the data we have in-memory about each stream_id in the version map which in its essence
@@ -167,6 +173,7 @@ struct VersionMapEntry {
         tombstones_.clear();
         tombstone_all_.reset();
         keys_.clear();
+        loaded_with_progress_ = LoadProgress{};
     }
 
     bool empty() const {
@@ -184,6 +191,7 @@ struct VersionMapEntry {
         swap(left.tombstone_all_, right.tombstone_all_);
         swap(left.head_, right.head_);
         swap(left.load_type_, right.load_type_);
+        swap(left.loaded_with_progress_, right.loaded_with_progress_);
     }
 
     // Below four functions used to return optional<AtomKey> of the tombstone, but copying keys is expensive and only
@@ -358,7 +366,7 @@ struct VersionMapEntry {
     std::optional<AtomKey> head_;
     LoadType load_type_ = LoadType::NOT_LOADED;
     timestamp last_reload_time_ = 0;
-    VersionId loaded_until_ = std::numeric_limits<uint64_t>::max();
+    LoadProgress loaded_with_progress_;
     std::deque<AtomKey> keys_;
     std::unordered_map<VersionId, AtomKey> tombstones_;
     std::optional<AtomKey> tombstone_all_;
