@@ -307,7 +307,7 @@ namespace
         SegmentInMemory res;
         if(!aggregated_.empty()) {
             constexpr auto dynamic_schema_data_type = DataType::FLOAT64;
-            using dynamic_schema_tdt = ScalarTagType<DataTypeTag<dynamic_schema_data_type>>;
+            using DynamicSchemaTDT = ScalarTagType<DataTypeTag<dynamic_schema_data_type>>;
             auto col = std::make_shared<Column>(make_scalar_type(dynamic_schema ? dynamic_schema_data_type: data_type_.value()), unique_values, true, false);
             auto column_data = col->data();
             col->set_row_data(unique_values - 1);
@@ -321,7 +321,7 @@ namespace
                     aggregated_.resize(new_size);
                     auto in_ptr = reinterpret_cast<MaybeValueType *>(aggregated_.data());
                     std::fill(in_ptr + prev_size, in_ptr + unique_values, MaybeValueType{});
-                    for (auto it = column_data.begin<dynamic_schema_tdt>(); it != column_data.end<dynamic_schema_tdt>(); ++it, ++in_ptr) {
+                    for (auto it = column_data.begin<DynamicSchemaTDT>(); it != column_data.end<DynamicSchemaTDT>(); ++it, ++in_ptr) {
                         *it = in_ptr->written_ ? static_cast<double>(in_ptr->value_)
                                                : std::numeric_limits<double>::quiet_NaN();
                     }
