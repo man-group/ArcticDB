@@ -1118,3 +1118,28 @@ def test_s3_force_uri_lib_config_handling(s3_storage):
 
     with pytest.raises(ValueError):
         Arctic(s3_storage.arctic_uri + "&force_uri_lib_config=false")
+
+
+# See test of same name in test_normalization.py for V1 API equivalent
+def test_norm_failure_error_message(arctic_library):
+    lib = arctic_library
+    sym = "test_norm_failure_error_message"
+    col_name = "My unnormalizable column"
+    df = pd.DataFrame({col_name: [1, [1, 2]]})
+    with pytest.raises(ArcticDbNotYetImplemented) as write_exception:
+        lib.write(sym, df)
+    with pytest.raises(ArcticDbNotYetImplemented) as write_batch_exception:
+        lib.write_batch([WritePayload(sym, df)])
+    with pytest.raises(ArcticDbNotYetImplemented) as append_exception:
+        lib.append(sym, df)
+    with pytest.raises(ArcticDbNotYetImplemented) as append_batch_exception:
+        lib.append_batch([WritePayload(sym, df)])
+    with pytest.raises(ArcticDbNotYetImplemented) as update_exception:
+        lib.update(sym, df)
+
+    assert all(col_name in str(e.value) for e in
+               [write_exception, write_batch_exception, append_exception, append_batch_exception, update_exception])
+    assert "write_pickle" in str(write_exception.value) and "pickle_on_failure" not in str(write_exception.value)
+    assert "write_pickle_batch" in str(write_batch_exception.value) and "pickle_on_failure" not in str(write_batch_exception.value)
+    assert all("write_pickle" not in str(e.value) for e in
+               [append_exception, append_batch_exception, update_exception])
