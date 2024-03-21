@@ -197,9 +197,6 @@ NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types) {
     const void* data = nbytes ? arr->data : nullptr;
     const std::array<stride_t, 2> strides = {arr->strides[0], arr->nd > 1 ? arr->strides[1] : 0};
     const std::array<shape_t, 2> shapes = {arr->dimensions[0], arr->nd > 1 ? arr->dimensions[1] : 0};
-    details::visit_type(dt, [] (auto) {
-        log::version().info("Testing");
-    });
     return {nbytes, arr->nd, strides.data(), shapes.data(), dt, descr->elsize, data, ndim};
 }
 
