@@ -28,9 +28,9 @@
 #include <arcticdb/util/type_handler.hpp>
 #include <arcticdb/python/python_handlers.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
+#include <arcticdb/util/storage_lock.hpp>
 
 #include <pybind11/pybind11.h>
-#include <folly/system/ThreadName.h>
 #include <mongocxx/exception/logic_error.hpp>
 
 #include <logger.pb.h>
@@ -174,7 +174,7 @@ void register_termination_handler() {
             std::rethrow_exception(eptr);
         } catch (const std::exception &e) {
             arcticdb::log::root().error("Terminate called in thread {}: {}\n Aborting",
-                                        folly::getCurrentThreadName().value_or("Unknown"), e.what());
+                                        arcticdb::get_thread_id(), e.what());
             std::abort();
         }
     });
