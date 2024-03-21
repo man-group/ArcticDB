@@ -400,103 +400,94 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
             auto partitioning_column = proc.get(ColumnName(grouping_column_));
             if (std::holds_alternative<ColumnWithStrings>(partitioning_column)) {
                 ColumnWithStrings col = std::get<ColumnWithStrings>(partitioning_column);
-                entity::details::visit_type(col.column_->type().data_type(),
-                                            [&proc_=proc, &grouping_map, &next_group_id, &aggregators_data, &string_pool, &col,
-                                             &num_unique, &grouping_data_type, this](auto data_type_tag) {
-                                                using DataTypeTagType = decltype(data_type_tag);
-                                                using RawType = typename DataTypeTagType::raw_type;
-                                                constexpr auto data_type = DataTypeTagType::data_type;
-                                                grouping_data_type = data_type;
-                                                std::vector<size_t> row_to_group;
-                                                row_to_group.reserve(col.column_->row_count());
-                                                auto input_data = col.column_->data();
-                                                auto hash_to_group = grouping_map.get<RawType>();
-                                                // For string grouping columns, keep a local map within this ProcessingUnit
-                                                // from offsets to groups, to avoid needless calls to col.string_at_offset and
-                                                // string_pool->get
-                                                // This could be slower in cases where there aren't many repeats in string
-                                                // grouping columns. Maybe track hit ratio of finds and stop using it if it is
-                                                // too low?
-                                                // Tested with 100,000,000 row dataframe with 100,000 unique values in the grouping column. Timings:
-                                                // 11.14 seconds without caching
-                                                // 11.01 seconds with caching
-                                                // Not worth worrying about right now
-                                                ankerl::unordered_dense::map<RawType, size_t> offset_to_group;
+                details::visit_type(col.column_->type().data_type(),
+                                    [&proc_=proc, &grouping_map, &next_group_id, &aggregators_data, &string_pool, &col,
+                                     &num_unique, &grouping_data_type, this](auto data_type_tag) {
+                                        using col_type_info = ScalarTypeInfo<decltype(data_type_tag)>;
+                                        grouping_data_type = col_type_info::data_type;
+                                        std::vector<size_t> row_to_group;
+                                        row_to_group.reserve(col.column_->row_count());
+                                        auto hash_to_group = grouping_map.get<typename col_type_info::RawType>();
+                                        // For string grouping columns, keep a local map within this ProcessingUnit
+                                        // from offsets to groups, to avoid needless calls to col.string_at_offset and
+                                        // string_pool->get
+                                        // This could be slower in cases where there aren't many repeats in string
+                                        // grouping columns. Maybe track hit ratio of finds and stop using it if it is
+                                        // too low?
+                                        // Tested with 100,000,000 row dataframe with 100,000 unique values in the grouping column. Timings:
+                                        // 11.14 seconds without caching
+                                        // 11.01 seconds with caching
+                                        // Not worth worrying about right now
+                                        ankerl::unordered_dense::map<typename col_type_info::RawType, size_t> offset_to_group;
 
-                                                const bool is_sparse = col.column_->is_sparse();
-                                                using optional_iter_type = std::optional<decltype(input_data.bit_vector()->first())>;
-                                                optional_iter_type iter = std::nullopt;
-                                                size_t previous_value_index = 0;
-                                                constexpr size_t missing_value_group_id = 0;
+                                        const bool is_sparse = col.column_->is_sparse();
+                                        if (is_sparse && next_group_id == 0) {
+                                            // We use 0 for the missing value group id
+                                            ++next_group_id;
+                                        }
+                                        ssize_t previous_value_index = 0;
+                                        constexpr size_t missing_value_group_id = 0;
 
-                                                if (is_sparse)
-                                                {
-                                                    iter = std::make_optional(input_data.bit_vector()->first());
-                                                    // We use 0 for the missing value group id
-                                                    next_group_id++;
-                                                }
-
-                                                while (auto block = input_data.next<ScalarTagType<DataTypeTagType>>()) {
-                                                    const auto row_count = block->row_count();
-                                                    auto ptr = block->data();
-                                                    for (size_t i = 0; i < row_count; ++i, ++ptr) {
-                                                        RawType val;
-                                                        if constexpr(is_sequence_type(data_type)) {
-                                                            auto offset = *ptr;
-                                                            if (auto it = offset_to_group.find(offset); it != offset_to_group.end()) {
-                                                                val = it->second;
+                                        Column::for_each_enumerated<typename col_type_info::TDT>(
+                                                *col.column_,
+                                                [&](auto enumerating_it) {
+                                                    typename col_type_info::RawType val;
+                                                    if constexpr(is_sequence_type(col_type_info::data_type)) {
+                                                        auto offset = enumerating_it.value();
+                                                        if (auto it = offset_to_group.find(offset); it != offset_to_group.end()) {
+                                                            val = it->second;
+                                                        } else {
+                                                            std::optional<std::string_view> str = col.string_at_offset(offset);
+                                                            if (str.has_value()) {
+                                                                val = string_pool->get(*str, true).offset();
                                                             } else {
-                                                                std::optional<std::string_view> str = col.string_at_offset(offset);
-                                                                if (str.has_value()) {
-                                                                    val = string_pool->get(*str, true).offset();
-                                                                } else {
-                                                                    val = offset;
-                                                                }
-                                                                RawType val_copy(val);
-                                                                offset_to_group.insert(std::make_pair<RawType, size_t>(std::forward<RawType>(offset), std::forward<RawType>(val_copy)));
+                                                                val = offset;
                                                             }
-                                                        } else {
-                                                            val = *ptr;
+                                                            typename col_type_info::RawType val_copy(val);
+                                                            offset_to_group.insert(std::make_pair<typename col_type_info::RawType, size_t>(std::forward<typename col_type_info::RawType>(offset), std::forward<typename col_type_info::RawType>(val_copy)));
                                                         }
-                                                        if (is_sparse) {
-                                                            for (size_t j = previous_value_index; j != *(iter.value()); ++j) {
-                                                                row_to_group.emplace_back(missing_value_group_id);
-                                                            }
-                                                            previous_value_index = *(iter.value()) + 1;
-                                                            ++(iter.value());
-                                                        }
+                                                    } else {
+                                                        val = enumerating_it.value();
+                                                    }
 
-                                                        if (auto it = hash_to_group->find(val); it == hash_to_group->end()) {
-                                                            row_to_group.emplace_back(next_group_id);
-                                                            auto group_id = next_group_id++;
-                                                            hash_to_group->insert(std::make_pair<RawType, size_t>(std::forward<RawType>(val), std::forward<RawType>(group_id)));
-                                                        } else {
-                                                            row_to_group.emplace_back(it->second);
+                                                    if (is_sparse) {
+                                                        for (auto j = previous_value_index; j != enumerating_it.idx(); ++j) {
+                                                            row_to_group.emplace_back(missing_value_group_id);
                                                         }
+                                                        previous_value_index = enumerating_it.idx() + 1;
+                                                    }
+
+                                                    if (auto it = hash_to_group->find(val); it == hash_to_group->end()) {
+                                                        row_to_group.emplace_back(next_group_id);
+                                                        auto group_id = next_group_id++;
+                                                        hash_to_group->insert(std::make_pair<typename col_type_info::RawType, size_t>(std::forward<typename col_type_info::RawType>(val), std::forward<typename col_type_info::RawType>(group_id)));
+                                                    } else {
+                                                        row_to_group.emplace_back(it->second);
                                                     }
                                                 }
+                                                );
 
-                                                // Marking all the last non-represented values as missing.
-                                                for (size_t i = row_to_group.size(); i <= size_t(col.column_->last_row()); ++i) {
-                                                    row_to_group.emplace_back(missing_value_group_id);
-                                                }
+                                        // Marking all the last non-represented values as missing.
+                                        for (size_t i = row_to_group.size(); i <= size_t(col.column_->last_row()); ++i) {
+                                            row_to_group.emplace_back(missing_value_group_id);
+                                        }
 
-                                                num_unique = next_group_id;
-                                                util::check(num_unique != 0, "Got zero unique values");
-                                                for (auto agg_data: folly::enumerate(aggregators_data)) {
-                                                    auto input_column_name = aggregators_.at(agg_data.index).get_input_column_name();
-                                                    auto input_column = proc_.get(input_column_name);
-                                                    std::optional<ColumnWithStrings> opt_input_column;
-                                                    if (std::holds_alternative<ColumnWithStrings>(input_column)) {
-                                                        auto column_with_strings = std::get<ColumnWithStrings>(input_column);
-                                                        // Empty columns don't contribute to aggregations
-                                                        if (!is_empty_type(column_with_strings.column_->type().data_type())) {
-                                                            opt_input_column.emplace(std::move(column_with_strings));
-                                                        }
-                                                    }
-                                                    agg_data->aggregate(opt_input_column, row_to_group, num_unique);
+                                        num_unique = next_group_id;
+                                        util::check(num_unique != 0, "Got zero unique values");
+                                        for (auto agg_data: folly::enumerate(aggregators_data)) {
+                                            auto input_column_name = aggregators_.at(agg_data.index).get_input_column_name();
+                                            auto input_column = proc_.get(input_column_name);
+                                            std::optional<ColumnWithStrings> opt_input_column;
+                                            if (std::holds_alternative<ColumnWithStrings>(input_column)) {
+                                                auto column_with_strings = std::get<ColumnWithStrings>(input_column);
+                                                // Empty columns don't contribute to aggregations
+                                                if (!is_empty_type(column_with_strings.column_->type().data_type())) {
+                                                    opt_input_column.emplace(std::move(column_with_strings));
                                                 }
-                                            });
+                                            }
+                                            agg_data->aggregate(opt_input_column, row_to_group, num_unique);
+                                        }
+                                    });
             } else {
                 util::raise_rte("Expected single column from expression");
             }
@@ -504,26 +495,26 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
 
     SegmentInMemory seg;
     auto index_col = std::make_shared<Column>(make_scalar_type(grouping_data_type), grouping_map.size(), true, false);
-    auto index_pos = seg.add_column(scalar_field(grouping_data_type, grouping_column_), index_col);
+    seg.add_column(scalar_field(grouping_data_type, grouping_column_), index_col);
     seg.descriptor().set_index(IndexDescriptor(0, IndexDescriptor::ROWCOUNT));
 
-    entity::details::visit_type(grouping_data_type, [&seg, &grouping_map, index_pos](auto data_type_tag) {
-        using DataTypeTagType = decltype(data_type_tag);
-        using RawType = typename DataTypeTagType::raw_type;
-        auto hashes = grouping_map.get<RawType>();
-        auto index_ptr = reinterpret_cast<RawType *>(seg.column(index_pos).ptr());
-        std::vector<std::pair<RawType, size_t>> elements;
+    details::visit_type(grouping_data_type, [&grouping_map, &index_col](auto data_type_tag) {
+        using col_type_info = ScalarTypeInfo<decltype(data_type_tag)>;
+        auto hashes = grouping_map.get<typename col_type_info::RawType>();
+        std::vector<std::pair<typename col_type_info::RawType, size_t>> elements;
         for (const auto &hash : *hashes)
             elements.push_back(std::make_pair(hash.first, hash.second));
 
         std::sort(std::begin(elements),
                   std::end(elements),
-                  [](const std::pair<RawType, size_t> &l, const std::pair<RawType, size_t> &r) {
+                  [](const std::pair<typename col_type_info::RawType, size_t> &l, const std::pair<typename col_type_info::RawType, size_t> &r) {
                       return l.second < r.second;
                   });
 
-        for (const auto &element : elements)
-            *index_ptr++ = element.first;
+        auto column_data = index_col->data();
+        std::transform(elements.cbegin(), elements.cend(), column_data.begin<typename col_type_info::TDT>(), [](const auto& element) {
+            return element.first;
+        });
     });
     index_col->set_row_data(grouping_map.size() - 1);
 
