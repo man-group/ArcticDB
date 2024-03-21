@@ -63,12 +63,6 @@ inline entity::VariantKey write_multi_index_entry(
     return multi_key_fut.wait().value();
 }
 
-struct LoadProgress {
-    VersionId loaded_until_ = std::numeric_limits<VersionId>::max();
-    VersionId oldest_loaded_index_version_ = std::numeric_limits<VersionId>::max();
-    timestamp earliest_loaded_timestamp_ = std::numeric_limits<timestamp>::max();
-};
-
 inline std::optional<AtomKey> read_segment_with_keys(
     const SegmentInMemory &seg,
     VersionMapEntry &entry,
@@ -77,6 +71,7 @@ inline std::optional<AtomKey> read_segment_with_keys(
     std::optional<AtomKey> next;
     VersionId oldest_loaded_index = std::numeric_limits<VersionId>::max();
     timestamp earliest_loaded_timestamp = std::numeric_limits<timestamp>::max();
+    timestamp earliest_loaded_undeleted_timestamp = std::numeric_limits<timestamp>::max();
 
     for (; row < ssize_t(seg.row_count()); ++row) {
         auto key = read_key_row(seg, row);
@@ -86,11 +81,9 @@ inline std::optional<AtomKey> read_segment_with_keys(
             entry.keys_.push_back(key);
             oldest_loaded_index = std::min(oldest_loaded_index, key.version_id());
 
-            // Note that LOAD_FROM_TIME is implicitly loading undeleted. If there was a requirement
-            // to load from a particular time disregarding whether symbols are deleted or not, there would
-            // need to be an additional termination condition
+            earliest_loaded_timestamp = std::min(earliest_loaded_timestamp, key.creation_ts());
             if(!entry.is_tombstoned(key))
-                earliest_loaded_timestamp = std::min(earliest_loaded_timestamp, key.creation_ts());
+                earliest_loaded_undeleted_timestamp = std::min(earliest_loaded_timestamp, key.creation_ts());
 
         } else if (key.type() == KeyType::TOMBSTONE) {
             entry.tombstones_.try_emplace(key.version_id(), key);
@@ -108,9 +101,9 @@ inline std::optional<AtomKey> read_segment_with_keys(
         }
     }
     util::check(row == ssize_t(seg.row_count()), "Unexpected ordering in journal segment");
-    load_progress.loaded_until_ = oldest_loaded_index;
-    load_progress.oldest_loaded_index_version_ = std::min(load_progress.oldest_loaded_index_version_, load_progress.loaded_until_);
+    load_progress.oldest_loaded_index_version_ = std::min(load_progress.oldest_loaded_index_version_, oldest_loaded_index);
     load_progress.earliest_loaded_timestamp_ = std::min(load_progress.earliest_loaded_timestamp_, earliest_loaded_timestamp);
+    load_progress.earliest_loaded_undeleted_timestamp_ = std::min(load_progress.earliest_loaded_undeleted_timestamp_, earliest_loaded_undeleted_timestamp);
     return next;
 }
 
@@ -193,7 +186,7 @@ inline void read_symbol_ref(const std::shared_ptr<StreamSource>& store, const St
 
     LoadProgress load_progress;
     entry.head_ = read_segment_with_keys(key_seg_pair.second, entry, load_progress);
-    entry.loaded_until_ = load_progress.loaded_until_;
+    entry.loaded_with_progress_ = load_progress;
 }
 
 inline void write_symbol_ref(std::shared_ptr<StreamSink> store,
@@ -240,13 +233,13 @@ inline bool loaded_until_version_id(const LoadParameter &load_params, const Load
         return false;
 
     if (is_positive_version_query(load_params)) {
-        if (load_progress.loaded_until_ > static_cast<VersionId>(*load_params.load_until_version_)) {
+        if (load_progress.oldest_loaded_index_version_ > static_cast<VersionId>(*load_params.load_until_version_)) {
             return false;
         }
     } else {
         if (latest_version.has_value()) {
             if (auto opt_version_id = get_version_id_negative_index(*latest_version, *load_params.load_until_version_);
-                opt_version_id && load_progress.loaded_until_ > *opt_version_id) {
+                opt_version_id && load_progress.oldest_loaded_index_version_ > *opt_version_id) {
                     return false;
             }
         } else {
@@ -255,7 +248,7 @@ inline bool loaded_until_version_id(const LoadParameter &load_params, const Load
     }
     ARCTICDB_DEBUG(log::version(),
                    "Exiting load downto because loaded to version {} for request {} with {} total versions",
-                   load_progress.loaded_until_,
+                   load_progress.oldest_loaded_index_version_,
                    *load_params.load_until_version_,
                    latest_version.value()
                   );
@@ -275,13 +268,13 @@ static constexpr timestamp nanos_to_seconds(timestamp nanos) {
 }
 
 inline bool loaded_until_timestamp(const LoadParameter &load_params, const LoadProgress& load_progress) {
-    if (!load_params.load_from_time_ || load_progress.earliest_loaded_timestamp_ > *load_params.load_from_time_)
+    if (!load_params.load_from_time_ || load_progress.earliest_loaded_undeleted_timestamp_ > *load_params.load_from_time_)
         return false;
 
     ARCTICDB_DEBUG(log::version(),
                    "Exiting load from timestamp because request {} <= {}",
                    *load_params.load_from_time_,
-                   load_progress.earliest_loaded_timestamp_);
+                   load_progress.earliest_loaded_undeleted_timestamp_);
     return true;
 }
 
@@ -324,28 +317,22 @@ inline bool penultimate_key_contains_required_version_id(const AtomKey& key, con
     }
 }
 
-inline bool key_exists_in_ref_entry(const LoadParameter& load_params, const VersionMapEntry& ref_entry, std::optional<AtomKey>& cached_penultimate_key, LoadProgress& load_progress) {
+inline bool key_exists_in_ref_entry(const LoadParameter& load_params, const VersionMapEntry& ref_entry, std::optional<AtomKey>& cached_penultimate_key) {
     if (is_latest_load_type(load_params.load_type_) && is_index_key_type(ref_entry.keys_[0].type()))
         return true;
 
     if(cached_penultimate_key && is_partial_load_type(load_params.load_type_)) {
         load_params.validate();
         if(load_params.load_type_ == LoadType::LOAD_DOWNTO && penultimate_key_contains_required_version_id(*cached_penultimate_key, load_params)) {
-            load_progress.loaded_until_ = cached_penultimate_key->version_id();
             return true;
         }
 
         if(load_params.load_type_ == LoadType::LOAD_FROM_TIME &&cached_penultimate_key->creation_ts() <= load_params.load_from_time_.value()) {
-            load_progress.loaded_until_ = cached_penultimate_key->version_id();
             return true;
         }
     }
 
     return false;
-}
-
-inline void set_loaded_until(const LoadProgress& load_progress, const std::shared_ptr<VersionMapEntry>& entry) {
-    entry->loaded_until_ = load_progress.loaded_until_;
 }
 
 inline SortedValue deduce_sorted(SortedValue existing_frame, SortedValue input_frame) {
