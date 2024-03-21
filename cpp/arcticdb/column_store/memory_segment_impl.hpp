@@ -733,6 +733,14 @@ public:
         compacted_ = value;
     }
 
+    bool fixed_str_as_dyn() const {
+        return fixed_str_as_dyn_;
+    }
+
+    void set_fixed_str_as_dyn(bool value) {
+        fixed_str_as_dyn_ = value;
+    }
+
     void check_magic() const {
         magic_.check();
     }
@@ -815,6 +823,7 @@ private:
     mutable std::unique_ptr<std::mutex> column_map_mutex_ = std::make_unique<std::mutex>();
     bool allow_sparse_ = false;
     bool compacted_ = false;
+    bool fixed_str_as_dyn_ = false;
     util::MagicNum<'M', 'S', 'e', 'g'> magic_;
     std::shared_ptr<FieldCollection> index_fields_;
     std::shared_ptr<arcticdb::proto::descriptors::TimeSeriesDescriptor> tsd_;

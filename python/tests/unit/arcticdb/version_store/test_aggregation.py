@@ -217,19 +217,7 @@ def test_count_aggregation(local_object_version_store):
     assert_frame_equal(res.data, df)
 
 
-@use_of_function_scoped_fixtures_in_hypothesis_checked
-@settings(deadline=None)
-@given(
-    df=data_frames(
-        [
-            column("grouping_column", elements=string_strategy, fill=string_strategy),
-            column("a", elements=numeric_type_strategies()),
-        ],
-        index=range_indexes(),
-    )
-)
-@pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
-def test_hypothesis_first_agg_numeric(lmdb_version_store, df):
+def first_aggregation(lmdb_version_store, df):
     lib = lmdb_version_store
     assume(not df.empty)
 
@@ -248,14 +236,43 @@ def test_hypothesis_first_agg_numeric(lmdb_version_store, df):
     assert_frame_equal(expected, vit.data)
 
 
-@pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
-def test_first_aggregation(local_object_version_store):
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=numeric_type_strategies()),
+        ],
+        index=range_indexes(),
+    )
+)
+def test_hypothesis_first_agg_numeric(lmdb_version_store, df):
+    first_aggregation(lmdb_version_store, df)
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=string_strategy),
+        ],
+        index=range_indexes(),
+    )
+)
+def test_hypothesis_first_agg_strings(lmdb_version_store, df):
+    first_aggregation(lmdb_version_store, df)
+
+
+def test_first_aggregation_numeric(local_object_version_store):
     df = DataFrame(
         {
-            "grouping_column": ["group_1", "group_2", "group_4", "group_2", "group_1", "group_3", "group_1"],
-            "get_first": [100.0, np.nan, np.nan, 2.7, 1.4, 5.8, 3.45],
+            "grouping_column": ["group_1", "group_2", "group_4", "group_2", "group_1", "group_3", "group_1", "group_5", "group_6", "group_6"],
+            "get_first": [100.0, np.nan, np.nan, 2.7, 1.4, 5.8, 3.45, None, None, 9.5],
         },
-        index=np.arange(7),
+        index=np.arange(10),
     )
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"get_first": "first"})
@@ -265,15 +282,91 @@ def test_first_aggregation(local_object_version_store):
     res = local_object_version_store.read(symbol, query_builder=q)
     res.data.sort_index(inplace=True)
 
-    df = pd.DataFrame({"get_first": [100.0, 2.7, 5.8, np.nan]}, index=["group_1", "group_2", "group_3", "group_4"])
+    df = pd.DataFrame({"get_first": [100.0, 2.7, 5.8, np.nan, None, 9.5]}, index=["group_1", "group_2", "group_3", "group_4", "group_5", "group_6"])
     df.index.rename("grouping_column", inplace=True)
     res.data.sort_index(inplace=True)
 
     assert_frame_equal(res.data, df)
 
 
-@pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
-def test_first_agg_with_append(local_object_version_store):
+@pytest.mark.parametrize("dynamic_strings", [True, False])
+def test_first_aggregation_strings(version_store_factory, dynamic_strings):
+    lib = version_store_factory(dynamic_strings=dynamic_strings)
+
+    df = DataFrame(
+        {
+            "grouping_column": ["group_1", "group_2", "group_1", "group_3"],
+            "get_first": ["Hello", "this", "is", "Homer"],
+        },
+        index=np.arange(4),
+    )
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"get_first": "first"})
+    symbol = "test_first_aggregation"
+    lib.write(symbol, df)
+
+    res = lib.read(symbol, query_builder=q)
+    res.data.sort_index(inplace=True)
+
+    df = pd.DataFrame({"get_first": ["Hello", "this", "Homer"]}, index=["group_1", "group_2", "group_3"])
+    df.index.rename("grouping_column", inplace=True)
+
+    assert_frame_equal(res.data, df)
+
+
+# TODO add a test with hypothesis and append for strings as well (when numeric will be working)
+# Same for last agg
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df1=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=numeric_type_strategies()),
+        ],
+        index=range_indexes(),
+    ),
+    df2=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=numeric_type_strategies()),
+        ],
+        index=range_indexes(),
+    ),
+    df3=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=numeric_type_strategies()),
+        ],
+        index=range_indexes(),
+    )
+)
+def test_hypothesis_first_agg_numeric_with_append(lmdb_version_store_tiny_segment, df1, df2, df3):
+    lib = lmdb_version_store_tiny_segment
+    assume(not df1.empty)
+    assume(not df2.empty)
+    assume(not df3.empty)
+
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"a": "first"})
+    df = pd.concat([df1, df2, df3], ignore_index=True)
+    expected = df.groupby("grouping_column").agg({"a": "first"})
+    expected.replace(
+        np.nan, np.inf, inplace=True
+    )  # New version of pandas treats values which exceeds limits as np.nan rather than np.inf, as in old version and arcticdb
+
+    symbol = "first_agg"
+    lib.write(symbol, df1)
+    lib.append(symbol, df2)
+    lib.append(symbol, df3)
+
+    vit = lib.read(symbol, query_builder=q)
+    vit.data.sort_index(inplace=True)
+
+    assert_frame_equal(expected, vit.data)
+
+
+def test_first_agg_numeric_with_append(local_object_version_store):
     lib = local_object_version_store
 
     symbol = "first_agg"
@@ -291,19 +384,28 @@ def test_first_agg_with_append(local_object_version_store):
     assert_frame_equal(vit.data, df)
 
 
-@use_of_function_scoped_fixtures_in_hypothesis_checked
-@settings(deadline=None)
-@given(
-    df=data_frames(
-        [
-            column("grouping_column", elements=string_strategy, fill=string_strategy),
-            column("a", elements=numeric_type_strategies()),
-        ],
-        index=range_indexes(),
-    )
-)
-@pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
-def test_hypothesis_last_agg_numeric(lmdb_version_store, df):
+@pytest.mark.parametrize("dynamic_strings", [True, False])
+def test_first_agg_strings_with_append(version_store_factory, dynamic_strings):
+    lib = version_store_factory(dynamic_strings=dynamic_strings)
+
+    symbol = "first_agg"
+    lib.write(symbol, pd.DataFrame({"grouping_column": ["group_1"], "get_first": ["Hi"]}))
+    lib.append(symbol, pd.DataFrame({"grouping_column": ["group_2"], "get_first": ["HELLO"]}))
+    lib.append(symbol, pd.DataFrame({"grouping_column": ["group_1"], "get_first": ["NO"]}))
+    lib.append(symbol, pd.DataFrame({"grouping_column": ["group_2"], "get_first": ["BLABLABLA"]}))
+    lib.append(symbol, pd.DataFrame({"grouping_column": ["group_3"], "get_first": ["This is it"]}))
+    q = QueryBuilder().groupby("grouping_column").agg({"get_first": "first"})
+
+    vit = lib.read(symbol, query_builder=q)
+    vit.data.sort_index(inplace=True)
+
+    df = pd.DataFrame({"get_first": ["Hi", "HELLO", "This is it"]}, index=["group_1", "group_2", "group_3"])
+    df.index.rename("grouping_column", inplace=True)
+
+    assert_frame_equal(vit.data, df)
+
+
+def last_aggregation(lmdb_version_store, df):
     lib = lmdb_version_store
     assume(not df.empty)
 
@@ -322,14 +424,43 @@ def test_hypothesis_last_agg_numeric(lmdb_version_store, df):
     assert_frame_equal(expected, vit.data)
 
 
-@pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
-def test_last_aggregation(local_object_version_store):
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=numeric_type_strategies()),
+        ],
+        index=range_indexes(),
+    )
+)
+def test_hypothesis_last_agg_numeric(lmdb_version_store, df):
+    last_aggregation(lmdb_version_store, df)
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=string_strategy),
+        ],
+        index=range_indexes(),
+    )
+)
+def test_hypothesis_last_agg_strings(lmdb_version_store, df):
+    last_aggregation(lmdb_version_store, df)
+
+
+def test_last_aggregation_numeric(local_object_version_store):
     df = DataFrame(
         {
-            "grouping_column": ["group_1", "group_2", "group_4", "group_5", "group_2", "group_1", "group_3", "group_1", "group_5"],
-            "get_last": [100.0, 2.7, np.nan, np.nan, np.nan, 1.4, 5.8, 3.45, 6.9],
+            "grouping_column": ["group_1", "group_2", "group_4", "group_5", "group_2", "group_1", "group_3", "group_1", "group_5", "group_6", "group_7", "group_7"],
+            "get_last": [100.0, 2.7, np.nan, np.nan, np.nan, 1.4, 5.8, 3.45, 6.9, None, None, 7.8],
         },
-        index=np.arange(9),
+        index=np.arange(12),
     )
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"get_last": "last"})
@@ -339,15 +470,90 @@ def test_last_aggregation(local_object_version_store):
     res = local_object_version_store.read(symbol, query_builder=q)
     res.data.sort_index(inplace=True)
 
-    df = pd.DataFrame({"get_last": [3.45, 2.7, 5.8, np.nan, 6.9]}, index=["group_1", "group_2", "group_3", "group_4", "group_5"])
+    df = pd.DataFrame({"get_last": [3.45, 2.7, 5.8, np.nan, 6.9, None, 7.8]}, index=["group_1", "group_2", "group_3", "group_4", "group_5", "group_6", "group_7"])
     df.index.rename("grouping_column", inplace=True)
     res.data.sort_index(inplace=True)
 
     assert_frame_equal(res.data, df)
 
 
-@pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
-def test_last_agg_with_append(local_object_version_store):
+@pytest.mark.parametrize("dynamic_strings", [True, False])
+def test_last_aggregation_strings(version_store_factory, dynamic_strings):
+    lib = version_store_factory(dynamic_strings=dynamic_strings)
+
+    df = DataFrame(
+        {
+            "grouping_column": ["group_1", "group_2", "group_1", "group_3"],
+            "get_last": ["Hello", "this", "is", "Homer"],
+        },
+        index=np.arange(4),
+    )
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"get_last": "last"})
+    symbol = "test_last_aggregation"
+    lib.write(symbol, df)
+
+    res = lib.read(symbol, query_builder=q)
+    res.data.sort_index(inplace=True)
+
+    df = pd.DataFrame({"get_last": ["is", "this", "Homer"]}, index=["group_1", "group_2", "group_3"])
+    df.index.rename("grouping_column", inplace=True)
+    res.data.sort_index(inplace=True)
+
+    assert_frame_equal(res.data, df)
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df1=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=numeric_type_strategies()),
+        ],
+        index=range_indexes(),
+    ),
+    df2=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=numeric_type_strategies()),
+        ],
+        index=range_indexes(),
+    ),
+    df3=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=numeric_type_strategies()),
+        ],
+        index=range_indexes(),
+    )
+)
+def test_hypothesis_last_agg_numeric_with_append(lmdb_version_store_tiny_segment, df1, df2, df3):
+    lib = lmdb_version_store_tiny_segment
+    assume(not df1.empty)
+    assume(not df2.empty)
+    assume(not df3.empty)
+
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"a": "last"})
+    df = pd.concat([df1, df2, df3], ignore_index=True)
+    expected = df.groupby("grouping_column").agg({"a": "last"})
+    expected.replace(
+        np.nan, np.inf, inplace=True
+    )  # New version of pandas treats values which exceeds limits as np.nan rather than np.inf, as in old version and arcticdb
+
+    symbol = "last_agg"
+    lib.write(symbol, df1)
+    lib.append(symbol, df2)
+    lib.append(symbol, df3)
+
+    vit = lib.read(symbol, query_builder=q)
+    vit.data.sort_index(inplace=True)
+
+    assert_frame_equal(expected, vit.data)
+
+
+def test_last_agg_numeric_with_append(local_object_version_store):
     lib = local_object_version_store
 
     symbol = "last_agg"
@@ -360,6 +566,27 @@ def test_last_agg_with_append(local_object_version_store):
     vit.data.sort_index(inplace=True)
 
     df = pd.DataFrame({"get_last": [20.0, 30.0]}, index=[0, 1])
+    df.index.rename("grouping_column", inplace=True)
+
+    assert_frame_equal(vit.data, df)
+
+
+@pytest.mark.parametrize("dynamic_strings", [True, False])
+def test_last_agg_strings_with_append(version_store_factory, dynamic_strings):
+    lib = version_store_factory(dynamic_strings=dynamic_strings)
+
+    symbol = "last_agg"
+    lib.write(symbol, pd.DataFrame({"grouping_column": ["group_1"], "get_last": ["Hi"]}))
+    lib.append(symbol, pd.DataFrame({"grouping_column": ["group_2"], "get_last": ["HELLO"]}))
+    lib.append(symbol, pd.DataFrame({"grouping_column": ["group_1"], "get_last": ["NO"]}))
+    lib.append(symbol, pd.DataFrame({"grouping_column": ["group_2"], "get_last": ["BLABLABLA"]}))
+    lib.append(symbol, pd.DataFrame({"grouping_column": ["group_3"], "get_last": ["This is something else"]}))
+    q = QueryBuilder().groupby("grouping_column").agg({"get_last": "last"})
+
+    vit = lib.read(symbol, query_builder=q)
+    vit.data.sort_index(inplace=True)
+
+    df = pd.DataFrame({"get_last": ["NO", "BLABLABLA", "This is something else"]}, index=["group_1", "group_2", "group_3"])
     df.index.rename("grouping_column", inplace=True)
 
     assert_frame_equal(vit.data, df)

@@ -426,6 +426,14 @@ public:
         impl_->set_compacted(val);
     }
 
+    bool fixed_str_as_dyn() const  {
+        return impl_->fixed_str_as_dyn();
+    }
+
+    void set_fixed_str_as_dyn(bool val) {
+        impl_->set_fixed_str_as_dyn(val);
+    }
+
     void change_schema(const StreamDescriptor& descriptor) {
         return impl_->change_schema(descriptor);
     }
