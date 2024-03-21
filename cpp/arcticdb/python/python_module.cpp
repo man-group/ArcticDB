@@ -31,7 +31,6 @@
 
 #include <pybind11/pybind11.h>
 #include <folly/system/ThreadName.h>
-#include <folly/portability/PThread.h>
 #include <mongocxx/exception/logic_error.hpp>
 
 #include <logger.pb.h>
