@@ -303,9 +303,9 @@ constexpr  ValueType get_value_type(char specifier) noexcept {
         // TODO: for the support of Pandas>=2.0, convert any `datetime` to `datetime64[ns]` before-hand and do not
         // rely uniquely on the resolution-less 'M' specifier if it this doable.
     case 'M': return ValueType::NANOSECONDS_UTC; //  datetime // numpy doesn't support the buffer protocol for datetime64
-    case 'U': return ValueType::UTF8_FIXED; //  Unicode
+    case 'U': return ValueType::UTF8_FIXED; //  Unicode fixed-width
     case 'S': return ValueType::ASCII_FIXED; //  (byte-)string
-    case 'O': return ValueType::BYTES; // Fishy, an actual type might be better
+    case 'O': return ValueType::UTF_DYNAMIC; // Unicode dynamic width
     default:
         return ValueType::UNKNOWN_VALUE_TYPE;    // Unknown
     }

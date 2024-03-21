@@ -66,6 +66,7 @@ message VersionStoreConfig {
         bool fast_tombstone_all = 56;
         bool bucketize_dynamic = 57;
         uint32 max_num_buckets = 58;
+        bool empty_types = 59;
 
         message SyncDisabled {
             bool enabled = 1;

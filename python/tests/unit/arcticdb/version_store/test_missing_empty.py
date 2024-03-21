@@ -590,41 +590,41 @@ _TEST_LOOKUP = {test.name: test for test in _ALL_TESTS_RAW}
 
 
 @pytest.mark.parametrize("test_case", _ROUND_TRIP_TESTS)
-def test_empty_missing_round_trip_lmdb(lmdb_version_store, test_case: TestCase):
-    run_test(lmdb_version_store, test_case, round_trip)
+def test_empty_missing_round_trip_lmdb(lmdb_version_store_empty_types, test_case: TestCase):
+    run_test(lmdb_version_store_empty_types, test_case, round_trip)
 
 
 @pytest.mark.parametrize("test_case", _ROUND_TRIP_TESTS)
-def test_empty_missing_round_trip_lmdb_dynamic_schema(lmdb_version_store_dynamic_schema, test_case: TestCase):
-    run_test(lmdb_version_store_dynamic_schema, test_case, round_trip)
+def test_empty_missing_round_trip_lmdb_dynamic_schema(lmdb_version_store_empty_types_dynamic_schema, test_case: TestCase):
+    run_test(lmdb_version_store_empty_types_dynamic_schema, test_case, round_trip)
 
 
 @pytest.mark.parametrize("test_case", _APPEND_TESTS)
-def test_empty_missing_append_lmdb(lmdb_version_store, test_case: TestCase):
+def test_empty_missing_append_lmdb(lmdb_version_store_empty_type, test_case: TestCase):
     if test_case.base_name not in _TEST_LOOKUP:
         pytest.fail(f"Base test case {test_case.base_name} not found")
-    run_test(lmdb_version_store, test_case, append, _TEST_LOOKUP[test_case.base_name])
+    run_test(lmdb_version_store_empty_type, test_case, append, _TEST_LOOKUP[test_case.base_name])
 
 
 @pytest.mark.parametrize("test_case", _APPEND_TESTS)
-def test_empty_missing_append_lmdb_dynamic_schema(lmdb_version_store_dynamic_schema, test_case: TestCase):
+def test_empty_missing_append_lmdb_dynamic_schema(lmdb_version_store_empty_type_dynamic_schema, test_case: TestCase):
     if test_case.base_name not in _TEST_LOOKUP:
         pytest.fail(f"Base test case {test_case.base_name} not found")
-    run_test(lmdb_version_store_dynamic_schema, test_case, append, _TEST_LOOKUP[test_case.base_name])
+    run_test(lmdb_version_store_empty_type_dynamic_schema, test_case, append, _TEST_LOOKUP[test_case.base_name])
 
 
 @pytest.mark.parametrize("test_case", _UPDATE_TESTS)
-def test_empty_missing_update_lmdb(lmdb_version_store, test_case: TestCase):
+def test_empty_missing_update_lmdb(lmdb_version_store_empty_type, test_case: TestCase):
     if test_case.base_name not in _TEST_LOOKUP:
         pytest.fail(f"Base test case {test_case.base_name} not found")
-    run_test(lmdb_version_store, test_case, update, _TEST_LOOKUP[test_case.base_name])
+    run_test(lmdb_version_store_empty_type, test_case, update, _TEST_LOOKUP[test_case.base_name])
 
 
 @pytest.mark.parametrize("test_case", _UPDATE_TESTS)
-def test_empty_missing_update_lmdb_dynamic_schema(lmdb_version_store_dynamic_schema, test_case: TestCase):
+def test_empty_missing_update_lmdb_dynamic_schema(lmdb_version_store_empty_type_dynamic_schema, test_case: TestCase):
     if test_case.base_name not in _TEST_LOOKUP:
         pytest.fail(f"Base test case {test_case.base_name} not found")
-    run_test(lmdb_version_store_dynamic_schema, test_case, update, _TEST_LOOKUP[test_case.base_name])
+    run_test(lmdb_version_store_empty_type_dynamic_schema, test_case, update, _TEST_LOOKUP[test_case.base_name])
 
 
 # to run a single test, edit the following 2 lines to contain the test and action you want to test,
@@ -634,16 +634,16 @@ _SINGLE_TEST_ACTION = update     # round_trip | append | update
 
 
 @pytest.mark.parametrize("test_case", _SINGLE_TEST)
-def test_empty_missing_single_lmdb(lmdb_version_store, test_case: TestCase):
+def test_empty_missing_single_lmdb(lmdb_version_store_empty_type, test_case: TestCase):
     if test_case:
         if test_case.base_name and test_case.base_name not in _TEST_LOOKUP:
             pytest.fail(f"Base test case {test_case.base_name} not found")
-        run_test(lmdb_version_store, test_case, _SINGLE_TEST_ACTION, _TEST_LOOKUP[test_case.base_name])
+        run_test(lmdb_version_store_empty_type, test_case, _SINGLE_TEST_ACTION, _TEST_LOOKUP[test_case.base_name])
 
 
 @pytest.mark.parametrize("test_case", _SINGLE_TEST)
-def test_empty_missing_single_lmdb_dynamic_schema(lmdb_version_store_dynamic_schema, test_case: TestCase):
+def test_empty_missing_single_lmdb_dynamic_schema(lmdb_version_store_empty_type_dynamic_schema, test_case: TestCase):
     if test_case:
         if test_case.base_name and test_case.base_name not in _TEST_LOOKUP:
             pytest.fail(f"Base test case {test_case.base_name} not found")
-        run_test(lmdb_version_store_dynamic_schema, test_case, _SINGLE_TEST_ACTION, _TEST_LOOKUP[test_case.base_name])
+        run_test(lmdb_version_store_empty_type_dynamic_schema, test_case, _SINGLE_TEST_ACTION, _TEST_LOOKUP[test_case.base_name])
