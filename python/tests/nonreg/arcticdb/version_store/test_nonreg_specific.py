@@ -204,9 +204,9 @@ def test_batch_write_unicode_strings(lmdb_version_store):
     (pd.Series, assert_series_equal),
     (pd.DataFrame, assert_frame_equal),
 ])
-def test_update_with_empty_series_or_dataframe(lmdb_version_store, PandasType, assert_pandas_container_equal):
+def test_update_with_empty_series_or_dataframe(lmdb_version_store_empty_types_v1, PandasType, assert_pandas_container_equal):
     # Non-regression test for https://github.com/man-group/ArcticDB/issues/892
-    lib = lmdb_version_store
+    lib = lmdb_version_store_empty_types_v1
 
     kwargs = { "name": "a" } if PandasType == pd.Series else { "columns": ["a"] }
     data = np.array([1.0]) if PandasType == pd.Series else np.array([[1.0]])
