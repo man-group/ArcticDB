@@ -542,7 +542,7 @@ void set_output_descriptors(
             auto mutable_index = pipeline_context->norm_meta_->mutable_df()->mutable_common()->mutable_index();
             mutable_index->set_name(*new_index);
             mutable_index->clear_fake_name();
-            mutable_index->set_is_not_range_index(true);
+            mutable_index->set_is_physically_stored(true);
             break;
         }
     }

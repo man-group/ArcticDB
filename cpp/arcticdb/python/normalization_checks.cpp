@@ -108,13 +108,13 @@ void update_rowcount_normalization_data(
         constexpr auto error_suffix =
             " the existing version. Please convert both to use Int64Index if you need this to work.";
         normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
-            old_index->is_not_range_index() == new_index->is_not_range_index(),
+            old_index->is_physically_stored() == new_index->is_physically_stored(),
             "The argument uses a {} index which is incompatible with {}",
-            new_index->is_not_range_index() ? "non-range" : "range-style",
+            new_index->is_physically_stored() ? "non-range" : "range-style",
             error_suffix
         );
 
-        if (!old_index->is_not_range_index()) {
+        if (!old_index->is_physically_stored()) {
             normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
                 old_index->step() == new_index->step(),
                 "The new argument has a different RangeIndex step from {}",

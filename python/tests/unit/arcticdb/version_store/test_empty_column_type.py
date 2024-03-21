@@ -817,3 +817,9 @@ class TestEmptyTypeIsOverriden:
         lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col": [1,2,3]}, index=incompatible_indexes[0]))
         with pytest.raises(Exception):
             lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col": [4, 5, 6]}, index=incompatible_indexes[1]))
+            
+
+def test_foo(lmdb_version_store_v2):
+    lmdb_version_store_v2.write("sym", pd.DataFrame({"col": []}, index=pd.DatetimeIndex([])))
+    print(lmdb_version_store_v2.read("sym").data)
+    print(lmdb_version_store_v2.read("sym").data.index)

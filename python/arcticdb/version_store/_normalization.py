@@ -292,18 +292,20 @@ def _normalize_single_index(index, index_names, index_norm, dynamic_strings=None
     # index: pd.Index or np.ndarray -> np.ndarray
     index_tz = None
 
-    if isinstance(index, RangeIndex):
-        # skip index since we can reconstruct it, so no need to actually store it
-        if index.name:
-            if not isinstance(index.name, int) and not isinstance(index.name, str):
-                raise NormalizationException(
-                    f"Index name must be a string or an int, received {index.name} of type {type(index.name)}"
-                )
-            if isinstance(index.name, int):
-                index_norm.is_int = True
-            index_norm.name = str(index.name)
-        index_norm.start = index.start if _range_index_props_are_public else index._start
-        index_norm.step = index.step if _range_index_props_are_public else index._step
+    if not index_norm.is_physically_stored:
+        if isinstance(index, RangeIndex):
+            # skip index since we can reconstruct it, so no need to actually store it
+            if index.name:
+                if not isinstance(index.name, int) and not isinstance(index.name, str):
+                    raise NormalizationException(
+                        f"Index name must be a string or an int, received {index.name} of type {type(index.name)}"
+                    )
+                if isinstance(index.name, int):
+                    index_norm.is_int = True
+                index_norm.name = str(index.name)
+            index_norm.start = index.start if _range_index_props_are_public else index._start
+            index_norm.step = index.step if _range_index_props_are_public else index._step
+            return [], []
         return [], []
     else:
         coerce_type = DTN64_DTYPE if len(index) == 0 else None
@@ -362,16 +364,16 @@ def _denormalize_single_index(item, norm_meta):
     rtn = Index([])
     if len(item.index_columns) == 0:
         # when then initial index was a RangeIndex
-        if norm_meta.WhichOneof("index_type") == "index" and not norm_meta.index.is_not_range_index:
+        if norm_meta.WhichOneof("index_type") == "index" and not norm_meta.index.is_physically_stored:
             if len(item.data) > 0:
                 if hasattr(norm_meta.index, "step") and norm_meta.index.step != 0:
                     stop = norm_meta.index.start + norm_meta.index.step * len(item.data[0])
                     name = norm_meta.index.name if norm_meta.index.name else None
                     return RangeIndex(start=norm_meta.index.start, stop=stop, step=norm_meta.index.step, name=name)
                 else:
-                    return None
+                    return Index([])
             else:
-                return RangeIndex(start=0, stop=0, step=1)
+                return Index([])
         # this means that the index is not a datetime index and it's been represented as a regular field in the stream
         item.index_columns.append(item.names.pop(0))
 
@@ -545,21 +547,12 @@ class _PandasNormalizer(Normalizer):
             df.reset_index(fields, inplace=True)
             index = df.index
         else:
-            n_rows = len(index)
-            n_categorical_columns = len(df.select_dtypes(include="category").columns)
-            if n_rows == 0 and n_categorical_columns == 0:
-                # In Pandas 1.0, an Index is used by default for any empty dataframe or series, except if
-                # there are categorical columns in which case a RangeIndex is used.
-                #
-                # In Pandas 2.0, RangeIndex is used by default for _any_ empty dataframe or series.
-                #
-                # In case of RangeIndex with 0 rows the C++ layer of ArcticDB will use the internal empty index type
-                # the index does not store a field and needs is_not_range_index to be False because of this logic:
-                # https://github.com/man-group/ArcticDB/blob/4184a467d9eee90600ddcbf34d896c763e76f78f/python/arcticdb/version_store/_store.py#L1908
-                # In future we need to revisit the protobuf structures for indexes to account for this
-                index = RangeIndex(0,0)
+            is_not_range_index = not isinstance(index, RangeIndex)
+            df_has_rows = not(len(index) == 0 and len(df.select_dtypes(include="category").columns) == 0)
             index_norm = pd_norm.index
-            index_norm.is_not_range_index = not isinstance(index, RangeIndex)
+            index_norm.is_physically_stored = is_not_range_index or df_has_rows
+            if not df_has_rows:
+                index = Index([])
 
         return _normalize_single_index(index, list(index.names), index_norm, dynamic_strings, string_max_len)
 
