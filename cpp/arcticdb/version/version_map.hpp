@@ -158,9 +158,8 @@ public:
             cached_penultimate_index = ref_entry.keys_[1];
         }
 
-        if (key_exists_in_ref_entry(load_params, ref_entry, cached_penultimate_index, load_progress)) {
-            load_progress.loaded_until_ = ref_entry.loaded_until_;
-            load_progress.oldest_loaded_index_version_ = ref_entry.loaded_until_;
+        if (key_exists_in_ref_entry(load_params, ref_entry, cached_penultimate_index)) {
+            load_progress = ref_entry.loaded_with_progress_;
             entry->keys_.push_back(ref_entry.keys_[0]);
             if(cached_penultimate_index)
                 entry->keys_.push_back(*cached_penultimate_index);
@@ -176,7 +175,7 @@ public:
             && load_latest_ongoing(load_params, entry)
             && looking_for_undeleted(load_params, entry, load_progress));
         }
-        set_loaded_until(load_progress, entry);
+        entry->loaded_with_progress_ = load_progress;
     }
 
     void load_via_ref_key(
@@ -572,68 +571,38 @@ public:
             return false;
         }
 
-        if (requested_load_type == LoadType::NOT_LOADED) {
-            return true;
-        }
-
         LoadType cached_load_type = entry->load_type_;
 
-        switch(cached_load_type) {
+        switch (requested_load_type) {
             case LoadType::NOT_LOADED:
-                break;
-            case LoadType::LOAD_LATEST:
-                // Future: This case and LOAD_LATEST_UNDELETED could be optimized: use cache if request is
-                // LOAD_FROM_TIME for a later time than the cached entry.
-                if (requested_load_type == LoadType::LOAD_LATEST) {
-                    return true;
-                }
-                if (requested_load_type == LoadType::LOAD_DOWNTO) {
-                    return loaded_as_far_as_load_until(*entry, load_param);
-                }
-                break;
-            case LoadType::LOAD_LATEST_UNDELETED:
-                if (requested_load_type == LoadType::LOAD_LATEST_UNDELETED
-                    || requested_load_type == LoadType::LOAD_LATEST) {
-                    return true;
-                }
-
-                if (requested_load_type == LoadType::LOAD_DOWNTO) {
-                    return loaded_as_far_as_load_until(*entry, load_param);
-                }
-                break;
-            case LoadType::LOAD_DOWNTO:
-                if (requested_load_type == LoadType::LOAD_DOWNTO) {
-                    return loaded_as_far_as_load_until(*entry, load_param);
-                }
-
-                if (requested_load_type == LoadType::LOAD_LATEST_UNDELETED) {
-                    auto opt_latest = entry->get_first_index(false).first;
-                    return opt_latest.has_value();
-                }
-
-                if (requested_load_type == LoadType::LOAD_LATEST) {
-                    auto opt_latest = entry->get_first_index(true).first;
-                    return opt_latest.has_value();
-                }
-
-                return false;
-            case LoadType::LOAD_FROM_TIME:
-                // Future: This case could be optimized: use cache if it is LOAD_FROM_TIME for earlier time or
-                // LOAD_DOWNTO for a version with an earlier timestamp
-
-                // LOAD_FROM_TIME keeps looking till it finds an undeleted version, even that is earlier than the
-                // search time requested
-                return requested_load_type == LoadType::NOT_LOADED
-                    || requested_load_type == LoadType::LOAD_LATEST_UNDELETED
-                    || requested_load_type == LoadType::LOAD_LATEST;
-            case LoadType::LOAD_UNDELETED:
-                return requested_load_type != LoadType::LOAD_ALL;
-            case LoadType::LOAD_ALL:
                 return true;
+            case LoadType::LOAD_LATEST: {
+                // If entry has at least one index we have the latest value cached
+                auto opt_latest = entry->get_first_index(true).first;
+                return opt_latest.has_value();
+            }
+            case LoadType::LOAD_LATEST_UNDELETED: {
+                // If entry has at least one undeleted index we have the latest_undeleted cached
+                // This check can be slow if we have thousands of deleted versions before the first undeleted. If that is
+                // ever a problem we can just store a boolean if we have an undeleted version.
+                auto opt_latest = entry->get_first_index(false).first;
+                return opt_latest.has_value();
+            }
+            case LoadType::LOAD_DOWNTO:
+                // We check whether the oldest loaded version is before or at the requested one
+                return loaded_as_far_as_version_id(*entry, load_param.load_until_version_.value());
+            case LoadType::LOAD_FROM_TIME:
+                // We check whether the earliest loaded timestamp is before or at the requested on
+                return entry->loaded_with_progress_.earliest_loaded_undeleted_timestamp_ <= load_param.load_from_time_.value();
+            case LoadType::LOAD_UNDELETED:
+                // We can have all undeleteded versions cached when cache was loaded by either loading all or all undeleted.
+                return cached_load_type==LoadType::LOAD_ALL || cached_load_type==LoadType::LOAD_UNDELETED;
+            case LoadType::LOAD_ALL:
+                // We can have all versions cached only when cache was loaded by loading all versions.
+                return cached_load_type==LoadType::LOAD_ALL;
             default:
                 util::raise_rte("Unexpected load type in cache {}", cached_load_type);
         }
-        return false;
     }
 
 private:
@@ -702,27 +671,27 @@ private:
 
     /**
      * Whether entry contains as much of the version map as specified by load_param. Checks whether
-     * loaded_until_ in entry is earlier than that specified in load_param.
+     * oldest_loaded_index_version_ in entry is earlier than that specified in load_param.
      *
      * @param entry the version map state to check
      * @param load_param the load request to test for completeness
      * @return true if and only if entry already contains data at least as far back as load_param requests
      */
-    bool loaded_as_far_as_load_until(const VersionMapEntry& entry, const LoadParameter& load_param) const {
-        if (is_positive_version_query(load_param)) {
-            if (entry.loaded_until_ <= static_cast<VersionId>(load_param.load_until_version_.value())) {
+    bool loaded_as_far_as_version_id(const VersionMapEntry& entry, SignedVersionId requested_version_id) const {
+        if (requested_version_id >= 0) {
+            if (entry.loaded_with_progress_.oldest_loaded_index_version_ <= static_cast<VersionId>(requested_version_id)) {
                 ARCTICDB_DEBUG(log::version(), "Loaded as far as required value {}, have {}",
-                               load_param.load_until_version_.value(), entry.loaded_until_);
+                               requested_version_id, entry.loaded_with_progress_.oldest_loaded_index_version_);
                 return true;
             }
         } else {
             auto opt_latest = entry.get_first_index(true).first;
             if (opt_latest.has_value()) {
                 auto opt_version_id = get_version_id_negative_index(opt_latest->version_id(),
-                                                                    *load_param.load_until_version_);
-                if (opt_version_id.has_value() && entry.loaded_until_ <= *opt_version_id) {
+                                                                    requested_version_id);
+                if (opt_version_id.has_value() && entry.loaded_with_progress_.oldest_loaded_index_version_ <= *opt_version_id) {
                     ARCTICDB_DEBUG(log::version(), "Loaded as far as required value {}, have {} and there are {} total versions",
-                                   load_param.load_until_version_.value(), entry.loaded_until_, opt_latest->version_id());
+                                   requested_version_id, entry.loaded_with_progress_.oldest_loaded_index_version_, opt_latest->version_id());
                     return true;
                 }
             }
