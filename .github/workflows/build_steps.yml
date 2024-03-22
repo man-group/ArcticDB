@@ -134,6 +134,10 @@ jobs:
         if: inputs.job_type == 'cpp-tests'
         run: cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET --target install
 
+      - name: Install dynamically linked library for tests
+        if: inputs.job_type == 'cpp-tests' && matrix.os == 'linux'
+        run: yum install -y https://dl.fedoraproject.org/pub/epel/7/x86_64/Packages/o/openssl11-1.1.1k-7.el7.x86_64.rpm
+
       - name: C++ Rapidcheck
         if: inputs.job_type == 'cpp-tests'
         run: cpp/out/install/arcticdb_rapidcheck_tests
@@ -164,6 +168,7 @@ jobs:
         run: pipx run cibuildwheel==${{inputs.cibw_version}}
         env:
           CIBW_MANYLINUX_X86_64_IMAGE: ${{inputs.cibw_image_tag}}
+          CIBW_REPAIR_WHEEL_COMMAND_LINUX: auditwheel repair -L . -w {dest_dir} {wheel} --exclude libssl-a0734ced.so.1.1
 
       - name: Store wheel artifact
         if: inputs.job_type == 'build-python-wheels'
@@ -298,6 +303,10 @@ jobs:
           ${{vars.EXTRA_TEST_PREPARE_CMD || ''}}
         env:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
+      
+      - name: Install dynamically linked library for tests
+        if: matrix.os == 'linux'
+        run: yum install -y https://dl.fedoraproject.org/pub/epel/7/x86_64/Packages/o/openssl11-1.1.1k-7.el7.x86_64.rpm
 
       - name: Set persistent storage variables
         if: inputs.persistent_storage == 'true'

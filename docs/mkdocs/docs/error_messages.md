@@ -183,3 +183,8 @@ RuntimeError
     |-- StreamDescriptorMismatch
     └-- InternalException
 ```
+
+## Import Error
+| Error messages | Cause | Resolution |
+|:--------------|:-------|:-----------|
+| libssl.so.1.1: cannot open shared object file | For linux-pypi prebuilt binary, since v4.5.0, libssl is no longer statically linked | Install libssl v1.1.1 manually; Please refer to https://github.com/man-group/ArcticDB |
