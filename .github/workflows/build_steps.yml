@@ -164,6 +164,7 @@ jobs:
         run: pipx run cibuildwheel==${{inputs.cibw_version}}
         env:
           CIBW_MANYLINUX_X86_64_IMAGE: ${{inputs.cibw_image_tag}}
+          CIBW_REPAIR_WHEEL_COMMAND_LINUX: auditwheel repair -L . -w {dest_dir} {wheel} --exclude libssl.so
 
       - name: Store wheel artifact
         if: inputs.job_type == 'build-python-wheels'
