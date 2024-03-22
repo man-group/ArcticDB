@@ -1143,3 +1143,65 @@ def test_norm_failure_error_message(arctic_library):
     assert "write_pickle_batch" in str(write_batch_exception.value) and "pickle_on_failure" not in str(write_batch_exception.value)
     assert all("write_pickle" not in str(e.value) for e in
                [append_exception, append_batch_exception, update_exception])
+
+
+class PicklableClass:
+    """A dummy user defined type that requires pickling to serialize."""
+
+    def __init__(self, id: str):
+        self.id = id
+
+
+class UnpicklableClass:
+    """A dummy user defined type that requires pickling to serialize."""
+
+    def __init__(self, id: str):
+        self.id = id
+
+    def __getstate__(self):
+        raise Exception("UnpicklableClass.__getstate__ called")
+
+    def __setstate__(self, d):
+        raise Exception("UnpicklableClass.__setstate__ called")
+
+
+def test_pickle_on_failure_behaviour(arctic_library):
+    lib = arctic_library
+    sym = "test_pickle_on_failure_behaviour"
+    assert not lib._nvs.lib_cfg().lib_desc.version.use_norm_failure_handler_known_types
+
+    normalizable_df = pd.DataFrame({"col": [1]})
+    unnormalizable_df = pd.DataFrame({"col": [(1,)]})
+    pod = 1
+    pod_list = [1, 2, 3]
+    pod_dict = {
+        "hello": {
+            2: [1, "bonjour"]
+        }
+    }
+    picklable_non_pod = PicklableClass("gutentag")
+    unpicklable_non_pod = UnpicklableClass("nihao")
+
+    lib.write(sym, normalizable_df)
+    lib.write_pickle(sym, normalizable_df)
+
+    with pytest.raises(ArcticDbNotYetImplemented):
+        lib.write(sym, unnormalizable_df)
+    lib.write_pickle(sym, unnormalizable_df)
+
+    lib.write(sym, pod)
+    lib.write_pickle(sym, pod)
+
+    lib.write(sym, pod_list)
+    lib.write_pickle(sym, pod_list)
+
+    lib.write(sym, pod_dict)
+    lib.write_pickle(sym, pod_dict)
+
+    lib.write(sym, picklable_non_pod)
+    lib.write_pickle(sym, picklable_non_pod)
+
+    with pytest.raises(Exception):
+        lib.write(sym, unpicklable_non_pod)
+    with pytest.raises(Exception):
+        lib.write_pickle(sym, unpicklable_non_pod)
