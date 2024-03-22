@@ -450,6 +450,8 @@ class Library:
             pickle_on_failure=False,
             parallel=staged,
             validate_index=validate_index,
+            norm_failure_options_msg="Using write_pickle will allow the object to be written. However, many operations "
+                                     "(such as date_range filtering and column selection) will not work on pickled data.",
         )
 
     def write_pickle(
@@ -596,6 +598,9 @@ class Library:
             pickle_on_failure=False,
             validate_index=validate_index,
             throw_on_error=throw_on_error,
+            norm_failure_options_msg="Using write_pickle_batch will allow the object to be written. However, many "
+                                     "operations (such as date_range filtering and column selection) will not work on "
+                                     "pickled data.",
         )
 
     def write_pickle_batch(

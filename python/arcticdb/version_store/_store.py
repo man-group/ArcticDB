@@ -204,6 +204,11 @@ class NativeVersionStore:
     """
 
     _warned_about_list_version_latest_only_and_snapshot: bool = False
+    norm_failure_options_msg_write = \
+        "Setting the pickle_on_failure parameter to True will allow the object to be written. However, many " \
+        "operations (such as date_range filtering and column selection) will not work on pickled data."
+    norm_failure_options_msg_append = "Data must be normalizable to be appended to existing data."
+    norm_failure_options_msg_update = "Data must be normalizable to be used to update existing data."
 
     def __init__(self, library, env, lib_cfg=None, open_mode=OpenMode.DELETE):
         # type: (_Library, Optional[str], Optional[LibraryConfig], OpenMode)->None
@@ -313,7 +318,17 @@ class NativeVersionStore:
             log.error("Could not get primary backing store for lib due to: {}".format(e))
         return backing_store
 
-    def _try_normalize(self, symbol, dataframe, metadata, pickle_on_failure, dynamic_strings, coerce_columns, **kwargs):
+    def _try_normalize(
+            self,
+            symbol,
+            dataframe,
+            metadata,
+            pickle_on_failure,
+            dynamic_strings,
+            coerce_columns,
+            norm_failure_options_msg="",
+            **kwargs
+    ):
         dynamic_schema = self.resolve_defaults(
             "dynamic_schema", self._lib_cfg.lib_desc.version.write_options, False, **kwargs
         )
@@ -335,8 +350,17 @@ class NativeVersionStore:
                     **kwargs,
                 )
         except ArcticDbNotYetImplemented as ex:
-            log.error("Not supported: normalizing symbol={}, data={}, metadata={}, {}", symbol, dataframe, metadata, ex)
-            raise
+            raise ArcticDbNotYetImplemented(
+                f"Not supported: normalizing\n"
+                f"symbol: {symbol}\n"
+                f"data:\n"
+                f"{dataframe}\n"
+                f"metadata:\n"
+                f"{metadata}\n"
+                f"Reason:\n"
+                f"{ex}\n"
+                f"{norm_failure_options_msg}"
+            )
         except Exception as ex:
             log.error("Error while normalizing symbol={}, data={}, metadata={}, {}", symbol, dataframe, metadata, ex)
             raise ArcticNativeException(str(ex))
@@ -523,6 +547,7 @@ class NativeVersionStore:
 
         coerce_columns = kwargs.get("coerce_columns", None)
         sparsify_floats = kwargs.get("sparsify_floats", False)
+        norm_failure_options_msg = kwargs.get("norm_failure_options_msg", self.norm_failure_options_msg_write)
 
         _handle_categorical_columns(symbol, data, False)
 
@@ -542,7 +567,13 @@ class NativeVersionStore:
                 return vit
 
         udm, item, norm_meta = self._try_normalize(
-            symbol, data, metadata, pickle_on_failure, dynamic_strings, coerce_columns
+            symbol,
+            data,
+            metadata,
+            pickle_on_failure,
+            dynamic_strings,
+            coerce_columns,
+            norm_failure_options_msg,
         )
         # TODO: allow_sparse for write_parallel / recursive normalizers as well.
         if isinstance(item, NPDDataFrame):
@@ -657,7 +688,15 @@ class NativeVersionStore:
 
         _handle_categorical_columns(symbol, dataframe)
 
-        udm, item, norm_meta = self._try_normalize(symbol, dataframe, metadata, False, dynamic_strings, coerce_columns)
+        udm, item, norm_meta = self._try_normalize(
+            symbol,
+            dataframe,
+            metadata,
+            False,
+            dynamic_strings,
+            coerce_columns,
+            self.norm_failure_options_msg_append,
+        )
 
         write_if_missing = kwargs.get("write_if_missing", True)
 
@@ -753,7 +792,15 @@ class NativeVersionStore:
 
         _handle_categorical_columns(symbol, data)
 
-        udm, item, norm_meta = self._try_normalize(symbol, data, metadata, False, dynamic_strings, coerce_columns)
+        udm, item, norm_meta = self._try_normalize(
+            symbol,
+            data,
+            metadata,
+            False,
+            dynamic_strings,
+            coerce_columns,
+            self.norm_failure_options_msg_update,
+        )
 
         if isinstance(item, NPDDataFrame):
             with _diff_long_stream_descriptor_mismatch(self):
@@ -1188,6 +1235,8 @@ class NativeVersionStore:
         pickle_on_failure = self.resolve_defaults(
             "pickle_on_failure", proto_cfg, global_default=False, existing_value=pickle_on_failure, **kwargs
         )
+        norm_failure_options_msg = kwargs.get("norm_failure_options_msg", self.norm_failure_options_msg_write)
+
         if metadata_vector is None:
             metadata_itr = itertools.repeat(None)
         else:
@@ -1201,9 +1250,10 @@ class NativeVersionStore:
                 symbols[idx],
                 data_vector[idx],
                 next(metadata_itr),
-                pickle_on_failure=pickle_on_failure,
-                dynamic_strings=dynamic_strings,
-                coerce_columns=None,
+                pickle_on_failure,
+                dynamic_strings,
+                None,
+                norm_failure_options_msg,
             )
             for idx in range(len(symbols))
         ]
@@ -1362,9 +1412,10 @@ class NativeVersionStore:
                 symbols[idx],
                 data_vector[idx],
                 next(metadata_itr),
-                dynamic_strings=dynamic_strings,
-                pickle_on_failure=False,
-                coerce_columns=None,
+                False,
+                dynamic_strings,
+                None,
+                self.norm_failure_options_msg_append,
             )
             for idx in range(len(symbols))
         ]
