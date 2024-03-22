@@ -23,7 +23,7 @@ arcticdb::proto::descriptors::AtomKey encode_key(const entity::AtomKey &key);
 
 entity::AtomKey decode_key(const arcticdb::proto::descriptors::AtomKey& input);
 
-[[nodiscard]] arcticdb::proto::descriptors::StreamDescriptor copy_stream_descriptor_to_proto(const entity::StreamDescriptor& desc);
+void copy_stream_descriptor_to_proto(const entity::StreamDescriptor& desc, arcticdb::proto::descriptors::StreamDescriptor& proto);
 
 arcticdb::proto::descriptors::TimeSeriesDescriptor copy_time_series_descriptor_to_proto(const TimeseriesDescriptor& tsd);
 

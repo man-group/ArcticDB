@@ -16,14 +16,11 @@
 
 namespace arcticdb::entity {
 
-struct FrameDescriptorImpl : public FrameDescriptor {
-    FrameDescriptorImpl() = default;
 
-    ARCTICDB_MOVE_COPY_DEFAULT(FrameDescriptorImpl)
+struct SegmentDescriptorImpl : public SegmentDescriptor {
+    SegmentDescriptorImpl() = default;
 
-    [[nodiscard]] FrameDescriptorImpl clone() const {
-        return *this;
-    }
+    ARCTICDB_MOVE_COPY_DEFAULT(SegmentDescriptorImpl)
 
     [[nodiscard]] const IndexDescriptorImpl& index() const {
         return static_cast<const IndexDescriptorImpl&>(index_);
@@ -32,36 +29,40 @@ struct FrameDescriptorImpl : public FrameDescriptor {
     IndexDescriptorImpl& index() {
         return static_cast<IndexDescriptorImpl&>(index_);
     }
+
+    [[nodiscard]] SegmentDescriptorImpl clone() const {
+        return *this;
+    }
 };
 
-inline bool operator==(const FrameDescriptorImpl& left, const FrameDescriptorImpl& right) {
-    return left.index() == right.index();
-}
+bool operator==(const SegmentDescriptorImpl& l, const SegmentDescriptorImpl& r) {
+    return l.sorted_ == r.sorted_ &&
+        l.index() == r.index() &&
+        l.compressed_bytes_ == r.compressed_bytes_ &&
+        l.uncompressed_bytes_ == r.uncompressed_bytes_;
 
-inline bool operator!=(const FrameDescriptorImpl& left, const FrameDescriptorImpl& right) {
-    return !(left == right);
 }
 
 struct StreamDescriptor {
-    std::shared_ptr<FrameDescriptorImpl> data_ = std::make_shared<FrameDescriptorImpl>();
+    std::shared_ptr<SegmentDescriptorImpl> data_ = std::make_shared<SegmentDescriptorImpl>();
     std::shared_ptr<FieldCollection> fields_ = std::make_shared<FieldCollection>();
     StreamId stream_id_;
 
     StreamDescriptor() = default;
     ~StreamDescriptor() = default;
 
-    StreamDescriptor(std::shared_ptr<FrameDescriptorImpl> data, std::shared_ptr<FieldCollection> fields) :
+    StreamDescriptor(std::shared_ptr<SegmentDescriptorImpl> data, std::shared_ptr<FieldCollection> fields) :
             data_(std::move(data)),
             fields_(std::move(fields)) {
     }
 
-    StreamDescriptor(std::shared_ptr<FrameDescriptorImpl> data, std::shared_ptr<FieldCollection> fields, StreamId stream_id) :
+    StreamDescriptor(std::shared_ptr<SegmentDescriptorImpl> data, std::shared_ptr<FieldCollection> fields, StreamId stream_id) :
         data_(std::move(data)),
         fields_(std::move(fields)),
         stream_id_(std::move(stream_id)) {
     }
 
-    [[nodiscard]] const FrameDescriptorImpl& data() const  {
+    [[nodiscard]] const SegmentDescriptorImpl& data() const  {
         return *data_;
     }
 
@@ -147,7 +148,7 @@ struct StreamDescriptor {
         swap(left.fields_, right.fields_);
     }
 
-    StreamDescriptor& operator=(StreamDescriptor&& other) {
+    StreamDescriptor& operator=(StreamDescriptor&& other) noexcept {
         swap(*this, other);
         return *this;
     }
@@ -158,7 +159,7 @@ struct StreamDescriptor {
     }
 
     [[nodiscard]] StreamDescriptor clone() const {
-        return StreamDescriptor{std::make_shared<FrameDescriptorImpl>(data_->clone()), std::make_shared<FieldCollection>(fields_->clone()), stream_id_};
+        return StreamDescriptor{std::make_shared<SegmentDescriptorImpl>(data_->clone()), std::make_shared<FieldCollection>(fields_->clone()), stream_id_};
     };
 
     [[nodiscard]] const FieldCollection& fields() const {
@@ -195,7 +196,7 @@ struct StreamDescriptor {
         return fields_;
     }
 
-    [[nodiscard]] std::shared_ptr<FrameDescriptorImpl> data_ptr() const {
+    [[nodiscard]] std::shared_ptr<SegmentDescriptorImpl> data_ptr() const {
         return data_;
     }
 
@@ -207,11 +208,11 @@ struct StreamDescriptor {
         return fields().end();
     }
 
-    decltype(auto) begin() const {
+    [[nodiscard]] decltype(auto) begin() const {
         return fields().begin();
     }
 
-    decltype(auto) end() const {
+    [[nodiscard]] decltype(auto) end() const {
         return fields().end();
     }
 
@@ -219,11 +220,11 @@ struct StreamDescriptor {
         return fields().size();
     }
 
-    bool empty() const {
+    [[nodiscard]] bool empty() const {
         return fields().empty();
     }
 
-    std::optional<std::size_t> find_field(std::string_view view) const {
+    [[nodiscard]] std::optional<std::size_t> find_field(std::string_view view) const {
         auto it = std::find_if(begin(), end(), [&](const auto& field) {
             return field.name() == view;
         });
@@ -312,7 +313,7 @@ inline DataType stream_id_data_type(const StreamId &stream_id) {
     return std::holds_alternative<NumericId>(stream_id) ? DataType::UINT64 : DataType::ASCII_DYNAMIC64;
 }
 
-inline FieldCollection field_collection_from_proto(google::protobuf::RepeatedPtrField<arcticdb::proto::descriptors::StreamDescriptor_FieldDescriptor>&& fields) {
+inline FieldCollection field_collection_from_proto(const google::protobuf::RepeatedPtrField<arcticdb::proto::descriptors::StreamDescriptor_FieldDescriptor>& fields) {
     FieldCollection output;
     for(const auto& field : fields) {
         output.add_field(type_desc_from_proto(field.type_desc()), field.name());

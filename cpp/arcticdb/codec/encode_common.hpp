@@ -173,7 +173,7 @@ void encode_metadata(
         std::ptrdiff_t& pos) {
     if (in_mem_seg.metadata()) {
         const auto bytes_count = static_cast<shape_t>(in_mem_seg.metadata()->ByteSizeLong());
-        ARCTICDB_TRACE(log::codec(), "Encoding {} bytes of metadata", bytes_count);
+        log::codec().info("Encoding {} bytes of metadata", bytes_count);
         auto& encoded_field = segment_header.mutable_metadata_field(1);
 
         constexpr int max_stack_alloc = 1 << 11;
@@ -189,6 +189,7 @@ void encode_metadata(
         meta_buffer.add_external_block(meta_ptr, bytes_count, 0u);
         google::protobuf::io::ArrayOutputStream aos(&meta_buffer[0], static_cast<int>(bytes_count));
         in_mem_seg.metadata()->SerializeToZeroCopyStream(&aos);
+        ARCTICDB_DEBUG(log::codec(), "Encoding metadata to position {}", pos);
         BytesEncoder<EncodingPolicyType>::encode(meta_buffer, codec_opts, out_buffer, pos, encoded_field);
         ARCTICDB_DEBUG(log::codec(), "Encoded metadata to position {}", pos);
         if (malloced)

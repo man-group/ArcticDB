@@ -119,7 +119,7 @@ class Segment {
 
     std::pair<uint8_t*, size_t> serialize_header(std::shared_ptr<Buffer>& tmp);
 
-    void write_proto_header(uint8_t* dst) const;
+    size_t write_proto_header(uint8_t* dst) const;
 
     [[nodiscard]] std::size_t total_segment_size() const {
         return FIXED_HEADER_SIZE + segment_header_bytes_size() + buffer_bytes();
@@ -131,6 +131,8 @@ class Segment {
 
         return *proto_size_;
     }
+
+    arcticdb::proto::encoding::SegmentHeader serialize_proto_header() const;
 
     [[nodiscard]] std::size_t segment_header_bytes_size() const {
         if(header_.encoding_version() == EncodingVersion::V1)
@@ -206,7 +208,7 @@ class Segment {
     StreamDescriptor desc_;
     std::any keepalive_;
     mutable std::unique_ptr<arcticdb::proto::encoding::SegmentHeader> proto_;
-    mutable std::optional<size_t> proto_size_ = 0UL;
+    mutable std::optional<size_t> proto_size_;
 };
 
 } //namespace arcticdb

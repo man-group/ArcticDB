@@ -70,12 +70,6 @@ std::vector<AppendMapEntry> get_incomplete_append_slices_for_stream_id(
     bool via_iteration,
     bool load_data);
 
-inline bool has_appends_key(
-    const std::shared_ptr<stream::StreamSource>& store,
-    const RefKey& ref_key) {
-    return store->key_exists(ref_key).get();
-}
-
 inline std::vector<AppendMapEntry> load_via_iteration(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
@@ -276,7 +270,7 @@ void write_head(const std::shared_ptr<Store>& store, const AtomKey& next_key, si
     SegmentInMemory segment(desc);
     auto tsd = pack_timeseries_descriptor(std::move(desc), total_rows, next_key, {});
     segment.set_timeseries_descriptor(std::move(tsd));
-    store->write(KeyType::APPEND_REF, next_key.id(), std::move(segment)).get();
+    store->write_sync(KeyType::APPEND_REF, next_key.id(), std::move(segment));
 }
 
 void remove_incomplete_segments(
@@ -312,18 +306,17 @@ std::vector<AppendMapEntry> load_via_list(
 std::pair<std::optional<AtomKey>, size_t> read_head(const std::shared_ptr<StreamSource>& store, StreamId stream_id) {
     auto ref_key = RefKey{std::move(stream_id), KeyType::APPEND_REF};
     auto output = std::make_pair<std::optional<AtomKey>, size_t>(std::nullopt, 0);
+    try {
+        auto [key, seg] = store->read_sync(ref_key);
+        const auto &tsd = seg.index_descriptor();
+        if (tsd.proto().has_next_key())
+            output.first = decode_key(tsd.proto().next_key());
 
-    if(!has_appends_key(store, ref_key))
-        return output;
-
-    auto fut = store->read(ref_key);
-    auto [key, seg] = std::move(fut).get();
-    const auto& tsd = seg.index_descriptor();
-    if(tsd.proto().has_next_key()) {
-        output.first = decode_key(tsd.proto().next_key());
+        output.second = tsd.total_rows();
+    } catch (storage::KeyNotFoundException& ex) {
+        ARCTICDB_RUNTIME_DEBUG(log::version(), "Failed to get head of append list for {}: {}", ref_key, ex.what());
     }
 
-    output.second = tsd.total_rows();
     return output;
 }
 

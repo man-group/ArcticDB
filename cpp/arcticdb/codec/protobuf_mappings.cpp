@@ -11,16 +11,6 @@
 
 namespace arcticdb {
 
-size_t calc_encoded_field_buffer_size(const arcticdb::proto::encoding::EncodedField& field) {
-    size_t bytes = EncodedFieldImpl::Size;
-    util::check(field.has_ndarray(), "Only ndarray translations supported");
-    const auto& ndarray = field.ndarray();
-    util::check(ndarray.shapes_size() < 2, "Unexpected number of shapes in proto translation: {}", ndarray.shapes_size());
-    bytes += sizeof(EncodedBlock) * ndarray.shapes_size();
-    bytes += sizeof(EncodedBlock) * ndarray.values_size();
-    return bytes;
-}
-
 void block_from_proto(const arcticdb::proto::encoding::Block& input, EncodedBlock& output, bool is_shape) {
     output.set_in_bytes(input.in_bytes());
     output.set_out_bytes(input.out_bytes());
@@ -74,7 +64,6 @@ void encoded_field_from_proto(const arcticdb::proto::encoding::EncodedField& inp
     const auto& input_ndarray = input.ndarray();
     auto* output_ndarray = output.mutable_ndarray();
 
-    output_ndarray->set_items_count(input_ndarray.items_count());
     util::check(input_ndarray.shapes_size() < 2, "Unexpected number of shapes in proto translation");
     if(input_ndarray.shapes_size() == 1) {
         auto* shape_block = output_ndarray->add_shapes();
@@ -87,7 +76,7 @@ void encoded_field_from_proto(const arcticdb::proto::encoding::EncodedField& inp
     }
 }
 
-void proto_from_encoded_field(const EncodedFieldImpl& input, arcticdb::proto::encoding::EncodedField& output) {
+void copy_encoded_field_to_proto(const EncodedFieldImpl& input, arcticdb::proto::encoding::EncodedField& output) {
     util::check(input.has_ndarray(), "Only ndarray fields supported for v1 encoding");
     const auto& input_ndarray = input.ndarray();
     auto* output_ndarray = output.mutable_ndarray();
@@ -105,18 +94,10 @@ void proto_from_encoded_field(const EncodedFieldImpl& input, arcticdb::proto::en
     }
 }
 
-void deserialize_proto_field(
-    SegmentHeader& segment_header,
-    FieldOffset field_offset,
-    CursoredBuffer<Buffer>& buffer,
-    const arcticdb::proto::encoding::EncodedField& field,
-    size_t& pos) {
-    segment_header.set_field(field_offset);
-    segment_header.set_offset(field_offset, pos++);
-    const auto field_size = calc_encoded_field_buffer_size(field);
-    buffer.ensure<uint8_t>(field_size);
-    auto* data = buffer.data();
-    encoded_field_from_proto(field, *reinterpret_cast<EncodedFieldImpl*>(data));
+size_t num_blocks(const arcticdb::proto::encoding::EncodedField& field) {
+    util::check(field.has_ndarray(), "Expected ndarray in segment header");
+    util::check(field.ndarray().shapes_size() <= 1, "Expected single shapes block");
+    return field.ndarray().shapes_size() + field.ndarray().values_size();
 }
 
 SegmentHeader deserialize_segment_header_from_proto(const arcticdb::proto::encoding::SegmentHeader& header) {
@@ -124,47 +105,15 @@ SegmentHeader deserialize_segment_header_from_proto(const arcticdb::proto::encod
     output.set_encoding_version(EncodingVersion(header.encoding_version()));
     output.set_compacted(header.compacted());
 
-    auto pos = 0UL;
-    CursoredBuffer<Buffer> buffer;
     if(header.has_metadata_field())
-        deserialize_proto_field(output, FieldOffset::METADATA, buffer, header.descriptor_field(), pos);
+        encoded_field_from_proto(header.metadata_field(), output.mutable_metadata_field(num_blocks(header.metadata_field())));
 
     if(header.has_string_pool_field())
-        deserialize_proto_field(output, FieldOffset::STRING_POOL, buffer, header.string_pool_field(), pos);
+        encoded_field_from_proto(header.string_pool_field(), output.mutable_string_pool_field(num_blocks(header.string_pool_field())));
 
-    if(header.has_descriptor_field())
-        deserialize_proto_field(output, FieldOffset::DESCRIPTOR, buffer, header.descriptor_field(), pos);
-
-    if(header.has_index_descriptor_field())
-        deserialize_proto_field(output, FieldOffset::INDEX, buffer, header.index_descriptor_field(), pos);
-
-    if(header.has_column_fields())
-        deserialize_proto_field(output, FieldOffset::COLUMN, buffer, header.column_fields(), pos);
+    //TODO get encoded_fields
 
     return output;
-}
-
-arcticdb::proto::encoding::SegmentHeader serialize_segment_header_to_proto(const SegmentHeader& hdr) {
-    arcticdb::proto::encoding::SegmentHeader segment_header;
-    if(hdr.has_metadata_field())
-        proto_from_encoded_field(hdr.metadata_field(), *segment_header.mutable_metadata_field());
-
-    if(hdr.has_string_pool_field())
-        proto_from_encoded_field(hdr.metadata_field(), *segment_header.mutable_metadata_field());
-
-    if(hdr.has_descriptor_field())
-        proto_from_encoded_field(hdr.metadata_field(), *segment_header.mutable_metadata_field());
-
-    if(hdr.has_index_descriptor_field())
-        proto_from_encoded_field(hdr.metadata_field(), *segment_header.mutable_metadata_field());
-
-    if(hdr.has_column_fields())
-        proto_from_encoded_field(hdr.metadata_field(), *segment_header.mutable_metadata_field());
-
-    segment_header.set_compacted(hdr.compacted());
-    segment_header.set_encoding_version(static_cast<uint16_t>(hdr.encoding_version()));
-
-    return segment_header;
 }
 
 size_t calc_proto_encoded_blocks_size(const arcticdb::proto::encoding::SegmentHeader& hdr) {
@@ -186,12 +135,20 @@ EncodedFieldCollection encoded_fields_from_proto(const arcticdb::proto::encoding
     EncodedFieldCollection encoded_fields(encoded_buffer_size, hdr.fields_size());
     auto buffer = ChunkedBuffer::presized(encoded_buffer_size);
     for(auto&& [index, in_field] : folly::enumerate(hdr.fields())) {
-        util::check(in_field.has_ndarray(), "Only ndarray supported at the moment");
-        const auto ndarray = in_field.ndarray();
-        auto* out_field = encoded_fields.add_field(ndarray.shapes_size() + ndarray.values_size());
+        auto* out_field = encoded_fields.add_field(num_blocks(in_field));
         encoded_field_from_proto(in_field, *out_field);
     }
     return encoded_fields;
+}
+
+void copy_encoded_fields_to_proto(const EncodedFieldCollection& fields, arcticdb::proto::encoding::SegmentHeader& hdr) {
+    auto& proto_fields = *hdr.mutable_fields();
+    auto field = fields.begin();
+    for(auto i = 0U; i < fields.size(); ++i) {
+        auto* proto_field = proto_fields.Add();
+        copy_encoded_field_to_proto(field.current(), *proto_field);
+        ++field;
+    }
 }
 
 } //namespace arcticdb

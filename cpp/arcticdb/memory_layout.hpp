@@ -172,12 +172,15 @@ struct IndexDescriptor {
 };
 
 struct FrameDescriptor {
-    uint64_t total_rows_;
+    uint64_t total_rows_ = 0UL;
+    bool column_groups_ = false;
+};
+
+struct SegmentDescriptor {
     SortedValue sorted_ = SortedValue::UNKNOWN;
     uint64_t compressed_bytes_ = 0UL;
     uint64_t uncompressed_bytes_ = 0UL;
     IndexDescriptor index_;
-    bool column_groups_ = false;
 };
 
 enum class FieldOffset : uint8_t {

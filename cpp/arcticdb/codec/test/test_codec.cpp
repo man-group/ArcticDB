@@ -483,3 +483,38 @@ TEST(Segment, KeepAlive) {
     }
     ASSERT_EQ(TransactionalThing::destroyed, true);
 }
+
+TEST(Segment, RoundtripTimeseriesDescriptorV1) {
+    SegmentInMemory in_mem_seg{stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UINT8, "ints")})};
+    in_mem_seg.set_scalar<uint8_t>(0, 23);
+    in_mem_seg.end_row();
+    TimeseriesDescriptor tsd;
+    tsd.set_total_rows(23);
+    in_mem_seg.set_timeseries_descriptor(std::move(tsd));
+    auto copy = in_mem_seg.clone();
+    auto seg = encode_v1(std::move(in_mem_seg), codec::default_lz4_codec());
+    SegmentInMemory decoded;
+    decode_v1(seg, seg.header(), decoded, seg.descriptor());
+    ASSERT_EQ(decoded.index_descriptor().total_rows(), 23);
+    ASSERT_EQ(decoded, copy);
+}
+
+TEST(Segment, RoundtripTimeseriesDescriptorWriteToBufferV1) {
+    SegmentInMemory in_mem_seg{stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UINT8, "ints")})};
+    in_mem_seg.set_scalar<uint8_t>(0, 23);
+    in_mem_seg.end_row();
+    TimeseriesDescriptor tsd;
+    tsd.set_total_rows(23);
+    in_mem_seg.set_timeseries_descriptor(std::move(tsd));
+    auto copy = in_mem_seg.clone();
+    auto seg = encode_v1(std::move(in_mem_seg), codec::default_lz4_codec());
+    std::vector<uint8_t> vec;
+    const auto bytes = seg.total_segment_size();
+    vec.resize(bytes);
+    seg.write_to(vec.data());
+    auto unserialized = Segment::from_bytes(vec.data(), bytes);
+    SegmentInMemory decoded;
+    decode_v1(unserialized, unserialized.header(), decoded, unserialized.descriptor());
+    ASSERT_EQ(decoded.index_descriptor().total_rows(), 23);
+    ASSERT_EQ(decoded, copy);
+}

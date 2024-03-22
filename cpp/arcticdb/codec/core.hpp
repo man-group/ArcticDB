@@ -14,6 +14,7 @@
 #include <arcticdb/util/hash.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/log/log.hpp>
+#include <arcticdb/util/dump_bytes.hpp>
 
 #include <type_traits>
 
@@ -279,6 +280,7 @@ struct GenericBlockEncoder {
                 *shape_pb->mutable_codec());
 
             HashedValue shape_hash = helper.get_digest_and_reset();
+            log::codec().info("Wrote shapes block ({}): {}", shape_comp_size, dump_bytes(s_out, shape_comp_size));
 
             // write values
             auto value_pb = field_nd_array->add_values();
@@ -293,6 +295,7 @@ struct GenericBlockEncoder {
                 pos,
                 *value_pb->mutable_codec());
 
+            log::codec().info("Wrote values block ({}): {}", values_comp_size, dump_bytes(t_out, values_comp_size));
             auto digest = helper.hasher_.digest();
             helper_array_block.update_field_size(*field_nd_array);
             helper_array_block.set_block_data(shape_pb, value_pb, shape_hash, shape_comp_size, digest, values_comp_size);

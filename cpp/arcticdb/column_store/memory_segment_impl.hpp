@@ -418,6 +418,7 @@ public:
     }
 
     const TimeseriesDescriptor& index_descriptor() const {
+        util::check(tsd_.has_value(), "Index descriptor requested but not set");
         return *tsd_;
     }
 

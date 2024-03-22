@@ -13,10 +13,20 @@
 
 namespace arcticdb {
 
+struct FrameDescriptorImpl : public FrameDescriptor {
+    FrameDescriptorImpl() = default;
+
+    ARCTICDB_MOVE_COPY_DEFAULT(FrameDescriptorImpl)
+
+    [[nodiscard]] FrameDescriptorImpl clone() const {
+        return *this;
+    }
+};
+
 struct TimeseriesDescriptor {
   using Proto = arcticdb::proto::descriptors::FrameMetadata;
 
-  std::shared_ptr<FrameDescriptorImpl> data_;
+  std::shared_ptr<FrameDescriptorImpl> data_ = std::make_shared<FrameDescriptorImpl>();
   std::shared_ptr<Proto> proto_ = std::make_shared<Proto>();
   std::shared_ptr<FieldCollection> fields_ = std::make_shared<FieldCollection>();
 
@@ -48,17 +58,6 @@ struct TimeseriesDescriptor {
       return data_->total_rows_;
   }
 
-  [[nodiscard]] SortedValue sorted() const {
-      return data_->sorted_;
-  }
-
-  [[nodiscard]] IndexDescriptorImpl index() const {
-      return data_->index();
-  }
-
-  void set_sorted(SortedValue sorted) {
-      data_->sorted_ = sorted;
-  }
 
   arcticdb::proto::descriptors::UserDefinedMetadata&& detach_user_metadata() {
     return std::move(*proto_->mutable_multi_key_meta());

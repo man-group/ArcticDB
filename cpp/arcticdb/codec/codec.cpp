@@ -22,16 +22,6 @@
 
 namespace arcticdb {
 
-Segment encode_v2(
-    SegmentInMemory&& in_mem_seg,
-    const arcticdb::proto::encoding::VariantCodec& codec_opts
-);
-
-Segment encode_v1(
-    SegmentInMemory&& in_mem_seg,
-    const arcticdb::proto::encoding::VariantCodec& codec_opts
-);
-
 constexpr TypeDescriptor metadata_type_desc() {
     return TypeDescriptor{
         DataType::UINT8, Dimension::Dim1
@@ -108,6 +98,7 @@ std::optional<google::protobuf::Any> decode_metadata(
         auto meta_type_desc = metadata_type_desc();
         MetaBuffer meta_buf;
         std::optional<util::BitMagic> bv;
+        ARCTICDB_DEBUG(log::codec(), "Decoding metadata at position {}: {}", data - begin, dump_bytes(data, 10));
         data += decode_field(meta_type_desc, hdr.metadata_field(), data, meta_buf, bv, hdr.encoding_version());
         ARCTICDB_TRACE(log::codec(), "Decoded metadata to position {}", data - begin);
         google::protobuf::io::ArrayInputStream ais(meta_buf.buffer().data(),
@@ -130,15 +121,18 @@ std::shared_ptr<arcticdb::proto::descriptors::FrameMetadata> extract_frame_metad
     return output;
 }
 
-
 void decode_metadata(
     const SegmentHeader& hdr,
     const uint8_t*& data,
     const uint8_t* begin ARCTICDB_UNUSED,
     SegmentInMemory& res) {
     auto maybe_any = decode_metadata(hdr, data, begin);
-    if(maybe_any)
+    if(maybe_any) {
+        log::version().info("Found metadata on segment");
         res.set_metadata(std::move(*maybe_any));
+    } else {
+        log::version().info("No metadata on segment");
+    }
 }
 
 std::optional<google::protobuf::Any> decode_metadata_from_segment(const Segment &segment) {
@@ -247,6 +241,7 @@ FrameDescriptorImpl read_frame_descriptor(const uint8_t* data) {
 FrameDescriptorImpl frame_descriptor_from_proto(arcticdb::proto::descriptors::TimeSeriesDescriptor& tsd) {
     FrameDescriptorImpl output;
     output.column_groups_ = tsd.has_column_groups() && tsd.column_groups().enabled();
+    output.total_rows_ = tsd.total_rows();
     return output;
 }
 
@@ -265,6 +260,18 @@ void exchange_timeseries_proto(const SourceType& source, DestType& destination) 
         *destination.mutable_multi_key_meta() = source.multi_key_meta();
 }
 
+TimeseriesDescriptor unpack_timeseries_descriptor_from_proto(
+    const google::protobuf::Any& any) {
+
+    auto tsd = timeseries_descriptor_from_any(any);
+    auto frame_meta = std::make_shared<arcticdb::proto::descriptors::FrameMetadata>();
+    exchange_timeseries_proto(tsd, *frame_meta);
+
+    auto frame_desc = std::make_shared<FrameDescriptorImpl>(frame_descriptor_from_proto(tsd));
+    auto old_fields = std::make_shared<FieldCollection>(fields_from_proto(tsd.stream_descriptor()));
+    return {frame_desc, frame_meta, old_fields};
+}
+
 std::optional<TimeseriesDescriptor> decode_timeseries_descriptor_v1(
     const SegmentHeader& hdr,
     const uint8_t* data,
@@ -274,17 +281,7 @@ std::optional<TimeseriesDescriptor> decode_timeseries_descriptor_v1(
     if(!maybe_any)
         return std::nullopt;
 
-    auto tsd = timeseries_descriptor_from_any(*maybe_any);
-    auto frame_meta = std::make_shared<arcticdb::proto::descriptors::FrameMetadata>();
-    exchange_timeseries_proto(tsd, *frame_meta);
-
-    auto frame_desc = std::make_shared<FrameDescriptorImpl>(frame_descriptor_from_proto(tsd));
-
-    if(hdr.has_descriptor_field() && hdr.descriptor_field().has_ndarray())
-        data += encoding_sizes::ndarray_field_compressed_size(hdr.descriptor_field().ndarray());
-
-    auto old_fields = std::make_shared<FieldCollection>(fields_from_proto(tsd.stream_descriptor()));
-    return std::make_optional<TimeseriesDescriptor>(frame_desc, frame_meta, old_fields);
+    return unpack_timeseries_descriptor_from_proto(*maybe_any);
 }
 
 std::optional<TimeseriesDescriptor> decode_timeseries_descriptor_v2(
@@ -357,11 +354,12 @@ std::pair<std::optional<google::protobuf::Any>, StreamDescriptor> decode_metadat
     return std::make_pair(std::move(maybe_any), segment.descriptor());
 }
 
-void decode_string_pool( const SegmentHeader& hdr,
-                         const uint8_t*& data,
-                         const uint8_t* begin ARCTICDB_UNUSED,
-                         const uint8_t* end,
-                         SegmentInMemory& res) {
+void decode_string_pool(
+        const SegmentHeader& hdr,
+        const uint8_t*& data,
+        const uint8_t* begin ARCTICDB_UNUSED,
+        const uint8_t* end,
+        SegmentInMemory& res) {
     if (hdr.has_string_pool_field()) {
         ARCTICDB_TRACE(log::codec(), "Decoding string pool");
         util::check(data!=end, "Reached end of input block with string pool fields to decode");
@@ -376,7 +374,6 @@ void decode_string_pool( const SegmentHeader& hdr,
         ARCTICDB_TRACE(log::codec(), "Decoded string pool to position {}", data-begin);
     }
 }
-
 
 void decode_v2(const Segment& segment,
            SegmentHeader& hdr,
@@ -450,6 +447,11 @@ void decode_v1(const Segment& segment,
     const uint8_t* begin = data;
     const uint8_t* end = begin + segment.buffer().bytes();
     decode_metadata(hdr, data, begin, res);
+    if(res.has_metadata() && res.metadata()->Is<arcticdb::proto::descriptors::TimeSeriesDescriptor>()) {
+        log::version().info("Unpacking timeseries descriptor from metadata");
+        auto tsd = unpack_timeseries_descriptor_from_proto(*res.metadata());
+        res.set_timeseries_descriptor(std::move(tsd));
+    }
 
     if (data != end) {
         const auto fields_size = desc.fields().size();

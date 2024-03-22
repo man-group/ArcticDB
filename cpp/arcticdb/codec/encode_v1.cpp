@@ -112,6 +112,17 @@ namespace arcticdb {
         SegmentHeader segment_header{EncodingVersion::V1};
         segment_header.set_compacted(in_mem_seg.compacted());
 
+        if(in_mem_seg.has_index_descriptor()) {
+            log::version().info("Memory segment has index descriptor, encoding to protobuf");
+            util::check(!in_mem_seg.has_metadata(), "Metadata already set when trying to set index descriptor");
+            auto proto = copy_time_series_descriptor_to_proto(in_mem_seg.index_descriptor());
+            google::protobuf::Any any;
+            any.PackFrom(proto);
+            in_mem_seg.set_metadata(std::move(any));
+        } else {
+            log::version().info("Memory segment has no index descriptor");
+        }
+
         std::ptrdiff_t pos = 0;
         static auto block_to_header_ratio = ConfigsMap::instance()->get_int("Codec.EstimatedHeaderRatio", 75);
         const auto preamble = in_mem_seg.num_blocks() * block_to_header_ratio;
@@ -120,14 +131,12 @@ namespace arcticdb {
         auto out_buffer = std::make_shared<Buffer>(max_compressed_size, preamble);
         ColumnEncoderV1 encoder;
 
+        encode_metadata<EncodingPolicyV1>(in_mem_seg, segment_header, codec_opts, *out_buffer, pos);
         ARCTICDB_TRACE(log::codec(), "Encoding descriptor: {}", in_mem_seg.descriptor());
         auto descriptor_data = in_mem_seg.descriptor().data_ptr();
         descriptor_data->uncompressed_bytes_ = uncompressed_size;
 
         EncodedFieldCollection encoded_fields(encoded_buffer_size, in_mem_seg.num_columns());
-
-        encode_metadata<EncodingPolicyV1>(in_mem_seg, segment_header, codec_opts, *out_buffer, pos);
-
         if(in_mem_seg.row_count() > 0) {
             ARCTICDB_TRACE(log::codec(), "Encoding fields");
             for (std::size_t column_index = 0; column_index < in_mem_seg.num_columns(); ++column_index) {

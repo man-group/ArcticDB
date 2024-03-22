@@ -30,9 +30,6 @@ message SegmentHeader {
     EncodedField metadata_field = 7;  // optional metadata encoding
     EncodedField string_pool_field = 8; // string pool
     bool compacted = 9; // is the segment the result of a compaction
-    EncodedField descriptor_field = 10;
-    EncodedField index_descriptor_field = 11;
-    EncodedField column_fields = 12;
     uint32 encoding_version = 13;
 }
 

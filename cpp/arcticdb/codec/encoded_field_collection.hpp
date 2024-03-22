@@ -73,8 +73,8 @@ public:
 
     ARCTICDB_MOVE_ONLY_DEFAULT(EncodedFieldCollection)
 
-    [[nodiscard]] EncodedFieldCollectionIterator begin() {
-        return {&data_};
+    [[nodiscard]] EncodedFieldCollectionIterator begin() const {
+        return {const_cast<ChunkedBuffer*>(&data_)};
     }
 
     [[nodiscard]] bool empty() const {
@@ -139,7 +139,6 @@ public:
     ChunkedBuffer&& release_data() {
         return std::move(data_);
     }
-
 };
 
 } //namespace arcticdb

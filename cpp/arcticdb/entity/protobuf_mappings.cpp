@@ -92,10 +92,7 @@ AtomKey decode_key(const arcticdb::proto::descriptors::AtomKey& input) {
         .build(stream_id, KeyType(input.key_type()));
 }
 
-[[nodiscard]] arcticdb::proto::descriptors::StreamDescriptor copy_stream_descriptor_to_proto(const StreamDescriptor& desc) {
-    using Proto = arcticdb::proto::descriptors::StreamDescriptor;
-
-    Proto proto;
+void copy_stream_descriptor_to_proto(const StreamDescriptor& desc, arcticdb::proto::descriptors::StreamDescriptor& proto) {
     proto.set_in_bytes(desc.uncompressed_bytes());
     proto.set_out_bytes(desc.compressed_bytes());
     proto.set_sorted(arcticdb::proto::descriptors::SortedValue(desc.sorted()));
@@ -110,11 +107,15 @@ AtomKey decode_key(const arcticdb::proto::descriptors::AtomKey& input) {
         new_field->mutable_type_desc()->set_dimension(static_cast<uint32_t>(field.type().dimension()));
         set_data_type(field.type().data_type(), *new_field->mutable_type_desc());
     }
-    return proto;
 }
 
 arcticdb::proto::descriptors::TimeSeriesDescriptor copy_time_series_descriptor_to_proto(const TimeseriesDescriptor& tsd) {
     arcticdb::proto::descriptors::TimeSeriesDescriptor output;
+
+    output.set_total_rows(tsd.total_rows());
+    if(tsd.column_groups())
+        output.mutable_column_groups()->set_enabled(true);
+
     for(const auto& field : *tsd.fields_) {
         auto new_field = output.mutable_stream_descriptor()->mutable_fields()->Add();
         new_field->set_name(std::string(field.name()));

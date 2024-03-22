@@ -56,20 +56,18 @@ inline void set_passthrough(const PassthroughCodec& passthrough_in, arcticdb::pr
     passthrough_out.set_mark(passthrough_in.unused_);
 }
 
-size_t calc_encoded_field_buffer_size(const arcticdb::proto::encoding::EncodedField& field);
-
 void proto_from_block(const EncodedBlock& input, arcticdb::proto::encoding::Block& output);
 
 void encoded_field_from_proto(const arcticdb::proto::encoding::EncodedField& input, EncodedFieldImpl& output);
 
-void proto_from_encoded_field(const EncodedFieldImpl& input, arcticdb::proto::encoding::EncodedField& output);
+void copy_encoded_field_to_proto(const EncodedFieldImpl& input, arcticdb::proto::encoding::EncodedField& output);
 
 SegmentHeader deserialize_segment_header_from_proto(const arcticdb::proto::encoding::SegmentHeader& header);
-
-arcticdb::proto::encoding::SegmentHeader serialize_segment_header_to_proto(const SegmentHeader& hdr);
 
 size_t calc_proto_encoded_blocks_size(const arcticdb::proto::encoding::SegmentHeader& hdr);
 
 EncodedFieldCollection encoded_fields_from_proto(const arcticdb::proto::encoding::SegmentHeader& hdr);
+
+void copy_encoded_fields_to_proto(const EncodedFieldCollection& fields, arcticdb::proto::encoding::SegmentHeader& hdr);
 
 } //namespace arcticdb
