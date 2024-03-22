@@ -9,11 +9,12 @@ As of the Change Date specified in that file, in accordance with the Business So
 import sys
 import pytz
 import math
-import re
 import pytest
 import pandas as pd
 import numpy as np
 from datetime import datetime, timezone
+from enum import Enum
+import platform
 
 from arcticdb_ext.exceptions import InternalException, UserInputException
 from arcticdb_ext.storage import NoDataFoundException
@@ -35,7 +36,7 @@ from arcticdb.version_store.library import (
     ArcticInvalidApiUsageException,
 )
 
-from tests.util.mark import AZURE_TESTS_MARK, MONGO_TESTS_MARK, REAL_S3_TESTS_MARK
+from tests.util.mark import AZURE_TESTS_MARK, MONGO_TESTS_MARK, REAL_S3_TESTS_MARK, S3_SSL_TESTS_MARK
 
 def test_library_creation_deletion(arctic_client):
     ac = arctic_client
@@ -160,8 +161,55 @@ def test_do_not_persist_s3_details(s3_storage):
     assert not s3_storage.https
     assert s3_storage.region == ""
     assert not s3_storage.use_virtual_addressing
+    assert s3_storage.ca_cert_path == ""
+    assert s3_storage.ca_cert_dir == ""
 
     assert "sym" in ac["test"].list_symbols()
+
+class ParameterDisplayStatus(Enum):
+    NOT_SHOW = 1
+    DISABLE = 2
+    ENABLE = 3
+
+parameter_display_status = [ParameterDisplayStatus.NOT_SHOW, ParameterDisplayStatus.DISABLE, ParameterDisplayStatus.ENABLE]
+
+@S3_SSL_TESTS_MARK
+@pytest.mark.parametrize('client_cert_file', parameter_display_status)
+@pytest.mark.parametrize('ssl', parameter_display_status)
+def test_s3_no_ssl_verification(s3_no_ssl_storage, client_cert_file, ssl):
+    uri = s3_no_ssl_storage.arctic_uri
+    if ssl == ParameterDisplayStatus.DISABLE:
+        uri += "&ssl=False"
+    elif ssl == ParameterDisplayStatus.ENABLE:
+        uri += "&ssl=True"
+    if client_cert_file == ParameterDisplayStatus.DISABLE:
+        uri += "&CA_cert_path="
+    elif client_cert_file == ParameterDisplayStatus.ENABLE:
+        uri += f"&CA_cert_path={s3_no_ssl_storage.factory.client_cert_file}"
+    ac = Arctic(uri)
+    lib = ac.create_library("test")
+    lib.write("sym", pd.DataFrame())
+
+
+@S3_SSL_TESTS_MARK
+def test_s3_ca_directory_ssl_verification(s3_storage):
+    uri = f"s3s://{s3_storage.factory.host}:{s3_storage.bucket}?access={s3_storage.key.id}" \
+          f"&secret={s3_storage.key.secret}&CA_cert_path=&CA_cert_dir={s3_storage.factory.client_cert_dir}&ssl=True"
+    if s3_storage.factory.port:
+        uri += f"&port={s3_storage.factory.port}"
+    ac = Arctic(uri)
+    lib = ac.create_library("test")
+    lib.write("sym", pd.DataFrame())
+
+
+@S3_SSL_TESTS_MARK
+def test_s3_https_backend_without_ssl_verification(s3_storage):
+    uri = f"s3s://{s3_storage.factory.host}:{s3_storage.bucket}?access={s3_storage.key.id}&secret={s3_storage.key.secret}&ssl=False"
+    if s3_storage.factory.port:
+        uri += f"&port={s3_storage.factory.port}"
+    ac = Arctic(uri)
+    lib = ac.create_library("test")
+    lib.write("sym", pd.DataFrame())
 
 
 def test_library_options(arctic_client):

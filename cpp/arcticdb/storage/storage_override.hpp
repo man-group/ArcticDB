@@ -14,7 +14,11 @@ class S3Override {
     std::string endpoint_;
     std::string bucket_name_;
     std::string region_;
+    std::string ca_cert_path_;
+    std::string ca_cert_dir_;
     bool use_virtual_addressing_ = false;
+    bool https_;
+    bool ssl_;
 
 public:
     std::string credential_name() const {
@@ -65,6 +69,39 @@ public:
         use_virtual_addressing_ = use_virtual_addressing;
     }
 
+    std::string ca_cert_path() const {
+        return ca_cert_path_;
+    }
+
+    void set_ca_cert_path(std::string_view ca_cert_path){
+        ca_cert_path_ = ca_cert_path;
+    }
+
+
+    std::string ca_cert_dir() const {
+        return ca_cert_dir_;
+    }
+
+    void set_ca_cert_dir(std::string_view ca_cert_dir){
+        ca_cert_dir_ = ca_cert_dir;
+    }
+
+    bool https() const {
+        return https_;
+    }
+
+    void set_https(bool https){
+        https_ = https;
+    }
+
+    bool ssl() const {
+        return ssl_;
+    }
+
+    void set_ssl(bool ssl){
+        ssl_ = ssl;
+    }
+
     void modify_storage_config(arcticdb::proto::storage::VariantStorage& storage) const {
         if(storage.config().Is<arcticdb::proto::s3_storage::Config>()) {
             arcticdb::proto::s3_storage::Config s3_storage;
@@ -76,6 +113,10 @@ public:
             s3_storage.set_endpoint(endpoint_);
             s3_storage.set_region(region_);
             s3_storage.set_use_virtual_addressing(use_virtual_addressing_);
+            s3_storage.set_ca_cert_path(ca_cert_path_);
+            s3_storage.set_ca_cert_dir(ca_cert_dir_);
+            s3_storage.set_https(https_);
+            s3_storage.set_ssl(ssl_);
 
             util::pack_to_any(s3_storage, *storage.mutable_config());
         }
