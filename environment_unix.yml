@@ -66,7 +66,8 @@ dependencies:
   - werkzeug
   - moto
   - mock
-  - msgpack-python
+  # msgpack 0.5.0 is required for strict_types argument, needed for correct pickling fallback
+  - msgpack-python >= 0.5.0
   # Pinned to avoid test disruption (in phase with the pin in setup.cfg)
   # See: https://github.com/man-group/ArcticDB/pull/291
   - hypothesis < 6.73
