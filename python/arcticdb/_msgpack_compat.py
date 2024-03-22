@@ -5,7 +5,7 @@ NO WARRANTY, EXPRESSED OR IMPLIED.
 This module implements a backwards compatible version of msgpack functions.
 """
 import msgpack
-from arcticdb.log import version as log
+from arcticdb.preconditions import check
 from arcticdb.exceptions import ArcticNativeException
 
 ExtType = msgpack.ExtType
@@ -20,7 +20,6 @@ def _check_valid_msgpack():
         packer_module in ("msgpack._packer", "msgpack.fallback", "msgpack._cmsgpack")
     ):
         return
-    log.info("Unsupported msgpack variant, got: {}, {}".format(pack_module, packer_module))
     raise ArcticNativeException("Unsupported msgpack variant, got: {}, {}".format(pack_module, packer_module))
 
 
@@ -44,7 +43,7 @@ def padded_packb(obj, **kwargs):
     nbytes = packer.getbuffer().nbytes
     pad = -nbytes % 8 # next multiple of 8 bytes
     [packer.pack(None) for _ in range(pad)] # None is packed as single byte b`\xc0`
-    assert packer.getbuffer().nbytes % 8 == 0
+    check(packer.getbuffer().nbytes % 8 == 0, 'Error in ArcticDB padded_packb. Padding failed. nbytes={}', packer.getbuffer().nbytes)
     return packer.bytes(), nbytes
 
 
