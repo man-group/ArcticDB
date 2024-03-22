@@ -5,7 +5,6 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
-import copy
 import datetime
 import os
 import sys
@@ -1242,7 +1241,7 @@ class NativeVersionStore:
         if metadata_vector is None:
             metadata_vector = len(symbols) * [None]
         else:
-            metadata_vector = list(iter(metadata_vector))
+            metadata_vector = list(metadata_vector)
 
         for idx in range(len(symbols)):
             _handle_categorical_columns(symbols[idx], data_vector[idx], False)
@@ -1403,7 +1402,7 @@ class NativeVersionStore:
         if metadata_vector is None:
             metadata_vector = len(symbols) * [None]
         else:
-            metadata_vector = list(iter(metadata_vector))
+            metadata_vector = list(metadata_vector)
 
         for idx in range(len(symbols)):
             _handle_categorical_columns(symbols[idx], data_vector[idx])
