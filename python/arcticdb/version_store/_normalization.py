@@ -1220,10 +1220,9 @@ def normalize_metadata(d):
     packed = _msgpack_metadata._msgpack_packb(d)
     size = len(packed)
     if size > _MAX_USER_DEFINED_META:
-        raise ArcticDbNotYetImplemented("User defined metadata cannot exceed {}B".format(_MAX_USER_DEFINED_META))
+        raise ArcticDbNotYetImplemented(f'User defined metadata cannot exceed {_MAX_USER_DEFINED_META}B')
     if size > _WARN_USER_DEFINED_META:
-        log.warn('User defined metadata is above warning size ({0}B), metadata cannot exceed {1}B.  Current size: {2}B.'\
-                 .format(_WARN_USER_DEFINED_META, _MAX_USER_DEFINED_META, size))
+        log.warn(f'User defined metadata is above warning size ({_WARN_USER_DEFINED_META}B), metadata cannot exceed {_MAX_USER_DEFINED_META}B.  Current size: {size}B.')
 
     udm = UserDefinedMetadata()
     udm.inline_payload = packed

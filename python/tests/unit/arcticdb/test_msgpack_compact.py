@@ -19,7 +19,7 @@ def test_packb_raises_on_tuple():
 def test_padded_packb_small():
     packed, nbytes = padded_packb(1)
     assert len(packed) % 8 == 0
-    assert len(packed) > nbytes
+    assert len(packed) >= nbytes
     assert len(packed) - nbytes < 8
     assert packed[:nbytes] == msgpack.packb(1, use_bin_type=True, strict_types=True)
 
@@ -34,12 +34,19 @@ def test_padded_packb_list():
 
 
 def test_padded_packb_string():
-    aas = 'A' * 1_000_005 # not dividisble by 8
+    aas = 'A' * 1_000_005 # not divisible by 8
     packed, nbytes = padded_packb(aas)
     assert len(packed) % 8 == 0
     assert len(packed) >= nbytes
     assert len(packed) - nbytes < 8
     assert packed[:nbytes] == msgpack.packb(aas, use_bin_type=True, strict_types=True)
+
+
+def test_padded_packb_padding():
+    # padded_packb behaviour relies on 1 byte for None assumption from msgpack spec
+    packed, nbytes = padded_packb(None)
+    assert nbytes == 1  # 1 byte of content
+    assert packed == b'\xc0\xc0\xc0\xc0\xc0\xc0\xc0\xc0' # 7 bytes of padding, 8 total
 
 
 def test_unpackb():

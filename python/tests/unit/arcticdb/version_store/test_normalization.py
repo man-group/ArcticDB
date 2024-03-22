@@ -369,7 +369,7 @@ def test_ndarray_arbitrary_shape():
 
 
 def test_dict_with_tuples():
-    # This has to be pickeld because msgpack doesn't differentiate between tuples and lists
+    # This has to be pickled because msgpack doesn't differentiate between tuples and lists
     data = {(1, 2): [1, 24, 55]}
     norm = CompositeNormalizer(use_norm_failure_handler_known_types=False, fallback_normalizer=test_msgpack_normalizer)
     df, norm_meta = norm.normalize(data)
