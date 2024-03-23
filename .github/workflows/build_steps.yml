@@ -134,6 +134,10 @@ jobs:
         if: inputs.job_type == 'cpp-tests'
         run: cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET --target install
 
+      - name: Install dynamically linked library in Linux
+        if: matrix.os == 'linux'
+        run: yum install -y openssl
+
       - name: C++ Rapidcheck
         if: inputs.job_type == 'cpp-tests'
         run: cpp/out/install/arcticdb_rapidcheck_tests
@@ -299,6 +303,10 @@ jobs:
           ${{vars.EXTRA_TEST_PREPARE_CMD || ''}}
         env:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
+      
+      - name: Install dynamically linked library in Linux
+        if: matrix.os == 'linux'
+        run: yum install -y openssl
 
       - name: Set persistent storage variables
         if: inputs.persistent_storage == 'true'
