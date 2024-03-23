@@ -136,7 +136,8 @@ jobs:
 
       - name: Install dynamically linked library in Linux
         if: matrix.os == 'linux'
-        run: yum install -y openssl
+        run: yum install -y https://dl.fedoraproject.org/pub/epel/7/x86_64/Packages/o/openssl11-1.1.1k-7.el7.x86_64.rpm
+
 
       - name: C++ Rapidcheck
         if: inputs.job_type == 'cpp-tests'
@@ -306,7 +307,9 @@ jobs:
       
       - name: Install dynamically linked library in Linux
         if: matrix.os == 'linux'
-        run: yum install -y openssl
+        run: |
+          wget http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.0g-2ubuntu4_amd64.deb
+          sudo dpkg -i libssl1.1_1.1.0g-2ubuntu4_amd64.deb
 
       - name: Set persistent storage variables
         if: inputs.persistent_storage == 'true'
