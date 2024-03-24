@@ -30,7 +30,10 @@ namespace arcticdb::storage {
 
         void remove_library_config(const LibraryPath& path) const;
 
-        [[nodiscard]] std::shared_ptr<Library> get_library(const LibraryPath& path, const StorageOverride& storage_override = StorageOverride{});
+        [[nodiscard]] std::shared_ptr<Library> get_library(
+                const LibraryPath& path,
+                const StorageOverride& storage_override = StorageOverride{},
+                bool ignore_cache = false);
 
         void cleanup_library_if_open(const LibraryPath& path);
 

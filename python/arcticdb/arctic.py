@@ -24,6 +24,9 @@ from arcticdb.exceptions import UnsupportedLibraryOptionValue, UnknownLibraryOpt
 from arcticdb.options import ModifiableEnterpriseLibraryOption, ModifiableLibraryOption
 
 
+logger = logging.getLogger(__name__)
+
+
 class Arctic:
     """
     Top-level library management class. Arctic instances can be configured against an S3 environment and enable the
@@ -348,12 +351,15 @@ class Arctic:
                                        f"in ArcticDB. Please raise an issue on github.com/ArcticDB")
 
         self._library_manager.write_library_config(cfg, library.name, self._library_adapter.get_masking_override())
+
+        lib_mgr_name = self._library_adapter.get_name_for_library_manager(library.name)
+        storage_override = self._library_adapter.get_storage_override()
         library._nvs._initialize(
-            library._nvs._library,
+            self._library_manager.get_library(lib_mgr_name, storage_override, ignore_cache=True),
             library._nvs.env,
             cfg,
             library._nvs._custom_normalizer,
             library._nvs._open_mode
         )
 
-        logging.info(f"Set option=[{option}] to value=[{option_value}] for Arctic=[{self}] Library=[{library}]")
+        logger.info(f"Set option=[{option}] to value=[{option_value}] for Arctic=[{self}] Library=[{library}]")

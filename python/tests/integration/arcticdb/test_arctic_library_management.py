@@ -204,14 +204,6 @@ def test_modify_options_cols_per_segment(lmdb_storage):
     assert proto_options.column_group_size == 200
 
 
-# TODO - need to "reload" the library
-"""
-        lib = NativeVersionStore(
-            self._library_manager.get_library(lib_mgr_name, storage_override),
-            repr(self._library_adapter),
-            lib_cfg=self._library_manager.get_library_config(lib_mgr_name, storage_override),
-        )
-"""
 def test_modify_options_replication(lmdb_storage):
     ac = lmdb_storage.create_arctic()
     lib = ac.create_library("lib")
