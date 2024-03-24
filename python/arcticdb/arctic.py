@@ -8,7 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 from typing import List, Optional
 
-from arcticdb.options import DEFAULT_ENCODING_VERSION, LibraryOptions
+from arcticdb.options import DEFAULT_ENCODING_VERSION, LibraryOptions, EnterpriseLibraryOptions
 from arcticdb_ext.storage import LibraryManager
 from arcticdb.exceptions import LibraryNotFound, MismatchingLibraryOptions
 from arcticdb.version_store.library import ArcticInvalidApiUsageException, Library
@@ -158,7 +158,10 @@ class Arctic:
             else:
                 raise e
 
-    def create_library(self, name: str, library_options: Optional[LibraryOptions] = None) -> Library:
+    def create_library(self,
+                       name: str,
+                       library_options: Optional[LibraryOptions] = None,
+                       enterprise_library_options: Optional[EnterpriseLibraryOptions] = None) -> Library:
         """
         Creates the library named ``name``.
 
@@ -176,7 +179,11 @@ class Arctic:
             The name of the library that you wish to create.
 
         library_options: Optional[LibraryOptions]
-            Options to use in configuring the library. Defaults if not provided are the same as are documented in LibraryOptions.
+            Options to use in configuring the library. Defaults if not provided are the same as documented in LibraryOptions.
+
+        enterprise_library_options: Optional[EnterpriseLibraryOptions]
+            Enterprise options to use in configuring the library. Defaults if not provided are the same as documented in
+            EnterpriseLibraryOptions. These options are only relevant to ArcticDB enterprise users.
 
         Examples
         --------
@@ -194,7 +201,10 @@ class Arctic:
         if library_options is None:
             library_options = LibraryOptions()
 
-        cfg = self._library_adapter.get_library_config(name, library_options)
+        if enterprise_library_options is None:
+            enterprise_library_options = EnterpriseLibraryOptions()
+
+        cfg = self._library_adapter.get_library_config(name, library_options, enterprise_library_options)
         lib_mgr_name = self._library_adapter.get_name_for_library_manager(name)
         self._library_manager.write_library_config(cfg, lib_mgr_name, self._library_adapter.get_masking_override())
         if self._created_lib_names is not None:

@@ -174,9 +174,7 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
         storage_override.set_s3_override(s3_override)
         return storage_override
 
-    def get_library_config(self, name, library_options: LibraryOptions):
-        env_cfg = EnvironmentConfigsMap()
-
+    def add_library_to_env(self, env_cfg: EnvironmentConfigsMap, name: str):
         _name = self._query_params.access if not self._query_params.aws_auth else USE_AWS_CRED_PROVIDERS_TOKEN
         _key = self._query_params.secret if not self._query_params.aws_auth else USE_AWS_CRED_PROVIDERS_TOKEN
 
@@ -198,15 +196,6 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
             env_name=_DEFAULT_ENV,
             region=self._query_params.region,
             use_virtual_addressing=self._query_params.use_virtual_addressing,
-        )
-
-        library_options.encoding_version = (
-            library_options.encoding_version if library_options.encoding_version is not None else self._encoding_version
-        )
-        set_library_options(env_cfg.env_by_id[_DEFAULT_ENV].lib_by_path[name], library_options)
-
-        return NativeVersionStore.create_library_config(
-            env_cfg, _DEFAULT_ENV, name, encoding_version=library_options.encoding_version
         )
 
     def _configure_aws(self):
