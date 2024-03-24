@@ -27,5 +27,13 @@ class MismatchingLibraryOptions(ArcticException):
     pass
 
 
+class UnknownLibraryOption(ArcticException):
+    pass
+
+
+class UnsupportedLibraryOptionValue(ArcticException):
+    pass
+
+
 class LmdbOptionsError(ArcticException):
     pass

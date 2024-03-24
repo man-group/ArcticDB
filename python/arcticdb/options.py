@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 from typing import Optional
+from enum import Enum
 
 from arcticdb.encoding_version import EncodingVersion
 
@@ -206,3 +207,26 @@ class EnterpriseLibraryOptions:
         return (
             f"EnterpriseLibraryOptions(replication={self.replication}, background_deletion={self.background_deletion})"
         )
+
+
+class ModifiableLibraryOption(Enum):
+    """Library options that can be modified after library creation.
+
+    See also `ModifiableEnterpriseLibraryOption` for enterprise options that can be modified.
+
+    See `LibraryOptions` for a description of each option.
+    """
+    DEDUP = 1
+    ROWS_PER_SEGMENT = 2
+    COLUMNS_PER_SEGMENT = 3
+
+
+class ModifiableEnterpriseLibraryOption(Enum):
+    """Enterprise library options that can be modified after library creation.
+
+    See also `ModifiableLibraryOption` for non-enterprise options that can be modified.
+
+    See `EnterpriseLibraryOptions` for a description of each option.
+    """
+    REPLICATION = 1
+    BACKGROUND_DELETION = 2

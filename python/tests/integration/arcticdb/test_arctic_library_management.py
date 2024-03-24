@@ -26,6 +26,8 @@ from arcticdb.version_store.library import (
 
 from tests.util.mark import AZURE_TESTS_MARK, MONGO_TESTS_MARK, REAL_S3_TESTS_MARK
 
+from arcticdb.options import ModifiableEnterpriseLibraryOption, ModifiableLibraryOption
+
 
 def test_library_creation_deletion(arctic_client):
     ac = arctic_client
@@ -124,6 +126,121 @@ def test_create_library_background_deletion_option_set_does_not_delete(lmdb_stor
     lib = ac.create_library("lib", enterprise_library_options=EnterpriseLibraryOptions(background_deletion=True))
     lt = lib._nvs.library_tool()
 
+    df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
+    lib.write("abc", df)
+    lib.delete("abc")
+
+    assert len(lt.find_keys(KeyType.TABLE_DATA))
+
+
+def test_modify_options_affect_in_memory_lib(lmdb_storage):
+    ac = lmdb_storage.create_arctic()
+    lib = ac.create_library("lib")
+
+    ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.REPLICATION, True)
+    ac.modify_library_option(lib, ModifiableLibraryOption.DEDUP, False)
+
+    proto_options = lib._nvs.lib_cfg().lib_desc.version.write_options
+    assert proto_options.sync_passive.enabled
+    assert not proto_options.de_duplication
+
+
+def test_modify_options_affect_persistent_lib_config(lmdb_storage):
+    ac = lmdb_storage.create_arctic()
+    lib = ac.create_library("lib")
+
+    ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.REPLICATION, True)
+    ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.BACKGROUND_DELETION, True)
+
+    new_client = Arctic(ac.get_uri())
+    new_lib = new_client["lib"]
+    proto_options = new_lib._nvs.lib_cfg().lib_desc.version.write_options
+    assert proto_options.sync_passive.enabled
+    assert proto_options.delayed_deletes
+
+
+def test_modify_options_dedup(lmdb_storage):
+    ac = lmdb_storage.create_arctic()
+    lib = ac.create_library("lib")
+
+    ac.modify_library_option(lib, ModifiableLibraryOption.DEDUP, False)
+
+    proto_options = lib._nvs.lib_cfg().lib_desc.version.write_options
+    assert not proto_options.de_duplication
+
+    ac.modify_library_option(lib, ModifiableLibraryOption.DEDUP, True)
+
+    proto_options = lib._nvs.lib_cfg().lib_desc.version.write_options
+    assert proto_options.de_duplication
+
+
+def test_modify_options_rows_per_segment(lmdb_storage):
+    ac = lmdb_storage.create_arctic()
+    lib = ac.create_library("lib")
+
+    ac.modify_library_option(lib, ModifiableLibraryOption.ROWS_PER_SEGMENT, 100)
+
+    proto_options = lib._nvs.lib_cfg().lib_desc.version.write_options
+    assert proto_options.segment_row_size == 100
+
+    ac.modify_library_option(lib, ModifiableLibraryOption.ROWS_PER_SEGMENT, 200)
+
+    proto_options = lib._nvs.lib_cfg().lib_desc.version.write_options
+    assert proto_options.segment_row_size == 200
+
+
+def test_modify_options_cols_per_segment(lmdb_storage):
+    ac = lmdb_storage.create_arctic()
+    lib = ac.create_library("lib")
+
+    ac.modify_library_option(lib, ModifiableLibraryOption.COLUMNS_PER_SEGMENT, 100)
+
+    proto_options = lib._nvs.lib_cfg().lib_desc.version.write_options
+    assert proto_options.column_group_size == 100
+
+    ac.modify_library_option(lib, ModifiableLibraryOption.COLUMNS_PER_SEGMENT, 200)
+
+    proto_options = lib._nvs.lib_cfg().lib_desc.version.write_options
+    assert proto_options.column_group_size == 200
+
+
+# TODO - need to "reload" the library
+"""
+        lib = NativeVersionStore(
+            self._library_manager.get_library(lib_mgr_name, storage_override),
+            repr(self._library_adapter),
+            lib_cfg=self._library_manager.get_library_config(lib_mgr_name, storage_override),
+        )
+"""
+def test_modify_options_replication(lmdb_storage):
+    ac = lmdb_storage.create_arctic()
+    lib = ac.create_library("lib")
+
+    ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.REPLICATION, True)
+
+    proto_options = lib._nvs.lib_cfg().lib_desc.version.write_options
+    assert proto_options.sync_passive.enabled
+
+    df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
+    lib.write("abc", df)
+
+    lt = lib._nvs.library_tool()
+    assert len(lt.find_keys(KeyType.LOG)) == 1
+
+    ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.REPLICATION, False)
+    proto_options = lib._nvs.lib_cfg().lib_desc.version.write_options
+    assert not proto_options.sync_passive.enabled
+
+    lib.write("def", df)
+    assert len(lt.find_keys(KeyType.LOG)) == 1
+
+
+def test_modify_options_background_deletion(lmdb_storage):
+    ac = lmdb_storage.create_arctic()
+    lib = ac.create_library("lib")
+    lt = lib._nvs.library_tool()
+
+    ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.BACKGROUND_DELETION, True)
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
     lib.write("abc", df)
     lib.delete("abc")

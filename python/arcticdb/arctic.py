@@ -5,8 +5,8 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
-
-from typing import List, Optional
+import logging
+from typing import List, Optional, Any, Union
 
 from arcticdb.options import DEFAULT_ENCODING_VERSION, LibraryOptions, EnterpriseLibraryOptions
 from arcticdb_ext.storage import LibraryManager
@@ -20,6 +20,8 @@ from arcticdb.adapters.azure_library_adapter import AzureLibraryAdapter
 from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
 from arcticdb.adapters.in_memory_library_adapter import InMemoryLibraryAdapter
 from arcticdb.encoding_version import EncodingVersion
+from arcticdb.exceptions import UnsupportedLibraryOptionValue, UnknownLibraryOption
+from arcticdb.options import ModifiableEnterpriseLibraryOption, ModifiableLibraryOption
 
 
 class Arctic:
@@ -281,3 +283,77 @@ class Arctic:
         s3://MY_ENDPOINT:MY_BUCKET
         """
         return self._uri
+
+    def modify_library_option(self,
+                              library: Library,
+                              option: Union[ModifiableLibraryOption, ModifiableEnterpriseLibraryOption],
+                              option_value: Any):
+        """
+        Modify an option for a library.
+
+        See `LibraryOptions` and `EnterpriseLibraryOptions` for descriptions of the meanings of the various options.
+
+        After the modification, this process and other processes that open the library will use the new value. Processes
+        that already have the library open will not see the configuration change until they restart.
+
+        Parameters
+        ----------
+        library
+            The library to modify.
+
+        option
+            The library option to change.
+
+        option_value
+            The new setting for the library option.
+        """
+        def check_bool():
+            if not isinstance(option_value, bool):
+                raise UnsupportedLibraryOptionValue(f"{option} only supports bool values but received {option_value}. "
+                                                    f"Not changing library option.")
+
+        def check_postive_int():
+            if not isinstance(option_value, int):
+                raise UnsupportedLibraryOptionValue(f"{option} only supports positive integer values but received "
+                                                    f"{option_value}. Not changing library option.")
+
+        cfg = library._nvs.lib_cfg()
+        write_options = cfg.lib_desc.version.write_options
+
+        # Core options
+        if option == ModifiableLibraryOption.DEDUP:
+            check_bool()
+            write_options.de_duplication = option_value
+
+        elif option == ModifiableLibraryOption.ROWS_PER_SEGMENT:
+            check_postive_int()
+            write_options.segment_row_size = option_value
+
+        elif option == ModifiableLibraryOption.COLUMNS_PER_SEGMENT:
+            check_postive_int()
+            write_options.column_group_size = option_value
+
+        # Enterprise options
+        elif option == ModifiableEnterpriseLibraryOption.REPLICATION:
+            check_bool()
+            write_options.sync_passive.enabled = option_value
+
+        elif option == ModifiableEnterpriseLibraryOption.BACKGROUND_DELETION:
+            check_bool()
+            write_options.delayed_deletes = option_value
+
+        # Unknown
+        else:
+            raise UnknownLibraryOption(f"Unknown library option {option} cannot be modified. This is a bug "
+                                       f"in ArcticDB. Please raise an issue on github.com/ArcticDB")
+
+        self._library_manager.write_library_config(cfg, library.name, self._library_adapter.get_masking_override())
+        library._nvs._initialize(
+            library._nvs._library,
+            library._nvs.env,
+            cfg,
+            library._nvs._custom_normalizer,
+            library._nvs._open_mode
+        )
+
+        logging.info(f"Set option=[{option}] to value=[{option_value}] for Arctic=[{self}] Library=[{library}]")

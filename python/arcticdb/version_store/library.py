@@ -13,7 +13,8 @@ from enum import Enum, auto
 from typing import Optional, Any, Tuple, Dict, Union, List, Iterable, NamedTuple
 from numpy import datetime64
 
-from arcticdb.options import LibraryOptions, EnterpriseLibraryOptions
+from arcticdb.options import \
+    LibraryOptions, EnterpriseLibraryOptions, ModifiableLibraryOption, ModifiableEnterpriseLibraryOption
 from arcticdb.supported_types import Timestamp
 from arcticdb.util._versions import IS_PANDAS_TWO
 
