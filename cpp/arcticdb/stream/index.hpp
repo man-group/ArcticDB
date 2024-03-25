@@ -244,6 +244,11 @@ private:
     std::string name_;
 };
 
+/*
+ * Special index which does not store any index values. The index value is
+ * derived from the offset of the segment, and no column representing the index
+ * is materialized.
+ */
 class RowCountIndex : public BaseIndex<RowCountIndex> {
   public:
     using TypeDescTag = TypeDescriptorTag<
@@ -261,7 +266,7 @@ class RowCountIndex : public BaseIndex<RowCountIndex> {
     static constexpr IndexDescriptor::Type type() { return IndexDescriptor::ROWCOUNT; }
 
     void check(const FieldCollection& ) const {
-        // No index defined
+        // No state to check for row count index.
     }
 
     template<typename SegmentType>
@@ -286,7 +291,8 @@ class RowCountIndex : public BaseIndex<RowCountIndex> {
 
     template<class RowCellSetter>
     void set(RowCellSetter, const IndexValue & = {timestamp(0)}) {
-        // No index value
+        // No index value can be set since the value of the index relies on the
+        // offset of the segment.
     }
 
     RowCountIndex make_from_descriptor(const StreamDescriptor&) const {
@@ -310,8 +316,9 @@ inline Index index_type_from_descriptor(const StreamDescriptor &desc) {
     }
 }
 
-inline Index default_index_type_from_descriptor(const IndexDescriptor::Proto &desc) {
-    switch (desc.kind()) {
+// Only to be used for visitation to get field count etc as the name is not set
+inline Index variant_index_from_type(IndexDescriptor::Type type) {
+    switch (type) {
     case IndexDescriptor::TIMESTAMP:
         return TimeseriesIndex::default_index();
     case IndexDescriptor::STRING:
@@ -319,23 +326,14 @@ inline Index default_index_type_from_descriptor(const IndexDescriptor::Proto &de
     case IndexDescriptor::ROWCOUNT:
         return RowCountIndex::default_index();
     default:
-        util::raise_rte("Unknown index type {} trying to generate index type", int(desc.kind()));
-    }
-}
-
-// Only to be used for visitation to get field count etc as the name is not set
-inline Index variant_index_from_type(IndexDescriptor::Type type) {
-    switch (type) {
-    case IndexDescriptor::TIMESTAMP:
-        return TimeseriesIndex{TimeseriesIndex::DefaultName};
-    case IndexDescriptor::STRING:
-        return TableIndex{TableIndex::DefaultName};
-    case IndexDescriptor::ROWCOUNT:
-        return RowCountIndex{};
-    default:
         util::raise_rte("Unknown index type {} trying to generate index type", int(type));
     }
 }
+
+inline Index default_index_type_from_descriptor(const IndexDescriptor::Proto &desc) {
+    return variant_index_from_type(desc.kind());
+}
+
 
 inline Index default_index_type_from_descriptor(const IndexDescriptor &desc) {
     return default_index_type_from_descriptor(desc.proto());

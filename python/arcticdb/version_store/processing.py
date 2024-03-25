@@ -27,6 +27,8 @@ from arcticdb_ext.version_store import GroupByClause as _GroupByClause
 from arcticdb_ext.version_store import AggregationClause as _AggregationClause
 from arcticdb_ext.version_store import RowRangeClause as _RowRangeClause
 from arcticdb_ext.version_store import DateRangeClause as _DateRangeClause
+from arcticdb_ext.version_store import SortClause as _SortClause
+from arcticdb_ext.version_store import MergeClause as _MergeClause
 from arcticdb_ext.version_store import RowRangeType as _RowRangeType
 from arcticdb_ext.version_store import ExpressionName as _ExpressionName
 from arcticdb_ext.version_store import ColumnName as _ColumnName
@@ -276,10 +278,16 @@ def value_list_from_args(*args):
 # These are just used for shallow/deep copying, pickling, and equality checks
 PythonFilterClause = namedtuple("PythonFilterClause", ["expr"])
 PythonProjectionClause = namedtuple("PythonProjectionClause", ["name", "expr"])
-PythonGroupByClause = namedtuple("PythonGroupByClause", ["name"])
+# TODO: Probably add `grouping_column` to `PythonAggregationClause` to correctly reflect the C++ class.
 PythonAggregationClause = namedtuple("PythonAggregationClause", ["aggregations"])
 PythonDateRangeClause = namedtuple("PythonDateRangeClause", ["start", "end"])
+PythonMergeClause = namedtuple("PythonMergeClause", [])
+PythonSortClause = namedtuple("PythonSortClause", ["column"])
 
+
+class PythonGroupByClause(NamedTuple):
+    name: str
+    sort: bool = True
 
 class PythonRowRangeClause(NamedTuple):
     row_range_type: _RowRangeType = None
@@ -420,7 +428,7 @@ class QueryBuilder:
         self._python_clauses.append(PythonProjectionClause(name, expr))
         return self
 
-    def groupby(self, name: str):
+    def groupby(self, name: str, sort: bool = True):
         """
         Group symbol by column name. GroupBy operations must be followed by an aggregation operator. Currently the following five aggregation
         operators are supported:
@@ -436,6 +444,9 @@ class QueryBuilder:
         ----------
         name: `str`
             Name of the column to group on. Note that currently GroupBy only supports single-column groupings.
+
+        sort: `bool`
+            Whether to sort the groups by the grouping column. Defaults to True.
 
         Examples
         --------
@@ -493,8 +504,8 @@ class QueryBuilder:
         QueryBuilder
             Modified QueryBuilder object.
         """
-        self.clauses.append(_GroupByClause(name))
-        self._python_clauses.append(PythonGroupByClause(name))
+        self.clauses.append(_GroupByClause(name, sort))
+        self._python_clauses.append(PythonGroupByClause(name, sort))
         return self
 
     def agg(self, aggregations: Dict[str, str]):
@@ -503,10 +514,20 @@ class QueryBuilder:
             len(self.clauses) and isinstance(self.clauses[-1], _GroupByClause),
             f"Aggregation only makes sense after groupby",
         )
+        group_by_clause = self.clauses[-1]
+
         for v in aggregations.values():
             v = v.lower()
-        self.clauses.append(_AggregationClause(self.clauses[-1].grouping_column, aggregations))
+        self.clauses.append(_AggregationClause(group_by_clause.grouping_column, aggregations))
         self._python_clauses.append(PythonAggregationClause(aggregations))
+
+        if group_by_clause.sort:
+            self.clauses.append(_MergeClause())
+            self._python_clauses.append(PythonMergeClause())
+
+            self.clauses.append(_SortClause(group_by_clause.grouping_column))
+            self._python_clauses.append(PythonSortClause(group_by_clause.grouping_column))
+
         return self
 
     # TODO: specify type of other must be QueryBuilder with from __future__ import annotations once only Python 3.7+
@@ -620,7 +641,7 @@ class QueryBuilder:
                 input_columns, expression_context = visit_expression(python_clause.expr)
                 self.clauses.append(_ProjectClause(input_columns, python_clause.name, expression_context))
             elif isinstance(python_clause, PythonGroupByClause):
-                self.clauses.append(_GroupByClause(python_clause.name))
+                self.clauses.append(_GroupByClause(python_clause.name, python_clause.sort))
             elif isinstance(python_clause, PythonAggregationClause):
                 self.clauses.append(_AggregationClause(self.clauses[-1].grouping_column, python_clause.aggregations))
             elif isinstance(python_clause, PythonRowRangeClause):
@@ -630,6 +651,10 @@ class QueryBuilder:
                     self.clauses.append(_RowRangeClause(python_clause.row_range_type, python_clause.n))
             elif isinstance(python_clause, PythonDateRangeClause):
                 self.clauses.append(_DateRangeClause(python_clause.start, python_clause.end))
+            elif isinstance(python_clause, PythonSortClause):
+                self.clauses.append(_SortClause(python_clause.column))
+            elif isinstance(python_clause, PythonMergeClause):
+                self.clauses.append(_MergeClause())
             else:
                 raise ArcticNativeException(
                     f"Unrecognised clause type {type(python_clause)} when unpickling QueryBuilder"

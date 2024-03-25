@@ -381,6 +381,33 @@ def test_querybuilder_groupby_then_groupby(lmdb_version_store_tiny_segment):
     assert_frame_equal(expected, received)
 
 
+def test_query_builder_group_by_sort(lmdb_version_store_tiny_segment):
+    lib = lmdb_version_store_tiny_segment
+    symbol = "test_query_builder_group_by_sort"
+
+    df = pd.DataFrame(
+    {
+            # TODO: Add tests for grouping columns of strings, and datetimes.
+            "grouping_column": [2, 1, 1],
+            "to_max": [1, 5, 4],
+        },
+        index=np.arange(3),
+    )
+    lib.write(symbol, df)
+
+    q = QueryBuilder()
+    q = q.groupby("grouping_column", sort=False).agg({"to_max": "max"})
+    received = lib.read(symbol, query_builder=q).data
+    expected = df.groupby("grouping_column", sort=False).agg({"to_max": "max"})
+    assert_frame_equal(expected, received)
+
+    q = QueryBuilder()
+    q = q.groupby("grouping_column", sort=True).agg({"to_max": "max"})
+    received = lib.read(symbol, query_builder=q).data
+    expected = df.groupby("grouping_column", sort=True).agg({"to_max": "max"})
+    assert_frame_equal(expected, received)
+
+
 def test_querybuilder_pickling():
     """QueryBuilder must be pickleable with all possible clauses."""
 
