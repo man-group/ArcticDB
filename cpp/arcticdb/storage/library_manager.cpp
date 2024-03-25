@@ -129,7 +129,8 @@ void LibraryManager::remove_library_config(const LibraryPath& path) const {
     store_->remove_key(RefKey{StreamId(path.to_delim_path()), entity::KeyType::LIBRARY_CONFIG}).wait();
 }
 
-std::shared_ptr<Library> LibraryManager::get_library(const LibraryPath& path, const StorageOverride& storage_override,
+std::shared_ptr<Library> LibraryManager::get_library(const LibraryPath& path,
+                                                     const StorageOverride& storage_override,
                                                      const bool ignore_cache) {
     if (!ignore_cache) {
         // Check global cache first, important for LMDB and RocksDB to only open once from a given process
