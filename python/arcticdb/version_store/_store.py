@@ -1237,10 +1237,11 @@ class NativeVersionStore:
         )
         norm_failure_options_msg = kwargs.get("norm_failure_options_msg", self.norm_failure_options_msg_write)
 
+        # metadata_vector used to be type-hinted as an Iterable, so handle this case in case anyone is relying on it
         if metadata_vector is None:
-            metadata_itr = itertools.repeat(None)
+            metadata_vector = len(symbols) * [None]
         else:
-            metadata_itr = iter(metadata_vector)
+            metadata_vector = list(metadata_vector)
 
         for idx in range(len(symbols)):
             _handle_categorical_columns(symbols[idx], data_vector[idx], False)
@@ -1249,7 +1250,7 @@ class NativeVersionStore:
             self._try_normalize(
                 symbols[idx],
                 data_vector[idx],
-                next(metadata_itr),
+                metadata_vector[idx],
                 pickle_on_failure,
                 dynamic_strings,
                 None,
@@ -1264,13 +1265,11 @@ class NativeVersionStore:
             symbols, items, norm_metas, udms, prune_previous_version, validate_index, throw_on_error
         )
         write_results = []
-        if metadata_vector is not None:
-            metadata_itr = iter(metadata_vector)
-        for result in cxx_versioned_items:
+        for idx, result in enumerate(cxx_versioned_items):
             if isinstance(result, DataError):
                 write_results.append(result)
             else:
-                write_results.append(self._convert_thin_cxx_item_to_python(result, next(metadata_itr)))
+                write_results.append(self._convert_thin_cxx_item_to_python(result, metadata_vector[idx]))
         return write_results
 
     def _batch_write_metadata_to_versioned_items(
@@ -1399,10 +1398,11 @@ class NativeVersionStore:
         )
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
 
+        # metadata_vector used to be type-hinted as an Iterable, so handle this case in case anyone is relying on it
         if metadata_vector is None:
-            metadata_itr = itertools.repeat(None)
+            metadata_vector = len(symbols) * [None]
         else:
-            metadata_itr = iter(metadata_vector)
+            metadata_vector = list(metadata_vector)
 
         for idx in range(len(symbols)):
             _handle_categorical_columns(symbols[idx], data_vector[idx])
@@ -1411,7 +1411,7 @@ class NativeVersionStore:
             self._try_normalize(
                 symbols[idx],
                 data_vector[idx],
-                next(metadata_itr),
+                metadata_vector[idx],
                 False,
                 dynamic_strings,
                 None,
@@ -1436,13 +1436,11 @@ class NativeVersionStore:
             throw_on_error,
         )
         append_results = []
-        if metadata_vector is not None:
-            metadata_itr = iter(metadata_vector)
-        for result in cxx_versioned_items:
+        for idx, result in enumerate(cxx_versioned_items):
             if isinstance(result, DataError):
                 append_results.append(result)
             else:
-                append_results.append(self._convert_thin_cxx_item_to_python(result, next(metadata_itr)))
+                append_results.append(self._convert_thin_cxx_item_to_python(result, metadata_vector[idx]))
         return append_results
 
     def batch_restore_version(
