@@ -59,4 +59,22 @@ inline void ensure_rowcount_norm_meta(arcticdb::proto::descriptors::Normalizatio
 }
 
 
+inline FrameDescriptorImpl frame_descriptor_from_proto(arcticdb::proto::descriptors::TimeSeriesDescriptor& tsd) {
+    FrameDescriptorImpl output;
+    output.column_groups_ = tsd.has_column_groups() && tsd.column_groups().enabled();
+    output.total_rows_ = tsd.total_rows();
+    return output;
+}
+
+inline SegmentDescriptorImpl segment_descriptor_from_proto(const arcticdb::proto::descriptors::StreamDescriptor& desc) {
+    SegmentDescriptorImpl output;
+    output.sorted_ = SortedValue(desc.sorted());
+    output.compressed_bytes_ = desc.out_bytes();
+    output.uncompressed_bytes_ = desc.in_bytes();
+    output.index_ = IndexDescriptor(IndexDescriptor::Type(desc.index().kind()), desc.index().field_count());
+    return output;
+}
+
+
+
 } //namespace arcticdb

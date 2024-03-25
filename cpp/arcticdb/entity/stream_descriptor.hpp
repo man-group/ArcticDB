@@ -44,7 +44,7 @@ bool operator==(const SegmentDescriptorImpl& l, const SegmentDescriptorImpl& r) 
 }
 
 struct StreamDescriptor {
-    std::shared_ptr<SegmentDescriptorImpl> data_ = std::make_shared<SegmentDescriptorImpl>();
+    std::shared_ptr<SegmentDescriptorImpl> segment_desc_ = std::make_shared<SegmentDescriptorImpl>();
     std::shared_ptr<FieldCollection> fields_ = std::make_shared<FieldCollection>();
     StreamId stream_id_;
 
@@ -52,18 +52,18 @@ struct StreamDescriptor {
     ~StreamDescriptor() = default;
 
     StreamDescriptor(std::shared_ptr<SegmentDescriptorImpl> data, std::shared_ptr<FieldCollection> fields) :
-            data_(std::move(data)),
+            segment_desc_(std::move(data)),
             fields_(std::move(fields)) {
     }
 
     StreamDescriptor(std::shared_ptr<SegmentDescriptorImpl> data, std::shared_ptr<FieldCollection> fields, StreamId stream_id) :
-        data_(std::move(data)),
+        segment_desc_(std::move(data)),
         fields_(std::move(fields)),
         stream_id_(std::move(stream_id)) {
     }
 
     [[nodiscard]] const SegmentDescriptorImpl& data() const  {
-        return *data_;
+        return *segment_desc_;
     }
 
     void set_id(const StreamId& id) {
@@ -75,35 +75,31 @@ struct StreamDescriptor {
     }
 
     [[nodiscard]] uint64_t uncompressed_bytes() const {
-        return data_->uncompressed_bytes_;
+        return segment_desc_->uncompressed_bytes_;
     }
 
     [[nodiscard]] uint64_t compressed_bytes() const {
-        return data_->compressed_bytes_;
+        return segment_desc_->compressed_bytes_;
     }
 
     [[nodiscard]] SortedValue sorted() const {
-        return data_->sorted_;
+        return segment_desc_->sorted_;
     }
 
     [[nodiscard]] IndexDescriptorImpl index() const {
-        return static_cast<IndexDescriptorImpl&>(data_->index_);
+        return static_cast<IndexDescriptorImpl&>(segment_desc_->index_);
     }
 
     void set_sorted(SortedValue sorted) {
-       data_->sorted_ = sorted;
-    }
-
-    [[nodiscard]] SortedValue get_sorted() {
-        return data_->sorted_;
+       segment_desc_->sorted_ = sorted;
     }
 
     void set_index(const IndexDescriptorImpl& idx) {
-        data_->index_ = idx;
+        segment_desc_->index_ = idx;
     }
 
     IndexDescriptorImpl& index() {
-        return static_cast<IndexDescriptorImpl&>(data_->index_);
+        return static_cast<IndexDescriptorImpl&>(segment_desc_->index_);
     }
 
     void set_index_type(const IndexDescriptorImpl::Type type) {
@@ -144,7 +140,7 @@ struct StreamDescriptor {
             return;
 
         swap(left.stream_id_, right.stream_id_);
-        swap(left.data_, right.data_);
+        swap(left.segment_desc_, right.segment_desc_);
         swap(left.fields_, right.fields_);
     }
 
@@ -159,7 +155,7 @@ struct StreamDescriptor {
     }
 
     [[nodiscard]] StreamDescriptor clone() const {
-        return StreamDescriptor{std::make_shared<SegmentDescriptorImpl>(data_->clone()), std::make_shared<FieldCollection>(fields_->clone()), stream_id_};
+        return StreamDescriptor{std::make_shared<SegmentDescriptorImpl>(segment_desc_->clone()), std::make_shared<FieldCollection>(fields_->clone()), stream_id_};
     };
 
     [[nodiscard]] const FieldCollection& fields() const {
@@ -197,7 +193,7 @@ struct StreamDescriptor {
     }
 
     [[nodiscard]] std::shared_ptr<SegmentDescriptorImpl> data_ptr() const {
-        return data_;
+        return segment_desc_;
     }
 
     decltype(auto) begin() {
@@ -234,7 +230,7 @@ struct StreamDescriptor {
     }
 
     friend bool operator==(const StreamDescriptor& left, const StreamDescriptor& right) {
-        if(*left.data_ != *right.data_)
+        if(*left.segment_desc_ != *right.segment_desc_)
             return false;
 
         return *left.fields_ == *right.fields_;

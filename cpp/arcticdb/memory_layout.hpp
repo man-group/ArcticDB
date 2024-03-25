@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <arcticdb/codec/magic_words.hpp>
 
 namespace arcticdb {
 
@@ -84,6 +85,7 @@ enum class BitmapFormat : uint8_t {
     BITMAGIC,
     ROARING
 };
+
 struct EncodedField {
     EncodedFieldType type_ = EncodedFieldType::UNKNOWN;
     uint8_t shapes_count_ = 0u;
@@ -183,15 +185,91 @@ struct SegmentDescriptor {
     IndexDescriptor index_;
 };
 
+// A segment header contains a set of optional fields that describe the contents of a given segment
 enum class FieldOffset : uint8_t {
-    METADATA,
-    STRING_POOL,
-    DESCRIPTOR,
-    INDEX,
-    COLUMN,
+    METADATA, // Opaque field for user and normalization metadata
+    STRING_POOL, // Deduplicated compressed field of string data
+    DESCRIPTOR, // Collection of field names and types for the current segment
+    INDEX, // Optional additional set of fields used when this segment indexes a dataframe
+    COLUMN, // Set of encoded fields that represent the body (user) data of the segment
     COUNT
 };
 
+/*
+ * Note. The structures below contain variable-length fields (represented by named structures) and should not be
+ * used to implement the data format directly. They are intended as a syntactically-correct representation
+ * of the storage format only.
+ */
+struct FieldList {
+    // A list of field descriptors containing the name, type and dimensionality of a column of data
+};
+
+struct EncodedFieldList {
+    // A list of encoded fields that describes the contents of other fields. An encoded field is a list of blocks
+    // with a specific set of compression types
+};
+
+struct OpaqueField {
+    // An opaque field to be filled with user-determined content, used for things like
+    // language-specific normalization data
+};
+
+struct ColumnField {
+    ColumnMagic column_magic_;
+    // A data field described by an EncodedField, consists of a set of compressed blocks that may represent
+    // shapes and values, and an optional sparse bitmap
+};
+
+template <typename FieldType>
+struct CompressedField {
+    // A compressed block of data containing some other structure. A compressed field is represented by an EncodedField
+    // which contains a set of Block objects describing the compression stype
+};
+
+template <typename FieldType>
+struct RepeatedField {
+    // A set of fields that are repeated, whose number corresponds to a unary field describing this set. For example, the
+    // number of repeated column fields should correspond to the number of entries in the descriptor (which describes the
+    // user-facing information about a column's contents, and the number of EncodedFields in the body fields, which describe
+    // the block structure and compression
+};
+
+// Binrary representation of a segment header. Contains positioning information about the structure of the segment,
+// and the list of fields representing the segment metadata fields
+struct SegmentHeaderData {
+    HeaderData data_;
+    EncodedFieldList header_fields_; // Header fields containing the fields described by FieldOffsets
+    std::array<uint32_t, 5> offset_ = {}; // Maps the entries in the FieldOffset enumeration to the header field entries
+};
+
+// The overall memory layout of an ArcticDB segment
+struct MemoryLayout {
+    FixedHeader fixed_header_;
+    SegmentHeaderData variable_header_;
+
+    MetadataMagic metadata_magic_;
+    OpaqueField metadata_;
+
+    DescriptorMagic descriptor_magic_;
+    CompressedField<FieldList> descriptor_fields_;
+
+    IndexMagic index_magic_;
+    // Optional fields present if this segment refers to a complete dataframe, i.e. if it is a primary index
+    FrameDescriptor index_frame_descriptor_;
+    SegmentDescriptor index_segment_descriptor_;
+    OpaqueField index_metadata_;
+    CompressedField<FieldList> index_descriptor_fields_;
+
+    RepeatedField<ColumnField> columns_;
+
+    StringPoolMagic string_pool_magic_;
+    ColumnField string_pool_field_;
+
+    EncodedFieldList body_fields_;  // Encoded field list representing the user data fields (columns)
+};
 
 #pragma pack(pop)
+
+
+
 } //namespace arcticdb

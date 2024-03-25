@@ -7,7 +7,6 @@
 
 namespace arcticdb {
 
-
 static constexpr std::array<std::string_view, 5> offset_names_ = {
     "METADATA",
     "STRING_POOL",

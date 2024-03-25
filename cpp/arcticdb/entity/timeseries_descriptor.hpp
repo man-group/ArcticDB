@@ -24,107 +24,122 @@ struct FrameDescriptorImpl : public FrameDescriptor {
 };
 
 struct TimeseriesDescriptor {
-  using Proto = arcticdb::proto::descriptors::FrameMetadata;
+    using Proto = arcticdb::proto::descriptors::FrameMetadata;
 
-  std::shared_ptr<FrameDescriptorImpl> data_ = std::make_shared<FrameDescriptorImpl>();
-  std::shared_ptr<Proto> proto_ = std::make_shared<Proto>();
-  std::shared_ptr<FieldCollection> fields_ = std::make_shared<FieldCollection>();
+    std::shared_ptr<FrameDescriptorImpl> frame_data_ = std::make_shared<FrameDescriptorImpl>();
+    std::shared_ptr<SegmentDescriptorImpl> segment_desc_ = std::make_shared<SegmentDescriptorImpl>();
+    std::shared_ptr<Proto> proto_ = std::make_shared<Proto>();
+    std::shared_ptr<FieldCollection> fields_ = std::make_shared<FieldCollection>();
 
-  TimeseriesDescriptor() = default;
+    TimeseriesDescriptor() = default;
 
-  TimeseriesDescriptor(
-      std::shared_ptr<FrameDescriptorImpl> data,
-      std::shared_ptr<Proto> proto,
-      std::shared_ptr<FieldCollection> fields) :
-    data_(data),
-    proto_(std::move(proto)),
-    fields_(std::move(fields)) {
-  }
+    TimeseriesDescriptor(
+        std::shared_ptr<FrameDescriptorImpl> frame_desc,
+        std::shared_ptr<SegmentDescriptorImpl> segment_desc,
+        std::shared_ptr<Proto> proto,
+        std::shared_ptr<FieldCollection> fields) :
+        frame_data_(std::move(frame_desc)),
+        segment_desc_(segment_desc),
+        proto_(std::move(proto)),
+        fields_(std::move(fields)) {
+    }
 
-  const FrameDescriptorImpl& frame_descriptor() const {
-      return *data_;
-  }
+    [[nodiscard]] const FrameDescriptorImpl &frame_descriptor() const {
+        return *frame_data_;
+    }
 
-  void set_stream_descriptor(const StreamDescriptor& desc) {
-      data_ = desc.data_ptr();
-      fields_ = desc.fields_ptr();
-  }
+    void set_stream_descriptor(const StreamDescriptor &desc) {
+        segment_desc_ = desc.data_ptr();
+        fields_ = desc.fields_ptr();
+    }
 
-  void set_total_rows(uint64_t rows) {
-      data_->total_rows_ = rows;
-  }
+    void set_total_rows(uint64_t rows) {
+        frame_data_->total_rows_ = rows;
+    }
 
-  [[nodiscard]] uint64_t total_rows() const {
-      return data_->total_rows_;
-  }
+    [[nodiscard]] uint64_t total_rows() const {
+        return frame_data_->total_rows_;
+    }
 
+    [[nodiscard]] SortedValue sorted() const {
+        return segment_desc_->sorted_;
+    }
 
-  arcticdb::proto::descriptors::UserDefinedMetadata&& detach_user_metadata() {
-    return std::move(*proto_->mutable_multi_key_meta());
-  }
+    [[nodiscard]] IndexDescriptorImpl index() const {
+        return static_cast<IndexDescriptorImpl &>(segment_desc_->index_);
+    }
 
-  arcticdb::proto::descriptors::NormalizationMetadata&& detach_normalization_metadata() {
-    return std::move(*proto_->mutable_normalization());
-  }
+    void set_sorted(SortedValue sorted) {
+        segment_desc_->sorted_ = sorted;
+    }
 
-  arcticdb::proto::descriptors::UserDefinedMetadata&& detach_multi_key_metadata() {
-    return std::move(*proto_->mutable_multi_key_meta());
-  }
+    arcticdb::proto::descriptors::UserDefinedMetadata &&detach_user_metadata() {
+        return std::move(*proto_->mutable_multi_key_meta());
+    }
 
-  void set_user_metadata(arcticdb::proto::descriptors::UserDefinedMetadata&& user_meta) {
-      *proto_->mutable_user_meta() = std::move(user_meta);
-  }
+    arcticdb::proto::descriptors::NormalizationMetadata &&detach_normalization_metadata() {
+        return std::move(*proto_->mutable_normalization());
+    }
 
-  void set_normalization_metadata(arcticdb::proto::descriptors::NormalizationMetadata&& norm_meta) {
-      *proto_->mutable_normalization() = std::move(norm_meta);
-  }
+    arcticdb::proto::descriptors::UserDefinedMetadata &&detach_multi_key_metadata() {
+        return std::move(*proto_->mutable_multi_key_meta());
+    }
 
-  void set_multi_key_metadata(arcticdb::proto::descriptors::UserDefinedMetadata&& multi_key_meta) {
-      *proto_->mutable_multi_key_meta() = std::move(multi_key_meta);
-  }
+    void set_user_metadata(arcticdb::proto::descriptors::UserDefinedMetadata &&user_meta) {
+        *proto_->mutable_user_meta() = std::move(user_meta);
+    }
 
-  [[nodiscard]] std::shared_ptr<FieldCollection> fields_ptr() const  {
-      return fields_;
-  }
+    void set_normalization_metadata(arcticdb::proto::descriptors::NormalizationMetadata &&norm_meta) {
+        *proto_->mutable_normalization() = std::move(norm_meta);
+    }
 
-  [[nodiscard]] std::shared_ptr<Proto> proto_ptr() const {
-      return proto_;
-  }
+    void set_multi_key_metadata(arcticdb::proto::descriptors::UserDefinedMetadata &&multi_key_meta) {
+        *proto_->mutable_multi_key_meta() = std::move(multi_key_meta);
+    }
 
-  [[nodiscard]] bool proto_is_null() const {
-      return !proto_;
-  }
+    [[nodiscard]] std::shared_ptr<FieldCollection> fields_ptr() const {
+        return fields_;
+    }
 
-  [[nodiscard]] const FieldCollection& fields() const {
-      return *fields_;
-  }
+    [[nodiscard]] std::shared_ptr<Proto> proto_ptr() const {
+        return proto_;
+    }
 
-  [[nodiscard]] FieldCollection& mutable_fields() {
-      return *fields_;
-  }
+    [[nodiscard]] bool proto_is_null() const {
+        return !proto_;
+    }
 
-  [[nodiscard]] Proto& mutable_proto() {
-       return *proto_;
-  }
+    [[nodiscard]] const FieldCollection &fields() const {
+        return *fields_;
+    }
 
-  [[nodiscard]] const Proto& proto() const {
-      return *proto_;
-  }
+    [[nodiscard]] FieldCollection &mutable_fields() {
+        return *fields_;
+    }
 
-  [[nodiscard]] TimeseriesDescriptor clone() const {
-      auto proto = std::make_shared<Proto>();
-      proto->CopyFrom(*proto_);
-      auto frame_desc = std::make_shared<FrameDescriptorImpl>(data_->clone());
-      return {std::move(frame_desc), std::move(proto), std::make_shared<FieldCollection>(fields_->clone())};
-  }
+    [[nodiscard]] Proto &mutable_proto() {
+        return *proto_;
+    }
 
-  [[nodiscard]] bool column_groups() const {
-      return data_->column_groups_;
-  }
+    [[nodiscard]] const Proto &proto() const {
+        return *proto_;
+    }
 
-  [[nodiscard]] StreamDescriptor as_stream_descriptor() const {
-      return {data_, fields_};
-  }
+    [[nodiscard]] TimeseriesDescriptor clone() const {
+        auto proto = std::make_shared<Proto>();
+        proto->CopyFrom(*proto_);
+        auto frame_desc = std::make_shared<FrameDescriptorImpl>(frame_data_->clone());
+        auto segment_desc = std::make_shared<SegmentDescriptorImpl>(segment_desc_->clone());
+        return {std::move(frame_desc), std::move(segment_desc), std::move(proto), std::make_shared<FieldCollection>(fields_->clone())};
+    }
+
+    [[nodiscard]] bool column_groups() const {
+        return frame_data_->column_groups_;
+    }
+
+    [[nodiscard]] StreamDescriptor as_stream_descriptor() const {
+        return {segment_desc_, fields_};
+    }
 };
 
 }

@@ -64,7 +64,7 @@ struct IndexSegmentReader {
 
     bool bucketize_dynamic() const;
 
-    SortedValue get_sorted() const {
+    SortedValue sorted() const {
         return tsd().sorted();
     }
 
@@ -81,7 +81,7 @@ struct IndexSegmentReader {
     }
 
     StreamDescriptor index_descriptor() const {
-        return {tsd_.data_, tsd_.fields_};
+        return {tsd_.segment_desc_, tsd_.fields_};
     }
 
 private:

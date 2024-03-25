@@ -23,9 +23,11 @@ TimeseriesDescriptor make_timeseries_descriptor(
 
     auto frame_desc = std::make_shared<FrameDescriptorImpl>();
     frame_desc->total_rows_ = total_rows;
-    frame_desc->index_ = desc.index();
-    frame_desc->sorted_ = desc.sorted();
     frame_desc->column_groups_ = bucketize_dynamic;
+
+    auto segment_desc = std::make_shared<SegmentDescriptorImpl>();
+    segment_desc->index_ = desc.index();
+    segment_desc->sorted_ = desc.sorted();
 
     auto proto = std::make_shared<TimeseriesDescriptor::Proto>();
     proto->mutable_normalization()->CopyFrom(norm_meta);
@@ -40,7 +42,7 @@ TimeseriesDescriptor make_timeseries_descriptor(
         proto->mutable_next_key()->CopyFrom(encode_key(next_key.value()));
 
     //TODO maybe need ensure_norm_meta?
-    return TimeseriesDescriptor{std::move(frame_desc), std::move(proto), desc.fields_ptr()};
+    return TimeseriesDescriptor{std::move(frame_desc), std::move(segment_desc), std::move(proto), desc.fields_ptr()};
 }
 
 
@@ -149,7 +151,7 @@ std::pair<size_t, size_t> offset_and_row_count(const std::shared_ptr<pipelines::
 }
 
 bool index_is_not_timeseries_or_is_sorted_ascending(const std::shared_ptr<pipelines::InputTensorFrame>& frame) {
-    return !std::holds_alternative<stream::TimeseriesIndex>(frame->index) || frame->desc.get_sorted() == SortedValue::ASCENDING;
+    return !std::holds_alternative<stream::TimeseriesIndex>(frame->index) || frame->desc.sorted() == SortedValue::ASCENDING;
 }
 
 }

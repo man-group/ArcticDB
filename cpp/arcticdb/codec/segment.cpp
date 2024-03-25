@@ -105,7 +105,14 @@ EncodedFieldCollection deserialize_body_fields(const SegmentHeader& hdr, const u
     return EncodedFieldCollection{decode_encoded_fields(hdr, encoded_fields_ptr, data)};
 }
 
-std::tuple<SegmentHeader, FieldCollection, std::shared_ptr<FrameDescriptorImpl>, std::optional<SegmentHeaderProtoWrapper>> decode_header_and_fields(const uint8_t*& src) {
+struct DeserializedSegmentData {
+    SegmentHeader segment_header_;
+    std::shared_ptr<FieldCollection> fields_;
+    std::shared_ptr<FrameDescriptorImpl> frame_desc_;
+    std::optional<SegmentHeaderProtoWrapper> proto_wrapper_;
+};
+
+DeserializedSegmentData decode_header_and_fields(const uint8_t*& src) {
     auto* fixed_hdr = reinterpret_cast<const FixedHeader*>(src);
     ARCTICDB_DEBUG(log::codec(), "Reading header: {} + {} = {}",
                    FIXED_HEADER_SIZE,
@@ -113,21 +120,21 @@ std::tuple<SegmentHeader, FieldCollection, std::shared_ptr<FrameDescriptorImpl>,
                    FIXED_HEADER_SIZE + fixed_hdr->header_bytes);
 
     util::check_arg(fixed_hdr->magic_number == MAGIC_NUMBER, "expected first 2 bytes: {}, actual {}", fixed_hdr->magic_number, MAGIC_NUMBER);
-    auto data = std::make_shared<FrameDescriptorImpl>(); //TODO decode
     std::optional<SegmentHeaderProtoWrapper> proto_wrapper;
 
     const auto* header_ptr = src + FIXED_HEADER_SIZE;
     if(const auto header_version = fixed_hdr->encoding_version; header_version == HEADER_VERSION_V1) {
-
        proto_wrapper = decode_protobuf_header(header_ptr, fixed_hdr->header_bytes);
+       auto data = std::make_shared<SegmentDescriptorImpl>(segment_descriptor_from_proto(proto_wrapper->proto().stream_descriptor()));
        auto segment_header = deserialize_segment_header_from_proto(proto_wrapper->proto());
        util::check(segment_header.encoding_version() == EncodingVersion::V1, "Expected v1 header to contain legacy encoding version");
-       auto fields = field_collection_from_proto(std::move(proto_wrapper->proto().stream_descriptor().fields()));
+       auto fields = std::make_shared<FieldCollection>(field_collection_from_proto(std::move(proto_wrapper->proto().stream_descriptor().fields())));
        src += FIXED_HEADER_SIZE + fixed_hdr->header_bytes;
        return {std::move(segment_header), std::move(fields), std::move(data), std::move(proto_wrapper)};
     } else {
         SegmentHeader segment_header;
         const auto* fields_ptr = header_ptr + fixed_hdr->header_bytes;
+        auto data = std::make_shared<SegmentInMemoryImpl>(read_segment_descriptor
         segment_header.deserialize_from_bytes(header_ptr);
         util::check(segment_header.encoding_version() == EncodingVersion::V2, "Expected V2 encoding in binary header");
         auto fields = deserialize_descriptor_fields_collection(fields_ptr, segment_header);

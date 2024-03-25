@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <arcticdb/util/magic_num.hpp>
+
 namespace arcticdb {
     using DescriptorMagic = util::MagicNum<'D','e','s','c'>;
     using EncodedMagic = util::MagicNum<'E','n','c','d'>;
@@ -15,4 +17,5 @@ namespace arcticdb {
     using IndexMagic = util::MagicNum<'I','n','d','x'>;
     using ColumnMagic = util::MagicNum<'C','l','m','n'>;
     using FrameDataMagic = util::MagicNum<'F','r', 'a', 'm'>;
+    using SegmentDescriptorMagic = util::MagicNum<'S','D', 's', 'c'>;
 }

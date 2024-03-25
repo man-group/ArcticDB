@@ -30,7 +30,6 @@ struct SegmentCompressedSize {
     size_t body_size_ = 0U;
 };
 
-
 SegmentCompressedSize compressed(const arcticdb::proto::encoding::SegmentHeader& seg_hdr);
 }
 
@@ -64,19 +63,19 @@ class Segment {
   public:
     Segment() = default;
 
-    Segment(SegmentHeader&& header, std::shared_ptr<Buffer> buffer, std::shared_ptr<FrameDescriptorImpl> data, std::shared_ptr<FieldCollection> fields) :
+    Segment(SegmentHeader&& header, std::shared_ptr<Buffer> buffer, std::shared_ptr<SegmentDescriptorImpl> data, std::shared_ptr<FieldCollection> fields) :
         header_(std::move(header)),
         buffer_(std::move(buffer)),
         desc_(std::move(data), std::move(fields)){
     }
 
-    Segment(SegmentHeader&& header, BufferView buffer, std::shared_ptr<FrameDescriptorImpl> data, std::shared_ptr<FieldCollection> fields) :
+    Segment(SegmentHeader&& header, BufferView buffer, std::shared_ptr<SegmentDescriptorImpl> data, std::shared_ptr<FieldCollection> fields) :
         header_(std::move(header)),
         buffer_(buffer),
         desc_(std::move(data), std::move(fields)) {
     }
 
-    Segment(SegmentHeader&& header, VariantBuffer &&buffer, std::shared_ptr<FrameDescriptorImpl> data, std::shared_ptr<FieldCollection> fields) :
+    Segment(SegmentHeader&& header, VariantBuffer &&buffer, std::shared_ptr<SegmentDescriptorImpl> data, std::shared_ptr<FieldCollection> fields) :
         header_(std::move(header)),
         buffer_(std::move(buffer)),
         desc_(std::move(data), std::move(fields)) {

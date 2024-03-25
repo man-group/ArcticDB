@@ -113,8 +113,7 @@ std::optional<google::protobuf::Any> decode_metadata(
 }
 
 std::shared_ptr<arcticdb::proto::descriptors::FrameMetadata> extract_frame_metadata(
-    SegmentInMemory& res
-    ) {
+        SegmentInMemory& res) {
     std::shared_ptr<arcticdb::proto::descriptors::FrameMetadata> output;
     util::check(res.has_metadata(), "Cannot extract frame metadata as it is null");
     res.metadata()->UnpackTo(output.get());
@@ -171,6 +170,16 @@ FrameDescriptorImpl read_frame_descriptor(
     data += sizeof(FrameDescriptorImpl);
     return *frame_descriptor;
 }
+
+FrameDescriptorImpl read_segment_descriptor(
+    const uint8_t*& data,
+    const uint8_t* begin ARCTICDB_UNUSED) {
+    util::check_magic<SegmentDescriptorMagic>(data);
+    auto* frame_descriptor = reinterpret_cast<const FrameDescriptorImpl*>(data);
+    data += sizeof(FrameDescriptorImpl);
+    return *frame_descriptor;
+}
+
 
 std::optional<FieldCollection> decode_index_fields(
     const SegmentHeader& hdr,
@@ -234,17 +243,6 @@ std::optional<FieldCollection> decode_descriptor_fields(
     }
 }
 
-FrameDescriptorImpl read_frame_descriptor(const uint8_t* data) {
-    return *reinterpret_cast<const FrameDescriptorImpl*>(data);
-}
-
-FrameDescriptorImpl frame_descriptor_from_proto(arcticdb::proto::descriptors::TimeSeriesDescriptor& tsd) {
-    FrameDescriptorImpl output;
-    output.column_groups_ = tsd.has_column_groups() && tsd.column_groups().enabled();
-    output.total_rows_ = tsd.total_rows();
-    return output;
-}
-
 template<typename SourceType, typename DestType>
 void exchange_timeseries_proto(const SourceType& source, DestType& destination) {
     if (source.has_normalization())
@@ -267,9 +265,10 @@ TimeseriesDescriptor unpack_timeseries_descriptor_from_proto(
     auto frame_meta = std::make_shared<arcticdb::proto::descriptors::FrameMetadata>();
     exchange_timeseries_proto(tsd, *frame_meta);
 
+    auto segment_desc = std::make_shared<SegmentDescriptorImpl>(segment_descriptor_from_proto((tsd.stream_descriptor())));
     auto frame_desc = std::make_shared<FrameDescriptorImpl>(frame_descriptor_from_proto(tsd));
     auto old_fields = std::make_shared<FieldCollection>(fields_from_proto(tsd.stream_descriptor()));
-    return {frame_desc, frame_meta, old_fields};
+    return {frame_desc, segment_desc, frame_meta, old_fields};
 }
 
 std::optional<TimeseriesDescriptor> decode_timeseries_descriptor_v1(
@@ -303,11 +302,11 @@ std::optional<TimeseriesDescriptor> decode_timeseries_descriptor_v2(
 
     util::check_magic<IndexMagic>(data);
     auto frame_desc = std::make_shared<FrameDescriptorImpl>(read_frame_descriptor(data));
-
+    auto segment_desc = std::make_shared<SegmentDescriptorImpl>(read_segment_descriptor(data));
     auto maybe_fields = decode_index_fields(hdr, data, begin, end);
     util::check(maybe_fields.has_value(), "Expected index fields in v2 timeseries descriptor");
     maybe_fields->regenerate_offsets();
-    return std::make_optional<TimeseriesDescriptor>(frame_desc, frame_meta, std::make_shared<FieldCollection>(std::move(*maybe_fields)));
+    return std::make_optional<TimeseriesDescriptor>(frame_desc, segment_desc, frame_meta, std::make_shared<FieldCollection>(std::move(*maybe_fields)));
 }
 
 std::optional<TimeseriesDescriptor> decode_timeseries_descriptor(
@@ -395,10 +394,11 @@ void decode_v2(const Segment& segment,
     if(hdr.has_index_descriptor_field()) {
         auto frame_metadata = extract_frame_metadata(res);
         auto index_frame_descriptor = std::make_shared<FrameDescriptorImpl>(read_frame_descriptor(data, begin));
+        auto index_segment_descriptor = std::make_shared<SegmentDescriptorImpl>(read_segment_descriptor(data));
         auto index_fields = decode_index_fields(hdr, data, begin, end);
         util::check(index_fields.has_value(), "Failed to get index fields");
         auto index_field_ptr = std::make_shared<FieldCollection>(std::move(*index_fields));
-        TimeseriesDescriptor tsd{std::move(index_frame_descriptor), std::move(frame_metadata), std::move(index_field_ptr)};
+        TimeseriesDescriptor tsd{std::move(index_frame_descriptor), std::move(index_segment_descriptor), std::move(frame_metadata), std::move(index_field_ptr)};
         res.set_timeseries_descriptor(std::move(tsd));
     }
 
