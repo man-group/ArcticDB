@@ -1342,7 +1342,7 @@ def test_batch_write(basic_store_tombstone_and_sync_passive):
         vitem = lmdb_version_store.read(sym)
         sequential_results[vitem.symbol] = vitem
     lmdb_version_store.batch_write(
-        list(multi_data.keys()), list(multi_data.values()), metadata_vector=list(metadata.values())
+        list(multi_data.keys()), list(multi_data.values()), metadata_vector=(metadata[sym] for sym in multi_data)
     )
     batch_results = lmdb_version_store.batch_read(list(multi_data.keys()))
     assert len(batch_results) == len(sequential_results)
@@ -2122,7 +2122,7 @@ def test_batch_append(basic_store_tombstone, three_col_df):
     metadata = {"sym1": {"key1": "val1"}, "sym2": None, "sym3": None}
 
     lmdb_version_store.batch_write(
-        list(multi_data.keys()), list(multi_data.values()), metadata_vector=list(metadata.values())
+        list(multi_data.keys()), list(multi_data.values()), metadata_vector=(metadata[sym] for sym in multi_data)
     )
 
     multi_append = {"sym1": three_col_df(10), "sym2": three_col_df(11), "sym3": three_col_df(12)}
