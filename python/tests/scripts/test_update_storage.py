@@ -5,7 +5,7 @@ import pytest
 
 from arcticdb import Arctic
 from arcticdb.scripts.update_storage import run
-from arcticdb.options import LibraryOptions
+from arcticdb.options import LibraryOptions, EnterpriseLibraryOptions
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
 from arcticc.pb2.azure_storage_pb2 import Config as AzureConfig
 from arcticdb.storage_fixtures.api import ArcticUriFields
@@ -18,8 +18,7 @@ LIB_NAME = "test_lib"
 
 
 def create_library_config(ac: Arctic, name: str):
-    opts = LibraryOptions()
-    cfg = ac._library_adapter.get_library_config(name, opts)
+    cfg = ac._library_adapter.get_library_config(name, LibraryOptions(), EnterpriseLibraryOptions())
     ac._library_manager.write_library_config(cfg, name, test_only_validation_toggle=False)
 
 

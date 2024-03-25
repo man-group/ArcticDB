@@ -200,14 +200,21 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         from moto.server import DomainDispatcherApplication, create_backend_app
 
         class _HostDispatcherApplication(DomainDispatcherApplication):
-            """The stand-alone server needs a way to distinguish between S3 and IAM. We use the host for that"""
-
-            _MAP = {"s3.us-east-1.amazonaws.com": "s3", "localhost": "s3", "127.0.0.1": "iam"}
 
             _reqs_till_rate_limit = -1
 
             def get_backend_for_host(self, host):
-                return self._MAP.get(host, host)
+                """The stand-alone server needs a way to distinguish between S3 and IAM. We use the host for that"""
+                if host is None:
+                    return None
+                if "s3" in host or host == "localhost":
+                    return "s3"
+                elif host == "127.0.0.1":
+                    return "iam"
+                elif host == "moto_api":
+                    return "moto_api"
+                else:
+                    raise RuntimeError(f"Unknown host {host}")
 
             def __call__(self, environ, start_response):
                 path_info: bytes = environ.get("PATH_INFO", "")

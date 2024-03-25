@@ -153,9 +153,16 @@ void register_bindings(py::module& storage) {
         .def("remove_library_config", [](const LibraryManager& library_manager, std::string_view library_path){
             return library_manager.remove_library_config(LibraryPath{library_path, '.'});
         }, py::call_guard<SingleThreadMutexHolder>())
-        .def("get_library", [](LibraryManager& library_manager, std::string_view library_path, const StorageOverride& storage_override){
-            return library_manager.get_library(LibraryPath{library_path, '.'}, storage_override);
-        }, py::arg("library_path"), py::arg("storage_override") = StorageOverride{})
+        .def("get_library", [](
+                LibraryManager& library_manager, std::string_view library_path,
+                const StorageOverride& storage_override,
+                const bool ignore_cache) {
+            return library_manager.get_library(LibraryPath{library_path, '.'}, storage_override, ignore_cache);
+        },
+             py::arg("library_path"),
+             py::arg("storage_override") = StorageOverride{},
+             py::arg("ignore_cache") = false
+        )
         .def("cleanup_library_if_open", [](LibraryManager& library_manager, std::string_view library_path) {
             return library_manager.cleanup_library_if_open(LibraryPath{library_path, '.'});
         })
