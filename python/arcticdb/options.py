@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 from typing import Optional
+from enum import Enum
 
 from arcticdb.encoding_version import EncodingVersion
 
@@ -16,7 +17,7 @@ DEFAULT_ENCODING_VERSION = EncodingVersion.V1
 
 class LibraryOptions:
     """
-    Configuration options that can be applied when libraries are created.
+    Configuration options for ArcticDB libraries.
 
     Attributes
     ----------
@@ -142,3 +143,90 @@ class LibraryOptions:
             f" rows_per_segment={self.rows_per_segment}, columns_per_segment={self.columns_per_segment},"
             f" encoding_version={self.encoding_version if self.encoding_version is not None else 'Default'})"
         )
+
+
+class EnterpriseLibraryOptions:
+    """
+    Configuration options for ArcticDB libraries, that should only be used when you are using the ArcticDB enterprise
+    features.
+
+    Contact `arcticdb@man.com` for more information about the Enterprise features.
+
+    Attributes
+    ----------
+
+    replication: bool
+        See `__init__` for details.
+
+    background_deletion: bool
+        See `__init__` for details.
+    """
+
+    def __init__(
+            self,
+            *,
+            replication: bool = False,
+            background_deletion: bool = False,
+    ):
+        """
+        Parameters
+        ----------
+
+        replication: bool, default False
+
+            Whether to use the replication feature for this library. The replication tool is an enterprise tool that
+            is used for one-way replication of the contents of a library to an arbitrary number of secondary storages.
+
+            When enabled, modifications to this library will also write an oplog message that will be consumed by the
+            replication tool.
+
+            When using this option, replication target libraries _must_ have background_deletion=True. We recommend
+            that source libraries also have background_deletion=True as this improves replication performance.
+
+        background_deletion: bool, default False
+            Whether to use background deletion for this library. The background deletion tool is an enterprise tool
+            that performs data deletion in the background, so that writers to an ArcticDB library do not need to spend
+            time doing the deletion themselves.
+
+            When enabled, deletions and version pruning on this library will only logically delete data. The background
+            deletion tool is responsible for the physical deletion.
+
+            This flag does not affect the logical semantics of the ArcticDB APIs. Readers will see data in the same
+            state following a `delete` or `prune_previous_versions` call regardless of whether this flag is set or not.
+        """
+        self.replication = replication
+        self.background_deletion = background_deletion
+
+    def __eq__(self, right):
+        return (
+                self.replication == right.replication
+                and self.background_deletion == right.background_deletion
+        )
+
+    def __repr__(self):
+        return (
+            f"EnterpriseLibraryOptions(replication={self.replication}, background_deletion={self.background_deletion})"
+        )
+
+
+class ModifiableLibraryOption(Enum):
+    """Library options that can be modified after library creation.
+
+    See also `ModifiableEnterpriseLibraryOption` for enterprise options that can be modified.
+
+    See `LibraryOptions` for a description of each option.
+    """
+    DEDUP = 1
+    ROWS_PER_SEGMENT = 2
+    COLUMNS_PER_SEGMENT = 3
+
+
+class ModifiableEnterpriseLibraryOption(Enum):
+    """Enterprise library options that can be modified after library creation.
+
+    See also `ModifiableLibraryOption` for non-enterprise options that can be modified.
+
+    See `EnterpriseLibraryOptions` for a description of each option.
+    """
+    REPLICATION = 1
+    BACKGROUND_DELETION = 2

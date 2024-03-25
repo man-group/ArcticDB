@@ -10,7 +10,6 @@ import time
 from typing import Optional
 import platform
 
-from arcticdb.options import LibraryOptions
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap, LibraryConfig
 from arcticdb.version_store.helper import add_azure_library_to_env
 from arcticdb.config import _DEFAULT_ENV
@@ -123,9 +122,7 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
         storage_override.set_azure_override(azure_override)
         return storage_override
 
-    def get_library_config(self, name, library_options: LibraryOptions):
-        env_cfg = EnvironmentConfigsMap()
-
+    def add_library_to_env(self, env_cfg: EnvironmentConfigsMap, name: str):
         if self._query_params.Path_prefix:
             # add time to prefix - so that the azure root folder is unique and we can delete and recreate fast
             with_prefix = f"{self._query_params.Path_prefix}/{name}{time.time() * 1e9:.0f}"
@@ -140,15 +137,6 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
             endpoint=self._endpoint,
             with_prefix=with_prefix,
             ca_cert_path=self._ca_cert_path,
-        )
-
-        library_options.encoding_version = (
-            library_options.encoding_version if library_options.encoding_version is not None else self._encoding_version
-        )
-        set_library_options(env_cfg.env_by_id[_DEFAULT_ENV].lib_by_path[name], library_options)
-
-        return NativeVersionStore.create_library_config(
-            env_cfg, _DEFAULT_ENV, name, encoding_version=library_options.encoding_version
         )
 
     @property

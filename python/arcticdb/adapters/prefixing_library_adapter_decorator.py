@@ -55,9 +55,9 @@ class PrefixingLibraryAdapterDecorator(ArcticLibraryAdapter if TYPE_CHECKING els
     def library_manager_names_to_user_facing(self, names: Iterable[str]) -> List[str]:
         return [name[len(self._prefix) :] for name in names if name.startswith(self._prefix)]
 
-    def get_library_config(self, name: str, library_options: LibraryOptions):
+    def get_library_config(self, name: str, library_options: LibraryOptions, enterprise_library_options):
         lib_mgr_name = self.get_name_for_library_manager(name)
-        return self._inner.get_library_config(lib_mgr_name, library_options)
+        return self._inner.get_library_config(lib_mgr_name, library_options, enterprise_library_options)
 
     def __repr__(self):
         return repr(self._inner)
@@ -70,7 +70,7 @@ class PrefixingLibraryAdapterDecorator(ArcticLibraryAdapter if TYPE_CHECKING els
             sig = inspect.signature(inner_attr)
             for param in sig.parameters:
                 if "name" in param:
-                    raise NotImplementedError(f"{type(self).__name__} need to be updated to wrap {inner_attr}")
+                    raise NotImplementedError(f"{type(self).__name__} needs to be updated to wrap {inner_attr}")
             try:
                 setattr(inner_attr, marker, True)
             except:
