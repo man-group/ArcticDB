@@ -104,12 +104,10 @@ def test_empty_df():
     assert_frame_equal(d, D)
 
 
+# See test_get_description_date_range_tz in test_arctic.py for the V2 API equivalent
 @pytest.mark.parametrize(
     "tz", ["UTC", "Europe/Amsterdam", pytz.UTC, pytz.timezone("Europe/Amsterdam"), du.tz.gettz("UTC")]
 )
-# @pytest.mark.parametrize(
-#     "tz", ["Europe/Amsterdam"]
-# )
 def test_write_tz(lmdb_version_store, sym, tz):
     assert tz is not None
     index = index=pd.date_range(pd.Timestamp(0), periods=10, tz=tz)
@@ -123,6 +121,7 @@ def test_write_tz(lmdb_version_store, sym, tz):
     assert isinstance(start_ts, datetime.datetime)
     assert isinstance(end_ts, datetime.datetime)
     assert start_ts == index[0]
+    # datetime.datetime is microsecond precision, so don't need a +1ns in this assertion
     assert end_ts == index[-1]
 
 

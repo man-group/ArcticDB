@@ -711,6 +711,23 @@ def test_get_description(arctic_library):
     assert info.sorted == "ASCENDING"
 
 
+# See test_write_tz in test_normalization.py for the V1 API equivalent
+@pytest.mark.parametrize(
+    "tz", ["UTC", "Europe/Amsterdam"]
+)
+def test_get_description_date_range_tz(arctic_library, tz):
+    lib = arctic_library
+    sym = "test_get_description_date_range_tz"
+    index = index=pd.date_range(pd.Timestamp(0), periods=10, tz=tz)
+    df = pd.DataFrame(data={"col1": np.arange(10)}, index=index)
+    lib.write(sym, df)
+    start_ts, end_ts = lib.get_description(sym).date_range
+    assert isinstance(start_ts, pd.Timestamp)
+    assert isinstance(end_ts, pd.Timestamp)
+    assert start_ts == index[0]
+    assert end_ts == index[-1] + pd.Timedelta(1, unit="ns")
+
+
 def test_tail(arctic_library):
     lib = arctic_library
 
