@@ -700,7 +700,7 @@ def test_get_description(arctic_library):
     original_info = lib.get_description("symbol", as_of=0)
     # then
     assert [c[0] for c in info.columns] == ["column"]
-    assert info.date_range == (datetime(2018, 1, 1, tzinfo=timezone.utc), datetime(2018, 1, 6, tzinfo=timezone.utc))
+    assert info.date_range == (pd.Timestamp(year=2018, month=1, day=1), pd.Timestamp(year=2018, month=1, day=6, nanosecond=1))
     assert info.index[0] == ["named_index"]
     assert info.index_type == "index"
     assert info.row_count == 6
