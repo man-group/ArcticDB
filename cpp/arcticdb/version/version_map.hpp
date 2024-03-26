@@ -108,7 +108,7 @@ class VersionMapImpl {
      */
     using MapType =  std::map<StreamId, std::shared_ptr<VersionMapEntry>>;
 
-    static constexpr uint64_t DEFAULT_CLOCK_UNSYNC_TOLERANCE = ONE_SECOND * 2;
+    static constexpr uint64_t DEFAULT_CLOCK_UNSYNC_TOLERANCE = ONE_MILLISECOND * 200;
     static constexpr uint64_t DEFAULT_RELOAD_INTERVAL = ONE_SECOND * 2;
     MapType map_;
     bool validate_ = false;
