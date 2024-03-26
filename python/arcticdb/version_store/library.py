@@ -125,8 +125,9 @@ class SymbolDescription(NamedTuple):
         Number of rows, or None if the symbol is pickled.
     last_update_time : datetime.datetime
         The time of the last update to the symbol, in UTC.
-    date_range : Tuple[Union[datetime.datetime, numpy.datetime64], Union[datetime.datetime, numpy.datetime64]]
-        The values of the index column in the first and last rows of this symbol in UTC. Both values will be NaT if:
+    date_range : Tuple[Union[pandas.Timestamp], Union[pandas.Timestamp]]
+        The value of the index column in the first row of this symbol, and one nanosecond after the value of the index
+        column in the last row of this symbol. Both values will be NaT if:
         - the symbol is not timestamp indexed
         - the symbol is timestamp indexed, but the sorted field of this class is UNSORTED (see below)
     sorted : str
@@ -1647,19 +1648,13 @@ class Library:
             last_update_time = last_update_time.replace(tzinfo=pytz.UTC)
         columns = tuple(NameWithDType(n, t) for n, t in zip(info["col_names"]["columns"], info["dtype"]))
         index = NameWithDType(info["col_names"]["index"], info["col_names"]["index_dtype"])
-        date_range = tuple(
-            map(
-                lambda x: x.replace(tzinfo=datetime.timezone.utc) if not np.isnat(np.datetime64(x)) else x,
-                info["date_range"],
-            )
-        )
         return SymbolDescription(
             columns=columns,
             index=index,
             row_count=info["rows"],
             last_update_time=last_update_time,
             index_type=info["index_type"],
-            date_range=date_range,
+            date_range=info["date_range"],
             sorted=info["sorted"],
         )
 
@@ -1684,7 +1679,7 @@ class Library:
         SymbolDescription
             For documentation on each field.
         """
-        info = self._nvs.get_info(symbol, as_of)
+        info = self._nvs.get_info(symbol, as_of, date_range_ns_precision=True)
         return self._info_to_desc(info)
 
     @staticmethod
@@ -1740,7 +1735,8 @@ class Library:
         symbol_strings, as_ofs = self.parse_list_of_symbols(symbols)
 
         throw_on_error = False
-        descriptions = self._nvs._batch_read_descriptor(symbol_strings, as_ofs, throw_on_error)
+        date_range_ns_precision = True
+        descriptions = self._nvs._batch_read_descriptor(symbol_strings, as_ofs, throw_on_error, date_range_ns_precision)
 
         description_results = [
             description if isinstance(description, DataError) else self._info_to_desc(description)
