@@ -2463,11 +2463,16 @@ class NativeVersionStore:
         if tz:
             # If tz is provided, it is stored in UTC - hence needs to be localized to UTC before
             # converting to the given tz
+            # return (
+            #     pd.Timestamp(min_ts, tz="UTC").tz_convert(tz),
+            #     pd.Timestamp(max_ts, tz="UTC").tz_convert(tz),
+            # )
             return (
                 _from_tz_timestamp(min_ts, "UTC").astimezone(pytz.timezone(tz)),
                 _from_tz_timestamp(max_ts, "UTC").astimezone(pytz.timezone(tz)),
             )
         else:
+            # return pd.Timestamp(min_ts), pd.Timestamp(max_ts)
             return _from_tz_timestamp(min_ts, None), _from_tz_timestamp(max_ts, None)
 
     def get_timerange_for_symbol(

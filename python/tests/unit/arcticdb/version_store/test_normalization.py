@@ -107,14 +107,23 @@ def test_empty_df():
 @pytest.mark.parametrize(
     "tz", ["UTC", "Europe/Amsterdam", pytz.UTC, pytz.timezone("Europe/Amsterdam"), du.tz.gettz("UTC")]
 )
+# @pytest.mark.parametrize(
+#     "tz", ["Europe/Amsterdam"]
+# )
 def test_write_tz(lmdb_version_store, sym, tz):
     assert tz is not None
-    df = pd.DataFrame(data={"col1": np.arange(10)}, index=pd.date_range(pd.Timestamp(0), periods=10, tz=tz))
+    index = index=pd.date_range(pd.Timestamp(0), periods=10, tz=tz)
+    df = pd.DataFrame(data={"col1": np.arange(10)}, index=index)
     lmdb_version_store.write(sym, df)
     result = lmdb_version_store.read(sym).data
     assert_frame_equal(df, result)
     df_tz = df.index.tzinfo
     assert str(df_tz) == str(tz)
+    start_ts, end_ts = lmdb_version_store.get_timerange_for_symbol(sym)
+    assert isinstance(start_ts, datetime.datetime)
+    assert isinstance(end_ts, datetime.datetime)
+    assert start_ts == index[0]
+    assert end_ts == index[-1]
 
 
 def get_multiindex_df_with_tz(tz):
