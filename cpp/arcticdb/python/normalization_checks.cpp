@@ -196,7 +196,7 @@ void fix_normalization_or_throw(
     auto &old_norm = existing_isr.tsd().proto().normalization();
     auto &new_norm = new_frame.norm_meta;
     if (check_pandas_like(old_norm, new_norm)) {
-        const IndexDescriptor::Type old_index_type = existing_isr.seg().descriptor().index().type();
+        const IndexDescriptor::Type old_index_type = existing_isr.tsd().proto().stream_descriptor().index().kind();
         const IndexDescriptor::Type new_index_type = new_frame.desc.index().type();
         if (old_index_type == new_index_type && old_index_type == IndexDescriptor::ROWCOUNT) {
             update_rowcount_normalization_data(old_norm, new_norm, existing_isr.tsd().proto().total_rows());

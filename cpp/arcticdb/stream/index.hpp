@@ -313,19 +313,19 @@ public:
     }
 
     [[nodiscard]] static IndexValue start_value_for_segment(const SegmentInMemory& segment) {
-        return static_cast<timestamp>(segment.offset());
+        return static_cast<NumericIndex>(segment.offset());
     }
 
     [[nodiscard]] static IndexValue end_value_for_segment(const SegmentInMemory& segment) {
-        return static_cast<timestamp>(segment.offset());
+        return static_cast<NumericIndex>(segment.offset());
     }
 
     [[nodiscard]] static IndexValue start_value_for_keys_segment(const SegmentInMemory& segment) {
-        return static_cast<timestamp>(segment.offset());
+        return static_cast<NumericIndex>(segment.offset());
     }
 
     [[nodiscard]] static IndexValue end_value_for_keys_segment(const SegmentInMemory& segment) {
-        return static_cast<timestamp>(segment.offset());
+        return static_cast<NumericIndex>(segment.offset());
     }
 };
 

@@ -292,20 +292,19 @@ def _normalize_single_index(index, index_names, index_norm, dynamic_strings=None
     # index: pd.Index or np.ndarray -> np.ndarray
     index_tz = None
 
-    if not index_norm.is_physically_stored:
+    if isinstance(index_norm, NormalizationMetadata.PandasIndex) and not index_norm.is_physically_stored:
+        if index.name:
+            if not isinstance(index.name, int) and not isinstance(index.name, str):
+                raise NormalizationException(
+                    f"Index name must be a string or an int, received {index.name} of type {type(index.name)}"
+                )
+            if isinstance(index.name, int):
+                index_norm.is_int = True
+            index_norm.name = str(index.name)
         if isinstance(index, RangeIndex):
             # skip index since we can reconstruct it, so no need to actually store it
-            if index.name:
-                if not isinstance(index.name, int) and not isinstance(index.name, str):
-                    raise NormalizationException(
-                        f"Index name must be a string or an int, received {index.name} of type {type(index.name)}"
-                    )
-                if isinstance(index.name, int):
-                    index_norm.is_int = True
-                index_norm.name = str(index.name)
             index_norm.start = index.start if _range_index_props_are_public else index._start
             index_norm.step = index.step if _range_index_props_are_public else index._step
-            return [], []
         return [], []
     else:
         coerce_type = DTN64_DTYPE if len(index) == 0 else None
@@ -550,7 +549,7 @@ class _PandasNormalizer(Normalizer):
             is_not_range_index = not isinstance(index, RangeIndex)
             df_has_rows = not(len(index) == 0 and len(df.select_dtypes(include="category").columns) == 0)
             index_norm = pd_norm.index
-            index_norm.is_physically_stored = is_not_range_index or df_has_rows
+            index_norm.is_physically_stored = is_not_range_index and df_has_rows
             if not df_has_rows:
                 index = Index([])
 
@@ -844,7 +843,6 @@ class DataFrameNormalizer(_PandasNormalizer):
         # type: (DataFrame, Optional[int])->NormalizedInput
         norm_meta = NormalizationMetadata()
         norm_meta.df.common.mark = True
-
         if isinstance(item.columns, RangeIndex):
             norm_meta.df.has_synthetic_columns = True
 
@@ -1097,6 +1095,7 @@ class TimeFrameNormalizer(Normalizer):
         norm_meta = NormalizationMetadata()
         norm_meta.ts.mark = True
         index_norm = norm_meta.ts.common.index
+        index_norm.is_physically_stored = len(item.times) > 0 and not isinstance(item.times, RangeIndex)
         index_names, ix_vals = _normalize_single_index(
             item.times, ["times"], index_norm, dynamic_strings, string_max_len
         )
