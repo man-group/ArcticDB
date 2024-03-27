@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import datetime
+import sys
 from collections import namedtuple
 
 import numpy as np
@@ -117,6 +118,8 @@ def test_write_tz(lmdb_version_store, sym, tz):
     assert_frame_equal(df, result)
     df_tz = df.index.tzinfo
     assert str(df_tz) == str(tz)
+    if tz == du.tz.gettz("UTC") and sys.version_info < (3, 7):
+        pytest.skip("Timezone files don't seem to have ever worked properly on Python 3.6")
     start_ts, end_ts = lmdb_version_store.get_timerange_for_symbol(sym)
     assert isinstance(start_ts, datetime.datetime)
     assert isinstance(end_ts, datetime.datetime)
