@@ -366,7 +366,6 @@ def test_parallel_append_existing_data_unsorted(lmdb_version_store, sortedness):
         lib.compact_incomplete(sym, True, False)
 
 
-@pytest.mark.xfail(reason="See https://github.com/man-group/ArcticDB/issues/1250")
 @pytest.mark.parametrize("append", (True, False))
 def test_parallel_dynamic_schema_compatible_types(lmdb_version_store_dynamic_schema, append):
     lib = lmdb_version_store_dynamic_schema
@@ -411,3 +410,19 @@ def test_parallel_dynamic_schema_compatible_types(lmdb_version_store_dynamic_sch
     else:
         expected_df = pd.concat([df_1, df_2])
     assert_frame_equal(expected_df, read_df)
+
+
+def test_parallel_no_column_slicing(lmdb_version_store_tiny_segment):
+    lib = lmdb_version_store_tiny_segment
+    sym = "test_parallel_column_slicing"
+    lib_tool = lib.library_tool()
+    # lmdb_version_store_tiny_segment has 2 columns per slice
+    df = pd.DataFrame({"col_0": [0], "col_1": [1], "col_2": [2]})
+    lib.write(sym, df, parallel=True)
+    assert len(lib_tool.find_keys(KeyType.APPEND_DATA)) == 1
+    lib.remove_incomplete(sym)
+    lib.append(sym, df, incomplete=True)
+    assert len(lib_tool.find_keys(KeyType.APPEND_DATA)) == 1
+
+
+
