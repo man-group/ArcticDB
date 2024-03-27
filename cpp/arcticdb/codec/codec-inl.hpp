@@ -91,6 +91,7 @@ std::size_t decode_ndarray(
             util::check(type_desc_tag.data_type() == DataType::EMPTYVAL,
                 "NDArray of type {} should not be of size 0!",
                 datatype_to_str(type_desc_tag.data_type()));
+            read_bytes = encoding_sizes::data_compressed_size(field);
             return;
         }
 
