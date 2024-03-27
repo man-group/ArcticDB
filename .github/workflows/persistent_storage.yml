@@ -53,7 +53,7 @@ jobs:
       - name: Install latest release
         if: inputs.arcticdb_version == 'latest'
         run: |
-          pip install pytest arcticdb
+          pip install pytest arcticdb "protobuf<5"
       
       # Currently, the oldest "supported" release is 3.0.0
       # We use this version to test forwards/barwards compatibility 
@@ -62,13 +62,13 @@ jobs:
       - name: Install oldest supported release
         if: inputs.arcticdb_version == 'oldest'
         run: |
-          pip install pytest arcticdb=="3.0.0"
+          pip install pytest arcticdb=="3.0.0" "protobuf<5"
 
       # The 4.0.x series are a special side branch and we want to test them separately
       - name: Install 4.0.x supported release
         if: inputs.arcticdb_version == '4_0_x'
         run: |
-          pip install pytest arcticdb=="4.0.*"
+          pip install pytest arcticdb=="4.0.*" "protobuf<5"
 
       - name: Set persistent storage variables
         uses: ./.github/actions/set_persistent_storage_env_vars
@@ -103,7 +103,7 @@ jobs:
 
       - name: Install latest release
         run: |
-          pip install pytest arcticdb
+          pip install pytest arcticdb "protobuf<5"
 
       - name: Set persistent storage variables
         uses: ./.github/actions/set_persistent_storage_env_vars
