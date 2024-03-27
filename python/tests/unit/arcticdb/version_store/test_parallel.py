@@ -11,7 +11,7 @@ import random
 import datetime
 import pytest
 
-from arcticdb.exceptions import SortingException
+from arcticdb.exceptions import SortingException, SchemaException
 from arcticdb.util.test import (
     assert_frame_equal,
     random_strings_of_length,
@@ -379,8 +379,20 @@ def test_parallel_no_column_slicing(lmdb_version_store_tiny_segment):
     assert len(lib_tool.find_keys(KeyType.APPEND_DATA)) == 1
 
 
-def test_parallel_write_dynamic_schema_type_changing(lmdb_version_store_dynamic_schema):
-    lib = lmdb_version_store_dynamic_schema
+def test_parallel_write_static_schema_type_changing(lmdb_version_store_tiny_segment):
+    lib = lmdb_version_store_tiny_segment
+    sym = "test_parallel_write_static_schema_type_changing"
+    lib_tool = lib.library_tool()
+    df_0 = pd.DataFrame({"col": np.arange(2, dtype=np.uint8)}, index=pd.date_range("2024-01-01", periods=2))
+    df_1 = pd.DataFrame({"col": np.arange(2, 4, dtype=np.uint16)}, index=pd.date_range("2024-01-03", periods=2))
+    lib.write(sym, df_0, parallel=True)
+    lib.write(sym, df_1, parallel=True)
+    with pytest.raises(SchemaException):
+        lib.compact_incomplete(sym, False, False)
+
+
+def test_parallel_write_dynamic_schema_type_changing(lmdb_version_store_tiny_segment_dynamic):
+    lib = lmdb_version_store_tiny_segment_dynamic
     sym = "test_parallel_write_dynamic_schema_type_changing"
     df_0 = pd.DataFrame({"col": np.arange(1, dtype=np.uint8)}, index=pd.date_range("2024-01-01", periods=1))
     df_1 = pd.DataFrame({"col": np.arange(1, 2, dtype=np.uint16)}, index=pd.date_range("2024-01-02", periods=1))
@@ -392,8 +404,21 @@ def test_parallel_write_dynamic_schema_type_changing(lmdb_version_store_dynamic_
     assert_frame_equal(expected, received)
 
 
-def test_parallel_write_dynamic_schema_missing_column(lmdb_version_store_dynamic_schema):
-    lib = lmdb_version_store_dynamic_schema
+def test_parallel_write_static_schema_missing_column(lmdb_version_store_tiny_segment):
+    lib = lmdb_version_store_tiny_segment
+    sym = "test_parallel_write_static_schema_missing_column"
+    df_0 = pd.DataFrame({"col_0": [0], "col_1": [0.5]}, index=pd.date_range("2024-01-01", periods=1))
+    df_1 = pd.DataFrame({"col_0": [1]}, index=pd.date_range("2024-01-02", periods=1))
+    lib.write(sym, df_0, parallel=True)
+    lib.write(sym, df_1, parallel=True)
+    lib.compact_incomplete(sym, False, False)
+    expected = pd.concat([df_0, df_1])
+    received = lib.read(sym).data
+    assert_frame_equal(expected, received)
+
+
+def test_parallel_write_dynamic_schema_missing_column(lmdb_version_store_tiny_segment_dynamic):
+    lib = lmdb_version_store_tiny_segment_dynamic
     sym = "test_parallel_write_dynamic_schema_missing_column"
     df_0 = pd.DataFrame({"col_0": [0], "col_1": [0.5]}, index=pd.date_range("2024-01-01", periods=1))
     df_1 = pd.DataFrame({"col_0": [1]}, index=pd.date_range("2024-01-02", periods=1))
@@ -405,8 +430,34 @@ def test_parallel_write_dynamic_schema_missing_column(lmdb_version_store_dynamic
     assert_frame_equal(expected, received)
 
 
-def test_parallel_append_dynamic_schema_missing_column(lmdb_version_store_dynamic_schema):
-    lib = lmdb_version_store_dynamic_schema
+def test_parallel_append_static_schema_type_changing(lmdb_version_store_tiny_segment):
+    lib = lmdb_version_store_tiny_segment
+    sym = "test_parallel_append_static_schema_type_changing"
+    df_0 = pd.DataFrame({"col": np.arange(1, dtype=np.uint8)}, index=pd.date_range("2024-01-01", periods=1))
+    df_1 = pd.DataFrame({"col": np.arange(1, 2, dtype=np.uint16)}, index=pd.date_range("2024-01-02", periods=1))
+    lib.write(sym, df_0)
+    lib.append(sym, df_1, incomplete=True)
+    lib.compact_incomplete(sym, True, False)
+    expected = pd.concat([df_0, df_1])
+    received = lib.read(sym).data
+    assert_frame_equal(expected, received)
+
+
+def test_parallel_append_static_schema_missing_column(lmdb_version_store_tiny_segment):
+    lib = lmdb_version_store_tiny_segment
+    sym = "test_parallel_append_static_schema_missing_column"
+    df_0 = pd.DataFrame({"col_0": [0], "col_1": [0.5]}, index=pd.date_range("2024-01-01", periods=1))
+    df_1 = pd.DataFrame({"col_0": [1]}, index=pd.date_range("2024-01-02", periods=1))
+    lib.write(sym, df_0)
+    lib.append(sym, df_1, incomplete=True)
+    lib.compact_incomplete(sym, True, False)
+    expected = pd.concat([df_0, df_1])
+    received = lib.read(sym).data
+    assert_frame_equal(expected, received)
+
+
+def test_parallel_append_dynamic_schema_missing_column(lmdb_version_store_tiny_segment_dynamic):
+    lib = lmdb_version_store_tiny_segment_dynamic
     sym = "test_parallel_append_dynamic_schema_missing_column"
     df_0 = pd.DataFrame({"col_0": [0], "col_1": [0.5]}, index=pd.date_range("2024-01-01", periods=1))
     df_1 = pd.DataFrame({"col_0": [1]}, index=pd.date_range("2024-01-02", periods=1))

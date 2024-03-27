@@ -544,8 +544,10 @@ void SegmentInMemoryImpl::change_schema(StreamDescriptor descriptor) {
         const auto& other_type = descriptor.field(col).type();
         if(col_index) {
             auto this_type = column_unchecked(*col_index).type();
-            util::check(this_type == other_type, "Could not convert type {} to type {} for column {}, this index {}, other index {}",
-                        other_type, this_type, col_name, *col_index, col);
+            schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                    this_type == other_type,
+                    "Could not convert type {} to type {} for column {}, this index {}, other index {}",
+                    other_type, this_type, col_name, *col_index, col);
             new_columns[col] = std::move(columns_[*col_index]);
         } else {
             auto new_column = std::make_shared<Column>(other_type, row_count(), false, allow_sparse_);
