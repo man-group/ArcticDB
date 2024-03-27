@@ -540,6 +540,7 @@ void Column::change_type(DataType target_type) {
             });
         });
     }
+    buf.commit();
     type_ = TypeDescriptor{target_type, type_.dimension()};
     std::swap(data_, buf);
 }

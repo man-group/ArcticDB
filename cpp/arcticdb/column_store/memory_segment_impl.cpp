@@ -59,6 +59,7 @@ void SegmentInMemoryImpl::append(const SegmentInMemoryImpl& other) {
 
             if (this_type != *opt_common_type) {
                 column_unchecked(col).change_type(opt_common_type->data_type_);
+                descriptor_->mutable_field(col).mutable_type().data_type_ = opt_common_type->data_type_;
             }
             if (other_type != *opt_common_type) {
                 auto type_promoted_col = other.column_unchecked(*other_col_index).clone();

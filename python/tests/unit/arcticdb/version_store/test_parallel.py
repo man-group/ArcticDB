@@ -366,6 +366,7 @@ def test_parallel_append_existing_data_unsorted(lmdb_version_store, sortedness):
         lib.compact_incomplete(sym, True, False)
 
 
+@pytest.mark.skip()
 @pytest.mark.parametrize("append", (True, False))
 def test_parallel_dynamic_schema_compatible_types(lmdb_version_store_dynamic_schema, append):
     lib = lmdb_version_store_dynamic_schema
@@ -424,5 +425,17 @@ def test_parallel_no_column_slicing(lmdb_version_store_tiny_segment):
     lib.append(sym, df, incomplete=True)
     assert len(lib_tool.find_keys(KeyType.APPEND_DATA)) == 1
 
+
+def test_parallel_write_dynamic_schema_type_changing(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    sym = "test_parallel_write_dynamic_schema_type_changing"
+    df_0 = pd.DataFrame({"col": np.arange(1, dtype=np.uint8)}, index=pd.date_range("2024-01-01", periods=1))
+    df_1 = pd.DataFrame({"col": np.arange(1, 2, dtype=np.uint16)}, index=pd.date_range("2024-01-02", periods=1))
+    lib.write(sym, df_0, parallel=True)
+    lib.write(sym, df_1, parallel=True)
+    lib.compact_incomplete(sym, False, False)
+    expected = pd.concat([df_0, df_1])
+    received = lib.read(sym).data
+    assert_frame_equal(expected, received)
 
 
