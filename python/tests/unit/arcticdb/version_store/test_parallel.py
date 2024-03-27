@@ -379,23 +379,25 @@ def test_parallel_no_column_slicing(lmdb_version_store_tiny_segment):
     assert len(lib_tool.find_keys(KeyType.APPEND_DATA)) == 1
 
 
-def test_parallel_write_static_schema_type_changing(lmdb_version_store_tiny_segment):
+@pytest.mark.parametrize("rows_per_incomplete", (1, 2))
+def test_parallel_write_static_schema_type_changing(lmdb_version_store_tiny_segment, rows_per_incomplete):
     lib = lmdb_version_store_tiny_segment
     sym = "test_parallel_write_static_schema_type_changing"
     lib_tool = lib.library_tool()
-    df_0 = pd.DataFrame({"col": np.arange(2, dtype=np.uint8)}, index=pd.date_range("2024-01-01", periods=2))
-    df_1 = pd.DataFrame({"col": np.arange(2, 4, dtype=np.uint16)}, index=pd.date_range("2024-01-03", periods=2))
+    df_0 = pd.DataFrame({"col": np.arange(rows_per_incomplete, dtype=np.uint8)}, index=pd.date_range("2024-01-01", periods=rows_per_incomplete))
+    df_1 = pd.DataFrame({"col": np.arange(rows_per_incomplete, 2 * rows_per_incomplete, dtype=np.uint16)}, index=pd.date_range("2024-01-03", periods=rows_per_incomplete))
     lib.write(sym, df_0, parallel=True)
     lib.write(sym, df_1, parallel=True)
     with pytest.raises(SchemaException):
         lib.compact_incomplete(sym, False, False)
 
 
-def test_parallel_write_dynamic_schema_type_changing(lmdb_version_store_tiny_segment_dynamic):
+@pytest.mark.parametrize("rows_per_incomplete", (1, 2))
+def test_parallel_write_dynamic_schema_type_changing(lmdb_version_store_tiny_segment_dynamic, rows_per_incomplete):
     lib = lmdb_version_store_tiny_segment_dynamic
     sym = "test_parallel_write_dynamic_schema_type_changing"
-    df_0 = pd.DataFrame({"col": np.arange(1, dtype=np.uint8)}, index=pd.date_range("2024-01-01", periods=1))
-    df_1 = pd.DataFrame({"col": np.arange(1, 2, dtype=np.uint16)}, index=pd.date_range("2024-01-02", periods=1))
+    df_0 = pd.DataFrame({"col": np.arange(rows_per_incomplete, dtype=np.uint8)}, index=pd.date_range("2024-01-01", periods=rows_per_incomplete))
+    df_1 = pd.DataFrame({"col": np.arange(rows_per_incomplete, 2 * rows_per_incomplete, dtype=np.uint16)}, index=pd.date_range("2024-01-02", periods=rows_per_incomplete))
     lib.write(sym, df_0, parallel=True)
     lib.write(sym, df_1, parallel=True)
     lib.compact_incomplete(sym, False, False)
@@ -411,10 +413,8 @@ def test_parallel_write_static_schema_missing_column(lmdb_version_store_tiny_seg
     df_1 = pd.DataFrame({"col_0": [1]}, index=pd.date_range("2024-01-02", periods=1))
     lib.write(sym, df_0, parallel=True)
     lib.write(sym, df_1, parallel=True)
-    lib.compact_incomplete(sym, False, False)
-    expected = pd.concat([df_0, df_1])
-    received = lib.read(sym).data
-    assert_frame_equal(expected, received)
+    with pytest.raises(SchemaException):
+        lib.compact_incomplete(sym, False, False)
 
 
 def test_parallel_write_dynamic_schema_missing_column(lmdb_version_store_tiny_segment_dynamic):
@@ -437,10 +437,8 @@ def test_parallel_append_static_schema_type_changing(lmdb_version_store_tiny_seg
     df_1 = pd.DataFrame({"col": np.arange(1, 2, dtype=np.uint16)}, index=pd.date_range("2024-01-02", periods=1))
     lib.write(sym, df_0)
     lib.append(sym, df_1, incomplete=True)
-    lib.compact_incomplete(sym, True, False)
-    expected = pd.concat([df_0, df_1])
-    received = lib.read(sym).data
-    assert_frame_equal(expected, received)
+    with pytest.raises(SchemaException):
+        lib.compact_incomplete(sym, True, False)
 
 
 def test_parallel_append_static_schema_missing_column(lmdb_version_store_tiny_segment):
