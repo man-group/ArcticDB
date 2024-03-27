@@ -366,53 +366,6 @@ def test_parallel_append_existing_data_unsorted(lmdb_version_store, sortedness):
         lib.compact_incomplete(sym, True, False)
 
 
-@pytest.mark.skip()
-@pytest.mark.parametrize("append", (True, False))
-def test_parallel_dynamic_schema_compatible_types(lmdb_version_store_dynamic_schema, append):
-    lib = lmdb_version_store_dynamic_schema
-    sym = "test_parallel_dynamic_schema_compatible_types"
-    if append:
-        df_0 = pd.DataFrame(
-            {
-                "same type": np.arange(1, dtype=np.uint8),
-                "compatible type": np.arange(1, dtype=np.uint8),
-                "column in some incompletes": np.arange(1, dtype=np.uint8),
-                "column in no incompletes": np.arange(1, dtype=np.uint8),
-            }
-            , index=[pd.Timestamp("2024-01-01")]
-        )
-        lib.write(sym, df_0)
-    df_1 = pd.DataFrame(
-        {
-            "same type": np.arange(1, 2, dtype=np.uint8),
-            "compatible type": np.arange(1, 2, dtype=np.uint16),
-            "column in some incompletes": np.arange(1, 2, dtype=np.uint8),
-        }
-        , index=[pd.Timestamp("2024-01-02")]
-    )
-    df_2 = pd.DataFrame(
-        {
-            "same type": np.arange(2, 3, dtype=np.uint8),
-            "compatible type": np.arange(2, 3, dtype=np.uint32),
-        }
-        , index=[pd.Timestamp("2024-01-03")]
-    )
-    if append:
-        lib.append(sym, df_2, incomplete=True)
-        lib.append(sym, df_1, incomplete=True)
-    else:
-        lib.write(sym, df_2, parallel=True)
-        lib.write(sym, df_1, parallel=True)
-    lib.compact_incomplete(sym, append, False)
-
-    read_df = lib.read(sym).data
-    if append:
-        expected_df = pd.concat([df_0, df_1, df_2])
-    else:
-        expected_df = pd.concat([df_1, df_2])
-    assert_frame_equal(expected_df, read_df)
-
-
 def test_parallel_no_column_slicing(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     sym = "test_parallel_column_slicing"
