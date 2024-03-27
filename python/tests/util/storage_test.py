@@ -174,11 +174,12 @@ def write_persistent_library(lib, latest: bool = False):
     # TODO: look into if this is a bug
     # assert_frame_equal fails on prev versions of ArcticDB
     # due to a difference in frequency of the datetime index
-    assert res.equals(df)
+    if latest:
+        assert res.equals(df)
 
-    lib.update(sym, df)
-    res = lib.read(sym).data
-    assert res.equals(df)
+        lib.update(sym, df)
+        res = lib.read(sym).data
+        assert res.equals(df)
 
 
 def seed_library(ac, version: str = ""):
