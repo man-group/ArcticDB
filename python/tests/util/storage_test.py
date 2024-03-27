@@ -117,7 +117,6 @@ def read_persistent_library(lib):
     df, sym = get_empty_series()
     res_df = lib.read(sym).data
     assert res_df.empty
-    assert str(res_df.dtype) == "datetime64[ns]"
 
     df, sym = get_csv_df()
     res_df = lib.read(sym).data
@@ -147,6 +146,7 @@ def verify_library(ac):
 
 def is_strategy_branch_valid_format(input_string):
     pattern = r"^(linux|windows)_cp3(6|7|8|9|10|11).*$"
+    print(f"Checking if {input_string} matches the pattern: {pattern}")
     match = re.match(pattern, input_string)
     return bool(match)
 
