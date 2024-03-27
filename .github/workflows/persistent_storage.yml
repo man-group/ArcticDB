@@ -60,8 +60,15 @@ jobs:
       # So we expect that libs written by the version that we are build to be readable by arcticdb>=3.0.0 and vice-versa
       # Change this value, if we need to support a newer one in the future
       - name: Install oldest supported release
+        if: inputs.arcticdb_version == 'oldest'
         run: |
           pip install pytest arcticdb=="3.0.0"
+
+      # The 4.0.x series are a special side branch and we want to test them separately
+      - name: Install 4.0.x supported release
+        if: inputs.arcticdb_version == '4_0_x'
+        run: |
+          pip install pytest arcticdb=="4.0.*"
 
       - name: Set persistent storage variables
         uses: ./.github/actions/set_persistent_storage_env_vars

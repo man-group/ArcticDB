@@ -35,6 +35,15 @@ def get_empty_series():
     return series, sym
 
 
+def get_df_with_nones():
+    df = pd.DataFrame(
+        {"c1": [None, None, None], "c2": [1.2, None, 1.4]},
+        index=pd.date_range("1/1/2018", end="1/03/2018"),
+    )
+
+    return df, "sym_with_nones"
+
+
 def get_csv_df():
     buf = io.StringIO("2023-11-27 00:00:00,0.73260,0.73260,0.73260,0.73260,7")
 
@@ -77,9 +86,7 @@ def get_real_s3_uri(shared_path: bool = True):
         path_prefix,
         _,
     ) = real_s3_credentials(shared_path)
-    aws_uri = (
-        f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix={path_prefix}"
-    )
+    aws_uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix={path_prefix}"
     return aws_uri
 
 
@@ -119,6 +126,17 @@ def read_persistent_library(lib):
     res_df.index.rename(str(res_df.index.name), inplace=True)
     assert_frame_equal(res_df, df)
 
+    df, sym = get_df_with_nones()
+    res_df = lib.read(sym).data
+    assert res_df.equals(df)
+
+
+def update_persistent_library(lib):
+    df, sym = get_df_with_nones()
+    lib.update(sym, df)
+    res_df = lib.read(sym).data
+    assert res_df.equals(df)
+
 
 def verify_library(ac):
     libraries = get_test_libraries(ac)
@@ -150,12 +168,26 @@ def write_persistent_library(lib, latest: bool = False):
     res = lib.read(sym).data
     assert_frame_equal(res, df)
 
+    df, sym = get_df_with_nones()
+    lib.write(sym, df)
+    res = lib.read(sym).data
+    # TODO: look into if this is a bug
+    # assert_frame_equal fails on prev versions of ArcticDB
+    # due to a difference in frequency of the datetime index
+    assert res.equals(df)
+
+    lib.update(sym, df)
+    res = lib.read(sym).data
+    assert res.equals(df)
+
 
 def seed_library(ac, version: str = ""):
     strategy_branch = os.getenv("ARCTICDB_PERSISTENT_STORAGE_STRATEGY_BRANCH")
 
     if not is_strategy_branch_valid_format(strategy_branch):
-        raise ValueError(f"The strategy_branch: {strategy_branch} is not formatted correctly")
+        raise ValueError(
+            f"The strategy_branch: {strategy_branch} is not formatted correctly"
+        )
 
     lib_name = f"seed_{version}{strategy_branch}"
     lib_name = normalize_lib_name(lib_name)
@@ -220,7 +252,9 @@ def generate_ascending_dataframe(n, freq="S", end_timestamp="1/1/2023"):
     # Generate timestamps
     fake_tickers = [gen_fake_ticker(val) for val in values]
     # Create dataframe
-    df = pd.DataFrame({"timestamp": timestamps, "fake_ticker": fake_tickers, "value": values})
+    df = pd.DataFrame(
+        {"timestamp": timestamps, "fake_ticker": fake_tickers, "value": values}
+    )
     return df
 
 
