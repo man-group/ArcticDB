@@ -452,3 +452,16 @@ def test_parallel_write_dynamic_schema_missing_column(lmdb_version_store_dynamic
     assert_frame_equal(expected, received)
 
 
+def test_parallel_append_dynamic_schema_missing_column(lmdb_version_store_dynamic_schema):
+    lib = lmdb_version_store_dynamic_schema
+    sym = "test_parallel_append_dynamic_schema_missing_column"
+    df_0 = pd.DataFrame({"col_0": [0], "col_1": [0.5]}, index=pd.date_range("2024-01-01", periods=1))
+    df_1 = pd.DataFrame({"col_0": [1]}, index=pd.date_range("2024-01-02", periods=1))
+    lib.write(sym, df_0)
+    lib.append(sym, df_1, incomplete=True)
+    lib.compact_incomplete(sym, True, False)
+    expected = pd.concat([df_0, df_1])
+    received = lib.read(sym).data
+    assert_frame_equal(expected, received)
+
+
