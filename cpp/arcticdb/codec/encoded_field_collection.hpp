@@ -77,6 +77,10 @@ public:
         return {const_cast<ChunkedBuffer*>(&data_)};
     }
 
+    size_t num_blocks() const {
+        return data_.num_blocks();
+    }
+
     [[nodiscard]] bool empty() const {
         return data_.empty();
     }
@@ -108,11 +112,11 @@ public:
     }
 
     [[nodiscard]] const EncodedFieldImpl &at(size_t pos) const {
-        return *reinterpret_cast<const EncodedFieldImpl*>(data_.ptr_cast<const uint8_t>(get_offset(pos), sizeof(EncodedFieldImpl)));
+        return *reinterpret_cast<const EncodedFieldImpl*>(data_.ptr_cast<const uint8_t>(get_offset(pos), EncodedFieldImpl::Size));
     }
 
     [[nodiscard]] EncodedFieldImpl &at(size_t pos) {
-        return *reinterpret_cast<EncodedFieldImpl*>(data_.ptr_cast<uint8_t>(get_offset(pos), sizeof(EncodedFieldImpl)));
+        return *reinterpret_cast<EncodedFieldImpl*>(data_.ptr_cast<uint8_t>(get_offset(pos), EncodedFieldImpl::Size));
     }
 
     [[nodiscard]] size_t size() const {
@@ -124,6 +128,7 @@ public:
         write_offset(count_, offset_);
         log::version().info("Wrote offset {}", get_offset(count_));
         const auto required_bytes = calc_field_bytes(num_blocks);
+        util::check(required_bytes >= EncodedFieldImpl::Size, "Unexpectedly small allocation size: {}", required_bytes);
         data_.ensure(offset_ + required_bytes);
         auto* field = new (data_.ptr_cast<uint8_t>(offset_, required_bytes)) EncodedFieldImpl;
         log::version().info("Adding encoded field with {} blocks at position {}, {} bytes required", num_blocks, offset_, required_bytes);

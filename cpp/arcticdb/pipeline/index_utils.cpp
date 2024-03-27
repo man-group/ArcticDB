@@ -116,7 +116,7 @@ TimeseriesDescriptor get_merged_tsd(
             }
         }
     }
-    merged_descriptor.set_sorted(deduce_sorted(existing_descriptor.get_sorted(), new_frame->desc.get_sorted()));
+    merged_descriptor.set_sorted(deduce_sorted(existing_descriptor.sorted(), new_frame->desc.sorted()));
     return make_timeseries_descriptor(
             row_count,
             std::move(merged_descriptor),

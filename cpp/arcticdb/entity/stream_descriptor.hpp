@@ -35,7 +35,7 @@ struct SegmentDescriptorImpl : public SegmentDescriptor {
     }
 };
 
-bool operator==(const SegmentDescriptorImpl& l, const SegmentDescriptorImpl& r) {
+inline bool operator==(const SegmentDescriptorImpl& l, const SegmentDescriptorImpl& r) {
     return l.sorted_ == r.sorted_ &&
         l.index() == r.index() &&
         l.compressed_bytes_ == r.compressed_bytes_ &&

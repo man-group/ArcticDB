@@ -63,6 +63,7 @@ void encoded_field_from_proto(const arcticdb::proto::encoding::EncodedField& inp
     util::check(input.has_ndarray(), "Only ndarray fields supported for v1 encoding");
     const auto& input_ndarray = input.ndarray();
     auto* output_ndarray = output.mutable_ndarray();
+    output_ndarray->set_items_count(input_ndarray.items_count());
 
     util::check(input_ndarray.shapes_size() < 2, "Unexpected number of shapes in proto translation");
     if(input_ndarray.shapes_size() == 1) {
@@ -111,8 +112,8 @@ SegmentHeader deserialize_segment_header_from_proto(const arcticdb::proto::encod
     if(header.has_string_pool_field())
         encoded_field_from_proto(header.string_pool_field(), output.mutable_string_pool_field(num_blocks(header.string_pool_field())));
 
-    //TODO get encoded_fields
-
+    auto fields_from_proto = encoded_fields_from_proto(header);
+    output.set_body_fields(std::move(fields_from_proto));
     return output;
 }
 

@@ -9,7 +9,6 @@
 
 #include <arcticdb/entity/field_collection.hpp>
 #include <arcticdb/entity/stream_descriptor.hpp>
-#include <arcticdb/entity/protobuf_mappings.hpp>
 
 namespace arcticdb {
 
@@ -48,6 +47,10 @@ struct TimeseriesDescriptor {
         return *frame_data_;
     }
 
+    [[nodiscard]] IndexDescriptor index() const {
+        return segment_desc_->index_;
+    }
+
     void set_stream_descriptor(const StreamDescriptor &desc) {
         segment_desc_ = desc.data_ptr();
         fields_ = desc.fields_ptr();
@@ -63,10 +66,6 @@ struct TimeseriesDescriptor {
 
     [[nodiscard]] SortedValue sorted() const {
         return segment_desc_->sorted_;
-    }
-
-    [[nodiscard]] IndexDescriptorImpl index() const {
-        return static_cast<IndexDescriptorImpl &>(segment_desc_->index_);
     }
 
     void set_sorted(SortedValue sorted) {

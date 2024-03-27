@@ -65,7 +65,7 @@ struct BytesEncoder {
                 data.block_and_offset(0).block_);
             Encoder::encode(codec_opts, typed_block, encoded_field, out_buffer, pos);
         } else if constexpr (EncodingPolicyType::version == EncodingVersion::V2) {
-            const size_t row_count = 1;
+            const shape_t row_count = 1;  //TOD this seems weird and wrong. Why is it hardcoded to 1?
             const auto shapes_data = static_cast<ShapesBlockTDT::DataTypeTag::raw_type>(data.bytes());
             auto shapes_block = TypedBlockData<ShapesBlockTDT>(&shapes_data,
                                                                nullptr,
@@ -86,6 +86,7 @@ struct BytesEncoder {
         } else {
             static_assert(std::is_same_v<decltype(EncodingPolicyType::version), void>, "Unknown encoding version");
         }
+        encoded_field.validate();
     }
 
     static size_t max_compressed_size(const arcticdb::proto::encoding::VariantCodec &codec_opts, shape_t data_size) {
@@ -102,6 +103,10 @@ struct BytesEncoder {
         } else {
             static_assert(std::is_same_v<decltype(EncodingPolicyType::version), void>, "Unknown encoding version");
         }
+    }
+
+    static size_t num_encoded_blocks(const ChunkedBuffer& buffer) {
+        return buffer.num_blocks() + 1;
     }
 };
 
@@ -174,7 +179,7 @@ void encode_metadata(
     if (in_mem_seg.metadata()) {
         const auto bytes_count = static_cast<shape_t>(in_mem_seg.metadata()->ByteSizeLong());
         log::codec().info("Encoding {} bytes of metadata", bytes_count);
-        auto& encoded_field = segment_header.mutable_metadata_field(1);
+
 
         constexpr int max_stack_alloc = 1 << 11;
         bool malloced{false};
@@ -187,6 +192,8 @@ void encode_metadata(
         }
         ChunkedBuffer meta_buffer;
         meta_buffer.add_external_block(meta_ptr, bytes_count, 0u);
+        const auto num_encoded_fields = BytesEncoder<EncodingPolicyType>::num_encoded_blocks(meta_buffer);
+        auto& encoded_field = segment_header.mutable_metadata_field(num_encoded_fields);
         google::protobuf::io::ArrayOutputStream aos(&meta_buffer[0], static_cast<int>(bytes_count));
         in_mem_seg.metadata()->SerializeToZeroCopyStream(&aos);
         ARCTICDB_DEBUG(log::codec(), "Encoding metadata to position {}", pos);

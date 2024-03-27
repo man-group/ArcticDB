@@ -7,6 +7,8 @@
 
 namespace arcticdb {
 
+class SegmentInMemory;
+
 static constexpr std::array<std::string_view, 5> offset_names_ = {
     "METADATA",
     "STRING_POOL",
@@ -141,6 +143,14 @@ public:
         return get_field<FieldOffset::COLUMN>();
     }
 
+    void validate() const {
+        for(auto i = 0U; i < static_cast<size_t>(FieldOffset::COUNT); ++i) {
+            auto offset = FieldOffset(i);
+            if(has_field(offset))
+                header_fields_.at(offset_[as_pos(offset)]).validate();
+        }
+    }
+
     template <FieldOffset field_offset>
     EncodedFieldImpl& create_field(size_t num_blocks) {
         auto new_field = header_fields_.add_field(num_blocks);
@@ -178,6 +188,8 @@ public:
         return get_mutable_field<FieldOffset::COLUMN>(num_blocks);
     }
 
+    size_t required_bytes(const SegmentInMemory& in_mem_seg);
+
     [[nodiscard]] EncodingVersion encoding_version() const {
         return data_.encoding_version_;
     }
@@ -194,13 +206,17 @@ public:
         return data_.footer_offset_;
     }
 
-    void serialize_to_bytes(uint8_t* dst) const {
+    void serialize_to_bytes(uint8_t* dst, size_t expected_bytes) const {
+        const auto* begin = dst;
         data_.field_buffer_.fields_bytes_ = static_cast<uint32_t>(header_fields_.data_bytes());
         data_.field_buffer_.offset_bytes_ = static_cast<uint32_t>(header_fields_.offset_bytes());
         memcpy(dst, &data_, sizeof(HeaderData));
         dst += sizeof(HeaderData);
         memcpy(dst, header_fields_.data_buffer(), header_fields_.data_bytes());
+        dst += header_fields_.data_bytes();
         memcpy(dst, header_fields_.offsets_buffer(), header_fields_.offset_bytes());
+        dst += header_fields_.offset_bytes();
+        util::check(size_t(dst - begin) == expected_bytes, "Mismatch between actual and expected bytes: {} != {}", dst - begin, expected_bytes);
     }
 
     static constexpr uint16_t field_mask(FieldOffset field_offset) {
@@ -253,7 +269,24 @@ struct formatter<arcticdb::SegmentHeader> {
 
     template<typename FormatContext>
     auto format(const arcticdb::SegmentHeader &header, FormatContext &ctx) const {
-        return fmt::format_to(ctx.out(), "{}:{}", header.encoding_version(), header.bytes());
+        fmt::format_to(ctx.out(), "Segment header: encoding {}: {} bytes { \n", header.encoding_version(), header.bytes());
+
+        if(header.has_descriptor_field())
+            fmt::format_to(ctx.out(), "Descriptor: {}\n", header.descriptor_field());
+
+        if(header.has_metadata_field())
+            fmt::format_to(ctx.out(), "Metadata: {}\n", header.metadata_field());
+
+        if(header.has_index_descriptor_field())
+            fmt::format_to(ctx.out(), "Index: {}\n", header.index_descriptor_field());
+
+        if(header.has_string_pool_field())
+            fmt::format_to(ctx.out(), "String pool: {}\n", header.string_pool_field());
+
+        if(header.has_column_fields())
+            fmt::format_to(ctx.out(), "Columns: {}\n", header.column_fields());
+
+        return fmt::format_to(ctx.out(), "}\n");
     }
 };
 }

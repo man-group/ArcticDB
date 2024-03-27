@@ -524,6 +524,10 @@ struct IndexDescriptorImpl : public IndexDescriptor {
         IndexDescriptor(type, field_count) {
     }
 
+    IndexDescriptorImpl(const IndexDescriptor& idx) :
+        IndexDescriptor(idx) {
+    }
+
     [[nodiscard]] bool uninitialized() const {
         return field_count() == 0 && type_ == Type::UNKNOWN;
     }

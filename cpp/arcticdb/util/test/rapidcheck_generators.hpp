@@ -73,7 +73,7 @@ struct Arbitrary<arcticdb::entity::StreamDescriptor> {
         }
         auto desc = stream_descriptor_from_range(arcticdb::StreamId{id}, arcticdb::stream::RowCountIndex{}, std::move(field_descriptors));
         return gen::build<StreamDescriptor>(
-            gen::set(&StreamDescriptor::data_, gen::just(desc.data_)),
+            gen::set(&StreamDescriptor::segment_desc_, gen::just(desc.segment_desc_)),
             gen::set(&StreamDescriptor::fields_, gen::just(desc.fields_))
         );
     }

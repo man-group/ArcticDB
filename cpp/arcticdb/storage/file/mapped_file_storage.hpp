@@ -10,6 +10,7 @@
 #include <arcticdb/storage/single_file_storage.hpp>
 #include <arcticdb/storage/storage_factory.hpp>
 #include <arcticdb/entity/protobufs.hpp>
+#include <arcticdb/entity/protobuf_mappings.hpp>
 #include <arcticdb/util/composite.hpp>
 #include <arcticdb/util/memory_mapped_file.hpp>
 #include <arcticdb/util/pb_util.hpp>

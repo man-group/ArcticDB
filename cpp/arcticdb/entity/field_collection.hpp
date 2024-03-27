@@ -179,6 +179,10 @@ public:
         return {&buffer_.buffer(), &shapes_.buffer(), type_, nullptr};
     }
 
+    size_t num_blocks() const {
+        return buffer_.buffer().num_blocks();
+    }
+
     const Field& operator[](size_t pos) const {
         return at(pos);
     }

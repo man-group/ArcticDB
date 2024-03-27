@@ -11,14 +11,12 @@
 #include <arcticdb/codec/default_codecs.hpp>
 #include <arcticdb/codec/encoded_field.hpp>
 #include <arcticdb/codec/encoded_field_collection.hpp>
-
-
-#include <string>
-#include <google/protobuf/io/zero_copy_stream_impl.h>
-
-
+#include <arcticdb/entity/stream_descriptor.hpp>
 #include <arcticdb/codec/encode_common.hpp>
 
+#include <google/protobuf/io/zero_copy_stream_impl.h>
+
+#include <string>
 
 namespace arcticdb {
 
@@ -95,11 +93,12 @@ std::optional<google::protobuf::Any> decode_metadata(
     const uint8_t* begin ARCTICDB_UNUSED
     ) {
     if (hdr.has_metadata_field()) {
+        hdr.metadata_field().validate();
         auto meta_type_desc = metadata_type_desc();
         MetaBuffer meta_buf;
         std::optional<util::BitMagic> bv;
         ARCTICDB_DEBUG(log::codec(), "Decoding metadata at position {}: {}", data - begin, dump_bytes(data, 10));
-        data += decode_field(meta_type_desc, hdr.metadata_field(), data, meta_buf, bv, hdr.encoding_version());
+        data += decode_ndarray(meta_type_desc, hdr.metadata_field().ndarray(), data, meta_buf, bv, hdr.encoding_version());
         ARCTICDB_TRACE(log::codec(), "Decoded metadata to position {}", data - begin);
         google::protobuf::io::ArrayInputStream ais(meta_buf.buffer().data(),
                                                    static_cast<int>(meta_buf.buffer().bytes()));
@@ -110,14 +109,6 @@ std::optional<google::protobuf::Any> decode_metadata(
     } else {
         return std::nullopt;
     }
-}
-
-std::shared_ptr<arcticdb::proto::descriptors::FrameMetadata> extract_frame_metadata(
-        SegmentInMemory& res) {
-    std::shared_ptr<arcticdb::proto::descriptors::FrameMetadata> output;
-    util::check(res.has_metadata(), "Cannot extract frame metadata as it is null");
-    res.metadata()->UnpackTo(output.get());
-    return output;
 }
 
 void decode_metadata(
@@ -162,47 +153,50 @@ EncodedFieldCollection decode_encoded_fields(
     return {std::move(encoded_column.release_buffer()), std::move(encoded_column.release_shapes())};
 }
 
+std::shared_ptr<arcticdb::proto::descriptors::FrameMetadata> extract_frame_metadata(
+    SegmentInMemory& res) {
+    auto output = std::make_shared<arcticdb::proto::descriptors::FrameMetadata>();
+    util::check(res.has_metadata(), "Cannot extract frame metadata as it is null");
+    res.metadata()->UnpackTo(output.get());
+    return output;
+}
+
 FrameDescriptorImpl read_frame_descriptor(
-    const uint8_t*& data,
-    const uint8_t* begin ARCTICDB_UNUSED) {
-    util::check_magic<FrameDataMagic>(data);
+    const uint8_t*& data) {
     auto* frame_descriptor = reinterpret_cast<const FrameDescriptorImpl*>(data);
     data += sizeof(FrameDescriptorImpl);
     return *frame_descriptor;
 }
 
-FrameDescriptorImpl read_segment_descriptor(
-    const uint8_t*& data,
-    const uint8_t* begin ARCTICDB_UNUSED) {
+SegmentDescriptorImpl read_segment_descriptor(
+    const uint8_t*& data) {
     util::check_magic<SegmentDescriptorMagic>(data);
-    auto* frame_descriptor = reinterpret_cast<const FrameDescriptorImpl*>(data);
-    data += sizeof(FrameDescriptorImpl);
+    auto* frame_descriptor = reinterpret_cast<const SegmentDescriptorImpl*>(data);
+    data += sizeof(SegmentDescriptorImpl);
     return *frame_descriptor;
 }
 
-
-std::optional<FieldCollection> decode_index_fields(
+std::shared_ptr<FieldCollection> decode_index_fields(
     const SegmentHeader& hdr,
     const uint8_t*& data,
     const uint8_t* begin ARCTICDB_UNUSED,
     const uint8_t* end) {
+    auto fields = std::make_shared<FieldCollection>();
     if(hdr.has_index_descriptor_field() && hdr.index_descriptor_field().has_ndarray()) {
         ARCTICDB_TRACE(log::codec(), "Decoding index fields");
         util::check(data!=end, "Reached end of input block with index descriptor fields to decode");
         std::optional<util::BitMagic> bv;
-        FieldCollection fields;
+
         data += decode_field(FieldCollection::type(),
                        hdr.index_descriptor_field(),
                        data,
-                       fields,
+                       *fields,
                        bv,
                        hdr.encoding_version());
 
         ARCTICDB_TRACE(log::codec(), "Decoded index descriptor to position {}", data-begin);
-        return std::make_optional<FieldCollection>(std::move(fields));
-    } else {
-        return std::nullopt;
     }
+    return fields;
 }
 
 namespace {
@@ -303,10 +297,9 @@ std::optional<TimeseriesDescriptor> decode_timeseries_descriptor_v2(
     util::check_magic<IndexMagic>(data);
     auto frame_desc = std::make_shared<FrameDescriptorImpl>(read_frame_descriptor(data));
     auto segment_desc = std::make_shared<SegmentDescriptorImpl>(read_segment_descriptor(data));
-    auto maybe_fields = decode_index_fields(hdr, data, begin, end);
-    util::check(maybe_fields.has_value(), "Expected index fields in v2 timeseries descriptor");
-    maybe_fields->regenerate_offsets();
-    return std::make_optional<TimeseriesDescriptor>(frame_desc, segment_desc, frame_meta, std::make_shared<FieldCollection>(std::move(*maybe_fields)));
+    auto index_fields = decode_index_fields(hdr, data, begin, end);
+    index_fields->regenerate_offsets();
+    return std::make_optional<TimeseriesDescriptor>(frame_desc, segment_desc, frame_meta, std::move(index_fields));
 }
 
 std::optional<TimeseriesDescriptor> decode_timeseries_descriptor(
@@ -375,7 +368,7 @@ void decode_string_pool(
 }
 
 void decode_v2(const Segment& segment,
-           SegmentHeader& hdr,
+           const SegmentHeader& hdr,
            SegmentInMemory& res,
            const StreamDescriptor& desc) {
     ARCTICDB_SAMPLE(DecodeSegment, 0)
@@ -390,15 +383,12 @@ void decode_v2(const Segment& segment,
         data += encoding_sizes::field_compressed_size(hdr.descriptor_field());
 
     util::check_magic<IndexMagic>(data);
-
     if(hdr.has_index_descriptor_field()) {
+        auto index_frame_descriptor = std::make_shared<FrameDescriptorImpl>(read_frame_descriptor(data));
         auto frame_metadata = extract_frame_metadata(res);
-        auto index_frame_descriptor = std::make_shared<FrameDescriptorImpl>(read_frame_descriptor(data, begin));
         auto index_segment_descriptor = std::make_shared<SegmentDescriptorImpl>(read_segment_descriptor(data));
         auto index_fields = decode_index_fields(hdr, data, begin, end);
-        util::check(index_fields.has_value(), "Failed to get index fields");
-        auto index_field_ptr = std::make_shared<FieldCollection>(std::move(*index_fields));
-        TimeseriesDescriptor tsd{std::move(index_frame_descriptor), std::move(index_segment_descriptor), std::move(frame_metadata), std::move(index_field_ptr)};
+        TimeseriesDescriptor tsd{std::move(index_frame_descriptor), std::move(index_segment_descriptor), std::move(frame_metadata), std::move(index_fields)};
         res.set_timeseries_descriptor(std::move(tsd));
     }
 

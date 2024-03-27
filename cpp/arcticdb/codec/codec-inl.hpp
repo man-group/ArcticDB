@@ -80,6 +80,7 @@ std::size_t decode_ndarray(
     EncodingVersion encoding_version
 ) {
     ARCTICDB_SUBSAMPLE_AGG(DecodeNdArray)
+
     std::size_t read_bytes = 0;
     td.visit_tag([&](auto type_desc_tag) {
         using TD = std::decay_t<decltype(type_desc_tag)>;

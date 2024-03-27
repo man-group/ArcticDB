@@ -255,6 +255,7 @@ struct GenericBlockEncoder {
                 max_compressed_size,
                 pos,
                 *value_pb->mutable_codec());
+
             helper_scalar_block.set_block_data(*value_pb, helper.hasher_.digest(), compressed_size);
             helper_scalar_block.set_version(*value_pb, EncoderType::VERSION);
         } else {

@@ -200,7 +200,7 @@ class Segment {
 
   private:
     std::pair<uint8_t*, size_t> serialize_header_v1(std::shared_ptr<Buffer>& tmp);
-    std::pair<uint8_t*, size_t> serialize_header_v2(std::shared_ptr<Buffer>& tmp);
+    std::pair<uint8_t*, size_t> serialize_header_v2(size_t expected_bytes);
 
     SegmentHeader header_;
     VariantBuffer buffer_;

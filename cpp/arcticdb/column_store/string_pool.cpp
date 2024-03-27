@@ -135,6 +135,10 @@ void StringPool::set_allow_sparse(bool) {
     // Not used
 }
 
+size_t StringPool::num_blocks() const {
+    return block_.num_blocks();
+}
+
 OffsetString StringPool::get(std::string_view s, bool deduplicate) {
     if(deduplicate) {
         if (auto it = map_.find(s); it != map_.end())

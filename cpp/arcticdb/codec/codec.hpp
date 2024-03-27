@@ -83,6 +83,9 @@ std::optional<TimeseriesDescriptor> decode_timeseries_descriptor(
     Segment& segment);
 
 HashedValue hash_segment_header(const SegmentHeader &hdr);
+
+SegmentDescriptorImpl read_segment_descriptor(const uint8_t*& data);
+
 } // namespace arcticdb
 
 #define ARCTICDB_SEGMENT_ENCODER_H_

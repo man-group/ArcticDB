@@ -303,14 +303,14 @@ void sorted_data_check_update(InputTensorFrame& frame, const index::IndexSegment
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
         is_time_series,
         "When calling update, the input data must be a time series.");
-    bool input_data_is_sorted = frame.desc.get_sorted() == SortedValue::ASCENDING ||
-                                frame.desc.get_sorted() == SortedValue::UNKNOWN;
+    bool input_data_is_sorted = frame.desc.sorted() == SortedValue::ASCENDING ||
+                                frame.desc.sorted() == SortedValue::UNKNOWN;
     // If changing this error message, the corresponding message in _normalization.py::restrict_data_to_date_range_only should also be updated
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
         input_data_is_sorted,
         "When calling update, the input data must be sorted.");
-    bool existing_data_is_sorted = index_segment_reader.get_sorted() == SortedValue::ASCENDING ||
-                                    index_segment_reader.get_sorted() == SortedValue::UNKNOWN;
+    bool existing_data_is_sorted = index_segment_reader.sorted() == SortedValue::ASCENDING ||
+                                    index_segment_reader.sorted() == SortedValue::UNKNOWN;
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
          existing_data_is_sorted,
         "When calling update, the existing data must be sorted.");
@@ -1220,7 +1220,7 @@ VersionedItem sort_merge_impl(
     std::optional<SortedValue> previous_sorted_value;
     if(append && update_info.previous_index_key_.has_value()) {
         read_indexed_keys_to_pipeline(store, pipeline_context, *(update_info.previous_index_key_), read_query, ReadOptions{});
-        previous_sorted_value.emplace(pipeline_context->desc_->get_sorted());
+        previous_sorted_value.emplace(pipeline_context->desc_->sorted());
     }
 
     auto num_versioned_rows = pipeline_context->total_rows_;
@@ -1314,7 +1314,7 @@ VersionedItem compact_incomplete_impl(
     std::optional<SortedValue> previous_sorted_value;
     if(append && update_info.previous_index_key_.has_value()) {
         read_indexed_keys_to_pipeline(store, pipeline_context, *(update_info.previous_index_key_), read_query, read_options);
-        previous_sorted_value.emplace(pipeline_context->desc_->get_sorted());
+        previous_sorted_value.emplace(pipeline_context->desc_->sorted());
     }
 
     auto prev_size = pipeline_context->slice_and_keys_.size();

@@ -173,9 +173,14 @@ struct IndexDescriptor {
     uint32_t field_count_ = 0U;
 };
 
+enum class FrameMetadataEncoding : uint8_t {
+    PROTOBUF = 0
+};
+
 struct FrameDescriptor {
     uint64_t total_rows_ = 0UL;
     bool column_groups_ = false;
+    FrameMetadataEncoding metadatda_encoding_ = FrameMetadataEncoding::PROTOBUF;
 };
 
 struct SegmentDescriptor {
@@ -256,8 +261,8 @@ struct MemoryLayout {
     IndexMagic index_magic_;
     // Optional fields present if this segment refers to a complete dataframe, i.e. if it is a primary index
     FrameDescriptor index_frame_descriptor_;
+    SegmentDescriptorMagic segment_descriptor_magic_;
     SegmentDescriptor index_segment_descriptor_;
-    OpaqueField index_metadata_;
     CompressedField<FieldList> index_descriptor_fields_;
 
     RepeatedField<ColumnField> columns_;

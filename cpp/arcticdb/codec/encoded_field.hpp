@@ -295,9 +295,29 @@ struct EncodedFieldImpl : public EncodedField {
         return {*this, false};
     }
 
+    void validate() const {
+        size_t shapes_count = 0;
+        for(const auto& shape : shapes()) {
+            util::check(shape.is_shape_, "Expected shape to have is_shape_set");
+            util::check(shape.codecs_[0].codec_ != Codec::UNKNOWN, "Unknown shape codec");
+            util::check(shape.encoder_version() == 1, "Incorrect encoder version: {}", shape.encoder_version());
+            ++shapes_count;
+        }
+        util::check(shapes_count == static_cast<size_t>(shapes_size()), "Shape size mismatch: {} != {}", shapes_count, shapes_size());
+
+        size_t values_count = 0;
+        for(const auto& value : values()) {
+            util::check(value.is_shape_ == false, "Value has is_shape set");
+            util::check(value.codec().codec_type() != Codec::UNKNOWN, "Unknown code in block {}", values_count);
+            util::check(value.encoder_version() == 1, "Incorrect encoder version: {}", value.encoder_version());
+            ++values_count;
+        }
+        util::check(values_count == static_cast<size_t>(values_size()), "Shape size mismatch: {} != {}", values_count, values_size());
+    }
+
     EncodedBlock *add_shapes() {
         util::check(shapes_count_ == 0, "Expected single shapes block");
-        auto block = new(blocks() + items_count()) EncodedBlock{true};
+        auto block = new(blocks()) EncodedBlock{true};
         ++shapes_count_;
         return block;
     }

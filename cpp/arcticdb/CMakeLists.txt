@@ -480,7 +480,7 @@ set(arcticdb_srcs
         codec/encoded_field.cpp
         memory_layout.hpp
         codec/protobuf_mappings.cpp
-        entity/protobuf_mappings.cpp entity/types_proto.hpp entity/types_proto.cpp)
+        entity/protobuf_mappings.cpp entity/types_proto.hpp entity/types_proto.cpp stream/protobuf_mappings.cpp codec/segment_header.cpp)
 
 if(${ARCTICDB_INCLUDE_ROCKSDB})
     list (APPEND arcticdb_srcs
