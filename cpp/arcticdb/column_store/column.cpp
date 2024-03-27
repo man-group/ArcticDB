@@ -366,23 +366,25 @@ void Column::mark_absent_rows(size_t num_rows) {
 }
 
 void Column::default_initialize_rows(size_t start_pos, size_t num_rows, bool ensure_alloc) {
-    type_.visit_tag([that=this, start_pos, num_rows, ensure_alloc](auto tag) {
-        using T= std::decay_t<decltype(tag)>;
-        using RawType = typename T::DataTypeTag::raw_type;
-        const auto bytes = (num_rows * sizeof(RawType));
+    if (num_rows > 0) {
+        type_.visit_tag([that = this, start_pos, num_rows, ensure_alloc](auto tag) {
+            using T = std::decay_t<decltype(tag)>;
+            using RawType = typename T::DataTypeTag::raw_type;
+            const auto bytes = (num_rows * sizeof(RawType));
 
-        if(ensure_alloc)
-            that->data_.ensure<uint8_t>(bytes);
+            if (ensure_alloc)
+                that->data_.ensure<uint8_t>(bytes);
 
-        auto type_ptr = that->data_.ptr_cast<RawType>(start_pos, bytes);
-        util::default_initialize<T>(reinterpret_cast<uint8_t*>(type_ptr), bytes);
+            auto type_ptr = that->data_.ptr_cast<RawType>(start_pos, bytes);
+            util::default_initialize<T>(reinterpret_cast<uint8_t *>(type_ptr), bytes);
 
-        if(ensure_alloc)
-            that->data_.commit();
+            if (ensure_alloc)
+                that->data_.commit();
 
-        that->last_logical_row_ += static_cast<ssize_t>(num_rows);
-        that->last_physical_row_ += static_cast<ssize_t>(num_rows);
-    });
+            that->last_logical_row_ += static_cast<ssize_t>(num_rows);
+            that->last_physical_row_ += static_cast<ssize_t>(num_rows);
+        });
+    }
 }
 
 void Column::set_row_data(size_t row_id) {
