@@ -95,7 +95,7 @@ def test_roundtrip_nat(lmdb_version_store):
     vit = lmdb_version_store.read("all_nats")
 
 
-def test_floats_to_nans(lmdb_version_store):
+def test_floats_to_nans(lmdb_version_store_dynamic_schema):
     num_rows_per_day = 10
     num_days = 10
     num_columns = 8
@@ -118,10 +118,10 @@ def test_floats_to_nans(lmdb_version_store):
 
     random.shuffle(dataframes)
     for d in dataframes:
-        lmdb_version_store.write(symbol, d, parallel=True)
+        lmdb_version_store_dynamic_schema.write(symbol, d, parallel=True)
 
-    lmdb_version_store.version_store.compact_incomplete(symbol, False, False)
-    vit = lmdb_version_store.read(symbol)
+    lmdb_version_store_dynamic_schema.version_store.compact_incomplete(symbol, False, False)
+    vit = lmdb_version_store_dynamic_schema.read(symbol)
     df.sort_index(axis=1, inplace=True)
     result = vit.data
     result.sort_index(axis=1, inplace=True)
@@ -204,7 +204,7 @@ def test_sort_merge_append(basic_store_dynamic_schema):
     assert_frame_equal(vit.data, df)
 
 
-def test_datetimes_to_nats(lmdb_version_store):
+def test_datetimes_to_nats(lmdb_version_store_dynamic_schema):
     num_rows_per_day = 10
     num_days = 10
     num_columns = 8
@@ -226,10 +226,10 @@ def test_datetimes_to_nats(lmdb_version_store):
 
     random.shuffle(dataframes)
     for d in dataframes:
-        lmdb_version_store.write(symbol, d, parallel=True)
+        lmdb_version_store_dynamic_schema.write(symbol, d, parallel=True)
 
-    lmdb_version_store.version_store.compact_incomplete(symbol, False, True)
-    vit = lmdb_version_store.read(symbol)
+    lmdb_version_store_dynamic_schema.version_store.compact_incomplete(symbol, False, True)
+    vit = lmdb_version_store_dynamic_schema.read(symbol)
     df.sort_index(axis=1, inplace=True)
     result = vit.data
     result.sort_index(axis=1, inplace=True)
@@ -448,10 +448,8 @@ def test_parallel_append_static_schema_missing_column(lmdb_version_store_tiny_se
     df_1 = pd.DataFrame({"col_0": [1]}, index=pd.date_range("2024-01-02", periods=1))
     lib.write(sym, df_0)
     lib.append(sym, df_1, incomplete=True)
-    lib.compact_incomplete(sym, True, False)
-    expected = pd.concat([df_0, df_1])
-    received = lib.read(sym).data
-    assert_frame_equal(expected, received)
+    with pytest.raises(SchemaException):
+        lib.compact_incomplete(sym, True, False)
 
 
 def test_parallel_append_dynamic_schema_missing_column(lmdb_version_store_tiny_segment_dynamic):

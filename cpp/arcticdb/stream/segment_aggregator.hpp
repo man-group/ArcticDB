@@ -46,7 +46,7 @@ public:
         SegmentingPolicy &&segmenting_policy = SegmentingPolicy{}
         ) :
         AggregatorType(std::move(schema), std::move(c), std::move(segmenting_policy)),
-        slice_callback_(std::move(slice_callback)) {
+        slice_callback_(std::move(slice_callback)){
     }
 
     void add_segment(SegmentInMemory&& seg, const pipelines::FrameSlice& slice, bool convert_int_to_float) {
@@ -54,7 +54,7 @@ public:
         if constexpr (std::is_same_v<Schema, FixedSchema>) {
             if (stream_descriptor_.has_value()) {
                 schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                        segment.descriptor() == *stream_descriptor_,
+                        segment.descriptor().fields() == stream_descriptor_->fields(),
                         "Stream descriptor mismatch when compacting segments with static schema");
             } else {
                 stream_descriptor_ = segment.descriptor();
