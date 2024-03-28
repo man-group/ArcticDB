@@ -464,12 +464,14 @@ def test_named_agg(lmdb_version_store_tiny_segment):
     )
     lib.write(sym, df)
     expected = df.groupby("grouping_column").agg(agg_column_sum=pd.NamedAgg("agg_column", "sum"), agg_column_mean=pd.NamedAgg("agg_column", "mean"))
+    expected = expected.reindex(columns=sorted(expected.columns))
     print(f"\n{df}")
     print(f"\n{expected}")
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"agg_column_sum": ("agg_column", "sum"), "agg_column_mean": ("agg_column", "mean")})
     received = lib.read(sym, query_builder=q).data
     received.sort_index(inplace=True)
+    received = received.reindex(columns=sorted(received.columns))
     assert_frame_equal(expected, received)
 
 

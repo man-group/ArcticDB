@@ -270,7 +270,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def("__str__", &GroupByClause::to_string);
 
     py::class_<AggregationClause, std::shared_ptr<AggregationClause>>(version, "AggregationClause")
-            .def(py::init<std::string, std::unordered_map<std::string, std::string>>())
+            .def(py::init<std::string, std::unordered_map<std::string, std::variant<std::string, std::pair<std::string, std::string>>>>())
             .def("__str__", &AggregationClause::to_string);
 
     py::enum_<RowRangeClause::RowRangeType>(version, "RowRangeType")

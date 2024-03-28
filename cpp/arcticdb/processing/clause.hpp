@@ -355,7 +355,7 @@ struct AggregationClause {
     std::shared_ptr<ComponentManager> component_manager_;
     ProcessingConfig processing_config_;
     std::string grouping_column_;
-    std::unordered_map<std::string, std::string> aggregation_map_;
+    std::unordered_map<std::string, std::variant<std::string, std::pair<std::string, std::string>>> aggregation_map_;
     std::vector<GroupingAggregator> aggregators_;
 
     AggregationClause() = delete;
@@ -363,8 +363,7 @@ struct AggregationClause {
     ARCTICDB_MOVE_COPY_DEFAULT(AggregationClause)
 
     AggregationClause(const std::string& grouping_column,
-                      const std::unordered_map<std::string,
-                      std::string>& aggregations);
+                      const std::unordered_map<std::string, std::variant<std::string, std::pair<std::string, std::string>>>& aggregations);
 
     [[noreturn]] std::vector<std::vector<size_t>> structure_for_processing(
             ARCTICDB_UNUSED const std::vector<RangesAndKey>&,
