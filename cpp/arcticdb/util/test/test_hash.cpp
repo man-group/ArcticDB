@@ -7,7 +7,6 @@
 
 #include <gtest/gtest.h>
 #include <arcticdb/util/hash.hpp>
-#include <arcticdb/util/configs_map.hpp>
 
 using namespace arcticdb;
 

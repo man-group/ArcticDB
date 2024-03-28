@@ -7,21 +7,22 @@
 
 #pragma once
 
-#include <arcticdb/stream/stream_source.hpp>
-#include <arcticdb/pipeline/pipeline_context.hpp>
-#include <arcticdb/pipeline/read_options.hpp>
 #include <arcticdb/util/bitset.hpp>
-
 #include <folly/futures/Future.h>
-
+#include <arcticdb/pipeline/frame_slice.hpp>
 #include <memory>
 
 namespace arcticdb {
     struct BufferHolder;
+    struct ReadOptions;
+    namespace stream {
+        struct StreamSource;
+    }
 }
 
 namespace arcticdb::pipelines {
-
+struct PipelineContext;
+struct PipelineContextRow;
 SegmentInMemory allocate_frame(const std::shared_ptr<PipelineContext>& context);
 
 template <typename KeySliceContainer>
@@ -38,7 +39,7 @@ std::optional<util::BitSet> check_and_mark_slices(
 
     bool is_first = true;
     size_t count = 0u;
-    std::set<RowRange> row_ranges;
+    std::set<arcticdb::pipelines::RowRange> row_ranges;
     for (auto[opt_seg, slice, key] : slice_and_keys) {
         is_first = row_ranges.insert(slice.row_range).second;
         if(return_bitset) {
@@ -54,7 +55,7 @@ std::optional<util::BitSet> check_and_mark_slices(
 
     if(!row_ranges.empty()) {
         auto pos = row_ranges.begin();
-        RowRange current = *pos;
+        arcticdb::pipelines::RowRange current = *pos;
         std::advance(pos, 1);
         for(; pos != row_ranges.end(); ++pos){
             sorting::check<ErrorCode::E_UNSORTED_DATA>(pos->start() == current.end(), "Non-contiguous rows, range search on unsorted data? {} {}", current, *pos);

@@ -5,10 +5,8 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <pybind11/functional.h>
 
 #include <arcticdb/python/adapt_read_dataframe.hpp>
-#include <arcticdb/storage/library.hpp>
 #include <arcticdb/storage/s3/s3_storage_tool.hpp>
 #include <arcticdb/toolbox/library_tool.hpp>
 #include <arcticdb/util/memory_tracing.hpp>

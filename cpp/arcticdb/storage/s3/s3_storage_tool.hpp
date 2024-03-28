@@ -7,10 +7,11 @@
 
 #pragma once
 
-#include <arcticdb/storage/s3/s3_storage.hpp>
 #include <aws/s3/S3Client.h>
+#include <arcticdb/entity/protobufs.hpp>
 
 namespace arcticdb::storage::s3 {
+class S3ApiInstance;
 
 class S3StorageTool {
 public:

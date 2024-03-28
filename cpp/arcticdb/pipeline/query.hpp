@@ -9,16 +9,9 @@
 
 #include <arcticdb/util/bitset.hpp>
 #include <arcticdb/entity/index_range.hpp>
-#include <arcticdb/processing/expression_context.hpp>
-#include <arcticdb/entity/versioned_item.hpp>
-#include <arcticdb/pipeline/python_output_frame.hpp>
-#include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
-#include <arcticdb/util/constructors.hpp>
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/pipeline/index_segment_reader.hpp>
-#include <arcticdb/pipeline/input_tensor_frame.hpp>
-#include <arcticdb/pipeline/read_options.hpp>
 #include <arcticdb/stream/stream_utils.hpp>
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/util/simple_string_hash.hpp>
@@ -134,8 +127,8 @@ inline bool is_column_selected(size_t start_col, size_t end_col, const util::Bit
 inline FilterQuery<index::IndexSegmentReader> create_static_col_filter(util::BitSet &&selected_columns) {
     return [sc = std::move(selected_columns)](const index::IndexSegmentReader &isr, std::unique_ptr<util::BitSet>&& input) mutable {
         auto res = std::make_unique<util::BitSet>(static_cast<util::BitSetSizeType>(isr.size()));
-        auto start_col = isr.column(index::Fields::start_col).begin<stream::SliceTypeDescriptorTag>();
-        auto end_col = isr.column(index::Fields::end_col).begin<stream::SliceTypeDescriptorTag>();
+        auto start_col = isr.column(arcticdb::pipelines::index::Fields::start_col).begin<stream::SliceTypeDescriptorTag>();
+        auto end_col = isr.column(arcticdb::pipelines::index::Fields::end_col).begin<stream::SliceTypeDescriptorTag>();
 
         if (input) {
             bm::bvector<>::enumerator en = input->first();
@@ -276,14 +269,14 @@ inline FilterQuery<ContainerType> create_index_filter(const IndexRange &range, b
 
         switch (index_type.value()) {
         case IndexDescriptor::TIMESTAMP: {
-            return build_bitset_for_index<ContainerType, TimeseriesIndex>(container,
+            return build_bitset_for_index<ContainerType, stream::TimeseriesIndex>(container,
                                                                           rg,
                                                                           dynamic_schema,
                                                                           column_groups,
                                                                           std::move(input));
         }
         case IndexDescriptor::STRING: {
-            return build_bitset_for_index<ContainerType, TableIndex>(container, rg, dynamic_schema, column_groups, std::move(input));
+            return build_bitset_for_index<ContainerType, stream::TableIndex>(container, rg, dynamic_schema, column_groups, std::move(input));
         }
         default:util::raise_rte("Unknown index type {} in create_index_filter", uint32_t(index_type.value()));
         }

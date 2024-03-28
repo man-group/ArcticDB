@@ -5,9 +5,8 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/codec/encoding_sizes.hpp>
-#include <arcticdb/entity/types.hpp>
-#include <arcticdb/stream/protobuf_mappings.hpp>
+#include <arcticdb/entity/protobufs.hpp>
+#include <arcticdb/entity/types_proto.hpp>
 
 namespace arcticdb::encoding_sizes {
 

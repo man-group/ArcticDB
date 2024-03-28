@@ -10,9 +10,6 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
-#include <arcticdb/stream/stream_source.hpp>
-#include <arcticdb/storage/store.hpp>
-#include <arcticdb/pipeline/input_tensor_frame.hpp>
 
 namespace arcticdb::pipelines {
 struct PythonOutputFrame;
@@ -21,7 +18,9 @@ using FilterRange = std::variant<std::monostate, IndexRange, RowRange>;
 }
 
 namespace arcticdb {
-
+namespace stream {
+    struct StreamSource;
+}
 std::pair<std::optional<entity::AtomKey>, size_t> read_head(
     const std::shared_ptr<stream::StreamSource>& store,
     StreamId stream_id);

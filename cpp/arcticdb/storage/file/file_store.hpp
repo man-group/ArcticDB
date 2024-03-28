@@ -4,7 +4,6 @@
  *
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
-
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/codec/codec.hpp>
 #include <arcticdb/storage/coalesced/multi_segment_header.hpp>
@@ -23,12 +22,15 @@
 #include <arcticdb/stream/piloted_clock.hpp>
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
+#include <arcticdb/pipeline/frame_slice.hpp>
+#include <arcticdb/pipeline/pipeline_common.hpp>
+#include <arcticdb/pipeline/index_utils.hpp>
+#include <arcticdb/pipeline/write_frame.hpp>
 
 namespace arcticdb {
 
-
 size_t max_data_size(
-    const std::vector<std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice>>& items,
+    const std::vector<std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, pipelines::FrameSlice>>& items,
     const arcticdb::proto::encoding::VariantCodec& codec_opts,
     EncodingVersion encoding_version) {
     auto max_file_size = 0UL;
@@ -62,7 +64,7 @@ void write_dataframe_to_file_internal(
     auto slices = slice(*frame, slicing);
     ARCTICDB_SUBSAMPLE_DEFAULT(SliceAndWrite)
 
-    auto slice_and_rowcount = get_slice_and_rowcount(slices);
+    auto slice_and_rowcount = arcticdb::pipelines::get_slice_and_rowcount(slices);
     const size_t write_window = ConfigsMap::instance()->get_int("VersionStore.BatchWriteWindow",
                                                               static_cast<int64_t>(2 * async::TaskScheduler::instance()->io_thread_count()));
     auto key_seg_futs = folly::collect(folly::window(std::move(slice_and_rowcount),
@@ -93,6 +95,7 @@ void write_dataframe_to_file_internal(
         return store->async_write(key_seg, dedup_map);
     }, batch_size)).via(&async::io_executor())
     .thenValue([&frame, stream_id, store] (auto&& slice_and_keys) {
+        using namespace arcticdb::pipelines;
         return index::write_index(frame, std::forward<decltype(slice_and_keys)>(slice_and_keys), IndexPartialKey{stream_id, VersionId{0}}, store);
     });
     // TODO include key size and key offset in max size calculation
@@ -107,7 +110,7 @@ void write_dataframe_to_file_internal(
 version_store::ReadVersionOutput read_dataframe_from_file_internal(
         const StreamId& stream_id,
         const std::string& path,
-        ReadQuery& read_query,
+        pipelines::ReadQuery& read_query,
         const ReadOptions& read_options,
         const arcticdb::proto::encoding::VariantCodec &codec_opts) {
     auto config = storage::file::pack_config(path, codec_opts);

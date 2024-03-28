@@ -6,8 +6,8 @@
  */
 
 #include <gtest/gtest.h>
-#include <arcticdb/entity/types_proto.hpp>
 #include <arcticdb/entity/type_utils.hpp>
+#include <arcticdb/entity/types.hpp>
 
 TEST(HasValidTypePromotion, DifferentDimensions) {
     using namespace arcticdb;

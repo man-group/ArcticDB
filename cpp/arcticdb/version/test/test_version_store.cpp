@@ -8,16 +8,16 @@
 #include <gtest/gtest.h>
 
 #include <arcticdb/version/version_store_api.hpp>
-#include <arcticdb/storage/open_mode.hpp>
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/storage/memory/memory_storage.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
 #include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/util/allocator.hpp>
-#include <arcticdb/codec/default_codecs.hpp>
 #include <arcticdb/version/version_functions.hpp>
+#include <arcticdb/pipeline/write_frame.hpp>
+#include <arcticdb/stream/append_map.hpp>
+#include <arcticdb/stream/test/test_store_common.hpp>
 
-#include <filesystem>
+
 #include <chrono>
 #include <thread>
 
@@ -48,7 +48,7 @@ auto write_version_frame(
     auto wrapper = get_test_simple_frame(stream_id, rows, start_val);
     auto& frame = wrapper.frame_;
     auto store = pvs._test_get_store();
-    auto var_key = write_frame(std::move(pk), frame, slicing, store, de_dup_map).get();
+    auto var_key = arcticdb::pipelines::write_frame(std::move(pk), frame, slicing, store, de_dup_map).get();
     auto key = to_atom(var_key); // Moves
     if (update_version_map) {
         pvs._test_get_version_map()->write_version(store, key, previous_key);

@@ -5,14 +5,12 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/column_store/column_map.hpp>
-#include <arcticdb/util/random.h>
 #include <gtest/gtest.h>
-
-#include <arcticdb/column_store/column_map.hpp>
-#include <arcticdb/util/random.h>
 #include <arcticdb/util/test/rapidcheck.hpp>
 #include <arcticdb/util/test/rapidcheck_generators.hpp>
+#include <arcticdb/entity/field_collection.hpp>
+#include <arcticdb/entity/stream_descriptor.hpp>
+#include <arcticdb/column_store/column_map.hpp>
 #include <arcticdb/entity/types.hpp>
 
 using namespace arcticdb;

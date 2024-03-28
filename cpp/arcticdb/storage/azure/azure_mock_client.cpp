@@ -5,14 +5,10 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <azure/core/http/curl_transport.hpp>
-#include <azure/core.hpp>
-#include <azure/storage/blobs.hpp>
 
-#include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/storage/azure/azure_client_wrapper.hpp>
 #include <arcticdb/storage/azure/azure_mock_client.hpp>
-#include <arcticdb/storage/object_store_utils.hpp>
+#include <arcticdb/storage/storage_mock_client.hpp>
 
 namespace arcticdb::storage::azure {
 

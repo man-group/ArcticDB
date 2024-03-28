@@ -10,7 +10,6 @@
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/column_store/column_data.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
-#include <arcticdb/python/python_utils.hpp>
 
 namespace py = pybind11;
 

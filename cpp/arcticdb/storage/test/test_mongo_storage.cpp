@@ -7,12 +7,8 @@
 
 #include <gtest/gtest.h>
 
-#include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/mongo/mongo_storage.hpp>
 
-#include <thread>
-#include <filesystem>
-#include <mongocxx/uri.hpp>
 
 const std::string test_server("mongodb://localhost:27017");
 

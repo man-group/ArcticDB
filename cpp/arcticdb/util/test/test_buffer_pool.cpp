@@ -7,6 +7,7 @@
 
 #include <gtest/gtest.h>
 #include <arcticdb/util/buffer_pool.hpp>
+#include <arcticdb/util/buffer.hpp>
 
 namespace arcticdb {
     TEST(BufferPool, Basic) {

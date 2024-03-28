@@ -7,11 +7,11 @@
 
 #pragma once
 
-#include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/pb_util.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <numeric>
+#include <arcticdb/entity/protobufs.hpp>
 
 namespace arcticdb::encoding_sizes {
 

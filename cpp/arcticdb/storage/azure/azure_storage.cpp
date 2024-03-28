@@ -7,29 +7,18 @@
 
 #include <arcticdb/storage/azure/azure_storage.hpp>
 
-#include <arcticdb/log/log.hpp>
-#include <azure/core/http/curl_transport.hpp>
 
 
 #include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/util/pb_util.hpp>
-#include <arcticdb/log/log.hpp>
-#include <arcticdb/util/buffer_pool.hpp>
 
-#include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 #include <folly/gen/Base.h>
-#include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
-#include <arcticdb/util/exponential_backoff.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/util/composite.hpp>
 
-#include <azure/core.hpp>
-#include <azure/storage/blobs.hpp>
 
-#include <boost/interprocess/streams/bufferstream.hpp>
 
 #include <arcticdb/storage/azure/azure_client_wrapper.hpp>
 #include <arcticdb/storage/azure/azure_real_client.hpp>

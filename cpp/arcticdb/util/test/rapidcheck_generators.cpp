@@ -6,6 +6,7 @@
  */
 
 #include <gtest/gtest.h>
+#include <arcticdb/util/test/rapidcheck.hpp>
 #include <arcticdb/util/test/rapidcheck_generators.hpp>
 #include <arrow/util/decimal.h>
 

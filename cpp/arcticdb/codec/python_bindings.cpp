@@ -13,16 +13,12 @@
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/python/python_utils.hpp>
-#include <arcticdb/util/flatten_utils.hpp>
 #include <arcticdb/util/cursored_buffer.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
 
-#include <fmt/format.h>
-
 #include <memory>
 #include <algorithm>
-#include <string>
 
 namespace py = pybind11;
 using namespace arcticdb::python_util;

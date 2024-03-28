@@ -5,27 +5,18 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/entity/native_tensor.hpp>
-#include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/pipeline/index_writer.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
-#include <arcticdb/stream/protobuf_mappings.hpp>
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/stream/aggregator.hpp>
-#include <arcticdb/entity/protobufs.hpp>
-#include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/util/variant.hpp>
-#include <arcticdb/python/python_types.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
-#include <arcticdb/stream/append_map.hpp>
-#include <arcticdb/version/version_utils.hpp>
-#include <arcticdb/entity/merge_descriptors.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/util/format_date.hpp>
 #include <vector>

@@ -13,7 +13,6 @@
 #include <arcticdb/codec/passthrough.hpp>
 #include <arcticdb/codec/zstd.hpp>
 #include <arcticdb/codec/lz4.hpp>
-#include <arcticdb/codec/encoded_field.hpp>
 #include <arcticdb/codec/magic_words.hpp>
 
 #include <arcticdb/util/bitset.hpp>
