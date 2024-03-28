@@ -69,10 +69,8 @@ inline void merge_segments(
     timestamp min_idx = std::numeric_limits<timestamp>::max();
     timestamp max_idx = std::numeric_limits<timestamp>::min();
     for (auto &segment : segments) {
-        std::vector<SegmentInMemory> history{{segment}};
-        const auto& latest = *history.rbegin();
-        ARCTICDB_DEBUG(log::version(), "Appending segment with {} rows", latest.row_count());
-        for(const auto& field : latest.descriptor().fields()) {
+        ARCTICDB_DEBUG(log::version(), "Appending segment with {} rows", segment.row_count());
+        for(const auto& field : segment.descriptor().fields()) {
             if(!merged.column_index(field.name())){//TODO: Bottleneck for wide segments
                 auto pos = merged.add_column(field, 0, false);
                 if (!is_sparse){
@@ -80,12 +78,12 @@ inline void merge_segments(
                 }
             }
         }
-        if (latest.row_count() && latest.descriptor().index().type() == IndexDescriptor::TIMESTAMP) {
-            min_idx = std::min(min_idx, latest.begin()->begin()->value<timestamp>());
-            max_idx = std::max(max_idx, (latest.end() - 1)->begin()->value<timestamp>());
+        if (segment.row_count() && segment.descriptor().index().type() == IndexDescriptor::TIMESTAMP) {
+            min_idx = std::min(min_idx, segment.begin()->begin()->value<timestamp>());
+            max_idx = std::max(max_idx, (segment.end() - 1)->begin()->value<timestamp>());
         }
-        merge_string_columns(latest, merged.string_pool_ptr(), false);
-        merged.append(*history.rbegin());
+        merge_string_columns(segment, merged.string_pool_ptr(), false);
+        merged.append(segment);
         merged.set_compacted(true);
         util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
     }
