@@ -327,30 +327,26 @@ Composite<EntityIds> ProjectClause::process(Composite<EntityIds>&& entity_ids) c
 
 AggregationClause::AggregationClause(const std::string& grouping_column,
                                      const std::unordered_map<std::string, std::variant<std::string, std::pair<std::string, std::string>>>& aggregations):
-        grouping_column_(grouping_column),
-        aggregation_map_(aggregations) {
+        grouping_column_(grouping_column) {
     clause_info_.can_combine_with_column_selection_ = false;
     clause_info_.new_index_ = grouping_column_;
     clause_info_.input_columns_ = std::make_optional<std::unordered_set<std::string>>({grouping_column_});
     clause_info_.modifies_output_descriptor_ = true;
-    for (const auto& [key, var_agg_named_agg]: aggregations) {
+    for (const auto& [output_column_name, var_agg_named_agg]: aggregations) {
         std::string input_column_name;
-        std::string output_column_name;
         std::string aggregation_operator;
         util::variant_match(
                 var_agg_named_agg,
-                [&, this] (const std::string& agg_operator) {
-                    input_column_name = key;
-                    output_column_name = key;
+                [&input_column_name, &aggregation_operator, &output_column_name] (const std::string& agg_operator) {
+                    input_column_name = output_column_name;
                     aggregation_operator = agg_operator;
                 },
-                [&, this] (const std::pair<std::string, std::string>& input_col_and_agg) {
+                [&input_column_name, &aggregation_operator] (const std::pair<std::string, std::string>& input_col_and_agg) {
                     input_column_name = input_col_and_agg.first;
-                    output_column_name = key;
                     aggregation_operator = input_col_and_agg.second;
                 }
                 );
-
+        str_.append(fmt::format("{}: ({}, {}), ", output_column_name, input_column_name, aggregation_operator));
         clause_info_.input_columns_->insert(input_column_name);
         auto typed_input_column_name = ColumnName(input_column_name);
         auto typed_output_column_name = ColumnName(output_column_name);
@@ -368,27 +364,7 @@ AggregationClause::AggregationClause(const std::string& grouping_column,
             user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Unknown aggregation operator provided: {}", aggregation_operator);
         }
     }
-
-//    for (const auto& [column_name, aggregation_operator]: aggregations) {
-//        auto [_, inserted] = clause_info_.input_columns_->insert(column_name);
-//        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(inserted,
-//                                                              "Cannot perform two aggregations over the same column: {}",
-//                                                              column_name);
-//        auto typed_column_name = ColumnName(column_name);
-//        if (aggregation_operator == "sum") {
-//            aggregators_.emplace_back(SumAggregator(typed_column_name, typed_column_name));
-//        } else if (aggregation_operator == "mean") {
-//            aggregators_.emplace_back(MeanAggregator(typed_column_name, typed_column_name));
-//        } else if (aggregation_operator == "max") {
-//            aggregators_.emplace_back(MaxAggregator(typed_column_name, typed_column_name));
-//        } else if (aggregation_operator == "min") {
-//            aggregators_.emplace_back(MinAggregator(typed_column_name, typed_column_name));
-//        } else if (aggregation_operator == "count") {
-//            aggregators_.emplace_back(CountAggregator(typed_column_name, typed_column_name));
-//        } else {
-//            user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Unknown aggregation operator provided: {}", aggregation_operator);
-//        }
-//    }
+    str_.append("}");
 }
 
 Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_ids) const {
@@ -563,9 +539,7 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
 }
 
 [[nodiscard]] std::string AggregationClause::to_string() const {
-    // TODO: pretty print
-    return "";
-//    return fmt::format("AGGREGATE {}", aggregation_map_);
+    return str_;
 }
 
 [[nodiscard]] Composite<EntityIds> RemoveColumnPartitioningClause::process(Composite<EntityIds>&& entity_ids) const {

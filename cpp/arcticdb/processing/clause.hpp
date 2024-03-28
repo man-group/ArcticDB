@@ -355,8 +355,8 @@ struct AggregationClause {
     std::shared_ptr<ComponentManager> component_manager_;
     ProcessingConfig processing_config_;
     std::string grouping_column_;
-    std::unordered_map<std::string, std::variant<std::string, std::pair<std::string, std::string>>> aggregation_map_;
     std::vector<GroupingAggregator> aggregators_;
+    std::string str_{"AGGREGATE {"};
 
     AggregationClause() = delete;
 
