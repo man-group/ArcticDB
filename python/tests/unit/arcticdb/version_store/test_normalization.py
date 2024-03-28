@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import datetime
+from datetime import timezone, timedelta
 from collections import namedtuple
 
 import numpy as np
@@ -115,6 +116,34 @@ def test_write_tz(lmdb_version_store, sym, tz):
     assert_frame_equal(df, result)
     df_tz = df.index.tzinfo
     assert str(df_tz) == str(tz)
+
+
+@pytest.mark.parametrize(
+    "tz",
+    [
+        None,
+        "UTC",
+        "Europe/Amsterdam",
+        "America/New_York",
+        timezone(timedelta(seconds=0), "UTC"),
+        timezone(timedelta(seconds=0), "Europe/Amsterdam"),
+        timezone(timedelta(seconds=0), "America/New_York"),
+        pytz.UTC,
+        pytz.timezone("Europe/Amsterdam"),
+        pytz.timezone("America/New_York"),
+        du.tz.gettz("UTC"),
+        du.tz.gettz("Europe/Amsterdam"),
+        du.tz.gettz("America/New_York"),
+    ],
+)
+def test_write_metadata_tz(lmdb_version_store, sym, tz):
+    df = pd.DataFrame(data={"col1": np.arange(10)}, index=pd.date_range(pd.Timestamp(0), periods=10))
+    meta = pd.Timestamp("2024-03-04", tz=tz)
+    lmdb_version_store.write(sym, df, metadata={"index_start": meta})
+    df_tz = lmdb_version_store.read(sym).metadata["index_start"]
+    assert str(df_tz.tzinfo) == str(meta.tzinfo) or df_tz.tzname() == meta.tzname()
+    if meta.tzinfo is not None:
+        assert df_tz.tzinfo.utcoffset(df_tz) == meta.tzinfo.utcoffset(meta)
 
 
 def get_multiindex_df_with_tz(tz):

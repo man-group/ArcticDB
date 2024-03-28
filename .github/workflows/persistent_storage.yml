@@ -52,6 +52,7 @@ jobs:
 
       - name: Install latest release
         if: inputs.arcticdb_version == 'latest'
+        # remove protobuf==4.24.4 when we have addressed issue #1422
         run: |
           pip install pytest arcticdb "protobuf<5"
       
@@ -60,6 +61,7 @@ jobs:
       # So we expect that libs written by the version that we are build to be readable by arcticdb>=3.0.0 and vice-versa
       # Change this value, if we need to support a newer one in the future
       - name: Install oldest supported release
+        # remove protobuf==4.24.4 when we have addressed issue #1422
         run: |
           pip install pytest arcticdb=="3.0.0" "protobuf<5"
 
@@ -95,6 +97,7 @@ jobs:
         run: echo /opt/python/${{env.python_impl_name}}*/bin >> $GITHUB_PATH
 
       - name: Install latest release
+        # remove protobuf==4.24.4 when we have addressed issue #1422
         run: |
           pip install pytest arcticdb "protobuf<5"
 

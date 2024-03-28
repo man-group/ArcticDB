@@ -155,3 +155,16 @@ The handling of `NaN` in ArcticDB depends on the type of the column under consid
 * For string columns, `NaN`, as well as Python `None`, are fully supported.
 * For floating-point numeric columns, `NaN` is also fully supported.
 * For integer numeric columns `NaN` is not supported. A column that otherwise contains only integers will be treated as a floating point column if a `NaN` is encountered by ArcticDB, at which point [the usual rules](api/arctic.md#LibraryOptions) around type promotion for libraries configured with or without dynamic schema all apply as usual.
+
+### How does ArcticDB handle `time zone` information?
+
+ArcticDB takes a more strict approach to time zone handling than Pandas. While Pandas support multiple types for storing time zone information, ArcticDB coerces all time zone information to `datetime.timezone`. This way we can ensure that all time zone information is stored in a consistent manner, and that all time zone information is preserved when data is written to and read from ArcticDB.
+
+When writing data with time zone information to ArcticDB, we preserve the time zone offset and name. When reading data with time zone information from ArcticDB, this data is used to create a `datetime.timezone` object.
+
+!!! note
+
+    This means that regardles of the timezone types being written in ArcticDB, all time zone types are normalised to `datetime.timezone`.
+    If you would like a another time-zone type back then tzname can be used to recreate it:
+    - For `pytz` you can use: `pytz.gettz(dt.tzname())`
+    - For `ZoneInfo`, after Python 3.9+, you can use: `ZoneInfo(dt.tzname())`
