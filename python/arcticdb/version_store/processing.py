@@ -12,7 +12,7 @@ from math import inf
 import numpy as np
 import pandas as pd
 
-from typing import Dict, NamedTuple
+from typing import Dict, NamedTuple, Tuple, Union
 
 from arcticdb.exceptions import ArcticNativeException, UserInputException
 from arcticdb.version_store._normalization import normalize_dt_range_to_ts
@@ -497,7 +497,7 @@ class QueryBuilder:
         self._python_clauses.append(PythonGroupByClause(name))
         return self
 
-    def agg(self, aggregations: Dict[str, str]):
+    def agg(self, aggregations: Dict[str, Union[str, tuple[str, str]]]):
         # Only makes sense if previous stage is a group-by
         check(
             len(self.clauses) and isinstance(self.clauses[-1], _GroupByClause),
