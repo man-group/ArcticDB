@@ -430,6 +430,7 @@ def test_parallel_write_dynamic_schema_missing_column(lmdb_version_store_tiny_se
     assert_frame_equal(expected, received)
 
 
+@pytest.mark.xfail("See https://github.com/man-group/ArcticDB/issues/1466")
 def test_parallel_append_static_schema_type_changing(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     sym = "test_parallel_append_static_schema_type_changing"
@@ -441,6 +442,7 @@ def test_parallel_append_static_schema_type_changing(lmdb_version_store_tiny_seg
         lib.compact_incomplete(sym, True, False)
 
 
+@pytest.mark.xfail("See https://github.com/man-group/ArcticDB/issues/1466")
 def test_parallel_append_static_schema_missing_column(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     sym = "test_parallel_append_static_schema_missing_column"

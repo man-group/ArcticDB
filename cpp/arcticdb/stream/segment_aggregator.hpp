@@ -43,10 +43,9 @@ public:
         SliceCallBack&& slice_callback,
         Schema &&schema,
         typename AggregatorType::Callback &&c,
-        SegmentingPolicy &&segmenting_policy = SegmentingPolicy{}
-        ) :
+        SegmentingPolicy &&segmenting_policy = SegmentingPolicy{}) :
         AggregatorType(std::move(schema), std::move(c), std::move(segmenting_policy)),
-        slice_callback_(std::move(slice_callback)){
+        slice_callback_(std::move(slice_callback)) {
     }
 
     void add_segment(SegmentInMemory&& seg, const pipelines::FrameSlice& slice, bool convert_int_to_float) {
