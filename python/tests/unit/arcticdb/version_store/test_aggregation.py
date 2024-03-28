@@ -451,24 +451,33 @@ def test_mean_aggregation_float(local_object_version_store):
     assert_frame_equal(res.data, df)
 
 
-# TODO: Test v2 encoding as well
 def test_named_agg(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     sym = "test_named_agg"
     gen = np.random.default_rng()
     df = DataFrame(
         {
-            "grouping_column": [1, 1],
-            "agg_column": gen.integers(0, 100, 2)
+            "grouping_column": [1, 1, 1, 2, 3, 4],
+            "agg_column": gen.integers(0, 100, 6)
         }
     )
     lib.write(sym, df)
-    expected = df.groupby("grouping_column").agg(agg_column_sum=pd.NamedAgg("agg_column", "sum"), agg_column_mean=pd.NamedAgg("agg_column", "mean"))
+    expected = df.groupby("grouping_column").agg(
+        agg_column_sum=pd.NamedAgg("agg_column", "sum"),
+        agg_column_mean=pd.NamedAgg("agg_column", "mean"),
+        agg_column=pd.NamedAgg("agg_column", "min"),
+    )
     expected = expected.reindex(columns=sorted(expected.columns))
     print(f"\n{df}")
     print(f"\n{expected}")
     q = QueryBuilder()
-    q = q.groupby("grouping_column").agg({"agg_column_sum": ("agg_column", "sum"), "agg_column_mean": ("agg_column", "mean")})
+    q = q.groupby("grouping_column").agg(
+        {
+            "agg_column_sum": ("agg_column", "sum"),
+            "agg_column_mean": ("agg_column", "mean"),
+            "agg_column": "min",
+        }
+    )
     print(f"{q}")
     received = lib.read(sym, query_builder=q).data
     received.sort_index(inplace=True)
