@@ -399,7 +399,7 @@ def test_querybuilder_pickling():
     q = q.groupby("col1")
 
     # PythonAggregationClause
-    q = q.agg({"col2": "sum"})
+    q = q.agg({"col2": "sum", "new_col": ("col2", "mean")})
 
     import pickle
 
