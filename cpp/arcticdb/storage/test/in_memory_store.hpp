@@ -14,6 +14,7 @@
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
 #include <arcticdb/storage/storage.hpp>
+#include <arcticdb/stream/piloted_clock.hpp>
 
 #include <folly/futures/Future.h>
 

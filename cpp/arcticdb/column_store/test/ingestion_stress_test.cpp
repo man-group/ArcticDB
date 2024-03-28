@@ -7,16 +7,13 @@
 
 #include <gtest/gtest.h>
 #include <string>
-#include <algorithm>
-#include <fmt/format.h>
 
-#include <arcticdb/util/random.h>
 #include <arcticdb/util/timer.hpp>
 #include <arcticdb/util/test/generators.hpp>
-#include <arcticdb/stream/row_builder.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/pipeline/query.hpp>
+#include <arcticdb/stream/append_map.hpp>
 
 using namespace arcticdb;
 namespace as = arcticdb::stream;

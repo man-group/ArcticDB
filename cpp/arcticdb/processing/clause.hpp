@@ -7,32 +7,21 @@
 
 #pragma once
 
-#include <arcticdb/entity/key.hpp>
-#include <arcticdb/column_store/column.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
-#include <arcticdb/pipeline/value.hpp>
 #include <arcticdb/processing/expression_context.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/processing/aggregation.hpp>
 #include <arcticdb/processing/aggregation_interface.hpp>
 #include <arcticdb/processing/processing_unit.hpp>
-#include <arcticdb/processing/grouper.hpp>
 #include <arcticdb/stream/aggregator.hpp>
-#include <arcticdb/util/movable_priority_queue.hpp>
-#include <arcticdb/stream/merge.hpp>
-#include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/util/composite.hpp>
 
 #include <folly/Poly.h>
-#include <folly/futures/Future.h>
 
 #include <vector>
 #include <unordered_map>
 #include <string>
-#include <variant>
 #include <memory>
-#include <atomic>
 
 namespace arcticdb {
 

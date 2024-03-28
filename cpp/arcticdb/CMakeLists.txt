@@ -433,10 +433,6 @@ set(arcticdb_srcs
         processing/operation_dispatch.cpp
         processing/operation_dispatch_unary.cpp
         processing/operation_dispatch_binary.cpp
-        processing/operation_dispatch_binary_eq.cpp
-        processing/operation_dispatch_binary_gt.cpp
-        processing/operation_dispatch_binary_lt.cpp
-        processing/operation_dispatch_binary_operator.cpp
         python/python_to_tensor_frame.cpp
         storage/config_resolvers.cpp
         storage/failure_simulation.cpp

@@ -11,12 +11,9 @@
 #include <arcticdb/storage/s3/s3_api.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/storage/s3/s3_mock_client.hpp>
-#include <arcticdb/storage/s3/detail-inl.hpp>
 #include <arcticdb/entity/protobufs.hpp>
-#include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/storage/test/common.hpp>
 
-#include <aws/core/Aws.h>
 
 struct EnvFunctionShim : ::testing::Test {
     std::unordered_set<const char*> env_vars_to_unset{};

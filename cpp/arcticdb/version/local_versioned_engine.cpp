@@ -15,12 +15,15 @@
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/storage_lock.hpp>
-#include <arcticdb/entity/metrics.hpp>
 #include <arcticdb/version/version_tasks.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/version/version_map_batch_methods.hpp>
 #include <arcticdb/util/container_filter_wrapper.hpp>
 #include <arcticdb/python/gil_lock.hpp>
+#include <arcticdb/version/version_functions.hpp>
+#include <arcticdb/stream/append_map.hpp>
+#include <arcticdb/pipeline/read_pipeline.hpp>
+
 
 namespace arcticdb::version_store {
 

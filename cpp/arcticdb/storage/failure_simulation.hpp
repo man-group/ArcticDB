@@ -11,9 +11,8 @@
 #include <arcticdb/util/random.h>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/util/variant.hpp>
 #include <folly/Function.h>
-
+#include <variant>
 namespace arcticdb {
 
 #ifdef _WIN32

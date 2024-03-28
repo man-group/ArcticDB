@@ -6,9 +6,13 @@
  */
 
 #include <arcticdb/entity/stream_descriptor.hpp>
-#include <arcticdb/pipeline/frame_slice.hpp>
 
 namespace arcticdb {
+class Store;
+namespace pipelines {
+    struct SliceAndKey;
+}
+
 StreamDescriptor merge_descriptors(
     const StreamDescriptor &original,
     const std::vector<std::shared_ptr<FieldCollection>> &entries,

@@ -12,19 +12,16 @@
 #include <filesystem>
 
 #include <arcticdb/log/log.hpp>
-#include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/storage/constants.hpp>
 #include <arcticdb/storage/library_path.hpp>
 #include <arcticdb/storage/open_mode.hpp>
 #include <arcticdb/util/format_bytes.hpp>
 #include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/util/pb_util.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_options.hpp>
-#include <arcticdb/storage/storage_utils.hpp>
+#include <arcticdb/storage/lmdb/lmdb_client_wrapper.hpp>
 
-#include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 #include <folly/gen/Base.h>
 
 namespace arcticdb::storage::lmdb {

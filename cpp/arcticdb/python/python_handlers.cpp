@@ -9,6 +9,7 @@
 #include <arcticdb/codec/encoding_sizes.hpp>
 #include <arcticdb/codec/codec.hpp>
 #include <arcticdb/util/buffer_holder.hpp>
+#include <arcticdb/pipeline/column_mapping.hpp>
 
 namespace arcticdb {
 

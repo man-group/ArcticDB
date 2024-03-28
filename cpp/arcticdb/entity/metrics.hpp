@@ -7,26 +7,21 @@
 
 #pragma once
 
-#include <prometheus/counter.h>
-#include <prometheus/gateway.h>
-#include <prometheus/registry.h>
-#include <prometheus/summary.h>
-#include <prometheus/exposer.h>
-#include <prometheus/family.h>
 #include <prometheus/histogram.h>
 
-#ifndef _WIN32
-#include <sys/param.h>
-#include <unistd.h>
-#endif
+namespace prometheus {
+    class Exposer;
+    class Gateway;
+}
 
-#include <arcticdb/entity/protobufs.hpp>
-#include <arcticdb/log/log.hpp>
-#include <arcticdb/util/timer.hpp>
 #include <map>
 #include <unordered_map>
 #include <memory>
-#include <fmt/format.h>
+#include <arcticdb/util/preconditions.hpp>
+
+namespace prometheus {
+    class Summary;
+}
 
 namespace arcticdb {
 

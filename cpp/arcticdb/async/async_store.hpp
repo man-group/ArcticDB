@@ -10,11 +10,9 @@
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/util/clock.hpp>
 #include <arcticdb/storage/store.hpp>
-#include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/storage/library.hpp>
 #include <folly/futures/Future.h>
 #include <arcticdb/async/tasks.hpp>
-#include <arcticdb/stream/stream_utils.hpp>
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
 
@@ -332,7 +330,7 @@ std::vector<folly::Future<bool>> batch_key_exists(
                 std::move(seg),
                 codec_,
                 encoding_version_}();
-            return std::pair<storage::KeySegmentPair, FrameSlice>(std::move(key_seg), std::move(slice));
+            return std::pair<storage::KeySegmentPair, pipelines::FrameSlice>(std::move(key_seg), std::move(slice));
         })
         .thenValue([de_dup_map](auto &&ks) -> std::pair<KeyOptSegment, pipelines::FrameSlice> {
             auto [key_seg, slice] = std::forward<decltype(ks)>(ks);

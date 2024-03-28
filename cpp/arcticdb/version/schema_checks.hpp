@@ -33,7 +33,7 @@ inline void check_normalization_index_match(NormalizationOperation operation,
                                      const StreamDescriptor &old_descriptor,
                                      const pipelines::InputTensorFrame &frame) {
     auto old_idx_kind = old_descriptor.index().type();
-    bool new_is_timeseries = std::holds_alternative<TimeseriesIndex>(frame.index);
+    bool new_is_timeseries = std::holds_alternative<stream::TimeseriesIndex>(frame.index);
 
     if (operation == UPDATE) {
         util::check_rte(old_idx_kind == IndexDescriptor::TIMESTAMP && new_is_timeseries,

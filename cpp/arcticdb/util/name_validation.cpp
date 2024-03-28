@@ -7,10 +7,9 @@
 
 #include <arcticdb/util/name_validation.hpp>
 
-#include <arcticdb/entity/key.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/configs_map.hpp>
-#include <arcticdb/stream/index.hpp>
+#include <arcticdb/util/variant.hpp>
 
 namespace arcticdb {
 
@@ -22,7 +21,7 @@ constexpr auto MAX_SIZE = 255;
 
 void verify_name(
         const std::string& name_type_for_error,
-        const StringId& name,
+        const entity::StringId& name,
         bool check_symbol_out_of_range = true,
         const std::set<char>& unsupported_chars = UNSUPPORTED_S3_CHARS,
         std::optional<char> unsupported_prefix = std::nullopt,
@@ -73,7 +72,7 @@ void verify_name(
     }
 }
 
-void verify_symbol_key(const StreamId& symbol_key) {
+void verify_symbol_key(const entity::StreamId& symbol_key) {
     if (ConfigsMap::instance()->get_int("VersionStore.NoStrictSymbolCheck")) {
         ARCTICDB_DEBUG(log::version(),
                        "Key with stream id {} will not be strictly checked because VersionStore.NoStrictSymbolCheck variable is set to 1.",
@@ -83,13 +82,13 @@ void verify_symbol_key(const StreamId& symbol_key) {
 
     util::variant_match(
             symbol_key,
-            [](const NumericId &num_symbol_key) {
+            [](const entity::NumericId &num_symbol_key) {
                 (void) num_symbol_key; // Suppresses -Wunused-parameter
                 ARCTICDB_DEBUG(log::version(), "Nothing to verify in stream id {} as it contains a NumericId.",
                                num_symbol_key);
                 return;
             },
-            [](const StringId &str_symbol_key) {
+            [](const entity::StringId &str_symbol_key) {
                 verify_name("symbol key", str_symbol_key);
             }
     );
@@ -98,7 +97,7 @@ void verify_symbol_key(const StreamId& symbol_key) {
 // Library names starting with "/" fail if storage is LMDB and library parts starting with "/" will fail in Mongo
 constexpr auto UNSUPPORTED_LMDB_MONGO_PREFIX = '/';
 
-void verify_library_path(const StringId& library_path, char delim) {
+void verify_library_path(const entity::StringId& library_path, char delim) {
     verify_name("library name", library_path, false, {}, {}, delim);
 }
 
@@ -118,7 +117,7 @@ void verify_library_path_part(const std::string& library_part, char delim) {
     }
 }
 
-void verify_library_path_on_write(const StringId& library_path) {
+void verify_library_path_on_write(const entity::StringId& library_path) {
     verify_name("library name", library_path, true, UNSUPPORTED_S3_CHARS);
 }
 

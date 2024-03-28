@@ -6,12 +6,10 @@
  */
 
 #include <gtest/gtest.h>
-#include <arcticdb/util/test/gtest_utils.hpp>
 
-#include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/azure/azure_storage.hpp>
 #include <arcticdb/storage/azure/azure_mock_client.hpp>
-#include <arcticdb/util/buffer.hpp>
+#include <arcticdb/storage/storage_mock_client.hpp>
 #include <arcticdb/storage/test/common.hpp>
 
 using namespace arcticdb;

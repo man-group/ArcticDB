@@ -7,14 +7,12 @@
 
 #pragma once
 
-#include <azure/core/http/curl_transport.hpp>
-#include <azure/core/http/http_status_code.hpp>
-#include <azure/core.hpp>
-#include <azure/storage/blobs.hpp>
 
-#include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/storage/azure/azure_client_wrapper.hpp>
-#include <arcticdb/storage/storage_mock_client.hpp>
+
+namespace arcticdb::storage {
+    enum class StorageOperation;
+}
 
 namespace arcticdb::storage::azure {
 

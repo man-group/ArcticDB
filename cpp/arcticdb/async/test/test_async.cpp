@@ -9,13 +9,10 @@
 #include <arcticdb/storage/common.hpp>
 #include <arcticdb/storage/config_resolvers.hpp>
 #include <arcticdb/storage/library_index.hpp>
-#include <arcticdb/storage/storage_factory.hpp>
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/util/test/config_common.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
-#include <arcticdb/util/random.h>
 
-#include <fmt/format.h>
 
 #include <string>
 #include <vector>
@@ -43,7 +40,7 @@ TEST(Async, SinkBasic) {
 
     auto seg = ac::SegmentInMemory();
     aa::EncodeAtomTask enc{
-        ac::entity::KeyType::GENERATION, ac::entity::VersionId{6}, ac::entity::NumericId{123}, ac::entity::NumericId{456}, ac::timestamp{457}, {ac::entity::NumericIndex{999}}, std::move(seg), codec_opt, ac::EncodingVersion::V2
+        ac::entity::KeyType::GENERATION, ac::entity::VersionId{6}, ac::entity::NumericId{123}, ac::entity::NumericId{456}, ac::timestamp{457}, ac::entity::NumericIndex{999}, std::move(seg), codec_opt, ac::EncodingVersion::V2
     };
 
     auto v = sched.submit_cpu_task(std::move(enc)).via(&aa::io_executor()).thenValue(aa::WriteSegmentTask{lib}).get();

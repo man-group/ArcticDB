@@ -10,7 +10,6 @@
 #include <arcticdb/codec/encoding_sizes.hpp>
 #include <arcticdb/codec/codec.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
-#include <arcticdb/pipeline/index_segment_reader.hpp>
 #include <arcticdb/pipeline/read_frame.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
@@ -20,15 +19,15 @@
 #include <arcticdb/util/type_handler.hpp>
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/codec/slice_data_sink.hpp>
-#include <arcticdb/storage/store.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/pipeline/column_mapping.hpp>
 #include <ankerl/unordered_dense.h>
 #include <arcticdb/codec/variant_encoded_field_collection.hpp>
 #include <arcticdb/util/magic_num.hpp>
-#include <google/protobuf/util/message_differencer.h>
-#include <folly/gen/Base.h>
+#include <arcticdb/entity/protobufs.hpp>
 #include <folly/concurrency/ConcurrentHashMap.h>
+#include <arcticdb/pipeline/read_options.hpp>
+#include <arcticdb/stream/stream_source.hpp>
 
 namespace arcticdb::pipelines {
 
@@ -490,9 +489,9 @@ void decode_into_frame_dynamic(
             // decode_or_expand will invoke the empty type handler which will do backfilling with the default value depending on the
             // destination type.
             if (!trivially_compatible_types(m.source_type_desc_, m.dest_type_desc_) && !source_is_empty) {
-                m.dest_type_desc_.visit_tag([&buffer, &m, &data, encoded_field, buffers, encdoing_version] (auto dest_desc_tag) {
+                m.dest_type_desc_.visit_tag([&buffer, &m, buffers] (auto dest_desc_tag) {
                     using DestinationType =  typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
-                    m.source_type_desc_.visit_tag([&buffer, &m, &data, &encoded_field, &buffers, encdoing_version] (auto src_desc_tag ) {
+                    m.source_type_desc_.visit_tag([&buffer, &m] (auto src_desc_tag ) {
                         using SourceType =  typename decltype(src_desc_tag)::DataTypeTag::raw_type;
                         if constexpr(std::is_arithmetic_v<SourceType> && std::is_arithmetic_v<DestinationType>) {
                             // If the source and destination types are different, then sizeof(destination type) >= sizeof(source type)

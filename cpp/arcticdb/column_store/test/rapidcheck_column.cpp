@@ -7,13 +7,10 @@
 
 #include <gtest/gtest.h>
 #include <cstdint>
-#include <limits>
-
-#include <arcticdb/column_store/memory_segment.hpp>
-#include <arcticdb/util/test/test_utils.hpp>
+#include <arcticdb/util/test/rapidcheck.hpp>
+#include <arcticdb/column_store/column.hpp>
 
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/util/test/rapidcheck.hpp>
 
 struct ColumnModel {
     std::vector<uint64_t> data;
@@ -89,7 +86,7 @@ struct ColumnRead : rc::state::Command<ColumnModel, arcticdb::Column> {
 
 RC_GTEST_PROP(Column, Rapidcheck, ()) {
     ColumnModel initial_state;
-    arcticdb::Column sut(TypeDescriptor(DataType::UINT64, Dimension::Dim0), 0, false, false);
+    arcticdb::Column sut(arcticdb::entity::TypeDescriptor(arcticdb::entity::DataType::UINT64, arcticdb::entity::Dimension::Dim0), 0, false, false);
     rc::state::check(initial_state,
                      sut,
                      &rc::state::gen::execOneOf<ColumnAppend, ColumnRead, ColumnLowerBound, ColumnUpperBound>);

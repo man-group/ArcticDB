@@ -7,7 +7,6 @@
 
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
-
 #include <arcticdb/util/ranges_from_future.hpp>
 
 #include <unordered_map>

@@ -6,15 +6,11 @@
  */
 
 #include <gtest/gtest.h>
-#include <gmock/gmock.h>
-
+#include <gmock/gmock-matchers.h>
 #include <arcticdb/version/version_map.hpp>
 #include <arcticdb/version/version_functions.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/storage/test/in_memory_store.hpp>
-#include <arcticdb/version/version_log.hpp>
-#include <arcticdb/version/version_map_batch_methods.hpp>
-#include <arcticdb/util/test/gtest_utils.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
 
 namespace arcticdb {

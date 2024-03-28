@@ -13,6 +13,15 @@
 #include <arcticdb/stream/merge.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/stream/segment_aggregator.hpp>
+#include <arcticdb/pipeline/slicing.hpp>
+#include <arcticdb/storage/store.hpp>
+#include <arcticdb/stream/stream_source.hpp>
+#include <arcticdb/stream/stream_reader.hpp>
+#include <arcticdb/stream/schema.hpp>
+#include <arcticdb/stream/aggregator.hpp>
+#include <arcticdb/pipeline/read_options.hpp>
+#include <arcticdb/pipeline/write_options.hpp>
+
 
 namespace arcticdb {
 
@@ -33,7 +42,7 @@ void merge_frames_for_keys_impl(
     struct StreamMergeWrapper {
         StreamMergeWrapper(
             KeySupplier &&key_supplier,
-            std::shared_ptr <StreamSource> store,
+            std::shared_ptr <stream::StreamSource> store,
             const IndexRange &index_range,
             StreamId id) :
             stream_reader_(std::move(key_supplier), std::move(store), storage::ReadKeyOpts{}, index_range),
@@ -76,8 +85,8 @@ void merge_frames_for_keys_impl(
         input_streams.emplace(std::make_unique<StreamMergeWrapper>(std::move(key_func), store, index_range, index_key.id()));
     }
 
-    using AggregatorType = Aggregator<IndexType, DynamicSchema, SegmentationPolicy, DensityPolicy>;
-    AggregatorType agg{DynamicSchema{index.create_stream_descriptor(target_id, {}), index}, std::move(func), std::move(segmentation_policy)};
+    using AggregatorType = stream::Aggregator<IndexType, stream::DynamicSchema, SegmentationPolicy, DensityPolicy>;
+    AggregatorType agg{stream::DynamicSchema{index.create_stream_descriptor(target_id, {}), index}, std::move(func), std::move(segmentation_policy)};
     do_merge<IndexType, StreamMergeWrapper, AggregatorType, decltype(input_streams)>(input_streams, agg, true);
 }
 

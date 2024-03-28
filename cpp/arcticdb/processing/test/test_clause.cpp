@@ -6,11 +6,11 @@
  */
 
 #include <gtest/gtest.h>
-#include <gmock/gmock-matchers.h>
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/util/test/generators.hpp>
-#include <folly/futures/Future.h>
 #include <arcticdb/pipeline/frame_slice.hpp>
+#include <arcticdb/processing/grouper.hpp>
+#include <gmock/gmock-matchers.h>
 
 template<typename T>
 void segment_scalar_assert_all_values_equal(const arcticdb::ProcessingUnit& proc_unit, const arcticdb::ColumnName& name, const std::unordered_set<T>& expected, size_t expected_row_count) {

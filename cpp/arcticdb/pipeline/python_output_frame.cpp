@@ -7,7 +7,6 @@
 
 #include <arcticdb/pipeline/python_output_frame.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
-#include <arcticdb/util/memory_tracing.hpp>
 #include <arcticdb/column_store/column_utils.hpp>
 
 namespace arcticdb::pipelines {

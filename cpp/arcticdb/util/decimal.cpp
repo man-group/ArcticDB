@@ -8,7 +8,6 @@
 #include <arcticdb/util/decimal.hpp>
 #include <string>
 #include <cassert>
-#include <cmath>
 #include <boost/multiprecision/cpp_int.hpp>
 #include <arcticdb/util/preprocess.hpp>
 #include <arcticdb/util/preconditions.hpp>

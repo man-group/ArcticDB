@@ -7,9 +7,9 @@
 
 #include <gtest/gtest.h>
 #include <arcticdb/stream/segment_aggregator.hpp>
-#include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/util/test/generators.hpp>
+#include <arcticdb/stream/index.hpp>
 
 TEST(SegmentAggregator, Basic) {
     using namespace arcticdb;
@@ -36,7 +36,7 @@ TEST(SegmentAggregator, Basic) {
         segments.emplace_back(std::move(wrapper.segment()));
     }
 
-    SegmentSinkWrapper seg_wrapper(symbol, TimeseriesIndex::default_index(), fields_from_range(std::vector<FieldRef>{
+    SegmentSinkWrapper seg_wrapper(symbol, stream::TimeseriesIndex::default_index(), fields_from_range(std::vector<FieldRef>{
         scalar_field(DataType::UINT64, "numbers"),
         scalar_field(DataType::ASCII_DYNAMIC64, "strings")
     }));

@@ -7,10 +7,7 @@
 #include <arcticdb/storage/file/mapped_file_storage.hpp>
 
 #include <arcticdb/log/log.hpp>
-#include <arcticdb/entity/atom_key.hpp>
-#include <arcticdb/storage/constants.hpp>
 #include <arcticdb/storage/library_path.hpp>
-#include <arcticdb/storage/open_mode.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_options.hpp>

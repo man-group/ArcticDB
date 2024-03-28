@@ -6,6 +6,7 @@
  */
 
 #include <arcticdb/processing/aggregation.hpp>
+#include <arcticdb/entity/type_utils.hpp>
 
 #include <cmath>
 
@@ -70,14 +71,6 @@ namespace
         } else {
             current_data_type = data_type;
         }
-    }
-
-    inline util::BitMagic::enumerator::value_type deref(util::BitMagic::enumerator iter) {
-        return *iter;
-    }
-
-    inline std::size_t deref(std::size_t index) {
-        return index;
     }
 
     template<typename T, typename T2=void>

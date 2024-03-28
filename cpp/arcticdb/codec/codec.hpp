@@ -7,15 +7,15 @@
 
 #pragma once
 
-#include <arcticdb/codec/core.hpp>
-#include <arcticdb/codec/segment.hpp>
-#include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/codec/encode_common.hpp>
 
 namespace arcticdb {
 
 using ShapesBlockTDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension::Dim0>>;
+
+class SegmentInMemory;
+class Segment;
 
 Segment encode_dispatch(
     SegmentInMemory&& in_mem_seg,

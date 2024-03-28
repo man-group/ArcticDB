@@ -6,8 +6,9 @@
  */
 
 #include <arcticdb/pipeline/frame_utils.hpp>
-#include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
+#include <arcticdb/entity/protobuf_mappings.hpp>
+#include <arcticdb/pipeline/index_segment_reader.hpp>
 
 namespace arcticdb {
 

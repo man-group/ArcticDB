@@ -7,12 +7,11 @@
 
 #include <gtest/gtest.h>
 
-#include <bitmagic/bm.h>
-#include <bitmagic/bmserial.h>
 #include <arcticdb/util/buffer.hpp>
 #include <arcticdb/util/bitset.hpp>
+#include <arcticdb/column_store/chunked_buffer.hpp>
+#include <arcticdb/util/sparse_utils.hpp>
 
-#include <arcticdb/util/test/generators.hpp>
 
 TEST(BitMagic, Basic) {
     using namespace arcticdb;

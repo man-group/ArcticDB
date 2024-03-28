@@ -5,12 +5,14 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 #pragma once
-
-#include <entity/types.hpp>
-#include <util/type_handler.hpp>
+#include <cinttypes>
+#include <memory>
+#include <arcticdb/codec/variant_encoded_field_collection.hpp>
 
 namespace arcticdb {
     struct ColumnMapping;
+    struct BufferHolder;
+    enum class EncodingVersion : uint16_t;
 
     struct EmptyHandler {
         /// @see arcticdb::ITypeHandler

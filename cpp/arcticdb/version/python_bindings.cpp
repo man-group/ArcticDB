@@ -7,22 +7,20 @@
 
 #include <arcticdb/version/python_bindings.hpp>
 #include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
 #include <pybind11/numpy.h>
 #include <pybind11/operators.h>
 #include <arcticdb/entity/data_error.hpp>
 #include <arcticdb/version/version_store_api.hpp>
-#include <arcticdb/python/arctic_version.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/query.hpp>
-#include <arcticdb/storage/mongo/mongo_instance.hpp>
 #include <arcticdb/processing/operation_types.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/processing/expression_context.hpp>
 #include <arcticdb/pipeline/value_set.hpp>
 #include <arcticdb/python/adapt_read_dataframe.hpp>
 #include <arcticdb/version/schema_checks.hpp>
+#include <arcticdb/processing/grouper.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
 
 namespace arcticdb::version_store {

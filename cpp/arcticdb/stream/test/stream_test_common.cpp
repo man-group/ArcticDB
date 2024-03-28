@@ -6,7 +6,7 @@
  */
 
 #include <arcticdb/stream/test/stream_test_common.hpp>
-
+#include <arcticdb/stream/piloted_clock.hpp>
 namespace arcticdb {
 
 std::atomic<timestamp> PilotedClock::time_{0};

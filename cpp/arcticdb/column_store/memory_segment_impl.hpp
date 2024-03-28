@@ -11,12 +11,12 @@
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/util/preconditions.hpp>
+#include <arcticdb/column_store/string_pool.hpp>
 
 #include <arcticdb/entity/timeseries_descriptor.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/util/magic_num.hpp>
 #include <arcticdb/util/constructors.hpp>
-#include <arcticdb/column_store/column_map.hpp>
 #include <arcticdb/entity/stream_descriptor.hpp>
 
 #include <boost/iterator/iterator_facade.hpp>
@@ -28,7 +28,7 @@ namespace google::protobuf
 }
 
 namespace arcticdb {
-
+class ColumnMap;
 class SegmentInMemoryImpl;
 
 namespace {

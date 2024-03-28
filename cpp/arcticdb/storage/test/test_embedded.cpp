@@ -22,9 +22,6 @@
 #include <arcticdb/util/buffer.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/test/test_utils.hpp>
-#include <arcticdb/util/random.h>
-#include <arcticdb/stream/row_builder.hpp>
-#include <arcticdb/stream/aggregator.hpp>
 
 namespace ac = arcticdb;
 namespace as = arcticdb::storage;

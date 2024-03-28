@@ -9,7 +9,6 @@
 #include <cstdint>
 #include <limits>
 
-#include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/util/test/test_utils.hpp>
 
 #include <arcticdb/entity/types.hpp>
