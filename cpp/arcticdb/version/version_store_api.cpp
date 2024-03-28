@@ -941,7 +941,7 @@ void PythonVersionStore::prune_previous_versions(const StreamId& stream_id) {
     const std::shared_ptr<VersionMapEntry>& entry = version_map()->check_reload(
             store(),
             stream_id,
-            LoadParameter{LoadType::LOAD_UNDELETED},
+            LoadParameter{LoadType::LOAD_ALL, false},
             __FUNCTION__);
     storage::check<ErrorCode::E_SYMBOL_NOT_FOUND>(!entry->empty(), "Symbol {} is not found", stream_id);
     auto [latest, deleted] = entry->get_first_index(false);
@@ -1125,6 +1125,7 @@ std::vector<SliceAndKey> PythonVersionStore::list_incompletes(const StreamId& st
 }
 
 void PythonVersionStore::clear(const bool continue_on_error) {
+    version_map()->flush();
     if (store()->fast_delete()) {
         // Most storage backends have a fast deletion method for a db/collection equivalent, eg. drop() for mongo and
         // lmdb and iterating each key is always going to be suboptimal.
