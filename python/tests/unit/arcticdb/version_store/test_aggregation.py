@@ -468,7 +468,9 @@ def test_named_agg(lmdb_version_store_tiny_segment):
     print(f"\n{expected}")
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"agg_column_sum": ("agg_column", "sum"), "agg_column_mean": ("agg_column", "mean")})
-
+    received = lib.read(sym, query_builder=q).data
+    received.sort_index(inplace=True)
+    assert_frame_equal(expected, received)
 
 
 def test_max_minus_one(lmdb_version_store):
