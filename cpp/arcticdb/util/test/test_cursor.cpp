@@ -10,7 +10,6 @@
 #include <vector>
 #include <arcticdb/util/buffer.hpp>
 #include <arcticdb/column_store/chunked_buffer.hpp>
-#include <arcticdb/util/cursor.hpp>
 #include <arcticdb/util/cursored_buffer.hpp>
 #include <arcticdb/util/error_code.hpp>
 

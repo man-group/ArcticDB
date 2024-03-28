@@ -6,11 +6,9 @@
  */
 
 #include <arcticdb/stream/append_map.hpp>
-#include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
 #include <arcticdb/stream/stream_source.hpp>
 #include <arcticdb/stream/index.hpp>
-#include <arcticdb/entity/protobufs.hpp>
 #include <pipeline/query.hpp>
 #include <pipeline/frame_slice.hpp>
 #include <util/key_utils.hpp>
@@ -250,7 +248,7 @@ std::vector<SliceAndKey> get_incomplete(
     auto entries = get_incomplete_append_slices_for_stream_id(store, stream_id, via_iteration, load_data);
 
     util::variant_match(range,
-                        [](const RowRange &) {
+                        [](const pipelines::RowRange &) {
                             util::raise_rte("Only timestamp based ranges supported for filtering.");
                         },
                         [&entries](const IndexRange &index_range) {
@@ -367,7 +365,7 @@ AppendMapEntry entry_from_key(const std::shared_ptr<StreamSource>& store, const 
     if(seg)
         seg->attach_descriptor(desc);
 
-    auto frame_slice = FrameSlice{desc, ColRange{index_field_count, field_count}, RowRange{0, entry.total_rows_}};
+    auto frame_slice = FrameSlice{desc, pipelines::ColRange{index_field_count, field_count}, pipelines::RowRange{0, entry.total_rows_}};
     entry.slice_and_key_ = SliceAndKey{std::move(frame_slice), key, std::move(seg)};
     return entry;
 }

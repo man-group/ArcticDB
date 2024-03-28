@@ -9,7 +9,6 @@
 
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/codec/variant_encoded_field_collection.hpp>
-#include <arcticdb/pipeline/column_mapping.hpp>
 
 #include <folly/Poly.h>
 
@@ -19,6 +18,7 @@
 namespace arcticdb {
 
 struct BufferHolder;
+struct ColumnMapping;
 
 struct ITypeHandler {
     template<class Base>

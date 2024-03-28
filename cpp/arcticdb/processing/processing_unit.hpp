@@ -15,15 +15,13 @@
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/processing/component_manager.hpp>
-#include <arcticdb/processing/expression_context.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/filter_segment.hpp>
 #include <arcticdb/util/composite.hpp>
-#include <arcticdb/util/string_utils.hpp>
-#include <arcticdb/util/variant.hpp>
 
 namespace arcticdb {
+    struct ExpressionContext;
     enum class PipelineOptimisation : uint8_t {
         SPEED,
         MEMORY
@@ -61,8 +59,8 @@ namespace arcticdb {
                        std::optional<pipelines::RowRange>&& row_range=std::nullopt,
                        std::optional<pipelines::ColRange>&& col_range=std::nullopt) {
             auto segment_in_memory = std::move(seg);
-            auto rows = row_range.value_or(RowRange(0, segment_in_memory.row_count()));
-            auto cols = col_range.value_or(ColRange(0, segment_in_memory.is_null() ? 0 : segment_in_memory.descriptor().field_count() - segment_in_memory.descriptor().index().field_count()));
+            auto rows = row_range.value_or(pipelines::RowRange(0, segment_in_memory.row_count()));
+            auto cols = col_range.value_or(pipelines::ColRange(0, segment_in_memory.is_null() ? 0 : segment_in_memory.descriptor().field_count() - segment_in_memory.descriptor().index().field_count()));
             segments_.emplace({std::make_shared<SegmentInMemory>(std::move(segment_in_memory))});
             row_ranges_.emplace({std::make_shared<pipelines::RowRange>(std::move(rows))});
             col_ranges_.emplace({std::make_shared<pipelines::ColRange>(std::move(cols))});

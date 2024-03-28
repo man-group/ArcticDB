@@ -5,9 +5,8 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
+#include <arcticdb/column_store/column_map.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
-#include <arcticdb/entity/protobufs.hpp>
-#include <arcticdb/stream/protobuf_mappings.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/pipeline/read_pipeline.hpp>
 

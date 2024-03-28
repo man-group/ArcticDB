@@ -8,24 +8,20 @@
 
 #pragma once
 
-#include <cstdint>
 #include <variant>
 #include <memory>
 #include <type_traits>
 
-#include <folly/futures/Future.h>
 
 #include <arcticdb/pipeline/value.hpp>
 #include <arcticdb/pipeline/value_set.hpp>
 #include <arcticdb/column_store/column.hpp>
-#include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/processing/operation_dispatch.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/entity/type_conversion.hpp>
-
+#include <arcticdb/column_store/string_pool.hpp>
 namespace arcticdb {
 
 VariantData binary_boolean(const util::BitSet& left, const util::BitSet& right, OperationType operation);
@@ -247,31 +243,7 @@ VariantData binary_comparator(const ColumnWithStrings& column_with_strings, cons
 }
 
 template<typename Func>
-VariantData visit_binary_comparator(const VariantData& left, const VariantData& right, Func&& func) {
-    if(std::holds_alternative<EmptyResult>(left) || std::holds_alternative<EmptyResult>(right))
-        return EmptyResult{};
-
-    return std::visit(util::overload {
-     [&func] (const ColumnWithStrings& l, const std::shared_ptr<Value>& r) ->VariantData  {
-        auto result = binary_comparator<decltype(func)>(l, *r, std::forward<decltype(func)>(func));
-         return transform_to_placeholder(result);
-        },
-        [&] (const ColumnWithStrings& l, const ColumnWithStrings& r)  ->VariantData {
-        auto result = binary_comparator<decltype(func)>(l, r, std::forward<decltype(func)>(func));
-        return transform_to_placeholder(result);
-        },
-        [&](const std::shared_ptr<Value>& l, const ColumnWithStrings& r) ->VariantData {
-        auto result =  binary_comparator<decltype(func), true>(r, *l, std::forward<decltype(func)>(func));
-        return transform_to_placeholder(result);
-        },
-        [&] ([[maybe_unused]] const std::shared_ptr<Value>& l, [[maybe_unused]] const std::shared_ptr<Value>& r) ->VariantData  {
-        util::raise_rte("Two value inputs not accepted to binary comparators");
-        },
-        [](const auto &, const auto&) -> VariantData {
-        util::raise_rte("Bitset/ValueSet inputs not accepted to binary comparators");
-    }
-    }, left, right);
-}
+VariantData visit_binary_comparator(const VariantData& left, const VariantData& right, Func&& func);
 
 template <typename Func>
 VariantData binary_operator(const Value& left, const Value& right, Func&& func) {
@@ -374,53 +346,8 @@ VariantData binary_operator(const Column& col, const Value& val, Func&& func) {
 }
 
 template<typename Func>
-VariantData visit_binary_operator(const VariantData& left, const VariantData& right, Func&& func) {
-    if(std::holds_alternative<EmptyResult>(left) || std::holds_alternative<EmptyResult>(right))
-        return EmptyResult{};
-
-    return std::visit(util::overload {
-        [&] (const ColumnWithStrings& l, const std::shared_ptr<Value>& r) ->VariantData  {
-            return binary_operator<decltype(func)>(*(l.column_), *r, std::forward<decltype(func)>(func));
-            },
-            [&] (const ColumnWithStrings& l, const ColumnWithStrings& r)  ->VariantData {
-            return binary_operator<decltype(func)>(*(l.column_), *(r.column_), std::forward<decltype(func)>(func));
-            },
-            [&](const std::shared_ptr<Value>& l, const ColumnWithStrings& r) ->VariantData {
-            return binary_operator<decltype(func), true>(*(r.column_), *l, std::forward<decltype(func)>(func));
-            },
-            [&] (const std::shared_ptr<Value>& l, const std::shared_ptr<Value>& r) -> VariantData {
-            return binary_operator<decltype(func)>(*l, *r, std::forward<decltype(func)>(func));
-            },
-            [](const auto &, const auto&) -> VariantData {
-            util::raise_rte("Bitset/ValueSet inputs not accepted to binary operators");
-        }
-        }, left, right);
-}
+VariantData visit_binary_operator(const VariantData& left, const VariantData& right, Func&& func);
 
 VariantData dispatch_binary(const VariantData& left, const VariantData& right, OperationType operation);
-
-// instantiated in operation_dispatch_binary_operator.cpp to reduce compilation memory use
-extern template
-VariantData visit_binary_operator<arcticdb::PlusOperator>(const VariantData&, const VariantData&, PlusOperator&&);
-extern template
-VariantData visit_binary_operator<arcticdb::MinusOperator>(const VariantData&, const VariantData&, MinusOperator&&);
-extern template
-VariantData visit_binary_operator<arcticdb::TimesOperator>(const VariantData&, const VariantData&, TimesOperator&&);
-extern template
-VariantData visit_binary_operator<arcticdb::DivideOperator>(const VariantData&, const VariantData&, DivideOperator&&);
-
-// instantiated in operation_dispatch_binary_comparator.cpp to reduce compilation memory use
-extern template
-VariantData visit_binary_comparator<EqualsOperator>(const VariantData&, const VariantData&, EqualsOperator&&);
-extern template
-VariantData visit_binary_comparator<NotEqualsOperator>(const VariantData&, const VariantData&, NotEqualsOperator&&);
-extern template
-VariantData visit_binary_comparator<LessThanOperator>(const VariantData&, const VariantData&, LessThanOperator&&);
-extern template
-VariantData visit_binary_comparator<LessThanEqualsOperator>(const VariantData&, const VariantData&, LessThanEqualsOperator&&);
-extern template
-VariantData visit_binary_comparator<GreaterThanOperator>(const VariantData&, const VariantData&, GreaterThanOperator&&);
-extern template
-VariantData visit_binary_comparator<GreaterThanEqualsOperator>(const VariantData&, const VariantData&, GreaterThanEqualsOperator&&);
 
 }

@@ -6,7 +6,7 @@
  */
 
 #include <arcticdb/util/allocator.hpp>
-
+#include <fmt/std.h>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/memory_tracing.hpp>
@@ -15,7 +15,6 @@
 #include <folly/concurrency/ConcurrentHashMap.h>
 #include <folly/ThreadCachedInt.h>
 
-#include <fmt/std.h>
 
 namespace arcticdb {
 

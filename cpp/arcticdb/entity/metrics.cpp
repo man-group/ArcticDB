@@ -6,13 +6,16 @@
  */
 
 #include <arcticdb/entity/metrics.hpp>
+#include <prometheus/exposer.h>
+#include <prometheus/gateway.h>
 #include <arcticdb/log/log.hpp>
-#include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/util/preprocess.hpp>
-#include <arcticdb/util/pb_util.hpp>
+#include <prometheus/registry.h>
+#include <prometheus/summary.h>
 
 #ifdef _WIN32
-#    include <Winsock.h> // for gethostname
+#include <Winsock.h> // for gethostname
+#else
+#include <unistd.h> // for gethostname
 #endif
 
 using namespace prometheus;

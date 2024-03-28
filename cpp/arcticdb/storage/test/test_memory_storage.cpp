@@ -6,7 +6,6 @@
  */
 
 #include <gtest/gtest.h>
-#include <arcticdb/storage/memory/memory_storage.hpp>
 #include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
 

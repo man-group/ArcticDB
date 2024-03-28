@@ -16,9 +16,9 @@ struct SliceDataSink {
     SliceDataSink(uint8_t *data, std::size_t size) : data_(data), shape_(0), current_size_(0), total_size_(size) {
     }
 
-    shape_t *allocate_shapes(std::size_t s) ARCTICDB_UNUSED {
+    entity::shape_t *allocate_shapes(std::size_t s) ARCTICDB_UNUSED {
         if (s == 0) return nullptr;
-        util::check_arg(s == 8, "expected exactly one shape, actual {}", s / sizeof(shape_t));
+        util::check_arg(s == 8, "expected exactly one shape, actual {}", s / sizeof(entity::shape_t));
         return &shape_;
     }
 
@@ -37,7 +37,7 @@ struct SliceDataSink {
 
 private:
     uint8_t *data_;
-    shape_t shape_;
+    entity::shape_t shape_;
     std::size_t current_size_;
     std::size_t total_size_;
 };

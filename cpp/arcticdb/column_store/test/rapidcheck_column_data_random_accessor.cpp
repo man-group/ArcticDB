@@ -6,10 +6,10 @@
  */
 
 #include <gtest/gtest.h>
+#include <arcticdb/util/test/rapidcheck.hpp>
 
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/column_store/column_data_random_accessor.hpp>
-#include <arcticdb/util/test/rapidcheck.hpp>
 
 // Tricky to construct columns using a ChunkedBuffer with the testing size of 64 bytes, so only use rapidcheck for
 // single block tests, and test regualr and irregular accessors in test_column_data_random_accessor.cpp

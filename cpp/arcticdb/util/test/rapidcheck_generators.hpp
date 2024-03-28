@@ -8,11 +8,16 @@
 #pragma once
 
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/util/test/rapidcheck.hpp>
-
+#include <arcticdb/stream/index.hpp>
+#include <arcticdb/stream/schema.hpp>
+#include <arcticdb/stream/stream_sink.hpp>
+#include <arcticdb/stream/stream_writer.hpp>
+#include <arcticdb/stream/stream_reader.hpp>
+#include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
-#include <arcticdb/stream/test/stream_test_common.hpp>
+#include <folly/futures/Future.h>
 
+namespace ac = arcticdb;
 inline rc::Gen <arcticdb::entity::DataType> gen_numeric_datatype() {
     return rc::gen::element<arcticdb::entity::DataType>(
         arcticdb::entity::DataType::INT8,
@@ -153,17 +158,17 @@ folly::Future<arcticdb::entity::VariantKey> write_frame_data(const TestDataFrame
 inline folly::Future<arcticdb::entity::VariantKey> write_test_frame(ac::StreamId stream_id,
 
                                                                 const TestDataFrame &data_frame,
-                                                                std::shared_ptr<ac::StreamSink> store) {
+                                                                std::shared_ptr<ac::stream::StreamSink> store) {
     auto schema = schema_from_test_frame(data_frame, std::move(stream_id));
     auto start_end = test_frame_range(data_frame);
     auto gen_id = arcticdb::VersionId(0);
 
-    ac::StreamWriter<ac::TimeseriesIndex, ac::FixedSchema> writer{
+    ac::stream::StreamWriter<ac::stream::TimeseriesIndex, ac::stream::FixedSchema> writer{
         std::move(schema),
         std::move(store),
         gen_id,
         start_end,
-        ac::RowCountSegmentPolicy{4}
+        ac::stream::RowCountSegmentPolicy{4}
     };
 
     return write_frame_data(data_frame, writer);
@@ -217,9 +222,9 @@ bool check_read_frame(const TestDataFrame &data_frame, ReaderType &reader, std::
 
 inline bool check_test_frame(const TestDataFrame &data_frame,
                              const arcticdb::entity::AtomKey &key,
-                             std::shared_ptr<ac::StreamSource> store,
+                             std::shared_ptr<ac::stream::StreamSource> store,
                              std::vector<std::string> &errors) {
-    ac::StreamReader<arcticdb::entity::AtomKey, folly::Function<std::vector<arcticdb::entity::AtomKey>()>, arcticdb::SegmentInMemory::Row> stream_reader{
+    ac::stream::StreamReader<arcticdb::entity::AtomKey, folly::Function<std::vector<arcticdb::entity::AtomKey>()>, arcticdb::SegmentInMemory::Row> stream_reader{
         [&]() { return std::vector<arcticdb::entity::AtomKey>{key}; },
         std::move(store)
     };

@@ -10,24 +10,21 @@
 #include <arcticdb/entity/versioned_item.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/query.hpp>
-#include <arcticdb/pipeline/write_options.hpp>
-#include <arcticdb/async/task_scheduler.hpp>
-#include <arcticdb/stream/append_map.hpp>
-#include <arcticdb/pipeline/read_pipeline.hpp>
-#include <arcticdb/pipeline/pipeline_context.hpp>
-#include <arcticdb/pipeline/read_options.hpp>
 #include <arcticdb/entity/atom_key.hpp>
-#include <arcticdb/stream/stream_reader.hpp>
-#include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/entity/frame_and_descriptor.hpp>
-#include <arcticdb/version/version_store_objects.hpp>
 
-#include <string>
+
+namespace arcticdb{
+    struct WriteOptions;
+    struct ReadOptions;
+    class DeDupMap;
+}
 
 namespace arcticdb::version_store {
 
 using namespace arcticdb::entity;
 using namespace arcticdb::pipelines;
+struct UpdateInfo;
 
 VersionedItem write_dataframe_impl(
     const std::shared_ptr<Store>& store,

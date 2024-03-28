@@ -6,7 +6,6 @@
  */
 
 #include <gtest/gtest.h>
-#include <gmock/gmock-matchers.h> // Included in gtest 1.10
 
 #include <arcticdb/version/symbol_list.hpp>
 #include <arcticdb/version/version_map.hpp>
@@ -14,8 +13,7 @@
 #include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/util/test/gtest_utils.hpp>
 #include <arcticdb/version/test/symbol_list_backwards_compat.hpp>
-
-#include <shared_mutex>
+#include <gmock/gmock-matchers.h>
 
 #include <folly/executors/FutureExecutor.h>
 #include <folly/executors/CPUThreadPoolExecutor.h>

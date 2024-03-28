@@ -10,7 +10,6 @@
 
 #include <gtest/gtest.h>
 
-#include <fmt/format.h>
 #include <iostream>
 #include <type_traits>
 

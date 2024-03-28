@@ -6,9 +6,9 @@
  */
 
 #include <gtest/gtest.h>
-#include <arcticdb/util/test/rapidcheck.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/util/offset_string.hpp>
+#include <arcticdb/util/test/rapidcheck.hpp>
 
 #include <map>
 #include <string>

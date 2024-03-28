@@ -8,21 +8,15 @@
 #pragma once
 
 #include <arcticdb/version/version_map.hpp>
-#include <arcticdb/async/async_store.hpp>
-#include <arcticdb/version/symbol_list.hpp>
 #include <arcticdb/version/snapshot.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/write_options.hpp>
 #include <arcticdb/entity/versioned_item.hpp>
-#include <arcticdb/pipeline/query.hpp>
-#include <arcticdb/pipeline/input_tensor_frame.hpp>
-#include <arcticdb/version/version_core.hpp>
 #include <arcticdb/version/versioned_engine.hpp>
 #include <arcticdb/entity/descriptor_item.hpp>
 #include <arcticdb/entity/data_error.hpp>
 
-#include <sstream>
 namespace arcticdb::version_store {
 
 /**

@@ -7,7 +7,6 @@
 
 #include <gtest/gtest.h>
 
-#include <arcticdb/codec/codec.hpp>
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/lmdb/lmdb_storage.hpp>
 #include <arcticdb/storage/lmdb/lmdb_mock_client.hpp>

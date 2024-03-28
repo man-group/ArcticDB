@@ -10,11 +10,10 @@
 #include <benchmark/benchmark.h>
 
 #include <arcticdb/processing/clause.hpp>
-#include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
-#include <folly/futures/Future.h>
-#include <arcticdb/pipeline/frame_slice.hpp>
-
+#include <arcticdb/processing/grouper.hpp>
+#include <arcticdb/stream/index.hpp>
+#include <arcticdb/stream/test/stream_test_common.hpp>
 using namespace arcticdb;
 
 // run like: --benchmark_time_unit=ms --benchmark_filter=.* --benchmark_min_time=5x

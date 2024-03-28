@@ -11,7 +11,6 @@
 #include <arcticdb/util/test/test_utils.hpp>
 #include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/util/random.h>
-#include <arcticdb/stream/row_builder.hpp>
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/codec/typed_block_encoder_impl.hpp>
 

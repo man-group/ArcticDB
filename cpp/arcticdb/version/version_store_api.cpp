@@ -8,10 +8,7 @@
 #include <arcticdb/version/version_store_api.hpp>
 
 #include <arcticdb/python/python_utils.hpp>
-#include <arcticdb/async/async_store.hpp>
 #include <arcticdb/version/version_map.hpp>
-#include <arcticdb/entity/protobufs.hpp>
-#include <arcticdb/util/timer.hpp>
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/util/ranges_from_future.hpp>
@@ -19,19 +16,18 @@
 #include <arcticdb/entity/versioned_item.hpp>
 #include <arcticdb/entity/descriptor_item.hpp>
 #include <arcticdb/pipeline/query.hpp>
-#include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/util/optional_defaults.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
 #include <arcticdb/pipeline/read_frame.hpp>
-#include <arcticdb/version/version_tasks.hpp>
 #include <arcticdb/version/version_map_batch_methods.hpp>
 #include <arcticdb/version/version_utils.hpp>
+#include <arcticdb/version/version_functions.hpp>
 #include <arcticdb/pipeline/pipeline_utils.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/version/snapshot.hpp>
 #include <storage/file/file_store.hpp>
+#include <arcticdb/stream/append_map.hpp>
 
-#include <regex>
 
 namespace arcticdb::version_store {
 
@@ -52,7 +48,7 @@ VersionedItem PythonVersionStore::write_dataframe_specific_version(
     ARCTICDB_SAMPLE(WriteDataFrame, 0)
 
     ARCTICDB_DEBUG(log::version(), "write_dataframe_specific_version stream_id: {} , version_id: {}", stream_id, version_id);
-    if (auto version_key = ::arcticdb::get_specific_version(store(), version_map(), stream_id, version_id, VersionQuery{}); version_key) {
+    if (auto version_key = arcticdb::get_specific_version(store(), version_map(), stream_id, version_id, VersionQuery{}); version_key) {
         log::version().warn("Symbol stream_id: {} already exists with version_id: {}", stream_id, version_id);
         return {std::move(*version_key)};
     }

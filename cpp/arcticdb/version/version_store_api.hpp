@@ -10,31 +10,11 @@
 #include <arcticdb/entity/data_error.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/stream/index.hpp>
-#include <arcticdb/util/timeouts.hpp>
-#include <arcticdb/util/variant.hpp>
-#include <pybind11/pybind11.h>
-#include <arcticdb/python/python_utils.hpp>
-#include <arcticdb/async/async_store.hpp>
 #include <arcticdb/version/version_map.hpp>
-#include <arcticdb/version/snapshot.hpp>
-#include <arcticdb/version/symbol_list.hpp>
-#include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
-#include <arcticdb/pipeline/write_options.hpp>
 #include <arcticdb/entity/versioned_item.hpp>
-#include <arcticdb/pipeline/query.hpp>
-#include <arcticdb/pipeline/slicing.hpp>
-#include <arcticdb/pipeline/read_pipeline.hpp>
-#include <arcticdb/pipeline/query.hpp>
-#include <arcticdb/pipeline/read_options.hpp>
-#include <arcticdb/stream/append_map.hpp>
-#include <arcticdb/version/version_core.hpp>
 #include <arcticdb/version/local_versioned_engine.hpp>
 #include <arcticdb/entity/read_result.hpp>
-#include <arcticdb/version/version_log.hpp>
-
-#include <type_traits>
-#include <iostream>
 
 namespace arcticdb::version_store {
 

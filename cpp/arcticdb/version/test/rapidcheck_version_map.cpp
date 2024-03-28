@@ -5,18 +5,12 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <cstdint>
-#include <limits>
 
-#include <arcticdb/version/version_map.hpp>
-#include <arcticdb/util/test/test_utils.hpp>
-#include <arcticdb/util/preprocess.hpp>
-#include <arcticdb/stream/test/stream_test_common.hpp>
-#include <arcticdb/storage/test/in_memory_store.hpp>
-
-#include <arcticdb/entity/types.hpp>
 #include <gtest/gtest.h>
+#include <arcticdb/version/version_map.hpp>
+#include <arcticdb/util/preprocess.hpp>
 #include <arcticdb/util/test/rapidcheck.hpp>
+
 #include <arcticdb/version/test/version_map_model.hpp>
 #include <arcticdb/version/version_functions.hpp>
 

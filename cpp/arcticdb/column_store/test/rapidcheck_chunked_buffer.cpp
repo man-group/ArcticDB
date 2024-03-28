@@ -7,12 +7,10 @@
 
 #include "gtest/gtest.h"
 #include <arcticdb/util/test/rapidcheck.hpp>
-
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/util/cursored_buffer.hpp>
 
 #include <vector>
-#include <algorithm>
 
 TEST(ChunkedBuffer, Basic) {
     using namespace arcticdb;
