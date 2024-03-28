@@ -311,6 +311,6 @@ size_t get_slice_rowcounts(
 std::pair<size_t, size_t> offset_and_row_count(
     const std::shared_ptr<pipelines::PipelineContext>& context);
 
-bool index_is_not_timeseries_or_is_sorted_ascending(const std::shared_ptr<pipelines::InputTensorFrame>& frame);
+bool index_is_not_timeseries_or_is_sorted_ascending(const pipelines::InputTensorFrame& frame);
 
 } //namespace arcticdb

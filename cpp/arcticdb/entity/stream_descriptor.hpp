@@ -22,7 +22,6 @@ struct StreamDescriptor {
 
     std::shared_ptr<Proto> data_ = std::make_shared<Proto>();
     std::shared_ptr<FieldCollection> fields_ = std::make_shared<FieldCollection>();
-    ;
 
     StreamDescriptor() = default;
     ~StreamDescriptor() = default;
@@ -65,7 +64,7 @@ struct StreamDescriptor {
         data_->set_sorted(sorted_value_to_proto(sorted));
     }
 
-    SortedValue get_sorted() {
+    SortedValue get_sorted() const {
         return sorted_value_from_proto(data_->sorted());
     }
 

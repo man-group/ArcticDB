@@ -148,8 +148,8 @@ std::pair<size_t, size_t> offset_and_row_count(const std::shared_ptr<pipelines::
     return std::make_pair(offset, row_count);
 }
 
-bool index_is_not_timeseries_or_is_sorted_ascending(const std::shared_ptr<pipelines::InputTensorFrame>& frame) {
-    return !std::holds_alternative<stream::TimeseriesIndex>(frame->index) || frame->desc.get_sorted() == SortedValue::ASCENDING;
+bool index_is_not_timeseries_or_is_sorted_ascending(const pipelines::InputTensorFrame& frame) {
+    return !std::holds_alternative<stream::TimeseriesIndex>(frame.index) || frame.desc.get_sorted() == SortedValue::ASCENDING;
 }
 
 }

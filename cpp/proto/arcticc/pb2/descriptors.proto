@@ -57,6 +57,8 @@ message TypeDescriptor {
 message IndexDescriptor {
     enum Type {
         UNKNOWN = 0;
+        // Used then the dataframe has 0 rows. Convertible to any other type
+        EMPTY = 69; // 'E'
         ROWCOUNT = 82; // 'R'
         STRING = 83; // 'S'
         TIMESTAMP = 84; //  'T'
@@ -122,7 +124,7 @@ message NormalizationMetadata {
         string name = 1; // RangeIndex are not represented as a field, hence no name is associated
         string tz = 2;
         bool fake_name = 3;
-        bool is_not_range_index = 4;
+        bool is_physically_stored = 4;
         int64 start = 5; // Used for RangeIndex
         int64 step = 6; // Used for RangeIndex
         bool is_int = 7;

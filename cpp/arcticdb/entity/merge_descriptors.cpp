@@ -46,8 +46,13 @@ StreamDescriptor merge_descriptors(
     // Merge all the fields for all slices, apart from the index which we already have from the first descriptor.
     // Note that we preserve the ordering as we see columns, especially the index which needs to be column 0.
     for (const auto &fields : entries) {
-        if(has_index)
-            util::variant_match(index, [&fields] (const auto& idx) { idx.check(*fields); });
+        if (has_index) {
+            util::variant_match(index,
+                [](const EmptyIndex&) {},
+                [](const RowCountIndex&) {},
+                [&fields] (const auto& idx) { idx.check(*fields); }
+            );
+        }
 
         for (size_t idx = has_index ? 1u : 0u; idx < static_cast<size_t>(fields->size()); ++idx) {
             const auto& field = fields->at(idx);

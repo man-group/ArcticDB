@@ -170,7 +170,9 @@ class Aggregator {
         // size then you get default buffer sizes.
         segment_(desc.value_or(schema_policy_.default_descriptor()), row_count.value_or(segmenting_policy_.expected_row_size()), false, SparsePolicy::allow_sparse) {
             segment_.init_column_map();
-            index().check(segment_.descriptor().fields());
+            if constexpr (!(std::is_same_v<Index, EmptyIndex> || std::is_same_v<Index, RowCountIndex>)) {
+                index().check(segment_.descriptor().fields());
+            }
     };
 
     virtual ~Aggregator() = default;

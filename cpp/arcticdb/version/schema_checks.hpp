@@ -29,42 +29,56 @@ struct StreamDescriptorMismatch : ArcticSpecificException<ErrorCode::E_DESCRIPTO
                                         fmt::join(existing.fields(), ", "), fmt::join(new_val.fields(), ", "))) {}
 };
 
+inline IndexDescriptor::Type get_common_index_type(const IndexDescriptor::Type& left, const IndexDescriptor::Type& right) {
+    if (left == right) {
+        return left;
+    }
+    if (left == IndexDescriptor::EMPTY) {
+        return right;
+    }
+    if (right == IndexDescriptor::EMPTY) {
+        return left;
+    }
+    return IndexDescriptor::UNKNOWN;
+}
+
 inline void check_normalization_index_match(NormalizationOperation operation,
                                      const StreamDescriptor &old_descriptor,
                                      const pipelines::InputTensorFrame &frame) {
-    auto old_idx_kind = old_descriptor.index().type();
-    bool new_is_timeseries = std::holds_alternative<TimeseriesIndex>(frame.index);
-
+    const IndexDescriptor::Type old_idx_kind = old_descriptor.index().type();
+    const IndexDescriptor::Type new_idx_kind = frame.desc.index().type();
     if (operation == UPDATE) {
-        util::check_rte(old_idx_kind == IndexDescriptor::TIMESTAMP && new_is_timeseries,
+        const bool new_is_timeseries = std::holds_alternative<TimeseriesIndex>(frame.index);
+        util::check_rte(
+            (old_idx_kind == IndexDescriptor::TIMESTAMP || old_idx_kind == IndexDescriptor::EMPTY) && new_is_timeseries,
                         "Update will not work as expected with a non-timeseries index");
     } else {
-        // TODO: AN-722
-        if (new_is_timeseries) {
-            if (old_idx_kind != IndexDescriptor::TIMESTAMP) {
-                log::version().warn("Appending a timeseries to a non-timeseries-indexed symbol may create a "
-                                    "confusing index and cause problems later");
-            }
-        } else {
-            if (old_idx_kind != IndexDescriptor::ROWCOUNT) {
-                // Backwards compatibility
-                log::version().warn("Appending a non-timeseries-indexed data to a timeseries symbol is highly "
-                                    "likely to cause corruption/unexpected behaviour.");
-            }
-        }
+        const IndexDescriptor::Type common_index_type = get_common_index_type(old_idx_kind, new_idx_kind);
+        normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+            common_index_type != IndexDescriptor::UNKNOWN,
+            "Cannot append {} index to {} index",
+            index_type_to_str(new_idx_kind),
+            index_type_to_str(old_idx_kind)
+        );
     }
 }
 
-inline bool columns_match(const StreamDescriptor &left, const StreamDescriptor &right) {
-    if (left.fields().size() != right.fields().size())
+inline bool columns_match(const StreamDescriptor& left, const StreamDescriptor& right) {
+    const int left_index_is_empty = left.index().type() == IndexDescriptor::EMPTY;
+    const int right_fields_offset = right.index().field_count() * left_index_is_empty;
+    // The empty index is compatible with all other index types. Differences in the index fields in this case is
+    // allowed. The index fields are always the first in the list.
+    if (left.fields().size() + right_fields_offset != right.fields().size()) {
         return false;
-
+    }
+    // In case the left index is empty index we want to skip name/type checking of the index fields which are always
+    // the first fields.
     for (auto i = 0; i < int(left.fields().size()); ++i) {
-        if (left.fields(i).name() != right.fields(i).name())
+        if (left.fields(i).name() != right.fields(i + right_fields_offset).name())
             return false;
 
-        const TypeDescriptor &left_type = left.fields(i).type();
-        const TypeDescriptor &right_type = right.fields(i).type();
+        const TypeDescriptor& left_type = left.fields(i).type();
+        const TypeDescriptor& right_type = right.fields(i + right_fields_offset).type();
 
         if (!trivially_compatible_types(left_type, right_type) &&
             !(is_empty_type(left_type.data_type()) || is_empty_type(right_type.data_type())))
