@@ -504,7 +504,16 @@ class QueryBuilder:
             f"Aggregation only makes sense after groupby",
         )
         for v in aggregations.values():
-            v = v.lower()
+            check(isinstance(v, (str, tuple)), f"Values in agg dict expected to be strings or tuples, received {v} of type {type(v)}")
+            if isinstance(v, str):
+                v = v.lower()
+            elif isinstance(v, tuple):
+                check(
+                    len(v) == 2 and (isinstance(v[0], str) and isinstance(v[1], str)),
+                    f"Tuple values in agg dict expected to have 2 string elements, received {v}"
+                )
+                v[1].lower()
+
         self.clauses.append(_AggregationClause(self.clauses[-1].grouping_column, aggregations))
         self._python_clauses.append(PythonAggregationClause(aggregations))
         return self
