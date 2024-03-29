@@ -1947,6 +1947,13 @@ def test_get_index(object_version_store):
     assert idx.iloc[0]["version_id"] == 0
 
 
+def test_read_empty_index(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_read_empty_index"
+    lib.write(sym, pd.DataFrame())
+    assert len(lib.read_index(sym)) == 0
+
+
 def test_snapshot_empty_segment(basic_store):
     lib = basic_store
 

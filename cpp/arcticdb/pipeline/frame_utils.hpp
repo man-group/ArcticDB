@@ -244,7 +244,7 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
             Column arr_col{column_type_descriptor, true};
             for (auto en = values_bitset.first(); en < values_bitset.end(); ++en) {
                 const auto arr_pos = *en;
-                const auto row_tensor = convert::obj_to_tensor(ptr_data[arr_pos]);
+                const auto row_tensor = convert::obj_to_tensor(ptr_data[arr_pos], false);
                 const auto row_type_descriptor = TypeDescriptor{row_tensor.data_type(), Dimension::Dim1};
                 const std::optional<TypeDescriptor>& common_type = has_valid_common_type(row_type_descriptor, secondary_type);
                 normalization::check<ErrorCode::E_COLUMN_SECONDARY_TYPE_MISMATCH>(

@@ -244,8 +244,9 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
         return arr
     else:
         raise ArcticDbNotYetImplemented(
-            "Support for arbitrary objects in an array is not implemented apart from string, unicode, Timestamp. "
-            "Column type={} for column={}. Do you have mixed dtypes in your column?".format(arr.dtype, arr_name)
+            f"Failed to normalize column '{arr_name}' with dtype '{arr.dtype}'. Found first non-null value of type "
+            f"'{type(sample)}', but only strings, unicode, and Timestamps are supported. "
+            f"Do you have mixed dtypes in your column?"
         )
 
     # Pick any unwanted data conversions (e.g. np.NaN to 'nan') or None to the string 'None'
@@ -1241,14 +1242,8 @@ class CompositeNormalizer(Normalizer):
             if pickle_on_failure:
                 log.debug("pickle_on_failure flag set, normalizing the item with MsgPackNormalizer", type(item), ex)
                 return self.fallback_normalizer.normalize(item)
-            # Could not normalize with the default handler, pickle_on_failure
-            error_message = (
-                "Could not normalize item of type: {} with any normalizer."
-                "You can set pickle_on_failure param to force pickling of this object instead."
-                "(Note: Pickling has worse performance and stricter memory limitations)"
-            )
-            log.error(error_message, type(item), ex)
-            raise
+            else:
+                raise
 
     def denormalize(self, item, norm_meta):
         # type: (_FrameData, NormalizationMetadata)->_SUPPORTED_TYPES

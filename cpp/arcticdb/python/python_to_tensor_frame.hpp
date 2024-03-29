@@ -80,13 +80,14 @@ std::variant<StringEncodingError, PyStringWrapper> py_unicode_to_buffer(
     PyObject *obj,
     std::optional<ScopedGILLock>& scoped_gil_lock);
 
-NativeTensor obj_to_tensor(PyObject *ptr);
+NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types);
 
 std::shared_ptr<pipelines::InputTensorFrame> py_ndf_to_frame(
     const StreamId& stream_name,
     const py::tuple &item,
     const py::object &norm_meta,
-    const py::object &user_meta);
+    const py::object &user_meta,
+    bool empty_types);
 
 std::shared_ptr<pipelines::InputTensorFrame> py_none_to_frame();
 
