@@ -64,8 +64,7 @@ inline void check_normalization_index_match(NormalizationOperation operation,
 }
 
 inline bool columns_match(const StreamDescriptor& left, const StreamDescriptor& right) {
-    const int left_index_is_empty = left.index().type() == IndexDescriptor::EMPTY;
-    const int right_fields_offset = right.index().field_count() * left_index_is_empty;
+    const int right_fields_offset = left.index().type() == IndexDescriptor::EMPTY ? right.index().field_count() : 0;
     // The empty index is compatible with all other index types. Differences in the index fields in this case is
     // allowed. The index fields are always the first in the list.
     if (left.fields().size() + right_fields_offset != right.fields().size()) {

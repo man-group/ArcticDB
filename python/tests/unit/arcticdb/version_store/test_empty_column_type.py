@@ -14,9 +14,8 @@ import pytest
 
 class DtypeGenerator:
     """
-    Class which can generate all dtypes which ArcticDB supports. It can generate them by type category e.g. int, float,
-    etc. It can also generate a list of all available dtypes. Not all supported scalar dtypes are generated as this
-    leads to a combinatorc explosion in test case count.
+    Can generate representative subset of all supported dtypes. Can generate by category (e.g. int, float, etc...) or
+    all. Generating the full set of dtypes leads to combinatoric explosion in the number of test cases.
     """
 
 
@@ -75,7 +74,7 @@ def empty_index(request):
     yield request.param
 
 
-class TestCanAppendToColunWithNones:
+class TestCanAppendToColumnWithNones:
     """
     Tests that it is possible to write a column containing None values and latter append to it. Initially the type of
     the column must be empty type after the append the column must be of the same type as the appended data.
@@ -499,11 +498,11 @@ class TestCanUpdateWithNone:
         )
         lmdb_version_store_static_and_dynamic.update(
             "sym",
-            pd.DataFrame({"col": [None, None]}, index=self.update_index())
+            pd.DataFrame({"col": [None, np.nan]}, index=self.update_index())
         )
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym").data,
-            pd.DataFrame({"col": [1, float("NaN"), float("NaN"), 4]}, index=self.index(), dtype=float_dtype)
+            pd.DataFrame({"col": [1, float("NaN"), np.nan, 4]}, index=self.index(), dtype=float_dtype)
         )
 
     def test_bool(self, lmdb_version_store_static_and_dynamic, boolean_dtype):

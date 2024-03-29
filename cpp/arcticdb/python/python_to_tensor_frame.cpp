@@ -220,7 +220,7 @@ std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
                 "Number idx names {} and values {} do not match",
                 idx_names.size(), idx_vals.size());
 
-    if (idx_names.empty() == false) {
+    if (!idx_names.empty()) {
         util::check(idx_names.size() == 1, "Multi-indexed dataframes not handled");
         auto index_tensor = obj_to_tensor(idx_vals[0].ptr());
         util::check(index_tensor.ndim() == 1, "Multi-dimensional indexes not handled");
