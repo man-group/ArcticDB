@@ -26,6 +26,7 @@
 #include <map>
 #include <unordered_map>
 #include <memory>
+#include <fmt/format.h>
 
 namespace arcticdb {
 
@@ -34,6 +35,42 @@ const std::string PROMETHEUS_ENV_LABEL = "env";
 const int SUMMARY_MAX_AGE = 30;
 const int SUMMARY_AGE_BUCKETS = 5;
 
+class MetricsConfig {
+public:
+    enum class Model {
+        NO_INIT,
+        PUSH,
+        PULL
+    };
+    MetricsConfig() : model_(Model::NO_INIT) {}
+
+    MetricsConfig(const std::string& host,
+                     const std::string& port,
+                     const std::string& job_name, 
+                     const std::string& instance, 
+                     const std::string& prometheus_env, 
+                     const Model model)
+            : host(host)
+            , port(port)
+            , job_name(job_name)
+            , instance(instance)
+            , prometheus_env(prometheus_env)
+            , model_(model) {
+                util::check(!host.empty(), "MetricsConfig: host is empty");
+                util::check(!port.empty(), "MetricsConfig: port is empty");
+                util::check(!job_name.empty(), "MetricsConfig: job_name is empty");
+                util::check(!instance.empty(), "MetricsConfig: instance is empty");
+                util::check(!prometheus_env.empty(), "MetricsConfig: instance is empty");
+                util::check(!prometheus_env.empty(), "MetricsConfig: prometheus_env is empty");
+            }
+    
+    std::string host;
+    std::string port;
+    std::string job_name;
+    std::string instance;
+    std::string prometheus_env;
+    Model model_;
+};
 
 class PrometheusInstance {
 public:
@@ -67,6 +104,10 @@ public:
 
     int push();
 
+    void configure(const MetricsConfig& config, const bool reconfigure = false);
+
+    MetricsConfig cfg_;
+    
     private:
 
         struct HistogramInfo {
@@ -88,20 +129,8 @@ public:
         // push gateway
         std::string mongo_instance_;
         std::shared_ptr<prometheus::Gateway> gateway_;
-};
+        bool configured_;
 
-class PrometheusConfigInstance {
-public:
-    static std::shared_ptr<PrometheusConfigInstance> instance();
-
-    using Proto = arcticdb::proto::utils::PrometheusConfig;
-    Proto config;
-    static std::shared_ptr<PrometheusConfigInstance> instance_;
-    static std::once_flag init_flag_;
-
-    static void init(){
-        instance_ = std::make_shared<PrometheusConfigInstance>();
-    }
 };
 
 inline void log_prometheus_gauge(const std::string& metric_name, const std::string& metric_desc, size_t val) {
@@ -121,3 +150,16 @@ inline void log_prometheus_counter(const std::string& metric_name, const std::st
 }
 
 } // Namespace arcticdb
+
+template<>
+struct fmt::formatter<arcticdb::MetricsConfig> {
+
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const arcticdb::MetricsConfig k, FormatContext &ctx) const {
+        return  fmt::format_to(ctx.out(), "MetricsConfig: host={}, port={}, job_name={}, instance={}, prometheus_env={}, model={}",
+                               k.host, k.port, k.job_name, k.instance, k.prometheus_env, static_cast<int>(k.model_));
+    }
+};

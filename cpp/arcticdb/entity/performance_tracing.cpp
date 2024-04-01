@@ -8,9 +8,9 @@
 
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/log/log.hpp>
-#include <folly/system/ThreadName.h>
 #include <arcticdb/util/preprocess.hpp>
 #include <arcticdb/util/pb_util.hpp>
+#include <arcticdb/util/storage_lock.hpp>
 
 std::shared_ptr<RemoteryInstance> RemoteryInstance::instance(){
     std::call_once(RemoteryInstance::init_flag_, &RemoteryInstance::init);
@@ -63,7 +63,7 @@ namespace arcticdb::detail {
         std::unordered_map<const char *, std::string> fqn_by_task_name_;
         std::string thread_name_;
 
-        ThreadNameCache():fqn_by_task_name_(),thread_name_(folly::getCurrentThreadName().value_or("Thread")){}
+        ThreadNameCache():fqn_by_task_name_(),thread_name_(fmt::format("{}", arcticdb::get_thread_id())){}
 
         std::string_view get_thread_name(const char * task_name){
             if(auto fqn_it = fqn_by_task_name_.find(task_name); fqn_it != fqn_by_task_name_.end()){

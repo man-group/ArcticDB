@@ -349,6 +349,23 @@ def test_parallel_append_overlapping_with_existing(lmdb_version_store):
         lib.compact_incomplete(sym, True, False)
 
 
+@pytest.mark.parametrize("sortedness", ("DESCENDING", "UNSORTED"))
+def test_parallel_append_existing_data_unsorted(lmdb_version_store, sortedness):
+    lib = lmdb_version_store
+    sym = "test_parallel_append_existing_data_unsorted"
+    last_index_date = "2024-01-01" if sortedness == "DESCENDING" else "2024-01-03"
+    df_0 = pd.DataFrame(
+        {"col": [1, 2, 3]},
+        index=[pd.Timestamp("2024-01-04"), pd.Timestamp("2024-01-02"), pd.Timestamp(last_index_date)]
+    )
+    lib.write(sym, df_0)
+    assert lib.get_info(sym)["sorted"] == sortedness
+    df_1 = pd.DataFrame({"col": [3, 4]}, index=[pd.Timestamp("2024-01-05"), pd.Timestamp("2024-01-06")])
+    lib.append(sym, df_1, incomplete=True)
+    with pytest.raises(SortingException):
+        lib.compact_incomplete(sym, True, False)
+
+
 @pytest.mark.xfail(reason="See https://github.com/man-group/ArcticDB/issues/1250")
 @pytest.mark.parametrize("append", (True, False))
 def test_parallel_dynamic_schema_compatible_types(lmdb_version_store_dynamic_schema, append):

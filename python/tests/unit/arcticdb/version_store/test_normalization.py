@@ -558,3 +558,28 @@ def test_pyarrow_error(lmdb_version_store):
 
     with pytest.raises(ArcticDbNotYetImplemented, match=error_msg_intro):
         lmdb_version_store.write("test_pyarrow_error_mixed_df", mixed_df)
+
+
+# See test of same name in test_arctic.py for V2 API equivalent
+def test_norm_failure_error_message(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_norm_failure_error_message"
+    col_name = "My unnormalizable column"
+    df = pd.DataFrame({col_name: [1, [1, 2]]})
+    with pytest.raises(ArcticDbNotYetImplemented) as write_exception:
+        lib.write(sym, df)
+    with pytest.raises(ArcticDbNotYetImplemented) as batch_write_exception:
+        lib.batch_write([sym], [df])
+    with pytest.raises(ArcticDbNotYetImplemented) as append_exception:
+        lib.append(sym, df)
+    with pytest.raises(ArcticDbNotYetImplemented) as batch_append_exception:
+        lib.batch_append([sym], [df])
+    with pytest.raises(ArcticDbNotYetImplemented) as update_exception:
+        lib.update(sym, df)
+
+    assert all(col_name in str(e.value) for e in
+               [write_exception, batch_write_exception, append_exception, batch_append_exception, update_exception])
+    assert all("pickle_on_failure" in str(e.value) for e in
+               [write_exception, batch_write_exception])
+    assert all("pickle_on_failure" not in str(e.value) for e in
+               [append_exception, batch_append_exception, update_exception])

@@ -28,10 +28,9 @@
 #include <arcticdb/util/type_handler.hpp>
 #include <arcticdb/python/python_handlers.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
+#include <arcticdb/util/storage_lock.hpp>
 
 #include <pybind11/pybind11.h>
-#include <folly/system/ThreadName.h>
-#include <folly/portability/PThread.h>
 #include <mongocxx/exception/logic_error.hpp>
 
 #include <logger.pb.h>
@@ -175,7 +174,7 @@ void register_termination_handler() {
             std::rethrow_exception(eptr);
         } catch (const std::exception &e) {
             arcticdb::log::root().error("Terminate called in thread {}: {}\n Aborting",
-                                        folly::getCurrentThreadName().value_or("Unknown"), e.what());
+                                        arcticdb::get_thread_id(), e.what());
             std::abort();
         }
     });
@@ -276,13 +275,19 @@ void register_instrumentation(py::module && m){
 }
 
 void register_metrics(py::module && m){
+
     auto prometheus = m.def_submodule("prometheus");
     py::class_<arcticdb::PrometheusInstance, std::shared_ptr<arcticdb::PrometheusInstance>>(prometheus, "Instance");
-    prometheus.def("configure", [](const py::object & py_config){
-        arcticdb::proto::utils::PrometheusConfig config;
-        arcticdb::python_util::pb_from_python(py_config, config);
-        arcticdb::PrometheusConfigInstance::instance()->config.CopyFrom(config);
-    });
+
+    py::class_<arcticdb::MetricsConfig, std::shared_ptr<arcticdb::MetricsConfig>>(prometheus, "MetricsConfig")
+    .def(py::init<const std::string&, const std::string&, const std::string&, const std::string&, const std::string&, const arcticdb::MetricsConfig::Model>());
+
+    py::enum_<arcticdb::MetricsConfig::Model>(prometheus, "MetricsConfigModel")
+            .value("NO_INIT", arcticdb::MetricsConfig::Model::NO_INIT)
+            .value("PUSH", arcticdb::MetricsConfig::Model::PUSH)
+            .value("PULL", arcticdb::MetricsConfig::Model::PULL)
+            .export_values()
+    ;
 }
 
 /// Register handling of non-trivial types. For more information @see arcticdb::TypeHandlerRegistry and

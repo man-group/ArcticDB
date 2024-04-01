@@ -10,7 +10,7 @@
 namespace arcticdb {
 
 void ProcessingUnit::apply_filter(
-    const util::BitSet& bitset,
+    util::BitSet&& bitset,
     PipelineOptimisation optimisation) {
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(segments_.has_value() && row_ranges_.has_value() && col_ranges_.has_value(),
                                                     "ProcessingUnit::apply_filter requires all of segments, row_ranges, and col_ranges to be present");
@@ -18,7 +18,7 @@ void ProcessingUnit::apply_filter(
 
     for (auto&& [idx, segment]: folly::enumerate(*segments_)) {
         auto seg = filter_segment(*segment,
-                                  bitset,
+                                  std::move(bitset),
                                   filter_down_stringpool);
         auto num_rows = seg.is_null() ? 0 : seg.row_count();
         row_ranges_->at(idx) = std::make_shared<pipelines::RowRange>(row_ranges_->at(idx)->first, row_ranges_->at(idx)->first + num_rows);

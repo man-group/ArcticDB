@@ -213,7 +213,7 @@ public:
         }
 
         // Used to construct [c]end iterators
-        explicit ColumnDataIterator(ColumnData* parent, typename TDT::DataTypeTag::raw_type* end_ptr):
+        explicit ColumnDataIterator(ColumnData* parent, RawType* end_ptr):
                 parent_(parent) {
             data_.ptr_ = end_ptr;
         }
@@ -304,7 +304,7 @@ public:
         if(!data_->blocks().empty()) {
             auto block = data_->blocks().at(num_blocks() - 1);
             auto typed_block_data = next_typed_block<TDT>(block);
-            end_ptr = typed_block_data.data() + typed_block_data.row_count();
+            end_ptr = const_cast<RawType*>(typed_block_data.data() + typed_block_data.row_count());
         }
         return ColumnDataIterator<TDT, iterator_type, iterator_density, false>(this, end_ptr);
     }

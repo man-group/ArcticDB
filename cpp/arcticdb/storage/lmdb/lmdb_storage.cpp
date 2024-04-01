@@ -259,6 +259,43 @@ void LmdbStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& vi
     }
 }
 
+void remove_db_files(const fs::path& lib_path) {
+    std::vector<std::string> files = {"lock.mdb", "data.mdb"};
+
+    for (const auto& file : files) {
+        fs::path file_path = lib_path / file;
+        try {
+            if (fs::exists(file_path)) {
+                fs::remove(file_path);
+            }
+        } catch (const std::filesystem::filesystem_error& e) {
+            raise<ErrorCode::E_UNEXPECTED_LMDB_ERROR>(
+                    fmt::format("Unexpected LMDB Error: Failed to remove LMDB file at path: {} error: {}",
+                                file_path.string(), e.what()));
+        }
+    }
+
+    if (fs::exists(lib_path)) {
+        if (!fs::is_empty(lib_path)) {
+            log::storage().warn(fmt::format("Skipping deletion of directory holding LMDB library during "
+                                            "library deletion as it contains files unrelated to LMDB"));
+        } else {
+            try {
+                fs::remove_all(lib_path);
+            } catch (const fs::filesystem_error& e) {
+                raise<ErrorCode::E_UNEXPECTED_LMDB_ERROR>(
+                        fmt::format("Unexpected LMDB Error: Failed to remove directory: {} error: {}",
+                                    lib_path.string(), e.what()));
+            }
+        }
+    }
+}
+
+void LmdbStorage::cleanup() {
+    env_.reset();
+    remove_db_files(lib_dir_);
+}
+
 
 namespace {
 template<class T>

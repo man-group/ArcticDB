@@ -110,7 +110,7 @@ std::variant<StringEncodingError, PyStringWrapper> py_unicode_to_buffer(PyObject
     }
 }
 
-NativeTensor obj_to_tensor(PyObject *ptr) {
+NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types) {
     auto& api = pybind11::detail::npy_api::get();
     util::check(api.PyArray_Check_(ptr), "Expected Python array");
     const auto arr = pybind11::detail::array_proxy(ptr);
@@ -120,7 +120,7 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
     // In Pandas < 2, empty series dtype is `"float"`, but as of Pandas 2.0, empty series dtype is `"object"`
     // The Normalizer in Python cast empty `"float"` series to `"object"` so `EMPTY` is used here.
     // See: https://github.com/man-group/ArcticDB/pull/1049
-    auto val_type = size == 0 ? ValueType::EMPTY : get_value_type(descr->kind);
+    auto val_type = size == 0 && empty_types ? ValueType::EMPTY : get_value_type(descr->kind);
     auto val_bytes = static_cast<uint8_t>(descr->elsize);
     const int64_t element_count = ndim == 1 ? int64_t(arr->dimensions[0]) : int64_t(arr->dimensions[0]) * int64_t(arr->dimensions[1]);
     const auto c_style = arr->strides[0] == val_bytes;
@@ -173,7 +173,7 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
                     sample = *current_object;
             }
             if (empty && descr->kind == 'O') {
-                val_type = ValueType::EMPTY;
+                val_type = empty_types ? ValueType::EMPTY : ValueType::UTF_DYNAMIC;
             } else if(all_nans || is_unicode(sample)){
                 val_type = ValueType::UTF_DYNAMIC;
             } else if (PYBIND11_BYTES_CHECK(sample)) {
@@ -204,7 +204,8 @@ std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
     const StreamId& stream_name,
     const py::tuple &item,
     const py::object &norm_meta,
-    const py::object &user_meta) {
+    const py::object &user_meta,
+    bool empty_types) {
     ARCTICDB_SUBSAMPLE_DEFAULT(NormalizeFrame)
     auto res = std::make_shared<InputTensorFrame>();
     res->desc.set_id(stream_name);
@@ -222,7 +223,7 @@ std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
 
     if (!idx_names.empty()) {
         util::check(idx_names.size() == 1, "Multi-indexed dataframes not handled");
-        auto index_tensor = obj_to_tensor(idx_vals[0].ptr());
+        auto index_tensor = obj_to_tensor(idx_vals[0].ptr(), empty_types);
         util::check(index_tensor.ndim() == 1, "Multi-dimensional indexes not handled");
         util::check(index_tensor.shape() != nullptr, "Index tensor expected to contain shapes");
         std::string index_column_name = !idx_names.empty() ? idx_names[0] : "index";
@@ -251,7 +252,7 @@ std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
     res->set_sorted(sorted);
 
     for (auto i = 0u; i < col_vals.size(); ++i) {
-        auto tensor = obj_to_tensor(col_vals[i].ptr());
+        auto tensor = obj_to_tensor(col_vals[i].ptr(), empty_types);
         res->num_rows = std::max(res->num_rows, static_cast<ssize_t>(tensor.shape(0)));
         if(tensor.expanded_dim() == 1) {
             res->desc.add_field(scalar_field(tensor.data_type(), col_names[i]));

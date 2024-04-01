@@ -5,10 +5,10 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+import logging
+from typing import List, Optional, Any, Union
 
-from typing import List, Optional
-
-from arcticdb.options import DEFAULT_ENCODING_VERSION, LibraryOptions
+from arcticdb.options import DEFAULT_ENCODING_VERSION, LibraryOptions, EnterpriseLibraryOptions
 from arcticdb_ext.storage import LibraryManager
 from arcticdb.exceptions import LibraryNotFound, MismatchingLibraryOptions
 from arcticdb.version_store.library import ArcticInvalidApiUsageException, Library
@@ -20,6 +20,11 @@ from arcticdb.adapters.azure_library_adapter import AzureLibraryAdapter
 from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
 from arcticdb.adapters.in_memory_library_adapter import InMemoryLibraryAdapter
 from arcticdb.encoding_version import EncodingVersion
+from arcticdb.exceptions import UnsupportedLibraryOptionValue, UnknownLibraryOption
+from arcticdb.options import ModifiableEnterpriseLibraryOption, ModifiableLibraryOption
+
+
+logger = logging.getLogger(__name__)
 
 
 class Arctic:
@@ -158,7 +163,10 @@ class Arctic:
             else:
                 raise e
 
-    def create_library(self, name: str, library_options: Optional[LibraryOptions] = None) -> Library:
+    def create_library(self,
+                       name: str,
+                       library_options: Optional[LibraryOptions] = None,
+                       enterprise_library_options: Optional[EnterpriseLibraryOptions] = None) -> Library:
         """
         Creates the library named ``name``.
 
@@ -176,7 +184,11 @@ class Arctic:
             The name of the library that you wish to create.
 
         library_options: Optional[LibraryOptions]
-            Options to use in configuring the library. Defaults if not provided are the same as are documented in LibraryOptions.
+            Options to use in configuring the library. Defaults if not provided are the same as documented in LibraryOptions.
+
+        enterprise_library_options: Optional[EnterpriseLibraryOptions]
+            Enterprise options to use in configuring the library. Defaults if not provided are the same as documented in
+            EnterpriseLibraryOptions. These options are only relevant to ArcticDB enterprise users.
 
         Examples
         --------
@@ -194,7 +206,10 @@ class Arctic:
         if library_options is None:
             library_options = LibraryOptions()
 
-        cfg = self._library_adapter.get_library_config(name, library_options)
+        if enterprise_library_options is None:
+            enterprise_library_options = EnterpriseLibraryOptions()
+
+        cfg = self._library_adapter.get_library_config(name, library_options, enterprise_library_options)
         lib_mgr_name = self._library_adapter.get_name_for_library_manager(name)
         self._library_manager.write_library_config(cfg, lib_mgr_name, self._library_adapter.get_masking_override())
         if self._created_lib_names is not None:
@@ -218,16 +233,12 @@ class Arctic:
         except LibraryNotFound:
             return
         lib._nvs.version_store.clear()
-        del lib
         lib_mgr_name = self._library_adapter.get_name_for_library_manager(name)
-        self._library_manager.close_library_if_open(lib_mgr_name)
-        try:
-            self._library_adapter.cleanup_library(name)
-        finally:
-            self._library_manager.remove_library_config(lib_mgr_name)
+        self._library_manager.cleanup_library_if_open(lib_mgr_name)
+        self._library_manager.remove_library_config(lib_mgr_name)
 
-            if self._created_lib_names and name in self._created_lib_names:
-                self._created_lib_names.remove(name)
+        if self._created_lib_names and name in self._created_lib_names:
+            self._created_lib_names.remove(name)
 
     def has_library(self, name: str) -> bool:
         """
@@ -275,3 +286,80 @@ class Arctic:
         s3://MY_ENDPOINT:MY_BUCKET
         """
         return self._uri
+
+    def modify_library_option(self,
+                              library: Library,
+                              option: Union[ModifiableLibraryOption, ModifiableEnterpriseLibraryOption],
+                              option_value: Any):
+        """
+        Modify an option for a library.
+
+        See `LibraryOptions` and `EnterpriseLibraryOptions` for descriptions of the meanings of the various options.
+
+        After the modification, this process and other processes that open the library will use the new value. Processes
+        that already have the library open will not see the configuration change until they restart.
+
+        Parameters
+        ----------
+        library
+            The library to modify.
+
+        option
+            The library option to change.
+
+        option_value
+            The new setting for the library option.
+        """
+        def check_bool():
+            if not isinstance(option_value, bool):
+                raise UnsupportedLibraryOptionValue(f"{option} only supports bool values but received {option_value}. "
+                                                    f"Not changing library option.")
+
+        def check_postive_int():
+            if not isinstance(option_value, int):
+                raise UnsupportedLibraryOptionValue(f"{option} only supports positive integer values but received "
+                                                    f"{option_value}. Not changing library option.")
+
+        cfg = library._nvs.lib_cfg()
+        write_options = cfg.lib_desc.version.write_options
+
+        # Core options
+        if option == ModifiableLibraryOption.DEDUP:
+            check_bool()
+            write_options.de_duplication = option_value
+
+        elif option == ModifiableLibraryOption.ROWS_PER_SEGMENT:
+            check_postive_int()
+            write_options.segment_row_size = option_value
+
+        elif option == ModifiableLibraryOption.COLUMNS_PER_SEGMENT:
+            check_postive_int()
+            write_options.column_group_size = option_value
+
+        # Enterprise options
+        elif option == ModifiableEnterpriseLibraryOption.REPLICATION:
+            check_bool()
+            write_options.sync_passive.enabled = option_value
+
+        elif option == ModifiableEnterpriseLibraryOption.BACKGROUND_DELETION:
+            check_bool()
+            write_options.delayed_deletes = option_value
+
+        # Unknown
+        else:
+            raise UnknownLibraryOption(f"Unknown library option {option} cannot be modified. This is a bug "
+                                       f"in ArcticDB. Please raise an issue on github.com/ArcticDB")
+
+        self._library_manager.write_library_config(cfg, library.name, self._library_adapter.get_masking_override())
+
+        lib_mgr_name = self._library_adapter.get_name_for_library_manager(library.name)
+        storage_override = self._library_adapter.get_storage_override()
+        library._nvs._initialize(
+            self._library_manager.get_library(lib_mgr_name, storage_override, ignore_cache=True),
+            library._nvs.env,
+            cfg,
+            library._nvs._custom_normalizer,
+            library._nvs._open_mode
+        )
+
+        logger.info(f"Set option=[{option}] to value=[{option_value}] for Arctic=[{self}] Library=[{library}]")
