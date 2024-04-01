@@ -69,7 +69,7 @@ def dtype(request):
     yield request.param
 
 
-@pytest.fixture(params=[pd.RangeIndex(0,0), pd.DatetimeIndex([])])
+@pytest.fixture(params=[pd.RangeIndex(0,0), pd.DatetimeIndex([]), pd.MultiIndex.from_arrays([[],[]], names=["a", "b"])])
 def empty_index(request):
     yield request.param
 
@@ -568,6 +568,7 @@ class TestCanUpdateWithNone:
                 index=self.index()
             )
         )
+
 
 class TestCanAppendToEmptyColumn:
     """

@@ -291,7 +291,6 @@ _range_index_props_are_public = hasattr(RangeIndex, "start")
 def _normalize_single_index(index, index_names, index_norm, dynamic_strings=None, string_max_len=None):
     # index: pd.Index or np.ndarray -> np.ndarray
     index_tz = None
-
     if isinstance(index_norm, NormalizationMetadata.PandasIndex) and not index_norm.is_physically_stored:
         if index.name:
             if not isinstance(index.name, int) and not isinstance(index.name, str):
@@ -525,7 +524,11 @@ _IDX_PREFIX_LEN = len(_IDX_PREFIX)
 class _PandasNormalizer(Normalizer):
     def _index_to_records(self, df, pd_norm, dynamic_strings, string_max_len):
         index = df.index
-        if isinstance(index, MultiIndex):
+        if len(index) == 0 and len(df.select_dtypes(include="category").columns) == 0:
+            index_norm = pd_norm.index
+            index_norm.is_physically_stored = False
+            index = Index([])
+        elif isinstance(index, MultiIndex):
             # This is suboptimal and only a first implementation since it reduplicates the data
             index_norm = pd_norm.multi_index
             index_norm.field_count = len(index.levels) - 1
