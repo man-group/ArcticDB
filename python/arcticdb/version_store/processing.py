@@ -515,7 +515,7 @@ class QueryBuilder:
         self._python_clauses.append(PythonGroupByClause(name))
         return self
 
-    def agg(self, aggregations: Dict[str, Union[str, tuple[str, str]]]):
+    def agg(self, aggregations: Dict[str, Union[str, Tuple[str, str]]]):
         # Only makes sense if previous stage is a group-by
         check(
             len(self.clauses) and isinstance(self.clauses[-1], _GroupByClause),
