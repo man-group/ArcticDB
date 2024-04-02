@@ -23,51 +23,25 @@ namespace arcticdb::stream {
 
 using namespace arcticdb::entity;
 
-inline IndexDescriptor::Type get_index_value_type(const AtomKey &key) {
-    return std::holds_alternative<timestamp>(key.start_index()) ? IndexDescriptor::TIMESTAMP : IndexDescriptor::STRING;
-}
+IndexDescriptor::Type get_index_value_type(const AtomKey& key);
 
-template<typename Derived>
+template <typename Derived>
 class BaseIndex {
-  public:
-    template<class RangeType>
-    StreamDescriptor create_stream_descriptor(StreamId stream_id, RangeType&& fields) const {
+public:
+    template <class RangeType> StreamDescriptor create_stream_descriptor(StreamId stream_id, RangeType&& fields) const {
         return stream_descriptor(stream_id, *derived(), std::move(fields));
     }
 
-    [[nodiscard]] StreamDescriptor create_stream_descriptor(
-                                              StreamId stream_id,
-                                              std::initializer_list<FieldRef> fields) const {
-        std::vector<FieldRef> fds{fields};
-        return create_stream_descriptor(stream_id, folly::range(fds));
-
-    }
-
-    [[nodiscard]] const Derived* derived() const {
-        return static_cast<const Derived*>(this);
-    }
-
-    explicit operator IndexDescriptor() const {
-        return {Derived::field_count(), Derived::type()};
-    }
-
-    [[nodiscard]] FieldRef field(size_t) const {
-        return {static_cast<TypeDescriptor>(typename Derived::TypeDescTag{}), std::string_view(derived()->name())};
-    }
+    [[nodiscard]] StreamDescriptor create_stream_descriptor(StreamId stream_id, std::initializer_list<FieldRef> fields) const;
+    [[nodiscard]] const Derived* derived() const;
+    explicit operator IndexDescriptor() const;
+    [[nodiscard]] FieldRef field(size_t) const;
 };
 
 //TODO make this into just a numeric index, of which timestamp is a special case
 class TimeseriesIndex : public BaseIndex<TimeseriesIndex> {
 public:
     static constexpr const char* DefaultName = "time" ;
-
-    explicit TimeseriesIndex(const std::string& name) :
-        name_(name) {
-    }
-
-    static TimeseriesIndex default_index() {
-        return TimeseriesIndex(DefaultName);
-    }
 
     using TypeDescTag = TypeDescriptorTag<
         DataTypeTag<DataType::NANOSECONDS_UTC64>,
@@ -80,63 +54,19 @@ public:
     static constexpr IndexDescriptor::Type type() {
         return IndexDescriptor::TIMESTAMP;
     }
+    TimeseriesIndex(const std::string& name);
+    static TimeseriesIndex default_index();
+    void check(const FieldCollection& fields) const;
+    static IndexValue start_value_for_segment(const SegmentInMemory& segment);
+    static IndexValue end_value_for_segment(const SegmentInMemory& segment);
+    static IndexValue start_value_for_keys_segment(const SegmentInMemory& segment);
+    static IndexValue end_value_for_keys_segment(const SegmentInMemory& segment);
 
-    void check(const FieldCollection &fields) const {
-        const size_t fields_size = fields.size();
-        constexpr int current_fields_size = int(field_count());
+    [[nodiscard]] const char* name() const;
+    static TimeseriesIndex make_from_descriptor(const StreamDescriptor& desc);
 
-        const TypeDescriptor &first_field_type = fields[0].type();
-        const TypeDescriptor &current_first_field_type = this->field(0).type();
-
-        const bool valid_type_promotion = has_valid_type_promotion(first_field_type, current_first_field_type).has_value();
-        const bool trivial_type_compatibility = trivially_compatible_types(first_field_type, current_first_field_type);
-
-        const bool compatible_types = valid_type_promotion || trivial_type_compatibility;
-
-        util::check_arg(fields_size >= current_fields_size, "expected at least {} fields, actual {}",
-                        current_fields_size, fields_size);
-        util::check_arg(compatible_types, "expected field[0]={}, actual {}",
-                        this->field(0), fields[0]);
-    }
-
-    template<typename SegmentType>
-    static IndexValue start_value_for_segment(const SegmentType &segment) {
-        if (segment.row_count() == 0)
-            return { NumericIndex{0} };
-        auto first_ts = segment.template scalar_at<timestamp>(0, 0).value();
-        return {first_ts};
-    }
-
-    template<typename SegmentType>
-    static IndexValue end_value_for_segment(const SegmentType &segment) {
-        auto row_count = segment.row_count();
-        if (row_count == 0)
-            return { NumericIndex{0} };
-        auto last_ts = segment.template scalar_at<timestamp>(row_count - 1, 0).value();
-        return {last_ts};
-    }
-
-    template<typename SegmentType>
-    static IndexValue start_value_for_keys_segment(const SegmentType &segment) {
-        if (segment.row_count() == 0)
-            return { NumericIndex{0} };
-        auto start_index_id = int(pipelines::index::Fields::start_index);
-        auto first_ts = segment.template scalar_at<timestamp>(0, start_index_id).value();
-        return {first_ts};
-    }
-
-    template<typename SegmentType>
-    static IndexValue end_value_for_keys_segment(const SegmentType &segment) {
-        auto row_count = segment.row_count();
-        if (row_count == 0)
-            return { NumericIndex{0} };
-        auto end_index_id = int(pipelines::index::Fields::end_index);
-        auto last_ts = segment.template scalar_at<timestamp>(row_count - 1, end_index_id).value();
-        return {last_ts};
-    }
-
-    template<class RowCellSetter>
-    void set(RowCellSetter setter, const IndexValue &index_value) {
+    template <class RowCellSetter>
+    void set(RowCellSetter setter, const IndexValue& index_value) {
         if (std::holds_alternative<timestamp>(index_value)) {
             auto ts = std::get<timestamp>(index_value);
             util::check_arg(ts >= ts_, "timestamp decreasing, current val={}, candidate={}", ts_, ts);
@@ -144,15 +74,6 @@ public:
             setter(0, ts);
         } else
             util::raise_rte("Cannot set this type, expecting timestamp");
-    }
-
-    [[nodiscard]] const char *name() const { return name_.c_str(); }
-
-    static TimeseriesIndex make_from_descriptor(const StreamDescriptor& desc) {
-        if(desc.field_count() > 0)
-            return TimeseriesIndex(std::string(desc.fields(0).name()));
-
-        return TimeseriesIndex(DefaultName);
     }
 
   private:
@@ -164,13 +85,9 @@ class TableIndex : public BaseIndex<TableIndex> {
 public:
     static constexpr const char* DefaultName = "Key";
 
-    explicit TableIndex(const std::string& name) :
-        name_(name) {
-    }
+    explicit TableIndex(const std::string& name);
 
-    static TableIndex default_index() {
-        return TableIndex(DefaultName);
-    }
+    static TableIndex default_index();
 
     using TypeDescTag = TypeDescriptorTag<
         DataTypeTag<DataType::ASCII_DYNAMIC64>,
@@ -184,45 +101,15 @@ public:
         return IndexDescriptor::STRING;
     }
 
-    void check(const FieldCollection &fields) const {
-        util::check_arg(fields.size() >= int(field_count()), "expected at least {} fields, actual {}",
-                        field_count(), fields.size());
+    void check(const FieldCollection& fields) const;
 
-        util::check(fields.ref_at(0) == field(0),
-            "Field descriptor mismatch {} != {}", fields.ref_at(0), field(0));
-    }
+    static IndexValue start_value_for_segment(const SegmentInMemory& segment);
 
-    template<typename SegmentType>
-    static IndexValue start_value_for_segment(const SegmentType &segment) {
-        auto string_index = segment.string_at(0, 0).value();
-        return {std::string{string_index}};
-    }
+    static IndexValue end_value_for_segment(const SegmentInMemory& segment);
 
-    template<typename SegmentType>
-    static IndexValue end_value_for_segment(const SegmentType &segment) {
-        auto last_rowid = segment.row_count() - 1;
-        auto string_index = segment.string_at(last_rowid, 0).value();
-        return {std::string{string_index}};
-    }
+    static IndexValue start_value_for_keys_segment(const SegmentInMemory& segment);
 
-    template<typename SegmentType>
-    static IndexValue start_value_for_keys_segment(const SegmentType &segment) {
-        if (segment.row_count() == 0)
-            return { NumericIndex{0} };
-        auto start_index_id = int(pipelines::index::Fields::start_index);
-        auto string_index = segment.string_at(0, start_index_id).value();
-        return {std::string{string_index}};
-    }
-
-    template<typename SegmentType>
-    static IndexValue end_value_for_keys_segment(const SegmentType &segment) {
-        auto row_count = segment.row_count();
-        if (row_count == 0)
-            return { NumericIndex{0} };
-        auto end_index_id = int(pipelines::index::Fields::end_index);
-        auto string_index = segment.string_at(row_count - 1, end_index_id).value();
-        return {std::string{string_index}};
-    }
+    static IndexValue end_value_for_keys_segment(const SegmentInMemory& segment);
 
     template<class RowCellSetter>
     void set(RowCellSetter setter, const IndexValue &index_value) const {
@@ -232,14 +119,9 @@ public:
             util::raise_rte("Cannot set this type. Expecting std::string");
     }
 
-    static TableIndex make_from_descriptor(const StreamDescriptor& desc) {
-        if(desc.field_count() > 0)
-            return TableIndex(std::string(desc.field(0).name()));
+    static TableIndex make_from_descriptor(const StreamDescriptor& desc);
 
-        return TableIndex(DefaultName);
-    }
-
-    const char *name() const { return name_.c_str(); }
+    const char* name() const;
 
 private:
     std::string name_;
@@ -253,42 +135,26 @@ class RowCountIndex : public BaseIndex<RowCountIndex> {
 
     RowCountIndex() = default;
 
-    static RowCountIndex default_index() {
-        return RowCountIndex{};
-    }
+    static RowCountIndex default_index();
 
     static constexpr size_t field_count() { return 0; }
 
     static constexpr IndexDescriptor::Type type() { return IndexDescriptor::ROWCOUNT; }
 
-    template<typename SegmentType>
-    static IndexValue start_value_for_segment(const SegmentType &segment) {
-        return static_cast<timestamp>(segment.offset());
-    }
+    static IndexValue start_value_for_segment(const SegmentInMemory& segment);
 
-    template<typename SegmentType>
-    static IndexValue end_value_for_segment(const SegmentType &segment) {
-        return static_cast<timestamp>(segment.offset() + (segment.row_count() - 1));
-    }
+    static IndexValue end_value_for_segment(const SegmentInMemory& segment);
 
-    template<typename SegmentType>
-    static IndexValue start_value_for_keys_segment(const SegmentType &segment) {
-        return static_cast<timestamp>(segment.offset());
-    }
+    static IndexValue start_value_for_keys_segment(const SegmentInMemory& segment);
 
-    template<typename SegmentType>
-    static IndexValue end_value_for_keys_segment(const SegmentType &segment) {
-        return static_cast<timestamp>(segment.offset() + (segment.row_count() - 1));
-    }
+    static IndexValue end_value_for_keys_segment(const SegmentInMemory& segment);
 
     template<class RowCellSetter>
     void set(RowCellSetter, const IndexValue & = {timestamp(0)}) {
         // No index value
     }
 
-    RowCountIndex make_from_descriptor(const StreamDescriptor&) const {
-        return RowCountIndex::default_index();
-    }
+    RowCountIndex make_from_descriptor(const StreamDescriptor&) const;
 
     static constexpr const char *name() { return "row_count"; }
 };
@@ -312,80 +178,22 @@ public:
         return {};
     }
 
-    [[nodiscard]] static IndexValue start_value_for_segment(const SegmentInMemory& segment) {
-        return static_cast<NumericIndex>(segment.offset());
-    }
-
-    [[nodiscard]] static IndexValue end_value_for_segment(const SegmentInMemory& segment) {
-        return static_cast<NumericIndex>(segment.offset());
-    }
-
-    [[nodiscard]] static IndexValue start_value_for_keys_segment(const SegmentInMemory& segment) {
-        return static_cast<NumericIndex>(segment.offset());
-    }
-
-    [[nodiscard]] static IndexValue end_value_for_keys_segment(const SegmentInMemory& segment) {
-        return static_cast<NumericIndex>(segment.offset());
-    }
+    [[nodiscard]] static IndexValue start_value_for_segment(const SegmentInMemory& segment);
+    [[nodiscard]] static IndexValue end_value_for_segment(const SegmentInMemory& segment);
+    [[nodiscard]] static IndexValue start_value_for_keys_segment(const SegmentInMemory& segment);
+    [[nodiscard]] static IndexValue end_value_for_keys_segment(const SegmentInMemory& segment);
 };
 
 using Index = std::variant<stream::TimeseriesIndex, stream::RowCountIndex, stream::TableIndex, stream::EmptyIndex>;
 
-inline Index index_type_from_descriptor(const StreamDescriptor &desc) {
-    switch (desc.index().proto().kind()) {
-    case IndexDescriptor::EMPTY: return EmptyIndex{};
-    case IndexDescriptor::TIMESTAMP:
-        return TimeseriesIndex::make_from_descriptor(desc);
-    case IndexDescriptor::STRING:
-        return TableIndex::make_from_descriptor(desc);
-    case IndexDescriptor::ROWCOUNT:
-        return RowCountIndex{};
-    default:util::raise_rte("Data obtained from storage refers to an index type that this build of ArcticDB doesn't understand ({}).", int(desc.index().proto().kind()));
-    }
-}
-
-inline Index default_index_type_from_descriptor(const IndexDescriptor::Proto &desc) {
-    switch (desc.kind()) {
-    case IndexDescriptor::EMPTY: return EmptyIndex{};
-    case IndexDescriptor::TIMESTAMP:
-        return TimeseriesIndex::default_index();
-    case IndexDescriptor::STRING:
-        return TableIndex::default_index();
-    case IndexDescriptor::ROWCOUNT:
-        return RowCountIndex::default_index();
-    default:
-        util::raise_rte("Unknown index type {} trying to generate index type", int(desc.kind()));
-    }
-}
+Index index_type_from_descriptor(const StreamDescriptor& desc);
+Index default_index_type_from_descriptor(const IndexDescriptor::Proto& desc);
 
 // Only to be used for visitation to get field count etc as the name is not set
-inline Index variant_index_from_type(IndexDescriptor::Type type) {
-    switch (type) {
-    case IndexDescriptor::EMPTY: return EmptyIndex{};
-    case IndexDescriptor::TIMESTAMP:
-        return TimeseriesIndex{TimeseriesIndex::DefaultName};
-    case IndexDescriptor::STRING:
-        return TableIndex{TableIndex::DefaultName};
-    case IndexDescriptor::ROWCOUNT:
-        return RowCountIndex{};
-    default:
-        util::raise_rte("Unknown index type {} trying to generate index type", int(type));
-    }
-}
-
-inline Index default_index_type_from_descriptor(const IndexDescriptor &desc) {
-    return default_index_type_from_descriptor(desc.proto());
-}
-
-inline IndexDescriptor get_descriptor_from_index(const Index& index) {
-    return util::variant_match(index, [] (const auto& idx) {
-        return static_cast<IndexDescriptor>(idx);
-    });
-}
-
-inline Index empty_index() {
-    return RowCountIndex::default_index();
-}
+Index variant_index_from_type(IndexDescriptor::Type type);
+Index default_index_type_from_descriptor(const IndexDescriptor& desc);
+IndexDescriptor get_descriptor_from_index(const Index& index);
+Index empty_index();
 
 }
 
