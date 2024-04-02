@@ -12,7 +12,7 @@ from math import inf
 import numpy as np
 import pandas as pd
 
-from typing import Dict, NamedTuple
+from typing import Dict, NamedTuple, Tuple, Union
 
 from arcticdb.exceptions import ArcticNativeException, UserInputException
 from arcticdb.version_store._normalization import normalize_dt_range_to_ts
@@ -451,9 +451,9 @@ class QueryBuilder:
         >>> q = q.groupby("grouping_column").agg({"to_mean": "mean"})
         >>> lib.write("symbol", df)
         >>> lib.read("symbol", query_builder=q).data
-                     to_mean
+                      to_mean
             group_1  1.666667
-            group_2       NaN
+            group_2       2.2
 
         Max over one group:
 
@@ -485,8 +485,26 @@ class QueryBuilder:
         >>> q = q.groupby("grouping_column").agg({"to_max": "max", "to_mean": "mean"})
         >>> lib.write("symbol", df)
         >>> lib.read("symbol", query_builder=q).data
-                        to_max   to_mean
+                     to_max   to_mean
             group_1     2.5  1.666667
+
+        Min and max over one column, mean over another:
+        >>> df = pd.DataFrame(
+            {
+                "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"],
+                "agg_1": [1, 2, 3, 4, 5],
+                "agg_2": [1.1, 1.4, 2.5, np.nan, 2.2],
+            },
+            index=np.arange(5),
+        )
+        >>> q = adb.QueryBuilder()
+        >>> q = q.groupby("grouping_column")
+        >>> q = q.agg({"agg_1_min": ("agg_1", "min"), "agg_1_max": ("agg_1", "max"), "agg_2": "mean"})
+        >>> lib.write("symbol", df)
+        >>> lib.read("symbol", query_builder=q).data
+                     agg_1_min  agg_1_max     agg_2
+            group_1          1          3  1.666667
+            group_2          4          5       2.2
 
         Returns
         -------
@@ -497,14 +515,23 @@ class QueryBuilder:
         self._python_clauses.append(PythonGroupByClause(name))
         return self
 
-    def agg(self, aggregations: Dict[str, str]):
+    def agg(self, aggregations: Dict[str, Union[str, Tuple[str, str]]]):
         # Only makes sense if previous stage is a group-by
         check(
             len(self.clauses) and isinstance(self.clauses[-1], _GroupByClause),
             f"Aggregation only makes sense after groupby",
         )
-        for v in aggregations.values():
-            v = v.lower()
+        for k, v in aggregations.items():
+            check(isinstance(v, (str, tuple)), f"Values in agg dict expected to be strings or tuples, received {v} of type {type(v)}")
+            if isinstance(v, str):
+                aggregations[k] = v.lower()
+            elif isinstance(v, tuple):
+                check(
+                    len(v) == 2 and (isinstance(v[0], str) and isinstance(v[1], str)),
+                    f"Tuple values in agg dict expected to have 2 string elements, received {v}"
+                )
+                aggregations[k] = (v[0], v[1].lower())
+
         self.clauses.append(_AggregationClause(self.clauses[-1].grouping_column, aggregations))
         self._python_clauses.append(PythonAggregationClause(aggregations))
         return self
