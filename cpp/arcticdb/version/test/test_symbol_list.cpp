@@ -20,6 +20,8 @@
 #include <folly/executors/FutureExecutor.h>
 #include <folly/executors/CPUThreadPoolExecutor.h>
 
+#include <arcticdb/async/task_scheduler.hpp>
+
 using namespace arcticdb;
 using namespace folly;
 using namespace arcticdb::entity;
@@ -30,6 +32,9 @@ MAKE_GTEST_FMT(FailureType, "{}")
 
 static const StorageFailureSimulator::ParamActionSequence RAISE_ONCE = {fault(), no_op};
 static const StorageFailureSimulator::ParamActionSequence RAISE_ON_2ND_CALL = {no_op, fault(), no_op};
+
+namespace aa = arcticdb::async;
+namespace as = arcticdb::storage;
 
 /* === Tests overview ===
  * Test each below for both the symbol list source and the version map source:
@@ -244,6 +249,53 @@ TEST_P(SymbolListWithWriteFailures, InitialCompact) {
     ASSERT_THAT(symbols, UnorderedElementsAreArray(expected));
 
     check_num_symbol_list_keys_match_expectation({{{CompactOutcome::NOT_WRITTEN, 0}, {CompactOutcome::WRITTEN, 1}, {CompactOutcome::NOT_CLEANED_UP, 1}}});
+}
+
+// If this test is timing out, it's likely that a deadlock is occurring
+// A call is blocking on the CPU thread pool, which has only one thread in this test
+TEST_F(SymbolListSuite, InitialCompactConcurent) {
+    ConfigsMap::instance()->set_int("VersionStore.NumCPUThreads", 1);
+    ConfigsMap::instance()->set_int("VersionStore.NumIOThreads", 1);
+    async::TaskScheduler::reattach_instance();
+    
+    std::vector<std::shared_ptr<arcticdb::Store>> store_targets;
+    auto version_store = get_test_engine();
+    const auto& store = version_store._test_get_store();
+    store_targets.emplace_back(store);
+    int64_t n = 20;
+    size_t parallelism_level_ = store_targets.size();
+
+    override_max_delta(n);
+
+    std::vector<StreamId> expected;
+    for(int64_t i = 0; i < 1; ++i) {
+        auto symbol = fmt::format("sym{}", i);
+        auto key1 = atom_key_builder().version_id(1).creation_ts(2).content_hash(3).start_index(
+                4).end_index(5).build(symbol, KeyType::TABLE_INDEX);
+        version_map->write_version(store_targets[0], key1, std::nullopt);
+        expected.emplace_back(symbol);
+    }
+
+    // Go through the path without previous compaction
+    auto futures = folly::window(store_targets, [this] (auto&& store_target) {
+        return folly::via(&async::cpu_executor(), [this, &store_target] {
+           return symbol_list->get_symbols(store_target);
+        });
+    }, parallelism_level_);
+
+    folly::collect(futures).get();
+
+    // Go through the path with previous compaction
+    futures = folly::window(store_targets, [this] (auto&& store) {
+        return folly::via(&async::cpu_executor(), [this, &store] {
+           return symbol_list->get_symbols(store);
+        });
+    }, parallelism_level_);
+
+    auto res = folly::collect(futures).get();
+
+    std::vector<StreamId> symbols = res[0];
+    ASSERT_THAT(symbols, UnorderedElementsAreArray(expected));
 }
 
 INSTANTIATE_TEST_SUITE_P(, SymbolListWithWriteFailures, Values(
