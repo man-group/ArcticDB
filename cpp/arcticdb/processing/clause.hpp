@@ -350,6 +350,12 @@ inline StreamDescriptor empty_descriptor(arcticdb::proto::descriptors::IndexDesc
     return StreamDescriptor{StreamId{id}, IndexDescriptor{field_count, type}, std::make_shared<FieldCollection>()};
 }
 
+struct NamedAggregator {
+    std::string aggregation_operator_;
+    std::string input_column_name_;
+    std::string output_column_name_;
+};
+
 struct AggregationClause {
     ClauseInfo clause_info_;
     std::shared_ptr<ComponentManager> component_manager_;
@@ -363,7 +369,7 @@ struct AggregationClause {
     ARCTICDB_MOVE_COPY_DEFAULT(AggregationClause)
 
     AggregationClause(const std::string& grouping_column,
-                      const std::unordered_map<std::string, std::variant<std::string, std::pair<std::string, std::string>>>& aggregations);
+                      const std::vector<NamedAggregator>& aggregations);
 
     [[noreturn]] std::vector<std::vector<size_t>> structure_for_processing(
             ARCTICDB_UNUSED const std::vector<RangesAndKey>&,

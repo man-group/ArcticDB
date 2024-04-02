@@ -326,43 +326,33 @@ Composite<EntityIds> ProjectClause::process(Composite<EntityIds>&& entity_ids) c
 }
 
 AggregationClause::AggregationClause(const std::string& grouping_column,
-                                     const std::unordered_map<std::string, std::variant<std::string, std::pair<std::string, std::string>>>& aggregations):
+                                     const std::vector<NamedAggregator>& named_aggregators):
         grouping_column_(grouping_column) {
     clause_info_.can_combine_with_column_selection_ = false;
     clause_info_.new_index_ = grouping_column_;
     clause_info_.input_columns_ = std::make_optional<std::unordered_set<std::string>>({grouping_column_});
     clause_info_.modifies_output_descriptor_ = true;
     str_ = "AGGREGATE {";
-    for (const auto& [output_column_name, var_agg_named_agg]: aggregations) {
-        std::string input_column_name;
-        std::string aggregation_operator;
-        util::variant_match(
-                var_agg_named_agg,
-                [&input_column_name, &aggregation_operator, &output_column_name] (const std::string& agg_operator) {
-                    input_column_name = output_column_name;
-                    aggregation_operator = agg_operator;
-                },
-                [&input_column_name, &aggregation_operator] (const std::pair<std::string, std::string>& input_col_and_agg) {
-                    input_column_name = input_col_and_agg.first;
-                    aggregation_operator = input_col_and_agg.second;
-                }
-                );
-        str_.append(fmt::format("{}: ({}, {}), ", output_column_name, input_column_name, aggregation_operator));
-        clause_info_.input_columns_->insert(input_column_name);
-        auto typed_input_column_name = ColumnName(input_column_name);
-        auto typed_output_column_name = ColumnName(output_column_name);
-        if (aggregation_operator == "sum") {
+    for (const auto& named_aggregator: named_aggregators) {
+        str_.append(fmt::format("{}: ({}, {}), ",
+                                named_aggregator.output_column_name_,
+                                named_aggregator.input_column_name_,
+                                named_aggregator.aggregation_operator_));
+        clause_info_.input_columns_->insert(named_aggregator.input_column_name_);
+        auto typed_input_column_name = ColumnName(named_aggregator.input_column_name_);
+        auto typed_output_column_name = ColumnName(named_aggregator.output_column_name_);
+        if (named_aggregator.aggregation_operator_ == "sum") {
             aggregators_.emplace_back(SumAggregator(typed_input_column_name, typed_output_column_name));
-        } else if (aggregation_operator == "mean") {
+        } else if (named_aggregator.aggregation_operator_ == "mean") {
             aggregators_.emplace_back(MeanAggregator(typed_input_column_name, typed_output_column_name));
-        } else if (aggregation_operator == "max") {
+        } else if (named_aggregator.aggregation_operator_ == "max") {
             aggregators_.emplace_back(MaxAggregator(typed_input_column_name, typed_output_column_name));
-        } else if (aggregation_operator == "min") {
+        } else if (named_aggregator.aggregation_operator_ == "min") {
             aggregators_.emplace_back(MinAggregator(typed_input_column_name, typed_output_column_name));
-        } else if (aggregation_operator == "count") {
+        } else if (named_aggregator.aggregation_operator_ == "count") {
             aggregators_.emplace_back(CountAggregator(typed_input_column_name, typed_output_column_name));
         } else {
-            user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Unknown aggregation operator provided: {}", aggregation_operator);
+            user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Unknown aggregation operator provided: {}", named_aggregator.aggregation_operator_);
         }
     }
     str_.append("}");
