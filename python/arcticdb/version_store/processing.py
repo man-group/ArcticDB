@@ -451,7 +451,7 @@ class QueryBuilder:
         >>> q = q.groupby("grouping_column").agg({"to_mean": "mean"})
         >>> lib.write("symbol", df)
         >>> lib.read("symbol", query_builder=q).data
-                     to_mean
+                      to_mean
             group_1  1.666667
             group_2       2.2
 
@@ -485,7 +485,7 @@ class QueryBuilder:
         >>> q = q.groupby("grouping_column").agg({"to_max": "max", "to_mean": "mean"})
         >>> lib.write("symbol", df)
         >>> lib.read("symbol", query_builder=q).data
-                        to_max   to_mean
+                     to_max   to_mean
             group_1     2.5  1.666667
 
         Min and max over one column, mean over another:
