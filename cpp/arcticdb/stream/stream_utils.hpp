@@ -376,7 +376,7 @@ inline std::vector<std::string> get_index_columns_from_descriptor(const Timeseri
     ssize_t index_till;
     const auto& common = norm_info.df().common();
     if(auto idx_type = common.index_type_case(); idx_type == arcticdb::proto::descriptors::NormalizationMetadata_Pandas::kIndex)
-        index_till = common.index().is_not_range_index() ? 1 : stream_descriptor.index().field_count();
+        index_till = common.index().is_physically_stored() ? 1 : stream_descriptor.index().field_count();
     else
         index_till = 1 + common.multi_index().field_count();  //# The value of field_count is len(index) - 1
 
@@ -388,7 +388,10 @@ inline std::vector<std::string> get_index_columns_from_descriptor(const Timeseri
 }
 
 inline IndexRange get_range_from_segment(const Index& index, const SegmentInMemory& segment) {
-    return util::variant_match(index, [&segment] (auto index_type) {
+    return util::variant_match(
+        index,
+        [](const EmptyIndex&) { return IndexRange{}; },
+        [&segment] (auto index_type) {
         using IndexType = decltype(index_type);
         auto start = IndexType::start_value_for_segment(segment);
         auto end = IndexType::end_value_for_segment(segment);

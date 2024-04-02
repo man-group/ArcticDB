@@ -49,69 +49,29 @@ namespace arcticdb::entity {
         Proto data_;
         using Type = arcticdb::proto::descriptors::IndexDescriptor::Type;
 
-        static const Type UNKNOWN = arcticdb::proto::descriptors::IndexDescriptor_Type_UNKNOWN;
-        static const Type ROWCOUNT = arcticdb::proto::descriptors::IndexDescriptor_Type_ROWCOUNT;
-        static const Type STRING = arcticdb::proto::descriptors::IndexDescriptor_Type_STRING;
-        static const Type TIMESTAMP = arcticdb::proto::descriptors::IndexDescriptor_Type_TIMESTAMP;
+        static constexpr Type UNKNOWN = arcticdb::proto::descriptors::IndexDescriptor_Type_UNKNOWN;
+        static constexpr Type EMPTY = arcticdb::proto::descriptors::IndexDescriptor_Type_EMPTY;
+        static constexpr Type ROWCOUNT = arcticdb::proto::descriptors::IndexDescriptor_Type_ROWCOUNT;
+        static constexpr Type STRING = arcticdb::proto::descriptors::IndexDescriptor_Type_STRING;
+        static constexpr Type TIMESTAMP = arcticdb::proto::descriptors::IndexDescriptor_Type_TIMESTAMP;
 
         using TypeChar = char;
 
         IndexDescriptor() = default;
-        IndexDescriptor(size_t field_count, Type type) {
-            data_.set_kind(type);
-            data_.set_field_count(static_cast<uint32_t>(field_count));
-        }
-
-        explicit IndexDescriptor(arcticdb::proto::descriptors::IndexDescriptor data)
-            : data_(std::move(data)) {
-        }
-
-        bool uninitialized() const {
-            return data_.field_count() == 0 && data_.kind() == Type::IndexDescriptor_Type_UNKNOWN;
-        }
-
-        const Proto& proto() const {
-            return data_;
-        }
-
-        size_t field_count() const {
-            return static_cast<size_t>(data_.field_count());
-        }
-
-        Type type() const {
-            return data_.kind();
-        }
-
-        void set_type(Type type) {
-            data_.set_kind(type);
-        }
-
         ARCTICDB_MOVE_COPY_DEFAULT(IndexDescriptor)
-
-        friend bool operator==(const IndexDescriptor& left, const IndexDescriptor& right) {
-            return left.type() == right.type();
-        }
+        IndexDescriptor(size_t field_count, Type type);
+        explicit IndexDescriptor(arcticdb::proto::descriptors::IndexDescriptor data);
+        bool uninitialized() const;
+        const Proto& proto() const;
+        size_t field_count() const;
+        Type type() const;
+        void set_type(Type type);
+        friend bool operator==(const IndexDescriptor& left, const IndexDescriptor& right);
     };
 
-    constexpr IndexDescriptor::TypeChar to_type_char(IndexDescriptor::Type type) {
-        switch (type) {
-        case IndexDescriptor::TIMESTAMP:return 'T';
-        case IndexDescriptor::ROWCOUNT:return 'R';
-        case IndexDescriptor::STRING:return 'S';
-        case IndexDescriptor::UNKNOWN:return 'U';
-        default:util::raise_rte("Unknown index type: {}", int(type));
-        }
-    }
-
-    constexpr IndexDescriptor::Type from_type_char(IndexDescriptor::TypeChar type) {
-        switch (type) {
-        case 'T': return IndexDescriptor::TIMESTAMP;
-        case 'R': return IndexDescriptor::ROWCOUNT;
-        case 'S': return IndexDescriptor::STRING;
-        case 'U': return IndexDescriptor::UNKNOWN;
-        default:util::raise_rte("Unknown index type: {}", int(type));
-        }
-    }
+    IndexDescriptor::TypeChar to_type_char(IndexDescriptor::Type type);
+    IndexDescriptor::Type from_type_char(IndexDescriptor::TypeChar type);
+    const char* index_type_to_str(IndexDescriptor::Type type);
 
     void set_id(arcticdb::proto::descriptors::StreamDescriptor& pb_desc, StreamId id);
 
