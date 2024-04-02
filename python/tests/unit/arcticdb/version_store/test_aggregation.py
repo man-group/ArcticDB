@@ -458,7 +458,7 @@ def test_named_agg(lmdb_version_store_tiny_segment):
     df = DataFrame(
         {
             "grouping_column": [1, 1, 1, 2, 3, 4],
-            "agg_column": gen.integers(0, 100, 6)
+            "agg_column": gen.random(6)
         }
     )
     lib.write(sym, df)
