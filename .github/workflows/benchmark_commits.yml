@@ -39,8 +39,7 @@ jobs:
       - name: Extra envs
         run: |
           . build_tooling/vcpkg_caching.sh # Linux follower needs another call in CIBW
-          echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
-          VCPKG_ROOT=$PLATFORM_VCPKG_ROOT" | tee -a $GITHUB_ENV
+          echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES" | tee -a $GITHUB_ENV
           cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
           echo "ARCTICDB_CODE_COVERAGE_BUILD=1" | tee -a $GITHUB_ENV
         env:
