@@ -214,7 +214,7 @@ folly::Future<arcticdb::entity::VariantKey> write_incomplete_frame(
     std::optional<AtomKey>&& next_key)  {
     using namespace arcticdb::pipelines;
 
-    if (!index_is_not_timeseries_or_is_sorted_ascending(frame)) {
+    if (!index_is_not_timeseries_or_is_sorted_ascending(*frame)) {
         sorting::raise<ErrorCode::E_UNSORTED_DATA>("When writing/appending staged data in parallel, input data must be sorted.");
     }
 

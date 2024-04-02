@@ -292,9 +292,7 @@ _range_index_props_are_public = hasattr(RangeIndex, "start")
 def _normalize_single_index(index, index_names, index_norm, dynamic_strings=None, string_max_len=None):
     # index: pd.Index or np.ndarray -> np.ndarray
     index_tz = None
-
-    if isinstance(index, RangeIndex):
-        # skip index since we can reconstruct it, so no need to actually store it
+    if isinstance(index_norm, NormalizationMetadata.PandasIndex) and not index_norm.is_physically_stored:
         if index.name:
             if not isinstance(index.name, int) and not isinstance(index.name, str):
                 raise NormalizationException(
@@ -303,8 +301,10 @@ def _normalize_single_index(index, index_names, index_norm, dynamic_strings=None
             if isinstance(index.name, int):
                 index_norm.is_int = True
             index_norm.name = str(index.name)
-        index_norm.start = index.start if _range_index_props_are_public else index._start
-        index_norm.step = index.step if _range_index_props_are_public else index._step
+        if isinstance(index, RangeIndex):
+            # skip index since we can reconstruct it, so no need to actually store it
+            index_norm.start = index.start if _range_index_props_are_public else index._start
+            index_norm.step = index.step if _range_index_props_are_public else index._step
         return [], []
     else:
         coerce_type = DTN64_DTYPE if len(index) == 0 else None
@@ -363,16 +363,16 @@ def _denormalize_single_index(item, norm_meta):
     rtn = Index([])
     if len(item.index_columns) == 0:
         # when then initial index was a RangeIndex
-        if norm_meta.WhichOneof("index_type") == "index" and not norm_meta.index.is_not_range_index:
+        if norm_meta.WhichOneof("index_type") == "index" and not norm_meta.index.is_physically_stored:
             if len(item.data) > 0:
                 if hasattr(norm_meta.index, "step") and norm_meta.index.step != 0:
                     stop = norm_meta.index.start + norm_meta.index.step * len(item.data[0])
                     name = norm_meta.index.name if norm_meta.index.name else None
                     return RangeIndex(start=norm_meta.index.start, stop=stop, step=norm_meta.index.step, name=name)
                 else:
-                    return None
+                    return Index([])
             else:
-                return RangeIndex(start=0, stop=0, step=1)
+                return Index([])
         # this means that the index is not a datetime index and it's been represented as a regular field in the stream
         item.index_columns.append(item.names.pop(0))
 
@@ -525,7 +525,11 @@ _IDX_PREFIX_LEN = len(_IDX_PREFIX)
 class _PandasNormalizer(Normalizer):
     def _index_to_records(self, df, pd_norm, dynamic_strings, string_max_len):
         index = df.index
-        if isinstance(index, MultiIndex):
+        if len(index) == 0 and len(df.select_dtypes(include="category").columns) == 0:
+            index_norm = pd_norm.index
+            index_norm.is_physically_stored = False
+            index = Index([])
+        elif isinstance(index, MultiIndex):
             # This is suboptimal and only a first implementation since it reduplicates the data
             index_norm = pd_norm.multi_index
             index_norm.field_count = len(index.levels) - 1
@@ -546,22 +550,12 @@ class _PandasNormalizer(Normalizer):
             df.reset_index(fields, inplace=True)
             index = df.index
         else:
-            n_rows = len(index)
-            n_categorical_columns = len(df.select_dtypes(include="category").columns)
-            if IS_PANDAS_TWO and isinstance(index, RangeIndex) and n_rows == 0 and n_categorical_columns == 0:
-                # In Pandas 1.0, an Index is used by default for any empty dataframe or series, except if
-                # there are categorical columns in which case a RangeIndex is used.
-                #
-                # In Pandas 2.0, RangeIndex is used by default for _any_ empty dataframe or series.
-                # See: https://github.com/pandas-dev/pandas/issues/49572
-                # Yet internally, ArcticDB uses a DatetimeIndex for empty dataframes and series without categorical
-                # columns.
-                #
-                # The index is converted to a DatetimeIndex for preserving the behavior of ArcticDB with Pandas 1.0.
-                index = DatetimeIndex([])
-
+            is_not_range_index = not isinstance(index, RangeIndex)
+            df_has_rows = not(len(index) == 0 and len(df.select_dtypes(include="category").columns) == 0)
             index_norm = pd_norm.index
-            index_norm.is_not_range_index = not isinstance(index, RangeIndex)
+            index_norm.is_physically_stored = is_not_range_index and df_has_rows
+            if not df_has_rows:
+                index = Index([])
 
         return _normalize_single_index(index, list(index.names), index_norm, dynamic_strings, string_max_len)
 
@@ -853,7 +847,6 @@ class DataFrameNormalizer(_PandasNormalizer):
         # type: (DataFrame, Optional[int])->NormalizedInput
         norm_meta = NormalizationMetadata()
         norm_meta.df.common.mark = True
-
         if isinstance(item.columns, RangeIndex):
             norm_meta.df.has_synthetic_columns = True
 
@@ -1106,6 +1099,7 @@ class TimeFrameNormalizer(Normalizer):
         norm_meta = NormalizationMetadata()
         norm_meta.ts.mark = True
         index_norm = norm_meta.ts.common.index
+        index_norm.is_physically_stored = len(item.times) > 0 and not isinstance(item.times, RangeIndex)
         index_names, ix_vals = _normalize_single_index(
             item.times, ["times"], index_norm, dynamic_strings, string_max_len
         )
