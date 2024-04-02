@@ -63,21 +63,21 @@ inline void check_normalization_index_match(NormalizationOperation operation,
     }
 }
 
-inline bool columns_match(const StreamDescriptor& left, const StreamDescriptor& right) {
-    const int right_fields_offset = left.index().type() == IndexDescriptor::EMPTY ? right.index().field_count() : 0;
+inline bool columns_match(const StreamDescriptor& df_in_store_descriptor, const StreamDescriptor& new_df_descriptor) {
+    const int right_fields_offset = df_in_store_descriptor.index().type() == IndexDescriptor::EMPTY ? new_df_descriptor.index().field_count() : 0;
     // The empty index is compatible with all other index types. Differences in the index fields in this case is
     // allowed. The index fields are always the first in the list.
-    if (left.fields().size() + right_fields_offset != right.fields().size()) {
+    if (df_in_store_descriptor.fields().size() + right_fields_offset != new_df_descriptor.fields().size()) {
         return false;
     }
     // In case the left index is empty index we want to skip name/type checking of the index fields which are always
     // the first fields.
-    for (auto i = 0; i < int(left.fields().size()); ++i) {
-        if (left.fields(i).name() != right.fields(i + right_fields_offset).name())
+    for (auto i = 0; i < int(df_in_store_descriptor.fields().size()); ++i) {
+        if (df_in_store_descriptor.fields(i).name() != new_df_descriptor.fields(i + right_fields_offset).name())
             return false;
 
-        const TypeDescriptor& left_type = left.fields(i).type();
-        const TypeDescriptor& right_type = right.fields(i + right_fields_offset).type();
+        const TypeDescriptor& left_type = df_in_store_descriptor.fields(i).type();
+        const TypeDescriptor& right_type = new_df_descriptor.fields(i + right_fields_offset).type();
 
         if (!trivially_compatible_types(left_type, right_type) &&
             !(is_empty_type(left_type.data_type()) || is_empty_type(right_type.data_type())))
