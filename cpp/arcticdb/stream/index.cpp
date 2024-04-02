@@ -7,6 +7,11 @@
  */
 
 #include <arcticdb/stream/index.hpp>
+#include <arcticdb/column_store/memory_segment.hpp>
+#include <arcticdb/pipeline/index_fields.hpp>
+#include <arcticdb/entity/type_utils.hpp>
+
+
 namespace arcticdb::stream {
 
 IndexDescriptor::Type get_index_value_type(const AtomKey& key) {

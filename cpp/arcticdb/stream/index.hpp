@@ -9,15 +9,14 @@
 
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/util/clock.hpp>
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/entity/index_range.hpp>
-#include <arcticdb/pipeline/index_fields.hpp>
 #include <arcticdb/entity/stream_descriptor.hpp>
-#include <arcticdb/entity/type_utils.hpp>
-#include <arcticdb/column_store/memory_segment.hpp>
 
-#include <folly/Range.h>
+
+namespace arcticdb {
+    class SegmentInMemory;
+}
 
 namespace arcticdb::stream {
 
