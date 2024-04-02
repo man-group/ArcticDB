@@ -474,8 +474,8 @@ def test_named_agg(lmdb_version_store_tiny_segment):
     q = q.groupby("grouping_column").agg(
         {
             "agg_column_sum": ("agg_column", "sum"),
-            "agg_column_mean": ("agg_column", "mean"),
-            "agg_column": "min",
+            "agg_column_mean": ("agg_column", "MEAN"),
+            "agg_column": "MIN",
         }
     )
     print(f"{q}")
