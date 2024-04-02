@@ -453,7 +453,7 @@ class QueryBuilder:
         >>> lib.read("symbol", query_builder=q).data
                      to_mean
             group_1  1.666667
-            group_2       NaN
+            group_2       2.2
 
         Max over one group:
 
@@ -487,6 +487,24 @@ class QueryBuilder:
         >>> lib.read("symbol", query_builder=q).data
                         to_max   to_mean
             group_1     2.5  1.666667
+
+        Min and max over one column, mean over another:
+        >>> df = pd.DataFrame(
+            {
+                "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"],
+                "agg_1": [1, 2, 3, 4, 5],
+                "agg_2": [1.1, 1.4, 2.5, np.nan, 2.2],
+            },
+            index=np.arange(5),
+        )
+        >>> q = adb.QueryBuilder()
+        >>> q = q.groupby("grouping_column")
+        >>> q = q.agg({"agg_1_min": ("agg_1", "min"), "agg_1_max": ("agg_1", "max"), "agg_2": "mean"})
+        >>> lib.write("symbol", df)
+        >>> lib.read("symbol", query_builder=q).data
+                     agg_1_min  agg_1_max     agg_2
+            group_1          1          3  1.666667
+            group_2          4          5       2.2
 
         Returns
         -------
