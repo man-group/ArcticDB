@@ -270,7 +270,23 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def("__str__", &GroupByClause::to_string);
 
     py::class_<AggregationClause, std::shared_ptr<AggregationClause>>(version, "AggregationClause")
-            .def(py::init<std::string, std::unordered_map<std::string, std::string>>())
+            .def(py::init([](
+                    const std::string& grouping_colum,
+                    const std::unordered_map<std::string, std::variant<std::string, std::pair<std::string, std::string>>> aggregations) {
+                std::vector<NamedAggregator> named_aggregators;
+                for (const auto& [output_column_name, var_agg_named_agg]: aggregations) {
+                    util::variant_match(
+                            var_agg_named_agg,
+                            [&named_aggregators, &output_column_name] (const std::string& agg_operator) {
+                                named_aggregators.emplace_back(agg_operator, output_column_name, output_column_name);
+                            },
+                            [&named_aggregators, &output_column_name] (const std::pair<std::string, std::string>& input_col_and_agg) {
+                                named_aggregators.emplace_back(input_col_and_agg.second, input_col_and_agg.first, output_column_name);
+                            }
+                    );
+                }
+                return AggregationClause(grouping_colum, named_aggregators);
+            }))
             .def("__str__", &AggregationClause::to_string);
 
     py::enum_<RowRangeClause::RowRangeType>(version, "RowRangeType")
