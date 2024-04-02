@@ -564,6 +564,7 @@ std::optional<std::string_view> SegmentInMemoryImpl::string_at(position_t row, p
     const auto& col_ref = column(col);
 
     if(is_fixed_string_type(td.data_type()) && col_ref.is_inflated()) {
+
         auto string_size = col_ref.bytes() / row_count();
         auto ptr = col_ref.data().buffer().ptr_cast<char>(row * string_size, string_size);
         return std::string_view(ptr, string_size);
