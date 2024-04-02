@@ -332,6 +332,7 @@ AggregationClause::AggregationClause(const std::string& grouping_column,
     clause_info_.new_index_ = grouping_column_;
     clause_info_.input_columns_ = std::make_optional<std::unordered_set<std::string>>({grouping_column_});
     clause_info_.modifies_output_descriptor_ = true;
+    str_ = "AGGREGATE {";
     for (const auto& [output_column_name, var_agg_named_agg]: aggregations) {
         std::string input_column_name;
         std::string aggregation_operator;

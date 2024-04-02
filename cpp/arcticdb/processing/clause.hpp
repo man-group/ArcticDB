@@ -356,7 +356,7 @@ struct AggregationClause {
     ProcessingConfig processing_config_;
     std::string grouping_column_;
     std::vector<GroupingAggregator> aggregators_;
-    std::string str_{"AGGREGATE {"};
+    std::string str_;
 
     AggregationClause() = delete;
 

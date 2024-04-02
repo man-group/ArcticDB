@@ -468,8 +468,6 @@ def test_named_agg(lmdb_version_store_tiny_segment):
         agg_column=pd.NamedAgg("agg_column", "min"),
     )
     expected = expected.reindex(columns=sorted(expected.columns))
-    print(f"\n{df}")
-    print(f"\n{expected}")
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg(
         {
@@ -478,7 +476,6 @@ def test_named_agg(lmdb_version_store_tiny_segment):
             "agg_column": "MIN",
         }
     )
-    print(f"{q}")
     received = lib.read(sym, query_builder=q).data
     received.sort_index(inplace=True)
     received = received.reindex(columns=sorted(received.columns))
