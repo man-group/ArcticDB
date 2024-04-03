@@ -13,7 +13,9 @@
 #include <prometheus/summary.h>
 
 #ifdef _WIN32
-#    include <Winsock.h> // for gethostname
+#include <Winsock.h> // for gethostname
+#else
+#include <unistd.h> // for gethostname
 #endif
 
 using namespace prometheus;
