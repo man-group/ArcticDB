@@ -15,6 +15,10 @@
 
 #include <cstdint>
 
+#ifndef DEBUG_BUILD
+#include <boost/container/small_vector.hpp>
+#endif
+
 namespace arcticdb {
 
 /*
