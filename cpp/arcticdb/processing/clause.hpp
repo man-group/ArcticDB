@@ -73,7 +73,7 @@ struct IClause {
         // TODO #732: Factor out start_from as part of https://github.com/man-group/ArcticDB/issues/732
         [[nodiscard]] std::vector<std::vector<size_t>>
         structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys,
-                                 size_t start_from) const {
+                                 size_t start_from) {
             return std::move(folly::poly_call<0>(*this, ranges_and_keys, start_from));
         }
 
@@ -117,7 +117,8 @@ std::vector<std::vector<size_t>> structure_by_column_slice(std::vector<RangesAnd
 Composite<ProcessingUnit> gather_entities(std::shared_ptr<ComponentManager> component_manager,
                                           Composite<EntityIds>&& entity_ids,
                                           bool include_atom_keys = false,
-                                          bool include_bucket = false);
+                                          bool include_bucket = false,
+                                          bool include_initial_expected_get_calls = false);
 
 EntityIds push_entities(std::shared_ptr<ComponentManager> component_manager, ProcessingUnit&& proc);
 
@@ -128,7 +129,7 @@ struct PassthroughClause {
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
             std::vector<RangesAndKey>& ranges_and_keys,
-            size_t start_from) const {
+            size_t start_from) {
         return structure_by_row_slice(ranges_and_keys, start_from);
     }
 
@@ -170,7 +171,7 @@ struct FilterClause {
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
             std::vector<RangesAndKey>& ranges_and_keys,
-            size_t start_from) const {
+            size_t start_from) {
         return structure_by_row_slice(ranges_and_keys, start_from);
     }
 
@@ -223,7 +224,7 @@ struct ProjectClause {
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
             std::vector<RangesAndKey>& ranges_and_keys,
-            size_t start_from) const {
+            size_t start_from) {
         return structure_by_row_slice(ranges_and_keys, start_from);
     }
 
@@ -270,7 +271,7 @@ struct PartitionClause {
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
             std::vector<RangesAndKey>& ranges_and_keys,
-            size_t start_from) const {
+            size_t start_from) {
         return structure_by_row_slice(ranges_and_keys, start_from);
     }
 
@@ -380,7 +381,7 @@ struct AggregationClause {
 
     [[noreturn]] std::vector<std::vector<size_t>> structure_for_processing(
             ARCTICDB_UNUSED const std::vector<RangesAndKey>&,
-            ARCTICDB_UNUSED size_t) const {
+            ARCTICDB_UNUSED size_t) {
         internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
                 "AggregationClause::structure_for_processing should never be called"
                 );
@@ -409,6 +410,109 @@ struct AggregationClause {
     [[nodiscard]] std::string to_string() const;
 };
 
+template<ResampleBoundary closed_boundary>
+class Bucket {
+public:
+    Bucket(timestamp start, timestamp end):
+    start_(start), end_(end){}
+
+    void set_boundaries(timestamp start, timestamp end) {
+        start_ = start;
+        end_ = end;
+    }
+
+    bool contains(timestamp ts) const {
+        if constexpr (closed_boundary == ResampleBoundary::LEFT) {
+            return ts >= start_ && ts < end_;
+        } else {
+            // closed_boundary == ResampleBoundary::RIGHT
+            return ts > start_ && ts <= end_;
+        }
+    }
+
+private:
+    timestamp start_;
+    timestamp end_;
+};
+
+template<ResampleBoundary closed_boundary>
+struct ResampleClause {
+    ClauseInfo clause_info_;
+    std::shared_ptr<ComponentManager> component_manager_;
+    ProcessingConfig processing_config_;
+    std::string rule_;
+    ResampleBoundary label_boundary_;
+    // This will either hold the date range specified by the user, or the first and last timestamps present in the index column
+    std::optional<TimestampRange> date_range_;
+    // Inject this as a callback in the ctor to avoid language-specific dependencies this low down in the codebase
+    std::function<std::vector<timestamp>(timestamp, timestamp, std::string_view, ResampleBoundary)> generate_bucket_boundaries_;
+    std::vector<timestamp> bucket_boundaries_;
+    std::vector<SortedAggregatorInterface> aggregators_;
+    std::string str_;
+
+    ResampleClause() = delete;
+
+    ARCTICDB_MOVE_COPY_DEFAULT(ResampleClause)
+
+    ResampleClause(const std::string& rule,
+                   ResampleBoundary label_boundary,
+                   std::function<std::vector<timestamp>(timestamp, timestamp, std::string_view, ResampleBoundary)>&& generate_bucket_boundaries):
+            rule_(rule),
+            label_boundary_(label_boundary),
+            generate_bucket_boundaries_(std::move(generate_bucket_boundaries)){
+        clause_info_.can_combine_with_column_selection_ = false;
+        clause_info_.modifies_output_descriptor_ = true;
+    }
+
+    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
+            std::vector<RangesAndKey>& ranges_and_keys,
+            size_t start_from);
+
+    [[nodiscard]] Composite<EntityIds> process(Composite<EntityIds>&& entity_ids) const;
+
+    [[nodiscard]] std::optional<std::vector<Composite<EntityIds>>> repartition(
+            ARCTICDB_UNUSED std::vector<Composite<EntityIds>>&&
+    ) const {
+        return std::nullopt;
+    }
+
+    [[nodiscard]] const ClauseInfo& clause_info() const {
+        return clause_info_;
+    }
+
+    void set_processing_config(const ProcessingConfig& processing_config);
+
+    void set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
+        component_manager_ = component_manager;
+    }
+
+    [[nodiscard]] std::string to_string() const;
+
+    [[nodiscard]] std::string rule() const {
+        return rule_;
+    }
+
+    void set_aggregations(const std::vector<NamedAggregator>& named_aggregators);
+
+    void set_date_range(timestamp date_range_start, timestamp date_range_end) {
+        date_range_.emplace(date_range_start, date_range_end);
+    }
+
+    bool index_range_outside_bucket_range(timestamp start_index, timestamp end_index) const;
+
+    // Advances the bucket boundary iterator to the end of the last bucket that includes a value from a row slice with the given last index value
+    void advance_bucket_past_value(const std::vector<timestamp>& bucket_boundaries,
+                                   std::vector<timestamp>::const_iterator& bucket_boundaries_it,
+                                   timestamp value) const;
+
+    std::vector<timestamp> generate_bucket_boundaries(timestamp first_ts,
+                                                      timestamp last_ts,
+                                                      bool responsible_for_first_overlapping_bucket) const;
+
+    std::shared_ptr<Column> generate_output_index_column(const std::vector<std::shared_ptr<Column>>& input_index_columns,
+                                                         const std::vector<timestamp>& bucket_boundaries) const;
+};
+
 struct RemoveColumnPartitioningClause {
     ClauseInfo clause_info_;
     std::shared_ptr<ComponentManager> component_manager_;
@@ -421,7 +525,7 @@ struct RemoveColumnPartitioningClause {
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
             std::vector<RangesAndKey>& ranges_and_keys,
-            size_t start_from) const {
+            size_t start_from) {
         return structure_by_row_slice(ranges_and_keys, start_from);
     }
 
@@ -455,7 +559,7 @@ struct SplitClause {
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
             std::vector<RangesAndKey>& ranges_and_keys,
-            size_t start_from) const {
+            size_t start_from) {
         return structure_by_row_slice(ranges_and_keys, start_from);
     }
 
@@ -488,7 +592,7 @@ struct SortClause {
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
             std::vector<RangesAndKey>& ranges_and_keys,
-            size_t start_from) const {
+            size_t start_from) {
         return structure_by_row_slice(ranges_and_keys, start_from);
     }
 
@@ -534,7 +638,7 @@ struct MergeClause {
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
             std::vector<RangesAndKey>& ranges_and_keys,
-            size_t start_from) const {
+            size_t start_from) {
         return structure_by_row_slice(ranges_and_keys, start_from);
     }
 
@@ -575,7 +679,7 @@ struct ColumnStatsGenerationClause {
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
             std::vector<RangesAndKey>& ranges_and_keys,
-            size_t start_from) const {
+            size_t start_from) {
         return structure_by_row_slice(ranges_and_keys, start_from);
     }
 
@@ -643,7 +747,7 @@ struct RowRangeClause {
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
             std::vector<RangesAndKey>& ranges_and_keys,
-            ARCTICDB_UNUSED size_t start_from) const;
+            ARCTICDB_UNUSED size_t start_from);
 
     [[nodiscard]] Composite<EntityIds> process(Composite<EntityIds>&& entity_ids) const;
 
@@ -684,7 +788,7 @@ struct DateRangeClause {
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
             std::vector<RangesAndKey>& ranges_and_keys,
-            size_t start_from) const;
+            size_t start_from);
 
     [[nodiscard]] Composite<EntityIds> process(Composite<EntityIds>&& entity_ids) const;
 

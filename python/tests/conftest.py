@@ -615,7 +615,7 @@ def lmdb_version_store_small_segment(version_store_factory):
 
 @pytest.fixture
 def lmdb_version_store_tiny_segment(version_store_factory):
-    return version_store_factory(column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2**30})
+    return version_store_factory(column_group_size=2, segment_row_size=2, dynamic_strings=True, lmdb_config={"map_size": 2**30})
 
 
 @pytest.fixture

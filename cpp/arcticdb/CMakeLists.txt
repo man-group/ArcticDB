@@ -786,6 +786,7 @@ if(${TEST})
             processing/test/test_filter_and_project_sparse.cpp
             processing/test/test_has_valid_type_promotion.cpp
             processing/test/test_operation_dispatch.cpp
+             processing/test/test_resample.cpp
             processing/test/test_set_membership.cpp
             processing/test/test_signed_unsigned_comparison.cpp
             processing/test/test_type_comparison.cpp
@@ -931,12 +932,14 @@ if(${TEST})
             column_store/test/rapidcheck_column_data_random_accessor.cpp
             column_store/test/rapidcheck_column_map.cpp
             column_store/test/test_chunked_buffer.cpp
+             processing/test/rapidcheck_resample.cpp
             stream/test/stream_test_common.cpp
             util/test/rapidcheck_decimal.cpp
             util/test/rapidcheck_generators.cpp
             util/test/rapidcheck_string_pool.cpp
             util/test/rapidcheck_main.cpp
-            version/test/rapidcheck_version_map.cpp)
+            version/test/rapidcheck_version_map.cpp
+    )
 
     add_executable(arcticdb_rapidcheck_tests ${rapidcheck_srcs})
     install(TARGETS arcticdb_rapidcheck_tests RUNTIME

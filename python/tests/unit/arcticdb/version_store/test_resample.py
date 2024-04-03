@@ -1,0 +1,425 @@
+from functools import partial
+import numpy as np
+import pandas as pd
+import pytest
+
+from arcticdb import QueryBuilder
+from arcticdb.exceptions import ArcticDbNotYetImplemented, SchemaException
+from arcticdb.util.test import assert_frame_equal
+from arcticdb.util._versions import IS_PANDAS_TWO
+
+def generic_resample_test(lib, sym, rule, aggregations, date_range=None, closed=None, label=None):
+    # Pandas doesn't have a good date_range equivalent in resample, so just use read for that
+    expected = lib.read(sym, date_range=date_range).data
+    # Pandas 1.X needs None as the first argument to agg with named aggregators
+    expected = expected.resample(rule, closed=closed, label=label).agg(None, **aggregations)
+    expected = expected.reindex(columns=sorted(expected.columns))
+
+    q = QueryBuilder()
+    q = q.resample(rule, closed=closed, label=label).agg(aggregations)
+    received = lib.read(sym, date_range=date_range, query_builder=q).data
+    received = received.reindex(columns=sorted(received.columns))
+
+    assert_frame_equal(expected, received, check_dtype=False)
+
+
+@pytest.mark.parametrize("freq", ("min", "h", "D", "1h30min"))
+@pytest.mark.parametrize("date_range", (None, (pd.Timestamp("2024-01-02T12:00:00"), pd.Timestamp("2024-01-03T12:00:00"))))
+@pytest.mark.parametrize("closed", ("left", "right"))
+@pytest.mark.parametrize("label", ("left", "right"))
+def test_resampling(lmdb_version_store_v1, freq, date_range, closed, label):
+    lib = lmdb_version_store_v1
+    sym = "test_resampling"
+    # Want an index with data every minute for 2 days, with additional data points 1 nanosecond before and after each
+    # minute to catch off-by-one errors
+    idx_start_base = pd.Timestamp("2024-01-02")
+    idx_end_base = pd.Timestamp("2024-01-04")
+
+    idx = pd.date_range(idx_start_base, idx_end_base, freq="min")
+    idx_1_nano_before = pd.date_range(idx_start_base - pd.Timedelta(1), idx_end_base - pd.Timedelta(1), freq="min")
+    idx_1_nano_after = pd.date_range(idx_start_base + pd.Timedelta(1), idx_end_base + pd.Timedelta(1), freq="min")
+    idx = idx.join(idx_1_nano_before, how="outer").join(idx_1_nano_after, how="outer")
+    rng = np.random.default_rng()
+    df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
+    lib.write(sym, df)
+
+    generic_resample_test(
+        lib,
+        sym,
+        freq,
+        {
+            "sum": ("col", "sum"),
+            "min": ("col", "min"),
+            "max": ("col", "max"),
+            "mean": ("col", "mean"),
+            "count": ("col", "count"),
+            "first": ("col", "first"),
+            "last": ("col", "last"),
+        },
+        date_range=date_range,
+        closed=closed,
+        label=label
+    )
+
+
+@pytest.mark.parametrize("closed", ("left", "right"))
+def test_resampling_duplicated_index_value_on_segment_boundary(lmdb_version_store_v1, closed):
+    lib = lmdb_version_store_v1
+    sym = "test_resampling_duplicated_index_value_on_segment_boundary"
+    # Will group on microseconds
+    df_0 = pd.DataFrame({"col": np.arange(4)}, index=np.array([0, 1, 2, 1000], dtype="datetime64[ns]"))
+    df_1 = pd.DataFrame({"col": np.arange(4, 8)}, index=np.array([1000, 1000, 1000, 1000], dtype="datetime64[ns]"))
+    df_2 = pd.DataFrame({"col": np.arange(8, 12)}, index=np.array([1000, 1001, 2000, 2001], dtype="datetime64[ns]"))
+    lib.write(sym, df_0)
+    lib.append(sym, df_1)
+    lib.append(sym, df_2)
+
+    generic_resample_test(
+        lib,
+        sym,
+        "us",
+        {"sum": ("col", "sum")},
+        closed=closed,
+    )
+
+
+def test_resampling_timezones(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_resampling_timezones"
+    # UK clocks go forward at 1am on March 31st in 2024
+    index = pd.date_range("2024-03-31T00:00:00", freq="min", periods=240, tz="Europe/London")
+    df = pd.DataFrame({"col": np.arange(len(index))}, index=index)
+    lib.write(sym, df)
+    generic_resample_test(
+        lib,
+        sym,
+        "h",
+        {"sum": ("col", "sum")},
+    )
+
+    # UK clocks go back at 2am on October 27th in 2024
+    index = pd.date_range("2024-10-27T00:00:00", freq="min", periods=240, tz="Europe/London")
+    df = pd.DataFrame({"col": np.arange(len(index))}, index=index)
+    lib.write(sym, df)
+    generic_resample_test(
+        lib,
+        sym,
+        "h",
+        {"sum": ("col", "sum")},
+    )
+
+
+def test_resampling_nan_correctness(lmdb_version_store_tiny_segment):
+    lib = lmdb_version_store_tiny_segment
+    sym = "test_resampling_nan_correctness"
+    # NaN here means NaT for datetime columns and NaN/None in string columns
+    # Create 5 buckets worth of data, each containing 3 values:
+    # - No nans
+    # - All nans
+    # - First value nan
+    # - Middle value nan
+    # - Last value nan
+    # Will group on microseconds
+    idx = [0, 1, 2, 1000, 1001, 1002, 2000, 2001, 2002, 3000, 3001, 3002, 4000, 4001, 4002]
+    idx = np.array(idx, dtype="datetime64[ns]")
+    float_col = np.arange(15, dtype=np.float64)
+    string_col = [f"str {str(i)}" for i in range(15)]
+    datetime_col = np.array(np.arange(0, 30, 2), dtype="datetime64[ns]")
+    for i in [3, 4, 5, 6, 10, 14]:
+        float_col[i] = np.nan
+        string_col[i] = None if i % 2 == 0 else np.nan
+        datetime_col[i] = np.datetime64('NaT')
+
+    df = pd.DataFrame({"float_col": float_col, "string_col": string_col, "datetime_col": datetime_col}, index=idx)
+    lib.write(sym, df)
+
+    agg_dict = {
+        "float_sum": ("float_col", "sum"),
+        "float_mean": ("float_col", "mean"),
+        "float_min": ("float_col", "min"),
+        "float_max": ("float_col", "max"),
+        "float_first": ("float_col", "first"),
+        "float_last": ("float_col", "last"),
+        "float_count": ("float_col", "count"),
+    }
+
+    # Pandas 1.X does not support all of these aggregators/behaviours
+    if IS_PANDAS_TWO:
+        agg_dict.update(
+            {
+                "string_first": ("string_col", "first"),
+                "string_last": ("string_col", "last"),
+                "string_count": ("string_col", "count"),
+                "datetime_mean": ("datetime_col", "mean"),
+                "datetime_min": ("datetime_col", "min"),
+                "datetime_max": ("datetime_col", "max"),
+                "datetime_first": ("datetime_col", "first"),
+                "datetime_last": ("datetime_col", "last"),
+                "datetime_count": ("datetime_col", "count"),
+            }
+        )
+
+    generic_resample_test(lib, sym, "us", agg_dict)
+
+
+def test_resampling_bool_columns(lmdb_version_store_tiny_segment):
+    lib = lmdb_version_store_tiny_segment
+    sym = "test_resampling_bool_columns"
+
+    idx = [0, 1, 1000, 1001, 2000, 2001, 3000, 3001]
+    idx = np.array(idx, dtype="datetime64[ns]")
+
+    col = [True, True, True, False, False, True, False, False]
+
+    df = pd.DataFrame({"col": col}, index=idx)
+    lib.write(sym, df)
+
+    generic_resample_test(
+        lib,
+        sym,
+        "us",
+        {
+            "sum": ("col", "sum"),
+            "mean": ("col", "mean"),
+            "min": ("col", "min"),
+            "max": ("col", "max"),
+            "first": ("col", "first"),
+            "last": ("col", "last"),
+            "count": ("col", "count"),
+        },
+    )
+
+
+def test_resampling_dynamic_schema_types_changing(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    sym = "test_resampling_dynamic_schema_types_changing"
+    # Will group on microseconds
+    idx_0 = [0, 1, 2, 1000]
+    idx_0 = np.array(idx_0, dtype="datetime64[ns]")
+    col_0 = np.arange(4, dtype=np.uint8)
+    df_0 = pd.DataFrame({"col": col_0}, index=idx_0)
+    lib.write(sym, df_0)
+
+    idx_1 = [1001, 1002, 2000, 2001]
+    idx_1 = np.array(idx_1, dtype="datetime64[ns]")
+    col_1 = np.arange(1000, 1004, dtype=np.int64)
+    df_1 = pd.DataFrame({"col": col_1}, index=idx_1)
+    lib.append(sym, df_1)
+
+    generic_resample_test(
+        lib,
+        sym,
+        "us",
+        {
+            "sum": ("col", "sum"),
+            "mean": ("col", "mean"),
+            "min": ("col", "min"),
+            "max": ("col", "max"),
+            "first": ("col", "first"),
+            "last": ("col", "last"),
+            "count": ("col", "count"),
+        },
+    )
+
+
+def test_resampling_empty_bucket_in_range(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_resampling_empty_bucket_in_range"
+    # Group on microseconds, so bucket 1000-1999 will be empty
+    idx = [0, 1, 2000, 2001]
+    idx = np.array(idx, dtype="datetime64[ns]")
+    col = np.arange(4, dtype=np.float64)
+
+    df = pd.DataFrame({"col": col}, index=idx)
+    rng = np.random.default_rng()
+    df = pd.DataFrame(
+        {
+            "to_sum": rng.integers(0, 100, len(idx)),
+            "to_min": rng.integers(0, 100, len(idx)),
+            "to_max": rng.integers(0, 100, len(idx)),
+            "to_mean": rng.integers(0, 100, len(idx)),
+            "to_count": rng.integers(0, 100, len(idx)),
+            "to_first": rng.integers(0, 100, len(idx)),
+            "to_last": rng.integers(0, 100, len(idx)),
+        },
+        index=idx,
+    )
+    lib.write(sym, df)
+
+    # Pandas recommended way to resample and exclude buckets with no index values, which is our behaviour
+    # See https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#sparse-resampling
+    def round(t, freq):
+        freq = pd.tseries.frequencies.to_offset(freq)
+        td = pd.Timedelta(freq)
+        return pd.Timestamp((t.value // td.value) * td.value)
+
+    expected = df.groupby(partial(round, freq="us")).agg(
+        {
+            "to_sum": "sum",
+            "to_mean": "mean",
+            "to_min": "min",
+            "to_max": "max",
+            "to_first": "first",
+            "to_last": "last",
+            "to_count": "count",
+        }
+    )
+    expected = expected.reindex(columns=sorted(expected.columns))
+    expected["to_count"] = expected["to_count"].astype(np.uint64)
+
+    q = QueryBuilder()
+    q = q.resample("us").agg(
+        {
+            "to_sum": "sum",
+            "to_mean": "mean",
+            "to_min": "min",
+            "to_max": "max",
+            "to_first": "first",
+            "to_last": "last",
+            "to_count": "count",
+        }
+    )
+    received = lib.read(sym, query_builder=q).data
+    received = received.reindex(columns=sorted(received.columns))
+    assert_frame_equal(expected, received, check_dtype=False)
+
+
+@pytest.mark.parametrize("use_date_range", (True, False))
+@pytest.mark.parametrize("single_query", (True, False))
+def test_resampling_batch_read_query(lmdb_version_store_v1, use_date_range, single_query):
+    lib = lmdb_version_store_v1
+    sym_0 = "test_resampling_batch_read_query_0"
+    sym_1 = "test_resampling_batch_read_query_1"
+
+    if use_date_range:
+        date_range_0 = (pd.Timestamp("2024-01-01T01:00:00"), pd.Timestamp("2024-01-01T12:00:00"))
+        date_range_1 = (pd.Timestamp("2024-01-02T01:00:00"), pd.Timestamp("2024-01-02T11:00:00"))
+        date_ranges = [date_range_0, date_range_1]
+    else:
+        date_range_0 = None
+        date_range_1 = None
+        date_ranges = None
+
+    df_0 = pd.DataFrame({"col": np.arange(2000)}, index=pd.date_range("2024-01-01", freq="min", periods=2000))
+    df_1 = pd.DataFrame({"col": np.arange(1000)}, index=pd.date_range("2024-01-02", freq="min", periods=1000))
+    lib.batch_write([sym_0, sym_1], [df_0, df_1])
+
+    if single_query:
+        agg_dict_0 = {"col": "sum"}
+        agg_dict_1 = agg_dict_0
+        q = QueryBuilder().resample("h").agg(agg_dict_0)
+    else:
+        agg_dict_0 = {"col": "sum"}
+        agg_dict_1 = {"col": "mean"}
+        q_0 = QueryBuilder().resample("h").agg(agg_dict_0)
+        q_1 = QueryBuilder().resample("h").agg(agg_dict_1)
+        q = [q_0, q_1]
+
+    # Date range filtering in Pandas is painful, so use our read call for that bit
+    expected_0 = lib.read(sym_0, date_range=date_range_0).data.resample("h").agg(agg_dict_0)
+    expected_1 = lib.read(sym_1, date_range=date_range_1).data.resample("h").agg(agg_dict_1)
+    expected_0 = expected_0.reindex(columns=sorted(expected_0.columns))
+    expected_1 = expected_1.reindex(columns=sorted(expected_1.columns))
+
+    res = lib.batch_read([sym_0, sym_1], date_ranges=date_ranges, query_builder=q)
+    received_0 = res[sym_0].data
+    received_1 = res[sym_1].data
+
+    received_0 = received_0.reindex(columns=sorted(received_0.columns))
+    received_1 = received_1.reindex(columns=sorted(received_1.columns))
+    assert_frame_equal(expected_0, received_0, check_dtype=False)
+    assert_frame_equal(expected_1, received_1, check_dtype=False)
+
+
+# All following tests cover that an appropriate exception is thrown when unsupported operations are attempted
+
+@pytest.mark.parametrize("freq", ("B", "W", "M", "Q", "Y", "cbh", "bh", "BYS", "YS", "BYE", "YE", "BQS", "QS", "BQE",
+                                  "QE", "CBMS", "BMS", "SMS", "MS", "CBME", "BME", "SME", "ME", "C"))
+def test_resample_rejects_unsupported_frequency_strings(freq):
+    with pytest.raises(ArcticDbNotYetImplemented):
+        QueryBuilder().resample(freq)
+    with pytest.raises(ArcticDbNotYetImplemented):
+        QueryBuilder().resample("2" + freq)
+    # Pandas 1.X throws an attribute error here
+    if IS_PANDAS_TWO:
+        with pytest.raises(ArcticDbNotYetImplemented):
+            QueryBuilder().resample(freq + "1h")
+
+
+def test_resampling_unsupported_aggregation_type_combos(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_resampling_unsupported_aggregation_type_combos"
+
+    df = pd.DataFrame({"string": ["hello"], "datetime": [pd.Timestamp(0)]}, index=[pd.Timestamp(0)])
+    lib.write(sym, df)
+
+    for agg in ["sum", "mean", "min", "max"]:
+        q = QueryBuilder()
+        q = q.resample("min").agg({"string": agg})
+        with pytest.raises(SchemaException):
+            lib.read(sym, query_builder=q)
+
+    q = QueryBuilder()
+    q = q.resample("min").agg({"datetime": "sum"})
+    with pytest.raises(SchemaException):
+        lib.read(sym, query_builder=q)
+
+
+def test_resampling_dynamic_schema_missing_column(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    sym = "test_resampling_dynamic_schema_missing_column"
+
+    lib.write(sym, pd.DataFrame({"col_0": [0]}, index=[pd.Timestamp(0)]))
+    lib.append(sym, pd.DataFrame({"col_1": [1000]}, index=[pd.Timestamp(2000)]))
+
+    # Schema exception should be thrown regardless of whether there are any buckets that span segments or not
+    q = QueryBuilder()
+    q = q.resample("us").agg({"col_0": "sum"})
+    with pytest.raises(SchemaException):
+        lib.read(sym, query_builder=q)
+
+    q = QueryBuilder()
+    q = q.resample("s").agg({"col_1": "sum"})
+    with pytest.raises(SchemaException):
+        lib.read(sym, query_builder=q)
+
+
+def test_resampling_sparse_data(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_resampling_sparse_data"
+
+    # col_1 will be dense, but with fewer rows than the index column, and so semantically sparse
+    data = {
+        "col_0": [np.nan, 1.0],
+        "col_1": [2.0, np.nan]
+    }
+    lib.write(sym, pd.DataFrame(data, index=[pd.Timestamp(0), pd.Timestamp(1000)]), sparsify_floats=True)
+
+    q = QueryBuilder()
+    q = q.resample("us").agg({"col_0": "sum"})
+    with pytest.raises(SchemaException):
+        lib.read(sym, query_builder=q)
+
+    q = QueryBuilder()
+    q = q.resample("s").agg({"col_1": "sum"})
+    with pytest.raises(SchemaException):
+        lib.read(sym, query_builder=q)
+
+
+def test_resampling_empty_type_column(lmdb_version_store_empty_types_v1):
+    lib = lmdb_version_store_empty_types_v1
+    sym = "test_resampling_empty_type_column"
+
+    lib.write(sym, pd.DataFrame({"col": ["hello"]}, index=[pd.Timestamp(0)]))
+    lib.append(sym, pd.DataFrame({"col": [None]}, index=[pd.Timestamp(2000)]))
+
+    # Schema exception should be thrown regardless of whether there are any buckets that span segments or not
+    q = QueryBuilder()
+    q = q.resample("us").agg({"col": "first"})
+    with pytest.raises(SchemaException):
+        lib.read(sym, query_builder=q)
+
+    q = QueryBuilder()
+    q = q.resample("s").agg({"col": "first"})
+    with pytest.raises(SchemaException):
+        lib.read(sym, query_builder=q)

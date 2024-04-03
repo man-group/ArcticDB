@@ -6,15 +6,16 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 from collections import namedtuple
+from dataclasses import dataclass
 import datetime
 from math import inf
 
 import numpy as np
 import pandas as pd
 
-from typing import Dict, NamedTuple, Tuple, Union
+from typing import Dict, NamedTuple, Optional, Tuple, Union
 
-from arcticdb.exceptions import ArcticNativeException, UserInputException
+from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticNativeException, UserInputException
 from arcticdb.version_store._normalization import normalize_dt_range_to_ts
 from arcticdb.preconditions import check
 from arcticdb.supported_types import DateRangeInput, time_types as supported_time_types
@@ -25,6 +26,9 @@ from arcticdb_ext.version_store import FilterClause as _FilterClause
 from arcticdb_ext.version_store import ProjectClause as _ProjectClause
 from arcticdb_ext.version_store import GroupByClause as _GroupByClause
 from arcticdb_ext.version_store import AggregationClause as _AggregationClause
+from arcticdb_ext.version_store import ResampleClauseLeftClosed as _ResampleClauseLeftClosed
+from arcticdb_ext.version_store import ResampleClauseRightClosed as _ResampleClauseRightClosed
+from arcticdb_ext.version_store import ResampleBoundary as _ResampleBoundary
 from arcticdb_ext.version_store import RowRangeClause as _RowRangeClause
 from arcticdb_ext.version_store import DateRangeClause as _DateRangeClause
 from arcticdb_ext.version_store import RowRangeType as _RowRangeType
@@ -299,6 +303,14 @@ class PythonRowRangeClause(NamedTuple):
     start: int = None
     end: int = None
 
+# Would be cleaner if all Python*Clause classes were dataclasses, but this is used for pickling, so hard to change now
+@dataclass
+class PythonResampleClause:
+    rule: str
+    closed: _ResampleBoundary
+    label: _ResampleBoundary
+    aggregations: Dict[str, Union[str, Tuple[str, str]]] = None
+
 
 class QueryBuilder:
     """
@@ -530,8 +542,8 @@ class QueryBuilder:
     def agg(self, aggregations: Dict[str, Union[str, Tuple[str, str]]]):
         # Only makes sense if previous stage is a group-by
         check(
-            len(self.clauses) and isinstance(self.clauses[-1], _GroupByClause),
-            f"Aggregation only makes sense after groupby",
+            len(self.clauses) and isinstance(self.clauses[-1], (_GroupByClause, _ResampleClauseLeftClosed, _ResampleClauseRightClosed)),
+            f"Aggregation only makes sense after groupby or resample",
         )
         for k, v in aggregations.items():
             check(isinstance(v, (str, tuple)), f"Values in agg dict expected to be strings or tuples, received {v} of type {type(v)}")
@@ -544,9 +556,62 @@ class QueryBuilder:
                 )
                 aggregations[k] = (v[0], v[1].lower())
 
-        self.clauses.append(_AggregationClause(self.clauses[-1].grouping_column, aggregations))
-        self._python_clauses.append(PythonAggregationClause(aggregations))
+        if isinstance(self.clauses[-1], _GroupByClause):
+            self.clauses.append(_AggregationClause(self.clauses[-1].grouping_column, aggregations))
+            self._python_clauses.append(PythonAggregationClause(aggregations))
+        else:
+            self.clauses[-1].set_aggregations(aggregations)
+            self._python_clauses[-1].aggregations = aggregations
+            # self._python_clauses[-1] = self._python_clauses[-1]._replace(aggregations=aggregations)
         return self
+
+
+    def resample(
+            self,
+            rule: Union[str, pd.DateOffset],
+            closed: Optional[str] = None,
+            label: Optional[str] = None,
+    ):
+        check(not len(self.clauses), "resample only supported as first clause in the pipeline")
+        rule = rule.freqstr if isinstance(rule, pd.DateOffset) else rule
+        # We use floor and ceiling later to round user-provided date ranges and or start/end index values of the symbol
+        # before calling pandas.date_range to generate the bucket boundaries, but floor and ceiling only work with
+        # well-defined intervals that are multiples of whole ns/us/ms/s/min/h/D
+        try:
+            pd.Timestamp(0).floor(rule)
+        except ValueError:
+            raise ArcticDbNotYetImplemented(f"Frequency string '{rule}' not yet supported. Valid frequency strings "
+                                            f"are ns, us, ms, s, min, h, D, and multiples/combinations thereof such "
+                                            f"as 1h30min")
+
+        # This set is documented here:
+        # https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Series.resample.html#pandas.Series.resample
+        # and lifted directly from pandas.core.resample.TimeGrouper.__init__, and so is inherently fragile to upstream
+        # changes
+        end_types = {"M", "A", "Q", "BM", "BA", "BQ", "W"}
+        boundary_map = {
+            "left": _ResampleBoundary.LEFT,
+            "right": _ResampleBoundary.RIGHT,
+            None: _ResampleBoundary.RIGHT if rule in end_types else _ResampleBoundary.LEFT
+        }
+        check(closed in boundary_map.keys(), f"closed kwarg to resample must be `left`, 'right', or None, but received '{closed}'")
+        check(label in boundary_map.keys(), f"label kwarg to resample must be `left`, 'right', or None, but received '{closed}'")
+        if boundary_map[closed] == _ResampleBoundary.LEFT:
+            self.clauses.append(_ResampleClauseLeftClosed(rule, boundary_map[label]))
+        else:
+            # boundary_map[closed] == _ResampleBoundary.RIGHT
+            self.clauses.append(_ResampleClauseRightClosed(rule, boundary_map[label]))
+        self._python_clauses.append(PythonResampleClause(rule=rule, closed=boundary_map[closed], label=boundary_map[label]))
+        return self
+
+    def is_resample(self):
+        return len(self.clauses) and isinstance(self.clauses[0], (_ResampleClauseLeftClosed, _ResampleClauseRightClosed))
+
+    def set_date_range(self, date_range:Optional[DateRangeInput]):
+        if self.is_resample() and date_range is not None:
+            start, end = normalize_dt_range_to_ts(date_range)
+            self.clauses[0].set_date_range(start.value, end.value)
+
 
     # TODO: specify type of other must be QueryBuilder with from __future__ import annotations once only Python 3.7+
     # supported
@@ -662,6 +727,14 @@ class QueryBuilder:
                 self.clauses.append(_GroupByClause(python_clause.name))
             elif isinstance(python_clause, PythonAggregationClause):
                 self.clauses.append(_AggregationClause(self.clauses[-1].grouping_column, python_clause.aggregations))
+            elif isinstance(python_clause, PythonResampleClause):
+                if python_clause.closed == _ResampleBoundary.LEFT:
+                    self.clauses.append(_ResampleClauseLeftClosed(python_clause.rule, python_clause.label))
+                else:
+                    # python_clause.closed == _ResampleBoundary.RIGHT
+                    self.clauses.append(_ResampleClauseRightClosed(python_clause.rule, python_clause.label))
+                if python_clause.aggregations is not None:
+                    self.clauses[-1].set_aggregations(python_clause.aggregations)
             elif isinstance(python_clause, PythonRowRangeClause):
                 if python_clause.start is not None and python_clause.end is not None:
                     self.clauses.append(_RowRangeClause(python_clause.start, python_clause.end))
@@ -701,7 +774,7 @@ class QueryBuilder:
                 clause.set_pipeline_optimisation(_Optimisation.MEMORY)
 
     def needs_post_processing(self):
-        return not any(isinstance(clause, (_RowRangeClause, _DateRangeClause)) for clause in self.clauses)
+        return not any(isinstance(clause, (_RowRangeClause, _DateRangeClause, _ResampleClauseLeftClosed, _ResampleClauseRightClosed)) for clause in self.clauses)
 
 
 CONSTRUCTOR_MAP = {

@@ -89,7 +89,7 @@ VariantData ProcessingUnit::get(const VariantNode &name) {
             return computed->second;
         } else {
             auto expr = expression_context_->expression_nodes_.get_value(expression_name.value);
-            auto data = expr->compute(self());
+            auto data = expr->compute(*this);
             computed_data_.try_emplace(expression_name.value, data);
             return data;
         }
@@ -98,6 +98,61 @@ VariantData ProcessingUnit::get(const VariantNode &name) {
         util::raise_rte("ProcessingUnit::get called with monostate VariantNode");
     }
     );
+}
+
+std::vector<ProcessingUnit> split_by_row_slice(ProcessingUnit&& proc) {
+    auto input = std::move(proc);
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(input.segments_.has_value(), "split_by_row_slice needs Segments");
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(input.row_ranges_.has_value(), "split_by_row_slice needs RowRanges");
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(input.col_ranges_.has_value(), "split_by_row_slice needs ColRanges");
+    auto include_expected_get_calls = input.segment_initial_expected_get_calls_.has_value();
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(input.segment_initial_expected_get_calls_.has_value(), "split_by_row_slice needs expected get calls");
+
+    std::map<RowRange, ProcessingUnit> output_map;
+    for (auto [idx, row_range_ptr]: folly::enumerate(*input.row_ranges_)) {
+        if (auto it = output_map.find(*row_range_ptr); it != output_map.end()) {
+            it->second.segments_->emplace_back(input.segments_->at(idx));
+            it->second.row_ranges_->emplace_back(input.row_ranges_->at(idx));
+            it->second.col_ranges_->emplace_back(input.col_ranges_->at(idx));
+            if (include_expected_get_calls) {
+                it->second.segment_initial_expected_get_calls_->emplace_back(
+                        input.segment_initial_expected_get_calls_->at(idx));
+            }
+        } else {
+            auto [inserted_it, _] = output_map.emplace(*row_range_ptr, ProcessingUnit{});
+            inserted_it->second.segments_.emplace(1, input.segments_->at(idx));
+            inserted_it->second.row_ranges_.emplace(1, input.row_ranges_->at(idx));
+            inserted_it->second.col_ranges_.emplace(1, input.col_ranges_->at(idx));
+            if (include_expected_get_calls) {
+                inserted_it->second.segment_initial_expected_get_calls_.emplace(1,
+                                                                                input.segment_initial_expected_get_calls_->at(
+                                                                                        idx));
+            }
+        }
+    }
+    std::vector<ProcessingUnit> output;
+    output.reserve(output_map.size());
+    for (auto&& [_, processing_unit]: output_map) {
+        output.emplace_back(std::move(processing_unit));
+    }
+    // The expected get counts for all segments in a row slice should be the same
+    // This should always be 1 or 2 for the first row slice, and 1 for all of the others
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(!output.empty(), "Unexpected empty output in split_by_row_slice");
+    if (include_expected_get_calls) {
+        for (const auto &row_slice: output) {
+            auto expected_get_calls = row_slice.segment_initial_expected_get_calls_->front();
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(0 < expected_get_calls && expected_get_calls <= 2,
+                                                            "expected_get_calls in split_by_row_slice should be 1 or 2, got {}",
+                                                            expected_get_calls);
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                    std::all_of(row_slice.segment_initial_expected_get_calls_->begin(),
+                                row_slice.segment_initial_expected_get_calls_->end(),
+                                [&expected_get_calls](uint64_t i) { return i == expected_get_calls; }),
+                    "All segments in same row slice should have same expected_get_calls in split_by_row_slice");
+        }
+    }
+
+    return output;
 }
 
 } //namespace arcticdb

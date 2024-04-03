@@ -25,6 +25,7 @@
 #include <arcticdb/codec/codec.hpp>
 
 #include <type_traits>
+#include <ranges>
 
 namespace arcticdb::async {
 
@@ -405,7 +406,8 @@ struct MemSegmentProcessingTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(MemSegmentProcessingTask)
 
     Composite<EntityIds> operator()() {
-        for(const auto& clause : clauses_) {
+        std::ranges::reverse_view reversed_clauses{clauses_};
+        for (const auto& clause: reversed_clauses) {
             entity_ids_ = clause->process(std::move(entity_ids_));
 
             if(clause->clause_info().requires_repartition_)

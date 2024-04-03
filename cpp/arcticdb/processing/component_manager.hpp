@@ -66,13 +66,26 @@ public:
         }
     }
 
+    template<typename T>
+    uint64_t get_initial_expected_get_calls(EntityId id) {
+        // Only applies to ComponentMaps tracking expected get calls
+        if constexpr(std::is_same_v<T, std::shared_ptr<SegmentInMemory>>) {
+            return segment_map_.get_initial_expected_get_calls(id);
+        } else {
+            // Hacky workaround for static_assert(false) not being allowed
+            // See https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2022/p2593r0.html
+            static_assert(sizeof(T) == 0, "Unsupported component type passed to ComponentManager::get_initial_expected_get_calls");
+        }
+    }
+
 private:
     template<typename T>
     class ComponentMap {
     public:
         explicit ComponentMap(std::string&& entity_type, bool track_expected_gets):
                 entity_type_(std::move(entity_type)),
-                opt_expected_get_calls_map_(track_expected_gets ? std::make_optional<std::unordered_map<EntityId, uint64_t>>() : std::nullopt){
+                opt_expected_get_calls_map_(track_expected_gets ? std::make_optional<std::unordered_map<EntityId, uint64_t>>() : std::nullopt),
+                opt_expected_get_calls_initial_map_(track_expected_gets ? std::make_optional<std::unordered_map<EntityId, uint64_t>>() : std::nullopt){
         };
         ARCTICDB_NO_MOVE_OR_COPY(ComponentMap)
 
@@ -87,6 +100,9 @@ private:
                                                                 "Failed to insert {} with ID {}, must provide expected gets",
                                                                 entity_type_, id);
                 internal::check<ErrorCode::E_ASSERTION_FAILURE>(opt_expected_get_calls_map_->try_emplace(id, *expected_get_calls).second,
+                                                                "Failed to insert {} with ID {}, already exists",
+                                                                entity_type_, id);
+                internal::check<ErrorCode::E_ASSERTION_FAILURE>(opt_expected_get_calls_initial_map_->try_emplace(id, *expected_get_calls).second,
                                                                 "Failed to insert {} with ID {}, already exists",
                                                                 entity_type_, id);
             }
@@ -114,6 +130,17 @@ private:
             }
             return res;
         }
+        uint64_t get_initial_expected_get_calls(EntityId id) {
+            std::lock_guard <std::mutex> lock(mtx_);
+            ARCTICDB_DEBUG(log::storage(), "Getting initial expected get calls of {} with id {}", entity_type_, id);
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(opt_expected_get_calls_initial_map_.has_value(),
+                                                            "Cannot get initial expected get calls for {} as they are not being tracked", entity_type_);
+            auto it = opt_expected_get_calls_initial_map_->find(id);
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(it != opt_expected_get_calls_initial_map_->end(),
+                                                            "Requested non-existent {} with ID {}",
+                                                            entity_type_, id);
+            return it->second;
+        }
     private:
         // Just used for logging/exception messages
         std::string entity_type_;
@@ -121,6 +148,7 @@ private:
         // If not nullopt, tracks the number of calls to get for each entity id, and erases from maps when it has been
         // called this many times
         std::optional<std::unordered_map<EntityId, uint64_t>> opt_expected_get_calls_map_;
+        std::optional<std::unordered_map<EntityId, uint64_t>> opt_expected_get_calls_initial_map_;
         std::mutex mtx_;
     };
 
