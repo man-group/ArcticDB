@@ -13,7 +13,6 @@
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/codec/codec.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
-
 namespace arcticdb::storage::file {
 
 MappedFileStorage::MappedFileStorage(const LibraryPath &lib, OpenMode mode, Config conf) :
