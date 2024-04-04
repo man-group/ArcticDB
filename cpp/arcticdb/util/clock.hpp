@@ -9,19 +9,42 @@
 
 #include <arcticdb/entity/types.hpp>
 
+#include <cstdint>
+#if defined(_WIN32)
 #include <chrono>
+#elif defined(__linux__)
+#include <time.h>
+#elif defined(__APPLE__)
+#include <mach/mach_time.h>
+#endif
+
 
 namespace arcticdb::util {
 
 class SysClock {
   public:
     static entity::timestamp nanos_since_epoch() {
-        auto t = std::chrono::system_clock::now();
-        return std::chrono::duration_cast<std::chrono::nanoseconds>(t.time_since_epoch()).count();
+        auto now = std::chrono::system_clock::now();
+        auto now_ns = std::chrono::time_point_cast<std::chrono::nanoseconds>(now);
+        return now_ns.time_since_epoch().count();
     }
     static entity::timestamp coarse_nanos_since_epoch() {
-        auto t = std::chrono::system_clock::now();
-        return std::chrono::duration_cast<std::chrono::nanoseconds>(t.time_since_epoch()).count();
+#if defined(__linux__)
+        timespec ts;
+        clock_gettime(CLOCK_REALTIME_COARSE, &ts);
+        return static_cast<uint64_t>(ts.tv_sec) * 1000000000LL + ts.tv_nsec;
+#elif defined(_WIN32)
+        return nanos_since_epoch();
+#elif defined(__APPLE__)
+        static mach_timebase_info_data_t info = {0, 0};
+        if (info.denom == 0) {
+            mach_timebase_info(&info);
+        }
+        uint64_t now = mach_absolute_time();
+        now *= info.numer;
+        now /= info.denom;
+        return now;
+#endif
     }
 };
 
