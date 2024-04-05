@@ -2,6 +2,7 @@
   "name": "arcticdb",
   "version": "1.1.0",
   "dependencies": [
+    "liblzma",
     "fmt",
     "spdlog",
     "pcre",
@@ -170,9 +171,6 @@
     { "name": "zlib", "version": "1.2.13" },
     { "name": "zstd", "version": "1.5.2" }
   ],
-  "vcpkg-configuration": {
-    "overlay-ports": ["third_party/vcpkg_overlays"]
-  },
   "$note on builtin-baseline": "Remember to regenerate third_party/vcpkg_overlays",
   "builtin-baseline": "0c20b2a97c390e106150837042d921b0939e7ecb"
 }

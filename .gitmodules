@@ -15,4 +15,5 @@
 	url = https://github.com/emil-e/rapidcheck.git
 [submodule "cpp/vcpkg"]
 	path = cpp/vcpkg
-	url = https://github.com/microsoft/vcpkg.git
+	# Temporarily use QuantStack's fork of vcpkg to circumvent liblmza missing on github:
+	url = https://github.com/QuantStack/vcpkg.git
