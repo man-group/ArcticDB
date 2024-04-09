@@ -242,6 +242,18 @@ def is_supported_sequence(obj):
     return isinstance(obj, (list, set, frozenset, tuple, np.ndarray))
 
 
+def nanoseconds_from_utc(time):
+    # We convert every time type to a pandas Timestamp because it:
+    # - is consistent with how we normalize time types when normalizing
+    # - has nanosecond precision
+    # - if tzinfo is set will give nanoseconds since UTC
+    return int(pd.Timestamp(time).value)
+
+
+def nanoseconds_timedelta(timedelta):
+    return int(pd.Timedelta(timedelta).value)
+
+
 def value_list_from_args(*args):
     if len(args) == 1 and is_supported_sequence(args[0]):
         collection = args[0]
@@ -255,7 +267,7 @@ def value_list_from_args(*args):
             if value not in value_set:
                 value_set.add(value)
                 if isinstance(value, supported_time_types):
-                    value = int(value.timestamp() * 1_000_000_000)
+                    value = nanoseconds_from_utc(value)
                 elem = np.array([value]) if isinstance(value, (int, np.integer)) else np.full(1, value, dtype=None)
                 array_list.append(elem)
                 contains_integer = contains_integer or isinstance(value, (int, np.integer))
@@ -708,15 +720,11 @@ def create_value(value):
     elif isinstance(value, np.integer):
         min_scalar_type = np.min_scalar_type(value)
         f = CONSTRUCTOR_MAP.get(min_scalar_type.kind).get(min_scalar_type.itemsize)
-    elif isinstance(value, (pd.Timestamp, pd.Timedelta)):
-        # pd.Timestamp is in supported_time_types, but its timestamp() method can't provide ns precision
-        value = value.value
-        f = ValueInt64
     elif isinstance(value, supported_time_types):
-        value = int(value.timestamp() * 1_000_000_000)
+        value = nanoseconds_from_utc(value)
         f = ValueInt64
-    elif isinstance(value, datetime.timedelta):
-        value = int(value.total_seconds() * 1_000_000_000)
+    elif isinstance(value, (datetime.timedelta, pd.Timedelta)):
+        value = nanoseconds_timedelta(value)
         f = ValueInt64
     elif isinstance(value, bool):
         f = ValueBool
