@@ -62,7 +62,6 @@ def test_querybuilder_date_range_then_filter(lmdb_version_store_tiny_segment, us
     assert_frame_equal(expected, received)
 
 
-# TODO: This test is currently failing to demonstrate issue arcticdb-man#103. Will be fixed in followup commit
 def test_querybuilder_filter_datetime_with_timezone(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     symbol = "symbol"
