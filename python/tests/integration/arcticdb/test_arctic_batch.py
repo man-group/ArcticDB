@@ -440,6 +440,15 @@ def test_write_batch_missing_keys_dedup(library_factory):
     assert_frame_equal(read_dataframe.data, df2)
 
 
+def test_delete_batch(library_factory, sym):
+    lib = library_factory(LibraryOptions(rows_per_segment=2))
+    df = pd.DataFrame({"y": np.arange(1000)})
+    lib.write(sym, df)
+    lib.delete(sym)
+    lib_tool = lib._nvs.library_tool()
+    assert not lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
+
+
 def test_append_batch(library_factory):
     lib = library_factory(LibraryOptions(rows_per_segment=10))
     assert lib._nvs._lib_cfg.lib_desc.version.write_options.segment_row_size == 10
