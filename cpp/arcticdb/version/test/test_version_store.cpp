@@ -203,6 +203,11 @@ TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {
     using namespace arcticdb::stream;
     using namespace arcticdb::pipelines;
 
+    arcticdb::proto::storage::VersionStoreConfig cfg;
+    cfg.CopyFrom(test_store_->cfg());
+    cfg.mutable_write_options()->set_dynamic_schema(true);
+    test_store_->configure(std::move(cfg));
+
     size_t count = 0;
 
     std::vector<SegmentToInputFrameAdapter> data;

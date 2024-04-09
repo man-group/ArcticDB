@@ -50,6 +50,15 @@ public:
 
     void add_segment(SegmentInMemory&& seg, const pipelines::FrameSlice& slice, bool convert_int_to_float) {
         auto segment = std::move(seg);
+        if constexpr (std::is_same_v<Schema, FixedSchema>) {
+            if (stream_descriptor_.has_value()) {
+                schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                        segment.descriptor().fields() == stream_descriptor_->fields(),
+                        "Stream descriptor mismatch when compacting segments with static schema");
+            } else {
+                stream_descriptor_ = segment.descriptor();
+            }
+        }
         AggregatorType::stats().update_many(segment.row_count(), segment.num_bytes());
         //TODO very specific use-case, you probably don't want this
         if(convert_int_to_float)
@@ -100,6 +109,7 @@ private:
     std::vector<SegmentInMemory> segments_;
     std::vector<pipelines::FrameSlice> slices_;
     SliceCallBack slice_callback_;
+    std::optional<StreamDescriptor> stream_descriptor_;
 };
 
 } // namespace arcticdb
