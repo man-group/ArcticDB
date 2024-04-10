@@ -267,7 +267,7 @@ std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
     // Currently the python layers assign RowRange index to both empty dataframes and dataframes wich do not specify
     // index explicitly. Thus we handle this case after all columns are read so that we know how many rows are there.
     if (idx_names.empty()) {
-        if (res->num_rows > 0) {
+        if (!empty_types || res->num_rows > 0) {
             res->index = stream::RowCountIndex();
             res->desc.set_index_type(IndexDescriptor::ROWCOUNT);
         } else {

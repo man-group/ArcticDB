@@ -54,14 +54,16 @@ folly::Future<AtomKey> async_append_impl(
     const UpdateInfo& update_info,
     const std::shared_ptr<InputTensorFrame>& frame,
     const WriteOptions& options,
-    bool validate_index);
+    bool validate_index,
+    bool empty_types);
 
 VersionedItem append_impl(
     const std::shared_ptr<Store>& store,
     const UpdateInfo& update_info,
     const std::shared_ptr<InputTensorFrame>& frame,
     const WriteOptions& options,
-    bool validate_index);
+    bool validate_index,
+    bool empty_types);
 
 VersionedItem update_impl(
     const std::shared_ptr<Store>& store,
@@ -69,7 +71,8 @@ VersionedItem update_impl(
     const UpdateQuery & query,
     const std::shared_ptr<InputTensorFrame>& frame,
     const WriteOptions&& options,
-    bool dynamic_schema);
+    bool dynamic_schema,
+    bool empty_types);
 
 VersionedItem delete_range_impl(
     const std::shared_ptr<Store>& store,

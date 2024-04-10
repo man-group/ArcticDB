@@ -587,7 +587,8 @@ VersionedItem LocalVersionedEngine::update_internal(
                                           query,
                                           frame,
                                           get_write_options(),
-                                          dynamic_schema);
+                                          dynamic_schema,
+                                          cfg().write_options().empty_types());
         write_version_and_prune_previous(
             prune_previous_versions, versioned_item.key_, update_info.previous_index_key_);
         return versioned_item;
@@ -1398,7 +1399,8 @@ VersionedItem LocalVersionedEngine::append_internal(
                                           update_info,
                                           frame,
                                           get_write_options(),
-                                          validate_index);
+                                          validate_index,
+                                          cfg().write_options().empty_types());
         write_version_and_prune_previous(
             prune_previous_versions, versioned_item.key_, update_info.previous_index_key_);
         return versioned_item;
@@ -1446,7 +1448,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
                 auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
                 auto write_options = get_write_options();
                 if (update_info.previous_index_key_.has_value()) {
-                    index_key_fut = async_append_impl(store(), update_info, frame, write_options, validate_index);
+                    index_key_fut = async_append_impl(store(), update_info, frame, write_options, validate_index, cfg().write_options().empty_types());
                 } else {
                     missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
                     upsert,
