@@ -70,16 +70,6 @@ Install ArcticDB:
 
 ```bash
 $ pip install arcticdb
-# For linux-pypi prebuilt binary, since v4.5.0, libssl is no longer statically linked. 
-# openssl v1.1.1 is needed to be manually installed.
-# openssl v1.1.1 can be installed with precompiled package online, if not available in the OS:
-# RHEL:
-$ yum install -y compat-openssl11
-# or
-$ yum install -y https://dl.fedoraproject.org/pub/epel/7/x86_64/Packages/o/openssl11-1.1.1k-7.el7.x86_64.rpm
-# Ubuntu:
-# Please go to http://security.ubuntu.com/ubuntu/pool/main/o/openssl/ to
-# download and install latest openssl_1.1.1 and libssl1.1_1.1.1 deb files in sequence
 ```
 or using conda-forge
 ```bash
