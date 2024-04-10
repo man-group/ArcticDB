@@ -292,7 +292,7 @@ _range_index_props_are_public = hasattr(RangeIndex, "start")
 def _normalize_single_index(index, index_names, index_norm, dynamic_strings=None, string_max_len=None):
     # index: pd.Index or np.ndarray -> np.ndarray
     index_tz = None
-    if isinstance(index_norm, NormalizationMetadata.PandasIndex) and not index_norm.is_physically_stored:
+    if isinstance(index, RangeIndex):
         if index.name:
             if not isinstance(index.name, int) and not isinstance(index.name, str):
                 raise NormalizationException(
@@ -529,7 +529,7 @@ class _PandasNormalizer(Normalizer):
         if empty_df and empty_types:
             index_norm = pd_norm.index
             index_norm.is_physically_stored = False
-            index = Index([])
+            index = DatetimeIndex([])
         elif isinstance(index, MultiIndex):
             # This is suboptimal and only a first implementation since it reduplicates the data
             index_norm = pd_norm.multi_index
@@ -553,8 +553,7 @@ class _PandasNormalizer(Normalizer):
         else:
             index_norm = pd_norm.index
             index_norm.is_physically_stored = not isinstance(index, RangeIndex) and not empty_df
-            if empty_df:
-                index = DatetimeIndex([])
+            index = DatetimeIndex([]) if empty_df else index
 
         return _normalize_single_index(index, list(index.names), index_norm, dynamic_strings, string_max_len)
 
