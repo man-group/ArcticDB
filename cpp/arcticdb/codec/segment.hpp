@@ -7,10 +7,6 @@
 
 #pragma once
 
-//#include <google/protobuf/io/zero_copy_stream_impl.h>  // lines 13-13
-//#include <codec/encoding_sizes.hpp>  // lines 12-12
-//#include <util/buffer_pool.hpp>  // lines 15-15
-
 #include "util/buffer.hpp"
 #include <arcticdb/storage/common.hpp>
 #include <google/protobuf/arena.h>

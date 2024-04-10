@@ -7,7 +7,7 @@
 
 #include <gtest/gtest.h>
 #include <arcticdb/util/global_lifetimes.hpp>
-#include <pybind11/pybind11.h>
+#include <pybind11/pybind11.h> // Must not directly include Python.h on Windows
 
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);
