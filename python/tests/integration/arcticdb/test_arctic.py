@@ -351,6 +351,12 @@ def test_delete_date_range(arctic_library):
     assert lib["symbol"].version == 1
 
 
+def test_azure_repr_body_censored(arctic_library):
+    ac_library_repr = repr(arctic_library)
+    if "AccountKey=" in ac_library_repr:
+        assert "AccountKey=..." in ac_library_repr.split(";")
+
+
 def _test_mongo_repr_body(mongo_storage: MongoDatabase):
     # The arctic_uri has the PrefixingLibraryAdapterDecorator logic in it, so use mongo_uri
     ac = Arctic(f"{mongo_storage.mongo_uri}/?maxPoolSize=10")
