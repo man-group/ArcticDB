@@ -361,14 +361,14 @@ def test_separation_between_libraries(arctic_client):
     assert ac["pytest_test_lib_2"].list_symbols() == ["test_2"]
 
 
-def add_path_prefix(uri, prefix):
-    if "path_prefix" in uri:
-        return uri + prefix
+def add_path_prefix(storage_fixture, prefix):
+    if "path_prefix".casefold() in storage_fixture.arctic_uri.casefold():
+        return storage_fixture.replace_uri_field(storage_fixture.arctic_uri, ArcticUriFields.PATH_PREFIX, prefix, start=3, end=2)
 
-    if "azure" in uri:  # azure connection string has a different format
-        return f"{uri};Path_prefix={prefix}"
+    if "azure" in storage_fixture.arctic_uri:  # azure connection string has a different format
+        return f"{storage_fixture.arctic_uri};Path_prefix={prefix}"
     else:
-        return f"{uri}&path_prefix={prefix}"
+        return f"{storage_fixture.arctic_uri}&path_prefix={prefix}"
 
 
 @pytest.mark.parametrize(
@@ -385,11 +385,10 @@ def test_separation_between_libraries_with_prefixes(fixture, request):
     creating a new bucket is time-consuming, for example due to organizational issues.
     """
     storage_fixture: StorageFixture = request.getfixturevalue(fixture)
-
-    mercury_uri = add_path_prefix(storage_fixture.arctic_uri, "/planet/mercury")
+    mercury_uri = add_path_prefix(storage_fixture, "/planet/mercury")
     ac_mercury = Arctic(mercury_uri)
 
-    mars_uri = add_path_prefix(storage_fixture.arctic_uri, "/planet/mars")
+    mars_uri = add_path_prefix(storage_fixture, "/planet/mars")
     ac_mars = Arctic(mars_uri)
 
     assert ac_mars.list_libraries() == []
@@ -416,7 +415,7 @@ def test_separation_between_libraries_with_prefixes(fixture, request):
 @pytest.mark.parametrize("fixture", ["s3_storage", pytest.param("azurite_storage", marks=AZURE_TESTS_MARK)])
 def test_library_management_path_prefix(fixture, request):
     storage_fixture: StorageFixture = request.getfixturevalue(fixture)
-    uri = add_path_prefix(storage_fixture.arctic_uri, "hello/world")
+    uri = add_path_prefix(storage_fixture, "hello/world")
     ac = Arctic(uri)
     assert ac.list_libraries() == []
 

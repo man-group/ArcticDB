@@ -40,6 +40,7 @@ class S3Bucket(StorageFixture):
         ArcticUriFields.BUCKET: re.compile("^s3://[^:]+(:)([^?]+)"),
         ArcticUriFields.USER: re.compile("[?&](access=)([^&]+)(&?)"),
         ArcticUriFields.PASSWORD: re.compile("[?&](secret=)([^&]+)(&?)"),
+        ArcticUriFields.PATH_PREFIX: re.compile("[?&](path_prefix=)([^&]+)(&?)"),
     }
 
     key: Key
@@ -88,7 +89,7 @@ class S3Bucket(StorageFixture):
             bucket_name=self.bucket,
             endpoint=self.factory.endpoint,
             with_prefix=with_prefix,
-            is_https=self.factory.endpoint.startswith("s3s:"),
+            is_https=self.factory.endpoint.startswith("https://"),
             region=self.factory.region,
             use_mock_storage_for_testing=self.factory.use_mock_storage_for_testing,
             ssl=self.factory.ssl,
@@ -174,6 +175,7 @@ def real_s3_from_environment_variables(*, shared_path: bool):
     secret_key = os.getenv("ARCTICDB_REAL_S3_SECRET_KEY")
     out.default_key = Key(access_key, secret_key, "unknown user")
     out.clean_bucket_on_fixture_exit = os.getenv("ARCTICDB_REAL_S3_CLEAR").lower() in ["true", "1"]
+    out.ssl = out.endpoint.startswith("https://")
     if shared_path:
         out.default_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX")
     else:
