@@ -29,6 +29,7 @@ class ArcticUriFields(Enum):
     PASSWORD = "PASSWORD"
     BUCKET = "BUCKET"
     CA_PATH = "CA_PATH"
+    PATH_PREFIX = "PATH_PREFIX"
 
     def __str__(self):
         return self.value
