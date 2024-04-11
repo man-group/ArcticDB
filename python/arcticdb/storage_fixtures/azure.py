@@ -28,6 +28,7 @@ class AzureContainer(StorageFixture):
         ArcticUriFields.PASSWORD: re.compile("[/;](AccountKey=)([^;]+)(;)"),
         ArcticUriFields.BUCKET: re.compile("[/;](Container=)([^;]+)(;)"),
         ArcticUriFields.CA_PATH: re.compile("[/;](CA_cert_path=)([^;]*)(;?)"),
+        ArcticUriFields.PATH_PREFIX: re.compile("[/;](Path_prefix=)([^;]*)(;?)"),
     }
     _sequence = 0
 
