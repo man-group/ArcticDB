@@ -93,6 +93,7 @@ jobs:
         with:
           # The version of the toolset is specified due to faulty version discovery.
           toolset: 14.39
+          version: 17.9.34714.143
 
       - name: Extra envs
         # This has to come after msvc-dev-cmd to overwrite the bad VCPKG_ROOT it sets
