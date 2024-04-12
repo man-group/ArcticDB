@@ -130,6 +130,12 @@ jobs:
           configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build']"
           buildPreset: ${{env.ARCTIC_CMAKE_PRESET}}
 
+      - name: "Cat prometheus errors"
+        if: matrix.os == 'windows'
+        run: |
+            cat cpp/vcpkg/buildtrees/prometheus-cpp/config-x64-windows-static-dbg-CMakeCache.txt.log
+            cat cpp/vcpkg/buildtrees/prometheus-cpp/config-x64-windows-static-out.log
+
       - name: Compile C++ tests
         if: inputs.job_type == 'cpp-tests'
         run: cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET --target install
