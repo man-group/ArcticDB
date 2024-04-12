@@ -89,11 +89,10 @@ jobs:
 
       - name: Enable Windows compiler commands
         if: matrix.os == 'windows'
-        uses: ilammy/msvc-dev-cmd@v1.12.1
+        uses: ilammy/msvc-dev-cmd@v1.13.0
         with:
           # The version of the toolset is specified due to faulty version discovery.
           toolset: 14.39
-          version: 17.9.34714.143
 
       - name: Extra envs
         # This has to come after msvc-dev-cmd to overwrite the bad VCPKG_ROOT it sets
@@ -130,6 +129,11 @@ jobs:
           configurePreset: ${{env.ARCTIC_CMAKE_PRESET}}
           configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build']"
           buildPreset: ${{env.ARCTIC_CMAKE_PRESET}}
+
+      - name: Check errors
+        if: always()
+        run: |
+          cat cpp/vcpkg/buildtrees/prometheus-cpp/config-x64-windows-static-err.log || true
 
       - name: Compile C++ tests
         if: inputs.job_type == 'cpp-tests'
