@@ -52,6 +52,7 @@
       "name": "libiconv",
       "platform": "!linux"
     },
+    "civetweb",
     "openssl",
     "double-conversion",
     "libevent",
