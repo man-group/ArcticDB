@@ -74,7 +74,7 @@ jobs:
           submodules: recursive # Just in case a dep has its own third-party deps
 
       # See: https://github.com/actions/runner-images/issues/9680#issuecomment-2051917949
-      - name: HOTFIX: Setup CMake 3.29.2
+      - name: HOTFIX Setup CMake 3.29.2
         if: matrix.os == 'windows'
         uses: jwlawson/actions-setup-cmake@v2
         with:
