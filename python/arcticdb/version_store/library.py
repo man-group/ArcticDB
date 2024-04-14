@@ -297,23 +297,13 @@ class DevTools:
     def library_tool(self):
         return self._nvs.library_tool()
 
-class Library:
+class ReadLibrary:
     """
-    The main interface exposing read/write functionality within a given Arctic instance.
-
+    The main interface exposing read functionality within a given Arctic instance.
+`
     Arctic libraries contain named symbols which are the atomic unit of data storage within Arctic. Symbols
-    contain data that in most cases resembles a DataFrame and are versioned such that all modifying
-    operations can be tracked and reverted.
-
-    Instances of this class provide a number of primitives to write, modify and remove symbols, as well as
-    also providing methods to manage library snapshots. For more information on snapshots please see the `snapshot`
-    method.
-
-    Arctic libraries support concurrent writes and reads to multiple symbols as well as concurrent reads to a single
-    symbol. However, concurrent writers to a single symbol are not supported other than for primitives that
-    explicitly state support for single-symbol concurrent writes.
+    contain data that in most cases resembles a DataFrame and are versioned.
     """
-
     def __init__(self, arctic_instance_description: str, nvs: NativeVersionStore):
         """
         Parameters
@@ -360,6 +350,536 @@ class Library:
             background_deletion=write_options.delayed_deletes
         )
 
+    def read(
+        self,
+        symbol: str,
+        as_of: Optional[AsOf] = None,
+        date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None,
+        row_range: Optional[Tuple[int, int]] = None,
+        columns: Optional[List[str]] = None,
+        query_builder: Optional[QueryBuilder] = None,
+    ) -> VersionedItem:
+        """
+        Read data for the named symbol.  Returns a VersionedItem object with a data and metadata element (as passed into
+        write).
+
+        Parameters
+        ----------
+        symbol : str
+            Symbol name.
+
+        as_of : AsOf, default=None
+            Return the data as it was as of the point in time. ``None`` means that the latest version should be read. The
+            various types of this parameter mean:
+            - ``int``: specific version number. Negative indexing is supported, with -1 representing the latest version, -2 the version before that, etc.
+            - ``str``: snapshot name which contains the version
+            - ``datetime.datetime`` : the version of the data that existed ``as_of`` the requested point in time
+
+        date_range: Tuple[Optional[Timestamp], Optional[Timestamp]], default=None
+            DateRange to restrict read data to.
+
+            Applicable only for time-indexed Pandas dataframes or series. Returns only the
+            part of the data that falls withing the given range (inclusive). None on either end leaves that part of the
+            range open-ended. Hence specifying ``(None, datetime(2025, 1, 1)`` declares that you wish to read all data up
+            to and including 20250101.
+            The same effect can be achieved by using the date_range clause of the QueryBuilder class, which will be
+            slower, but return data with a smaller memory footprint. See the QueryBuilder.date_range docstring for more
+            details.
+
+            Only one of date_range or row_range can be provided.
+
+        row_range: `Optional[Tuple[int, int]]`, default=None
+            Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound
+            lib.read(symbol, row_range=(start, end)).data should behave the same as df.iloc[start:end], including in
+            the handling of negative start/end values.
+
+            Only one of date_range or row_range can be provided.
+
+        columns: List[str], default=None
+            Applicable only for Pandas data. Determines which columns to return data for.
+
+        query_builder: Optional[QueryBuilder], default=None
+            A QueryBuilder object to apply to the dataframe before it is returned. For more information see the
+            documentation for the QueryBuilder class (``from arcticdb import QueryBuilder; help(QueryBuilder)``).
+
+        Returns
+        -------
+        VersionedItem object that contains a .data and .metadata element
+
+        Examples
+        --------
+
+        >>> df = pd.DataFrame({'column': [5,6,7]})
+        >>> lib.write("symbol", df, metadata={'my_dictionary': 'is_great'})
+        >>> lib.read("symbol").data
+           column
+        0       5
+        1       6
+        2       7
+
+        The default read behaviour is also available through subscripting:
+
+        >>> lib["symbol"].data
+           column
+        0       5
+        1       6
+        2       7
+        """
+        return self._nvs.read(
+            symbol=symbol,
+            as_of=as_of,
+            date_range=date_range,
+            row_range=row_range,
+            columns=columns,
+            query_builder=query_builder,
+        )
+
+    def read_batch(
+        self, symbols: List[Union[str, ReadRequest]], query_builder: Optional[QueryBuilder] = None
+    ) -> List[Union[VersionedItem, DataError]]:
+        """
+        Reads multiple symbols.
+
+        Parameters
+        ----------
+        symbols : List[Union[str, ReadRequest]]
+            List of symbols to read.
+
+        query_builder: Optional[QueryBuilder], default=None
+            A single QueryBuilder to apply to all the dataframes before they are returned. If this argument is passed
+            then none of the ``symbols`` may have their own query_builder specified in their request.
+
+        Returns
+        -------
+        List[Union[VersionedItem, DataError]]
+            A list of the read results, whose i-th element corresponds to the i-th element of the ``symbols`` parameter.
+            If the specified version does not exist, a DataError object is returned, with symbol, version_request_type,
+            version_request_data properties, error_code, error_category, and exception_string properties. If a key error or
+            any other internal exception occurs, the same DataError object is also returned.
+
+        Raises
+        ------
+        ArcticInvalidApiUsageException
+            If kwarg query_builder and per-symbol query builders both used.
+
+        Examples
+        --------
+        >>> lib.write("s1", pd.DataFrame())
+        >>> lib.write("s2", pd.DataFrame({"col": [1, 2, 3]}))
+        >>> lib.write("s2", pd.DataFrame(), prune_previous_versions=False)
+        >>> lib.write("s3", pd.DataFrame())
+        >>> batch = lib.read_batch(["s1", adb.ReadRequest("s2", as_of=0), "s3", adb.ReadRequest("s2", as_of=1000)])
+        >>> batch[0].data.empty
+        True
+        >>> batch[1].data.empty
+        False
+        >>> batch[2].data.empty
+        True
+        >>> batch[3].symbol
+        "s2"
+        >>> isinstance(batch[3], adb.DataError)
+        True
+        >>> batch[3].version_request_type
+        VersionRequestType.SPECIFIC
+        >>> batch[3].version_request_data
+        1000
+        >>> batch[3].error_code
+        ErrorCode.E_NO_SUCH_VERSION
+        >>> batch[3].error_category
+        ErrorCategory.MISSING_DATA
+
+        See Also
+        --------
+        read
+        """
+        symbol_strings = []
+        as_ofs = []
+        date_ranges = []
+        row_ranges = []
+        columns = []
+        query_builders = []
+
+        def handle_read_request(s_):
+            symbol_strings.append(s_.symbol)
+            as_ofs.append(s_.as_of)
+            date_ranges.append(s_.date_range)
+            row_ranges.append(s_.row_range)
+
+            columns.append(s_.columns)
+            if s_.query_builder is not None and query_builder is not None:
+                raise ArcticInvalidApiUsageException(
+                    "kwarg query_builder and per-symbol query builders cannot "
+                    f"both be used but {s_} had its own query_builder specified."
+                )
+            else:
+                query_builders.append(s_.query_builder)
+
+        def handle_symbol(s_):
+            symbol_strings.append(s_)
+            for l_ in (as_ofs, date_ranges, row_ranges, columns, query_builders):
+                l_.append(None)
+
+        for s in symbols:
+            if isinstance(s, str):
+                handle_symbol(s)
+            elif isinstance(s, ReadRequest):
+                handle_read_request(s)
+            else:
+                raise ArcticInvalidApiUsageException(
+                    f"Unsupported item in the symbols argument s=[{s}] type(s)=[{type(s)}]. Only [str] and"
+                    " [ReadRequest] are supported."
+                )
+        throw_on_error = False
+        return self._nvs._batch_read_to_versioned_items(
+            symbol_strings, as_ofs, date_ranges, row_ranges, columns, query_builder or query_builders, throw_on_error
+        )
+
+    def read_metadata(self, symbol: str, as_of: Optional[AsOf] = None) -> VersionedItem:
+        """
+        Return the metadata saved for a symbol.  This method is faster than read as it only loads the metadata, not the
+        data itself.
+
+        Parameters
+        ----------
+        symbol
+            Symbol name
+        as_of : AsOf, default=None
+            Return the metadata as it was as of the point in time. See documentation on `read` for documentation on
+            the different forms this parameter can take.
+
+        Returns
+        -------
+        VersionedItem
+            Structure containing metadata and version number of the affected symbol in the store. The data attribute
+            will be None.
+        """
+        return self._nvs.read_metadata(symbol, as_of)
+
+    def read_metadata_batch(self, symbols: List[Union[str, ReadInfoRequest]]) -> List[Union[VersionedItem, DataError]]:
+        """
+        Reads the metadata of multiple symbols.
+
+        Parameters
+        ----------
+        symbols : List[Union[str, ReadInfoRequest]]
+            List of symbols to read metadata.
+
+        Returns
+        -------
+        List[Union[VersionedItem, DataError]]
+            A list of the read metadata results, whose i-th element corresponds to the i-th element of the ``symbols`` parameter.
+            A VersionedItem object with the metadata field set as None will be returned if the requested version of the
+            symbol exists but there is no metadata
+            If the specified version does not exist, a DataError object is returned, with symbol, version_request_type,
+            version_request_data properties, error_code, error_category, and exception_string properties. If a key error or
+            any other internal exception occurs, the same DataError object is also returned.
+
+        See Also
+        --------
+        read_metadata
+        """
+        symbol_strings, as_ofs = self.parse_list_of_symbols(symbols)
+
+        include_errors_and_none_meta = True
+        return self._nvs._batch_read_metadata_to_versioned_items(symbol_strings, as_ofs, include_errors_and_none_meta)
+
+    def list_symbols(self, snapshot_name: Optional[str] = None, regex: Optional[str] = None) -> List[str]:
+        """
+        Return the symbols in this library.
+
+        Parameters
+        ----------
+        regex
+            If passed, returns only the symbols which match the regex.
+
+        snapshot_name
+            Return the symbols available under the snapshot. If None then considers symbols that are live in the
+            library as of the current time.
+
+        Returns
+        -------
+        List[str]
+            Symbols in the library.
+        """
+        return self._nvs.list_symbols(snapshot=snapshot_name, regex=regex)
+
+    def has_symbol(self, symbol: str, as_of: Optional[AsOf] = None) -> bool:
+        """
+        Whether this library contains the given symbol.
+
+        Parameters
+        ----------
+        symbol
+            Symbol name for the item
+        as_of : AsOf, default=None
+            Return the data as it was as_of the point in time. See `read` for more documentation. If absent then
+            considers symbols that are live in the library as of the current time.
+
+        Returns
+        -------
+        bool
+            True if the symbol is in the library, False otherwise.
+
+        Examples
+        --------
+        >>> lib.write("symbol", pd.DataFrame())
+        >>> lib.has_symbol("symbol")
+        True
+        >>> lib.has_symbol("another_symbol")
+        False
+
+        The __contains__ operator also checks whether a symbol exists in this library as of now:
+
+        >>> "symbol" in lib
+        True
+        >>> "another_symbol" in lib
+        False
+        """
+        return self._nvs.has_symbol(symbol, as_of=as_of)
+
+    def list_snapshots(self) -> Dict[str, Any]:
+        """
+        List the snapshots in the library.
+
+        Returns
+        -------
+        Dict[str, Any]
+            Snapshots in the library. Keys are snapshot names, values are metadata associated with that snapshot.
+        """
+        return self._nvs.list_snapshots()
+
+    def list_versions(
+        self,
+        symbol: Optional[str] = None,
+        snapshot: Optional[str] = None,
+        latest_only: bool = False,
+        skip_snapshots: bool = False,
+    ) -> Dict[SymbolVersion, VersionInfo]:
+        """
+        Get the versions in this library, filtered by the passed in parameters.
+
+        Parameters
+        ----------
+        symbol
+            Symbol to return versions for.  If None returns versions across all symbols in the library.
+        snapshot
+            Only return the versions contained in the named snapshot.
+        latest_only : bool, default=False
+            Only include the latest version for each returned symbol.
+        skip_snapshots : bool, default=False
+            Don't populate version list with snapshot information. Can improve performance significantly if there are
+            many snapshots.
+
+        Returns
+        -------
+        Dict[SymbolVersion, VersionInfo]
+            Dictionary describing the version for each symbol-version pair in the library. Since symbol version is a
+            (named) tuple you can index in to the dictionary simply as shown in the examples below.
+
+        Examples
+        --------
+        >>> df = pd.DataFrame()
+        >>> lib.write("symbol", df, metadata=10)
+        >>> lib.write("symbol", df, metadata=11, prune_previous_versions=False)
+        >>> lib.snapshot("snapshot")
+        >>> lib.write("symbol", df, metadata=12, prune_previous_versions=False)
+        >>> lib.delete("symbol", versions=(1, 2))
+        >>> versions = lib.list_versions("symbol")
+        >>> versions["symbol", 1].deleted
+        True
+        >>> versions["symbol", 1].snapshots
+        ["my_snap"]
+        """
+        versions = self._nvs.list_versions(
+            symbol=symbol,
+            snapshot=snapshot,
+            latest_only=latest_only,
+            iterate_on_failure=False,
+            skip_snapshots=skip_snapshots,
+        )
+        return {
+            SymbolVersion(v["symbol"], v["version"]): VersionInfo(v["date"], v["deleted"], v["snapshots"])
+            for v in versions
+        }
+
+    def head(self, symbol: str, n: int = 5, as_of: Optional[AsOf] = None, columns: List[str] = None) -> VersionedItem:
+        """
+        Read the first n rows of data for the named symbol. If n is negative, return all rows except the last n rows.
+
+        Parameters
+        ----------
+        symbol
+            Symbol name.
+        n : int, default=5
+            Number of rows to select if non-negative, otherwise number of rows to exclude.
+        as_of : AsOf, default=None
+            See documentation on `read`.
+        columns
+            See documentation on `read`.
+
+        Returns
+        -------
+        VersionedItem object that contains a .data and .metadata element.
+        """
+        return self._nvs.head(symbol=symbol, n=n, as_of=as_of, columns=columns)
+
+    def tail(
+        self, symbol: str, n: int = 5, as_of: Optional[Union[int, str]] = None, columns: List[str] = None
+    ) -> VersionedItem:
+        """
+        Read the last n rows of data for the named symbol. If n is negative, return all rows except the first n rows.
+
+        Parameters
+        ----------
+        symbol
+            Symbol name.
+        n : int, default=5
+            Number of rows to select if non-negative, otherwise number of rows to exclude.
+        as_of : AsOf, default=None
+            See documentation on `read`.
+        columns
+            See documentation on `read`.
+
+        Returns
+        -------
+        VersionedItem object that contains a .data and .metadata element.
+        """
+        return self._nvs.tail(symbol=symbol, n=n, as_of=as_of, columns=columns)
+
+    @staticmethod
+    def _info_to_desc(info: Dict[str, Any]) -> SymbolDescription:
+        last_update_time = pd.to_datetime(info["last_update"], utc=True)
+        if IS_PANDAS_TWO:
+            # Pandas 2.0.0 now uses `datetime.timezone.utc` instead of `pytz.UTC`.
+            # See: https://github.com/pandas-dev/pandas/issues/34916
+            # We enforce the use of `pytz.UTC` for consistency.
+            last_update_time = last_update_time.replace(tzinfo=pytz.UTC)
+        columns = tuple(NameWithDType(n, t) for n, t in zip(info["col_names"]["columns"], info["dtype"]))
+        index = NameWithDType(info["col_names"]["index"], info["col_names"]["index_dtype"])
+        date_range = tuple(
+            map(
+                lambda x: x.replace(tzinfo=datetime.timezone.utc) if not np.isnat(np.datetime64(x)) else x,
+                info["date_range"],
+            )
+        )
+        return SymbolDescription(
+            columns=columns,
+            index=index,
+            row_count=info["rows"],
+            last_update_time=last_update_time,
+            index_type=info["index_type"],
+            date_range=date_range,
+            sorted=info["sorted"],
+        )
+
+    def get_description(self, symbol: str, as_of: Optional[AsOf] = None) -> SymbolDescription:
+        """
+        Returns descriptive data for ``symbol``.
+
+        Parameters
+        ----------
+        symbol
+            Symbol name.
+        as_of : AsOf, default=None
+            See documentation on `read`.
+
+        Returns
+        -------
+        SymbolDescription
+            Named tuple containing the descriptive data.
+
+        See Also
+        --------
+        SymbolDescription
+            For documentation on each field.
+        """
+        info = self._nvs.get_info(symbol, as_of)
+        return self._info_to_desc(info)
+
+    @staticmethod
+    def parse_list_of_symbols(symbols: List[Union[str, ReadInfoRequest]]) -> (List, List):
+        symbol_strings = []
+        as_ofs = []
+
+        def handle_read_request(s: ReadInfoRequest):
+            symbol_strings.append(s.symbol)
+            as_ofs.append(s.as_of)
+
+        def handle_symbol(s: str):
+            symbol_strings.append(s)
+            as_ofs.append(None)
+
+        for s in symbols:
+            if isinstance(s, str):
+                handle_symbol(s)
+            elif isinstance(s, ReadInfoRequest):
+                handle_read_request(s)
+            else:
+                raise ArcticInvalidApiUsageException(
+                    f"Unsupported item in the symbols argument s=[{s}] type(s)=[{type(s)}]. Only [str] and"
+                    " [ReadInfoRequest] are supported."
+                )
+
+        return (symbol_strings, as_ofs)
+
+    def get_description_batch(
+        self, symbols: List[Union[str, ReadInfoRequest]]
+    ) -> List[Union[SymbolDescription, DataError]]:
+        """
+        Returns descriptive data for a list of ``symbols``.
+
+        Parameters
+        ----------
+        symbols : List[Union[str, ReadInfoRequest]]
+            List of symbols to read.
+
+        Returns
+        -------
+        List[Union[SymbolDescription, DataError]]
+            A list of the descriptive data, whose i-th element corresponds to the i-th element of the ``symbols`` parameter.
+            If the specified version does not exist, a DataError object is returned, with symbol, version_request_type,
+            version_request_data properties, error_code, error_category, and exception_string properties. If a key error or
+            any other internal exception occurs, the same DataError object is also returned.
+
+        See Also
+        --------
+        SymbolDescription
+            For documentation on each field.
+        """
+        symbol_strings, as_ofs = self.parse_list_of_symbols(symbols)
+
+        throw_on_error = False
+        descriptions = self._nvs._batch_read_descriptor(symbol_strings, as_ofs, throw_on_error)
+
+        description_results = [
+            description if isinstance(description, DataError) else self._info_to_desc(description)
+            for description in descriptions
+        ]
+
+        return description_results
+
+    @property
+    def name(self):
+        """The name of this library."""
+        return self._nvs.name()
+
+
+class Library(ReadLibrary):
+    """
+    The main interface exposing read/write functionality within a given Arctic instance.
+
+    Arctic libraries contain named symbols which are the atomic unit of data storage within Arctic. Symbols
+    contain data that in most cases resembles a DataFrame and are versioned such that all modifying
+    operations can be tracked and reverted.
+
+    Instances of this class provide a number of primitives to write, modify and remove symbols, as well as
+    also providing methods to manage library snapshots. For more information on snapshots please see the `snapshot`
+    method.
+
+    Arctic libraries support concurrent writes and reads to multiple symbols as well as concurrent reads to a single
+    symbol. However, concurrent writers to a single symbol are not supported other than for primitives that
+    explicitly state support for single-symbol concurrent writes.
+    """
     def write(
         self,
         symbol: str,
@@ -982,238 +1502,6 @@ class Library:
         """
         return self._nvs.list_symbols_with_incomplete_data()
 
-    def read(
-        self,
-        symbol: str,
-        as_of: Optional[AsOf] = None,
-        date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None,
-        row_range: Optional[Tuple[int, int]] = None,
-        columns: Optional[List[str]] = None,
-        query_builder: Optional[QueryBuilder] = None,
-    ) -> VersionedItem:
-        """
-        Read data for the named symbol.  Returns a VersionedItem object with a data and metadata element (as passed into
-        write).
-
-        Parameters
-        ----------
-        symbol : str
-            Symbol name.
-
-        as_of : AsOf, default=None
-            Return the data as it was as of the point in time. ``None`` means that the latest version should be read. The
-            various types of this parameter mean:
-            - ``int``: specific version number. Negative indexing is supported, with -1 representing the latest version, -2 the version before that, etc.
-            - ``str``: snapshot name which contains the version
-            - ``datetime.datetime`` : the version of the data that existed ``as_of`` the requested point in time
-
-        date_range: Tuple[Optional[Timestamp], Optional[Timestamp]], default=None
-            DateRange to restrict read data to.
-
-            Applicable only for time-indexed Pandas dataframes or series. Returns only the
-            part of the data that falls withing the given range (inclusive). None on either end leaves that part of the
-            range open-ended. Hence specifying ``(None, datetime(2025, 1, 1)`` declares that you wish to read all data up
-            to and including 20250101.
-            The same effect can be achieved by using the date_range clause of the QueryBuilder class, which will be
-            slower, but return data with a smaller memory footprint. See the QueryBuilder.date_range docstring for more
-            details.
-
-            Only one of date_range or row_range can be provided.
-
-        row_range: `Optional[Tuple[int, int]]`, default=None
-            Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound
-            lib.read(symbol, row_range=(start, end)).data should behave the same as df.iloc[start:end], including in
-            the handling of negative start/end values.
-
-            Only one of date_range or row_range can be provided.
-
-        columns: List[str], default=None
-            Applicable only for Pandas data. Determines which columns to return data for.
-
-        query_builder: Optional[QueryBuilder], default=None
-            A QueryBuilder object to apply to the dataframe before it is returned. For more information see the
-            documentation for the QueryBuilder class (``from arcticdb import QueryBuilder; help(QueryBuilder)``).
-
-        Returns
-        -------
-        VersionedItem object that contains a .data and .metadata element
-
-        Examples
-        --------
-
-        >>> df = pd.DataFrame({'column': [5,6,7]})
-        >>> lib.write("symbol", df, metadata={'my_dictionary': 'is_great'})
-        >>> lib.read("symbol").data
-           column
-        0       5
-        1       6
-        2       7
-
-        The default read behaviour is also available through subscripting:
-
-        >>> lib["symbol"].data
-           column
-        0       5
-        1       6
-        2       7
-        """
-        return self._nvs.read(
-            symbol=symbol,
-            as_of=as_of,
-            date_range=date_range,
-            row_range=row_range,
-            columns=columns,
-            query_builder=query_builder,
-        )
-
-    def read_batch(
-        self, symbols: List[Union[str, ReadRequest]], query_builder: Optional[QueryBuilder] = None
-    ) -> List[Union[VersionedItem, DataError]]:
-        """
-        Reads multiple symbols.
-
-        Parameters
-        ----------
-        symbols : List[Union[str, ReadRequest]]
-            List of symbols to read.
-
-        query_builder: Optional[QueryBuilder], default=None
-            A single QueryBuilder to apply to all the dataframes before they are returned. If this argument is passed
-            then none of the ``symbols`` may have their own query_builder specified in their request.
-
-        Returns
-        -------
-        List[Union[VersionedItem, DataError]]
-            A list of the read results, whose i-th element corresponds to the i-th element of the ``symbols`` parameter.
-            If the specified version does not exist, a DataError object is returned, with symbol, version_request_type,
-            version_request_data properties, error_code, error_category, and exception_string properties. If a key error or
-            any other internal exception occurs, the same DataError object is also returned.
-
-        Raises
-        ------
-        ArcticInvalidApiUsageException
-            If kwarg query_builder and per-symbol query builders both used.
-
-        Examples
-        --------
-        >>> lib.write("s1", pd.DataFrame())
-        >>> lib.write("s2", pd.DataFrame({"col": [1, 2, 3]}))
-        >>> lib.write("s2", pd.DataFrame(), prune_previous_versions=False)
-        >>> lib.write("s3", pd.DataFrame())
-        >>> batch = lib.read_batch(["s1", adb.ReadRequest("s2", as_of=0), "s3", adb.ReadRequest("s2", as_of=1000)])
-        >>> batch[0].data.empty
-        True
-        >>> batch[1].data.empty
-        False
-        >>> batch[2].data.empty
-        True
-        >>> batch[3].symbol
-        "s2"
-        >>> isinstance(batch[3], adb.DataError)
-        True
-        >>> batch[3].version_request_type
-        VersionRequestType.SPECIFIC
-        >>> batch[3].version_request_data
-        1000
-        >>> batch[3].error_code
-        ErrorCode.E_NO_SUCH_VERSION
-        >>> batch[3].error_category
-        ErrorCategory.MISSING_DATA
-
-        See Also
-        --------
-        read
-        """
-        symbol_strings = []
-        as_ofs = []
-        date_ranges = []
-        row_ranges = []
-        columns = []
-        query_builders = []
-
-        def handle_read_request(s_):
-            symbol_strings.append(s_.symbol)
-            as_ofs.append(s_.as_of)
-            date_ranges.append(s_.date_range)
-            row_ranges.append(s_.row_range)
-
-            columns.append(s_.columns)
-            if s_.query_builder is not None and query_builder is not None:
-                raise ArcticInvalidApiUsageException(
-                    "kwarg query_builder and per-symbol query builders cannot "
-                    f"both be used but {s_} had its own query_builder specified."
-                )
-            else:
-                query_builders.append(s_.query_builder)
-
-        def handle_symbol(s_):
-            symbol_strings.append(s_)
-            for l_ in (as_ofs, date_ranges, row_ranges, columns, query_builders):
-                l_.append(None)
-
-        for s in symbols:
-            if isinstance(s, str):
-                handle_symbol(s)
-            elif isinstance(s, ReadRequest):
-                handle_read_request(s)
-            else:
-                raise ArcticInvalidApiUsageException(
-                    f"Unsupported item in the symbols argument s=[{s}] type(s)=[{type(s)}]. Only [str] and"
-                    " [ReadRequest] are supported."
-                )
-        throw_on_error = False
-        return self._nvs._batch_read_to_versioned_items(
-            symbol_strings, as_ofs, date_ranges, row_ranges, columns, query_builder or query_builders, throw_on_error
-        )
-
-    def read_metadata(self, symbol: str, as_of: Optional[AsOf] = None) -> VersionedItem:
-        """
-        Return the metadata saved for a symbol.  This method is faster than read as it only loads the metadata, not the
-        data itself.
-
-        Parameters
-        ----------
-        symbol
-            Symbol name
-        as_of : AsOf, default=None
-            Return the metadata as it was as of the point in time. See documentation on `read` for documentation on
-            the different forms this parameter can take.
-
-        Returns
-        -------
-        VersionedItem
-            Structure containing metadata and version number of the affected symbol in the store. The data attribute
-            will be None.
-        """
-        return self._nvs.read_metadata(symbol, as_of)
-
-    def read_metadata_batch(self, symbols: List[Union[str, ReadInfoRequest]]) -> List[Union[VersionedItem, DataError]]:
-        """
-        Reads the metadata of multiple symbols.
-
-        Parameters
-        ----------
-        symbols : List[Union[str, ReadInfoRequest]]
-            List of symbols to read metadata.
-
-        Returns
-        -------
-        List[Union[VersionedItem, DataError]]
-            A list of the read metadata results, whose i-th element corresponds to the i-th element of the ``symbols`` parameter.
-            A VersionedItem object with the metadata field set as None will be returned if the requested version of the
-            symbol exists but there is no metadata
-            If the specified version does not exist, a DataError object is returned, with symbol, version_request_type,
-            version_request_data properties, error_code, error_category, and exception_string properties. If a key error or
-            any other internal exception occurs, the same DataError object is also returned.
-
-        See Also
-        --------
-        read_metadata
-        """
-        symbol_strings, as_ofs = self.parse_list_of_symbols(symbols)
-
-        include_errors_and_none_meta = True
-        return self._nvs._batch_read_metadata_to_versioned_items(symbol_strings, as_ofs, include_errors_and_none_meta)
 
     def write_metadata(
             self,

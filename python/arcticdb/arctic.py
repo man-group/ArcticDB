@@ -111,7 +111,7 @@ class Arctic:
         return self.has_library(name)
 
     def get_library(
-        self, name: str, create_if_missing: Optional[bool] = False, library_options: Optional[LibraryOptions] = None
+        self, name: str, create_if_missing: Optional[bool] = False, library_options: Optional[LibraryOptions] = None, read_only: Optional[bool] = False
     ) -> Library:
         """
         Returns the library named ``name``.
@@ -133,6 +133,10 @@ class Arctic:
             If create_if_missing is True, and the library already exists, ensures that the existing library options
             match these.
             Unused if create_if_missing is False.
+
+        read_only: Optional[bool], default = False
+            If True, return a simplified library API without any write/update/delete capabilities (a ReadLibrary).
+            This does not check that the backend permissions are read only.
 
         Examples
         --------
