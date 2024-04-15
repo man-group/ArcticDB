@@ -175,7 +175,7 @@ private:
     [[nodiscard]] bool needs_compaction(const LoadResult& load_result) const;
 };
 
-folly::Future<std::vector<Store::RemoveKeyResultType>> delete_keys(
+std::vector<Store::RemoveKeyResultType> delete_keys(
     const std::shared_ptr<Store>& store,
     std::vector<AtomKey>&& remove,
     const AtomKey& exclude);

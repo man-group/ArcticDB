@@ -288,6 +288,20 @@ folly::Future<std::vector<RemoveKeyResultType>> remove_keys(std::vector<entity::
            async::submit_io_task(RemoveBatchTask{std::move(keys), library_, opts});
 }
 
+std::vector<RemoveKeyResultType> remove_keys_sync(const std::vector<entity::VariantKey> &keys,
+                                                  storage::RemoveOpts opts) override {
+    return keys.empty() ?
+           std::vector<RemoveKeyResultType>() :
+           RemoveBatchTask{keys, library_, opts}();
+}
+
+std::vector<RemoveKeyResultType> remove_keys_sync(std::vector<entity::VariantKey> &&keys,
+                                                  storage::RemoveOpts opts) override {
+    return keys.empty() ?
+           std::vector<RemoveKeyResultType>() :
+           RemoveBatchTask{std::move(keys), library_, opts}();
+}
+
 folly::Future<std::vector<VariantKey>> batch_read_compressed(
         std::vector<std::pair<entity::VariantKey, ReadContinuation>> &&keys_and_continuations,
         const BatchReadArgs &args) override {
