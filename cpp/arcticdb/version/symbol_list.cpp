@@ -685,11 +685,10 @@ SegmentInMemory create_empty_segment(const StreamId& stream_id) {
     return output;
 }
 
-folly::Future<VariantKey> write_symbols(
+VariantKey write_symbols(
         const std::shared_ptr<Store>& store,
         const CollectionType& symbols,
         const StreamId& stream_id,
-        timestamp creation_ts,
         const StreamId& type_holder)  {
     ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Writing {} symbols to symbol list cache", symbols.size());
 
@@ -702,10 +701,10 @@ folly::Future<VariantKey> write_symbols(
         segment = write_entries_to_symbol_segment(stream_id, type_holder, symbols);
     }
 
-    return store->write(KeyType::SYMBOL_LIST, 0, stream_id, creation_ts, NumericIndex{ 0 }, NumericIndex{ 0 }, std::move(segment));
+    return store->write_sync(KeyType::SYMBOL_LIST, 0, stream_id, NumericIndex{ 0 }, NumericIndex{ 0 }, std::move(segment));
 }
 
-folly::Future<std::vector<Store::RemoveKeyResultType>> delete_keys(
+std::vector<Store::RemoveKeyResultType> delete_keys(
         const std::shared_ptr<Store>& store,
         std::vector<AtomKey>&& remove,
         const AtomKey& exclude) {
@@ -719,7 +718,7 @@ folly::Future<std::vector<Store::RemoveKeyResultType>> delete_keys(
             variant_keys.emplace_back(atom_key);
     }
 
-    return store->remove_keys(variant_keys);
+    return store->remove_keys_sync(variant_keys);
 }
 
 bool has_recent_compaction(
@@ -766,9 +765,8 @@ std::set<StreamId> SymbolList::load(
                     auto written = write_symbols(store,
                                                  load_result.symbols_,
                                                  compaction_id,
-                                                 load_result.timestamp_,
-                                                 data_.type_holder_).get();
-                    delete_keys(store, load_result.detach_symbol_list_keys(), std::get<AtomKey>(written)).get();
+                                                 data_.type_holder_);
+                    delete_keys(store, load_result.detach_symbol_list_keys(), std::get<AtomKey>(written));
                 }
             } else {
                 ARCTICDB_RUNTIME_DEBUG(log::symbol(),"Not compacting the symbol list due to lock contention");
