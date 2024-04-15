@@ -264,17 +264,16 @@ std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
 
     // idx_names are passed by the python layer. They are empty in case row count index is used see:
     // https://github.com/man-group/ArcticDB/blob/4184a467d9eee90600ddcbf34d896c763e76f78f/python/arcticdb/version_store/_normalization.py#L291
-    // Currently the python layers assign RowRange index to both empty dataframes and dataframes wich do not specify
+    // Currently the python layers assign RowRange index to both empty dataframes and dataframes which do not specify
     // index explicitly. Thus we handle this case after all columns are read so that we know how many rows are there.
     if (idx_names.empty()) {
-        if (!empty_types || res->num_rows > 0) {
-            res->index = stream::RowCountIndex();
-            res->desc.set_index_type(IndexDescriptor::ROWCOUNT);
-        } else {
-            res->index = stream::EmptyIndex();
-            res->desc.set_index_type(IndexDescriptor::EMPTY);
-        }
+        res->index = stream::RowCountIndex();
+        res->desc.set_index_type(IndexDescriptor::ROWCOUNT);
+    }
 
+    if (empty_types && res->num_rows == 0) {
+        res->index = stream::EmptyIndex();
+        res->desc.set_index_type(IndexDescriptor::EMPTY);
     }
 
     ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res->desc);

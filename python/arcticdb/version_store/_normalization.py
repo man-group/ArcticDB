@@ -289,10 +289,13 @@ def _from_tz_timestamp(ts, tz):
 _range_index_props_are_public = hasattr(RangeIndex, "start")
 
 
-def _normalize_single_index(index, index_names, index_norm, dynamic_strings=None, string_max_len=None):
+def _normalize_single_index(index, index_names, index_norm, dynamic_strings=None, string_max_len=None, empty_types=False):
     # index: pd.Index or np.ndarray -> np.ndarray
     index_tz = None
-    if isinstance(index, RangeIndex):
+    is_empty = len(index) == 0
+    if empty_types and is_empty and not index_norm.is_physically_stored:
+        return [], []
+    elif isinstance(index, RangeIndex):
         if index.name:
             if not isinstance(index.name, int) and not isinstance(index.name, str):
                 raise NormalizationException(
@@ -301,10 +304,8 @@ def _normalize_single_index(index, index_names, index_norm, dynamic_strings=None
             if isinstance(index.name, int):
                 index_norm.is_int = True
             index_norm.name = str(index.name)
-        if isinstance(index, RangeIndex):
-            # skip index since we can reconstruct it, so no need to actually store it
-            index_norm.start = index.start if _range_index_props_are_public else index._start
-            index_norm.step = index.step if _range_index_props_are_public else index._step
+        index_norm.start = index.start if _range_index_props_are_public else index._start
+        index_norm.step = index.step if _range_index_props_are_public else index._step
         return [], []
     else:
         coerce_type = DTN64_DTYPE if len(index) == 0 else None
@@ -370,7 +371,7 @@ def _denormalize_single_index(item, norm_meta):
                     name = norm_meta.index.name if norm_meta.index.name else None
                     return RangeIndex(start=norm_meta.index.start, stop=stop, step=norm_meta.index.step, name=name)
                 else:
-                    return None
+                    return DatetimeIndex([])
             else:
                 return RangeIndex(start=0, stop=0, step=1)
         # this means that the index is not a datetime index and it's been represented as a regular field in the stream
@@ -553,9 +554,10 @@ class _PandasNormalizer(Normalizer):
         else:
             index_norm = pd_norm.index
             index_norm.is_physically_stored = not isinstance(index, RangeIndex) and not empty_df
-            index = DatetimeIndex([]) if empty_df else index
+            is_categorical = len(df.select_dtypes(include="category").columns) > 0
+            index = DatetimeIndex([]) if IS_PANDAS_TWO and empty_df and not is_categorical else index
 
-        return _normalize_single_index(index, list(index.names), index_norm, dynamic_strings, string_max_len)
+        return _normalize_single_index(index, list(index.names), index_norm, dynamic_strings, string_max_len, empty_types=empty_types)
 
     def _index_from_records(self, item, norm_meta):
         # type: (NormalizationMetadata.Pandas, _SUPPORTED_NATIVE_RETURN_TYPES, Bool)->Union[Index, DatetimeIndex, MultiIndex]
@@ -1094,13 +1096,13 @@ class Pickler(object):
 
 
 class TimeFrameNormalizer(Normalizer):
-    def normalize(self, item, string_max_len=None, dynamic_strings=False, coerce_columns=None, **kwargs):
+    def normalize(self, item, string_max_len=None, dynamic_strings=False, coerce_columns=None, empty_types=False, **kwargs):
         norm_meta = NormalizationMetadata()
         norm_meta.ts.mark = True
         index_norm = norm_meta.ts.common.index
         index_norm.is_physically_stored = len(item.times) > 0 and not isinstance(item.times, RangeIndex)
         index_names, ix_vals = _normalize_single_index(
-            item.times, ["times"], index_norm, dynamic_strings, string_max_len
+            item.times, ["times"], index_norm, dynamic_strings, string_max_len, empty_types=empty_types
         )
         columns_names, columns_vals = _normalize_columns(
             item.columns_names,

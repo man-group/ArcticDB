@@ -584,6 +584,7 @@ class TestCanAppendToEmptyColumn:
     @pytest.fixture(autouse=True)
     def create_empty_column(self, lmdb_version_store_static_and_dynamic, dtype, empty_index):
         lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": []}, dtype=dtype, index=empty_index))
+        assert lmdb_version_store_static_and_dynamic.read("sym").data.index.equals(pd.DatetimeIndex([]))
         yield
 
     def test_integer(self, lmdb_version_store_static_and_dynamic, int_dtype, dtype, append_index):
@@ -744,6 +745,7 @@ class TestCanUpdateEmptyColumn:
     @pytest.fixture(autouse=True)
     def create_empty_column(self, lmdb_version_store_static_and_dynamic, dtype, empty_index):
         lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": []}, dtype=dtype, index=empty_index))
+        assert lmdb_version_store_static_and_dynamic.read("sym").data.index.equals(pd.DatetimeIndex([]))
         yield
 
     def update_index(self):
