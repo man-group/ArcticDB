@@ -32,7 +32,12 @@ from arcticdb.storage_fixtures.mongo import auto_detect_server
 from arcticdb.storage_fixtures.in_memory import InMemoryStorageFixture
 from arcticdb.version_store._normalization import MsgPackNormalizer
 from arcticdb.util.test import create_df
-from tests.util.mark import AZURE_TESTS_MARK, MONGO_TESTS_MARK, REAL_S3_TESTS_MARK
+from tests.util.mark import (
+    AZURE_TESTS_MARK,
+    MONGO_TESTS_MARK,
+    REAL_S3_TESTS_MARK,
+    S3_SSL_TEST_ENABLED,
+)
 
 # region =================================== Misc. Constants & Setup ====================================
 hypothesis.settings.register_profile("ci_linux", max_examples=100)
@@ -103,13 +108,25 @@ def lmdb_storage(tmp_path):
 
 @pytest.fixture(scope="session")
 def s3_storage_factory():
-    with MotoS3StorageFixtureFactory() as f:
+    with MotoS3StorageFixtureFactory(use_ssl=S3_SSL_TEST_ENABLED) as f:
+        yield f
+
+
+@pytest.fixture(scope="session")
+def s3_no_ssl_storage_factory():
+    with MotoS3StorageFixtureFactory(use_ssl=False) as f:
         yield f
 
 
 @pytest.fixture
 def s3_storage(s3_storage_factory):
     with s3_storage_factory.create_fixture() as f:
+        yield f
+
+
+@pytest.fixture
+def s3_no_ssl_storage(s3_no_ssl_storage_factory):
+    with s3_no_ssl_storage_factory.create_fixture() as f:
         yield f
 
 
@@ -232,14 +249,19 @@ def s3_store_factory_mock_storage_exception(lib_name, s3_storage):
     # The following interger is for how many requests until 503 repsonse is sent
     # -1 means the 503 response is disabled
     # Setting persisted throughout the lifetime of moto server, so it needs to be reset
-    requests.post(endpoint + "/rate_limit", b"0").raise_for_status()
+    requests.post(endpoint + "/rate_limit", b"0", verify=False).raise_for_status()
     yield lib
-    requests.post(endpoint + "/rate_limit", b"-1").raise_for_status()
+    requests.post(endpoint + "/rate_limit", b"-1", verify=False).raise_for_status()
 
 
 @pytest.fixture
 def s3_store_factory(lib_name, s3_storage):
     return s3_storage.create_version_store_factory(lib_name)
+
+
+@pytest.fixture
+def s3_no_ssl_store_factory(lib_name, s3_no_ssl_storage):
+    return s3_no_ssl_storage.create_version_store_factory(lib_name)
 
 
 @pytest.fixture
