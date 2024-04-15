@@ -1,0 +1,9 @@
+[data-md-color-scheme="arcticdb"] {
+    --md-primary-fg-color:        #003f69;
+    --md-primary-fg-color--light: #ECB7B7;
+    --md-primary-fg-color--dark:  #90030C;
+  }
+
+.md-grid {
+    max-width: 75rem;
+}
