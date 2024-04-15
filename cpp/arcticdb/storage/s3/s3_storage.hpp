@@ -219,6 +219,10 @@ auto get_s3_config(const ConfigType& conf) {
     const bool verify_ssl = ConfigsMap::instance()->get_int("S3Storage.VerifySSL", conf.ssl());
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Verify ssl: {}", verify_ssl);
     client_configuration.verifySSL = verify_ssl;
+    if (client_configuration.verifySSL && (!conf.ca_cert_path().empty() || !conf.ca_cert_dir().empty())) {
+        client_configuration.caFile = conf.ca_cert_path();
+        client_configuration.caPath = conf.ca_cert_dir();
+    }
     client_configuration.maxConnections = conf.max_connections() == 0 ?
             ConfigsMap::instance()->get_int("VersionStore.NumIOThreads", 16) :
             conf.max_connections();

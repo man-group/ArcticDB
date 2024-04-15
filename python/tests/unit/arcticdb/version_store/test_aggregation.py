@@ -451,6 +451,37 @@ def test_mean_aggregation_float(local_object_version_store):
     assert_frame_equal(res.data, df)
 
 
+def test_named_agg(lmdb_version_store_tiny_segment):
+    lib = lmdb_version_store_tiny_segment
+    sym = "test_named_agg"
+    gen = np.random.default_rng()
+    df = DataFrame(
+        {
+            "grouping_column": [1, 1, 1, 2, 3, 4],
+            "agg_column": gen.random(6)
+        }
+    )
+    lib.write(sym, df)
+    expected = df.groupby("grouping_column").agg(
+        agg_column_sum=pd.NamedAgg("agg_column", "sum"),
+        agg_column_mean=pd.NamedAgg("agg_column", "mean"),
+        agg_column=pd.NamedAgg("agg_column", "min"),
+    )
+    expected = expected.reindex(columns=sorted(expected.columns))
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg(
+        {
+            "agg_column_sum": ("agg_column", "sum"),
+            "agg_column_mean": ("agg_column", "MEAN"),
+            "agg_column": "MIN",
+        }
+    )
+    received = lib.read(sym, query_builder=q).data
+    received.sort_index(inplace=True)
+    received = received.reindex(columns=sorted(received.columns))
+    assert_frame_equal(expected, received)
+
+
 def test_max_minus_one(lmdb_version_store):
     symbol = "minus_one"
     lib = lmdb_version_store

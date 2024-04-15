@@ -62,7 +62,12 @@ TEST(Clause, AggregationEmptyColumn) {
     using namespace arcticdb;
     auto component_manager = std::make_shared<ComponentManager>();
 
-    AggregationClause aggregation("int_repeated_values", {{"empty_sum", "sum"}, {"empty_min", "min"}, {"empty_max", "max"}, {"empty_mean", "mean"}, {"empty_count", "count"}});
+    AggregationClause aggregation("int_repeated_values",
+                                  {{"sum", "empty_sum", "empty_sum"},
+                                   {"min", "empty_min", "empty_min"},
+                                   {"max", "empty_max", "empty_max"},
+                                   {"mean", "empty_mean", "empty_mean"},
+                                   {"count", "empty_count", "empty_count"}});
     aggregation.set_component_manager(component_manager);
 
     size_t num_rows{100};
@@ -132,7 +137,12 @@ TEST(Clause, AggregationColumn)
     using namespace arcticdb;
     auto component_manager = std::make_shared<ComponentManager>();
 
-    AggregationClause aggregation("int_repeated_values", {{"sum_int", "sum"}, {"min_int", "min"}, {"max_int", "max"}, {"mean_int", "mean"}, {"count_int", "count"}});
+    AggregationClause aggregation("int_repeated_values",
+                                  {{"sum", "sum_int", "sum_int"},
+                                   {"min", "min_int", "min_int"},
+                                   {"max", "max_int", "max_int"},
+                                   {"mean", "mean_int", "mean_int"},
+                                   {"count", "count_int", "count_int"}});
     aggregation.set_component_manager(component_manager);
 
     size_t num_rows{100};
@@ -159,7 +169,12 @@ TEST(Clause, AggregationSparseColumn)
     using namespace arcticdb;
     auto component_manager = std::make_shared<ComponentManager>();
 
-    AggregationClause aggregation("int_repeated_values", {{"sum_int", "sum"}, {"min_int", "min"}, {"max_int", "max"}, {"mean_int", "mean"}, {"count_int", "count"}});
+    AggregationClause aggregation("int_repeated_values",
+                                  {{"sum", "sum_int", "sum_int"},
+                                   {"min", "min_int", "min_int"},
+                                   {"max", "max_int", "max_int"},
+                                   {"mean", "mean_int", "mean_int"},
+                                   {"count", "count_int", "count_int"}});
     aggregation.set_component_manager(component_manager);
 
     size_t num_rows{100};
@@ -217,7 +232,12 @@ TEST(Clause, AggregationSparseGroupby) {
     using namespace arcticdb;
     auto component_manager = std::make_shared<ComponentManager>();
 
-    AggregationClause aggregation("int_sparse_repeated_values", {{"sum_int", "sum"}, {"min_int", "min"}, {"max_int", "max"}, {"mean_int", "mean"}, {"count_int", "count"}});
+    AggregationClause aggregation("int_sparse_repeated_values",
+                                  {{"sum", "sum_int", "sum_int"},
+                                   {"min", "min_int", "min_int"},
+                                   {"max", "max_int", "max_int"},
+                                   {"mean", "mean_int", "mean_int"},
+                                   {"count", "count_int", "count_int"}});
     aggregation.set_component_manager(component_manager);
 
     size_t num_rows{100};
