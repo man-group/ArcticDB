@@ -915,11 +915,13 @@ if(${TEST})
 
     target_link_libraries(benchmarks
             PUBLIC
-            benchmark::benchmark
-            benchmark::benchmark_main
+                benchmark::benchmark
+                benchmark::benchmark_main
             PRIVATE
-            arcticdb_core_static
-            )
+                arcticdb_core_static
+                Python::Python
+                ${AWSSDK_LINK_LIBRARIES}
+    )
 
     set(rapidcheck_srcs
             column_store/test/rapidcheck_column_store.cpp
