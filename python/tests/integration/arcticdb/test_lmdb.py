@@ -103,28 +103,29 @@ def test_lmdb_malloc_trim(lmdb_storage):
     lib._nvs.trim()
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Non Windows platforms have different file path name restrictions")
-def test_invalid_lib_name_windows(lmdb_storage):
+@pytest.mark.parametrize("invalid_lib_name", ["lib?1", "lib:1", "lib|1", "lib.", "lib "])
+def test_invalid_lmdb_lib_name_windows(lmdb_storage, invalid_lib_name):
     ac = lmdb_storage.create_arctic()
+    with pytest.raises(UserInputException) as e:
+        ac.create_library(invalid_lib_name)
 
-    invalid_paths = ["lib?1", "lib:1", "lib|1", "lib.", "lib "]
-    for lib in invalid_paths:
-        with pytest.raises(UserInputException) as e:
-            ac.create_library(lib)
-        assert ac.list_libraries() == []
+    assert ac.list_libraries() == []
 
-    valid_libs = ["lib#~@,1", "lib{)[.1", "!lib$%^"]
-    for lib in valid_libs:
-        ac.create_library(lib)
-    assert set(ac.list_libraries()) == set(valid_libs)
+def is_valid_lmdb_lib_name(lmdb_storage, lib_name):
+    ac = lmdb_storage.create_arctic()
+    ac.create_library(lib_name)
+
+    return ac.list_libraries() == [lib_name]
+
+# Valid names on all platforms
+@pytest.mark.parametrize("valid_lib_name", ["lib#~@,1", "lib{)[.1", "!lib$%^"])
+def test_valid_lib_name(lmdb_storage, valid_lib_name):
+    assert is_valid_lmdb_lib_name(lmdb_storage, valid_lib_name)
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Windows has different file path name restrictions")
-def test_valid_lib_name_linux(lmdb_storage):
-    ac = lmdb_storage.create_arctic()
-    valid_libs = ["lib?1", "lib:1", "lib|1", "lib ", "lib#~@,1", "lib{)[.1", "!lib$%^"]
-    for lib in valid_libs:
-        ac.create_library(lib)
-
-    assert set(ac.list_libraries()) == set(valid_libs)
+@pytest.mark.parametrize("valid_lib_name", ["lib?1", "lib:1", "lib|1", "lib "])
+def test_valid_lib_name_linux(lmdb_storage, valid_lib_name):
+    assert is_valid_lmdb_lib_name(lmdb_storage, valid_lib_name)
 
 def test_lmdb_mapsize(tmp_path):
     # Given - tiny map size
