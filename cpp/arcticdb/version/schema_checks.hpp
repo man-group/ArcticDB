@@ -66,6 +66,14 @@ inline void check_normalization_index_match(
                 index_type_to_str(old_idx_kind)
             );
         } else {
+            // (old_idx_kind == IndexDescriptor::TIMESTAMP && new_idx_kind == IndexDescriptor::ROWCOUNT) is left to preserve
+            // pre-empty index behavior with pandas 2, see test_empty_writes.cpp::test_append_empty_series. Empty pd.Series
+            // have Rowrange index, but due to: https://github.com/man-group/ArcticDB/blob/bd1776291fe402d8b18af9fea865324ebd7705f1/python/arcticdb/version_store/_normalization.py#L545
+            // it gets converted to DatetimeIndex (all empty indexes except categorical and multiindex are converted to datetime index
+            // in pandas 2 if empty index type is disabled), however we still want to be able to append pd.Series to empty pd.Series.
+            // Having this will not allow appending RowCont indexed pd.DataFrames to DateTime indexed pd.DataFrames because they would
+            // have different field size (the rowcount index is not stored as a field). This logic is bug prone and will become better
+            // after we enable the empty index.
             normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
                 common_index_type != IndexDescriptor::UNKNOWN ||
                     (old_idx_kind == IndexDescriptor::TIMESTAMP && new_idx_kind == IndexDescriptor::ROWCOUNT),
