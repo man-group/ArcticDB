@@ -111,21 +111,21 @@ def test_invalid_lmdb_lib_name_windows(lmdb_storage, invalid_lib_name):
 
     assert ac.list_libraries() == []
 
-def is_valid_lmdb_lib_name(lmdb_storage, lib_name):
-    ac = lmdb_storage.create_arctic()
-    ac.create_library(lib_name)
-
-    return ac.list_libraries() == [lib_name]
-
 # Valid names on all platforms
 @pytest.mark.parametrize("valid_lib_name", ["lib#~@,1", "lib{)[.1", "!lib$%^"])
 def test_valid_lib_name(lmdb_storage, valid_lib_name):
-    assert is_valid_lmdb_lib_name(lmdb_storage, valid_lib_name)
+    ac = lmdb_storage.create_arctic()
+    ac.create_library(valid_lib_name)
+
+    assert ac.list_libraries() == [valid_lib_name]
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Windows has different file path name restrictions")
 @pytest.mark.parametrize("valid_lib_name", ["lib?1", "lib:1", "lib|1", "lib "])
 def test_valid_lib_name_linux(lmdb_storage, valid_lib_name):
-    assert is_valid_lmdb_lib_name(lmdb_storage, valid_lib_name)
+    ac = lmdb_storage.create_arctic()
+    ac.create_library(valid_lib_name)
+
+    assert ac.list_libraries() == [valid_lib_name]
 
 def test_lmdb_mapsize(tmp_path):
     # Given - tiny map size
