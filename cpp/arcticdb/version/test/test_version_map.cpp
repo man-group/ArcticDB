@@ -12,6 +12,8 @@
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/storage/test/in_memory_store.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
+#include <arcticdb/stream/test/test_store_common.hpp>
+
 
 namespace arcticdb {
 

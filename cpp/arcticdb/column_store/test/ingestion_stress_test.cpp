@@ -14,6 +14,7 @@
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/pipeline/query.hpp>
 #include <arcticdb/stream/append_map.hpp>
+#include <arcticdb/stream/test/test_store_common.hpp>
 
 using namespace arcticdb;
 namespace as = arcticdb::stream;

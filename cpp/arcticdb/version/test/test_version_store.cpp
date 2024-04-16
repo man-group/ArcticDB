@@ -15,6 +15,8 @@
 #include <arcticdb/version/version_functions.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/stream/append_map.hpp>
+#include <arcticdb/stream/test/test_store_common.hpp>
+
 
 #include <chrono>
 #include <thread>

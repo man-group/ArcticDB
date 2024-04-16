@@ -792,7 +792,9 @@ if(${TEST})
             storage/test/test_storage_factory.cpp
             storage/test/test_storage_exceptions.cpp
             storage/test/test_azure_storage.cpp
+            stream/test/stream_test_common.hpp
             stream/test/stream_test_common.cpp
+            stream/test/test_store_common.hpp
             stream/test/test_aggregator.cpp
             stream/test/test_append_map.cpp
             stream/test/test_row_builder.cpp
@@ -915,9 +917,7 @@ if(${TEST})
             PUBLIC
             benchmark::benchmark
             benchmark::benchmark_main
-            ${COMMON_PUBLIC_TEST_LIBRARIES}
             PRIVATE
-            ${AWSSDK_LINK_LIBRARIES}
             arcticdb_core_static
             )
 

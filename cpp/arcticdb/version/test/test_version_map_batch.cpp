@@ -4,6 +4,8 @@
 #include <arcticdb/stream/test/stream_test_common.hpp>
 #include <arcticdb/util/test/gtest_utils.hpp>
 #include <arcticdb/stream/piloted_clock.hpp>
+#include <arcticdb/stream/test/test_store_common.hpp>
+
 
 using namespace arcticdb;
 using namespace arcticdb::pipelines;

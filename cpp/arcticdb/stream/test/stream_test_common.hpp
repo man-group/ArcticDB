@@ -15,7 +15,6 @@
 #include <arcticdb/version/version_store_api.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/entity/protobufs.hpp>
-#include <gtest/gtest.h>
 #include <filesystem>
 
 namespace fg = folly::gen;
@@ -335,20 +334,5 @@ inline auto test_store(const std::string &lib_name) {
     auto version_store = std::make_shared<version_store::PythonVersionStore>(library);
     return version_store;
 }
-
-struct TestStore : ::testing::Test {
-protected:
-    virtual std::string get_name() = 0;
-
-    void SetUp() override {
-        test_store_ = test_store(get_name());
-    }
-
-    void TearDown() override {
-        test_store_->clear();
-    }
-
-    std::shared_ptr<arcticdb::version_store::PythonVersionStore> test_store_;
-};
 
 } //namespace arcticdb

@@ -10,7 +10,7 @@
 #include <array>
 #include <fstream>
 #include <arcticdb/util/preprocess.hpp>
-#include <log/log.hpp>
+#include <arcticdb/log/log.hpp>
 #ifdef WIN32
 #include <process.h>
 #else

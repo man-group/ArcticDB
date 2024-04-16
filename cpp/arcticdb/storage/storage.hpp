@@ -9,7 +9,6 @@
 #include <arcticdb/storage/key_segment_pair.hpp>
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/util/composite.hpp>
-#include <util/composite.hpp>
 
 namespace arcticdb::storage {
 
