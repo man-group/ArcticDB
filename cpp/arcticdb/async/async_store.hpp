@@ -145,6 +145,10 @@ entity::VariantKey write_sync(
     return WriteSegmentTask{library_}(std::move(encoded));
 }
 
+bool is_path_valid(const std::string_view path) const override {
+    return library_->is_path_valid(path);
+}
+
 folly::Future<folly::Unit> write_compressed(storage::KeySegmentPair &&ks) override {
     return async::submit_io_task(WriteCompressedTask{std::move(ks), library_});
 }

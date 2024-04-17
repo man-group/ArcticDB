@@ -60,6 +60,8 @@ class LmdbStorage final : public Storage {
 
     bool do_key_exists(const VariantKey & key) final;
 
+    bool do_is_path_valid(const std::string_view path) const final;
+
     ::lmdb::env& env() {
         if (!env_) {
             raise<ErrorCode::E_UNEXPECTED_LMDB_ERROR>("Unexpected LMDB Error: Invalid operation: LMDB environment has been removed. "

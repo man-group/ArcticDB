@@ -165,6 +165,10 @@ public:
         return do_key_path(key);
     }
 
+    bool is_path_valid(const std::string_view path) const {
+        return do_is_path_valid(path);
+    }
+
     [[nodiscard]] const LibraryPath &library_path() const { return lib_path_; }
     [[nodiscard]] OpenMode open_mode() const { return mode_; }
 
@@ -186,6 +190,8 @@ private:
     virtual void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string & prefix) = 0;
 
     virtual std::string do_key_path(const VariantKey& key) const = 0;
+
+    virtual bool do_is_path_valid(const std::string_view) const { return true; }
 
     LibraryPath lib_path_;
     OpenMode mode_;
