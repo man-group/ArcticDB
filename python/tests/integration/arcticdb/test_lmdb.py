@@ -103,7 +103,7 @@ def test_lmdb_malloc_trim(lmdb_storage):
     lib._nvs.trim()
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Non Windows platforms have different file path name restrictions")
-@pytest.mark.parametrize("invalid_lib_name", ["lib?1", "lib:1", "lib|1", "lib.", "lib "])
+@pytest.mark.parametrize("invalid_lib_name", ["lib?1", "lib:1", "lib|1", "lib\"1", "lib.", "lib "])
 def test_invalid_lmdb_lib_name_windows(lmdb_storage, invalid_lib_name):
     ac = lmdb_storage.create_arctic()
     with pytest.raises(UserInputException) as e:
