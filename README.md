@@ -1,24 +1,3 @@
-<table>
-<tr>
-<td>
-
-![Alt text](static/happybdayarcticdb.png)
-
-</td>
-<td>
-
-# 🚀 ArcticDB Hits 1,000 GitHub Stars on Our First Open Source Anniversary! 🚀
-
-Exciting news as we celebrate two milestones: ArcticDB's first year in the open-source community
-and reaching 1,000 GitHub stars! ⭐
-
-A huge thank you to all the contributors, supporters, and community members whose involvement has been
-pivotal to our success! 🙌
-
-</td>
-</tr>
-</table>
-
 <p align="center">
 <img src="https://github.com/man-group/ArcticDB/raw/master/static/ArcticDBCropped.png" width="40%">
 </p>
@@ -178,6 +157,7 @@ Please see version conversion dates in the below table:
 | 4.1 | Business Source License 1.1 | Nov 1, 2025 |
 | 4.2 | Business Source License 1.1 | Nov 12, 2025 |
 | 4.3 | Business Source License 1.1 | Feb 7, 2026 |
+| 4.4 | Business Source License 1.1 | Apr 5, 2026 |
 ## Code of Conduct
 
 [Code of Conduct](https://github.com/man-group/ArcticDB/blob/master/CODE_OF_CONDUCT.md)

@@ -202,30 +202,29 @@ void do_remove_impl(Composite<VariantKey>&& ks,
         static const size_t delete_object_limit =
             std::min(BATCH_SUBREQUEST_LIMIT, static_cast<size_t>(ConfigsMap::instance()->get_int("AzureStorage.DeleteBatchSize", BATCH_SUBREQUEST_LIMIT)));
 
-        unsigned int batch_counter = 0u;
-        auto submit_batch = [&azure_client, &request_timeout, &batch_counter](auto &to_delete) {
+        auto submit_batch = [&azure_client, &request_timeout](auto &to_delete) {
             try {
                 azure_client.delete_blobs(to_delete, request_timeout);
             }
             catch (const Azure::Core::RequestFailedException& e) {
                 raise_azure_exception(e);
             }
-            batch_counter = 0u;
+            to_delete.clear();
         };
 
         (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach(
-            [&root_folder, b=std::move(bucketizer), delete_object_limit=delete_object_limit, &batch_counter, &to_delete, &submit_batch] (auto&& group) {//bypass incorrect 'set but no used" error for delete_object_limit
+            [&root_folder, b=std::move(bucketizer), delete_object_limit=delete_object_limit, &to_delete, &submit_batch] (auto&& group) {//bypass incorrect 'set but no used" error for delete_object_limit
                 auto key_type_dir = key_type_folder(root_folder, group.key());
                 for (auto k : folly::enumerate(group.values())) {
                     auto blob_name = object_path(b.bucketize(key_type_dir, *k), *k);
                     to_delete.emplace_back(std::move(blob_name));
-                    if (++batch_counter == delete_object_limit) {
+                    if (to_delete.size() == delete_object_limit) {
                         submit_batch(to_delete);
                     }
                 }
             }
         );
-        if (batch_counter) {
+        if (!to_delete.empty()) {
             submit_batch(to_delete);
         }
 }
@@ -342,7 +341,7 @@ using namespace Azure::Storage::Blobs;
 AzureStorage::AzureStorage(const LibraryPath &library_path, OpenMode mode, const Config &conf) :
     Storage(library_path, mode),
     root_folder_(object_store_utils::get_root_folder(library_path)),
-    request_timeout_(conf.request_timeout() == 0 ? 60000 : conf.request_timeout()) {
+    request_timeout_(conf.request_timeout() == 0 ? 200000 : conf.request_timeout()) {
         if(conf.use_mock_storage_for_testing()) {
             ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using Mock Azure storage");
             azure_client_ = std::make_unique<MockAzureClient>();

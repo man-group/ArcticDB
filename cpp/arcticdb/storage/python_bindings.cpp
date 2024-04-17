@@ -114,7 +114,11 @@ void register_bindings(py::module& storage) {
         .def_property("bucket_name", &S3Override::bucket_name, &S3Override::set_bucket_name)
         .def_property("region", &S3Override::region, &S3Override::set_region)
         .def_property(
-                "use_virtual_addressing", &S3Override::use_virtual_addressing, &S3Override::set_use_virtual_addressing);
+                "use_virtual_addressing", &S3Override::use_virtual_addressing, &S3Override::set_use_virtual_addressing)
+        .def_property("ca_cert_path", &S3Override::ca_cert_path, &S3Override::set_ca_cert_path)
+        .def_property("ca_cert_dir", &S3Override::ca_cert_dir, &S3Override::set_ca_cert_dir)
+        .def_property("https", &S3Override::https, &S3Override::set_https)
+        .def_property("ssl", &S3Override::ssl, &S3Override::set_ssl);
 
     py::class_<AzureOverride>(storage, "AzureOverride")
         .def(py::init<>())
@@ -153,11 +157,18 @@ void register_bindings(py::module& storage) {
         .def("remove_library_config", [](const LibraryManager& library_manager, std::string_view library_path){
             return library_manager.remove_library_config(LibraryPath{library_path, '.'});
         }, py::call_guard<SingleThreadMutexHolder>())
-        .def("get_library", [](LibraryManager& library_manager, std::string_view library_path, const StorageOverride& storage_override){
-            return library_manager.get_library(LibraryPath{library_path, '.'}, storage_override);
-        }, py::arg("library_path"), py::arg("storage_override") = StorageOverride{})
-        .def("close_library_if_open", [](LibraryManager& library_manager, std::string_view library_path) {
-            return library_manager.close_library_if_open(LibraryPath{library_path, '.'});
+        .def("get_library", [](
+                LibraryManager& library_manager, std::string_view library_path,
+                const StorageOverride& storage_override,
+                const bool ignore_cache) {
+            return library_manager.get_library(LibraryPath{library_path, '.'}, storage_override, ignore_cache);
+        },
+             py::arg("library_path"),
+             py::arg("storage_override") = StorageOverride{},
+             py::arg("ignore_cache") = false
+        )
+        .def("cleanup_library_if_open", [](LibraryManager& library_manager, std::string_view library_path) {
+            return library_manager.cleanup_library_if_open(LibraryPath{library_path, '.'});
         })
         .def("has_library", [](const LibraryManager& library_manager, std::string_view library_path){
             return library_manager.has_library(LibraryPath{library_path, '.'});

@@ -5,7 +5,6 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import pandas as pd
 import numpy as np
-import pytest
 
 from arcticdb.util.test import sample_dataframe, populate_db
 from arcticdb_ext.storage import KeyType

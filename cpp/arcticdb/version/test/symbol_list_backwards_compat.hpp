@@ -160,7 +160,7 @@ void backwards_compat_write_journal(const std::shared_ptr<Store>& store, const S
 
 void backwards_compat_compact(const std::shared_ptr<Store>& store, std::vector<AtomKey>&& old_keys, const BackwardsCompatCollectionType& symbols) {
     auto compacted_key = backwards_compat_write(store, symbols, StreamId{std::string{CompactionId}}, timestamp(12), StringId{}).get();
-    delete_keys(store, std::move(old_keys), to_atom(compacted_key)).get();
+    delete_keys(store, std::move(old_keys), to_atom(compacted_key));
 }
 
 } //namespace arcticdb

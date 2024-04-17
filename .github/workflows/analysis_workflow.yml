@@ -75,7 +75,7 @@ jobs:
       - name: Install ArcticDB[Testing]
         shell: bash -el {0}
         run: |
-          pip install arcticdb[Testing]
+          pip install arcticdb[Testing] "protobuf<5"
 
       - name: Publish results to Github Pages
         shell: bash -el {0}

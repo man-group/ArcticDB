@@ -181,7 +181,7 @@ class StorageLock {
 
     timestamp create_ref_key(const std::shared_ptr<Store>& store) {
         auto ts =  ClockType::nanos_since_epoch();
-        store->write(KeyType::LOCK, name_, lock_segment(name_, ts)).get();
+        store->write_sync(KeyType::LOCK, name_, lock_segment(name_, ts));
         ARCTICDB_DEBUG(log::lock(), "Created lock with timestamp {}", ts);
         return ts;
     }
@@ -195,7 +195,7 @@ class StorageLock {
     }
 
     bool ref_key_exists(const std::shared_ptr<Store>& store) {
-        auto exists = store->key_exists(ref_key()).get();
+        auto exists = store->key_exists_sync(ref_key());
         ARCTICDB_DEBUG(log::lock(), "Ref key exists: {}", exists ? "true" : "false");
         return exists;
     }
@@ -203,7 +203,7 @@ class StorageLock {
     static void do_remove_ref_key(const std::shared_ptr<Store>& store, const StreamId& name) {
         ARCTICDB_DEBUG(log::lock(), "Removing ref key");
         try {
-            store->remove_key(get_ref_key(name)).get();
+            store->remove_key_sync(get_ref_key(name));
         } catch (const storage::KeyNotFoundException&) {
             log::storage().warn("Key not found in storage unlock");
         }
@@ -215,7 +215,7 @@ class StorageLock {
 
     std::optional<timestamp> read_timestamp(const std::shared_ptr<Store>& store) {
         try {
-            auto key_seg = store->read(ref_key()).get();
+            auto key_seg = store->read_sync(ref_key());
             return key_seg.second.template scalar_at<timestamp>(0, 0).value();
         } catch (const std::invalid_argument&) {
             return std::nullopt;

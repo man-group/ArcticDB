@@ -59,6 +59,7 @@ void SegmentInMemoryImpl::append(const SegmentInMemoryImpl& other) {
 
             if (this_type != *opt_common_type) {
                 column_unchecked(col).change_type(opt_common_type->data_type_);
+                descriptor_->mutable_field(col).mutable_type().data_type_ = opt_common_type->data_type_;
             }
             if (other_type != *opt_common_type) {
                 auto type_promoted_col = other.column_unchecked(*other_col_index).clone();
@@ -543,8 +544,10 @@ void SegmentInMemoryImpl::change_schema(StreamDescriptor descriptor) {
         const auto& other_type = descriptor.field(col).type();
         if(col_index) {
             auto this_type = column_unchecked(*col_index).type();
-            util::check(this_type == other_type, "Could not convert type {} to type {} for column {}, this index {}, other index {}",
-                        other_type, this_type, col_name, *col_index, col);
+            schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                    this_type == other_type,
+                    "Could not convert type {} to type {} for column {}, this index {}, other index {}",
+                    other_type, this_type, col_name, *col_index, col);
             new_columns[col] = std::move(columns_[*col_index]);
         } else {
             auto new_column = std::make_shared<Column>(other_type, row_count(), false, allow_sparse_);
@@ -564,6 +567,7 @@ std::optional<std::string_view> SegmentInMemoryImpl::string_at(position_t row, p
     const auto& col_ref = column(col);
 
     if(is_fixed_string_type(td.data_type()) && col_ref.is_inflated()) {
+
         auto string_size = col_ref.bytes() / row_count();
         auto ptr = col_ref.data().buffer().ptr_cast<char>(row * string_size, string_size);
         return std::string_view(ptr, string_size);

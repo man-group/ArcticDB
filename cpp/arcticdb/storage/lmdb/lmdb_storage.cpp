@@ -66,8 +66,8 @@ void LmdbStorage::do_write_internal(Composite<KeySegmentPair>&& kvs, ::lmdb::txn
             int64_t overwrite_flag = std::holds_alternative<RefKey>(kv.variant_key()) ? 0 : MDB_NOOVERWRITE;
             try {
                 lmdb_client_->write(db_name, k, std::move(seg), txn, dbi, overwrite_flag);
-            } catch (const ::lmdb::key_exist_error&) {
-                throw DuplicateKeyException(kv.variant_key());
+            } catch (const ::lmdb::key_exist_error& e) {
+                throw DuplicateKeyException(fmt::format("Key already exists: {}: {}", kv.variant_key(), e.what()));
             } catch (const ::lmdb::error& ex) {
                 raise_lmdb_exception(ex);
             }
@@ -257,6 +257,43 @@ void LmdbStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& vi
     } catch (const ::lmdb::error& ex) {
         raise_lmdb_exception(ex);
     }
+}
+
+void remove_db_files(const fs::path& lib_path) {
+    std::vector<std::string> files = {"lock.mdb", "data.mdb"};
+
+    for (const auto& file : files) {
+        fs::path file_path = lib_path / file;
+        try {
+            if (fs::exists(file_path)) {
+                fs::remove(file_path);
+            }
+        } catch (const std::filesystem::filesystem_error& e) {
+            raise<ErrorCode::E_UNEXPECTED_LMDB_ERROR>(
+                    fmt::format("Unexpected LMDB Error: Failed to remove LMDB file at path: {} error: {}",
+                                file_path.string(), e.what()));
+        }
+    }
+
+    if (fs::exists(lib_path)) {
+        if (!fs::is_empty(lib_path)) {
+            log::storage().warn(fmt::format("Skipping deletion of directory holding LMDB library during "
+                                            "library deletion as it contains files unrelated to LMDB"));
+        } else {
+            try {
+                fs::remove_all(lib_path);
+            } catch (const fs::filesystem_error& e) {
+                raise<ErrorCode::E_UNEXPECTED_LMDB_ERROR>(
+                        fmt::format("Unexpected LMDB Error: Failed to remove directory: {} error: {}",
+                                    lib_path.string(), e.what()));
+            }
+        }
+    }
+}
+
+void LmdbStorage::cleanup() {
+    env_.reset();
+    remove_db_files(lib_dir_);
 }
 
 

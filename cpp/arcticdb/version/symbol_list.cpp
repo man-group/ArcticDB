@@ -128,17 +128,35 @@ MaybeCompaction last_compaction(const std::vector<AtomKey>& keys) {
     }
 }
 
+// The below string_at and scalar_at functions should be used for symbol list cache segments instead of the ones
+// provided in SegmentInMemory, because the symbol list structure is the only place where columns can have more entries
+// than the segment has rows. Hence, we need to bypass the checks inside SegmentInMemory's function and directly call the
+// Column's string_at and scalar_at.
+std::string string_at(const SegmentInMemory& seg, position_t row, position_t col){
+    auto offset = seg.column(col).scalar_at<position_t>(row);
+    util::check(offset.has_value(), "Symbol list trying to call string_at for missing row {}, column {}", row, col);
+    return std::string(seg.string_pool_ptr()->get_view(offset.value()));
+}
+
+template<typename T>
+T scalar_at(const SegmentInMemory& seg, position_t row, position_t col){
+    auto scalar = seg.column(col).scalar_at<T>(row);
+    util::check(scalar.has_value(), "Symbol list trying to call scalar_at for missing row {}, column {}", row, col);
+    return scalar.value();
+}
+
+
 StreamId stream_id_from_segment(
         DataType data_type,
         const SegmentInMemory& seg,
         position_t row_id,
         position_t column) {
     if (data_type == DataType::UINT64) {
-            auto num_id = seg.scalar_at<uint64_t>(row_id, column).value();
+            auto num_id = scalar_at<uint64_t>(seg, row_id, column);
             ARCTICDB_DEBUG(log::symbol(), "Reading numeric symbol {}", num_id);
             return safe_convert_to_numeric_id(num_id);
     } else {
-        auto sym = std::string(seg.string_at(row_id, column).value());
+        auto sym = string_at(seg, row_id, column);
         ARCTICDB_DEBUG(log::symbol(), "Reading string symbol '{}'", sym);
         return {std::move(sym)};
     }
@@ -183,8 +201,8 @@ std::vector<SymbolListEntry> read_new_style_list_from_storage(const SegmentInMem
 
     for(auto i = 0L; i < seg.column(0).row_count(); ++i) {
         auto stream_id = stream_id_from_segment(data_type, seg, i, 0);
-        auto reference_id = VersionId{seg.scalar_at<uint64_t>(i, 1).value()};
-        auto reference_time = timestamp{seg.scalar_at<int64_t>(i, 2).value()};
+        auto reference_id = VersionId{scalar_at<uint64_t>(seg, i, 1)};
+        auto reference_time = timestamp{scalar_at<int64_t>(seg, i, 2)};
         ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Reading added symbol {}: {}@{}", stream_id, reference_id, reference_time);
         output.emplace_back(stream_id, reference_id, reference_time, ActionType::ADD);
     }
@@ -195,8 +213,8 @@ std::vector<SymbolListEntry> read_new_style_list_from_storage(const SegmentInMem
 
         for (auto i = 0L; i < seg.column(3).row_count(); ++i) {
             auto stream_id = stream_id_from_segment(data_type, seg, i, 3);
-            auto reference_id = VersionId{seg.scalar_at<uint64_t>(i, 4).value()};
-            auto reference_time = timestamp{seg.scalar_at<int64_t>(i, 5).value()};
+            auto reference_id = VersionId{scalar_at<uint64_t>(seg, i, 4)};
+            auto reference_time = timestamp{scalar_at<int64_t>(seg, i, 5)};
             ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Reading deleted symbol {}: {}@{}", stream_id, reference_id, reference_time);
             output.emplace_back(stream_id, reference_id, reference_time, ActionType::DELETE);
         }
@@ -667,11 +685,10 @@ SegmentInMemory create_empty_segment(const StreamId& stream_id) {
     return output;
 }
 
-folly::Future<VariantKey> write_symbols(
+VariantKey write_symbols(
         const std::shared_ptr<Store>& store,
         const CollectionType& symbols,
         const StreamId& stream_id,
-        timestamp creation_ts,
         const StreamId& type_holder)  {
     ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Writing {} symbols to symbol list cache", symbols.size());
 
@@ -684,10 +701,10 @@ folly::Future<VariantKey> write_symbols(
         segment = write_entries_to_symbol_segment(stream_id, type_holder, symbols);
     }
 
-    return store->write(KeyType::SYMBOL_LIST, 0, stream_id, creation_ts, NumericIndex{ 0 }, NumericIndex{ 0 }, std::move(segment));
+    return store->write_sync(KeyType::SYMBOL_LIST, 0, stream_id, NumericIndex{ 0 }, NumericIndex{ 0 }, std::move(segment));
 }
 
-folly::Future<std::vector<Store::RemoveKeyResultType>> delete_keys(
+std::vector<Store::RemoveKeyResultType> delete_keys(
         const std::shared_ptr<Store>& store,
         std::vector<AtomKey>&& remove,
         const AtomKey& exclude) {
@@ -701,7 +718,7 @@ folly::Future<std::vector<Store::RemoveKeyResultType>> delete_keys(
             variant_keys.emplace_back(atom_key);
     }
 
-    return store->remove_keys(variant_keys);
+    return store->remove_keys_sync(variant_keys);
 }
 
 bool has_recent_compaction(
@@ -748,9 +765,8 @@ std::set<StreamId> SymbolList::load(
                     auto written = write_symbols(store,
                                                  load_result.symbols_,
                                                  compaction_id,
-                                                 load_result.timestamp_,
-                                                 data_.type_holder_).get();
-                    delete_keys(store, load_result.detach_symbol_list_keys(), std::get<AtomKey>(written)).get();
+                                                 data_.type_holder_);
+                    delete_keys(store, load_result.detach_symbol_list_keys(), std::get<AtomKey>(written));
                 }
             } else {
                 ARCTICDB_RUNTIME_DEBUG(log::symbol(),"Not compacting the symbol list due to lock contention");

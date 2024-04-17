@@ -12,7 +12,7 @@ from math import inf
 import numpy as np
 import pandas as pd
 
-from typing import Dict, NamedTuple
+from typing import Dict, NamedTuple, Tuple, Union
 
 from arcticdb.exceptions import ArcticNativeException, UserInputException
 from arcticdb.version_store._normalization import normalize_dt_range_to_ts
@@ -242,6 +242,18 @@ def is_supported_sequence(obj):
     return isinstance(obj, (list, set, frozenset, tuple, np.ndarray))
 
 
+def nanoseconds_from_utc(time):
+    # We convert every time type to a pandas Timestamp because it:
+    # - is consistent with how we normalize time types when normalizing
+    # - has nanosecond precision
+    # - if tzinfo is set will give nanoseconds since UTC
+    return int(pd.Timestamp(time).value)
+
+
+def nanoseconds_timedelta(timedelta):
+    return int(pd.Timedelta(timedelta).value)
+
+
 def value_list_from_args(*args):
     if len(args) == 1 and is_supported_sequence(args[0]):
         collection = args[0]
@@ -255,7 +267,7 @@ def value_list_from_args(*args):
             if value not in value_set:
                 value_set.add(value)
                 if isinstance(value, supported_time_types):
-                    value = int(value.timestamp() * 1_000_000_000)
+                    value = nanoseconds_from_utc(value)
                 elem = np.array([value]) if isinstance(value, (int, np.integer)) else np.full(1, value, dtype=None)
                 array_list.append(elem)
                 contains_integer = contains_integer or isinstance(value, (int, np.integer))
@@ -451,9 +463,9 @@ class QueryBuilder:
         >>> q = q.groupby("grouping_column").agg({"to_mean": "mean"})
         >>> lib.write("symbol", df)
         >>> lib.read("symbol", query_builder=q).data
-                     to_mean
+                      to_mean
             group_1  1.666667
-            group_2       NaN
+            group_2       2.2
 
         Max over one group:
 
@@ -485,8 +497,26 @@ class QueryBuilder:
         >>> q = q.groupby("grouping_column").agg({"to_max": "max", "to_mean": "mean"})
         >>> lib.write("symbol", df)
         >>> lib.read("symbol", query_builder=q).data
-                        to_max   to_mean
+                     to_max   to_mean
             group_1     2.5  1.666667
+
+        Min and max over one column, mean over another:
+        >>> df = pd.DataFrame(
+            {
+                "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"],
+                "agg_1": [1, 2, 3, 4, 5],
+                "agg_2": [1.1, 1.4, 2.5, np.nan, 2.2],
+            },
+            index=np.arange(5),
+        )
+        >>> q = adb.QueryBuilder()
+        >>> q = q.groupby("grouping_column")
+        >>> q = q.agg({"agg_1_min": ("agg_1", "min"), "agg_1_max": ("agg_1", "max"), "agg_2": "mean"})
+        >>> lib.write("symbol", df)
+        >>> lib.read("symbol", query_builder=q).data
+                     agg_1_min  agg_1_max     agg_2
+            group_1          1          3  1.666667
+            group_2          4          5       2.2
 
         Returns
         -------
@@ -497,14 +527,23 @@ class QueryBuilder:
         self._python_clauses.append(PythonGroupByClause(name))
         return self
 
-    def agg(self, aggregations: Dict[str, str]):
+    def agg(self, aggregations: Dict[str, Union[str, Tuple[str, str]]]):
         # Only makes sense if previous stage is a group-by
         check(
             len(self.clauses) and isinstance(self.clauses[-1], _GroupByClause),
             f"Aggregation only makes sense after groupby",
         )
-        for v in aggregations.values():
-            v = v.lower()
+        for k, v in aggregations.items():
+            check(isinstance(v, (str, tuple)), f"Values in agg dict expected to be strings or tuples, received {v} of type {type(v)}")
+            if isinstance(v, str):
+                aggregations[k] = v.lower()
+            elif isinstance(v, tuple):
+                check(
+                    len(v) == 2 and (isinstance(v[0], str) and isinstance(v[1], str)),
+                    f"Tuple values in agg dict expected to have 2 string elements, received {v}"
+                )
+                aggregations[k] = (v[0], v[1].lower())
+
         self.clauses.append(_AggregationClause(self.clauses[-1].grouping_column, aggregations))
         self._python_clauses.append(PythonAggregationClause(aggregations))
         return self
@@ -681,15 +720,11 @@ def create_value(value):
     elif isinstance(value, np.integer):
         min_scalar_type = np.min_scalar_type(value)
         f = CONSTRUCTOR_MAP.get(min_scalar_type.kind).get(min_scalar_type.itemsize)
-    elif isinstance(value, (pd.Timestamp, pd.Timedelta)):
-        # pd.Timestamp is in supported_time_types, but its timestamp() method can't provide ns precision
-        value = value.value
-        f = ValueInt64
     elif isinstance(value, supported_time_types):
-        value = int(value.timestamp() * 1_000_000_000)
+        value = nanoseconds_from_utc(value)
         f = ValueInt64
-    elif isinstance(value, datetime.timedelta):
-        value = int(value.total_seconds() * 1_000_000_000)
+    elif isinstance(value, (datetime.timedelta, pd.Timedelta)):
+        value = nanoseconds_timedelta(value)
         f = ValueInt64
     elif isinstance(value, bool):
         f = ValueBool

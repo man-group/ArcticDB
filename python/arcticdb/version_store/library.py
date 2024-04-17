@@ -10,10 +10,11 @@ import datetime
 
 import pytz
 from enum import Enum, auto
-from typing import Optional, Any, Tuple, Dict, AnyStr, Union, List, Iterable, NamedTuple
+from typing import Optional, Any, Tuple, Dict, Union, List, Iterable, NamedTuple
 from numpy import datetime64
 
-from arcticdb.options import LibraryOptions
+from arcticdb.options import \
+    LibraryOptions, EnterpriseLibraryOptions, ModifiableLibraryOption, ModifiableEnterpriseLibraryOption
 from arcticdb.supported_types import Timestamp
 from arcticdb.util._versions import IS_PANDAS_TWO
 
@@ -335,6 +336,7 @@ class Library:
         return self.has_symbol(symbol)
 
     def options(self) -> LibraryOptions:
+        """Library options set on this library. See also `enterprise_options`."""
         write_options = self._nvs.lib_cfg().lib_desc.version.write_options
         return LibraryOptions(
             dynamic_schema=write_options.dynamic_schema,
@@ -342,6 +344,14 @@ class Library:
             rows_per_segment=write_options.segment_row_size,
             columns_per_segment=write_options.column_group_size,
             encoding_version=self._nvs.lib_cfg().lib_desc.version.encoding_version,
+        )
+
+    def enterprise_options(self) -> EnterpriseLibraryOptions:
+        """Enterprise library options set on this library. See also `options` for non-enterprise options."""
+        write_options = self._nvs.lib_cfg().lib_desc.version.write_options
+        return EnterpriseLibraryOptions(
+            replication=write_options.sync_passive.enabled,
+            background_deletion=write_options.delayed_deletes
         )
 
     def write(
@@ -450,6 +460,8 @@ class Library:
             pickle_on_failure=False,
             parallel=staged,
             validate_index=validate_index,
+            norm_failure_options_msg="Using write_pickle will allow the object to be written. However, many operations "
+                                     "(such as date_range filtering and column selection) will not work on pickled data.",
         )
 
     def write_pickle(
@@ -596,6 +608,9 @@ class Library:
             pickle_on_failure=False,
             validate_index=validate_index,
             throw_on_error=throw_on_error,
+            norm_failure_options_msg="Using write_pickle_batch will allow the object to be written. However, many "
+                                     "operations (such as date_range filtering and column selection) will not work on "
+                                     "pickled data.",
         )
 
     def write_pickle_batch(
@@ -808,6 +823,11 @@ class Library:
             modified, even if ``data`` covers a wider date range.
         prune_previous_versions
             Removes previous (non-snapshotted) versions from the database when True.
+
+        Returns
+        -------
+        VersionedItem
+            Structure containing metadata and version number of the written symbol in the store.
 
         Examples
         --------

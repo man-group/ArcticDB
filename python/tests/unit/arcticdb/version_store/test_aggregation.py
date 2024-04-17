@@ -36,6 +36,29 @@ def test_group_on_float_column_with_nans(lmdb_version_store):
     assert_frame_equal(expected, received)
 
 
+# TODO: Add first and last once un-feature flagged
+@pytest.mark.parametrize("aggregator", ("sum", "min", "max", "mean", "count"))
+def test_aggregate_float_columns_with_nans(lmdb_version_store, aggregator):
+    lib = lmdb_version_store
+    sym = "test_aggregate_float_columns_with_nans"
+    df = pd.DataFrame(
+        {
+            "grouping_column": 3 * ["some nans", "only nans"],
+            "agg_column": [1.0, np.nan, 2.0, np.nan, np.nan, np.nan],
+        }
+    )
+    lib.write(sym, df)
+    expected = df.groupby("grouping_column").agg({"agg_column": aggregator})
+    # We count in unsigned integers for obvious reasons
+    if aggregator == "count":
+        expected = expected.astype(np.uint64)
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"agg_column": aggregator})
+    received = lib.read(sym, query_builder=q).data
+    received.sort_index(inplace=True)
+    assert_frame_equal(expected, received)
+
+
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
@@ -428,26 +451,35 @@ def test_mean_aggregation_float(local_object_version_store):
     assert_frame_equal(res.data, df)
 
 
-def test_mean_aggregation_float_nan(lmdb_version_store):
+def test_named_agg(lmdb_version_store_tiny_segment):
+    lib = lmdb_version_store_tiny_segment
+    sym = "test_named_agg"
+    gen = np.random.default_rng()
     df = DataFrame(
         {
-            "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"],
-            "to_mean": [1.1, 1.4, 2.5, np.nan, 2.2],
-        },
-        index=np.arange(5),
+            "grouping_column": [1, 1, 1, 2, 3, 4],
+            "agg_column": gen.random(6)
+        }
     )
+    lib.write(sym, df)
+    expected = df.groupby("grouping_column").agg(
+        agg_column_sum=pd.NamedAgg("agg_column", "sum"),
+        agg_column_mean=pd.NamedAgg("agg_column", "mean"),
+        agg_column=pd.NamedAgg("agg_column", "min"),
+    )
+    expected = expected.reindex(columns=sorted(expected.columns))
     q = QueryBuilder()
-    q = q.groupby("grouping_column").agg({"to_mean": "mean"})
-    symbol = "test_aggregation"
-    lmdb_version_store.write(symbol, df)
-
-    res = lmdb_version_store.read(symbol, query_builder=q)
-
-    df = pd.DataFrame({"to_mean": [(1.1 + 1.4 + 2.5) / 3, np.nan]}, index=["group_1", "group_2"])
-    df.index.rename("grouping_column", inplace=True)
-    res.data.sort_index(inplace=True)
-
-    assert_frame_equal(res.data, df)
+    q = q.groupby("grouping_column").agg(
+        {
+            "agg_column_sum": ("agg_column", "sum"),
+            "agg_column_mean": ("agg_column", "MEAN"),
+            "agg_column": "MIN",
+        }
+    )
+    received = lib.read(sym, query_builder=q).data
+    received.sort_index(inplace=True)
+    received = received.reindex(columns=sorted(received.columns))
+    assert_frame_equal(expected, received)
 
 
 def test_max_minus_one(lmdb_version_store):

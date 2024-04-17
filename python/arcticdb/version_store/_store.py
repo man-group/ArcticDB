@@ -204,6 +204,11 @@ class NativeVersionStore:
     """
 
     _warned_about_list_version_latest_only_and_snapshot: bool = False
+    norm_failure_options_msg_write = \
+        "Setting the pickle_on_failure parameter to True will allow the object to be written. However, many " \
+        "operations (such as date_range filtering and column selection) will not work on pickled data."
+    norm_failure_options_msg_append = "Data must be normalizable to be appended to existing data."
+    norm_failure_options_msg_update = "Data must be normalizable to be used to update existing data."
 
     def __init__(self, library, env, lib_cfg=None, open_mode=OpenMode.DELETE):
         # type: (_Library, Optional[str], Optional[LibraryConfig], OpenMode)->None
@@ -313,7 +318,17 @@ class NativeVersionStore:
             log.error("Could not get primary backing store for lib due to: {}".format(e))
         return backing_store
 
-    def _try_normalize(self, symbol, dataframe, metadata, pickle_on_failure, dynamic_strings, coerce_columns, **kwargs):
+    def _try_normalize(
+            self,
+            symbol,
+            dataframe,
+            metadata,
+            pickle_on_failure,
+            dynamic_strings,
+            coerce_columns,
+            norm_failure_options_msg="",
+            **kwargs
+    ):
         dynamic_schema = self.resolve_defaults(
             "dynamic_schema", self._lib_cfg.lib_desc.version.write_options, False, **kwargs
         )
@@ -335,8 +350,17 @@ class NativeVersionStore:
                     **kwargs,
                 )
         except ArcticDbNotYetImplemented as ex:
-            log.error("Not supported: normalizing symbol={}, data={}, metadata={}, {}", symbol, dataframe, metadata, ex)
-            raise
+            raise ArcticDbNotYetImplemented(
+                f"Not supported: normalizing\n"
+                f"symbol: {symbol}\n"
+                f"data:\n"
+                f"{dataframe}\n"
+                f"metadata:\n"
+                f"{metadata}\n"
+                f"Reason:\n"
+                f"{ex}\n"
+                f"{norm_failure_options_msg}"
+            )
         except Exception as ex:
             log.error("Error while normalizing symbol={}, data={}, metadata={}, {}", symbol, dataframe, metadata, ex)
             raise ArcticNativeException(str(ex))
@@ -523,6 +547,7 @@ class NativeVersionStore:
 
         coerce_columns = kwargs.get("coerce_columns", None)
         sparsify_floats = kwargs.get("sparsify_floats", False)
+        norm_failure_options_msg = kwargs.get("norm_failure_options_msg", self.norm_failure_options_msg_write)
 
         _handle_categorical_columns(symbol, data, False)
 
@@ -542,7 +567,13 @@ class NativeVersionStore:
                 return vit
 
         udm, item, norm_meta = self._try_normalize(
-            symbol, data, metadata, pickle_on_failure, dynamic_strings, coerce_columns
+            symbol,
+            data,
+            metadata,
+            pickle_on_failure,
+            dynamic_strings,
+            coerce_columns,
+            norm_failure_options_msg,
         )
         # TODO: allow_sparse for write_parallel / recursive normalizers as well.
         if isinstance(item, NPDDataFrame):
@@ -557,15 +588,7 @@ class NativeVersionStore:
                     symbol, item, norm_meta, udm, prune_previous_version, sparsify_floats, validate_index
                 )
 
-            return VersionedItem(
-                symbol=vit.symbol,
-                library=self._library.library_path,
-                version=vit.version,
-                metadata=metadata,
-                data=None,
-                host=self.env,
-                timestamp=vit.timestamp
-            )
+            return self._convert_thin_cxx_item_to_python(vit, metadata)
 
     def _resolve_dynamic_strings(self, kwargs):
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
@@ -665,7 +688,15 @@ class NativeVersionStore:
 
         _handle_categorical_columns(symbol, dataframe)
 
-        udm, item, norm_meta = self._try_normalize(symbol, dataframe, metadata, False, dynamic_strings, coerce_columns)
+        udm, item, norm_meta = self._try_normalize(
+            symbol,
+            dataframe,
+            metadata,
+            False,
+            dynamic_strings,
+            coerce_columns,
+            self.norm_failure_options_msg_append,
+        )
 
         write_if_missing = kwargs.get("write_if_missing", True)
 
@@ -677,15 +708,7 @@ class NativeVersionStore:
                     vit = self.version_store.append(
                         symbol, item, norm_meta, udm, write_if_missing, prune_previous_version, validate_index
                     )
-                    return VersionedItem(
-                        symbol=vit.symbol,
-                        library=self._library.library_path,
-                        version=vit.version,
-                        metadata=metadata,
-                        data=None,
-                        host=self.env,
-                        timestamp=vit.timestamp
-                    )
+                    return self._convert_thin_cxx_item_to_python(vit, metadata)
 
     def update(
         self,
@@ -769,22 +792,22 @@ class NativeVersionStore:
 
         _handle_categorical_columns(symbol, data)
 
-        udm, item, norm_meta = self._try_normalize(symbol, data, metadata, False, dynamic_strings, coerce_columns)
+        udm, item, norm_meta = self._try_normalize(
+            symbol,
+            data,
+            metadata,
+            False,
+            dynamic_strings,
+            coerce_columns,
+            self.norm_failure_options_msg_update,
+        )
 
         if isinstance(item, NPDDataFrame):
             with _diff_long_stream_descriptor_mismatch(self):
                 vit = self.version_store.update(
                     symbol, update_query, item, norm_meta, udm, upsert, dynamic_schema, prune_previous_version
                 )
-            return VersionedItem(
-                symbol=vit.symbol,
-                library=self._library.library_path,
-                version=vit.version,
-                metadata=metadata,
-                data=None,
-                host=self.env,
-                timestamp=vit.timestamp
-            )
+            return self._convert_thin_cxx_item_to_python(vit, metadata)
 
     def create_column_stats(
         self, symbol: str, column_stats: Dict[str, Set[str]], as_of: Optional[VersionQueryInput] = None
@@ -1110,16 +1133,16 @@ class NativeVersionStore:
 
         return results_dict
 
-    def _convert_thin_cxx_item_to_python(self, v) -> VersionedItem:
+    def _convert_thin_cxx_item_to_python(self, cxx_versioned_item, metadata) -> VersionedItem:
         """Convert a cxx versioned item that does not contain data or metadata to a Python equivalent."""
         return VersionedItem(
-            symbol=v.symbol,
+            symbol=cxx_versioned_item.symbol,
             library=self._library.library_path,
             data=None,
-            version=v.version,
-            metadata=None,
+            version=cxx_versioned_item.version,
+            metadata=metadata,
             host=self.env,
-            timestamp=v.timestamp
+            timestamp=cxx_versioned_item.timestamp
         )
 
     def batch_write(
@@ -1212,10 +1235,13 @@ class NativeVersionStore:
         pickle_on_failure = self.resolve_defaults(
             "pickle_on_failure", proto_cfg, global_default=False, existing_value=pickle_on_failure, **kwargs
         )
+        norm_failure_options_msg = kwargs.get("norm_failure_options_msg", self.norm_failure_options_msg_write)
+
+        # metadata_vector used to be type-hinted as an Iterable, so handle this case in case anyone is relying on it
         if metadata_vector is None:
-            metadata_itr = itertools.repeat(None)
+            metadata_vector = len(symbols) * [None]
         else:
-            metadata_itr = iter(metadata_vector)
+            metadata_vector = list(metadata_vector)
 
         for idx in range(len(symbols)):
             _handle_categorical_columns(symbols[idx], data_vector[idx], False)
@@ -1224,10 +1250,11 @@ class NativeVersionStore:
             self._try_normalize(
                 symbols[idx],
                 data_vector[idx],
-                next(metadata_itr),
-                pickle_on_failure=pickle_on_failure,
-                dynamic_strings=dynamic_strings,
-                coerce_columns=None,
+                metadata_vector[idx],
+                pickle_on_failure,
+                dynamic_strings,
+                None,
+                norm_failure_options_msg,
             )
             for idx in range(len(symbols))
         ]
@@ -1238,11 +1265,11 @@ class NativeVersionStore:
             symbols, items, norm_metas, udms, prune_previous_version, validate_index, throw_on_error
         )
         write_results = []
-        for result in cxx_versioned_items:
+        for idx, result in enumerate(cxx_versioned_items):
             if isinstance(result, DataError):
                 write_results.append(result)
             else:
-                write_results.append(self._convert_thin_cxx_item_to_python(result))
+                write_results.append(self._convert_thin_cxx_item_to_python(result, metadata_vector[idx]))
         return write_results
 
     def _batch_write_metadata_to_versioned_items(
@@ -1257,11 +1284,11 @@ class NativeVersionStore:
             symbols, normalized_meta, prune_previous_version, throw_on_error
         )
         write_metadata_results = []
-        for result in cxx_versioned_items:
+        for idx, result in enumerate(cxx_versioned_items):
             if isinstance(result, DataError):
                 write_metadata_results.append(result)
             else:
-                write_metadata_results.append(self._convert_thin_cxx_item_to_python(result))
+                write_metadata_results.append(self._convert_thin_cxx_item_to_python(result, metadata_vector[idx]))
         return write_metadata_results
 
     def batch_write_metadata(
@@ -1371,10 +1398,11 @@ class NativeVersionStore:
         )
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
 
+        # metadata_vector used to be type-hinted as an Iterable, so handle this case in case anyone is relying on it
         if metadata_vector is None:
-            metadata_itr = itertools.repeat(None)
+            metadata_vector = len(symbols) * [None]
         else:
-            metadata_itr = iter(metadata_vector)
+            metadata_vector = list(metadata_vector)
 
         for idx in range(len(symbols)):
             _handle_categorical_columns(symbols[idx], data_vector[idx])
@@ -1383,10 +1411,11 @@ class NativeVersionStore:
             self._try_normalize(
                 symbols[idx],
                 data_vector[idx],
-                next(metadata_itr),
-                dynamic_strings=dynamic_strings,
-                pickle_on_failure=False,
-                coerce_columns=None,
+                metadata_vector[idx],
+                False,
+                dynamic_strings,
+                None,
+                self.norm_failure_options_msg_append,
             )
             for idx in range(len(symbols))
         ]
@@ -1407,11 +1436,11 @@ class NativeVersionStore:
             throw_on_error,
         )
         append_results = []
-        for result in cxx_versioned_items:
+        for idx, result in enumerate(cxx_versioned_items):
             if isinstance(result, DataError):
                 append_results.append(result)
             else:
-                append_results.append(self._convert_thin_cxx_item_to_python(result))
+                append_results.append(self._convert_thin_cxx_item_to_python(result, metadata_vector[idx]))
         return append_results
 
     def batch_restore_version(
@@ -2686,7 +2715,7 @@ class NativeVersionStore:
         )
         udm = normalize_metadata(metadata) if metadata is not None else None
         v = self.version_store.write_metadata(symbol, udm, prune_previous_version)
-        return self._convert_thin_cxx_item_to_python(v)
+        return self._convert_thin_cxx_item_to_python(v, metadata)
 
     def is_symbol_fragmented(self, symbol: str, segment_size: Optional[int] = None) -> bool:
         """

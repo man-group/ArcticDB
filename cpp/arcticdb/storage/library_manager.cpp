@@ -129,8 +129,10 @@ void LibraryManager::remove_library_config(const LibraryPath& path) const {
     store_->remove_key(RefKey{StreamId(path.to_delim_path()), entity::KeyType::LIBRARY_CONFIG}).wait();
 }
 
-std::shared_ptr<Library> LibraryManager::get_library(const LibraryPath& path, const StorageOverride& storage_override) {
-    {
+std::shared_ptr<Library> LibraryManager::get_library(const LibraryPath& path,
+                                                     const StorageOverride& storage_override,
+                                                     const bool ignore_cache) {
+    if (!ignore_cache) {
         // Check global cache first, important for LMDB and RocksDB to only open once from a given process
         std::lock_guard<std::mutex> lock{open_libraries_mutex_};
         if (auto cached = open_libraries_.find(path); cached != open_libraries_.end()) {
@@ -156,9 +158,12 @@ std::shared_ptr<Library> LibraryManager::get_library(const LibraryPath& path, co
     return lib;
 }
 
-void LibraryManager::close_library_if_open(const LibraryPath &path) {
+void LibraryManager::cleanup_library_if_open(const LibraryPath &path) {
     std::lock_guard<std::mutex> lock{open_libraries_mutex_};
-    open_libraries_.erase(path);
+    if (auto it = open_libraries_.find(path); it != open_libraries_.end()) {
+        it->second->cleanup();
+        open_libraries_.erase(it);
+    }
 }
 
 std::vector<LibraryPath> LibraryManager::get_library_paths() const {

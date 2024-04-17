@@ -12,13 +12,17 @@ import json
 import os
 import re
 import sys
-import time
+import trustme
+import subprocess
+import platform
+from tempfile import mkdtemp
+
 
 import requests
 from typing import NamedTuple, Optional, Any, Type
 
 from .api import *
-from .utils import get_ephemeral_port, GracefulProcessUtils, wait_for_server_to_come_up
+from .utils import get_ephemeral_port, GracefulProcessUtils, wait_for_server_to_come_up, safer_rmtree
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 from arcticdb.version_store.helper import add_s3_library_to_env
 
@@ -57,6 +61,12 @@ class S3Bucket(StorageFixture):
             self.arctic_uri += f"&port={port}"
         if factory.default_prefix:
             self.arctic_uri += f"&path_prefix={factory.default_prefix}"
+        if factory.ssl:
+            self.arctic_uri += "&ssl=True"
+        if platform.system() == "Linux":
+            if factory.client_cert_file:
+                self.arctic_uri += f"&CA_cert_path={self.factory.client_cert_file}"
+            # client_cert_dir is skipped on purpose; It will be test manually in other tests
 
     def __exit__(self, exc_type, exc_value, traceback):
         if self.factory.clean_bucket_on_fixture_exit:
@@ -81,7 +91,9 @@ class S3Bucket(StorageFixture):
             is_https=self.factory.endpoint.startswith("s3s:"),
             region=self.factory.region,
             use_mock_storage_for_testing=self.factory.use_mock_storage_for_testing,
-        )
+            ssl=self.factory.ssl,
+            ca_cert_path=self.factory.client_cert_file,
+        )# client_cert_dir is skipped on purpose; It will be test manually in other tests
         return cfg
 
     def set_permission(self, *, read: bool, write: bool):
@@ -124,6 +136,11 @@ class BaseS3StorageFixtureFactory(StorageFixtureFactory):
     clean_bucket_on_fixture_exit = True
     use_mock_storage_for_testing = None  # If set to true allows error simulation
 
+    def __init__(self):
+        self.client_cert_file = ""
+        self.client_cert_dir = ""
+        self.ssl = False
+        
     def __str__(self):
         return f"{type(self).__name__}[{self.default_bucket or self.endpoint}]"
 
@@ -137,7 +154,8 @@ class BaseS3StorageFixtureFactory(StorageFixtureFactory):
             region_name=self.region,
             aws_access_key_id=key.id,
             aws_secret_access_key=key.secret,
-        )
+            verify=self.client_cert_file if self.client_cert_file else False,
+        ) # verify=False cannot skip verification on buggy boto3 in py3.6
 
     def create_fixture(self) -> S3Bucket:
         return S3Bucket(self, self.default_bucket)
@@ -194,20 +212,31 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
     _bucket_id = 0
     _live_buckets: List[S3Bucket] = []
 
+    def __init__(self, use_ssl: bool):
+        self.http_protocol = "https" if use_ssl else "http"
+
+
     @staticmethod
-    def run_server(port):
+    def run_server(port, key_file, cert_file):
         import werkzeug
         from moto.server import DomainDispatcherApplication, create_backend_app
 
         class _HostDispatcherApplication(DomainDispatcherApplication):
-            """The stand-alone server needs a way to distinguish between S3 and IAM. We use the host for that"""
-
-            _MAP = {"s3.us-east-1.amazonaws.com": "s3", "localhost": "s3", "127.0.0.1": "iam"}
 
             _reqs_till_rate_limit = -1
 
             def get_backend_for_host(self, host):
-                return self._MAP.get(host, host)
+                """The stand-alone server needs a way to distinguish between S3 and IAM. We use the host for that"""
+                if host is None:
+                    return None
+                if "s3" in host or host == "localhost":
+                    return "s3"
+                elif host == "127.0.0.1":
+                    return "iam"
+                elif host == "moto_api":
+                    return "moto_api"
+                else:
+                    raise RuntimeError(f"Unknown host {host}")
 
             def __call__(self, environ, start_response):
                 path_info: bytes = environ.get("PATH_INFO", "")
@@ -237,26 +266,55 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
                         self._reqs_till_rate_limit -= 1
 
                 return super().__call__(environ, start_response)
-
         werkzeug.run_simple(
             "0.0.0.0",
             port,
             _HostDispatcherApplication(create_backend_app),
             threaded=True,
-            ssl_context=None,
+            ssl_context=(cert_file, key_file) if cert_file and key_file else None,
         )
 
     def _start_server(self):
         port = self.port = get_ephemeral_port(2)
-        self.endpoint = f"http://{self.host}:{port}"
-        self._iam_endpoint = f"http://127.0.0.1:{port}"
+        self.endpoint = f"{self.http_protocol}://{self.host}:{port}"
+        self.working_dir = mkdtemp(suffix="MotoS3StorageFixtureFactory")
+        self._iam_endpoint = f"{self.http_protocol}://localhost:{port}"
 
-        p = self._p = multiprocessing.Process(target=self.run_server, args=(port,))
-        p.start()
-        wait_for_server_to_come_up(self.endpoint, "moto", p)
+        self.ssl = self.http_protocol == "https" # In real world, using https protocol doesn't necessarily mean ssl will be verified
+        if self.http_protocol == "https":
+            self.key_file = os.path.join(self.working_dir, "key.pem")
+            self.cert_file = os.path.join(self.working_dir, "cert.pem")
+            self.client_cert_file = os.path.join(self.working_dir, "client.pem")
+            ca = trustme.CA()
+            server_cert = ca.issue_cert("localhost")
+            server_cert.private_key_pem.write_to_path(self.key_file)
+            server_cert.cert_chain_pems[0].write_to_path(self.cert_file)
+            ca.cert_pem.write_to_path(self.client_cert_file)
+            self.client_cert_dir = self.working_dir
+            # Create the sym link for curl CURLOPT_CAPATH option; rehash only available on openssl >=1.1.1
+            subprocess.run(
+                f'ln -s "{self.client_cert_file}" "$(openssl x509 -hash -noout -in "{self.client_cert_file}")".0',
+                cwd=self.working_dir,
+                shell=True,
+            )
+        else:
+            self.key_file = ""
+            self.cert_file = ""
+            self.client_cert_file = ""
+            self.client_cert_dir = ""
+        
+        self._p = multiprocessing.Process(
+            target=self.run_server, 
+            args=(port, 
+                  self.key_file if self.http_protocol == "https" else None, 
+                  self.cert_file if self.http_protocol == "https" else None,
+            )
+        )
+        self._p.start()
+        wait_for_server_to_come_up(self.endpoint, "moto", self._p)
 
     def _safe_enter(self):
-        for attempt in range(3):  # For unknown reason, Moto, when running in pytest-xdist, will randomly fail to start
+        for _ in range(3):  # For unknown reason, Moto, when running in pytest-xdist, will randomly fail to start
             try:
                 self._start_server()
                 break
@@ -264,11 +322,12 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
                 sys.stderr.write(repr(e))
                 GracefulProcessUtils.terminate(self._p)
 
-        self._s3_admin = self._boto("s3", self.default_key)
+        self._s3_admin = self._boto(service="s3", key=self.default_key)
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         GracefulProcessUtils.terminate(self._p)
+        safer_rmtree(self, self.working_dir)
 
     def _create_user_get_key(self, user: str, iam=None):
         iam = iam or self._iam_admin
@@ -286,7 +345,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         if enforcing == self._enforcing_permissions:
             return
         if enforcing and not self._iam_admin:
-            iam = self._boto("iam", self.default_key)
+            iam = self._boto(service="iam", key=self.default_key)
 
             def _policy(*statements):
                 return json.dumps({"Version": "2012-10-17", "Statement": statements})
@@ -302,8 +361,8 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
 
             key = self._create_user_get_key("admin", iam)
             iam.attach_user_policy(UserName="admin", PolicyArn=policy_arn)
-            self._iam_admin = self._boto("iam", key)
-            self._s3_admin = self._boto("s3", key)
+            self._iam_admin = self._boto(service="iam", key=key)
+            self._s3_admin = self._boto(service="s3", key=key)
 
         # The number is the remaining requests before permission checks kick in
         requests.post(self._iam_endpoint + "/moto-api/reset-auth", "0" if enforcing else "inf")
@@ -324,7 +383,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
             b.slow_cleanup(failure_consequence="The following delete bucket call will also fail. ")
             self._s3_admin.delete_bucket(Bucket=b.bucket)
         else:
-            requests.post(self._iam_endpoint + "/moto-api/reset")
+            requests.post(self._iam_endpoint + "/moto-api/reset", verify=False) # If CA cert verify fails, it will take ages for this line to finish
             self._iam_admin = None
 
 

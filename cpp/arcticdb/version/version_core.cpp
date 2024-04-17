@@ -821,16 +821,26 @@ void read_incompletes_to_pipeline(
     pipeline_context->total_rows_ = pipeline_context->calc_rows();
 }
 
-void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<PipelineContext>& pipeline_context) {
-    // Does nothing if the symbol is not timestamp-indexed
-    // Checks both that the index ranges of incomplete segments do not overlap with one another, and that the earliest
-    // timestamp in an incomplete segment is greater than the latest timestamp existing in the symbol in the case of a
-    // parallel append
+void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<PipelineContext>& pipeline_context,
+                                                 const std::optional<SortedValue>& previous_sorted_value) {
+    /*
+     Does nothing if the symbol is not timestamp-indexed
+     Checks:
+      - that the existing data is not known to be unsorted in the case of a parallel append
+      - that the index ranges of incomplete segments do not overlap with one another
+      - that the earliest timestamp in an incomplete segment is greater than the latest timestamp existing in the
+        symbol in the case of a parallel append
+     */
     if (pipeline_context->descriptor().index().type() == IndexDescriptor::TIMESTAMP) {
         std::optional<timestamp> last_existing_index_value;
         // Beginning of incomplete segments == beginning of all segments implies all segments are incompletes, so we are
         // writing, not appending
         if (pipeline_context->incompletes_begin() != pipeline_context->begin()) {
+            sorting::check<ErrorCode::E_UNSORTED_DATA>(
+                    !previous_sorted_value.has_value() ||
+                    *previous_sorted_value == SortedValue::ASCENDING ||
+                    *previous_sorted_value == SortedValue::UNKNOWN,
+                    "Cannot append staged segments to existing data as existing data is not sorted in ascending order");
             auto last_indexed_slice_and_key = std::prev(pipeline_context->incompletes_begin())->slice_and_key();
             // -1 as end_time is stored as 1 greater than the last index value in the segment
             last_existing_index_value = last_indexed_slice_and_key.key().end_time() - 1;
@@ -1324,7 +1334,7 @@ VersionedItem compact_incomplete_impl(
     if (pipeline_context->slice_and_keys_.size() == prev_size) {
         util::raise_rte("No incomplete segments found for {}", stream_id);
     }
-    check_incompletes_index_ranges_dont_overlap(pipeline_context);
+    check_incompletes_index_ranges_dont_overlap(pipeline_context, previous_sorted_value);
     const auto& first_seg = pipeline_context->slice_and_keys_.begin()->segment(store);
 
     std::vector<entity::VariantKey> delete_keys;
@@ -1342,7 +1352,7 @@ VersionedItem compact_incomplete_impl(
                                     sparsify ? VariantColumnPolicy{SparseColumnPolicy{}} : VariantColumnPolicy{DenseColumnPolicy{}}
                                     );
     util::variant_match(std::move(policies), [
-        &fut_vec, &slices, pipeline_context=pipeline_context, &store, convert_int_to_float, &previous_sorted_value] (auto &&idx, auto &&schema, auto &&column_policy) {
+        &fut_vec, &slices, pipeline_context=pipeline_context, &store, convert_int_to_float, &previous_sorted_value, &write_options] (auto &&idx, auto &&schema, auto &&column_policy) {
         using IndexType = std::remove_reference_t<decltype(idx)>;
         using SchemaType = std::remove_reference_t<decltype(schema)>;
         using ColumnPolicyType = std::remove_reference_t<decltype(column_policy)>;
@@ -1354,7 +1364,7 @@ VersionedItem compact_incomplete_impl(
                 slices,
                 store,
                 convert_int_to_float,
-                std::nullopt);
+                write_options.segment_row_size);
         if constexpr(std::is_same_v<IndexType, TimeseriesIndex>) {
             pipeline_context->desc_->set_sorted(deduce_sorted(previous_sorted_value.value_or(SortedValue::ASCENDING), SortedValue::ASCENDING));
         }
