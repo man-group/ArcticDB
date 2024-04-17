@@ -63,8 +63,8 @@ void LmdbStorage::do_write_internal(Composite<KeySegmentPair>&& kvs, ::lmdb::txn
             int64_t overwrite_flag = std::holds_alternative<RefKey>(kv.variant_key()) ? 0 : MDB_NOOVERWRITE;
             try {
                 lmdb_client_->write(db_name, k, std::move(seg), txn, dbi, overwrite_flag);
-            } catch (const ::lmdb::key_exist_error&) {
-                throw DuplicateKeyException(kv.variant_key());
+            } catch (const ::lmdb::key_exist_error& e) {
+                throw DuplicateKeyException(fmt::format("Key already exists: {}: {}", kv.variant_key(), e.what()));
             } catch (const ::lmdb::error& ex) {
                 raise_lmdb_exception(ex);
             }

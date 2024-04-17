@@ -8,6 +8,8 @@ As of the Change Date specified in that file, in accordance with the Business So
 import numpy as np
 import pandas as pd
 import pytest
+import datetime
+import dateutil
 
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.util.test import assert_frame_equal
@@ -58,6 +60,39 @@ def test_querybuilder_date_range_then_filter(lmdb_version_store_tiny_segment, us
         received = lib.read(symbol, date_range=date_range, query_builder=q).data
     expected = df.query("col1 in [3, 6]")
     assert_frame_equal(expected, received)
+
+
+def test_querybuilder_filter_datetime_with_timezone(lmdb_version_store_tiny_segment):
+    lib = lmdb_version_store_tiny_segment
+    symbol = "symbol"
+    def can_read_back(write_with_time, filter_with_time):
+        df = pd.DataFrame({"col": [write_with_time]})
+        lib.delete(symbol)
+        lib.write(symbol, df)
+
+        q = QueryBuilder()
+        q = q[q["col"] == filter_with_time]
+        read_df = lib.read(symbol, query_builder=q).data
+
+        return len(read_df) == 1
+
+    notz_winter_time = datetime.datetime(2024, 1, 1)
+    notz_summer_time = datetime.datetime(2024, 6, 1)
+    utc_time = datetime.datetime(2024, 6, 1, tzinfo=dateutil.tz.tzutc())
+    us_time = datetime.datetime(2024, 6, 1, tzinfo=dateutil.tz.gettz('America/New_York'))
+
+    # Reading back the same time should always succeed
+    assert can_read_back(notz_winter_time, notz_winter_time)
+    assert can_read_back(notz_summer_time, notz_summer_time)
+    assert can_read_back(utc_time, utc_time)
+    assert can_read_back(us_time, us_time)
+
+    # If tzinfo is not specified we assume UTC
+    assert can_read_back(notz_summer_time, utc_time)
+    assert can_read_back(utc_time, notz_summer_time)
+    assert not can_read_back(notz_summer_time, us_time)
+    assert not can_read_back(us_time, notz_summer_time)
+
 
 
 @pytest.mark.parametrize("use_date_range_clause", [True, False])

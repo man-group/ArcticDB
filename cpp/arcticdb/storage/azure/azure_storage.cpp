@@ -330,7 +330,7 @@ using namespace Azure::Storage::Blobs;
 AzureStorage::AzureStorage(const LibraryPath &library_path, OpenMode mode, const Config &conf) :
     Storage(library_path, mode),
     root_folder_(object_store_utils::get_root_folder(library_path)),
-    request_timeout_(conf.request_timeout() == 0 ? 60000 : conf.request_timeout()) {
+    request_timeout_(conf.request_timeout() == 0 ? 200000 : conf.request_timeout()) {
         if(conf.use_mock_storage_for_testing()) {
             ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using Mock Azure storage");
             azure_client_ = std::make_unique<MockAzureClient>();
