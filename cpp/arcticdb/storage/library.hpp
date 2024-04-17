@@ -130,6 +130,10 @@ class Library {
         return storages_->key_exists(key);
     }
 
+    bool is_path_valid(const std::string_view path) const {
+        return storages_->is_path_valid(path);
+    }
+
     KeySegmentPair read(VariantKey key, ReadKeyOpts opts = ReadKeyOpts{}) {
         KeySegmentPair res{VariantKey{key}};
         util::check(!std::holds_alternative<StringId>(variant_key_id(key)) || !std::get<StringId>(variant_key_id(key)).empty(), "Unexpected empty id");

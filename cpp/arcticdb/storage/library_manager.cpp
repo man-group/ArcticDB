@@ -103,7 +103,7 @@ void LibraryManager::write_library_config(const py::object& lib_cfg, const Libra
     segment.set_metadata(std::move(output));
 
     auto library_name = path.to_delim_path();
-    verify_library_path_on_write(library_name);
+    verify_library_path_on_write(store_.get(), library_name);
 
     store_->write_sync(
             entity::KeyType::LIBRARY_CONFIG,

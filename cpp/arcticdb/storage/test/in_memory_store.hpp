@@ -144,6 +144,10 @@ namespace arcticdb {
             return write(key_type, stream_id, std::move(segment)).get();
         }
 
+        bool is_path_valid(const std::string_view) const override {
+            return true;
+        }
+
         folly::Future<entity::VariantKey>
         write(stream::KeyType key_type, const StreamId& stream_id, SegmentInMemory &&segment) override {
             util::check(is_ref_key_class(key_type), "Cannot write ref key with atom key type {}", key_type);

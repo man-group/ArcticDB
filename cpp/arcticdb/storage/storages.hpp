@@ -67,6 +67,10 @@ class Storages {
         return primary().key_exists(key);
     }
 
+    bool is_path_valid(const std::string_view path) const {
+        return primary().is_path_valid(path);
+    }
+
     auto read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts, bool primary_only=true) {
         ARCTICDB_RUNTIME_SAMPLE(StoragesRead, 0)
         if(primary_only)
