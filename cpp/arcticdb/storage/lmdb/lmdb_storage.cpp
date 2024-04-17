@@ -259,6 +259,23 @@ void LmdbStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& vi
     }
 }
 
+bool LmdbStorage::do_is_path_valid(const std::string_view pathString) const {
+#ifdef _WIN32
+    std::string_view invalid_win32_chars = "<>:\"|?*";
+    auto found = pathString.find_first_of(invalid_win32_chars);
+    if (found != std::string::npos) {
+        return false;
+    }
+
+    if (!pathString.empty() && (pathString.back() == '.' || std::isspace(pathString.back()))) {
+        return false;
+    }
+#else
+    (void) pathString; // suppress -Werror=unused-parameter
+#endif
+    return true;
+}
+
 void remove_db_files(const fs::path& lib_path) {
     std::vector<std::string> files = {"lock.mdb", "data.mdb"};
 
