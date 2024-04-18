@@ -749,7 +749,6 @@ TEST(VersionMap, CacheInvalidationWithTombstoneAfterLoad) {
 
     // Now when the cached version is deleted, we should invalidate the cache for load parameters which look for undeleted.
     ASSERT_FALSE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_LATEST_UNDELETED}));
-    // TODO: The following test is failing because we fail to invalidate the cache when the version got deleted. Will be fixed in following commit
     ASSERT_FALSE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_FROM_TIME, static_cast<timestamp>(1)}));
     //TODO: Add more undeleted checks
 
@@ -758,6 +757,49 @@ TEST(VersionMap, CacheInvalidationWithTombstoneAfterLoad) {
 
     // Then - version 0 should be returned
     ASSERT_TRUE(latest_undeleted_entry->get_first_index(false).first.has_value());
+}
+
+TEST(VersionMap, CacheInvalidationWithTombstoneAllAfterLoad) {
+    using namespace arcticdb;
+    // Given - symbol with 2 versions - load downto version 0
+    // never time-invalidate the cache so we can test our other cache invalidation logic
+    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
+    auto store = std::make_shared<InMemoryStore>();
+
+    auto version_map = std::make_shared<VersionMap>();
+    StreamId id{"test"};
+    write_two_versions(store, version_map, id);
+
+    // Use a clean version_map
+    version_map = std::make_shared<VersionMap>();
+
+    auto entry = version_map->check_reload(
+            store,
+            id,
+            LoadParameter{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(0)},
+            __FUNCTION__);
+
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_LATEST_UNDELETED}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_FROM_TIME, static_cast<timestamp>(1)}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_FROM_TIME, static_cast<timestamp>(0)}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(-1)}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(-2)}));
+
+    // When - we delete version 1
+    auto tombstone_key = version_map->write_tombstone(store, VersionId{1}, id, entry);
+
+    // We should not invalidate the cache because the version we loaded to is still undeleted
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_LATEST_UNDELETED}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_FROM_TIME, static_cast<timestamp>(1)}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_FROM_TIME, static_cast<timestamp>(0)}));
+
+    // When - we delete all versions without reloading
+    version_map->write_tombstone_all_key_internal(store, tombstone_key, entry);
+
+    // We should invalidate cached undeleted checks
+    ASSERT_FALSE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_LATEST_UNDELETED}));
+    ASSERT_FALSE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_FROM_TIME, static_cast<timestamp>(1)}));
+    ASSERT_FALSE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_FROM_TIME, static_cast<timestamp>(0)}));
 }
 
 #define GTEST_COUT std::cerr << "[          ] [ INFO ]"

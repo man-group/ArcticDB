@@ -134,6 +134,7 @@ inline AtomKey get_tombstone_all_key(const AtomKey &latest, timestamp creation_t
 
 struct LoadProgress {
     VersionId oldest_loaded_index_version_ = std::numeric_limits<VersionId>::max();
+    VersionId oldest_loaded_undeleted_index_version_ = std::numeric_limits<VersionId>::max();
     timestamp earliest_loaded_timestamp_ = std::numeric_limits<timestamp>::max();
     timestamp earliest_loaded_undeleted_timestamp_ = std::numeric_limits<timestamp>::max();
 };
