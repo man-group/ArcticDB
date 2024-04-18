@@ -1022,6 +1022,7 @@ private:
             return index_to_tombstone(k, stream_id, creation_ts.value_or(store->current_timestamp()));
         });
         do_write(store, tombstone,  entry);
+        entry->tombstones_.try_emplace(tombstone.version_id(), tombstone);
         if(log_changes_)
             log_tombstone(store, tombstone.id(), tombstone.version_id());
 
