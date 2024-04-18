@@ -188,7 +188,6 @@ inline version_store::TombstoneVersionResult tombstone_version(
             is_live_index_type_key // Entry could be cached with deleted keys even if LOAD_UNDELETED
             );
 
-    AtomKey tombstone;
     if (res.keys_to_delete.empty()) {
         // It is possible to have a tombstone key without a corresponding index_key
         // This scenario can happen in case of DR sync
@@ -202,13 +201,12 @@ inline version_store::TombstoneVersionResult tombstone_version(
                             stream_id, version_id);
             }
             // We will write a tombstone key even when the index_key is not found
-            tombstone = version_map->write_tombstone(store, version_id, stream_id, entry, creation_ts);
+            version_map->write_tombstone(store, version_id, stream_id, entry, creation_ts);
         }
     } else {
-        tombstone = version_map->write_tombstone(store, res.keys_to_delete[0], stream_id, entry, creation_ts);
+        version_map->write_tombstone(store, res.keys_to_delete[0], stream_id, entry, creation_ts);
     }
 
-    entry->tombstones_.try_emplace(version_id, std::move(tombstone));
     if (version_map->validate())
         entry->validate();
 
