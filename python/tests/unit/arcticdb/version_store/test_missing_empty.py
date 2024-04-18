@@ -140,9 +140,10 @@ def infer_type(s: pd.Series):
 def fill_value(t):
     fill_values = {
         bool: False,
-        int: 0
+        int: 0,
+        np.int64: 0
     }
-    if t in fill_values.keys():
+    if t in fill_values:
         return fill_values[t]
     return None
 
@@ -151,9 +152,8 @@ def pd_arcticdb_read_sim(df):
     read_df = df.copy(True)
     for c in df.columns:
         t = infer_type(df[c])
-        print(c, t, fill_value(t))
-        if t and fill_value(t) is not None:
-            fv = fill_value(t)
+        fv = fill_value(t)
+        if fv is not None:
             read_df[c] = df[c].fillna(fv)
     return read_df
 
