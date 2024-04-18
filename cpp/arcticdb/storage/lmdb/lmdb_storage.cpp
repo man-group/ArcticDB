@@ -259,6 +259,24 @@ void LmdbStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& vi
     }
 }
 
+bool LmdbStorage::do_is_path_valid(const std::string_view pathString ARCTICDB_UNUSED) const {
+#ifdef _WIN32
+    // Note that \ and / are valid characters as they will create subdirectories which are expected to work.
+    // The filenames such as COM1, LPT1, AUX, CON etc. are reserved but not strictly disallowed by Windows as directory names.
+    // Therefore, paths with these names are allowed.
+    std::string_view invalid_win32_chars = "<>:\"|?*";
+    auto found = pathString.find_first_of(invalid_win32_chars);
+    if (found != std::string::npos) {
+        return false;
+    }
+
+    if (!pathString.empty() && (pathString.back() == '.' || std::isspace(pathString.back()))) {
+        return false;
+    }
+#endif
+    return true;
+}
+
 void remove_db_files(const fs::path& lib_path) {
     std::vector<std::string> files = {"lock.mdb", "data.mdb"};
 

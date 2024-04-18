@@ -11,6 +11,7 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/stream/index.hpp>
+#include <arcticdb/storage/store.hpp>
 
 namespace arcticdb {
 
@@ -118,8 +119,13 @@ void verify_library_path_part(const std::string& library_part, char delim) {
     }
 }
 
-void verify_library_path_on_write(const StringId& library_path) {
+void verify_library_path_on_write(const Store* store, const StringId& library_path) {
     verify_name("library name", library_path, true, UNSUPPORTED_S3_CHARS);
+    user_input::check<ErrorCode::E_INVALID_CHAR_IN_NAME>(
+            store->is_path_valid(library_path),
+            "The library name contains unsupported chars. Library Name: {}",
+            library_path
+    );
 }
 
 }

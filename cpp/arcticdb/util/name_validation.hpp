@@ -11,6 +11,7 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/stream/index.hpp>
+#include <arcticdb/pipeline/index_segment_reader.hpp>
 
 namespace arcticdb {
 
@@ -21,7 +22,7 @@ void verify_symbol_key(const StreamId &symbol_key);
 // Does strict checks on library names and raises UserInputException if it encounters an error.
 // Should be checked only when writing new libraries to allow for backwards compatibility
 // with old invalid libraries.
-void verify_library_path_on_write(const StringId& library_path);
+void verify_library_path_on_write(const Store* store, const StringId& library_path);
 
 // These two do relaxed checks which should always be run on each library operation (including
 // already existing libraries). These raise friendly error messages instead of segfaulting or

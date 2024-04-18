@@ -17,7 +17,7 @@ from pathlib import Path
 
 from arcticdb import Arctic
 from arcticdb.util.test import assert_frame_equal
-from arcticdb.exceptions import LmdbMapFullError, StorageException
+from arcticdb.exceptions import LmdbMapFullError, StorageException, UserInputException
 from arcticdb.util.test import get_wide_dataframe
 import arcticdb.adapters.lmdb_library_adapter as la
 from arcticdb.exceptions import LmdbOptionsError
@@ -102,6 +102,30 @@ def test_lmdb_malloc_trim(lmdb_storage):
     lib = ac.create_library("test_lmdb_malloc_trim")
     lib._nvs.trim()
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Non Windows platforms have different file path name restrictions")
+@pytest.mark.parametrize("invalid_lib_name", ["lib?1", "lib:1", "lib|1", "lib\"1", "lib.", "lib "])
+def test_invalid_lmdb_lib_name_windows(lmdb_storage, invalid_lib_name):
+    ac = lmdb_storage.create_arctic()
+    with pytest.raises(UserInputException) as e:
+        ac.create_library(invalid_lib_name)
+
+    assert ac.list_libraries() == []
+
+# Valid names on all platforms
+@pytest.mark.parametrize("valid_lib_name", ["lib#~@,1", "lib{)[.1", "!lib$%^"])
+def test_valid_lib_name(lmdb_storage, valid_lib_name):
+    ac = lmdb_storage.create_arctic()
+    ac.create_library(valid_lib_name)
+
+    assert ac.list_libraries() == [valid_lib_name]
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows has different file path name restrictions")
+@pytest.mark.parametrize("valid_lib_name", ["lib?1", "lib:1", "lib|1", "lib "])
+def test_valid_lib_name_linux(lmdb_storage, valid_lib_name):
+    ac = lmdb_storage.create_arctic()
+    ac.create_library(valid_lib_name)
+
+    assert ac.list_libraries() == [valid_lib_name]
 
 def test_lmdb_mapsize(tmp_path):
     # Given - tiny map size

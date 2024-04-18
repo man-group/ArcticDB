@@ -62,7 +62,8 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
         super().__init__(uri, self._encoding_version)
 
     def __repr__(self):
-        return "azure(endpoint=%s, container=%s)" % (self._endpoint, self._container)
+        censored_endpoint = re.sub(r"AccountKey=.+?;", "AccountKey=...;", self._endpoint)
+        return "azure(endpoint=%s, container=%s)" % (censored_endpoint, self._container)
 
     @property
     def config_library(self):
