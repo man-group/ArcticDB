@@ -73,6 +73,7 @@ inline std::optional<AtomKey> read_segment_with_keys(
     ssize_t row = 0;
     std::optional<AtomKey> next;
     VersionId oldest_loaded_index = std::numeric_limits<VersionId>::max();
+    VersionId oldest_loaded_undeleted_index = std::numeric_limits<VersionId>::max();
     timestamp earliest_loaded_timestamp = std::numeric_limits<timestamp>::max();
     timestamp earliest_loaded_undeleted_timestamp = std::numeric_limits<timestamp>::max();
 
@@ -83,10 +84,12 @@ inline std::optional<AtomKey> read_segment_with_keys(
         if (is_index_key_type(key.type())) {
             entry.keys_.push_back(key);
             oldest_loaded_index = std::min(oldest_loaded_index, key.version_id());
-
             earliest_loaded_timestamp = std::min(earliest_loaded_timestamp, key.creation_ts());
-            if(!entry.is_tombstoned(key))
+
+            if(!entry.is_tombstoned(key)) {
+                oldest_loaded_undeleted_index = std::min(oldest_loaded_undeleted_index, key.version_id());
                 earliest_loaded_undeleted_timestamp = std::min(earliest_loaded_timestamp, key.creation_ts());
+            }
 
         } else if (key.type() == KeyType::TOMBSTONE) {
             entry.tombstones_.try_emplace(key.version_id(), key);
@@ -105,6 +108,7 @@ inline std::optional<AtomKey> read_segment_with_keys(
     }
     util::check(row == ssize_t(seg.row_count()), "Unexpected ordering in journal segment");
     load_progress.oldest_loaded_index_version_ = std::min(load_progress.oldest_loaded_index_version_, oldest_loaded_index);
+    load_progress.oldest_loaded_undeleted_index_version_ = std::min(load_progress.oldest_loaded_undeleted_index_version_, oldest_loaded_undeleted_index);
     load_progress.earliest_loaded_timestamp_ = std::min(load_progress.earliest_loaded_timestamp_, earliest_loaded_timestamp);
     load_progress.earliest_loaded_undeleted_timestamp_ = std::min(load_progress.earliest_loaded_undeleted_timestamp_, earliest_loaded_undeleted_timestamp);
     return next;
