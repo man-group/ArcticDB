@@ -10,8 +10,6 @@
 #include <cstdint>
 #include <string_view>
 
-#include <folly/hash/Hash.h>
-
 #define XXH_STATIC_LINKING_ONLY
 #include <xxhash.h>
 #undef XXH_STATIC_LINKING_ONLY
