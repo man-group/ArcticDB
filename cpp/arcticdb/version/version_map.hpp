@@ -16,6 +16,7 @@
 #include <unordered_set>
 #include <map>
 #include <deque>
+#include <gtest/gtest_prod.h>
 
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/atom_key.hpp>
@@ -932,6 +933,7 @@ public:
     }
 
 private:
+    FRIEND_TEST(VersionMap, CacheInvalidationWithTombstoneAllAfterLoad);
     std::pair<VersionId, std::vector<AtomKey>> tombstone_from_key_or_all_internal(
             std::shared_ptr<Store> store,
             const StreamId& stream_id,
@@ -969,6 +971,14 @@ private:
         return {version_id, std::move(output)};
     }
 
+    // Invalidates the cached undeleted entry if it got tombstoned either by a tombstone or by a tombstone_all
+    void maybe_invalidate_cached_undeleted(VersionMapEntry& entry){
+        if (entry.is_tombstoned(entry.loaded_with_progress_.oldest_loaded_undeleted_index_version_)){
+            entry.loaded_with_progress_.oldest_loaded_undeleted_index_version_ = std::numeric_limits<VersionId>::max();
+            entry.loaded_with_progress_.earliest_loaded_undeleted_timestamp_ = std::numeric_limits<timestamp>::max();
+        }
+    }
+
     AtomKey write_tombstone_all_key_internal(
             const std::shared_ptr<Store>& store,
             const AtomKey& previous_key,
@@ -976,6 +986,7 @@ private:
         auto tombstone_key = get_tombstone_all_key(previous_key, store->current_timestamp());
         entry->try_set_tombstone_all(tombstone_key);
         do_write(store, tombstone_key, entry);
+        maybe_invalidate_cached_undeleted(*entry);
         return tombstone_key;
     }
 
@@ -993,6 +1004,7 @@ private:
         });
         do_write(store, tombstone,  entry);
         entry->tombstones_.try_emplace(tombstone.version_id(), tombstone);
+        maybe_invalidate_cached_undeleted(*entry);
         if(log_changes_)
             log_tombstone(store, tombstone.id(), tombstone.version_id());
 
