@@ -125,6 +125,39 @@ def pd_delete_replace(df1, df2, date_range=None):
     # concat preserves types over other methods eg int -> float (due to temp NaN creation)
     return pd_restore_secondary_index_levels(pd.concat(to_concat), df1.index.names)
 
+
+def infer_type(s: pd.Series):
+    t = None
+    for v in s:
+        if not pd.isnull(v):
+            tv = type(v)
+            if t and tv != t:
+                raise ValueError(f"Mixed non-None types in column {s.name}: {t} and {tv}")
+            t = tv
+    return t
+
+
+def fill_value(t):
+    fill_values = {
+        bool: False,
+        int: 0,
+        np.int64: 0
+    }
+    if t in fill_values:
+        return fill_values[t]
+    return None
+
+
+def pd_arcticdb_read_sim(df):
+    read_df = df.copy(True)
+    for c in df.columns:
+        t = infer_type(df[c])
+        fv = fill_value(t)
+        if fv is not None:
+            read_df[c] = df[c].fillna(fv)
+    return read_df
+
+
 def create_df(dtype, data, index):
     if dtype is None:
         return pd.DataFrame({'col': data}, index=index)
@@ -191,9 +224,14 @@ def append_update(lib, df, test, verb, verb_name, pd_mod_func):
     except Exception as e:
         return TestResult(False, f"Read error: {e}")
     try:
-        df_mod_pd = pd_mod_func(base_df, df, test.index is None)
+        df_mod_pd_raw = pd_mod_func(base_df, df, test.index is None)
     except Exception as e:
-        return TestResult(False, f"Pandas repro error: {e}")
+        return TestResult(False, f"Error running Pandas repro function for Arctic {verb_name}: {e}")
+    try:
+        df_mod_pd = pd_arcticdb_read_sim(df_mod_pd_raw)
+    except Exception as e:
+        return TestResult(False, f"Error running Pandas read simulation function: {e}")
+
     match = df_mod_pd.equals(df_db)
     message = 'match' if match else compare_dfs(df_mod_pd, df_db)
     return TestResult(match, message)
