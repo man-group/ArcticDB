@@ -218,32 +218,33 @@ void do_remove_impl(Composite<VariantKey>&& ks,
         }
 }
 
-auto default_prefix_handler() {
-    return [] (const std::string& prefix, const std::string& key_type_dir, const KeyDescriptor& key_descriptor, KeyType) {
-        return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
-    };
+std::string prefix_handler(const std::string& prefix, const std::string& key_type_dir, const KeyDescriptor& key_descriptor, KeyType) {
+    return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
 }
 
-template<class KeyBucketizer, class PrefixHandler>
+template<class KeyBucketizer>
 void do_iterate_type_impl(KeyType key_type,
     const IterateTypeVisitor& visitor,
     const std::string& root_folder,
     AzureClientWrapper& azure_client,
     KeyBucketizer&& bucketizer,
-    PrefixHandler&& prefix_handler = default_prefix_handler(),
     const std::string& prefix = std::string{}) {
         ARCTICDB_SAMPLE(AzureStorageIterateType, 0)
         auto key_type_dir = key_type_folder(root_folder, key_type);
+        const auto path_to_key_size = key_type_dir.size() + 1 + bucketizer.bucketize_length(key_type);
+        // if prefix is empty, add / to avoid matching both log and logc when key_type_dir is {root_folder}/log
+        if (prefix.empty()) {
+            key_type_dir += "/";
+        }
 
         KeyDescriptor key_descriptor(prefix,
             is_ref_key_class(key_type) ? IndexDescriptor::UNKNOWN : IndexDescriptor::TIMESTAMP, FormatType::TOKENIZED);
         auto key_prefix = prefix_handler(prefix, key_type_dir, key_descriptor, key_type);
-        const auto root_folder_size = key_type_dir.size() + 1 + bucketizer.bucketize_length(key_type);
 
         try {
             for (auto page = azure_client.list_blobs(key_prefix); page.HasPage(); page.MoveToNextPage()) {
                 for (const auto& blob : page.Blobs) {
-                    auto key = blob.Name.substr(root_folder_size);
+                    auto key = blob.Name.substr(path_to_key_size);
                     ARCTICDB_TRACE(log::version(), "Got object_list: {}, key: {}", blob.Name, key);
                     auto k = variant_key_from_bytes(
                                 reinterpret_cast<uint8_t*>(key.data()),
@@ -305,11 +306,7 @@ void AzureStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
 }
 
 void AzureStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix) {
-    auto prefix_handler = [] (const std::string& prefix, const std::string& key_type_dir, const KeyDescriptor key_descriptor, KeyType) {
-        return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
-    };
-
-    detail::do_iterate_type_impl(key_type, visitor, root_folder_, *azure_client_, FlatBucketizer{}, std::move(prefix_handler), prefix);
+    detail::do_iterate_type_impl(key_type, visitor, root_folder_, *azure_client_, FlatBucketizer{}, prefix);
 }
 
 bool AzureStorage::do_key_exists(const VariantKey& key) {

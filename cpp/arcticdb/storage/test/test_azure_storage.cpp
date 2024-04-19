@@ -72,3 +72,13 @@ TEST_F(AzureMockStorageFixture, test_list) {
 
     ASSERT_EQ(list_in_store(store), symbols);
 }
+
+TEST_F(AzureMockStorageFixture, test_matching_key_type_prefix_list) {
+    auto log_symbols = populate_store(store, "symbol_log", 0, 5, entity::KeyType::LOG);
+    ASSERT_EQ(list_in_store(store, entity::KeyType::LOG), log_symbols);
+
+    auto log_compacted_symbols = populate_store(store, "symbol_logc", 0, 5, entity::KeyType::LOG_COMPACTED);
+    ASSERT_EQ(list_in_store(store, entity::KeyType::LOG_COMPACTED), log_compacted_symbols);
+
+    ASSERT_EQ(list_in_store(store, entity::KeyType::LOG), log_symbols);
+}
