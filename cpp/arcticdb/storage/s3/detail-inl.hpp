@@ -284,6 +284,11 @@ namespace s3 {
         ) {
             ARCTICDB_SAMPLE(S3StorageIterateType, 0)
             auto key_type_dir = key_type_folder(root_folder, key_type);
+            const auto path_to_key_size = key_type_dir.size() + 1 + bucketizer.bucketize_length(key_type);
+            // if prefix is empty, add / to avoid matching both log and logc when key_type_dir is {root_folder}/log
+            if (prefix.empty()) {
+                key_type_dir += "/";
+            }
 
             // Generally we get the key descriptor from the AtomKey, but in the case of iterating version journals
             // where we want to have a narrower prefix, we can use the info that it's a version journal and derive
@@ -304,11 +309,10 @@ namespace s3 {
                 if (list_objects_result.is_success()) {
                     auto& output = list_objects_result.get_output();
 
-                    const auto root_folder_size = key_type_dir.size() + 1 + bucketizer.bucketize_length(key_type);
                     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Received object list");
 
                     for (auto& s3_object_name: output.s3_object_names) {
-                        auto key = s3_object_name.substr(root_folder_size);
+                        auto key = s3_object_name.substr(path_to_key_size);
                         ARCTICDB_TRACE(log::version(), "Got object_list: {}, key: {}", s3_object_name, key);
                         auto k = variant_key_from_bytes(
                                 reinterpret_cast<uint8_t *>(key.data()),
