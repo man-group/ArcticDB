@@ -74,9 +74,10 @@ inline void check_normalization_index_match(
             // Having this will not allow appending RowCont indexed pd.DataFrames to DateTime indexed pd.DataFrames because they would
             // have different field size (the rowcount index is not stored as a field). This logic is bug prone and will become better
             // after we enable the empty index.
+            const bool input_frame_is_series = frame.norm_meta.has_series();
             normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
                 common_index_type != IndexDescriptor::UNKNOWN ||
-                    (old_idx_kind == IndexDescriptor::TIMESTAMP && new_idx_kind == IndexDescriptor::ROWCOUNT),
+                    (input_frame_is_series && old_idx_kind == IndexDescriptor::TIMESTAMP && new_idx_kind == IndexDescriptor::ROWCOUNT),
                 "Cannot append {} index to {} index",
                 index_type_to_str(new_idx_kind),
                 index_type_to_str(old_idx_kind)
