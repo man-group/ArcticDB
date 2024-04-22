@@ -124,12 +124,12 @@ void update_rowcount_normalization_data(
             size_t new_start = new_index->start();
             auto stop = old_index->start() + old_length * old_index->step();
             normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
-                new_start == stop,
-                "The appending data has a RangeIndex.start={} that is not contiguous with the {}"
-                "stop ({}) of",
-                error_suffix,
+                new_start == stop || (new_start == 0 && new_index->step() == 1),
+                "The appending data has a RangeIndex.start={} that is not contiguous with the "
+                "stop ({}) of {}",
                 new_start,
-                stop
+                stop,
+                error_suffix
             );
 
             new_pandas->get().mutable_index()->set_start(old_index->start());

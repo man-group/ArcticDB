@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 from packaging.version import Version
 from arcticdb.util._versions import PANDAS_VERSION
-import arcticdb
+from arcticdb_ext.exceptions import NormalizationException
 
 class DtypeGenerator:
     """
@@ -861,15 +861,10 @@ class TestIndexTypeWithEmptyTypeDisabledPands2AndLater(DisabledEmptyIndexBase):
         assert result.index.equals(pd.DatetimeIndex([]))
 
     def test_has_a_column(self, lmdb_version_store_static_and_dynamic):
-        if self.is_dynamic_schema(lmdb_version_store_static_and_dynamic):
-            pytest.xfail(
-                """In case of empty symbols dynamic schema allows appending indexes of different types.
-                See https://github.com/man-group/ArcticDB/issues/1507. This is fixed with the empty index type."""
-            )
         result = self.roundtrip(pd.DataFrame({"a": []}), lmdb_version_store_static_and_dynamic)
         assert result.index.equals(pd.DatetimeIndex([]))
-        with pytest.raises(Exception):
-            lmdb_version_store_static_and_dynamic.append(self.sym(), pd.DataFrame({"a": [1.0]}))
+        with pytest.raises(NormalizationException):
+            lmdb_version_store_static_and_dynamic.append(self.sym(), pd.DataFrame({"a": [1.0]}, index=pd.RangeIndex(0, 1, 1)))
         to_append_successfuly = pd.DataFrame({"a": [1.0]}, index=pd.DatetimeIndex(["01/01/2024"])) 
         lmdb_version_store_static_and_dynamic.append(self.sym(), to_append_successfuly)
         assert_frame_equal(
@@ -882,11 +877,6 @@ class TestIndexTypeWithEmptyTypeDisabledPands2AndLater(DisabledEmptyIndexBase):
         assert result.index.equals(pd.DatetimeIndex([]))
 
     def test_explicit_row_range_with_columns(self, lmdb_version_store_static_and_dynamic):
-        if self.is_dynamic_schema(lmdb_version_store_static_and_dynamic):
-            pytest.xfail(
-                """In case of empty symbols dynamic schema allows appending indexes of different types.
-                See https://github.com/man-group/ArcticDB/issues/1507. This is fixed with the empty index type."""
-            )
         result = self.roundtrip(pd.DataFrame({"a": []}, index=pd.RangeIndex(start=5, stop=5, step=100)), lmdb_version_store_static_and_dynamic)
         assert result.index.equals(pd.DatetimeIndex([]))
         with pytest.raises(Exception):
@@ -938,7 +928,7 @@ class TestIndexTypeWithEmptyTypeDisabledPands0AndPands1(DisabledEmptyIndexBase):
     def test_has_a_column(self, lmdb_version_store_static_and_dynamic):
         result = self.roundtrip(pd.DataFrame({"a": []}), lmdb_version_store_static_and_dynamic)
         assert result.index.equals(pd.RangeIndex(start=0, stop=0, step=1))
-        with pytest.raises(arcticdb.exceptions.NormalizationException):
+        with pytest.raises(NormalizationException):
             lmdb_version_store_static_and_dynamic.append(self.sym(), pd.DataFrame({"a": ["a"]}, index=pd.DatetimeIndex(["01/01/2024"])))
         to_append_successfuly = pd.DataFrame({"a": ["a"]})
         lmdb_version_store_static_and_dynamic.append(self.sym(), to_append_successfuly)
@@ -949,22 +939,17 @@ class TestIndexTypeWithEmptyTypeDisabledPands0AndPands1(DisabledEmptyIndexBase):
         assert result.index.equals(pd.RangeIndex(start=0, stop=0, step=1))
 
     def test_explicit_row_range_with_columns(self, lmdb_version_store_static_and_dynamic):
-        if self.is_dynamic_schema(lmdb_version_store_static_and_dynamic):
-            pytest.xfail(
-                """Dynamic schema should not allow appending missmatching range indexes. See issue:
-                https://github.com/man-group/ArcticDB/issues/1509"""
-            )
         result = self.roundtrip(pd.DataFrame({"a": []}, index=pd.RangeIndex(start=5, stop=5, step=100)), lmdb_version_store_static_and_dynamic)
         assert result.index.equals(pd.RangeIndex(start=5, stop=5, step=100))
         # Cannot append datetime indexed df to empty rowrange index
-        with pytest.raises(arcticdb.exceptions.NormalizationException):
+        with pytest.raises(NormalizationException):
             lmdb_version_store_static_and_dynamic.append(self.sym(), pd.DataFrame({"a": ["a"]}, index=pd.DatetimeIndex(["01/01/2024"])))
         # Cannot append rowrange indexed df if the start of the appended is not matching the stop of the empty
-        with pytest.raises(arcticdb.exceptions.NormalizationException):
+        with pytest.raises(NormalizationException):
             lmdb_version_store_static_and_dynamic.append(self.sym(), pd.DataFrame({"a": ["a"]}, index=pd.RangeIndex(start=9, stop=109, step=100)))
             lmdb_version_store_static_and_dynamic.append(self.sym(), pd.DataFrame({"a": ["a"]}, index=pd.RangeIndex(start=10, stop=110, step=100)))
         # Cannot append rowrange indexed df if the step is different
-        with pytest.raises(arcticdb.exceptions.NormalizationException):
+        with pytest.raises(NormalizationException):
             lmdb_version_store_static_and_dynamic.append(self.sym(), pd.DataFrame({"a": ["a"]}, index=pd.RangeIndex(start=5, stop=6, step=1)))
         to_append_successfuly = pd.DataFrame({"a": ["a"]}, index=pd.RangeIndex(start=5, stop=105, step=100))
         lmdb_version_store_static_and_dynamic.append(self.sym(), to_append_successfuly)
