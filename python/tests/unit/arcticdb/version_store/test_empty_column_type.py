@@ -13,6 +13,7 @@ import numpy as np
 import pytest
 from packaging.version import Version
 from arcticdb.util._versions import PANDAS_VERSION
+import arcticdb
 
 class DtypeGenerator:
     """
@@ -905,22 +906,20 @@ class TestIndexTypeWithEmptyTypeDisabledPands2AndLater(DisabledEmptyIndexBase):
         result = self.roundtrip(pd.DataFrame({"a": []}, index=pd.DatetimeIndex([])), lmdb_version_store_static_and_dynamic)
         assert result.index.equals(pd.DatetimeIndex([]))
          
-    @pytest.mark.parametrize("arrays, expected_dtypes", [
-        ([[], []], ("datetime64[ns]", "object")),
-        ([np.array([], dtype="float"), np.array([], dtype="int")], ("float64", "int")),
-        ([np.array([], dtype="int"), np.array([], dtype="float")], ("int", "float")),
-        ([np.array([], dtype="datetime64[ns]"), np.array([], dtype="float64")], ("datetime64[ns]", "float"))
+    @pytest.mark.parametrize("arrays, expected_arrays", [
+        ([[], []], ([np.array([], dtype="datetime64[ns]"), np.array([], dtype="object")])),
+        ([np.array([], dtype="float"), np.array([], dtype="int")], ([np.array([], dtype="float"), np.array([], dtype="int")])),
+        ([np.array([], dtype="int"), np.array([], dtype="float")], ([np.array([], dtype="int"), np.array([], "float")])),
+        ([np.array([], dtype="datetime64[ns]"), np.array([], dtype="float64")], ([np.array([], dtype="datetime64[ns]"), np.array([], dtype="float")]))
     ])
-    def test_multiindex_default(self, lmdb_version_store_static_and_dynamic, arrays, expected_dtypes):
+    def test_multiindex(self, lmdb_version_store_static_and_dynamic, arrays, expected_arrays):
         # When multiindex is used the dtypes are preserved. In case default empty numpy arrays are used like so:
-        # pd.MultiIndex.from_arrays([np.arra([]), np.arra([])], names=["p", "s"]) the result varies depending on
-        # the default dtype in numpy for that version
+        # pd.MultiIndex.from_arrays([np.array([]), np.array([])], names=["p", "s"]) the result varies depending on
+        # numpy's defaults
         input_index = pd.MultiIndex.from_arrays(arrays, names=["p", "s"])
         result = self.roundtrip(pd.DataFrame({"a": []}, index=input_index), lmdb_version_store_static_and_dynamic)
-        assert result.index.equals(pd.MultiIndex.from_arrays([[], []], names=["p", "s"]))
-        expected_multiindex = pd.MultiIndex.from_arrays([np.array([], dtype=expected_dtypes[0]), np.array([], dtype=expected_dtypes[1])], names=["p", "s"])
-        print(result.index.dtypes)
-        print(expected_multiindex.dtypes)
+        expected_multiindex = pd.MultiIndex.from_arrays(expected_arrays, names=["p", "s"])
+        assert result.index.equals(expected_multiindex)
         assert expected_multiindex.dtypes.equals(result.index.dtypes)
 
 
@@ -937,11 +936,11 @@ class TestIndexTypeWithEmptyTypeDisabledPands0AndPands1(DisabledEmptyIndexBase):
         result = self.roundtrip(pd.DataFrame([]), lmdb_version_store_static_and_dynamic)
         assert result.index.equals(pd.DatetimeIndex([]))
 
-    def test_has_a_column_static_schema(self, lmdb_version_store_static_and_dynamic):
+    def test_has_a_column(self, lmdb_version_store_static_and_dynamic):
         result = self.roundtrip(pd.DataFrame({"a": []}), lmdb_version_store_static_and_dynamic)
         assert result.index.equals(pd.RangeIndex(start=0, stop=0, step=1))
-        with pytest.raises(Exception):
-            lmdb_version_store_static_and_dynamic.append(pd.DataFrame({"a": ["a"]}, index=pd.DatetimeIndex(["01/01/2024"])))
+        with pytest.raises(arcticdb.exceptions.NormalizationException):
+            lmdb_version_store_static_and_dynamic.append(self.sym(), pd.DataFrame({"a": ["a"]}, index=pd.DatetimeIndex(["01/01/2024"])))
         to_append_successfuly = pd.DataFrame({"a": ["a"]})
         lmdb_version_store_static_and_dynamic.append(self.sym(), to_append_successfuly)
         assert_frame_equal(lmdb_version_store_static_and_dynamic.read(self.sym()).data, to_append_successfuly)
@@ -959,16 +958,15 @@ class TestIndexTypeWithEmptyTypeDisabledPands0AndPands1(DisabledEmptyIndexBase):
         result = self.roundtrip(pd.DataFrame({"a": []}, index=pd.RangeIndex(start=5, stop=5, step=100)), lmdb_version_store_static_and_dynamic)
         assert result.index.equals(pd.RangeIndex(start=5, stop=5, step=100))
         # Cannot append datetime indexed df to empty rowrange index
-        with pytest.raises(Exception):
-            lmdb_version_store_static_and_dynamic.append(self.sym(), pd.DataFrame({"a": [1.0]}, index=pd.DatetimeIndex(["01/01/2024"])))
+        with pytest.raises(arcticdb.exceptions.NormalizationException):
+            lmdb_version_store_static_and_dynamic.append(self.sym(), pd.DataFrame({"a": ["a"]}, index=pd.DatetimeIndex(["01/01/2024"])))
         # Cannot append rowrange indexed df if the start of the appended is not matching the stop of the empty
-        with pytest.raises(Exception):
-            lmdb_version_store_static_and_dynamic.append(self.sym(), pd.DataFrame({"a": [1.0]}, index=pd.RangeIndex(start=9, stop=109, step=100)))
-            lmdb_version_store_static_and_dynamic.append(self.sym(), pd.DataFrame({"a": [1.0]}, index=pd.RangeIndex(start=10, stop=110, step=100)))
-            print(lmdb_version_store_static_and_dynamic.read(self.sym()).data)
+        with pytest.raises(arcticdb.exceptions.NormalizationException):
+            lmdb_version_store_static_and_dynamic.append(self.sym(), pd.DataFrame({"a": ["a"]}, index=pd.RangeIndex(start=9, stop=109, step=100)))
+            lmdb_version_store_static_and_dynamic.append(self.sym(), pd.DataFrame({"a": ["a"]}, index=pd.RangeIndex(start=10, stop=110, step=100)))
         # Cannot append rowrange indexed df if the step is different
-        with pytest.raises(Exception):
-            lmdb_version_store_static_and_dynamic.append(self.sym(), pd.DataFrame({"a": [1.0]}, index=pd.RangeIndex(start=5, stop=6, step=1)))
+        with pytest.raises(arcticdb.exceptions.NormalizationException):
+            lmdb_version_store_static_and_dynamic.append(self.sym(), pd.DataFrame({"a": ["a"]}, index=pd.RangeIndex(start=5, stop=6, step=1)))
         to_append_successfuly = pd.DataFrame({"a": ["a"]}, index=pd.RangeIndex(start=5, stop=105, step=100))
         lmdb_version_store_static_and_dynamic.append(self.sym(), to_append_successfuly)
         assert_frame_equal(
@@ -984,18 +982,18 @@ class TestIndexTypeWithEmptyTypeDisabledPands0AndPands1(DisabledEmptyIndexBase):
         result = self.roundtrip(pd.DataFrame({"a": []}, index=pd.DatetimeIndex([])), lmdb_version_store_static_and_dynamic)
         assert result.index.equals(pd.DatetimeIndex([]))
 
-    @pytest.mark.parametrize("arrays, expected_dtypes", [
-        ([[], []], ("datetime64[ns]", "object")),
-        ([np.array([], dtype="float"), np.array([], dtype="int")], ("object", "int")),
-        ([np.array([], dtype="int"), np.array([], dtype="float")], ("int", "object")),
-        ([np.array([], dtype="datetime64[ns]"), np.array([], dtype="float64")], ("datetime64[ns]", "object"))
+    @pytest.mark.parametrize("arrays, expected_arrays", [
+        ([[], []], ([np.array([], dtype="datetime64[ns]"), np.array([], dtype="object")])),
+        ([np.array([], dtype="float"), np.array([], dtype="int")], ([np.array([], dtype="object"), np.array([], dtype="int")])),
+        ([np.array([], dtype="int"), np.array([], dtype="float")], ([np.array([], dtype="int"), np.array([], "object")])),
+        ([np.array([], dtype="datetime64[ns]"), np.array([], dtype="float64")], ([np.array([], dtype="datetime64[ns]"), np.array([], dtype="object")]))
     ])
-    def test_multiindex_default(self, lmdb_version_store_static_and_dynamic, arrays, expected_dtypes):
+    def test_multiindex(self, lmdb_version_store_static_and_dynamic, arrays, expected_arrays):
         # When multiindex is used the dtypes are preserved. In case default empty numpy arrays are used like so:
-        # pd.MultiIndex.from_arrays([np.arra([]), np.arra([])], names=["p", "s"]) the result varies depending on
-        # the default dtype in numpy for that version
+        # pd.MultiIndex.from_arrays([np.array([]), np.array([])], names=["p", "s"]) the result varies depending on
+        # numpy's defaults
         input_index = pd.MultiIndex.from_arrays(arrays, names=["p", "s"])
         result = self.roundtrip(pd.DataFrame({"a": []}, index=input_index), lmdb_version_store_static_and_dynamic)
-        assert result.index.equals(pd.MultiIndex.from_arrays([[], []], names=["p", "s"]))
-        expected_multiindex = pd.MultiIndex.from_arrays([np.array([], dtype=expected_dtypes[0]), np.array([], dtype=expected_dtypes[1])], names=["p", "s"])
+        expected_multiindex = pd.MultiIndex.from_arrays(expected_arrays, names=["p", "s"])
+        assert result.index.equals(expected_multiindex)
         assert self.multiindex_dtypes(expected_multiindex).equals(self.multiindex_dtypes(result.index))
