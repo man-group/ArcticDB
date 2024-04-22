@@ -839,7 +839,7 @@ class DisabledEmptyIndexBase:
 
     @classmethod
     def is_dynamic_schema(cls, storage):
-        return storage.lib_cfg().lib_desc.version.write_options.dynamic_schema == True
+        return storage.lib_cfg().lib_desc.version.write_options.dynamic_schema
 
     @pytest.fixture(
     scope="function",
