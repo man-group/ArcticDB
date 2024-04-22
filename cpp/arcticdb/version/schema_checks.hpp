@@ -121,12 +121,9 @@ inline void fix_descriptor_mismatch_or_throw(
     const auto &old_sd = existing_isr.tsd().as_stream_descriptor();
     check_normalization_index_match(operation, old_sd, new_frame, empty_types);
 
-    if (dynamic_schema)
-        return; // TODO: dynamic schema may need some of the checks as below
-
     fix_normalization_or_throw(operation == APPEND, existing_isr, new_frame);
 
-    if (!columns_match(old_sd, new_frame.desc)) {
+    if (!dynamic_schema && !columns_match(old_sd, new_frame.desc)) {
         throw StreamDescriptorMismatch(
             "The columns (names and types) in the argument are not identical to that of the existing version",
             StreamDescriptor{old_sd},
