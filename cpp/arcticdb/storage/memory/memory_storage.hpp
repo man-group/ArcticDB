@@ -23,6 +23,8 @@ namespace arcticdb::storage::memory {
 
         MemoryStorage(const LibraryPath &lib, OpenMode mode, const Config &conf);
 
+        std::string uid() const final;
+
     private:
         void do_write(Composite<KeySegmentPair>&& kvs) final;
 

@@ -168,7 +168,8 @@ class Library {
     }
 
     std::string name() {
-        return library_path_.to_delim_path();
+        auto lib_uid = storages_->uid();
+        return fmt::format("{}", lib_uid);
     }
 
   private:

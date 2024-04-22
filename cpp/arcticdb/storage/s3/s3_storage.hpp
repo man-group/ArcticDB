@@ -39,6 +39,8 @@ class S3Storage final : public Storage {
      */
     std::string get_key_path(const VariantKey& key) const;
 
+    std::string uid() const final;
+
   private:
     void do_write(Composite<KeySegmentPair>&& kvs) final;
 
@@ -70,6 +72,7 @@ class S3Storage final : public Storage {
     std::unique_ptr<S3ClientWrapper> s3_client_;
     std::string root_folder_;
     std::string bucket_name_;
+    std::string region_;
 };
 
 inline arcticdb::proto::storage::VariantStorage pack_config(const std::string &bucket_name) {

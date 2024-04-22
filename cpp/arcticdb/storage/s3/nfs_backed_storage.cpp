@@ -118,6 +118,10 @@ VariantKey unencode_object_id(const VariantKey& key) {
                         });
 }
 
+std::string NfsBackedStorage::uid() const {
+    return fmt::format("nfs_backed_storage-{}/{}", root_folder_, bucket_name_);
+}
+
 void NfsBackedStorage::do_write(Composite<KeySegmentPair>&& kvs) {
     auto enc = kvs.transform([] (auto&& key_seg) {
         return KeySegmentPair{encode_object_id(key_seg.variant_key()), std::move(key_seg.segment())};

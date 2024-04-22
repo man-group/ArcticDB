@@ -173,6 +173,8 @@ public:
     [[nodiscard]] const LibraryPath &library_path() const { return lib_path_; }
     [[nodiscard]] OpenMode open_mode() const { return mode_; }
 
+    virtual std::string uid() const = 0;
+
 private:
     virtual void do_write(Composite<KeySegmentPair>&& kvs) = 0;
 

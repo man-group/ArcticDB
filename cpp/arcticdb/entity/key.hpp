@@ -178,6 +178,10 @@ enum class KeyType : int {
      * Contains column stats about the index key with the same stream ID and version number
      */
     COLUMN_STATS = 25,
+    /*
+     * Used for storing the ids of storages that failed to sync
+     */
+    FAIL_INFO = 26,
     UNDEFINED
 };
 

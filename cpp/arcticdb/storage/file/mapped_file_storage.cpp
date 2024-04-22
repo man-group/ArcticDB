@@ -25,6 +25,10 @@ MappedFileStorage::MappedFileStorage(const LibraryPath &lib, OpenMode mode, Conf
     init();
 }
 
+std::string MappedFileStorage::uid() const {
+    return fmt::format("mapped_file_storage-{}", config_.path());
+}
+
 void MappedFileStorage::do_write_raw(const uint8_t* data, size_t bytes) {
     ARCTICDB_DEBUG(log::storage(), "Writing {} bytes to mapped file storage at offset {}", bytes, offset_);
     memcpy(file_.data() + offset_, data, bytes);

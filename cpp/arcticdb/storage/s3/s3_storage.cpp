@@ -53,6 +53,9 @@ namespace s3 {
 
 namespace fg = folly::gen;
 
+std::string S3Storage::uid() const {
+    return fmt::format("s3_storage-{}/{}/{}", region_, bucket_name_, root_folder_);
+}
 
 std::string S3Storage::get_key_path(const VariantKey& key) const {
     auto b = FlatBucketizer{};
@@ -101,7 +104,8 @@ S3Storage::S3Storage(const LibraryPath &library_path, OpenMode mode, const Confi
     Storage(library_path, mode),
     s3_api_(S3ApiInstance::instance()),
     root_folder_(object_store_utils::get_root_folder(library_path)),
-    bucket_name_(conf.bucket_name()) {
+    bucket_name_(conf.bucket_name()),
+    region_(conf.region()) {
 
     auto creds = get_aws_credentials(conf);
 

@@ -33,7 +33,7 @@ RocksDBStorage::RocksDBStorage(const LibraryPath &library_path, OpenMode mode, c
     auto lib_path_str = library_path.to_delim_path(fs::path::preferred_separator);
 
     auto lib_dir = root_path / lib_path_str;
-    auto db_name = lib_dir.generic_string();
+    db_name_ = lib_dir.generic_string();
 
     std::set<std::string> key_names;
     arcticdb::entity::foreach_key_type([&](KeyType&& key_type) {
@@ -45,7 +45,7 @@ RocksDBStorage::RocksDBStorage(const LibraryPath &library_path, OpenMode mode, c
     ::rocksdb::DBOptions db_options;
 
     ::rocksdb::ConfigOptions cfg_opts;
-    auto s = ::rocksdb::LoadLatestOptions(cfg_opts, db_name, &db_options, &column_families);
+    auto s = ::rocksdb::LoadLatestOptions(cfg_opts, db_name_, &db_options, &column_families);
     if (s.ok()) {
         std::set<std::string> existing_key_names{};
         for (const auto& desc : column_families) {
@@ -56,7 +56,7 @@ RocksDBStorage::RocksDBStorage(const LibraryPath &library_path, OpenMode mode, c
         util::check(existing_key_names == key_names, "Existing database has incorrect key columns.");
     } else if (s.IsNotFound()) {
         util::check_arg(mode > OpenMode::READ, "Missing dir {} for lib={}. mode={}",
-                            db_name, lib_path_str, mode);
+                            db_name_, lib_path_str, mode);
         // Default column family required, error if not provided.
         column_families.emplace_back(::rocksdb::kDefaultColumnFamilyName, ::rocksdb::ColumnFamilyOptions());
         for (const auto& key_name: key_names) {
@@ -75,7 +75,7 @@ RocksDBStorage::RocksDBStorage(const LibraryPath &library_path, OpenMode mode, c
     std::vector<::rocksdb::ColumnFamilyHandle*> handles;
     // Note: the "default" handle will be returned as well. It is necessary to delete this, but not
     // rocksdb's internal handle to the default column family as returned by DefaultColumnFamily().
-    s = ::rocksdb::DB::Open(db_options, db_name, column_families, &handles, &db_);
+    s = ::rocksdb::DB::Open(db_options, db_name_, column_families, &handles, &db_);
     storage::check<ErrorCode::E_UNEXPECTED_ROCKSDB_ERROR>(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
     util::check(handles.size() == column_families.size(), "Open returned wrong number of handles.");
     for (std::size_t i = 0; i < handles.size(); i++) {
@@ -93,6 +93,10 @@ RocksDBStorage::~RocksDBStorage() {
     auto s = db_->Close();
     storage::check<ErrorCode::E_UNEXPECTED_ROCKSDB_ERROR>(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
     delete db_;
+}
+
+std::string RocksDBStorage::uid() const {
+    return fmt::format("rocksdb_storage-{}", db_name_);
 }
 
 void RocksDBStorage::do_write(Composite<KeySegmentPair>&& kvs) {

@@ -300,6 +300,10 @@ bool do_key_exists_impl(
 }
 } //namespace detail
 
+std::string AzureStorage::uid() const {
+    return fmt::format("azure_storage-{}", root_folder_);
+}
+
 void AzureStorage::do_write(Composite<KeySegmentPair>&& kvs) {
     detail::do_write_impl(std::move(kvs), root_folder_, *azure_client_, FlatBucketizer{}, upload_option_, request_timeout_);
 }
@@ -338,6 +342,7 @@ using namespace Azure::Storage::Blobs;
 AzureStorage::AzureStorage(const LibraryPath &library_path, OpenMode mode, const Config &conf) :
     Storage(library_path, mode),
     root_folder_(object_store_utils::get_root_folder(library_path)),
+    container_name_(conf.container_name()),
     request_timeout_(conf.request_timeout() == 0 ? 200000 : conf.request_timeout()) {
         if(conf.use_mock_storage_for_testing()) {
             ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using Mock Azure storage");
