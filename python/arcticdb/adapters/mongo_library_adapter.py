@@ -27,7 +27,7 @@ except ImportError:
 class MongoLibraryAdapter(ArcticLibraryAdapter):
     @staticmethod
     def supports_uri(uri: str) -> bool:
-        return uri.startswith("mongodb://")  # mongo+srv:// support?
+        return uri.startswith("mongodb://") or uri.startswith("mongodb+srv://")
 
     def __init__(self, uri: str, encoding_version: EncodingVersion, *args, **kwargs):
         try:
