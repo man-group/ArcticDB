@@ -568,6 +568,31 @@ def test_delete_date_range_remove_everything(version_store_factory, map_timeout)
         assert_frame_equal(vit.data, df)
 
 
+def test_delete_date_range_get_info(lmdb_version_store_tiny_segment):
+    lib = lmdb_version_store_tiny_segment
+    sym = "test_delete_date_range_get_info"
+    data = {
+        "col_0": [0, 1, 2, 3, 4],
+        "col_1": [5, 6, 7, 8, 9],
+        "col_2": [10, 11, 12, 13, 14],
+    }
+    df = pd.DataFrame(data, index=pd.date_range(pd.Timestamp(1000), freq="us", periods=5))
+    lib.write(sym, df)
+    date_range = lib.get_info(sym)["date_range"]
+    assert df.index[0] == date_range[0]
+    assert df.index[-1] == date_range[1]
+
+    lib.delete(sym, (pd.Timestamp(4000), pd.Timestamp(5000)))
+    received = lib.read(sym).data
+    assert_frame_equal(df.iloc[:3], received)
+    assert received.index[-1] == lib.get_info(sym)["date_range"][1]
+
+    lib.delete(sym, (pd.Timestamp(1000), pd.Timestamp(2000)))
+    received = lib.read(sym).data
+    assert_frame_equal(df.iloc[2:3], received)
+    assert received.index[0] == lib.get_info(sym)["date_range"][0]
+
+
 def test_delete_read_from_timestamp(basic_store):
     sym = "test_from_timestamp_with_delete"
     lib = basic_store

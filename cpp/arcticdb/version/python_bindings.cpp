@@ -200,16 +200,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def_property_readonly("end_index", &DescriptorItem::end_index)
         .def_property_readonly("creation_ts", &DescriptorItem::creation_ts)
         .def_property_readonly("timeseries_descriptor", [](const DescriptorItem& self) {
-          py::object pyobj;
-          auto timeseries_descriptor = self.timeseries_descriptor();
-          if (timeseries_descriptor.has_value()) {
-               arcticdb::proto::descriptors::TimeSeriesDescriptor tsd;
-               timeseries_descriptor->UnpackTo(&tsd);
-               pyobj = python_util::pb_to_python(tsd);
-          } else {
-               pyobj = pybind11::none();
-          }
-          return pyobj;
+            // FUTURE: Use std::optional monadic operations in C++23
+            auto opt_tsd = self.timeseries_descriptor();
+            return opt_tsd.has_value() ? python_util::pb_to_python(*opt_tsd) : pybind11::none();
         });
 
     py::class_<pipelines::FrameSlice, std::shared_ptr<pipelines::FrameSlice>>(version, "FrameSlice")

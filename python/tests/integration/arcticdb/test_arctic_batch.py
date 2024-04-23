@@ -1316,8 +1316,8 @@ def test_read_description_batch_empty_nat(arctic_library):
     requests = [ReadInfoRequest("sym_" + str(sym)) for sym in range(num_symbols)]
     results_list = lib.get_description_batch(requests)
     for sym in range(num_symbols):
-        assert np.isnat(results_list[sym].date_range[0]) == True
-        assert np.isnat(results_list[sym].date_range[1]) == True
+        assert np.isnat(results_list[sym].date_range[0])
+        assert np.isnat(results_list[sym].date_range[1])
 
 
 def test_read_batch_mixed_with_snapshots(arctic_library):
