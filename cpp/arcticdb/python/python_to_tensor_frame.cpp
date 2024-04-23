@@ -116,7 +116,7 @@ NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types) {
     const auto arr = pybind11::detail::array_proxy(ptr);
     const auto descr = pybind11::detail::array_descriptor_proxy(arr->descr);
     auto ndim = arr->nd;
-    ssize_t size = ndim == 1 ? arr->dimensions[0] : arr->dimensions[0] * arr->dimensions[1];
+    const ssize_t size = ndim == 1 ? arr->dimensions[0] : arr->dimensions[0] * arr->dimensions[1];
     // In Pandas < 2, empty series dtype is `"float"`, but as of Pandas 2.0, empty series dtype is `"object"`
     // The Normalizer in Python cast empty `"float"` series to `"object"` so `EMPTY` is used here.
     // See: https://github.com/man-group/ArcticDB/pull/1049
@@ -264,17 +264,16 @@ std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
 
     // idx_names are passed by the python layer. They are empty in case row count index is used see:
     // https://github.com/man-group/ArcticDB/blob/4184a467d9eee90600ddcbf34d896c763e76f78f/python/arcticdb/version_store/_normalization.py#L291
-    // Currently the python layers assign RowRange index to both empty dataframes and dataframes wich do not specify
+    // Currently the python layers assign RowRange index to both empty dataframes and dataframes which do not specify
     // index explicitly. Thus we handle this case after all columns are read so that we know how many rows are there.
     if (idx_names.empty()) {
-        if (res->num_rows > 0) {
-            res->index = stream::RowCountIndex();
-            res->desc.set_index_type(IndexDescriptor::ROWCOUNT);
-        } else {
-            res->index = stream::EmptyIndex();
-            res->desc.set_index_type(IndexDescriptor::EMPTY);
-        }
+        res->index = stream::RowCountIndex();
+        res->desc.set_index_type(IndexDescriptor::ROWCOUNT);
+    }
 
+    if (empty_types && res->num_rows == 0) {
+        res->index = stream::EmptyIndex();
+        res->desc.set_index_type(IndexDescriptor::EMPTY);
     }
 
     ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res->desc);

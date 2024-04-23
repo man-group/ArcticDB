@@ -283,10 +283,13 @@ def _from_tz_timestamp(ts, tz):
 _range_index_props_are_public = hasattr(RangeIndex, "start")
 
 
-def _normalize_single_index(index, index_names, index_norm, dynamic_strings=None, string_max_len=None):
+def _normalize_single_index(index, index_names, index_norm, dynamic_strings=None, string_max_len=None, empty_types=False):
     # index: pd.Index or np.ndarray -> np.ndarray
     index_tz = None
-    if isinstance(index_norm, NormalizationMetadata.PandasIndex) and not index_norm.is_physically_stored:
+    is_empty = len(index) == 0
+    if empty_types and is_empty and not index_norm.is_physically_stored:
+        return [], []
+    elif isinstance(index, RangeIndex):
         if index.name:
             if not isinstance(index.name, int) and not isinstance(index.name, str):
                 raise NormalizationException(
@@ -295,10 +298,8 @@ def _normalize_single_index(index, index_names, index_norm, dynamic_strings=None
             if isinstance(index.name, int):
                 index_norm.is_int = True
             index_norm.name = str(index.name)
-        if isinstance(index, RangeIndex):
-            # skip index since we can reconstruct it, so no need to actually store it
-            index_norm.start = index.start if _range_index_props_are_public else index._start
-            index_norm.step = index.step if _range_index_props_are_public else index._step
+        index_norm.start = index.start if _range_index_props_are_public else index._start
+        index_norm.step = index.step if _range_index_props_are_public else index._step
         return [], []
     else:
         coerce_type = DTN64_DTYPE if len(index) == 0 else None
@@ -364,9 +365,9 @@ def _denormalize_single_index(item, norm_meta):
                     name = norm_meta.index.name if norm_meta.index.name else None
                     return RangeIndex(start=norm_meta.index.start, stop=stop, step=norm_meta.index.step, name=name)
                 else:
-                    return Index([])
+                    return DatetimeIndex([])
             else:
-                return Index([])
+                return RangeIndex(start=0, stop=0, step=1)
         # this means that the index is not a datetime index and it's been represented as a regular field in the stream
         item.index_columns.append(item.names.pop(0))
 
@@ -517,12 +518,13 @@ _IDX_PREFIX_LEN = len(_IDX_PREFIX)
 
 
 class _PandasNormalizer(Normalizer):
-    def _index_to_records(self, df, pd_norm, dynamic_strings, string_max_len):
+    def _index_to_records(self, df, pd_norm, dynamic_strings, string_max_len, empty_types):
         index = df.index
-        if len(index) == 0 and len(df.select_dtypes(include="category").columns) == 0:
+        empty_df = len(index) == 0
+        if empty_df and empty_types:
             index_norm = pd_norm.index
             index_norm.is_physically_stored = False
-            index = Index([])
+            index = DatetimeIndex([])
         elif isinstance(index, MultiIndex):
             # This is suboptimal and only a first implementation since it reduplicates the data
             index_norm = pd_norm.multi_index
@@ -544,14 +546,12 @@ class _PandasNormalizer(Normalizer):
             df.reset_index(fields, inplace=True)
             index = df.index
         else:
-            is_not_range_index = not isinstance(index, RangeIndex)
-            df_has_rows = not(len(index) == 0 and len(df.select_dtypes(include="category").columns) == 0)
             index_norm = pd_norm.index
-            index_norm.is_physically_stored = is_not_range_index and df_has_rows
-            if not df_has_rows:
-                index = Index([])
+            index_norm.is_physically_stored = not isinstance(index, RangeIndex) and not empty_df
+            is_categorical = len(df.select_dtypes(include="category").columns) > 0
+            index = DatetimeIndex([]) if IS_PANDAS_TWO and empty_df and not is_categorical else index
 
-        return _normalize_single_index(index, list(index.names), index_norm, dynamic_strings, string_max_len)
+        return _normalize_single_index(index, list(index.names), index_norm, dynamic_strings, string_max_len, empty_types=empty_types)
 
     def _index_from_records(self, item, norm_meta):
         # type: (NormalizationMetadata.Pandas, _SUPPORTED_NATIVE_RETURN_TYPES, Bool)->Union[Index, DatetimeIndex, MultiIndex]
@@ -581,12 +581,13 @@ class SeriesNormalizer(_PandasNormalizer):
     def __init__(self):
         self._df_norm = DataFrameNormalizer()
 
-    def normalize(self, item, string_max_len=None, dynamic_strings=False, coerce_columns=None, **kwargs):
+    def normalize(self, item, string_max_len=None, dynamic_strings=False, coerce_columns=None, empty_types=False, **kwargs):
         df, norm = self._df_norm.normalize(
             item.to_frame(),
             dynamic_strings=dynamic_strings,
             string_max_len=string_max_len,
             coerce_columns=coerce_columns,
+            empty_types=empty_types
         )
         norm.series.CopyFrom(norm.df)
         if item.name:
@@ -837,7 +838,7 @@ class DataFrameNormalizer(_PandasNormalizer):
 
         return df
 
-    def normalize(self, item, string_max_len=None, dynamic_strings=False, coerce_columns=None, **kwargs):
+    def normalize(self, item, string_max_len=None, dynamic_strings=False, coerce_columns=None, empty_types=False, **kwargs):
         # type: (DataFrame, Optional[int])->NormalizedInput
         norm_meta = NormalizationMetadata()
         norm_meta.df.common.mark = True
@@ -853,7 +854,7 @@ class DataFrameNormalizer(_PandasNormalizer):
             raise ArcticDbNotYetImplemented("MultiIndex column are not supported yet")
 
         index_names, ix_vals = self._index_to_records(
-            item, norm_meta.df.common, dynamic_strings, string_max_len=string_max_len
+            item, norm_meta.df.common, dynamic_strings, string_max_len=string_max_len, empty_types=empty_types
         )
         # The first branch of this if is faster, but does not work with null/duplicated column names
         if item.columns.is_unique and not item.columns.hasnans:
@@ -1009,13 +1010,13 @@ class Pickler(object):
 
 
 class TimeFrameNormalizer(Normalizer):
-    def normalize(self, item, string_max_len=None, dynamic_strings=False, coerce_columns=None, **kwargs):
+    def normalize(self, item, string_max_len=None, dynamic_strings=False, coerce_columns=None, empty_types=False, **kwargs):
         norm_meta = NormalizationMetadata()
         norm_meta.ts.mark = True
         index_norm = norm_meta.ts.common.index
         index_norm.is_physically_stored = len(item.times) > 0 and not isinstance(item.times, RangeIndex)
         index_names, ix_vals = _normalize_single_index(
-            item.times, ["times"], index_norm, dynamic_strings, string_max_len
+            item.times, ["times"], index_norm, dynamic_strings, string_max_len, empty_types=empty_types
         )
         columns_names, columns_vals = _normalize_columns(
             item.columns_names,
@@ -1087,7 +1088,7 @@ class CompositeNormalizer(Normalizer):
         self.msg_pack_denorm = MsgPackNormalizer()  # must exist for deserialization
         self.fallback_normalizer = fallback_normalizer
 
-    def _normalize(self, item, string_max_len=None, dynamic_strings=False, coerce_columns=None, **kwargs):
+    def _normalize(self, item, string_max_len=None, dynamic_strings=False, coerce_columns=None, empty_types=False, **kwargs):
         normalizer = self.get_normalizer_for_type(item)
 
         if not normalizer:
@@ -1099,6 +1100,7 @@ class CompositeNormalizer(Normalizer):
             string_max_len=string_max_len,
             dynamic_strings=dynamic_strings,
             coerce_columns=coerce_columns,
+            empty_types=empty_types,
             **kwargs,
         )
 
@@ -1136,7 +1138,7 @@ class CompositeNormalizer(Normalizer):
         return None
 
     def normalize(
-        self, item, string_max_len=None, pickle_on_failure=False, dynamic_strings=False, coerce_columns=None, **kwargs
+        self, item, string_max_len=None, pickle_on_failure=False, dynamic_strings=False, coerce_columns=None, empty_types=False, **kwargs
     ):
         """
         :param item: Item to be normalized to something Arctic Native understands.
@@ -1145,13 +1147,13 @@ class CompositeNormalizer(Normalizer):
         :param pickle_on_failure: This will fallback to pickling the Supported objects (DataFrame, Series, TimeFrame)
          even if use_norm_failure_handler_known_types was not configured at the library level.
         """
-
         try:
             return self._normalize(
                 item,
                 string_max_len=string_max_len,
                 dynamic_strings=dynamic_strings,
                 coerce_columns=coerce_columns,
+                empty_types=empty_types,
                 **kwargs,
             )
         except Exception as ex:

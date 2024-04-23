@@ -137,7 +137,8 @@ folly::Future<AtomKey> async_append_impl(
     const UpdateInfo& update_info,
     const std::shared_ptr<InputTensorFrame>& frame,
     const WriteOptions& options,
-    bool validate_index) {
+    bool validate_index,
+    bool empty_types) {
 
     util::check(update_info.previous_index_key_.has_value(), "Cannot append as there is no previous index key to append to");
     const StreamId stream_id = frame->desc.id();
@@ -147,7 +148,7 @@ folly::Future<AtomKey> async_append_impl(
     auto row_offset = index_segment_reader.tsd().proto().total_rows();
     util::check_rte(!index_segment_reader.is_pickled(), "Cannot append to pickled data");
     frame->set_offset(static_cast<ssize_t>(row_offset));
-    fix_descriptor_mismatch_or_throw(APPEND, options.dynamic_schema, index_segment_reader, *frame);
+    fix_descriptor_mismatch_or_throw(APPEND, options.dynamic_schema, index_segment_reader, *frame, empty_types);
     if (validate_index) {
         sorted_data_check_append(*frame, index_segment_reader);
     }
@@ -162,14 +163,16 @@ VersionedItem append_impl(
     const UpdateInfo& update_info,
     const std::shared_ptr<InputTensorFrame>& frame,
     const WriteOptions& options,
-    bool validate_index) {
+    bool validate_index,
+    bool empty_types) {
 
     ARCTICDB_SUBSAMPLE_DEFAULT(WaitForWriteCompletion)
     auto version_key_fut = async_append_impl(store,
                                              update_info,
                                              frame,
                                              options,
-                                             validate_index);
+                                             validate_index,
+                                             empty_types);
     auto version_key = std::move(version_key_fut).get();
     auto versioned_item = VersionedItem(to_atom(std::move(version_key)));
     ARCTICDB_DEBUG(log::version(), "write_dataframe_impl stream_id: {} , version_id: {}", versioned_item.symbol(), update_info.next_version_id_);
@@ -323,7 +326,8 @@ VersionedItem update_impl(
     const UpdateQuery& query,
     const std::shared_ptr<InputTensorFrame>& frame,
     const WriteOptions&& options,
-    bool dynamic_schema) {
+    bool dynamic_schema,
+    bool empty_types) {
     util::check(update_info.previous_index_key_.has_value(), "Cannot update as there is no previous index key to update into");
     const StreamId stream_id = frame->desc.id();
     ARCTICDB_DEBUG(log::version(), "Update versioned dataframe for stream_id: {} , version_id = {}", stream_id, update_info.previous_index_key_->version_id());
@@ -337,7 +341,7 @@ VersionedItem update_impl(
     sorted_data_check_update(*frame, index_segment_reader);
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
     (void)check_and_mark_slices(index_segment_reader, dynamic_schema, false, std::nullopt, bucketize_dynamic);
-    fix_descriptor_mismatch_or_throw(UPDATE, dynamic_schema, index_segment_reader, *frame);
+    fix_descriptor_mismatch_or_throw(UPDATE, dynamic_schema, index_segment_reader, *frame, empty_types);
 
     std::vector<FilterQuery<index::IndexSegmentReader>> queries =
         build_update_query_filters<index::IndexSegmentReader>(query.row_filter, frame->index, frame->index_range, dynamic_schema, index_segment_reader.bucketize_dynamic());
