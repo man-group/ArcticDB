@@ -116,7 +116,7 @@ jobs:
         if: matrix.os == 'linux'
         run: |
           yum update -y
-          yum install -y devtoolset-12
+          yum install -y devtoolset-11
           echo "CMAKE_C_COMPILER=/opt/rh/devtoolset-11/root/usr/bin/gcc" | tee -a $GITHUB_ENV
           echo "CMAKE_CXX_COMPILER=/opt/rh/devtoolset-11/root/usr/bin/g++" | tee -a $GITHUB_ENV
           echo "LD_LIBRARY_PATH=/opt/rh/devtoolset-11/root/usr/lib64:\
