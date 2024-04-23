@@ -409,6 +409,9 @@ folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(
                 util::raise_rte("Unsupported index type {}", seg.column(position_t(index::Fields::end_index)).type());
             }
         });
+        if (end_index.has_value()) {
+            --(*end_index);
+        }
         return DescriptorItem{std::move(to_atom(key_seg)), std::move(start_index), std::move(end_index), std::move(timeseries_descriptor)};
     });
 }
