@@ -1,9 +1,10 @@
-![](images/FullWithBorder.png)
+ ![](images/FullWithBorder.png)
 
 ## What is ArcticDB?
 
-ArcticDB is an embedded/serverless database engine designed to integrate with Pandas and the Python Data Science ecosystem. ArcticDB enables 
-you to store, retrieve and process DataFrames at scale, backed by commodity object storage (S3-compatible storages and Azure Blob Storage).
+ArcticDB is an embedded/serverless database engine designed for DataFrames (e.g. Pandas) and the
+Python Data Science ecosystem. ArcticDB enables you to store, retrieve and process DataFrames at scale,
+backed by commodity object storage (S3-compatible storages and Azure Blob Storage).
 
 ArcticDB requires *zero additional infrastructure* beyond a running Python environment and access to object storage and can be **installed in seconds.**
 
@@ -11,11 +12,11 @@ ArcticDB is:
 
 - **Fast**: ArcticDB is incredibly fast, able to process millions of (on-disk) rows a second, and is very easy to install: `pip install arcticdb`!
 - **Flexible**: Supporting data with and without a schema, ArcticDB is also fully compatible with streaming data ingestion. The platform is bitemporal, allowing you to see all previous versions of stored data.
-- **Familiar**: ArcticDB is the world's simplest database, designed to be immediately familiar to anyone with prior Python and Pandas experience.
+- **Familiar**: ArcticDB is the world's simplest database - the api is easy to learn for anyone with prior Python and Pandas experience. Just you and your data - the cognitive overhead is very low.
 
-#### What is ArcticDB _not_?
+#### Transactions
 
-ArcticDB is designed for high throughput analytical workloads. It is _not_ a transactional database and as such is not a replacement for tools such as PostgreSQL.
+ArcticDB is designed for high throughput analytical workloads. It is _not_ a transactional database and as such is not a replacement for tools such as PostgreSQL. In our experience a large proportion of workflows can easily be constructed to run without transactions.
 
 ## Getting Started
 
@@ -25,7 +26,8 @@ The below guide covers installation, setup and basic usage. More detailed inform
 
 ArcticDB supports Python 3.6 - 3.11. To install, simply run:
 
-```
+
+```python
 pip install arcticdb
 ```
 
@@ -35,125 +37,19 @@ ArcticDB is a storage engine designed for object storage, but also supports loca
 
 !!! Storage Compatibility
 
-    ArcticDB supports any S3 API compatible storage. It has been tested against AWS S3 and storage appliances like [VAST Universal Storage](https://vastdata.com/).
+    ArcticDB supports any S3 API compatible storage. It supports AWS, Azure and storage appliances like [VAST Universal Storage](https://vastdata.com/) and [Pure Storage](https://purestorage.com/).
 
     ArcticDB also supports LMDB for local/file based storage - to use LMDB, pass an LMDB path as the URI: `adb.Arctic('lmdb://path/to/desired/database')`.
 
 To get started, we can import ArcticDB and instantiate it:
 
 ```python
->>> import arcticdb as adb
->>> ac = adb.Arctic(<URI>)
+import arcticdb as adb
+uri = "insert your uri string here"
+ac = adb.Arctic(uri)
 ```
 
-For more information on the format of _<URI\>_, please view the docstring ([`>>> help(Arctic)`](api/arctic.md#arcticdb.Arctic)). Below we'll run through some setup examples.
-
-#### S3 configuration
-
-There are two methods to configure S3 access. If you happen to know the access and secret key, simply connect as follows:
-
-```python
->>> import arcticdb as adb
->>> ac = adb.Arctic('s3://ENDPOINT:BUCKET?region=blah&access=ABCD&secret=DCBA')
-```
-
-Otherwise, you can delegate authentication to the AWS SDK (obeys standard [AWS configuration options](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html)):
-
-```python
->>> ac = adb.Arctic('s3://ENDPOINT:BUCKET?aws_auth=true')
-```
-
-Same as above, but using HTTPS:
-
-```python
->>> ac = adb.Arctic('s3s://ENDPOINT:BUCKET?aws_auth=true')
-```
-
-!!! s3 vs s3s
-
-    Use `s3s` if your S3 endpoint used HTTPS
-
-##### Connecting to a defined storage endpoint
-
-Connect to local storage (not AWS - HTTP endpoint of s3.local) with a pre-defined access and storage key:
-
-```python
->>> ac = adb.Arctic('s3://s3.local:arcticdb-test-bucket?access=EFGH&secret=HGFE')
-```
-
-##### Connecting to AWS
-
-Connecting to AWS with a pre-defined region:
-
-```python
->>> ac = adb.Arctic('s3s://s3.eu-west-2.amazonaws.com:arcticdb-test-bucket?aws_auth=true')
-```
-
-Note that no explicit credential parameters are given. When `aws_auth` is passed, authentication is delegated to the AWS SDK which is responsible for locating the appropriate credentials in the `.config` file or
-in environment variables. You can manually configure which profile is being used by setting the `AWS_PROFILE` environment variable as described in the
-[AWS Documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html).
-
-#### Using a specific path within a bucket
-
-You may want to restrict access for the ArcticDB library to a specific path within the bucket. To do this, you can use the `path_prefix` parameter:
-
-```python
->>> ac = adb.Arctic('s3s://s3.eu-west-2.amazonaws.com:arcticdb-test-bucket?path_prefix=test&aws_auth=true')
-```
-
-#### Azure
-
-ArcticDB uses the [Azure connection string](https://learn.microsoft.com/en-us/azure/storage/common/storage-configure-connection-string) to define the connection: 
-
-```python
->>> import arcticdb as adb
->>> ac = adb.Arctic('azure://AccountName=ABCD;AccountKey=EFGH;BlobEndpoint=ENDPOINT;Container=CONTAINER')
-```
-
-For example: 
-
-```python
->>> import arcticdb as adb
->>> ac = adb.Arctic("azure://CA_cert_path=/etc/ssl/certs/ca-certificates.crt;BlobEndpoint=https://arctic.blob.core.windows.net;Container=acblob;SharedAccessSignature=sp=awd&st=2001-01-01T00:00:00Z&se=2002-01-01T00:00:00Z&spr=https&rf=g&sig=awd%3D")
-```
-
-For more information, [see the Arctic class reference](api/arctic.md#arcticdb.Arctic).
-
-#### LMDB
-
-LMDB supports configuring its map size. See its [documentation](http://www.lmdb.tech/doc/group__mdb.html#gaa2506ec8dab3d969b0e609cd82e619e5).
-
-You may need to tweak it on Windows, whereas on Linux the default is much larger and should suffice. This is because Windows allocates physical
-space for the map file eagerly, whereas on Linux the map size is an upper bound to the physical space that will be used.
-
-You can set a map size in the connection string:
-
-```python
->>> import arcticdb as adb
->>> ac = adb.Arctic('lmdb://path/to/desired/database?map_size=2GB')
-```
-
-The default on Windows is 2GiB. Errors with `lmdb errror code -30792` indicate that the map is getting full and that you should
-increase its size. This will happen if you are doing large writes.
-
-In each Python process, you should ensure that you only have one Arctic instance open over a given LMDB database.
-
-LMDB does not work with remote filesystems.
-
-#### In-memory configuration
-
-An in-memory backend is provided mainly for testing and experimentation. It could be useful when creating files with LMDB is not desired.
-
-There are no configuration parameters, and the memory is owned solely be the Arctic instance.
-
-For example:
-
-```python
->>> import arcticdb as adb
->>> ac = adb.Arctic('mem://')
-```
-
-For concurrent access to a local backend, we recommend LMDB connected to tmpfs.
+For more information on the format of the `uri` string, please view the docstring ([`help(Arctic)`](api/arctic.md#arcticdb.Arctic)) or read the [storage access](storage_access.md) section.
 
 #### Library Setup
 
@@ -163,15 +59,18 @@ are stored in collections called _libraries_. A single _library_ can store an ef
 _Libraries_ must first be initialized prior to use:
 
 ```python
->>> ac.create_library('data')  # fixed schema - see note below
->>> ac.list_libraries()
+ac.create_library('data')  # fixed schema - see note below
+ac.list_libraries()
+```
+output
+```python
 ['data']
 ```
 
 A library can then be retrieved:
 
 ```python
->>> library = ac['data']
+library = ac['data']
 ```
 
 !!! info "ArcticDB Schemas & the Dynamic Schema library option"
@@ -182,21 +81,24 @@ A library can then be retrieved:
     option within the `library_options` parameter of the `create_library` method. Note that whether to use fixed or dynamic schemas must be set at 
     library creation time.
 
-##### Reading And Writing Data(Frames)!
+##### Reading And Writing Data
 
-Now we have a library set up, we can get to reading and writing data! ArcticDB exposes a set of simple API primitives to enable DataFrame storage. 
+Now we have a library set up, we can get to reading and writing data. ArcticDB exposes a set of simple API primitives to enable DataFrame storage. 
 
 Let's first look at writing a DataFrame to storage:
 
-```Python
+```python
 # 50 columns, 25 rows, random data, datetime indexed.
->>> import pandas as pd
->>> import numpy as np
->>> from datetime import datetime
->>> cols = ['COL_%d' % i for i in range(50)]
->>> df = pd.DataFrame(np.random.randint(0, 50, size=(25, 50)), columns=cols)
->>> df.index = pd.date_range(datetime(2000, 1, 1, 5), periods=25, freq="H")
->>> df.head(2)
+import pandas as pd
+import numpy as np
+from datetime import datetime
+cols = ['COL_%d' % i for i in range(50)]
+df = pd.DataFrame(np.random.randint(0, 50, size=(25, 50)), columns=cols)
+df.index = pd.date_range(datetime(2000, 1, 1, 5), periods=25, freq="H")
+df.head(2)
+```
+output
+```
                      COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
 2000-01-01 05:00:00     35     46      4      0     17     35     33     25  ...
 2000-01-01 06:00:00      9     24     18     30      0     39     43     20  ...
@@ -204,8 +106,11 @@ Let's first look at writing a DataFrame to storage:
 
 Write the DataFrame:
 
-```Python
->>> library.write('test_frame', df)
+```python
+library.write('test_frame', df)
+```
+output
+```
 VersionedItem(symbol=test_frame,library=data,data=n/a,version=0,metadata=None,host=<host>)
 ```
 
@@ -227,8 +132,11 @@ The `'test_frame'` DataFrame will be used for the remainder of this guide.
 Read it back:
 
 ```Python
->>> from_storage_df = library.read('test_frame').data
->>> from_storage_df.head(2)
+from_storage_df = library.read('test_frame').data
+from_storage_df.head(2)
+```
+output
+```
                      COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
 2000-01-01 05:00:00     35     46      4      0     17     35     33     25  ...
 2000-01-01 06:00:00      9     24     18     30      0     39     43     20  ...
@@ -247,7 +155,10 @@ ArcticDB enables you to slice by _row_ and by _column_.
 ###### Row-slicing
 
 ```Python
->>> library.read('test_frame', date_range=(df.index[5], df.index[8])).data
+library.read('test_frame', date_range=(df.index[5], df.index[8])).data
+```
+output
+```
                      COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
 2000-01-01 10:00:00     43     28     36     18     10     37     31     32  ...
 2000-01-01 11:00:00     36      5     30     18     44     15     31     28  ...
@@ -258,9 +169,12 @@ ArcticDB enables you to slice by _row_ and by _column_.
 ##### Column slicing
 
 ```Python
->>> _range = (df.index[5], df.index[8])
->>> _columns = ['COL_30', 'COL_31']
->>> library.read('test_frame', date_range=_range, columns=_columns).data
+_range = (df.index[5], df.index[8])
+_columns = ['COL_30', 'COL_31']
+library.read('test_frame', date_range=_range, columns=_columns).data
+```
+output
+```
                      COL_30  COL_31
 2000-01-01 10:00:00       7      26
 2000-01-01 11:00:00      29      18
@@ -279,13 +193,15 @@ ArcticDB uses a Pandas-_like_ syntax to describe how to filter data. For more de
     We do not intend to re-implement the entirety of the Pandas filtering/masking operations, but instead target a maximally useful subset. 
 
 ```Python
->>> _range = (df.index[5], df.index[8])
->>> _cols = ['COL_30', 'COL_31']
->>> import arcticdb as adb
->>> q = adb.QueryBuilder()
->>> q = q[(q["COL_30"] > 30) & (q["COL_31"] < 50)]
->>> library.read('test_frame', date_range=_range, columns=_cols, query_builder=q).data
->>>
+_range = (df.index[5], df.index[8])
+_cols = ['COL_30', 'COL_31']
+import arcticdb as adb
+q = adb.QueryBuilder()
+q = q[(q["COL_30"] > 30) & (q["COL_31"] < 50)]
+library.read('test_frame', date_range=_range, columns=_cols, query_builder=q).data
+```
+output
+```
                      COL_30  COL_31
 2000-01-01 12:00:00      36      26
 2000-01-01 13:00:00      48      42
@@ -300,25 +216,37 @@ ArcticDB fully supports modifying stored data via two primitives: _update_ and _
 The update primitive enables you to overwrite a contiguous chunk of data. In the below example, we use `update` to modify _2000-01-01 05:00:00_, 
 remove _2000-01-01 06:00:00_ and modify _2000-01-01 07:00:00_.
 
-```Python
+```python
 # Recreate the DataFrame with new (and different!) random data, and filter to only the first and third row
->>> random_data = np.random.randint(0, 50, size=(25, 50))
->>> df = pd.DataFrame(random_data, columns=['COL_%d' % i for i in range(50)])
->>> df.index = pd.date_range(datetime(2000, 1, 1, 5), periods=25, freq="H")
+random_data = np.random.randint(0, 50, size=(25, 50))
+df = pd.DataFrame(random_data, columns=['COL_%d' % i for i in range(50)])
+df.index = pd.date_range(datetime(2000, 1, 1, 5), periods=25, freq="H")
 # Filter!
->>> df = df.iloc[[0,2]]
->>> df
+df = df.iloc[[0,2]]
+df
+```
+output
+```
                      COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
 2000-01-01 05:00:00     46     24      4     20      7     32      1     18  ...
 2000-01-01 07:00:00     44     37     16     27     30      1     35     25  ...
->>> library.update('test_frame', df)
+```
+now update the symbol
+```python
+library.update('test_frame', df)
+```
+output
+```
 VersionedItem(symbol=test_frame,library=data,data=n/a,version=1,metadata=None,host=<host>)
 ```
 
 Now let's look at the first 2 rows in the symbol:
 
-```Python
->>> library.head('test_frame', 2).data  # head/tail are similar to the equivalent Pandas operations
+```python
+library.head('test_frame', 2).data  # head/tail are similar to the equivalent Pandas operations
+```
+output
+```
                      COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
 2000-01-01 05:00:00     46     24      4     20      7     32      1     18  ...
 2000-01-01 07:00:00     44     37     16     27     30      1     35     25  ...
@@ -329,10 +257,13 @@ Now let's look at the first 2 rows in the symbol:
 Let's append data to the end of the timeseries:
 
 ```Python
->>> random_data = np.random.randint(0, 50, size=(5, 50))
->>> df_append = pd.DataFrame(random_data, columns=['COL_%d' % i for i in range(50)])
->>> df_append.index = pd.date_range(datetime(2000, 1, 2, 7), periods=5, freq="H")
->>> df_append
+random_data = np.random.randint(0, 50, size=(5, 50))
+df_append = pd.DataFrame(random_data, columns=['COL_%d' % i for i in range(50)])
+df_append.index = pd.date_range(datetime(2000, 1, 2, 7), periods=5, freq="H")
+df_append
+```
+output
+```
                      COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
 2000-01-02 07:00:00     38     44      4     37      3     26     12     10  ...
 2000-01-02 08:00:00     44     32      4     12     15     13     17     16  ...
@@ -346,9 +277,17 @@ Let's append data to the end of the timeseries:
 Let's now _append_ that DataFrame to what was written previously, and then pull back the final 7 rows from storage:
 
 ```Python
->>> library.append('test_frame', df_append)
+library.append('test_frame', df_append)
+```
+output
+```
 VersionedItem(symbol=test_frame,library=data,data=n/a,version=2,metadata=None,host=<host>)
->>> library.tail('test_frame', 7).data
+```
+```python
+library.tail('test_frame', 7).data
+```
+output
+```
                      COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
 2000-01-02 04:00:00      4     13      8     14     25     11     11     11  ...
 2000-01-02 05:00:00     14     41     24      7     16     10     15     36  ...
@@ -367,7 +306,10 @@ You might have noticed that _read_ calls do not return the data directly - but i
 (_write_, _append_ and _update_) increment the version counter. ArcticDB versions all modifications, which means you can retrieve earlier versions of data (ArcticDB is a bitemporal database!):
 
 ```Python
->>> library.tail('test_frame', 7, as_of=0).data
+library.tail('test_frame', 7, as_of=0).data
+```
+output
+```
                      COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
 2000-01-01 23:00:00     26     38     12     30     25     29     47     27  ...
 2000-01-02 00:00:00     12     14     42     11     44     32     19     11  ...
