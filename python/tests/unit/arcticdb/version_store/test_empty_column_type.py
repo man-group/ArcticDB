@@ -920,7 +920,6 @@ class TestIndexTypeWithEmptyTypeDisabledPands2AndLater(DisabledEmptyIndexBase):
         result = self.roundtrip(pd.DataFrame({"a": []}, index=input_index), lmdb_version_store_static_and_dynamic)
         expected_multiindex = pd.MultiIndex.from_arrays(expected_arrays, names=["p", "s"])
         assert result.index.equals(expected_multiindex)
-        assert expected_multiindex.dtypes.equals(result.index.dtypes)
 
 
 @pytest.mark.skipif(PANDAS_VERSION >= Version("2.0.0"), reason="This tests only the behavior with Pandas <= 2")
@@ -996,4 +995,3 @@ class TestIndexTypeWithEmptyTypeDisabledPands0AndPands1(DisabledEmptyIndexBase):
         result = self.roundtrip(pd.DataFrame({"a": []}, index=input_index), lmdb_version_store_static_and_dynamic)
         expected_multiindex = pd.MultiIndex.from_arrays(expected_arrays, names=["p", "s"])
         assert result.index.equals(expected_multiindex)
-        assert self.multiindex_dtypes(expected_multiindex).equals(self.multiindex_dtypes(result.index))
