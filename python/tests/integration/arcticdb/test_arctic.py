@@ -19,6 +19,7 @@ import platform
 from arcticdb_ext.exceptions import InternalException, UserInputException
 from arcticdb_ext.storage import NoDataFoundException
 from arcticdb.exceptions import ArcticDbNotYetImplemented, LibraryNotFound, MismatchingLibraryOptions
+from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
 from arcticdb.arctic import Arctic
 from arcticdb.options import LibraryOptions, EnterpriseLibraryOptions
 from arcticdb import QueryBuilder
@@ -912,6 +913,11 @@ def test_s3_force_uri_lib_config_handling(s3_storage):
 
     with pytest.raises(ValueError):
         Arctic(s3_storage.arctic_uri + "&force_uri_lib_config=false")
+
+
+@pytest.mark.parametrize("connection_string", ("mongodb://blah", "mongodb+srv://blah"))
+def test_mongo_connection_string_format(connection_string):
+    assert MongoLibraryAdapter.supports_uri(connection_string)
 
 
 # See test of same name in test_normalization.py for V1 API equivalent
