@@ -373,15 +373,7 @@ folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(
                 return std::nullopt;
             } else if constexpr (is_numeric_type(ColumnTagType::data_type)) {
                 std::optional<NumericIndex> start_index;
-                auto column_data = seg.column(position_t(index::Fields::start_index)).data();
-                while (auto block = column_data.template next<ColumnDescriptorType>()) {
-                    auto ptr = reinterpret_cast<const NumericIndex *>(block.value().data());
-                    const auto row_count = block.value().row_count();
-                    for (auto i = 0u; i < row_count; ++i) {
-                        auto value = *ptr++;
-                        start_index = start_index.has_value() ? std::min(*start_index, value) : value;
-                    }
-                }
+                start_index = seg.column(position_t(index::Fields::start_index)).template scalar_at<timestamp>(0);
                 return start_index;
             } else {
                 util::raise_rte("Unsupported index type {}", seg.column(position_t(index::Fields::start_index)).type());
@@ -395,15 +387,7 @@ folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(
                 return std::nullopt;
             } else if constexpr (is_numeric_type(ColumnTagType::data_type)) {
                 std::optional<NumericIndex> end_index;
-                auto column_data = seg.column(position_t(index::Fields::end_index)).data();
-                while (auto block = column_data.template next<ColumnDescriptorType>()) {
-                    auto ptr = reinterpret_cast<const NumericIndex *>(block.value().data());
-                    const auto row_count = block.value().row_count();
-                    for (auto i = 0u; i < row_count; ++i) {
-                        auto value = *ptr++;
-                        end_index = end_index.has_value() ? std::max(*end_index, value) : value;
-                    }
-                }
+                end_index = seg.column(position_t(index::Fields::end_index)).template scalar_at<timestamp>(seg.row_count() - 1);
                 return end_index;
             } else {
                 util::raise_rte("Unsupported index type {}", seg.column(position_t(index::Fields::end_index)).type());
