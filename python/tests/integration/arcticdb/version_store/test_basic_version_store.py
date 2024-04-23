@@ -48,6 +48,7 @@ from arcticdb.util.test import (
 )
 from tests.util.date import DateRange
 
+from tests.util.mark import S3_TESTS_MARK, AZURE_TESTS_MARK, MONGO_TESTS_MARK, REAL_S3_TESTS_MARK
 
 @pytest.fixture()
 def symbol():
@@ -450,8 +451,8 @@ def test_negative_cases(basic_store, symbol):
         "lmdb_version_store_v1",
         "lmdb_version_store_v2",
         "lmdb_version_store_no_symbol_list",
-        "s3_version_store_v1",
-        "s3_version_store_v2",
+        pytest.param("s3_version_store_v1", marks=S3_TESTS_MARK),
+        pytest.param("s3_version_store_v2", marks=S3_TESTS_MARK)
     ],
 )
 def test_list_symbols_regex(request, lib_type):

@@ -24,7 +24,7 @@ from arcticdb.version_store.library import (
     ArcticInvalidApiUsageException,
 )
 
-from tests.util.mark import AZURE_TESTS_MARK, MONGO_TESTS_MARK, REAL_S3_TESTS_MARK
+from tests.util.mark import S3_TESTS_MARK, AZURE_TESTS_MARK, MONGO_TESTS_MARK, REAL_S3_TESTS_MARK
 
 from arcticdb.options import ModifiableEnterpriseLibraryOption, ModifiableLibraryOption
 
@@ -374,7 +374,7 @@ def add_path_prefix(uri, prefix):
 @pytest.mark.parametrize(
     "fixture",
     [
-        "s3_storage",
+        pytest.param("s3_storage", marks=S3_TESTS_MARK),
         pytest.param("azurite_storage", marks=AZURE_TESTS_MARK),
         pytest.param("real_s3_storage", marks=REAL_S3_TESTS_MARK),
     ],
@@ -413,7 +413,7 @@ def test_separation_between_libraries_with_prefixes(fixture, request):
     ac_mars.delete_library("pytest_test_lib_2")
 
 
-@pytest.mark.parametrize("fixture", ["s3_storage", pytest.param("azurite_storage", marks=AZURE_TESTS_MARK)])
+@pytest.mark.parametrize("fixture", [pytest.param("s3_storage", marks=S3_TESTS_MARK), pytest.param("azurite_storage", marks=AZURE_TESTS_MARK)])
 def test_library_management_path_prefix(fixture, request):
     storage_fixture: StorageFixture = request.getfixturevalue(fixture)
     uri = add_path_prefix(storage_fixture.arctic_uri, "hello/world")

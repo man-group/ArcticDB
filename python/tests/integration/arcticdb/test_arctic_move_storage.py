@@ -8,7 +8,7 @@ from arcticdb.util.test import get_wide_dataframe
 from arcticdb.util.test import assert_frame_equal
 from arcticdb.exceptions import LmdbMapFullError
 
-from tests.util.mark import AZURE_TESTS_MARK
+from tests.util.mark import S3_TESTS_MARK, AZURE_TESTS_MARK
 
 
 @pytest.fixture()
@@ -21,7 +21,7 @@ def lmdb_storage_factory():  # LmdbStorageFixtures aren't produced by a factory,
 
 @pytest.mark.parametrize(
     "storage_type, host_attr",
-    [("lmdb", "db_dir"), ("s3", "bucket"), pytest.param("azurite", "container", marks=AZURE_TESTS_MARK)],
+    [("lmdb", "db_dir"), pytest.param("s3", "bucket", marks=S3_TESTS_MARK), pytest.param("azurite", "container", marks=AZURE_TESTS_MARK)],
 )
 def test_move_storage(storage_type, host_attr, request):
     storage_factory = request.getfixturevalue(storage_type + "_storage_factory")

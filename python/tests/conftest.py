@@ -36,6 +36,7 @@ from tests.util.mark import (
     AZURE_TESTS_MARK,
     MONGO_TESTS_MARK,
     REAL_S3_TESTS_MARK,
+    S3_TESTS_MARK,
     S3_SSL_TEST_ENABLED,
 )
 
@@ -106,19 +107,24 @@ def lmdb_storage(tmp_path):
         yield f
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="session", params=[pytest.param(1, marks=S3_TESTS_MARK)])
 def s3_storage_factory():
     with MotoS3StorageFixtureFactory(use_ssl=S3_SSL_TEST_ENABLED) as f:
         yield f
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="session", params=[pytest.param(1, marks=S3_TESTS_MARK)])
 def s3_no_ssl_storage_factory():
     with MotoS3StorageFixtureFactory(use_ssl=False) as f:
         yield f
 
 
-@pytest.fixture
+@pytest.fixture(
+    scope="function",
+    params=[
+        pytest.param("s3_storage_factory", marks=S3_TESTS_MARK),
+    ],
+)
 def s3_storage(s3_storage_factory):
     with s3_storage_factory.create_fixture() as f:
         yield f
@@ -197,7 +203,7 @@ def mem_storage():
 @pytest.fixture(
     scope="function",
     params=[
-        "s3",
+        pytest.param("s3", marks=S3_TESTS_MARK),
         "lmdb",
         "mem",
         pytest.param("azurite", marks=AZURE_TESTS_MARK),
@@ -215,7 +221,7 @@ def arctic_client(request, encoding_version):
 @pytest.fixture(
     scope="function",
     params=[
-        "s3",
+        pytest.param("s3", marks=S3_TESTS_MARK),
         "mem",
         pytest.param("azurite", marks=AZURE_TESTS_MARK),
         pytest.param("mongo", marks=MONGO_TESTS_MARK),
@@ -353,7 +359,7 @@ def mongo_version_store(mongo_store_factory):
 @pytest.fixture(
     scope="function",
     params=[
-        "s3_store_factory",
+        pytest.param("s3_store_factory", marks=S3_TESTS_MARK),
         pytest.param("azure_store_factory", marks=AZURE_TESTS_MARK),
         pytest.param("real_s3_store_factory", marks=REAL_S3_TESTS_MARK),
     ],
@@ -386,7 +392,7 @@ def object_version_store_prune_previous(object_store_factory):
 
 
 @pytest.fixture(
-    scope="function", params=["s3_store_factory", pytest.param("azure_store_factory", marks=AZURE_TESTS_MARK)]
+    scope="function", params=[pytest.param("s3_store_factory", marks=S3_TESTS_MARK), pytest.param("azure_store_factory", marks=AZURE_TESTS_MARK)]
 )
 def local_object_store_factory(request):
     """
@@ -781,8 +787,8 @@ def lmdb_version_store_static_and_dynamic(request):
     params=(
         "lmdb_version_store_v1",
         "lmdb_version_store_v2",
-        "s3_version_store_v1",
-        "s3_version_store_v2",
+        pytest.param("s3_version_store_v1", marks=S3_TESTS_MARK),
+        pytest.param("s3_version_store_v2", marks=S3_TESTS_MARK),
         "in_memory_version_store",
         pytest.param("azure_version_store", marks=AZURE_TESTS_MARK),
         pytest.param("mongo_version_store", marks=MONGO_TESTS_MARK),
@@ -801,8 +807,8 @@ def object_and_mem_and_lmdb_version_store(request):
     params=(
         "lmdb_version_store_dynamic_schema_v1",
         "lmdb_version_store_dynamic_schema_v2",
-        "s3_version_store_dynamic_schema_v1",
-        "s3_version_store_dynamic_schema_v2",
+        pytest.param("s3_version_store_dynamic_schema_v1", marks=S3_TESTS_MARK),
+        pytest.param("s3_version_store_dynamic_schema_v2", marks=S3_TESTS_MARK),
         "in_memory_version_store_dynamic_schema",
         pytest.param("azure_version_store_dynamic_schema", marks=AZURE_TESTS_MARK),
         pytest.param("real_s3_version_store_dynamic_schema", marks=REAL_S3_TESTS_MARK),

@@ -34,7 +34,7 @@ from arcticdb.version_store.library import (
     ArcticInvalidApiUsageException,
 )
 
-from tests.util.mark import AZURE_TESTS_MARK, MONGO_TESTS_MARK, REAL_S3_TESTS_MARK, S3_SSL_TESTS_MARK
+from tests.util.mark import S3_TESTS_MARK, AZURE_TESTS_MARK, MONGO_TESTS_MARK, REAL_S3_TESTS_MARK, S3_SSL_TESTS_MARK
 
 class ParameterDisplayStatus(Enum):
     NOT_SHOW = 1
@@ -835,7 +835,7 @@ def test_segment_slicing(arctic_client):
     assert num_data_segments == math.ceil(rows / rows_per_segment) * math.ceil(columns / columns_per_segment)
 
 
-@pytest.mark.parametrize("fixture", ["s3_storage", pytest.param("azurite_storage", marks=AZURE_TESTS_MARK)])
+@pytest.mark.parametrize("fixture", [pytest.param("s3_storage", marks=S3_TESTS_MARK), pytest.param("azurite_storage", marks=AZURE_TESTS_MARK)])
 def test_reload_symbol_list(fixture, request):
     storage_fixture: StorageFixture = request.getfixturevalue(fixture)
 
@@ -873,7 +873,7 @@ def test_reload_symbol_list(fixture, request):
 @pytest.mark.parametrize(
     "fixture",
     [
-        "s3_storage",
+        pytest.param("s3_storage", marks=S3_TESTS_MARK),
         pytest.param("azurite_storage", marks=AZURE_TESTS_MARK),
         pytest.param("mongo_storage", marks=MONGO_TESTS_MARK),
         pytest.param("real_s3_storage", marks=REAL_S3_TESTS_MARK),

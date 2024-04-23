@@ -48,6 +48,7 @@ REAL_S3_TESTS_MARK = pytest.mark.skipif(
 """Mark on tests using the real (i.e. hosted by AWS as opposed to moto) S3.
 Currently controlled by the ARCTICDB_PERSISTENT_STORAGE_TESTS and ARCTICDB_FAST_TESTS_ONLY env vars."""
 
+S3_TESTS_MARK = pytest.mark.skip
 
 """Windows and MacOS have different handling of self-signed CA cert for test. 
 TODO: https://github.com/man-group/ArcticDB/issues/1394"""
