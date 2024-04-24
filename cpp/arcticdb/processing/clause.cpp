@@ -62,6 +62,15 @@ std::vector<std::vector<size_t>> structure_by_column_slice(std::vector<RangesAnd
     return res;
 }
 
+std::vector<std::vector<size_t>> structure_all_together(std::vector<RangesAndKey>& ranges_and_keys) {
+    std::vector<size_t> res;
+    for (const auto& [idx, ranges_and_key]: folly::enumerate(ranges_and_keys))
+        res.emplace_back(idx);
+
+    return {std::move(res)};
+}
+
+
 /*
  * On entry to a clause, construct ProcessingUnits from the input entity IDs. These will either be provided by the
  * structure_for_processing method for the first clause in the pipeline, or by the previous clause for all subsequent
@@ -909,15 +918,24 @@ void merge_impl(
 // MergeClause receives a list of DataFrames as input and merge them into a single one where all 
 // the rows are sorted by time stamp
 Composite<EntityIds> MergeClause::process(Composite<EntityIds>&& entity_ids) const {
+    return std::move(entity_ids);
+}
+
+std::optional<std::vector<Composite<EntityIds>>> MergeClause::repartition(
+    std::vector<Composite<EntityIds>> &&comps) const {
+
+    // TODO this is a hack because we don't currently have a way to
+    // specify any particular input shape unless a clause is the
+    // first one and can use structure_for_processing. Ideally
+    // merging should be parallel like resampling
+    auto entity_ids = merge_composites(std::move(comps));
     auto procs = gather_entities(component_manager_, std::move(entity_ids));
 
     auto compare =
             [](const std::unique_ptr<SegmentWrapper> &left,
                const std::unique_ptr<SegmentWrapper> &right) {
-                const auto left_index = index::index_value_from_row(left->row(),
-                                                                               IndexDescriptor::TIMESTAMP, 0);
-                const auto right_index = index::index_value_from_row(right->row(),
-                                                                                IndexDescriptor::TIMESTAMP, 0);
+                const auto left_index = index::index_value_from_row(left->row(), IndexDescriptor::TIMESTAMP, 0);
+                const auto right_index = index::index_value_from_row(right->row(), IndexDescriptor::TIMESTAMP, 0);
                 return left_index > right_index;
             };
 
@@ -931,13 +949,15 @@ Composite<EntityIds> MergeClause::process(Composite<EntityIds>&& entity_ids) con
     procs.broadcast([&input_streams, &min_start_row, &max_end_row, &min_start_col, &max_end_col](auto&& proc) {
         for (auto&& [idx, segment]: folly::enumerate(proc.segments_.value())) {
             size_t start_row = proc.row_ranges_->at(idx)->start();
-            min_start_row = start_row < min_start_row ? start_row : min_start_row;
             size_t end_row = proc.row_ranges_->at(idx)->end();
-            max_end_row = end_row > max_end_row ? end_row : max_end_row;
+            min_start_row = std::min(start_row, min_start_row);
+            max_end_row = std::max(end_row, max_end_row);
+
             size_t start_col = proc.col_ranges_->at(idx)->start();
-            min_start_col = start_col < min_start_col ? start_col : min_start_col;
             size_t end_col = proc.col_ranges_->at(idx)->end();
-            max_end_col = end_col > max_end_col ? end_col : max_end_col;
+            min_start_col = std::min(start_col, min_start_col);
+            max_end_col = std::max(end_col, max_end_col);
+
             input_streams.push(std::make_unique<SegmentWrapper>(std::move(*segment)));
         }
     });
@@ -957,15 +977,11 @@ Composite<EntityIds> MergeClause::process(Composite<EntityIds>&& entity_ids) con
                                                                                                       stream_descriptor_);
             }, index_, density_policy_);
 
-    return ret;
+    std::vector<Composite<EntityIds>> output;
+    output.emplace_back(std::move(ret));
+    return std::make_optional(std::move(output));
 }
 
-std::optional<std::vector<Composite<EntityIds>>> MergeClause::repartition(
-        std::vector<Composite<EntityIds>> &&comps) const {
-    std::vector<Composite<EntityIds>> v;
-    v.push_back(merge_composites_shallow(std::move(comps)));
-    return v;
-}
 
 Composite<EntityIds> ColumnStatsGenerationClause::process(Composite<EntityIds>&& entity_ids) const {
     auto procs = gather_entities(component_manager_, std::move(entity_ids), true);
