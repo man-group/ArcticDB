@@ -37,6 +37,7 @@ chmod 555 sccache
 
 echo "
 FROM $manylinux_image
+RUN rpm --import https://repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux
 RUN yum update -y && \
     yum install -y zip jq less gcc-toolset-13-gdb \
       openssl-devel cyrus-sasl-devel gcc-toolset-13-libatomic-devel libcurl-devel python3-devel flex && \
