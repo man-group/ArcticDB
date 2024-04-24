@@ -2455,9 +2455,9 @@ class NativeVersionStore:
 
     def _get_time_range_from_ts(self, desc, min_ts, max_ts):
         if desc.stream_descriptor.index.kind != IndexDescriptor.Type.TIMESTAMP or \
-            desc.stream_descriptor.sorted == SortedValue.UNSORTED or \
-            min_ts is None or \
-            max_ts is None:
+                desc.stream_descriptor.sorted == SortedValue.UNSORTED or \
+                min_ts is None or \
+                max_ts is None:
             return datetime64("nat"), datetime64("nat")
         input_type = desc.normalization.WhichOneof("input_type")
         tz = None
