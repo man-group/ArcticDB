@@ -287,6 +287,7 @@ std::optional<SliceAndKey> rewrite_partial_segment(
     }
     SegmentInMemory output = segment.truncate(affected_row_range.start(), affected_row_range.end(), true);
     const IndexValue start_ts = TimeseriesIndex::start_value_for_segment(output);
+    // +1 as in the key we store one nanosecond greater than the last index value in the segment
     const IndexValue end_ts = std::get<NumericIndex>(TimeseriesIndex::end_value_for_segment(output)) + 1;
     FrameSlice new_slice{
         std::make_shared<StreamDescriptor>(output.descriptor()),
