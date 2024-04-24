@@ -172,7 +172,7 @@ def test_staged_data(arctic_library, finalize_method):
     lib.write(sym_unfinalized, df_1, staged=True)
     lib.write(sym_unfinalized, df_2, staged=True)
 
-    metadata = {"hello_world"}
+    metadata = {"hello": "world"}
     lib.finalize_staged_data(sym_with_metadata, finalize_method, metadata=metadata)
     lib.finalize_staged_data(sym_without_metadata, finalize_method)
 
