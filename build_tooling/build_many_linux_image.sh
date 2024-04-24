@@ -37,16 +37,9 @@ chmod 555 sccache
 
 echo "
 FROM $manylinux_image
-RUN rpmkeys --import 'https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x3FA7E0328081BFF6A14DA29AA6A19B38D3D831EF' && \
-    curl https://download.mono-project.com/repo/centos7-stable.repo > /etc/yum.repos.d/mono-centos7-stable.repo && \
-    sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://olcentgbl.trafficmanager.net|' /etc/yum.repos.d/CentOS-Base.repo && \
-    sed -ir 's/socket_timeout=3/socket_timeout=1/ ; s/maxhostfileage.*/maxhostfileage=1/ ;\
-            s/#?exclude.*/exclude=.edu/' /etc/yum/pluginconf.d/fastestmirror.conf
-ADD sccache /usr/local/bin/
 RUN yum update -y && \
-    yum install -y zip jq less devtoolset-11-gdb \
-      openssl-devel cyrus-sasl-devel devtoolset-10-libatomic-devel libcurl-devel python3-devel flex && \
-    rpm -Uvh --nodeps \$(repoquery --location mono-{core,web,devel,data,wcf,winfx}) && \
+    yum install -y zip jq less gcc-toolset-13-gdb \
+      openssl-devel cyrus-sasl-devel gcc-toolset-13-libatomic-devel libcurl-devel python3-devel flex && \
     yum clean all && touch /etc/arcticdb_deps_installed
 LABEL io.arcticdb.cibw_ver=\"${cibuildwheel_ver}\" io.arcticdb.base=\"${manylinux_image}\"
 " > Dockerfile
