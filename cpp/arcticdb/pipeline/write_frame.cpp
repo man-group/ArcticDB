@@ -277,7 +277,6 @@ std::optional<SliceAndKey> rewrite_partial_segment(
     const std::shared_ptr<Store>& store
 ) {
     const auto& key = existing.key();
-    const IndexRange& existing_range = key.index_range();
     auto kv = store->read(key).get();
     const SegmentInMemory& segment = kv.second;
     const RowRange affected_row_range = partial_rewrite_row_range(segment, index_range, affected_part);
