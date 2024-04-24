@@ -31,7 +31,8 @@ class LocalQueryBuilderFunctions:
             lib.write(f"{rows}_rows", generate_benchmark_df(rows))
 
     def teardown(self, num_rows):
-        pass
+        del self.lib
+        del self.ac
 
     def setup(self, num_rows):
         self.ac = Arctic(LocalQueryBuilderFunctions.CONNECTION_STRING)
