@@ -112,16 +112,12 @@ jobs:
           du -m /mnt/usr/local/lib/ | sort -n | tail -n 50
           nohup rm -rf /mnt/usr/local/lib/android &
 
-      - name: Use a C++20 compliant devtoolset
+      - name: Set up GCC
         if: matrix.os == 'linux'
-        run: |
-          yum update -y
-          yum install -y devtoolset-11
-          echo "CMAKE_C_COMPILER=/opt/rh/devtoolset-11/root/usr/bin/gcc" | tee -a $GITHUB_ENV
-          echo "CMAKE_CXX_COMPILER=/opt/rh/devtoolset-11/root/usr/bin/g++" | tee -a $GITHUB_ENV
-          echo "LD_LIBRARY_PATH=/opt/rh/devtoolset-11/root/usr/lib64:\
-          /opt/rh/devtoolset-11/root/usr/lib:/opt/rh/devtoolset-11/root/usr/lib64/dyninst:${LD_LIBRARY_PATH}" | tee -a $GITHUB_ENV
-          echo "/opt/rh/devtoolset-11/root/usr/bin" >> $GITHUB_PATH
+        uses: egor-tensin/setup-gcc@v1
+        with:
+          version: 12
+          platform: x64
 
       - name: Find and remove ccache # See PR: #945
         if: matrix.os == 'windows'
