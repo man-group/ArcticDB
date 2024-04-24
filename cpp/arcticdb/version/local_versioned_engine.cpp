@@ -363,40 +363,33 @@ folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(
     const auto key = std::move(k);
     return store()->read(key)
     .thenValue([](auto&& key_seg_pair) -> DescriptorItem {
-        auto key_seg = std::move(std::get<0>(key_seg_pair));
-        auto seg = std::move(std::get<1>(key_seg_pair));
-        auto timeseries_descriptor = seg.has_metadata() ? std::make_optional<google::protobuf::Any>(*seg.metadata()) : std::nullopt;
-        auto start_index = seg.column(position_t(index::Fields::start_index)).type().visit_tag([&](auto column_desc_tag) -> std::optional<NumericIndex> {
-            using ColumnDescriptorType = std::decay_t<decltype(column_desc_tag)>;
-            using ColumnTagType =  typename ColumnDescriptorType::DataTypeTag;
-            if (seg.row_count() == 0) {
-                return std::nullopt;
-            } else if constexpr (is_numeric_type(ColumnTagType::data_type)) {
-                std::optional<NumericIndex> start_index;
-                start_index = seg.column(position_t(index::Fields::start_index)).template scalar_at<timestamp>(0);
-                return start_index;
-            } else {
-                util::raise_rte("Unsupported index type {}", seg.column(position_t(index::Fields::start_index)).type());
-            }
-        });
-
-        auto end_index = seg.column(position_t(index::Fields::end_index)).type().visit_tag([&](auto column_desc_tag) -> std::optional<NumericIndex> {
-            using ColumnDescriptorType = std::decay_t<decltype(column_desc_tag)>;
-            using ColumnTagType =  typename ColumnDescriptorType::DataTypeTag;
-            if (seg.row_count() == 0) {
-                return std::nullopt;
-            } else if constexpr (is_numeric_type(ColumnTagType::data_type)) {
-                std::optional<NumericIndex> end_index;
-                end_index = seg.column(position_t(index::Fields::end_index)).template scalar_at<timestamp>(seg.row_count() - 1);
-                return end_index;
-            } else {
-                util::raise_rte("Unsupported index type {}", seg.column(position_t(index::Fields::end_index)).type());
-            }
-        });
-        if (end_index.has_value()) {
-            --(*end_index);
+        auto key = to_atom(std::move(key_seg_pair.first));
+        auto seg = std::move(key_seg_pair.second);
+        auto tsd = std::make_optional<arcticdb::proto::descriptors::TimeSeriesDescriptor>();
+        if (seg.has_metadata()) {
+            seg.metadata()->UnpackTo(&(*tsd));
         }
-        return DescriptorItem{std::move(to_atom(key_seg)), std::move(start_index), std::move(end_index), std::move(timeseries_descriptor)};
+        std::optional<timestamp> start_index;
+        std::optional<timestamp> end_index;
+        if (seg.row_count() > 0) {
+            const auto& start_index_column = seg.column(position_t(index::Fields::start_index));
+            details::visit_type(start_index_column.type().data_type(), [&start_index_column, &start_index](auto column_desc_tag) {
+                using type_info = ScalarTypeInfo<decltype(column_desc_tag)>;
+                if constexpr (is_time_type(type_info::data_type)) {
+                    start_index = start_index_column.template scalar_at<timestamp>(0);
+                }
+            });
+
+            const auto& end_index_column = seg.column(position_t(index::Fields::end_index));
+            details::visit_type(end_index_column.type().data_type(), [&end_index_column, &end_index, row_count=seg.row_count()](auto column_desc_tag) {
+                using type_info = ScalarTypeInfo<decltype(column_desc_tag)>;
+                if constexpr (is_time_type(type_info::data_type)) {
+                    // -1 as the end timestamp in the data keys is one nanosecond greater than the last value in the index column
+                    end_index = *end_index_column.template scalar_at<timestamp>(row_count - 1) - 1;
+                }
+            });
+        }
+        return DescriptorItem{std::move(key), start_index, end_index, std::move(tsd)};
     });
 }
 
