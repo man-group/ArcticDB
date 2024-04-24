@@ -372,52 +372,56 @@ TEST(Clause, Split) {
 
 TEST(Clause, Merge) {
     using namespace arcticdb;
-    const auto seg_size = 5;
+    const auto seg_size = 30;
     ScopedConfig max_blocks("Merge.SegmentSize", seg_size);
     auto component_manager = std::make_shared<ComponentManager>();
+
+    const auto num_segs = 4;
+    const auto num_rows = 20;
 
     auto stream_id = StreamId("Merge");
     StreamDescriptor descriptor{};
     descriptor.add_field(FieldRef{make_scalar_type(DataType::NANOSECONDS_UTC64),"time"});
-    MergeClause merge_clause{TimeseriesIndex{"time"}, DenseColumnPolicy{}, stream_id, descriptor};
+    MergeClause merge_clause{TimeseriesIndex{"time"}, SparseColumnPolicy{}, stream_id, descriptor};
     merge_clause.set_component_manager(component_manager);
 
     Composite<EntityIds> entity_ids;
-    std::vector<SegmentInMemory> copies;
-    const auto num_segs = 2;
-    const auto num_rows = 5;
+    auto seg = get_standard_timeseries_segment(std::get<StringId>(stream_id), num_rows);
+
+    std::vector<SegmentInMemory> segs;
     for(auto x = 0u; x < num_segs; ++x) {
         auto symbol = fmt::format("merge_{}", x);
-        auto seg = get_standard_timeseries_segment(symbol, 10);
-        copies.emplace_back(seg.clone());
-        auto proc_unit = ProcessingUnit{std::move(seg)};
-        entity_ids.push_back(push_entities(component_manager, std::move(proc_unit)));
+        segs.emplace_back(SegmentInMemory{seg.descriptor().clone(), num_rows / num_segs, false});
     }
 
-    auto res = gather_entities(component_manager, merge_clause.process(std::move(entity_ids))).as_range();
-    ASSERT_EQ(res.size(), 4u);
-    for(auto i = 0; i < num_rows * num_segs; ++i) {
-        auto& output_seg = *res[i / seg_size].segments_->at(0);
-        auto output_row = i % seg_size;
-        const auto& expected_seg = copies[i % num_segs];
-        auto expected_row = i / num_segs;
-        for(auto field : folly::enumerate(output_seg.descriptor().fields())) {
-            if(field.index == 1)
-                continue;
-
-            visit_field(*field, [&output_seg, &expected_seg, output_row, expected_row, &field] (auto tdt) {
-                using DataTypeTag = typename decltype(tdt)::DataTypeTag;
-                if constexpr(is_sequence_type(DataTypeTag::data_type)) {
-                    const auto val1 = output_seg.string_at(output_row, position_t(field.index));
-                    const auto val2 = expected_seg.string_at(expected_row, position_t(field.index));
-                    ASSERT_EQ(val1, val2);
+    for(auto i = 0u; i < num_rows; ++i) {
+        auto& current = segs[i % num_segs];
+        for(auto j = 0U; j < seg.descriptor().field_count(); ++j) {
+            current.column(j).type().visit_tag([&current, &seg, i, j](auto&& tag) {
+                using DT = std::decay_t<decltype(tag)>;
+                const auto data_type = DT::DataTypeTag::data_type;
+                using RawType = typename DT::DataTypeTag::raw_type;
+                if constexpr(is_sequence_type(data_type)) {
+                    current.set_string(j, seg.string_at(i, j).value());
                 } else {
-                    using RawType = typename decltype(tdt)::DataTypeTag::raw_type;
-                    const auto val1 = output_seg.scalar_at<RawType>(output_row, field.index);
-                    const auto val2 = expected_seg.scalar_at<RawType>(expected_row, field.index);
-                    ASSERT_EQ(val1, val2);
+                    current.set_scalar<RawType>(j, seg.scalar_at<RawType>(i, j).value());
                 }
             });
         }
+        current.end_row();
     }
+
+    for(auto x = 0u; x < num_segs; ++x) {
+        auto proc_unit = ProcessingUnit{std::move(segs[x])};
+        entity_ids.push_back(push_entities(component_manager, std::move(proc_unit)));
+    }
+
+    Composite<EntityIds> processed_ids = merge_clause.process(std::move(entity_ids));
+    std::vector<Composite<EntityIds>> vec;
+    vec.emplace_back(std::move(processed_ids));
+    auto repartitioned = merge_clause.repartition(std::move(vec));
+    auto res = gather_entities(component_manager, std::move(repartitioned->at(0))).as_range();
+    ASSERT_EQ(res.size(), 1u);
+    const auto& received = res[0];
+    ASSERT_EQ(*received.segments_->at(0), seg);
 }
