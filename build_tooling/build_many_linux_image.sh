@@ -42,6 +42,11 @@ RUN yum update -y && \
     yum install -y zip jq less gcc-toolset-13-gdb \
       openssl-devel cyrus-sasl-devel gcc-toolset-13-libatomic-devel libcurl-devel python3-devel flex && \
     yum clean all && touch /etc/arcticdb_deps_installed
+
+ENV CMAKE_C_COMPILER=/opt/rh/gcc-toolset-13/root/usr/bin/gcc
+ENV CMAKE_CXX_COMPILER=/opt/rh/gcc-toolset-13/root/usr/bin/g++
+ENV PATH=/opt/rh/gcc-toolset-13/root/usr/bin:$PATH
+
 LABEL io.arcticdb.cibw_ver=\"${cibuildwheel_ver}\" io.arcticdb.base=\"${manylinux_image}\"
 " > Dockerfile
 
