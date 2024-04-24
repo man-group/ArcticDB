@@ -7,7 +7,7 @@ if [[ -z "$manylinux_image" ]] ; then
         v${cibuildwheel_ver:?'Must set either manylinux_image or cibuildwheel_ver environment variable'}
 
     url="https://github.com/pypa/cibuildwheel/raw/v${cibuildwheel_ver}/cibuildwheel/resources/pinned_docker_images.cfg"
-    manylinux_image=$(curl -sL "$url" | awk "/${image_grep:-manylinux2014_x86_64}/ { print \$3 ; exit }" )
+    manylinux_image=$(curl -sL "$url" | awk "/${image_grep:-manylinux_2_28_x86_64}/ { print \$3 ; exit }" )
     if [[ -z "$manylinux_image" ]] ; then
         echo "Failed to parse source image from cibuildwheel repo: ${url}" >&2
         exit 1

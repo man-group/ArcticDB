@@ -112,13 +112,6 @@ jobs:
           du -m /mnt/usr/local/lib/ | sort -n | tail -n 50
           nohup rm -rf /mnt/usr/local/lib/android &
 
-      - name: Set up GCC
-        if: matrix.os == 'linux'
-        uses: egor-tensin/setup-gcc@v1
-        with:
-          version: 12
-          platform: x64
-
       - name: Find and remove ccache # See PR: #945
         if: matrix.os == 'windows'
         run: rm $(which ccache) || true
