@@ -145,17 +145,6 @@ def test_write_metadata_with_none(arctic_library):
     assert read_symbol.version == 0
 
 
-def staged_write(sym, arctic_library):
-    lib = arctic_library
-    df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
-    df.index = pd.date_range("2018-01-01", periods=3, freq="H")
-    lib.write(sym, df, staged=True)
-
-    df = pd.DataFrame({"col1": [4, 5, 6], "col2": [7, 8, 9]})
-    df.index = pd.date_range("2018-01-01 03:00:00", periods=3, freq="H")
-    lib.write(sym, df, staged=True)
-
-
 @pytest.mark.parametrize("finalize_method", (StagedDataFinalizeMethod.WRITE, StagedDataFinalizeMethod.APPEND))
 def test_staged_data(arctic_library, finalize_method):
     lib = arctic_library
