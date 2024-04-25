@@ -25,7 +25,9 @@ class IterateVersionChain:
     CONNECTION_STRING = "lmdb://version_chain?map_size=20GB"
     LIB_NAME = "lib"
 
-    params = ([50_000], ["forever", "default", "never"], [0.0, 0.99])
+    # TODO: Investigate why setup is taking ~50mins with 50k versions on ec2 runners.
+    # Locally it looks like it shouldn't take more than 15.
+    params = ([25_000], ["forever", "default", "never"], [0.0, 0.99])
     param_names = ["num_versions", "caching", "deleted"]
 
     def symbol(self, num_versions, deleted):
