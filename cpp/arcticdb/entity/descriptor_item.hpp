@@ -16,27 +16,27 @@ namespace arcticdb {
 struct DescriptorItem {
     DescriptorItem(
         entity::AtomKey &&key, 
-        std::optional<IndexValue> start_index, 
-        std::optional<IndexValue> end_index,
-        std::optional<google::protobuf::Any> timeseries_descriptor) :
+        std::optional<timestamp> start_index,
+        std::optional<timestamp> end_index,
+        std::optional<arcticdb::proto::descriptors::TimeSeriesDescriptor>&& timeseries_descriptor) :
         key_(std::move(key)),
         start_index_(start_index),
         end_index_(end_index),
-        timeseries_descriptor_(timeseries_descriptor) {
+        timeseries_descriptor_(std::move(timeseries_descriptor)) {
     }
 
     DescriptorItem() = delete;
 
     entity::AtomKey key_;
-    std::optional<IndexValue> start_index_;
-    std::optional<IndexValue> end_index_;
-    std::optional<google::protobuf::Any> timeseries_descriptor_;
+    std::optional<timestamp> start_index_;
+    std::optional<timestamp> end_index_;
+    std::optional<arcticdb::proto::descriptors::TimeSeriesDescriptor> timeseries_descriptor_;
     
     std::string symbol() const { return fmt::format("{}", key_.id()); }
     uint64_t version() const { return key_.version_id(); }
     timestamp creation_ts() const { return key_.creation_ts(); }
-    std::optional<IndexValue> start_index() const { return start_index_; }
-    std::optional<IndexValue> end_index() const { return end_index_; }
-    std::optional<google::protobuf::Any> timeseries_descriptor() const { return timeseries_descriptor_; }
+    std::optional<timestamp> start_index() const { return start_index_; }
+    std::optional<timestamp> end_index() const { return end_index_; }
+    std::optional<arcticdb::proto::descriptors::TimeSeriesDescriptor> timeseries_descriptor() const { return timeseries_descriptor_; }
 };
 }

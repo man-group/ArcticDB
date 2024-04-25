@@ -269,33 +269,6 @@ static RowRange partial_rewrite_row_range(
     }
 }
 
-/// @brief Find the index range of affected rows during a partial rewrite (on update)
-/// Similar to partial_rewrite_row_range the segment is affected either at the beginning
-/// or at the end.
-static IndexRange partial_rewrite_index_range(
-    const IndexRange& segment_range,
-    const IndexRange& update_range,
-    AffectedSegmentPart affected_part
-) {
-    if (affected_part == AffectedSegmentPart::START) {
-        util::check(
-            segment_range.start_ < update_range.start_,
-            "Unexpected index range in after: {} !< {}",
-            segment_range.start_,
-            update_range.start_
-        );
-        return {segment_range.start_, update_range.start_};
-    } else {
-        util::check(
-            segment_range.end_ > update_range.end_,
-            "Unexpected non-intersection of update indices: {} !> {}",
-            segment_range.end_,
-            update_range.end_
-        );
-        return {segment_range.end_, update_range.end_};
-    }
-}
-
 std::optional<SliceAndKey> rewrite_partial_segment(
     const SliceAndKey& existing,
     IndexRange index_range,
@@ -304,16 +277,17 @@ std::optional<SliceAndKey> rewrite_partial_segment(
     const std::shared_ptr<Store>& store
 ) {
     const auto& key = existing.key();
-    const IndexRange& existing_range = key.index_range();
     auto kv = store->read(key).get();
     const SegmentInMemory& segment = kv.second;
-    const IndexRange affected_index_range = partial_rewrite_index_range(existing_range, index_range, affected_part);
     const RowRange affected_row_range = partial_rewrite_row_range(segment, index_range, affected_part);
     const int64_t num_rows = affected_row_range.end() - affected_row_range.start();
     if (num_rows <= 0) {
         return std::nullopt;
     }
     SegmentInMemory output = segment.truncate(affected_row_range.start(), affected_row_range.end(), true);
+    const IndexValue start_ts = TimeseriesIndex::start_value_for_segment(output);
+    // +1 as in the key we store one nanosecond greater than the last index value in the segment
+    const IndexValue end_ts = std::get<NumericIndex>(TimeseriesIndex::end_value_for_segment(output)) + 1;
     FrameSlice new_slice{
         std::make_shared<StreamDescriptor>(output.descriptor()),
         existing.slice_.col_range,
@@ -324,8 +298,8 @@ std::optional<SliceAndKey> rewrite_partial_segment(
         key.type(),
         version_id,
         key.id(),
-        affected_index_range.start_,
-        affected_index_range.end_,
+        start_ts,
+        end_ts,
         std::move(output)
     );
     return SliceAndKey{std::move(new_slice), std::get<AtomKey>(std::move(fut_key).get())};
