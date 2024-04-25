@@ -203,6 +203,22 @@ def test_snapshots_and_deletes(arctic_library):
     assert lib.list_snapshots() == {"snap_after_delete": None}
     assert lib.list_symbols() == ["my_symbol2"]
 
+def test_list_snapshots_no_metadata(arctic_library):
+    lib = arctic_library
+    df = pd.DataFrame({"a": [1, 2, 3]})
+
+    snap1 = "snap1"
+    metadata_snap1 = {"snap1": 1}
+    symbol1 = "test_symbol"
+    snap2 = "snap2"
+    symbol2 = "test_symbol2"
+
+    lib.write(symbol1, df)
+    lib.snapshot(snap1, metadata=metadata_snap1)
+    lib.write(symbol2, df)
+    lib.snapshot(snap2)
+
+    assert lib.list_snapshots(False) == {snap1: None, snap2: None}
 
 def test_delete_non_existent_snapshot(arctic_library):
     lib = arctic_library

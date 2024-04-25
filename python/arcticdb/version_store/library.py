@@ -1452,16 +1452,21 @@ class Library:
         """
         return self._nvs.has_symbol(symbol, as_of=as_of)
 
-    def list_snapshots(self) -> Dict[str, Any]:
+    def list_snapshots(self, load_metadata: Optional[bool] = True) -> Dict[str, Any]:
         """
         List the snapshots in the library.
+
+        Parameters
+        ----------
+        load_metadata : `Optional[bool]`, default=True
+            Load the snapshot metadata. May be slow so opt for false if you don't need it.
 
         Returns
         -------
         Dict[str, Any]
             Snapshots in the library. Keys are snapshot names, values are metadata associated with that snapshot.
         """
-        return self._nvs.list_snapshots()
+        return self._nvs.list_snapshots(load_metadata)
 
     def list_versions(
         self,
