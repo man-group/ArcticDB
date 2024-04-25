@@ -864,7 +864,7 @@ class TestIndexTypeWithEmptyTypeDisabledPands2AndLater(DisabledEmptyIndexBase):
         result = self.roundtrip(pd.DataFrame({"a": []}), lmdb_version_store_static_and_dynamic)
         assert result.index.equals(pd.DatetimeIndex([]))
         with pytest.raises(NormalizationException):
-            lmdb_version_store_static_and_dynamic.append(self.sym(), pd.DataFrame({"a": [1.0]}, index=pd.RangeIndex(0, 1, 1)))
+            lmdb_version_store_static_and_dynamic.append(self.sym(), pd.DataFrame({"a": [1.0]}))
         to_append_successfuly = pd.DataFrame({"a": [1.0]}, index=pd.DatetimeIndex(["01/01/2024"])) 
         lmdb_version_store_static_and_dynamic.append(self.sym(), to_append_successfuly)
         assert_frame_equal(
