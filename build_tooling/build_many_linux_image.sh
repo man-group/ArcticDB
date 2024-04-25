@@ -40,7 +40,8 @@ FROM $manylinux_image
 RUN rpm --import https://repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux
 RUN yum update -y && \
     yum install -y zip jq less gcc-toolset-13-gdb \
-      openssl-devel cyrus-sasl-devel gcc-toolset-13-libatomic-devel libcurl-devel python3-devel flex && \
+      openssl-devel cyrus-sasl-devel gcc-toolset-13-libatomic-devel \
+      libcurl-devel python3-devel flex cmake ninja && \
     yum clean all && touch /etc/arcticdb_deps_installed
 
 ENV CMAKE_C_COMPILER=/opt/rh/gcc-toolset-13/root/usr/bin/gcc
