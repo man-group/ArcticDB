@@ -45,6 +45,9 @@ RUN yum update -y && \
 
 ENV CMAKE_C_COMPILER=/opt/rh/gcc-toolset-13/root/usr/bin/gcc
 ENV CMAKE_CXX_COMPILER=/opt/rh/gcc-toolset-13/root/usr/bin/g++
+ENV CC=/opt/rh/gcc-toolset-13/root/usr/bin/gcc
+ENV CXX=/opt/rh/gcc-toolset-13/root/usr/bin/g++
+ENV LD_LIBRARY_PATH=/opt/rh/gcc-toolset-13/root/usr/lib64:/opt/rh/gcc-toolset-13/root/usr/lib:$LD_LIBRARY_PATH
 ENV PATH=/opt/rh/gcc-toolset-13/root/usr/bin:$PATH
 
 LABEL io.arcticdb.cibw_ver=\"${cibuildwheel_ver}\" io.arcticdb.base=\"${manylinux_image}\"
