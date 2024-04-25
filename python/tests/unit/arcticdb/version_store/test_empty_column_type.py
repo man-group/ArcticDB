@@ -11,21 +11,24 @@ import pandas as pd
 from pandas.testing import assert_frame_equal
 import numpy as np
 import pytest
+from packaging.version import Version
+from arcticdb.util._versions import PANDAS_VERSION
+import arcticdb
 
 class DtypeGenerator:
     """
-    Class which can generate all dtypes which ArcticDB supports. It can generate them by type category e.g. int, float,
-    etc. It can also generate a list of all available dtypes
+    Can generate representative subset of all supported dtypes. Can generate by category (e.g. int, float, etc...) or
+    all. Generating the full set of dtypes leads to combinatoric explosion in the number of test cases.
     """
 
 
     @staticmethod
     def int_dtype():
-        return [t + s for s in ["8", "16", "32", "64"] for t in ["int", "uint"]]
+        return ["int32", "uint64"]
 
     @staticmethod
     def float_dtype():
-        return ["float" + s for s in ["32", "64"]]
+        return ["float64"]
     
     @staticmethod
     def bool_dtype():
@@ -69,7 +72,7 @@ def dtype(request):
     yield request.param
 
 
-@pytest.fixture(params=[pd.RangeIndex(0,0), pd.DatetimeIndex([])])
+@pytest.fixture(params=[pd.RangeIndex(0,0), pd.DatetimeIndex([]), pd.MultiIndex.from_arrays([[],[]], names=["a", "b"])])
 def empty_index(request):
     yield request.param
 
@@ -498,11 +501,11 @@ class TestCanUpdateWithNone:
         )
         lmdb_version_store_static_and_dynamic.update(
             "sym",
-            pd.DataFrame({"col": [None, np.nan]}, index=self.update_index(), dtype=float_dtype)
+            pd.DataFrame({"col": [None, np.nan]}, index=self.update_index())
         )
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym").data,
-            pd.DataFrame({"col": [1, np.nan, np.nan, 4]}, index=self.index(), dtype=float_dtype)
+            pd.DataFrame({"col": [1, float("NaN"), np.nan, 4]}, index=self.index(), dtype=float_dtype)
         )
 
     def test_bool(self, lmdb_version_store_static_and_dynamic, boolean_dtype):
@@ -569,6 +572,7 @@ class TestCanUpdateWithNone:
             )
         )
 
+
 class TestCanAppendToEmptyColumn:
     """
     Tests that it's possible to append to a column which contains no rows. The type of the columns, including the index
@@ -576,55 +580,42 @@ class TestCanAppendToEmptyColumn:
     """
 
 
-    @pytest.fixture(params=
-            [
-                pytest.param(
-                    pd.RangeIndex(0,3),
-                    marks=pytest.mark.xfail(
-                        reason="Appending row ranged columns to empty columns is not supported yet."
-                        "The index of empty df is of type datetime and it clashes with the row-range type."
-                        "The expected behavior is to allow this as long as the initial df is of 0 rows.")
-                    ),
-                list(pd.date_range(start="1/1/2024", end="1/3/2024"))
-            ]
-    )
+    @pytest.fixture(params=[pd.RangeIndex(0,3), list(pd.date_range(start="1/1/2024", end="1/3/2024"))])
     def append_index(self, request):
         yield request.param
 
     @pytest.fixture(autouse=True)
     def create_empty_column(self, lmdb_version_store_static_and_dynamic, dtype, empty_index):
-        if isinstance(empty_index, pd.RangeIndex) and sys.version_info[1] < 9:
-            pytest.xfail("""compat-36 and compat-38 tests are failing because this would assign a row-range index to
-                         the empty df. This will be fixed when the pandas-agnostic empty index type is added""")
         lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": []}, dtype=dtype, index=empty_index))
+        assert lmdb_version_store_static_and_dynamic.read("sym").data.index.equals(pd.DatetimeIndex([]))
         yield
 
-    def test_integer(self, lmdb_version_store_static_and_dynamic, int_dtype, empty_index, dtype, append_index):
+    def test_integer(self, lmdb_version_store_static_and_dynamic, int_dtype, dtype, append_index):
         df_to_append = pd.DataFrame({"col": [1,2,3]}, dtype=int_dtype, index=append_index)
         lmdb_version_store_static_and_dynamic.append("sym", df_to_append)
         assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df_to_append)
 
-    def test_float(self, lmdb_version_store_static_and_dynamic, float_dtype, empty_index, append_index):
+    def test_float(self, lmdb_version_store_static_and_dynamic, float_dtype, append_index):
         df_to_append = pd.DataFrame({"col": [1.0,2.0,3.0]}, dtype=float_dtype, index=append_index)
         lmdb_version_store_static_and_dynamic.append("sym", df_to_append)
         assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df_to_append)
 
-    def test_bool(self, lmdb_version_store_static_and_dynamic, boolean_dtype, empty_index, append_index):
+    def test_bool(self, lmdb_version_store_static_and_dynamic, boolean_dtype, append_index):
         df_to_append = pd.DataFrame({"col": [True, False, None]}, dtype=boolean_dtype, index=append_index)
         lmdb_version_store_static_and_dynamic.append("sym", df_to_append)
         assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df_to_append)
 
-    def test_empty(self, lmdb_version_store_static_and_dynamic, empty_index, append_index):
+    def test_nones(self, lmdb_version_store_static_and_dynamic, append_index):
         df_to_append = pd.DataFrame({"col": [None, None, None]}, index=append_index)
         lmdb_version_store_static_and_dynamic.append("sym", df_to_append)
         assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df_to_append)
 
-    def test_string(self, lmdb_version_store_static_and_dynamic, empty_index, append_index):
+    def test_string(self, lmdb_version_store_static_and_dynamic, append_index):
         df_to_append = pd.DataFrame({"col": ["short_string", None, 20 * "long_string"]}, index=append_index)
         lmdb_version_store_static_and_dynamic.append("sym", df_to_append)
         assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df_to_append)
 
-    def test_date(self, lmdb_version_store_static_and_dynamic, date_dtype, empty_index, append_index):
+    def test_date(self, lmdb_version_store_static_and_dynamic, date_dtype, append_index):
         df_to_append = pd.DataFrame(
             {
                 "col": np.array(
@@ -642,58 +633,81 @@ class TestCanAppendToEmptyColumn:
         assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df_to_append)
 
 
-class TestAppendingEmptyToColumnDoesNothing:
+class TestAppendAndUpdateWithEmptyToColumnDoesNothing:
     """
-    Test if it is possible to append empty column to an already existing column. The append should not change anything.
-    If dynamic schema is used the update should not create new columns. The update should not even reach the C++ layer.
+    Test if it is possible to append/update empty column to an already existing column. The append/update should not
+    change anything. If dynamic schema is used the append/update should not create new columns. The append/update
+    should not even reach the C++ layer and the version should not be changed.
     """
-
 
     @pytest.fixture(params=[pd.RangeIndex(0,3), list(pd.date_range(start="1/1/2024", end="1/3/2024"))])
     def index(self, request):
         yield request.param
 
-    def test_integer(self, lmdb_version_store_static_and_dynamic, index, int_dtype, empty_index, dtype):
+    @pytest.fixture()
+    def empty_dataframe(self, empty_index, dtype):
+        yield pd.DataFrame({"col": []}, dtype=dtype, index=empty_index)
+
+    @staticmethod
+    def assert_append_empty_does_nothing(initial_df, store, empty):
+        store.append("sym", empty)
+        read_result = store.read("sym")
+        assert_frame_equal(read_result.data, initial_df)
+        assert read_result.version == 0
+
+    @staticmethod
+    def assert_update_empty_does_nothing(initial_df, store, empty):
+        store.update("sym", empty)
+        read_result = store.read("sym")
+        assert_frame_equal(read_result.data, initial_df)
+        assert read_result.version == 0
+
+    def test_integer(self, lmdb_version_store_static_and_dynamic, index, int_dtype, empty_dataframe):
         df = pd.DataFrame({"col": [1,2,3]}, dtype=int_dtype, index=index)
         lmdb_version_store_static_and_dynamic.write("sym", df)
-        lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col": []}, dtype=dtype, index=empty_index))
-        read_result = lmdb_version_store_static_and_dynamic.read("sym")
-        assert_frame_equal(read_result.data, df)
-        assert read_result.version == 0
+        self.assert_append_empty_does_nothing(df, lmdb_version_store_static_and_dynamic, empty_dataframe)
+        self.assert_update_empty_does_nothing(df, lmdb_version_store_static_and_dynamic, empty_dataframe)
 
-    def test_float(self, lmdb_version_store_static_and_dynamic, index, float_dtype, empty_index, dtype):
+    def test_float(self, lmdb_version_store_static_and_dynamic, index, float_dtype, empty_dataframe):
         df = pd.DataFrame({"col": [1,2,3]}, dtype=float_dtype, index=index)
         lmdb_version_store_static_and_dynamic.write("sym", df)
-        lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col": []}, dtype=dtype, index=empty_index))
-        read_result = lmdb_version_store_static_and_dynamic.read("sym")
-        assert_frame_equal(read_result.data, df)
-        assert read_result.version == 0
+        self.assert_append_empty_does_nothing(df, lmdb_version_store_static_and_dynamic, empty_dataframe)
+        self.assert_update_empty_does_nothing(df, lmdb_version_store_static_and_dynamic, empty_dataframe)
 
-    def test_bool(self, lmdb_version_store_static_and_dynamic, index, boolean_dtype, empty_index, dtype):
+    def test_bool(self, lmdb_version_store_static_and_dynamic, index, boolean_dtype, empty_dataframe):
         df = pd.DataFrame({"col": [False, True, None]}, dtype=boolean_dtype, index=index)
         lmdb_version_store_static_and_dynamic.write("sym", df)
-        lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col": []}, dtype=dtype, index=empty_index))
-        read_result = lmdb_version_store_static_and_dynamic.read("sym")
-        assert_frame_equal(read_result.data, df)
-        assert read_result.version == 0
+        self.assert_append_empty_does_nothing(df, lmdb_version_store_static_and_dynamic, empty_dataframe)
+        self.assert_update_empty_does_nothing(df, lmdb_version_store_static_and_dynamic, empty_dataframe)
 
-    def test_empty(self, lmdb_version_store_static_and_dynamic, index, empty_index, dtype):
+    def test_nones(self, lmdb_version_store_static_and_dynamic, index, empty_dataframe):
         df = pd.DataFrame({"col": [None, None, None]}, index=index)
         lmdb_version_store_static_and_dynamic.write("sym", df)
-        lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col": []}, dtype=dtype, index=empty_index))
-        read_result = lmdb_version_store_static_and_dynamic.read("sym")
-        assert_frame_equal(read_result.data, df)
-        assert read_result.version == 0
+        self.assert_append_empty_does_nothing(df, lmdb_version_store_static_and_dynamic, empty_dataframe)
+        self.assert_update_empty_does_nothing(df, lmdb_version_store_static_and_dynamic, empty_dataframe)
 
-    def test_string(self, lmdb_version_store_static_and_dynamic, index, empty_index, dtype):
-        df = pd.DataFrame({"col": ["shord", 20*"long", None]}, index=index)
+    @pytest.mark.parametrize("initial_empty_index", [pd.RangeIndex(0,0), pd.DatetimeIndex([])])
+    def test_empty(self, lmdb_version_store_static_and_dynamic, initial_empty_index, empty_dataframe):
+        df = pd.DataFrame({"col": []}, index=initial_empty_index)
         lmdb_version_store_static_and_dynamic.write("sym", df)
-        lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col": []}, dtype=dtype, index=empty_index))
-        read_result = lmdb_version_store_static_and_dynamic.read("sym")
-        assert_frame_equal(read_result.data, df)
-        assert read_result.version == 0
+        self.assert_append_empty_does_nothing(
+            lmdb_version_store_static_and_dynamic.read("sym").data,
+            lmdb_version_store_static_and_dynamic,
+            empty_dataframe
+        )
+        self.assert_update_empty_does_nothing(
+            lmdb_version_store_static_and_dynamic.read("sym").data,
+            lmdb_version_store_static_and_dynamic,
+            empty_dataframe
+        )
 
-    def test_date(self, lmdb_version_store_static_and_dynamic, date_dtype, index, empty_index, dtype):
+    def test_string(self, lmdb_version_store_static_and_dynamic, index, empty_dataframe):
+        df = pd.DataFrame({"col": ["short", 20*"long", None]}, index=index)
+        lmdb_version_store_static_and_dynamic.write("sym", df)
+        self.assert_append_empty_does_nothing(df, lmdb_version_store_static_and_dynamic, empty_dataframe)
+        self.assert_update_empty_does_nothing(df, lmdb_version_store_static_and_dynamic, empty_dataframe)
+
+    def test_date(self, lmdb_version_store_static_and_dynamic, date_dtype, index, empty_dataframe):
         df = pd.DataFrame(
             {
                 "col": np.array(
@@ -705,10 +719,8 @@ class TestAppendingEmptyToColumnDoesNothing:
                 )
             }, dtype=date_dtype, index=index)
         lmdb_version_store_static_and_dynamic.write("sym", df)
-        lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col": []}, dtype=dtype, index=empty_index))
-        read_result = lmdb_version_store_static_and_dynamic.read("sym")
-        assert_frame_equal(read_result.data, df)
-        assert read_result.version == 0
+        self.assert_append_empty_does_nothing(df, lmdb_version_store_static_and_dynamic, empty_dataframe)
+        self.assert_update_empty_does_nothing(df, lmdb_version_store_static_and_dynamic, empty_dataframe)
 
     def test_empty_df_does_not_create_new_columns_in_dynamic_schema(self, lmdb_version_store_dynamic_schema, index):
         df = pd.DataFrame({"col": [1,2,3]}, dtype="int32", index=index)
@@ -735,10 +747,8 @@ class TestCanUpdateEmptyColumn:
 
     @pytest.fixture(autouse=True)
     def create_empty_column(self, lmdb_version_store_static_and_dynamic, dtype, empty_index):
-        if isinstance(empty_index, pd.RangeIndex) and sys.version_info[1] < 9:
-            pytest.xfail("""compat-36 and compat-38 tests are failing because this would assign a row-range index to
-                         the empty df. This will be fixed when the pandas-agnostic empty index type is added""")
         lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": []}, dtype=dtype, index=empty_index))
+        assert lmdb_version_store_static_and_dynamic.read("sym").data.index.equals(pd.DatetimeIndex([]))
         yield
 
     def update_index(self):
@@ -784,10 +794,204 @@ class TestCanUpdateEmptyColumn:
         lmdb_version_store_static_and_dynamic.update("sym", df)
         assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df)
 
-class TestEmptyTypesIsOverriden:
+
+class TestEmptyTypeIsOverriden:
+    """
+    When an empty column (or a column containing only None) values is initially written it is assigned the empty type.
+    The first write/update to change the type determines the actual type of the column. Test that the first non-empty
+    append determines the actual type and subsequent appends with different types fail.
+    """
+
+
     def test_cannot_append_different_type_after_first_not_none(self, lmdb_version_store_static_and_dynamic):
         lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": [None, None]}))
         lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col": [1, 2, 3]}))
         lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col": [None, None]}))
         with pytest.raises(Exception):
             lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col": ["some", "string"]}))
+
+    @pytest.mark.parametrize(
+            "index, incompatible_index",
+            [
+                (pd.RangeIndex(0,3), list(pd.date_range(start="1/1/2024", end="1/3/2024"))),
+                (list(pd.date_range(start="1/1/2024", end="1/3/2024")), pd.RangeIndex(0, 3))
+            ]
+    )
+    def test_cannot_append_different_index_type_after_first_non_empty(self, lmdb_version_store_static_and_dynamic, index, incompatible_index):
+        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": []}))
+        assert lmdb_version_store_static_and_dynamic.read("sym").data.index.equals(pd.DatetimeIndex([]))
+        df_to_append_successfuly = pd.DataFrame({"col": [1,2,3]}, index=index)
+        lmdb_version_store_static_and_dynamic.append("sym",df_to_append_successfuly , validate_index=False)
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df_to_append_successfuly)
+        with pytest.raises(Exception):
+            lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col": [4, 5, 6]}, index=incompatible_index))
+
+
+class DisabledEmptyIndexBase:
+    @classmethod
+    def sym(cls):
+        return "sym"
+
+    @classmethod
+    def roundtrip(cls, dataframe, storage):
+        storage.write(cls.sym(), dataframe)
+        return storage.read(cls.sym()).data
+
+    @classmethod
+    def is_dynamic_schema(cls, storage):
+        return storage.lib_cfg().lib_desc.version.write_options.dynamic_schema
+
+    @pytest.fixture(
+    scope="function",
+    params=(
+        "lmdb_version_store_v1",
+        "lmdb_version_store_v2",
+        "lmdb_version_store_dynamic_schema_v1",
+        "lmdb_version_store_dynamic_schema_v2",
+        ),
+    )
+    def lmdb_version_store_static_and_dynamic(self, request):
+        yield request.getfixturevalue(request.param)
+
+@pytest.mark.skipif(PANDAS_VERSION < Version("2.0.0"), reason="This tests behavior of Pandas 2 and grater.")
+class TestIndexTypeWithEmptyTypeDisabledPands2AndLater(DisabledEmptyIndexBase):
+
+    def test_no_cols(self, lmdb_version_store_static_and_dynamic):
+        result = self.roundtrip(pd.DataFrame([]), lmdb_version_store_static_and_dynamic)
+        assert result.index.equals(pd.DatetimeIndex([]))
+
+    def test_has_a_column(self, lmdb_version_store_static_and_dynamic):
+        if self.is_dynamic_schema(lmdb_version_store_static_and_dynamic):
+            pytest.xfail(
+                """In case of empty symbols dynamic schema allows appending indexes of different types.
+                See https://github.com/man-group/ArcticDB/issues/1507. This is fixed with the empty index type."""
+            )
+        result = self.roundtrip(pd.DataFrame({"a": []}), lmdb_version_store_static_and_dynamic)
+        assert result.index.equals(pd.DatetimeIndex([]))
+        with pytest.raises(Exception):
+            lmdb_version_store_static_and_dynamic.append(self.sym(), pd.DataFrame({"a": [1.0]}))
+        to_append_successfuly = pd.DataFrame({"a": [1.0]}, index=pd.DatetimeIndex(["01/01/2024"])) 
+        lmdb_version_store_static_and_dynamic.append(self.sym(), to_append_successfuly)
+        assert_frame_equal(
+            lmdb_version_store_static_and_dynamic.read(self.sym()).data,
+            to_append_successfuly
+        )
+
+    def test_explicit_row_range_no_columns(self, lmdb_version_store_static_and_dynamic):
+        result = self.roundtrip(pd.DataFrame([], index=pd.RangeIndex(start=5, stop=5, step=100)), lmdb_version_store_static_and_dynamic)
+        assert result.index.equals(pd.DatetimeIndex([]))
+
+    def test_explicit_row_range_with_columns(self, lmdb_version_store_static_and_dynamic):
+        if self.is_dynamic_schema(lmdb_version_store_static_and_dynamic):
+            pytest.xfail(
+                """In case of empty symbols dynamic schema allows appending indexes of different types.
+                See https://github.com/man-group/ArcticDB/issues/1507. This is fixed with the empty index type."""
+            )
+        result = self.roundtrip(pd.DataFrame({"a": []}, index=pd.RangeIndex(start=5, stop=5, step=100)), lmdb_version_store_static_and_dynamic)
+        assert result.index.equals(pd.DatetimeIndex([]))
+        with pytest.raises(Exception):
+            lmdb_version_store_static_and_dynamic.append(self.sym(), pd.DataFrame({"a": [1.0]}, pd.RangeIndex(start=0, stop=1, step=1)))
+        to_append_successfuly = pd.DataFrame({"a": [1.0]}, index=pd.DatetimeIndex(["01/01/2024"])) 
+        lmdb_version_store_static_and_dynamic.append(self.sym(), to_append_successfuly)
+        assert_frame_equal(
+            lmdb_version_store_static_and_dynamic.read(self.sym()).data,
+            to_append_successfuly
+        )
+
+    def test_explicit_rowrange_default_step(self, lmdb_version_store_static_and_dynamic):
+        result = self.roundtrip(pd.DataFrame({"a": []}, index=pd.RangeIndex(start=0, stop=0)), lmdb_version_store_static_and_dynamic)
+        assert result.index.equals(pd.DatetimeIndex([]))
+            
+    def test_explicit_datetime(self, lmdb_version_store_static_and_dynamic):
+        result = self.roundtrip(pd.DataFrame({"a": []}, index=pd.DatetimeIndex([])), lmdb_version_store_static_and_dynamic)
+        assert result.index.equals(pd.DatetimeIndex([]))
+         
+    @pytest.mark.parametrize("arrays, expected_arrays", [
+        ([[], []], ([np.array([], dtype="datetime64[ns]"), np.array([], dtype="object")])),
+        ([np.array([], dtype="float"), np.array([], dtype="int")], ([np.array([], dtype="float"), np.array([], dtype="int")])),
+        ([np.array([], dtype="int"), np.array([], dtype="float")], ([np.array([], dtype="int"), np.array([], "float")])),
+        ([np.array([], dtype="datetime64[ns]"), np.array([], dtype="float64")], ([np.array([], dtype="datetime64[ns]"), np.array([], dtype="float")]))
+    ])
+    def test_multiindex(self, lmdb_version_store_static_and_dynamic, arrays, expected_arrays):
+        # When multiindex is used the dtypes are preserved. In case default empty numpy arrays are used like so:
+        # pd.MultiIndex.from_arrays([np.array([]), np.array([])], names=["p", "s"]) the result varies depending on
+        # numpy's defaults
+        input_index = pd.MultiIndex.from_arrays(arrays, names=["p", "s"])
+        result = self.roundtrip(pd.DataFrame({"a": []}, index=input_index), lmdb_version_store_static_and_dynamic)
+        expected_multiindex = pd.MultiIndex.from_arrays(expected_arrays, names=["p", "s"])
+        assert result.index.equals(expected_multiindex)
+
+
+@pytest.mark.skipif(PANDAS_VERSION >= Version("2.0.0"), reason="This tests only the behavior with Pandas <= 2")
+class TestIndexTypeWithEmptyTypeDisabledPands0AndPands1(DisabledEmptyIndexBase):
+    @classmethod
+    def multiindex_dtypes(cls, index):
+        """
+        The MultiIndex class in Pandas < 2 does not have dtypes method. This emulates that
+        """
+        return pd.Series({name: level.dtype for name, level in zip(index.names, index.levels)})
+    
+    def test_no_cols(self, lmdb_version_store_static_and_dynamic):
+        result = self.roundtrip(pd.DataFrame([]), lmdb_version_store_static_and_dynamic)
+        assert result.index.equals(pd.DatetimeIndex([]))
+
+    def test_has_a_column(self, lmdb_version_store_static_and_dynamic):
+        result = self.roundtrip(pd.DataFrame({"a": []}), lmdb_version_store_static_and_dynamic)
+        assert result.index.equals(pd.RangeIndex(start=0, stop=0, step=1))
+        with pytest.raises(arcticdb.exceptions.NormalizationException):
+            lmdb_version_store_static_and_dynamic.append(self.sym(), pd.DataFrame({"a": ["a"]}, index=pd.DatetimeIndex(["01/01/2024"])))
+        to_append_successfuly = pd.DataFrame({"a": ["a"]})
+        lmdb_version_store_static_and_dynamic.append(self.sym(), to_append_successfuly)
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.read(self.sym()).data, to_append_successfuly)
+
+    def test_explicit_row_range_no_columns(self, lmdb_version_store_static_and_dynamic):
+        result = self.roundtrip(pd.DataFrame([], index=pd.RangeIndex(start=5, stop=5, step=100)), lmdb_version_store_static_and_dynamic)
+        assert result.index.equals(pd.RangeIndex(start=0, stop=0, step=1))
+
+    def test_explicit_row_range_with_columns(self, lmdb_version_store_static_and_dynamic):
+        if self.is_dynamic_schema(lmdb_version_store_static_and_dynamic):
+            pytest.xfail(
+                """Dynamic schema should not allow appending missmatching range indexes. See issue:
+                https://github.com/man-group/ArcticDB/issues/1509"""
+            )
+        result = self.roundtrip(pd.DataFrame({"a": []}, index=pd.RangeIndex(start=5, stop=5, step=100)), lmdb_version_store_static_and_dynamic)
+        assert result.index.equals(pd.RangeIndex(start=5, stop=5, step=100))
+        # Cannot append datetime indexed df to empty rowrange index
+        with pytest.raises(arcticdb.exceptions.NormalizationException):
+            lmdb_version_store_static_and_dynamic.append(self.sym(), pd.DataFrame({"a": ["a"]}, index=pd.DatetimeIndex(["01/01/2024"])))
+        # Cannot append rowrange indexed df if the start of the appended is not matching the stop of the empty
+        with pytest.raises(arcticdb.exceptions.NormalizationException):
+            lmdb_version_store_static_and_dynamic.append(self.sym(), pd.DataFrame({"a": ["a"]}, index=pd.RangeIndex(start=9, stop=109, step=100)))
+            lmdb_version_store_static_and_dynamic.append(self.sym(), pd.DataFrame({"a": ["a"]}, index=pd.RangeIndex(start=10, stop=110, step=100)))
+        # Cannot append rowrange indexed df if the step is different
+        with pytest.raises(arcticdb.exceptions.NormalizationException):
+            lmdb_version_store_static_and_dynamic.append(self.sym(), pd.DataFrame({"a": ["a"]}, index=pd.RangeIndex(start=5, stop=6, step=1)))
+        to_append_successfuly = pd.DataFrame({"a": ["a"]}, index=pd.RangeIndex(start=5, stop=105, step=100))
+        lmdb_version_store_static_and_dynamic.append(self.sym(), to_append_successfuly)
+        assert_frame_equal(
+            lmdb_version_store_static_and_dynamic.read(self.sym()).data,
+            to_append_successfuly
+        )
+
+    def test_explicit_rowrange_default_step(self, lmdb_version_store_static_and_dynamic):
+        result = self.roundtrip(pd.DataFrame({"a": []}, index=pd.RangeIndex(start=0, stop=0)), lmdb_version_store_static_and_dynamic)
+        assert result.index.equals(pd.RangeIndex(start=0, stop=0, step=1))
+            
+    def test_explicit_datetime(self, lmdb_version_store_static_and_dynamic):
+        result = self.roundtrip(pd.DataFrame({"a": []}, index=pd.DatetimeIndex([])), lmdb_version_store_static_and_dynamic)
+        assert result.index.equals(pd.DatetimeIndex([]))
+
+    @pytest.mark.parametrize("arrays, expected_arrays", [
+        ([[], []], ([np.array([], dtype="datetime64[ns]"), np.array([], dtype="object")])),
+        ([np.array([], dtype="float"), np.array([], dtype="int")], ([np.array([], dtype="object"), np.array([], dtype="int")])),
+        ([np.array([], dtype="int"), np.array([], dtype="float")], ([np.array([], dtype="int"), np.array([], "object")])),
+        ([np.array([], dtype="datetime64[ns]"), np.array([], dtype="float64")], ([np.array([], dtype="datetime64[ns]"), np.array([], dtype="object")]))
+    ])
+    def test_multiindex(self, lmdb_version_store_static_and_dynamic, arrays, expected_arrays):
+        # When multiindex is used the dtypes are preserved. In case default empty numpy arrays are used like so:
+        # pd.MultiIndex.from_arrays([np.array([]), np.array([])], names=["p", "s"]) the result varies depending on
+        # numpy's defaults
+        input_index = pd.MultiIndex.from_arrays(arrays, names=["p", "s"])
+        result = self.roundtrip(pd.DataFrame({"a": []}, index=input_index), lmdb_version_store_static_and_dynamic)
+        expected_multiindex = pd.MultiIndex.from_arrays(expected_arrays, names=["p", "s"])
+        assert result.index.equals(expected_multiindex)

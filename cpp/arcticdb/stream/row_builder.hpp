@@ -53,7 +53,7 @@ class RowBuilder {
     template<class...Args>
     void start_row(const Args...args) {
         reset();
-        if constexpr(sizeof...(Args)> 0) {
+        if constexpr(sizeof...(Args)> 0 && !std::is_same_v<Index, EmptyIndex>) {
             index().set([&](std::size_t pos, auto arg) {
                 if constexpr (std::is_integral_v<decltype(arg)> || std::is_floating_point_v<decltype(arg)>)
                     set_scalar_impl(pos, arg);

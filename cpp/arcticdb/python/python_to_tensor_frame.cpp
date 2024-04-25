@@ -16,15 +16,15 @@
 #include <pybind11/numpy.h>
 
 namespace arcticdb::convert {
-const char none_char[8] = {'\300', '\000', '\000', '\000', '\000', '\000', '\000', '\000'};
+constexpr const char none_char[8] = {'\300', '\000', '\000', '\000', '\000', '\000', '\000', '\000'};
 
 using namespace arcticdb::pipelines;
 
-bool is_unicode(PyObject *obj) {
+[[nodiscard]] static inline bool is_unicode(PyObject *obj) {
     return PyUnicode_Check(obj);
 }
 
-bool is_py_boolean(PyObject* obj) {
+[[nodiscard]] static inline bool is_py_boolean(PyObject* obj) {
     return PyBool_Check(obj);
 }
 
@@ -47,7 +47,7 @@ std::variant<StringEncodingError, PyStringWrapper> pystring_to_buffer(PyObject *
     return api.PyArray_Check_(obj);
 }
 
-std::tuple<ValueType, uint8_t, ssize_t> determine_python_object_type(PyObject* obj) {
+[[nodiscard]] static std::tuple<ValueType, uint8_t, ssize_t> determine_python_object_type(PyObject* obj) {
     if (is_py_boolean(obj)) {
         normalization::raise<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>("Nullable booleans are not supported at the moment");
         return {ValueType::BOOL_OBJECT, 1, 1};
@@ -62,7 +62,7 @@ std::tuple<ValueType, uint8_t, ssize_t> determine_python_object_type(PyObject* o
 /// @todo We will iterate over all arrays in a column in aggregator_set_data anyways, so this is redundant, however
 ///     the type is determined at the point when obj_to_tensor is called. We need to make it possible to change the
 ///     the column type in aggregator_set_data in order not to iterate all arrays twice.
-std::tuple<ValueType, uint8_t, ssize_t> determine_python_array_type(PyObject** begin, PyObject** end) {
+[[nodiscard]] static std::tuple<ValueType, uint8_t, ssize_t> determine_python_array_type(PyObject** begin, PyObject** end) {
         auto none = py::none{};
         while(begin != end) {
         if(none.ptr() == *begin) {
@@ -116,7 +116,7 @@ NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types) {
     const auto arr = pybind11::detail::array_proxy(ptr);
     const auto descr = pybind11::detail::array_descriptor_proxy(arr->descr);
     auto ndim = arr->nd;
-    ssize_t size = ndim == 1 ? arr->dimensions[0] : arr->dimensions[0] * arr->dimensions[1];
+    const ssize_t size = ndim == 1 ? arr->dimensions[0] : arr->dimensions[0] * arr->dimensions[1];
     // In Pandas < 2, empty series dtype is `"float"`, but as of Pandas 2.0, empty series dtype is `"object"`
     // The Normalizer in Python cast empty `"float"` series to `"object"` so `EMPTY` is used here.
     // See: https://github.com/man-group/ArcticDB/pull/1049
@@ -221,10 +221,7 @@ std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
                 "Number idx names {} and values {} do not match",
                 idx_names.size(), idx_vals.size());
 
-    if (idx_names.empty()) {
-        res->index = stream::RowCountIndex();
-        res->desc.set_index_type(IndexDescriptor::ROWCOUNT);
-    } else {
+    if (!idx_names.empty()) {
         util::check(idx_names.size() == 1, "Multi-indexed dataframes not handled");
         auto index_tensor = obj_to_tensor(idx_vals[0].ptr(), empty_types);
         util::check(index_tensor.ndim() == 1, "Multi-dimensional indexes not handled");
@@ -232,10 +229,7 @@ std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
         std::string index_column_name = !idx_names.empty() ? idx_names[0] : "index";
         res->num_rows = index_tensor.shape(0);
         // TODO handle string indexes
-        // Empty type check is added to preserve the current behavior which is that 0-rowed dataframes
-        // are assigned datetime index. This will be changed in further PR creating empty typed index.
-        if (index_tensor.data_type() == DataType::NANOSECONDS_UTC64 || is_empty_type(index_tensor.data_type())) {
-
+        if (index_tensor.data_type() == DataType::NANOSECONDS_UTC64) {
             res->desc.set_index_field_count(1);
             res->desc.set_index_type(IndexDescriptor::TIMESTAMP);
 
@@ -266,6 +260,20 @@ std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
             res->desc.add_field(FieldRef{TypeDescriptor{tensor.data_type(), Dimension::Dim1}, col_names[i]});
         }
         res->field_tensors.push_back(std::move(tensor));
+    }
+
+    // idx_names are passed by the python layer. They are empty in case row count index is used see:
+    // https://github.com/man-group/ArcticDB/blob/4184a467d9eee90600ddcbf34d896c763e76f78f/python/arcticdb/version_store/_normalization.py#L291
+    // Currently the python layers assign RowRange index to both empty dataframes and dataframes which do not specify
+    // index explicitly. Thus we handle this case after all columns are read so that we know how many rows are there.
+    if (idx_names.empty()) {
+        res->index = stream::RowCountIndex();
+        res->desc.set_index_type(IndexDescriptor::ROWCOUNT);
+    }
+
+    if (empty_types && res->num_rows == 0) {
+        res->index = stream::EmptyIndex();
+        res->desc.set_index_type(IndexDescriptor::EMPTY);
     }
 
     ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res->desc);

@@ -197,7 +197,7 @@ class InputFactories(_InputFactoryValues, Enum):
         ),
         _ROWCOUNT,
         "df",
-        "is_not_range_index",
+        "is_physically_stored",
     )
 
     DF_DTI = (
