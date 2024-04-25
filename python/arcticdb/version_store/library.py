@@ -889,6 +889,7 @@ class Library:
         symbol: str,
         mode: Optional[StagedDataFinalizeMethod] = StagedDataFinalizeMethod.WRITE,
         prune_previous_versions: Optional[bool] = False,
+        metadata: Any = None,
     ):
         """
         Finalises staged data, making it available for reads.
@@ -903,6 +904,8 @@ class Library:
             new timeseries. Append collects the staged data and appends them to the latest version.
         prune_previous_versions
             Removes previous (non-snapshotted) versions from the database.
+        metadata : Any, default=None
+            Optional metadata to persist along with the symbol.
 
         See Also
         --------
@@ -913,6 +916,7 @@ class Library:
             symbol,
             append=mode == StagedDataFinalizeMethod.APPEND,
             convert_int_to_float=False,
+            metadata=metadata,
             prune_previous_version=prune_previous_versions,
         )
 

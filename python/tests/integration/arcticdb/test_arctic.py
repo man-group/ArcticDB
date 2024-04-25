@@ -145,42 +145,46 @@ def test_write_metadata_with_none(arctic_library):
     assert read_symbol.version == 0
 
 
-def staged_write(sym, arctic_library):
+@pytest.mark.parametrize("finalize_method", (StagedDataFinalizeMethod.WRITE, StagedDataFinalizeMethod.APPEND))
+def test_staged_data(arctic_library, finalize_method):
     lib = arctic_library
-    df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
-    df.index = pd.date_range("2018-01-01", periods=3, freq="H")
-    lib.write(sym, df, staged=True)
+    sym_with_metadata = "sym_with_metadata"
+    sym_without_metadata = "sym_without_metadata"
+    sym_unfinalized = "sym_unfinalized"
+    df_0 = pd.DataFrame({"col": [1, 2]}, index=pd.date_range("2024-01-01", periods=2))
+    df_1 = pd.DataFrame({"col": [3, 4]}, index=pd.date_range("2024-01-03", periods=2))
+    df_2 = pd.DataFrame({"col": [5, 6]}, index=pd.date_range("2024-01-05", periods=2))
+    expected = pd.concat([df_0, df_1, df_2])
 
-    df = pd.DataFrame({"col1": [4, 5, 6], "col2": [7, 8, 9]})
-    df.index = pd.date_range("2018-01-01 03:00:00", periods=3, freq="H")
-    lib.write(sym, df, staged=True)
+    if finalize_method == StagedDataFinalizeMethod.WRITE:
+        lib.write(sym_with_metadata, df_0, staged=True)
+        lib.write(sym_without_metadata, df_0, staged=True)
+        lib.write(sym_unfinalized, df_0, staged=True)
+    else:
+        # finalize_method == StagedDataFinalizeMethod.APPEND
+        lib.write(sym_with_metadata, df_0, staged=False)
+        lib.write(sym_without_metadata, df_0, staged=False)
 
+    lib.write(sym_with_metadata, df_1, staged=True)
+    lib.write(sym_with_metadata, df_2, staged=True)
+    lib.write(sym_without_metadata, df_1, staged=True)
+    lib.write(sym_without_metadata, df_2, staged=True)
+    lib.write(sym_unfinalized, df_1, staged=True)
+    lib.write(sym_unfinalized, df_2, staged=True)
 
-def test_parallel_writes_and_appends(arctic_library):
-    lib = arctic_library
-    staged_write("my_symbol", lib)
-    staged_write("my_other_symbol", lib)
-    staged_write("yet_another_symbol", lib)
+    metadata = {"hello": "world"}
+    lib.finalize_staged_data(sym_with_metadata, finalize_method, metadata=metadata)
+    lib.finalize_staged_data(sym_without_metadata, finalize_method)
 
-    lib.finalize_staged_data("my_symbol", StagedDataFinalizeMethod.WRITE)
-    lib.finalize_staged_data("my_other_symbol", StagedDataFinalizeMethod.WRITE)
+    assert set(lib.list_symbols()) == {sym_with_metadata, sym_without_metadata}
 
-    assert set(lib.list_symbols()) == {"my_symbol", "my_other_symbol"}
+    sym_with_metadata_vit = lib.read(sym_with_metadata)
+    assert_frame_equal(expected, sym_with_metadata_vit.data)
+    assert sym_with_metadata_vit.metadata == metadata
 
-    comp_df = pd.DataFrame({"col1": [1, 2, 3, 4, 5, 6], "col2": [4, 5, 6, 7, 8, 9]})
-    comp_df.index = pd.date_range("2018-01-01", periods=6, freq="H")
-    assert_frame_equal(lib.read("my_symbol").data, comp_df)
-    assert_frame_equal(lib.read("my_other_symbol").data, comp_df)
-
-    df = pd.DataFrame({"col1": [7, 8, 9], "col2": [10, 11, 12]})
-    df.index = pd.date_range("2018-01-01 06:00:00", periods=3, freq="H")
-    lib.write("my_symbol", df, staged=True)
-
-    lib.finalize_staged_data("my_symbol", StagedDataFinalizeMethod.APPEND)
-
-    comp_df = pd.DataFrame({"col1": [1, 2, 3, 4, 5, 6, 7, 8, 9], "col2": [4, 5, 6, 7, 8, 9, 10, 11, 12]})
-    comp_df.index = pd.date_range("2018-01-01", periods=9, freq="H")
-    assert_frame_equal(lib.read("my_symbol").data, comp_df)
+    sym_without_metadata_vit = lib.read(sym_without_metadata)
+    assert_frame_equal(expected, sym_without_metadata_vit.data)
+    assert sym_without_metadata_vit.metadata is None
 
 
 def test_snapshots_and_deletes(arctic_library):
