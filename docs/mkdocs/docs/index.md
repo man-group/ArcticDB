@@ -4,7 +4,7 @@
 
 ArcticDB is a serverless DataFrame database engine designed for the Python Data Science ecosystem. 
 
-ArcticDB enables you to store, retrieve and process DataFrames at scale, backed by commodity object storage.
+ArcticDB enables you to store, retrieve and process DataFrames at scale, backed by commodity object storage (S3-compatible storages and Azure Blob Storage).
 
 ArcticDB requires *zero additional infrastructure* beyond a running Python environment and access to object storage and can be **installed in seconds.**
 
@@ -17,19 +17,12 @@ ArcticDB is:
     - No data schema is needed
     - Supports streaming data ingestion
     - Bitemporal - stores all previous versions of stored data
-    - As easy to get started as using files
+    - Easy to setup both locally and on cloud
     - Scales from dev/research to production environments
 - **Familiar**
     - ArcticDB is the world's simplest database
     - Easy to learn for anyone with Python and Pandas experience
     - Just you and your data - the cognitive overhead is very low.
-
-#### Transactions: Are They Overrated?
-
-- ArcticDB is designed for high throughput analytical workloads
-- It is not a transactional database
-- Most analytical workflows can be constructed to run without needing transactions
-- So why pay the cost of transactions when they are often not needed?
 
 ## Getting Started
 
@@ -57,11 +50,12 @@ To get started, we can import ArcticDB and instantiate it:
 
 ```python
 import arcticdb as adb
-uri = "insert your uri string here"
+# this will set up the storage using the local file system
+uri = "lmdb://tmp/arcticdb_intro"
 ac = adb.Arctic(uri)
 ```
 
-For more information on how to correctly format the `uri` string, please view the docstring ([`help(Arctic)`](api/arctic.md#arcticdb.Arctic)) or read the [storage access](#storage-access) section (click the link or keep reading below this section).
+For more information on how to correctly format the `uri` string for other storages, please view the docstring ([`help(Arctic)`](api/arctic.md#arcticdb.Arctic)) or read the [storage access](#storage-access) section (click the link or keep reading below this section).
 
 ### Library Setup
 
@@ -71,7 +65,7 @@ are stored in collections called _libraries_. A single _library_ can store many 
 _Libraries_ must first be initialized prior to use:
 
 ```python
-ac.create_library('data')  # fixed schema - see note below
+ac.create_library('data')  # static schema - see note below
 ac.list_libraries()
 ```
 output
@@ -99,7 +93,7 @@ library = ac.get_library('data', create_if_missing=True)
 
     However, if you need to add, remove or change the type of columns via `update` or `append`, then you can do that. You simply need to create the library with the `dynamic_schema` option set. See the `library_options` parameter of the ([`create_library`](api/arctic/#arcticdb.Arctic.create_library)) method.
 
-    So you have the best of both worlds - you can either enforce a static schema on your data so it cannot change by modifying operations, or allow it to be flexible.
+    So you have the best of both worlds - you can choose to either enforce a static schema on your data so it cannot change by modifying operations, or allow it to be flexible.
     
     The choice to use static or dynamic schemas must be set at library creation time.
 
@@ -107,9 +101,11 @@ library = ac.get_library('data', create_if_missing=True)
 
 ### Reading And Writing Data
 
-Now we have a library set up, we can get to reading and writing data. ArcticDB exposes a set of simple functions to enable DataFrame storage. 
+Now we have a library set up, we can get to reading and writing data. ArcticDB has a set of simple functions for DataFrame storage.
 
-Let's first look at writing a DataFrame to storage:
+Let's write a DataFrame to storage.
+
+First create the data:
 
 ```python
 # 50 columns, 25 rows, random data, datetime indexed.
@@ -131,7 +127,7 @@ _output (the first 5 rows of the data)_
 2000-01-01 09:00:00     45     17     39     47     47     11     33     31  ...
 ```
 
-Write the DataFrame:
+Then write to the library:
 
 ```python
 library.write('test_frame', df)
@@ -152,9 +148,7 @@ The `'test_frame'` DataFrame will be used for the remainder of this guide.
     * `DatetimeIndex`
     * `MultiIndex` composed of above supported types
     
-    Currently, ArcticDB allows `append()`-ing to a `RangeIndex` only with a continuing `RangeIndex` (i.e. the appending `RangeIndex.start` == `RangeIndex.stop` of the existing data and they have the same `RangeIndex.step`). If a DataFrame with a non-continuing `RangeIndex` is passed to `append()`, ArcticDB does _not_ convert it `Int64Index` like Pandas and will produce an error.
-
-    The "row" concept in `head()/tail()` refers to the row number, not the value in the `pandas.Index`.
+    The "row" concept in `head()/tail()` refers to the row number ('iloc'), not the value in the `pandas.Index` ('loc').
 
 Read the data back from storage:
 
@@ -215,7 +209,7 @@ _output (the rows in the date range and columns requested)_
 2000-01-01 13:00:00      18       8
 ```
 
-### Filtering
+#### Filtering
 
 ArcticDB uses a Pandas-_like_ syntax to describe how to filter data. For more details including the limitations, please view the docstring ([`help(QueryBuilder)`](api/query_builder)).
 
@@ -262,9 +256,9 @@ _output_
 Then create 3 new rows to append. For append to work the new data must have its first `datetime` starting after the existing data.
 
 ```python
-random_data = np.random.randint(0, 50, size=(5, 50))
+random_data = np.random.randint(0, 50, size=(3, 50))
 df_append = pd.DataFrame(random_data, columns=['COL_%d' % i for i in range(50)])
-df_append.index = pd.date_range(datetime(2000, 1, 2, 7), periods=5, freq="H")
+df_append.index = pd.date_range(datetime(2000, 1, 2, 7), periods=3, freq="H")
 df_append
 ```
 _output_
@@ -483,7 +477,7 @@ LMDB does not work with remote filesystems.
 
 An in-memory backend is provided mainly for testing and experimentation. It could be useful when creating files with LMDB is not desired.
 
-There are no configuration parameters, and the memory is owned solely be the Arctic instance.
+There are no configuration parameters, and the memory is owned solely by the Arctic instance.
 
 For example:
 
@@ -493,3 +487,12 @@ ac = adb.Arctic('mem://')
 ```
 
 For concurrent access to a local backend, we recommend LMDB connected to tmpfs, see [LMDB and In-Memory Tutorial](tutorials/lmdb_and_in_memory.md).
+
+### Transactions
+
+- Transactions can be expensive and slow
+- Most analytical workflows can be constructed to run without needing transactions
+- So why pay the cost of transactions when they are often not needed?
+- ArcticDB doesn't have transactions because it is designed for high throughput analytical workloads
+
+
