@@ -50,7 +50,6 @@ RUN yum update -y && \
       libcurl-devel \
       python3-devel \
       flex \
-      cmake \
       ninja-build && \
     yum clean all &&\
     touch /etc/arcticdb_deps_installed
