@@ -12,26 +12,28 @@ ArcticDB is:
 
 - **Fast**
     - Process millions of rows per second
-    - Very easy to install: `pip install arcticdb`
+    - Quick and easy to install: `pip install arcticdb`
 - **Flexible**
     - No data schema is needed
     - Supports streaming data ingestion
     - Bitemporal - stores all previous versions of stored data
+    - As easy to get started as using files
+    - Scales from dev/research to production environments
 - **Familiar**
     - ArcticDB is the world's simplest database
-    - The coding needed is easy to learn for anyone with prior Python and Pandas experience
+    - Easy to learn for anyone with Python and Pandas experience
     - Just you and your data - the cognitive overhead is very low.
 
 #### Transactions: Are They Overrated?
 
 - ArcticDB is designed for high throughput analytical workloads
-- It is _not_ a transactional database
+- It is not a transactional database
 - Most analytical workflows can be constructed to run without needing transactions
 - So why pay the cost of transactions when they are often not needed?
 
 ## Getting Started
 
-This section will cover installation, setup and basic usage. More detailed information and advanced functionality such as _snapshots_ and _parallel writers_ can be found in the tutorials section.
+This section will cover installation, setup and basic usage. More details on basics and advanced features can be found in the [tutorials](tutorials/fundamentals.md) section.
 
 ### Installation
 
@@ -61,10 +63,10 @@ ac = adb.Arctic(uri)
 
 For more information on how to correctly format the `uri` string, please view the docstring ([`help(Arctic)`](api/arctic.md#arcticdb.Arctic)) or read the [storage access](#storage-access) section (click the link or keep reading below this section).
 
-#### Library Setup
+### Library Setup
 
-ArcticDB is geared towards storing many (potentially millions) of tables. Individual tables are called _symbols_ and 
-are stored in collections called _libraries_. A single _library_ can store multiple symbols.
+ArcticDB is geared towards storing many (potentially millions) of tables. Individual tables (DataFrames) are called _symbols_ and 
+are stored in collections called _libraries_. A single _library_ can store many symbols.
 
 _Libraries_ must first be initialized prior to use:
 
@@ -77,13 +79,13 @@ output
 ['data']
 ```
 
-A library can then be retrieved:
+The library must then be instantiated in the code ready to read/write data:
 
 ```python
 library = ac['data']
 ```
 
-Sometimes it is more convenient to combine library creation and retrieval using this form, which will automatically create the library if needed, to save you checking
+Sometimes it is more convenient to combine library creation and instantiation using this form, which will automatically create the library if needed, to save you checking if it exists already:
 
 ```python
 library = ac.get_library('data', create_if_missing=True)
@@ -97,15 +99,15 @@ library = ac.get_library('data', create_if_missing=True)
 
     However, if you need to add, remove or change the type of columns via `update` or `append`, then you can do that. You simply need to create the library with the `dynamic_schema` option set. See the `library_options` parameter of the ([`create_library`](api/arctic/#arcticdb.Arctic.create_library)) method.
 
-    So you have the best of both worlds - you can either enforce a static schema on your data so it cannot change, or allow it to be flexible.
+    So you have the best of both worlds - you can either enforce a static schema on your data so it cannot change by modifying operations, or allow it to be flexible.
     
     The choice to use static or dynamic schemas must be set at library creation time.
 
     In this section we are using `static schema`, just to be clear.
 
-##### Reading And Writing Data
+### Reading And Writing Data
 
-Now we have a library set up, we can get to reading and writing data. ArcticDB exposes a set of simple API primitives to enable DataFrame storage. 
+Now we have a library set up, we can get to reading and writing data. ArcticDB exposes a set of simple functions to enable DataFrame storage. 
 
 Let's first look at writing a DataFrame to storage:
 
@@ -119,7 +121,7 @@ df = pd.DataFrame(np.random.randint(0, 50, size=(25, 50)), columns=cols)
 df.index = pd.date_range(datetime(2000, 1, 1, 5), periods=25, freq="H")
 df.head(5)
 ```
-output (the first 5 rows of the data)
+_output (the first 5 rows of the data)_
 ```
                      COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
 2000-01-01 05:00:00     18     48     10     16     38     34     25     44  ...
@@ -134,7 +136,7 @@ Write the DataFrame:
 ```python
 library.write('test_frame', df)
 ```
-output (this is information about what was written)
+_output (information about what was written)_
 ```
 VersionedItem(symbol=test_frame,library=data,data=n/a,version=0,metadata=None,host=<host>)
 ```
@@ -154,13 +156,13 @@ The `'test_frame'` DataFrame will be used for the remainder of this guide.
 
     The "row" concept in `head()/tail()` refers to the row number, not the value in the `pandas.Index`.
 
-Read it back:
+Read the data back from storage:
 
 ```Python
 from_storage_df = library.read('test_frame').data
 from_storage_df.head(5)
 ```
-output (the first 5 rows but read from the database)
+_output (the first 5 rows but read from the database)_
 ```
                      COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
 2000-01-01 05:00:00     18     48     10     16     38     34     25     44  ...
@@ -173,9 +175,9 @@ output (the first 5 rows but read from the database)
 The data read matches the original data, of course.
 
 
-##### Slicing and Filtering
+### Slicing and Filtering
 
-ArcticDB enables you to slice by _row_ and by _column_. 
+ArcticDB enables you to slice by row and by column. 
 
 !!! info "ArcticDB indexing"
 
@@ -183,12 +185,12 @@ ArcticDB enables you to slice by _row_ and by _column_.
     optimised slicing across index entries. If the index is unsorted or not numeric your data can still be stored but row-slicing will
     be slower.
 
-###### Row-slicing
+#### Row-slicing
 
 ```Python
 library.read('test_frame', date_range=(df.index[5], df.index[8])).data
 ```
-output (the rows in the data range requested)
+_output (the rows in the data range requested)_
 ```
                      COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
 2000-01-01 10:00:00     23     39      0     45     15     28     10     17  ...
@@ -197,14 +199,14 @@ output (the rows in the data range requested)
 2000-01-01 13:00:00     28     32     47     37     17     44     29     24  ...
 ```
 
-##### Column slicing
+#### Column slicing
 
 ```Python
 _range = (df.index[5], df.index[8])
 _columns = ['COL_30', 'COL_31']
 library.read('test_frame', date_range=_range, columns=_columns).data
 ```
-output (the rows in the date range and columns requested)
+_output (the rows in the date range and columns requested)_
 ```
                      COL_30  COL_31
 2000-01-01 10:00:00      31       2
@@ -213,7 +215,7 @@ output (the rows in the date range and columns requested)
 2000-01-01 13:00:00      18       8
 ```
 
-###### Filtering
+### Filtering
 
 ArcticDB uses a Pandas-_like_ syntax to describe how to filter data. For more details including the limitations, please view the docstring ([`help(QueryBuilder)`](api/query_builder)).
 
@@ -229,27 +231,27 @@ q = adb.QueryBuilder()
 q = q[(q["COL_30"] > 10) & (q["COL_31"] < 40)]
 library.read('test_frame', date_range=_range, columns=_cols, query_builder=q).data
 ```
-output (the data filtered by date range, columns and the query which filters based on the data values)
+_output (the data filtered by date range, columns and the query which filters based on the data values)_
 ```
                      COL_30  COL_31
 2000-01-01 10:00:00      31       2
 2000-01-01 13:00:00      18       8
 ```
 
-####  Modifications, Versioning (aka Time Travel)
+###  Modifications, Versioning (aka Time Travel)
 
 ArcticDB fully supports modifying stored data via two primitives: _update_ and _append_.
 
-##### Append
+#### Append
 
 Let's append data to the end of the timeseries.
 
-To start, we will take a look at the last few records of the data before it gets modified
+To start, we will take a look at the last few records of the data (before it gets modified)
 
 ```python
 library.tail('test_frame', 4).data
 ```
-output
+_output_
 ```
                      COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
 2000-01-02 02:00:00     46     12     38     47      4     31      1     42  ...
@@ -265,7 +267,7 @@ df_append = pd.DataFrame(random_data, columns=['COL_%d' % i for i in range(50)])
 df_append.index = pd.date_range(datetime(2000, 1, 2, 7), periods=5, freq="H")
 df_append
 ```
-output
+_output_
 ```
                      COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
 2000-01-02 07:00:00      9     15      4     48     48     35     34     49  ...
@@ -278,7 +280,7 @@ Now _append_ that DataFrame to what was written previously
 ```Python
 library.append('test_frame', df_append)
 ```
-output
+_output_
 ```
 VersionedItem(symbol=test_frame,library=data,data=n/a,version=1,metadata=None,host=<host>)
 ```
@@ -287,7 +289,7 @@ Then look at the final 5 rows to see what happened
 ```python
 library.tail('test_frame', 5).data
 ```
-output
+_output_
 ```
                      COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
 2000-01-02 04:00:00     17     48     36     43      6     46      5      8  ...
@@ -301,7 +303,7 @@ The final 5 rows consist of the last two rows written previously followed by the
 
 Append is very useful for adding new data to the end of a large timeseries.
 
-##### Update
+#### Update
 
 The update primitive enables you to overwrite a contiguous chunk of data. This results in modifying some rows and deleting others as we will see in the example below.
 
@@ -313,7 +315,7 @@ df = pd.DataFrame(random_data, columns=['COL_%d' % i for i in range(50)])
 df.index = pd.date_range(datetime(2000, 1, 1, 5), periods=2, freq="2H")
 df
 ```
-output (rows 0 and 2 only as selected by the `iloc[]`)
+_output (rows 0 and 2 only as selected by the `iloc[]`)_
 ```
                      COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
 2000-01-01 05:00:00     47     49     15      6     22     48     45     22  ...
@@ -323,7 +325,7 @@ now update the symbol
 ```python
 library.update('test_frame', df)
 ```
-output (information about the update)
+_output (information about the update)_
 ```
 VersionedItem(symbol=test_frame,library=data,data=n/a,version=2,metadata=None,host=<host>)
 ```
@@ -333,7 +335,7 @@ Now let's look at the first 4 rows in the symbol:
 ```python
 library.head('test_frame', 4).data  # head/tail are similar to the equivalent Pandas operations
 ```
-output
+_output_
 ```
                      COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
 2000-01-01 05:00:00     47     49     15      6     22     48     45     22  ...
@@ -351,7 +353,7 @@ Let's unpick how we end up with that result. The update has
 Logically, this corresponds to replacing the complete date range of the old data with the new data, which is what you would expect from an update.
 
 
-##### Versioning
+#### Versioning
 
 You might have noticed that `read` calls do not return the data directly - but instead returns a `VersionedItem` structure. You may also have noticed that modification operations 
 (`write`, `append` and `update`) increment the version number. ArcticDB versions all modifications, which means you can retrieve earlier versions of data - it is a bitemporal database:
@@ -359,7 +361,7 @@ You might have noticed that `read` calls do not return the data directly - but i
 ```Python
 library.tail('test_frame', 7, as_of=0).data
 ```
-output
+_output_
 ```
                      COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
 2000-01-01 23:00:00     16     46      3     45     43     14     10     27  ...
@@ -490,4 +492,4 @@ import arcticdb as adb
 ac = adb.Arctic('mem://')
 ```
 
-For concurrent access to a local backend, we recommend LMDB connected to tmpfs.
+For concurrent access to a local backend, we recommend LMDB connected to tmpfs, see [LMDB and In-Memory Tutorial](tutorials/lmdb_and_in_memory.md).
