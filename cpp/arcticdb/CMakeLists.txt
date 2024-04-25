@@ -461,6 +461,7 @@ set(arcticdb_srcs
         storage/storage_factory.cpp
         stream/aggregator.cpp
         stream/append_map.cpp
+        stream/index.cpp
         stream/piloted_clock.cpp
         toolbox/library_tool.cpp
         util/allocator.cpp

@@ -63,7 +63,7 @@ struct formatter<arcticdb::storage::KeyData> {
 
     template<typename FormatContext>
     auto format(const arcticdb::storage::KeyData &k, FormatContext &ctx) const {
-        return format_to(ctx.out(), "{}:{}", k.key_offset_, k.key_size_);
+        return fmt::format_to(ctx.out(), "{}:{}", k.key_offset_, k.key_size_);
     }
 };
 
