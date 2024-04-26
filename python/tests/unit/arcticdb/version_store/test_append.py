@@ -28,6 +28,39 @@ def test_append_simple(lmdb_version_store):
     assert_frame_equal(vit.data, expected)
 
 
+@pytest.mark.parametrize("empty_types", (True, False))
+@pytest.mark.parametrize("dynamic_schema", (True, False))
+def test_append_range_index(version_store_factory, empty_types, dynamic_schema):
+    lib = version_store_factory(empty_types=empty_types, dynamic_schema=dynamic_schema)
+    sym = "test_append_range_index"
+    df_0 = pd.DataFrame({"col": [0, 1]}, index=pd.RangeIndex(0, 4, 2))
+    lib.write(sym, df_0)
+
+    # Appending another range index following on from what is there should work
+    df_1 = pd.DataFrame({"col": [2, 3]}, index=pd.RangeIndex(4, 8, 2))
+    lib.append(sym, df_1)
+    expected = pd.concat([df_0, df_1])
+    received = lib.read(sym).data
+    assert_frame_equal(expected, received)
+
+    # Appending a range starting earlier or later, or with a different step size, should fail
+    for idx in [pd.RangeIndex(6, 10, 2), pd.RangeIndex(10, 14, 2), pd.RangeIndex(8, 14, 3)]:
+        with pytest.raises(NormalizationException):
+            lib.append(sym, pd.DataFrame({"col": [4, 5]}, index=idx))
+
+
+@pytest.mark.parametrize("empty_types", (True, False))
+@pytest.mark.parametrize("dynamic_schema", (True, False))
+def test_append_range_index_from_zero(version_store_factory, empty_types, dynamic_schema):
+    lib = version_store_factory(empty_types=empty_types, dynamic_schema=dynamic_schema)
+    sym = "test_append_range_index_from_zero"
+    df_0 = pd.DataFrame({"col": [0, 1]}, index=pd.RangeIndex(-6, -2, 2))
+    lib.write(sym, df_0)
+
+    with pytest.raises(NormalizationException):
+        lib.append(sym, pd.DataFrame({"col": [2, 3]}, index=pd.RangeIndex(0, 4, 2)))
+
+
 def test_append_indexed(s3_version_store):
     symbol = "test_append_simple"
     idx1 = np.arange(0, 10)

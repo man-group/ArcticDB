@@ -74,9 +74,10 @@ inline void check_normalization_index_match(
             // Having this will not allow appending RowCont indexed pd.DataFrames to DateTime indexed pd.DataFrames because they would
             // have different field size (the rowcount index is not stored as a field). This logic is bug prone and will become better
             // after we enable the empty index.
+            const bool input_frame_is_series = frame.norm_meta.has_series();
             normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
                 common_index_type != IndexDescriptor::UNKNOWN ||
-                    (old_idx_kind == IndexDescriptor::TIMESTAMP && new_idx_kind == IndexDescriptor::ROWCOUNT),
+                    (input_frame_is_series && old_idx_kind == IndexDescriptor::TIMESTAMP && new_idx_kind == IndexDescriptor::ROWCOUNT),
                 "Cannot append {} index to {} index",
                 index_type_to_str(new_idx_kind),
                 index_type_to_str(old_idx_kind)
@@ -121,12 +122,9 @@ inline void fix_descriptor_mismatch_or_throw(
     const auto &old_sd = existing_isr.tsd().as_stream_descriptor();
     check_normalization_index_match(operation, old_sd, new_frame, empty_types);
 
-    if (dynamic_schema)
-        return; // TODO: dynamic schema may need some of the checks as below
-
     fix_normalization_or_throw(operation == APPEND, existing_isr, new_frame);
 
-    if (!columns_match(old_sd, new_frame.desc)) {
+    if (!dynamic_schema && !columns_match(old_sd, new_frame.desc)) {
         throw StreamDescriptorMismatch(
             "The columns (names and types) in the argument are not identical to that of the existing version",
             StreamDescriptor{old_sd},
