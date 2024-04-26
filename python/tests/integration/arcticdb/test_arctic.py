@@ -876,6 +876,16 @@ def test_azure_sas_token(azurite_storage_factory: StorageFixtureFactory):
             ac = f.create_arctic()
             ac.create_library("x")
 
+def test_lib_has_lib_tools_read_index(lmdb_library):
+    lib = lmdb_library
+    sym = "my_symbol"
+
+    df = pd.DataFrame({"col": [1, 2, 3]})
+    lib.write(sym, df)
+    lib_tool = lib._dev_tools.library_tool()
+
+    assert lib_tool.read_index(sym).equals(lib._nvs.read_index(sym))
+
 
 def test_s3_force_uri_lib_config_handling(s3_storage):
     # force_uri_lib_config is a obsolete configuration. However, user still includes this option in their setup.

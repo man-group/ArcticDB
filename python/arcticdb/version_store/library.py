@@ -290,6 +290,12 @@ class StagedDataFinalizeMethod(Enum):
     WRITE = auto()
     APPEND = auto()
 
+class DevTools:
+    def __init__(self, nvs):
+        self._nvs = nvs
+
+    def library_tool(self):
+        return self._nvs.library_tool()
 
 class Library:
     """
@@ -321,6 +327,7 @@ class Library:
         self.arctic_instance_desc = arctic_instance_description
         self._nvs = nvs
         self._nvs._normalizer.df._skip_df_consolidation = True
+        self._dev_tools = DevTools(nvs)
 
     def __repr__(self):
         return "Library(%s, path=%s, storage=%s)" % (
@@ -1779,13 +1786,14 @@ class Library:
         >>> lib.write("symbol", pd.DataFrame({"A": [0]}, index=[pd.Timestamp(0)]))
         >>> lib.append("symbol", pd.DataFrame({"A": [1, 2]}, index=[pd.Timestamp(1), pd.Timestamp(2)]))
         >>> lib.append("symbol", pd.DataFrame({"A": [3]}, index=[pd.Timestamp(3)]))
-        >>> lib.read_index(sym)
+        >>> lib_tool = lib._dev_tools.library_tool()
+        >>> lib_tool.read_index(sym)
                             start_index                     end_index  version_id stream_id          creation_ts          content_hash  index_type  key_type  start_col  end_col  start_row  end_row
         1970-01-01 00:00:00.000000000 1970-01-01 00:00:00.000000001          20    b'sym'  1678974096622685727   6872717287607530038          84         2          1        2          0        1
         1970-01-01 00:00:00.000000001 1970-01-01 00:00:00.000000003          21    b'sym'  1678974096931527858  12345256156783683504          84         2          1        2          1        3
         1970-01-01 00:00:00.000000003 1970-01-01 00:00:00.000000004          22    b'sym'  1678974096970045987   7952936283266921920          84         2          1        2          3        4
         >>> lib.version_store.defragment_symbol_data("symbol", 2)
-        >>> lib.read_index(sym)  # Returns two segments rather than three as a result of the defragmentation operation
+        >>> lib_tool.read_index(sym)  # Returns two segments rather than three as a result of the defragmentation operation
                             start_index                     end_index  version_id stream_id          creation_ts         content_hash  index_type  key_type  start_col  end_col  start_row  end_row
         1970-01-01 00:00:00.000000000 1970-01-01 00:00:00.000000003          23    b'sym'  1678974097067271451  5576804837479525884          84         2          1        2          0        3
         1970-01-01 00:00:00.000000003 1970-01-01 00:00:00.000000004          23    b'sym'  1678974097067427062  7952936283266921920          84         2          1        2          3        4
