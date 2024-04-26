@@ -7,6 +7,7 @@ from typing import Optional, Union, List, Dict, Any
 import pandas as pd
 
 from arcticdb.version_store._normalization import FrameData
+from arcticdb.supported_types import ExplicitlySupportedDates
 from arcticdb_ext.codec import decode_segment
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.stream import SegmentInMemory
@@ -15,6 +16,7 @@ from arcticdb_ext.version_store import AtomKey, PythonOutputFrame, RefKey
 from arcticdb.version_store._normalization import denormalize_dataframe
 
 VariantKey = Union[AtomKey, RefKey]
+VersionQueryInput = Union[int, str, ExplicitlySupportedDates, None]
 
 _KEY_PROPERTIES = {
     key_type: {k: v for k, v in vars(key_type).items() if isinstance(v, property)} for key_type in (AtomKey, RefKey)
@@ -31,6 +33,10 @@ def props_dict_to_atom_key(d: Dict[str, Any]) -> AtomKey:
 
 
 class LibraryTool(LibraryToolImpl):
+    def __init__(self, library, nvs):
+        super().__init__(library)
+        self._nvs = nvs
+
     @staticmethod
     def key_types() -> List[KeyType]:
         return list(KeyType.__members__.values())
@@ -136,3 +142,20 @@ class LibraryTool(LibraryToolImpl):
         """
         df = self.read_to_dataframe(key)
         return self.dataframe_to_keys(df, id if id is not None else key.id, filter_key_type)
+
+    def read_index(self, symbol: str, as_of: Optional[VersionQueryInput] = None, **kwargs) -> pd.DataFrame:
+        """
+        Read the index key for the named symbol.
+
+        Parameters
+        ----------
+        symbol : `str`
+            Symbol name.
+        as_of : `Optional[VersionQueryInput]`, default=None
+            See documentation of `read` method for more details.
+
+        Returns
+        -------
+        Pandas DataFrame representing the index key in a human-readable format.
+        """
+        return self._nvs.read_index(symbol, as_of, **kwargs)
