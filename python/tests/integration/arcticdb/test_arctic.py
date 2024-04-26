@@ -13,6 +13,7 @@ import pytest
 import pandas as pd
 import numpy as np
 from datetime import datetime, timezone
+from typing import List
 from enum import Enum
 import platform
 
@@ -218,7 +219,9 @@ def test_list_snapshots_no_metadata(arctic_library):
     lib.write(symbol2, df)
     lib.snapshot(snap2)
 
-    assert lib.list_snapshots(False) == {snap1: None, snap2: None}
+    snaps_list = lib.list_snapshots(False)
+    assert isinstance(snaps_list, List)
+    assert set(snaps_list) == {snap1, snap2}
 
 def test_delete_non_existent_snapshot(arctic_library):
     lib = arctic_library
