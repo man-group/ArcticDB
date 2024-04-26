@@ -6,7 +6,7 @@
  */
 
 #include <arcticdb/processing/aggregation.hpp>
-
+#include <arcticdb/entity/type_utils.hpp>
 #include <cmath>
 
 namespace arcticdb
@@ -72,13 +72,20 @@ namespace
         }
     }
 
-    inline util::BitMagic::enumerator::value_type deref(util::BitMagic::enumerator iter) {
+    #if defined(__clang__)
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wunused-function"
+    #endif
+    static inline util::BitMagic::enumerator::value_type deref(util::BitMagic::enumerator iter) {
         return *iter;
     }
 
-    inline std::size_t deref(std::size_t index) {
+    static inline std::size_t deref(std::size_t index) {
         return index;
     }
+    #if defined(__clang__)
+    #pragma clang diagnostic pop
+    #endif
 
     template<typename T, typename T2=void>
     struct OutputType;

@@ -9,14 +9,12 @@
 
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/codec/default_codecs.hpp>
-#include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/pipeline/pipeline_utils.hpp>
 #include <arcticdb/storage/library.hpp>
 #include <arcticdb/util/clock.hpp>
 #include <arcticdb/util/key_utils.hpp>
-#include <arcticdb/util/variant.hpp>
 #include <arcticdb/version/version_utils.hpp>
 #include <cstdlib>
 

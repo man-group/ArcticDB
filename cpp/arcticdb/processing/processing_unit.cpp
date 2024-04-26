@@ -6,6 +6,7 @@
  */
 
 #include <arcticdb/processing/processing_unit.hpp>
+#include <arcticdb/processing/expression_context.hpp>
 
 namespace arcticdb {
 

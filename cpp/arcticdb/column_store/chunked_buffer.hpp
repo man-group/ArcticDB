@@ -9,14 +9,15 @@
 #pragma once
 
 #include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/util/magic_num.hpp>
 #include <arcticdb/util/allocator.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/column_store/block.hpp>
 
-#include <boost/container/small_vector.hpp>
-
 #include <cstdint>
+
+#ifndef DEBUG_BUILD
+#include <boost/container/small_vector.hpp>
+#endif
 
 namespace arcticdb {
 

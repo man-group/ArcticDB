@@ -8,19 +8,27 @@
 #pragma once
 
 #include <arcticdb/storage/storage.hpp>
-#include <arcticdb/storage/storage_factory.hpp>
 
 #include <arcticdb/entity/protobufs.hpp>
-
-#include <folly/Range.h>
-#include <arcticdb/util/composite.hpp>
-#include <arcticdb/storage/lmdb/lmdb_client_wrapper.hpp>
-
+#include <arcticdb/util/pb_util.hpp>
 #include <filesystem>
+
+// LMDB++ is using `std::is_pod` in `lmdb++.h`, which is deprecated as of C++20.
+// See: https://github.com/drycpp/lmdbxx/blob/0b43ca87d8cfabba392dfe884eb1edb83874de02/lmdb%2B%2B.h#L1068
+// See: https://en.cppreference.com/w/cpp/types/is_pod
+// This suppresses the warning.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#ifdef ARCTICDB_USING_CONDA
+#include <lmdb++.h>
+#else
+#include <third_party/lmdbxx/lmdb++.h>
+#endif
 
 namespace fs = std::filesystem;
 
 namespace arcticdb::storage::lmdb {
+class LmdbClientWrapper;
 
 class LmdbStorage final : public Storage {
   public:

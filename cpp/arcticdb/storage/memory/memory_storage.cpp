@@ -9,7 +9,6 @@
 
 #include <folly/gen/Base.h>
 
-#include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/storage/storage_utils.hpp>

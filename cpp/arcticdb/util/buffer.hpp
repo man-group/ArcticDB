@@ -7,8 +7,8 @@
 
 #pragma once
 
-#include <util/allocator.hpp>
-#include <util/constructors.hpp>
+#include <arcticdb/util/allocator.hpp>
+#include <arcticdb/util/constructors.hpp>
 
 #include <cstdint>
 #include <memory>

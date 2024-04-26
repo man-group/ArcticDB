@@ -7,14 +7,10 @@
 
 #pragma once
 
-#include <arcticdb/column_store/string_pool.hpp>
 
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/util/bitset.hpp>
-#include <arcticdb/entity/protobufs.hpp>
-#include <arcticdb/pipeline/index_segment_reader.hpp>
 
-#include <boost/iterator_adaptors.hpp>
 
 #include <memory>
 

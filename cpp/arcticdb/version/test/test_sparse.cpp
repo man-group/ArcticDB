@@ -14,6 +14,8 @@
 #include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
+#include <arcticdb/stream/test/test_store_common.hpp>
+
 
 struct SparseTestStore : arcticdb::TestStore {
 protected:

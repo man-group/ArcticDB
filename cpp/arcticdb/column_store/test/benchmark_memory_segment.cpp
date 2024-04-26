@@ -9,7 +9,6 @@
 
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
-#include <folly/container/Enumerate.h>
 
 #include <algorithm>
 

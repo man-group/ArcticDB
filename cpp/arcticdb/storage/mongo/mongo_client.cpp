@@ -17,12 +17,12 @@
 #include <mongocxx/pool.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
-#include <arcticdb/util/key_utils.hpp>
 #include <arcticdb/util/exponential_backoff.hpp>
 #include <mongocxx/model/replace_one.hpp>
 #include <mongocxx/config/version.hpp>
-#include <arcticdb/util/composite.hpp>
 #include <arcticdb/storage/failure_simulation.hpp>
+#include <arcticdb/entity/types_proto.hpp>
+#include <arcticdb/stream/index.hpp>
 
 namespace arcticdb::storage::mongo {
 

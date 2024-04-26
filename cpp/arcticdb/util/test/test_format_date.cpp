@@ -6,7 +6,6 @@
  */
 
 #include <gtest/gtest.h>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/format_date.hpp>
 
 TEST(FormatDate, ZeroTs) {

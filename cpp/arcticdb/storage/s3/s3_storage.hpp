@@ -8,24 +8,19 @@
 #pragma once
 
 #include <arcticdb/storage/storage.hpp>
-#include <arcticdb/storage/storage_factory.hpp>
-#include <aws/core/Aws.h>
-#include <aws/s3/model/PutObjectRequest.h>
-#include <aws/core/auth/AWSCredentialsProvider.h>
 #include <arcticdb/log/log.hpp>
-#include <arcticdb/storage/s3/s3_api.hpp>
 #include <arcticdb/storage/s3/s3_client_wrapper.hpp>
-#include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/entity/protobufs.hpp>
-#include <arcticdb/util/composite.hpp>
 #include <arcticdb/util/configs_map.hpp>
+#include <aws/core/client/ClientConfiguration.h>
+#include <aws/core/auth/AWSCredentials.h>
 #include <cstdlib>
 #include <sstream>
 #include <string>
 #include <vector>
 
 namespace arcticdb::storage::s3 {
-
+class S3ApiInstance;
 const std::string USE_AWS_CRED_PROVIDERS_TOKEN = "_RBAC_";
 
 class S3Storage final : public Storage {

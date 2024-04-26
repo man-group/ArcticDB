@@ -20,7 +20,6 @@
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/python/arctic_version.hpp>
 #include <arcticdb/entity/metrics.hpp>
-#include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/util/global_lifetimes.hpp>
 #include <arcticdb/util/configs_map.hpp>

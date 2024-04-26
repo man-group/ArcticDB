@@ -7,12 +7,7 @@
 
 #pragma once
 
-#include <arcticdb/entity/atom_key.hpp>
-#include <arcticdb/entity/types.hpp>
-#include <arcticdb/util/hash.hpp>
-#include <arcticdb/util/exponential_backoff.hpp>
 #include <arcticdb/util/configs_map.hpp>
-#include <arcticdb/util/home_directory.hpp>
 #include <arcticdb/async/base_task.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 
@@ -25,7 +20,6 @@
 #include <filesystem>
 #include <string>
 #include <fstream>
-#include <fmt/format.h>
 #include <type_traits>
 
 namespace arcticdb::async {

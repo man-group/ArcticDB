@@ -6,16 +6,13 @@
  */
 #include <arcticdb/codec/codec.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
-#include <arcticdb/stream/protobuf_mappings.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
-#include <arcticdb/codec/default_codecs.hpp>
 #include <arcticdb/codec/encoded_field.hpp>
 #include <arcticdb/codec/encoded_field_collection.hpp>
-
+#include <arcticdb/column_store/memory_segment.hpp>
+#include <arcticdb/codec/segment.hpp>
 
 #include <string>
-#include <google/protobuf/io/zero_copy_stream_impl.h>
-
 
 #include <arcticdb/codec/encode_common.hpp>
 

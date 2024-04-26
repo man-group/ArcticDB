@@ -8,23 +8,29 @@
 #pragma once
 #include <vector>
 #include <memory>
-#include <arcticdb/storage/library.hpp>
 #include <arcticdb/storage/library_path.hpp>
 #include <arcticdb/storage/storage_override.hpp>
-#include <arcticdb/pipeline/index_segment_reader.hpp>
 
+namespace pybind11 {
+    class object;
+}
+
+namespace arcticdb {
+    class Store;
+}
 
 namespace arcticdb::storage {
+    class Library;
     class LibraryManager {
     public:
         explicit LibraryManager(const std::shared_ptr<storage::Library>& library);
 
         ARCTICDB_NO_MOVE_OR_COPY(LibraryManager)
 
-        void write_library_config(const py::object& lib_cfg, const LibraryPath& path, const StorageOverride& storage_override,
+        void write_library_config(const pybind11::object& lib_cfg, const LibraryPath& path, const StorageOverride& storage_override,
                                   bool validate) const;
 
-        [[nodiscard]] py::object get_library_config(const LibraryPath& path, const StorageOverride& storage_override = StorageOverride{}) const;
+        [[nodiscard]] pybind11::object get_library_config(const LibraryPath& path, const StorageOverride& storage_override = StorageOverride{}) const;
 
         [[nodiscard]] bool is_library_config_ok(const LibraryPath& path, bool throw_on_failure) const;
 

@@ -433,10 +433,6 @@ set(arcticdb_srcs
         processing/operation_dispatch.cpp
         processing/operation_dispatch_unary.cpp
         processing/operation_dispatch_binary.cpp
-        processing/operation_dispatch_binary_eq.cpp
-        processing/operation_dispatch_binary_gt.cpp
-        processing/operation_dispatch_binary_lt.cpp
-        processing/operation_dispatch_binary_operator.cpp
         python/python_to_tensor_frame.cpp
         storage/config_resolvers.cpp
         storage/failure_simulation.cpp
@@ -797,7 +793,9 @@ if(${TEST})
             storage/test/test_storage_factory.cpp
             storage/test/test_storage_exceptions.cpp
             storage/test/test_azure_storage.cpp
+            stream/test/stream_test_common.hpp
             stream/test/stream_test_common.cpp
+            stream/test/test_store_common.hpp
             stream/test/test_aggregator.cpp
             stream/test/test_append_map.cpp
             stream/test/test_row_builder.cpp
@@ -917,13 +915,13 @@ if(${TEST})
 
     target_link_libraries(benchmarks
             PUBLIC
-            benchmark::benchmark
-            benchmark::benchmark_main
-            ${COMMON_PUBLIC_TEST_LIBRARIES}
+                benchmark::benchmark
+                benchmark::benchmark_main
             PRIVATE
-            ${AWSSDK_LINK_LIBRARIES}
-            arcticdb_core_static
-            )
+                arcticdb_core_static
+                Python::Python
+                ${AWSSDK_LINK_LIBRARIES}
+    )
 
     set(rapidcheck_srcs
             column_store/test/rapidcheck_column_store.cpp

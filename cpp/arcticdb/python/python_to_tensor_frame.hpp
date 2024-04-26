@@ -7,11 +7,13 @@
 
 #pragma once
 
-#include <pybind11/pybind11.h>
-#include <arcticdb/python/gil_lock.hpp>
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/entity/native_tensor.hpp>
 #include <string>
+
+namespace arcticdb {
+    class ScopedGILLock;
+}
 
 namespace arcticdb::convert {
 

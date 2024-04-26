@@ -9,7 +9,6 @@
 
 #include <arcticdb/entity/key.hpp>
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/storage/store.hpp>
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/stream/index_aggregator.hpp>
 #include <arcticdb/version/version_map_entry.hpp>

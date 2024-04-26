@@ -51,7 +51,7 @@ inline void check_normalization_index_match(
     const IndexDescriptor::Type old_idx_kind = old_descriptor.index().type();
     const IndexDescriptor::Type new_idx_kind = frame.desc.index().type();
     if (operation == UPDATE) {
-        const bool new_is_timeseries = std::holds_alternative<TimeseriesIndex>(frame.index);
+        const bool new_is_timeseries = std::holds_alternative<arcticdb::stream::TimeseriesIndex>(frame.index);
         util::check_rte(
             (old_idx_kind == IndexDescriptor::TIMESTAMP || old_idx_kind == IndexDescriptor::EMPTY) && new_is_timeseries,
             "Update will not work as expected with a non-timeseries index"

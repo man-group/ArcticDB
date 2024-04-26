@@ -7,17 +7,11 @@
 
 #include <arcticdb/stream/python_bindings.hpp>
 
-#include <pybind11/stl_bind.h>
 #include <arcticdb/python/reader.hpp>
 
-#include <arcticdb/storage/python_bindings.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/stream/row_builder.hpp>
 #include <arcticdb/stream/aggregator.hpp>
-#include <arcticdb/stream/stream_reader.hpp>
-#include <arcticdb/stream/stream_writer.hpp>
-#include <arcticdb/entity/protobufs.hpp>
 
 namespace py = pybind11;
 

@@ -13,6 +13,7 @@
 #include <arcticdb/storage/test/in_memory_store.hpp>
 #include <arcticdb/entity/merge_descriptors.hpp>
 #include <arcticdb/pipeline/read_frame.hpp>
+#include <arcticdb/pipeline/read_pipeline.hpp>
 
 TEST(Append, Simple) {
     using namespace arcticdb;

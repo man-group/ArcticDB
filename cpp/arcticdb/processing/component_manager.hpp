@@ -9,13 +9,25 @@
 
 #include <atomic>
 #include <unordered_map>
+#include <optional>
+#include <memory>
 
-#include <arcticdb/pipeline/frame_slice.hpp>
+#include <arcticdb/log/log.hpp>
+#include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/constructors.hpp>
 
 namespace arcticdb {
+class SegmentInMemory;
 
-using namespace pipelines;
+namespace pipelines {
+    struct RowRange;
+    struct ColRange;
+}
+
+namespace entity {
+    class AtomKeyImpl;
+}
+using AtomKey = entity::AtomKeyImpl;
 using EntityId = uint64_t;
 using bucket_id = size_t;
 
@@ -31,9 +43,9 @@ public:
         auto insertion_id = entity_id(id);
         if constexpr(std::is_same_v<T, std::shared_ptr<SegmentInMemory>>) {
             segment_map_.add(insertion_id, std::move(component), expected_get_calls);
-        } else if constexpr(std::is_same_v<T, std::shared_ptr<RowRange>>) {
+        } else if constexpr(std::is_same_v<T, std::shared_ptr<arcticdb::pipelines::RowRange>>) {
             row_range_map_.add(insertion_id, std::move(component));
-        } else if constexpr(std::is_same_v<T, std::shared_ptr<ColRange>>) {
+        } else if constexpr(std::is_same_v<T, std::shared_ptr<arcticdb::pipelines::ColRange>>) {
             col_range_map_.add(insertion_id, std::move(component));
         } else if constexpr(std::is_same_v<T, std::shared_ptr<AtomKey>>) {
             atom_key_map_.add(insertion_id, std::move(component));
@@ -51,9 +63,9 @@ public:
     T get(EntityId id) {
         if constexpr(std::is_same_v<T, std::shared_ptr<SegmentInMemory>>) {
             return segment_map_.get(id);
-        } else if constexpr(std::is_same_v<T, std::shared_ptr<RowRange>>) {
+        } else if constexpr(std::is_same_v<T, std::shared_ptr<pipelines::RowRange>>) {
             return row_range_map_.get(id);
-        } else if constexpr(std::is_same_v<T, std::shared_ptr<ColRange>>) {
+        } else if constexpr(std::is_same_v<T, std::shared_ptr<pipelines::ColRange>>) {
             return col_range_map_.get(id);
         } else if constexpr(std::is_same_v<T, std::shared_ptr<AtomKey>>) {
             return atom_key_map_.get(id);
@@ -125,8 +137,8 @@ private:
     };
 
     ComponentMap<std::shared_ptr<SegmentInMemory>> segment_map_{"segment", true};
-    ComponentMap<std::shared_ptr<RowRange>> row_range_map_{"row range", false};
-    ComponentMap<std::shared_ptr<ColRange>> col_range_map_{"col range", false};
+    ComponentMap<std::shared_ptr<pipelines::RowRange>> row_range_map_{"row range", false};
+    ComponentMap<std::shared_ptr<pipelines::ColRange>> col_range_map_{"col range", false};
     ComponentMap<std::shared_ptr<AtomKey>> atom_key_map_{"atom key", false};
     ComponentMap<bucket_id> bucket_map_{"bucket", false};
 
