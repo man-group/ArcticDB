@@ -2819,4 +2819,4 @@ class NativeVersionStore:
         return self._library
 
     def library_tool(self) -> LibraryTool:
-        return LibraryTool(self.library())
+        return LibraryTool(self.library(), self)
