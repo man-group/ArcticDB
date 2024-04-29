@@ -206,75 +206,72 @@ class TestCanAppendColumnWithNonesToColumn:
 
 
     def test_integer(self, lmdb_version_store_static_and_dynamic, int_dtype):
-        df_initial = pd.DataFrame({"col": np.array([1,2,3], dtype=int_dtype)})
+        df_initial = pd.DataFrame({"col": np.array([1,2,3], dtype=int_dtype), "other": [1,2,3]})
         lmdb_version_store_static_and_dynamic.write("sym", df_initial)
-        lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col": [None, None]}))
-        assert_frame_equal(
-            lmdb_version_store_static_and_dynamic.read("sym").data,
-            pd.DataFrame({"col": np.array([1,2,3,0,0], dtype=int_dtype)})
-        )
-        assert_frame_equal(
-            lmdb_version_store_static_and_dynamic.read("sym", row_range=[0,3]).data,
-            df_initial
-        )
+        lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col": [None, None], "other": [4,5]}))
+        expected_df = pd.DataFrame({"col": np.array([1,2,3,0,0], dtype=int_dtype), "other": [1,2,3,4,5]})
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, expected_df)
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym", row_range=[0,3]).data, df_initial)
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym", row_range=[3,5]).data,
-            pd.DataFrame({"col": np.array([0,0], dtype=int_dtype)})
+            pd.DataFrame({"col": np.array([0,0], dtype=int_dtype), "other": [4, 5]})
         )
+        # Cannot compare with expected_df.tail(n=1) due to issue #1537: https://github.com/man-group/ArcticDB/issues/1537
+        # TODO: Move in a separate test suite testing the processing pipeline
+        expected_tail = pd.DataFrame({"col": np.array([0], dtype=int_dtype), "other": [5]})
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.tail("sym", n=1).data, expected_tail)
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.head("sym", n=1).data, expected_df.head(n=1))
 
     def test_float(self, lmdb_version_store_static_and_dynamic, float_dtype):
-        df_initial = pd.DataFrame({"col": np.array([1,2,3], dtype=float_dtype)})
+        df_initial = pd.DataFrame({"col": np.array([1,2,3], dtype=float_dtype), "other": [1,2,3]})
         lmdb_version_store_static_and_dynamic.write("sym", df_initial)
-        lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col": [None, None]}))
-        assert_frame_equal(
-            lmdb_version_store_static_and_dynamic.read("sym").data,
-            pd.DataFrame({"col": np.array([1,2,3,float("NaN"),float("NaN")], dtype=float_dtype)})
-        )
-        assert_frame_equal(
-            lmdb_version_store_static_and_dynamic.read("sym", row_range=[0,3]).data,
-            df_initial
-        )
+        lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col": [None, None], "other": [4,5]}))
+        expected_df = pd.DataFrame({"col": np.array([1,2,3,float("NaN"),np.nan], dtype=float_dtype), "other": [1,2,3,4,5]})
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, expected_df)
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym", row_range=[0,3]).data, df_initial)
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym", row_range=[3,5]).data,
-            pd.DataFrame({"col": np.array([float("NaN"), float("NaN")], dtype=float_dtype)})
+            pd.DataFrame({"col": np.array([np.nan, float("NaN")], dtype=float_dtype), "other": [4,5]})
         )
+        # Cannot compare with expected_df.tail(n=1) due to issue #1537: https://github.com/man-group/ArcticDB/issues/1537
+        # TODO: Move in a separate test suite testing the processing pipeline
+        expected_tail = pd.DataFrame({"col": np.array([np.nan], dtype=float_dtype), "other": [5]})
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.tail("sym", n=1).data, expected_tail)
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.head("sym", n=1).data, expected_df.head(n=1))
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.head("sym", n=1).data, expected_df.head(n=1))
 
     def test_bool(self, lmdb_version_store_static_and_dynamic, boolean_dtype):
         # Note: if dtype is bool pandas will convert None to False
-        df_initial = pd.DataFrame({"col": np.array([True, False, True], dtype=boolean_dtype)})
-        df_with_none = pd.DataFrame({"col": np.array([None, None])})
+        df_initial = pd.DataFrame({"col": np.array([True, False, True], dtype=boolean_dtype), "other": [1,2,3]})
         lmdb_version_store_static_and_dynamic.write("sym", df_initial)
-        lmdb_version_store_static_and_dynamic.append("sym", df_with_none)
-        assert_frame_equal(
-            lmdb_version_store_static_and_dynamic.read("sym").data,
-            pd.DataFrame({"col": np.array([True, False, True, None, None], dtype=boolean_dtype)})
-        )
-        assert_frame_equal(
-            lmdb_version_store_static_and_dynamic.read("sym", row_range=[0,3]).data,
-            df_initial
-        )
+        lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col": np.array([None, None]), "other": [4,5]}))
+        expected_df = pd.DataFrame({"col": np.array([True, False, True, None, None], dtype=boolean_dtype), "other": [1,2,3,4,5]})
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data,expected_df)
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym", row_range=[0,3]).data, df_initial)
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym", row_range=[3,5]).data,
-            pd.DataFrame(df_with_none, dtype=boolean_dtype)
+            pd.DataFrame({"col": np.array([None, None], dtype=boolean_dtype), "other": [4,5]})
         )
+        # Cannot compare with expected_df.tail(n=1) due to issue #1537: https://github.com/man-group/ArcticDB/issues/1537
+        # TODO: Move in a separate test suite testing the processing pipeline
+        expected_tail = pd.DataFrame({"col": np.array(None, dtype=boolean_dtype), "other": [5]})
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.tail("sym", n=1).data, expected_tail)
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.head("sym", n=1).data, expected_df.head(n=1))
 
     def test_string(self, lmdb_version_store_static_and_dynamic):
-        df_initial = pd.DataFrame({"col": np.array(["some_string", "long_string"*100, ""])})
-        df_with_none = pd.DataFrame({"col": np.array([None, None])})
+        df_initial = pd.DataFrame({"col": np.array(["some_string", "long_string"*100, ""]), "other": [1,2,3]})
+        df_with_none = pd.DataFrame({"col": np.array([None, None]), "other": [4,5]})
         lmdb_version_store_static_and_dynamic.write("sym", df_initial)
         lmdb_version_store_static_and_dynamic.append("sym", df_with_none)
-        assert_frame_equal(
-            lmdb_version_store_static_and_dynamic.read("sym").data,
-            pd.DataFrame({"col": np.array(["some_string", "long_string"*100, "", None, None])})
-        )
-        assert_frame_equal(
-            lmdb_version_store_static_and_dynamic.read("sym", row_range=[0,3]).data,
-            df_initial
-        )
-        assert_frame_equal(
-            lmdb_version_store_static_and_dynamic.read("sym", row_range=[3,5]).data,
-            df_with_none
-        )
+        expected_df = pd.DataFrame({"col": np.array(["some_string", "long_string"*100, "", None, None]), "other":[1,2,3,4,5]})
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, expected_df)
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym", row_range=[0,3]).data, df_initial)
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym", row_range=[3,5]).data, df_with_none)
+        # Cannot compare with expected_df.tail(n=1) due to issue #1537: https://github.com/man-group/ArcticDB/issues/1537
+        # TODO: Move in a separate test suite testing the processing pipeline
+        expected_tail = pd.DataFrame({"col": np.array([None]), "other": [5]})
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.tail("sym", n=1).data, expected_tail)
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.head("sym", n=1).data, expected_df.head(n=1))
 
     def test_date(self, lmdb_version_store_static_and_dynamic, date_dtype):
         df_initial = pd.DataFrame(
@@ -284,14 +281,15 @@ class TestCanAppendColumnWithNonesToColumn:
                         np.datetime64('2005-02'),
                         np.datetime64('2005-03'),
                         np.datetime64('2005-03')
-                    ]
-                )
-            },
-            dtype=date_dtype
+                    ],
+                    dtype=date_dtype
+                ),
+                "other": [1,2,3]
+            }
         )
         lmdb_version_store_static_and_dynamic.write("sym", df_initial)
-        lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col": np.array([None, None])}))
-        expected_result = pd.DataFrame(
+        lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col": np.array([None, None]), "other": [4,5]}))
+        expected_df = pd.DataFrame(
             {
                 "col": np.array(
                     [
@@ -301,18 +299,21 @@ class TestCanAppendColumnWithNonesToColumn:
                         np.datetime64('NaT'),
                         np.datetime64('NaT')
                     ],
-                    dtype=date_dtype)
+                    dtype=date_dtype),
+                "other": [1,2,3,4,5]
             }
         )
-        assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, expected_result)
-        assert_frame_equal(
-            lmdb_version_store_static_and_dynamic.read("sym", row_range=[0,3]).data,
-            df_initial
-        )
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, expected_df)
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym", row_range=[0,3]).data, df_initial)
         assert_frame_equal(
             lmdb_version_store_static_and_dynamic.read("sym", row_range=[3,5]).data,
-            pd.DataFrame({"col": np.array([np.datetime64('NaT'), np.datetime64('NaT')], dtype=date_dtype)})
+            pd.DataFrame({"col": np.array([np.datetime64('NaT'), np.datetime64('NaT')], dtype=date_dtype), "other":[4,5]})
         )
+        # Cannot compare with expected_df.tail(n=1) due to issue #1537: https://github.com/man-group/ArcticDB/issues/1537
+        # TODO: Move in a separate test suite testing the processing pipeline
+        expected_tail = pd.DataFrame({"col": np.array([np.datetime64('NaT')], dtype=date_dtype), "other": [5]})
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.tail("sym", n=1).data, expected_tail)
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.head("sym", n=1).data, expected_df.head(n=1))
 
 
 class TestCanUpdateNones:
