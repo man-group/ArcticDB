@@ -213,7 +213,7 @@ namespace fmt {
         constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
         template<typename FormatContext>
         auto format(const arcticdb::FieldCollection &fc, FormatContext &ctx) const {
-            for (auto i = 0; i < fc.size(); ++i) {
+            for (size_t i = 0; i < fc.size(); ++i) {
                 if (i == fc.size() - 1) {
                     fmt::format_to(ctx.out(), "FD<name={}, type={}, idx={}>", fc[i].name(), fc[i].type(), i);
                 }
