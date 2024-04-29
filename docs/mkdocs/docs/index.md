@@ -11,16 +11,17 @@ ArcticDB requires *zero additional infrastructure* beyond a running Python envir
 ArcticDB is:
 
 - **Fast**
-    - Process millions of rows per second
+    - Process up to 100 million rows per second for a single consumer
+    - Process a billion rows per second across all consumers
     - Quick and easy to install: `pip install arcticdb`
 - **Flexible**
-    - No data schema is needed
+    - Data schemas are not required
     - Supports streaming data ingestion
     - Bitemporal - stores all previous versions of stored data
     - Easy to setup both locally and on cloud
     - Scales from dev/research to production environments
 - **Familiar**
-    - ArcticDB is the world's simplest database
+    - ArcticDB is the world's simplest shareable database
     - Easy to learn for anyone with Python and Pandas experience
     - Just you and your data - the cognitive overhead is very low.
 
@@ -30,7 +31,10 @@ This section will cover installation, setup and basic usage. More details on bas
 
 ### Installation
 
-ArcticDB supports Python 3.6 - 3.11. To install, simply run:
+ArcticDB supports Python 3.6 - 3.11. Python 3.7 is the earliest version for Windows.
+
+To install, simply run:
+
 
 ```python
 pip install arcticdb
@@ -65,24 +69,24 @@ are stored in collections called _libraries_. A single _library_ can store many 
 _Libraries_ must first be initialized prior to use:
 
 ```python
-ac.create_library('data')  # static schema - see note below
+ac.create_library('intro')  # static schema - see note below
 ac.list_libraries()
 ```
 output
 ```python
-['data']
+['intro']
 ```
 
 The library must then be instantiated in the code ready to read/write data:
 
 ```python
-library = ac['data']
+library = ac['intro']
 ```
 
 Sometimes it is more convenient to combine library creation and instantiation using this form, which will automatically create the library if needed, to save you checking if it exists already:
 
 ```python
-library = ac.get_library('data', create_if_missing=True)
+library = ac.get_library('intro', create_if_missing=True)
 ```
 
 !!! info "ArcticDB Static & Dynamic Schemas"
@@ -93,7 +97,7 @@ library = ac.get_library('data', create_if_missing=True)
 
     However, if you need to add, remove or change the type of columns via `update` or `append`, then you can do that. You simply need to create the library with the `dynamic_schema` option set. See the `library_options` parameter of the ([`create_library`](api/arctic/#arcticdb.Arctic.create_library)) method.
 
-    So you have the best of both worlds - you can choose to either enforce a static schema on your data so it cannot change by modifying operations, or allow it to be flexible.
+    So you have the best of both worlds - you can choose to either enforce a static schema on your data so it cannot be changed by modifying operations, or allow it to be flexible.
     
     The choice to use static or dynamic schemas must be set at library creation time.
 
@@ -134,7 +138,7 @@ library.write('test_frame', df)
 ```
 _output (information about what was written)_
 ```
-VersionedItem(symbol=test_frame,library=data,data=n/a,version=0,metadata=None,host=<host>)
+VersionedItem(symbol=test_frame,library=intro,data=n/a,version=0,metadata=None,host=<host>)
 ```
 
 The `'test_frame'` DataFrame will be used for the remainder of this guide.
@@ -236,6 +240,8 @@ _output (the data filtered by date range, columns and the query which filters ba
 
 ArcticDB fully supports modifying stored data via two primitives: _update_ and _append_.
 
+These operations are atomic but do not lock the symbol. Please see the section on [transactions](#transactions) for more on this.
+
 #### Append
 
 Let's append data to the end of the timeseries.
@@ -276,7 +282,7 @@ library.append('test_frame', df_append)
 ```
 _output_
 ```
-VersionedItem(symbol=test_frame,library=data,data=n/a,version=1,metadata=None,host=<host>)
+VersionedItem(symbol=test_frame,library=intro,data=n/a,version=1,metadata=None,host=<host>)
 ```
 Then look at the final 5 rows to see what happened
 
@@ -321,7 +327,7 @@ library.update('test_frame', df)
 ```
 _output (information about the update)_
 ```
-VersionedItem(symbol=test_frame,library=data,data=n/a,version=2,metadata=None,host=<host>)
+VersionedItem(symbol=test_frame,library=intro,data=n/a,version=2,metadata=None,host=<host>)
 ```
 
 Now let's look at the first 4 rows in the symbol:
@@ -349,8 +355,7 @@ Logically, this corresponds to replacing the complete date range of the old data
 
 #### Versioning
 
-You might have noticed that `read` calls do not return the data directly - but instead returns a `VersionedItem` structure. You may also have noticed that modification operations 
-(`write`, `append` and `update`) increment the version number. ArcticDB versions all modifications, which means you can retrieve earlier versions of data - it is a bitemporal database:
+You might have noticed that `read` calls do not return the data directly - but instead returns a `VersionedItem` structure. You may also have noticed that modification operations (`write`, `append` and `update`) increment the version number. ArcticDB versions all modifications, which means you can retrieve earlier versions of data - it is a bitemporal database:
 
 ```Python
 library.tail('test_frame', 7, as_of=0).data
@@ -490,8 +495,9 @@ For concurrent access to a local backend, we recommend LMDB connected to tmpfs, 
 
 ### Transactions
 
-- Transactions can be expensive and slow
-- Most analytical workflows can be constructed to run without needing transactions
+- Transactions can be be very useful but are often expensive and slow
+- If we unpack ACID: Atomicity, Consistency and Durability are useful, Isolation less so
+- Most analytical workflows can be constructed to run without needing transactions at all
 - So why pay the cost of transactions when they are often not needed?
 - ArcticDB doesn't have transactions because it is designed for high throughput analytical workloads
 
