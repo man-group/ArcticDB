@@ -2418,7 +2418,7 @@ def test_wrong_df_col_order(basic_store):
     lib.write(sym, df1)
 
     df2 = pd.DataFrame({"col2": [4, 5, 6], "col1": [14, 15, 16]})
-    with pytest.raises(StreamDescriptorMismatch, match=", idx="):
+    with pytest.raises(StreamDescriptorMismatch, match="type=TD<type=INT64, dim=0>, idx="):
         lib.append(sym, df2)
 
 
