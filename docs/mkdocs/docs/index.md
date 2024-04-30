@@ -147,8 +147,8 @@ The `'test_frame'` DataFrame will be used for the remainder of this guide.
 
     When writing Pandas DataFrames, ArcticDB supports the following index types:
     
-    * `pandas.Index` containing `int64` or `float64` (or the corresponding dedicated types `Int64Index`, `UInt64Index` and `Float64Index`)
-    * `RangeIndex` with the restrictions noted below
+    * `pandas.Index` containing `int64` (or the corresponding dedicated types `Int64Index`, `UInt64Index`)
+    * `RangeIndex`
     * `DatetimeIndex`
     * `MultiIndex` composed of above supported types
     
@@ -344,7 +344,7 @@ _output_
 2000-01-01 09:00:00     45     17     39     47     47     11     33     31  ...
 ```
 
-Let's unpick how we end up with that result. The update has
+Let's unpack how we end up with that result. The update has
 
 * replaced the data in the symbol with the new data where the index matched (in this case the 05:00 and 07:00 rows)
 * removed any rows within the date range of the new data that are not in the index of the new data (in this case the 06:00 row)
