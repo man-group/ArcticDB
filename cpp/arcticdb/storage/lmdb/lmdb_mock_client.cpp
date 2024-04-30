@@ -11,6 +11,7 @@
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
 #include <arcticdb/util/string_utils.hpp>
+#include <arcticdb/storage/lmdb/lmdb.hpp>
 
 
 namespace arcticdb::storage::lmdb {

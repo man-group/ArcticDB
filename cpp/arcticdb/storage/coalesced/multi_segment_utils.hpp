@@ -22,7 +22,7 @@ uint64_t get_symbol_prefix(const entity::StreamId& stream_id) {
     constexpr size_t begin = sizeof(InternalType) - sizeof(StorageType);
     StorageType data{};
     util::variant_match(stream_id,
-        [&data] (const entity::StringId& string_id) {
+        [&data, begin, end] (const entity::StringId& string_id) {
             auto* target = reinterpret_cast<char*>(&data);
             for(size_t p = begin, i = 0; p < end && i < string_id.size(); ++p, ++i) {
                 const auto c = string_id[i];

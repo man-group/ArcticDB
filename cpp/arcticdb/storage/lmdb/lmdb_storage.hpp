@@ -20,6 +20,11 @@
 
 namespace fs = std::filesystem;
 
+namespace lmdb {
+class env;
+class dbi;
+}
+
 namespace arcticdb::storage::lmdb {
 
 class LmdbStorage final : public Storage {
@@ -54,13 +59,7 @@ class LmdbStorage final : public Storage {
 
     bool do_is_path_valid(const std::string_view path) const final;
 
-    ::lmdb::env& env() {
-        if (!env_) {
-            raise<ErrorCode::E_UNEXPECTED_LMDB_ERROR>("Unexpected LMDB Error: Invalid operation: LMDB environment has been removed. "
-                                                      "Possibly because the library has been deleted");
-        }
-        return *env_;
-    }
+    ::lmdb::env& env();
 
     std::string do_key_path(const VariantKey&) const final { return {}; };
 
@@ -72,7 +71,7 @@ class LmdbStorage final : public Storage {
     std::unique_ptr<std::mutex> write_mutex_;
     std::unique_ptr<::lmdb::env> env_;
 
-    std::unordered_map<std::string, ::lmdb::dbi> dbi_by_key_type_;
+    std::unordered_map<std::string, std::unique_ptr<::lmdb::dbi>> dbi_by_key_type_;
 
     std::filesystem::path lib_dir_;
 

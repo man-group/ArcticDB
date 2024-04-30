@@ -19,7 +19,7 @@ using TimePoint = std::chrono::time_point<Clock>;
 
 inline std::string format_timestamp(entity::timestamp ts) {
     std::stringstream ss;
-#if  defined(_WIN32) or defined(__APPLE__)
+#if defined(_WIN32) || defined(__APPLE__)
     auto time_point = Clock::time_point(std::chrono::duration_cast<std::chrono::seconds>(std::chrono::nanoseconds(ts)));
 #else
     auto time_point = Clock::time_point(std::chrono::nanoseconds(ts));
