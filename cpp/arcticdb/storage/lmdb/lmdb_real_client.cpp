@@ -11,7 +11,7 @@
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/storage/lmdb/lmdb_real_client.hpp>
 #include <arcticdb/storage/storage_utils.hpp>
-
+#include <arcticdb/storage/lmdb/lmdb.hpp>
 
 namespace arcticdb::storage::lmdb {
 

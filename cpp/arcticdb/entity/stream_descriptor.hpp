@@ -272,9 +272,13 @@ StreamDescriptor index_descriptor(const StreamId& stream_id, IndexType, const Ra
 }
 
 template <typename IndexType>
-StreamDescriptor index_descriptor(StreamId stream_id, IndexType index_type,
-                                  std::initializer_list<FieldRef> fields) {
-    return index_descriptor(stream_id, index_type, folly::gen::from(fields) | folly::gen::as<std::vector>());
+StreamDescriptor index_descriptor(StreamId stream_id, IndexType index_type, std::initializer_list<FieldRef> fields) {
+    std::vector<FieldRef> fields_vec;
+    fields_vec.reserve(fields.size());
+    for(const auto& field : fields)
+        fields_vec.push_back(field);
+
+    return index_descriptor(stream_id, index_type, fields_vec);
 }
 
 template <typename IndexType, typename RangeType>

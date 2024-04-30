@@ -47,15 +47,15 @@ VariantData visit_binary_boolean(const VariantData& left, const VariantData& rig
 template <typename Func>
 VariantData binary_membership(const ColumnWithStrings& column_with_strings, ValueSet& value_set, Func&& func) {
     if (is_empty_type(column_with_strings.column_->type().data_type())) {
-        if constexpr(std::is_same_v<Func, IsInOperator&&>) {
+        if constexpr(std::is_same_v<std::remove_reference_t<Func>, IsInOperator>) {
             return EmptyResult{};
-        } else if constexpr(std::is_same_v<Func, IsNotInOperator&&>) {
+        } else if constexpr(std::is_same_v<std::remove_reference_t<Func>, IsNotInOperator>) {
             return FullResult{};
         }
     }
     // If the value set is empty, we can short-circuit
     if (value_set.empty()) {
-        if constexpr(std::is_same_v<Func, IsNotInOperator&&>) {
+        if constexpr(std::is_same_v<std::remove_reference_t<Func>, IsNotInOperator>) {
             return FullResult{};
         } else {
             return EmptyResult{};
@@ -63,7 +63,7 @@ VariantData binary_membership(const ColumnWithStrings& column_with_strings, Valu
     }
 
     util::BitSet output_bitset;
-    constexpr auto sparse_missing_value_output = std::is_same_v<Func, IsNotInOperator&&>;
+    constexpr auto sparse_missing_value_output = std::is_same_v<std::remove_reference_t<Func>, IsNotInOperator>;
     details::visit_type(column_with_strings.column_->type().data_type(),[&] (auto col_tag) {
         using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
         details::visit_type(value_set.base_type().data_type(), [&] (auto val_set_tag) {
@@ -79,7 +79,7 @@ VariantData binary_membership(const ColumnWithStrings& column_with_strings, Valu
                     typed_value_set = value_set.get_set<std::string>();
                 }
                 auto offset_set = column_with_strings.string_pool_->get_offsets_for_column(typed_value_set, *column_with_strings.column_);
-                Column::transform<typename col_type_info::TDT>(
+                Column::transform_to_bitset<typename col_type_info::TDT>(
                         *column_with_strings.column_,
                         output_bitset,
                         sparse_missing_value_output,
@@ -92,7 +92,7 @@ VariantData binary_membership(const ColumnWithStrings& column_with_strings, Valu
             } else if constexpr (is_numeric_type(col_type_info::data_type) && is_numeric_type(val_set_type_info::data_type)) {
                 using WideType = typename type_arithmetic_promoted_type<typename col_type_info::RawType,typename val_set_type_info::RawType, std::remove_reference_t<Func>>::type;
                 auto typed_value_set = value_set.get_set<WideType>();
-                Column::transform<typename col_type_info::TDT>(
+                Column::transform_to_bitset<typename col_type_info::TDT>(
                         *column_with_strings.column_,
                         output_bitset,
                         sparse_missing_value_output,
@@ -123,7 +123,7 @@ VariantData visit_binary_membership(const VariantData &left, const VariantData &
 
     return std::visit(util::overload {
         [&] (const ColumnWithStrings& l, const std::shared_ptr<ValueSet>& r) ->VariantData  {
-            return transform_to_placeholder(binary_membership<decltype(func)>(l, *r, std::forward<decltype(func)>(func)));
+            return transform_to_placeholder(binary_membership(l, *r, std::forward<decltype(func)>(func)));
             },
             [](const auto &, const auto&) -> VariantData {
             util::raise_rte("Binary membership operations must be Column/ValueSet");
@@ -137,7 +137,7 @@ VariantData binary_comparator(const ColumnWithStrings& left, const ColumnWithStr
         return EmptyResult{};
     }
     util::BitSet output_bitset;
-    constexpr auto sparse_missing_value_output = std::is_same_v<Func, NotEqualsOperator&&>;
+    constexpr auto sparse_missing_value_output = std::is_same_v<std::remove_reference_t<Func>, NotEqualsOperator>;
 
     details::visit_type(left.column_->type().data_type(), [&](auto left_tag) {
         using left_type_info = ScalarTypeInfo<decltype(left_tag)>;
@@ -185,7 +185,7 @@ VariantData binary_comparator(const ColumnWithStrings& column_with_strings, cons
         return EmptyResult{};
     }
     util::BitSet output_bitset;
-    constexpr auto sparse_missing_value_output = std::is_same_v<Func, NotEqualsOperator&&>;
+    constexpr auto sparse_missing_value_output = std::is_same_v<std::remove_reference_t<Func>, NotEqualsOperator>;
 
     details::visit_type(column_with_strings.column_->type().data_type(), [&](auto col_tag) {
         using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
@@ -206,7 +206,7 @@ VariantData binary_comparator(const ColumnWithStrings& column_with_strings, cons
                     value_string = std::string(*val.str_data(), val.len());
                 }
                 auto value_offset = column_with_strings.string_pool_->get_offset_for_column(value_string, *column_with_strings.column_);
-                Column::transform<typename col_type_info::TDT>(
+                Column::transform_to_bitset<typename col_type_info::TDT>(
                         *column_with_strings.column_,
                         output_bitset,
                         sparse_missing_value_output,
@@ -224,7 +224,7 @@ VariantData binary_comparator(const ColumnWithStrings& column_with_strings, cons
                                                 typename arcticdb::Comparable<typename col_type_info::RawType, typename val_type_info::RawType>,
                                                 typename arcticdb::Comparable<typename val_type_info::RawType, typename col_type_info::RawType>>;
                 auto value = static_cast<typename comp::left_type>(*reinterpret_cast<const typename val_type_info::RawType *>(val.data_));
-                Column::transform<typename col_type_info::TDT>(
+                Column::transform_to_bitset<typename col_type_info::TDT>(
                         *column_with_strings.column_,
                         output_bitset,
                         sparse_missing_value_output,

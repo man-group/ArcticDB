@@ -18,18 +18,6 @@ namespace arcticdb::pipelines {
 
 using namespace arcticdb::entity;
 
-/// @TODO Move to a separate "util" header
-template <typename T, typename... U>
-concept is_any_of = (std::same_as<T, U> || ...);
-
-template <typename IndexT>
-concept ValidIndex = is_any_of<
-    std::remove_cvref_t<std::remove_pointer_t<std::decay_t<IndexT>>>,
-    stream::TimeseriesIndex,
-    stream::RowCountIndex,
-    stream::TableIndex,
-    stream::EmptyIndex>;
-
 
 struct InputTensorFrame {
     InputTensorFrame() :

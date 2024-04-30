@@ -50,7 +50,7 @@ VariantData transform_to_bitset(const VariantData& data) {
                 details::visit_type(column_with_strings.column_->type().data_type(), [&column_with_strings, &output_bitset](auto col_tag) {
                     using type_info = ScalarTypeInfo<decltype(col_tag)>;
                     if constexpr (is_bool_type(type_info::data_type)) {
-                        Column::transform<typename type_info::TDT>(*column_with_strings.column_, output_bitset, false, [](auto input_value) -> bool {
+                        Column::transform_to_bitset<typename type_info::TDT>(*column_with_strings.column_, output_bitset, false, [](auto input_value) -> bool {
                             return input_value;
                         });
                     } else {
