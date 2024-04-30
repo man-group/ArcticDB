@@ -17,10 +17,12 @@
 
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
-#include <arcticdb/pipeline/value_set.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
-#include <arcticdb/stream/segment_aggregator.hpp>
 #include <ankerl/unordered_dense.h>
+#include <arcticdb/processing/aggregation.hpp>
+#include <arcticdb/stream/merge_utils.hpp>
+#include <arcticdb/stream/merge.hpp>
+#include <arcticdb/util/movable_priority_queue.hpp>
 
 namespace arcticdb {
 
@@ -33,9 +35,9 @@ std::vector<std::vector<size_t>> structure_by_row_slice(std::vector<RangesAndKey
     });
     ranges_and_keys.erase(ranges_and_keys.begin(), ranges_and_keys.begin() + start_from);
     std::vector<std::vector<size_t>> res;
-    RowRange previous_row_range;
+    pipelines::RowRange previous_row_range;
     for (const auto& [idx, ranges_and_key]: folly::enumerate(ranges_and_keys)) {
-        RowRange current_row_range{ranges_and_key.row_range_};
+        pipelines::RowRange current_row_range{ranges_and_key.row_range_};
         if (current_row_range != previous_row_range) {
             res.emplace_back();
         }
@@ -50,9 +52,9 @@ std::vector<std::vector<size_t>> structure_by_column_slice(std::vector<RangesAnd
         return std::tie(left.col_range_.first, left.row_range_.first) < std::tie(right.col_range_.first, right.row_range_.first);
     });
     std::vector<std::vector<size_t>> res;
-    ColRange previous_col_range;
+    pipelines::ColRange previous_col_range;
     for (const auto& [idx, ranges_and_key]: folly::enumerate(ranges_and_keys)) {
-        ColRange current_col_range{ranges_and_key.col_range_};
+        pipelines::ColRange current_col_range{ranges_and_key.col_range_};
         if (current_col_range != previous_col_range) {
             res.emplace_back();
         }
@@ -77,15 +79,15 @@ Composite<ProcessingUnit> gather_entities(std::shared_ptr<ComponentManager> comp
     (const EntityIds& entity_ids) -> ProcessingUnit {
         ProcessingUnit res;
         std::vector<std::shared_ptr<SegmentInMemory>> segments;
-        std::vector<std::shared_ptr<RowRange>> row_ranges;
-        std::vector<std::shared_ptr<ColRange>> col_ranges;
+        std::vector<std::shared_ptr<pipelines::RowRange>> row_ranges;
+        std::vector<std::shared_ptr<pipelines::ColRange>> col_ranges;
         segments.reserve(entity_ids.size());
         row_ranges.reserve(entity_ids.size());
         col_ranges.reserve(entity_ids.size());
         for (auto entity_id: entity_ids) {
             segments.emplace_back(component_manager->get<std::shared_ptr<SegmentInMemory>>(entity_id));
-            row_ranges.emplace_back(component_manager->get<std::shared_ptr<RowRange>>(entity_id));
-            col_ranges.emplace_back(component_manager->get<std::shared_ptr<ColRange>>(entity_id));
+            row_ranges.emplace_back(component_manager->get<std::shared_ptr<pipelines::RowRange>>(entity_id));
+            col_ranges.emplace_back(component_manager->get<std::shared_ptr<pipelines::ColRange>>(entity_id));
         }
         res.set_segments(std::move(segments));
         res.set_row_ranges(std::move(row_ranges));
@@ -556,8 +558,8 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
         }
         if (output_seg.has_value()) {
             output.push_back(push_entities(component_manager_, ProcessingUnit(std::move(*output_seg),
-                                                                RowRange{min_start_row, max_end_row},
-                                                                ColRange{min_start_col, max_end_col})));
+                                                               pipelines::RowRange{min_start_row, max_end_row},
+                                                               pipelines::ColRange{min_start_col, max_end_col})));
         }
     });
     return output;
@@ -575,7 +577,7 @@ Composite<EntityIds> SplitClause::process(Composite<EntityIds>&& entity_ids) con
             for (auto&& split_seg : split_segs) {
                 end_row = start_row + split_seg.row_count();
                 ret.push_back(push_entities(component_manager_, ProcessingUnit(std::move(split_seg),
-                                                                 RowRange(start_row, end_row),
+                                                                 pipelines::RowRange(start_row, end_row),
                                                                  std::move(*proc.col_ranges_->at(idx)))));
                 start_row = end_row;
             }
@@ -605,8 +607,8 @@ void merge_impl(
         QueueType &input_streams,
         bool add_symbol_column,
         StreamId stream_id,
-        const RowRange& row_range,
-        const ColRange& col_range,
+        const pipelines::RowRange& row_range,
+        const pipelines::ColRange& col_range,
         IndexType index,
         const StreamDescriptor& stream_descriptor) {
     auto num_segment_rows = ConfigsMap::instance()->get_int("Merge.SegmentSize", 100000);
@@ -669,8 +671,8 @@ Composite<EntityIds> MergeClause::process(Composite<EntityIds>&& entity_ids) con
             input_streams.push(std::make_unique<SegmentWrapper>(std::move(*segment)));
         }
     });
-    const RowRange row_range{min_start_row, max_end_row};
-    const ColRange col_range{min_start_col, max_end_col};
+    const pipelines::RowRange row_range{min_start_row, max_end_row};
+    const pipelines::ColRange col_range{min_start_col, max_end_col};
     Composite<EntityIds> ret;
     std::visit(
             [this, &ret, &input_streams, &comp=compare, stream_id=stream_id_, &row_range, &col_range](auto idx, auto density) {

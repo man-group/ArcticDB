@@ -7,7 +7,6 @@
 
 #pragma once
 
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/util/magic_num.hpp>

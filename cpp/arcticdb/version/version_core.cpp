@@ -22,18 +22,17 @@
 #include <arcticdb/pipeline/read_frame.hpp>
 #include <arcticdb/pipeline/read_options.hpp>
 #include <arcticdb/stream/stream_sink.hpp>
-#include <arcticdb/stream/stream_writer.hpp>
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/stream/schema.hpp>
 #include <arcticdb/pipeline/index_writer.hpp>
-#include <arcticdb/entity/metrics.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/util/composite.hpp>
-#include <arcticdb/pipeline/column_mapping.hpp>
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/entity/merge_descriptors.hpp>
 #include <arcticdb/processing/component_manager.hpp>
+#include <arcticdb/pipeline/write_frame.hpp>
+#include <arcticdb/version/version_store_objects.hpp>
 
 namespace arcticdb::version_store {
 
@@ -105,7 +104,7 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
     if (validate_index && !index_is_not_timeseries_or_is_sorted_ascending(*frame)) {
         sorting::raise<ErrorCode::E_UNSORTED_DATA>("When calling write with validate_index enabled, input data must be sorted");
     }
-    return write_frame(std::move(partial_key), frame, slicing_arg, store, de_dup_map, sparsify_floats);
+    return arcticdb::pipelines::write_frame(std::move(partial_key), frame, slicing_arg, store, de_dup_map, sparsify_floats);
 }
 
 namespace {
@@ -381,7 +380,7 @@ VersionedItem update_impl(
                             orig_filter_range = idx_range;
                             return intersecting_segments(affected_keys, idx_range, idx_range, update_info.next_version_id_, store);
                         },
-                        [](const RowRange&)-> std::pair<std::vector<SliceAndKey>, std::vector<SliceAndKey>> {
+                        [](const pipelines::RowRange&)-> std::pair<std::vector<SliceAndKey>, std::vector<SliceAndKey>> {
                             util::raise_rte("Unexpected row_range in update query");
                         }
     );
@@ -498,10 +497,10 @@ Composite<EntityIds> process_clauses(
                                             std::make_shared<SegmentInMemory>(std::move(segment_and_slice.segment_in_memory_)),
                                             entity_ids[idx], segment_proc_unit_counts[entity_ids[idx]]);
                                     component_manager->add(
-                                            std::make_shared<RowRange>(std::move(segment_and_slice.ranges_and_key_.row_range_)),
+                                            std::make_shared<pipelines::RowRange>(std::move(segment_and_slice.ranges_and_key_.row_range_)),
                                             entity_ids[idx]);
                                     component_manager->add(
-                                            std::make_shared<ColRange>(std::move(segment_and_slice.ranges_and_key_.col_range_)),
+                                            std::make_shared<pipelines::ColRange>(std::move(segment_and_slice.ranges_and_key_.col_range_)),
                                             entity_ids[idx]);
                                     component_manager->add(
                                             std::make_shared<AtomKey>(std::move(segment_and_slice.ranges_and_key_.key_)),
@@ -876,7 +875,7 @@ void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<PipelineC
     }
 }
 
-void copy_frame_data_to_buffer(const SegmentInMemory& destination, size_t target_index, SegmentInMemory& source, size_t source_index, const RowRange& row_range) {
+void copy_frame_data_to_buffer(const SegmentInMemory& destination, size_t target_index, SegmentInMemory& source, size_t source_index, const pipelines::RowRange& row_range) {
     auto num_rows = row_range.diff();
     if (num_rows == 0) {
         return;
@@ -1135,7 +1134,7 @@ SegmentInMemory do_direct_read_or_process(
         frame = prepare_output_frame(std::move(segs), pipeline_context, store, read_options);
     } else {
         ARCTICDB_SAMPLE(MarkAndReadDirect, 0)
-        util::check_rte(!(pipeline_context->is_pickled() && std::holds_alternative<RowRange>(read_query.row_filter)), "Cannot use head/tail/row_range with pickled data, use plain read instead");
+        util::check_rte(!(pipeline_context->is_pickled() && std::holds_alternative<pipelines::RowRange>(read_query.row_filter)), "Cannot use head/tail/row_range with pickled data, use plain read instead");
         mark_index_slices(pipeline_context, opt_false(read_options.dynamic_schema_), pipeline_context->bucketize_dynamic_);
         frame = read_direct(store, pipeline_context, buffers, read_options);
     }

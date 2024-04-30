@@ -7,10 +7,12 @@
 
 #pragma once
 
-#include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/storage/mongo/mongo_client_wrapper.hpp>
-#include <arcticdb/storage/storage_mock_client.hpp>
 #include <mongocxx/exception/operation_exception.hpp>
+
+namespace arcticdb::storage {
+    enum class StorageOperation;
+}
 
 namespace arcticdb::storage::mongo {
 

@@ -3,9 +3,8 @@
 #include <arcticdb/log/log.hpp>
 
 #ifdef WIN32
-
+#include <folly/gen/Base.h>
 #include "Windows.h"
-#include "winerror.h"
 
 namespace arcticdb {
 
@@ -18,6 +17,7 @@ namespace arcticdb {
 
     public:
         MemoryMappedFile() = default;
+        ARCTICDB_NO_MOVE_OR_COPY(MemoryMappedFile)
 
         size_t get_file_size(const std::string& file_path) {
             LARGE_INTEGER size;
@@ -122,7 +122,6 @@ namespace arcticdb {
     };
 
 }//namespace arcticdb
-
 #else
 #include <iostream>
 #include <sys/mman.h>

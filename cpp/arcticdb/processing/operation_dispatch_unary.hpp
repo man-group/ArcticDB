@@ -8,23 +8,17 @@
 
 #pragma once
 
-#include <cstdint>
 #include <variant>
 #include <memory>
 #include <type_traits>
 
-#include <folly/futures/Future.h>
 
 #include <arcticdb/pipeline/value.hpp>
-#include <arcticdb/pipeline/value_set.hpp>
 #include <arcticdb/column_store/column.hpp>
-#include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/processing/operation_dispatch.hpp>
-#include <arcticdb/entity/type_conversion.hpp>
 
 namespace arcticdb {
 
@@ -115,7 +109,7 @@ VariantData unary_comparator(const Column& col, Func&& func) {
     constexpr auto sparse_missing_value_output = std::is_same_v<Func, IsNullOperator&&>;
     details::visit_type(col.type().data_type(), [&](auto col_tag) {
         using type_info = ScalarTypeInfo<decltype(col_tag)>;
-        Column::transform<typename type_info::TDT>(col, output_bitset, sparse_missing_value_output, [&func](auto input_value) -> bool {
+        Column::transform<typename type_info::TDT>(col, output_bitset, sparse_missing_value_output, [&](auto input_value) -> bool {
             if constexpr (is_floating_point_type(type_info::data_type)) {
                 return func.apply(input_value);
             } else if constexpr (is_sequence_type(type_info::data_type)) {

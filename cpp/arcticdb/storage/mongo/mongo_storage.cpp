@@ -8,20 +8,16 @@
 
 #include <arcticdb/storage/mongo/mongo_storage.hpp>
 
-#include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 #include <arcticdb/util/configs_map.hpp>
-#include <fmt/format.h>
 #include <folly/gen/Base.h>
 
 #include <arcticdb/storage/mongo/mongo_instance.hpp>
-#include <arcticdb/entity/index_range.hpp>
 #include <arcticdb/storage/mongo/mongo_client.hpp>
 #include <arcticdb/storage/mongo/mongo_mock_client.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/storage/storage.hpp>
 #include <mongocxx/exception/operation_exception.hpp>
-#include <bsoncxx/json.hpp>
 
 namespace arcticdb::storage::mongo {
 

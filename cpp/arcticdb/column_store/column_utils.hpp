@@ -9,7 +9,7 @@
 
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/pipeline/frame_data_wrapper.hpp>
-
+#include <arcticdb/util/memory_tracing.hpp>
 #include <pybind11/pybind11.h>
 
 namespace arcticdb::detail {

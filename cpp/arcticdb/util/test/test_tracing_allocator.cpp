@@ -7,7 +7,6 @@
 
 #include <gtest/gtest.h>
 #include <arcticdb/util/allocator.hpp>
-#include <arcticdb/util/magic_num.hpp>
 #include <arcticdb/util/memory_tracing.hpp>
 
 TEST(Allocator, Tracing) {

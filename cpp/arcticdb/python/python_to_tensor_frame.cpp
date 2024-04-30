@@ -7,12 +7,11 @@
 
 
 #include <arcticdb/python/python_to_tensor_frame.hpp>
-#include <arcticdb/entity/protobufs.hpp>
+#include <arcticdb/python/gil_lock.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/entity/native_tensor.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/python/python_types.hpp>
-#include <pybind11/stl.h>
 #include <pybind11/numpy.h>
 
 namespace arcticdb::convert {

@@ -7,7 +7,6 @@
 
 #include <gtest/gtest.h>
 
-#include <arcticdb/stream/row_builder.hpp>
 #include <arcticdb/stream/aggregator.hpp>
 
 namespace as = arcticdb::stream;

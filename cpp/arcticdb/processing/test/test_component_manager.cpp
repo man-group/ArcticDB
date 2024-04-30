@@ -8,6 +8,9 @@
 #include <gtest/gtest.h>
 
 #include <arcticdb/processing/component_manager.hpp>
+#include <arcticdb/entity/atom_key.hpp>
+#include <arcticdb/pipeline/frame_slice.hpp>
+#include <arcticdb/entity/key.hpp>
 
 using namespace arcticdb;
 using namespace arcticdb::pipelines;
@@ -15,15 +18,15 @@ using namespace arcticdb::pipelines;
 TEST(ComponentManager, Simple) {
     ComponentManager component_manager;
     auto segment_0 = std::make_shared<SegmentInMemory>();
-    auto row_range_0 = std::make_shared<RowRange>(0, 10);
-    auto col_range_0 = std::make_shared<ColRange>(10, 20);
-    auto key_0 = std::make_shared<AtomKey>(AtomKeyBuilder().version_id(1).build("symbol_0", KeyType::TABLE_DATA));
+    auto row_range_0 = std::make_shared<arcticdb::pipelines::RowRange>(0, 10);
+    auto col_range_0 = std::make_shared<arcticdb::pipelines::ColRange>(10, 20);
+    auto key_0 = std::make_shared<AtomKey>(arcticdb::entity::AtomKeyBuilder().version_id(1).build("symbol_0", arcticdb::entity::KeyType::TABLE_DATA));
     uint64_t expected_get_calls_0{1};
 
     auto segment_1 = std::make_shared<SegmentInMemory>();
-    auto row_range_1 = std::make_shared<RowRange>(20, 30);
-    auto col_range_1 = std::make_shared<ColRange>(30, 40);
-    auto key_1 = std::make_shared<AtomKey>(AtomKeyBuilder().version_id(2).build("symbol_1", KeyType::TABLE_DATA));
+    auto row_range_1 = std::make_shared<arcticdb::pipelines::RowRange>(20, 30);
+    auto col_range_1 = std::make_shared<arcticdb::pipelines::ColRange>(30, 40);
+    auto key_1 = std::make_shared<AtomKey>(arcticdb::entity::AtomKeyBuilder().version_id(2).build("symbol_1", arcticdb::entity::KeyType::TABLE_DATA));
     uint64_t expected_get_calls_1{2};
 
     auto id_0 = component_manager.add(segment_0, std::nullopt, expected_get_calls_0);

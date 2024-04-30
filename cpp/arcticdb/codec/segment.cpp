@@ -7,12 +7,9 @@
 
 #include <arcticdb/codec/segment.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
-#include <arcticdb/stream/protobuf_mappings.hpp>
 
-#include <arcticdb/util/pb_util.hpp>
 #include <arcticdb/util/dump_bytes.hpp>
 #include <arcticdb/codec/codec.hpp>
-#include <arcticdb/codec/magic_words.hpp>
 
 namespace arcticdb {
 namespace segment_size {

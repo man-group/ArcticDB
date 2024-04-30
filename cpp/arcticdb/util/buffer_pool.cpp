@@ -6,7 +6,7 @@
  */
 
 #include <arcticdb/util/buffer_pool.hpp>
-#include <memory>
+#include <arcticdb/util/buffer.hpp>
 
 namespace arcticdb {
 

@@ -7,13 +7,10 @@
 
 #pragma once
 
-#include <arcticdb/async/async_store.hpp>
-#include <arcticdb/storage/storage_factory.hpp>
-#include <arcticdb/storage/mongo/mongo_client.hpp>
 #include <arcticdb/entity/protobufs.hpp>
-#include <arcticdb/storage/library.hpp>
+#include <arcticdb/storage/common.hpp>
+#include <arcticdb/storage/library_path.hpp>
 
-#include <mutex>
 
 namespace arcticdb::storage {
 class ConfigResolver {

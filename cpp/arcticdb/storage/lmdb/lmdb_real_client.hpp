@@ -10,9 +10,7 @@
 #include <arcticdb/storage/lmdb/lmdb_client_wrapper.hpp>
 
 #include <arcticdb/codec/segment.hpp>
-#include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/entity/variant_key.hpp>
-#include <arcticdb/storage/storage_utils.hpp>
 
 
 namespace arcticdb::storage::lmdb {

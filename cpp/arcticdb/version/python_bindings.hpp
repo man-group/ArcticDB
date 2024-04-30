@@ -8,9 +8,12 @@
 #pragma once
 
 #include <pybind11/pybind11.h>
-#include <arcticdb/util/error_code.hpp>
 
 namespace py = pybind11;
+
+namespace arcticdb {
+    struct ArcticException;
+}
 
 namespace arcticdb::version_store {
 

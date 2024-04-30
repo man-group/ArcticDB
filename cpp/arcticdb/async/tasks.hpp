@@ -11,16 +11,13 @@
 #include <arcticdb/storage/library.hpp>
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/util/hash.hpp>
 #include <arcticdb/stream/stream_utils.hpp>
-#include <arcticdb/stream/protobuf_mappings.hpp>
 #include <arcticdb/stream/stream_source.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/async/base_task.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
-#include <arcticdb/processing/processing_unit.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/codec/codec.hpp>
 

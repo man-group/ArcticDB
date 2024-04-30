@@ -7,17 +7,13 @@
 
 #pragma once
 
-#include <arcticdb/entity/index_range.hpp>
 
 
-#include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <folly/futures/Future.h>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
 #include <arcticdb/stream/stream_sink.hpp>
-#include <arcticdb/storage/store.hpp>
-#include <arcticdb/pipeline/pipeline_common.hpp>
 
 namespace arcticdb::pipelines {
 

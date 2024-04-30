@@ -9,7 +9,6 @@
 #error "This should only be included by types.hpp"
 #endif
 
-#include <fmt/format.h>
 #include <fmt/ranges.h>
 #include <variant>
 
