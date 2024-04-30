@@ -18,14 +18,13 @@
 #include <arcticdb/storage/open_mode.hpp>
 #include <arcticdb/util/format_bytes.hpp>
 #include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/util/pb_util.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_options.hpp>
-#include <arcticdb/storage/storage_utils.hpp>
 
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 #include <folly/gen/Base.h>
+#include <arcticdb/storage/lmdb/lmdb.hpp>
 
 namespace arcticdb::storage::lmdb {
 
@@ -49,6 +48,15 @@ void raise_lmdb_exception(const ::lmdb::error& e) {
     raise<ErrorCode::E_UNEXPECTED_LMDB_ERROR>(fmt::format("Unexpected LMDB Error: LMDBError#{}: {}", error_code, e.what()));
 }
 
+::lmdb::env& LmdbStorage::env() {
+    if (!env_) {
+        raise<ErrorCode::E_UNEXPECTED_LMDB_ERROR>("Unexpected LMDB Error: Invalid operation: LMDB environment has been removed. "
+                                                  "Possibly because the library has been deleted");
+    }
+    return *env_;
+}
+
+
 void LmdbStorage::do_write_internal(Composite<KeySegmentPair>&& kvs, ::lmdb::txn& txn) {
     auto fmt_db = [](auto &&kv) { return kv.key_type(); };
 
@@ -56,7 +64,7 @@ void LmdbStorage::do_write_internal(Composite<KeySegmentPair>&& kvs, ::lmdb::txn
         auto db_name = fmt::format("{}", group.key());
 
         ARCTICDB_SUBSAMPLE(LmdbStorageOpenDb, 0)
-        ::lmdb::dbi& dbi = dbi_by_key_type_.at(db_name);
+        ::lmdb::dbi& dbi = *dbi_by_key_type_.at(db_name);
 
         ARCTICDB_SUBSAMPLE(LmdbStorageWriteValues, 0)
         for (auto &kv : group.values()) {
@@ -117,7 +125,7 @@ void LmdbStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor
     (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
         auto db_name = fmt::format("{}", group.key());
         ARCTICDB_SUBSAMPLE(LmdbStorageOpenDb, 0)
-        ::lmdb::dbi& dbi = dbi_by_key_type_.at(db_name);
+        ::lmdb::dbi& dbi = *dbi_by_key_type_.at(db_name);
         for (auto &k : group.values()) {
             auto stored_key = to_serialized_key(k);
             try {
@@ -155,7 +163,7 @@ bool LmdbStorage::do_key_exists(const VariantKey&key) {
     ARCTICDB_SUBSAMPLE(LmdbStorageOpenDb, 0)
 
     try {
-        ::lmdb::dbi& dbi = dbi_by_key_type_.at(db_name);
+        ::lmdb::dbi& dbi = *dbi_by_key_type_.at(db_name);
         auto stored_key = to_serialized_key(key);
         return lmdb_client_->exists(db_name, stored_key, txn, dbi);
     } catch ([[maybe_unused]] const ::lmdb::not_found_error &ex) {
@@ -176,7 +184,7 @@ std::vector<VariantKey> LmdbStorage::do_remove_internal(Composite<VariantKey>&& 
         ARCTICDB_SUBSAMPLE(LmdbStorageOpenDb, 0)
         try {
             // If no key of this type has been written before, this can fail
-            ::lmdb::dbi& dbi = dbi_by_key_type_.at(db_name);
+            ::lmdb::dbi& dbi = *dbi_by_key_type_.at(db_name);
             for (auto &k : group.values()) {
                 auto stored_key = to_serialized_key(k);
 
@@ -230,7 +238,7 @@ bool LmdbStorage::do_fast_delete() {
         auto db_name = fmt::format("{}", key_type);
         ARCTICDB_SUBSAMPLE(LmdbStorageOpenDb, 0)
         ARCTICDB_DEBUG(log::storage(), "dropping {}", db_name);
-        ::lmdb::dbi& dbi = dbi_by_key_type_.at(db_name);
+        ::lmdb::dbi& dbi = *dbi_by_key_type_.at(db_name);
         try {
             ::lmdb::dbi_drop(dtxn, dbi);
         } catch (const ::lmdb::error& ex) {
@@ -246,7 +254,7 @@ void LmdbStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& vi
     ARCTICDB_SAMPLE(LmdbStorageItType, 0);
     auto txn = ::lmdb::txn::begin(env(), nullptr, MDB_RDONLY); // scoped abort on
     std::string type_db = fmt::format("{}", key_type);
-    ::lmdb::dbi& dbi = dbi_by_key_type_.at(type_db);
+    ::lmdb::dbi& dbi = *dbi_by_key_type_.at(type_db);
 
     try {
         auto keys = lmdb_client_->list(type_db, prefix, txn, dbi, key_type);
@@ -314,7 +322,7 @@ LmdbStorage::LmdbStorage(const LibraryPath &library_path, OpenMode mode, const C
     }
     write_mutex_ = std::make_unique<std::mutex>();
     env_ = std::make_unique<::lmdb::env>(::lmdb::env::create(conf.flags()));
-    dbi_by_key_type_ = std::unordered_map<std::string, ::lmdb::dbi>{};
+    dbi_by_key_type_ = std::unordered_map<std::string, std::unique_ptr<::lmdb::dbi>>{};
 
     fs::path root_path = conf.path().c_str();
     auto lib_path_str = library_path.to_delim_path(fs::path::preferred_separator);
@@ -363,7 +371,7 @@ LmdbStorage::LmdbStorage(const LibraryPath &library_path, OpenMode mode, const C
         arcticdb::entity::foreach_key_type([&txn, this](KeyType &&key_type) {
             std::string db_name = fmt::format("{}", key_type);
             ::lmdb::dbi dbi = ::lmdb::dbi::open(txn, db_name.data(), MDB_CREATE);
-            dbi_by_key_type_.insert(std::make_pair(std::move(db_name), std::move(dbi)));
+            dbi_by_key_type_.insert(std::make_pair(std::move(db_name), std::make_unique<::lmdb::dbi>(std::move(dbi))));
         });
     } catch (const ::lmdb::error& ex) {
         raise_lmdb_exception(ex);

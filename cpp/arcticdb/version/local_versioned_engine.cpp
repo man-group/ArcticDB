@@ -866,7 +866,7 @@ folly::Future<folly::Unit> LocalVersionedEngine::delete_trees_responsibly(
                 return true;
             }
             get_matching_prev_and_next_versions(entry, key.version_id(), // Check 2)
-                    [](ARCTICDB_UNUSED auto& matching) {},
+                    [](const AtomKey&) {},
                     [&check, &not_to_delete](auto& prev) { if (check.prev_version) not_to_delete.insert(prev);},
                     [&check, &not_to_delete](auto& next) { if (check.next_version) not_to_delete.insert(next);},
                     [v=key.version_id()](const AtomKeyImpl& key, const std::shared_ptr<VersionMapEntry>& entry) {

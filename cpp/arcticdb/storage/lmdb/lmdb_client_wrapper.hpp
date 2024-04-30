@@ -12,18 +12,10 @@
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/storage/storage_utils.hpp>
 
-// LMDB++ is using `std::is_pod` in `lmdb++.h`, which is deprecated as of C++20.
-// See: https://github.com/drycpp/lmdbxx/blob/0b43ca87d8cfabba392dfe884eb1edb83874de02/lmdb%2B%2B.h#L1068
-// See: https://en.cppreference.com/w/cpp/types/is_pod
-// This suppresses the warning.
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-#ifdef ARCTICDB_USING_CONDA
-#include <lmdb++.h>
-#else
-#include <third_party/lmdbxx/lmdb++.h>
-#endif
-#pragma GCC diagnostic pop
+namespace lmdb {
+class txn;
+class dbi;
+}
 
 
 namespace arcticdb::storage::lmdb {

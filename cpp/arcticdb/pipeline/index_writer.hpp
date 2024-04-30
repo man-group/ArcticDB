@@ -16,8 +16,8 @@
 #include <arcticdb/pipeline/pipeline_common.hpp>
 
 namespace arcticdb::pipelines::index {
-// TODO: change the name - something like KeysSegmentWriter or KeyAggragator or  better
-template<class Index, std::enable_if_t<InputTensorFrame::is_valid_index_v<Index>, bool> = 0>
+
+template<typename Index>
 class IndexWriter {
     // All index segments are row-count indexed in the sense that the keys are
     // already ordered - they don't need an additional index
