@@ -187,6 +187,7 @@ jobs:
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
       persistent_storage: ${{inputs.persistent_storage}}
       pytest_xdist_mode: ${{matrix.pytest_xdist_mode}}
+      compile-override: compile-on-ec2
 
   cpp-test-windows:
     needs: [common_config]
