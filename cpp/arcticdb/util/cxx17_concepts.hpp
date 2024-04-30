@@ -2,7 +2,7 @@
 #include <functional>
 
 namespace arcticdb {
-
+    
 template<typename F, typename Arg>
 using is_unary_predicate = std::is_invocable_r<bool, F, Arg>;
 
