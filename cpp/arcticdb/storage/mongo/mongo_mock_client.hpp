@@ -15,27 +15,36 @@
 namespace arcticdb::storage::mongo {
 
 struct MongoDocumentKey {
-    VariantKey key;
+    VariantKey key_;
 
-    std::string id_string() const {
-        return fmt::format("{}", variant_key_id(key));
+    ARCTICDB_MOVE_ONLY_DEFAULT(MongoDocumentKey)
+
+    explicit MongoDocumentKey(VariantKey&& key) : key_(std::move(key)) {
+    }
+
+    [[nodiscard]] std::string id_string() const {
+        return fmt::format("{}", variant_key_id(key_));
     }
 };
 
 struct MongoKey {
-    std::string database_name;
-    std::string collection_name;
-    MongoDocumentKey doc_key;
+    std::string database_name_;
+    std::string collection_name_;
+    MongoDocumentKey doc_key_;
 
-    MongoKey(const std::string& database_name, const std::string& collection_name, const VariantKey& key) :
-            database_name(database_name), collection_name(collection_name), doc_key(key) { }
+    ARCTICDB_MOVE_ONLY_DEFAULT(MongoKey)
+
+    MongoKey(std::string database_name, std::string collection_name, VariantKey key) :
+            database_name_(std::move(database_name)),
+            collection_name_(std::move(collection_name)),
+            doc_key_(std::move(key)) { }
 
     bool operator<(const MongoKey& other) const {
-        std::string id_string = doc_key.id_string();
-        std::string other_id_string = other.doc_key.id_string();
+        std::string id_string = doc_key_.id_string();
+        std::string other_id_string = other.doc_key_.id_string();
 
-        return std::tie(database_name, collection_name, id_string) <
-               std::tie(other.database_name, other.collection_name, other_id_string);
+        return std::tie(database_name_, collection_name_, id_string) <
+               std::tie(other.database_name_, other.collection_name_, other_id_string);
     }
 };
 
@@ -50,15 +59,17 @@ struct MongoFailure {
         return std::holds_alternative<no_ack_failure>(failure);
     }
 
-    mongocxx::operation_exception get_exception() const {
+    [[nodiscard]] mongocxx::operation_exception get_exception() const {
         return std::get<mongocxx::operation_exception>(failure);
     }
-
 };
 
 class MockMongoClient : public MongoClientWrapper {
-
 public:
+    MockMongoClient() = default;
+
+    ARCTICDB_MOVE_ONLY_DEFAULT(MockMongoClient)
+
     static std::string get_failure_trigger(
             const std::string& key,
             StorageOperation operation_to_fail,

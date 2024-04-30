@@ -258,7 +258,7 @@ public:
             return data_.ptr_ == other.data_.ptr_;
         }
 
-        base_type::reference dereference() const {
+        typename base_type::reference dereference() const {
             if constexpr (iterator_type == IteratorType::ENUMERATED) {
                 return data_;
             } else {
@@ -270,7 +270,7 @@ public:
         ColumnData* parent_{nullptr};
         std::optional<TypedBlockData<TDT>> opt_block_{std::nullopt};
         std::size_t remaining_values_in_block_{0};
-        base_type::value_type data_;
+        typename base_type::value_type data_;
     };
 
     ColumnData(

@@ -15,7 +15,6 @@
 
 #include <arcticdb/storage/library.hpp>
 #include <arcticdb/storage/library_manager.hpp>
-#include <arcticdb/storage/protobuf_mappings.hpp>
 #include <arcticdb/storage/library_index.hpp>
 #include <arcticdb/storage/config_resolvers.hpp>
 #include <arcticdb/storage/constants.hpp>
