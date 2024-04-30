@@ -120,7 +120,7 @@ jobs:
           cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
           echo "ARCTICDB_CODE_COVERAGE_BUILD=1" | tee -a $GITHUB_ENV
         env:
-          CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
+          CMAKE_BUILD_PARALLEL_LEVEL: 8
 
       - name: Prepare C++ compilation env
         run: . build_tooling/prep_cpp_build.sh 
