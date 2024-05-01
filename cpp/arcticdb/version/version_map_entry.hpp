@@ -34,7 +34,7 @@ inline constexpr bool is_partial_load_type(LoadType load_type) {
 }
 
 // Used to specify whether we want to load all or only undeleted versions
-enum class ToLoad : uint32_t {
+enum class LoadObjective : uint32_t {
     ANY,
     UNDELETED
 };
@@ -52,14 +52,14 @@ struct VersionDetails {
 
 // The LoadStrategy describes how to load versions from the version chain. It consists of:
 // load_type: Describes up to which point in the chain we need to go.
-// to_load: Whether to include tombstoned versions
+// load_objective: Whether to include tombstoned versions
 struct LoadStrategy {
-    explicit LoadStrategy(LoadType load_type, ToLoad to_load = ToLoad::ANY) :
-        load_type_(load_type), to_load_(to_load) {
+    explicit LoadStrategy(LoadType load_type, LoadObjective load_objective = LoadObjective::ANY) :
+            load_type_(load_type), load_objective_(load_objective) {
     }
 
-    LoadStrategy(LoadType load_type, ToLoad to_load, int64_t load_from_time_or_until) :
-        load_type_(load_type), to_load_(to_load) {
+    LoadStrategy(LoadType load_type, LoadObjective load_objective, int64_t load_from_time_or_until) :
+            load_type_(load_type), load_objective_(load_objective) {
         switch(load_type_) {
             case LoadType::LOAD_FROM_TIME:
                 load_from_time_ = load_from_time_or_until;
@@ -74,18 +74,18 @@ struct LoadStrategy {
     }
 
     LoadType load_type_ = LoadType::NOT_LOADED;
-    ToLoad to_load_ = ToLoad::ANY;
+    LoadObjective load_objective_ = LoadObjective::ANY;
     std::optional<SignedVersionId> load_until_version_ = std::nullopt;
     std::optional<timestamp> load_from_time_ = std::nullopt;
 
     bool should_include_deleted() const {
-        switch (to_load_) {
-            case ToLoad::ANY:
+        switch (load_objective_) {
+            case LoadObjective::ANY:
                 return true;
-            case ToLoad::UNDELETED:
+            case LoadObjective::UNDELETED:
                 return false;
             default:
-                util::raise_rte("Invalid to_load: {}", to_load_);
+                util::raise_rte("Invalid load_objective: {}", load_objective_);
         }
     }
 
@@ -146,15 +146,15 @@ inline LoadStrategy union_of_undeleted_strategies(const LoadStrategy& left, cons
     // we can't know where to read to unless we know the version chain.
     // A possible workaround for this is to restructure loading the version chain to get a set of LoadStrategies and stop
     // searching only when all of them are satisfied.
-    return LoadStrategy{LoadType::LOAD_ALL, ToLoad::UNDELETED};
+    return LoadStrategy{LoadType::LOAD_ALL, LoadObjective::UNDELETED};
 }
 
 // LoadParameter is just a LoadStrategy and a boolean specified from VersionQuery.iterate_on_failure defaulting to false.
 struct LoadParameter {
     LoadParameter(const LoadStrategy& load_strategy) : load_strategy_(load_strategy) {}
-    LoadParameter(LoadType load_type, ToLoad to_load) : load_strategy_(load_type, to_load) {}
-    LoadParameter(LoadType load_type, ToLoad to_load, int64_t load_from_time_or_until) :
-        load_strategy_(load_type, to_load, load_from_time_or_until) {}
+    LoadParameter(LoadType load_type, LoadObjective load_objective) : load_strategy_(load_type, load_objective) {}
+    LoadParameter(LoadType load_type, LoadObjective load_objective, int64_t load_from_time_or_until) :
+        load_strategy_(load_type, load_objective, load_from_time_or_until) {}
 
     LoadStrategy load_strategy_;
     bool iterate_on_failure_ = false;
@@ -548,16 +548,16 @@ namespace fmt {
     };
 
     template<>
-    struct formatter<arcticdb::ToLoad> {
+    struct formatter<arcticdb::LoadObjective> {
         template<typename ParseContext>
         constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
 
         template<typename FormatContext>
-        auto format(arcticdb::ToLoad l, FormatContext &ctx) const {
+        auto format(arcticdb::LoadObjective l, FormatContext &ctx) const {
             switch (l) {
-                case arcticdb::ToLoad::ANY:
+                case arcticdb::LoadObjective::ANY:
                     return fmt::format_to(ctx.out(), "ANY");
-                case arcticdb::ToLoad::UNDELETED:
+                case arcticdb::LoadObjective::UNDELETED:
                     return fmt::format_to(ctx.out(), "UNDELETED");
                 default:
                     arcticdb::util::raise_rte("Unrecognized to load {}", int(l));
