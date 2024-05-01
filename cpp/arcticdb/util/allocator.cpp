@@ -290,7 +290,7 @@ namespace arcticdb {
 
     template<class TracingPolicy, class ClockType>
     void AllocatorImpl<TracingPolicy, ClockType>::maybe_trim() {
-        const uint32_t trim_count = ConfigsMap::instance()->get_int("Allocator.TrimCount", 250);
+        static const uint32_t trim_count = ConfigsMap::instance()->get_int("Allocator.TrimCount", 250);
         if (free_count_of<TracingPolicy, ClockType>().readFast() > trim_count && free_count_of<TracingPolicy, ClockType>().readFastAndReset() > trim_count)
             trim();
     }
