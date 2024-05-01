@@ -264,7 +264,6 @@ class PythonVersionStore : public LocalVersionedEngine {
         const std::optional<StreamId> &stream_id,
         const std::optional<SnapshotId>& snap_name,
         const std::optional<bool> &latest_only,
-        const std::optional<bool>& iterate_on_failure,
         const std::optional<bool>& skip_snapshots);
 
     // Batch methods

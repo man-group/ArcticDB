@@ -390,21 +390,21 @@ TEST(VersionStore, TestReadTimestampAt) {
 
   auto version_map = version_store._test_get_version_map();
   version_map->write_version(mock_store, key1, std::nullopt);
-  auto key = load_index_key_from_time(mock_store, version_map, id, timestamp(0), pipelines::VersionQuery{});
+  auto key = load_index_key_from_time(mock_store, version_map, id, timestamp(0));
   ASSERT_EQ(key.value().content_hash(), 3);
 
   version_map->write_version(mock_store, key2, key1);
-  key = load_index_key_from_time(mock_store, version_map, id, timestamp(0), pipelines::VersionQuery{});
+  key = load_index_key_from_time(mock_store, version_map, id, timestamp(0));
   ASSERT_EQ(key.value().content_hash(), 3);
-  key = load_index_key_from_time(mock_store, version_map, id, timestamp(1), pipelines::VersionQuery{});
+  key = load_index_key_from_time(mock_store, version_map, id, timestamp(1));
   ASSERT_EQ(key.value().content_hash(), 4);
 
   version_map->write_version(mock_store, key3, key2);
-  key = load_index_key_from_time(mock_store, version_map, id, timestamp(0), pipelines::VersionQuery{});
+  key = load_index_key_from_time(mock_store, version_map, id, timestamp(0));
   ASSERT_EQ(key.value().content_hash(), 3);
-  key = load_index_key_from_time(mock_store, version_map, id, timestamp(1), pipelines::VersionQuery{});
+  key = load_index_key_from_time(mock_store, version_map, id, timestamp(1));
   ASSERT_EQ(key.value().content_hash(), 4);
-  key = load_index_key_from_time(mock_store, version_map, id, timestamp(2), pipelines::VersionQuery{});
+  key = load_index_key_from_time(mock_store, version_map, id, timestamp(2));
   ASSERT_EQ(key.value().content_hash(), 5);
 }
 
@@ -422,7 +422,7 @@ TEST(VersionStore, TestReadTimestampAtInequality) {
 
   auto version_map = version_store._test_get_version_map();
   version_map->write_version(mock_store, key1, std::nullopt);
-  auto key = load_index_key_from_time(mock_store, version_map, id, timestamp(1), pipelines::VersionQuery{});
+  auto key = load_index_key_from_time(mock_store, version_map, id, timestamp(1));
   ASSERT_EQ(static_cast<bool>(key), true);
   ASSERT_EQ(key.value().content_hash(), 3);
 }
