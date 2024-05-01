@@ -23,7 +23,7 @@
 template <typename Model>
 void check_latest_versions(const Model&  s0, MapStorePair &sut, std::string symbol) {
     using namespace arcticdb;
-    auto prev = get_latest_version(sut.store_,sut.map_, symbol, pipelines::VersionQuery{}).first;
+    auto prev = get_latest_version(sut.store_,sut.map_, symbol).first;
     auto sut_version_id = prev ? prev->version_id() : 0;
     auto model_prev = s0.get_latest_version(symbol);
     auto model_version_id = model_prev ? model_prev.value() : 0;
@@ -33,9 +33,7 @@ void check_latest_versions(const Model&  s0, MapStorePair &sut, std::string symb
 template <typename Model>
 void check_latest_undeleted_versions(const Model&  s0, MapStorePair &sut, std::string symbol) {
     using namespace arcticdb;
-    pipelines::VersionQuery version_query;
-    version_query.set_iterate_on_failure(true);
-    auto prev = get_latest_undeleted_version(sut.store_, sut.map_, symbol, version_query);
+    auto prev = get_latest_undeleted_version(sut.store_, sut.map_, symbol);
     auto sut_version_id = prev ? prev->version_id() : 0;
     auto model_prev = s0.get_latest_undeleted_version(symbol);
     auto model_version_id = model_prev ? model_prev.value() : 0;
@@ -224,7 +222,7 @@ struct GetAllVersions : rc::state::Command<Model, MapStorePair> {
     void run(const Model& s0, MapStorePair &sut) const override {
         auto model_versions = s0.get_all_versions(symbol_);
         using namespace arcticdb;
-        auto sut_version = get_all_versions(sut.store_, sut.map_, symbol_, pipelines::VersionQuery{});
+        auto sut_version = get_all_versions(sut.store_, sut.map_, symbol_);
         RC_ASSERT(model_versions.size() == sut_version.size());
 
         for(auto i = size_t{0}; i < model_versions.size(); ++i)

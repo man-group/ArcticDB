@@ -54,7 +54,7 @@ struct VersionDetails {
 // load_type: Describes up to which point in the chain we need to go.
 // load_objective: Whether to include tombstoned versions
 struct LoadStrategy {
-    explicit LoadStrategy(LoadType load_type, LoadObjective load_objective = LoadObjective::ANY) :
+    explicit LoadStrategy(LoadType load_type, LoadObjective load_objective) :
             load_type_(load_type), load_objective_(load_objective) {
     }
 
@@ -149,17 +149,6 @@ inline LoadStrategy union_of_undeleted_strategies(const LoadStrategy& left, cons
     return LoadStrategy{LoadType::LOAD_ALL, LoadObjective::UNDELETED};
 }
 
-// LoadParameter is just a LoadStrategy and a boolean specified from VersionQuery.iterate_on_failure defaulting to false.
-struct LoadParameter {
-    LoadParameter(const LoadStrategy& load_strategy) : load_strategy_(load_strategy) {}
-    LoadParameter(LoadType load_type, LoadObjective load_objective) : load_strategy_(load_type, load_objective) {}
-    LoadParameter(LoadType load_type, LoadObjective load_objective, int64_t load_from_time_or_until) :
-        load_strategy_(load_type, load_objective, load_from_time_or_until) {}
-
-    LoadStrategy load_strategy_;
-    bool iterate_on_failure_ = false;
-};
-
 template<typename T>
 bool deque_is_unique(std::deque<T> vec) {
     sort(vec.begin(), vec.end());
@@ -252,7 +241,7 @@ struct VersionMapEntry {
         tombstone_all_.reset();
         keys_.clear();
         loaded_with_progress_ = LoadProgress{};
-        load_strategy_ = LoadStrategy{LoadType::NOT_LOADED};
+        load_strategy_ = LoadStrategy{LoadType::NOT_LOADED, LoadObjective::ANY};
     }
 
     bool empty() const {
@@ -443,7 +432,7 @@ struct VersionMapEntry {
     }
 
     std::optional<AtomKey> head_;
-    LoadStrategy load_strategy_ = LoadStrategy{LoadType::NOT_LOADED };
+    LoadStrategy load_strategy_ = LoadStrategy{LoadType::NOT_LOADED, LoadObjective::ANY};
     timestamp last_reload_time_ = 0;
     LoadProgress loaded_with_progress_;
     std::deque<AtomKey> keys_;

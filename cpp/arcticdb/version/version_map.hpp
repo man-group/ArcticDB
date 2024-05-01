@@ -235,7 +235,7 @@ public:
     }
 
     void write_version(std::shared_ptr<Store> store, const AtomKey &key, const std::optional<AtomKey>& previous_key) {
-        LoadParameter load_param{LoadType::LOAD_LATEST, LoadObjective::ANY};
+        LoadStrategy load_param{LoadType::LOAD_LATEST, LoadObjective::ANY};
         auto entry = check_reload(store, key.id(), load_param,  __FUNCTION__);
 
         do_write(store, key, entry);
@@ -259,7 +259,7 @@ public:
         auto entry = check_reload(
             store,
             stream_id,
-            LoadParameter{LoadType::LOAD_ALL, LoadObjective::UNDELETED},
+            LoadStrategy{LoadType::LOAD_ALL, LoadObjective::UNDELETED},
             __FUNCTION__);
         auto output = tombstone_from_key_or_all_internal(store, stream_id, first_key_to_tombstone, entry);
 
@@ -273,7 +273,7 @@ public:
     }
 
     std::string dump_entry(const std::shared_ptr<Store>& store, const StreamId& stream_id) {
-        const auto entry = check_reload(store, stream_id, LoadParameter{LoadType::LOAD_ALL, LoadObjective::ANY}, __FUNCTION__);
+        const auto entry = check_reload(store, stream_id, LoadStrategy{LoadType::LOAD_ALL, LoadObjective::ANY}, __FUNCTION__);
         return entry->dump();
     }
 
@@ -285,7 +285,7 @@ public:
         auto entry = check_reload(
                 store,
                 key.id(),
-                LoadParameter{LoadType::LOAD_ALL, LoadObjective::UNDELETED},
+                LoadStrategy{LoadType::LOAD_ALL, LoadObjective::UNDELETED},
                 __FUNCTION__);
         auto [_, result] = tombstone_from_key_or_all_internal(store, key.id(), previous_key, entry);
 
@@ -324,7 +324,7 @@ public:
         // This method has no API, and is not tested in the rapidcheck tests, but could easily be enabled there.
         // It compacts the version map but skips any keys which have been deleted (to free up space).
         ARCTICDB_DEBUG(log::version(), "Version map compacting versions for stream {}", stream_id);
-        auto entry = check_reload(store, stream_id, LoadParameter{LoadType::LOAD_ALL, LoadObjective::ANY}, __FUNCTION__);
+        auto entry = check_reload(store, stream_id, LoadStrategy{LoadType::LOAD_ALL, LoadObjective::ANY}, __FUNCTION__);
         if (!requires_compaction(entry))
             return;
 
@@ -439,7 +439,7 @@ public:
 
     void compact(std::shared_ptr<Store> store, const StreamId& stream_id) {
         ARCTICDB_DEBUG(log::version(), "Version map compacting versions for stream {}", stream_id);
-        auto entry = check_reload(store, stream_id, LoadParameter{LoadType::LOAD_ALL, LoadObjective::ANY}, __FUNCTION__);
+        auto entry = check_reload(store, stream_id, LoadStrategy{LoadType::LOAD_ALL, LoadObjective::ANY}, __FUNCTION__);
         if (entry->empty()) {
             log::version().warn("Entry is empty in compact");
             return;
@@ -461,7 +461,7 @@ public:
 
     void overwrite_symbol_tree(
             std::shared_ptr<Store> store, const StreamId& stream_id, const std::vector<AtomKey>& index_keys) {
-        auto entry = check_reload(store, stream_id, LoadParameter{LoadType::LOAD_ALL, LoadObjective::ANY}, __FUNCTION__);
+        auto entry = check_reload(store, stream_id, LoadStrategy{LoadType::LOAD_ALL, LoadObjective::ANY}, __FUNCTION__);
         auto old_entry = *entry;
         if (!index_keys.empty()) {
             entry->keys_.assign(std::begin(index_keys), std::end(index_keys));
@@ -480,15 +480,15 @@ public:
     std::shared_ptr<VersionMapEntry> check_reload(
         std::shared_ptr<Store> store,
         const StreamId& stream_id,
-        const LoadParameter& load_param,
+        const LoadStrategy& load_strategy,
         const char* function ARCTICDB_UNUSED) {
         ARCTICDB_DEBUG(log::version(), "Check reload in function {} for id {}", function, stream_id);
 
-        if (has_cached_entry(stream_id, load_param.load_strategy_)) {
+        if (has_cached_entry(stream_id, load_strategy)) {
             return get_entry(stream_id);
         }
 
-        return storage_reload(store, stream_id, load_param.load_strategy_, load_param.iterate_on_failure_);
+        return storage_reload(store, stream_id, load_strategy);
     }
 
     /**
@@ -742,8 +742,7 @@ private:
     std::shared_ptr<VersionMapEntry> storage_reload(
         std::shared_ptr<Store> store,
         const StreamId& stream_id,
-        const LoadStrategy& load_strategy,
-        bool iterate_on_failure) {
+        const LoadStrategy& load_strategy) {
         /*
          * Goes to the storage for a given symbol, and recreates the VersionMapEntry from preferably the ref key
          * structure, and if that fails it then goes and builds that from iterating all keys from storage which can
@@ -755,28 +754,12 @@ private:
         const auto clock_unsync_tolerance = ConfigsMap::instance()->get_int("VersionMap.UnsyncTolerance",
                                                                             DEFAULT_CLOCK_UNSYNC_TOLERANCE);
         entry->last_reload_time_ = Clock::nanos_since_epoch() - clock_unsync_tolerance;
-        entry->load_strategy_ = LoadStrategy{LoadType::NOT_LOADED}; // FUTURE: to make more thread-safe with #368
+        entry->load_strategy_ = LoadStrategy{LoadType::NOT_LOADED, LoadObjective::ANY}; // FUTURE: to make more thread-safe with #368
 
-        try {
-            auto temp = std::make_shared<VersionMapEntry>(*entry);
-            load_via_ref_key(store, stream_id, load_strategy, temp);
-            std::swap(*entry, *temp);
-            entry->load_strategy_ = load_strategy;
-        }
-        catch (const std::runtime_error &err) {
-            (void)err;
-            if (iterate_on_failure) {
-                ARCTICDB_DEBUG(log::version(),
-                        "Loading versions from storage via ref key failed with error: {}, will load via iteration",
-                        err.what());
-            } else {
-                throw;
-            }
-        }
-        if (iterate_on_failure && entry->empty()) {
-            (void) load_via_iteration(store, stream_id, entry);
-            entry->load_strategy_ = LoadStrategy{LoadType::LOAD_ALL, LoadObjective::ANY};
-        }
+        auto temp = std::make_shared<VersionMapEntry>(*entry);
+        load_via_ref_key(store, stream_id, load_strategy, temp);
+        std::swap(*entry, *temp);
+        entry->load_strategy_ = load_strategy;
 
         util::check(entry->keys_.empty() || entry->head_, "Non-empty VersionMapEntry should set head");
         if (validate_)
@@ -945,7 +928,7 @@ private:
             entry = check_reload(
                     store,
                     stream_id,
-                    LoadParameter{LoadType::LOAD_ALL, LoadObjective::UNDELETED},
+                    LoadStrategy{LoadType::LOAD_ALL, LoadObjective::UNDELETED},
                     __FUNCTION__);
         }
 
