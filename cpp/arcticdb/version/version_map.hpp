@@ -235,7 +235,7 @@ public:
     }
 
     void write_version(std::shared_ptr<Store> store, const AtomKey &key, const std::optional<AtomKey>& previous_key) {
-        LoadParameter load_param{LoadType::LOAD_LATEST, ToLoad::ANY};
+        LoadParameter load_param{LoadType::LOAD_LATEST, LoadObjective::ANY};
         auto entry = check_reload(store, key.id(), load_param,  __FUNCTION__);
 
         do_write(store, key, entry);
@@ -259,7 +259,7 @@ public:
         auto entry = check_reload(
             store,
             stream_id,
-            LoadParameter{LoadType::LOAD_ALL, ToLoad::UNDELETED},
+            LoadParameter{LoadType::LOAD_ALL, LoadObjective::UNDELETED},
             __FUNCTION__);
         auto output = tombstone_from_key_or_all_internal(store, stream_id, first_key_to_tombstone, entry);
 
@@ -273,7 +273,7 @@ public:
     }
 
     std::string dump_entry(const std::shared_ptr<Store>& store, const StreamId& stream_id) {
-        const auto entry = check_reload(store, stream_id, LoadParameter{LoadType::LOAD_ALL, ToLoad::ANY}, __FUNCTION__);
+        const auto entry = check_reload(store, stream_id, LoadParameter{LoadType::LOAD_ALL, LoadObjective::ANY}, __FUNCTION__);
         return entry->dump();
     }
 
@@ -285,7 +285,7 @@ public:
         auto entry = check_reload(
                 store,
                 key.id(),
-                LoadParameter{LoadType::LOAD_ALL, ToLoad::UNDELETED},
+                LoadParameter{LoadType::LOAD_ALL, LoadObjective::UNDELETED},
                 __FUNCTION__);
         auto [_, result] = tombstone_from_key_or_all_internal(store, key.id(), previous_key, entry);
 
@@ -324,7 +324,7 @@ public:
         // This method has no API, and is not tested in the rapidcheck tests, but could easily be enabled there.
         // It compacts the version map but skips any keys which have been deleted (to free up space).
         ARCTICDB_DEBUG(log::version(), "Version map compacting versions for stream {}", stream_id);
-        auto entry = check_reload(store, stream_id, LoadParameter{LoadType::LOAD_ALL, ToLoad::ANY}, __FUNCTION__);
+        auto entry = check_reload(store, stream_id, LoadParameter{LoadType::LOAD_ALL, LoadObjective::ANY}, __FUNCTION__);
         if (!requires_compaction(entry))
             return;
 
@@ -439,7 +439,7 @@ public:
 
     void compact(std::shared_ptr<Store> store, const StreamId& stream_id) {
         ARCTICDB_DEBUG(log::version(), "Version map compacting versions for stream {}", stream_id);
-        auto entry = check_reload(store, stream_id, LoadParameter{LoadType::LOAD_ALL, ToLoad::ANY}, __FUNCTION__);
+        auto entry = check_reload(store, stream_id, LoadParameter{LoadType::LOAD_ALL, LoadObjective::ANY}, __FUNCTION__);
         if (entry->empty()) {
             log::version().warn("Entry is empty in compact");
             return;
@@ -461,7 +461,7 @@ public:
 
     void overwrite_symbol_tree(
             std::shared_ptr<Store> store, const StreamId& stream_id, const std::vector<AtomKey>& index_keys) {
-        auto entry = check_reload(store, stream_id, LoadParameter{LoadType::LOAD_ALL, ToLoad::ANY}, __FUNCTION__);
+        auto entry = check_reload(store, stream_id, LoadParameter{LoadType::LOAD_ALL, LoadObjective::ANY}, __FUNCTION__);
         auto old_entry = *entry;
         if (!index_keys.empty()) {
             entry->keys_.assign(std::begin(index_keys), std::end(index_keys));
@@ -775,7 +775,7 @@ private:
         }
         if (iterate_on_failure && entry->empty()) {
             (void) load_via_iteration(store, stream_id, entry);
-            entry->load_strategy_ = LoadStrategy{LoadType::LOAD_ALL, ToLoad::ANY};
+            entry->load_strategy_ = LoadStrategy{LoadType::LOAD_ALL, LoadObjective::ANY};
         }
 
         util::check(entry->keys_.empty() || entry->head_, "Non-empty VersionMapEntry should set head");
@@ -841,7 +841,7 @@ public:
 
         try {
             auto entry_ref = std::make_shared<VersionMapEntry>();
-            load_via_ref_key(store, stream_id, LoadStrategy{LoadType::LOAD_ALL, ToLoad::ANY}, entry_ref);
+            load_via_ref_key(store, stream_id, LoadStrategy{LoadType::LOAD_ALL, LoadObjective::ANY}, entry_ref);
             entry_ref->validate();
         } catch (const std::exception& err) {
             log::version().warn(
@@ -854,7 +854,7 @@ public:
 
     bool indexes_sorted(const std::shared_ptr<Store>& store, const StreamId& stream_id) {
         auto entry_ref = std::make_shared<VersionMapEntry>();
-        load_via_ref_key(store, stream_id, LoadStrategy{LoadType::LOAD_ALL, ToLoad::ANY}, entry_ref);
+        load_via_ref_key(store, stream_id, LoadStrategy{LoadType::LOAD_ALL, LoadObjective::ANY}, entry_ref);
         auto indexes = entry_ref->get_indexes(true);
         return std::is_sorted(std::cbegin(indexes), std::cend(indexes), [] (const auto& l, const auto& r) {
             return l > r;
@@ -945,7 +945,7 @@ private:
             entry = check_reload(
                     store,
                     stream_id,
-                    LoadParameter{LoadType::LOAD_ALL, ToLoad::UNDELETED},
+                    LoadParameter{LoadType::LOAD_ALL, LoadObjective::UNDELETED},
                     __FUNCTION__);
         }
 
