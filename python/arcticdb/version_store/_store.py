@@ -1484,7 +1484,6 @@ class NativeVersionStore:
 
     def _get_version_query(self, as_of: VersionQueryInput, **kwargs):
         version_query = _PythonVersionStoreVersionQuery()
-        version_query.set_iterate_on_failure(_assume_false("iterate_on_failure", kwargs))
 
         if isinstance(as_of, str):
             version_query.set_snap_name(as_of)
@@ -1968,7 +1967,6 @@ class NativeVersionStore:
         symbol: Optional[str] = None,
         snapshot: Optional[str] = None,
         latest_only: Optional[bool] = False,
-        iterate_on_failure: Optional[bool] = False,
         skip_snapshots: Optional[bool] = False,
     ) -> List[Dict]:
         """
@@ -1983,8 +1981,6 @@ class NativeVersionStore:
         latest_only : `bool`
             Only include the latest version for each returned symbol. Has no effect if `snapshot` argument is also
             specified.
-        iterate_on_failure: `bool`
-            Iterate the type in the storage if the top-level key isn't present.
         skip_snapshots: `bool`
             Don't populate version list with snapshot information.
             Can improve performance significantly if there are many snapshots.
@@ -2015,7 +2011,7 @@ class NativeVersionStore:
             log.warning("latest_only has no effect when snapshot is specified")
             NativeVersionStore._warned_about_list_version_latest_only_and_snapshot = True
 
-        result = self.version_store.list_versions(symbol, snapshot, latest_only, iterate_on_failure, skip_snapshots)
+        result = self.version_store.list_versions(symbol, snapshot, latest_only, skip_snapshots)
         return [
             {
                 "symbol": version_result[0],
@@ -2267,7 +2263,7 @@ class NativeVersionStore:
             log.info("Done deleting version: {}".format(str(v_info["version"])))
 
     def has_symbol(
-        self, symbol: str, as_of: Optional[VersionQueryInput] = None, iterate_on_failure: Optional[bool] = False
+        self, symbol: str, as_of: Optional[VersionQueryInput] = None
     ) -> bool:
         """
         Return True if the 'symbol' exists in this library AND the symbol isn't deleted in the specified as_of.
@@ -2279,8 +2275,6 @@ class NativeVersionStore:
             symbol name
         as_of : `Optional[VersionQueryInput]`, default=None
             See documentation of `read` method for more details.
-        iterate_on_failure: `Optional[bool]`, default=False
-            Iterate the type in the storage if the top-level key isn;t present
 
         Returns
         -------
@@ -2289,7 +2283,7 @@ class NativeVersionStore:
         """
 
         return (
-            self._find_version(symbol, as_of=as_of, raise_on_missing=False, iterate_on_failure=iterate_on_failure)
+            self._find_version(symbol, as_of=as_of, raise_on_missing=False)
             is not None
         )
 

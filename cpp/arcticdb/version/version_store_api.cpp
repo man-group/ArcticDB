@@ -52,7 +52,7 @@ VersionedItem PythonVersionStore::write_dataframe_specific_version(
     ARCTICDB_SAMPLE(WriteDataFrame, 0)
 
     ARCTICDB_DEBUG(log::version(), "write_dataframe_specific_version stream_id: {} , version_id: {}", stream_id, version_id);
-    if (auto version_key = ::arcticdb::get_specific_version(store(), version_map(), stream_id, version_id, VersionQuery{}); version_key) {
+    if (auto version_key = ::arcticdb::get_specific_version(store(), version_map(), stream_id, version_id); version_key) {
         log::version().warn("Symbol stream_id: {} already exists with version_id: {}", stream_id, version_id);
         return {std::move(*version_key)};
     }
@@ -190,12 +190,11 @@ VersionResultVector get_latest_versions_for_symbols(
     const std::shared_ptr<Store>& store,
     const std::shared_ptr<VersionMap>& version_map,
     const std::set<StreamId>& stream_ids,
-    SymbolVersionToSnapshotMap& snapshots_for_symbol,
-    const VersionQuery& version_query
+    SymbolVersionToSnapshotMap& snapshots_for_symbol
 ) {
     VersionResultVector res;
     for (auto &s_id: stream_ids) {
-            const auto& opt_version_key = get_latest_undeleted_version(store, version_map, s_id, version_query);
+            const auto& opt_version_key = get_latest_undeleted_version(store, version_map, s_id);
             if (opt_version_key) {
                 res.emplace_back(
                     s_id,
@@ -220,7 +219,7 @@ VersionResultVector get_all_versions_for_symbols(
     VersionResultVector res;
     std::unordered_set<std::pair<StreamId, VersionId>> unpruned_versions;
     for (auto &s_id: stream_ids) {
-            auto all_versions = get_all_versions(store, version_map, s_id, VersionQuery{});
+            auto all_versions = get_all_versions(store, version_map, s_id);
             unpruned_versions = {};
             for (const auto &entry: all_versions) {
                 unpruned_versions.emplace(s_id, entry.version_id());
@@ -252,7 +251,6 @@ VersionResultVector PythonVersionStore::list_versions(
     const std::optional<StreamId> &stream_id,
     const std::optional<SnapshotId> &snap_name,
     const std::optional<bool>& latest_only,
-    const std::optional<bool>& iterate_on_failure,
     const std::optional<bool>& skip_snapshots) {
     ARCTICDB_SAMPLE(ListVersions, 0)
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: list_versions");
@@ -276,11 +274,8 @@ VersionResultVector PythonVersionStore::list_versions(
             return list_versions_for_snapshot(stream_ids, snap_name, *versions_for_snapshots, snapshots_for_symbol);
     }
 
-    VersionQuery version_query;
-    version_query.set_iterate_on_failure(iterate_on_failure);
-
    if(opt_false(latest_only))
-       return get_latest_versions_for_symbols(store(), version_map(), stream_ids, snapshots_for_symbol, version_query);
+       return get_latest_versions_for_symbols(store(), version_map(), stream_ids, snapshots_for_symbol);
    else
        return get_all_versions_for_symbols(store(), version_map(), stream_ids, snapshots_for_symbol, creation_ts_for_version_symbol);
 }
@@ -511,7 +506,7 @@ VersionedItem PythonVersionStore::write_partitioned_dataframe(
     const std::vector<std::string>& partition_value
     ) {
     ARCTICDB_SAMPLE(WritePartitionedDataFrame, 0)
-    auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id, VersionQuery{});
+    auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id);
     auto version_id = get_next_version_from_key(maybe_prev);
 
     //    TODO: We are not actually partitioning stuff atm, just assuming a single partition is passed for now.
@@ -564,7 +559,7 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
     ARCTICDB_SAMPLE(WriteVersionedMultiKey, 0)
 
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write_versioned_composite_data");
-    auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id, VersionQuery{});
+    auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id);
     auto version_id = get_next_version_from_key(maybe_prev);
     ARCTICDB_DEBUG(log::version(), "write_versioned_composite_data for stream_id: {} , version_id = {}", stream_id, version_id);
     // TODO: Assuming each sub key is always going to have the same version attached to it.
@@ -742,7 +737,7 @@ void PythonVersionStore::write_parallel(
 }
 
 std::unordered_map<VersionId, bool> PythonVersionStore::get_all_tombstoned_versions(const StreamId &stream_id) {
-    return ::arcticdb::get_all_tombstoned_versions(store(), version_map(), stream_id, VersionQuery{});
+    return ::arcticdb::get_all_tombstoned_versions(store(), version_map(), stream_id);
 }
 
 FrameAndDescriptor create_frame(const StreamId& target_id, SegmentInMemory seg, const ReadOptions& read_options) {
@@ -909,7 +904,7 @@ void PythonVersionStore::delete_version(
         const StreamId& stream_id,
         VersionId version_id) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_version");
-    auto result = ::arcticdb::tombstone_version(store(), version_map(), stream_id, version_id, VersionQuery{});
+    auto result = ::arcticdb::tombstone_version(store(), version_map(), stream_id, version_id);
 
     if (!result.keys_to_delete.empty() && !cfg().write_options().delayed_deletes()) {
         delete_tree(result.keys_to_delete, result);
@@ -923,7 +918,7 @@ void PythonVersionStore::delete_version(
 void PythonVersionStore::fix_symbol_trees(const std::vector<StreamId>& symbols) {
     auto snaps = get_master_snapshots_map(store());
     for (const auto& sym : symbols) {
-        auto index_keys_from_symbol_tree = get_all_versions(store(), version_map(), sym, VersionQuery{});
+        auto index_keys_from_symbol_tree = get_all_versions(store(), version_map(), sym);
         for(const auto& [key, map] : snaps[sym]) {
             index_keys_from_symbol_tree.push_back(key);
         }
@@ -941,7 +936,7 @@ void PythonVersionStore::prune_previous_versions(const StreamId& stream_id) {
     const std::shared_ptr<VersionMapEntry>& entry = version_map()->check_reload(
             store(),
             stream_id,
-            LoadParameter{LoadType::LOAD_ALL, LoadObjective::UNDELETED},
+            LoadStrategy{LoadType::LOAD_ALL, LoadObjective::UNDELETED},
             __FUNCTION__);
     storage::check<ErrorCode::E_SYMBOL_NOT_FOUND>(!entry->empty(), "Symbol {} is not found", stream_id);
     auto [latest, deleted] = entry->get_first_index(false);
@@ -952,7 +947,7 @@ void PythonVersionStore::prune_previous_versions(const StreamId& stream_id) {
         return;
     }
 
-    auto previous = ::arcticdb::get_specific_version(store(), version_map(), stream_id, *prev_id, VersionQuery{});
+    auto previous = ::arcticdb::get_specific_version(store(), version_map(), stream_id, *prev_id);
     auto [_, pruned_indexes] = version_map()->tombstone_from_key_or_all(store(), stream_id, previous);
     delete_unreferenced_pruned_indexes(pruned_indexes, *latest).get();
 }
@@ -1109,7 +1104,7 @@ ReadResult PythonVersionStore::read_index(
 }
 
 std::vector<AtomKey> PythonVersionStore::get_version_history(const StreamId& stream_id) {
-    return get_index_and_tombstone_keys(store(), version_map(), stream_id, VersionQuery{});
+    return get_index_and_tombstone_keys(store(), version_map(), stream_id);
 }
 
 void PythonVersionStore::_compact_version_map(const StreamId& id) {

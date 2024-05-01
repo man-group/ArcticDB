@@ -98,8 +98,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def(py::init())
         .def("set_snap_name", &VersionQuery::set_snap_name)
         .def("set_timestamp", &VersionQuery::set_timestamp)
-        .def("set_version", &VersionQuery::set_version)
-        .def("set_iterate_on_failure", &VersionQuery::set_iterate_on_failure);
+        .def("set_version", &VersionQuery::set_version);
 
     py::class_<ReadOptions>(version, "PythonVersionStoreReadOptions")
         .def(py::init())
@@ -671,10 +670,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                 const std::optional<StreamId> & s_id,
                 const std::optional<SnapshotId> & snap_id,
                 const std::optional<bool>& latest,
-                const std::optional<bool>& iterate_on_failure,
                 const std::optional<bool>& skip_snapshots
                 ){
-                 return v.list_versions(s_id, snap_id, latest, iterate_on_failure, skip_snapshots);
+                 return v.list_versions(s_id, snap_id, latest, skip_snapshots);
              },
              py::call_guard<SingleThreadMutexHolder>(), "List all the version ids for this store.")
         .def("_compact_version_map",

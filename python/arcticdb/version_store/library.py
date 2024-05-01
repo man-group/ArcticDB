@@ -1509,7 +1509,6 @@ class Library:
             symbol=symbol,
             snapshot=snapshot,
             latest_only=latest_only,
-            iterate_on_failure=False,
             skip_snapshots=skip_snapshots,
         )
         return {
