@@ -299,7 +299,7 @@ class ModificationFunctions:
     def time_update_upsert(self, rows):
         self.lib.update(f"sym", self.df_update_upsert, upsert=True)
 
-    def time_update_short_wide(self, rows, num_symbols):
+    def time_update_short_wide(self, rows):
         self.lib_short_wide.update("short_wide_sym", self.df_update_short_wide)
 
     def time_append_single(self, rows):
@@ -308,7 +308,7 @@ class ModificationFunctions:
     def time_append_large(self, rows):
         self.lib.append(f"sym", self.df_append_large)
 
-    def time_append_short_wide(self, rows, num_symbols):
+    def time_append_short_wide(self, rows):
         self.lib_short_wide.append("short_wide_sym", self.df_append_short_wide)
 
     def time_delete(self, rows):
