@@ -101,18 +101,15 @@ public:
     ) override;
 
     std::optional<VersionedItem> get_latest_version(
-        const StreamId &stream_id,
-        const VersionQuery& version_query);
+        const StreamId &stream_id);
 
     std::optional<VersionedItem> get_specific_version(
         const StreamId &stream_id,
-        SignedVersionId signed_version_id,
-        const VersionQuery& version_query);
+        SignedVersionId signed_version_id);
 
     std::optional<VersionedItem> get_version_at_time(
         const StreamId& stream_id,
-        timestamp as_of,
-        const VersionQuery& version_query);
+        timestamp as_of);
 
     std::optional<VersionedItem> get_version_from_snapshot(
         const StreamId& stream_id,
