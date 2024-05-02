@@ -26,7 +26,7 @@ inline std::string_view normalization_operation_str(NormalizationOperation opera
 struct StreamDescriptorMismatch : ArcticSpecificException<ErrorCode::E_DESCRIPTOR_MISMATCH>  {
     StreamDescriptorMismatch(const char* preamble, const StreamDescriptor& existing, const StreamDescriptor& new_val, NormalizationOperation operation) :
     ArcticSpecificException(fmt::format("{}: {} \nexisting={}\n new_val={}", preamble, normalization_operation_str(operation),
-                                        fmt::join(existing.fields(), ", "), fmt::join(new_val.fields(), ", "))) {}
+                                        existing.fields(), new_val.fields())) {}
 };
 
 inline IndexDescriptor::Type get_common_index_type(const IndexDescriptor::Type& left, const IndexDescriptor::Type& right) {

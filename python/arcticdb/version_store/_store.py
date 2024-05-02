@@ -149,7 +149,7 @@ def _handle_categorical_columns(symbol, data, throw=True):
 
 
 _BATCH_BAD_ARGS: Dict[Any, Sequence[str]] = {}
-_STREAM_DESCRIPTOR_SPLIT = re.compile(r"(?<=>), ")
+_STREAM_DESCRIPTOR_SPLIT = re.compile(r", (?=FD<)")
 
 
 def _check_batch_kwargs(batch_fun, non_batch_fun, kwargs: Dict):
