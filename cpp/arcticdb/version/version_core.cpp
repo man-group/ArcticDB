@@ -896,8 +896,11 @@ void copy_frame_data_to_buffer(const SegmentInMemory& destination, size_t target
 
     auto type_promotion_error_msg = fmt::format("Can't promote type {} to type {} in field {}",
                                                 src_column.type(), dst_column.type(), destination.field(target_index).name());
-
-    if (trivially_compatible_types(src_column.type(), dst_column.type())) {
+    if (is_empty_type(src_column.type().data_type())) {
+        dst_column.type().visit_tag([&](auto dst_desc_tag) {
+            util::default_initialize<decltype(dst_desc_tag)>(dst_ptr, num_rows * dst_rawtype_size);
+        });
+    } else if (trivially_compatible_types(src_column.type(), dst_column.type())) {
         memcpy(dst_ptr, src_ptr, total_size);
     } else if (has_valid_type_promotion(src_column.type(), dst_column.type())) {
         dst_column.type().visit_tag([&src_ptr, &dst_ptr, &src_column, &type_promotion_error_msg, num_rows] (auto dest_desc_tag) {
