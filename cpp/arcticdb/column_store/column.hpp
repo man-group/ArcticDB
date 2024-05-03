@@ -31,6 +31,8 @@
 #include <numeric>
 #include <optional>
 
+#include <arcticdb/util/cxx17_concepts.hpp>
+
 namespace py = pybind11;
 
 namespace arcticdb {
@@ -700,8 +702,11 @@ public:
     template <
         typename input_tdt,
         typename output_tdt,
-        typename functor>
-    //  requires std::is_invocable_r_v<typename output_tdt::DataTypeTag::raw_type, functor, typename input_tdt::DataTypeTag::raw_type>
+        typename functor,
+        typename = std::enable_if<
+                std::is_invocable_r_v<
+                        typename output_tdt::DataTypeTag::raw_type, functor,
+                        typename input_tdt::DataTypeTag::raw_type>>>
     static void transform(const Column& input_column, Column& output_column, functor&& f) {
         auto input_data = input_column.data();
         initialise_output_column(input_column, output_column);
@@ -718,12 +723,12 @@ public:
             typename left_input_tdt,
             typename right_input_tdt,
             typename output_tdt,
-            typename functor>
-    /*requires std::is_invocable_r_v<
-            typename output_tdt::DataTypeTag::raw_type,
-            functor,
-            typename left_input_tdt::DataTypeTag::raw_type,
-            typename right_input_tdt::DataTypeTag::raw_type>*/
+            typename functor,
+            typename = std::enable_if<std::is_invocable_r_v<
+                typename output_tdt::DataTypeTag::raw_type,
+                functor,
+                typename left_input_tdt::DataTypeTag::raw_type,
+                typename right_input_tdt::DataTypeTag::raw_type>>>
     static void transform(const Column& left_input_column,
                           const Column& right_input_column,
                           Column& output_column,
@@ -782,7 +787,8 @@ public:
 
     template <
             typename input_tdt,
-            typename functor>
+            typename functor,
+            typename = std::enable_if<is_unary_predicate_v<input_tdt, functor>>>
     // std::predicate<typename input_tdt::DataTypeTag::raw_type> functor>
     static void transform(const Column& input_column,
                           util::BitSet& output_bitset,
@@ -808,6 +814,7 @@ public:
             typename right_input_tdt,
             // std::relation<typename left_input_tdt::DataTypeTag::raw_type, typename right_input_tdt::DataTypeTag::raw_type> functor>
             typename functor>
+            //std::enable_if<is_binary_predicate_v<left_input_tdt, right_input_tdt, functor>>>
     static void transform(const Column& left_input_column,
                           const Column& right_input_column,
                           util::BitSet& output_bitset,
@@ -892,7 +899,6 @@ public:
     }
 
 private:
-
     position_t last_offset() const;
     void update_offsets(size_t nbytes);
     bool is_scalar() const;
