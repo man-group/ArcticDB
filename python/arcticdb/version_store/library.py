@@ -927,7 +927,7 @@ class Library:
         )
 
     def sort_and_finalize_staged_data(
-        self, symbol: str, mode: Optional[StagedDataFinalizeMethod] = StagedDataFinalizeMethod.WRITE
+        self, symbol: str, mode: Optional[StagedDataFinalizeMethod] = StagedDataFinalizeMethod.WRITE, prune_previous_versions: Optional[bool] = False
     ):
         """
         sort_merge will sort and finalize staged data. This differs from `finalize_staged_data` in that it
@@ -943,13 +943,16 @@ class Library:
             Finalise mode. Valid options are WRITE or APPEND. Write collects the staged data and writes them to a
             new timeseries. Append collects the staged data and appends them to the latest version.
 
+        prune_previous_versions : `Optional[bool]`, default=False
+            Remove previous versions from version list. Uses library default if left as None.
+
         See Also
         --------
         write
             Documentation on the ``staged`` parameter explains the concept of staged data in more detail.
         """
 
-        self._nvs.version_store.sort_merge(symbol, None, mode == StagedDataFinalizeMethod.APPEND, False)
+        self._nvs.version_store.sort_merge(symbol, None, mode == StagedDataFinalizeMethod.APPEND, prune_previous_versions=prune_previous_versions)
 
     def get_staged_symbols(self) -> List[str]:
         """
@@ -1723,7 +1726,7 @@ class Library:
         """
         return self._nvs.is_symbol_fragmented(symbol, segment_size)
 
-    def defragment_symbol_data(self, symbol: str, segment_size: Optional[int] = None) -> VersionedItem:
+    def defragment_symbol_data(self, symbol: str, segment_size: Optional[int] = None, prune_previous_versions:bool = False) -> VersionedItem:
         """
         Compacts fragmented segments by merging row-sliced segments (https://docs.arcticdb.io/technical/on_disk_storage/#data-layer).
         This method calls `is_symbol_fragmented` to determine whether to proceed with the defragmentation operation.
@@ -1781,7 +1784,7 @@ class Library:
         Config map setting - SymbolDataCompact.SegmentCount will be replaced by a library setting
         in the future. This API will allow overriding the setting as well.
         """
-        return self._nvs.defragment_symbol_data(symbol, segment_size)
+        return self._nvs.defragment_symbol_data(symbol, segment_size, prune_previous_versions)
 
     @property
     def name(self):
