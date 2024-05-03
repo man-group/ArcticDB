@@ -540,6 +540,37 @@ def test_delete_date_range_with_strings(version_store_factory, index_start):
     assert_frame_equal(vit.data, df)
 
 
+@pytest.mark.parametrize("prune_previous_versions", [True, False])
+def test_delete_date_range_with_prune_previous(lmdb_version_store, prune_previous_versions):
+    lib = lmdb_version_store
+    symbol = "delete_daterange"
+    periods = 100
+    idx = pd.date_range("1970-01-01", periods=periods, freq="D")
+    df = pd.DataFrame({"a": [random_string(10) for _ in range(len(idx))]}, index=idx)
+    lib.write(symbol, df)
+
+    start = random.randrange(9, periods - 2)
+    end = random.randrange(start, periods - 1)
+
+    start_time = idx[start]
+    end_time = idx[end]
+
+    range_to_delete = pd.date_range(start=start_time, end=end_time)
+    lib.delete(symbol, date_range=range_to_delete, prune_previous_versions=prune_previous_versions)
+    old_df = df
+    df = df.drop(df.index[start : end + 1])  # Arctic is end date inclusive
+
+    vit = lib.read(symbol)
+    assert_frame_equal(vit.data, df)
+
+    versions = [version["version"] for version in lib.list_versions(symbol)]
+    if prune_previous_versions:
+        assert len(versions) == 1 and versions[0] == 1
+    else:
+        assert len(versions) == 2
+        assert_frame_equal(lib.read(symbol, as_of=0).data, old_df)
+
+
 @pytest.mark.parametrize("map_timeout", MAP_TIMEOUTS)
 def test_delete_date_range_remove_everything(version_store_factory, map_timeout):
     with config_context("VersionMap.ReloadInterval", map_timeout):

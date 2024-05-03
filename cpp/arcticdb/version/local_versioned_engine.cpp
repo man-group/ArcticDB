@@ -490,7 +490,7 @@ std::shared_ptr<DeDupMap> LocalVersionedEngine::get_de_dup_map(
 }
 
 
-VersionedItem LocalVersionedEngine::sort_index(const StreamId& stream_id, bool dynamic_schema) {
+VersionedItem LocalVersionedEngine::sort_index(const StreamId& stream_id, bool dynamic_schema, bool prune_previous_versions) {
     auto maybe_prev = get_latest_undeleted_version(store(), version_map(), stream_id, VersionQuery{});
     util::check(maybe_prev.has_value(), "Cannot delete from non-existent symbol {}", stream_id);
     auto version_id = get_next_version_from_key(*maybe_prev);
@@ -522,7 +522,7 @@ VersionedItem LocalVersionedEngine::sort_index(const StreamId& stream_id, bool d
         bucketize_dynamic);
 
     auto versioned_item = pipelines::index::index_and_version(index, store(), time_series, std::move(slice_and_keys), stream_id, version_id).get();
-    version_map()->write_version(store(), versioned_item.key_, maybe_prev);
+    write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, maybe_prev);
     ARCTICDB_DEBUG(log::version(), "sorted index of stream_id: {} , version_id: {}", stream_id, version_id);
     return versioned_item;
 }
@@ -530,15 +530,15 @@ VersionedItem LocalVersionedEngine::sort_index(const StreamId& stream_id, bool d
 VersionedItem LocalVersionedEngine::delete_range_internal(
     const StreamId& stream_id,
     const UpdateQuery & query,
-    bool dynamic_schema) {
+    const DeleteRangeOptions& option) {
     auto maybe_prev = get_latest_undeleted_version(store(), version_map(), stream_id, VersionQuery{});
     util::check(maybe_prev.has_value(), "Cannot delete from non-existent symbol {}", stream_id);
     auto versioned_item = delete_range_impl(store(),
                                             *maybe_prev,
                                             query,
                                             get_write_options(),
-                                            dynamic_schema);
-    version_map()->write_version(store(), versioned_item.key_, maybe_prev);
+                                            option.dynamic_schema_);
+    write_version_and_prune_previous(option.prune_previous_versions_, versioned_item.key_, maybe_prev);
     return versioned_item;
 }
 
@@ -1011,7 +1011,7 @@ bool LocalVersionedEngine::is_symbol_fragmented(const StreamId& stream_id, std::
     return is_symbol_fragmented_impl(pre_defragmentation_info.segments_need_compaction);
 }
 
-VersionedItem LocalVersionedEngine::defragment_symbol_data(const StreamId& stream_id, std::optional<size_t> segment_size) {
+VersionedItem LocalVersionedEngine::defragment_symbol_data(const StreamId& stream_id, std::optional<size_t> segment_size, bool prune_previous_versions) {
     log::version().info("Defragmenting data for symbol {}", stream_id);
 
     // Currently defragmentation only for latest version - is there a use-case to allow compaction for older data?
@@ -1023,7 +1023,7 @@ VersionedItem LocalVersionedEngine::defragment_symbol_data(const StreamId& strea
             store(), stream_id, update_info, options,
             segment_size.has_value() ? *segment_size : options.segment_row_size);
 
-    version_map_->write_version(store_, versioned_item.key_, update_info.previous_index_key_);
+    write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, update_info.previous_index_key_);
 
     if(cfg_.symbol_list())
         symbol_list().add_symbol(store_, stream_id, versioned_item.key_.version_id());
@@ -1667,14 +1667,10 @@ std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> Local
 VersionedItem LocalVersionedEngine::sort_merge_internal(
     const StreamId& stream_id,
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
-    bool append,
-    bool convert_int_to_float,
-    bool via_iteration,
-    bool sparsify
-    ) {
+    const SortMergeOptions& option) {
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id, VersionQuery{});
-    auto versioned_item = sort_merge_impl(store_, stream_id, user_meta, update_info, append, convert_int_to_float, via_iteration, sparsify);
-    version_map()->write_version(store(), versioned_item.key_, update_info.previous_index_key_);
+    auto versioned_item = sort_merge_impl(store_, stream_id, user_meta, update_info, option.append_, option.convert_int_to_float_, option.via_iteration_, option.sparsify_);
+    write_version_and_prune_previous(option.prune_previous_versions_, versioned_item.key_, update_info.previous_index_key_);
     return versioned_item;
 }
 

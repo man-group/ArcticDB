@@ -238,6 +238,26 @@ def arctic_library(arctic_client, lib_name):
     return arctic_client.create_library(lib_name)
 
 
+@pytest.fixture(
+    scope="function",
+    params=[
+        "lmdb",
+        "mem",
+        pytest.param("real_s3", marks=REAL_S3_TESTS_MARK),
+    ],
+)
+def basic_arctic_client(request, encoding_version):
+    storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage")
+    ac = storage_fixture.create_arctic(encoding_version=encoding_version)
+    assert not ac.list_libraries()
+    return ac
+
+
+@pytest.fixture
+def basic_arctic_library(basic_arctic_client, lib_name):
+    return basic_arctic_client.create_library(lib_name)
+
+
 # endregion
 # region ============================ `NativeVersionStore` Fixture Factories ============================
 @pytest.fixture
