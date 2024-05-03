@@ -2198,14 +2198,17 @@ class NativeVersionStore:
             end-inclusive.
             If not provided then all versions of the symbol will be removed in their entirety (unless accessible via at
             least one snapshot).
+        prune_previous_versions : `Optional[bool]`, default=False
+            Remove previous versions from version list. Uses library default if left as None.
         """
         if date_range is not None:
             dynamic_schema = self.resolve_defaults(
                 "dynamic_schema", self._lib_cfg.lib_desc.version.write_options, False, **kwargs
             )
+            prune_previous_versions = _assume_false("prune_previous_versions", kwargs)
             update_query = _PythonVersionStoreUpdateQuery()
             update_query.row_filter = _normalize_dt_range(date_range)
-            self.version_store.delete_range(symbol, update_query, dynamic_schema)
+            self.version_store.delete_range(symbol, update_query, dynamic_schema, prune_previous_versions)
 
         else:
             self.version_store.delete(symbol)
@@ -2743,7 +2746,7 @@ class NativeVersionStore:
         """
         return self.version_store.is_symbol_fragmented(symbol, segment_size)
 
-    def defragment_symbol_data(self, symbol: str, segment_size: Optional[int] = None) -> VersionedItem:
+    def defragment_symbol_data(self, symbol: str, segment_size: Optional[int] = None, prune_previous_versions: Optional[bool] = False) -> VersionedItem:
         """
         Compacts fragmented segments by merging row-sliced segments (https://docs.arcticdb.io/technical/on_disk_storage/#data-layer).
         This method calls `is_symbol_fragmented` to determine whether to proceed with the defragmentation operation.
@@ -2766,6 +2769,8 @@ class NativeVersionStore:
             If parameter is not provided, library option - "segment_row_size" will be used
             Note that no. of rows per segment, after compaction, may exceed the target.
             It is for achieving smallest no. of segment after compaction. Please refer to below example for further explantion.
+        prune_previous_versions : `Optional[bool]`, default=False
+            Remove previous versions from version list. Uses library default if left as None.
 
         Returns
         -------
@@ -2804,7 +2809,7 @@ class NativeVersionStore:
         if self._lib_cfg.lib_desc.version.write_options.bucketize_dynamic:
             raise ArcticDbNotYetImplemented(f"Support for library with 'bucketize_dynamic' ON is not implemented yet")
 
-        result = self.version_store.defragment_symbol_data(symbol, segment_size)
+        result = self.version_store.defragment_symbol_data(symbol, segment_size, prune_previous_versions)
         return VersionedItem(
             symbol=result.symbol,
             library=self._library.library_path,

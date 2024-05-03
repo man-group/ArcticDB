@@ -128,7 +128,10 @@ def test_floats_to_nans(lmdb_version_store_dynamic_schema):
     assert_frame_equal(vit.data, df)
 
 
-def test_sort_merge_write(basic_store):
+@pytest.mark.parametrize("prune_previous_versions", [True, False])
+def test_write_parallel_sort_merge(basic_arctic_library, prune_previous_versions):
+    lib = basic_arctic_library
+
     num_rows_per_day = 10
     num_days = 10
     num_columns = 8
@@ -150,17 +153,23 @@ def test_sort_merge_write(basic_store):
         dt = dt + datetime.timedelta(days=1)
 
     random.shuffle(dataframes)
+    lib.write(symbol, dataframes[0])
     for d in dataframes:
-        basic_store.write(symbol, d, parallel=True)
-    basic_store.version_store.sort_merge(symbol)
-    vit = basic_store.read(symbol)
+        lib.write(symbol, d, staged=True)
+    lib.sort_and_finalize_staged_data(symbol, prune_previous_versions=prune_previous_versions)
+    vit = lib.read(symbol)
     df.sort_index(axis=1, inplace=True)
     result = vit.data
     result.sort_index(axis=1, inplace=True)
     assert_frame_equal(vit.data, df)
+    if prune_previous_versions:
+        assert 0 not in [version["version"] for version in lib._nvs.list_versions(symbol)]
+    else:
+        assert_frame_equal(lib.read(symbol, as_of=0).data, dataframes[0])
 
 
-def test_sort_merge_append(basic_store_dynamic_schema):
+@pytest.mark.parametrize("prune_previous_versions", [True, False])
+def test_sort_merge_append(basic_store_dynamic_schema, prune_previous_versions):
     lib = basic_store_dynamic_schema
     num_rows_per_day = 10
     num_days = 10
@@ -191,17 +200,30 @@ def test_sort_merge_append(basic_store_dynamic_schema):
         if idx_dataframe == half_way:
             break
 
+    old_dataframes = dataframes[: int(half_way)]
     dataframes = dataframes[int(half_way) :]
     random.shuffle(dataframes)
     for d in dataframes:
         lib.write(symbol, d, parallel=True)
 
-    lib.version_store.sort_merge(symbol, None, True)
+    lib.version_store.sort_merge(symbol, None, True, prune_previous_versions=prune_previous_versions)
     vit = lib.read(symbol)
     df.sort_index(axis=1, inplace=True)
     result = vit.data
     result.sort_index(axis=1, inplace=True)
     assert_frame_equal(vit.data, df)
+
+    versions = [version["version"] for version in lib.list_versions(symbol)]
+    if prune_previous_versions:
+        assert len(versions) == 1 and versions[0] == int(half_way)
+    else:
+        assert len(versions) == int(half_way) + 1
+        for version in range(int(half_way)):
+            result = lib.read(symbol, as_of=version).data
+            result.sort_index(axis=1, inplace=True)
+            df = pd.concat(old_dataframes[0 : version+1])
+            df.sort_index(axis=1, inplace=True)
+            assert_frame_equal(result, df)
 
 
 def test_datetimes_to_nats(lmdb_version_store_dynamic_schema):
