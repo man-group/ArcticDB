@@ -21,32 +21,31 @@ Let's revisit the structures that ArcticDB provides for organising data, illustr
 The object stores available will typically be decided by external factors such as
 
 * Environment: prod/uat/research
-* Permissions: enviroments that grants/deny read/write permission to different groups of users/systems
+* Permissions: enviroments that grant/deny read/write permission to different groups of users/systems
 * Accounting: different cloud buckets may be charged to different internal accounts
 * Storage Quotas: different amounts of storage may be allocated for different purposes
-* Storage Performance: faster/slower storage according to requirements and cost
+* Storage Performance: faster/slower storage for different applications according to requirements and cost
 
-So we assume here that this the the part of the data organisation that is decided for such reasons and beyond the scope of these guidelines.
-
-ArcticDB can handle a large number of libraries per object store - up to 100,000 is perfectly reasonable.
 
 ### Library
 
-A library groups together a set of related data. Typically its primary purpose is the help catalog the data - well named/documented libraries help people find the data they need.
+ArcticDB can handle a large number of libraries per object store - up to 100,000 is perfectly reasonable.
+
+A library groups together a set of related data. Typically its primary purpose is to help catalog the data - well named/documented libraries help people find the data they need.
 
 ### Symbol
 
 The symbol is the base unit of storage in ArcticDB. Each symbol is a DataFrame and has optimised indexing on the columns and the index.
 
-So the choice of how the use the (symbol, columns, index) is important to how the system will perform. It is also the full key to access a specific single data item from a DataFrame (including the version, when needed).
+So the choice of how to use the (symbol, columns, index) is important to how the system will perform. It is also the full key to access a specific single data item from a DataFrame (including the version, when needed).
 
 ### Versions
 
-Each symbol gets a new version every time it is modified. A consideration of how versions will be treated is a key choice - in particular it will have a big impact how much storage is used. The most common choices are:
+Each symbol gets a new version every time it is modified. A consideration of how versions will be treated is a key design choice - in particular it will have a big impact how much storage is used. The most common choices are:
 
 * Keep only the latest versions. Delete older versions either with `prune_previous_version` or in a background process (see [Enterprise Features](#enterprise-features)).
 * Keep key versions only. Often implemented using [snapshots](snapshots.md).
-* Keep all versions. This can use alot of storage if the data modifications are frequent but is very powerful for fully archiving the data.
+* Keep all versions. This can use large amounts of storage if the data modifications are frequent but is very powerful for fully archiving the data.
 
 
 ## System Design Concerns
@@ -62,15 +61,15 @@ This is usually a one-off process to get a system up and running. Ideally the sa
 Regular updates to the data are the norm for most systems. We must consider in our design
 
 * Delivery format (the format that the data source uses) vs storage format of the data. The trade-offs are
-  - storing data in a format close to delivery format makes it easier to reconcile with the source
-  - the delivery format is often not the best format for the downstream
+  * storing data in a format close to delivery format makes it easier to reconcile with the source
+  * the delivery format is often not the best format for downstream processes
 * Frequency of data updates
 * Storage growth characteristics over time
 * System performance over time
 
 ### Efficient Downstream Access
 
-Often the data is accessed by downstream users and systems much more frequently than it is updated. In that case it is worth organising data to optimise downstream access.
+Often the data is accessed by downstream users and systems much more frequently than it is updated. If that is the case, it is worth organising data to optimise downstream access performance.
 
 ### Data Problems: Investigation and Remediation
 
@@ -103,14 +102,14 @@ It is worth understanding and bearing in mind these properties of the system
 #### Indices
 
 * The primary and performant index is the first DataFrame row index.
-* The columns names are a performant index.
+* The columns names are also a performant index.
 * There are no secondary row or column indices.
 * The symbol-list is a good index when compacted.
 * The version-list is a good index when compacted.
 
 #### Data
 
-* DataFrame data is always stored columnar and compressed. ArcticDB is optimised read and write these.
+* DataFrame data is always stored columnar and compressed. ArcticDB is optimised to read and write these.
 * DataFrame data is tiled and stored in objects (default is 100,000 rows x 127 cols)
 * Data in different DataFrames is stored in different objects
 
@@ -122,27 +121,27 @@ It is worth understanding and bearing in mind these properties of the system
 
 ### Plan your Version Management
 
-* In particular plan which versions to keep and how to delete the other
+* In particular plan which versions to keep and how to delete the others
 * Snapshots are useful for version management
 * There are interactions between snapshots and versions: snapshots keep versions from being deleted
 
-Please see the [snapshots documentation](snapshots.md) and [snapshots notebook](../notebooks/ArcticDB_demo_snapshots.ipynb).
+Please see the [snapshots documentation](snapshots.md) and [snapshots notebook](../notebooks/ArcticDB_demo_snapshots.ipynb) for more details.
 
 
 ### Lots of Small Appends or Updates Can Fragment Your Data
 
-Append and Update are efficient because they always add new chunks of data rather than reorganising the existing data (actually update will reorganise but only where necessary which is usually a small amount).
+Append and Update are efficient because they always add new chunks of data rather than reorganising the existing data (actually update will reorganise but only where necessary which is typically only a small amount).
 
 This means that lots of small appends or updates can result in lots of small data chunks, which makes reads slower.
 
-You can defragment a symbol manually using the [defragment_symbol_data](../api/library.md) library function. Altnernatively the [Enterprise Features](#enterprise-features) offer background processes that will take care of defgramentation for you.
+You can defragment a symbol manually using the [defragment_symbol_data](../api/library.md) library function. Altnernatively the [Enterprise Features](#enterprise-features) offer background processes that will take care of defragmentation for you.
 
 
 ## Examples Based on Market Data
 
 ### Seperate Symbol for Each Security
 
-The data for a single security would be a timeseries of market data. In this set of sample data this would be all the data for AAPL.
+The data for a single security would be a timeseries of market data. In this set of sample data this would be all the price data for AAPL.
 
 ![](../images/MarketData5MinBarsSingleSec.png)
 
@@ -168,7 +167,7 @@ The data for all securities is merged together into a single symbol.
 
 ![](../images/MarketData5MinBarsAllSecs.png)
 
-The security identifier is included as an extra index column.
+The security identifier is included as an extra index column. Note that DataFrames with a Pandas MultiIndex will round trip correctly, which is useful. However the high performance ArcticDB indexing is only on the primary index level.
 
 #### Pros
 
@@ -177,7 +176,7 @@ The security identifier is included as an extra index column.
 
 #### Cons
 
-* The update process is more complicated. Probably needs a read, modify, write sequence of operations (see [Future Features](#planned-future-features-and-improvements))
+* The update process is more complicated. Probably needs a read, modify, write sequence of operations (although see [Future Features](#planned-future-features-and-improvements))
 * Time index for raw data may not match between securities.
 
 The data is easier to use with [time index alignment](#time-index-alignment).
