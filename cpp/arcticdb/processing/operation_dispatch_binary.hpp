@@ -105,8 +105,10 @@ VariantData binary_membership(const ColumnWithStrings& column_with_strings, Valu
                     }
                 });
             } else {
-                util::raise_rte("Cannot check membership of {} in set of {} (possible categorical?)",
-                                column_with_strings.column_->type(), value_set.base_type());
+                util::raise_rte("Cannot check membership of {} {} in set of {} (possible categorical?)",
+                                column_with_strings.column_name_.value,
+                                get_user_friendly_type_string(column_with_strings.column_->type()),
+                                get_user_friendly_type_string(value_set.base_type()));
             }
         });
     });
@@ -170,7 +172,11 @@ VariantData binary_comparator(const ColumnWithStrings& left, const ColumnWithStr
                     return func(static_cast<typename comp::left_type>(left_value), static_cast<typename comp::right_type>(right_value));
                 });
             } else {
-                util::raise_rte("Cannot compare {} to {} (possible categorical?)", left.column_->type(), right.column_->type());
+                util::raise_rte("Cannot compare {} {} to {} {} (possible categorical?)",
+                                left.column_name_.value,
+                                get_user_friendly_type_string(left.column_->type()),
+                                right.column_name_.value,
+                                get_user_friendly_type_string(right.column_->type()));
             }
         });
     });
@@ -237,7 +243,10 @@ VariantData binary_comparator(const ColumnWithStrings& column_with_strings, cons
                 });
 
             } else {
-                util::raise_rte("Cannot compare {} to {} (possible categorical?)", column_with_strings.column_->type(), val.type());
+                util::raise_rte("Cannot compare {} {} to {} (possible categorical?)",
+                                column_with_strings.column_name_.value,
+                                get_user_friendly_type_string(column_with_strings.column_->type()),
+                                get_user_friendly_type_string(val.type()));
             }
         });
     });
@@ -274,19 +283,24 @@ VariantData visit_binary_comparator(const VariantData& left, const VariantData& 
 }
 
 template <typename Func>
+inline std::string binary_operation_column_name(std::string_view left_column, Func& func, std::string_view right_column) {
+    return fmt::format("({} {} {})", left_column, func, right_column);
+}
+
+template <typename Func>
 VariantData binary_operator(const Value& left, const Value& right, Func&& func) {
     auto output_value = std::make_unique<Value>();
 
     details::visit_type(left.type().data_type(), [&](auto left_tag) {
         using left_type_info = ScalarTypeInfo<decltype(left_tag)>;
         if constexpr(!is_numeric_type(left_type_info::data_type)) {
-            util::raise_rte("Non-numeric type provided to binary operation: {}", left.type());
+            util::raise_rte("Non-numeric type provided to binary operation: {}", get_user_friendly_type_string(left.type()));
         }
         auto left_value = *reinterpret_cast<const typename left_type_info::RawType*>(left.data_);
         details::visit_type(right.type().data_type(), [&](auto right_tag) {
             using right_type_info = ScalarTypeInfo<decltype(right_tag)>;
             if constexpr(!is_numeric_type(right_type_info::data_type)) {
-                util::raise_rte("Non-numeric type provided to binary operation: {}", right.type());
+                util::raise_rte("Non-numeric type provided to binary operation: {}", get_user_friendly_type_string(right.type()));
             }
             auto right_value = *reinterpret_cast<const typename right_type_info::RawType*>(right.data_);
             using TargetType = typename type_arithmetic_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType, std::remove_reference_t<Func>>::type;
@@ -298,53 +312,58 @@ VariantData binary_operator(const Value& left, const Value& right, Func&& func) 
 }
 
 template <typename Func>
-VariantData binary_operator(const Column& left, const Column& right, Func&& func) {
+VariantData binary_operator(const ColumnWithStrings& left, const ColumnWithStrings& right, Func&& func) {
     schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-            !is_empty_type(left.type().data_type()) && !is_empty_type(right.type().data_type()),
+            !is_empty_type(left.column_->type().data_type()) && !is_empty_type(right.column_->type().data_type()),
             "Empty column provided to binary operator");
     std::unique_ptr<Column> output_column;
 
-    details::visit_type(left.type().data_type(), [&](auto left_tag) {
+    details::visit_type(left.column_->type().data_type(), [&](auto left_tag) {
         using left_type_info = ScalarTypeInfo<decltype(left_tag)>;
         if constexpr(!is_numeric_type(left_type_info::data_type)) {
-            util::raise_rte("Non-numeric type provided to binary operation: {}", left.type());
+            util::raise_rte("Non-numeric column provided to binary operation: {} {}",
+                            left.column_name_.value,
+                            get_user_friendly_type_string(left.column_->type()));
         }
-        details::visit_type(right.type().data_type(), [&](auto right_tag) {
+        details::visit_type(right.column_->type().data_type(), [&](auto right_tag) {
             using right_type_info = ScalarTypeInfo<decltype(right_tag)>;
             if constexpr(!is_numeric_type(right_type_info::data_type)) {
-                util::raise_rte("Non-numeric type provided to binary operation: {}", right.type());
+                util::raise_rte("Non-numeric column provided to binary operation: {} {}",
+                                right.column_name_.value,
+                                get_user_friendly_type_string(right.column_->type()));
             }
             using TargetType = typename type_arithmetic_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType, std::remove_reference_t<decltype(func)>>::type;
             constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
             output_column = std::make_unique<Column>(make_scalar_type(output_data_type), true);
             Column::transform<typename left_type_info::TDT, typename right_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
-                    left,
-                    right,
+                    *(left.column_),
+                    *(right.column_),
                     *output_column,
                     [&func] (auto left_value, auto right_value) -> TargetType {
                         return func.apply(left_value, right_value);
                     });
         });
     });
-    return VariantData(ColumnWithStrings(std::move(output_column)));
+    return VariantData(ColumnWithStrings(std::move(output_column), ColumnName(binary_operation_column_name(left.column_name_.value, func, right.column_name_.value))));
 }
 
 template <typename Func, bool arguments_reversed = false>
-VariantData binary_operator(const Column& col, const Value& val, Func&& func) {
+VariantData binary_operator(const ColumnWithStrings& col, const Value& val, Func&& func) {
     schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-            !is_empty_type(col.type().data_type()),
+            !is_empty_type(col.column_->type().data_type()),
             "Empty column provided to binary operator");
     std::unique_ptr<Column> output_column;
+    std::string column_name;
 
-    details::visit_type(col.type().data_type(), [&](auto col_tag) {
+    details::visit_type(col.column_->type().data_type(), [&](auto col_tag) {
         using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
         if constexpr(!is_numeric_type(col_type_info::data_type)) {
-            util::raise_rte("Non-numeric type provided to binary operation: {}", col.type());
+            util::raise_rte("Non-numeric column provided to binary operation: {} {}", col.column_name_.value, get_user_friendly_type_string(col.column_->type()));
         }
         details::visit_type(val.type().data_type(), [&](auto val_tag) {
             using val_type_info = ScalarTypeInfo<decltype(val_tag)>;
             if constexpr(!is_numeric_type(val_type_info::data_type)) {
-                util::raise_rte("Non-numeric type provided to binary operation: {}", val.type());
+                util::raise_rte("Non-numeric type provided to binary operation with column {}: {}", col.column_name_.value, get_user_friendly_type_string(val.type()));
             }
             auto raw_value = *reinterpret_cast<const typename val_type_info::RawType*>(val.data_);
             using TargetType = typename type_arithmetic_promoted_type<typename col_type_info::RawType, typename val_type_info::RawType, std::remove_reference_t<decltype(func)>>::type;
@@ -353,24 +372,26 @@ VariantData binary_operator(const Column& col, const Value& val, Func&& func) {
                 constexpr auto output_data_type = data_type_from_raw_type<ReversedTargetType>();
                 output_column = std::make_unique<Column>(make_scalar_type(output_data_type), true);
                 Column::transform<typename col_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
-                        col,
+                        *(col.column_),
                         *output_column,
-                        [&func, raw_value](auto input_value) -> ReversedTargetType {
-                    return func.apply(raw_value, input_value);
+                        [&func, &col, &column_name, raw_value](auto input_value) -> ReversedTargetType {
+                            column_name = binary_operation_column_name(fmt::format("{}", raw_value), func, col.column_name_.value);
+                            return func.apply(raw_value, input_value);
                 });
             } else {
                 constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
                 output_column = std::make_unique<Column>(make_scalar_type(output_data_type), true);
                 Column::transform<typename col_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
-                        col,
+                        *(col.column_),
                         *output_column,
-                        [&func, raw_value](auto input_value) -> TargetType {
-                    return func.apply(input_value, raw_value);
+                        [&func, &col, &column_name, raw_value](auto input_value) -> TargetType {
+                            column_name = binary_operation_column_name(col.column_name_.value, func, fmt::format("{}", raw_value));
+                            return func.apply(input_value, raw_value);
                 });
             }
         });
     });
-    return {ColumnWithStrings(std::move(output_column))};
+    return {ColumnWithStrings(std::move(output_column), ColumnName(column_name))};
 }
 
 template<typename Func>
@@ -380,13 +401,13 @@ VariantData visit_binary_operator(const VariantData& left, const VariantData& ri
 
     return std::visit(util::overload {
         [&] (const ColumnWithStrings& l, const std::shared_ptr<Value>& r) ->VariantData  {
-            return binary_operator<decltype(func)>(*(l.column_), *r, std::forward<decltype(func)>(func));
+            return binary_operator<decltype(func)>(l, *r, std::forward<decltype(func)>(func));
             },
             [&] (const ColumnWithStrings& l, const ColumnWithStrings& r)  ->VariantData {
-            return binary_operator<decltype(func)>(*(l.column_), *(r.column_), std::forward<decltype(func)>(func));
+            return binary_operator<decltype(func)>(l, r, std::forward<decltype(func)>(func));
             },
             [&](const std::shared_ptr<Value>& l, const ColumnWithStrings& r) ->VariantData {
-            return binary_operator<decltype(func), true>(*(r.column_), *l, std::forward<decltype(func)>(func));
+            return binary_operator<decltype(func), true>(r, *l, std::forward<decltype(func)>(func));
             },
             [&] (const std::shared_ptr<Value>& l, const std::shared_ptr<Value>& r) -> VariantData {
             return binary_operator<decltype(func)>(*l, *r, std::forward<decltype(func)>(func));

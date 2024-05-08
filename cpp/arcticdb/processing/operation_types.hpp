@@ -520,3 +520,182 @@ bool operator()(T t, const ankerl::unordered_dense::set<U>& u) const {
 };
 
 } //namespace arcticdb
+
+namespace fmt {
+template<>
+struct formatter<arcticdb::AbsOperator> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    constexpr auto format(const arcticdb::AbsOperator&, FormatContext &ctx) const {
+        return fmt::format_to(ctx.out(), "ABS");
+    }
+};
+
+template<>
+struct formatter<arcticdb::NegOperator> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    constexpr auto format(const arcticdb::NegOperator&, FormatContext &ctx) const {
+        return fmt::format_to(ctx.out(), "-");
+    }
+};
+
+template<>
+struct formatter<arcticdb::IsNullOperator> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    constexpr auto format(const arcticdb::IsNullOperator&, FormatContext &ctx) const {
+        return fmt::format_to(ctx.out(), "ISNULL");
+    }
+};
+
+template<>
+struct formatter<arcticdb::NotNullOperator> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    constexpr auto format(const arcticdb::NotNullOperator&, FormatContext &ctx) const {
+        return fmt::format_to(ctx.out(), "NOTNULL");
+    }
+};
+
+template<>
+struct formatter<arcticdb::PlusOperator> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    constexpr auto format(const arcticdb::PlusOperator&, FormatContext &ctx) const {
+        return fmt::format_to(ctx.out(), "+");
+    }
+};
+
+template<>
+struct formatter<arcticdb::MinusOperator> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    constexpr auto format(const arcticdb::MinusOperator&, FormatContext &ctx) const {
+        return fmt::format_to(ctx.out(), "-");
+    }
+};
+
+template<>
+struct formatter<arcticdb::TimesOperator> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    constexpr auto format(const arcticdb::TimesOperator&, FormatContext &ctx) const {
+        return fmt::format_to(ctx.out(), "*");
+    }
+};
+
+template<>
+struct formatter<arcticdb::DivideOperator> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    constexpr auto format(const arcticdb::DivideOperator&, FormatContext &ctx) const {
+        return fmt::format_to(ctx.out(), "/");
+    }
+};
+
+template<>
+struct formatter<arcticdb::EqualsOperator> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    constexpr auto format(const arcticdb::EqualsOperator&, FormatContext &ctx) const {
+        return fmt::format_to(ctx.out(), "=");
+    }
+};
+
+template<>
+struct formatter<arcticdb::NotEqualsOperator> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    constexpr auto format(const arcticdb::NotEqualsOperator&, FormatContext &ctx) const {
+        return fmt::format_to(ctx.out(), "!=");
+    }
+};
+
+template<>
+struct formatter<arcticdb::LessThanOperator> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    constexpr auto format(const arcticdb::LessThanOperator&, FormatContext &ctx) const {
+        return fmt::format_to(ctx.out(), "<");
+    }
+};
+
+template<>
+struct formatter<arcticdb::LessThanEqualsOperator> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    constexpr auto format(const arcticdb::LessThanEqualsOperator&, FormatContext &ctx) const {
+        return fmt::format_to(ctx.out(), "<=");
+    }
+};
+
+template<>
+struct formatter<arcticdb::GreaterThanOperator> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    constexpr auto format(const arcticdb::GreaterThanOperator&, FormatContext &ctx) const {
+        return fmt::format_to(ctx.out(), ">");
+    }
+};
+
+template<>
+struct formatter<arcticdb::GreaterThanEqualsOperator> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    constexpr auto format(const arcticdb::GreaterThanEqualsOperator&, FormatContext &ctx) const {
+        return fmt::format_to(ctx.out(), ">=");
+    }
+};
+
+template<>
+struct formatter<arcticdb::IsInOperator> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    constexpr auto format(const arcticdb::IsInOperator&, FormatContext &ctx) const {
+        return fmt::format_to(ctx.out(), "IN");
+    }
+};
+
+template<>
+struct formatter<arcticdb::IsNotInOperator> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    constexpr auto format(const arcticdb::IsNotInOperator&, FormatContext &ctx) const {
+        return fmt::format_to(ctx.out(), "NOT IN");
+    }
+};
+
+} // namespace fmt

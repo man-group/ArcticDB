@@ -14,6 +14,7 @@
 #include <arcticdb/processing/operation_types.hpp>
 #include <arcticdb/pipeline/value.hpp>
 #include <arcticdb/pipeline/value_set.hpp>
+#include <utility>
 
 
 namespace arcticdb {
@@ -42,19 +43,23 @@ class StringPool;
 struct ColumnWithStrings {
     std::shared_ptr<Column> column_;
     const std::shared_ptr<StringPool> string_pool_;
+    ColumnName column_name_;
 
-    explicit ColumnWithStrings(std::unique_ptr<Column>&& col) :
-        column_(std::move(col)) {
+    ColumnWithStrings(std::unique_ptr<Column>&& col, ColumnName col_name) :
+        column_(std::move(col)),
+        column_name_(std::move(col_name)) {
     }
 
-    ColumnWithStrings(Column&& col, std::shared_ptr<StringPool> string_pool) :
+    ColumnWithStrings(Column&& col, std::shared_ptr<StringPool> string_pool, ColumnName col_name) :
         column_(std::make_shared<Column>(std::move(col))),
-        string_pool_(std::move(string_pool)) {
+        string_pool_(std::move(string_pool)),
+        column_name_(std::move(col_name)) {
     }
 
-    ColumnWithStrings(std::shared_ptr<Column> column, const std::shared_ptr<StringPool>& string_pool) :
+    ColumnWithStrings(std::shared_ptr<Column> column, const std::shared_ptr<StringPool>& string_pool, ColumnName col_name) :
         column_(std::move(column)),
-        string_pool_(string_pool) {
+        string_pool_(string_pool),
+        column_name_(std::move(col_name)) {
     }
 
     [[nodiscard]] std::optional<std::string_view> string_at_offset(entity::position_t offset, bool strip_fixed_width_trailing_nulls=false) const;

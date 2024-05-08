@@ -7,7 +7,9 @@
 
 #pragma once
 #include<optional>
+#include <fmt/format.h>
 #include<arcticdb/entity/descriptors.hpp>
+#include <arcticdb/entity/types.hpp>
 
 namespace arcticdb {
 
@@ -38,4 +40,9 @@ namespace entity {
     const proto::descriptors::TypeDescriptor& left,
     const proto::descriptors::TypeDescriptor& right
 );
+
+inline std::string get_user_friendly_type_string(const entity::TypeDescriptor& type) {
+    return is_sequence_type(type.data_type()) ? "TD<type=STRING, dim=0>" : fmt::format("{}", type);
+}
+
 }

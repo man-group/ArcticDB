@@ -116,7 +116,7 @@ void BM_hash_grouping_int(benchmark::State& state) {
     constexpr auto data_type = data_type_from_raw_type<integer>();
     Column column(make_scalar_type(data_type), num_rows, true, false);
     memcpy(column.ptr(), data.data(), num_rows * sizeof(integer));
-    ColumnWithStrings col_with_strings(std::move(column), {});
+    ColumnWithStrings col_with_strings(std::move(column), {}, ColumnName("random_ints"));
 
     grouping::HashingGroupers::Grouper<ScalarTagType<DataTypeTag<data_type>>> grouper;
     grouping::ModuloBucketizer bucketizer(num_buckets);
@@ -157,7 +157,7 @@ void BM_hash_grouping_string(benchmark::State& state) {
         column.set_scalar(idx, ofstr.offset());
     }
 
-    ColumnWithStrings col_with_strings(std::move(column), string_pool);
+    ColumnWithStrings col_with_strings(std::move(column), string_pool, ColumnName("random_strings"));
 
     grouping::HashingGroupers::Grouper<ScalarTagType<DataTypeTag<DataType::UTF_DYNAMIC64>>> grouper;
     grouping::ModuloBucketizer bucketizer(num_buckets);

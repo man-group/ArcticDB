@@ -44,7 +44,7 @@ VariantData unary_operator(const Value& val, Func&& func) {
     details::visit_type(val.type().data_type(), [&](auto val_tag) {
         using type_info = ScalarTypeInfo<decltype(val_tag)>;
         if constexpr (!is_numeric_type(type_info::data_type)) {
-            util::raise_rte("Cannot perform arithmetic on {}", val.type());
+            util::raise_rte("Cannot perform arithmetic on {}", get_user_friendly_type_string(val.type()));
         }
         auto value = *reinterpret_cast<const typename type_info::RawType*>(val.data_);
         using TargetType = typename unary_arithmetic_promoted_type<typename type_info::RawType, std::remove_reference_t<Func>>::type;
@@ -56,36 +56,43 @@ VariantData unary_operator(const Value& val, Func&& func) {
 }
 
 template <typename Func>
-VariantData unary_operator(const Column& col, Func&& func) {
+inline std::string unary_operation_column_name(Func& func, std::string_view column_name) {
+    return fmt::format("{}({})", func, column_name);
+}
+
+template <typename Func>
+VariantData unary_operator(const ColumnWithStrings& col, Func&& func) {
     schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-            !is_empty_type(col.type().data_type()),
+            !is_empty_type(col.column_->type().data_type()),
             "Empty column provided to unary operator");
     std::unique_ptr<Column> output_column;
 
-    details::visit_type(col.type().data_type(), [&](auto col_tag) {
+    details::visit_type(col.column_->type().data_type(), [&](auto col_tag) {
         using type_info = ScalarTypeInfo<decltype(col_tag)>;
         if constexpr (is_numeric_type(type_info::data_type)) {
             using TargetType = typename unary_arithmetic_promoted_type<typename type_info::RawType, std::remove_reference_t<Func>>::type;
             constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
             output_column = std::make_unique<Column>(make_scalar_type(output_data_type), true);
-            Column::transform<typename type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(col,
+            Column::transform<typename type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(*(col.column_),
                                                                                                      *output_column,
                                                                                                      [&func](auto input_value) -> TargetType {
                                                                                                          return func.apply(
                                                                                                                  input_value);
                                                                                                      });
         } else {
-            util::raise_rte("Cannot perform arithmetic on {}", col.type());
+            util::raise_rte("Cannot perform arithmetic on {} {}",
+                            col.column_name_.value,
+                            get_user_friendly_type_string(col.column_->type()));
         }
     });
-    return {ColumnWithStrings(std::move(output_column))};
+    return {ColumnWithStrings(std::move(output_column), ColumnName(unary_operation_column_name(func, col.column_name_.value)))};
 }
 
 template<typename Func>
 VariantData visit_unary_operator(const VariantData& left, Func&& func) {
     return std::visit(util::overload{
         [&] (const ColumnWithStrings& l) -> VariantData {
-            return unary_operator(*(l.column_), std::forward<Func>(func));
+            return unary_operator(l, std::forward<Func>(func));
             },
         [&] (const std::shared_ptr<Value>& l) -> VariantData {
             return unary_operator(*l, std::forward<Func>(func));
