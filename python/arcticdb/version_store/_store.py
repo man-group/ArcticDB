@@ -332,7 +332,7 @@ class NativeVersionStore:
         dynamic_schema = self.resolve_defaults(
             "dynamic_schema", self._lib_cfg.lib_desc.version.write_options, False, **kwargs
         )
-        empty_types = self.resolve_defaults("empty_types", self._lib_cfg.lib_desc.version.write_options, False)
+        empty_types = self.resolve_defaults("empty_types", self._lib_cfg.lib_desc.version.write_options, True)
         try:
             udm = normalize_metadata(metadata) if metadata is not None else None
             opt_custom = self._custom_normalizer.normalize(dataframe)

@@ -283,7 +283,7 @@ def _from_tz_timestamp(ts, tz):
 _range_index_props_are_public = hasattr(RangeIndex, "start")
 
 
-def _normalize_single_index(index, index_names, index_norm, dynamic_strings=None, string_max_len=None, empty_types=False):
+def _normalize_single_index(index, index_names, index_norm, dynamic_strings=None, string_max_len=None, empty_types=True):
     # index: pd.Index or np.ndarray -> np.ndarray
     index_tz = None
     is_empty = len(index) == 0
@@ -581,7 +581,7 @@ class SeriesNormalizer(_PandasNormalizer):
     def __init__(self):
         self._df_norm = DataFrameNormalizer()
 
-    def normalize(self, item, string_max_len=None, dynamic_strings=False, coerce_columns=None, empty_types=False, **kwargs):
+    def normalize(self, item, string_max_len=None, dynamic_strings=False, coerce_columns=None, empty_types=True, **kwargs):
         df, norm = self._df_norm.normalize(
             item.to_frame(),
             dynamic_strings=dynamic_strings,
@@ -805,7 +805,7 @@ class DataFrameNormalizer(_PandasNormalizer):
 
         return df
 
-    def normalize(self, item, string_max_len=None, dynamic_strings=False, coerce_columns=None, empty_types=False, **kwargs):
+    def normalize(self, item, string_max_len=None, dynamic_strings=False, coerce_columns=None, empty_types=True, **kwargs):
         # type: (DataFrame, Optional[int])->NormalizedInput
         norm_meta = NormalizationMetadata()
         norm_meta.df.common.mark = True
@@ -977,7 +977,7 @@ class Pickler(object):
 
 
 class TimeFrameNormalizer(Normalizer):
-    def normalize(self, item, string_max_len=None, dynamic_strings=False, coerce_columns=None, empty_types=False, **kwargs):
+    def normalize(self, item, string_max_len=None, dynamic_strings=False, coerce_columns=None, empty_types=True, **kwargs):
         norm_meta = NormalizationMetadata()
         norm_meta.ts.mark = True
         index_norm = norm_meta.ts.common.index
@@ -1055,7 +1055,7 @@ class CompositeNormalizer(Normalizer):
         self.msg_pack_denorm = MsgPackNormalizer()  # must exist for deserialization
         self.fallback_normalizer = fallback_normalizer
 
-    def _normalize(self, item, string_max_len=None, dynamic_strings=False, coerce_columns=None, empty_types=False, **kwargs):
+    def _normalize(self, item, string_max_len=None, dynamic_strings=False, coerce_columns=None, empty_types=True, **kwargs):
         normalizer = self.get_normalizer_for_type(item)
 
         if not normalizer:
@@ -1105,7 +1105,7 @@ class CompositeNormalizer(Normalizer):
         return None
 
     def normalize(
-        self, item, string_max_len=None, pickle_on_failure=False, dynamic_strings=False, coerce_columns=None, empty_types=False, **kwargs
+        self, item, string_max_len=None, pickle_on_failure=False, dynamic_strings=False, coerce_columns=None, empty_types=True, **kwargs
     ):
         """
         :param item: Item to be normalized to something Arctic Native understands.

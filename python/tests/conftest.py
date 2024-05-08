@@ -523,38 +523,6 @@ def lmdb_version_store_dynamic_schema(
 
 
 @pytest.fixture
-def lmdb_version_store_empty_types_v1(version_store_factory, lib_name):
-    library_name = lib_name + "_v1"
-    return version_store_factory(dynamic_strings=True, empty_types=True, name=library_name)
-
-
-@pytest.fixture
-def lmdb_version_store_empty_types_v2(version_store_factory, lib_name):
-    library_name = lib_name + "_v2"
-    return version_store_factory(
-        dynamic_strings=True, empty_types=True, encoding_version=int(EncodingVersion.V2), name=library_name
-    )
-
-
-@pytest.fixture
-def lmdb_version_store_empty_types_dynamic_schema_v1(version_store_factory, lib_name):
-    library_name = lib_name + "_v1"
-    return version_store_factory(dynamic_strings=True, empty_types=True, dynamic_schema=True, name=library_name)
-
-
-@pytest.fixture
-def lmdb_version_store_empty_types_dynamic_schema_v2(version_store_factory, lib_name):
-    library_name = lib_name + "_v2"
-    return version_store_factory(
-        dynamic_strings=True,
-        empty_types=True,
-        dynamic_schema=True,
-        encoding_version=int(EncodingVersion.V2),
-        name=library_name,
-    )
-
-
-@pytest.fixture
 def lmdb_version_store_delayed_deletes_v1(version_store_factory):
     return version_store_factory(
         delayed_deletes=True, dynamic_strings=True, empty_types=True, prune_previous_version=True
@@ -767,10 +735,10 @@ def get_wide_df():
 @pytest.fixture(
     scope="function",
     params=(
-        "lmdb_version_store_empty_types_v1",
-        "lmdb_version_store_empty_types_v2",
-        "lmdb_version_store_empty_types_dynamic_schema_v1",
-        "lmdb_version_store_empty_types_dynamic_schema_v2",
+        "lmdb_version_store_v1",
+        "lmdb_version_store_v2",
+        "lmdb_version_store_dynamic_schema_v1",
+        "lmdb_version_store_dynamic_schema_v2",
     ),
 )
 def lmdb_version_store_static_and_dynamic(request):
