@@ -29,13 +29,13 @@ The object stores available will typically be decided by external factors such a
 
 ### Library
 
-ArcticDB can handle a large number of libraries per object store - up to 100,000 is perfectly reasonable.
+ArcticDB can handle a large number of libraries per object store - up to 50,000 is perfectly reasonable.
 
 A library groups together a set of related data. Typically its primary purpose is to help catalog the data - well named/documented libraries help people find the data they need.
 
 ### Symbol
 
-The symbol is the base unit of storage in ArcticDB. Each symbol is a DataFrame and has optimised indexing on the columns and the index.
+The symbol is the base unit of storage in ArcticDB. Each symbol is a DataFrame and has optimised data access on the columns and index of the DataFrame.
 
 So the choice of how to use the (symbol, columns, index) is important to how the system will perform. It is also the full key to access a specific single data item from a DataFrame (including the version, when needed).
 
@@ -61,8 +61,8 @@ This is usually a one-off process to get a system up and running. Ideally the sa
 Regular updates to the data are the norm for most systems. We must consider in our design
 
 * Delivery format (the format that the data source uses) vs storage format of the data. The trade-offs are
-  * storing data in a format close to delivery format makes it easier to reconcile with the source
-  * the delivery format is often not the best format for downstream processes
+    * Storing data in a format close to delivery format makes it easier to reconcile with the source
+    * The delivery format is often not the best format for downstream processes
 * Frequency of data updates
 * Storage growth characteristics over time
 * System performance over time
@@ -78,6 +78,7 @@ System problems are often caused by suspected bad data. It is worth thinking abo
 * Tooling to find and examine suspected bad data
 * Consider how to reconcile suspected bad data vs the original data source
 * Manual overrides to fix bad data to allow the system to run effectively while data is re-sourced
+* Versioning and snaphsots makes it easy to return to a last known good state
 
 ### Maintenance
 
@@ -93,7 +94,7 @@ There are [Enterprise Features](#enterprise-features) to help with these issues 
 
 ## General Performance Guidelines for ArcticDB
 
-In this section we want to highlight some general rules of thumb that will help you get the best performance from ArticDB.
+In this section we want to highlight some general rules of thumb that will help you get the best performance from ArcticDB.
 
 ### Properties of ArcticDB
 
@@ -217,7 +218,7 @@ Resampling is one way to align data. There is a Pandas resample function and a f
 
 ## Enterprise Features
 
-Many of the housekeeping and maintenance procedures recommended in this guide are taken care of by processes available in the ArticDB Enterprise package. Please contact us if you would like to explore further.
+Many of the housekeeping and maintenance procedures recommended in this guide are taken care of by processes available in the ArcticDB Enterprise package. Please contact us if you would like to explore further. Click the _Get ArcticDB_ button on our [website](https://arcticdb.io/) to contact us.
 
 
 ## Planned Future Features and Improvements
@@ -226,6 +227,8 @@ We are always improving and adding new features to ArcticDB. Below are a few rel
 
 * **Multi-Index:** support for more flexible data updates for multi-index symbols.
 * **Resampling:** a planned [QueryBuilder](../api/query_builder) extension that will allow fast on-the-fly resampling of data as part of the read.
+
+If you have a suggestion for a new feature, please raise an issue on our [github](https://github.com/man-group/ArcticDB). Please include as much detail as possible.
 
 
 
