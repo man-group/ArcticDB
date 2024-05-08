@@ -3,6 +3,8 @@
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ *
+ * The code in this file is derived from https://github.com/facebook/folly/blob/main/folly/ThreadCachedInt.h under the Apache 2.0 license which is available in full at https://github.com/facebook/folly/blob/main/LICENSE.
  */
 
 #pragma once
