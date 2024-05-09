@@ -616,12 +616,19 @@ std::vector<std::vector<size_t>> ResampleClause<closed_boundary>::structure_for_
     }
     debug::check<ErrorCode::E_ASSERTION_FAILURE>(std::is_sorted(bucket_boundaries_.begin(), bucket_boundaries_.end()),
                                                  "Resampling expects provided bucket boundaries to be strictly monotonically increasing");
-    std::erase_if(ranges_and_keys, [this](const RangesAndKey &ranges_and_key) {
+    // TODO: Replace with commented out code once C++20 is reinstated
+    ranges_and_keys.erase(std::remove_if(ranges_and_keys.begin(), ranges_and_keys.end(), [this](const RangesAndKey &ranges_and_key) {
         auto [start_index, end_index] = ranges_and_key.key_.time_range();
         // end_index from the key is 1 nanosecond larger than the index value of the last row in the row-slice
         end_index--;
         return index_range_outside_bucket_range(start_index, end_index);
-    });
+    }), ranges_and_keys.end());
+//    std::erase_if(ranges_and_keys, [this](const RangesAndKey &ranges_and_key) {
+//        auto [start_index, end_index] = ranges_and_key.key_.time_range();
+//        // end_index from the key is 1 nanosecond larger than the index value of the last row in the row-slice
+//        end_index--;
+//        return index_range_outside_bucket_range(start_index, end_index);
+//    });
     auto res = structure_by_row_slice(ranges_and_keys, 0);
     // Element i of res also needs the values from element i+1 if there is a bucket which incorporates the last index
     // value of row-slice i and the first value of row-slice i+1
