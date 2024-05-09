@@ -43,7 +43,7 @@ MongoFailure get_failure(const std::string& message, StorageOperation operation,
         case StorageOperation::EXISTS:
             return create_failure<mongocxx::query_exception>(message, error_code);
         case StorageOperation::DELETE:
-            return create_failure<mongocxx::bulk_write_exception>(message, error_code);
+            [[fallthrough]];
         case StorageOperation::DELETE_LOCAL:
             return create_failure<mongocxx::bulk_write_exception>(message, error_code);
         case StorageOperation::LIST:
@@ -56,7 +56,7 @@ MongoFailure get_failure(const std::string& message, StorageOperation operation,
 std::optional<MongoFailure> has_failure_trigger(
         const MongoKey& key,
         StorageOperation operation) {
-    auto key_id = key.doc_key.id_string();
+    auto key_id = key.doc_key_.id_string();
     auto failure_string_for_operation = "#Failure_" + operation_to_string(operation) + "_";
     auto position = key_id.rfind(failure_string_for_operation);
     if (position == std::string::npos) {
@@ -81,8 +81,8 @@ bool matches_prefix(
         const std::string& collection_name,
         const std::string& prefix) {
 
-    return key.database_name == database_name && key.collection_name == collection_name &&
-           key.doc_key.id_string().find(prefix) == 0;
+    return key.database_name_ == database_name && key.collection_name_ == collection_name &&
+           key.doc_key_.id_string().find(prefix) == 0;
 }
 
 void throw_if_exception(MongoFailure& failure) {
@@ -107,7 +107,7 @@ bool MockMongoClient::write_segment(
         return false;
     }
 
-    mongo_contents.insert_or_assign(key, std::move(kv.segment()));
+    mongo_contents.insert_or_assign(std::move(key), std::move(kv.segment()));
     return true;
 }
 
@@ -129,7 +129,7 @@ UpdateResult MockMongoClient::update_segment(
         return {0}; // upsert is false, don't update and return 0 as modified_count
     }
 
-    mongo_contents.insert_or_assign(key, std::move(kv.segment()));
+    mongo_contents.insert_or_assign(std::move(key), std::move(kv.segment()));
     return {key_found ? 1 : 0};
 }
 
@@ -149,7 +149,7 @@ std::optional<KeySegmentPair> MockMongoClient::read_segment(
         return std::nullopt;
     }
 
-    return KeySegmentPair(std::move(mongo_key.doc_key.key), std::move(it->second));
+    return KeySegmentPair(std::move(mongo_key.doc_key_.key_), std::move(it->second));
 }
 
 DeleteResult MockMongoClient::remove_keyvalue(
@@ -201,7 +201,7 @@ std::vector<VariantKey> MockMongoClient::list_keys(
                 throw_if_exception(failure.value());
                 return {};
             }
-            output.push_back(key.first.doc_key.key);
+            output.push_back(key.first.doc_key_.key_);
         }
     }
 
@@ -214,7 +214,7 @@ void MockMongoClient::ensure_collection(std::string_view, std::string_view ) {
 
 void MockMongoClient::drop_collection(std::string database_name, std::string collection_name) {
     for (auto it = mongo_contents.begin(); it != mongo_contents.end(); ) {
-        if (it->first.database_name == database_name && it->first.collection_name == collection_name) {
+        if (it->first.database_name_ == database_name && it->first.collection_name_ == collection_name) {
             it = mongo_contents.erase(it);
         } else {
             ++it;

@@ -109,7 +109,8 @@ bool MockLmdbClient::remove(const std::string& db_name, std::string& path, ::lmd
         return false;
     }
 
-    lmdb_contents_.erase(key);
+    
+    _contents_.erase(key);
     return true;
 }
 

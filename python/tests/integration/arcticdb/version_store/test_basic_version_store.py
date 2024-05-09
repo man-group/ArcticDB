@@ -2410,6 +2410,17 @@ def test_diff_long_stream_descriptor_mismatch(basic_store, method, num):
             if i % 20 == 4:
                 assert f"FD<name=col{i}, type=TD<type=UTF" in msg
 
+def test_wrong_df_col_order(basic_store):
+    lib = basic_store
+
+    df1 = pd.DataFrame({"col1": [11, 12, 13], "col2": [1, 2, 3]})
+    sym = "symbol"
+    lib.write(sym, df1)
+
+    df2 = pd.DataFrame({"col2": [4, 5, 6], "col1": [14, 15, 16]})
+    with pytest.raises(StreamDescriptorMismatch, match="type=TD<type=INT64, dim=0>, idx="):
+        lib.append(sym, df2)
+
 
 def test_get_non_existing_columns_in_series(basic_store, sym):
     lib = basic_store

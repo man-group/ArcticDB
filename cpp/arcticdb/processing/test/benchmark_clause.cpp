@@ -88,7 +88,6 @@ static void BM_merge_ordered(benchmark::State& state){
 }
 
 template <typename integer>
-requires std::integral<integer>
 void BM_hash_grouping_int(benchmark::State& state) {
     auto num_rows = state.range(0);
     auto num_unique_values = state.range(1);

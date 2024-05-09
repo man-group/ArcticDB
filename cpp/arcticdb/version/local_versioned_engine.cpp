@@ -553,6 +553,7 @@ VersionedItem LocalVersionedEngine::update_internal(
     bool dynamic_schema,
     bool prune_previous_versions) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: update");
+    py::gil_scoped_release release_gil;
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(),
                                                                         version_map(),
                                                                         stream_id,
@@ -870,7 +871,7 @@ folly::Future<folly::Unit> LocalVersionedEngine::delete_trees_responsibly(
                 return true;
             }
             get_matching_prev_and_next_versions(entry, key.version_id(), // Check 2)
-                    [](ARCTICDB_UNUSED auto& matching) {},
+                    [](const AtomKey&) {},
                     [&check, &not_to_delete](auto& prev) { if (check.prev_version) not_to_delete.insert(prev);},
                     [&check, &not_to_delete](auto& next) { if (check.next_version) not_to_delete.insert(next);},
                     [v=key.version_id()](const AtomKeyImpl& key, const std::shared_ptr<VersionMapEntry>& entry) {
@@ -1365,7 +1366,7 @@ VersionedItem LocalVersionedEngine::append_internal(
     bool upsert,
     bool prune_previous_versions,
     bool validate_index) {
-
+    py::gil_scoped_release release_gil;
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(),
                                                                         version_map(),
                                                                         stream_id,

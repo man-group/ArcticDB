@@ -29,16 +29,12 @@ namespace arcticdb::log {
 
 static const char* DefaultLogPattern = "%Y%m%d %H:%M:%S.%f %t %L %n | %v";
 
-
 namespace {
-    std::shared_ptr<Loggers> loggers_instance_;
-    std::once_flag loggers_init_flag_;
-}
+std::shared_ptr<Loggers> loggers_instance_;
+std::once_flag loggers_init_flag_;
+} // namespace
 
-
-struct Loggers::Impl
-{
-
+struct Loggers::Impl {
     std::mutex config_mutex_;
     std::unordered_map<std::string, spdlog::sink_ptr> sink_by_id_;
     std::unique_ptr<spdlog::logger> unconfigured_ = std::make_unique<spdlog::logger>("arcticdb",
@@ -65,7 +61,6 @@ struct Loggers::Impl
 
     spdlog::logger& logger_ref(std::unique_ptr<spdlog::logger>& src);
 };
-
 
 constexpr auto get_default_log_level() {
     return spdlog::level::info;
@@ -124,15 +119,13 @@ namespace fs = std::filesystem;
 using SinkConf = arcticdb::proto::logger::SinkConfig;
 
 Loggers::Loggers()
-    : impl_(std::make_unique<Impl>())
-{
+        : impl_(std::make_unique<Impl>()) {
     impl_->unconfigured_->set_level(get_default_log_level());
 }
 
 Loggers::~Loggers() = default;
 
-Loggers& Loggers::instance()
-{
+Loggers& Loggers::instance() {
     std::call_once(loggers_init_flag_, &Loggers::init);
     return *loggers_instance_;
 }
@@ -200,7 +193,6 @@ void Loggers::flush_all() {
     snapshot().flush();
 }
 
-
 void Loggers::destroy_instance() {
     loggers_instance_.reset();
 }
@@ -208,7 +200,6 @@ void Loggers::destroy_instance() {
 void Loggers::init() {
     loggers_instance_ = std::make_shared<Loggers>();
 }
-
 
 namespace {
 std::string make_parent_dir(const std::string &p_str, std::string_view def_p_str) {
@@ -231,7 +222,6 @@ spdlog::logger& Loggers::Impl::logger_ref(std::unique_ptr<spdlog::logger>& src) 
 
     return *unconfigured_;
 }
-
 
 bool Loggers::configure(const arcticdb::proto::logger::LoggersConfig &conf, bool force) {
     auto lock = std::scoped_lock(impl_->config_mutex_);
@@ -316,7 +306,6 @@ bool Loggers::configure(const arcticdb::proto::logger::LoggersConfig &conf, bool
     check_and_configure("symbol", "root", impl_->symbol_);
     check_and_configure("snapshot", "root", impl_->snapshot_);
 
-
     if (auto flush_sec = util::as_opt(conf.flush_interval_seconds()).value_or(1); flush_sec != 0) {
         impl_->periodic_worker_.emplace(
             [loggers = std::weak_ptr(loggers_instance_)]() {
@@ -327,7 +316,6 @@ bool Loggers::configure(const arcticdb::proto::logger::LoggersConfig &conf, bool
     }
     return true;
 }
-
 
 void Loggers::Impl::configure_logger(
         const arcticdb::proto::logger::LoggerConfig &conf,
@@ -350,18 +338,15 @@ void Loggers::Impl::configure_logger(
         logger = std::make_unique<spdlog::logger>(fq_name, sink_ptrs.begin(), sink_ptrs.end());
     }
 
-    if (!conf.pattern().empty()) {
+    if (!conf.pattern().empty())
         logger->set_pattern(conf.pattern());
-    }
-    else {
+    else
         logger->set_pattern(DefaultLogPattern);
-    }
 
-    if (conf.level() != 0) {
+    if (conf.level() != 0)
         logger->set_level(static_cast<spdlog::level::level_enum>(conf.level() - 1));
-    } else {
+    else
         logger->set_level(get_default_log_level());
-    }
 }
 
 }

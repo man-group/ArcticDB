@@ -25,6 +25,7 @@
 
 #include <filesystem>
 #include <memory>
+#include <arcticdb/storage/lmdb/lmdb.hpp>
 
 using namespace arcticdb;
 using namespace storage;

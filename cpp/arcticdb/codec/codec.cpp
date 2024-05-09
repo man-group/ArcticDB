@@ -16,7 +16,6 @@
 
 #include <arcticdb/codec/encode_common.hpp>
 
-
 namespace arcticdb {
 
 Segment encode_v2(
@@ -317,6 +316,19 @@ void decode_string_pool( const arcticdb::proto::encoding::SegmentHeader& hdr,
     }
 }
 
+ssize_t calculate_last_row(const Column& col) {
+    ssize_t last_row{0};
+    if (col.opt_sparse_map().has_value()) {
+        bm::bvector_size_type last_set_bit;
+        if (col.sparse_map().find_reverse(last_set_bit)) {
+            last_row = static_cast<ssize_t>(last_set_bit);
+        }
+    } else {
+        last_row = static_cast<ssize_t>(col.row_count());
+    }
+    return last_row;
+}
+
 void decode_v2(
     const Segment& segment,
     arcticdb::proto::encoding::SegmentHeader& hdr,
@@ -345,7 +357,7 @@ void decode_v2(
         const auto fields_size = desc.fields().size();
         const auto start_row = res.row_count();
         EncodedFieldCollection encoded_fields(std::move(encoded_fields_buffer));
-        const auto seg_row_count = fields_size ? ssize_t(encoded_fields.at(0).ndarray().items_count()) : 0L;
+        ssize_t seg_row_count = 0;
         res.init_column_map();
 
         for (std::size_t i = 0; i < fields_size; ++i) {
@@ -355,6 +367,7 @@ void decode_v2(
             if(auto col_index = res.column_index(field_name)) {
                 auto& col = res.column(static_cast<position_t>(*col_index));
                 data += decode_field(res.field(*col_index).type(), encoded_field, data, col, col.opt_sparse_map(), to_encoding_version(hdr.encoding_version()));
+                seg_row_count = std::max(seg_row_count, calculate_last_row(col));
             } else {
                 data += encoding_sizes::field_compressed_size(encoded_field) + sizeof(ColumnMagic);
             }
@@ -388,7 +401,7 @@ void decode_v1(
         util::check(fields_size == hdr.fields_size(), "Mismatch between descriptor and header field size: {} != {}", fields_size, hdr.fields_size());
         const auto start_row = res.row_count();
 
-        const auto seg_row_count = fields_size ? ssize_t(hdr.fields(0).ndarray().items_count()) : 0LL;
+        ssize_t seg_row_count = 0;
         res.init_column_map();
 
         for (int i = 0; i < fields_size; ++i) {
@@ -409,6 +422,7 @@ void decode_v1(
                     col.opt_sparse_map(),
                     to_encoding_version(hdr.encoding_version())
                 );
+                seg_row_count = std::max(seg_row_count, calculate_last_row(col));
             } else {
                 util::check(data != end, "Reached end of input block with {} fields to decode", fields_size - i);
                 data += encoding_sizes::field_compressed_size(field);

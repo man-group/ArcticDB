@@ -204,3 +204,25 @@ FieldCollection fields_from_range(const RangeType& fields) {
 
 
 } //namespace arcticdb
+
+
+namespace fmt {
+    template<>
+    struct formatter<arcticdb::FieldCollection> {
+        template<typename ParseContext>
+        constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+        template<typename FormatContext>
+        auto format(const arcticdb::FieldCollection &fc, FormatContext &ctx) const {
+            for (size_t i = 0; i < fc.size(); ++i) {
+                if (i == fc.size() - 1) {
+                    fmt::format_to(ctx.out(), "FD<name={}, type={}, idx={}>", fc[i].name(), fc[i].type(), i);
+                }
+                else {
+                    fmt::format_to(ctx.out(), "FD<name={}, type={}, idx={}>, ", fc[i].name(), fc[i].type(), i);
+                }
+            }
+
+            return ctx.out();
+        }
+    };
+}

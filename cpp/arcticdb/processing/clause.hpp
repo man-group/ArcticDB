@@ -340,6 +340,13 @@ inline StreamDescriptor empty_descriptor(arcticdb::proto::descriptors::IndexDesc
 }
 
 struct NamedAggregator {
+    NamedAggregator(const std::string& s, const std::string& t, const std::string& v) :
+            aggregation_operator_(s),
+            input_column_name_(t),
+            output_column_name_(v){
+
+    }
+
     std::string aggregation_operator_;
     std::string input_column_name_;
     std::string output_column_name_;

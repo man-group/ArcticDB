@@ -347,7 +347,6 @@ set(arcticdb_srcs
         util/memory_mapped_file.hpp
         util/name_validation.hpp
         util/offset_string.hpp
-        util/offset_string.hpp
         util/optional_defaults.hpp
         util/pb_util.hpp
         util/preconditions.hpp
@@ -469,7 +468,6 @@ set(arcticdb_srcs
         util/memory_mapped_file.hpp
         util/name_validation.cpp
         util/offset_string.cpp
-        util/offset_string.cpp
         util/sparse_utils.cpp
         util/string_utils.cpp
         util/trace.cpp
@@ -484,7 +482,7 @@ set(arcticdb_srcs
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
         storage/s3/ec2_utils.cpp
-)
+        storage/lmdb/lmdb.hpp util/cxx17_concepts.hpp)
 
 if(${ARCTICDB_INCLUDE_ROCKSDB})
     list (APPEND arcticdb_srcs
@@ -676,6 +674,7 @@ target_include_directories(arcticdb_python PRIVATE
         ${LIBMONGOCXX_STATIC_INCLUDE_DIRS}
         ${LIBBSONCXX_STATIC_INCLUDE_DIRS}
         ${BITMAGIC_INCLUDE_DIRS}
+        ${LMDB_LIBRARIES}
         )
 
 
