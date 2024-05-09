@@ -61,8 +61,8 @@ This is usually a one-off process to get a system up and running. Ideally the sa
 Regular updates to the data are the norm for most systems. We must consider in our design
 
 * Delivery format (the format that the data source uses) vs storage format of the data. The trade-offs are
-    * Storing data in a format close to delivery format makes it easier to reconcile with the source
-    * The delivery format is often not the best format for downstream processes
+    - Storing data in a format close to delivery format makes it easier to reconcile with the source
+    - The delivery format is often not the best format for downstream processes
 * Frequency of data updates
 * Storage growth characteristics over time
 * System performance over time
