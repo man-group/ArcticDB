@@ -246,15 +246,6 @@ public:
             log_write(store, key.id(), key.version_id());
     }
 
-    AtomKey write_tombstone_all_key(
-            const std::shared_ptr<Store>& store,
-            const AtomKey& previous_key,
-            const std::shared_ptr<VersionMapEntry>& entry) {
-        auto tombstone_key = write_tombstone_all_key_internal(store, previous_key, entry);
-        write_symbol_ref(store, tombstone_key, std::nullopt, entry->head_.value());
-        return tombstone_key;
-    }
-
     /**
      * Tombstone all non-deleted versions of the given stream and do the related housekeeping.
      * @param first_key_to_tombstone The first key in the version chain that should be tombstoned. When empty
@@ -298,8 +289,8 @@ public:
                 __FUNCTION__);
         auto [_, result] = tombstone_from_key_or_all_internal(store, key.id(), previous_key, entry);
 
-        do_write(store, key, entry);
-        write_symbol_ref(store, *entry->keys_.cbegin(), std::nullopt, entry->head_.value());
+        auto previous_index = do_write(store, key, entry);
+        write_symbol_ref(store, *entry->keys_.cbegin(), previous_index, entry->head_.value());
 
         if (log_changes_)
             log_write(store, key.id(), key.version_id());
@@ -502,7 +493,10 @@ public:
         return storage_reload(store, stream_id, load_param, load_param.iterate_on_failure_);
     }
 
-    void do_write(
+    /**
+     * Returns the second undeleted index (after the write).
+     */
+    std::optional<AtomKey> do_write(
         std::shared_ptr<Store> store,
         const AtomKey &key,
         const std::shared_ptr<VersionMapEntry> &entry) {
@@ -512,7 +506,7 @@ public:
         auto journal_key = to_atom(std::move(journal_single_key(store, key, entry->head_)));
         write_to_entry(entry, key, journal_key);
         auto previous_index = entry->get_second_undeleted_index();
-        write_symbol_ref(store, key, previous_index, journal_key);
+        return previous_index;
     }
 
     AtomKey write_tombstone(
