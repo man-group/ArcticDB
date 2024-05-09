@@ -87,6 +87,7 @@ nav:
     - Snapshots: 'tutorials/snapshots.md'
     - Metadata: 'tutorials/metadata.md'
     - In-memory backends: 'tutorials/lmdb_and_in_memory.md'
+    - Data Organisation Guide: 'tutorials/data_organisation.md'
   - Storage Guides:
     - Getting started with AWS S3: 'aws.md'
     - Getting started with Azure Blob Storage: 'azure.md'
