@@ -8,13 +8,13 @@
       
       
       
-        <link rel="canonical" href="https://docs.arcticdb.io/dev/technical/on_disk_storage/">
+        <link rel="canonical" href="https://docs.arcticdb.io/dev/tutorials/data_organisation/">
       
       
-        <link rel="prev" href="../architecture/">
+        <link rel="prev" href="../lmdb_and_in_memory/">
       
       
-        <link rel="next" href="../migration/">
+        <link rel="next" href="../../aws/">
       
       
       <link rel="icon" href="../../images/FullWithBorder.png">
@@ -22,7 +22,7 @@
     
     
       
-        <title>On-Disk Storage - ArcticDB</title>
+        <title>Data Organisation Guide - ArcticDB</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#arcticdb-on-disk-storage-format" class="md-skip">
+        <a href="#guidelines-for-organising-your-data" class="md-skip">
           Skip to content
         </a>
       
@@ -129,7 +129,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              On-Disk Storage
+              Data Organisation Guide
             
           </span>
         </div>
@@ -240,7 +240,7 @@
     
     
       <li class="md-tabs__item md-tabs__item--active">
-        <a href="../../tutorials/fundamentals/" class="md-tabs__link">
+        <a href="../fundamentals/" class="md-tabs__link">
           
   
   Guides
@@ -514,6 +514,8 @@
                 
   
   
+    
+  
   
   
     
@@ -528,11 +530,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_1" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_1" checked>
         
           
           <label class="md-nav__link" for="__nav_2_1" id="__nav_2_1_label" tabindex="">
@@ -546,7 +548,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_1_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_1_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_2_1">
             <span class="md-nav__icon md-icon"></span>
             Tutorials
@@ -560,7 +562,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../tutorials/fundamentals/" class="md-nav__link">
+      <a href="../fundamentals/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -581,7 +583,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../tutorials/parallel_writes/" class="md-nav__link">
+      <a href="../parallel_writes/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -602,7 +604,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../tutorials/snapshots/" class="md-nav__link">
+      <a href="../snapshots/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -623,7 +625,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../tutorials/metadata/" class="md-nav__link">
+      <a href="../metadata/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -644,7 +646,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../tutorials/lmdb_and_in_memory/" class="md-nav__link">
+      <a href="../lmdb_and_in_memory/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -662,10 +664,30 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../tutorials/data_organisation/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Data Organisation Guide
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   <span class="md-ellipsis">
@@ -674,6 +696,266 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#introduction" class="md-nav__link">
+    <span class="md-ellipsis">
+      Introduction
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#arcticdbs-data-hierarchy" class="md-nav__link">
+    <span class="md-ellipsis">
+      ArcticDB's Data Hierarchy
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ArcticDB's Data Hierarchy">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#object-store" class="md-nav__link">
+    <span class="md-ellipsis">
+      Object Store
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#library" class="md-nav__link">
+    <span class="md-ellipsis">
+      Library
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#symbol" class="md-nav__link">
+    <span class="md-ellipsis">
+      Symbol
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#versions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Versions
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#system-design-concerns" class="md-nav__link">
+    <span class="md-ellipsis">
+      System Design Concerns
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="System Design Concerns">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#initial-data-population" class="md-nav__link">
+    <span class="md-ellipsis">
+      Initial Data Population
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#data-update-process" class="md-nav__link">
+    <span class="md-ellipsis">
+      Data Update Process
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#efficient-downstream-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      Efficient Downstream Access
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#data-problems-investigation-and-remediation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Data Problems: Investigation and Remediation
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#maintenance" class="md-nav__link">
+    <span class="md-ellipsis">
+      Maintenance
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#general-performance-guidelines-for-arcticdb" class="md-nav__link">
+    <span class="md-ellipsis">
+      General Performance Guidelines for ArcticDB
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="General Performance Guidelines for ArcticDB">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#properties-of-arcticdb" class="md-nav__link">
+    <span class="md-ellipsis">
+      Properties of ArcticDB
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#arcticdb-is-optimised-for-large-dataframes" class="md-nav__link">
+    <span class="md-ellipsis">
+      ArcticDB is Optimised for Large DataFrames
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#plan-your-version-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      Plan your Version Management
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lots-of-small-appends-or-updates-can-fragment-your-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      Lots of Small Appends or Updates Can Fragment Your Data
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#examples-based-on-market-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      Examples Based on Market Data
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Examples Based on Market Data">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#seperate-symbol-for-each-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      Seperate Symbol for Each Security
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#single-symbol-for-all-securities" class="md-nav__link">
+    <span class="md-ellipsis">
+      Single Symbol for all Securities
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#single-symbol-for-each-data-item" class="md-nav__link">
+    <span class="md-ellipsis">
+      Single Symbol for each Data Item
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#time-index-alignment" class="md-nav__link">
+    <span class="md-ellipsis">
+      Time Index Alignment
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#enterprise-features" class="md-nav__link">
+    <span class="md-ellipsis">
+      Enterprise Features
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#planned-future-features-and-improvements" class="md-nav__link">
+    <span class="md-ellipsis">
+      Planned Future Features and Improvements
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -784,8 +1066,6 @@
                 
   
   
-    
-  
   
   
     
@@ -800,11 +1080,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_3" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_3" >
         
           
           <label class="md-nav__link" for="__nav_2_3" id="__nav_2_3_label" tabindex="">
@@ -818,7 +1098,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_3_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_3_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_2_3">
             <span class="md-nav__icon md-icon"></span>
             Technical Information
@@ -832,7 +1112,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../architecture/" class="md-nav__link">
+      <a href="../../technical/architecture/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -850,30 +1130,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  <span class="md-ellipsis">
-    On-Disk Storage
-  </span>
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../technical/on_disk_storage/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -882,152 +1142,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#structural-overview" class="md-nav__link">
-    <span class="md-ellipsis">
-      Structural overview
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Structural overview">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#reference-layer" class="md-nav__link">
-    <span class="md-ellipsis">
-      Reference Layer
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#version-layer" class="md-nav__link">
-    <span class="md-ellipsis">
-      Version Layer
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#index-layer" class="md-nav__link">
-    <span class="md-ellipsis">
-      Index Layer
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#data-layer" class="md-nav__link">
-    <span class="md-ellipsis">
-      Data Layer
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#arcticdb-key-types" class="md-nav__link">
-    <span class="md-ellipsis">
-      ArcticDB Key Types
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="ArcticDB Key Types">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#what-is-an-arcticdb-key" class="md-nav__link">
-    <span class="md-ellipsis">
-      What is an ArcticDB key?
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#key-types" class="md-nav__link">
-    <span class="md-ellipsis">
-      Key Types
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#example-paths" class="md-nav__link">
-    <span class="md-ellipsis">
-      Example paths
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#additional-information" class="md-nav__link">
-    <span class="md-ellipsis">
-      Additional Information
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Additional Information">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#data-layer-fragmentation" class="md-nav__link">
-    <span class="md-ellipsis">
-      Data Layer Fragmentation
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#symbol-list-caching" class="md-nav__link">
-    <span class="md-ellipsis">
-      Symbol List Caching
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1040,7 +1154,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../migration/" class="md-nav__link">
+      <a href="../../technical/migration/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1061,7 +1175,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../contributing/" class="md-nav__link">
+      <a href="../../technical/contributing/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1598,46 +1712,55 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#structural-overview" class="md-nav__link">
+  <a href="#introduction" class="md-nav__link">
     <span class="md-ellipsis">
-      Structural overview
+      Introduction
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Structural overview">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#arcticdbs-data-hierarchy" class="md-nav__link">
+    <span class="md-ellipsis">
+      ArcticDB's Data Hierarchy
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ArcticDB's Data Hierarchy">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#reference-layer" class="md-nav__link">
+  <a href="#object-store" class="md-nav__link">
     <span class="md-ellipsis">
-      Reference Layer
+      Object Store
     </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#version-layer" class="md-nav__link">
+  <a href="#library" class="md-nav__link">
     <span class="md-ellipsis">
-      Version Layer
+      Library
     </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#index-layer" class="md-nav__link">
+  <a href="#symbol" class="md-nav__link">
     <span class="md-ellipsis">
-      Index Layer
+      Symbol
     </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#data-layer" class="md-nav__link">
+  <a href="#versions" class="md-nav__link">
     <span class="md-ellipsis">
-      Data Layer
+      Versions
     </span>
   </a>
   
@@ -1649,37 +1772,55 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#arcticdb-key-types" class="md-nav__link">
+  <a href="#system-design-concerns" class="md-nav__link">
     <span class="md-ellipsis">
-      ArcticDB Key Types
+      System Design Concerns
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="ArcticDB Key Types">
+    <nav class="md-nav" aria-label="System Design Concerns">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#what-is-an-arcticdb-key" class="md-nav__link">
+  <a href="#initial-data-population" class="md-nav__link">
     <span class="md-ellipsis">
-      What is an ArcticDB key?
+      Initial Data Population
     </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#key-types" class="md-nav__link">
+  <a href="#data-update-process" class="md-nav__link">
     <span class="md-ellipsis">
-      Key Types
+      Data Update Process
     </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#example-paths" class="md-nav__link">
+  <a href="#efficient-downstream-access" class="md-nav__link">
     <span class="md-ellipsis">
-      Example paths
+      Efficient Downstream Access
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#data-problems-investigation-and-remediation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Data Problems: Investigation and Remediation
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#maintenance" class="md-nav__link">
+    <span class="md-ellipsis">
+      Maintenance
     </span>
   </a>
   
@@ -1691,28 +1832,46 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#additional-information" class="md-nav__link">
+  <a href="#general-performance-guidelines-for-arcticdb" class="md-nav__link">
     <span class="md-ellipsis">
-      Additional Information
+      General Performance Guidelines for ArcticDB
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Additional Information">
+    <nav class="md-nav" aria-label="General Performance Guidelines for ArcticDB">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#data-layer-fragmentation" class="md-nav__link">
+  <a href="#properties-of-arcticdb" class="md-nav__link">
     <span class="md-ellipsis">
-      Data Layer Fragmentation
+      Properties of ArcticDB
     </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#symbol-list-caching" class="md-nav__link">
+  <a href="#arcticdb-is-optimised-for-large-dataframes" class="md-nav__link">
     <span class="md-ellipsis">
-      Symbol List Caching
+      ArcticDB is Optimised for Large DataFrames
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#plan-your-version-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      Plan your Version Management
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lots-of-small-appends-or-updates-can-fragment-your-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      Lots of Small Appends or Updates Can Fragment Your Data
     </span>
   </a>
   
@@ -1720,6 +1879,75 @@
         
       </ul>
     </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#examples-based-on-market-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      Examples Based on Market Data
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Examples Based on Market Data">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#seperate-symbol-for-each-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      Seperate Symbol for Each Security
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#single-symbol-for-all-securities" class="md-nav__link">
+    <span class="md-ellipsis">
+      Single Symbol for all Securities
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#single-symbol-for-each-data-item" class="md-nav__link">
+    <span class="md-ellipsis">
+      Single Symbol for each Data Item
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#time-index-alignment" class="md-nav__link">
+    <span class="md-ellipsis">
+      Time Index Alignment
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#enterprise-features" class="md-nav__link">
+    <span class="md-ellipsis">
+      Enterprise Features
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#planned-future-features-and-improvements" class="md-nav__link">
+    <span class="md-ellipsis">
+      Planned Future Features and Improvements
+    </span>
+  </a>
   
 </li>
       
@@ -1744,157 +1972,171 @@
   
 
 
-<h1 id="arcticdb-on-disk-storage-format">ArcticDB On-Disk Storage Format<a class="headerlink" href="#arcticdb-on-disk-storage-format" title="Permanent link">&para;</a></h1>
-<p>ArcticDB uses a custom storage format that differs from Parquet, HDF5 or other similar well-known columnar storage formats. This page provides a high-level description of this format.</p>
-<p>The ArcticDB storage engine is designed to work with any key-value storage backend and currently has full <em>optimised</em> support for the following backends:</p>
-<ol>
-<li>S3</li>
-<li>LMDB</li>
-</ol>
-<p>The structure of the stored data is optimised for that storage - for example, when using S3 all related paths (or <em>keys</em>) share a common prefix to optimise for <code>ListObjects</code> calls.</p>
-<p>Despite this storage specific optimisation, the hierarchy and segment format remain identical regardless of the backend storage. These components are described below.</p>
-<h2 id="structural-overview">Structural overview<a class="headerlink" href="#structural-overview" title="Permanent link">&para;</a></h2>
-<p><img alt="Storage Format Overview" src="../../images/ArcticDBSchema.png" /></p>
-<p>The above diagram provides an overview of this format, illustrating how ArcticDB manages the symbol metadata, version history and index layout of the data it stores. Not shown is the binary format used to store ArcticDB segments.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Please note that the key formatting illustrated on the left hand side of the above diagram is specific to S3. The formatting may differ depending on the underlying storage and as such the key paths might not match 
-when using another storage engine such as LMDB.</p>
-</div>
-<p>The ArcticDB storage format is comprised of 4 layers; the <strong>Reference Layer</strong>, the <strong>Version Layer</strong>, the <strong>Index Layer</strong> and finally, the <strong>Data Layer</strong>. For a full definition of a key, please see the above diagram. </p>
-<h3 id="reference-layer">Reference Layer<a class="headerlink" href="#reference-layer" title="Permanent link">&para;</a></h3>
-<p>The reference layer maintains an active pointer to the head of the <a href="#version-layer">version layer</a> linked list, which enables fast retrieval of the latest version of a symbol. This pointer is stored in the Data Segment as illustrated in the above diagram. As a result, the reference layer is the only mutable part of ArcticDB's storage format with the value of each reference-layer-key able to be overwritten (hence using a <em>Reference Key</em>, rather than an <em>Atom Key</em>)</p>
-<p>The reference layer primarily stores keys of type <em>Version Reference</em>, as <a href="#key-types">documented below</a>.</p>
-<h3 id="version-layer">Version Layer<a class="headerlink" href="#version-layer" title="Permanent link">&para;</a></h3>
-<p>The version layer contains a linked list of immutable atom keys/values. Each element of the linked list contains two pointers in the data segment; one points to the next entry in the linked list, and the other points to an index key, providing a route through to the index layer of the storage structure. As a result, traversing the version layer linked list for a symbol allows you to travel backwards through time to retrieve data as it were at a previous version/point in time. The version layer also contains information about which versions have been deleted, and which are still "live".</p>
-<p>This means that for symbols with a lot of versions, this linked list can get quite long, and so reading old versions (using the <code>as_of</code> argument) can become slower as lots of tiny object reads are required in order to find the relevant index key. A method will soon be added to the <code>Library</code> <a href="../../api/library/">API</a> allowing users to "compact" this linked list into a few larger objects.</p>
-<p>The version layer primarily stores keys of type <em>Version</em>, as <a href="#key-types">documented below</a>.</p>
-<h3 id="index-layer">Index Layer<a class="headerlink" href="#index-layer" title="Permanent link">&para;</a></h3>
-<p>The index layer is an immutable layer that provides a B-Tree index over the data layer. Much like the reference and version layer, this utilises data segments containing data pointers. Each pointer is simply a key that that contains a data segment. </p>
-<p>For more information on the data stored in this layer, see the <a href="#structural-overview">Structural Overview diagram</a>.</p>
-<p>The index layer primarily stores keys of type <em>Table Index</em>, as <a href="#key-types">documented below</a>.</p>
-<h3 id="data-layer">Data Layer<a class="headerlink" href="#data-layer" title="Permanent link">&para;</a></h3>
-<p>The data layer is an immutable layer that contains compressed data segments. Dataframes provided by the user are sliced by both columns and rows, in order to facilitate rapid date-range and column searching during read operations. See the <a href="../../api/arctic/#arcticdb.LibraryOptions">documentation</a> for the <code>rows_per_segment</code> and <code>columns_per_segment</code> library configuration options for more details.</p>
-<p>The data layer primarily stores keys of type <em>Table Data</em>, as <a href="#key-types">documented below</a>.</p>
-<h2 id="arcticdb-key-types">ArcticDB Key Types<a class="headerlink" href="#arcticdb-key-types" title="Permanent link">&para;</a></h2>
-<h3 id="what-is-an-arcticdb-key">What is an ArcticDB key?<a class="headerlink" href="#what-is-an-arcticdb-key" title="Permanent link">&para;</a></h3>
-<p>ArcticDB stores data in either LMDB or object storage (S3). Regardless of the backend though, ArcticDB stores data in well-defined key types where a key type defines the purpose of the associated value and the structure of the name/path of the key. Examples of how the paths differ for S3 are shown below.</p>
-<p>Note that where this documentation refers to a <em>Key Type</em> key (for example a <em>version reference</em> key), it refers to both the S3/LMDB key and the associated S3/LMDB value.</p>
-<h3 id="key-types">Key Types<a class="headerlink" href="#key-types" title="Permanent link">&para;</a></h3>
-<table>
-<thead>
-<tr>
-<th>Key Type</th>
-<th>Atom/Reference</th>
-<th>S3 Prefix</th>
-<th>Purpose</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Version Reference</td>
-<td>Reference</td>
-<td>vref</td>
-<td>Maintains the top level pointer to the latest version of a symbol</td>
-</tr>
-<tr>
-<td>Version</td>
-<td>Atom</td>
-<td>ver</td>
-<td>Maintains pointers to index keys for one or more versions of a symbol</td>
-</tr>
-<tr>
-<td>Table Index</td>
-<td>Atom</td>
-<td>tindex</td>
-<td>Maintains an index structure over the data</td>
-</tr>
-<tr>
-<td>Table Data</td>
-<td>Atom</td>
-<td>tdata</td>
-<td>Maintains the data for a table</td>
-</tr>
-<tr>
-<td>Symbol List</td>
-<td>Atom</td>
-<td>sl</td>
-<td>Caches symbol addition/removals</td>
-</tr>
-</tbody>
-</table>
-<p>Note that <strong>Atom</strong> keys are immutable. <strong>Reference</strong> keys are not immutable and therefore the associated value can be updated. </p>
-<div class="admonition info">
-<p class="admonition-title">Version Ref</p>
-<p>In this documentation, <code>Version Reference key</code> is sometimes shortened to <code>Version Ref key</code>. </p>
-</div>
-<h3 id="example-paths">Example paths<a class="headerlink" href="#example-paths" title="Permanent link">&para;</a></h3>
-<p>The paths below are examples of S3-based paths. LMDB ArcticDB libraries may have slightly different paths. </p>
-<table>
-<thead>
-<tr>
-<th>Key Type</th>
-<th>Example Path</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Version Ref</td>
-<td>{bucket}/{library prefix}/{library storage id}/vref/<em>sUt</em>MYSYMBOL</td>
-</tr>
-<tr>
-<td>Symbol List</td>
-<td>{bucket}/{library prefix}/{library storage id}/*sSt*__add__*6*1632469542244313925*8986477046003934300*ORJDSG8GU4_6*ORJDSG8GU4_6</td>
-</tr>
-</tbody>
-</table>
-<h2 id="additional-information">Additional Information<a class="headerlink" href="#additional-information" title="Permanent link">&para;</a></h2>
-<h3 id="data-layer-fragmentation">Data Layer Fragmentation<a class="headerlink" href="#data-layer-fragmentation" title="Permanent link">&para;</a></h3>
-<p>As the example given in the <a href="#structural-overview">Structural Overview diagram</a> demonstrates, Atom Keys in the data layer from older versions are re-used (i.e. pointed to) by the new version's index layer if the data in them is still needed. This is always trivially true for <code>append</code> operations, and this is conceptually simpler, so the example we will work with here is based on <code>append</code>. It is worth noting that all of the same arguments also apply to <code>update</code> as well though.</p>
-<p>By re-using data layer keys from the previous version, calls to <code>append</code> are as efficient as possible, as they do not need to read any of the data layer keys from the previous version. However, this can result in the data layer becoming <em>fragmented</em>, in the sense that data in the data layer is spread over a lot of small objects in storage, and this can have a negative performance impact on <code>read</code> operations.</p>
-<p>Consider a use case where a symbol with 10 columns, all of 8 byte numeric types, is appended to once per minute. This means that each day, 1,440 data layer segments are written, each with just 80 bytes of information in. Calling <code>read</code> for a days worth of data therefore requires 1,440 reads of these tiny data layer objects, which will be much less efficient than reading a single object of 115,200 bytes.</p>
-<p>We will soon be adding an API to perform exactly this operation, re-slicing data such that subsequent reads can be as efficient as possible, without harming the efficiency of existing <code>append</code> or <code>update</code> operations.</p>
-<h3 id="symbol-list-caching">Symbol List Caching<a class="headerlink" href="#symbol-list-caching" title="Permanent link">&para;</a></h3>
-<div class="admonition info">
-<p class="admonition-title">Speeding up listing symbols</p>
-<p>The below documentation details the architecture for the symbol list cache.</p>
-<p>It explains that to speed up <code>list_symbols</code>, <strong>simply run <code>list_symbols</code> through to completion frequently</strong>. 
-The cache is built on first run and <em>compacted</em> afterwards. 
-This will speed up <code>list_symbols</code> for <strong>all accessors of the library - not just the user that runs </strong><code>list_symbols</code>. </p>
-</div>
-<p><code>list_symbols</code> is a common operation to perform on an ArcticDB library. As this returns a list of "live" symbols (those for which at least one version has not been deleted), using the data structures described above, this involves:</p>
+<h1 id="guidelines-for-organising-your-data">Guidelines for Organising Your Data<a class="headerlink" href="#guidelines-for-organising-your-data" title="Permanent link">&para;</a></h1>
+<h2 id="introduction">Introduction<a class="headerlink" href="#introduction" title="Permanent link">&para;</a></h2>
+<p>We are often asked about how best to organise data in ArcticDB. There is no single answer to this question - it will depend on many factors, but especially on the data itself and how it will be used.</p>
+<p>ArcticDB offers a high degree of flexibility in how data is arranged. Although this is a strength of the system, sometimes the choices are so broad that it is hard to know where to start.</p>
+<p>In this guide we aim to outline some design principles and rules of thumb to help you decide the best scheme for your data, system and users.</p>
+<p>We begin by taking a design view of the way ArcticDB structures data and the system design concerns, then from those consider how to assess and balance the trade-offs of some typical organisation strategies.</p>
+<h2 id="arcticdbs-data-hierarchy">ArcticDB's Data Hierarchy<a class="headerlink" href="#arcticdbs-data-hierarchy" title="Permanent link">&para;</a></h2>
+<p>Let's revisit the structures that ArcticDB provides for organising data, illustrated below</p>
+<p><img alt="" src="../../images/ArcticDBDataHierarchy.png" /></p>
+<h3 id="object-store">Object Store<a class="headerlink" href="#object-store" title="Permanent link">&para;</a></h3>
+<p>The object stores available will typically be decided by external factors such as</p>
 <ul>
-<li>Loading a list of <a href="#key-types">version reference keys</a> in the library.</li>
-<li>For each version reference key:<ul>
-<li>Traverse the version key linked-list until either a live version is found, or it is established that all versions have been deleted.</li>
+<li>Environment: prod/uat/research</li>
+<li>Permissions: enviroments that grant/deny read/write permission to different groups of users/systems</li>
+<li>Accounting: different cloud buckets may be charged to different internal accounts</li>
+<li>Storage Quotas: different amounts of storage may be allocated for different purposes</li>
+<li>Storage Performance: faster/slower storage for different applications according to requirements and cost</li>
+</ul>
+<h3 id="library">Library<a class="headerlink" href="#library" title="Permanent link">&para;</a></h3>
+<p>ArcticDB can handle a large number of libraries per object store - up to 50,000 is perfectly reasonable.</p>
+<p>A library groups together a set of related data. Typically its primary purpose is to help catalog the data - well named/documented libraries help people find the data they need.</p>
+<h3 id="symbol">Symbol<a class="headerlink" href="#symbol" title="Permanent link">&para;</a></h3>
+<p>The symbol is the base unit of storage in ArcticDB. Each symbol is a DataFrame and has optimised data access on the columns and index of the DataFrame.</p>
+<p>So the choice of how to use the (symbol, columns, index) is important to how the system will perform. It is also the full key to access a specific single data item from a DataFrame (including the version, when needed).</p>
+<h3 id="versions">Versions<a class="headerlink" href="#versions" title="Permanent link">&para;</a></h3>
+<p>Each symbol gets a new version every time it is modified. A consideration of how versions will be treated is a key design choice - in particular it will have a big impact how much storage is used. The most common choices are:</p>
+<ul>
+<li>Keep only the latest versions. Delete older versions either with <code>prune_previous_version</code> or in a background process (see <a href="#enterprise-features">Enterprise Features</a>).</li>
+<li>Keep key versions only. Often implemented using <a href="../snapshots/">snapshots</a>.</li>
+<li>Keep all versions. This can use large amounts of storage if the data modifications are frequent but is very powerful for fully archiving the data.</li>
+</ul>
+<h2 id="system-design-concerns">System Design Concerns<a class="headerlink" href="#system-design-concerns" title="Permanent link">&para;</a></h2>
+<p>The following topics are necessary concerns when running a system. To that extent the data organisation plan must bear them in mind.</p>
+<h3 id="initial-data-population">Initial Data Population<a class="headerlink" href="#initial-data-population" title="Permanent link">&para;</a></h3>
+<p>This is usually a one-off process to get a system up and running. Ideally the same scripts can be used for initial data population and regular updates, with different parameters.</p>
+<h3 id="data-update-process">Data Update Process<a class="headerlink" href="#data-update-process" title="Permanent link">&para;</a></h3>
+<p>Regular updates to the data are the norm for most systems. We must consider in our design</p>
+<ul>
+<li>Delivery format (the format that the data source uses) vs storage format of the data. The trade-offs are<ul>
+<li>Storing data in a format close to delivery format makes it easier to reconcile with the source</li>
+<li>The delivery format is often not the best format for downstream processes</li>
 </ul>
 </li>
+<li>Frequency of data updates</li>
+<li>Storage growth characteristics over time</li>
+<li>System performance over time</li>
 </ul>
-<p>For many libraries, these operations will be quick enough. However, if there are millions of symbols, or if the first live version to be found for symbols is very far back in the version key linked-list, then this method can be prohibitively expensive.</p>
-<p>Therefore, ArcticDB maintains a cache of live symbols, such that the <code>list_symbols</code> call should always return quickly. This works by writing special atom keys into the storage that track when symbols are created or deleted, and the time that the operation happened. These <a href="#key-types"><em>Symbol List</em> atom keys</a> are of the form:</p>
+<h3 id="efficient-downstream-access">Efficient Downstream Access<a class="headerlink" href="#efficient-downstream-access" title="Permanent link">&para;</a></h3>
+<p>Often the data is accessed by downstream users and systems much more frequently than it is updated. If that is the case, it is worth organising data to optimise downstream access performance.</p>
+<h3 id="data-problems-investigation-and-remediation">Data Problems: Investigation and Remediation<a class="headerlink" href="#data-problems-investigation-and-remediation" title="Permanent link">&para;</a></h3>
+<p>System problems are often caused by suspected bad data. It is worth thinking about how to investigate and remediate such problems. For example</p>
 <ul>
-<li><code>&lt;library prefix&gt;/sl/*sSt*__add__*0*&lt;timestamp 1&gt;*&lt;content hash&gt;*&lt;symbol name&gt;*&lt;symbol name&gt;</code> - signifies that <code>&lt;symbol name&gt;</code> was created at <code>&lt;timestamp 1&gt;</code></li>
-<li><code>&lt;library prefix&gt;/sl/*sSt*__delete__*0*&lt;timestamp 2&gt;*&lt;content hash&gt;*&lt;symbol name&gt;*&lt;symbol name&gt;</code> - signifies that <code>&lt;symbol name&gt;</code> was deleted at <code>&lt;timestamp 2&gt;</code></li>
+<li>Tooling to find and examine suspected bad data</li>
+<li>Consider how to reconcile suspected bad data vs the original data source</li>
+<li>Manual overrides to fix bad data to allow the system to run effectively while data is re-sourced</li>
+<li>Versioning and snaphsots makes it easy to return to a last known good state</li>
 </ul>
-<p>The operation to list symbols then involves:</p>
+<h3 id="maintenance">Maintenance<a class="headerlink" href="#maintenance" title="Permanent link">&para;</a></h3>
+<p>Some routine maintenance is required to keep systems running efficiently and deal with problems, some of which may have causes from outside the system.</p>
+<p>For ArcticDB specifically, the following issues are worth consideration:</p>
 <ul>
-<li>Read all of the <a href="#key-types">symbol list atom keys</a> for the library (this resolves to a <code>ListObjects</code> call with S3 storage).</li>
-<li>Separate the <a href="#what-is-an-arcticdb-key">keys</a> by the symbol they refer to being created/deleted.</li>
-<li>For each symbol:<ul>
-<li>Check if the most recent operation was a creation or a deletion.</li>
+<li>Version management (see <a href="#versions">versions</a>)</li>
+<li>Defragmentation</li>
+<li>Replication / Backup of data</li>
 </ul>
-</li>
-</ul>
-<p>Symbols for which the latest operation is a creation are then returned to the caller of <code>list_symbols</code>.</p>
-<p>Without any housekeeping, this process could lead to unbounded growth in the number of symbol list atom keys in the library. Even worse, many of these keys would contain redundant information, as we only care about the latest operation for each symbol. Therefore, whenever <code>list_symbols</code> is called by a client with write permissions on the library, if there are too many (500 by default, see the <a href="../../runtime_config/">Runtime Configuration</a> page for details on how to configure) symbol list atom keys, all of the information from these keys is compacted into a single symbol list atom key, and the old keys are deleted. For example, if there were 4 symbol list atom keys:</p>
+<p>There are <a href="#enterprise-features">Enterprise Features</a> to help with these issues and more.</p>
+<h2 id="general-performance-guidelines-for-arcticdb">General Performance Guidelines for ArcticDB<a class="headerlink" href="#general-performance-guidelines-for-arcticdb" title="Permanent link">&para;</a></h2>
+<p>In this section we want to highlight some general rules of thumb that will help you get the best performance from ArcticDB.</p>
+<h3 id="properties-of-arcticdb">Properties of ArcticDB<a class="headerlink" href="#properties-of-arcticdb" title="Permanent link">&para;</a></h3>
+<p>It is worth understanding and bearing in mind these properties of the system</p>
+<h4 id="indices">Indices<a class="headerlink" href="#indices" title="Permanent link">&para;</a></h4>
 <ul>
-<li><code>&lt;library prefix&gt;/sl/*sSt*__add__*0*t0*&lt;content hash&gt;*symbol1*symbol1</code> Create "symbol1" at t0</li>
-<li><code>&lt;library prefix&gt;/sl/*sSt*__delete__*0*t1*&lt;content hash&gt;*symbol1*symbol1</code> Delete "symbol1" at t1</li>
-<li><code>&lt;library prefix&gt;/sl/*sSt*__add__*0*t2*&lt;content hash&gt;*symbol12*symbol2</code> Create "symbol2" at t2</li>
-<li><code>&lt;library prefix&gt;/sl/*sSt*__add__*0*t3*&lt;content hash&gt;*symbol1*symbol1</code> Create "symbol1" at t3</li>
+<li>The primary and performant index is the first DataFrame row index.</li>
+<li>The columns names are also a performant index.</li>
+<li>There are no secondary row or column indices.</li>
+<li>The symbol-list is a good index when compacted.</li>
+<li>The version-list is a good index when compacted.</li>
 </ul>
-<p>They would be compacted into a single object stating that "symbol1" and "symbol2" were both alive at time t3. The key for this object is of the form <code>&lt;library prefix&gt;/sl/*sSt*__symbols__*0*t3*&lt;content hash&gt;*0*0</code>.</p>
-<p>Astute observers will correctly take issue with basing logical decisions on timestamps in a purely client-side database with no synchronisation between clocks of different clients enforced. As such, this cache can diverge from reality, if two different clients create and delete the same symbol at about the same time, and this is the most likely cause of odd behaviour such as <code>lib.read(symbol)</code> working, but <code>symbol in lib.list_symbols()</code> returning <code>False</code>. If this happens, <code>lib.reload_symbol_list()</code> should resolve the issue.</p>
+<h4 id="data">Data<a class="headerlink" href="#data" title="Permanent link">&para;</a></h4>
+<ul>
+<li>DataFrame data is always stored columnar and compressed. ArcticDB is optimised to read and write these.</li>
+<li>DataFrame data is tiled and stored in objects (default is 100,000 rows x 127 cols)</li>
+<li>Data in different DataFrames is stored in different objects</li>
+</ul>
+<h3 id="arcticdb-is-optimised-for-large-dataframes">ArcticDB is Optimised for Large DataFrames<a class="headerlink" href="#arcticdb-is-optimised-for-large-dataframes" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Prefer a smaller number of symbols that have a large amount of data each</li>
+<li>Accessing date ranges and subsets of columns is very efficient</li>
+<li>Collecting together data from a large number of symbols can be slower</li>
+</ul>
+<h3 id="plan-your-version-management">Plan your Version Management<a class="headerlink" href="#plan-your-version-management" title="Permanent link">&para;</a></h3>
+<ul>
+<li>In particular plan which versions to keep and how to delete the others</li>
+<li>Snapshots are useful for version management</li>
+<li>There are interactions between snapshots and versions: snapshots keep versions from being deleted</li>
+</ul>
+<p>Please see the <a href="../snapshots/">snapshots documentation</a> and <a href="../../notebooks/ArcticDB_demo_snapshots/">snapshots notebook</a> for more details.</p>
+<h3 id="lots-of-small-appends-or-updates-can-fragment-your-data">Lots of Small Appends or Updates Can Fragment Your Data<a class="headerlink" href="#lots-of-small-appends-or-updates-can-fragment-your-data" title="Permanent link">&para;</a></h3>
+<p>Append and Update are efficient because they always add new chunks of data rather than reorganising the existing data (actually update will reorganise but only where necessary which is typically only a small amount).</p>
+<p>This means that lots of small appends or updates can result in lots of small data chunks, which makes reads slower.</p>
+<p>You can defragment a symbol manually using the <a href="../../api/library/">defragment_symbol_data</a> library function. Altnernatively the <a href="#enterprise-features">Enterprise Features</a> offer background processes that will take care of defragmentation for you.</p>
+<h2 id="examples-based-on-market-data">Examples Based on Market Data<a class="headerlink" href="#examples-based-on-market-data" title="Permanent link">&para;</a></h2>
+<h3 id="seperate-symbol-for-each-security">Seperate Symbol for Each Security<a class="headerlink" href="#seperate-symbol-for-each-security" title="Permanent link">&para;</a></h3>
+<p>The data for a single security would be a timeseries of market data. In this set of sample data this would be all the price data for AAPL.</p>
+<p><img alt="" src="../../images/MarketData5MinBarsSingleSec.png" /></p>
+<p>Every security has its own symbol with the same data shape.</p>
+<h4 id="pros">Pros<a class="headerlink" href="#pros" title="Permanent link">&para;</a></h4>
+<ul>
+<li>Ideal for single security analysis</li>
+<li>The delivery format for the data is often per security</li>
+<li>The update process is simple</li>
+</ul>
+<h4 id="cons">Cons<a class="headerlink" href="#cons" title="Permanent link">&para;</a></h4>
+<ul>
+<li>Analysis involving many securities requires reading many symbols</li>
+<li>Time index for raw data may not match between securities.</li>
+</ul>
+<p>The data is easier to use with <a href="#time-index-alignment">time index alignment</a>.</p>
+<h3 id="single-symbol-for-all-securities">Single Symbol for all Securities<a class="headerlink" href="#single-symbol-for-all-securities" title="Permanent link">&para;</a></h3>
+<p>The data for all securities is merged together into a single symbol.</p>
+<p><img alt="" src="../../images/MarketData5MinBarsAllSecs.png" /></p>
+<p>The security identifier is included as an extra index column. Note that DataFrames with a Pandas MultiIndex will round trip correctly, which is useful. However the high performance ArcticDB indexing is only on the primary index level.</p>
+<h4 id="pros_1">Pros<a class="headerlink" href="#pros_1" title="Permanent link">&para;</a></h4>
+<ul>
+<li>Good for analysis involving many securities at once eg. portfolio analysis</li>
+<li>A single large DataFrame tends to give very good read performance</li>
+</ul>
+<h4 id="cons_1">Cons<a class="headerlink" href="#cons_1" title="Permanent link">&para;</a></h4>
+<ul>
+<li>The update process is more complicated. Probably needs a read, modify, write sequence of operations (although see <a href="#planned-future-features-and-improvements">Future Features</a>)</li>
+<li>Time index for raw data may not match between securities.</li>
+</ul>
+<p>The data is easier to use with <a href="#time-index-alignment">time index alignment</a>.</p>
+<h3 id="single-symbol-for-each-data-item">Single Symbol for each Data Item<a class="headerlink" href="#single-symbol-for-each-data-item" title="Permanent link">&para;</a></h3>
+<p>A symbol holds the timeseries for all securities for a single field. In the example below are the close prices over time for all securities.</p>
+<p><img alt="" src="../../images/MarketData5MinBarsAllSecsClose.png" /></p>
+<h4 id="pros_2">Pros<a class="headerlink" href="#pros_2" title="Permanent link">&para;</a></h4>
+<ul>
+<li>Good for analysis involving many securities at once eg. portfolio analysis</li>
+<li>A single large DataFrame tends to give very good read performance</li>
+<li>Update process is reasonably simple.</li>
+</ul>
+<h4 id="cons_2">Cons<a class="headerlink" href="#cons_2" title="Permanent link">&para;</a></h4>
+<ul>
+<li>Time index for raw data may not match between securities. </li>
+</ul>
+<p>The data is easier to use with <a href="#time-index-alignment">time index alignment</a>.</p>
+<h2 id="time-index-alignment">Time Index Alignment<a class="headerlink" href="#time-index-alignment" title="Permanent link">&para;</a></h2>
+<p>Raw data may not be time-aligned</p>
+<ul>
+<li>The underlying tick data arrives at arbitrary times</li>
+<li>Different products have different trading hours</li>
+<li>Some securities may trade less frequently</li>
+</ul>
+<p>For many purposes time-aligned data is either necessary or makes the task much simpler.</p>
+<p>Resampling is one way to align data. There is a Pandas resample function and a faster function planned in ArcticDB (see <a href="#planned-future-features-and-improvements">Future Features</a>).</p>
+<h2 id="enterprise-features">Enterprise Features<a class="headerlink" href="#enterprise-features" title="Permanent link">&para;</a></h2>
+<p>Many of the housekeeping and maintenance procedures recommended in this guide are taken care of by processes available in the ArcticDB Enterprise package. Please contact us if you would like to explore further. Click the <em>Get ArcticDB</em> button on our <a href="https://arcticdb.io/">website</a> to contact us.</p>
+<h2 id="planned-future-features-and-improvements">Planned Future Features and Improvements<a class="headerlink" href="#planned-future-features-and-improvements" title="Permanent link">&para;</a></h2>
+<p>We are always improving and adding new features to ArcticDB. Below are a few relevant new features that are in our plans</p>
+<ul>
+<li><strong>Multi-Index:</strong> support for more flexible data updates for multi-index symbols.</li>
+<li><strong>Resampling:</strong> a planned <a href="../api/query_builder">QueryBuilder</a> extension that will allow fast on-the-fly resampling of data as part of the read.</li>
+</ul>
+<p>If you have a suggestion for a new feature, please raise an issue on our <a href="https://github.com/man-group/ArcticDB">github</a>. Please include as much detail as possible.</p>
 
 
 
