@@ -17,6 +17,7 @@
 #include <arcticdb/processing/aggregation.hpp>
 #include <arcticdb/processing/aggregation_interface.hpp>
 #include <arcticdb/processing/processing_unit.hpp>
+#include <arcticdb/processing/sorted_aggregation.hpp>
 #include <arcticdb/processing/grouper.hpp>
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/util/movable_priority_queue.hpp>

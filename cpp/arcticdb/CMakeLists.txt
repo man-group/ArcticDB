@@ -252,6 +252,7 @@ set(arcticdb_srcs
         pipeline/write_frame.hpp
         pipeline/write_options.hpp
         processing/aggregation.hpp
+        processing/aggregation_utils.hpp
         processing/component_manager.hpp
         processing/operation_dispatch.hpp
         processing/operation_dispatch_binary.hpp
@@ -263,6 +264,7 @@ set(arcticdb_srcs
         processing/clause.hpp
         processing/expression_context.hpp
         processing/expression_node.hpp
+        processing/sorted_aggregation.hpp
         storage/constants.hpp
         storage/common.hpp
         storage/config_resolvers.hpp
@@ -426,6 +428,7 @@ set(arcticdb_srcs
         python/normalization_checks.cpp
         processing/processing_unit.cpp
         processing/aggregation.cpp
+        processing/aggregation_utils.cpp
         processing/clause.cpp
         processing/component_manager.cpp
         processing/expression_node.cpp
@@ -436,6 +439,7 @@ set(arcticdb_srcs
         processing/operation_dispatch_binary_gt.cpp
         processing/operation_dispatch_binary_lt.cpp
         processing/operation_dispatch_binary_operator.cpp
+        processing/sorted_aggregation.cpp
         python/python_to_tensor_frame.cpp
         storage/config_resolvers.cpp
         storage/failure_simulation.cpp
