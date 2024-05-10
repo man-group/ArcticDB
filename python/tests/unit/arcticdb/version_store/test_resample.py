@@ -143,7 +143,7 @@ def test_resampling_nan_correctness(lmdb_version_store_tiny_segment):
         "float_count": ("float_col", "count"),
     }
 
-    # Pandas 1.X does not support all of these aggregators/behaviours
+    # Pandas 1.X does not support all of these aggregators, or behaves in a less intuitive way than Pandas 2.X
     if IS_PANDAS_TWO:
         agg_dict.update(
             {

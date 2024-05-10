@@ -562,7 +562,6 @@ class QueryBuilder:
         else:
             self.clauses[-1].set_aggregations(aggregations)
             self._python_clauses[-1].aggregations = aggregations
-            # self._python_clauses[-1] = self._python_clauses[-1]._replace(aggregations=aggregations)
         return self
 
 
@@ -599,7 +598,6 @@ class QueryBuilder:
         if boundary_map[closed] == _ResampleBoundary.LEFT:
             self.clauses.append(_ResampleClauseLeftClosed(rule, boundary_map[label]))
         else:
-            # boundary_map[closed] == _ResampleBoundary.RIGHT
             self.clauses.append(_ResampleClauseRightClosed(rule, boundary_map[label]))
         self._python_clauses.append(PythonResampleClause(rule=rule, closed=boundary_map[closed], label=boundary_map[label]))
         return self
@@ -731,7 +729,6 @@ class QueryBuilder:
                 if python_clause.closed == _ResampleBoundary.LEFT:
                     self.clauses.append(_ResampleClauseLeftClosed(python_clause.rule, python_clause.label))
                 else:
-                    # python_clause.closed == _ResampleBoundary.RIGHT
                     self.clauses.append(_ResampleClauseRightClosed(python_clause.rule, python_clause.label))
                 if python_clause.aggregations is not None:
                     self.clauses[-1].set_aggregations(python_clause.aggregations)
