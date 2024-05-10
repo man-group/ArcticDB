@@ -212,6 +212,31 @@ using CountAggregator = GroupingAggregatorImpl<CountAggregatorData>;
 using FirstAggregator = GroupingAggregatorImpl<FirstAggregatorData>;
 using LastAggregator = GroupingAggregatorImpl<LastAggregatorData>;
 
+template<ResampleBoundary closed_boundary>
+class Bucket {
+public:
+    Bucket(timestamp start, timestamp end):
+            start_(start), end_(end){}
+
+    void set_boundaries(timestamp start, timestamp end) {
+        start_ = start;
+        end_ = end;
+    }
+
+    bool contains(timestamp ts) const {
+        if constexpr (closed_boundary == ResampleBoundary::LEFT) {
+            return ts >= start_ && ts < end_;
+        } else {
+            // closed_boundary == ResampleBoundary::RIGHT
+            return ts > start_ && ts <= end_;
+        }
+    }
+
+private:
+    timestamp start_;
+    timestamp end_;
+};
+
 enum class SortedAggregationOperator {
     SUM,
     MEAN,

@@ -649,6 +649,7 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const 
                     bool reached_end_of_buckets{false};
                     auto bucket_start_it = bucket_boundaries.cbegin();
                     auto bucket_end_it = std::next(bucket_start_it);
+                    Bucket<closed_boundary> current_bucket(*bucket_start_it, *bucket_end_it);
                     const auto bucket_boundaries_end = bucket_boundaries.cend();
                     for (auto [idx, input_agg_column]: folly::enumerate(input_agg_columns)) {
                         // Always true right now due to check at the top of this function
@@ -664,6 +665,7 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const 
                                 &string_pool,
                                 &bucket_start_it,
                                 &bucket_end_it,
+                                &current_bucket,
                                 &reached_end_of_buckets](auto input_type_desc_tag) {
                                     using input_type_info = ScalarTypeInfo<decltype(input_type_desc_tag)>;
                                     if constexpr ((is_numeric_type(input_type_info::data_type) && is_numeric_type(output_type_info::data_type)) ||
@@ -680,7 +682,7 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const 
                                         for (auto index_it = index_data.template cbegin<IndexTDT>();
                                              index_it != index_cend && !reached_end_of_buckets;
                                              ++index_it, ++agg_it) {
-                                            if (ARCTICDB_LIKELY(index_value_in_bucket(*index_it, *bucket_start_it, *bucket_end_it))) {
+                                            if (ARCTICDB_LIKELY(current_bucket.contains(*index_it))) {
                                                 if constexpr(is_time_type(input_type_info::data_type) && aggregation_operator == SortedAggregationOperator::COUNT) {
                                                     bucket_aggregator.template push<typename input_type_info::RawType, true>(*agg_it);
                                                 } else if constexpr (is_numeric_type(input_type_info::data_type) || is_bool_type(input_type_info::data_type)) {
@@ -725,13 +727,23 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const 
                                                         }
                                                     }
                                                 }
-                                                if (ARCTICDB_LIKELY(!reached_end_of_buckets && index_value_in_bucket(*index_it, *bucket_start_it, *bucket_end_it))) {
-                                                    if constexpr(is_time_type(input_type_info::data_type) && aggregation_operator == SortedAggregationOperator::COUNT) {
-                                                        bucket_aggregator.template push<typename input_type_info::RawType, true>(*agg_it);
-                                                    } else if constexpr (is_numeric_type(input_type_info::data_type) || is_bool_type(input_type_info::data_type)) {
-                                                        bucket_aggregator.push(*agg_it);
-                                                    } else if constexpr (is_sequence_type(input_type_info::data_type)) {
-                                                        bucket_aggregator.push(agg_column.string_at_offset(*agg_it));
+                                                if (ARCTICDB_LIKELY(!reached_end_of_buckets)) {
+                                                    current_bucket.set_boundaries(*bucket_start_it, *bucket_end_it);
+                                                    if (ARCTICDB_LIKELY(current_bucket.contains(*index_it))) {
+                                                        if constexpr (is_time_type(input_type_info::data_type) &&
+                                                                      aggregation_operator ==
+                                                                      SortedAggregationOperator::COUNT) {
+                                                            bucket_aggregator.template push<typename input_type_info::RawType, true>(
+                                                                    *agg_it);
+                                                        } else if constexpr (
+                                                                is_numeric_type(input_type_info::data_type) ||
+                                                                is_bool_type(input_type_info::data_type)) {
+                                                            bucket_aggregator.push(*agg_it);
+                                                        } else if constexpr (is_sequence_type(
+                                                                input_type_info::data_type)) {
+                                                            bucket_aggregator.push(
+                                                                    agg_column.string_at_offset(*agg_it));
+                                                        }
                                                     }
                                                 }
                                             }
