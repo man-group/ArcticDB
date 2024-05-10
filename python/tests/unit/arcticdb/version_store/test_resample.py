@@ -109,8 +109,13 @@ def test_resampling_timezones(lmdb_version_store_v1):
     )
 
 
-def test_resampling_nan_correctness(lmdb_version_store_tiny_segment):
-    lib = lmdb_version_store_tiny_segment
+def test_resampling_nan_correctness(version_store_factory):
+    lib = version_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        dynamic_strings=True,
+        lmdb_config={"map_size": 2**30}
+    )
     sym = "test_resampling_nan_correctness"
     # NaN here means NaT for datetime columns and NaN/None in string columns
     # Create 5 buckets worth of data, each containing 3 values:
