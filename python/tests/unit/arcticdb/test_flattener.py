@@ -16,7 +16,7 @@ from arcticdb.version_store._custom_normalizers import (
 
 import numpy as np
 import pandas as pd
-from pandas.testing import assert_frame_equal, assert_series_equal
+from arcticdb.util.test import assert_frame_equal, assert_series_equal
 
 fl = Flattener()
 separator = fl.SEPARATOR
