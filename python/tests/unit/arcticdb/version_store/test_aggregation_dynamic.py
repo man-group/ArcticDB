@@ -37,7 +37,10 @@ def assert_equal_value(data, expected):
     assert_frame_equal(received.astype("float"), expected)
 
 
-@pytest.mark.xfail(MACOS_CONDA_BUILD, reason="Conda Pandas returns nan instead of inf like other platforms")
+@pytest.mark.xfail(
+    MACOS_CONDA_BUILD,
+    reason="Conda Pandas returns nan instead of inf like other platforms",
+)
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
@@ -93,8 +96,8 @@ def test_hypothesis_mean_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df):
         index=range_indexes(),
     )
 )
-def test_hypothesis_sum_agg_dynamic(s3_version_store_dynamic_schema_v2, df):
-    lib = s3_version_store_dynamic_schema_v2
+def test_hypothesis_sum_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df):
+    lib = lmdb_version_store_dynamic_schema_v1
     assume(not df.empty)
 
     symbol = f"sum_agg-{uuid.uuid4().hex}"
@@ -213,11 +216,18 @@ def test_hypothesis_count_agg_dynamic_strings(lmdb_version_store_dynamic_schema_
     count_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df)
 
 
-def test_count_aggregation_dynamic(s3_version_store_dynamic_schema_v2):
-    lib = s3_version_store_dynamic_schema_v2
+def test_count_aggregation_dynamic(lmdb_version_store_dynamic_schema_v2):
+    lib = lmdb_version_store_dynamic_schema_v2
     df = DataFrame(
         {
-            "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2", "group_3"],
+            "grouping_column": [
+                "group_1",
+                "group_1",
+                "group_1",
+                "group_2",
+                "group_2",
+                "group_3",
+            ],
             "to_count": [100, 1, 3, 2, 2, np.nan],
         },
         index=np.arange(6),
@@ -276,11 +286,19 @@ def test_hypothesis_first_agg_dynamic_numeric(lmdb_version_store_dynamic_schema_
 
 
 @pytest.mark.xfail(reason="Not supported yet")
-def test_first_aggregation_dynamic(s3_version_store_dynamic_schema_v2):
-    lib = s3_version_store_dynamic_schema_v2
+def test_first_aggregation_dynamic(lmdb_version_store_dynamic_schema_v2):
+    lib = lmdb_version_store_dynamic_schema_v2
     df = DataFrame(
         {
-            "grouping_column": ["group_1", "group_2", "group_4", "group_2", "group_1", "group_3", "group_1"],
+            "grouping_column": [
+                "group_1",
+                "group_2",
+                "group_4",
+                "group_2",
+                "group_1",
+                "group_3",
+                "group_1",
+            ],
             "get_first": [100.0, np.nan, np.nan, 2.7, 1.4, 5.8, 3.45],
         },
         index=np.arange(7),
@@ -338,11 +356,21 @@ def test_hypothesis_last_agg_dynamic_numeric(lmdb_version_store_dynamic_schema_v
 
 
 @pytest.mark.xfail(reason="Not supported yet")
-def test_last_aggregation_dynamic(s3_version_store_dynamic_schema_v2):
-    lib = s3_version_store_dynamic_schema_v2
+def test_last_aggregation_dynamic(lmdb_version_store_dynamic_schema_v2):
+    lib = lmdb_version_store_dynamic_schema_v2
     df = DataFrame(
         {
-            "grouping_column": ["group_1", "group_2", "group_4", "group_5", "group_2", "group_1", "group_3", "group_1", "group_5"],
+            "grouping_column": [
+                "group_1",
+                "group_2",
+                "group_4",
+                "group_5",
+                "group_2",
+                "group_1",
+                "group_3",
+                "group_1",
+                "group_5",
+            ],
             "get_last": [100.0, 2.7, np.nan, np.nan, np.nan, 1.4, 5.8, 3.45, 6.9],
         },
         index=np.arange(9),
@@ -363,10 +391,13 @@ def test_last_aggregation_dynamic(s3_version_store_dynamic_schema_v2):
     assert_frame_equal(received, expected)
 
 
-def test_sum_aggregation_dynamic(s3_version_store_dynamic_schema_v2):
-    lib = s3_version_store_dynamic_schema_v2
+def test_sum_aggregation_dynamic(lmdb_version_store_dynamic_schema_v2):
+    lib = lmdb_version_store_dynamic_schema_v2
     df = DataFrame(
-        {"grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"], "to_sum": [1, 1, 2, 2, 2]},
+        {
+            "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"],
+            "to_sum": [1, 1, 2, 2, 2],
+        },
         index=np.arange(5),
     )
     symbol = "test_sum_aggregation_dynamic"
@@ -385,7 +416,10 @@ def test_sum_aggregation_dynamic(s3_version_store_dynamic_schema_v2):
 def test_sum_aggregation_with_range_index_dynamic(lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1
     df = DataFrame(
-        {"grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"], "to_sum": [1, 1, 2, 2, 2]}
+        {
+            "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"],
+            "to_sum": [1, 1, 2, 2, 2],
+        }
     )
     symbol = "test_sum_aggregation_dynamic"
     expected, slices = make_dynamic(df)
@@ -457,12 +491,23 @@ def test_group_column_splitting_dynamic(lmdb_version_store_tiny_segment_dynamic)
     assert_equal_value(vit.data, expected)
 
 
-def test_group_column_splitting_strings_dynamic(lmdb_version_store_tiny_segment_dynamic):
+def test_group_column_splitting_strings_dynamic(
+    lmdb_version_store_tiny_segment_dynamic,
+):
     lib = lmdb_version_store_tiny_segment_dynamic
     symbol = "test_group_column_splitting"
     df = DataFrame(
         {
-            "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2", "group_1", "group_2", "group_1"],
+            "grouping_column": [
+                "group_1",
+                "group_1",
+                "group_1",
+                "group_2",
+                "group_2",
+                "group_1",
+                "group_2",
+                "group_1",
+            ],
             "sum1": [1, 2, 3, 4, 1, 2, 3, 4],
             "max1": [1, 2, 3, 4, 1, 2, 3, 4],
             "sum2": [2, 3, 4, 5, 2, 3, 4, 5],
@@ -536,7 +581,9 @@ def test_minimal_repro_type_change_max(lmdb_version_store_dynamic_schema):
     assert_equal_value(received, expected)
 
 
-def test_minimal_repro_type_sum_similar_string_group_values(lmdb_version_store_dynamic_schema):
+def test_minimal_repro_type_sum_similar_string_group_values(
+    lmdb_version_store_dynamic_schema,
+):
     lib = lmdb_version_store_dynamic_schema
     sym = "test_minimal_repro_type_change_max"
 
@@ -550,7 +597,9 @@ def test_minimal_repro_type_sum_similar_string_group_values(lmdb_version_store_d
     assert_equal_value(received, expected)
 
 
-def test_aggregation_grouping_column_missing_from_row_group(lmdb_version_store_dynamic_schema):
+def test_aggregation_grouping_column_missing_from_row_group(
+    lmdb_version_store_dynamic_schema,
+):
     lib = lmdb_version_store_dynamic_schema
     df0 = DataFrame(
         {"to_sum": [1, 2], "grouping_column": ["group_1", "group_2"]},

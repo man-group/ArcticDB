@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import pytest
 import numpy as np
 import pandas as pd
@@ -217,7 +218,7 @@ def test_hypothesis_count_agg_strings(lmdb_version_store, df):
     count_aggregation(lmdb_version_store, df)
 
 
-def test_count_aggregation(local_object_version_store):
+def test_count_aggregation(lmdb_version_store):
     df = DataFrame(
         {
             "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2", "group_3"],
@@ -228,9 +229,9 @@ def test_count_aggregation(local_object_version_store):
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"to_count": "count"})
     symbol = "test_count_aggregation"
-    local_object_version_store.write(symbol, df)
+    lmdb_version_store.write(symbol, df)
 
-    res = local_object_version_store.read(symbol, query_builder=q)
+    res = lmdb_version_store.read(symbol, query_builder=q)
     res.data.sort_index(inplace=True)
 
     df = pd.DataFrame({"to_count": [3, 2, 0]}, index=["group_1", "group_2", "group_3"], dtype=np.uint64)
@@ -272,7 +273,7 @@ def test_hypothesis_first_agg_numeric(lmdb_version_store, df):
 
 
 @pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
-def test_first_aggregation(local_object_version_store):
+def test_first_aggregation(lmdb_version_store):
     df = DataFrame(
         {
             "grouping_column": ["group_1", "group_2", "group_4", "group_2", "group_1", "group_3", "group_1"],
@@ -283,9 +284,9 @@ def test_first_aggregation(local_object_version_store):
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"get_first": "first"})
     symbol = "test_first_aggregation"
-    local_object_version_store.write(symbol, df)
+    lmdb_version_store.write(symbol, df)
 
-    res = local_object_version_store.read(symbol, query_builder=q)
+    res = lmdb_version_store.read(symbol, query_builder=q)
     res.data.sort_index(inplace=True)
 
     df = pd.DataFrame({"get_first": [100.0, 2.7, 5.8, np.nan]}, index=["group_1", "group_2", "group_3", "group_4"])
@@ -296,8 +297,8 @@ def test_first_aggregation(local_object_version_store):
 
 
 @pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
-def test_first_agg_with_append(local_object_version_store):
-    lib = local_object_version_store
+def test_first_agg_with_append(lmdb_version_store):
+    lib = lmdb_version_store
 
     symbol = "first_agg"
     lib.write(symbol, pd.DataFrame({"grouping_column": [0], "get_first": [10.0]}))
@@ -346,10 +347,20 @@ def test_hypothesis_last_agg_numeric(lmdb_version_store, df):
 
 
 @pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
-def test_last_aggregation(local_object_version_store):
+def test_last_aggregation(lmdb_version_store):
     df = DataFrame(
         {
-            "grouping_column": ["group_1", "group_2", "group_4", "group_5", "group_2", "group_1", "group_3", "group_1", "group_5"],
+            "grouping_column": [
+                "group_1",
+                "group_2",
+                "group_4",
+                "group_5",
+                "group_2",
+                "group_1",
+                "group_3",
+                "group_1",
+                "group_5",
+            ],
             "get_last": [100.0, 2.7, np.nan, np.nan, np.nan, 1.4, 5.8, 3.45, 6.9],
         },
         index=np.arange(9),
@@ -357,12 +368,14 @@ def test_last_aggregation(local_object_version_store):
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"get_last": "last"})
     symbol = "test_last_aggregation"
-    local_object_version_store.write(symbol, df)
+    lmdb_version_store.write(symbol, df)
 
-    res = local_object_version_store.read(symbol, query_builder=q)
+    res = lmdb_version_store.read(symbol, query_builder=q)
     res.data.sort_index(inplace=True)
 
-    df = pd.DataFrame({"get_last": [3.45, 2.7, 5.8, np.nan, 6.9]}, index=["group_1", "group_2", "group_3", "group_4", "group_5"])
+    df = pd.DataFrame(
+        {"get_last": [3.45, 2.7, 5.8, np.nan, 6.9]}, index=["group_1", "group_2", "group_3", "group_4", "group_5"]
+    )
     df.index.rename("grouping_column", inplace=True)
     res.data.sort_index(inplace=True)
 
@@ -370,8 +383,8 @@ def test_last_aggregation(local_object_version_store):
 
 
 @pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
-def test_last_agg_with_append(local_object_version_store):
-    lib = local_object_version_store
+def test_last_agg_with_append(lmdb_version_store):
+    lib = lmdb_version_store
 
     symbol = "last_agg"
     lib.write(symbol, pd.DataFrame({"grouping_column": [0], "get_last": [10.0]}))
@@ -388,7 +401,7 @@ def test_last_agg_with_append(local_object_version_store):
     assert_frame_equal(vit.data, df)
 
 
-def test_sum_aggregation(local_object_version_store):
+def test_sum_aggregation(lmdb_version_store):
     df = DataFrame(
         {"grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"], "to_sum": [1, 1, 2, 2, 2]},
         index=np.arange(5),
@@ -396,9 +409,9 @@ def test_sum_aggregation(local_object_version_store):
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"to_sum": "sum"})
     symbol = "test_sum_aggregation"
-    local_object_version_store.write(symbol, df)
+    lmdb_version_store.write(symbol, df)
 
-    res = local_object_version_store.read(symbol, query_builder=q)
+    res = lmdb_version_store.read(symbol, query_builder=q)
     res.data.sort_index(inplace=True)
 
     df = pd.DataFrame({"to_sum": [4, 4]}, index=["group_1", "group_2"])
@@ -408,7 +421,7 @@ def test_sum_aggregation(local_object_version_store):
     assert_frame_equal(res.data, df)
 
 
-def test_mean_aggregation(local_object_version_store):
+def test_mean_aggregation(lmdb_version_store):
     df = DataFrame(
         {"grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"], "to_mean": [1, 1, 2, 2, 2]},
         index=np.arange(5),
@@ -416,9 +429,9 @@ def test_mean_aggregation(local_object_version_store):
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"to_mean": "mean"})
     symbol = "test_aggregation"
-    local_object_version_store.write(symbol, df)
+    lmdb_version_store.write(symbol, df)
 
-    res = local_object_version_store.read(symbol, query_builder=q)
+    res = lmdb_version_store.read(symbol, query_builder=q)
     res.data.sort_index(inplace=True)
 
     df = pd.DataFrame({"to_mean": [4 / 3, 2]}, index=["group_1", "group_2"])
@@ -428,7 +441,7 @@ def test_mean_aggregation(local_object_version_store):
     assert_frame_equal(res.data, df)
 
 
-def test_mean_aggregation_float(local_object_version_store):
+def test_mean_aggregation_float(lmdb_version_store):
     df = DataFrame(
         {
             "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"],
@@ -439,9 +452,9 @@ def test_mean_aggregation_float(local_object_version_store):
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"to_mean": "mean"})
     symbol = "test_aggregation"
-    local_object_version_store.write(symbol, df)
+    lmdb_version_store.write(symbol, df)
 
-    res = local_object_version_store.read(symbol, query_builder=q)
+    res = lmdb_version_store.read(symbol, query_builder=q)
     res.data.sort_index(inplace=True)
 
     df = pd.DataFrame({"to_mean": [(1.1 + 1.4 + 2.5) / 3, 2.2]}, index=["group_1", "group_2"])
@@ -455,12 +468,7 @@ def test_named_agg(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     sym = "test_named_agg"
     gen = np.random.default_rng()
-    df = DataFrame(
-        {
-            "grouping_column": [1, 1, 1, 2, 3, 4],
-            "agg_column": gen.random(6)
-        }
-    )
+    df = DataFrame({"grouping_column": [1, 1, 1, 2, 3, 4], "agg_column": gen.random(6)})
     lib.write(sym, df)
     expected = df.groupby("grouping_column").agg(
         agg_column_sum=pd.NamedAgg("agg_column", "sum"),

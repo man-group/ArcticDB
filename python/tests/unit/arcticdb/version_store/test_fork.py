@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import time
 from multiprocessing import Pool
 from pickle import loads, dumps
@@ -70,11 +71,11 @@ def _read_and_assert_symbol(args):
             time.sleep(0.5)  # Make sure the writes have finished, especially azurite.
 
 
-def test_parallel_reads(local_object_version_store):
+def test_parallel_reads(lmdb_version_store):
     symbols = ["XXX"] * 20
     p = Pool(10)
-    local_object_version_store.write(symbols[0], df("test1"))
+    lmdb_version_store.write(symbols[0], df("test1"))
     time.sleep(0.1)  # Make sure the writes have finished, especially azurite.
-    p.map(_read_and_assert_symbol, [(local_object_version_store, s, idx) for idx, s in enumerate(symbols)])
+    p.map(_read_and_assert_symbol, [(lmdb_version_store, s, idx) for idx, s in enumerate(symbols)])
     p.close()
     p.join()
