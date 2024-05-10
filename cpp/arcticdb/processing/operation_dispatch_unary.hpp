@@ -103,6 +103,7 @@ VariantData visit_unary_operator(const VariantData& left, Func&& func) {
         },
         [](const auto&) -> VariantData {
             user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Bitset/ValueSet inputs not accepted to unary operators");
+            return EmptyResult{};
         }
     }, left);
 }
@@ -155,6 +156,7 @@ VariantData visit_unary_comparator(const VariantData& left, Func&& func) {
             },
             [](const auto&) -> VariantData {
                 user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Bitset/ValueSet inputs not accepted to unary comparators");
+                return EmptyResult{};
             }
     }, left);
 }

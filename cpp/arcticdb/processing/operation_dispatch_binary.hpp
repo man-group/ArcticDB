@@ -130,6 +130,7 @@ VariantData visit_binary_membership(const VariantData &left, const VariantData &
             },
             [](const auto &, const auto&) -> VariantData {
             user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Binary membership operations must be Column/ValueSet");
+            return EmptyResult{};
         }
         }, left, right);
 }
@@ -245,11 +246,19 @@ VariantData binary_comparator(const ColumnWithStrings& column_with_strings, cons
                 });
 
             } else {
-                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Invalid comparison {} {} '{}' {}",
-                                column_with_strings.column_name_,
-                                get_user_friendly_type_string(column_with_strings.column_->type()),
-                                func,
-                                get_user_friendly_type_string(val.type()));
+                if constexpr (arguments_reversed) {
+                    user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Invalid comparison {} '{}' {} {}",
+                                    get_user_friendly_type_string(val.type()),
+                                    func,
+                                    column_with_strings.column_name_,
+                                    get_user_friendly_type_string(column_with_strings.column_->type()));
+                } else {
+                    user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Invalid comparison {} {} '{}' {}",
+                                    column_with_strings.column_name_,
+                                    get_user_friendly_type_string(column_with_strings.column_->type()),
+                                    func,
+                                    get_user_friendly_type_string(val.type()));
+                }
             }
         });
     });
@@ -278,9 +287,11 @@ VariantData visit_binary_comparator(const VariantData& left, const VariantData& 
         },
         [&] ([[maybe_unused]] const std::shared_ptr<Value>& l, [[maybe_unused]] const std::shared_ptr<Value>& r) ->VariantData  {
         user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Two value inputs not accepted to binary comparators");
+        return EmptyResult{};
         },
         [](const auto &, const auto&) -> VariantData {
         user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Bitset/ValueSet inputs not accepted to binary comparators");
+        return EmptyResult{};
     }
     }, left, right);
 }
@@ -419,7 +430,8 @@ VariantData visit_binary_operator(const VariantData& left, const VariantData& ri
             },
             [](const auto &, const auto&) -> VariantData {
             user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Bitset/ValueSet inputs not accepted to binary operators");
-        }
+            return EmptyResult{};
+            }
         }, left, right);
 }
 
