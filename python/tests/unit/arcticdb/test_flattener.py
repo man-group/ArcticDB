@@ -16,6 +16,7 @@ from arcticdb.version_store._custom_normalizers import (
 
 import numpy as np
 import pandas as pd
+from arcticdb.util.test import assert_frame_equal, assert_series_equal
 
 fl = Flattener()
 separator = fl.SEPARATOR
@@ -98,7 +99,7 @@ def test_pandas_series(lmdb_version_store):
 
     lib = lmdb_version_store
     lib.write("sym", test_data, recursive_normalizers=True)
-    assert lib.read("sym").data[0].equals(test_data[0])
+    assert_series_equal(lib.read("sym").data[0], test_data[0])
 
 
 def test_multiindex_recursive_normalizer(lmdb_version_store):
@@ -106,4 +107,4 @@ def test_multiindex_recursive_normalizer(lmdb_version_store):
     vals = ["a", "b", "c"]
     df = pd.DataFrame(data=np.arange(6), index=pd.MultiIndex.from_product([dtidx, vals], names=["a", "b"]))
     lmdb_version_store.write("df", {"data": df}, recursive_normalizers=True)
-    assert lmdb_version_store.read("df").data["data"].equals(df)
+    assert_frame_equal(lmdb_version_store.read("df").data["data"], df)
