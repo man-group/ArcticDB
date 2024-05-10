@@ -106,7 +106,6 @@ std::vector<ProcessingUnit> split_by_row_slice(ProcessingUnit&& proc) {
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(input.row_ranges_.has_value(), "split_by_row_slice needs RowRanges");
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(input.col_ranges_.has_value(), "split_by_row_slice needs ColRanges");
     auto include_expected_get_calls = input.segment_initial_expected_get_calls_.has_value();
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(input.segment_initial_expected_get_calls_.has_value(), "split_by_row_slice needs expected get calls");
 
     std::map<RowRange, ProcessingUnit> output_map;
     for (auto [idx, row_range_ptr]: folly::enumerate(*input.row_ranges_)) {
@@ -115,8 +114,7 @@ std::vector<ProcessingUnit> split_by_row_slice(ProcessingUnit&& proc) {
             it->second.row_ranges_->emplace_back(input.row_ranges_->at(idx));
             it->second.col_ranges_->emplace_back(input.col_ranges_->at(idx));
             if (include_expected_get_calls) {
-                it->second.segment_initial_expected_get_calls_->emplace_back(
-                        input.segment_initial_expected_get_calls_->at(idx));
+                it->second.segment_initial_expected_get_calls_->emplace_back(input.segment_initial_expected_get_calls_->at(idx));
             }
         } else {
             auto [inserted_it, _] = output_map.emplace(*row_range_ptr, ProcessingUnit{});
@@ -124,9 +122,7 @@ std::vector<ProcessingUnit> split_by_row_slice(ProcessingUnit&& proc) {
             inserted_it->second.row_ranges_.emplace(1, input.row_ranges_->at(idx));
             inserted_it->second.col_ranges_.emplace(1, input.col_ranges_->at(idx));
             if (include_expected_get_calls) {
-                inserted_it->second.segment_initial_expected_get_calls_.emplace(1,
-                                                                                input.segment_initial_expected_get_calls_->at(
-                                                                                        idx));
+                inserted_it->second.segment_initial_expected_get_calls_.emplace(1, input.segment_initial_expected_get_calls_->at(idx));
             }
         }
     }
