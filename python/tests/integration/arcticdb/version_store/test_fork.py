@@ -37,21 +37,21 @@ def check_lib_config(lib):
     assert found_test_normalizer
 
 
-def get_pickle_store(lmdb_version_store):
+def get_pickle_store(local_object_version_store):
     d = {"a": "b"}
-    lmdb_version_store.write("xxx", d)
-    ser = dumps(lmdb_version_store)
+    local_object_version_store.write("xxx", d)
+    ser = dumps(local_object_version_store)
     nvs = loads(ser)
     out = nvs.read("xxx")
     assert d == out.data
 
 
-def test_map(lmdb_version_store):
+def test_map(local_object_version_store):
     symbols = ["XXX", "YYY"]
     p = Pool(1)
-    p.map(write_symbol, [(lmdb_version_store, s) for s in symbols])
+    p.map(write_symbol, [(local_object_version_store, s) for s in symbols])
     for s in symbols:
-        vit = lmdb_version_store.read(s)
+        vit = local_object_version_store.read(s)
         assert_frame_equal(vit.data, df(s))
     p.close()
     p.join()
@@ -71,11 +71,14 @@ def _read_and_assert_symbol(args):
             time.sleep(0.5)  # Make sure the writes have finished, especially azurite.
 
 
-def test_parallel_reads(lmdb_version_store):
+def test_parallel_reads(local_object_version_store):
     symbols = ["XXX"] * 20
     p = Pool(10)
-    lmdb_version_store.write(symbols[0], df("test1"))
+    local_object_version_store.write(symbols[0], df("test1"))
     time.sleep(0.1)  # Make sure the writes have finished, especially azurite.
-    p.map(_read_and_assert_symbol, [(lmdb_version_store, s, idx) for idx, s in enumerate(symbols)])
+    p.map(
+        _read_and_assert_symbol,
+        [(local_object_version_store, s, idx) for idx, s in enumerate(symbols)],
+    )
     p.close()
     p.join()

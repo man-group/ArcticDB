@@ -96,8 +96,8 @@ def test_hypothesis_mean_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df):
         index=range_indexes(),
     )
 )
-def test_hypothesis_sum_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df):
-    lib = lmdb_version_store_dynamic_schema_v1
+def test_hypothesis_sum_agg_dynamic(lmdb_version_store_dynamic_schema_v2, df):
+    lib = lmdb_version_store_dynamic_schema_v2
     assume(not df.empty)
 
     symbol = f"sum_agg-{uuid.uuid4().hex}"
@@ -484,8 +484,12 @@ def test_group_column_splitting_dynamic(lmdb_version_store_tiny_segment_dynamic)
         lib.append(symbol, df_slice, write_if_missing=True)
 
     q = QueryBuilder()
-    q = q.groupby("grouping_column").agg({"sum1": "sum", "max1": "max", "sum2": "sum", "max2": "max"})
-    expected = expected.groupby("grouping_column").agg({"sum1": "sum", "max1": "max", "sum2": "sum", "max2": "max"})
+    q = q.groupby("grouping_column").agg(
+        {"sum1": "sum", "max1": "max", "sum2": "sum", "max2": "max"}
+    )
+    expected = expected.groupby("grouping_column").agg(
+        {"sum1": "sum", "max1": "max", "sum2": "sum", "max2": "max"}
+    )
     vit = lib.read(symbol, query_builder=q)
 
     assert_equal_value(vit.data, expected)
@@ -520,8 +524,12 @@ def test_group_column_splitting_strings_dynamic(
         lib.append(symbol, df_slice, write_if_missing=True)
 
     q = QueryBuilder()
-    q = q.groupby("grouping_column").agg({"sum1": "sum", "max1": "max", "sum2": "sum", "max2": "max"})
-    expected = expected.groupby("grouping_column").agg({"sum1": "sum", "max1": "max", "sum2": "sum", "max2": "max"})
+    q = q.groupby("grouping_column").agg(
+        {"sum1": "sum", "max1": "max", "sum2": "sum", "max2": "max"}
+    )
+    expected = expected.groupby("grouping_column").agg(
+        {"sum1": "sum", "max1": "max", "sum2": "sum", "max2": "max"}
+    )
 
     vit = lib.read(symbol, query_builder=q)
     assert_equal_value(vit.data, expected)
@@ -531,16 +539,22 @@ def test_segment_without_aggregation_column(lmdb_version_store_dynamic_schema):
     lib = lmdb_version_store_dynamic_schema
     sym = "test_segment_without_aggregation_column"
 
-    write_df = pd.DataFrame({"grouping_column": ["group_0"], "aggregation_column": [10330.0]})
+    write_df = pd.DataFrame(
+        {"grouping_column": ["group_0"], "aggregation_column": [10330.0]}
+    )
     lib.write(sym, write_df)
     append_df = pd.DataFrame({"grouping_column": ["group_1"]})
     lib.append(sym, append_df)
     df = pd.concat((write_df, append_df))
 
     for aggregation_operation in ["max", "min", "mean", "sum"]:
-        expected = df.groupby("grouping_column").agg({"aggregation_column": aggregation_operation})
+        expected = df.groupby("grouping_column").agg(
+            {"aggregation_column": aggregation_operation}
+        )
         q = QueryBuilder()
-        q = q.groupby("grouping_column").agg({"aggregation_column": aggregation_operation})
+        q = q.groupby("grouping_column").agg(
+            {"aggregation_column": aggregation_operation}
+        )
         received = lib.read(sym, query_builder=q).data
         assert_equal_value(received, expected)
 
