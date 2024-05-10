@@ -554,9 +554,7 @@ void ResampleClause<closed_boundary>::set_aggregations(const std::vector<NamedAg
         auto typed_input_column_name = ColumnName(named_aggregator.input_column_name_);
         auto typed_output_column_name = ColumnName(named_aggregator.output_column_name_);
         if (named_aggregator.aggregation_operator_ == "sum") {
-            aggregators_.emplace_back(
-                    SortedAggregator<SortedAggregationOperator::SUM, closed_boundary>(typed_input_column_name,
-                                                                                      typed_output_column_name));
+            aggregators_.emplace_back(SortedAggregator<SortedAggregationOperator::SUM, closed_boundary>(typed_input_column_name, typed_output_column_name));
         } else if (named_aggregator.aggregation_operator_ == "mean") {
             aggregators_.emplace_back(SortedAggregator<SortedAggregationOperator::MEAN, closed_boundary>(typed_input_column_name, typed_output_column_name));
         } else if (named_aggregator.aggregation_operator_ == "min") {
@@ -605,12 +603,7 @@ std::vector<std::vector<size_t>> ResampleClause<closed_boundary>::structure_for_
         date_range_ = index_range;
     }
 
-    auto start = std::chrono::steady_clock::now();
     bucket_boundaries_ = generate_bucket_boundaries_(date_range_->first, date_range_->second, rule_, closed_boundary);
-    auto end = std::chrono::steady_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-    log::version().warn("Pandas date range took {}ms", duration.count());
-
     if (bucket_boundaries_.size() < 2) {
         return {};
     }
@@ -833,8 +826,7 @@ std::shared_ptr<Column> ResampleClause<closed_boundary>::generate_output_index_c
         for (auto it = index_column_data.cbegin<IndexTDT>(); it != cend; ++it) {
             if (ARCTICDB_LIKELY(current_bucket.contains(*it))) {
                 if (ARCTICDB_UNLIKELY(!current_bucket_added_to_index)) {
-                    *output_index_column_it++ =
-                            label_boundary_ == ResampleBoundary::LEFT ? *std::prev(bucket_end_it) : *bucket_end_it;
+                    *output_index_column_it++ = label_boundary_ == ResampleBoundary::LEFT ? *std::prev(bucket_end_it) : *bucket_end_it;
                     ++output_index_column_row_count;
                     current_bucket_added_to_index = true;
                 }
@@ -846,8 +838,7 @@ std::shared_ptr<Column> ResampleClause<closed_boundary>::generate_output_index_c
                     current_bucket.set_boundaries(*std::prev(bucket_end_it), *bucket_end_it);
                     current_bucket_added_to_index = false;
                     if (ARCTICDB_LIKELY(current_bucket.contains(*it))) {
-                        *output_index_column_it++ =
-                                label_boundary_ == ResampleBoundary::LEFT ? *std::prev(bucket_end_it) : *bucket_end_it;
+                        *output_index_column_it++ = label_boundary_ == ResampleBoundary::LEFT ? *std::prev(bucket_end_it) : *bucket_end_it;
                         ++output_index_column_row_count;
                         current_bucket_added_to_index = true;
                     }
