@@ -54,7 +54,7 @@ VariantData ProcessingUnit::get(const VariantNode &name) {
                         segment->column_ptr(
                         position_t(position_t(opt_idx.value()))),
                         segment->string_pool_ptr(),
-                        column_name));
+                        column_name.value));
             }
         }
         // Try multi-index column names
@@ -66,7 +66,7 @@ VariantData ProcessingUnit::get(const VariantNode &name) {
                         segment->column_ptr(
                         position_t(*opt_idx)),
                         segment->string_pool_ptr(),
-                        column_name));
+                        column_name.value));
             }
         }
 

@@ -17,8 +17,8 @@
 TEST(OperationDispatch, unary_operator) {
     using namespace arcticdb;
     size_t num_rows = 100;
-    auto int_column = ColumnWithStrings(std::make_unique<Column>(generate_int_column(num_rows)), ColumnName("int_col"));
-    auto empty_column = ColumnWithStrings(std::make_unique<Column>(generate_empty_column()), ColumnName("empty_col"));
+    auto int_column = ColumnWithStrings(std::make_unique<Column>(generate_int_column(num_rows)), "int_col");
+    auto empty_column = ColumnWithStrings(std::make_unique<Column>(generate_empty_column()), "empty_col");
 
     // int col
     auto variant_data = visit_unary_operator(int_column, NegOperator{});
@@ -34,8 +34,8 @@ TEST(OperationDispatch, unary_operator) {
 TEST(OperationDispatch, binary_operator) {
     using namespace arcticdb;
     size_t num_rows = 100;
-    auto int_column = ColumnWithStrings(std::make_unique<Column>(generate_int_column(num_rows)), ColumnName("int_col"));
-    auto empty_column = ColumnWithStrings(std::make_unique<Column>(generate_empty_column()), ColumnName("empty_col"));
+    auto int_column = ColumnWithStrings(std::make_unique<Column>(generate_int_column(num_rows)), "int_col");
+    auto empty_column = ColumnWithStrings(std::make_unique<Column>(generate_empty_column()), "empty_col");
     auto value = std::make_shared<Value>(static_cast<int64_t>(50), DataType::INT64);
 
     // int col + int col
@@ -77,8 +77,8 @@ TEST(OperationDispatch, binary_operator) {
 TEST(OperationDispatch, binary_comparator) {
     using namespace arcticdb;
     size_t num_rows = 100;
-    auto int_column = ColumnWithStrings(std::make_unique<Column>(generate_int_column(num_rows)), ColumnName("int_col"));
-    auto empty_column = ColumnWithStrings(std::make_unique<Column>(generate_empty_column()), ColumnName("empty_col"));
+    auto int_column = ColumnWithStrings(std::make_unique<Column>(generate_int_column(num_rows)), "int_col");
+    auto empty_column = ColumnWithStrings(std::make_unique<Column>(generate_empty_column()), "empty_col");
     auto value = std::make_shared<Value>(static_cast<int64_t>(50), DataType::INT64);
 
     // int col < int col
@@ -113,8 +113,8 @@ TEST(OperationDispatch, binary_comparator) {
 TEST(OperationDispatch, binary_membership) {
     using namespace arcticdb;
     size_t num_rows = 100;
-    auto int_column = ColumnWithStrings(std::make_unique<Column>(generate_int_column(num_rows)), ColumnName("int_col"));
-    auto empty_column = ColumnWithStrings(std::make_unique<Column>(generate_empty_column()), ColumnName("empty_col"));
+    auto int_column = ColumnWithStrings(std::make_unique<Column>(generate_int_column(num_rows)), "int_col");
+    auto empty_column = ColumnWithStrings(std::make_unique<Column>(generate_empty_column()), "empty_col");
     std::unordered_set<int64_t> raw_set{0, 23, 82, static_cast<int64_t>(num_rows) - 1, 1000000};
     auto value_set = std::make_shared<ValueSet>(std::make_shared<std::unordered_set<int64_t>>(raw_set));
 

@@ -44,7 +44,7 @@ VariantData unary_operator(const Value& val, Func&& func) {
     details::visit_type(val.type().data_type(), [&](auto val_tag) {
         using type_info = ScalarTypeInfo<decltype(val_tag)>;
         if constexpr (!is_numeric_type(type_info::data_type)) {
-            util::raise_rte("Cannot perform arithmetic on {}", get_user_friendly_type_string(val.type()));
+            user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Cannot perform unary operation '{}' on {}", func, get_user_friendly_type_string(val.type()));
         }
         auto value = *reinterpret_cast<const typename type_info::RawType*>(val.data_);
         using TargetType = typename unary_arithmetic_promoted_type<typename type_info::RawType, std::remove_reference_t<Func>>::type;
@@ -64,7 +64,7 @@ template <typename Func>
 VariantData unary_operator(const ColumnWithStrings& col, Func&& func) {
     schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
             !is_empty_type(col.column_->type().data_type()),
-            "Empty column provided to unary operator");
+            "Empty column provided to unary operator {}", func);
     std::unique_ptr<Column> output_column;
 
     details::visit_type(col.column_->type().data_type(), [&](auto col_tag) {
@@ -80,12 +80,13 @@ VariantData unary_operator(const ColumnWithStrings& col, Func&& func) {
                                                                                                                  input_value);
                                                                                                      });
         } else {
-            util::raise_rte("Cannot perform arithmetic on {} {}",
-                            col.column_name_.value,
+            user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Cannot perform unary operation '{}' on {} {}",
+                            func,
+                            col.column_name_,
                             get_user_friendly_type_string(col.column_->type()));
         }
     });
-    return {ColumnWithStrings(std::move(output_column), ColumnName(unary_operation_column_name(func, col.column_name_.value)))};
+    return {ColumnWithStrings(std::move(output_column), unary_operation_column_name(func, col.column_name_))};
 }
 
 template<typename Func>
@@ -101,7 +102,7 @@ VariantData visit_unary_operator(const VariantData& left, Func&& func) {
             return l;
         },
         [](const auto&) -> VariantData {
-            util::raise_rte("Bitset/ValueSet inputs not accepted to unary operators");
+            user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Bitset/ValueSet inputs not accepted to unary operators");
         }
     }, left);
 }
@@ -114,7 +115,7 @@ VariantData unary_comparator(const Column& col, Func&& func) {
         } else if constexpr (std::is_same_v<std::remove_reference_t<Func>, NotNullOperator>) {
             return is_empty_type(col.type().data_type()) ? VariantData(EmptyResult{}) : VariantData(FullResult{});
         } else {
-            internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected operator passed to unary_comparator");
+            user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Unexpected operator passed to unary_comparator");
         }
     }
 
@@ -130,7 +131,7 @@ VariantData unary_comparator(const Column& col, Func&& func) {
             } else if constexpr (is_time_type(type_info::data_type)) {
                 return func.template apply<TimeTypeTag>(input_value);
             } else {
-                internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Cannot perform null checks on {}", type_info::data_type);
+                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Cannot perform null checks on {}", type_info::data_type);
             }
         });
     });
@@ -149,11 +150,11 @@ VariantData visit_unary_comparator(const VariantData& left, Func&& func) {
                 } else if constexpr (std::is_same_v<std::remove_reference_t<Func>, NotNullOperator>) {
                     return EmptyResult{};
                 } else {
-                    internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected operator passed to visit unary_comparator");
+                    user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Unexpected operator passed to visit unary_comparator");
                 }
             },
             [](const auto&) -> VariantData {
-                util::raise_rte("Bitset/ValueSet inputs not accepted to unary comparators");
+                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Bitset/ValueSet inputs not accepted to unary comparators");
             }
     }, left);
 }

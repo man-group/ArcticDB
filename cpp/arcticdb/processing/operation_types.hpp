@@ -617,7 +617,7 @@ struct formatter<arcticdb::EqualsOperator> {
 
     template<typename FormatContext>
     constexpr auto format(const arcticdb::EqualsOperator&, FormatContext &ctx) const {
-        return fmt::format_to(ctx.out(), "=");
+        return fmt::format_to(ctx.out(), "==");
     }
 };
 
@@ -683,7 +683,7 @@ struct formatter<arcticdb::IsInOperator> {
 
     template<typename FormatContext>
     constexpr auto format(const arcticdb::IsInOperator&, FormatContext &ctx) const {
-        return fmt::format_to(ctx.out(), "IN");
+        return fmt::format_to(ctx.out(), "IS IN");
     }
 };
 
