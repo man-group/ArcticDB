@@ -361,7 +361,6 @@ public:
                                    StringPool& string_pool) const;
 private:
     [[nodiscard]] bool index_value_past_end_of_bucket(timestamp index_value, timestamp bucket_end) const;
-    [[nodiscard]] bool index_value_in_bucket(timestamp index_value, timestamp bucket_start, timestamp bucket_end) const;
 
     template<typename scalar_type_info>
     [[nodiscard]] auto get_bucket_aggregator() const {

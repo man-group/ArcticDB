@@ -221,16 +221,6 @@ bool SortedAggregator<aggregation_operator, closed_boundary>::index_value_past_e
     }
 }
 
-template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
-bool SortedAggregator<aggregation_operator, closed_boundary>::index_value_in_bucket(timestamp index_value, timestamp bucket_start, timestamp bucket_end) const {
-    if constexpr (closed_boundary == ResampleBoundary::LEFT) {
-        return index_value >= bucket_start && index_value < bucket_end;
-    } else {
-        // closed_boundary == ResampleBoundary::RIGHT
-        return index_value > bucket_start && index_value <= bucket_end;
-    }
-}
-
 template class SortedAggregator<AggregationOperator::SUM, ResampleBoundary::LEFT>;
 template class SortedAggregator<AggregationOperator::SUM, ResampleBoundary::RIGHT>;
 template class SortedAggregator<AggregationOperator::MIN, ResampleBoundary::LEFT>;
