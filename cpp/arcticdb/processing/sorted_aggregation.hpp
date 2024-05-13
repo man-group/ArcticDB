@@ -68,7 +68,7 @@ private:
     timestamp end_;
 };
 
-enum class SortedAggregationOperator {
+enum class AggregationOperator {
     SUM,
     MEAN,
     MIN,
@@ -79,7 +79,7 @@ enum class SortedAggregationOperator {
 };
 
 template<typename T>
-class SumBucketAggregator {
+class SumAggregatorSorted {
 public:
     void push(T value) {
         if constexpr (std::is_floating_point_v<T>) {
@@ -101,7 +101,7 @@ private:
 };
 
 template<typename T, bool TimeType = false>
-class MeanBucketAggregator {
+class MeanAggregatorSorted {
 public:
     void push(T value) {
         if constexpr (std::is_floating_point_v<T>) {
@@ -149,9 +149,9 @@ private:
 };
 
 template<typename T, bool TimeType = false>
-class MinBucketAggregator {
+class MinAggregatorSorted {
 public:
-    MinBucketAggregator() {
+    MinAggregatorSorted() {
         if constexpr (!std::is_floating_point_v<T> && !TimeType) {
             min_ = std::numeric_limits<T>::max();
         }
@@ -191,9 +191,9 @@ private:
 };
 
 template<typename T, bool TimeType = false>
-class MaxBucketAggregator {
+class MaxAggregatorSorted {
 public:
-    MaxBucketAggregator() {
+    MaxAggregatorSorted() {
         if constexpr (!std::is_floating_point_v<T> && !TimeType) {
             max_ = std::numeric_limits<T>::lowest();
         }
@@ -233,7 +233,7 @@ private:
 };
 
 template<typename T, bool TimeType = false>
-class FirstBucketAggregator {
+class FirstAggregatorSorted {
 public:
     void push(T value) {
         if constexpr (std::is_same_v<T, std::optional<std::string_view>>) {
@@ -273,7 +273,7 @@ private:
 };
 
 template<typename T, bool TimeType = false>
-class LastBucketAggregator {
+class LastAggregatorSorted {
 public:
     void push(T value) {
         if constexpr (std::is_same_v<T, std::optional<std::string_view>>) {
@@ -310,7 +310,7 @@ private:
     std::optional<T> last_;
 };
 
-class CountBucketAggregator {
+class CountAggregatorSorted {
 public:
     template<typename T, bool TimeType=false>
     void push(T value) {
@@ -340,7 +340,7 @@ private:
     uint64_t count_{0};
 };
 
-template<SortedAggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
+template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
 class SortedAggregator
 {
 public:
@@ -365,53 +365,49 @@ private:
 
     template<typename scalar_type_info>
     [[nodiscard]] auto get_bucket_aggregator() const {
-        if constexpr (aggregation_operator == SortedAggregationOperator::SUM) {
+        if constexpr (aggregation_operator == AggregationOperator::SUM) {
             if constexpr (is_bool_type(scalar_type_info::data_type)) {
                 // Sum of bool column is just the count of true values
-                return SumBucketAggregator<uint64_t>();
+                return SumAggregatorSorted<uint64_t>();
             } else {
-                return SumBucketAggregator<typename scalar_type_info::RawType>();
+                return SumAggregatorSorted<typename scalar_type_info::RawType>();
             }
-        } else if constexpr (aggregation_operator == SortedAggregationOperator::MEAN) {
+        } else if constexpr (aggregation_operator == AggregationOperator::MEAN) {
             if constexpr (is_time_type(scalar_type_info::data_type)) {
-                return MeanBucketAggregator<typename scalar_type_info::RawType, true>();
+                return MeanAggregatorSorted<typename scalar_type_info::RawType, true>();
             } else {
-                return MeanBucketAggregator<typename scalar_type_info::RawType>();
+                return MeanAggregatorSorted<typename scalar_type_info::RawType>();
             }
-        } else if constexpr (aggregation_operator == SortedAggregationOperator::MIN) {
+        } else if constexpr (aggregation_operator == AggregationOperator::MIN) {
             if constexpr (is_time_type(scalar_type_info::data_type)) {
-                return MinBucketAggregator<typename scalar_type_info::RawType, true>();
+                return MinAggregatorSorted<typename scalar_type_info::RawType, true>();
             } else {
-                return MinBucketAggregator<typename scalar_type_info::RawType>();
+                return MinAggregatorSorted<typename scalar_type_info::RawType>();
             }
-        } else if constexpr (aggregation_operator == SortedAggregationOperator::MAX) {
+        } else if constexpr (aggregation_operator == AggregationOperator::MAX) {
             if constexpr (is_time_type(scalar_type_info::data_type)) {
-                return MaxBucketAggregator<typename scalar_type_info::RawType, true>();
+                return MaxAggregatorSorted<typename scalar_type_info::RawType, true>();
             } else {
-                return MaxBucketAggregator<typename scalar_type_info::RawType>();
+                return MaxAggregatorSorted<typename scalar_type_info::RawType>();
             }
-        } else if constexpr (aggregation_operator == SortedAggregationOperator::FIRST) {
-            if constexpr (is_numeric_type(scalar_type_info::data_type) || is_bool_type(scalar_type_info::data_type)) {
-                if constexpr (is_time_type(scalar_type_info::data_type)) {
-                    return FirstBucketAggregator<typename scalar_type_info::RawType, true>();
-                } else {
-                    return FirstBucketAggregator<typename scalar_type_info::RawType>();
-                }
+        } else if constexpr (aggregation_operator == AggregationOperator::FIRST) {
+            if constexpr (is_time_type(scalar_type_info::data_type)) {
+                return FirstAggregatorSorted<typename scalar_type_info::RawType, true>();
+            } else if constexpr (is_numeric_type(scalar_type_info::data_type) || is_bool_type(scalar_type_info::data_type)) {
+                return FirstAggregatorSorted<typename scalar_type_info::RawType>();
             } else if constexpr (is_sequence_type(scalar_type_info::data_type)) {
-                return FirstBucketAggregator<std::optional<std::string_view>>();
+                return FirstAggregatorSorted<std::optional<std::string_view>>();
             }
-        } else if constexpr (aggregation_operator == SortedAggregationOperator::LAST) {
-            if constexpr (is_numeric_type(scalar_type_info::data_type) || is_bool_type(scalar_type_info::data_type)) {
-                if constexpr (is_time_type(scalar_type_info::data_type)) {
-                    return LastBucketAggregator<typename scalar_type_info::RawType, true>();
-                } else {
-                    return LastBucketAggregator<typename scalar_type_info::RawType>();
-                }
+        } else if constexpr (aggregation_operator == AggregationOperator::LAST) {
+            if constexpr (is_time_type(scalar_type_info::data_type)) {
+                return LastAggregatorSorted<typename scalar_type_info::RawType, true>();
+            } else if constexpr (is_numeric_type(scalar_type_info::data_type) || is_bool_type(scalar_type_info::data_type)) {
+                return LastAggregatorSorted<typename scalar_type_info::RawType>();
             } else if constexpr (is_sequence_type(scalar_type_info::data_type)) {
-                return LastBucketAggregator<std::optional<std::string_view>>();
+                return LastAggregatorSorted<std::optional<std::string_view>>();
             }
-        } else if constexpr (aggregation_operator == SortedAggregationOperator::COUNT) {
-            return CountBucketAggregator();
+        } else if constexpr (aggregation_operator == AggregationOperator::COUNT) {
+            return CountAggregatorSorted();
         }
     }
 
@@ -423,26 +419,26 @@ private:
 
 namespace fmt {
 template<>
-struct formatter<arcticdb::SortedAggregationOperator> {
+struct formatter<arcticdb::AggregationOperator> {
     template<typename ParseContext>
     constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
 
     template<typename FormatContext>
-    auto format(const arcticdb::SortedAggregationOperator& agg, FormatContext &ctx) const {
+    auto format(const arcticdb::AggregationOperator& agg, FormatContext &ctx) const {
         switch(agg) {
-            case arcticdb::SortedAggregationOperator::SUM:
+            case arcticdb::AggregationOperator::SUM:
                 return fmt::format_to(ctx.out(), "SUM");
-            case arcticdb::SortedAggregationOperator::MEAN:
+            case arcticdb::AggregationOperator::MEAN:
                 return fmt::format_to(ctx.out(), "MEAN");
-            case arcticdb::SortedAggregationOperator::MIN:
+            case arcticdb::AggregationOperator::MIN:
                 return fmt::format_to(ctx.out(), "MIN");
-            case arcticdb::SortedAggregationOperator::MAX:
+            case arcticdb::AggregationOperator::MAX:
                 return fmt::format_to(ctx.out(), "MAX");
-            case arcticdb::SortedAggregationOperator::FIRST:
+            case arcticdb::AggregationOperator::FIRST:
                 return fmt::format_to(ctx.out(), "FIRST");
-            case arcticdb::SortedAggregationOperator::LAST:
+            case arcticdb::AggregationOperator::LAST:
                 return fmt::format_to(ctx.out(), "LAST");
-            case arcticdb::SortedAggregationOperator::COUNT:
+            case arcticdb::AggregationOperator::COUNT:
             default:
                 return fmt::format_to(ctx.out(), "COUNT");
         }

@@ -554,19 +554,19 @@ void ResampleClause<closed_boundary>::set_aggregations(const std::vector<NamedAg
         auto typed_input_column_name = ColumnName(named_aggregator.input_column_name_);
         auto typed_output_column_name = ColumnName(named_aggregator.output_column_name_);
         if (named_aggregator.aggregation_operator_ == "sum") {
-            aggregators_.emplace_back(SortedAggregator<SortedAggregationOperator::SUM, closed_boundary>(typed_input_column_name, typed_output_column_name));
+            aggregators_.emplace_back(SortedAggregator<AggregationOperator::SUM, closed_boundary>(typed_input_column_name, typed_output_column_name));
         } else if (named_aggregator.aggregation_operator_ == "mean") {
-            aggregators_.emplace_back(SortedAggregator<SortedAggregationOperator::MEAN, closed_boundary>(typed_input_column_name, typed_output_column_name));
+            aggregators_.emplace_back(SortedAggregator<AggregationOperator::MEAN, closed_boundary>(typed_input_column_name, typed_output_column_name));
         } else if (named_aggregator.aggregation_operator_ == "min") {
-            aggregators_.emplace_back(SortedAggregator<SortedAggregationOperator::MIN, closed_boundary>(typed_input_column_name, typed_output_column_name));
+            aggregators_.emplace_back(SortedAggregator<AggregationOperator::MIN, closed_boundary>(typed_input_column_name, typed_output_column_name));
         } else if (named_aggregator.aggregation_operator_ == "max") {
-            aggregators_.emplace_back(SortedAggregator<SortedAggregationOperator::MAX, closed_boundary>(typed_input_column_name, typed_output_column_name));
+            aggregators_.emplace_back(SortedAggregator<AggregationOperator::MAX, closed_boundary>(typed_input_column_name, typed_output_column_name));
         } else if (named_aggregator.aggregation_operator_ == "first") {
-            aggregators_.emplace_back(SortedAggregator<SortedAggregationOperator::FIRST, closed_boundary>(typed_input_column_name, typed_output_column_name));
+            aggregators_.emplace_back(SortedAggregator<AggregationOperator::FIRST, closed_boundary>(typed_input_column_name, typed_output_column_name));
         } else if (named_aggregator.aggregation_operator_ == "last") {
-            aggregators_.emplace_back(SortedAggregator<SortedAggregationOperator::LAST, closed_boundary>(typed_input_column_name, typed_output_column_name));
+            aggregators_.emplace_back(SortedAggregator<AggregationOperator::LAST, closed_boundary>(typed_input_column_name, typed_output_column_name));
         } else if (named_aggregator.aggregation_operator_ == "count") {
-            aggregators_.emplace_back(SortedAggregator<SortedAggregationOperator::COUNT, closed_boundary>(typed_input_column_name, typed_output_column_name));
+            aggregators_.emplace_back(SortedAggregator<AggregationOperator::COUNT, closed_boundary>(typed_input_column_name, typed_output_column_name));
         } else {
             user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Unknown aggregation operator provided to resample: {}", named_aggregator.aggregation_operator_);
         }
