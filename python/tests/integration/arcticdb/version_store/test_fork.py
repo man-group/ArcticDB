@@ -76,11 +76,11 @@ def _read_and_assert_symbol(args):
 def test_parallel_reads(s3_store_factory):
     symbols = ["XXX"] * 20
     p = Pool(10)
-    local_object_version_store.write(symbols[0], df("test1"))
-    time.sleep(0.5)  # Make sure the writes have finished, especially azurite.
+    s3_store_factory.write(symbols[0], df("test1"))
+    time.sleep(0.1)  # Make sure the writes have finished, especially azurite.
     p.map(
         _read_and_assert_symbol,
-        [(local_object_version_store, s, idx) for idx, s in enumerate(symbols)],
+        [(s3_store_factory, s, idx) for idx, s in enumerate(symbols)],
     )
     p.close()
     p.join()
