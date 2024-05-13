@@ -198,13 +198,13 @@ private:
     ColumnName output_column_name_;
 };
 
-using SumAggregator = GroupingAggregatorImpl<SumAggregatorData>;
-using MinAggregator = GroupingAggregatorImpl<MinAggregatorData>;
-using MaxAggregator = GroupingAggregatorImpl<MaxAggregatorData>;
-using MeanAggregator = GroupingAggregatorImpl<MeanAggregatorData>;
-using CountAggregator = GroupingAggregatorImpl<CountAggregatorData>;
-using FirstAggregator = GroupingAggregatorImpl<FirstAggregatorData>;
-using LastAggregator = GroupingAggregatorImpl<LastAggregatorData>;
+using SumAggregatorUnsorted = GroupingAggregatorImpl<SumAggregatorData>;
+using MinAggregatorUnsorted = GroupingAggregatorImpl<MinAggregatorData>;
+using MaxAggregatorUnsorted = GroupingAggregatorImpl<MaxAggregatorData>;
+using MeanAggregatorUnsorted = GroupingAggregatorImpl<MeanAggregatorData>;
+using CountAggregatorUnsorted = GroupingAggregatorImpl<CountAggregatorData>;
+using FirstAggregatorUnsorted = GroupingAggregatorImpl<FirstAggregatorData>;
+using LastAggregatorUnsorted = GroupingAggregatorImpl<LastAggregatorData>;
 
 } //namespace arcticdb
 

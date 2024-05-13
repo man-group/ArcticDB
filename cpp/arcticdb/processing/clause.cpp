@@ -350,15 +350,15 @@ AggregationClause::AggregationClause(const std::string& grouping_column,
         auto typed_input_column_name = ColumnName(named_aggregator.input_column_name_);
         auto typed_output_column_name = ColumnName(named_aggregator.output_column_name_);
         if (named_aggregator.aggregation_operator_ == "sum") {
-            aggregators_.emplace_back(SumAggregator(typed_input_column_name, typed_output_column_name));
+            aggregators_.emplace_back(SumAggregatorUnsorted(typed_input_column_name, typed_output_column_name));
         } else if (named_aggregator.aggregation_operator_ == "mean") {
-            aggregators_.emplace_back(MeanAggregator(typed_input_column_name, typed_output_column_name));
+            aggregators_.emplace_back(MeanAggregatorUnsorted(typed_input_column_name, typed_output_column_name));
         } else if (named_aggregator.aggregation_operator_ == "max") {
-            aggregators_.emplace_back(MaxAggregator(typed_input_column_name, typed_output_column_name));
+            aggregators_.emplace_back(MaxAggregatorUnsorted(typed_input_column_name, typed_output_column_name));
         } else if (named_aggregator.aggregation_operator_ == "min") {
-            aggregators_.emplace_back(MinAggregator(typed_input_column_name, typed_output_column_name));
+            aggregators_.emplace_back(MinAggregatorUnsorted(typed_input_column_name, typed_output_column_name));
         } else if (named_aggregator.aggregation_operator_ == "count") {
-            aggregators_.emplace_back(CountAggregator(typed_input_column_name, typed_output_column_name));
+            aggregators_.emplace_back(CountAggregatorUnsorted(typed_input_column_name, typed_output_column_name));
         } else {
             user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Unknown aggregation operator provided: {}", named_aggregator.aggregation_operator_);
         }
