@@ -22,13 +22,16 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const 
     for (const auto& opt_input_agg_column: input_agg_columns) {
         if (opt_input_agg_column.has_value()) {
             auto input_data_type = opt_input_agg_column->column_->type().data_type();
-            schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(is_numeric_type(input_data_type) || is_bool_type(input_data_type) ||
-                                                                (is_sequence_type(input_data_type) &&
-                                                                 (aggregation_operator == AggregationOperator::FIRST ||
-                                                                  aggregation_operator == AggregationOperator::LAST ||
-                                                                  aggregation_operator == AggregationOperator::COUNT)),
-                                                                "Resample: Unsupported aggregation type {} on column '{}' of type {}",
-                                                                aggregation_operator, get_input_column_name().value, input_data_type);
+            schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
+                    (is_time_type(input_data_type) && aggregation_operator != AggregationOperator::SUM) ||
+                    is_numeric_type(input_data_type) ||
+                    is_bool_type(input_data_type) ||
+                    (is_sequence_type(input_data_type) &&
+                     (aggregation_operator == AggregationOperator::FIRST ||
+                      aggregation_operator == AggregationOperator::LAST ||
+                      aggregation_operator == AggregationOperator::COUNT)),
+                    "Resample: Unsupported aggregation type {} on column '{}' of type {}",
+                    aggregation_operator, get_input_column_name().value, input_data_type);
             add_data_type_impl(input_data_type, common_input_type);
         } else {
             // Column is missing from this row-slice due to dynamic schema, currently unsupported
