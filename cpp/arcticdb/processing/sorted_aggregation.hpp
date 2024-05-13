@@ -363,8 +363,18 @@ private:
     void check_aggregator_supported_with_data_type(DataType data_type) const;
 
     [[nodiscard]] DataType generate_output_data_type(DataType common_input_data_type) const;
-
     [[nodiscard]] bool index_value_past_end_of_bucket(timestamp index_value, timestamp bucket_end) const;
+
+    template<DataType data_type, typename Aggregator, typename T>
+    void push_to_aggregator(Aggregator& bucket_aggregator, T value, ARCTICDB_UNUSED const ColumnWithStrings& column_with_strings) const {
+        if constexpr(is_time_type(data_type) && aggregation_operator == AggregationOperator::COUNT) {
+            bucket_aggregator.template push<timestamp, true>(value);
+        } else if constexpr (is_numeric_type(data_type) || is_bool_type(data_type)) {
+            bucket_aggregator.push(value);
+        } else if constexpr (is_sequence_type(data_type)) {
+            bucket_aggregator.push(column_with_strings.string_at_offset(value));
+        }
+    }
 
     template<typename scalar_type_info>
     [[nodiscard]] auto get_bucket_aggregator() const {
