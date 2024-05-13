@@ -80,11 +80,13 @@ More information can be found [here](tutorials/data_organisation.md)!
 
 ### *Does ArcticDB support Authorization*  
 
-Although ArcticDB, being fully client-side, does not inherently implement authorization for untrusted clients, it is compatible with many first and third-party authentication solutions. Fine-grained authorization is not natively supported. 
+ArcticDB itself does not inherently support authorization at the moment as it operates fully on the client side. However, it is designed to work with first and third-party authentication solutions for managing data access. ArcticDB data can be effectively managed through the underlying storage system, such as S3 and Blob. Users can utilize storage permissions to create personal buckets with restricted write access or team buckets with broader read/write permissions. Permissions can also be set on individual ArcticDB libraries by configuring the access rights for each library's corresponding path.
+
 
 ### *How is ArcticDB data catalogued and discoverable by consumers?* 
 
 ArcticDB offers capabilities to list libraries and symbols, complete with metadata. For those seeking enhanced functionality, we suggest leveraging a third-party catalogue.  
+
 
 ### *How can I get started using ArcticDB?*
 
