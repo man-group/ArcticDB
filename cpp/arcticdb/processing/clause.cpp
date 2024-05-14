@@ -805,15 +805,12 @@ std::shared_ptr<Column> ResampleClause<closed_boundary>::generate_output_index_c
     auto data_type = DataType::NANOSECONDS_UTC64;
     using IndexTDT = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
 
-    // bucket_boundaries.size() - 1 is the maximum number of buckets, and therefore the maximum number of index values in the output
-    // This could be wasteful if there are many empty buckets in between present index values
-    // TODO: Presize in blocks instead so unused ones can be trimmed at the end
+    const auto max_index_column_bytes = (bucket_boundaries.size() - 1) * get_type_size(data_type);
     auto output_index_column = std::make_shared<Column>(TypeDescriptor(data_type, Dimension::Dim0),
-                                                        bucket_boundaries.size() - 1,
                                                         false,
-                                                        false);
+                                                        ChunkedBuffer::presized_in_blocks(max_index_column_bytes));
     auto output_index_column_data = output_index_column->data();
-    auto output_index_column_it = output_index_column_data.begin<IndexTDT>();
+    auto output_index_column_it = output_index_column_data.template begin<IndexTDT>();
     size_t output_index_column_row_count{0};
 
     auto bucket_end_it = std::next(bucket_boundaries.cbegin());
@@ -846,10 +843,8 @@ std::shared_ptr<Column> ResampleClause<closed_boundary>::generate_output_index_c
             }
         }
     }
-    // TODO: Trim unused blocks
-    // We preallocated the chunked buffer so this won't alloc, but just a hacky way to get bytes_ correct in the buffer
-    // TODO: Add API for this to remove hack
-    output_index_column->allocate_data(output_index_column_row_count * sizeof(timestamp));
+    const auto actual_index_column_bytes = output_index_column_row_count * get_type_size(data_type);
+    output_index_column->buffer().trim(actual_index_column_bytes);
     output_index_column->set_row_data(output_index_column_row_count - 1);
     return output_index_column;
 }
