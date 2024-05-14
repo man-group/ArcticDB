@@ -72,13 +72,13 @@ The serverless nature of ArcticDB provides excellent performance, making it idea
 ArcticDB offers compatibility with a wide array of storage choices, both on-premises and in the cloud, to guarantee adaptability and efficiency across different settings. It is verified to work with multiple storage systems such as AWS S3, Azure Blob, lmdb, In-memory, Ceph, MinIO, Pure Storage S3, Scality S3, and VAST Data S3, with plans to support additional options soon. 
 
 
-### *What are the trade offs with ArcticDB Versioning* 
+### *What are the trade offs with ArcticDB Versioning?* 
 
 ArcticDB offers robust versioning capabilities, allowing for point-in-time analysis and efficient data updates, including daily appends and historical corrections, making it ideal for research datasets. The database efficiently stores only the differences between versions, conserving storage space. Frequent, small updates can lead to fragmentation and slower reads, but ArcticDB's enterprise features can mitigate this through background compaction and data pruning.  
 
 More information can be found [here](tutorials/data_organisation.md)!
 
-### *Does ArcticDB support Authorization*  
+### *Does ArcticDB support Authorization?*  
 
 ArcticDB itself does not inherently support authorization at the moment as it operates fully on the client side. However, it is designed to work with first and third-party authentication solutions for managing data access. ArcticDB data can be effectively managed through the underlying storage system, such as S3 and Blob. Users can utilize storage permissions to create personal buckets with restricted write access or team buckets with broader read/write permissions. Permissions can also be set on individual ArcticDB libraries by configuring the access rights for each library's corresponding path.
 
