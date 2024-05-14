@@ -540,7 +540,7 @@ class QueryBuilder:
         return self
 
     def agg(self, aggregations: Dict[str, Union[str, Tuple[str, str]]]):
-        # Only makes sense if previous stage is a group-by
+        # Only makes sense if previous stage is a group-by or resample
         check(
             len(self.clauses) and isinstance(self.clauses[-1], (_GroupByClause, _ResampleClauseLeftClosed, _ResampleClauseRightClosed)),
             f"Aggregation only makes sense after groupby or resample",
@@ -571,6 +571,117 @@ class QueryBuilder:
             closed: Optional[str] = None,
             label: Optional[str] = None,
     ):
+        """
+        Resample symbol on the index. Symbol must be datetime indexed. Resample operations must be followed by an
+        aggregation operator. Currently, the following 7 aggregation operators are supported:
+            * "mean" - compute the mean of the group
+            * "sum" - compute the sum of the group
+            * "min" - compute the min of the group
+            * "max" - compute the max of the group
+            * "count" - compute the count of group
+            * "first" - compute the first value in the group
+            * "last" - compute the last value in the group
+        Note that not all aggregators are supported with all column types.:
+            * Numeric columns - support all aggregators
+            * Bool columns - support all aggregators
+            * String columns - support count, first, and last aggregators
+            * Datetime columns - support all aggregators EXCEPT sum
+        Note that time-buckets which contain no index values in the symbol will NOT be included in the returned
+        DataFrame. This is not the same as Pandas default behaviour.
+        Resampling is currently not supported with:
+            * Dynamic schema where an aggregation column is missing from one or more of the row-slices.
+            * Sparse data.
+
+        Parameters
+        ----------
+        rule: Union[`str`, 'pd.DataOffset']
+            The frequency at which to resample the data. Supported rule strings are ns, us, ms, s, min, h, and D, and
+            multiples/combinations of these, such as 1h30min. pd.DataOffset objects representing frequencies from this
+            set are also accepted.
+        closed: Optional['str'], default=None
+            Which boundary of each time-bucket is closed. Must be one of 'left' or 'right'. If not provided, the default
+            is left for all currently supported frequencies.
+        label: Optional['str'], default=None
+            Which boundary of each time-bucket is used as the index value in the returned DataFrame. Must be one of
+            'left' or 'right'. If not provided, the default is left for all currently supported frequencies.
+
+        Returns
+        -------
+        QueryBuilder
+            Modified QueryBuilder object.
+
+        Raises
+        -------
+        ArcticDbNotYetImplemented
+            A frequency string or Pandas DateOffset object are provided to the rule argument outside the supported
+            frequencies listed above.
+        ArcticNativeException
+            The closed or label arguments are not one of "left" or "right"
+        SchemaException
+            Raised on call to read if:
+                * If the aggregation specified is not compatible with the type of the column being aggregated as
+                  specified above.
+                * The library has dynamic schema enabled, and at least one of the columns being aggregated is missing
+                  from at least one row-slice.
+                * At least one of the columns being aggregated contains sparse data.
+
+        Examples
+        --------
+        Resample two hours worth of minutely data down to hourly data, summing the column 'to_sum':
+        >>> df = pd.DataFrame(
+            {
+                "to_sum": np.arange(120),
+            },
+            index=pd.date_range("2024-01-01", freq="min", periods=120),
+        )
+        >>> q = adb.QueryBuilder()
+        >>> q = q.resample("h").agg({"to_sum": "sum"})
+        >>> lib.write("symbol", df)
+        >>> lib.read("symbol", query_builder=q).data
+                                 to_sum
+            2024-01-01 00:00:00    1770
+            2024-01-01 01:00:00    5370
+
+        As above, but specifying that the closed boundary of each time-bucket is the right hand side, and also to label
+        the output by the right boundary.
+        >>> q = adb.QueryBuilder()
+        >>> q = q.resample("h", closed="right", label="right").agg({"to_sum": "sum"})
+        >>> lib.read("symbol", query_builder=q).data
+                                 to_sum
+            2024-01-01 00:00:00       0
+            2024-01-01 01:00:00    1830
+            2024-01-01 02:00:00    5310
+
+        Nones, NaNs, and NaTs are omitted from aggregations
+        >>> df = pd.DataFrame(
+            {
+                "to_mean": [1.0, np.nan, 2.0],
+            },
+            index=pd.date_range("2024-01-01", freq="min", periods=3),
+        )
+        >>> q = adb.QueryBuilder()
+        >>> q = q.resample("h").agg({"to_mean": "mean"})
+        >>> lib.write("symbol", df)
+        >>> lib.read("symbol", query_builder=q).data
+                                 to_mean
+            2024-01-01 00:00:00      1.5
+
+        Output column names can be controlled through the format of the dict passed to agg
+        >>> df = pd.DataFrame(
+            {
+                "agg_1": [1, 2, 3, 4, 5],
+                "agg_2": [1.0, 2.0, 3.0, np.nan, 5.0],
+            },
+            index=pd.date_range("2024-01-01", freq="min", periods=5),
+        )
+        >>> q = adb.QueryBuilder()
+        >>> q = q.resample("h")
+        >>> q = q.agg({"agg_1_min": ("agg_1", "min"), "agg_1_max": ("agg_1", "max"), "agg_2": "mean"})
+        >>> lib.write("symbol", df)
+        >>> lib.read("symbol", query_builder=q).data
+                                 agg_1_min  agg_1_max     agg_2
+            2024-01-01 00:00:00          1          5      2.75
+        """
         check(not len(self.clauses), "resample only supported as first clause in the pipeline")
         rule = rule.freqstr if isinstance(rule, pd.DateOffset) else rule
         # We use floor and ceiling later to round user-provided date ranges and or start/end index values of the symbol
