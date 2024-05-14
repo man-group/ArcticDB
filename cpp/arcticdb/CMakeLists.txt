@@ -251,7 +251,6 @@ set(arcticdb_srcs
         pipeline/value_set.hpp
         pipeline/write_frame.hpp
         pipeline/write_options.hpp
-        processing/unsorted_aggregation.hpp
         processing/aggregation_utils.hpp
         processing/component_manager.hpp
         processing/operation_dispatch.hpp
@@ -265,6 +264,7 @@ set(arcticdb_srcs
         processing/expression_context.hpp
         processing/expression_node.hpp
         processing/sorted_aggregation.hpp
+        processing/unsorted_aggregation.hpp
         storage/constants.hpp
         storage/common.hpp
         storage/config_resolvers.hpp
@@ -427,7 +427,6 @@ set(arcticdb_srcs
         pipeline/write_frame.cpp
         python/normalization_checks.cpp
         processing/processing_unit.cpp
-        processing/unsorted_aggregation.cpp
         processing/aggregation_utils.cpp
         processing/clause.cpp
         processing/component_manager.cpp
@@ -440,6 +439,7 @@ set(arcticdb_srcs
         processing/operation_dispatch_binary_lt.cpp
         processing/operation_dispatch_binary_operator.cpp
         processing/sorted_aggregation.cpp
+        processing/unsorted_aggregation.cpp
         python/python_to_tensor_frame.cpp
         storage/config_resolvers.cpp
         storage/failure_simulation.cpp
@@ -820,7 +820,7 @@ if(${TEST})
             util/test/test_id_transformation.cpp
             util/test/test_ranges_from_future.cpp
             util/test/test_runtime_config.cpp
-#            util/test/test_slab_allocator.cpp
+            util/test/test_slab_allocator.cpp
             util/test/test_storage_lock.cpp
             util/test/test_string_pool.cpp
             util/test/test_string_utils.cpp
@@ -936,7 +936,7 @@ if(${TEST})
             column_store/test/rapidcheck_column_data_random_accessor.cpp
             column_store/test/rapidcheck_column_map.cpp
             column_store/test/test_chunked_buffer.cpp
-             processing/test/rapidcheck_resample.cpp
+            processing/test/rapidcheck_resample.cpp
             stream/test/stream_test_common.cpp
             util/test/rapidcheck_decimal.cpp
             util/test/rapidcheck_generators.cpp
