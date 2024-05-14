@@ -802,8 +802,8 @@ std::vector<timestamp> ResampleClause<closed_boundary>::generate_bucket_boundari
 template<ResampleBoundary closed_boundary>
 std::shared_ptr<Column> ResampleClause<closed_boundary>::generate_output_index_column(const std::vector<std::shared_ptr<Column>>& input_index_columns,
                                                                                       const std::vector<timestamp>& bucket_boundaries) const {
-    auto data_type = DataType::NANOSECONDS_UTC64;
-    using IndexTDT = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
+    constexpr auto data_type = DataType::NANOSECONDS_UTC64;
+    using IndexTDT = ScalarTagType<DataTypeTag<data_type>>;
 
     const auto max_index_column_bytes = (bucket_boundaries.size() - 1) * get_type_size(data_type);
     auto output_index_column = std::make_shared<Column>(TypeDescriptor(data_type, Dimension::Dim0),
