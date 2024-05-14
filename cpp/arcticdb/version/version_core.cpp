@@ -916,15 +916,11 @@ void copy_frame_data_to_buffer(const SegmentInMemory& destination, size_t target
             using DestinationType =  typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
             auto typed_dst_ptr = reinterpret_cast<DestinationType *>(dst_ptr);
             details::visit_type(src_column.type().data_type() ,[&src_data, &typed_dst_ptr, &type_promotion_error_msg] (auto src_desc_tag) {
-                using SourceTDT = ScalarTagType<decltype(src_desc_tag)>;
-                using SourceType =  typename decltype(src_desc_tag)::DataTypeTag::raw_type;
-                if constexpr(std::is_arithmetic_v<SourceType> && std::is_arithmetic_v<DestinationType>) {
-                    while (auto block = src_data.template next<SourceTDT>()) {
-                        const auto row_count = block->row_count();
-                        auto src_ptr = reinterpret_cast<const SourceType*>(block->data());
-                        for (auto i = 0u; i < row_count; ++i) {
-                            *typed_dst_ptr++ = static_cast<DestinationType>(*src_ptr++);
-                        }
+                using source_type_info = ScalarTypeInfo<decltype(src_desc_tag)>;
+                if constexpr(std::is_arithmetic_v<typename source_type_info::RawType> && std::is_arithmetic_v<DestinationType>) {
+                    const auto src_cend = src_data.cend<typename source_type_info::TDT>();
+                    for (auto src_it = src_data.cbegin<typename source_type_info::TDT>(); src_it != src_cend; ++src_it) {
+                        *typed_dst_ptr++ = static_cast<DestinationType>(*src_it);
                     }
                 } else {
                     util::raise_rte(type_promotion_error_msg.c_str());
