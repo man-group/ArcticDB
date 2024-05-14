@@ -718,7 +718,6 @@ Composite<EntityIds> ResampleClause<closed_boundary>::process(Composite<EntityId
     // this value will cover the remaining index values this call is responsible for
     auto last_ts = first_row_slice_index_col.scalar_at<timestamp>(first_row_slice_index_col.row_count() - 1).value();
     auto bucket_boundaries = generate_bucket_boundaries(first_ts, last_ts, responsible_for_first_overlapping_bucket);
-    // Construct the output index column and the bucket boundaries this call to process is responsible for
     std::vector<std::shared_ptr<Column>> input_index_columns;
     input_index_columns.reserve(row_slices.size());
     for (const auto& row_slice: row_slices) {

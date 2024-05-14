@@ -418,7 +418,7 @@ struct ResampleClause {
     ProcessingConfig processing_config_;
     std::string rule_;
     ResampleBoundary label_boundary_;
-    // This will either hold the date range specified by the user, or the first and last timestamps present in the index column
+    // This will contain the data range specified by the user (if any) intersected with the range of timestamps for the symbol
     std::optional<TimestampRange> date_range_;
     // Inject this as a callback in the ctor to avoid language-specific dependencies this low down in the codebase
     std::function<std::vector<timestamp>(timestamp, timestamp, std::string_view, ResampleBoundary)> generate_bucket_boundaries_;
