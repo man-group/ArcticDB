@@ -12,8 +12,8 @@
 #include <arcticdb/util/memory_tracing.hpp>
 #include <arcticdb/util/clock.hpp>
 #include <arcticdb/util/configs_map.hpp>
+#include <arcticdb/util/thread_cached_int.hpp>
 #include <folly/concurrency/ConcurrentHashMap.h>
-#include <folly/ThreadCachedInt.h>
 
 #include <fmt/std.h>
 
@@ -152,7 +152,7 @@ namespace arcticdb {
     namespace {
         template<typename TracingPolicy, typename ClockType>
         auto& free_count_of(){
-            static folly::ThreadCachedInt<uint32_t> free_count;
+            static ThreadCachedInt<uint32_t> free_count;
             return free_count;
         };
     }
