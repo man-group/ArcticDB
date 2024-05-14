@@ -54,7 +54,9 @@ RC_GTEST_PROP(Resample, StructureForProcessing, ()) {
         sorted_ranges_and_keys.emplace_back(row_range, col_range, key);
     }
     auto ranges_and_keys = sorted_ranges_and_keys;
-    std::random_shuffle(ranges_and_keys.begin(), ranges_and_keys.end());
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::shuffle(ranges_and_keys.begin(), ranges_and_keys.end(), gen);
 
     // Create vector of bucket boundary pairs, inclusive at both ends
     // bucket_id will be used to refer to the index in these vectors of a specific bucket

@@ -235,13 +235,15 @@ inline py::list adapt_read_dfs(std::vector<std::variant<ReadResult, DataError>>&
 inline std::vector<NamedAggregator> named_aggregators_from_dict(const std::unordered_map<std::string, std::variant<std::string, std::pair<std::string, std::string>>> aggregations) {
     std::vector<NamedAggregator> named_aggregators;
     for (const auto& [output_column_name, var_agg_named_agg]: aggregations) {
+        // TODO: Remove this once we move to C++20
+        auto output_column_name_copy{output_column_name};
         util::variant_match(
                 var_agg_named_agg,
-                [&named_aggregators, &output_column_name] (const std::string& agg_operator) {
-                    named_aggregators.emplace_back(agg_operator, output_column_name, output_column_name);
+                [&named_aggregators, &output_column_name_copy] (const std::string& agg_operator) {
+                    named_aggregators.emplace_back(agg_operator, output_column_name_copy, output_column_name_copy);
                 },
-                [&named_aggregators, &output_column_name] (const std::pair<std::string, std::string>& input_col_and_agg) {
-                    named_aggregators.emplace_back(input_col_and_agg.second, input_col_and_agg.first, output_column_name);
+                [&named_aggregators, &output_column_name_copy] (const std::pair<std::string, std::string>& input_col_and_agg) {
+                    named_aggregators.emplace_back(input_col_and_agg.second, input_col_and_agg.first, output_column_name_copy);
                 }
         );
     }
