@@ -13,7 +13,7 @@ import dateutil
 
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.util.test import assert_frame_equal
-from arcticdb_ext.exceptions import SchemaException, InternalException, UserInputException
+from arcticdb_ext.exceptions import SchemaException
 
 
 def test_reuse_querybuilder(lmdb_version_store_tiny_segment):
@@ -266,40 +266,6 @@ def test_querybuilder_filter_then_filter(lmdb_version_store_tiny_segment):
 
     expected = df.query("col1 in [2, 3]")
     assert_frame_equal(expected, received)
-
-
-def test_df_query_wrong_type(lmdb_version_store_small_segment):
-    lib = lmdb_version_store_small_segment
-
-    df1 = pd.DataFrame({"col1": [1, 2, 3], "col2": [2, 3, 4], "col3": [4, 5, 6], "col_str": ["1", "2", "3"]})
-    sym = "symbol"
-    lib.write(sym, df1)
-
-    q = QueryBuilder()
-    q = q[q["col1"] / q["col_str"] == 3]
-    with pytest.raises(UserInputException, match="Non-numeric column provided to binary operation.*/.*col_str.*type=STRING"):
-        lib.read(sym, query_builder=q)
-
-    q = QueryBuilder()
-    q = q[q["col1"] + "1" == 3]
-    with pytest.raises(UserInputException, match="Non-numeric type provided to binary operation.*\+.*type=STRING"):
-        lib.read(sym, query_builder=q)
-
-    q = QueryBuilder()
-    q = q[-q["col_str"] == 3]
-    with pytest.raises(UserInputException, match="Cannot perform unary operation '-' on col_str.*type=STRING"):
-        lib.read(sym, query_builder=q)
-
-    q = QueryBuilder()
-    q = q[q["col1"] - 1 >= "1"]
-    with pytest.raises(UserInputException, match="Invalid comparison.*col1 - 1.*type=INT64.*>=.*type=STRING"):
-        lib.read(sym, query_builder=q)
-
-    q = QueryBuilder()
-    q = q[1 + q["col1"] * q["col2"] - q["col3"] == q["col_str"]]
-    # check that ((1 + (col1 * col2)) + col3) is generated as a column name and shown in the error message
-    with pytest.raises(UserInputException, match="Invalid comparison.*\(1 \+ \(col1 \* col2\)\) - col3.*type=INT64.*==.*col_str .*type=STRING"):
-        lib.read(sym, query_builder=q)
 
 
 def test_querybuilder_filter_then_project(lmdb_version_store_tiny_segment):

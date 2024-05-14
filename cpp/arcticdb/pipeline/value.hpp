@@ -209,3 +209,26 @@ inline std::optional<std::string> ascii_to_padded_utf32(std::string_view str, si
 }
 
 } //namespace arcticdb
+
+namespace fmt {
+template<>
+struct formatter<arcticdb::Value> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const arcticdb::Value& value, FormatContext& ctx) const {
+        if (is_sequence_type(value.type().data_type())) {
+            fmt::format_to(ctx.out(), "\"{}\"", std::string(*value.str_data(), value.len()));
+        }
+        else {
+            arcticdb::entity::details::visit_type(value.data_type_, [&](auto val_tag) {
+                using type_info = arcticdb::entity::ScalarTypeInfo<decltype(val_tag)>;
+                fmt::format_to(ctx.out(), "{}", value.get<typename type_info::RawType>());
+            });
+        }
+
+        return ctx.out();
+    }
+};
+}
