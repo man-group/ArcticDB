@@ -58,10 +58,16 @@ public:
     pointer allocate() noexcept {
         manage_slab_capacity();
         pointer p_block = nullptr;
-        tagged_value_t curr_next_free_offset;
+        tagged_value_t curr_next_free_offset = next_free_offset_.load();
         tagged_value_t new_next_free_offset;
+#ifdef LOG_SLAB_ALLOC_INTERNALS
+        // The LOG_SLAB_ALLOC_INTERNALS can be used to check for contention in getting the next free block by many threads.
+        auto allocation_attempts = 0u;
+#endif
         do {
-            curr_next_free_offset = next_free_offset_.load();
+#ifdef LOG_SLAB_ALLOC_INTERNALS
+            ++allocation_attempts;
+#endif
             // increase the id tag to prevent the ABA problem
             new_next_free_offset.tag = curr_next_free_offset.tag + 1;
 
@@ -71,7 +77,13 @@ public:
             new_next_free_offset.value = *reinterpret_cast<size_type*>(p_block);
         } while (!next_free_offset_.compare_exchange_strong(
                 curr_next_free_offset, new_next_free_offset));
-
+#ifdef LOG_SLAB_ALLOC_INTERNALS
+        if (allocation_attempts > 10){
+            // We only print when we encounter a lot of allocation_attempts because otherwise we remove the contention effect by effectively
+            // pausing every time to print.
+            std::cout<<"Many allocation attempts: "<<allocation_attempts<<"\n";
+        }
+#endif
         return p_block;
     };
 
@@ -79,14 +91,12 @@ public:
         util::check(p != nullptr, "Received nullptr in SlabAllocator::deallocate");
         if (!is_addr_in_slab(p))
             return;
-        tagged_value_t curr_next_free_offset;
+        tagged_value_t curr_next_free_offset = next_free_offset_.load();
         tagged_value_t new_next_free_offset;
         do {
-            curr_next_free_offset = next_free_offset_.load();
-
             // calculate the offset of this based on argument p
             new_next_free_offset.value = static_cast<size_type>(reinterpret_cast<block_t*>(p) - main_memory_);
-            // decrease the id tag to prevent the ABA problem
+            // increase the id tag to prevent the ABA problem
             new_next_free_offset.tag = curr_next_free_offset.tag + 1;
 
             // set the next free offset inside p from the current next_free_offset_
@@ -124,9 +134,8 @@ public:
 
 private:
     size_type try_decrease_available_blocks() noexcept {
-        size_type n;
+        size_type n = num_free_blocks_.load();
         do {
-            n = num_free_blocks_.load();
             if (n == 0) {
                 // true: there are no available blocks -> return false
                 return 0;
@@ -157,9 +166,8 @@ private:
     }
 
     bool try_changing_cb(bool activate) {
-        bool curr;
+        bool curr = cb_activated_.load();
         do {
-            curr = cb_activated_.load();
             if (curr == activate) {
                 // this value already changed by someone else
                 return false;
