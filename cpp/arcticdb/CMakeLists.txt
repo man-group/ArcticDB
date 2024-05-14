@@ -360,6 +360,7 @@ set(arcticdb_srcs
         util/sparse_utils.hpp
         util/storage_lock.hpp
         util/string_utils.hpp
+        util/thread_cached_int.hpp
         util/timeouts.hpp
         util/timer.hpp
         util/trace.hpp
