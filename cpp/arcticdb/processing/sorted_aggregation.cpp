@@ -168,7 +168,7 @@ template<AggregationOperator aggregation_operator, ResampleBoundary closed_bound
 void SortedAggregator<aggregation_operator, closed_boundary>::check_aggregator_supported_with_data_type(DataType data_type) const {
     schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
             (is_time_type(data_type) && aggregation_operator != AggregationOperator::SUM) ||
-            is_numeric_type(data_type) ||
+            (is_numeric_type(data_type)  && !is_time_type(data_type)) ||
             is_bool_type(data_type) ||
             (is_sequence_type(data_type) &&
              (aggregation_operator == AggregationOperator::FIRST ||
