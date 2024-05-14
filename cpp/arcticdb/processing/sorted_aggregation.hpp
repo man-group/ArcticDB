@@ -360,19 +360,33 @@ public:
                                    const Column& output_index_column,
                                    StringPool& string_pool) const;
 private:
+    [[nodiscard]] DataType generate_common_input_type(const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns) const;
     void check_aggregator_supported_with_data_type(DataType data_type) const;
-
     [[nodiscard]] DataType generate_output_data_type(DataType common_input_data_type) const;
     [[nodiscard]] bool index_value_past_end_of_bucket(timestamp index_value, timestamp bucket_end) const;
 
-    template<DataType data_type, typename Aggregator, typename T>
+    template<DataType input_data_type, typename Aggregator, typename T>
     void push_to_aggregator(Aggregator& bucket_aggregator, T value, ARCTICDB_UNUSED const ColumnWithStrings& column_with_strings) const {
-        if constexpr(is_time_type(data_type) && aggregation_operator == AggregationOperator::COUNT) {
+        if constexpr(is_time_type(input_data_type) && aggregation_operator == AggregationOperator::COUNT) {
             bucket_aggregator.template push<timestamp, true>(value);
-        } else if constexpr (is_numeric_type(data_type) || is_bool_type(data_type)) {
+        } else if constexpr (is_numeric_type(input_data_type) || is_bool_type(input_data_type)) {
             bucket_aggregator.push(value);
-        } else if constexpr (is_sequence_type(data_type)) {
+        } else if constexpr (is_sequence_type(input_data_type)) {
             bucket_aggregator.push(column_with_strings.string_at_offset(value));
+        }
+    }
+
+    template<DataType output_data_type, typename Aggregator>
+    [[nodiscard]] auto finalize_aggregator(Aggregator& bucket_aggregator, ARCTICDB_UNUSED StringPool& string_pool) const {
+        if constexpr (is_numeric_type(output_data_type) || is_bool_type(output_data_type) || aggregation_operator == AggregationOperator::COUNT) {
+            return bucket_aggregator.finalize();
+        } else if constexpr (is_sequence_type(output_data_type)) {
+            auto opt_string_view = bucket_aggregator.finalize();
+            if (ARCTICDB_LIKELY(opt_string_view.has_value())) {
+                return string_pool.get(*opt_string_view).offset();
+            } else {
+                return string_none;
+            }
         }
     }
 

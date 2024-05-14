@@ -17,24 +17,9 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const 
                                                                           const std::vector<timestamp>& bucket_boundaries,
                                                                           const Column& output_index_column,
                                                                           StringPool& string_pool) const {
-    std::optional<DataType> common_input_type;
-    for (const auto& opt_input_agg_column: input_agg_columns) {
-        if (opt_input_agg_column.has_value()) {
-            auto input_data_type = opt_input_agg_column->column_->type().data_type();
-            check_aggregator_supported_with_data_type(input_data_type);
-            add_data_type_impl(input_data_type, common_input_type);
-        } else {
-            // Column is missing from this row-slice due to dynamic schema, currently unsupported
-            schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>("Resample: Cannot aggregate column '{}' as it is missing from some row slices",
-                                                                get_input_column_name().value);
-        }
-    }
-    // Column is missing from all row-slices due to dynamic schema, currently unsupported
-    schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(common_input_type.has_value(),
-                                                        "Resample: Cannot aggregate column '{}' as it is missing from some row slices",
-                                                        get_input_column_name().value);
-
-    Column res(TypeDescriptor(generate_output_data_type(*common_input_type), Dimension::Dim0), output_index_column.row_count(), true, false);
+    using IndexTDT = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
+    auto common_input_type = generate_common_input_type(input_agg_columns);
+    Column res(TypeDescriptor(generate_output_data_type(common_input_type), Dimension::Dim0), output_index_column.row_count(), true, false);
     details::visit_type(
         res.type().data_type(),
         [this,
@@ -47,8 +32,7 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const 
             auto output_data = res.data();
             auto output_it = output_data.begin<typename output_type_info::TDT>();
             auto output_end_it = output_data.end<typename output_type_info::TDT>();
-            using IndexTDT = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
-            // Need this here to only generate valid get_bucket_aggregator code, exception should have been thrown earlier at runtime
+            // Need this here to only generate valid get_bucket_aggregator code, exception will have been thrown earlier at runtime
             constexpr bool supported_aggregation_type_combo = is_numeric_type(output_type_info::data_type) ||
                                                               is_bool_type(output_type_info::data_type) ||
                                                               (is_sequence_type(output_type_info::data_type) &&
@@ -62,7 +46,7 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const 
                 Bucket<closed_boundary> current_bucket(*bucket_start_it, *bucket_end_it);
                 const auto bucket_boundaries_end = bucket_boundaries.cend();
                 for (auto [idx, input_agg_column]: folly::enumerate(input_agg_columns)) {
-                    // Always true right now due to check at the top of this function
+                    // Always true right now due to earlier check
                     if (input_agg_column.has_value()) {
                         details::visit_type(
                             input_agg_column->column_->type().data_type(),
@@ -78,7 +62,7 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const 
                             &current_bucket,
                             &reached_end_of_buckets](auto input_type_desc_tag) {
                                 using input_type_info = ScalarTypeInfo<decltype(input_type_desc_tag)>;
-                                // Again, only needed to generate valid code below, exception should have been thrown earlier at runtime
+                                // Again, only needed to generate valid code below, exception will have been thrown earlier at runtime
                                 if constexpr ((is_numeric_type(input_type_info::data_type) && is_numeric_type(output_type_info::data_type)) ||
                                               (is_sequence_type(input_type_info::data_type) && (is_sequence_type(output_type_info::data_type) || aggregation_operator == AggregationOperator::COUNT)) ||
                                               (is_bool_type(input_type_info::data_type) && (is_bool_type(output_type_info::data_type) || is_numeric_type(output_type_info::data_type)))) {
@@ -94,20 +78,7 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const 
                                         if (ARCTICDB_LIKELY(current_bucket.contains(*index_it))) {
                                             push_to_aggregator<input_type_info::data_type>(bucket_aggregator, *agg_it, agg_column);
                                         } else if (ARCTICDB_LIKELY(index_value_past_end_of_bucket(*index_it, *bucket_end_it))) {
-                                            if constexpr (is_numeric_type(output_type_info::data_type) ||
-                                                          is_bool_type(output_type_info::data_type) ||
-                                                          aggregation_operator ==
-                                                          AggregationOperator::COUNT) {
-                                                *output_it++ = bucket_aggregator.finalize();
-                                            } else if constexpr (is_sequence_type(output_type_info::data_type)) {
-                                                auto opt_string_view = bucket_aggregator.finalize();
-                                                if (ARCTICDB_LIKELY(opt_string_view.has_value())) {
-                                                    *output_it++ = string_pool.get(*opt_string_view).offset();
-                                                } else {
-                                                    *output_it++ = string_none;
-                                                }
-                                            }
-
+                                            *output_it++ = finalize_aggregator<output_type_info::data_type>(bucket_aggregator, string_pool);
                                             // The following code is equivalent to:
                                             // if constexpr (closed_boundary == ResampleBoundary::LEFT) {
                                             //     bucket_end_it = std::upper_bound(bucket_end_it, bucket_boundaries_end, *index_it);
@@ -145,23 +116,35 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const 
                 }
                 // We were in the middle of aggregating a bucket when we ran out of index values
                 if (output_it != output_end_it) {
-                    if constexpr (is_numeric_type(output_type_info::data_type) ||
-                                  is_bool_type(output_type_info::data_type) ||
-                                  aggregation_operator == AggregationOperator::COUNT) {
-                        *output_it++ = bucket_aggregator.finalize();
-                    } else if constexpr (is_sequence_type(output_type_info::data_type)) {
-                        auto opt_string_view = bucket_aggregator.finalize();
-                        if (opt_string_view.has_value()) {
-                            *output_it++ = string_pool.get(*opt_string_view).offset();
-                        } else {
-                            *output_it++ = string_none;
-                        }
-                    }
+                    *output_it++ = finalize_aggregator<output_type_info::data_type>(bucket_aggregator, string_pool);
                 }
             }
         }
     );
     return res;
+}
+
+template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
+DataType SortedAggregator<aggregation_operator, closed_boundary>::generate_common_input_type(
+        const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns
+        ) const {
+    std::optional<DataType> common_input_type;
+    for (const auto& opt_input_agg_column: input_agg_columns) {
+        if (opt_input_agg_column.has_value()) {
+            auto input_data_type = opt_input_agg_column->column_->type().data_type();
+            check_aggregator_supported_with_data_type(input_data_type);
+            add_data_type_impl(input_data_type, common_input_type);
+        } else {
+            // Column is missing from this row-slice due to dynamic schema, currently unsupported
+            schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>("Resample: Cannot aggregate column '{}' as it is missing from some row slices",
+                                                                get_input_column_name().value);
+        }
+    }
+    // Column is missing from all row-slices due to dynamic schema, currently unsupported
+    schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(common_input_type.has_value(),
+                                                        "Resample: Cannot aggregate column '{}' as it is missing from some row slices",
+                                                        get_input_column_name().value);
+    return *common_input_type;
 }
 
 template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
