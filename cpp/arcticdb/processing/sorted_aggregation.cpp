@@ -133,20 +133,7 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const 
                                             if (ARCTICDB_LIKELY(!reached_end_of_buckets)) {
                                                 current_bucket.set_boundaries(*bucket_start_it, *bucket_end_it);
                                                 if (ARCTICDB_LIKELY(current_bucket.contains(*index_it))) {
-                                                    if constexpr (is_time_type(input_type_info::data_type) &&
-                                                                  aggregation_operator ==
-                                                                  AggregationOperator::COUNT) {
-                                                        bucket_aggregator.template push<typename input_type_info::RawType, true>(
-                                                                *agg_it);
-                                                    } else if constexpr (
-                                                            is_numeric_type(input_type_info::data_type) ||
-                                                            is_bool_type(input_type_info::data_type)) {
-                                                        bucket_aggregator.push(*agg_it);
-                                                    } else if constexpr (is_sequence_type(
-                                                            input_type_info::data_type)) {
-                                                        bucket_aggregator.push(
-                                                                agg_column.string_at_offset(*agg_it));
-                                                    }
+                                                    push_to_aggregator<input_type_info::data_type>(bucket_aggregator, *agg_it, agg_column);
                                                 }
                                             }
                                         }
