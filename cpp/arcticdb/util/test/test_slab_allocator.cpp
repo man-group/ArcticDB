@@ -21,11 +21,13 @@ using namespace arcticdb;
 template <typename MemoryChunk>
 using pointer_set = std::unordered_set<typename MemoryChunk::pointer>;
 
-size_t num_threads = std::thread::hardware_concurrency() - 1;
+// We limit the number of concurrent threads to 8 to avoid the slab allocator poor performance with large amounts of threads:
+// https://manwiki.maninvestments.com/display/AlphaTech/Slab+Allocator+poor+multi-threaded+performance+with+aggressive+allocations
+size_t num_threads = std::min(std::thread::hardware_concurrency() - 1, 8u);
 std::size_t const num_blocks_per_thread = 10000;
 
 template <typename MemoryChunk>
-pointer_set<MemoryChunk> call_alloc_and_dealloc(MemoryChunk& mc, std::size_t n, int64_t& execution_time_ms) {
+pointer_set<MemoryChunk> call_alloc(MemoryChunk& mc, std::size_t n, int64_t& execution_time_ms) {
     
     pointer_set<MemoryChunk> mcps;
     mcps.reserve(n);
@@ -61,7 +63,7 @@ void run_test(MemoryChunk& mc, unsigned int K)
         for (size_t i = 0; i < num_threads; ++i ) {
             v.emplace_back(std::async(
                     std::launch::async,
-                    call_alloc_and_dealloc<MemoryChunk>,
+                    call_alloc<MemoryChunk>,
                     std::ref(mc),
                     num_blocks_per_thread,
                     std::ref(execution_times[i])));
@@ -98,7 +100,7 @@ void run_test(MemoryChunk& mc, unsigned int K)
             }
         }
     }
-    std::cout << "Average execution time: " << avg / execution_times.size() << '\n';
+    std::cout << "Average execution time: " << avg / (num_threads * K) << "ms\n";
 }
 
 TEST(SlabAlloc, CacheLine128) {
