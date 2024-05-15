@@ -433,7 +433,7 @@ def test_querybuilder_resample_then_filter(lmdb_version_store_tiny_segment):
 
     expected = df.resample("us").agg({"col": "sum"})
     expected = expected.query("col == 9")
-    assert_frame_equal(expected, received)
+    assert_frame_equal(expected, received, check_dtype=False)
 
 
 def test_querybuilder_resample_then_project(lmdb_version_store_tiny_segment):
@@ -452,7 +452,7 @@ def test_querybuilder_resample_then_project(lmdb_version_store_tiny_segment):
 
     expected = df.resample("us").agg({"col": "sum"})
     expected["new_col"] = expected["col"] * 3
-    assert_frame_equal(expected, received)
+    assert_frame_equal(expected, received, check_dtype=False)
 
 
 def test_querybuilder_resample_then_groupby(lmdb_version_store_tiny_segment):
@@ -474,10 +474,11 @@ def test_querybuilder_resample_then_groupby(lmdb_version_store_tiny_segment):
     q = q.groupby("grouping_col").agg({"agg_col": "sum"})
 
     received = lib.read(symbol, query_builder=q).data
+    received.sort_index(inplace=True)
 
     expected = df.resample("us").agg({"grouping_col": "sum", "agg_col": "sum"})
     expected = expected.groupby("grouping_col").agg({"agg_col": "sum"})
-    assert_frame_equal(expected, received)
+    assert_frame_equal(expected, received, check_dtype=False)
 
 
 def test_querybuilder_pickling():

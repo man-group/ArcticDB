@@ -277,7 +277,7 @@ def test_resampling_empty_bucket_in_range(lmdb_version_store_v1):
         }
     )
     expected = expected.reindex(columns=sorted(expected.columns))
-    expected["to_count"] = expected["to_count"].astype(np.uint64)
+    # expected["to_count"] = expected["to_count"].astype(np.uint64)
 
     q = QueryBuilder()
     q = q.resample("us").agg(

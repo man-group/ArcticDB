@@ -739,11 +739,35 @@ class QueryBuilder:
             Modified QueryBuilder object.
         """
         check(
-            not len(other.clauses) or not isinstance(other.clauses[0], _DateRangeClause),
-            "In QueryBuilder.then: Date range only supported as first clause in the pipeline",
+            not len(other.clauses) or not isinstance(other.clauses[0], (_DateRangeClause, _ResampleClauseLeftClosed, _ResampleClauseRightClosed)),
+            "In QueryBuilder.then: Date range and Resample only supported as first clauses in the pipeline",
         )
         self.clauses.extend(other.clauses)
         self._python_clauses.extend(other._python_clauses)
+        return self
+
+    # TODO: specify type of other must be QueryBuilder with from __future__ import annotations once only Python 3.7+
+    # supported
+    def prepend(self, other):
+        """
+        Applies processing specified in other before any processing already defined for this QueryBuilder.
+
+        Parameters
+        ----------
+        other: `QueryBuilder`
+            QueryBuilder to apply before this one in the processing pipeline.
+
+        Returns
+        -------
+        QueryBuilder
+            Modified QueryBuilder object.
+        """
+        check(
+            not len(self.clauses) or not isinstance(self.clauses[0], (_DateRangeClause, _ResampleClauseLeftClosed, _ResampleClauseRightClosed)),
+            "In QueryBuilder.prepend: Date range and Resample only supported as first clauses in the pipeline",
+            )
+        self.clauses = other.clauses + self.clauses
+        self._python_clauses = other._python_clauses + self._python_clauses
         return self
 
     def _head(self, n: int):
