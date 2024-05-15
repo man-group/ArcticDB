@@ -360,7 +360,6 @@ public:
             }
         }
         new_entry->head_ = write_entry_to_storage(store, stream_id, new_version_id, new_entry);
-        write_symbol_ref(store, *new_entry->keys_.cbegin(), std::nullopt, new_entry->head_.value());
         remove_entry_version_keys(store, entry, stream_id);
         if (validate_)
             new_entry->validate();
@@ -468,7 +467,6 @@ public:
             entry->keys_.assign(std::begin(index_keys), std::end(index_keys));
             auto new_version_id = index_keys[0].version_id();
             entry->head_ = write_entry_to_storage(store, stream_id, new_version_id, entry);
-            write_symbol_ref(store, *entry->keys_.cbegin(), std::nullopt, entry->head_.value());
             if (validate_)
                 entry->validate();
         }
@@ -896,8 +894,7 @@ public:
         entry->clear();
         load_via_iteration(store, stream_id, entry, false);
         remove_duplicate_index_keys(entry);
-        auto new_entry = rewrite_entry(store, stream_id, entry);
-        write_symbol_ref(store, *new_entry->keys_.cbegin(), std::nullopt, new_entry->head_.value());
+        rewrite_entry(store, stream_id, entry);
     }
 
     void remove_and_rewrite_version_keys(std::shared_ptr<Store> store, const StreamId& stream_id) {
@@ -907,9 +904,8 @@ public:
         entry->clear();
         load_via_iteration(store, stream_id, entry, true);
         remove_duplicate_index_keys(entry);
-        auto new_entry = rewrite_entry(store, stream_id, entry);
+        rewrite_entry(store, stream_id, entry);
         remove_entry_version_keys(store, old_entry, stream_id);
-        write_symbol_ref(store, *new_entry->keys_.cbegin(), std::nullopt, new_entry->head_.value());
     }
 
     void fix_ref_key(std::shared_ptr<Store> store, const StreamId& stream_id) {
@@ -958,8 +954,7 @@ public:
 
         entry->keys_.insert(std::begin(entry->keys_), std::begin(missing_versions), std::end(missing_versions));
         entry->sort();
-        auto new_entry = rewrite_entry(store, stream_id, entry);
-        write_symbol_ref(store, *new_entry->keys_.cbegin(), std::nullopt, new_entry->head_.value());
+        rewrite_entry(store, stream_id, entry);
     }
 
     std::shared_ptr<Lock> get_lock_object(const StreamId& stream_id) const {
