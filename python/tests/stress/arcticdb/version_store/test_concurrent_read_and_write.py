@@ -41,5 +41,7 @@ def test_concurrent_read_write(writer_store, reader_store):
     writer.start()
     reader.join(5)
     writer.join(0.001)
+    writer.terminate()
+    reader.terminate()
 
     assert exceptions_in_reader.empty()
