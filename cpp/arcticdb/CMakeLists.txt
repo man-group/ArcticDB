@@ -2,7 +2,6 @@ option(TEST "Build all tests." ON)
 option(BUILD_WITH_REMOTERY "Build ArcticDB with Remotery (used for performance analysis)" OFF)
 option(SSL_LINK "Link against SSL libraries." ON)
 option(HIDE_LINKED_SYMBOLS "Passed `exclude-libs` through to linker, ensuring linked library symbols are not exported. Shrinks binary size." ON)
-option(STATIC_LINK_STD_LIB "Statically link the C++ standard libraries" ON)
 
 find_package(GTest CONFIG REQUIRED)
 include(CTest)
@@ -64,7 +63,6 @@ else()
     # https://conda-forge.org/docs/maintainer/knowledge_base.html#newer-c-features-with-old-sdk
     add_compile_definitions(_LIBCPP_DISABLE_AVAILABILITY)
 
-    SET(STATIC_LINK_STD_LIB OFF)
     SET(HIDE_LINKED_SYMBOLS OFF)
 
     find_package(pybind11 REQUIRED)
@@ -508,32 +506,18 @@ if (WIN32)
             /Zc:__cplusplus #needed to get the correct __cplusplus macro value
     )
 else()
-    if (STATIC_LINK_STD_LIB)
-        message("Statically linking standard libraries")
-        if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-             message(FATAL_ERROR "Statically linking standard libraries with CLANG is (currently) not supported")
-        elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-            set(standard_libraries
-                -static-libgcc
-                -static-libstdc++
-            )
-        else()
-            message(FATAL_ERROR "Unknown compiler: ${CMAKE_CXX_COMPILER_ID}")
-        endif()
+    message("Dynamically linking standard libraries")
+    if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        set(standard_libraries
+            stdc++
+        )
+    elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        set(standard_libraries
+            stdc++
+            gcc
+        )
     else()
-        message("Dynamically linking standard libraries")
-        if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-            set(standard_libraries
-                stdc++
-            )
-        elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-            set(standard_libraries
-                stdc++
-                gcc
-            )
-        else()
-            message(FATAL_ERROR "Unknown compiler: ${CMAKE_CXX_COMPILER_ID}")
-        endif()
+        message(FATAL_ERROR "Unknown compiler: ${CMAKE_CXX_COMPILER_ID}")
     endif()
 endif()
 

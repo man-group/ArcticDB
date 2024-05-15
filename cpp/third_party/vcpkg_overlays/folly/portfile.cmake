@@ -20,6 +20,8 @@ vcpkg_from_github(
         fix-deps.patch
         dont-inherit-cpp-version.patch
         ignore-uninitialized-local-variable-used.patch
+        0001-Include-missing-headers.patch
+        0002-Workaround-demangling-callback.patch
 )
 
 file(REMOVE "${SOURCE_PATH}/CMake/FindFmt.cmake")
