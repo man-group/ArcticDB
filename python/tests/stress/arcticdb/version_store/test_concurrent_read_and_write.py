@@ -37,11 +37,13 @@ def test_concurrent_read_write(writer_store, reader_store):
     reader = Process(target=read_repeatedly, args=(reader_store, exceptions_in_reader))
     writer = Process(target=write_repeatedly, args=(writer_store,))
 
-    reader.start()
-    writer.start()
-    reader.join(5)
-    writer.join(0.001)
-    writer.terminate()
-    reader.terminate()
+    try:
+        reader.start()
+        writer.start()
+        reader.join(5)
+        writer.join(0.001)
+    finally:
+        writer.terminate()
+        reader.terminate()
 
     assert exceptions_in_reader.empty()
