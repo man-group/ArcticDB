@@ -74,13 +74,14 @@ def _read_and_assert_symbol(args):
 # Testing with only s3_store_factory because testing with azurite causes a SegFault
 # def test_parallel_reads(local_object_version_store):
 def test_parallel_reads(s3_store_factory):
+    lib = s3_store_factory()
     symbols = ["XXX"] * 20
     p = Pool(10)
-    s3_store_factory.write(symbols[0], df("test1"))
+    lib.write(symbols[0], df("test1"))
     time.sleep(0.1)  # Make sure the writes have finished, especially azurite.
     p.map(
         _read_and_assert_symbol,
-        [(s3_store_factory, s, idx) for idx, s in enumerate(symbols)],
+        [(lib, s, idx) for idx, s in enumerate(symbols)],
     )
     p.close()
     p.join()
