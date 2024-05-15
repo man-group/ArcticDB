@@ -246,15 +246,6 @@ public:
             log_write(store, key.id(), key.version_id());
     }
 
-    AtomKey write_tombstone_all_key(
-            const std::shared_ptr<Store>& store,
-            const AtomKey& previous_key,
-            const std::shared_ptr<VersionMapEntry>& entry) {
-        auto tombstone_key = write_tombstone_all_key_internal(store, previous_key, entry);
-        write_symbol_ref(store, tombstone_key, std::nullopt, entry->head_.value());
-        return tombstone_key;
-    }
-
     /**
      * Tombstone all non-deleted versions of the given stream and do the related housekeeping.
      * @param first_key_to_tombstone The first key in the version chain that should be tombstoned. When empty
@@ -298,8 +289,8 @@ public:
                 __FUNCTION__);
         auto [_, result] = tombstone_from_key_or_all_internal(store, key.id(), previous_key, entry);
 
-        do_write(store, key, entry);
-        write_symbol_ref(store, *entry->keys_.cbegin(), std::nullopt, entry->head_.value());
+        auto previous_index = do_write(store, key, entry);
+        write_symbol_ref(store, *entry->keys_.cbegin(), previous_index, entry->head_.value());
 
         if (log_changes_)
             log_write(store, key.id(), key.version_id());
@@ -369,7 +360,6 @@ public:
             }
         }
         new_entry->head_ = write_entry_to_storage(store, stream_id, new_version_id, new_entry);
-        write_symbol_ref(store, *new_entry->keys_.cbegin(), std::nullopt, new_entry->head_.value());
         remove_entry_version_keys(store, entry, stream_id);
         if (validate_)
             new_entry->validate();
@@ -477,7 +467,6 @@ public:
             entry->keys_.assign(std::begin(index_keys), std::end(index_keys));
             auto new_version_id = index_keys[0].version_id();
             entry->head_ = write_entry_to_storage(store, stream_id, new_version_id, entry);
-            write_symbol_ref(store, *entry->keys_.cbegin(), std::nullopt, entry->head_.value());
             if (validate_)
                 entry->validate();
         }
@@ -502,7 +491,10 @@ public:
         return storage_reload(store, stream_id, load_param, load_param.iterate_on_failure_);
     }
 
-    void do_write(
+    /**
+     * Returns the second undeleted index (after the write).
+     */
+    std::optional<AtomKey> do_write(
         std::shared_ptr<Store> store,
         const AtomKey &key,
         const std::shared_ptr<VersionMapEntry> &entry) {
@@ -512,7 +504,7 @@ public:
         auto journal_key = to_atom(std::move(journal_single_key(store, key, entry->head_)));
         write_to_entry(entry, key, journal_key);
         auto previous_index = entry->get_second_undeleted_index();
-        write_symbol_ref(store, key, previous_index, journal_key);
+        return previous_index;
     }
 
     AtomKey write_tombstone(
@@ -902,8 +894,7 @@ public:
         entry->clear();
         load_via_iteration(store, stream_id, entry, false);
         remove_duplicate_index_keys(entry);
-        auto new_entry = rewrite_entry(store, stream_id, entry);
-        write_symbol_ref(store, *new_entry->keys_.cbegin(), std::nullopt, new_entry->head_.value());
+        rewrite_entry(store, stream_id, entry);
     }
 
     void remove_and_rewrite_version_keys(std::shared_ptr<Store> store, const StreamId& stream_id) {
@@ -913,9 +904,8 @@ public:
         entry->clear();
         load_via_iteration(store, stream_id, entry, true);
         remove_duplicate_index_keys(entry);
-        auto new_entry = rewrite_entry(store, stream_id, entry);
+        rewrite_entry(store, stream_id, entry);
         remove_entry_version_keys(store, old_entry, stream_id);
-        write_symbol_ref(store, *new_entry->keys_.cbegin(), std::nullopt, new_entry->head_.value());
     }
 
     void fix_ref_key(std::shared_ptr<Store> store, const StreamId& stream_id) {
@@ -964,8 +954,7 @@ public:
 
         entry->keys_.insert(std::begin(entry->keys_), std::begin(missing_versions), std::end(missing_versions));
         entry->sort();
-        auto new_entry = rewrite_entry(store, stream_id, entry);
-        write_symbol_ref(store, *new_entry->keys_.cbegin(), std::nullopt, new_entry->head_.value());
+        rewrite_entry(store, stream_id, entry);
     }
 
     std::shared_ptr<Lock> get_lock_object(const StreamId& stream_id) const {
