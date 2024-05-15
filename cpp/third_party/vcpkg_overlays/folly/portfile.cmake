@@ -22,6 +22,7 @@ vcpkg_from_github(
         ignore-uninitialized-local-variable-used.patch
         0001-Include-missing-headers.patch
         0002-Workaround-demangling-callback.patch
+        0003-Set-FOLLY_HAVE_SO_TIMESTAMPING-to-0.patch
 )
 
 file(REMOVE "${SOURCE_PATH}/CMake/FindFmt.cmake")
