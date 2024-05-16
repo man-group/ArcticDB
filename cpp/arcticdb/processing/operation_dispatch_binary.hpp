@@ -45,6 +45,21 @@ VariantData binary_boolean(EmptyResult, EmptyResult, OperationType operation);
 VariantData visit_binary_boolean(const VariantData& left, const VariantData& right, OperationType operation);
 
 template <typename Func>
+inline std::string binary_operation_column_name(std::string_view left_column, Func&& func, std::string_view right_column) {
+    return fmt::format("({} {} {})", left_column, func, right_column);
+}
+
+template <typename Func>
+inline std::string binary_operation_with_types_to_string(std::string_view left, const TypeDescriptor& type_left, Func&& func,
+                                                         std::string_view right, const TypeDescriptor& type_right,
+                                                         bool arguments_reversed = false) {
+    if (arguments_reversed) {
+        return fmt::format("{} ({}) {} {} ({})", right, get_user_friendly_type_string(type_right), func, left, get_user_friendly_type_string(type_left));
+    }
+    return fmt::format("{} ({}) {} {} ({})", left, get_user_friendly_type_string(type_left), func, right, get_user_friendly_type_string(type_right));
+}
+
+template <typename Func>
 VariantData binary_membership(const ColumnWithStrings& column_with_strings, ValueSet& value_set, Func&& func) {
     if (is_empty_type(column_with_strings.column_->type().data_type())) {
         if constexpr(std::is_same_v<std::remove_reference_t<Func>, IsInOperator>) {
@@ -252,7 +267,7 @@ VariantData binary_comparator(const ColumnWithStrings& column_with_strings, cons
                                         column_with_strings.column_name_,
                                         column_with_strings.column_->type(),
                                         func,
-                                        fmt::format("{}", val),
+                                        val.to_string<typename val_type_info::RawType>(),
                                         val.type(),
                                         arguments_reversed));
             }
@@ -293,21 +308,6 @@ VariantData visit_binary_comparator(const VariantData& left, const VariantData& 
 }
 
 template <typename Func>
-inline std::string binary_operation_column_name(std::string_view left_column, Func&& func, std::string_view right_column) {
-    return fmt::format("({} {} {})", left_column, func, right_column);
-}
-
-template <typename Func>
-inline std::string binary_operation_with_types_to_string(std::string_view left, const TypeDescriptor& type_left, Func&& func,
-                                                         std::string_view right, const TypeDescriptor& type_right,
-                                                         bool arguments_reversed = false) {
-    if (arguments_reversed) {
-        return fmt::format("{} ({}) {} {} ({})", right, get_user_friendly_type_string(type_right), func, left, get_user_friendly_type_string(type_left));
-    }
-    return fmt::format("{} ({}) {} {} ({})", left, get_user_friendly_type_string(type_left), func, right, get_user_friendly_type_string(type_right));
-}
-
-template <typename Func>
 VariantData binary_operator(const Value& left, const Value& right, Func&& func) {
     auto output_value = std::make_unique<Value>();
 
@@ -318,10 +318,10 @@ VariantData binary_operator(const Value& left, const Value& right, Func&& func) 
             if constexpr(!is_numeric_type(left_type_info::data_type) || !is_numeric_type(right_type_info::data_type)) {
                 user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Non-numeric type provided to binary operation: {}",
                                 binary_operation_with_types_to_string(
-                                    fmt::format("{}", left),
+                                    left.to_string<typename left_type_info::RawType>(),
                                     left.type(),
                                     func,
-                                    fmt::format("{}", right),
+                                    right.to_string<typename right_type_info::RawType>(),
                                     right.type()));
             }
             auto right_value = *reinterpret_cast<const typename right_type_info::RawType*>(right.data_);
@@ -388,7 +388,7 @@ VariantData binary_operator(const ColumnWithStrings& col, const Value& val, Func
                                         col.column_name_,
                                         col.column_->type(),
                                         func,
-                                        fmt::format("{}", val),
+                                        val.to_string<typename val_type_info::RawType>(),
                                         val.type(),
                                         arguments_reversed));
             }
