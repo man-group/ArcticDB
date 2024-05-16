@@ -5,117 +5,84 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+from math import log10
+
+from asv_runner.benchmarks.mark import SkipNotImplemented
+import numpy as np
+import pandas as pd
+
 from arcticdb import Arctic
-from arcticdb.version_store.processing import QueryBuilder
+from arcticdb import QueryBuilder
+from arcticdb.util.test import random_strings_of_length
 
-from .common import *
+class Resample:
+    number = 5
 
+    LIB_NAME = "resample"
+    CONNECTION_STRING = "lmdb://resample?map_size=5GB"
+    ROWS_PER_SEGMENT = 100_000
 
-class LocalQueryBuilderFunctions:
-    number = 4
-    timeout = 6000
-    LIB_NAME = "query_builder"
-    CONNECTION_STRING = "lmdb://query_builder?map_size=5GB"
-
-    params = [1_000_000, 10_000_000]
-    param_names = ["num_rows"]
+    param_names = [
+        "num_rows",
+        "downsampling_factor",
+        "col_type",
+        "aggregation",
+    ]
+    params = [
+        [1_000_000, 10_000_000],
+        [10, 100, 100_000],
+        ["bool", "int", "float", "datetime", "str"],
+        ["sum", "mean", "min", "max", "first", "last", "count"],
+    ]
 
     def setup_cache(self):
-        self.ac = Arctic(LocalQueryBuilderFunctions.CONNECTION_STRING)
+        ac = Arctic(self.CONNECTION_STRING)
+        ac.delete_library(self.LIB_NAME)
+        lib = ac.create_library(self.LIB_NAME)
+        rng = np.random.default_rng()
+        col_types = self.params[2]
+        rows = max(self.params[0])
+        for col_type in col_types:
+            if col_type == "str":
+                num_unique_strings = 100
+                unique_strings = random_strings_of_length(num_unique_strings, 10, True)
+            sym = col_type
+            num_segments = rows // self.ROWS_PER_SEGMENT
+            for idx in range(num_segments):
+                index = pd.date_range(pd.Timestamp(idx * self.ROWS_PER_SEGMENT, unit="us"), freq="us", periods=self.ROWS_PER_SEGMENT)
+                if col_type == "int":
+                    col_data = rng.integers(0, 100_000, self.ROWS_PER_SEGMENT)
+                elif col_type == "bool":
+                    col_data = rng.integers(0, 2, self.ROWS_PER_SEGMENT)
+                    col_data = col_data.astype(bool)
+                elif col_type == "float":
+                    col_data = 100_000 * rng.random(self.ROWS_PER_SEGMENT)
+                elif col_type == "datetime":
+                    col_data = rng.integers(0, 100_000, self.ROWS_PER_SEGMENT)
+                    col_data = col_data.astype("datetime64[s]")
+                elif col_type == "str":
+                    col_data = np.random.choice(unique_strings, self.ROWS_PER_SEGMENT)
+                df = pd.DataFrame({"col": col_data}, index=index)
+                lib.append(sym, df)
 
-        num_rows = LocalQueryBuilderFunctions.params
-        self.lib_name = LocalQueryBuilderFunctions.LIB_NAME
-        self.ac.delete_library(self.lib_name)
-        lib = self.ac.create_library(self.lib_name)
-        for rows in num_rows:
-            lib.write(f"{rows}_rows", generate_benchmark_df(rows))
-
-    def teardown(self, num_rows):
+    def teardown(self, num_rows, downsampling_factor, col_type, aggregation):
         del self.lib
         del self.ac
 
-    def setup(self, num_rows):
-        self.ac = Arctic(LocalQueryBuilderFunctions.CONNECTION_STRING)
-        self.lib = self.ac[LocalQueryBuilderFunctions.LIB_NAME]
+    def setup(self, num_rows, downsampling_factor, col_type, aggregation):
+        self.ac = Arctic(self.CONNECTION_STRING)
+        self.lib = self.ac[self.LIB_NAME]
+        self.date_range = (pd.Timestamp(0), pd.Timestamp(num_rows, unit="us"))
+        self.query_builder = QueryBuilder().resample(f"{downsampling_factor}us").agg({"col": aggregation})
 
-    # Omit string columns in filtering/projection benchmarks to avoid time/memory being dominated by Python string
-    # allocation
-    def time_filtering_numeric(self, num_rows):
-        q = QueryBuilder()
-        # v3 is random floats between 0 and 100
-        q = q[q["v3"] < 1.0]
-        self.lib.read(f"{num_rows}_rows", columns=["v3"], query_builder=q)
+    def time_resample(self, num_rows, downsampling_factor, col_type, aggregation):
+        if col_type == "datetime" and aggregation == "sum" or col_type == "str" and aggregation in ["sum", "mean", "min", "max"]:
+            raise SkipNotImplemented(f"{aggregation} not supported on columns of type {col_type}")
+        else:
+            self.lib.read(col_type, date_range=self.date_range, query_builder=self.query_builder)
 
-    def peakmem_filtering_numeric(self, num_rows):
-        q = QueryBuilder()
-        # v3 is random floats between 0 and 100
-        q = q[q["v3"] < 10.0]
-        self.lib.read(f"{num_rows}_rows", columns=["v3"], query_builder=q)
-
-    def time_filtering_string_isin(self, num_rows):
-        # Selects about 1% of the rows
-        k = num_rows // 1000
-        string_set = [f"id{str(i).zfill(3)}" for i in range(1, k + 1)]
-        q = QueryBuilder()
-        q = q[q["id1"].isin(string_set)]
-        self.lib.read(f"{num_rows}_rows", columns=["v3"], query_builder=q)
-
-    def peakmem_filtering_string_isin(self, num_rows):
-        # Selects about 1% of the rows
-        k = num_rows // 1000
-        string_set = [f"id{str(i).zfill(3)}" for i in range(1, k + 1)]
-        q = QueryBuilder()
-        q = q[q["id1"].isin(string_set)]
-        self.lib.read(f"{num_rows}_rows", columns=["v3"], query_builder=q)
-
-    def time_projection(self, num_rows):
-        q = QueryBuilder()
-        q = q.apply("new_col", q["v2"] * q["v3"])
-        self.lib.read(f"{num_rows}_rows", columns=["new_col"], query_builder=q)
-
-    def peakmem_projection(self, num_rows):
-        q = QueryBuilder()
-        q = q.apply("new_col", q["v2"] * q["v3"])
-        self.lib.read(f"{num_rows}_rows", columns=["new_col"], query_builder=q)
-
-    # The names are based on the queries used here: https://duckdblabs.github.io/db-benchmark/
-    # Don't rename to distinguish from other query tests as renaming makes it a new benchmark, losing historic results
-    def time_query_1(self, num_rows):
-        q = QueryBuilder()
-        q = q.groupby("id1").agg({"v1": "sum"})
-        self.lib.read(f"{num_rows}_rows", query_builder=q)
-
-    def peakmem_query_1(self, num_rows):
-        q = QueryBuilder()
-        q = q.groupby("id1").agg({"v1": "sum"})
-        self.lib.read(f"{num_rows}_rows", query_builder=q)
-
-    def time_query_3(self, num_rows):
-        q = QueryBuilder()
-        q = q.groupby("id3").agg({"v1": "sum", "v3": "sum"})
-        self.lib.read(f"{num_rows}_rows", query_builder=q)
-
-    def peakmem_query_3(self, num_rows):
-        q = QueryBuilder()
-        q = q.groupby("id3").agg({"v1": "sum", "v3": "sum"})
-        self.lib.read(f"{num_rows}_rows", query_builder=q)
-
-    def time_query_4(self, num_rows):
-        q = QueryBuilder()
-        q = q.groupby("id6").agg({"v1": "sum", "v2": "sum"})
-        self.lib.read(f"{num_rows}_rows", query_builder=q)
-
-    def peakmem_query_4(self, num_rows):
-        q = QueryBuilder()
-        q = q.groupby("id6").agg({"v1": "sum", "v2": "sum"})
-        self.lib.read(f"{num_rows}_rows", query_builder=q)
-
-    def time_query_adv_query_2(self, num_rows):
-        q = QueryBuilder()
-        q = q.groupby("id3").agg({"v1": "max", "v2": "min"})
-        self.lib.read(f"{num_rows}_rows", query_builder=q)
-
-    def peakmem_query_adv_query_2(self, num_rows):
-        q = QueryBuilder()
-        q = q.groupby("id3").agg({"v1": "max", "v2": "min"})
-        self.lib.read(f"{num_rows}_rows", query_builder=q)
+    def peakmem_resample(self, num_rows, downsampling_factor, col_type, aggregation):
+        if col_type == "datetime" and aggregation == "sum" or col_type == "str" and aggregation in ["sum", "mean", "min", "max"]:
+            raise SkipNotImplemented(f"{aggregation} not supported on columns of type {col_type}")
+        else:
+            self.lib.read(col_type, date_range=self.date_range, query_builder=self.query_builder)
