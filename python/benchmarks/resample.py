@@ -12,7 +12,7 @@ from .common import *
 
 
 class LocalQueryBuilderFunctions:
-    number = 5
+    number = 4
     timeout = 6000
     LIB_NAME = "query_builder"
     CONNECTION_STRING = "lmdb://query_builder?map_size=5GB"
