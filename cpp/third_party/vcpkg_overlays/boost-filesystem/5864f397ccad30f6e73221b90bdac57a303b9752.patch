@@ -3,7 +3,7 @@ index ca2fff3be..e22967e88 100644
 --- a/src/operations.cpp
 +++ b/src/operations.cpp
 @@ -70,7 +70,7 @@
-
+ 
  #include <unistd.h>
  #include <fcntl.h>
 -#if _POSIX_C_SOURCE < 200809L
