@@ -123,8 +123,7 @@
       "hidden": true,
       "generator": "Unix Makefiles",
       "cacheVariables": {
-        "CMAKE_MAKE_PROGRAM": "make",
-        "STATIC_LINK_STD_LIB": "OFF"
+        "CMAKE_MAKE_PROGRAM": "make"
       },
       "environment": {"cmakepreset_expected_host_system": "Darwin"}
     },
