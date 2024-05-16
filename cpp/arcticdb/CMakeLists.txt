@@ -505,20 +505,6 @@ if (WIN32)
             /external:I${CMAKE_SOURCE_DIR}/third_party
             /Zc:__cplusplus #needed to get the correct __cplusplus macro value
     )
-else()
-    message("Dynamically linking standard libraries")
-    if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-        set(standard_libraries
-            stdc++
-        )
-    elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-        set(standard_libraries
-            stdc++
-            gcc
-        )
-    else()
-        message(FATAL_ERROR "Unknown compiler: ${CMAKE_CXX_COMPILER_ID}")
-    endif()
 endif()
 
 
