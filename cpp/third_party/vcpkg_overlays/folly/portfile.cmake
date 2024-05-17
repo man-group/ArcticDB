@@ -24,6 +24,7 @@ vcpkg_from_github(
         0002-Workaround-demangling-callback.patch
         0003-Set-FOLLY_HAVE_SO_TIMESTAMPING-to-0.patch
         0004-Do-not-use-PRId64.patch
+        0005-Deactivate-libunwind-features.patch
 )
 
 file(REMOVE "${SOURCE_PATH}/CMake/FindFmt.cmake")
