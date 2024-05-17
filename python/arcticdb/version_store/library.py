@@ -122,7 +122,7 @@ class SymbolDescription(NamedTuple):
         Whether the index is a simple index or a multi_index. ``NA`` indicates that the stored data does not have an index.
     row_count : int
         Number of rows.
-    last_update_time : datetime64
+    last_update_time : datetime.datetime
         The time of the last update to the symbol, in UTC.
     date_range : Tuple[Union[datetime.datetime, numpy.datetime64], Union[datetime.datetime, numpy.datetime64]]
         The values of the index column in the first and last rows of this symbol in UTC. Both values will be NaT if:
@@ -145,7 +145,7 @@ class SymbolDescription(NamedTuple):
     index: NameWithDType
     index_type: str
     row_count: int
-    last_update_time: datetime64
+    last_update_time: datetime.datetime
     date_range: Tuple[Union[datetime.datetime, datetime64], Union[datetime.datetime, datetime64]]
     sorted: str
 
