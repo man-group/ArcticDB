@@ -5,9 +5,8 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
-from math import log10
-
-from asv_runner.benchmarks.mark import SkipNotImplemented
+# Use this import when upgraded to ASV 0.6.0 or later
+# from asv_runner.benchmarks.mark import SkipNotImplemented
 import numpy as np
 import pandas as pd
 
@@ -77,12 +76,16 @@ class Resample:
 
     def time_resample(self, num_rows, downsampling_factor, col_type, aggregation):
         if col_type == "datetime" and aggregation == "sum" or col_type == "str" and aggregation in ["sum", "mean", "min", "max"]:
-            raise SkipNotImplemented(f"{aggregation} not supported on columns of type {col_type}")
+            pass
+            # Use this when upgrading to ASV 0.6.0 or later
+            # raise SkipNotImplemented(f"{aggregation} not supported on columns of type {col_type}")
         else:
             self.lib.read(col_type, date_range=self.date_range, query_builder=self.query_builder)
 
     def peakmem_resample(self, num_rows, downsampling_factor, col_type, aggregation):
         if col_type == "datetime" and aggregation == "sum" or col_type == "str" and aggregation in ["sum", "mean", "min", "max"]:
-            raise SkipNotImplemented(f"{aggregation} not supported on columns of type {col_type}")
+            pass
+            # Use this when upgrading to ASV 0.6.0 or later
+            # raise SkipNotImplemented(f"{aggregation} not supported on columns of type {col_type}")
         else:
             self.lib.read(col_type, date_range=self.date_range, query_builder=self.query_builder)
