@@ -18,7 +18,7 @@ namespace arcticdb::storage::memory {
 
     namespace fg = folly::gen;
 
-    std::string MemoryStorage::uid() const {
+    std::string MemoryStorage::name() const {
         return "memory_storage-0";
     }
 

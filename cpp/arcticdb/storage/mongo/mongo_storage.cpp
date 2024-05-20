@@ -63,7 +63,7 @@ void raise_if_unexpected_error(const mongocxx::operation_exception& e) {
     }
 }
 
-std::string MongoStorage::uid() const {
+std::string MongoStorage::name() const {
     return fmt::format("mongo_storage-{}", db_);
 }
 

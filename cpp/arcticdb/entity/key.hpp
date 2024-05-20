@@ -181,7 +181,7 @@ enum class KeyType : int {
     /*
      * Used for storing the ids of storages that failed to sync
      */
-    FAIL_INFO = 26,
+    REPLICATION_FAIL_INFO = 26,
     UNDEFINED
 };
 

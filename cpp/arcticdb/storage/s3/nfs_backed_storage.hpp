@@ -30,7 +30,7 @@ public:
 
     NfsBackedStorage(const LibraryPath &lib, OpenMode mode, const Config &conf);
 
-    std::string uid() const final;
+    std::string name() const final;
 
 private:
     void do_write(Composite<KeySegmentPair>&& kvs) final;
@@ -58,11 +58,13 @@ private:
     auto& client() { return s3_client_; }
     const std::string& bucket_name() const { return bucket_name_; }
     const std::string& root_folder() const { return root_folder_; }
+    const std::string& region() const { return region_; }
 
     std::shared_ptr<storage::s3::S3ApiInstance> s3_api_;
     std::unique_ptr<storage::s3::S3ClientWrapper> s3_client_;
     std::string root_folder_;
     std::string bucket_name_;
+    std::string region_;
 };
 
 inline arcticdb::proto::storage::VariantStorage pack_config(const std::string &bucket_name) {

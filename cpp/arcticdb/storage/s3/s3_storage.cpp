@@ -53,7 +53,7 @@ namespace s3 {
 
 namespace fg = folly::gen;
 
-std::string S3Storage::uid() const {
+std::string S3Storage::name() const {
     return fmt::format("s3_storage-{}/{}/{}", region_, bucket_name_, root_folder_);
 }
 

@@ -26,7 +26,7 @@ class MappedFileStorage final : public SingleFileStorage {
 
     ~MappedFileStorage() override = default;
 
-    std::string uid() const final;
+    std::string name() const final;
 
 
   private:

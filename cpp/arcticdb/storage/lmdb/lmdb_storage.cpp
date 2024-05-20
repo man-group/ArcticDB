@@ -83,7 +83,7 @@ void LmdbStorage::do_write_internal(Composite<KeySegmentPair>&& kvs, ::lmdb::txn
     });
 }
 
-std::string LmdbStorage::uid() const {
+std::string LmdbStorage::name() const {
     return fmt::format("lmdb_storage-{}", lib_dir_.string());
 }
 

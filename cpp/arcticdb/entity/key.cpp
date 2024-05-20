@@ -64,7 +64,7 @@ KeyData get_key_data(KeyType key_type) {
     STRING_KEY(KeyType::APPEND_DATA, app, 'b')
     // Unused
     STRING_KEY(KeyType::PARTITION, pref, 'p')
-    STRING_KEY(KeyType::FAIL_INFO, fail, 'F')
+    STRING_KEY(KeyType::REPLICATION_FAIL_INFO, rfail, 'F')
     STRING_REF(KeyType::STORAGE_INFO, sref, 'h')
     NUMERIC_KEY(KeyType::STREAM_GROUP, sg, 'g')
     NUMERIC_KEY(KeyType::GENERATION, gen, 'G')

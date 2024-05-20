@@ -36,7 +36,7 @@ class LmdbStorage final : public Storage {
     LmdbStorage(LmdbStorage&& other) noexcept;
     ~LmdbStorage() override;
 
-    std::string uid() const final;
+    std::string name() const final;
 
   private:
     void do_write(Composite<KeySegmentPair>&& kvs) final;

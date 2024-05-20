@@ -25,7 +25,7 @@ MappedFileStorage::MappedFileStorage(const LibraryPath &lib, OpenMode mode, Conf
     init();
 }
 
-std::string MappedFileStorage::uid() const {
+std::string MappedFileStorage::name() const {
     return fmt::format("mapped_file_storage-{}", config_.path());
 }
 

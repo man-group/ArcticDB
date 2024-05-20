@@ -168,8 +168,8 @@ class Library {
     }
 
     std::string name() {
-        auto lib_uid = storages_->uid();
-        return fmt::format("{}", lib_uid);
+        auto lib_name = storages_->name();
+        return lib_name;
     }
 
   private:

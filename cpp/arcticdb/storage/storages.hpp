@@ -144,8 +144,8 @@ class Storages {
             return std::nullopt;
         }
     }
-    std::string uid() const {
-        return primary().uid();
+    std::string name() const {
+        return primary().name();
     }
 
   private:

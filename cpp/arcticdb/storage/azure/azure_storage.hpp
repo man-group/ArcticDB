@@ -31,7 +31,7 @@ class AzureStorage final : public Storage {
 
     AzureStorage(const LibraryPath &lib, OpenMode mode, const Config &conf);
 
-    std::string uid() const final;
+    std::string name() const final;
 
   protected:
     void do_write(Composite<KeySegmentPair>&& kvs) final;

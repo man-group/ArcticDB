@@ -39,7 +39,7 @@ class S3Storage final : public Storage {
      */
     std::string get_key_path(const VariantKey& key) const;
 
-    std::string uid() const final;
+    std::string name() const final;
 
   private:
     void do_write(Composite<KeySegmentPair>&& kvs) final;

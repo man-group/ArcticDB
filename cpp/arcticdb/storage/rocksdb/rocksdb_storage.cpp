@@ -95,7 +95,7 @@ RocksDBStorage::~RocksDBStorage() {
     delete db_;
 }
 
-std::string RocksDBStorage::uid() const {
+std::string RocksDBStorage::name() const {
     return fmt::format("rocksdb_storage-{}", db_name_);
 }
 

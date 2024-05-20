@@ -118,8 +118,8 @@ VariantKey unencode_object_id(const VariantKey& key) {
                         });
 }
 
-std::string NfsBackedStorage::uid() const {
-    return fmt::format("nfs_backed_storage-{}/{}", root_folder_, bucket_name_);
+std::string NfsBackedStorage::name() const {
+    return fmt::format("nfs_backed_storage-{}/{}/{}", region_, bucket_name_, root_folder_);
 }
 
 void NfsBackedStorage::do_write(Composite<KeySegmentPair>&& kvs) {
@@ -185,7 +185,8 @@ NfsBackedStorage::NfsBackedStorage(const LibraryPath &library_path, OpenMode mod
     Storage(library_path, mode),
     s3_api_(s3::S3ApiInstance::instance()),
     root_folder_(object_store_utils::get_root_folder(library_path)),
-    bucket_name_(conf.bucket_name()) {
+    bucket_name_(conf.bucket_name()),
+    region_(conf.region()) {
     s3_client_ = std::make_unique<s3::RealS3Client>(s3::get_aws_credentials(conf), s3::get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, false);
     if (!conf.prefix().empty()) {
         ARCTICDB_DEBUG(log::version(), "prefix found, using: {}", conf.prefix());
