@@ -17,7 +17,8 @@ namespace arcticdb {
 
 using namespace pipelines;
 using EntityId = uint64_t;
-using bucket_id = size_t;
+using EntityIds = std::vector<EntityId>;
+using bucket_id = uint8_t;
 
 class ComponentManager {
 public:
@@ -25,6 +26,36 @@ public:
     ARCTICDB_NO_MOVE_OR_COPY(ComponentManager)
 
     void set_next_entity_id(EntityId id);
+
+    template<typename T>
+    EntityIds add(std::vector<T>&& components, const std::optional<EntityIds>& ids=std::nullopt) {
+        EntityIds insertion_ids;
+        if (ids.has_value()) {
+            insertion_ids = *ids;
+        } else {
+            insertion_ids.reserve(components.size());
+            for (size_t idx = 0; idx < components.size(); ++idx) {
+                insertion_ids.emplace_back(next_entity_id_.fetch_add(1));
+            }
+        }
+
+        if constexpr(std::is_same_v<T, std::shared_ptr<SegmentInMemory>>) {
+            segment_map_.add(insertion_ids, std::move(components));
+        } else if constexpr(std::is_same_v<T, std::shared_ptr<RowRange>>) {
+            row_range_map_.add(insertion_ids, std::move(components));
+        } else if constexpr(std::is_same_v<T, std::shared_ptr<ColRange>>) {
+            col_range_map_.add(insertion_ids, std::move(components));
+        } else if constexpr(std::is_same_v<T, std::shared_ptr<AtomKey>>) {
+            atom_key_map_.add(insertion_ids, std::move(components));
+        } else if constexpr(std::is_same_v<T, bucket_id>) {
+            bucket_map_.add(insertion_ids, std::move(components));
+        } else {
+            // Hacky workaround for static_assert(false) not being allowed
+            // See https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2022/p2593r0.html
+            static_assert(sizeof(T) == 0, "Unsupported component type passed to ComponentManager::add");
+        }
+        return insertion_ids;
+    }
 
     template<typename T>
     EntityId add(T component, std::optional<EntityId> id=std::nullopt, std::optional<uint64_t> expected_get_calls=std::nullopt) {
@@ -48,17 +79,17 @@ public:
     }
 
     template<typename T>
-    T get(EntityId id) {
+    std::vector<T> get(const EntityIds& ids) {
         if constexpr(std::is_same_v<T, std::shared_ptr<SegmentInMemory>>) {
-            return segment_map_.get(id);
+            return segment_map_.get(ids);
         } else if constexpr(std::is_same_v<T, std::shared_ptr<RowRange>>) {
-            return row_range_map_.get(id);
+            return row_range_map_.get(ids);
         } else if constexpr(std::is_same_v<T, std::shared_ptr<ColRange>>) {
-            return col_range_map_.get(id);
+            return col_range_map_.get(ids);
         } else if constexpr(std::is_same_v<T, std::shared_ptr<AtomKey>>) {
-            return atom_key_map_.get(id);
+            return atom_key_map_.get(ids);
         } else if constexpr(std::is_same_v<T, bucket_id>) {
-            return bucket_map_.get(id);
+            return bucket_map_.get(ids);
         } else {
             // Hacky workaround for static_assert(false) not being allowed
             // See https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2022/p2593r0.html
@@ -89,6 +120,22 @@ private:
         };
         ARCTICDB_NO_MOVE_OR_COPY(ComponentMap)
 
+        void add(const EntityIds& ids,
+                 std::vector<T>&& entities) {
+            std::lock_guard <std::mutex> lock(mtx_);
+            for (auto [idx, id]: folly::enumerate(ids)) {
+                ARCTICDB_DEBUG(log::storage(), "Adding {} with id {}", entity_type_, id);
+                internal::check<ErrorCode::E_ASSERTION_FAILURE>(map_.try_emplace(id, std::move(entities[idx])).second,
+                                                                "Failed to insert {} with ID {}, already exists",
+                                                                entity_type_, id);
+                if (opt_expected_get_calls_map_.has_value()) {
+                    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                            opt_expected_get_calls_map_->try_emplace(id, 1).second,
+                            "Failed to insert {} with ID {}, already exists",
+                            entity_type_, id);
+                }
+            }
+        }
         void add(EntityId id, T&& entity, std::optional<uint64_t> expected_get_calls=std::nullopt) {
             std::lock_guard <std::mutex> lock(mtx_);
             ARCTICDB_DEBUG(log::storage(), "Adding {} with id {}", entity_type_, id);
@@ -107,25 +154,30 @@ private:
                                                                 entity_type_, id);
             }
         }
-        T get(EntityId id) {
+        std::vector<T> get(const EntityIds& ids) {
+            std::vector<T> res;
+            res.reserve(ids.size());
             std::lock_guard <std::mutex> lock(mtx_);
-            ARCTICDB_DEBUG(log::storage(), "Getting {} with id {}", entity_type_, id);
-            auto entity_it = map_.find(id);
-            internal::check<ErrorCode::E_ASSERTION_FAILURE>(entity_it != map_.end(),
-                                                            "Requested non-existent {} with ID {}",
-                                                            entity_type_, id);
-            auto res = entity_it->second;
-            if (opt_expected_get_calls_map_.has_value()) {
-                auto expected_get_calls_it = opt_expected_get_calls_map_->find(id);
-                internal::check<ErrorCode::E_ASSERTION_FAILURE>(expected_get_calls_it != opt_expected_get_calls_map_->end(),
+            for (auto id: ids) {
+                ARCTICDB_DEBUG(log::storage(), "Getting {} with id {}", entity_type_, id);
+                auto entity_it = map_.find(id);
+                internal::check<ErrorCode::E_ASSERTION_FAILURE>(entity_it != map_.end(),
                                                                 "Requested non-existent {} with ID {}",
                                                                 entity_type_, id);
-                if (--expected_get_calls_it->second == 0) {
-                    ARCTICDB_DEBUG(log::storage(),
-                                   "{} with id {} has been fetched the expected number of times, erasing from component manager",
-                                   entity_type_, id);
-                    map_.erase(entity_it);
-                    opt_expected_get_calls_map_->erase(expected_get_calls_it);
+                res.emplace_back(entity_it->second);
+                if (opt_expected_get_calls_map_.has_value()) {
+                    auto expected_get_calls_it = opt_expected_get_calls_map_->find(id);
+                    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                            expected_get_calls_it != opt_expected_get_calls_map_->end(),
+                            "Requested non-existent {} with ID {}",
+                            entity_type_, id);
+                    if (--expected_get_calls_it->second == 0) {
+                        ARCTICDB_DEBUG(log::storage(),
+                                       "{} with id {} has been fetched the expected number of times, erasing from component manager",
+                                       entity_type_, id);
+                        map_.erase(entity_it);
+                        opt_expected_get_calls_map_->erase(expected_get_calls_it);
+                    }
                 }
             }
             return res;

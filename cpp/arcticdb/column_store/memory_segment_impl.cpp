@@ -347,7 +347,7 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::get_output_segment(siz
     return output;
 }
 
-std::vector<std::shared_ptr<SegmentInMemoryImpl>> SegmentInMemoryImpl::partition(const std::vector<std::optional<uint8_t>>& row_to_segment,
+std::vector<std::shared_ptr<SegmentInMemoryImpl>> SegmentInMemoryImpl::partition(const std::vector<uint8_t>& row_to_segment,
                                                                    const std::vector<uint64_t>& segment_counts) const {
     schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(!is_sparse(),
                                                         "SegmentInMemory::partition not supported with sparse columns");
@@ -374,28 +374,22 @@ std::vector<std::shared_ptr<SegmentInMemoryImpl>> SegmentInMemoryImpl::partition
     }
 
     for(const auto& column : folly::enumerate(columns())) {
-        (*column)->type().visit_tag([&] (auto type_desc_tag){
-            using TypeDescriptorTag = decltype(type_desc_tag);
-            using ColumnTagType = typename TypeDescriptorTag::DataTypeTag;
-            using RawType = typename ColumnTagType::raw_type;
+        details::visit_type((*column)->type().data_type(), [&](auto col_tag) {
+            using type_info = ScalarTypeInfo<decltype(col_tag)>;
 
-            auto output_col_idx = column.index;
-            std::vector<RawType*> output_ptrs{output.size(), nullptr};
+            std::vector<typename type_info::RawType*> output_ptrs{output.size(), nullptr};
             for (const auto& segment: folly::enumerate(output)) {
                 if (static_cast<bool>(*segment)) {
-                    output_ptrs.at(segment.index) = reinterpret_cast<RawType*>((*segment)->column(output_col_idx).ptr());
+                    output_ptrs.at(segment.index) = reinterpret_cast<typename type_info::RawType*>((*segment)->column(column.index).ptr());
                 }
             }
 
-            auto input_data =  (*column)->data();
-            size_t overall_idx = 0;
-            while(auto block = input_data.next<TypeDescriptorTag>()) {
-                auto input_ptr = reinterpret_cast<const RawType*>(block.value().data());
-                for (size_t block_idx = 0; block_idx < block.value().row_count(); ++block_idx, ++input_ptr, ++overall_idx) {
-                    auto opt_output_segment_idx = row_to_segment[overall_idx];
-                    if (opt_output_segment_idx.has_value()) {
-                        *(output_ptrs[*opt_output_segment_idx]++) = *input_ptr;
-                    }
+            auto row_to_segment_it = row_to_segment.cbegin();
+            auto input_data = (*column)->data();
+            auto cend = input_data.cend<typename type_info::TDT>();
+            for (auto input_it = input_data.cbegin<typename type_info::TDT>(); input_it != cend; ++input_it, ++row_to_segment_it) {
+                if (ARCTICDB_LIKELY(*row_to_segment_it != 255)) {
+                    *(output_ptrs[*row_to_segment_it]++) = *input_it;
                 }
             }
         });

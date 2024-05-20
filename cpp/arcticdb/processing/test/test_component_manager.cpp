@@ -39,18 +39,18 @@ TEST(ComponentManager, Simple) {
     ASSERT_EQ(id_0, 0);
     ASSERT_EQ(id_1, 1);
 
-    ASSERT_EQ(component_manager.get<std::shared_ptr<SegmentInMemory>>(id_0), segment_0);
-    ASSERT_EQ(component_manager.get_initial_expected_get_calls<std::shared_ptr<SegmentInMemory>>(id_0), expected_get_calls_0);
-    ASSERT_EQ(component_manager.get<std::shared_ptr<RowRange>>(id_0), row_range_0);
-    ASSERT_EQ(component_manager.get<std::shared_ptr<ColRange>>(id_0), col_range_0);
-    ASSERT_EQ(component_manager.get<std::shared_ptr<AtomKey>>(id_0), key_0);
-    EXPECT_THROW(component_manager.get<std::shared_ptr<SegmentInMemory>>(id_0), InternalException);
+    ASSERT_EQ(component_manager.get<std::shared_ptr<SegmentInMemory>>({id_0})[0], segment_0);
+    ASSERT_EQ(component_manager.get_initial_expected_get_calls<std::shared_ptr<SegmentInMemory>>({id_0})[0], expected_get_calls_0);
+    ASSERT_EQ(component_manager.get<std::shared_ptr<RowRange>>({id_0})[0], row_range_0);
+    ASSERT_EQ(component_manager.get<std::shared_ptr<ColRange>>({id_0})[0], col_range_0);
+    ASSERT_EQ(component_manager.get<std::shared_ptr<AtomKey>>({id_0})[0], key_0);
+    EXPECT_THROW(component_manager.get<std::shared_ptr<SegmentInMemory>>({id_0}), InternalException);
 
-    ASSERT_EQ(component_manager.get<std::shared_ptr<SegmentInMemory>>(id_1), segment_1);
-    ASSERT_EQ(component_manager.get<std::shared_ptr<SegmentInMemory>>(id_1), segment_1);
-    ASSERT_EQ(component_manager.get_initial_expected_get_calls<std::shared_ptr<SegmentInMemory>>(id_1), expected_get_calls_1);
-    ASSERT_EQ(component_manager.get<std::shared_ptr<RowRange>>(id_1), row_range_1);
-    ASSERT_EQ(component_manager.get<std::shared_ptr<ColRange>>(id_1), col_range_1);
-    ASSERT_EQ(component_manager.get<std::shared_ptr<AtomKey>>(id_1), key_1);
-    EXPECT_THROW(component_manager.get<std::shared_ptr<SegmentInMemory>>(id_1), InternalException);
+    ASSERT_EQ(component_manager.get<std::shared_ptr<SegmentInMemory>>({id_1})[0], segment_1);
+    ASSERT_EQ(component_manager.get<std::shared_ptr<SegmentInMemory>>({id_1})[0], segment_1);
+    ASSERT_EQ(component_manager.get_initial_expected_get_calls<std::shared_ptr<SegmentInMemory>>({id_1})[0], expected_get_calls_1);
+    ASSERT_EQ(component_manager.get<std::shared_ptr<RowRange>>({id_1})[0], row_range_1);
+    ASSERT_EQ(component_manager.get<std::shared_ptr<ColRange>>({id_1})[0], col_range_1);
+    ASSERT_EQ(component_manager.get<std::shared_ptr<AtomKey>>({id_1})[0], key_1);
+    EXPECT_THROW(component_manager.get<std::shared_ptr<SegmentInMemory>>({id_1}), InternalException);
 }
