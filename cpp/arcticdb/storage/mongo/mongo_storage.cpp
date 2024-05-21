@@ -63,6 +63,10 @@ void raise_if_unexpected_error(const mongocxx::operation_exception& e) {
     }
 }
 
+std::string MongoStorage::name() const {
+    return fmt::format("mongo_storage-{}", db_);
+}
+
 void MongoStorage::do_write(Composite<KeySegmentPair>&& kvs) {
     namespace fg = folly::gen;
     auto fmt_db = [](auto &&kv) { return kv.key_type(); };

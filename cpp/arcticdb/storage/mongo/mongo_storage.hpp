@@ -25,6 +25,8 @@ class MongoStorage final : public Storage {
 
     MongoStorage(const LibraryPath &lib, OpenMode mode, const Config &conf);
 
+    std::string name() const final;
+
   private:
     void do_write(Composite<KeySegmentPair>&& kvs) final;
 

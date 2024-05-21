@@ -142,6 +142,10 @@ class NullStore :
 
     void set_failure_sim(const arcticdb::proto::storage::VersionStoreConfig::StorageFailureSimulator &) override {}
 
+    std::string name() const override {
+        return "NullStore";
+    }
+
 };
 
 } //namespace arcticdb
