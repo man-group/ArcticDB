@@ -45,6 +45,21 @@ VariantData binary_boolean(EmptyResult, EmptyResult, OperationType operation);
 VariantData visit_binary_boolean(const VariantData& left, const VariantData& right, OperationType operation);
 
 template <typename Func>
+inline std::string binary_operation_column_name(std::string_view left_column, Func&& func, std::string_view right_column) {
+    return fmt::format("({} {} {})", left_column, func, right_column);
+}
+
+template <typename Func>
+inline std::string binary_operation_with_types_to_string(std::string_view left, const TypeDescriptor& type_left, Func&& func,
+                                                         std::string_view right, const TypeDescriptor& type_right,
+                                                         bool arguments_reversed = false) {
+    if (arguments_reversed) {
+        return fmt::format("{} ({}) {} {} ({})", right, get_user_friendly_type_string(type_right), func, left, get_user_friendly_type_string(type_left));
+    }
+    return fmt::format("{} ({}) {} {} ({})", left, get_user_friendly_type_string(type_left), func, right, get_user_friendly_type_string(type_right));
+}
+
+template <typename Func>
 VariantData binary_membership(const ColumnWithStrings& column_with_strings, ValueSet& value_set, Func&& func) {
     if (is_empty_type(column_with_strings.column_->type().data_type())) {
         if constexpr(std::is_same_v<std::remove_reference_t<Func>, IsInOperator>) {
@@ -88,7 +103,7 @@ VariantData binary_membership(const ColumnWithStrings& column_with_strings, Valu
                     return func(offset, offset_set);
                 });
             } else if constexpr (is_bool_type(col_type_info::data_type) && is_bool_type(val_set_type_info::data_type)) {
-                util::raise_rte("Binary membership not implemented for bools");
+                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Binary membership '{}' not implemented for bools", func);
             } else if constexpr (is_numeric_type(col_type_info::data_type) && is_numeric_type(val_set_type_info::data_type)) {
                 using WideType = typename type_arithmetic_promoted_type<typename col_type_info::RawType,typename val_set_type_info::RawType, std::remove_reference_t<Func>>::type;
                 auto typed_value_set = value_set.get_set<WideType>();
@@ -105,8 +120,11 @@ VariantData binary_membership(const ColumnWithStrings& column_with_strings, Valu
                     }
                 });
             } else {
-                util::raise_rte("Cannot check membership of {} in set of {} (possible categorical?)",
-                                column_with_strings.column_->type(), value_set.base_type());
+                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Cannot check membership '{}' of {} {} in set of {}",
+                                func,
+                                column_with_strings.column_name_,
+                                get_user_friendly_type_string(column_with_strings.column_->type()),
+                                get_user_friendly_type_string(value_set.base_type()));
             }
         });
     });
@@ -126,7 +144,8 @@ VariantData visit_binary_membership(const VariantData &left, const VariantData &
             return transform_to_placeholder(binary_membership(l, *r, std::forward<decltype(func)>(func)));
             },
             [](const auto &, const auto&) -> VariantData {
-            util::raise_rte("Binary membership operations must be Column/ValueSet");
+            user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Binary membership operations must be Column/ValueSet");
+            return EmptyResult{};
         }
         }, left, right);
 }
@@ -170,7 +189,13 @@ VariantData binary_comparator(const ColumnWithStrings& left, const ColumnWithStr
                     return func(static_cast<typename comp::left_type>(left_value), static_cast<typename comp::right_type>(right_value));
                 });
             } else {
-                util::raise_rte("Cannot compare {} to {} (possible categorical?)", left.column_->type(), right.column_->type());
+                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Invalid comparison {}",
+                                binary_operation_with_types_to_string(
+                                        left.column_name_,
+                                        left.column_->type(),
+                                        func,
+                                        right.column_name_,
+                                        right.column_->type()));
             }
         });
     });
@@ -237,7 +262,14 @@ VariantData binary_comparator(const ColumnWithStrings& column_with_strings, cons
                 });
 
             } else {
-                util::raise_rte("Cannot compare {} to {} (possible categorical?)", column_with_strings.column_->type(), val.type());
+                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Invalid comparison {}",
+                                binary_operation_with_types_to_string(
+                                        column_with_strings.column_name_,
+                                        column_with_strings.column_->type(),
+                                        func,
+                                        val.to_string<typename val_type_info::RawType>(),
+                                        val.type(),
+                                        arguments_reversed));
             }
         });
     });
@@ -265,10 +297,12 @@ VariantData visit_binary_comparator(const VariantData& left, const VariantData& 
         return transform_to_placeholder(result);
         },
         [&] ([[maybe_unused]] const std::shared_ptr<Value>& l, [[maybe_unused]] const std::shared_ptr<Value>& r) ->VariantData  {
-        util::raise_rte("Two value inputs not accepted to binary comparators");
+        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Two value inputs not accepted to binary comparators");
+        return EmptyResult{};
         },
         [](const auto &, const auto&) -> VariantData {
-        util::raise_rte("Bitset/ValueSet inputs not accepted to binary comparators");
+        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Bitset/ValueSet inputs not accepted to binary comparators");
+        return EmptyResult{};
     }
     }, left, right);
 }
@@ -279,16 +313,19 @@ VariantData binary_operator(const Value& left, const Value& right, Func&& func) 
 
     details::visit_type(left.type().data_type(), [&](auto left_tag) {
         using left_type_info = ScalarTypeInfo<decltype(left_tag)>;
-        if constexpr(!is_numeric_type(left_type_info::data_type)) {
-            util::raise_rte("Non-numeric type provided to binary operation: {}", left.type());
-        }
-        auto left_value = *reinterpret_cast<const typename left_type_info::RawType*>(left.data_);
         details::visit_type(right.type().data_type(), [&](auto right_tag) {
             using right_type_info = ScalarTypeInfo<decltype(right_tag)>;
-            if constexpr(!is_numeric_type(right_type_info::data_type)) {
-                util::raise_rte("Non-numeric type provided to binary operation: {}", right.type());
+            if constexpr(!is_numeric_type(left_type_info::data_type) || !is_numeric_type(right_type_info::data_type)) {
+                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Non-numeric type provided to binary operation: {}",
+                                binary_operation_with_types_to_string(
+                                    left.to_string<typename left_type_info::RawType>(),
+                                    left.type(),
+                                    func,
+                                    right.to_string<typename right_type_info::RawType>(),
+                                    right.type()));
             }
             auto right_value = *reinterpret_cast<const typename right_type_info::RawType*>(right.data_);
+            auto left_value = *reinterpret_cast<const typename left_type_info::RawType*>(left.data_);
             using TargetType = typename type_arithmetic_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType, std::remove_reference_t<Func>>::type;
             output_value->data_type_ = data_type_from_raw_type<TargetType>();
             *reinterpret_cast<TargetType*>(output_value->data_) = func.apply(left_value, right_value);
@@ -298,79 +335,90 @@ VariantData binary_operator(const Value& left, const Value& right, Func&& func) 
 }
 
 template <typename Func>
-VariantData binary_operator(const Column& left, const Column& right, Func&& func) {
+VariantData binary_operator(const ColumnWithStrings& left, const ColumnWithStrings& right, Func&& func) {
     schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-            !is_empty_type(left.type().data_type()) && !is_empty_type(right.type().data_type()),
+            !is_empty_type(left.column_->type().data_type()) && !is_empty_type(right.column_->type().data_type()),
             "Empty column provided to binary operator");
     std::unique_ptr<Column> output_column;
 
-    details::visit_type(left.type().data_type(), [&](auto left_tag) {
+    details::visit_type(left.column_->type().data_type(), [&](auto left_tag) {
         using left_type_info = ScalarTypeInfo<decltype(left_tag)>;
-        if constexpr(!is_numeric_type(left_type_info::data_type)) {
-            util::raise_rte("Non-numeric type provided to binary operation: {}", left.type());
-        }
-        details::visit_type(right.type().data_type(), [&](auto right_tag) {
+        details::visit_type(right.column_->type().data_type(), [&](auto right_tag) {
             using right_type_info = ScalarTypeInfo<decltype(right_tag)>;
-            if constexpr(!is_numeric_type(right_type_info::data_type)) {
-                util::raise_rte("Non-numeric type provided to binary operation: {}", right.type());
+            if constexpr(!is_numeric_type(left_type_info::data_type) || !is_numeric_type(right_type_info::data_type)) {
+                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Non-numeric column provided to binary operation: {}",
+                                binary_operation_with_types_to_string(
+                                        left.column_name_,
+                                        left.column_->type(),
+                                        func,
+                                        right.column_name_,
+                                        right.column_->type()));
             }
             using TargetType = typename type_arithmetic_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType, std::remove_reference_t<decltype(func)>>::type;
             constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
             output_column = std::make_unique<Column>(make_scalar_type(output_data_type), true);
             Column::transform<typename left_type_info::TDT, typename right_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
-                    left,
-                    right,
+                    *(left.column_),
+                    *(right.column_),
                     *output_column,
                     [&func] (auto left_value, auto right_value) -> TargetType {
                         return func.apply(left_value, right_value);
                     });
         });
     });
-    return VariantData(ColumnWithStrings(std::move(output_column)));
+    return VariantData(ColumnWithStrings(std::move(output_column), binary_operation_column_name(left.column_name_, func, right.column_name_)));
 }
 
 template <typename Func, bool arguments_reversed = false>
-VariantData binary_operator(const Column& col, const Value& val, Func&& func) {
+VariantData binary_operator(const ColumnWithStrings& col, const Value& val, Func&& func) {
     schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-            !is_empty_type(col.type().data_type()),
+            !is_empty_type(col.column_->type().data_type()),
             "Empty column provided to binary operator");
     std::unique_ptr<Column> output_column;
+    std::string column_name;
 
-    details::visit_type(col.type().data_type(), [&](auto col_tag) {
+    details::visit_type(col.column_->type().data_type(), [&](auto col_tag) {
         using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
-        if constexpr(!is_numeric_type(col_type_info::data_type)) {
-            util::raise_rte("Non-numeric type provided to binary operation: {}", col.type());
-        }
         details::visit_type(val.type().data_type(), [&](auto val_tag) {
             using val_type_info = ScalarTypeInfo<decltype(val_tag)>;
-            if constexpr(!is_numeric_type(val_type_info::data_type)) {
-                util::raise_rte("Non-numeric type provided to binary operation: {}", val.type());
+            if constexpr(!is_numeric_type(col_type_info::data_type) || !is_numeric_type(val_type_info::data_type)) {
+                std::string error_message;
+                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Non-numeric type provided to binary operation: {}",
+                                binary_operation_with_types_to_string(
+                                        col.column_name_,
+                                        col.column_->type(),
+                                        func,
+                                        val.to_string<typename val_type_info::RawType>(),
+                                        val.type(),
+                                        arguments_reversed));
             }
             auto raw_value = *reinterpret_cast<const typename val_type_info::RawType*>(val.data_);
             using TargetType = typename type_arithmetic_promoted_type<typename col_type_info::RawType, typename val_type_info::RawType, std::remove_reference_t<decltype(func)>>::type;
             using ReversedTargetType = typename type_arithmetic_promoted_type<typename val_type_info::RawType, typename col_type_info::RawType, std::remove_reference_t<decltype(func)>>::type;
             if constexpr(arguments_reversed) {
+                column_name = binary_operation_column_name(fmt::format("{}", raw_value), func, col.column_name_);
                 constexpr auto output_data_type = data_type_from_raw_type<ReversedTargetType>();
                 output_column = std::make_unique<Column>(make_scalar_type(output_data_type), true);
                 Column::transform<typename col_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
-                        col,
+                        *(col.column_),
                         *output_column,
-                        [&func, raw_value](auto input_value) -> ReversedTargetType {
-                    return func.apply(raw_value, input_value);
+                        [&func, &col, &column_name, raw_value](auto input_value) -> ReversedTargetType {
+                            return func.apply(raw_value, input_value);
                 });
             } else {
+                column_name = binary_operation_column_name(col.column_name_, func, fmt::format("{}", raw_value));
                 constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
                 output_column = std::make_unique<Column>(make_scalar_type(output_data_type), true);
                 Column::transform<typename col_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
-                        col,
+                        *(col.column_),
                         *output_column,
-                        [&func, raw_value](auto input_value) -> TargetType {
-                    return func.apply(input_value, raw_value);
+                        [&func, &col, &column_name, raw_value](auto input_value) -> TargetType {
+                            return func.apply(input_value, raw_value);
                 });
             }
         });
     });
-    return {ColumnWithStrings(std::move(output_column))};
+    return {ColumnWithStrings(std::move(output_column), column_name)};
 }
 
 template<typename Func>
@@ -380,20 +428,21 @@ VariantData visit_binary_operator(const VariantData& left, const VariantData& ri
 
     return std::visit(util::overload {
         [&] (const ColumnWithStrings& l, const std::shared_ptr<Value>& r) ->VariantData  {
-            return binary_operator<decltype(func)>(*(l.column_), *r, std::forward<decltype(func)>(func));
+            return binary_operator<decltype(func)>(l, *r, std::forward<decltype(func)>(func));
             },
             [&] (const ColumnWithStrings& l, const ColumnWithStrings& r)  ->VariantData {
-            return binary_operator<decltype(func)>(*(l.column_), *(r.column_), std::forward<decltype(func)>(func));
+            return binary_operator<decltype(func)>(l, r, std::forward<decltype(func)>(func));
             },
             [&](const std::shared_ptr<Value>& l, const ColumnWithStrings& r) ->VariantData {
-            return binary_operator<decltype(func), true>(*(r.column_), *l, std::forward<decltype(func)>(func));
+            return binary_operator<decltype(func), true>(r, *l, std::forward<decltype(func)>(func));
             },
             [&] (const std::shared_ptr<Value>& l, const std::shared_ptr<Value>& r) -> VariantData {
             return binary_operator<decltype(func)>(*l, *r, std::forward<decltype(func)>(func));
             },
             [](const auto &, const auto&) -> VariantData {
-            util::raise_rte("Bitset/ValueSet inputs not accepted to binary operators");
-        }
+            user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Bitset/ValueSet inputs not accepted to binary operators");
+            return EmptyResult{};
+            }
         }, left, right);
 }
 
