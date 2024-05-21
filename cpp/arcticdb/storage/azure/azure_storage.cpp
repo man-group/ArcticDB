@@ -301,7 +301,7 @@ bool do_key_exists_impl(
 } //namespace detail
 
 std::string AzureStorage::name() const {
-    return fmt::format("azure_storage-{}/{}", root_folder_, container_name_);
+    return fmt::format("azure_storage-{}/{}", container_name_, root_folder_);
 }
 
 void AzureStorage::do_write(Composite<KeySegmentPair>&& kvs) {
