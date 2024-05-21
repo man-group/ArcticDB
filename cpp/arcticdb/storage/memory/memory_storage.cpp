@@ -29,16 +29,13 @@ namespace arcticdb::storage::memory {
             for (auto &kv : group.values()) {
                 util::variant_match(kv.variant_key(),
                                     [&](const RefKey &key) {
-                                        if (auto it = key_vec.find(key); it != key_vec.end()) {
-                                            key_vec.erase(it);
-                                        }
-
+                                        key_vec.erase(key);
                                         key_vec.try_emplace(key, kv.segment());
                                     },
                                     [&](const AtomKey &key) {
-                                        if (key_vec.find(key) != key_vec.end()) {
+                                        key_vec.visit(key, [key](const auto&){
                                             throw DuplicateKeyException(key);
-                                        }
+                                        });
 
                                         key_vec.try_emplace(key, kv.segment());
                                     }
@@ -56,17 +53,20 @@ namespace arcticdb::storage::memory {
             auto& key_vec = data_[group.key()];
 
             for (auto &kv : group.values()) {
-                auto it = key_vec.find(kv.variant_key());
+                auto kv_variant_key = kv.variant_key();
+                key_vec.erase(kv_variant_key);
 
-                if (!opts.upsert_ && it == key_vec.end()) {
-                    std::string err_message = fmt::format("do_update called with upsert=false on non-existent key(s): {}", kv.variant_key());
-                    throw KeyNotFoundException(std::move(kv.variant_key()), err_message);
-                }
+                key_vec.visit(kv_variant_key, [&kv_variant_key, &opts](const auto&){
+                    if (!opts.upsert_) {
+                        std::string err_message = fmt::format(
+                                "do_update called with upsert=false on non-existent key(s): {}",
+                                kv_variant_key
+                        );
+                        throw KeyNotFoundException(std::move(kv_variant_key), err_message);
+                    }
+                });
 
-                if(it != key_vec.end()) {
-                    key_vec.erase(it);
-                }
-                key_vec.insert(std::make_pair(kv.variant_key(), kv.segment()));
+                key_vec.insert(std::make_pair(kv_variant_key, kv.segment()));
             }
         });
     }
@@ -78,13 +78,14 @@ namespace arcticdb::storage::memory {
         (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
             auto& key_vec = data_[group.key()];
             for (auto &k : group.values()) {
-                auto it = key_vec.find(k);
-
-                if(it != key_vec.end()) {
+                bool key_exists = false;
+                key_vec.visit(k, [&visitor, &k, &key_exists](auto& pair){
+                    auto & seg = pair.second;
                     ARCTICDB_DEBUG(log::storage(), "Read key {}: {}", variant_key_type(k), variant_key_view(k));
-                    auto seg = it->second;
+                    key_exists = true;
                     visitor(k, std::move(seg));
-                } else {
+                });
+                if (!key_exists) {
                     throw KeyNotFoundException(std::move(ks));
                 }
             }
@@ -93,9 +94,12 @@ namespace arcticdb::storage::memory {
 
     bool MemoryStorage::do_key_exists(const VariantKey& key) {
         ARCTICDB_SAMPLE(MemoryStorageKeyExists, 0)
+        bool key_exists = false;
         const auto& key_vec = data_[variant_key_type(key)];
-        auto it = key_vec.find(key);
-        return it != key_vec.end();
+        key_vec.visit(key, [&key_exists](const auto &){
+            key_exists = true;
+        });
+        return key_exists;
     }
 
     void MemoryStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts opts)
@@ -107,14 +111,17 @@ namespace arcticdb::storage::memory {
             auto& key_vec = data_[group.key()];
 
             for (auto &k : group.values()) {
-                auto it = key_vec.find(k);
+                bool key_exists = false;
+                key_vec.visit(k, [&key_exists](const auto&){
+                    key_exists = true;
+                });
 
-                if(it != key_vec.end()) {
-                    ARCTICDB_DEBUG(log::storage(), "Removed key {}: {}", variant_key_type(k), variant_key_view(k));
-                    key_vec.erase(it);
-                } else if (!opts.ignores_missing_key_) {
-                    throw KeyNotFoundException(std::move(k));
+                if (!key_exists and !opts.ignores_missing_key_) {
+                        throw KeyNotFoundException(std::move(k));
                 }
+
+                ARCTICDB_DEBUG(log::storage(), "Removed key {}: {}", variant_key_type(k), variant_key_view(k));
+                key_vec.erase(k);
             }
         });
     }
@@ -131,13 +138,13 @@ namespace arcticdb::storage::memory {
         auto& key_vec = data_[key_type];
         auto prefix_matcher = stream_id_prefix_matcher(prefix);
 
-        for(auto& key_value : key_vec) {
+        key_vec.visit_all([&prefix_matcher, &visitor](const auto& key_value) {
             auto key = key_value.first;
 
             if (prefix_matcher(variant_key_id(key))) {
                 visitor(std::move(key));
             }
-        }
+        });
     }
 
     MemoryStorage::MemoryStorage(const LibraryPath &library_path, OpenMode mode, const Config&) :

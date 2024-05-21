@@ -28,7 +28,7 @@
 #include <arcticdb/util/magic_num.hpp>
 #include <google/protobuf/util/message_differencer.h>
 #include <folly/gen/Base.h>
-#include <folly/concurrency/ConcurrentHashMap.h>
+#include <boost/unordered/concurrent_flat_map.hpp>
 
 namespace arcticdb::pipelines {
 
@@ -805,7 +805,7 @@ inline PyStringConstructor get_string_constructor(bool has_type_conversion, bool
 }
 }
 
-using UniqueStringMapType = folly::ConcurrentHashMap<std::string_view, PyObject*>;
+using UniqueStringMapType = boost::unordered::concurrent_flat_map<std::string_view, PyObject*>;
 
 class DynamicStringReducer : public StringReducer {
     PyObject** ptr_dest_;
@@ -856,17 +856,22 @@ class DynamicStringReducer : public StringReducer {
                 Py_INCREF(py_nan_.get());
             } else {
                 const auto sv = get_string_from_pool(offset, string_pool);
-                if (auto it = unique_string_map_->find(sv); it != unique_string_map_->end()) {
-                    *ptr_dest_ = it->second;
+                bool string_view_exists = false;
+                PyObject** ptr_dest__ = ptr_dest_;
+                unique_string_map_->visit(sv, [&string_view_exists, ptr_dest__, lock_=this->lock_](auto& pair) {
+                    PyObject* py_obj = pair.second;
+                    string_view_exists = true;
+                    *ptr_dest__ = py_obj;
                     LockPolicy::lock(*lock_);
-                    Py_INCREF(*ptr_dest_);
+                    Py_INCREF(py_obj);
                     LockPolicy::unlock(*lock_);
-                } else {
+                });
+                if (!string_view_exists) {
                     LockPolicy::lock(*lock_);
                     *ptr_dest_ = StringCreator::create(sv, has_type_conversion) ;
                     Py_INCREF(*ptr_dest_);
                     LockPolicy::unlock(*lock_);
-                    unique_string_map_->emplace(sv, *ptr_dest_);
+                    unique_string_map_->try_emplace(sv, *ptr_dest_);
                 }
             }
         }

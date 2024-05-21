@@ -12,7 +12,7 @@
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/composite.hpp>
 #include <folly/Range.h>
-#include <folly/concurrency/ConcurrentHashMap.h>
+#include <boost/unordered/concurrent_flat_map.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
 
 namespace arcticdb::storage::memory {
@@ -44,7 +44,7 @@ namespace arcticdb::storage::memory {
 
         std::string do_key_path(const VariantKey&) const final { return {}; };
 
-        using KeyMap = folly::ConcurrentHashMap<VariantKey, Segment>;
+        using KeyMap = boost::unordered::concurrent_flat_map<VariantKey, Segment>;
         // This is pre-populated so that concurrent access is fine.
         // An outer folly::ConcurrentHashMap would only return const inner hash maps which is no good.
         using TypeMap = std::unordered_map<KeyType, KeyMap>;

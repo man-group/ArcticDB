@@ -13,7 +13,7 @@
 #include <arcticdb/util/clock.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/util/thread_cached_int.hpp>
-#include <folly/concurrency/ConcurrentHashMap.h>
+#include <boost/unordered/concurrent_flat_map.hpp>
 
 #include <fmt/std.h>
 
@@ -44,7 +44,7 @@ namespace arcticdb {
 
     struct TracingData::Impl
     {
-        folly::ConcurrentHashMap<AddrIdentifier, size_t> allocs_;
+        boost::unordered::concurrent_flat_map<AddrIdentifier, size_t> allocs_;
         std::atomic<uint64_t> total_allocs_{ 0 };
         std::atomic<uint64_t> total_irregular_allocs_{ 0 };
         std::atomic<uint64_t> total_allocs_calls_{ 0 };
@@ -74,21 +74,31 @@ namespace arcticdb {
 
     void TracingData::track_free(AddrIdentifier addr_ts) {
         //        util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
-        auto it = impl_->allocs_.find(addr_ts);
-        util::check(it != impl_->allocs_.end(), "Unrecognized address in free {}:{}", addr_ts.first, addr_ts.second);
-        util::check(impl_->total_allocs_ >= it->second,
-            "Request to free {}  from {}:{} when only {} remain",
-            it->second,
-            addr_ts.first,
-            addr_ts.second,
-            impl_->total_allocs_.load());
-        impl_->total_allocs_ -= it->second;
-        ARCTICDB_TRACE(log::codec(), "Freed {} at {}:{}, total allocation {}",
-            util::MemBytes{ it->second },
-            addr_ts.first,
-            addr_ts.second,
-            util::MemBytes{ impl_->total_allocs_.load() });
-        impl_->allocs_.erase(it);
+        auto total_allocations = impl_->total_allocs_.load();
+        impl_->allocs_.visit(addr_ts, [&addr_ts, &total_allocations](auto& pair) {
+            ARCTICDB_TRACE(log::codec(), "Freeing {} at {}:{}",
+                util::MemBytes{ pair.second },
+                addr_ts.first,
+                addr_ts.second,
+                util::MemBytes{ total_allocations }
+            );
+        });
+//        auto it = impl_->allocs_.find(addr_ts);
+//        util::check(it != impl_->allocs_.end(), "Unrecognized address in free {}:{}", addr_ts.first, addr_ts.second);
+//        util::check(impl_->total_allocs_ >= it->second,
+//            "Request to free {}  from {}:{} when only {} remain",
+//            it->second,
+//            addr_ts.first,
+//            addr_ts.second,
+//            impl_->total_allocs_.load());
+//        impl_->total_allocs_ -= it->second;
+//        ARCTICDB_TRACE(log::codec(), "Freed {} at {}:{}, total allocation {}",
+//            util::MemBytes{ it->second },
+//            addr_ts.first,
+//            addr_ts.second,
+//            util::MemBytes{ impl_->total_allocs_.load() });
+//        impl_->allocs_.erase(it);
+        impl_->allocs_.erase(addr_ts);
     }
 
     void TracingData::track_realloc(AddrIdentifier old_addr, AddrIdentifier new_addr, size_t size) {
@@ -138,8 +148,9 @@ namespace arcticdb {
         if (!all_freed) {
             log::memory().warn("Allocator has not freed all data, {} bytes counted", get_data.impl_->total_allocs_);
 
-            for (auto alloc : get_data.impl_->allocs_)
+            get_data.impl_->allocs_.visit_all([](const auto& alloc) {
                 log::memory().warn("Unfreed allocation: {}", uintptr_t(alloc.first.first));
+            });
         }
         return get_data.all_freed();
     }
