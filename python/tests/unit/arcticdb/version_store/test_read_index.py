@@ -16,7 +16,7 @@ from arcticdb.encoding_version import EncodingVersion
 from arcticdb.util._versions import PANDAS_VERSION
 
 @pytest.fixture(params=[
-    #(encoding_version, dynamic_schema)
+    # (encoding_version, dynamic_schema)
     (EncodingVersion.V1, False),
     (EncodingVersion.V1, True),
     (EncodingVersion.V2, False),
@@ -24,14 +24,13 @@ from arcticdb.util._versions import PANDAS_VERSION
 ])
 def lmdb_version_store_row_slice(request, lib_name, version_store_factory):
     library_name = "{}_v{}".format(lib_name, int(request.param[0]))
-    nvs = version_store_factory(
+    yield version_store_factory(
         dynamic_strings=True,
         name=library_name,
         encoding_version=int(request.param[0]),
-        dynamic_schema=request.param[0]
+        dynamic_schema=request.param[0],
+        column_group_size=1
     )
-    nvs.lib_cfg().lib_desc.version.write_options.column_group_size = 1
-    yield nvs
 
 @pytest.fixture(
     scope="function",
