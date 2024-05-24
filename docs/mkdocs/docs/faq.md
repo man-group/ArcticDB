@@ -59,34 +59,29 @@ Bindings are currently only available for Python.
 
 ### *What is the best practice for saving Data to ArcticDB?*
 
-Users are encouraged to store data in its original vendor format initially, then optimize storage based on their specific use cases, which may include maintaining multiple versions of the data to support different analysis needs. In ArcticDB, best practices for data storage involve considering the balance between read and update performance, data layout’s impact on index performance, and auditability against original data sources. It’s recommended to store data in a format that facilitates efficient querying. 
-
-A full guide can be found [here](tutorials/data_organisation.md)!
+Users should consider how they store data based on their specific use cases. We have a guide [here](tutorials/data_organisation.md) that can help you determine what is best for you!
 
 ### *What are the Limitations of ArcticDB being client-side?*
 
-The serverless nature of ArcticDB provides excellent performance, making it ideal for data science applications where speed and efficiency are key. Although it may not be ideal for scenarios that demand strong transactionality and concurrent updates, ArcticDB excels in complex, multi-tenant environments where its attributes align closely with those of popular NoSQL databases such as MongoDB and Cassandra, offering flexibility and scalability. 
+The serverless nature of ArcticDB provides excellent performance, making it ideal for data science applications where speed and efficiency are key.  It ensures atomicity, consistency, and durability but does not isolate transactions. Changes to symbols are performed on a last-writer-wins principle, and without isolation, write-after-read transactions are not supported, which may not be optimal for use cases requiring strong transactional guarantees. 
 
 ### *What storage options does ArcticDB support?*
 
-ArcticDB offers compatibility with a wide array of storage choices, both on-premises and in the cloud, to guarantee adaptability and efficiency across different settings. It is verified to work with multiple storage systems such as AWS S3, Azure Blob, lmdb, In-memory, Ceph, MinIO, Pure Storage S3, Scality S3, and VAST Data S3, with plans to support additional options soon. 
-
+ArcticDB offers compatibility with a wide array of storage choices, both on-premises and in the cloud, to guarantee adaptability and efficiency across different settings. It is verified to work with multiple storage systems such as AWS S3, Azure Blob Storage, LMDB, In-memory, Ceph, MinIO (Linux), Pure Flashblade S3, Scality S3, and VAST Data S3, with plans to support additional options soon. 
 
 ### *What are the trade offs with ArcticDB Versioning?* 
 
-ArcticDB offers robust versioning capabilities, allowing for point-in-time analysis and efficient data updates, including daily appends and historical corrections, making it ideal for research datasets. The database efficiently stores only the differences between versions, conserving storage space. Frequent, small updates can lead to fragmentation and slower reads, but ArcticDB's enterprise features can mitigate this through background compaction and data pruning.  
+ArcticDB versions data by default, allowing for point-in-time analysis and efficient data updates, including daily appends and historical corrections, making it ideal for research datasets. The database is capable of de-duplicating data that has not changed between versions, using storage space efficiently.  The ArcticDB enterprise tools including data pruning and compaction to help manage storage and data-fragmentation as new versions are created.   Storing large numbers of versions of data does require more storage.
 
 More information can be found [here](tutorials/data_organisation.md)!
 
-### *Does ArcticDB support Authorization?*  
+### *What granularity of authorization does ArcticDB support?*  
 
-ArcticDB itself does not inherently support authorization at the moment as it operates fully on the client side. However, it is designed to work with first and third-party authentication solutions for managing data access. ArcticDB data can be effectively managed through the underlying storage system, such as S3 and Blob. Users can utilize storage permissions to create personal buckets with restricted write access or team buckets with broader read/write permissions. Permissions can also be set on individual ArcticDB libraries by configuring the access rights for each library's corresponding path.
-
+Authentication is at storage account level, and authorization can be done at ArcticDB Library level for most S3 backends (w. directory/path permissions), otherwise also at storage account level.  There are many third-party authentication and authorization integrations available for the backends.
 
 ### *How is ArcticDB data catalogued and discoverable by consumers?* 
 
-ArcticDB offers capabilities to list libraries and symbols, complete with metadata. For those seeking enhanced functionality, we suggest leveraging a third-party catalogue.  
-
+ArcticDB offers capabilities to list libraries and symbols, complete with metadata. For those seeking more functionality, we suggest leveraging a third-party catalogue.  
 
 ### *How can I get started using ArcticDB?*
 
