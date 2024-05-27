@@ -1516,7 +1516,7 @@ class NativeVersionStore:
         date_range: Optional[DateRangeInput],
         row_range: Tuple[int, int],
         columns: Optional[List[str]],
-        query_builder: QueryBuilder,
+        query_builder: Optional[QueryBuilder],
     ):
         check(date_range is None or row_range is None, "Date range and row range both specified")
         read_query = _PythonVersionStoreReadQuery()
@@ -1619,7 +1619,7 @@ class NativeVersionStore:
         read_options.set_incompletes(self.resolve_defaults("incomplete", proto_cfg, global_default=False, **kwargs))
         return read_options
 
-    def _get_queries(self, symbol, as_of, date_range, row_range, columns, query_builder, **kwargs):
+    def _get_queries(self, symbol, as_of, date_range, row_range, columns=None, query_builder=None, **kwargs):
         version_query = self._get_version_query(as_of, **kwargs)
         read_options = self._get_read_options(**kwargs)
         read_query = self._get_read_query(
@@ -2824,3 +2824,22 @@ class NativeVersionStore:
 
     def library_tool(self) -> LibraryTool:
         return LibraryTool(self.library(), self)
+
+    # TODO: Add a docstring
+    def read_index_columns(
+        self,
+        symbol: str,
+        as_of: Optional[VersionQueryInput] = None,
+        date_range: Optional[DateRangeInput] = None,
+        row_range: Optional[Tuple[int, int]] = None,
+        **kwargs,
+    ) -> VersionedItem:
+        version_query, read_options, read_query = self._get_queries(
+            symbol=symbol,
+            as_of=as_of,
+            date_range=date_range,
+            row_range=row_range,
+            **kwargs,
+        )
+        read_result = self.version_store.read_index_columns(symbol, version_query, read_query, read_options)
+        return read_result

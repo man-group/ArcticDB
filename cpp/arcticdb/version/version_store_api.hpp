@@ -312,6 +312,12 @@ class PythonVersionStore : public LocalVersionedEngine {
         const std::optional<bool>& use_symbol_list = std::nullopt,
         const std::optional<bool>& all_symbols = std::nullopt);
 
+    void read_index_columns(
+        const StreamId& stream_id,
+        const VersionQuery& version_query,
+        ReadQuery& read_query,
+        const ReadOptions& read_options);
+
     void clear(const bool continue_on_error = true);
     bool empty();
     void force_delete_symbol(const StreamId& stream_id);

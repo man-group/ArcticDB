@@ -748,6 +748,12 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             [](PythonVersionStore& from, PythonVersionStore& to) {
                 to._test_set_store(from._test_get_store());
             })
+        .def(
+            "read_index_columns",
+            &PythonVersionStore::read_index_columns,
+            py::call_guard<SingleThreadMutexHolder>(),
+            "Read only the index columns from a dataframe"
+        )
         ;
 
     py::class_<ManualClockVersionStore, PythonVersionStore>(version, "ManualClockVersionStore")
