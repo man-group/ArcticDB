@@ -340,20 +340,8 @@ ReadVersionOutput LocalVersionedEngine::read_dataframe_version_internal(
     ReadQuery& read_query,
     const ReadOptions& read_options) {
     auto version = get_version_to_read(stream_id, version_query);
-    std::variant<VersionedItem, StreamId> identifier;
-    if(!version) {
-        if(opt_false(read_options.incompletes_)) {
-            log::version().warn("No index:  Key not found for {}, will attempt to use incomplete segments.", stream_id);
-            identifier = stream_id;
-        } else {
-            missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(
-                    "read_dataframe_version: version matching query '{}' not found for symbol '{}'", version_query, stream_id);
-        }
-    }
-    else  {
-        identifier = *version;
-    }
-
+    const std::variant<VersionedItem, StreamId> identifier =
+        get_version_identifier(stream_id, version_query, read_options, version);
     auto frame_and_descriptor = read_dataframe_internal(identifier, read_query, read_options);
     return ReadVersionOutput{version.value_or(VersionedItem{}), std::move(frame_and_descriptor)};
 }
@@ -1805,4 +1793,26 @@ std::shared_ptr<VersionMap> LocalVersionedEngine::_test_get_version_map() {
 void LocalVersionedEngine::_test_set_store(std::shared_ptr<Store> store) {
     set_store(std::move(store));
 }
+
+std::variant<VersionedItem, StreamId> LocalVersionedEngine::get_version_identifier(
+    const StreamId& stream_id,
+    const VersionQuery& version_query,
+    const ReadOptions& read_options,
+    const std::optional<VersionedItem>& version
+) {
+    if (!version) {
+        if (opt_false(read_options.incompletes_)) {
+            log::version().warn("No index:  Key not found for {}, will attempt to use incomplete segments.", stream_id);
+            return stream_id;
+        } else {
+            missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(
+                "read_dataframe_version: version matching query '{}' not found for symbol '{}'",
+                version_query,
+                stream_id
+            );
+        }
+    }
+    return *version;
+}
+
 } // arcticdb::version_store
