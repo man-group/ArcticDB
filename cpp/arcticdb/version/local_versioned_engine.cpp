@@ -1815,4 +1815,14 @@ std::variant<VersionedItem, StreamId> LocalVersionedEngine::get_version_identifi
     return *version;
 }
 
+void LocalVersionedEngine::read_index_columns_internal(
+    const std::variant<VersionedItem, StreamId>& identifier,
+    ReadQuery& read_query,
+    const ReadOptions& read_options
+) {
+    ARCTICDB_RUNTIME_SAMPLE(ReadIndexColumnsInternal, 0)
+    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: read_index_columns");
+    return read_index_columns_impl(store(), identifier, read_query, read_options);
+}
+
 } // arcticdb::version_store

@@ -1514,4 +1514,12 @@ VersionedItem defragment_symbol_data_impl(
     return vit;
 }
 
+void read_index_columns_impl(
+    [[maybe_unused]] const std::shared_ptr<Store>& store,
+    [[maybe_unused]] const std::variant<VersionedItem, StreamId>& version_info,
+    [[maybe_unused]] ReadQuery& read_query,
+    [[maybe_unused]] const ReadOptions& read_options
+) {
+}
+
 } //namespace arcticdb::version_store

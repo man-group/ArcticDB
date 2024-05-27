@@ -110,8 +110,7 @@ FrameAndDescriptor read_dataframe_impl(
     const std::shared_ptr<Store>& store,
     const std::variant<VersionedItem, StreamId>& version_info,
     ReadQuery & read_query,
-    const ReadOptions& read_options
-    );
+    const ReadOptions& read_options);
 
 FrameAndDescriptor read_segment_impl(
     const std::shared_ptr<Store>& store,
@@ -192,6 +191,12 @@ void read_indexed_keys_to_pipeline(
 void add_index_columns_to_query(
     const ReadQuery& read_query, 
     const TimeseriesDescriptor& desc);
+
+void read_index_columns_impl(
+    const std::shared_ptr<Store>& store,
+    const std::variant<VersionedItem, StreamId>& version_info,
+    ReadQuery& read_query,
+    const ReadOptions& read_options);
 
 } //namespace arcticdb::version_store
 
