@@ -80,7 +80,7 @@ std::pair<index::IndexSegmentReader, std::vector<SliceAndKey>> read_index_to_vec
 }
 
 TimeseriesDescriptor get_merged_tsd(
-        int row_count,
+        size_t row_count,
         bool dynamic_schema,
         const TimeseriesDescriptor& existing_tsd,
         const std::shared_ptr<pipelines::InputTensorFrame>& new_frame) {
