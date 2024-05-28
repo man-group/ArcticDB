@@ -513,6 +513,10 @@ def lmdb_version_store_big_map(version_store_factory):
 
 
 @pytest.fixture
+def lmdb_version_store_very_big_map(version_store_factory):
+    return version_store_factory(lmdb_config={"map_size": 2**35})
+
+@pytest.fixture
 def lmdb_version_store_column_buckets(version_store_factory):
     return version_store_factory(dynamic_schema=True, column_group_size=3, segment_row_size=2, bucketize_dynamic=True)
 
