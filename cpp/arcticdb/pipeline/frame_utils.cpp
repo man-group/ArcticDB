@@ -12,6 +12,7 @@
 namespace arcticdb {
 
 TimeseriesDescriptor make_timeseries_descriptor(
+        // TODO: It would be more explicit to use uint64_t instead of size_t. Not doing now as it involves a lot of type changes and needs to be done carefully.
         size_t total_rows,
         StreamDescriptor&& desc,
         arcticdb::proto::descriptors::NormalizationMetadata&& norm_meta,
