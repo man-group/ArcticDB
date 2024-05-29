@@ -291,6 +291,45 @@ inline FilterQuery<ContainerType> create_index_filter(const IndexRange &range, b
 }
 
 template<typename ContainerType>
+inline void build_row_read_query_filters(
+    const FilterRange& range,
+    bool dynamic_schema,
+    bool column_groups,
+    std::vector<FilterQuery<ContainerType>>& queries
+) {
+    util::variant_match(
+        range,
+        [&](const RowRange& row_range) {
+            queries.emplace_back(create_row_filter<ContainerType>(RowRange{row_range.first, row_range.second}));
+        },
+        [&](const IndexRange& index_range) {
+            if (index_range.specified_) {
+                queries.emplace_back(create_index_filter<ContainerType>(index_range, dynamic_schema, column_groups));
+            }
+        },
+        [](const auto&) {}
+    );
+}
+
+template <typename ContainerType>
+inline void build_col_read_query_filters(
+    const std::optional<util::BitSet>& col_bitset,
+    const std::shared_ptr<PipelineContext>& pipeline_context,
+    bool dynamic_schema,
+    bool column_groups,
+    std::vector<FilterQuery<ContainerType>>& queries
+) {
+    if (col_bitset) {
+        util::check(!dynamic_schema || column_groups, "Did not expect a column bitset with dynamic schema");
+
+        if (column_groups)
+            queries.emplace_back(create_dynamic_col_filter(util::BitSet(*col_bitset), pipeline_context));
+        else
+            queries.emplace_back(create_static_col_filter(util::BitSet(*col_bitset)));
+    }
+}
+
+template<typename ContainerType>
 inline std::vector<FilterQuery<ContainerType>> build_read_query_filters(
     std::optional<util::BitSet>& col_bitset,
     const std::shared_ptr<PipelineContext>& pipeline_context,
@@ -300,27 +339,8 @@ inline std::vector<FilterQuery<ContainerType>> build_read_query_filters(
     using namespace arcticdb::pipelines;
     std::vector<FilterQuery<ContainerType>> queries;
 
-    util::variant_match(range,
-                        [&](const RowRange &row_range) {
-                            queries.emplace_back(
-                                    create_row_filter<ContainerType>(RowRange{row_range.first, row_range.second}));
-                        },
-                        [&](const IndexRange &index_range) {
-                            if (index_range.specified_) {
-                                queries.emplace_back(create_index_filter<ContainerType>(index_range, dynamic_schema, column_groups));
-                            }
-                        },
-                        [](const auto &) {}
-    );
-
-    if(col_bitset) {
-        util::check(!dynamic_schema || column_groups, "Did not expect a column bitset with dynamic schema");
-
-        if(column_groups)
-            queries.emplace_back(create_dynamic_col_filter(util::BitSet(*col_bitset), pipeline_context));
-        else
-            queries.emplace_back(create_static_col_filter(util::BitSet(*col_bitset)));
-    }
+    build_row_read_query_filters(range, dynamic_schema, column_groups, queries);
+    build_col_read_query_filters(col_bitset, pipeline_context, dynamic_schema, column_groups, queries);
 
     return queries;
 }
