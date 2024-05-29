@@ -81,7 +81,7 @@ Authentication is at storage account level, and authorization can be done at Arc
 
 ### *How is ArcticDB data catalogued and discoverable by consumers?* 
 
-ArcticDB offers capabilities to list libraries and symbols, complete with metadata. For those seeking more functionality, we suggest leveraging a third-party catalogue.  
+ArcticDB offers capabilities to list libraries and symbols, complete with metadata. For those seeking more functionality, we suggest leveraging a third-party data catalogue.  
 
 ### *How can I get started using ArcticDB?*
 
