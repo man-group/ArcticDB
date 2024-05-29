@@ -59,25 +59,25 @@ Bindings are currently only available for Python.
 
 ### *What is the best practice for saving Data to ArcticDB?*
 
-Users should consider how they store data based on their specific use cases. We have a guide [here](tutorials/data_organisation.md) that can help you determine what is best for you!
+Users should consider how they store data based on their specific use cases. See the guide [here](tutorials/data_organisation.md).
 
 ### *What are the Limitations of ArcticDB being client-side?*
 
-The serverless nature of ArcticDB provides excellent performance, making it ideal for data science applications where speed and efficiency are key.  It ensures atomicity, consistency, and durability but does not isolate transactions. Changes to symbols are performed on a last-writer-wins principle, and without isolation, write-after-read transactions are not supported, which may not be optimal for use cases requiring strong transactional guarantees. 
+The serverless nature of ArcticDB provides excellent performance, making it ideal for data science applications where speed and efficiency are key.  It ensures atomicity, consistency, and durability but does not isolate transactions. Changes to symbols are performed on a last-writer-wins principle, and without isolation, write-after-read transactions are not supported, which is not suitable for use cases requiring strong transactional guarantees. 
 
 ### *What storage options does ArcticDB support?*
 
-ArcticDB offers compatibility with a wide array of storage choices, both on-premises and in the cloud, to guarantee adaptability and efficiency across different settings. It is verified to work with multiple storage systems such as AWS S3, Azure Blob Storage, LMDB, In-memory, Ceph, MinIO (Linux), Pure Flashblade S3, Scality S3, and VAST Data S3, with plans to support additional options soon. 
+ArcticDB offers compatibility with a wide array of storage choices, both on-premises and in the cloud. It is verified to work with multiple storage systems such as AWS S3, Azure Blob Storage, LMDB, In-memory, Ceph, MinIO (Linux), Pure Flashblade S3, Scality S3, and VAST Data S3, with plans to support additional options soon. 
 
 ### *What are the trade offs with ArcticDB Versioning?* 
 
-ArcticDB versions data by default, allowing for point-in-time analysis and efficient data updates, including daily appends and historical corrections, making it ideal for research datasets. The database is capable of de-duplicating data that has not changed between versions, using storage space efficiently.  The ArcticDB enterprise tools including data pruning and compaction to help manage storage and data-fragmentation as new versions are created.   Storing large numbers of versions of data does require more storage.
+ArcticDB versions data by default, allowing for point-in-time analysis and efficient data updates, including daily appends and historical corrections, making it ideal for research datasets. The database is capable of de-duplicating data that has not changed between versions, using storage space efficiently. The ArcticDB enterprise tools including data pruning and compaction to help manage storage and data-fragmentation as new versions are created. Storing large numbers of versions of data does require more storage.
 
 More information can be found [here](tutorials/data_organisation.md)!
 
 ### *What granularity of authorization does ArcticDB support?*  
 
-Authentication is at storage account level, and authorization can be done at ArcticDB Library level for most S3 backends (w. directory/path permissions), otherwise also at storage account level.  There are many third-party authentication and authorization integrations available for the backends.
+Authentication is at storage account level, and authorization can be done at ArcticDB Library level for most S3 backends (with directory/path permissions), otherwise also at storage account level.  There are many third-party authentication and authorization integrations available for the backends.
 
 ### *How is ArcticDB data catalogued and discoverable by consumers?* 
 
