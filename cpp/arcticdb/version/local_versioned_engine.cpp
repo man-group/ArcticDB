@@ -1029,7 +1029,11 @@ folly::Future<ReadVersionOutput> async_read_direct(
     auto index_segment_reader = std::make_shared<index::IndexSegmentReader>(std::move(index_segment));
 
     check_column_and_date_range_filterable(*index_segment_reader, read_query);
-    add_index_columns_to_query(read_query, index_segment_reader->tsd());
+    // When read_query.columns is empty means that we want to read all columns. There is no need to add the
+    // index explicitly.
+    if (!read_query.columns.empty()) {
+        add_index_columns_to_query(read_query, index_segment_reader->tsd());
+    }
 
     auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor{index_segment_reader->tsd().as_stream_descriptor()});
     pipeline_context->set_selected_columns(read_query.columns);

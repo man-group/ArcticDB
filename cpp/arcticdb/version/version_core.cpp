@@ -692,18 +692,17 @@ SegmentInMemory read_direct(const std::shared_ptr<Store>& store,
 }
 
 void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDescriptor& desc) {
-    if(!read_query.columns.empty()) {
-        auto index_columns = stream::get_index_columns_from_descriptor(desc);
-        if(index_columns.empty())
-            return;
+    auto index_columns = stream::get_index_columns_from_descriptor(desc);
+    if(index_columns.empty())
+        return;
 
-        std::vector<std::string> index_columns_to_add;
-        for(const auto& index_column : index_columns) {
-            if(std::find(std::begin(read_query.columns), std::end(read_query.columns), index_column) == std::end(read_query.columns))
-                index_columns_to_add.push_back(index_column);
-        }
-        read_query.columns.insert(std::begin(read_query.columns), std::begin(index_columns_to_add), std::end(index_columns_to_add));
+    std::vector<std::string> index_columns_to_add;
+    for(const auto& index_column : index_columns) {
+        if(std::find(std::begin(read_query.columns), std::end(read_query.columns), index_column) == std::end(read_query.columns))
+            index_columns_to_add.push_back(index_column);
     }
+    read_query.columns.insert(std::begin(read_query.columns), std::begin(index_columns_to_add), std::end(index_columns_to_add));
+    
 }
 
 FrameAndDescriptor read_segment_impl(
@@ -758,7 +757,11 @@ void read_indexed_keys_to_pipeline(
     ARCTICDB_DEBUG(log::version(), "Read index segment with {} keys", index_segment_reader.size());
     check_column_and_date_range_filterable(index_segment_reader, read_query);
 
-    add_index_columns_to_query(read_query, index_segment_reader.tsd());
+    // When read_query.columns is empty means that we want to read all columns. There is no need to add the
+    // index explicitly.
+    if (!read_query.columns.empty()) {
+        add_index_columns_to_query(read_query, index_segment_reader.tsd());
+    }
 
     const auto& tsd = index_segment_reader.tsd();
     read_query.calculate_row_filter(static_cast<int64_t>(tsd.proto().total_rows()));
@@ -804,7 +807,9 @@ void read_incompletes_to_pipeline(
     pipeline_context->incompletes_after_ = pipeline_context->slice_and_keys_.size();
 
     // If there are only incompletes we need to add the index here
-    if(pipeline_context->slice_and_keys_.empty()) {
+    // When read_query.columns is empty means that we want to read all columns. There is no need to add the
+    // index explicitly.
+    if(pipeline_context->slice_and_keys_.empty() && !read_query.columns.empty()) {
         add_index_columns_to_query(read_query, incomplete_segments.begin()->segment(store).index_descriptor());
     }
 
@@ -1520,6 +1525,7 @@ void read_index_columns_impl(
     [[maybe_unused]] ReadQuery& read_query,
     [[maybe_unused]] const ReadOptions& read_options
 ) {
+
 }
 
 } //namespace arcticdb::version_store

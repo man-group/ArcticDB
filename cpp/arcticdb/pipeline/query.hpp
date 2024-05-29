@@ -331,7 +331,7 @@ inline void build_col_read_query_filters(
 
 template<typename ContainerType>
 inline std::vector<FilterQuery<ContainerType>> build_read_query_filters(
-    std::optional<util::BitSet>& col_bitset,
+    const std::optional<util::BitSet>& col_bitset,
     const std::shared_ptr<PipelineContext>& pipeline_context,
     const FilterRange &range,
     bool dynamic_schema,
