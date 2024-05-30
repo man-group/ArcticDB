@@ -36,10 +36,6 @@ void PipelineContext::set_selected_columns(const std::vector<std::string>& colum
     selected_columns_ = requested_column_bitset_including_index(desc_->proto(), columns);
 }
 
-bool PipelineContextRow::selected_columns(size_t n) const {
-    return !parent_->selected_columns_ || parent_->selected_columns_.value()[n];
-}
-
 const std::optional<util::BitSet>& PipelineContextRow::get_selected_columns() const {
     return parent_->selected_columns_;
 }

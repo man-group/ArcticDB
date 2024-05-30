@@ -118,9 +118,9 @@ inline std::optional<util::BitSet> requested_column_bitset_including_index(const
         if(!contains_index_column(columns, desc)) {
             ARCTICDB_DEBUG(log::version(), "Specified columns missing index column");
             return build_column_bitset(desc, add_index_column(columns, desc));
-        }
-        else
+        } else {
             return build_column_bitset(desc, columns);
+        }
     }
     return std::nullopt;
 }
