@@ -394,7 +394,7 @@ void Column::set_row_data(size_t row_id) {
     last_logical_row_ = row_id;
     const auto last_stored_row = row_count() - 1;
     if(sparse_map_) {
-        last_physical_row_ = sparse_map_->count() - 1;
+        last_physical_row_ = static_cast<ssize_t>(sparse_map_->count()) - 1;
     } else if (last_logical_row_ != last_stored_row) {
         last_physical_row_ = last_stored_row;
         backfill_sparse_map(last_stored_row);

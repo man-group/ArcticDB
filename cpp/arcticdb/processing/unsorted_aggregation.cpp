@@ -314,7 +314,12 @@ namespace
                 } else {
                     auto in_ptr = reinterpret_cast<MaybeValueType*>(aggregated_.data());
                     for (auto it = column_data.begin<typename col_type_info::TDT>(); it != column_data.end<typename col_type_info::TDT>(); ++it, ++in_ptr) {
-                        *it = in_ptr->value_;
+                        if constexpr (is_floating_point_type(col_type_info::data_type)) {
+                            *it = in_ptr->written_ ? in_ptr->value_ : std::numeric_limits<typename col_type_info::RawType>::quiet_NaN();
+                        } else {
+                            // Use 0 for missing int values for consistency with sparse data
+                            *it = in_ptr->written_ ? in_ptr->value_ : 0;
+                        }
                     }
                 }
             });
