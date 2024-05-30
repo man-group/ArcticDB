@@ -214,6 +214,25 @@ class ChunkedBufferImpl {
         return res;
     }
 
+    // Trim will reduce the size of the chunked buffer to the specified size by dropping blocks that are wholly unneeded
+    // i.e. no allocation/memcpy is involved, only deallocation
+    // Use in performance critical code where a column is being created, the final size is unknown at construction
+    // time but a maximum size is known, by creating a Column using a chunked buffer that is presized in blocks. This
+    // unlocks ColumnDataIterator usage (more performant than repeated calls to Column::push_back). Once the column is
+    // created and the number of elements known, use this to drop unneeded blocks.
+    void trim(size_t requested_size) {
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(requested_size <= bytes_,
+                                                        "Cannot trim ChunkedBuffer with {} bytes to {} bytes",
+                                                        bytes_,
+                                                        requested_size);
+        while (bytes_ - last_block().bytes() >= requested_size) {
+            bytes_ -= last_block().bytes();
+            free_last_block();
+        }
+        last_block().resize(last_block().bytes() - (bytes_ - requested_size));
+        bytes_ = requested_size;
+    }
+
     struct BlockAndOffset {
         MemBlock* block_;
         size_t offset_;
