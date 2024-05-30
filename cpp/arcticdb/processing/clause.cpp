@@ -630,7 +630,7 @@ std::vector<std::vector<size_t>> ResampleClause<closed_boundary>::structure_for_
     // Exit if res_it == std::prev(res.end()) as this implies the last row slice was not incorporated into an earlier processing unit
     for (auto res_it = res.begin(); res_it != res.end() && res_it != std::prev(res.end());) {
         auto last_index_value_in_row_slice = ranges_and_keys[res_it->at(0)].key_.end_time() - 1;
-        advance_bucket_past_value(bucket_boundaries_, bucket_boundaries_it, last_index_value_in_row_slice);
+        advance_boundary_past_value(bucket_boundaries_, bucket_boundaries_it, last_index_value_in_row_slice);
         // bucket_boundaries_it now contains the end value of the last bucket covering the row-slice in res_it, or an end iterator if the last bucket ends before the end of this row-slice
         if (bucket_boundaries_it != bucket_boundaries_.end()) {
             Bucket<closed_boundary> current_bucket{*std::prev(bucket_boundaries_it), *bucket_boundaries_it};
@@ -675,9 +675,9 @@ bool ResampleClause<closed_boundary>::index_range_outside_bucket_range(timestamp
 }
 
 template<ResampleBoundary closed_boundary>
-void ResampleClause<closed_boundary>::advance_bucket_past_value(const std::vector<timestamp>& bucket_boundaries,
-                                                                std::vector<timestamp>::const_iterator& bucket_boundaries_it,
-                                                                timestamp value) const {
+void ResampleClause<closed_boundary>::advance_boundary_past_value(const std::vector<timestamp>& bucket_boundaries,
+                                                                  std::vector<timestamp>::const_iterator& bucket_boundaries_it,
+                                                                  timestamp value) const {
     // These loops are equivalent to bucket_boundaries_it = std::upper_bound(bucket_boundaries_it, bucket_boundaries.end(), value, std::less[_equal]{})
     // but optimised for the case where most buckets are non-empty.
     // Mathematically, this will be faster when b / log_2(b) < n, where b is the number of buckets and n is the number of index values
@@ -827,7 +827,7 @@ std::shared_ptr<Column> ResampleClause<closed_boundary>::generate_output_index_c
                     current_bucket_added_to_index = true;
                 }
             } else {
-                advance_bucket_past_value(bucket_boundaries, bucket_end_it, *it);
+                advance_boundary_past_value(bucket_boundaries, bucket_end_it, *it);
                 if (ARCTICDB_UNLIKELY(bucket_end_it == bucket_boundaries.end())) {
                     break;
                 } else {

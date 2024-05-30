@@ -88,7 +88,7 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const 
                                             // bucket_start_it = std::prev(bucket_end_it);
                                             // reached_end_of_buckets = bucket_end_it == bucket_boundaries_end;
                                             // The above code will be more performant when the vast majority of buckets are empty
-                                            // See comment in  ResampleClause::advance_bucket_past_value for mathematical and experimental bounds
+                                            // See comment in  ResampleClause::advance_boundary_past_value for mathematical and experimental bounds
                                             ++bucket_start_it;
                                             if (ARCTICDB_UNLIKELY(++bucket_end_it == bucket_boundaries_end)) {
                                                 reached_end_of_buckets = true;

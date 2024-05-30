@@ -477,9 +477,9 @@ struct ResampleClause {
     bool index_range_outside_bucket_range(timestamp start_index, timestamp end_index) const;
 
     // Advances the bucket boundary iterator to the end of the last bucket that includes a value from a row slice with the given last index value
-    void advance_bucket_past_value(const std::vector<timestamp>& bucket_boundaries,
-                                   std::vector<timestamp>::const_iterator& bucket_boundaries_it,
-                                   timestamp value) const;
+    void advance_boundary_past_value(const std::vector<timestamp>& bucket_boundaries,
+                                     std::vector<timestamp>::const_iterator& bucket_boundaries_it,
+                                     timestamp value) const;
 
     std::vector<timestamp> generate_bucket_boundaries(timestamp first_ts,
                                                       timestamp last_ts,
