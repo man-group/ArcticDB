@@ -163,7 +163,7 @@ inline FilterQuery<index::IndexSegmentReader> create_static_col_filter(util::Bit
     };
 }
 
-inline FilterQuery<index::IndexSegmentReader> create_dynamic_col_filter(util::BitSet &&selected_columns, const std::shared_ptr<PipelineContext>& pipeline_context) {
+inline FilterQuery<index::IndexSegmentReader> create_dynamic_col_filter(util::BitSet &&selected_columns, const PipelineContext* const pipeline_context) {
     return [sc = std::move(selected_columns), pipeline_context](const index::IndexSegmentReader &isr, std::unique_ptr<util::BitSet>&& input) mutable {
         auto res = std::make_unique<util::BitSet>(static_cast<util::BitSetSizeType>(sc.size()));
         util::check(isr.bucketize_dynamic(), "Expected column group in index segment reader dynamic column filter");
@@ -314,7 +314,7 @@ inline void build_row_read_query_filters(
 template <typename ContainerType>
 inline void build_col_read_query_filters(
     const std::optional<util::BitSet>& col_bitset,
-    const std::shared_ptr<PipelineContext>& pipeline_context,
+    const PipelineContext* const pipeline_context,
     bool dynamic_schema,
     bool column_groups,
     std::vector<FilterQuery<ContainerType>>& queries
@@ -332,7 +332,7 @@ inline void build_col_read_query_filters(
 template<typename ContainerType>
 inline std::vector<FilterQuery<ContainerType>> build_read_query_filters(
     const std::optional<util::BitSet>& col_bitset,
-    const std::shared_ptr<PipelineContext>& pipeline_context,
+    const PipelineContext * const pipeline_context,
     const FilterRange &range,
     bool dynamic_schema,
     bool column_groups) {

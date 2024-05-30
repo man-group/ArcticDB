@@ -1042,7 +1042,7 @@ folly::Future<ReadVersionOutput> async_read_direct(
 
     auto queries = get_column_bitset_and_query_functions<index::IndexSegmentReader>(
         read_query,
-        pipeline_context,
+        pipeline_context.get(),
         dynamic_schema,
         bucketize_dynamic);
 
@@ -1806,7 +1806,7 @@ std::variant<VersionedItem, StreamId> LocalVersionedEngine::get_version_identifi
 ) {
     if (!version) {
         if (opt_false(read_options.incompletes_)) {
-            log::version().warn("No index:  Key not found for {}, will attempt to use incomplete segments.", stream_id);
+            log::version().warn("No index: Key not found for {}, will attempt to use incomplete segments.", stream_id);
             return stream_id;
         } else {
             missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(

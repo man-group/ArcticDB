@@ -771,7 +771,7 @@ void read_indexed_keys_to_pipeline(
     bool dynamic_schema = opt_false(read_options.dynamic_schema_);
     auto queries = get_column_bitset_and_query_functions<index::IndexSegmentReader>(
         read_query,
-        pipeline_context,
+        pipeline_context.get(),
         dynamic_schema,
         bucketize_dynamic);
 

@@ -195,7 +195,7 @@ inline void generate_filtered_field_descriptors(std::shared_ptr<PipelineContext>
 template<class ContainerType>
 inline std::vector<FilterQuery<ContainerType>> get_column_bitset_and_query_functions(
     const ReadQuery& query,
-    const std::shared_ptr<PipelineContext>& pipeline_context,
+    PipelineContext* const pipeline_context,
     bool dynamic_schema,
     bool column_groups) {
     using namespace arcticdb::pipelines::index;
