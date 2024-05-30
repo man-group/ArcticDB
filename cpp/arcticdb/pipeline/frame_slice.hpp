@@ -188,6 +188,14 @@ struct RangesAndKey {
     RangesAndKey() = delete;
     ARCTICDB_MOVE_COPY_DEFAULT(RangesAndKey)
 
+    friend bool operator==(const RangesAndKey& left, const RangesAndKey& right) {
+        return left.row_range_ == right.row_range_ && left.col_range_ == right.col_range_ && left.key_ == right.key_;
+    }
+
+    bool operator!=(const RangesAndKey& right) const {
+        return !(*this == right);
+    }
+
     RowRange row_range_;
     ColRange col_range_;
     entity::AtomKey key_;

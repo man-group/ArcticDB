@@ -472,6 +472,8 @@ Composite<EntityIds> process_clauses(
     std::vector<bool> entity_added(segment_and_slice_futures.size(), false);
     std::vector<folly::Future<Composite<EntityIds>>> futures;
     bool first_clause{true};
+    // Reverse the order of clauses and iterate through them backwards so that the erase is efficient
+    std::reverse(clauses.begin(), clauses.end());
     while (!clauses.empty()) {
         for (auto&& comp_entity_ids: vec_comp_entity_ids) {
             if (first_clause) {
@@ -523,13 +525,12 @@ Composite<EntityIds> process_clauses(
         first_clause = false;
         vec_comp_entity_ids = folly::collect(futures).get();
         futures.clear();
-        // Erasing from front of vector not ideal, but they're just shared_ptr and there shouldn't be loads of clauses
-        while (clauses.size() > 0 && !clauses[0]->clause_info().requires_repartition_) {
-            clauses.erase(clauses.begin());
+        while (clauses.size() > 0 && !clauses.back()->clause_info().requires_repartition_) {
+            clauses.erase(clauses.end() - 1);
         }
-        if (clauses.size() > 0 && clauses[0]->clause_info().requires_repartition_) {
-            vec_comp_entity_ids = clauses[0]->repartition(std::move(vec_comp_entity_ids)).value();
-            clauses.erase(clauses.begin());
+        if (clauses.size() > 0 && clauses.back()->clause_info().requires_repartition_) {
+            vec_comp_entity_ids = clauses.back()->repartition(std::move(vec_comp_entity_ids)).value();
+            clauses.erase(clauses.end() - 1);
         }
     }
     return merge_composites(std::move(vec_comp_entity_ids));
@@ -891,7 +892,7 @@ void copy_frame_data_to_buffer(const SegmentInMemory& destination, size_t target
     auto total_size = dst_rawtype_size * num_rows;
     buffer.assert_size(offset + total_size);
 
-    auto src_ptr = src_column.data().buffer().data();
+    auto src_data = src_column.data();
     auto dst_ptr = buffer.data() + offset;
 
     auto type_promotion_error_msg = fmt::format("Can't promote type {} to type {} in field {}",
@@ -901,17 +902,25 @@ void copy_frame_data_to_buffer(const SegmentInMemory& destination, size_t target
             util::default_initialize<decltype(dst_desc_tag)>(dst_ptr, num_rows * dst_rawtype_size);
         });
     } else if (trivially_compatible_types(src_column.type(), dst_column.type())) {
-        memcpy(dst_ptr, src_ptr, total_size);
+        details::visit_type(src_column.type().data_type() ,[&src_data, &dst_ptr] (auto src_desc_tag) {
+            using SourceTDT = ScalarTagType<decltype(src_desc_tag)>;
+            using SourceType =  typename decltype(src_desc_tag)::DataTypeTag::raw_type;
+            while (auto block = src_data.template next<SourceTDT>()) {
+                const auto row_count = block->row_count();
+                memcpy(dst_ptr, block->data(), row_count * sizeof(SourceType));
+                dst_ptr += row_count * sizeof(SourceType);
+            }
+        });
     } else if (has_valid_type_promotion(src_column.type(), dst_column.type())) {
-        dst_column.type().visit_tag([&src_ptr, &dst_ptr, &src_column, &type_promotion_error_msg, num_rows] (auto dest_desc_tag) {
+        details::visit_type(dst_column.type().data_type() ,[&src_data, &dst_ptr, &src_column, &type_promotion_error_msg] (auto dest_desc_tag) {
             using DestinationType =  typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
-            src_column.type().visit_tag([&src_ptr, &dst_ptr, &type_promotion_error_msg, num_rows] (auto src_desc_tag ) {
-                using SourceType =  typename decltype(src_desc_tag)::DataTypeTag::raw_type;
-                if constexpr(std::is_arithmetic_v<SourceType> && std::is_arithmetic_v<DestinationType>) {
-                    auto typed_src_ptr = reinterpret_cast<SourceType *>(src_ptr);
-                    auto typed_dst_ptr = reinterpret_cast<DestinationType *>(dst_ptr);
-                    for (auto i = 0u; i < num_rows; ++i) {
-                        *typed_dst_ptr++ = static_cast<DestinationType>(*typed_src_ptr++);
+            auto typed_dst_ptr = reinterpret_cast<DestinationType *>(dst_ptr);
+            details::visit_type(src_column.type().data_type() ,[&src_data, &typed_dst_ptr, &type_promotion_error_msg] (auto src_desc_tag) {
+                using source_type_info = ScalarTypeInfo<decltype(src_desc_tag)>;
+                if constexpr(std::is_arithmetic_v<typename source_type_info::RawType> && std::is_arithmetic_v<DestinationType>) {
+                    const auto src_cend = src_data.cend<typename source_type_info::TDT>();
+                    for (auto src_it = src_data.cbegin<typename source_type_info::TDT>(); src_it != src_cend; ++src_it) {
+                        *typed_dst_ptr++ = static_cast<DestinationType>(*src_it);
                     }
                 } else {
                     util::raise_rte(type_promotion_error_msg.c_str());
