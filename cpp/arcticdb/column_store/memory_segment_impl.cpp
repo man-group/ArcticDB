@@ -388,7 +388,7 @@ std::vector<std::shared_ptr<SegmentInMemoryImpl>> SegmentInMemoryImpl::partition
             auto input_data = (*column)->data();
             auto cend = input_data.cend<typename type_info::TDT>();
             for (auto input_it = input_data.cbegin<typename type_info::TDT>(); input_it != cend; ++input_it, ++row_to_segment_it) {
-                if (ARCTICDB_LIKELY(*row_to_segment_it != 255)) {
+                if (ARCTICDB_LIKELY(*row_to_segment_it != std::numeric_limits<uint8_t>::max())) {
                     *(output_ptrs[*row_to_segment_it]++) = *input_it;
                 }
             }
