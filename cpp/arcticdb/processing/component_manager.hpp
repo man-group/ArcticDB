@@ -133,6 +133,10 @@ private:
                             opt_expected_get_calls_map_->try_emplace(id, 1).second,
                             "Failed to insert {} with ID {}, already exists",
                             entity_type_, id);
+                    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                            opt_expected_get_calls_initial_map_->try_emplace(id, 1).second,
+                            "Failed to insert {} with ID {}, already exists",
+                            entity_type_, id);
                 }
             }
         }
