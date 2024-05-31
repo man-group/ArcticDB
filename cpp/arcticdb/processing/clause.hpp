@@ -63,8 +63,6 @@ struct ProcessingConfig {
     uint64_t total_rows_ = 0;
 };
 
-using EntityIds = std::vector<EntityId>;
-
 struct IClause {
     template<class Base>
     struct Interface : Base {
