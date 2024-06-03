@@ -899,7 +899,8 @@ void copy_frame_data_to_buffer(const SegmentInMemory& destination, size_t target
         dst_column.type().visit_tag([&](auto dst_desc_tag) {
             util::default_initialize<decltype(dst_desc_tag)>(dst_ptr, num_rows * dst_rawtype_size);
         });
-    } else if (src_column.is_sparse() && has_valid_type_promotion(src_column.type(), dst_column.type())) {
+    // Do not use src_column.is_sparse() here, as that misses columns that are dense, but have fewer than num_rows values
+    } else if (src_column.opt_sparse_map().has_value() && has_valid_type_promotion(src_column.type(), dst_column.type())) {
         details::visit_type(dst_column.type().data_type(), [&](auto dst_tag) {
             using dst_type_info = ScalarTypeInfo<decltype(dst_tag)>;
             util::default_initialize<typename dst_type_info::TDT>(dst_ptr, num_rows * dst_rawtype_size);

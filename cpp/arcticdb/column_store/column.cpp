@@ -61,7 +61,9 @@ void initialise_output_column(const Column& left_input_column, const Column& rig
             }
             output_column.set_sparse_map(std::move(output_sparse_map));
         }
-        output_column.allocate_data(output_physical_rows * get_type_size(output_column.type().data_type()));
+        if (output_physical_rows > 0) {
+            output_column.allocate_data(output_physical_rows * get_type_size(output_column.type().data_type()));
+        }
         if (output_last_row.has_value()) {
             output_column.set_row_data(*output_last_row);
         }

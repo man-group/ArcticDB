@@ -523,6 +523,7 @@ public:
     }
 
     inline uint8_t *allocate_data(std::size_t bytes) {
+        if (bytes == 0)
         util::check(bytes != 0, "Allocate data called with zero size");
         data_.ensure_bytes(bytes);
         return data_.ptr();
