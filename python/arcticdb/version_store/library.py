@@ -810,6 +810,10 @@ class Library:
 
         Both the existing symbol version and ``data`` must be timeseries-indexed.
 
+        In the case where ``data`` has zero rows, nothing will be done and no new version will be created. This means that
+        `update` cannot be used with ``date_range`` to just delete a subset of the data. We have `delete_data_in_range`
+        for exactly this purpose and to make it very clear when deletion is intended.
+
         Note that `update` is not designed for multiple concurrent writers over a single symbol.
 
         Parameters
