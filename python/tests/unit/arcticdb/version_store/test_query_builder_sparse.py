@@ -30,6 +30,7 @@ class TestQueryBuilderSparse:
             },
             index=pd.date_range("2024-01-05", periods=4, tz="UTC")
         )
+        # Use parallel write to generate 2 segments as append does not have the sparsify_floats kwarg
         lib.write(self.sym, df_0, parallel=True, sparsify_floats=True)
         lib.write(self.sym, df_1, parallel=True, sparsify_floats=True)
         lib.compact_incomplete(self.sym, False, False, sparsify=True)
