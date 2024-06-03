@@ -317,8 +317,12 @@ namespace
                         if constexpr (is_floating_point_type(col_type_info::data_type)) {
                             *it = in_ptr->written_ ? in_ptr->value_ : std::numeric_limits<typename col_type_info::RawType>::quiet_NaN();
                         } else {
-                            // Use 0 for missing int values for consistency with sparse data
-                            *it = in_ptr->written_ ? in_ptr->value_ : 0;
+                            if constexpr(T == Extremum::MAX) {
+                                *it = in_ptr->written_ ? in_ptr->value_ : std::numeric_limits<typename col_type_info::RawType>::lowest();
+                            } else {
+                                // T == Extremum::MIN
+                                *it = in_ptr->written_ ? in_ptr->value_ : std::numeric_limits<typename col_type_info::RawType>::max();
+                            }
                         }
                     }
                 }
