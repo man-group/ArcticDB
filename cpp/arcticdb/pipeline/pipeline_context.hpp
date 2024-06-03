@@ -119,12 +119,19 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
     std::vector<SliceAndKey> slice_and_keys_;
     util::BitSet fetch_index_;
     std::vector<std::shared_ptr<StringPool>> string_pools_;
+    /// Columns the user selected explicitly via the columns read option. These are the columns we must
+    /// return as a result of a read operation,
     std::optional<util::BitSet> selected_columns_;
+    /// All columns that must be read. This is a superset of PipelineContext::selected_columns_ and is used in cases where
+    /// PipelineContext::selected_columns_ depend on other columns.
+    /// Example: DataFrame with one column: "col", a query builder projecting col + 1 onto an artificial column "proj". The user
+    /// does a read and needs only the projected column. PipelineContext::selected_columns_ will be ["proj"], while
+    /// PipelineContext::overall_column_bitset_ will be ["col", "proj"]
+    std::optional<util::BitSet> overall_column_bitset_;
     std::shared_ptr<FieldCollection> filter_columns_;
     std::vector<std::shared_ptr<StreamDescriptor>> segment_descriptors_;
     std::optional<std::unordered_set<std::string_view>> filter_columns_set_;
     std::optional<SegmentInMemory> multi_key_;
-    std::optional<util::BitSet> overall_column_bitset_;
     std::vector<unsigned char> compacted_;
     std::optional<size_t> incompletes_after_;
     bool bucketize_dynamic_ = false;
@@ -191,6 +198,7 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
         swap(left.fetch_index_, right.fetch_index_);
         swap(left.string_pools_, right.string_pools_);
         swap(left.selected_columns_, right.selected_columns_);
+        swap(left.overall_column_bitset_, right.overall_column_bitset_);
         swap(left.filter_columns_, right.filter_columns_);
         swap(left.segment_descriptors_, right.segment_descriptors_);
         swap(left.filter_columns_set_, right.filter_columns_set_);
