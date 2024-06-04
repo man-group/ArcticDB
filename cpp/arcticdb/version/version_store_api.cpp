@@ -504,16 +504,16 @@ std::set<StreamId> PythonVersionStore::list_streams(
     return list_streams_internal(snap_name, regex, prefix, opt_use_symbol_list, opt_all_symbols);
 }
 
-void PythonVersionStore::read_index_columns(
+ReadResult PythonVersionStore::read_index_columns(
     const StreamId& stream_id,
     const VersionQuery& version_query,
     ReadQuery& read_query,
     const ReadOptions& read_options
 ) {
-    const std::optional<VersionedItem> version = get_version_to_read(stream_id, version_query);
-    const std::variant<VersionedItem, StreamId> identifier =
-        get_version_identifier(stream_id, version_query, read_options, version);
-    read_index_columns_internal(identifier, read_query, read_options);
+    ReadVersionOutput index_columns = read_index_columns_internal(stream_id, version_query, read_query, read_options);
+    return create_python_read_result(
+        index_columns.versioned_item_, std::move(index_columns.frame_and_descriptor_)
+    );
 }
 
 VersionedItem PythonVersionStore::write_partitioned_dataframe(

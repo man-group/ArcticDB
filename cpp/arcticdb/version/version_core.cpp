@@ -1519,13 +1519,91 @@ VersionedItem defragment_symbol_data_impl(
     return vit;
 }
 
-void read_index_columns_impl(
-    [[maybe_unused]] const std::shared_ptr<Store>& store,
-    [[maybe_unused]] const std::variant<VersionedItem, StreamId>& version_info,
-    [[maybe_unused]] ReadQuery& read_query,
-    [[maybe_unused]] const ReadOptions& read_options
+FrameAndDescriptor read_index_columns_impl(
+    const std::shared_ptr<Store>& store,
+    const std::variant<VersionedItem, StreamId>& version_info,
+    ReadQuery& read_query,
+    const ReadOptions& read_options
 ) {
+    using namespace arcticdb::pipelines;
+    auto pipeline_context = std::make_shared<PipelineContext>();
 
+    if (std::holds_alternative<StreamId>(version_info)) {
+        pipeline_context->stream_id_ = std::get<StreamId>(version_info);
+    } else {
+        pipeline_context->stream_id_ = std::get<VersionedItem>(version_info).key_.id();
+        auto maybe_reader = get_index_segment_reader(store, pipeline_context, std::get<VersionedItem>(version_info));
+        if (maybe_reader) {
+            auto index_segment_reader = std::move(maybe_reader.value());
+            ARCTICDB_DEBUG(log::version(), "Read index segment with {} keys", index_segment_reader.size());
+            check_column_and_date_range_filterable(index_segment_reader, read_query);
+            debug::check<ErrorCode::E_ASSERTION_FAILURE>(
+                read_query.columns.empty(),
+                "There shouldn't be any columns passed by the client when reading the index"
+            );
+            const auto& tsd = index_segment_reader.tsd();
+            add_index_columns_to_query(read_query, tsd);
+            read_query.calculate_row_filter(static_cast<int64_t>(tsd.proto().total_rows()));
+            pipeline_context->desc_ = tsd.as_stream_descriptor();
+            pipeline_context->set_selected_columns(read_query.columns);
+            pipeline_context->overall_column_bitset_ = pipeline_context->selected_columns_; 
+            std::vector<FilterQuery<index::IndexSegmentReader>> queries;
+            const bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
+            const bool dynamic_schema = opt_false(read_options.dynamic_schema_);
+            build_row_read_query_filters(read_query.row_filter, dynamic_schema, bucketize_dynamic, queries);
+            queries.emplace_back([context=pipeline_context](const index::IndexSegmentReader&, std::unique_ptr<util::BitSet>&&) {
+                return std::make_unique<util::BitSet>(*context->overall_column_bitset_);
+            });
+            pipeline_context->slice_and_keys_ = filter_index(index_segment_reader, combine_filter_functions(queries));
+            pipeline_context->total_rows_ = pipeline_context->calc_rows();
+            pipeline_context->rows_ = index_segment_reader.tsd().proto().total_rows();
+            pipeline_context->norm_meta_ = std::make_unique<arcticdb::proto::descriptors::NormalizationMetadata>(
+                std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_normalization())
+            );
+            pipeline_context->user_meta_ = std::make_unique<arcticdb::proto::descriptors::UserDefinedMetadata>(
+                std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_user_meta())
+            );
+            pipeline_context->bucketize_dynamic_ = bucketize_dynamic;
+        }
+    }
+
+    // TODO: Is this needed
+    // if (pipeline_context->multi_key_)
+    //     return read_multi_key(store, *pipeline_context->multi_key_);
+
+    if (opt_false(read_options.incompletes_)) {
+        util::check(
+            std::holds_alternative<IndexRange>(read_query.row_filter),
+            "Streaming read requires date range filter"
+        );
+        const auto& query_range = std::get<IndexRange>(read_query.row_filter);
+        const auto existing_range = pipeline_context->index_range();
+        if (!existing_range.specified_ || query_range.end_ > existing_range.end_)
+            read_incompletes_to_pipeline(store, pipeline_context, read_query, read_options, false, false, false);
+    }
+
+    if (std::holds_alternative<StreamId>(version_info) && !pipeline_context->incompletes_after_) {
+        missing_data::raise<ErrorCode::E_NO_SYMBOL_DATA>(
+            "read_dataframe_impl: read returned no data for symbol {} (found no versions or append data)",
+            pipeline_context->stream_id_
+        );
+    }
+
+    modify_descriptor(pipeline_context, read_options);
+    generate_filtered_field_descriptors(pipeline_context, read_query.columns);
+    ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
+
+    auto buffers = std::make_shared<BufferHolder>();
+    auto frame = do_direct_read_or_process(store, read_query, read_options, pipeline_context, buffers);
+
+    ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
+    reduce_and_fix_columns(pipeline_context, frame, read_options);
+    return {
+        frame,
+        timeseries_descriptor_from_pipeline_context(pipeline_context, {}, pipeline_context->bucketize_dynamic_),
+        {},
+        buffers
+    };
 }
 
 } //namespace arcticdb::version_store

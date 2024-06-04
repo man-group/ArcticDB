@@ -2841,5 +2841,7 @@ class NativeVersionStore:
             row_range=row_range,
             **kwargs,
         )
-        read_result = self.version_store.read_index_columns(symbol, version_query, read_query, read_options)
-        return read_result
+        cpp_result = self.version_store.read_index_columns(symbol, version_query, read_query, read_options)
+        read_result = ReadResult(*cpp_result)
+        print(read_result.frame_data)
+        return self._post_process_dataframe(read_result, read_query, None)

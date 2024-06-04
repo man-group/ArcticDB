@@ -1819,14 +1819,19 @@ std::variant<VersionedItem, StreamId> LocalVersionedEngine::get_version_identifi
     return *version;
 }
 
-void LocalVersionedEngine::read_index_columns_internal(
-    const std::variant<VersionedItem, StreamId>& identifier,
+ReadVersionOutput LocalVersionedEngine::read_index_columns_internal(
+    const StreamId& stream_id,
+    const VersionQuery& version_query,
     ReadQuery& read_query,
     const ReadOptions& read_options
 ) {
     ARCTICDB_RUNTIME_SAMPLE(ReadIndexColumnsInternal, 0)
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: read_index_columns");
-    return read_index_columns_impl(store(), identifier, read_query, read_options);
+    const std::optional<VersionedItem> version = get_version_to_read(stream_id, version_query);
+    const std::variant<VersionedItem, StreamId> identifier =
+        get_version_identifier(stream_id, version_query, read_options, version);
+    FrameAndDescriptor frame_and_descriptor = read_index_columns_impl(store(), identifier, read_query, read_options);
+    return ReadVersionOutput{version.value_or(VersionedItem{}), std::move(frame_and_descriptor)};
 }
 
 } // arcticdb::version_store

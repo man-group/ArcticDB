@@ -750,7 +750,13 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             })
         .def(
             "read_index_columns",
-            &PythonVersionStore::read_index_columns,
+            [&](PythonVersionStore& v,
+                const StreamId& stream_id,
+                const VersionQuery& version_query,
+                ReadQuery& read_query,
+                const ReadOptions& read_options) {
+                return adapt_read_df(v.read_index_columns(stream_id, version_query, read_query, read_options));
+            },
             py::call_guard<SingleThreadMutexHolder>(),
             "Read only the index columns from a dataframe"
         )
