@@ -194,7 +194,7 @@ TEST_F(VersionStoreTest, SortMerge) {
         test_store_->append_incomplete_frame(symbol, std::move(frame.input_frame_));
     }
 
-    test_store_->sort_merge_internal(symbol, std::nullopt, true, false, false, false);
+    test_store_->sort_merge_internal(symbol, std::nullopt, arcticdb::version_store::SortMergeOptions{true, false, false, false, false});
 }
 
 TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {

@@ -211,7 +211,7 @@ def test_filter_categorical(request, lib_type):
     q = q[q.a == "hi"]
     symbol = "test_filter_categorical"
     lib.write(symbol, df)
-    with pytest.raises(InternalException) as e_info:
+    with pytest.raises(UserInputException) as e_info:
         _ = lib.read(symbol, query_builder=q)
 
 
@@ -282,32 +282,32 @@ def test_filter_bool_nonbool_comparison(lmdb_version_store):
     # bool column to string column
     q = QueryBuilder()
     q = q[q["bool"] == q["string"]]
-    with pytest.raises(InternalException) as e_info:
+    with pytest.raises(UserInputException) as e_info:
         lib.read(symbol, query_builder=q)
     # bool column to numeric column
     q = QueryBuilder()
     q = q[q["bool"] == q["numeric"]]
-    with pytest.raises(InternalException) as e_info:
+    with pytest.raises(UserInputException) as e_info:
         lib.read(symbol, query_builder=q)
     # bool column to string value
     q = QueryBuilder()
     q = q[q["bool"] == "test"]
-    with pytest.raises(InternalException) as e_info:
+    with pytest.raises(UserInputException) as e_info:
         lib.read(symbol, query_builder=q)
     # bool column to numeric value
     q = QueryBuilder()
     q = q[q["bool"] == 0]
-    with pytest.raises(InternalException) as e_info:
+    with pytest.raises(UserInputException) as e_info:
         lib.read(symbol, query_builder=q)
     # string column to bool value
     q = QueryBuilder()
     q = q[q["string"] == True]
-    with pytest.raises(InternalException) as e_info:
+    with pytest.raises(UserInputException) as e_info:
         lib.read(symbol, query_builder=q)
     # numeric column to bool value
     q = QueryBuilder()
     q = q[q["numeric"] == True]
-    with pytest.raises(InternalException) as e_info:
+    with pytest.raises(UserInputException) as e_info:
         lib.read(symbol, query_builder=q)
 
 
@@ -740,6 +740,50 @@ def test_filter_datetime_timezone_aware_hypothesis(version_store_factory, df_dt,
             assert False
         assert True
 
+def test_df_query_wrong_type(lmdb_version_store_small_segment):
+    lib = lmdb_version_store_small_segment
+
+    df1 = pd.DataFrame({"col1": [1, 2, 3], "col2": [2, 3, 4], "col3": [4, 5, 6],
+                        "col_str": ["1", "2", "3"], "col_bool": [True, False, True]})
+    sym = "symbol"
+    lib.write(sym, df1)
+
+    str_vals = np.array(["2", "3", "4", "5"])
+    q = QueryBuilder()
+    q = q[q["col1"].isin(str_vals)]
+    with pytest.raises(UserInputException, match="Cannot check membership 'IS IN' of col1.*type=INT.*in set of.*type=STRING"):
+        lib.read(sym, query_builder=q)
+
+    q = QueryBuilder()
+    q = q[q["col_bool"].isnull()]
+    with pytest.raises(UserInputException, match="Cannot perform null check: ISNULL\(col_bool\).*type=BOOL"):
+        lib.read(sym, query_builder=q)
+
+    q = QueryBuilder()
+    q = q[q["col1"] / q["col_str"] == 3]
+    with pytest.raises(UserInputException, match="Non-numeric column provided to binary operation: col1.*type=INT.*/.*col_str.*type=STRING"):
+        lib.read(sym, query_builder=q)
+
+    q = QueryBuilder()
+    q = q[q["col1"] + "1" == 3]
+    with pytest.raises(UserInputException, match="Non-numeric type provided to binary operation: col1.*type=INT.*\+ \"1\".*type=STRING"):
+        lib.read(sym, query_builder=q)
+
+    q = QueryBuilder()
+    q = q[-q["col_str"] == 3]
+    with pytest.raises(UserInputException, match="Cannot perform unary operation -\(col_str\).*type=STRING"):
+        lib.read(sym, query_builder=q)
+
+    q = QueryBuilder()
+    q = q[q["col1"] - 1 >= "1"]
+    with pytest.raises(UserInputException, match="Invalid comparison.*col1 - 1.*type=INT.*>=.*\"1\".*type=STRING"):
+        lib.read(sym, query_builder=q)
+
+    q = QueryBuilder()
+    q = q[1 + q["col1"] * q["col2"] - q["col3"] == q["col_str"]]
+    # check that ((1 + (col1 * col2)) + col3) is generated as a column name and shown in the error message
+    with pytest.raises(UserInputException, match="Invalid comparison.*\(1 \+ \(col1 \* col2\)\) - col3.*type=INT.*==.*col_str .*type=STRING"):
+        lib.read(sym, query_builder=q)
 
 def test_filter_datetime_nanoseconds(lmdb_version_store):
     sym = "test_filter_datetime_nanoseconds"
@@ -790,11 +834,11 @@ def test_filter_compare_string_number_col_val(lmdb_version_store, df, val):
     q = q[q["a"] < val]
     symbol = "test_filter_compare_string_number_col_val"
     lmdb_version_store.write(symbol, df)
-    with pytest.raises(InternalException) as e_info:
+    with pytest.raises(UserInputException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
     q = QueryBuilder()
-    q = q[val < q["a"]]
-    with pytest.raises(InternalException) as e_info:
+    q = q[(val < q["a"])]
+    with pytest.raises(UserInputException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
@@ -807,11 +851,11 @@ def test_filter_compare_string_number_val_col(lmdb_version_store, df, val):
     q = q[val < q["a"]]
     symbol = "test_filter_compare_string_number_val_col"
     lmdb_version_store.write(symbol, df)
-    with pytest.raises(InternalException) as e_info:
+    with pytest.raises(UserInputException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
     q = QueryBuilder()
     q = q[q["a"] < val]
-    with pytest.raises(InternalException) as e_info:
+    with pytest.raises(UserInputException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
@@ -828,11 +872,11 @@ def test_filter_compare_string_number_col_col(lmdb_version_store, df):
     q = q[q["a"] < q["b"]]
     symbol = "test_filter_compare_string_number_col_col"
     lmdb_version_store.write(symbol, df)
-    with pytest.raises(InternalException) as e_info:
+    with pytest.raises(UserInputException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
     q = QueryBuilder()
     q = q[q["b"] < q["a"]]
-    with pytest.raises(InternalException) as e_info:
+    with pytest.raises(UserInputException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
@@ -849,7 +893,7 @@ def test_filter_isin_string_number_signed(lmdb_version_store, df, vals):
     q = q[q["a"].isin(vals)]
     symbol = "test_filter_isin_string_number"
     lmdb_version_store.write(symbol, df, dynamic_strings=True)
-    with pytest.raises(InternalException) as e_info:
+    with pytest.raises(UserInputException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
@@ -866,7 +910,7 @@ def test_filter_isin_string_number_unsigned(lmdb_version_store, df, vals):
     q = q[q["a"].isin(vals)]
     symbol = "test_filter_isin_string_number"
     lmdb_version_store.write(symbol, df, dynamic_strings=True)
-    with pytest.raises(InternalException) as e_info:
+    with pytest.raises(UserInputException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
@@ -882,7 +926,7 @@ def test_filter_isin_number_string(lmdb_version_store, df, vals):
     q = q[q["a"].isin(vals)]
     symbol = "test_filter_isin_number_string"
     lmdb_version_store.write(symbol, df)
-    with pytest.raises(InternalException) as e_info:
+    with pytest.raises(UserInputException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
@@ -1395,11 +1439,11 @@ def test_filter_arithmetic_string_number_col_val(lmdb_version_store, df, val):
     q = q[(q["a"] + val) < 10]
     symbol = "test_filter_arithmetic_string_number_col_val"
     lmdb_version_store.write(symbol, df, dynamic_strings=True)
-    with pytest.raises(InternalException) as e_info:
+    with pytest.raises(UserInputException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
     q = QueryBuilder()
     q = q[(val + q["a"]) < 10]
-    with pytest.raises(InternalException) as e_info:
+    with pytest.raises(UserInputException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
@@ -1412,11 +1456,11 @@ def test_filter_arithmetic_string_number_val_col(lmdb_version_store, df, val):
     q = q[(q["a"] + val) < 10]
     symbol = "test_filter_arithmetic_string_number_val_col"
     lmdb_version_store.write(symbol, df)
-    with pytest.raises(InternalException) as e_info:
+    with pytest.raises(UserInputException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
     q = QueryBuilder()
     q = q[(val + q["a"]) < 10]
-    with pytest.raises(InternalException) as e_info:
+    with pytest.raises(UserInputException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
@@ -1433,11 +1477,11 @@ def test_filter_arithmetic_string_number_col_col(lmdb_version_store, df):
     q = q[(q["a"] + q["b"]) < 10]
     symbol = "test_filter_arithmetic_string_number_val_col"
     lmdb_version_store.write(symbol, df, dynamic_strings=True)
-    with pytest.raises(InternalException) as e_info:
+    with pytest.raises(UserInputException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
     q = QueryBuilder()
     q = q[(q["b"] + q["a"]) < 10]
-    with pytest.raises(InternalException) as e_info:
+    with pytest.raises(UserInputException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
@@ -1450,11 +1494,11 @@ def test_filter_arithmetic_string_string_col_val(lmdb_version_store, df, val):
     q = q[(q["a"] + val) < 10]
     symbol = "test_filter_arithmetic_string_string_col_val"
     lmdb_version_store.write(symbol, df, dynamic_strings=True)
-    with pytest.raises(InternalException) as e_info:
+    with pytest.raises(UserInputException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
     q = QueryBuilder()
     q = q[(val + q["a"]) < 10]
-    with pytest.raises(InternalException) as e_info:
+    with pytest.raises(UserInputException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
@@ -1467,11 +1511,11 @@ def test_filter_arithmetic_string_string_val_col(lmdb_version_store, df, val):
     q = q[(q["a"] + val) < 10]
     symbol = "test_filter_arithmetic_string_string_val_col"
     lmdb_version_store.write(symbol, df, dynamic_strings=True)
-    with pytest.raises(InternalException) as e_info:
+    with pytest.raises(UserInputException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
     q = QueryBuilder()
     q = q[(val + q["a"]) < 10]
-    with pytest.raises(InternalException) as e_info:
+    with pytest.raises(UserInputException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
@@ -1488,11 +1532,11 @@ def test_filter_arithmetic_string_string_col_col(lmdb_version_store, df):
     q = q[(q["a"] + q["b"]) < 10]
     symbol = "test_filter_arithmetic_string_string_col_col"
     lmdb_version_store.write(symbol, df, dynamic_strings=True)
-    with pytest.raises(InternalException) as e_info:
+    with pytest.raises(UserInputException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
     q = QueryBuilder()
     q = q[(q["b"] + q["a"]) < 10]
-    with pytest.raises(InternalException) as e_info:
+    with pytest.raises(UserInputException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
@@ -1519,7 +1563,7 @@ def test_filter_abs_string(lmdb_version_store, df, val):
     q = q[abs(q["a"]) < val]
     symbol = "test_filter_abs_string"
     lmdb_version_store.write(symbol, df, dynamic_strings=True)
-    with pytest.raises(InternalException) as e_info:
+    with pytest.raises(UserInputException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
@@ -1546,7 +1590,7 @@ def test_filter_neg_string(lmdb_version_store, df, val):
     q = q[-q["a"] < val]
     symbol = "test_filter_neg_string"
     lmdb_version_store.write(symbol, df, dynamic_strings=True)
-    with pytest.raises(InternalException) as e_info:
+    with pytest.raises(UserInputException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 

@@ -12,7 +12,7 @@ from arcticdb.storage_fixtures.api import ArcticUriFields
 from arcticdb.storage_fixtures.azure import AzureContainer
 from arcticdb.storage_fixtures.s3 import S3Bucket
 from arcticdb.adapters.s3_library_adapter import USE_AWS_CRED_PROVIDERS_TOKEN
-from tests.util.mark import AZURE_TESTS_MARK
+from tests.util.mark import AZURE_TESTS_MARK, SSL_TEST_ENABLED
 
 LIB_NAME = "test_lib"
 
@@ -105,6 +105,9 @@ def test_upgrade_script_s3_rbac_ok(s3_storage: S3Bucket, monkeypatch):
 @AZURE_TESTS_MARK
 def test_upgrade_script_dryrun_azure(azurite_storage: AzureContainer):
     # Given
+    if SSL_TEST_ENABLED:
+        # azurite factory doesn't set client_cert_dir by default
+        azurite_storage.arctic_uri += f";CA_cert_dir={azurite_storage.factory.client_cert_dir}"
     ac = azurite_storage.create_arctic()
     create_library_config(ac, LIB_NAME)
 
@@ -114,7 +117,8 @@ def test_upgrade_script_dryrun_azure(azurite_storage: AzureContainer):
     # Then
     config = ac._library_manager.get_library_config(LIB_NAME)
     azure_storage = _get_azure_storage_config(config)
-    assert azure_storage.ca_cert_path == azurite_storage.factory.ca_cert_path
+    assert azure_storage.ca_cert_path == azurite_storage.factory.client_cert_file
+    assert azure_storage.ca_cert_dir == azurite_storage.factory.client_cert_dir
     assert azure_storage.container_name == azurite_storage.container
     assert azurite_storage.factory.account_name in azure_storage.endpoint
     assert azurite_storage.factory.account_key in azure_storage.endpoint
@@ -125,6 +129,9 @@ def test_upgrade_script_dryrun_azure(azurite_storage: AzureContainer):
 @AZURE_TESTS_MARK
 def test_upgrade_script_azure(azurite_storage: AzureContainer):
     # Given
+    if SSL_TEST_ENABLED:
+        # azurite factory doesn't set client_cert_dir by default
+        azurite_storage.arctic_uri += f";CA_cert_dir={azurite_storage.factory.client_cert_dir}"
     ac = azurite_storage.create_arctic()
     create_library_config(ac, LIB_NAME)
 
@@ -133,6 +140,7 @@ def test_upgrade_script_azure(azurite_storage: AzureContainer):
     config = ac._library_manager.get_library_config(LIB_NAME)
     azure_storage = _get_azure_storage_config(config)
     assert azure_storage.ca_cert_path == ""
+    assert azure_storage.ca_cert_dir == ""
     assert azure_storage.container_name == ""
     assert azure_storage.endpoint == ""
     assert azure_storage.prefix.startswith(LIB_NAME)

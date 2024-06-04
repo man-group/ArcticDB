@@ -83,6 +83,10 @@ void LmdbStorage::do_write_internal(Composite<KeySegmentPair>&& kvs, ::lmdb::txn
     });
 }
 
+std::string LmdbStorage::name() const {
+    return fmt::format("lmdb_storage-{}", lib_dir_.string());
+}
+
 void LmdbStorage::do_write(Composite<KeySegmentPair>&& kvs) {
     ARCTICDB_SAMPLE(LmdbStorageWrite, 0)
     std::lock_guard<std::mutex> lock{*write_mutex_};

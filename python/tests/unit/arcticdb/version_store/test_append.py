@@ -153,7 +153,8 @@ def test_append_out_of_order_throws(lmdb_version_store):
         lib.append("a", pd.DataFrame({"c": [4]}, index=pd.date_range(1, periods=1)))
 
 
-def test_append_out_of_order_and_sort(lmdb_version_store_ignore_order):
+@pytest.mark.parametrize("prune_previous_versions", [True, False])
+def test_append_out_of_order_and_sort(lmdb_version_store_ignore_order, prune_previous_versions):
     symbol = "out_of_order"
     lmdb_version_store_ignore_order.version_store.remove_incomplete(symbol)
 
@@ -174,9 +175,17 @@ def test_append_out_of_order_and_sort(lmdb_version_store_ignore_order):
         else:
             lmdb_version_store_ignore_order.append(symbol, df)
 
-    lmdb_version_store_ignore_order.version_store.sort_index(symbol, True)
+    lmdb_version_store_ignore_order.version_store.sort_index(symbol, True, prune_previous_versions)
     vit = lmdb_version_store_ignore_order.read(symbol)
     assert_frame_equal(vit.data, test)
+
+    versions = [version["version"] for version in lmdb_version_store_ignore_order.list_versions(symbol)]
+    if prune_previous_versions:
+        assert len(versions) == 1 and versions[0] == len(list_df)
+    else:
+        assert len(versions) == len(list_df) + 1
+        for version in sorted(versions)[:-1]:
+            assert_frame_equal(lmdb_version_store_ignore_order.read(symbol, as_of=version).data, pd.concat(list_df[0 : version+1]))
 
 
 def test_upsert_with_delete(lmdb_version_store_big_map):
@@ -554,7 +563,8 @@ def test_read_incomplete_no_warning(s3_store_factory, sym, get_stderr):
         set_log_level()
 
 
-def test_defragment_read_prev_versions(sym, lmdb_version_store):
+@pytest.mark.parametrize("prune_previous_versions", [True, False])
+def test_defragment_read_prev_versions(sym, lmdb_version_store, prune_previous_versions):
     start_time, end_time = pd.to_datetime(("1990-1-1", "1995-1-1"))
     cols = ["a", "b", "c", "d"]
     index = pd.date_range(start_time, end_time, freq="D")
@@ -580,15 +590,19 @@ def test_defragment_read_prev_versions(sym, lmdb_version_store):
 
     assert lmdb_version_store.is_symbol_fragmented(sym)
     assert lmdb_version_store.get_info(sym)["sorted"] == "ASCENDING"
-    versioned_item = lmdb_version_store.defragment_symbol_data(sym)
+    versioned_item = lmdb_version_store.defragment_symbol_data(sym, prune_previous_versions=prune_previous_versions)
     assert lmdb_version_store.get_info(sym)["sorted"] == "ASCENDING"
     assert versioned_item.version == 101
-    assert len(lmdb_version_store.list_versions(sym)) == 102
+    if prune_previous_versions:
+        assert len(lmdb_version_store.list_versions(sym)) == 1
+        assert lmdb_version_store.list_versions(sym)[0]["version"] == 101
+    else:
+        assert len(lmdb_version_store.list_versions(sym)) == 102
+        assert_frame_equal(lmdb_version_store.read(sym, as_of=0).data, expected_dfs[0])
+        for version_id, expected_df in enumerate(expected_dfs):
+            assert_frame_equal(lmdb_version_store.read(sym, as_of=version_id).data, expected_df)
 
     assert_frame_equal(lmdb_version_store.read(sym).data, expected_dfs[-1])
-    assert_frame_equal(lmdb_version_store.read(sym, as_of=0).data, expected_dfs[0])
-    for version_id, expected_df in enumerate(expected_dfs):
-        assert_frame_equal(lmdb_version_store.read(sym, as_of=version_id).data, expected_df)
 
 
 def test_defragment_no_work_to_do(sym, lmdb_version_store):

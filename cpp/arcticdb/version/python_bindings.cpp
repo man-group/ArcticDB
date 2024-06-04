@@ -27,6 +27,39 @@
 
 namespace arcticdb::version_store {
 
+template<ResampleBoundary closed_boundary>
+void declare_resample_clause(py::module& version) {
+    std::string class_name;
+    if constexpr (closed_boundary == ResampleBoundary::LEFT) {
+        class_name = "ResampleClauseLeftClosed";
+    } else {
+        // closed_boundary == ResampleBoundary::RIGHT
+        class_name = "ResampleClauseRightClosed";
+    }
+    py::class_<ResampleClause<closed_boundary>, std::shared_ptr<ResampleClause<closed_boundary>>>(version, class_name.c_str())
+            .def(py::init([](std::string rule, ResampleBoundary label_boundary){
+                return ResampleClause<closed_boundary>(rule,
+                                                       label_boundary,
+                                                       [](timestamp start, timestamp end, std::string_view rule, ResampleBoundary closed_boundary_arg) -> std::vector<timestamp> {
+                                                           py::gil_scoped_acquire acquire_gil;
+                                                           auto py_start = python_util::pd_Timestamp()(start - (closed_boundary_arg == ResampleBoundary::RIGHT ? 1 : 0)).attr("floor")(rule);
+                                                           auto py_end = python_util::pd_Timestamp()(end + (closed_boundary_arg == ResampleBoundary::LEFT ? 1 : 0)).attr("ceil")(rule);
+                                                           static py::object date_range_function = py::module::import("pandas").attr("date_range");
+                                                           auto py_bucket_boundaries = date_range_function(py_start, py_end, nullptr, rule, nullptr, false).attr("values").cast<py::array_t<timestamp>>();
+                                                           return std::vector<timestamp>(py_bucket_boundaries.data(), py_bucket_boundaries.data() + py_bucket_boundaries.size());
+                                                       });
+            }))
+            .def_property_readonly("rule", &ResampleClause<closed_boundary>::rule)
+            .def("set_aggregations", [](ResampleClause<closed_boundary>& self,
+                                        const std::unordered_map<std::string, std::variant<std::string, std::pair<std::string, std::string>>> aggregations) {
+                self.set_aggregations(python_util::named_aggregators_from_dict(aggregations));
+            })
+            .def("set_date_range", [](ResampleClause<closed_boundary>& self, timestamp date_range_start, timestamp date_range_end) {
+                self.set_date_range(date_range_start, date_range_end);
+            })
+            .def("__str__", &ResampleClause<closed_boundary>::to_string);
+}
+
 void register_bindings(py::module &version, py::exception<arcticdb::ArcticException>& base_exception) {
 
     py::register_exception<StreamDescriptorMismatch>(version, "StreamDescriptorMismatch", base_exception.ptr());
@@ -266,21 +299,16 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def(py::init([](
                     const std::string& grouping_colum,
                     const std::unordered_map<std::string, std::variant<std::string, std::pair<std::string, std::string>>> aggregations) {
-                std::vector<NamedAggregator> named_aggregators;
-                for (const auto& [output_column_name, var_agg_named_agg]: aggregations) {
-                    util::variant_match(
-                            var_agg_named_agg,
-                            [&named_aggregators, &output_column_name] (const std::string& agg_operator) {
-                                named_aggregators.emplace_back(agg_operator, output_column_name, output_column_name);
-                            },
-                            [&named_aggregators, &output_column_name] (const std::pair<std::string, std::string>& input_col_and_agg) {
-                                named_aggregators.emplace_back(input_col_and_agg.second, input_col_and_agg.first, output_column_name);
-                            }
-                    );
-                }
-                return AggregationClause(grouping_colum, named_aggregators);
+                return AggregationClause(grouping_colum, python_util::named_aggregators_from_dict(aggregations));
             }))
             .def("__str__", &AggregationClause::to_string);
+
+    declare_resample_clause<ResampleBoundary::LEFT>(version);
+    declare_resample_clause<ResampleBoundary::RIGHT>(version);
+
+    py::enum_<ResampleBoundary>(version, "ResampleBoundary")
+            .value("LEFT", ResampleBoundary::LEFT)
+            .value("RIGHT", ResampleBoundary::RIGHT);
 
     py::enum_<RowRangeClause::RowRangeType>(version, "RowRangeType")
             .value("HEAD", RowRangeClause::RowRangeType::HEAD)
@@ -310,6 +338,8 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                                 std::shared_ptr<ProjectClause>,
                                 std::shared_ptr<GroupByClause>,
                                 std::shared_ptr<AggregationClause>,
+                                std::shared_ptr<ResampleClause<ResampleBoundary::LEFT>>,
+                                std::shared_ptr<ResampleClause<ResampleBoundary::RIGHT>>,
                                 std::shared_ptr<RowRangeClause>,
                                 std::shared_ptr<DateRangeClause>>> clauses) {
                 std::vector<std::shared_ptr<Clause>> _clauses;
@@ -479,10 +509,8 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              py::arg("convert_int_to_float") = false,
              py::arg("via_iteration") = true,
              py::arg("sparsify") = false,
+             py::arg("prune_previous_versions") = false,
              py::call_guard<SingleThreadMutexHolder>(), "sort_merge will sort and merge incomplete segments. The segments do not have to be ordered - incomplete segments can contain interleaved time periods but the final result will be fully ordered")
-         .def("sort_merge",
-              &PythonVersionStore::sort_merge,
-              py::call_guard<SingleThreadMutexHolder>(), "Sort and merge incomplete segments")
         .def("compact_library",
              &PythonVersionStore::compact_library,
              py::call_guard<SingleThreadMutexHolder>(), "Compact the whole library wherever necessary")

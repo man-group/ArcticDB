@@ -249,7 +249,7 @@ set(arcticdb_srcs
         pipeline/value_set.hpp
         pipeline/write_frame.hpp
         pipeline/write_options.hpp
-        processing/aggregation.hpp
+        processing/aggregation_utils.hpp
         processing/component_manager.hpp
         processing/operation_dispatch.hpp
         processing/operation_dispatch_binary.hpp
@@ -261,6 +261,8 @@ set(arcticdb_srcs
         processing/clause.hpp
         processing/expression_context.hpp
         processing/expression_node.hpp
+        processing/sorted_aggregation.hpp
+        processing/unsorted_aggregation.hpp
         storage/constants.hpp
         storage/common.hpp
         storage/config_resolvers.hpp
@@ -424,7 +426,7 @@ set(arcticdb_srcs
         pipeline/write_frame.cpp
         python/normalization_checks.cpp
         processing/processing_unit.cpp
-        processing/aggregation.cpp
+        processing/aggregation_utils.cpp
         processing/clause.cpp
         processing/component_manager.cpp
         processing/expression_node.cpp
@@ -435,6 +437,8 @@ set(arcticdb_srcs
         processing/operation_dispatch_binary_gt.cpp
         processing/operation_dispatch_binary_lt.cpp
         processing/operation_dispatch_binary_operator.cpp
+        processing/sorted_aggregation.cpp
+        processing/unsorted_aggregation.cpp
         python/python_to_tensor_frame.cpp
         storage/config_resolvers.cpp
         storage/failure_simulation.cpp
@@ -757,6 +761,7 @@ if(${TEST})
             processing/test/test_filter_and_project_sparse.cpp
             processing/test/test_has_valid_type_promotion.cpp
             processing/test/test_operation_dispatch.cpp
+            processing/test/test_resample.cpp
             processing/test/test_set_membership.cpp
             processing/test/test_signed_unsigned_comparison.cpp
             processing/test/test_type_comparison.cpp
@@ -902,12 +907,14 @@ if(${TEST})
             column_store/test/rapidcheck_column_data_random_accessor.cpp
             column_store/test/rapidcheck_column_map.cpp
             column_store/test/test_chunked_buffer.cpp
+            processing/test/rapidcheck_resample.cpp
             stream/test/stream_test_common.cpp
             util/test/rapidcheck_decimal.cpp
             util/test/rapidcheck_generators.cpp
             util/test/rapidcheck_string_pool.cpp
             util/test/rapidcheck_main.cpp
-            version/test/rapidcheck_version_map.cpp)
+            version/test/rapidcheck_version_map.cpp
+    )
 
     add_executable(arcticdb_rapidcheck_tests ${rapidcheck_srcs})
     install(TARGETS arcticdb_rapidcheck_tests RUNTIME

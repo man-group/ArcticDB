@@ -795,7 +795,7 @@ public:
     // by the row_to_segment vector (std::nullopt means the row is not included in any output segment).
     // segment_counts is the length of the number of output segments, and should be greater than or equal to the max value
     // in row_to_segment
-    std::vector<std::shared_ptr<SegmentInMemoryImpl>> partition(const std::vector<std::optional<uint8_t>>& row_to_segment,
+    std::vector<std::shared_ptr<SegmentInMemoryImpl>> partition(const std::vector<uint8_t>& row_to_segment,
                                                        const std::vector<uint64_t>& segment_counts) const;
 
     std::vector<std::shared_ptr<SegmentInMemoryImpl>> split(size_t rows) const;

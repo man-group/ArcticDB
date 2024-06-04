@@ -12,9 +12,10 @@ from typing import TYPE_CHECKING, Optional
 from tempfile import mkdtemp
 
 from .api import *
-from .utils import get_ephemeral_port, GracefulProcessUtils, wait_for_server_to_come_up, safer_rmtree
+from .utils import get_ephemeral_port, GracefulProcessUtils, wait_for_server_to_come_up, safer_rmtree, get_ca_cert_for_testing
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 from arcticdb.version_store.helper import add_azure_library_to_env
+from tests.util.mark import SSL_TEST_ENABLED
 
 # All storage client libraries to be imported on-demand to speed up start-up of ad-hoc test runs
 if TYPE_CHECKING:
@@ -28,6 +29,7 @@ class AzureContainer(StorageFixture):
         ArcticUriFields.PASSWORD: re.compile("[/;](AccountKey=)([^;]+)(;)"),
         ArcticUriFields.BUCKET: re.compile("[/;](Container=)([^;]+)(;)"),
         ArcticUriFields.CA_PATH: re.compile("[/;](CA_cert_path=)([^;]*)(;?)"),
+        ArcticUriFields.PATH_PREFIX: re.compile("[/;](Path_prefix=)([^;]*)(;?)"),
     }
     _sequence = 0
 
@@ -40,12 +42,13 @@ class AzureContainer(StorageFixture):
 
         f = self.factory
         self.arctic_uri = (
-            f"azure://DefaultEndpointsProtocol=http;{auth};BlobEndpoint={f.endpoint_root}/{f.account_name};"
-            f"Container={self.container};CA_cert_path={f.ca_cert_path}"
+            f"azure://DefaultEndpointsProtocol={f.http_protocol};{auth};BlobEndpoint={f.endpoint_root}/{f.account_name};"
+            f"Container={self.container};CA_cert_path={f.client_cert_file}"
         )
+        # CA_cert_dir is skipped on purpose; It will be tested manually in other tests
 
         # The retry_policy instance will be modified by the pipeline, so cannot be constant
-        policy = {"connection_timeout": 1, "read_timeout": 2, "retry_policy": LinearRetry(retry_total=3, backoff=1)}
+        policy = {"connection_timeout": 1, "read_timeout": 2, "retry_policy": LinearRetry(retry_total=3, backoff=1), "connection_verify": f.client_cert_file}
         self.client = ContainerClient.from_connection_string(self.arctic_uri, self.container, **policy)
         # add connection_verify=False to bypass ssl checking
 
@@ -93,7 +96,7 @@ class AzureContainer(StorageFixture):
             env_name=Defaults.ENV,
             container_name=self.container,
             endpoint=self.arctic_uri,
-            ca_cert_path=self.factory.ca_cert_path,
+            ca_cert_path=self.factory.client_cert_file,
             with_prefix=False,  # to allow azure_store_factory reuse_name to work correctly
         )
         return cfg
@@ -122,22 +125,19 @@ class AzureContainer(StorageFixture):
 
 
 class AzuriteStorageFixtureFactory(StorageFixtureFactory):
-    host = "127.0.0.1"
+    host = "localhost"
 
     # Per https://learn.microsoft.com/en-us/azure/storage/common/storage-configure-connection-string#configure-a-connection-string-for-azurite
     account_name = "devstoreaccount1"
     account_key = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
 
-    # Default cert path is used; May run into problem on Linux's non RHEL distribution
-    # See more on https://github.com/man-group/ArcticDB/issues/514
-    ca_cert_path = ""
-
     enforcing_permissions = False
     """Set to True to create AzureContainer with SAS authentication"""
 
-    def __init__(self, port=0, working_dir: Optional[str] = None):
+    def __init__(self, port=0, working_dir: Optional[str] = None, use_ssl: bool = True):
+        self.http_protocol = "https" if use_ssl else "http"
         self.port = port or get_ephemeral_port(0)
-        self.endpoint_root = f"http://{self.host}:{self.port}"
+        self.endpoint_root = f"{self.http_protocol}://{self.host}:{self.port}"
         self.working_dir = str(working_dir) if working_dir else mkdtemp(suffix="AzuriteStorageFixtureFactory")
 
     def __str__(self):
@@ -145,6 +145,17 @@ class AzuriteStorageFixtureFactory(StorageFixtureFactory):
 
     def _safe_enter(self):
         args = f"{shutil.which('azurite')} --blobPort {self.port} --blobHost {self.host} --queuePort 0 --tablePort 0"
+        if SSL_TEST_ENABLED:
+            self.client_cert_dir = self.working_dir
+            self.ca, self.key_file, self.cert_file, self.client_cert_file = get_ca_cert_for_testing(self.client_cert_dir)
+        else:
+            self.ca = ""
+            self.key_file = ""
+            self.cert_file = ""
+            self.client_cert_file = ""
+            self.client_cert_dir = ""
+        if self.http_protocol == "https":
+            args += f" --key {self.key_file} --cert {self.cert_file}"
         self._p = GracefulProcessUtils.start(args, cwd=self.working_dir)
         wait_for_server_to_come_up(self.endpoint_root, "azurite", self._p)
         return self

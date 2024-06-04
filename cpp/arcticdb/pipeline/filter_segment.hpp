@@ -20,7 +20,7 @@ inline SegmentInMemory filter_segment(const SegmentInMemory& input,
 }
 
 inline std::vector<SegmentInMemory> partition_segment(const SegmentInMemory& input,
-                                      const std::vector<std::optional<uint8_t>>& row_to_segment,
+                                      const std::vector<uint8_t>& row_to_segment,
                                       const std::vector<uint64_t>& segment_counts) {
     return input.partition(row_to_segment, segment_counts);
 }

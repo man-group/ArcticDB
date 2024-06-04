@@ -768,8 +768,9 @@ public:
             // One sparse, one dense. Use the enumerating forward iterator over the sparse column as it is more efficient than random access
             auto right_accessor = random_accessor<right_input_tdt>(&right_input_data);
             const auto right_column_row_count = right_input_column.row_count();
+            const auto left_input_data_cend = left_input_data.cend<left_input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
             for (auto left_it = left_input_data.cbegin<left_input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
-                 left_it != left_input_data.cend<left_input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>() && left_it->idx() < right_column_row_count;
+                 left_it != left_input_data_cend && left_it->idx() < right_column_row_count;
                  ++left_it) {
                 *output_it++ = f(left_it->value(), right_accessor.at(left_it->idx()));
             }
@@ -777,8 +778,9 @@ public:
             // One sparse, one dense. Use the enumerating forward iterator over the sparse column as it is more efficient than random access
             auto left_accessor = random_accessor<left_input_tdt>(&left_input_data);
             const auto left_column_row_count = left_input_column.row_count();
+            const auto right_input_data_cend = right_input_data.cend<right_input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
             for (auto right_it = right_input_data.cbegin<right_input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
-                 right_it != right_input_data.cend<right_input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>() && right_it->idx() < left_column_row_count;
+                 right_it != right_input_data_cend && right_it->idx() < left_column_row_count;
                  ++right_it) {
                 *output_it++ = f(left_accessor.at(right_it->idx()), right_it->value());
             }
@@ -871,8 +873,9 @@ public:
             initialise_output_bitset(left_input_column.sparse_map(), sparse_missing_value_output, output_bitset);
             auto right_accessor = random_accessor<right_input_tdt>(&right_input_data);
             const auto right_column_row_count = right_input_column.row_count();
+            const auto left_input_data_cend = left_input_data.cend<left_input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
             for (auto left_it = left_input_data.cbegin<left_input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
-                 left_it != left_input_data.cend<left_input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>() && left_it->idx() < right_column_row_count;
+                 left_it != left_input_data_cend && left_it->idx() < right_column_row_count;
                  ++left_it) {
                 if(f(left_it->value(), right_accessor.at(left_it->idx()))) {
                     inserter = left_it->idx();
@@ -883,8 +886,9 @@ public:
             initialise_output_bitset(right_input_column.sparse_map(), sparse_missing_value_output, output_bitset);
             auto left_accessor = random_accessor<left_input_tdt>(&left_input_data);
             const auto left_column_row_count = left_input_column.row_count();
+            const auto right_input_data_cend = right_input_data.cend<right_input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
             for (auto right_it = right_input_data.cbegin<right_input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
-                 right_it != right_input_data.cend<right_input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>() && right_it->idx() < left_column_row_count;
+                 right_it != right_input_data_cend && right_it->idx() < left_column_row_count;
                  ++right_it) {
                 if(f(left_accessor.at(right_it->idx()), right_it->value())) {
                     inserter = right_it->idx();
