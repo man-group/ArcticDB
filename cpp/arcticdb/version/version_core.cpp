@@ -1551,9 +1551,13 @@ FrameAndDescriptor read_index_columns_impl(
             const bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
             const bool dynamic_schema = opt_false(read_options.dynamic_schema_);
             build_row_read_query_filters(read_query.row_filter, dynamic_schema, bucketize_dynamic, queries);
-            queries.emplace_back([context=pipeline_context](const index::IndexSegmentReader&, std::unique_ptr<util::BitSet>&&) {
-                return std::make_unique<util::BitSet>(*context->overall_column_bitset_);
-            });
+            if (pipeline_context->overall_column_bitset_) {
+                queries.emplace_back(
+                    [context = pipeline_context](const index::IndexSegmentReader&, std::unique_ptr<util::BitSet>&&) {
+                        return std::make_unique<util::BitSet>(*context->overall_column_bitset_);
+                    }
+                );
+            }
             pipeline_context->slice_and_keys_ = filter_index(index_segment_reader, combine_filter_functions(queries));
             pipeline_context->total_rows_ = pipeline_context->calc_rows();
             pipeline_context->rows_ = index_segment_reader.tsd().proto().total_rows();
