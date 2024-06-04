@@ -250,6 +250,7 @@ public:
 
     void backfill_sparse_map(ssize_t to_row) {
         ARCTICDB_TRACE(log::version(), "Backfilling sparse map to position {}", to_row);
+        // Initialise the optional to an empty bitset if it has not been created yet
         auto& bitset = sparse_map();
         if (to_row >= 0) {
             bitset.set_range(0, bv_size(to_row), true);
@@ -523,7 +524,6 @@ public:
     }
 
     inline uint8_t *allocate_data(std::size_t bytes) {
-        if (bytes == 0)
         util::check(bytes != 0, "Allocate data called with zero size");
         data_.ensure_bytes(bytes);
         return data_.ptr();
