@@ -224,6 +224,9 @@ bool SymbolList::can_update_symbol_list(const std::shared_ptr<Store>& store,
         CollectionType& symbols) {
         ARCTICDB_DEBUG(log::version(), "Reading list from storage with key {}", key);
         auto key_seg = store->read(key).get().second;
+        if (key_seg.row_count() == 0)
+            return;
+
         missing_data::check<ErrorCode::E_UNREADABLE_SYMBOL_LIST>( key_seg.descriptor().field_count() > 0,
             "Expected at least one column in symbol list with key {}", key);
 
