@@ -22,9 +22,10 @@ import requests
 from typing import NamedTuple, Optional, Any, Type
 
 from .api import *
-from .utils import get_ephemeral_port, GracefulProcessUtils, wait_for_server_to_come_up, safer_rmtree
+from .utils import get_ephemeral_port, GracefulProcessUtils, wait_for_server_to_come_up, safer_rmtree, get_ca_cert_for_testing
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 from arcticdb.version_store.helper import add_s3_library_to_env
+from tests.util.mark import SSL_TEST_ENABLED
 
 # All storage client libraries to be imported on-demand to speed up start-up of ad-hoc test runs
 
@@ -40,6 +41,9 @@ class S3Bucket(StorageFixture):
         ArcticUriFields.BUCKET: re.compile("^s3://[^:]+(:)([^?]+)"),
         ArcticUriFields.USER: re.compile("[?&](access=)([^&]+)(&?)"),
         ArcticUriFields.PASSWORD: re.compile("[?&](secret=)([^&]+)(&?)"),
+        ArcticUriFields.PATH_PREFIX: re.compile("[?&](path_prefix=)([^&]+)(&?)"),
+        ArcticUriFields.CA_PATH: re.compile("[?&](CA_cert_path=)([^&]*)(&?)"),
+        ArcticUriFields.SSL: re.compile("[?&](ssl=)([^&]+)(&?)"),
     }
 
     key: Key
@@ -66,7 +70,7 @@ class S3Bucket(StorageFixture):
         if platform.system() == "Linux":
             if factory.client_cert_file:
                 self.arctic_uri += f"&CA_cert_path={self.factory.client_cert_file}"
-            # client_cert_dir is skipped on purpose; It will be test manually in other tests
+            # client_cert_dir is skipped on purpose; It will be tested manually in other tests
 
     def __exit__(self, exc_type, exc_value, traceback):
         if self.factory.clean_bucket_on_fixture_exit:
@@ -88,12 +92,12 @@ class S3Bucket(StorageFixture):
             bucket_name=self.bucket,
             endpoint=self.factory.endpoint,
             with_prefix=with_prefix,
-            is_https=self.factory.endpoint.startswith("s3s:"),
+            is_https=self.factory.endpoint.startswith("https://"),
             region=self.factory.region,
             use_mock_storage_for_testing=self.factory.use_mock_storage_for_testing,
             ssl=self.factory.ssl,
             ca_cert_path=self.factory.client_cert_file,
-        )# client_cert_dir is skipped on purpose; It will be test manually in other tests
+        )# client_cert_dir is skipped on purpose; It will be tested manually in other tests
         return cfg
 
     def set_permission(self, *, read: bool, write: bool):
@@ -137,10 +141,10 @@ class BaseS3StorageFixtureFactory(StorageFixtureFactory):
     use_mock_storage_for_testing = None  # If set to true allows error simulation
 
     def __init__(self):
-        self.client_cert_file = ""
-        self.client_cert_dir = ""
+        self.client_cert_file = None
+        self.client_cert_dir = None
         self.ssl = False
-        
+
     def __str__(self):
         return f"{type(self).__name__}[{self.default_bucket or self.endpoint}]"
 
@@ -155,7 +159,7 @@ class BaseS3StorageFixtureFactory(StorageFixtureFactory):
             aws_access_key_id=key.id,
             aws_secret_access_key=key.secret,
             verify=self.client_cert_file if self.client_cert_file else False,
-        ) # verify=False cannot skip verification on buggy boto3 in py3.6
+        )  # verify=False cannot skip verification on buggy boto3 in py3.6
 
     def create_fixture(self) -> S3Bucket:
         return S3Bucket(self, self.default_bucket)
@@ -174,6 +178,7 @@ def real_s3_from_environment_variables(*, shared_path: bool):
     secret_key = os.getenv("ARCTICDB_REAL_S3_SECRET_KEY")
     out.default_key = Key(access_key, secret_key, "unknown user")
     out.clean_bucket_on_fixture_exit = os.getenv("ARCTICDB_REAL_S3_CLEAR").lower() in ["true", "1"]
+    out.ssl = out.endpoint.startswith("https://")
     if shared_path:
         out.default_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX")
     else:
@@ -215,14 +220,12 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
     def __init__(self, use_ssl: bool):
         self.http_protocol = "https" if use_ssl else "http"
 
-
     @staticmethod
     def run_server(port, key_file, cert_file):
         import werkzeug
         from moto.server import DomainDispatcherApplication, create_backend_app
 
         class _HostDispatcherApplication(DomainDispatcherApplication):
-
             _reqs_till_rate_limit = -1
 
             def get_backend_for_host(self, host):
@@ -243,7 +246,10 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
 
                 with self.lock:
                     # Mock ec2 imds responses for testing
-                    if path_info in ("/latest/dynamic/instance-identity/document", b"/latest/dynamic/instance-identity/document"):
+                    if path_info in (
+                        "/latest/dynamic/instance-identity/document",
+                        b"/latest/dynamic/instance-identity/document",
+                    ):
                         start_response("200 OK", [("Content-Type", "text/plain")])
                         return [b"Something to prove imds is reachable"]
 
@@ -256,8 +262,10 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
                         return [b"Limit accepted"]
 
                     if self._reqs_till_rate_limit == 0:
-                        response_body = (b'<?xml version="1.0" encoding="UTF-8"?><Error><Code>SlowDown</Code><Message>Please reduce your request rate.</Message>'
-                                         b'<RequestId>176C22715A856A29</RequestId><HostId>9Gjjt1m+cjU4OPvX9O9/8RuvnG41MRb/18Oux2o5H5MY7ISNTlXN+Dz9IG62/ILVxhAGI0qyPfg=</HostId></Error>')
+                        response_body = (
+                            b'<?xml version="1.0" encoding="UTF-8"?><Error><Code>SlowDown</Code><Message>Please reduce your request rate.</Message>'
+                            b"<RequestId>176C22715A856A29</RequestId><HostId>9Gjjt1m+cjU4OPvX9O9/8RuvnG41MRb/18Oux2o5H5MY7ISNTlXN+Dz9IG62/ILVxhAGI0qyPfg=</HostId></Error>"
+                        )
                         start_response(
                             "503 Slow Down", [("Content-Type", "text/xml"), ("Content-Length", str(len(response_body)))]
                         )
@@ -266,6 +274,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
                         self._reqs_till_rate_limit -= 1
 
                 return super().__call__(environ, start_response)
+
         werkzeug.run_simple(
             "0.0.0.0",
             port,
@@ -281,34 +290,22 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         self._iam_endpoint = f"{self.http_protocol}://localhost:{port}"
 
         self.ssl = self.http_protocol == "https" # In real world, using https protocol doesn't necessarily mean ssl will be verified
-        if self.http_protocol == "https":
-            self.key_file = os.path.join(self.working_dir, "key.pem")
-            self.cert_file = os.path.join(self.working_dir, "cert.pem")
-            self.client_cert_file = os.path.join(self.working_dir, "client.pem")
-            ca = trustme.CA()
-            server_cert = ca.issue_cert("localhost")
-            server_cert.private_key_pem.write_to_path(self.key_file)
-            server_cert.cert_chain_pems[0].write_to_path(self.cert_file)
-            ca.cert_pem.write_to_path(self.client_cert_file)
-            self.client_cert_dir = self.working_dir
-            # Create the sym link for curl CURLOPT_CAPATH option; rehash only available on openssl >=1.1.1
-            subprocess.run(
-                f'ln -s "{self.client_cert_file}" "$(openssl x509 -hash -noout -in "{self.client_cert_file}")".0',
-                cwd=self.working_dir,
-                shell=True,
-            )
+        if SSL_TEST_ENABLED:
+            self.ca, self.key_file, self.cert_file, self.client_cert_file = get_ca_cert_for_testing(self.working_dir)
         else:
+            self.ca = ""
             self.key_file = ""
             self.cert_file = ""
             self.client_cert_file = ""
-            self.client_cert_dir = ""
+        self.client_cert_dir = self.working_dir
         
         self._p = multiprocessing.Process(
-            target=self.run_server, 
-            args=(port, 
-                  self.key_file if self.http_protocol == "https" else None, 
-                  self.cert_file if self.http_protocol == "https" else None,
-            )
+            target=self.run_server,
+            args=(
+                port,
+                self.key_file if self.http_protocol == "https" else None,
+                self.cert_file if self.http_protocol == "https" else None,
+            ),
         )
         self._p.start()
         wait_for_server_to_come_up(self.endpoint, "moto", self._p)
@@ -383,7 +380,9 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
             b.slow_cleanup(failure_consequence="The following delete bucket call will also fail. ")
             self._s3_admin.delete_bucket(Bucket=b.bucket)
         else:
-            requests.post(self._iam_endpoint + "/moto-api/reset", verify=False) # If CA cert verify fails, it will take ages for this line to finish
+            requests.post(
+                self._iam_endpoint + "/moto-api/reset", verify=False
+            )  # If CA cert verify fails, it will take ages for this line to finish
             self._iam_admin = None
 
 

@@ -431,6 +431,10 @@ namespace arcticdb {
 
         void set_failure_sim(const arcticdb::proto::storage::VersionStoreConfig::StorageFailureSimulator &) override {}
 
+        std::string name() const override {
+            return "InMemoryStore";
+        }
+
         void add_segment(const AtomKey &key, SegmentInMemory &&seg) {
             StorageFailureSimulator::instance()->go(FailureType::WRITE);
             std::lock_guard lock{mutex_};

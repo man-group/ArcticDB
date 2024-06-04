@@ -31,7 +31,7 @@ dependencies:
   - prometheus-cpp
   - libprotobuf < 4
   - openssl
-  - libcurl==8.5.0 #Until https://github.com/conda-forge/curl-feedstock/issues/135 addressed and release build available
+  - libcurl
   - bitmagic
   - spdlog
   - azure-core-cpp

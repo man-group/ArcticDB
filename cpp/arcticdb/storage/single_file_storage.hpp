@@ -15,6 +15,8 @@ public:
     SingleFileStorage(const LibraryPath &lib, OpenMode mode) :
         Storage(lib, mode) {}
 
+    std::string name() const = 0;
+
     void write_raw(const uint8_t* data, size_t bytes) {
         do_write_raw(data, bytes);
     }

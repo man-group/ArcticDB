@@ -18,6 +18,10 @@ namespace arcticdb::storage::memory {
 
     namespace fg = folly::gen;
 
+    std::string MemoryStorage::name() const {
+        return "memory_storage-0";
+    }
+
     void MemoryStorage::do_write(Composite<KeySegmentPair>&& kvs) {
         ARCTICDB_SAMPLE(MemoryStorageWrite, 0)
 

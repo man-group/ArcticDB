@@ -122,7 +122,7 @@ class SymbolDescription(NamedTuple):
         Whether the index is a simple index or a multi_index. ``NA`` indicates that the stored data does not have an index.
     row_count : int
         Number of rows.
-    last_update_time : datetime64
+    last_update_time : datetime.datetime
         The time of the last update to the symbol, in UTC.
     date_range : Tuple[Union[datetime.datetime, numpy.datetime64], Union[datetime.datetime, numpy.datetime64]]
         The values of the index column in the first and last rows of this symbol in UTC. Both values will be NaT if:
@@ -145,7 +145,7 @@ class SymbolDescription(NamedTuple):
     index: NameWithDType
     index_type: str
     row_count: int
-    last_update_time: datetime64
+    last_update_time: datetime.datetime
     date_range: Tuple[Union[datetime.datetime, datetime64], Union[datetime.datetime, datetime64]]
     sorted: str
 
@@ -810,6 +810,10 @@ class Library:
 
         Both the existing symbol version and ``data`` must be timeseries-indexed.
 
+        In the case where ``data`` has zero rows, nothing will be done and no new version will be created. This means that
+        `update` cannot be used with ``date_range`` to just delete a subset of the data. We have `delete_data_in_range`
+        for exactly this purpose and to make it very clear when deletion is intended.
+
         Note that `update` is not designed for multiple concurrent writers over a single symbol.
 
         Parameters
@@ -927,7 +931,7 @@ class Library:
         )
 
     def sort_and_finalize_staged_data(
-        self, symbol: str, mode: Optional[StagedDataFinalizeMethod] = StagedDataFinalizeMethod.WRITE
+        self, symbol: str, mode: Optional[StagedDataFinalizeMethod] = StagedDataFinalizeMethod.WRITE, prune_previous_versions: Optional[bool] = False
     ):
         """
         sort_merge will sort and finalize staged data. This differs from `finalize_staged_data` in that it
@@ -943,13 +947,16 @@ class Library:
             Finalise mode. Valid options are WRITE or APPEND. Write collects the staged data and writes them to a
             new timeseries. Append collects the staged data and appends them to the latest version.
 
+        prune_previous_versions : `Optional[bool]`, default=False
+            Remove previous versions from version list. Uses library default if left as None.
+
         See Also
         --------
         write
             Documentation on the ``staged`` parameter explains the concept of staged data in more detail.
         """
 
-        self._nvs.version_store.sort_merge(symbol, None, mode == StagedDataFinalizeMethod.APPEND, False)
+        self._nvs.version_store.sort_merge(symbol, None, mode == StagedDataFinalizeMethod.APPEND, prune_previous_versions=prune_previous_versions)
 
     def get_staged_symbols(self) -> List[str]:
         """
@@ -1723,7 +1730,7 @@ class Library:
         """
         return self._nvs.is_symbol_fragmented(symbol, segment_size)
 
-    def defragment_symbol_data(self, symbol: str, segment_size: Optional[int] = None) -> VersionedItem:
+    def defragment_symbol_data(self, symbol: str, segment_size: Optional[int] = None, prune_previous_versions:bool = False) -> VersionedItem:
         """
         Compacts fragmented segments by merging row-sliced segments (https://docs.arcticdb.io/technical/on_disk_storage/#data-layer).
         This method calls `is_symbol_fragmented` to determine whether to proceed with the defragmentation operation.
@@ -1781,7 +1788,7 @@ class Library:
         Config map setting - SymbolDataCompact.SegmentCount will be replaced by a library setting
         in the future. This API will allow overriding the setting as well.
         """
-        return self._nvs.defragment_symbol_data(symbol, segment_size)
+        return self._nvs.defragment_symbol_data(symbol, segment_size, prune_previous_versions)
 
     @property
     def name(self):

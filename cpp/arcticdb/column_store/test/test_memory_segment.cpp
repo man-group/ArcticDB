@@ -210,7 +210,7 @@ TEST(MemSegment, StdFindIf) {
     auto num_rows = 100u;
     auto frame_wrapper = get_test_timeseries_frame("modify", num_rows, 0);
     auto &segment = frame_wrapper.segment_;
-    auto it = std::find_if(std::begin(segment), std::end(segment), [] (SegmentInMemory::Row& row) { return row.template index<TimeseriesIndex>() == 50; });
+    const auto it = std::find_if(std::begin(segment), std::end(segment), [] (SegmentInMemory::Row& row) { return row.template index<TimeseriesIndex>() == 50; });
     auto val_it = it->begin();
     ASSERT_EQ(it->index<TimeseriesIndex>(), 50);
     std::advance(val_it, 1);

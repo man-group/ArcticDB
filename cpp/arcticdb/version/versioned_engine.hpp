@@ -36,6 +36,11 @@ struct ReadVersionOutput {
     FrameAndDescriptor frame_and_descriptor_;
 };
 
+struct DeleteRangeOptions {
+    bool dynamic_schema_;
+    bool prune_previous_versions_;
+};
+
 /**
  * The VersionedEngine interface contains methods that are portable between languages.
  *
@@ -63,10 +68,12 @@ public:
     virtual VersionedItem delete_range_internal(
         const StreamId& stream_id,
         const UpdateQuery& query,
-        bool dynamic_schema)= 0;
+        const DeleteRangeOptions& option)= 0;
 
     virtual VersionedItem sort_index(
-        const StreamId& stream_id, bool dynamic_schema) = 0;
+        const StreamId& stream_id,
+        bool dynamic_schema,
+        bool prune_previous_versions = false) = 0;
 
     virtual void append_incomplete_frame(
         const StreamId& stream_id,
@@ -145,7 +152,10 @@ public:
 
     virtual bool is_symbol_fragmented(const StreamId& stream_id, std::optional<size_t> segment_size) = 0;
 
-    virtual VersionedItem defragment_symbol_data(const StreamId& stream_id, std::optional<size_t> segment_size) = 0;
+    virtual VersionedItem defragment_symbol_data(
+        const StreamId& stream_id,
+        std::optional<size_t> segment_size,
+        bool prune_previous_versions) = 0;
 
     virtual void move_storage(
         KeyType key_type,

@@ -5,9 +5,9 @@
     This FAQ document covers multiple topic areas - please see the contents table on the 
     right for more information.
 
-##Product
+## Product
 
-###*What is ArcticDB?*
+### *What is ArcticDB?*
 
 ArcticDB is a high performance DataFrame database built for the modern Python
 Data Science ecosystem. ArcticDB is an embedded database engine - which means
@@ -19,11 +19,11 @@ enabling you to store and retrieve massive datasets within a Pythonic,
 DataFrame-like API that researchers, data scientists and software engineers will
 find immediately familiar.
 
-###*How does ArcticDB differ from the version of Arctic on GitHub?*
+### *How does ArcticDB differ from the version of Arctic on GitHub?*
 
 Please see the [history page](history.md).
 
-###*How does ArcticDB differ from Apache Parquet?*
+### *How does ArcticDB differ from Apache Parquet?*
 
 Both ArcticDB and Parquet enable the storage of columnar data without requiring
 additional infrastructure.
@@ -40,24 +40,50 @@ of both batch and streaming data.
 - Support for "dynamic schemas" - ArcticDB supports datasets with changing schemas (column sets) over time.
 - Support for automatic data deduplication.
 
-###*What sort of data is ArcticDB best suited to?*
+### *What sort of data is ArcticDB best suited to?*
 
 ArcticDB is an OLA(nalytical)P DBMS, rather than an OLT(ransactional)P DBMS.
 
 In practice, this means that ArcticDB is optimised for large numerical datasets
 and for queries that operate over many rows at a time.
 
-###*Does ArcticDB require a server?*
+### *Does ArcticDB require a server?*
 
 No. ArcticDB is a fully fledged embedded analytical database system,
 designed for modern cloud and on-premises object storage that does not require
 a server for any of the core features.
 
-###*What languages can I use ArcticDB with?*
+### *What languages can I use ArcticDB with?*
 
 Bindings are currently only available for Python. 
 
-###*How can I get started using ArcticDB?*
+### *What is the best practice for saving Data to ArcticDB?*
+
+Users should consider how they store data based on their specific use cases. See the guide [here](tutorials/data_organisation.md).
+
+### *What are the Limitations of ArcticDB being client-side?*
+
+The serverless nature of ArcticDB provides excellent performance, making it ideal for data science applications where speed and efficiency are key.  It ensures atomicity, consistency, and durability but does not isolate transactions. Changes to symbols are performed on a last-writer-wins principle, and without isolation, write-after-read transactions are not supported, which is not suitable for use cases requiring strong transactional guarantees. 
+
+### *What storage options does ArcticDB support?*
+
+ArcticDB offers compatibility with a wide array of storage choices, both on-premises and in the cloud. It is verified to work with multiple storage systems such as AWS S3, Azure Blob Storage, LMDB, In-memory, Ceph, MinIO (Linux), Pure Flashblade S3, Scality S3, and VAST Data S3, with plans to support additional options soon. 
+
+### *What are the trade offs with ArcticDB Versioning?* 
+
+ArcticDB versions data by default, allowing for point-in-time analysis and efficient data updates, including daily appends and historical corrections, making it ideal for research datasets. The database is capable of de-duplicating data that has not changed between versions, using storage space efficiently. The ArcticDB enterprise tools including data pruning and compaction to help manage storage and data-fragmentation as new versions are created. Storing large numbers of versions of data does require more storage.
+
+More information can be found [here](tutorials/data_organisation.md)!
+
+### *What granularity of authorization does ArcticDB support?*  
+
+Authentication is at storage account level, and authorization can be done at ArcticDB Library level for most S3 backends (with directory/path permissions), otherwise also at storage account level.  There are many third-party authentication and authorization integrations available for the backends.
+
+### *How is ArcticDB data catalogued and discoverable by consumers?* 
+
+ArcticDB offers capabilities to list libraries and symbols, complete with metadata. You can use these functions to discover and browse data stored in ArcticDB.
+
+### *How can I get started using ArcticDB?*
 
 Please see our [getting started guide](index.md)!
 

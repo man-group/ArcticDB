@@ -15,5 +15,8 @@ namespace arcticdb {
     static const char* const DeleteSnapshotId = "__delete_snapshot__";
     static const char* const LastSyncId = "__last_sync__";
     static const char* const LastBackupId = "__last_backup__";
+    static const char* const FailedTargetId = "__failed_target__";
     static const char* const StorageLogId = "__storage_log__";
+    static const char* const FailedStorageLogId = "__failed_storage_log__";
+
 }

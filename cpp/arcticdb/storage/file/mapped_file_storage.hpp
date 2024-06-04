@@ -26,6 +26,9 @@ class MappedFileStorage final : public SingleFileStorage {
 
     ~MappedFileStorage() override = default;
 
+    std::string name() const final;
+
+
   private:
     void do_write_raw(const uint8_t* data, size_t bytes) override;
 
