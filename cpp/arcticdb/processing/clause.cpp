@@ -387,6 +387,7 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
                         ++next_group_id;
                     }
                     ssize_t previous_value_index = 0;
+                    constexpr size_t missing_value_group_id = 0;
 
                     Column::for_each_enumerated<typename col_type_info::TDT>(
                             *col.column_,
@@ -420,8 +421,7 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
                                 if (is_sparse) {
                                     for (auto j = previous_value_index;
                                          j != enumerating_it.idx(); ++j) {
-                                        // We use 0 for the missing value group id
-                                        *row_to_group_ptr++ = 0;
+                                        *row_to_group_ptr++ = missing_value_group_id;
                                     }
                                     previous_value_index = enumerating_it.idx() + 1;
                                 }
@@ -913,7 +913,7 @@ void merge_impl(
         input_streams, agg, add_symbol_column);
 }
 
-// MergeClause receives a list of DataFrames as input and merge them into a single one where all
+// MergeClause receives a list of DataFrames as input and merge them into a single one where all 
 // the rows are sorted by time stamp
 Composite<EntityIds> MergeClause::process(Composite<EntityIds>&& entity_ids) const {
     auto procs = gather_entities(component_manager_, std::move(entity_ids));
