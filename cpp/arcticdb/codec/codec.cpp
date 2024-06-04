@@ -327,7 +327,7 @@ ssize_t calculate_last_row(const Column& col) {
             last_row = static_cast<ssize_t>(last_set_bit);
         }
     } else {
-        last_row = static_cast<ssize_t>(col.row_count());
+        last_row = static_cast<ssize_t>(col.row_count()) - 1;
     }
     return last_row;
 }
@@ -381,7 +381,7 @@ void decode_v2(
         util::check_magic<StringPoolMagic>(data);
         decode_string_pool(hdr, data, begin, end, res);
 
-        res.set_row_data(static_cast<ssize_t>(start_row + seg_row_count-1));
+        res.set_row_data(static_cast<ssize_t>(start_row + seg_row_count));
         res.set_compacted(segment.header().compacted());
     }
 }
@@ -434,7 +434,7 @@ void decode_v1(
         }
 
         decode_string_pool(hdr, data, begin, end, res);
-        res.set_row_data(static_cast<ssize_t>(start_row + seg_row_count-1));
+        res.set_row_data(static_cast<ssize_t>(start_row + seg_row_count));
         res.set_compacted(segment.header().compacted());
     }
 }
