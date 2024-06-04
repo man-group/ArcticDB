@@ -133,28 +133,38 @@ namespace arcticdb {
             const ColumnWithStrings& col,
             const Grouper& grouper,
             const Bucketizer& bucketizer) {
-        schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(!col.column_->is_sparse(),
-                                                            "GroupBy not supported with sparse columns");
         // Mapping from row to bucket
         // 255 reserved for Nones and NaNs in string/float columns
         // Faster to initialise to 255 and use a raw ptr for the output than to call emplace_back repeatedly
-        std::vector<bucket_id> row_to_bucket(col.column_->row_count(), std::numeric_limits<bucket_id>::max());
+        std::vector<bucket_id> row_to_bucket(col.column_->last_row() + 1, std::numeric_limits<bucket_id>::max());
         auto out_ptr = row_to_bucket.data();
         // Tracks how many rows are in each bucket
         // Use to skip empty buckets, and presize columns in the output ProcessingUnit
         std::vector<uint64_t> bucket_counts(bucketizer.num_buckets(), 0);
 
         using TDT = typename Grouper::GrouperDescriptor;
-        Column::for_each<TDT>(*col.column_, [&] (auto val) {
-            auto opt_group = grouper.group(val, col.string_pool_);
-            if (ARCTICDB_LIKELY(opt_group.has_value())) {
-                auto bucket = bucketizer.bucket(*opt_group);
-                *out_ptr++ = bucket;
-                ++bucket_counts[bucket];
-            } else {
-                ++out_ptr;
-            }
-        });
+
+        if (col.column_->is_sparse()) {
+            Column::for_each_enumerated<TDT>(*col.column_, [&](auto enumerating_it) {
+                auto opt_group = grouper.group(enumerating_it.value(), col.string_pool_);
+                if (ARCTICDB_LIKELY(opt_group.has_value())) {
+                    auto bucket = bucketizer.bucket(*opt_group);
+                    row_to_bucket[enumerating_it.idx()] = bucket;
+                    ++bucket_counts[bucket];
+                }
+            });
+        } else {
+            Column::for_each<TDT>(*col.column_, [&](auto val) {
+                auto opt_group = grouper.group(val, col.string_pool_);
+                if (ARCTICDB_LIKELY(opt_group.has_value())) {
+                    auto bucket = bucketizer.bucket(*opt_group);
+                    *out_ptr++ = bucket;
+                    ++bucket_counts[bucket];
+                } else {
+                    ++out_ptr;
+                }
+            });
+        }
         return {std::move(row_to_bucket), std::move(bucket_counts)};
     }
 

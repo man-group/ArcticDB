@@ -883,8 +883,6 @@ void copy_frame_data_to_buffer(const SegmentInMemory& destination, size_t target
         return;
     }
     auto& src_column = source.column(static_cast<position_t>(source_index));
-    schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(!src_column.opt_sparse_map().has_value(),
-                                                   "QueryBuilder not yet supported with sparse data");
     auto& dst_column = destination.column(static_cast<position_t>(target_index));
     auto& buffer = dst_column.data().buffer();
     auto dst_rawtype_size = sizeof_datatype(dst_column.type());
@@ -900,6 +898,19 @@ void copy_frame_data_to_buffer(const SegmentInMemory& destination, size_t target
     if (is_empty_type(src_column.type().data_type())) {
         dst_column.type().visit_tag([&](auto dst_desc_tag) {
             util::default_initialize<decltype(dst_desc_tag)>(dst_ptr, num_rows * dst_rawtype_size);
+        });
+    // Do not use src_column.is_sparse() here, as that misses columns that are dense, but have fewer than num_rows values
+    } else if (src_column.opt_sparse_map().has_value() && has_valid_type_promotion(src_column.type(), dst_column.type())) {
+        details::visit_type(dst_column.type().data_type(), [&](auto dst_tag) {
+            using dst_type_info = ScalarTypeInfo<decltype(dst_tag)>;
+            util::default_initialize<typename dst_type_info::TDT>(dst_ptr, num_rows * dst_rawtype_size);
+            auto typed_dst_ptr = reinterpret_cast<typename dst_type_info::RawType*>(dst_ptr);
+            details::visit_type(src_column.type().data_type(), [&](auto src_tag) {
+                using src_type_info = ScalarTypeInfo<decltype(src_tag)>;
+                Column::for_each_enumerated<typename src_type_info::TDT>(src_column, [typed_dst_ptr](auto enumerating_it) {
+                    typed_dst_ptr[enumerating_it.idx()] = static_cast<typename dst_type_info::RawType>(enumerating_it.value());
+                });
+            });
         });
     } else if (trivially_compatible_types(src_column.type(), dst_column.type())) {
         details::visit_type(src_column.type().data_type() ,[&src_data, &dst_ptr] (auto src_desc_tag) {
