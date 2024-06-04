@@ -45,29 +45,22 @@ void modify_descriptor(const std::shared_ptr<pipelines::PipelineContext>& pipeli
     auto& desc = *pipeline_context->desc_;
     if (opt_false(read_options.force_strings_to_object_)) {
         auto& fields = desc.fields();
-        std::for_each(
-            std::begin(fields),
-            std::end(fields),
-            [](auto& field_desc) {
-                if (field_desc.type().data_type() == DataType::ASCII_FIXED64)
-                    set_data_type(DataType::ASCII_DYNAMIC64, field_desc.mutable_type());
+        for (Field& field_desc : fields) {
+            if (field_desc.type().data_type() == DataType::ASCII_FIXED64)
+                set_data_type(DataType::ASCII_DYNAMIC64, field_desc.mutable_type());
 
-                if (field_desc.type().data_type() == DataType::UTF_FIXED64)
-                    set_data_type(DataType::UTF_DYNAMIC64, field_desc.mutable_type());
-            });
-    }
-    else if (opt_false(read_options.force_strings_to_fixed_)) {
+            if (field_desc.type().data_type() == DataType::UTF_FIXED64)
+                set_data_type(DataType::UTF_DYNAMIC64, field_desc.mutable_type());
+        }
+    } else if (opt_false(read_options.force_strings_to_fixed_)) {
         auto& fields = desc.fields();
-        std::for_each(
-            std::begin(fields),
-            std::end(fields),
-            [](auto& field_desc) {
-                if (field_desc.type().data_type() == DataType::ASCII_DYNAMIC64)
-                    set_data_type(DataType::ASCII_FIXED64, field_desc.mutable_type());
+        for (Field& field_desc : fields) {
+            if (field_desc.type().data_type() == DataType::ASCII_DYNAMIC64)
+                set_data_type(DataType::ASCII_FIXED64, field_desc.mutable_type());
 
-                if (field_desc.type().data_type() == DataType::UTF_DYNAMIC64)
-                    set_data_type(DataType::UTF_FIXED64, field_desc.mutable_type());
-            });
+            if (field_desc.type().data_type() == DataType::UTF_DYNAMIC64)
+                set_data_type(DataType::UTF_FIXED64, field_desc.mutable_type());
+        }
     }
 }
 
