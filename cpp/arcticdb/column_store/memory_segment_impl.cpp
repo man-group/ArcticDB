@@ -349,8 +349,6 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::get_output_segment(siz
 
 std::vector<std::shared_ptr<SegmentInMemoryImpl>> SegmentInMemoryImpl::partition(const std::vector<uint8_t>& row_to_segment,
                                                                    const std::vector<uint64_t>& segment_counts) const {
-    schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(!is_sparse(),
-                                                        "SegmentInMemory::partition not supported with sparse columns");
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(row_count() == row_to_segment.size(),
                                                     "row_to_segment size does not match segment row count: {} != {}", row_to_segment.size(), row_count());
     std::vector<std::shared_ptr<SegmentInMemoryImpl>> output(segment_counts.size());
@@ -362,7 +360,6 @@ std::vector<std::shared_ptr<SegmentInMemoryImpl>> SegmentInMemoryImpl::partition
         if (*segment_count > 0) {
             auto& seg = output.at(segment_count.index);
             seg = get_output_segment(*segment_count);
-            seg->set_row_data(*segment_count - 1);
             seg->set_string_pool(string_pool_);
             seg->set_compacted(compacted_);
             if (metadata_) {
@@ -376,23 +373,49 @@ std::vector<std::shared_ptr<SegmentInMemoryImpl>> SegmentInMemoryImpl::partition
     for(const auto& column : folly::enumerate(columns())) {
         details::visit_type((*column)->type().data_type(), [&](auto col_tag) {
             using type_info = ScalarTypeInfo<decltype(col_tag)>;
-
-            std::vector<typename type_info::RawType*> output_ptrs{output.size(), nullptr};
-            for (const auto& segment: folly::enumerate(output)) {
-                if (static_cast<bool>(*segment)) {
-                    output_ptrs.at(segment.index) = reinterpret_cast<typename type_info::RawType*>((*segment)->column(column.index).ptr());
+            if ((*column)->is_sparse()) {
+                std::vector<std::shared_ptr<Column>> output_columns(output.size());
+                for (const auto& segment: folly::enumerate(output)) {
+                    if (static_cast<bool>(*segment)) {
+                        (*segment)->add_column(field(column.index), 0, false);
+                        output_columns.at(segment.index) = (*segment)->column_ptr(column.index);
+                    }
                 }
-            }
-
-            auto row_to_segment_it = row_to_segment.cbegin();
-            auto input_data = (*column)->data();
-            auto cend = input_data.cend<typename type_info::TDT>();
-            for (auto input_it = input_data.cbegin<typename type_info::TDT>(); input_it != cend; ++input_it, ++row_to_segment_it) {
-                if (ARCTICDB_LIKELY(*row_to_segment_it != std::numeric_limits<uint8_t>::max())) {
-                    *(output_ptrs[*row_to_segment_it]++) = *input_it;
+                for (const auto& segment_idx: folly::enumerate(row_to_segment)) {
+                    if (*segment_idx != std::numeric_limits<uint8_t>::max()) {
+                        auto opt_value = (*column)->scalar_at<typename type_info::RawType>(segment_idx.index);
+                        if (opt_value.has_value()) {
+                            output_columns[*segment_idx]->push_back(*opt_value);
+                        } else {
+                            output_columns[*segment_idx]->mark_absent_rows(1);
+                        }
+                    }
                 }
+            } else {
+                std::vector<typename type_info::RawType*> output_ptrs{output.size(), nullptr};
+                for (const auto& segment: folly::enumerate(output)) {
+                    if (static_cast<bool>(*segment)) {
+                        if (is_sparse()) {
+                            (*segment)->add_column(field(column.index), segment_counts[segment.index], true);
+                        }
+                        output_ptrs.at(segment.index) = reinterpret_cast<typename type_info::RawType*>((*segment)->column(column.index).ptr());
+                    }
+                }
+                auto row_to_segment_it = row_to_segment.cbegin();
+                Column::for_each<typename type_info::TDT>(**column, [&row_to_segment_it, &output_ptrs](auto val) {
+                    if (ARCTICDB_LIKELY(*row_to_segment_it != std::numeric_limits<uint8_t>::max())) {
+                        *(output_ptrs[*row_to_segment_it]++) = val;
+                    }
+                    ++row_to_segment_it;
+                });
             }
         });
+    }
+    for (const auto& segment_count: folly::enumerate(segment_counts)) {
+        if (*segment_count > 0) {
+            auto& seg = output.at(segment_count.index);
+            seg->set_row_data(*segment_count - 1);
+        }
     }
     return output;
 }
