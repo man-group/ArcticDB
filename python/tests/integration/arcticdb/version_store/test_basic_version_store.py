@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import itertools
 import time
 import sys
@@ -121,7 +122,7 @@ def test_s3_breaking_chars_exception_compat(object_version_store):
 @pytest.mark.parametrize("suffix", ["", "suffix"])
 def test_symbol_names_with_all_chars(object_version_store, prefix, suffix):
     # Create symbol names with each character (except '\' because Azure replaces it with '/' in some cases)
-    names = [f"{prefix}{chr(i)}{suffix}" for i in range(256) if chr(i) != '\\']
+    names = [f"{prefix}{chr(i)}{suffix}" for i in range(256) if chr(i) != "\\"]
     df = sample_dataframe()
 
     written_symbols = set()
@@ -317,8 +318,7 @@ def test_prune_previous_versions_multiple_times(basic_store, symbol):
 
 
 def test_prune_previous_versions_write_batch(basic_store):
-    """Verify that the batch write method correctly prunes previous versions when the corresponding option is specified.
-    """
+    """Verify that the batch write method correctly prunes previous versions when the corresponding option is specified."""
     # Given
     lib = basic_store
     lib_tool = lib.library_tool()
@@ -348,8 +348,7 @@ def test_prune_previous_versions_write_batch(basic_store):
 
 
 def test_prune_previous_versions_batch_write_metadata(basic_store):
-    """Verify that the batch write metadata method correctly prunes previous versions when the corresponding option is specified.
-    """
+    """Verify that the batch write metadata method correctly prunes previous versions when the corresponding option is specified."""
     # Given
     lib = basic_store
     lib_tool = lib.library_tool()
@@ -379,8 +378,7 @@ def test_prune_previous_versions_batch_write_metadata(basic_store):
 
 
 def test_prune_previous_versions_append_batch(basic_store):
-    """Verify that the batch append method correctly prunes previous versions when the corresponding option is specified.
-    """
+    """Verify that the batch append method correctly prunes previous versions when the corresponding option is specified."""
     # Given
     lib = basic_store
     lib_tool = lib.library_tool()
@@ -409,6 +407,47 @@ def test_prune_previous_versions_append_batch(basic_store):
     assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 4
 
 
+def test_batch_append_unicode(basic_store):
+    symbol = "test_append_unicode"
+    uc = "\u0420\u043e\u0441\u0441\u0438\u044f"
+
+    df1 = pd.DataFrame(
+        index=[pd.Timestamp("2018-01-02"), pd.Timestamp("2018-01-03")],
+        data={"a": ["123", uc]},
+    )
+    basic_store.batch_write(symbols=[symbol], data_vector=[df1])
+    vit = basic_store.batch_read([symbol])[symbol]
+    assert_frame_equal(vit.data, df1)
+
+    df2 = pd.DataFrame(
+        index=[pd.Timestamp("2018-01-04"), pd.Timestamp("2018-01-05")],
+        data={"a": ["123", uc]},
+    )
+    basic_store.batch_append(symbols=[symbol], data_vector=[df2])
+    vit = basic_store.batch_read([symbol])[symbol]
+    expected = pd.concat([df1, df2])
+    assert_frame_equal(vit.data, expected)
+
+
+def test_batch_write_metadata_unicode(basic_store):
+    symbol = "test_append_unicode"
+    uc = "\u0420\u043e\u0441\u0441\u0438\u044f"
+    df1 = pd.DataFrame(
+        index=[pd.Timestamp("2018-01-02"), pd.Timestamp("2018-01-03")],
+        data={"a": ["123", uc]},
+    )
+
+    basic_store.batch_write(symbols=[symbol], data_vector=[df1])
+    vit = basic_store.batch_read([symbol])[symbol]
+    assert_frame_equal(vit.data, df1)
+
+    meta = {"a": 1, "b": uc}
+    basic_store.batch_write_metadata(symbols=[symbol], metadata_vector=[meta])
+    vits = basic_store.batch_read_metadata([symbol])
+    metadata = vits[symbol].metadata
+    assert metadata == meta
+
+
 def test_deleting_unknown_symbol(basic_store, symbol):
     df = sample_dataframe()
 
@@ -425,11 +464,10 @@ def test_negative_cases(basic_store, symbol):
     # To stay consistent with arctic this doesn't throw.
     basic_store.delete("does_not_exist")
 
-    
     with pytest.raises(NoSuchVersionException):
         basic_store.snapshot("empty_snapshot")
     with pytest.raises(NoSuchVersionException):
-        basic_store.snapshot("empty_snapshot", versions={"non-exist-symbol":0})
+        basic_store.snapshot("empty_snapshot", versions={"non-exist-symbol": 0})
     with pytest.raises(NoDataFoundException):
         basic_store.delete_snapshot("empty_snapshot")
 
@@ -717,8 +755,8 @@ def test_get_info_unsorted_timestamp_index_date_range(basic_store):
         sym,
         pd.DataFrame(
             {"col": [1, 2, 3]},
-            index=[pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-02")]
-        )
+            index=[pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-02")],
+        ),
     )
     info = lib.get_info(sym)
     assert np.isnat(info["date_range"][0])
@@ -812,14 +850,16 @@ def test_empty_ndarr(basic_store):
     basic_store.write(sym, ndarr)
     assert_array_equal(basic_store.read(sym).data, ndarr)
 
+
 # The following restrictions should be checked in the cpp layer's name_validation
-MAX_SYMBOL_SIZE=255
-UNSUPPORTED_S3_CHARS={'*', '<', '>'}
+MAX_SYMBOL_SIZE = 255
+UNSUPPORTED_S3_CHARS = {"*", "<", ">"}
+
 
 # See AN-765 for why we need no_symbol_list fixture
 def test_large_symbols(basic_store_no_symbol_list):
     # TODO: Make too long name on LMDB raise a friendlier UserInputException (instead of InternalException [E_INVALID_ARGUMENT])
-    with pytest.raises( (UserInputException, InternalException) ):
+    with pytest.raises((UserInputException, InternalException)):
         basic_store_no_symbol_list.write("a" * (MAX_SYMBOL_SIZE + 1), 1)
 
     for _ in range(5):
@@ -1435,8 +1475,8 @@ def test_batch_read_metadata_missing_keys(basic_store):
     lib_tool.remove(s2_key_to_delete)
 
     vits = lib.batch_read_metadata(["s2"], [1])
-    metadata = vits['s2'].metadata
-    assert metadata['s2'] == "more_metadata"
+    metadata = vits["s2"].metadata
+    assert metadata["s2"] == "more_metadata"
 
     with pytest.raises(StorageException):
         _ = lib.batch_read_metadata(["s1"], [None])
@@ -1665,10 +1705,10 @@ def test_find_version(lmdb_version_store_v1):
         lib.write(sym, 3)
 
     # Latest
-    #assert lib._find_version(sym).version == 3
+    # assert lib._find_version(sym).version == 3
     # By version number
-    #assert lib._find_version(sym, as_of=0).version == 0
-    #assert lib._find_version(sym, as_of=1).version == 1
+    # assert lib._find_version(sym, as_of=0).version == 0
+    # assert lib._find_version(sym, as_of=1).version == 1
     assert lib._find_version(sym, as_of=2) is None
     assert lib._find_version(sym, as_of=3).version == 3
     assert lib._find_version(sym, as_of=1000) is None
@@ -2231,8 +2271,9 @@ def test_batch_read_version_doesnt_exist(basic_store):
     with pytest.raises(NoDataFoundException):
         _ = basic_store.batch_read([sym1, sym2], as_ofs=[0, 1])
 
+
 def test_read_batch_deleted_version_doesnt_exist(basic_store):
-    sym1 = 'mysymbol'
+    sym1 = "mysymbol"
     basic_store.write(sym1, 0)
 
     basic_store.delete(sym1)
@@ -2241,7 +2282,8 @@ def test_read_batch_deleted_version_doesnt_exist(basic_store):
         basic_store.read(sym1, as_of=0)
 
     with pytest.raises(NoSuchVersionException):
-        basic_store.batch_read([sym1],  as_ofs=[0])
+        basic_store.batch_read([sym1], as_ofs=[0])
+
 
 def test_index_keys_start_end_index(basic_store, sym):
     idx = pd.date_range("2022-01-01", periods=100, freq="D")
@@ -2409,6 +2451,7 @@ def test_diff_long_stream_descriptor_mismatch(basic_store, method, num):
             assert f"FD<name=col{i}, type=TD<type=INT64, dim=0>" in msg
             if i % 20 == 4:
                 assert f"FD<name=col{i}, type=TD<type=UTF" in msg
+
 
 def test_wrong_df_col_order(basic_store):
     lib = basic_store
