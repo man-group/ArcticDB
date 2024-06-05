@@ -64,6 +64,7 @@ from arcticdb.version_store._normalization import (
     _from_tz_timestamp,
     restrict_data_to_date_range_only,
     normalize_dt_range_to_ts,
+    _denormalize_single_index
 )
 TimeSeriesType = Union[pd.DataFrame, pd.Series]
 
@@ -2843,5 +2844,17 @@ class NativeVersionStore:
         )
         cpp_result = self.version_store.read_index_columns(symbol, version_query, read_query, read_options)
         read_result = ReadResult(*cpp_result)
-        print(read_result.frame_data)
-        return self._post_process_dataframe(read_result, read_query, None)
+        index_type = read_result.norm.df.common.WhichOneof("index_type")
+        frame_data = FrameData.from_cpp(read_result.frame_data)
+        index = _denormalize_single_index(frame_data, read_result.norm.df.common)
+        meta = denormalize_user_metadata(read_result.udm, self._normalizer)
+
+        return VersionedItem(
+            symbol=read_result.version.symbol,
+            library=self._library.library_path,
+            data=index,
+            version=read_result.version.version,
+            metadata=meta,
+            host=self.env,
+            timestamp=read_result.version.timestamp
+        )
