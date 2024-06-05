@@ -250,7 +250,11 @@ public:
 
     void backfill_sparse_map(ssize_t to_row) {
         ARCTICDB_TRACE(log::version(), "Backfilling sparse map to position {}", to_row);
-        sparse_map().set_range(0, bv_size(to_row), true);
+        // Initialise the optional to an empty bitset if it has not been created yet
+        auto& bitset = sparse_map();
+        if (to_row >= 0) {
+            bitset.set_range(0, bv_size(to_row), true);
+        }
     }
 
     [[nodiscard]] util::BitMagic& sparse_map();

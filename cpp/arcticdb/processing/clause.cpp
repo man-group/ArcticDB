@@ -387,7 +387,6 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
                         ++next_group_id;
                     }
                     ssize_t previous_value_index = 0;
-                    constexpr size_t missing_value_group_id = 0;
 
                     Column::for_each_enumerated<typename col_type_info::TDT>(
                             *col.column_,
@@ -419,6 +418,7 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
                                 }
 
                                 if (is_sparse) {
+                                    constexpr size_t missing_value_group_id = 0;
                                     for (auto j = previous_value_index;
                                          j != enumerating_it.idx(); ++j) {
                                         *row_to_group_ptr++ = missing_value_group_id;
