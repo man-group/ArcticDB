@@ -36,7 +36,7 @@ TEST(Append, Simple) {
     generate_filtered_field_descriptors(pipeline_context, {});
 
     SegmentInMemory allocated_frame = allocate_frame(pipeline_context);
-    ASSERT_EQ(allocated_frame.row_count(), size_t(frame->num_rows));
+    ASSERT_EQ(allocated_frame.row_count(), frame->num_rows);
 }
 
 TEST(Append, MergeDescriptorsPromote) {

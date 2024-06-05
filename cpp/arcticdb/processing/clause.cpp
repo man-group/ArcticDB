@@ -77,35 +77,15 @@ Composite<ProcessingUnit> gather_entities(std::shared_ptr<ComponentManager> comp
     return entity_ids.transform([&component_manager, include_atom_keys, include_bucket, include_initial_expected_get_calls]
     (const EntityIds& entity_ids) -> ProcessingUnit {
         ProcessingUnit res;
-        std::vector<std::shared_ptr<SegmentInMemory>> segments;
-        std::vector<std::shared_ptr<RowRange>> row_ranges;
-        std::vector<std::shared_ptr<ColRange>> col_ranges;
-        segments.reserve(entity_ids.size());
-        row_ranges.reserve(entity_ids.size());
-        col_ranges.reserve(entity_ids.size());
-        for (auto entity_id: entity_ids) {
-            segments.emplace_back(component_manager->get<std::shared_ptr<SegmentInMemory>>(entity_id));
-            row_ranges.emplace_back(component_manager->get<std::shared_ptr<RowRange>>(entity_id));
-            col_ranges.emplace_back(component_manager->get<std::shared_ptr<ColRange>>(entity_id));
-        }
-        res.set_segments(std::move(segments));
-        res.set_row_ranges(std::move(row_ranges));
-        res.set_col_ranges(std::move(col_ranges));
+        res.set_segments(component_manager->get<std::shared_ptr<SegmentInMemory>>(entity_ids));
+        res.set_row_ranges(component_manager->get<std::shared_ptr<RowRange>>(entity_ids));
+        res.set_col_ranges(component_manager->get<std::shared_ptr<ColRange>>(entity_ids));
 
         if (include_atom_keys) {
-            std::vector<std::shared_ptr<AtomKey>> keys;
-            keys.reserve(entity_ids.size());
-            for (auto entity_id: entity_ids) {
-                keys.emplace_back(component_manager->get<std::shared_ptr<AtomKey>>(entity_id));
-            }
-            res.set_atom_keys(std::move(keys));
+            res.set_atom_keys(component_manager->get<std::shared_ptr<AtomKey>>(entity_ids));
         }
         if (include_bucket) {
-            std::vector<size_t> buckets;
-            buckets.reserve(entity_ids.size());
-            for (auto entity_id: entity_ids) {
-                buckets.emplace_back(component_manager->get<size_t>(entity_id));
-            }
+            std::vector<bucket_id> buckets{component_manager->get<bucket_id>(entity_ids)};
             // Each entity_id has a bucket, but they must all be the same within one processing unit
             if (buckets.size() > 0) {
                 internal::check<ErrorCode::E_ASSERTION_FAILURE>(
@@ -137,52 +117,20 @@ Composite<ProcessingUnit> gather_entities(std::shared_ptr<ComponentManager> comp
 EntityIds push_entities(std::shared_ptr<ComponentManager> component_manager, ProcessingUnit&& proc) {
     std::optional<EntityIds> res;
     if (proc.segments_.has_value()) {
-        res = std::make_optional<EntityIds>();
-        for (const auto& segment: *proc.segments_) {
-            res->emplace_back(component_manager->add(segment, std::nullopt, 1));
-        }
+        res = std::make_optional<EntityIds>(component_manager->add(std::move(*proc.segments_)));
     }
     if (proc.row_ranges_.has_value()) {
-        if (res.has_value()) {
-            for (const auto& [idx, row_range]: folly::enumerate(*proc.row_ranges_)) {
-                component_manager->add(row_range, res->at(idx));
-            }
-        } else {
-            res = std::make_optional<EntityIds>();
-            for (const auto& row_range: *proc.row_ranges_) {
-                res->emplace_back(component_manager->add(row_range));
-            }
-        }
+        res = component_manager->add(std::move(*proc.row_ranges_), res);
     }
     if (proc.col_ranges_.has_value()) {
-        if (res.has_value()) {
-            for (const auto& [idx, col_range]: folly::enumerate(*proc.col_ranges_)) {
-                component_manager->add(col_range, res->at(idx));
-            }
-        } else {
-            res = std::make_optional<EntityIds>();
-            for (const auto& col_range: *proc.col_ranges_) {
-                res->emplace_back(component_manager->add(col_range));
-            }
-        }
+        res = component_manager->add(std::move(*proc.col_ranges_), res);
     }
     if (proc.atom_keys_.has_value()) {
-        if (res.has_value()) {
-            for (const auto& [idx, atom_key]: folly::enumerate(*proc.atom_keys_)) {
-                component_manager->add(atom_key, res->at(idx));
-            }
-        } else {
-            res = std::make_optional<EntityIds>();
-            for (const auto& atom_key: *proc.atom_keys_) {
-                res->emplace_back(component_manager->add(atom_key));
-            }
-        }
+        res = component_manager->add(std::move(*proc.atom_keys_), res);
     }
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(res.has_value(), "Unexpected empty result in push_entities");
     if (proc.bucket_.has_value()) {
-        for (auto entity_id: *res) {
-            component_manager->add(*proc.bucket_, entity_id);
-        }
+        component_manager->add(std::vector<bucket_id>(res->size(), *proc.bucket_), res);
     }
     return *res;
 }
@@ -367,12 +315,12 @@ AggregationClause::AggregationClause(const std::string& grouping_column,
 }
 
 Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_ids) const {
-    auto procs_as_range = gather_entities(component_manager_, std::move(entity_ids)).as_range();
+    auto procs = gather_entities(component_manager_, std::move(entity_ids)).as_range();
 
-    // Sort procs following row range ascending order
-    std::sort(std::begin(procs_as_range), std::end(procs_as_range),
+    // Sort procs following row range descending order, as we are going to iterate through them backwards
+    std::sort(std::begin(procs), std::end(procs),
               [](const auto& left, const auto& right) {
-                  return left.row_ranges_->at(0)->start() < right.row_ranges_->at(0)->start();
+                  return left.row_ranges_->at(0)->start() >= right.row_ranges_->at(0)->start();
     });
 
     std::vector<GroupingAggregatorData> aggregators_data;
@@ -384,7 +332,7 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
     }
 
     // Work out the common type between the processing units for the columns being aggregated
-    for (auto& proc: procs_as_range) {
+    for (auto& proc: procs) {
         for (auto agg_data: folly::enumerate(aggregators_data)) {
             // Check that segments row ranges are the same
             internal::check<ErrorCode::E_ASSERTION_FAILURE>(
@@ -404,105 +352,118 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
     auto string_pool = std::make_shared<StringPool>();
     DataType grouping_data_type;
     GroupingMap grouping_map;
-    Composite<ProcessingUnit> procs(std::move(procs_as_range));
-    procs.broadcast(
-        [&num_unique, &grouping_data_type, &grouping_map, &next_group_id, &aggregators_data, &string_pool, this](auto &proc) {
-            auto partitioning_column = proc.get(ColumnName(grouping_column_));
-            if (std::holds_alternative<ColumnWithStrings>(partitioning_column)) {
-                ColumnWithStrings col = std::get<ColumnWithStrings>(partitioning_column);
-                details::visit_type(col.column_->type().data_type(),
-                                    [&proc_=proc, &grouping_map, &next_group_id, &aggregators_data, &string_pool, &col,
-                                     &num_unique, &grouping_data_type, this](auto data_type_tag) {
-                                        using col_type_info = ScalarTypeInfo<decltype(data_type_tag)>;
-                                        grouping_data_type = col_type_info::data_type;
-                                        std::vector<size_t> row_to_group;
-                                        row_to_group.reserve(col.column_->row_count());
-                                        auto hash_to_group = grouping_map.get<typename col_type_info::RawType>();
-                                        // For string grouping columns, keep a local map within this ProcessingUnit
-                                        // from offsets to groups, to avoid needless calls to col.string_at_offset and
-                                        // string_pool->get
-                                        // This could be slower in cases where there aren't many repeats in string
-                                        // grouping columns. Maybe track hit ratio of finds and stop using it if it is
-                                        // too low?
-                                        // Tested with 100,000,000 row dataframe with 100,000 unique values in the grouping column. Timings:
-                                        // 11.14 seconds without caching
-                                        // 11.01 seconds with caching
-                                        // Not worth worrying about right now
-                                        ankerl::unordered_dense::map<typename col_type_info::RawType, size_t> offset_to_group;
+    // Iterating backwards as we are going to erase from this vector as we go along
+    // This is to spread out deallocation of the input segments
+    for (auto it = procs.rbegin(); it != procs.rend(); ++it) {
+        auto& proc = *it;
+        auto partitioning_column = proc.get(ColumnName(grouping_column_));
+        if (std::holds_alternative<ColumnWithStrings>(partitioning_column)) {
+            ColumnWithStrings col = std::get<ColumnWithStrings>(partitioning_column);
+            details::visit_type(
+                col.column_->type().data_type(),
+                [&proc_ = proc, &grouping_map, &next_group_id, &aggregators_data, &string_pool, &col,
+                        &num_unique, &grouping_data_type, this](auto data_type_tag) {
+                    using col_type_info = ScalarTypeInfo<decltype(data_type_tag)>;
+                    grouping_data_type = col_type_info::data_type;
+                    // Faster to initialise to zero (missing value group) and use raw ptr than repeated calls to emplace_back
+                    std::vector<size_t> row_to_group(col.column_->last_row() + 1, 0);
+                    size_t* row_to_group_ptr = row_to_group.data();
+                    auto hash_to_group = grouping_map.get<typename col_type_info::RawType>();
+                    // For string grouping columns, keep a local map within this ProcessingUnit
+                    // from offsets to groups, to avoid needless calls to col.string_at_offset and
+                    // string_pool->get
+                    // This could be slower in cases where there aren't many repeats in string
+                    // grouping columns. Maybe track hit ratio of finds and stop using it if it is
+                    // too low?
+                    // Tested with 100,000,000 row dataframe with 100,000 unique values in the grouping column. Timings:
+                    // 11.14 seconds without caching
+                    // 11.01 seconds with caching
+                    // Not worth worrying about right now
+                    ankerl::unordered_dense::map<typename col_type_info::RawType, size_t> offset_to_group;
 
-                                        const bool is_sparse = col.column_->is_sparse();
-                                        if (is_sparse && next_group_id == 0) {
-                                            // We use 0 for the missing value group id
-                                            ++next_group_id;
+                    const bool is_sparse = col.column_->is_sparse();
+                    if (is_sparse && next_group_id == 0) {
+                        // We use 0 for the missing value group id
+                        ++next_group_id;
+                    }
+                    ssize_t previous_value_index = 0;
+
+                    Column::for_each_enumerated<typename col_type_info::TDT>(
+                            *col.column_,
+                            [&](auto enumerating_it) {
+                                typename col_type_info::RawType val;
+                                if constexpr (is_sequence_type(col_type_info::data_type)) {
+                                    auto offset = enumerating_it.value();
+                                    if (auto it = offset_to_group.find(offset); it !=
+                                                                                offset_to_group.end()) {
+                                        val = it->second;
+                                    } else {
+                                        std::optional<std::string_view> str = col.string_at_offset(
+                                                offset);
+                                        if (str.has_value()) {
+                                            val = string_pool->get(*str, true).offset();
+                                        } else {
+                                            val = offset;
                                         }
-                                        ssize_t previous_value_index = 0;
-                                        constexpr size_t missing_value_group_id = 0;
+                                        typename col_type_info::RawType val_copy(val);
+                                        offset_to_group.insert(
+                                                std::make_pair<typename col_type_info::RawType, size_t>(
+                                                        std::forward<typename col_type_info::RawType>(
+                                                                offset),
+                                                        std::forward<typename col_type_info::RawType>(
+                                                                val_copy)));
+                                    }
+                                } else {
+                                    val = enumerating_it.value();
+                                }
 
-                                        Column::for_each_enumerated<typename col_type_info::TDT>(
-                                                *col.column_,
-                                                [&](auto enumerating_it) {
-                                                    typename col_type_info::RawType val;
-                                                    if constexpr(is_sequence_type(col_type_info::data_type)) {
-                                                        auto offset = enumerating_it.value();
-                                                        if (auto it = offset_to_group.find(offset); it != offset_to_group.end()) {
-                                                            val = it->second;
-                                                        } else {
-                                                            std::optional<std::string_view> str = col.string_at_offset(offset);
-                                                            if (str.has_value()) {
-                                                                val = string_pool->get(*str, true).offset();
-                                                            } else {
-                                                                val = offset;
-                                                            }
-                                                            typename col_type_info::RawType val_copy(val);
-                                                            offset_to_group.insert(std::make_pair<typename col_type_info::RawType, size_t>(std::forward<typename col_type_info::RawType>(offset), std::forward<typename col_type_info::RawType>(val_copy)));
-                                                        }
-                                                    } else {
-                                                        val = enumerating_it.value();
-                                                    }
+                                if (is_sparse) {
+                                    constexpr size_t missing_value_group_id = 0;
+                                    for (auto j = previous_value_index;
+                                         j != enumerating_it.idx(); ++j) {
+                                        *row_to_group_ptr++ = missing_value_group_id;
+                                    }
+                                    previous_value_index = enumerating_it.idx() + 1;
+                                }
 
-                                                    if (is_sparse) {
-                                                        for (auto j = previous_value_index; j != enumerating_it.idx(); ++j) {
-                                                            row_to_group.emplace_back(missing_value_group_id);
-                                                        }
-                                                        previous_value_index = enumerating_it.idx() + 1;
-                                                    }
+                                if (auto it = hash_to_group->find(val); it ==
+                                                                        hash_to_group->end()) {
+                                    *row_to_group_ptr++ = next_group_id;
+                                    auto group_id = next_group_id++;
+                                    hash_to_group->insert(
+                                            std::make_pair<typename col_type_info::RawType, size_t>(
+                                                    std::forward<typename col_type_info::RawType>(
+                                                            val),
+                                                    std::forward<typename col_type_info::RawType>(
+                                                            group_id)));
+                                } else {
+                                    *row_to_group_ptr++ = it->second;
+                                }
+                            }
+                    );
 
-                                                    if (auto it = hash_to_group->find(val); it == hash_to_group->end()) {
-                                                        row_to_group.emplace_back(next_group_id);
-                                                        auto group_id = next_group_id++;
-                                                        hash_to_group->insert(std::make_pair<typename col_type_info::RawType, size_t>(std::forward<typename col_type_info::RawType>(val), std::forward<typename col_type_info::RawType>(group_id)));
-                                                    } else {
-                                                        row_to_group.emplace_back(it->second);
-                                                    }
-                                                }
-                                                );
-
-                                        // Marking all the last non-represented values as missing.
-                                        for (size_t i = row_to_group.size(); i <= size_t(col.column_->last_row()); ++i) {
-                                            row_to_group.emplace_back(missing_value_group_id);
-                                        }
-
-                                        num_unique = next_group_id;
-                                        util::check(num_unique != 0, "Got zero unique values");
-                                        for (auto agg_data: folly::enumerate(aggregators_data)) {
-                                            auto input_column_name = aggregators_.at(agg_data.index).get_input_column_name();
-                                            auto input_column = proc_.get(input_column_name);
-                                            std::optional<ColumnWithStrings> opt_input_column;
-                                            if (std::holds_alternative<ColumnWithStrings>(input_column)) {
-                                                auto column_with_strings = std::get<ColumnWithStrings>(input_column);
-                                                // Empty columns don't contribute to aggregations
-                                                if (!is_empty_type(column_with_strings.column_->type().data_type())) {
-                                                    opt_input_column.emplace(std::move(column_with_strings));
-                                                }
-                                            }
-                                            agg_data->aggregate(opt_input_column, row_to_group, num_unique);
-                                        }
-                                    });
-            } else {
-                util::raise_rte("Expected single column from expression");
-            }
-        });
-
+                    num_unique = next_group_id;
+                    util::check(num_unique != 0, "Got zero unique values");
+                    for (auto agg_data: folly::enumerate(aggregators_data)) {
+                        auto input_column_name = aggregators_.at(
+                                agg_data.index).get_input_column_name();
+                        auto input_column = proc_.get(input_column_name);
+                        std::optional<ColumnWithStrings> opt_input_column;
+                        if (std::holds_alternative<ColumnWithStrings>(input_column)) {
+                            auto column_with_strings = std::get<ColumnWithStrings>(input_column);
+                            // Empty columns don't contribute to aggregations
+                            if (!is_empty_type(column_with_strings.column_->type().data_type())) {
+                                opt_input_column.emplace(std::move(column_with_strings));
+                            }
+                        }
+                        agg_data->aggregate(opt_input_column, row_to_group, num_unique);
+                    }
+                });
+        } else {
+            util::raise_rte("Expected single column from expression");
+        }
+        procs.erase(std::next(it).base());
+    }
     SegmentInMemory seg;
     auto index_col = std::make_shared<Column>(make_scalar_type(grouping_data_type), grouping_map.size(), true, false);
     seg.add_column(scalar_field(grouping_data_type, grouping_column_), index_col);

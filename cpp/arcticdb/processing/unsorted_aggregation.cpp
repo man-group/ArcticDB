@@ -314,7 +314,16 @@ namespace
                 } else {
                     auto in_ptr = reinterpret_cast<MaybeValueType*>(aggregated_.data());
                     for (auto it = column_data.begin<typename col_type_info::TDT>(); it != column_data.end<typename col_type_info::TDT>(); ++it, ++in_ptr) {
-                        *it = in_ptr->value_;
+                        if constexpr (is_floating_point_type(col_type_info::data_type)) {
+                            *it = in_ptr->written_ ? in_ptr->value_ : std::numeric_limits<typename col_type_info::RawType>::quiet_NaN();
+                        } else {
+                            if constexpr(T == Extremum::MAX) {
+                                *it = in_ptr->written_ ? in_ptr->value_ : std::numeric_limits<typename col_type_info::RawType>::lowest();
+                            } else {
+                                // T == Extremum::MIN
+                                *it = in_ptr->written_ ? in_ptr->value_ : std::numeric_limits<typename col_type_info::RawType>::max();
+                            }
+                        }
                     }
                 }
             });

@@ -129,31 +129,42 @@ namespace arcticdb {
 
 
     template<typename Grouper, typename Bucketizer>
-    std::pair<std::vector<std::optional<uint8_t>>, std::vector<uint64_t>> get_buckets(
+    std::pair<std::vector<bucket_id>, std::vector<uint64_t>> get_buckets(
             const ColumnWithStrings& col,
-            Grouper& grouper,
-            Bucketizer& bucketizer) {
-        schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(!col.column_->is_sparse(),
-                                                            "GroupBy not supported with sparse columns");
+            const Grouper& grouper,
+            const Bucketizer& bucketizer) {
         // Mapping from row to bucket
-        // std::nullopt only for Nones and NaNs in string/float columns
-        std::vector<std::optional<uint8_t>> row_to_bucket;
-        row_to_bucket.reserve(col.column_->row_count());
+        // 255 reserved for Nones and NaNs in string/float columns
+        // Faster to initialise to 255 and use a raw ptr for the output than to call emplace_back repeatedly
+        std::vector<bucket_id> row_to_bucket(col.column_->last_row() + 1, std::numeric_limits<bucket_id>::max());
+        auto out_ptr = row_to_bucket.data();
         // Tracks how many rows are in each bucket
         // Use to skip empty buckets, and presize columns in the output ProcessingUnit
         std::vector<uint64_t> bucket_counts(bucketizer.num_buckets(), 0);
 
         using TDT = typename Grouper::GrouperDescriptor;
-        Column::for_each<TDT>(*col.column_, [&] (auto val) {
-            auto opt_group = grouper.group(val, col.string_pool_);
-            if (opt_group.has_value()) {
-                auto bucket = bucketizer.bucket(*opt_group);
-                row_to_bucket.emplace_back(bucket);
-                ++bucket_counts[bucket];
-            } else {
-                row_to_bucket.emplace_back(std::nullopt);
-            }
-        });
+
+        if (col.column_->is_sparse()) {
+            Column::for_each_enumerated<TDT>(*col.column_, [&](auto enumerating_it) {
+                auto opt_group = grouper.group(enumerating_it.value(), col.string_pool_);
+                if (ARCTICDB_LIKELY(opt_group.has_value())) {
+                    auto bucket = bucketizer.bucket(*opt_group);
+                    row_to_bucket[enumerating_it.idx()] = bucket;
+                    ++bucket_counts[bucket];
+                }
+            });
+        } else {
+            Column::for_each<TDT>(*col.column_, [&](auto val) {
+                auto opt_group = grouper.group(val, col.string_pool_);
+                if (ARCTICDB_LIKELY(opt_group.has_value())) {
+                    auto bucket = bucketizer.bucket(*opt_group);
+                    *out_ptr++ = bucket;
+                    ++bucket_counts[bucket];
+                } else {
+                    ++out_ptr;
+                }
+            });
+        }
         return {std::move(row_to_bucket), std::move(bucket_counts)};
     }
 
@@ -178,11 +189,11 @@ namespace arcticdb {
                     ResolvedGrouperType grouper;
                     auto num_buckets = ConfigsMap::instance()->get_int("Partition.NumBuckets",
                                                                        async::TaskScheduler::instance()->cpu_thread_count());
-                    if (num_buckets > std::numeric_limits<uint8_t>::max()) {
+                    if (num_buckets > std::numeric_limits<bucket_id>::max()) {
                         log::version().warn("GroupBy partitioning buckets capped at {} (received {})",
-                                            std::numeric_limits<uint8_t>::max(),
+                                            std::numeric_limits<bucket_id>::max(),
                                             num_buckets);
-                        num_buckets = std::numeric_limits<uint8_t>::max();
+                        num_buckets = std::numeric_limits<bucket_id>::max();
                     }
                     std::vector<ProcessingUnit> procs{static_cast<bucket_id>(num_buckets)};
                     BucketizerType bucketizer(num_buckets);
