@@ -15,7 +15,10 @@ from .api import *
 from .utils import get_ephemeral_port, GracefulProcessUtils, wait_for_server_to_come_up, safer_rmtree, get_ca_cert_for_testing
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 from arcticdb.version_store.helper import add_azure_library_to_env
-from tests.util.mark import SSL_TEST_ENABLED
+try:
+    from tests.util.mark import SSL_TEST_ENABLED
+except:
+    SSL_TEST_ENABLED = False
 
 # All storage client libraries to be imported on-demand to speed up start-up of ad-hoc test runs
 if TYPE_CHECKING:
