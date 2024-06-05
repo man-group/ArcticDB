@@ -1538,7 +1538,14 @@ FrameAndDescriptor read_index_columns_impl(
             add_index_columns_to_query(read_query, tsd);
             read_query.calculate_row_filter(static_cast<int64_t>(tsd.proto().total_rows()));
             pipeline_context->desc_ = tsd.as_stream_descriptor();
-            pipeline_context->set_selected_columns(read_query.columns);
+            const StreamDescriptor stream_descriptor = pipeline_context->descriptor();
+            pipeline_context->selected_columns_ = util::BitMagic(stream_descriptor.fields().size());
+            // This relies on the fact the the stream descriptor will always begin with its index fields in order
+            // to optimize the process of marking the columns as selected. If this invariant does not hold
+            // use pipeline_context->set_selected_columns(read_query.columns);
+            for (int i = 0; i < stream_descriptor.index().field_count(); ++i) {
+                (*(pipeline_context->selected_columns_))[i] = 1;
+            }
             pipeline_context->overall_column_bitset_ = pipeline_context->selected_columns_; 
             std::vector<FilterQuery<index::IndexSegmentReader>> queries;
             const bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
@@ -1587,7 +1594,18 @@ FrameAndDescriptor read_index_columns_impl(
     }
 
     modify_descriptor(pipeline_context, read_options);
-    generate_filtered_field_descriptors(pipeline_context, read_query.columns);
+
+    // This sets the selected column fields in the pipeline context and relies on the fact that the stream descriptor
+    // will always begin with its index columns in order to optimize the selection. If this stops being the
+    // case generate_filtered_field_descriptors should be used.
+    pipeline_context->filter_columns_ = std::make_shared<FieldCollection>();
+    pipeline_context->filter_columns_set_ = std::unordered_set<std::string_view>{};
+    const StreamDescriptor& stream_descriptor = pipeline_context->descriptor();
+    for (int i = 0; i < stream_descriptor.index().field_count(); ++i) {
+        const Field& index_field = stream_descriptor.field(i);
+        pipeline_context->filter_columns_->add(index_field.ref());
+        pipeline_context->filter_columns_set_->insert(index_field.name());
+    }
     ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
 
     auto buffers = std::make_shared<BufferHolder>();
