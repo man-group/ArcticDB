@@ -1535,7 +1535,7 @@ FrameAndDescriptor read_index_columns_impl(
                 "There shouldn't be any columns passed by the client when reading the index"
             );
             const auto& tsd = index_segment_reader.tsd();
-            add_index_columns_to_query(read_query, tsd);
+            read_query.columns = stream::get_index_columns_from_descriptor(tsd);
             read_query.calculate_row_filter(static_cast<int64_t>(tsd.proto().total_rows()));
             pipeline_context->desc_ = tsd.as_stream_descriptor();
             const StreamDescriptor stream_descriptor = pipeline_context->descriptor();
