@@ -456,7 +456,7 @@ protected:
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries);
 
-    std::variant<VersionedItem, StreamId> LocalVersionedEngine::get_version_identifier(
+    std::variant<VersionedItem, StreamId> get_version_identifier(
         const StreamId& stream_id,
         const VersionQuery& version_query,
         const ReadOptions& read_options,
