@@ -691,6 +691,7 @@ endif()
 target_link_libraries(arcticdb_ext
         PUBLIC
         PRIVATE
+        $<TARGET_OBJECTS:mimalloc-obj>
         arcticdb_python
         ${additional_link_flags}
         )
