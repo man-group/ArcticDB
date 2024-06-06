@@ -1949,7 +1949,6 @@ class NativeVersionStore:
 
     def _adapt_read_res(self, read_result: ReadResult) -> VersionedItem:
         frame_data = FrameData.from_cpp(read_result.frame_data)
-
         meta = denormalize_user_metadata(read_result.udm, self._normalizer)
         data = self._normalizer.denormalize(frame_data, read_result.norm)
         if read_result.norm.HasField("custom"):
@@ -2844,11 +2843,16 @@ class NativeVersionStore:
         )
         cpp_result = self.version_store.read_index_columns(symbol, version_query, read_query, read_options)
         read_result = ReadResult(*cpp_result)
-        index_type = read_result.norm.df.common.WhichOneof("index_type")
         frame_data = FrameData.from_cpp(read_result.frame_data)
-        index = _denormalize_single_index(frame_data, read_result.norm.df.common)
+        index_type = read_result.norm.df.common.WhichOneof("index_type")
         meta = denormalize_user_metadata(read_result.udm, self._normalizer)
-
+        if index_type == "index":
+            index = _denormalize_single_index(frame_data, read_result.norm.df.common)
+        elif index_type == "multi_index":
+            names = frame_data.index_columns + [name[_IDX_PREFIX_LEN:] for name in frame_data.names]
+            index = pd.MultiIndex.from_arrays(frame_data.data, names=names)
+        else:
+            raise ArcticNativeException("Unexpected undex type {}".format(index_type))
         return VersionedItem(
             symbol=read_result.version.symbol,
             library=self._library.library_path,

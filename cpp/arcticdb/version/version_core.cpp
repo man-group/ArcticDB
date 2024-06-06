@@ -1540,10 +1540,11 @@ FrameAndDescriptor read_index_columns_impl(
             pipeline_context->desc_ = tsd.as_stream_descriptor();
             const StreamDescriptor stream_descriptor = pipeline_context->descriptor();
             pipeline_context->selected_columns_ = util::BitMagic(stream_descriptor.fields().size());
-            // This relies on the fact the the stream descriptor will always begin with its index fields in order
-            // to optimize the process of marking the columns as selected. If this invariant does not hold
-            // use pipeline_context->set_selected_columns(read_query.columns);
-            for (int i = 0; i < stream_descriptor.index().field_count(); ++i) {
+            // Index columns will always come first. The current MultiIndex implementation is not complete
+            // (there is really one index column as far as Arctic is concernded) thus the index descriptor
+            // will always return 1 if asked for the number of fields via tsd.as_stream_descriptor().index().field_count()
+            // However the metadata correctly stores which columns are part of the MultiIndex.
+            for (int i = 0; i < read_query.columns.size(); ++i) {
                 (*(pipeline_context->selected_columns_))[i] = 1;
             }
             pipeline_context->overall_column_bitset_ = pipeline_context->selected_columns_; 
@@ -1595,13 +1596,14 @@ FrameAndDescriptor read_index_columns_impl(
 
     modify_descriptor(pipeline_context, read_options);
 
-    // This sets the selected column fields in the pipeline context and relies on the fact that the stream descriptor
-    // will always begin with its index columns in order to optimize the selection. If this stops being the
-    // case generate_filtered_field_descriptors should be used.
+    // Index columns will always come first. The current MultiIndex implementation is not complete
+    // (there is really one index column as far as Arctic is concernded) thus the index descriptor
+    // will always return 1 if asked for the number of fields via tsd.as_stream_descriptor().index().field_count()
+    // However the metadata correctly stores which columns are part of the MultiIndex.
     pipeline_context->filter_columns_ = std::make_shared<FieldCollection>();
     pipeline_context->filter_columns_set_ = std::unordered_set<std::string_view>{};
     const StreamDescriptor& stream_descriptor = pipeline_context->descriptor();
-    for (int i = 0; i < stream_descriptor.index().field_count(); ++i) {
+    for (int i = 0; i < read_query.columns.size(); ++i) {
         const Field& index_field = stream_descriptor.field(i);
         pipeline_context->filter_columns_->add(index_field.ref());
         pipeline_context->filter_columns_set_->insert(index_field.name());
