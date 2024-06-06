@@ -1204,7 +1204,7 @@ FrameAndDescriptor read_dataframe_impl(
 
     ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
     reduce_and_fix_columns(pipeline_context, frame, read_options);
-    return {frame, timeseries_descriptor_from_pipeline_context(pipeline_context, {}, pipeline_context->bucketize_dynamic_), {}, buffers};
+    return {frame, timeseries_descriptor_from_pipeline_context(*pipeline_context, {}, pipeline_context->bucketize_dynamic_), {}, buffers};
 }
 
 VersionedItem collate_and_write(
@@ -1617,7 +1617,7 @@ FrameAndDescriptor read_index_columns_impl(
     reduce_and_fix_columns(pipeline_context, frame, read_options);
     return {
         frame,
-        timeseries_descriptor_from_pipeline_context(pipeline_context, {}, pipeline_context->bucketize_dynamic_),
+        timeseries_descriptor_from_pipeline_context(*pipeline_context, {}, pipeline_context->bucketize_dynamic_),
         {},
         buffers
     };

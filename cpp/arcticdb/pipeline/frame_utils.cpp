@@ -60,15 +60,15 @@ TimeseriesDescriptor timseries_descriptor_from_index_segment(
 }
 
 TimeseriesDescriptor timeseries_descriptor_from_pipeline_context(
-    const std::shared_ptr<pipelines::PipelineContext>& pipeline_context,
+    pipelines::PipelineContext& pipeline_context,
     std::optional<AtomKey>&& prev_key,
     bool bucketize_dynamic) {
     return make_timeseries_descriptor(
-        pipeline_context->total_rows_,
-        StreamDescriptor{std::make_shared<StreamDescriptor::Proto>(std::move(pipeline_context->desc_->mutable_proto())),
-            pipeline_context->desc_->fields_ptr()},
-        std::move(*pipeline_context->norm_meta_),
-        pipeline_context->user_meta_ ? std::make_optional<arcticdb::proto::descriptors::UserDefinedMetadata>(std::move(*pipeline_context->user_meta_)) : std::nullopt,
+        pipeline_context.total_rows_,
+        StreamDescriptor{std::make_shared<StreamDescriptor::Proto>(std::move(pipeline_context.desc_->mutable_proto())),
+            pipeline_context.desc_->fields_ptr()},
+        std::move(*pipeline_context.norm_meta_),
+        pipeline_context.user_meta_ ? std::make_optional<arcticdb::proto::descriptors::UserDefinedMetadata>(std::move(*pipeline_context.user_meta_)) : std::nullopt,
         std::move(prev_key),
         std::nullopt,
         bucketize_dynamic

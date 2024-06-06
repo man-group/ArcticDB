@@ -128,9 +128,11 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
     /// does a read and needs only the projected column. PipelineContext::selected_columns_ will be ["proj"], while
     /// PipelineContext::overall_column_bitset_ will be ["col", "proj"]
     std::optional<util::BitSet> overall_column_bitset_;
+    // Stores the field descriptors for the columns in PipelineContext::selected_columns_
     std::shared_ptr<FieldCollection> filter_columns_;
-    std::vector<std::shared_ptr<StreamDescriptor>> segment_descriptors_;
+    // Set of the field names in PipelineContext::filter_columns_ used for faster search
     std::optional<std::unordered_set<std::string_view>> filter_columns_set_;
+    std::vector<std::shared_ptr<StreamDescriptor>> segment_descriptors_;
     std::optional<SegmentInMemory> multi_key_;
     std::vector<unsigned char> compacted_;
     std::optional<size_t> incompletes_after_;
