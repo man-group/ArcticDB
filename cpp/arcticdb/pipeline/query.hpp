@@ -121,16 +121,6 @@ using FilterQuery = folly::Function<std::unique_ptr<util::BitSet>(const Containe
 template<typename ContainerType>
 using CombinedQuery = folly::Function<std::unique_ptr<util::BitSet>(const ContainerType&)>;
 
-inline bool is_column_selected(size_t start_col, size_t end_col, const util::BitSet& sc) {
-    if (start_col == 0) {
-        auto col = sc.get_first();
-        return col < end_col;
-    } else {
-        auto col = sc.get_next(start_col - 1ULL);
-        return col != 0 && col < end_col;
-    }
-}
-
 inline FilterQuery<index::IndexSegmentReader> create_static_col_filter(std::shared_ptr<PipelineContext> pipeline_context) {
     return [pipeline = std::move(pipeline_context)](const index::IndexSegmentReader &isr, std::unique_ptr<util::BitSet>&& input) mutable {
         auto res = std::make_unique<util::BitSet>(static_cast<util::BitSetSizeType>(isr.size()));
@@ -147,13 +137,13 @@ inline FilterQuery<index::IndexSegmentReader> create_static_col_filter(std::shar
                 pos = *en;
                 std::advance(start_col, dist);
                 std::advance(end_col, dist);
-                (*res)[*en] = is_column_selected(*start_col, *end_col, *(pipeline->overall_column_bitset_));
+                (*res)[*en] = pipeline->overall_column_bitset_->any_range(*start_col, *end_col - 1);
                 ++en;
             }
 
         } else {
             for (std::size_t r = 0, end = isr.size(); r < end; ++r) {
-                (*res)[r] = is_column_selected(*start_col, *end_col, *(pipeline->overall_column_bitset_));
+                (*res)[r] = pipeline->overall_column_bitset_->any_range(*start_col, *end_col - 1);
                 ++start_col;
                 ++end_col;
             }
