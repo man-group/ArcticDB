@@ -92,7 +92,10 @@ class GracefulProcessUtils:
 
 def wait_for_server_to_come_up(url: str, service: str, process: ProcessUnion, *, timeout=20, sleep=0.2, req_timeout=1):
     deadline = time.time() + timeout
-    alive = (lambda: process.poll() is None) if isinstance(process, subprocess.Popen) else process.is_alive
+    if process is None:
+        alive = lambda: True
+    else:
+        alive = (lambda: process.poll() is None) if isinstance(process, subprocess.Popen) else process.is_alive
     while True:
         assert time.time() < deadline, f"Timed out waiting for {service} process to start"
         assert alive(), service + " process died shortly after start up"
