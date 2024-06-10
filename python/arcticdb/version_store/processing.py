@@ -445,11 +445,11 @@ class QueryBuilder:
         Group symbol by column name. GroupBy operations must be followed by an aggregation operator. Currently the following five aggregation
         operators are supported:
 
-            * "mean" - compute the mean of the group
-            * "sum" - compute the sum of the group
-            * "min" - compute the min of the group
-            * "max" - compute the max of the group
-            * "count" - compute the count of group
+        * "mean" - compute the mean of the group
+        * "sum" - compute the sum of the group
+        * "min" - compute the min of the group
+        * "max" - compute the max of the group
+        * "count" - compute the count of group
 
         For usage examples, see below.
 
@@ -572,27 +572,27 @@ class QueryBuilder:
         Resample symbol on the index. Symbol must be datetime indexed. Resample operations must be followed by an
         aggregation operator. Currently, the following 7 aggregation operators are supported:
 
-            * "mean" - compute the mean of the group
-            * "sum" - compute the sum of the group
-            * "min" - compute the min of the group
-            * "max" - compute the max of the group
-            * "count" - compute the count of group
-            * "first" - compute the first value in the group
-            * "last" - compute the last value in the group
+        * "mean" - compute the mean of the group
+        * "sum" - compute the sum of the group
+        * "min" - compute the min of the group
+        * "max" - compute the max of the group
+        * "count" - compute the count of group
+        * "first" - compute the first value in the group
+        * "last" - compute the last value in the group
 
         Note that not all aggregators are supported with all column types.:
 
-            * Numeric columns - support all aggregators
-            * Bool columns - support all aggregators
-            * String columns - support count, first, and last aggregators
-            * Datetime columns - support all aggregators EXCEPT sum
+        * Numeric columns - support all aggregators
+        * Bool columns - support all aggregators
+        * String columns - support count, first, and last aggregators
+        * Datetime columns - support all aggregators EXCEPT sum
 
         Note that time-buckets which contain no index values in the symbol will NOT be included in the returned
         DataFrame. This is not the same as Pandas default behaviour.
         Resampling is currently not supported with:
 
-            * Dynamic schema where an aggregation column is missing from one or more of the row-slices.
-            * Sparse data.
+        * Dynamic schema where an aggregation column is missing from one or more of the row-slices.
+        * Sparse data.
 
         Parameters
         ----------
@@ -622,11 +622,11 @@ class QueryBuilder:
         SchemaException
             Raised on call to read if:
 
-                * If the aggregation specified is not compatible with the type of the column being aggregated as
-                  specified above.
-                * The library has dynamic schema enabled, and at least one of the columns being aggregated is missing
-                  from at least one row-slice.
-                * At least one of the columns being aggregated contains sparse data.
+            * If the aggregation specified is not compatible with the type of the column being aggregated as
+              specified above.
+            * The library has dynamic schema enabled, and at least one of the columns being aggregated is missing
+              from at least one row-slice.
+            * At least one of the columns being aggregated contains sparse data.
 
         Examples
         --------
