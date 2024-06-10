@@ -1540,26 +1540,33 @@ FrameAndDescriptor read_index_columns_impl(
             pipeline_context->desc_ = tsd.as_stream_descriptor();
             const StreamDescriptor stream_descriptor = pipeline_context->descriptor();
             pipeline_context->selected_columns_ = util::BitMagic(stream_descriptor.fields().size());
-            // Index columns will always come first. The current MultiIndex implementation is not complete
-            // (there is really one index column as far as Arctic is concernded) thus the index descriptor
-            // will always return 1 if asked for the number of fields via tsd.as_stream_descriptor().index().field_count()
-            // However the metadata correctly stores which columns are part of the MultiIndex.
+            pipeline_context->overall_column_bitset_ = util::BitMagic(stream_descriptor.fields().size());
             for (int i = 0; i < read_query.columns.size(); ++i) {
                 (*(pipeline_context->selected_columns_))[i] = 1;
+                (*(pipeline_context->overall_column_bitset_))[i] = 1;
             }
-            pipeline_context->overall_column_bitset_ = pipeline_context->selected_columns_; 
             std::vector<FilterQuery<index::IndexSegmentReader>> queries;
             const bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
             const bool dynamic_schema = opt_false(read_options.dynamic_schema_);
             build_row_read_query_filters(read_query.row_filter, dynamic_schema, bucketize_dynamic, queries);
-            if (pipeline_context->overall_column_bitset_) {
-                queries.emplace_back(
-                    [context = pipeline_context](const index::IndexSegmentReader&, std::unique_ptr<util::BitSet>&&) {
-                        return std::make_unique<util::BitSet>(*context->overall_column_bitset_);
-                    }
-                );
+            if (queries.empty()) {
+                auto segment_start_row =
+                    index_segment_reader.column(index::Fields::start_row).begin<stream::SliceTypeDescriptorTag>();
+                auto segment_end_row =
+                    index_segment_reader.column(index::Fields::end_row).begin<stream::SliceTypeDescriptorTag>();
+                uint64_t current_index_segment_row = 0;
+                do {
+                    debug::check<ErrorCode::E_ASSERTION_FAILURE>(
+                        (current_index_segment_row == 0) || (*segment_start_row == *(segment_end_row - 1)),
+                        "Unexpected slice layout. The expected layout is column major."
+                    );
+                    pipeline_context->slice_and_keys_.push_back(index_segment_reader.row(current_index_segment_row++));
+                    ++segment_start_row;
+                    ++segment_end_row;
+                } while (*(segment_end_row-1) != index_segment_reader.tsd().proto().total_rows());
+            } else {
+                pipeline_context->slice_and_keys_ = filter_index(index_segment_reader, combine_filter_functions(queries));
             }
-            pipeline_context->slice_and_keys_ = filter_index(index_segment_reader, combine_filter_functions(queries));
             pipeline_context->total_rows_ = pipeline_context->calc_rows();
             pipeline_context->rows_ = index_segment_reader.tsd().proto().total_rows();
             pipeline_context->norm_meta_ = std::make_unique<arcticdb::proto::descriptors::NormalizationMetadata>(
@@ -1596,10 +1603,6 @@ FrameAndDescriptor read_index_columns_impl(
 
     modify_descriptor(pipeline_context, read_options);
 
-    // Index columns will always come first. The current MultiIndex implementation is not complete
-    // (there is really one index column as far as Arctic is concernded) thus the index descriptor
-    // will always return 1 if asked for the number of fields via tsd.as_stream_descriptor().index().field_count()
-    // However the metadata correctly stores which columns are part of the MultiIndex.
     pipeline_context->filter_columns_ = std::make_shared<FieldCollection>();
     pipeline_context->filter_columns_set_ = std::unordered_set<std::string_view>{};
     const StreamDescriptor& stream_descriptor = pipeline_context->descriptor();
