@@ -41,6 +41,23 @@ TEST(Allocator, Tracing) {
 }
 
 TEST(Allocator, PrintMemUsage) {
-    arcticdb::log::memory().set_level(spdlog::level::trace);
+    arcticdb::log::memory().set_level(spdlog::level::debug);
     arcticdb::util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
+
+    auto summary = arcticdb::util::get_memory_use_summary();
+#if defined(_WIN32) || defined(__APPLE__)
+    ASSERT_EQ(summary.size.value_, 0);
+    ASSERT_EQ(summary.resident.value_, 0);
+    ASSERT_EQ(summary.max_resident.value_, 0);
+    ASSERT_EQ(summary.shared.value_, 0);
+    ASSERT_EQ(summary.text.value_, 0);
+    ASSERT_EQ(summary.data_stack.value_, 0);
+#else
+    ASSERT_GT(summary.size.value_, 0);
+    ASSERT_GT(summary.resident.value_, 0);
+    ASSERT_GT(summary.max_resident.value_, 0);
+    ASSERT_GT(summary.shared.value_, 0);
+    ASSERT_GT(summary.text.value_, 0);
+    ASSERT_GT(summary.data_stack.value_, 0);
+#endif
 }
