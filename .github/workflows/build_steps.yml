@@ -94,12 +94,13 @@ jobs:
           disk-root: "D:"  # This is also the checkout directory. Total size 12GB.
         continue-on-error: true
 
+      - name: Install VS2022 BuildTools 17.9.7
+        if: matrix.os == 'windows'
+        run: choco install -y visualstudio2022buildtools --version=117.9.7.0 --params "--add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --installChannelUri https://aka.ms/vs/17/release/180911598_-255012421/channel"
+
       - name: Enable Windows compiler commands
         if: matrix.os == 'windows'
         uses: ilammy/msvc-dev-cmd@v1.12.1
-        with:
-          # The version of the toolset is specified due to faulty version discovery.
-          toolset: 14.39
 
       - name: Extra envs
         # This has to come after msvc-dev-cmd to overwrite the bad VCPKG_ROOT it sets
