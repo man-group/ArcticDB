@@ -16,7 +16,7 @@
 
 TEST(BitMagic, Basic) {
     using namespace arcticdb;
-    util::BitMagic bv;
+    util::BitSet bv;
     bv[0] = true;
     bv[3] = true;
 
@@ -34,7 +34,7 @@ TEST(BitMagic, DensifyAndExpand) {
     using namespace arcticdb;
     std::vector<float> sample_data;
     const size_t SPARSE_ELEMENTS = 1000;
-    util::BitMagic bv;
+    util::BitSet bv;
     size_t n_dense = 0;
     for (size_t idx = 0; idx < SPARSE_ELEMENTS; idx++) {
         if (idx % 2 == 0) {
@@ -69,4 +69,17 @@ TEST(BitMagic, DensifyAndExpand) {
         GTEST_ASSERT_EQ(data, *sparse_array);
         ++sparse_array;
     }
+}
+
+TEST(BitMagic, ForEachFunctor) {
+    using namespace arcticdb;
+    util::BitSet b;
+    b.set_bit(3);
+    b.set_bit(12);
+    b.set_bit(32);
+
+    BitVisitorFunctor func{[] (util::BitSetSizeType offset, uint64_t rank) {
+        log::version().info("{}: {}", rank, offset);
+    }};
+    bm::for_each_bit(b, func);
 }

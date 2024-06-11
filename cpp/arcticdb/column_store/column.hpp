@@ -264,10 +264,10 @@ public:
         }
     }
 
-    [[nodiscard]] util::BitMagic& sparse_map();
-    [[nodiscard]] const util::BitMagic& sparse_map() const;
-    [[nodiscard]] std::optional<util::BitMagic>& opt_sparse_map();
-    [[nodiscard]] std::optional<util::BitMagic> opt_sparse_map() const;
+    [[nodiscard]] util::BitSet& sparse_map();
+    [[nodiscard]] const util::BitSet& sparse_map() const;
+    [[nodiscard]] std::optional<util::BitSet>& opt_sparse_map();
+    [[nodiscard]] std::optional<util::BitSet> opt_sparse_map() const;
 
     template<typename TagType>
     auto begin() const {
@@ -416,7 +416,7 @@ public:
                          const std::vector<std::string> &input,
                          StringPool &string_pool);
 
-    void append_sparse_map(const util::BitMagic& bv, position_t at_row);
+    void append_sparse_map(const util::BitSet& bv, position_t at_row);
     void append(const Column& other, position_t at_row);
 
     // Sorts the column by an external column's jive_table.
@@ -937,7 +937,7 @@ private:
     bool inflated_ = false;
     bool allow_sparse_ = false;
 
-    std::optional<util::BitMagic> sparse_map_;
+    std::optional<util::BitSet> sparse_map_;
     util::MagicNum<'D', 'C', 'o', 'l'> magic_;
 }; //class Column
 

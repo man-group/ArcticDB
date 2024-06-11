@@ -295,7 +295,7 @@ public:
         const ChunkedBuffer* data,
         const Buffer* shapes,
         const TypeDescriptor &type,
-        const util::BitMagic* bit_vector) :
+        const util::BitSet* bit_vector) :
         data_(data),
         shapes_(shapes),
         pos_(0),
@@ -347,7 +347,7 @@ public:
         return *data_;
     }
 
-    [[nodiscard]] const util::BitMagic* bit_vector() const {
+    [[nodiscard]] const util::BitSet* bit_vector() const {
         return bit_vector_;
     }
 
@@ -470,7 +470,7 @@ public:
     size_t pos_;
     size_t shape_pos_;
     TypeDescriptor type_;
-    const util::BitMagic* bit_vector_;
+    const util::BitSet* bit_vector_;
 };
 
 }

@@ -135,7 +135,7 @@ void decode_string_pool(const SegmentHeader& hdr, const uint8_t*& data, const ui
         ARCTICDB_DEBUG(log::codec(), "Decoding string pool at position: {}", data - begin);
         util::check(data != end, "Reached end of input block with string pool fields to decode");
         context.allocate_string_pool();
-        std::optional<util::BitMagic> bv;
+        std::optional<util::BitSet> bv;
 
         // Note that this will decode the entire string pool into a ChunkedBuffer with exactly 1 chunk
         if(EncodingVersion(hdr.encoding_version()) == EncodingVersion::V2)
@@ -185,7 +185,7 @@ void decode_index_field(
             util::check(fields_match, "Cannot coerce index type from {} to {}",
                         context.descriptor().fields(0).type(), frame_field_descriptor.type());
 
-            std::optional<util::BitMagic> bv;
+            std::optional<util::BitSet> bv;
             data += decode_field(frame_field_descriptor.type(), field, data, sink, bv, encoding_version);
             util::check(!bv, "Unexpected sparse vector in index field");
             ARCTICDB_DEBUG(log::codec(), "Decoded index column {} to position {}", 0, data - begin);
@@ -204,7 +204,7 @@ void decode_or_expand(
     if(auto handler = TypeHandlerRegistry::instance()->get_handler(m.source_type_desc_); handler) {
         handler->handle_type(data, dest, encoded_field_info, m, dest_bytes, std::move(buffers), encoding_version);
     } else {
-        std::optional<util::BitMagic> bv;
+        std::optional<util::BitSet> bv;
         if (encoded_field_info.has_ndarray() && encoded_field_info.ndarray().sparse_map_bytes() > 0) {
             const auto &ndarray = encoded_field_info.ndarray();
             const auto bytes = encoding_sizes::data_uncompressed_size(ndarray);
