@@ -40,7 +40,8 @@ find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypasses our cpp/CMake/FindZstd.c
 
 find_package(azure-identity-cpp CONFIG REQUIRED)
 find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
-
+find_package(mimalloc REQUIRED)
+message(STATUS "mimalloc version: ${mimalloc_VERSION}")
 if(${BUILD_WITH_REMOTERY})
     add_compile_definitions(USE_REMOTERY)
 endif()
@@ -529,6 +530,7 @@ set (arcticdb_core_libraries
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
         Azure::azure-identity
         Azure::azure-storage-blobs
+        mimalloc-static
 )
 
 if(${ARCTICDB_PYTHON_EXPLICIT_LINK})
@@ -691,7 +693,6 @@ endif()
 target_link_libraries(arcticdb_ext
         PUBLIC
         PRIVATE
-        $<TARGET_OBJECTS:mimalloc-obj>
         arcticdb_python
         ${additional_link_flags}
         )

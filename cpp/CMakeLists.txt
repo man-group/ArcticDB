@@ -97,8 +97,7 @@ endif()
 
 set(FIND_LIBRARY_USE_LIB64_PATHS ON)
 include(PythonUtils) # Must be called before Pybind (third_party) to override its finding mechanism
-set(MI_LOCAL_DYNAMIC_TLS ON CACHE BOOL "")
-set(MI_BUILD_OBJECT ON CACHE BOOL "")
+
 add_subdirectory(third_party)
 add_subdirectory(proto)
 

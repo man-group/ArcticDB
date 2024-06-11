@@ -16,6 +16,3 @@
 [submodule "cpp/vcpkg"]
 	path = cpp/vcpkg
 	url = https://github.com/microsoft/vcpkg.git
-[submodule "cpp/third_party/mimalloc"]
-	path = cpp/third_party/mimalloc
-	url = https://github.com/microsoft/mimalloc.git
