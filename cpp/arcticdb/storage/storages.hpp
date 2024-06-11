@@ -144,6 +144,10 @@ class Storages {
             return std::nullopt;
         }
     }
+    std::string name() const {
+        return primary().name();
+    }
+
   private:
     Storage& primary() {
         util::check(!storages_.empty(), "No storages configured");

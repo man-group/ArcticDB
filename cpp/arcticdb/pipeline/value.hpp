@@ -132,6 +132,16 @@ struct Value {
         *str_data() = data;
     }
 
+    template<typename RawType>
+    std::string to_string() const {
+        if (has_sequence_type()) {
+            return "\"" + std::string(*str_data(), len()) + "\"";
+        }
+        else {
+            return fmt::format("{}", get<RawType>());
+        }
+    }
+
     ~Value() {
         if(has_sequence_type())
             delete[] *str_data();

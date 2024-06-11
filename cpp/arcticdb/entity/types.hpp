@@ -43,6 +43,7 @@ using VersionId = uint64_t;
 using SignedVersionId = int64_t;
 using GenerationId = VersionId;
 using timestamp = int64_t;
+// TODO: shape_t probably should be unsigned. Negative shapes don't make sense. This will involve a lot of changes in native_tensor.hpp
 using shape_t = int64_t;
 using stride_t = int64_t;
 using position_t = int64_t;

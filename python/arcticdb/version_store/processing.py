@@ -6,15 +6,16 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 from collections import namedtuple
+from dataclasses import dataclass
 import datetime
 from math import inf
 
 import numpy as np
 import pandas as pd
 
-from typing import Dict, NamedTuple, Tuple, Union
+from typing import Dict, NamedTuple, Optional, Tuple, Union
 
-from arcticdb.exceptions import ArcticNativeException, UserInputException
+from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticNativeException, UserInputException
 from arcticdb.version_store._normalization import normalize_dt_range_to_ts
 from arcticdb.preconditions import check
 from arcticdb.supported_types import DateRangeInput, time_types as supported_time_types
@@ -25,6 +26,9 @@ from arcticdb_ext.version_store import FilterClause as _FilterClause
 from arcticdb_ext.version_store import ProjectClause as _ProjectClause
 from arcticdb_ext.version_store import GroupByClause as _GroupByClause
 from arcticdb_ext.version_store import AggregationClause as _AggregationClause
+from arcticdb_ext.version_store import ResampleClauseLeftClosed as _ResampleClauseLeftClosed
+from arcticdb_ext.version_store import ResampleClauseRightClosed as _ResampleClauseRightClosed
+from arcticdb_ext.version_store import ResampleBoundary as _ResampleBoundary
 from arcticdb_ext.version_store import RowRangeClause as _RowRangeClause
 from arcticdb_ext.version_store import DateRangeClause as _DateRangeClause
 from arcticdb_ext.version_store import RowRangeType as _RowRangeType
@@ -299,6 +303,14 @@ class PythonRowRangeClause(NamedTuple):
     start: int = None
     end: int = None
 
+# Would be cleaner if all Python*Clause classes were dataclasses, but this is used for pickling, so hard to change now
+@dataclass
+class PythonResampleClause:
+    rule: str
+    closed: _ResampleBoundary
+    label: _ResampleBoundary
+    aggregations: Dict[str, Union[str, Tuple[str, str]]] = None
+
 
 class QueryBuilder:
     """
@@ -528,10 +540,10 @@ class QueryBuilder:
         return self
 
     def agg(self, aggregations: Dict[str, Union[str, Tuple[str, str]]]):
-        # Only makes sense if previous stage is a group-by
+        # Only makes sense if previous stage is a group-by or resample
         check(
-            len(self.clauses) and isinstance(self.clauses[-1], _GroupByClause),
-            f"Aggregation only makes sense after groupby",
+            len(self.clauses) and isinstance(self.clauses[-1], (_GroupByClause, _ResampleClauseLeftClosed, _ResampleClauseRightClosed)),
+            f"Aggregation only makes sense after groupby or resample",
         )
         for k, v in aggregations.items():
             check(isinstance(v, (str, tuple)), f"Values in agg dict expected to be strings or tuples, received {v} of type {type(v)}")
@@ -544,9 +556,171 @@ class QueryBuilder:
                 )
                 aggregations[k] = (v[0], v[1].lower())
 
-        self.clauses.append(_AggregationClause(self.clauses[-1].grouping_column, aggregations))
-        self._python_clauses.append(PythonAggregationClause(aggregations))
+        if isinstance(self.clauses[-1], _GroupByClause):
+            self.clauses.append(_AggregationClause(self.clauses[-1].grouping_column, aggregations))
+            self._python_clauses.append(PythonAggregationClause(aggregations))
+        else:
+            self.clauses[-1].set_aggregations(aggregations)
+            self._python_clauses[-1].aggregations = aggregations
         return self
+
+
+    def resample(
+            self,
+            rule: Union[str, pd.DateOffset],
+            closed: Optional[str] = None,
+            label: Optional[str] = None,
+    ):
+        """
+        Resample symbol on the index. Symbol must be datetime indexed. Resample operations must be followed by an
+        aggregation operator. Currently, the following 7 aggregation operators are supported:
+            * "mean" - compute the mean of the group
+            * "sum" - compute the sum of the group
+            * "min" - compute the min of the group
+            * "max" - compute the max of the group
+            * "count" - compute the count of group
+            * "first" - compute the first value in the group
+            * "last" - compute the last value in the group
+        Note that not all aggregators are supported with all column types.:
+            * Numeric columns - support all aggregators
+            * Bool columns - support all aggregators
+            * String columns - support count, first, and last aggregators
+            * Datetime columns - support all aggregators EXCEPT sum
+        Note that time-buckets which contain no index values in the symbol will NOT be included in the returned
+        DataFrame. This is not the same as Pandas default behaviour.
+        Resampling is currently not supported with:
+            * Dynamic schema where an aggregation column is missing from one or more of the row-slices.
+            * Sparse data.
+
+        Parameters
+        ----------
+        rule: Union[`str`, 'pd.DataOffset']
+            The frequency at which to resample the data. Supported rule strings are ns, us, ms, s, min, h, and D, and
+            multiples/combinations of these, such as 1h30min. pd.DataOffset objects representing frequencies from this
+            set are also accepted.
+        closed: Optional['str'], default=None
+            Which boundary of each time-bucket is closed. Must be one of 'left' or 'right'. If not provided, the default
+            is left for all currently supported frequencies.
+        label: Optional['str'], default=None
+            Which boundary of each time-bucket is used as the index value in the returned DataFrame. Must be one of
+            'left' or 'right'. If not provided, the default is left for all currently supported frequencies.
+
+        Returns
+        -------
+        QueryBuilder
+            Modified QueryBuilder object.
+
+        Raises
+        -------
+        ArcticDbNotYetImplemented
+            A frequency string or Pandas DateOffset object are provided to the rule argument outside the supported
+            frequencies listed above.
+        ArcticNativeException
+            The closed or label arguments are not one of "left" or "right"
+        SchemaException
+            Raised on call to read if:
+                * If the aggregation specified is not compatible with the type of the column being aggregated as
+                  specified above.
+                * The library has dynamic schema enabled, and at least one of the columns being aggregated is missing
+                  from at least one row-slice.
+                * At least one of the columns being aggregated contains sparse data.
+
+        Examples
+        --------
+        Resample two hours worth of minutely data down to hourly data, summing the column 'to_sum':
+        >>> df = pd.DataFrame(
+            {
+                "to_sum": np.arange(120),
+            },
+            index=pd.date_range("2024-01-01", freq="min", periods=120),
+        )
+        >>> q = adb.QueryBuilder()
+        >>> q = q.resample("h").agg({"to_sum": "sum"})
+        >>> lib.write("symbol", df)
+        >>> lib.read("symbol", query_builder=q).data
+                                 to_sum
+            2024-01-01 00:00:00    1770
+            2024-01-01 01:00:00    5370
+
+        As above, but specifying that the closed boundary of each time-bucket is the right hand side, and also to label
+        the output by the right boundary.
+        >>> q = adb.QueryBuilder()
+        >>> q = q.resample("h", closed="right", label="right").agg({"to_sum": "sum"})
+        >>> lib.read("symbol", query_builder=q).data
+                                 to_sum
+            2024-01-01 00:00:00       0
+            2024-01-01 01:00:00    1830
+            2024-01-01 02:00:00    5310
+
+        Nones, NaNs, and NaTs are omitted from aggregations
+        >>> df = pd.DataFrame(
+            {
+                "to_mean": [1.0, np.nan, 2.0],
+            },
+            index=pd.date_range("2024-01-01", freq="min", periods=3),
+        )
+        >>> q = adb.QueryBuilder()
+        >>> q = q.resample("h").agg({"to_mean": "mean"})
+        >>> lib.write("symbol", df)
+        >>> lib.read("symbol", query_builder=q).data
+                                 to_mean
+            2024-01-01 00:00:00      1.5
+
+        Output column names can be controlled through the format of the dict passed to agg
+        >>> df = pd.DataFrame(
+            {
+                "agg_1": [1, 2, 3, 4, 5],
+                "agg_2": [1.0, 2.0, 3.0, np.nan, 5.0],
+            },
+            index=pd.date_range("2024-01-01", freq="min", periods=5),
+        )
+        >>> q = adb.QueryBuilder()
+        >>> q = q.resample("h")
+        >>> q = q.agg({"agg_1_min": ("agg_1", "min"), "agg_1_max": ("agg_1", "max"), "agg_2": "mean"})
+        >>> lib.write("symbol", df)
+        >>> lib.read("symbol", query_builder=q).data
+                                 agg_1_min  agg_1_max     agg_2
+            2024-01-01 00:00:00          1          5      2.75
+        """
+        check(not len(self.clauses), "resample only supported as first clause in the pipeline")
+        rule = rule.freqstr if isinstance(rule, pd.DateOffset) else rule
+        # We use floor and ceiling later to round user-provided date ranges and or start/end index values of the symbol
+        # before calling pandas.date_range to generate the bucket boundaries, but floor and ceiling only work with
+        # well-defined intervals that are multiples of whole ns/us/ms/s/min/h/D
+        try:
+            pd.Timestamp(0).floor(rule)
+        except ValueError:
+            raise ArcticDbNotYetImplemented(f"Frequency string '{rule}' not yet supported. Valid frequency strings "
+                                            f"are ns, us, ms, s, min, h, D, and multiples/combinations thereof such "
+                                            f"as 1h30min")
+
+        # This set is documented here:
+        # https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Series.resample.html#pandas.Series.resample
+        # and lifted directly from pandas.core.resample.TimeGrouper.__init__, and so is inherently fragile to upstream
+        # changes
+        end_types = {"M", "A", "Q", "BM", "BA", "BQ", "W"}
+        boundary_map = {
+            "left": _ResampleBoundary.LEFT,
+            "right": _ResampleBoundary.RIGHT,
+            None: _ResampleBoundary.RIGHT if rule in end_types else _ResampleBoundary.LEFT
+        }
+        check(closed in boundary_map.keys(), f"closed kwarg to resample must be `left`, 'right', or None, but received '{closed}'")
+        check(label in boundary_map.keys(), f"label kwarg to resample must be `left`, 'right', or None, but received '{closed}'")
+        if boundary_map[closed] == _ResampleBoundary.LEFT:
+            self.clauses.append(_ResampleClauseLeftClosed(rule, boundary_map[label]))
+        else:
+            self.clauses.append(_ResampleClauseRightClosed(rule, boundary_map[label]))
+        self._python_clauses.append(PythonResampleClause(rule=rule, closed=boundary_map[closed], label=boundary_map[label]))
+        return self
+
+    def is_resample(self):
+        return len(self.clauses) and isinstance(self.clauses[0], (_ResampleClauseLeftClosed, _ResampleClauseRightClosed))
+
+    def set_date_range(self, date_range:Optional[DateRangeInput]):
+        if self.is_resample() and date_range is not None:
+            start, end = normalize_dt_range_to_ts(date_range)
+            self.clauses[0].set_date_range(start.value, end.value)
+
 
     # TODO: specify type of other must be QueryBuilder with from __future__ import annotations once only Python 3.7+
     # supported
@@ -565,11 +739,35 @@ class QueryBuilder:
             Modified QueryBuilder object.
         """
         check(
-            not len(other.clauses) or not isinstance(other.clauses[0], _DateRangeClause),
-            "In QueryBuilder.then: Date range only supported as first clause in the pipeline",
+            not len(other.clauses) or not isinstance(other.clauses[0], (_DateRangeClause, _ResampleClauseLeftClosed, _ResampleClauseRightClosed)),
+            "In QueryBuilder.then: Date range and Resample only supported as first clauses in the pipeline",
         )
         self.clauses.extend(other.clauses)
         self._python_clauses.extend(other._python_clauses)
+        return self
+
+    # TODO: specify type of other must be QueryBuilder with from __future__ import annotations once only Python 3.7+
+    # supported
+    def prepend(self, other):
+        """
+        Applies processing specified in other before any processing already defined for this QueryBuilder.
+
+        Parameters
+        ----------
+        other: `QueryBuilder`
+            QueryBuilder to apply before this one in the processing pipeline.
+
+        Returns
+        -------
+        QueryBuilder
+            Modified QueryBuilder object.
+        """
+        check(
+            not len(self.clauses) or not isinstance(self.clauses[0], (_DateRangeClause, _ResampleClauseLeftClosed, _ResampleClauseRightClosed)),
+            "In QueryBuilder.prepend: Date range and Resample only supported as first clauses in the pipeline",
+            )
+        self.clauses = other.clauses + self.clauses
+        self._python_clauses = other._python_clauses + self._python_clauses
         return self
 
     def _head(self, n: int):
@@ -662,6 +860,13 @@ class QueryBuilder:
                 self.clauses.append(_GroupByClause(python_clause.name))
             elif isinstance(python_clause, PythonAggregationClause):
                 self.clauses.append(_AggregationClause(self.clauses[-1].grouping_column, python_clause.aggregations))
+            elif isinstance(python_clause, PythonResampleClause):
+                if python_clause.closed == _ResampleBoundary.LEFT:
+                    self.clauses.append(_ResampleClauseLeftClosed(python_clause.rule, python_clause.label))
+                else:
+                    self.clauses.append(_ResampleClauseRightClosed(python_clause.rule, python_clause.label))
+                if python_clause.aggregations is not None:
+                    self.clauses[-1].set_aggregations(python_clause.aggregations)
             elif isinstance(python_clause, PythonRowRangeClause):
                 if python_clause.start is not None and python_clause.end is not None:
                     self.clauses.append(_RowRangeClause(python_clause.start, python_clause.end))
@@ -701,7 +906,7 @@ class QueryBuilder:
                 clause.set_pipeline_optimisation(_Optimisation.MEMORY)
 
     def needs_post_processing(self):
-        return not any(isinstance(clause, (_RowRangeClause, _DateRangeClause)) for clause in self.clauses)
+        return not any(isinstance(clause, (_RowRangeClause, _DateRangeClause, _ResampleClauseLeftClosed, _ResampleClauseRightClosed)) for clause in self.clauses)
 
 
 CONSTRUCTOR_MAP = {

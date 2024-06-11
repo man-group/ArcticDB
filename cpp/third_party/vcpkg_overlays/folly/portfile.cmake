@@ -8,8 +8,8 @@ vcpkg_add_to_path("${PYTHON3_DIR}")
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO facebook/folly
-    REF d8ed9cd2869c74b00fa6f1a7603301183f5c2249 #v2022.10.31.00
-    SHA512 55040dadb8a847f0d04c37a2dce920bb456a59decebc90920831998df9671feb33daf1f4235115adcce5eb9c469b97b9d96fa7a67a5914c434ebc1efc04f4770
+    REF 61c11d77eb9a8bdc60f673017fccfbe900125cb6 # v2023.09.25.00
+    SHA512 061413eaa14d8fc6d122f9fbf5ba66690d824461d256b3df1445f8de55832398ddb952d33121f7f576d18051809e3d6e648f465e3f4b4fa7df07781c1ba7219b
     HEAD_REF main
     PATCHES
         no_exception_tracer.patch
@@ -20,8 +20,6 @@ vcpkg_from_github(
         fix-deps.patch
         dont-inherit-cpp-version.patch
         ignore-uninitialized-local-variable-used.patch
-        0001-Include-missing-headers.patch
-        0002-Workaround-demangling-callback.patch
         0003-Set-FOLLY_HAVE_SO_TIMESTAMPING-to-0.patch
         0004-Do-not-use-PRId64.patch
         0005-Deactivate-libunwind-features.patch

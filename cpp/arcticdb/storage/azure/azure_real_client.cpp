@@ -32,9 +32,14 @@ container_client(BlobContainerClient::CreateFromConnectionString(conf.endpoint()
 
 Azure::Storage::Blobs::BlobClientOptions RealAzureClient::get_client_options(const Config &conf) {
     BlobClientOptions client_options;
-    if (!conf.ca_cert_path().empty()) {//WARNING: Setting ca_cert_path will force Azure sdk uses libcurl as backend support, instead of winhttp
+    if (!conf.ca_cert_path().empty() || !conf.ca_cert_dir().empty()) {//WARNING: Setting ca_cert_path or ca_cert_dir will force Azure sdk uses libcurl as backend support, instead of winhttp
         Azure::Core::Http::CurlTransportOptions curl_transport_options;
-        curl_transport_options.CAInfo = conf.ca_cert_path();
+        if (!conf.ca_cert_path().empty()) {
+            curl_transport_options.CAInfo = conf.ca_cert_path();
+        }
+        if (!conf.ca_cert_dir().empty()) {
+            curl_transport_options.CAPath = conf.ca_cert_dir();
+        }
         client_options.Transport.Transport = std::make_shared<Azure::Core::Http::CurlTransport>(curl_transport_options);
     }
     return client_options;

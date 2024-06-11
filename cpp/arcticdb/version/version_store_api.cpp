@@ -636,8 +636,9 @@ VersionedItem PythonVersionStore::update(
 VersionedItem PythonVersionStore::delete_range(
     const StreamId& stream_id,
     const UpdateQuery& query,
-    bool dynamic_schema) {
-    return delete_range_internal(stream_id, query, dynamic_schema);
+    bool dynamic_schema,
+    bool prune_previous_versions) {
+    return delete_range_internal(stream_id, query, DeleteRangeOptions{dynamic_schema, prune_previous_versions});
 }
 
 void PythonVersionStore::append_incomplete(
@@ -718,14 +719,15 @@ VersionedItem PythonVersionStore::sort_merge(
         bool append,
         bool convert_int_to_float,
         bool via_iteration,
-        bool sparsify
+        bool sparsify,
+        bool prune_previous_versions
 ) {
     std::optional<arcticdb::proto::descriptors::UserDefinedMetadata> meta;
     if (!user_meta.is_none()) {
         meta = std::make_optional<arcticdb::proto::descriptors::UserDefinedMetadata>();
         python_util::pb_from_python(user_meta, *meta);
     }
-    return sort_merge_internal(stream_id, meta, append, convert_int_to_float, via_iteration, sparsify);
+    return sort_merge_internal(stream_id, meta, SortMergeOptions{append, convert_int_to_float, via_iteration, sparsify, prune_previous_versions});
 }
 
 void PythonVersionStore::write_parallel(

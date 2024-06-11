@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import os.path as osp
 import re
 import time
@@ -226,9 +227,9 @@ def get_s3_proto(
     region=None,
     use_virtual_addressing=False,
     use_mock_storage_for_testing=None,
-    ca_cert_path="",
-    ca_cert_dir="",
-    ssl=False 
+    ca_cert_path=None,
+    ca_cert_dir=None,
+    ssl=False,
 ):
     env = cfg.env_by_id[env_name]
     s3 = S3Config()
@@ -283,8 +284,8 @@ def add_s3_library_to_env(
     region=None,
     use_virtual_addressing=False,
     use_mock_storage_for_testing=None,
-    ca_cert_path="",
-    ca_cert_dir="",
+    ca_cert_path=None,
+    ca_cert_dir=None,
     ssl=False,
 ):
     env = cfg.env_by_id[env_name]
@@ -323,6 +324,7 @@ def get_azure_proto(
     endpoint,
     with_prefix: Optional[Union[bool, str]] = True,
     ca_cert_path: str = "",
+    ca_cert_dir: str = "",
 ):
     env = cfg.env_by_id[env_name]
     azure = AzureConfig()
@@ -338,6 +340,7 @@ def get_azure_proto(
     else:
         azure.prefix = lib_name
     azure.ca_cert_path = ca_cert_path
+    azure.ca_cert_dir = ca_cert_dir
 
     sid, storage = get_storage_for_lib_name(azure.prefix, env)
     storage.config.Pack(azure, type_url_prefix="cxx.arctic.org")
@@ -353,6 +356,7 @@ def add_azure_library_to_env(
     description: Optional[bool] = None,
     with_prefix: Optional[Union[bool, str]] = True,
     ca_cert_path: str = "",
+    ca_cert_dir: str = "",
 ):
     env = cfg.env_by_id[env_name]
     sid, _ = get_azure_proto(
@@ -363,6 +367,7 @@ def add_azure_library_to_env(
         endpoint=endpoint,
         with_prefix=with_prefix,
         ca_cert_path=ca_cert_path,
+        ca_cert_dir=ca_cert_dir,
     )
 
     _add_lib_desc_to_env(env, lib_name, sid, description)

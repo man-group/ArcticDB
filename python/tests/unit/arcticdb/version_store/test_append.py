@@ -8,7 +8,11 @@ from numpy.testing import assert_array_equal
 
 from pandas import MultiIndex
 from arcticdb.version_store import NativeVersionStore
-from arcticdb_ext.exceptions import InternalException, NormalizationException, SortingException
+from arcticdb_ext.exceptions import (
+    InternalException,
+    NormalizationException,
+    SortingException,
+)
 from arcticdb_ext import set_config_int
 from arcticdb.util.test import random_integers, assert_frame_equal
 from arcticdb.config import set_log_level
@@ -28,6 +32,28 @@ def test_append_simple(lmdb_version_store):
     assert_frame_equal(vit.data, expected)
 
 
+def test_append_unicode(lmdb_version_store):
+    symbol = "test_append_unicode"
+    uc = "\u0420\u043e\u0441\u0441\u0438\u044f"
+
+    df1 = pd.DataFrame(
+        index=[pd.Timestamp("2018-01-02"), pd.Timestamp("2018-01-03")],
+        data={"a": ["123", uc]},
+    )
+    lmdb_version_store.write(symbol, df1)
+    vit = lmdb_version_store.read(symbol)
+    assert_frame_equal(vit.data, df1)
+
+    df2 = pd.DataFrame(
+        index=[pd.Timestamp("2018-01-04"), pd.Timestamp("2018-01-05")],
+        data={"a": ["123", uc]},
+    )
+    lmdb_version_store.append(symbol, df2)
+    vit = lmdb_version_store.read(symbol)
+    expected = pd.concat([df1, df2])
+    assert_frame_equal(vit.data, expected)
+
+
 @pytest.mark.parametrize("empty_types", (True, False))
 @pytest.mark.parametrize("dynamic_schema", (True, False))
 def test_append_range_index(version_store_factory, empty_types, dynamic_schema):
@@ -44,7 +70,11 @@ def test_append_range_index(version_store_factory, empty_types, dynamic_schema):
     assert_frame_equal(expected, received)
 
     # Appending a range starting earlier or later, or with a different step size, should fail
-    for idx in [pd.RangeIndex(6, 10, 2), pd.RangeIndex(10, 14, 2), pd.RangeIndex(8, 14, 3)]:
+    for idx in [
+        pd.RangeIndex(6, 10, 2),
+        pd.RangeIndex(10, 14, 2),
+        pd.RangeIndex(8, 14, 3),
+    ]:
         with pytest.raises(NormalizationException):
             lib.append(sym, pd.DataFrame({"col": [4, 5]}, index=idx))
 
@@ -86,7 +116,10 @@ def test_append_string_of_different_sizes(lmdb_version_store):
     vit = lmdb_version_store.read(symbol)
     assert_frame_equal(vit.data, df1)
 
-    df2 = pd.DataFrame(data={"x": ["catandsomethingelse", "dogandsomethingevenlonger"]}, index=np.arange(2, 4))
+    df2 = pd.DataFrame(
+        data={"x": ["catandsomethingelse", "dogandsomethingevenlonger"]},
+        index=np.arange(2, 4),
+    )
     lmdb_version_store.append(symbol, df2)
     vit = lmdb_version_store.read(symbol)
     expected = pd.concat([df1, df2])
@@ -142,7 +175,9 @@ def _random_integers(size, dtype):
     platform_int_info = np.iinfo("int_")
     iinfo = np.iinfo(dtype)
     return np.random.randint(
-        max(iinfo.min, platform_int_info.min), min(iinfo.max, platform_int_info.max), size=size
+        max(iinfo.min, platform_int_info.min),
+        min(iinfo.max, platform_int_info.max),
+        size=size,
     ).astype(dtype)
 
 
@@ -153,14 +188,19 @@ def test_append_out_of_order_throws(lmdb_version_store):
         lib.append("a", pd.DataFrame({"c": [4]}, index=pd.date_range(1, periods=1)))
 
 
-def test_append_out_of_order_and_sort(lmdb_version_store_ignore_order):
+@pytest.mark.parametrize("prune_previous_versions", [True, False])
+def test_append_out_of_order_and_sort(lmdb_version_store_ignore_order, prune_previous_versions):
     symbol = "out_of_order"
     lmdb_version_store_ignore_order.version_store.remove_incomplete(symbol)
 
     num_rows = 1111
     dtidx = pd.date_range("1970-01-01", periods=num_rows)
     test = pd.DataFrame(
-        {"uint8": _random_integers(num_rows, np.uint8), "uint32": _random_integers(num_rows, np.uint32)}, index=dtidx
+        {
+            "uint8": _random_integers(num_rows, np.uint8),
+            "uint32": _random_integers(num_rows, np.uint32),
+        },
+        index=dtidx,
     )
     chunk_size = 100
     list_df = [test[i : i + chunk_size] for i in range(0, test.shape[0], chunk_size)]
@@ -174,9 +214,20 @@ def test_append_out_of_order_and_sort(lmdb_version_store_ignore_order):
         else:
             lmdb_version_store_ignore_order.append(symbol, df)
 
-    lmdb_version_store_ignore_order.version_store.sort_index(symbol, True)
+    lmdb_version_store_ignore_order.version_store.sort_index(symbol, True, prune_previous_versions)
     vit = lmdb_version_store_ignore_order.read(symbol)
     assert_frame_equal(vit.data, test)
+
+    versions = [version["version"] for version in lmdb_version_store_ignore_order.list_versions(symbol)]
+    if prune_previous_versions:
+        assert len(versions) == 1 and versions[0] == len(list_df)
+    else:
+        assert len(versions) == len(list_df) + 1
+        for version in sorted(versions)[:-1]:
+            assert_frame_equal(
+                lmdb_version_store_ignore_order.read(symbol, as_of=version).data,
+                pd.concat(list_df[0 : version + 1]),
+            )
 
 
 def test_upsert_with_delete(lmdb_version_store_big_map):
@@ -188,7 +239,11 @@ def test_upsert_with_delete(lmdb_version_store_big_map):
     num_rows = 1111
     dtidx = pd.date_range("1970-01-01", periods=num_rows)
     test = pd.DataFrame(
-        {"uint8": _random_integers(num_rows, np.uint8), "uint32": _random_integers(num_rows, np.uint32)}, index=dtidx
+        {
+            "uint8": _random_integers(num_rows, np.uint8),
+            "uint32": _random_integers(num_rows, np.uint32),
+        },
+        index=dtidx,
     )
     chunk_size = 100
     list_df = [test[i : i + chunk_size] for i in range(0, test.shape[0], chunk_size)]
@@ -554,7 +609,8 @@ def test_read_incomplete_no_warning(s3_store_factory, sym, get_stderr):
         set_log_level()
 
 
-def test_defragment_read_prev_versions(sym, lmdb_version_store):
+@pytest.mark.parametrize("prune_previous_versions", [True, False])
+def test_defragment_read_prev_versions(sym, lmdb_version_store, prune_previous_versions):
     start_time, end_time = pd.to_datetime(("1990-1-1", "1995-1-1"))
     cols = ["a", "b", "c", "d"]
     index = pd.date_range(start_time, end_time, freq="D")
@@ -566,7 +622,11 @@ def test_defragment_read_prev_versions(sym, lmdb_version_store):
         update_start = end_time + pd.to_timedelta(idx, "days")
         update_end = update_start + pd.to_timedelta(10, "days")
         update_index = pd.date_range(update_start, update_end, freq="D")
-        update_df = pd.DataFrame(np.random.randn(len(update_index), len(cols)), index=update_index, columns=cols)
+        update_df = pd.DataFrame(
+            np.random.randn(len(update_index), len(cols)),
+            index=update_index,
+            columns=cols,
+        )
         lmdb_version_store.update(sym, update_df)
         next_expected_df = expected_dfs[-1].reindex(expected_dfs[-1].index.union(update_df.index))
         next_expected_df.loc[update_df.index] = update_df
@@ -580,15 +640,19 @@ def test_defragment_read_prev_versions(sym, lmdb_version_store):
 
     assert lmdb_version_store.is_symbol_fragmented(sym)
     assert lmdb_version_store.get_info(sym)["sorted"] == "ASCENDING"
-    versioned_item = lmdb_version_store.defragment_symbol_data(sym)
+    versioned_item = lmdb_version_store.defragment_symbol_data(sym, prune_previous_versions=prune_previous_versions)
     assert lmdb_version_store.get_info(sym)["sorted"] == "ASCENDING"
     assert versioned_item.version == 101
-    assert len(lmdb_version_store.list_versions(sym)) == 102
+    if prune_previous_versions:
+        assert len(lmdb_version_store.list_versions(sym)) == 1
+        assert lmdb_version_store.list_versions(sym)[0]["version"] == 101
+    else:
+        assert len(lmdb_version_store.list_versions(sym)) == 102
+        assert_frame_equal(lmdb_version_store.read(sym, as_of=0).data, expected_dfs[0])
+        for version_id, expected_df in enumerate(expected_dfs):
+            assert_frame_equal(lmdb_version_store.read(sym, as_of=version_id).data, expected_df)
 
     assert_frame_equal(lmdb_version_store.read(sym).data, expected_dfs[-1])
-    assert_frame_equal(lmdb_version_store.read(sym, as_of=0).data, expected_dfs[0])
-    for version_id, expected_df in enumerate(expected_dfs):
-        assert_frame_equal(lmdb_version_store.read(sym, as_of=version_id).data, expected_df)
 
 
 def test_defragment_no_work_to_do(sym, lmdb_version_store):

@@ -25,6 +25,8 @@ namespace arcticdb::storage::rocksdb {
         RocksDBStorage(const LibraryPath &lib, OpenMode mode, const Config &conf);
         ~RocksDBStorage() override;
 
+        std::string name() const final;
+
     private:
         void do_write(Composite<KeySegmentPair>&& kvs) final override;
 
@@ -55,6 +57,7 @@ namespace arcticdb::storage::rocksdb {
         using MapKeyType = std::string;
         using HandleType = ::rocksdb::ColumnFamilyHandle*;
         std::unordered_map<MapKeyType, HandleType> handles_by_key_type_;
+        std::string db_name_;
 
         inline static const std::string DEFAULT_ROCKSDB_NOT_OK_ERROR = "RocksDB Unexpected Error, RocksDB status not OK: ";
     };

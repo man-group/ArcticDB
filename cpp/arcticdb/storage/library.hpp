@@ -167,7 +167,8 @@ class Library {
     }
 
     std::string name() {
-        return library_path_.to_delim_path();
+        auto lib_name = storages_->name();
+        return lib_name;
     }
 
   private:

@@ -49,6 +49,14 @@ struct KeySizesInfo {
     size_t uncompressed_size; // bytes
 };
 
+struct SortMergeOptions {
+    bool append_;
+    bool convert_int_to_float_;
+    bool via_iteration_;
+    bool sparsify_;
+    bool prune_previous_versions_;
+};
+
 class LocalVersionedEngine : public VersionedEngine {
 
 public:
@@ -81,7 +89,7 @@ public:
     VersionedItem delete_range_internal(
         const StreamId& stream_id,
         const UpdateQuery& query,
-        bool dynamic_schema) override;
+        const DeleteRangeOptions& option) override;
 
     void append_incomplete_segment(
         const StreamId& stream_id,
@@ -258,11 +266,7 @@ public:
     VersionedItem sort_merge_internal(
         const StreamId& stream_id,
         const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
-        bool append,
-        bool convert_int_to_float,
-        bool via_iteration,
-        bool sparsify
-        );
+        const SortMergeOptions& option);
 
     std::vector<folly::Future<AtomKey>> batch_write_internal(
         const std::vector<VersionId>& version_ids,
@@ -329,7 +333,7 @@ public:
 
     bool is_symbol_fragmented(const StreamId& stream_id, std::optional<size_t> segment_size) override;
 
-    VersionedItem defragment_symbol_data(const StreamId& stream_id, std::optional<size_t> segment_size) override;
+    VersionedItem defragment_symbol_data(const StreamId& stream_id, std::optional<size_t> segment_size, bool prune_previous_versions) override;
     
     StorageLockWrapper get_storage_lock(const StreamId& stream_id) override;
 
@@ -344,7 +348,7 @@ public:
 
     timestamp latest_timestamp(const std::string& symbol) override;
 
-    VersionedItem sort_index(const StreamId& stream_id, bool dynamic_schema) override;
+    VersionedItem sort_index(const StreamId& stream_id, bool dynamic_schema, bool prune_previous_versions) override;
 
     void move_storage(
         KeyType key_type,

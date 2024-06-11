@@ -36,7 +36,8 @@ from tests.util.mark import (
     AZURE_TESTS_MARK,
     MONGO_TESTS_MARK,
     REAL_S3_TESTS_MARK,
-    S3_SSL_TEST_ENABLED,
+    SSL_TEST_ENABLED,
+    ARCTICDB_USING_CONDA
 )
 
 # region =================================== Misc. Constants & Setup ====================================
@@ -110,9 +111,10 @@ def lmdb_library(lmdb_storage, lib_name):
     return lmdb_storage.create_arctic().create_library(lib_name)
 
 
+# ssl is enabled by default to maximize test coverage as ssl is enabled most of the times in real world
 @pytest.fixture(scope="session")
 def s3_storage_factory():
-    with MotoS3StorageFixtureFactory(use_ssl=S3_SSL_TEST_ENABLED) as f:
+    with MotoS3StorageFixtureFactory(use_ssl=SSL_TEST_ENABLED) as f:
         yield f
 
 
@@ -165,16 +167,28 @@ def real_s3_storage(real_s3_storage_factory):
     with real_s3_storage_factory.create_fixture() as f:
         yield f
 
-
+# ssl cannot be ON by default due to azurite performance constraints https://github.com/man-group/ArcticDB/issues/1539
 @pytest.fixture(scope="session")
 def azurite_storage_factory():
-    with AzuriteStorageFixtureFactory() as f:
+    with AzuriteStorageFixtureFactory(use_ssl=False) as f:
         yield f
 
 
 @pytest.fixture
 def azurite_storage(azurite_storage_factory: AzuriteStorageFixtureFactory):
     with azurite_storage_factory.create_fixture() as f:
+        yield f
+
+
+@pytest.fixture(scope="session")
+def azurite_ssl_storage_factory():
+    with AzuriteStorageFixtureFactory(use_ssl=True) as f:
+        yield f
+
+
+@pytest.fixture
+def azurite_ssl_storage(azurite_ssl_storage_factory: AzuriteStorageFixtureFactory):
+    with azurite_ssl_storage_factory.create_fixture() as f:
         yield f
 
 
@@ -236,6 +250,26 @@ def arctic_client_no_lmdb(request, encoding_version):
 @pytest.fixture
 def arctic_library(arctic_client, lib_name):
     return arctic_client.create_library(lib_name)
+
+
+@pytest.fixture(
+    scope="function",
+    params=[
+        "lmdb",
+        "mem",
+        pytest.param("real_s3", marks=REAL_S3_TESTS_MARK),
+    ],
+)
+def basic_arctic_client(request, encoding_version):
+    storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage")
+    ac = storage_fixture.create_arctic(encoding_version=encoding_version)
+    assert not ac.list_libraries()
+    return ac
+
+
+@pytest.fixture
+def basic_arctic_library(basic_arctic_client, lib_name):
+    return basic_arctic_client.create_library(lib_name)
 
 
 # endregion
@@ -491,6 +525,10 @@ def lmdb_version_store_prune_previous(version_store_factory):
 def lmdb_version_store_big_map(version_store_factory):
     return version_store_factory(lmdb_config={"map_size": 2**30})
 
+
+@pytest.fixture
+def lmdb_version_store_very_big_map(version_store_factory):
+    return version_store_factory(lmdb_config={"map_size": 2**35})
 
 @pytest.fixture
 def lmdb_version_store_column_buckets(version_store_factory):

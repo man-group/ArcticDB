@@ -61,14 +61,16 @@
       "name": "arrow",
       "default-features": false
     },
+    "azure-core-cpp",
     "azure-identity-cpp",
     "azure-storage-blobs-cpp",
     "rocksdb",
     "benchmark"
   ],
   "overrides": [
-    { "name": "openssl", "version-string": "1.1.1n#1" },
+    { "name": "openssl", "version-string": "3.3.0" },
     { "name": "aws-sdk-cpp", "version": "1.11.201" },
+    { "name": "azure-core-cpp", "version": "1.11.2" },
     { "name": "aws-c-s3", "version": "0.3.24" },
     { "name": "bitmagic", "version": "7.12.3" },
     { "name": "boost-algorithm", "version": "1.84.0" },
@@ -150,7 +152,7 @@
     { "name": "curl", "version": "8.4.0" },
     { "name": "double-conversion", "version": "3.2.1" },
     { "name": "fmt", "version": "10.2.1" },
-    { "name": "folly", "version-string": "2022.10.31.00#3" },
+    { "name": "folly", "version-string": "2023.09.25.00" },
     { "name": "gflags", "version": "2.2.2#5" },
     { "name": "glog", "version": "0.6.0#2" },
     { "name": "gtest", "version": "1.12.1" },

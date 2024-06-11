@@ -31,6 +31,8 @@ class AzureStorage final : public Storage {
 
     AzureStorage(const LibraryPath &lib, OpenMode mode, const Config &conf);
 
+    std::string name() const final;
+
   protected:
     void do_write(Composite<KeySegmentPair>&& kvs) final;
 
@@ -58,11 +60,10 @@ class AzureStorage final : public Storage {
     std::unique_ptr<AzureClientWrapper> azure_client_;
 
     std::string root_folder_;
+    std::string container_name_;
     unsigned int request_timeout_;
     Azure::Storage::Blobs::UploadBlockBlobFromOptions upload_option_;
     Azure::Storage::Blobs::DownloadBlobToOptions download_option_;
-
-    Azure::Storage::Blobs::BlobClientOptions get_client_options(const Config &conf);
 };
 
 inline arcticdb::proto::storage::VariantStorage pack_config(const std::string &container_name) {

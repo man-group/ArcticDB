@@ -371,6 +371,10 @@ std::vector<folly::Future<bool>> batch_key_exists(
         library_->set_failure_sim(cfg);
     }
 
+    std::string name() const override {
+        return library_->name();
+    }
+
 private:
     std::shared_ptr<storage::Library> library_;
     std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_;

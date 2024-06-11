@@ -39,6 +39,8 @@ class S3Storage final : public Storage {
      */
     std::string get_key_path(const VariantKey& key) const;
 
+    std::string name() const final;
+
   private:
     void do_write(Composite<KeySegmentPair>&& kvs) final;
 
@@ -70,6 +72,7 @@ class S3Storage final : public Storage {
     std::unique_ptr<S3ClientWrapper> s3_client_;
     std::string root_folder_;
     std::string bucket_name_;
+    std::string region_;
 };
 
 inline arcticdb::proto::storage::VariantStorage pack_config(const std::string &bucket_name) {
@@ -212,6 +215,7 @@ auto get_s3_config(const ConfigType& conf) {
     auto endpoint_scheme = conf.https() ? Aws::Http::Scheme::HTTPS : Aws::Http::Scheme::HTTP;
     Aws::Client::ClientConfiguration client_configuration = get_proxy_config(endpoint_scheme);
     client_configuration.scheme = endpoint_scheme;
+    ARCTICDB_RUNTIME_DEBUG(log::storage(), "Endpoint Scheme: {}", conf.https() ? "https" : "http");
 
     if (!conf.region().empty()) {
         client_configuration.region = conf.region();

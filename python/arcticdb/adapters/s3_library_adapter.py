@@ -47,7 +47,7 @@ class ParsedQuery:
     # DEPRECATED - see https://github.com/man-group/ArcticDB/pull/833
     force_uri_lib_config: Optional[bool] = True
 
-    # winhttp is used as s3 backend support on Winodws by default; winhttp itself mainatains ca cert.
+    # winhttp is used as s3 backend support on Windows by default; winhttp itself maintains ca cert.
     # The options has no effect on Windows
     CA_cert_path: Optional[str] = "" # CURLOPT_CAINFO in curl
     CA_cert_dir: Optional[str] = "" # CURLOPT_CAPATH in curl
@@ -235,7 +235,7 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
 
     def _configure_aws(self):
         if not self._query_params.region:
-            match = re.match(r"s3\.(?P<region>[a-z0-9-]+)\.amazonaws.*", self._endpoint)
+            match = re.match(r"s3[-\.](?P<region>[a-z0-9-]+)\.amazonaws.*", self._endpoint)
             if match:
                 match_groups = match.groupdict()
                 self._query_params.region = match_groups["region"]

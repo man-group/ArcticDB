@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import numpy as np
 import pandas as pd
+import pickle
 import pytest
 import datetime
 import dateutil
@@ -416,6 +417,70 @@ def test_querybuilder_groupby_then_groupby(lmdb_version_store_tiny_segment):
     assert_frame_equal(expected, received)
 
 
+def test_querybuilder_resample_then_filter(lmdb_version_store_tiny_segment):
+    lib = lmdb_version_store_tiny_segment
+    symbol = "test_querybuilder_resample_then_filter"
+    idx = [0, 1, 2, 3, 1000, 1001]
+    idx = np.array(idx, dtype="datetime64[ns]")
+    df = pd.DataFrame({"col": np.arange(6)}, index=idx)
+    lib.write(symbol, df)
+
+    q = QueryBuilder()
+    q = q.resample("us").agg({"col": "sum"})
+    q = q[q["col"] == 9]
+
+    received = lib.read(symbol, query_builder=q).data
+
+    expected = df.resample("us").agg({"col": "sum"})
+    expected = expected.query("col == 9")
+    assert_frame_equal(expected, received, check_dtype=False)
+
+
+def test_querybuilder_resample_then_project(lmdb_version_store_tiny_segment):
+    lib = lmdb_version_store_tiny_segment
+    symbol = "test_querybuilder_resample_then_project"
+    idx = [0, 1, 2, 3, 1000, 1001]
+    idx = np.array(idx, dtype="datetime64[ns]")
+    df = pd.DataFrame({"col": np.arange(6)}, index=idx)
+    lib.write(symbol, df)
+
+    q = QueryBuilder()
+    q = q.resample("us").agg({"col": "sum"})
+    q = q.apply("new_col", q["col"] * 3)
+
+    received = lib.read(symbol, query_builder=q).data
+
+    expected = df.resample("us").agg({"col": "sum"})
+    expected["new_col"] = expected["col"] * 3
+    assert_frame_equal(expected, received, check_dtype=False)
+
+
+def test_querybuilder_resample_then_groupby(lmdb_version_store_tiny_segment):
+    lib = lmdb_version_store_tiny_segment
+    symbol = "test_querybuilder_resample_then_groupby"
+    idx = [0, 1, 1000, 1001, 2000, 2001, 3000, 3001]
+    idx = np.array(idx, dtype="datetime64[ns]")
+    # After downsampling and summing, grouping_col will be [0, 1, 1, 0]
+    df = pd.DataFrame(
+        {
+            "grouping_col": [0, 0, 10, -9, 20, -19, 30, -30],
+            "agg_col": np.arange(8),
+        },
+        index=idx)
+    lib.write(symbol, df)
+
+    q = QueryBuilder()
+    q = q.resample("us").agg({"grouping_col": "sum", "agg_col": "sum"})
+    q = q.groupby("grouping_col").agg({"agg_col": "sum"})
+
+    received = lib.read(symbol, query_builder=q).data
+    received.sort_index(inplace=True)
+
+    expected = df.resample("us").agg({"grouping_col": "sum", "agg_col": "sum"})
+    expected = expected.groupby("grouping_col").agg({"agg_col": "sum"})
+    assert_frame_equal(expected, received, check_dtype=False)
+
+
 def test_querybuilder_pickling():
     """QueryBuilder must be pickleable with all possible clauses."""
 
@@ -424,10 +489,10 @@ def test_querybuilder_pickling():
     # PythonDateRangeClause
     q = q.date_range((pd.Timestamp("2000-01-04"), pd.Timestamp("2000-01-07")))
 
-    # PythonProjectionClause
+    # PythonFilterClause
     q = q[q["col1"].isin(2, 3, 7)]
 
-    # PythonFilterClause
+    # PythonProjectionClause
     q = q.apply("new_col", (q["col1"] * q["col2"]) + 13)
 
     # PythonGroupByClause
@@ -436,67 +501,14 @@ def test_querybuilder_pickling():
     # PythonAggregationClause
     q = q.agg({"col2": "sum", "new_col": ("col2", "mean")})
 
-    import pickle
+    assert pickle.loads(pickle.dumps(q)) == q
+
+    # PythonResampleClause
+    q = QueryBuilder()
+    q = q.resample("T", "right", "left")
 
     assert pickle.loads(pickle.dumps(q)) == q
 
+    q = q.agg({"col2": "sum", "new_col": ("col2", "sum")})
 
-# Remove the following test and replace with more extensive ones once this issue is fixed:
-# https://github.com/man-group/ArcticDB/issues/1404
-def test_query_builder_sparse(lmdb_version_store):
-    lib = lmdb_version_store
-    sym = "test_filter_sparse"
-    df = pd.DataFrame(
-        {
-            "sparse_col": [0.0, np.nan, 0.0],
-            "dense_col": [0.0, 1.0, 2.0]
-         },
-        index=pd.date_range("2024-01-01", periods=3)
-    )
-    lib.write(sym, df, sparsify_floats=True)
-
-    # Filters
-    # These 2 filters exercise different code paths
-    q = QueryBuilder()
-    q = q[q["sparse_col"].isnull()]
-    with pytest.raises(SchemaException):
-        lib.read(sym, query_builder=q)
-    q = QueryBuilder()
-    q = q[q["sparse_col"] == np.float64(0.0)]
-    with pytest.raises(SchemaException):
-        lib.read(sym, query_builder=q)
-
-    # Projections
-    q = QueryBuilder().apply("projected_col", q["sparse_col"] + 1)
-    with pytest.raises(SchemaException):
-        lib.read(sym, query_builder=q)
-
-    # Groupbys
-    q = QueryBuilder().groupby("sparse_col").agg({"dense_col": "sum"})
-    with pytest.raises(SchemaException):
-        lib.read(sym, query_builder=q)
-
-    # Aggregations
-    q = QueryBuilder().groupby("dense_col").agg({"sparse_col": "sum"})
-    with pytest.raises(SchemaException):
-        lib.read(sym, query_builder=q)
-
-    # Date range
-    q = QueryBuilder().date_range((pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")))
-    with pytest.raises(SchemaException):
-        lib.read(sym, query_builder=q)
-
-    # Head
-    q = QueryBuilder()._head(2)
-    with pytest.raises(SchemaException):
-        lib.read(sym, query_builder=q)
-
-    # Tail
-    q = QueryBuilder()._tail(2)
-    with pytest.raises(SchemaException):
-        lib.read(sym, query_builder=q)
-
-    # Row range
-    q = QueryBuilder()._row_range((1, 2))
-    with pytest.raises(SchemaException):
-        lib.read(sym, query_builder=q)
+    assert pickle.loads(pickle.dumps(q)) == q
