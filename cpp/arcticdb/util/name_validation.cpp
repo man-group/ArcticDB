@@ -18,8 +18,8 @@ namespace arcticdb {
 // '*', '<' and '>' are problematic for S3
 const auto UNSUPPORTED_S3_CHARS = std::set<char>{'*', '<', '>'};
 
-// We currently require the size to fit in uint8. See entity/serialized_key.hpp
-constexpr auto MAX_SIZE = 255;
+// entity/serialized_key.hpp expects the symbol to be <255 chars
+constexpr size_t MAX_SIZE = std::numeric_limits<uint8_t>::max() - 1;
 
 void verify_name(
         const std::string& name_type_for_error,
@@ -28,6 +28,11 @@ void verify_name(
         const std::set<char>& unsupported_chars = UNSUPPORTED_S3_CHARS,
         std::optional<char> unsupported_prefix = std::nullopt,
         std::optional<char> unsupported_suffix = std::nullopt) {
+    if (name.empty()) {
+        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                "The {} cannot be an empty string.",
+                name_type_for_error);
+    }
     if (name.size() > MAX_SIZE) {
         user_input::raise<ErrorCode::E_NAME_TOO_LONG>(
                 "The {} length exceeds the max supported length. {} length: {}, Max Supported Length: {}",
@@ -54,7 +59,7 @@ void verify_name(
                     c);
         }
     }
-    if (unsupported_prefix.has_value() && name.size() > 0 && name[0] == unsupported_prefix.value()) {
+    if (unsupported_prefix.has_value() && name[0] == unsupported_prefix.value()) {
         user_input::raise<ErrorCode::E_INVALID_CHAR_IN_NAME>(
                 "The {} starts with an unsupported prefix. {}: {} Unsupported prefix: {} ",
                 name_type_for_error,
@@ -63,7 +68,7 @@ void verify_name(
                 unsupported_prefix.value()
         );
     }
-    if (unsupported_suffix.has_value() && name.size() > 0 && name[name.size() - 1] == unsupported_suffix.value()) {
+    if (unsupported_suffix.has_value() && name[name.size() - 1] == unsupported_suffix.value()) {
         user_input::raise<ErrorCode::E_INVALID_CHAR_IN_NAME>(
                 "The {} ends with an unsupported suffix. {}: {} Unsupported suffix: {} ",
                 name_type_for_error,
