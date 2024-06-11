@@ -21,7 +21,6 @@ from arcticdb.toolbox.library_tool import (
 from arcticdb_ext import set_config_int, unset_config_int
 from arcticdb_ext.storage import KeyType, OpenMode
 from arcticdb_ext.tools import CompactionId, CompactionLockName
-from arcticdb.storage_fixtures.s3 import MotoS3StorageFixtureFactory
 from arcticdb_ext.exceptions import InternalException
 
 from multiprocessing import Pool

@@ -15,7 +15,6 @@ from .api import *
 from .utils import get_ephemeral_port, GracefulProcessUtils, wait_for_server_to_come_up, safer_rmtree, get_ca_cert_for_testing
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 from arcticdb.version_store.helper import add_azure_library_to_env
-from tests.util.mark import SSL_TEST_ENABLED
 
 # All storage client libraries to be imported on-demand to speed up start-up of ad-hoc test runs
 if TYPE_CHECKING:
@@ -134,18 +133,19 @@ class AzuriteStorageFixtureFactory(StorageFixtureFactory):
     enforcing_permissions = False
     """Set to True to create AzureContainer with SAS authentication"""
 
-    def __init__(self, port=0, working_dir: Optional[str] = None, use_ssl: bool = True):
+    def __init__(self, port=0, working_dir: Optional[str] = None, use_ssl: bool = True, ssl_test_support: bool = True):
         self.http_protocol = "https" if use_ssl else "http"
         self.port = port or get_ephemeral_port(0)
         self.endpoint_root = f"{self.http_protocol}://{self.host}:{self.port}"
         self.working_dir = str(working_dir) if working_dir else mkdtemp(suffix="AzuriteStorageFixtureFactory")
+        self.ssl_test_support = ssl_test_support
 
     def __str__(self):
         return f"AzuriteStorageFixtureFactory[port={self.port},dir={self.working_dir}]"
 
     def _safe_enter(self):
         args = f"{shutil.which('azurite')} --blobPort {self.port} --blobHost {self.host} --queuePort 0 --tablePort 0"
-        if SSL_TEST_ENABLED:
+        if self.ssl_test_support:
             self.client_cert_dir = self.working_dir
             self.ca, self.key_file, self.cert_file, self.client_cert_file = get_ca_cert_for_testing(self.client_cert_dir)
         else:
