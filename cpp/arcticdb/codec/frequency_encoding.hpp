@@ -33,7 +33,7 @@ struct FrequencyEncoding {
     size_t bitset_max_bytes() {
         bm::serializer<util::BitSet>::statistics_type stat{};
         bitset_->calc_stat(&stat);
-        log::version().info("Bitset predicted bytes: {}", stat.max_serialize_mem);
+        ARCTICDB_DEBUG(log.version, "Bitset predicted bytes: {}", stat.max_serialize_mem);
         return stat.max_serialize_mem;
     }
 
@@ -81,7 +81,7 @@ struct FrequencyEncoding {
             util::check(leader_count <= num_rows, "Count of leader cannot be more than num_rows in frequency encoding");
             bitset_.emplace(util::BitSet(num_rows));
             expected_bytes_ = sizeof(Data) + (num_exceptions * sizeof(T)) + bitset_max_bytes();
-            log::version().info("Frequency encoding max required bytes: {}", *expected_bytes_);
+            ARCTICDB_DEBUG(log.version, "Frequency encoding max required bytes: {}", *expected_bytes_);
             util::check(*expected_bytes_ != 0, "Frequency encoding expects non-zero output bytes");
             return expected_bytes_;
         } else {
@@ -116,12 +116,12 @@ struct FrequencyEncoding {
 
         inserter.flush();
         auto buffer = encode_bitmap(*bitset_);
-        log::version().info("Bitset actual bytes: {}", buffer.size());
+        ARCTICDB_DEBUG(log.version, "Bitset actual bytes: {}", buffer.size());
         target += data->exceptions_ * sizeof(T);
         memcpy(target, buffer.data(), buffer.size());
         data->bitset_bytes_ = buffer.size();
         target += buffer.size();
-        log::version().info("Frequency encoding actual bytes: {}", target - data_out);
+        ARCTICDB_DEBUG(log.version, "Frequency encoding actual bytes: {}", target - data_out);
         return target - data_out;
     }
 
