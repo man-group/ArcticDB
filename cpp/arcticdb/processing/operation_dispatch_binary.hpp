@@ -94,7 +94,7 @@ VariantData binary_membership(const ColumnWithStrings& column_with_strings, Valu
                     typed_value_set = value_set.get_set<std::string>();
                 }
                 auto offset_set = column_with_strings.string_pool_->get_offsets_for_column(typed_value_set, *column_with_strings.column_);
-                Column::transform_to_bitset<typename col_type_info::TDT>(
+                Column::transform<typename col_type_info::TDT>(
                         *column_with_strings.column_,
                         output_bitset,
                         sparse_missing_value_output,
@@ -107,7 +107,7 @@ VariantData binary_membership(const ColumnWithStrings& column_with_strings, Valu
             } else if constexpr (is_numeric_type(col_type_info::data_type) && is_numeric_type(val_set_type_info::data_type)) {
                 using WideType = typename type_arithmetic_promoted_type<typename col_type_info::RawType,typename val_set_type_info::RawType, std::remove_reference_t<Func>>::type;
                 auto typed_value_set = value_set.get_set<WideType>();
-                Column::transform_to_bitset<typename col_type_info::TDT>(
+                Column::transform<typename col_type_info::TDT>(
                         *column_with_strings.column_,
                         output_bitset,
                         sparse_missing_value_output,
@@ -231,7 +231,7 @@ VariantData binary_comparator(const ColumnWithStrings& column_with_strings, cons
                     value_string = std::string(*val.str_data(), val.len());
                 }
                 auto value_offset = column_with_strings.string_pool_->get_offset_for_column(value_string, *column_with_strings.column_);
-                Column::transform_to_bitset<typename col_type_info::TDT>(
+                Column::transform<typename col_type_info::TDT>(
                         *column_with_strings.column_,
                         output_bitset,
                         sparse_missing_value_output,
@@ -249,7 +249,7 @@ VariantData binary_comparator(const ColumnWithStrings& column_with_strings, cons
                                                 typename arcticdb::Comparable<typename col_type_info::RawType, typename val_type_info::RawType>,
                                                 typename arcticdb::Comparable<typename val_type_info::RawType, typename col_type_info::RawType>>;
                 auto value = static_cast<typename comp::left_type>(*reinterpret_cast<const typename val_type_info::RawType *>(val.data_));
-                Column::transform_to_bitset<typename col_type_info::TDT>(
+                Column::transform<typename col_type_info::TDT>(
                         *column_with_strings.column_,
                         output_bitset,
                         sparse_missing_value_output,
