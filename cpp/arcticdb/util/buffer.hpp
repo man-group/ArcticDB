@@ -150,7 +150,7 @@ struct Buffer : public BaseBuffer<Buffer, true> {
         check_invariants();
         if (bytes_offset  + required_bytes > bytes()) {
             std::string err = fmt::format("Cursor overflow in reallocating buffer ptr_cast, cannot read {} bytes from a buffer of size {} with cursor "
-                                          "at {}, as it would required {} bytes. ",
+                                          "at {}, as it would require {} bytes. ",
                                           required_bytes,
                                           bytes(),
                                           bytes_offset,
