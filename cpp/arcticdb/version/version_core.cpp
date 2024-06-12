@@ -1618,6 +1618,9 @@ FrameAndDescriptor read_index_columns_impl(
 
     ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
     reduce_and_fix_columns(pipeline_context, frame, read_options);
+    if (pipeline_context->descriptor().index().type() == IndexDescriptor::ROWCOUNT) {
+        frame.set_row_id(pipeline_context->rows_ - 1);
+    }
     return {
         std::move(frame),
         timeseries_descriptor_from_pipeline_context(*pipeline_context, {}, pipeline_context->bucketize_dynamic_),
