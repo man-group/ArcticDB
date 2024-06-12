@@ -306,7 +306,7 @@ class ChunkedBufferImpl {
     void check_bytes(size_t pos_bytes, size_t required_bytes) const {
         if (pos_bytes + required_bytes > bytes()) {
             std::string err = fmt::format("Cursor overflow in chunked_buffer ptr_cast, cannot read {} bytes from a buffer of size {} with cursor "
-                                          "at {}, as it would required {} bytes. ",
+                                          "at {}, as it would require {} bytes. ",
                                           required_bytes,
                                           bytes(),
                                           pos_bytes,
