@@ -304,6 +304,21 @@ def test_append_not_sorted_exception(lmdb_version_store):
         lmdb_version_store.append(symbol, df2, validate_index=True)
 
 
+@pytest.mark.parametrize("validate_index", (True, False))
+def test_append_same_index_value(lmdb_version_store_v1, validate_index):
+    lib = lmdb_version_store_v1
+    sym = "test_append_same_index_value"
+    df_0 = pd.DataFrame({"col": [1, 2]}, index=pd.date_range("2024-01-01", periods=2))
+    lib.write(sym, df_0)
+
+    df_1 = pd.DataFrame({"col": [3, 4]}, index=pd.date_range(df_0.index[-1], periods=2))
+    lib.append(sym, df_1, validate_index=validate_index)
+    expected = pd.concat([df_0, df_1])
+    received = lib.read(sym).data
+    assert_frame_equal(expected, received)
+    assert lib.get_info(sym)["sorted"] == "ASCENDING"
+
+
 def test_append_existing_not_sorted_exception(lmdb_version_store):
     symbol = "bad_append"
 

@@ -342,6 +342,33 @@ def test_parallel_non_timestamp_index(lmdb_version_store, append):
 
 
 @pytest.mark.parametrize("append", (True, False))
+def test_parallel_all_same_index_values(lmdb_version_store, append):
+    lib = lmdb_version_store
+    sym = "test_parallel_all_same_index_values"
+    if append:
+        df_0 = pd.DataFrame({"col": [1, 2]}, index=[pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-01")])
+        lib.write(sym, df_0)
+    df_1 = pd.DataFrame({"col": [3, 4]}, index=[pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-02")])
+    df_2 = pd.DataFrame({"col": [5, 6]}, index=[pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-02")])
+    if append:
+        lib.append(sym, df_2, incomplete=True)
+        lib.append(sym, df_1, incomplete=True)
+    else:
+        lib.write(sym, df_2, parallel=True)
+        lib.write(sym, df_1, parallel=True)
+    lib.compact_incomplete(sym, append, False)
+    received = lib.read(sym).data
+    # Index values in incompletes all the same, so order of values in col could be [3, 4, 5, 6] or [5, 6, 3, 4]
+    if append:
+        expected = pd.concat([df_0, df_1, df_2]) if received["col"][2] == 3 else pd.concat([df_0, df_2, df_1])
+        assert_frame_equal(expected, received)
+    else:
+        expected = pd.concat([df_1, df_2]) if received["col"][0] == 3 else pd.concat([df_2, df_1])
+        assert_frame_equal(expected, received)
+    assert lib.get_info(sym)["sorted"] == "ASCENDING"
+
+
+@pytest.mark.parametrize("append", (True, False))
 def test_parallel_overlapping_incomplete_segments(lmdb_version_store, append):
     lib = lmdb_version_store
     sym = "test_parallel_overlapping_incomplete_segments"
@@ -358,6 +385,21 @@ def test_parallel_overlapping_incomplete_segments(lmdb_version_store, append):
         lib.write(sym, df_1, parallel=True)
     with pytest.raises(SortingException):
         lib.compact_incomplete(sym, append, False)
+
+
+def test_parallel_append_exactly_matches_existing(lmdb_version_store):
+    lib = lmdb_version_store
+    sym = "test_parallel_append_exactly_matches_existing"
+    df_0 = pd.DataFrame({"col": [1, 2]}, index=[pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")])
+    lib.write(sym, df_0)
+    df_1 = pd.DataFrame({"col": [3, 4]}, index=[pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-03")])
+    lib.append(sym, df_1, incomplete=True)
+    lib.compact_incomplete(sym, True, False)
+    expected = pd.concat([df_0, df_1])
+    received = lib.read(sym).data
+    assert_frame_equal(expected, received)
+    assert lib.get_info(sym)["sorted"] == "ASCENDING"
+
 
 
 def test_parallel_append_overlapping_with_existing(lmdb_version_store):
