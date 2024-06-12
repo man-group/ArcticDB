@@ -1549,7 +1549,7 @@ FrameAndDescriptor read_index_columns_impl(
             const bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
             const bool dynamic_schema = opt_false(read_options.dynamic_schema_);
             build_row_read_query_filters(read_query.row_filter, dynamic_schema, bucketize_dynamic, queries);
-            if (queries.empty()) {
+            if (queries.empty() && index_segment_reader.seg().row_count() > 0) {
                 auto segment_start_row =
                     index_segment_reader.column(index::Fields::start_row).begin<stream::SliceTypeDescriptorTag>();
                 auto segment_end_row =
@@ -1564,7 +1564,7 @@ FrameAndDescriptor read_index_columns_impl(
                     ++segment_start_row;
                     ++segment_end_row;
                 } while (*(segment_end_row-1) != index_segment_reader.tsd().proto().total_rows());
-            } else {
+            } else if (index_segment_reader.seg().row_count() > 0) {
                 pipeline_context->slice_and_keys_ = filter_index(index_segment_reader, combine_filter_functions(queries));
             }
             pipeline_context->total_rows_ = pipeline_context->calc_rows();
@@ -1619,7 +1619,7 @@ FrameAndDescriptor read_index_columns_impl(
     ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
     reduce_and_fix_columns(pipeline_context, frame, read_options);
     return {
-        frame,
+        std::move(frame),
         timeseries_descriptor_from_pipeline_context(*pipeline_context, {}, pipeline_context->bucketize_dynamic_),
         {},
         buffers
