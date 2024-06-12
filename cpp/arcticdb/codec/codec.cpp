@@ -219,7 +219,14 @@ std::optional<FieldCollection> decode_descriptor_fields(
     }
 }
 
-std::optional<std::tuple<google::protobuf::Any, arcticdb::proto::descriptors::TimeSeriesDescriptor, FieldCollection>> decode_timeseries_descriptor(
+std::optional<
+        std::tuple<
+                google::protobuf::Any,
+                arcticdb::proto::descriptors::TimeSeriesDescriptor,
+                FieldCollection
+        >
+>
+decode_timeseries_descriptor(
     const arcticdb::proto::encoding::SegmentHeader& hdr,
     const uint8_t* data,
     const uint8_t* begin,
