@@ -151,6 +151,15 @@ jobs:
         env:
           ARCTICDB_memory_loglevel: INFO
 
+      # We don't do anything with the benchmarks automatically yet, but check that they at least compile and run.
+      - name: Compile C++ Benchmarks
+        if: inputs.job_type == 'cpp-tests'
+        run: cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET --target benchmarks -j $CMAKE_BUILD_PARALLEL_LEVEL
+
+      - name: Run C++ Benchmarks
+        if: inputs.job_type == 'cpp-tests'
+        run: cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/benchmarks
+
       # ========================= build-python-wheels (CIBW) steps =========================
       - name: Get CIBuildWheel image & metadata
         if: inputs.job_type == 'build-python-wheels' && matrix.os == 'linux'
