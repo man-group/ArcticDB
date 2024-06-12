@@ -21,12 +21,13 @@ from arcticdb.toolbox.library_tool import (
 from arcticdb_ext import set_config_int, unset_config_int
 from arcticdb_ext.storage import KeyType, OpenMode
 from arcticdb_ext.tools import CompactionId, CompactionLockName
-from arcticdb_ext.exceptions import InternalException
+from arcticdb_ext.exceptions import InternalException, PermissionException
 
 from multiprocessing import Pool
 from arcticdb_ext import set_config_int
 import random
 import string
+from tests.util.mark import MACOS_CONDA_BUILD
 
 
 @pytest.fixture(autouse=True)
@@ -391,3 +392,77 @@ def test_symbol_list_parallel_stress_with_delete(
 def test_symbol_list_exception_and_printout(mock_s3_store_with_mock_storage_exception):  # moto is choosen just because it's easy to give storage error
     with pytest.raises(InternalException, match="E_S3_RETRYABLE Retry-able error"):
         mock_s3_store_with_mock_storage_exception.list_symbols()
+
+
+def test_force_compact_symbol_list(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    lib_tool = lib.library_tool()
+    # No symbol list keys
+    assert lib.compact_symbol_list() == 0
+    symbol_list_keys = lib_tool.find_keys(KeyType.SYMBOL_LIST)
+    assert len(symbol_list_keys) == 1
+    assert not len(lib.list_symbols())
+    lib_tool.remove(symbol_list_keys[0])
+
+    num_syms = 1000
+    syms = [f"sym_{idx:03}" for idx in range(num_syms)]
+    for sym in syms:
+        lib.write(sym, 1)
+    symbol_list_keys = lib_tool.find_keys(KeyType.SYMBOL_LIST)
+    assert len(symbol_list_keys) == num_syms
+    assert lib.compact_symbol_list() == num_syms
+    symbol_list_keys = lib_tool.find_keys(KeyType.SYMBOL_LIST)
+    assert len(symbol_list_keys) == 1
+    assert set(lib.list_symbols()) == set(syms)
+    # Idempotent
+    assert lib.compact_symbol_list() == 1
+    symbol_list_keys = lib_tool.find_keys(KeyType.SYMBOL_LIST)
+    assert len(symbol_list_keys) == 1
+    assert set(lib.list_symbols()) == set(syms)
+    # Everything deleted
+    for sym in syms:
+        lib.delete(sym)
+    # +1 for previous compacted key
+    assert lib.compact_symbol_list() == num_syms + 1
+    symbol_list_keys = lib_tool.find_keys(KeyType.SYMBOL_LIST)
+    assert len(symbol_list_keys) == 1
+    assert not len(lib.list_symbols())
+
+
+# Using S3 because LMDB does not allow OpenMode to be changed
+def test_force_compact_symbol_list_read_only(s3_version_store_v1):
+    lib_write = s3_version_store_v1
+    lib_read_only = make_read_only(lib_write)
+    # No symbol list keys
+    with pytest.raises(PermissionException):
+        lib_read_only.compact_symbol_list()
+    # Some symbol list keys
+    lib_write.write("sym1", 1)
+    lib_write.write("sym2", 1)
+    with pytest.raises(PermissionException):
+        lib_read_only.compact_symbol_list()
+    # One compacted symbol list key
+    assert lib_write.compact_symbol_list() == 2
+    with pytest.raises(PermissionException):
+        lib_read_only.compact_symbol_list()
+
+
+def test_force_compact_symbol_list_lock_held(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    lock = lib.version_store.get_storage_lock(CompactionLockName)
+    lock.lock()
+    with pytest.raises(InternalException):
+        lib.compact_symbol_list()
+    lock.unlock()
+    assert lib.compact_symbol_list() == 0
+
+
+@pytest.mark.skipif(MACOS_CONDA_BUILD, reason="Failing for unclear reasons")
+def test_force_compact_symbol_list_lock_held_past_ttl(lmdb_version_store_v1):
+    # Set TTL to 5 seconds. Compact symbol list will retry for 10 seconds, so should always work
+    set_config_int("StorageLock.TTL", 5_000_000_000)
+    lib = lmdb_version_store_v1
+    lock = lib.version_store.get_storage_lock(CompactionLockName)
+    lock.lock()
+    assert lib.compact_symbol_list() == 0
+

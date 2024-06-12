@@ -203,6 +203,11 @@ std::set<StreamId> LocalVersionedEngine::list_streams_internal(
     return res;
 }
 
+size_t LocalVersionedEngine::compact_symbol_list_internal() {
+    ARCTICDB_SAMPLE(CompactSymbolListInternal, 0)
+    return symbol_list().compact(store());
+}
+
 std::string LocalVersionedEngine::dump_versions(const StreamId& stream_id) {
     return version_map()->dump_entry(store(), stream_id);
 }

@@ -1706,6 +1706,24 @@ class Library:
         """
         self._nvs.version_store.reload_symbol_list()
 
+    def compact_symbol_list(self) -> None:
+        """
+        Compact the symbol list cache into a single key in the storage
+
+        Returns
+        -------
+        The number of symbol list keys prior to compaction
+
+
+        Raises
+        ------
+        PermissionException
+            Library has been opened in read-only mode
+        InternalException
+            Storage lock required to compact the symbol list could not be acquired
+        """
+        return self._nvs.compact_symbol_list()
+
     def is_symbol_fragmented(self, symbol: str, segment_size: Optional[int] = None) -> bool:
         """
         Check whether the number of segments that would be reduced by compaction is more than or equal to the

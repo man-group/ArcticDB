@@ -20,6 +20,7 @@
 #include <map>
 #include <ctime>
 #include <sstream>
+#include <iomanip>
 
 namespace arcticdb {
 
@@ -292,6 +293,13 @@ arcticdb::ScopedTimerTotal timer1{#name, [&data](auto totals) { \
 arcticdb::ScopedTimerTotal timer2{#name, [&data](auto totals) { \
     std::copy(std::begin(totals), std::end(totals), std::back_inserter(data)); \
 }};
+
+inline std::string date_and_time(int64_t ts) {
+    std::time_t seconds_since_epoch = ts / BILLION;
+    std::stringstream ss;
+    ss << std::put_time(std::gmtime(&seconds_since_epoch), "%F %T");
+    return ss.str();
+}
 
 
 } //namespace arcticdb

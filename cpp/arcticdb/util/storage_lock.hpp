@@ -116,7 +116,7 @@ class StorageLock {
         OnExit x{[that=this] () {
             that->mutex_.unlock();
         }};
-        if(!ref_key_exists(store) || ttl_expired(store)) {
+        if(!ref_key_exists(store) || !ttl_not_expired(store)) {
             ts_= create_ref_key(store);
             auto lock_sleep = ConfigsMap::instance()->get_int("StorageLock.WaitMs", 200);
             std::this_thread::sleep_for(std::chrono::milliseconds(lock_sleep));
@@ -154,13 +154,14 @@ class StorageLock {
             sleep_ms(wait_ms);
             total_wait += wait_ms;
             wait_ms *= 2;
-            if (ttl_expired(store))
+            auto read_ts = ttl_not_expired(store);
+            if (!read_ts)
                 break;
             if (timeout_ms && total_wait > *timeout_ms) {
                 ts_ = 0;
                 log::lock().info("Lock timed out, giving up after {}", wait_ms);
                 mutex_.unlock();
-                throw StorageLockTimeout{fmt::format("Storage lock {} timeout out after {} ms", name_, total_wait)};
+                throw StorageLockTimeout{fmt::format("Storage lock {} timeout out after {} ms. Lock held since {} (UTC)", name_, total_wait, date_and_time(*read_ts))};
             }
         }
         ts_ = create_ref_key(store);
@@ -224,17 +225,18 @@ class StorageLock {
         }
     }
 
-    bool ttl_expired(const std::shared_ptr<Store>& store) {
-        if (auto read_ts = read_timestamp(store); read_ts) {
+    std::optional<timestamp> ttl_not_expired(const std::shared_ptr<Store>& store) {
+        auto read_ts = read_timestamp(store);
+        if (read_ts) {
             // check TTL
             auto ttl = ConfigsMap::instance()->get_int("StorageLock.TTL", DEFAULT_TTL_INTERVAL);
             if (ClockType::coarse_nanos_since_epoch() - *read_ts > ttl) {
                 log::lock().warn("StorageLock {} taken for more than TTL (default 1 day). Force releasing", name_);
                 force_release_lock(name_, store);
-                return true;
+                return std::nullopt;
             }
         }
-        return false;
+        return read_ts;
     }
 };
 
