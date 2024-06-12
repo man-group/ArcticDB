@@ -331,7 +331,10 @@ class QueryBuilder:
 
     * isna, isnull, notna, and notnull - return all rows where a specified column is/is not NaN or None. isna is
     equivalent to isnull, and notna is equivalent to notnull, i.e. no distinction is made between NaN and None values
-    in column types that support both (e.g. strings). For example: ``q = q[q["col"].isna()]``
+    in column types that support both (e.g. strings). For example:
+        ```
+        >>> q = q[q["col"].isna()]
+        ```
     
     * Binary comparisons: <, <=, >, >=, ==, !=
     * Unary NOT: ~
