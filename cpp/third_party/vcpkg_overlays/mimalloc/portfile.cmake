@@ -32,7 +32,7 @@ vcpkg_cmake_configure(
         -DMI_BUILD_STATIC=${MI_BUILD_STATIC}
         -DMI_BUILD_SHARED=${MI_BUILD_SHARED}
         -DMI_INSTALL_TOPLEVEL=ON
-        -DMI_LOCAL_DYNAMIC_TLS=ON
+        -DMI_LOCAL_DYNAMIC_TLS=ON  # We need this flag to avoid the error "cannot allocate memory in static TLS block" cannot allocate memory in static TLS block
 )
 
 message(STATUS "Setting CMAKE_BUILD_TYPE to $ENV{CMAKE_BUILD_TYPE}")

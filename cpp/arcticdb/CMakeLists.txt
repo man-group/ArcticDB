@@ -530,7 +530,7 @@ set (arcticdb_core_libraries
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
         Azure::azure-identity
         Azure::azure-storage-blobs
-        mimalloc-static
+        mimalloc
 )
 
 if(${ARCTICDB_PYTHON_EXPLICIT_LINK})
