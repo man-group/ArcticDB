@@ -315,9 +315,10 @@ class PythonResampleClause:
 class QueryBuilder:
     """
     Build a query to process read results with. Syntax is designed to be similar to Pandas:
-        >>> q = adb.QueryBuilder()
-        >>> q = q[q["a"] < 5] (equivalent to q = q[q.a < 5] provided the column name is also a valid Python variable name)
-        >>> dataframe = lib.read(symbol, query_builder=q).data
+
+        q = adb.QueryBuilder()
+        q = q[q["a"] < 5] (equivalent to q = q[q.a < 5] provided the column name is also a valid Python variable name)
+        dataframe = lib.read(symbol, query_builder=q).data
 
     For Group By and Aggregation functionality please see the documentation for the `groupby`. For projection
     functionality, see the documentation for the `apply` method.
@@ -333,7 +334,7 @@ class QueryBuilder:
     equivalent to isnull, and notna is equivalent to notnull, i.e. no distinction is made between NaN and None values
     in column types that support both (e.g. strings). For example:
         ```
-        >>> q = q[q["col"].isna()]
+        q = q[q["col"].isna()]
         ```
     
     * Binary comparisons: <, <=, >, >=, ==, !=
@@ -343,26 +344,26 @@ class QueryBuilder:
 
     isin/isnotin accept lists, sets, frozensets, 1D ndarrays, or *args unpacking. For example:
 
-        >>> l = [1, 2, 3]
-        >>> q.isin(l)
+        l = [1, 2, 3]
+        q.isin(l)
 
     is equivalent to...
 
-        >>> q.isin(1, 2, 3)
+        q.isin(1, 2, 3)
 
     Boolean columns can be filtered on directly:
 
-        >>> q = adb.QueryBuilder()
-        >>> q = q[q["boolean_column"]]
+        q = adb.QueryBuilder()
+        q = q[q["boolean_column"]]
 
     and combined with other operations intuitively:
 
-        >>> q = adb.QueryBuilder()
-        >>> q = q[(q["boolean_column_1"] & ~q["boolean_column_2"]) & (q["numeric_column"] > 0)]
+        q = adb.QueryBuilder()
+        q = q[(q["boolean_column_1"] & ~q["boolean_column_2"]) & (q["numeric_column"] > 0)]
 
     Arbitrary combinations of these expressions is possible, for example:
 
-        >>> q = q[(((q["a"] * q["b"]) / 5) < (0.7 * q["c"])) & (q["b"] != 12)]
+        q = q[(((q["a"] * q["b"]) / 5) < (0.7 * q["c"])) & (q["b"] != 12)]
 
     See tests/unit/arcticdb/version_store/test_filtering.py for more example uses.
 
@@ -407,7 +408,7 @@ class QueryBuilder:
         Examples
         --------
 
-        >>> df = pd.DataFrame(
+        df = pd.DataFrame(
             {
                 "VWAP": np.arange(0, 10, dtype=np.float64),
                 "ASK": np.arange(10, 20, dtype=np.uint16),
@@ -415,21 +416,22 @@ class QueryBuilder:
             },
             index=np.arange(10),
         )
-        >>> lib.write("expression", df)
-        >>> q = adb.QueryBuilder()
-        >>> q = q.apply("ADJUSTED", q["ASK"] * q["VOL_ACC"] + 7)
-        >>> lib.read("expression", query_builder=q).data
-        VOL_ACC  ASK  VWAP  ADJUSTED
-        0     20   10   0.0       207
-        1     21   11   1.0       238
-        2     22   12   2.0       271
-        3     23   13   3.0       306
-        4     24   14   4.0       343
-        5     25   15   5.0       382
-        6     26   16   6.0       423
-        7     27   17   7.0       466
-        8     28   18   8.0       511
-        9     29   19   9.0       558
+        lib.write("expression", df)
+        q = adb.QueryBuilder()
+        q = q.apply("ADJUSTED", q["ASK"] * q["VOL_ACC"] + 7)
+        lib.read("expression", query_builder=q).data
+
+        # VOL_ACC  ASK  VWAP  ADJUSTED
+        # 0     20   10   0.0       207
+        # 1     21   11   1.0       238
+        # 2     22   12   2.0       271
+        # 3     23   13   3.0       306
+        # 4     24   14   4.0       343
+        # 5     25   15   5.0       382
+        # 6     26   16   6.0       423
+        # 7     27   17   7.0       466
+        # 8     28   18   8.0       511
+        # 9     29   19   9.0       558
 
         Returns
         -------
@@ -462,40 +464,43 @@ class QueryBuilder:
         Examples
         --------
         Average (mean) over two groups:
-        >>> df = pd.DataFrame(
+
+        df = pd.DataFrame(
             {
                 "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"],
                 "to_mean": [1.1, 1.4, 2.5, np.nan, 2.2],
             },
             index=np.arange(5),
         )
-        >>> q = adb.QueryBuilder()
-        >>> q = q.groupby("grouping_column").agg({"to_mean": "mean"})
-        >>> lib.write("symbol", df)
-        >>> lib.read("symbol", query_builder=q).data
-                      to_mean
-            group_1  1.666667
-            group_2       2.2
+        q = adb.QueryBuilder()
+        q = q.groupby("grouping_column").agg({"to_mean": "mean"})
+        lib.write("symbol", df)
+        lib.read("symbol", query_builder=q).data
+        
+        #               to_mean
+        #     group_1  1.666667
+        #     group_2       2.2
 
         Max over one group:
 
-        >>> df = pd.DataFrame(
+        df = pd.DataFrame(
             {
                 "grouping_column": ["group_1", "group_1", "group_1"],
                 "to_max": [1, 5, 4],
             },
             index=np.arange(3),
         )
-        >>> q = adb.QueryBuilder()
-        >>> q = q.groupby("grouping_column").agg({"to_max": "max"})
-        >>> lib.write("symbol", df)
-        >>> lib.read("symbol", query_builder=q).data
-                     to_max
-            group_1  5
+        q = adb.QueryBuilder()
+        q = q.groupby("grouping_column").agg({"to_max": "max"})
+        lib.write("symbol", df)
+        lib.read("symbol", query_builder=q).data
+        
+        #             to_max
+        #    group_1  5
 
         Max and Mean:
 
-        >>> df = pd.DataFrame(
+        df = pd.DataFrame(
             {
                 "grouping_column": ["group_1", "group_1", "group_1"],
                 "to_mean": [1.1, 1.4, 2.5],
@@ -503,15 +508,16 @@ class QueryBuilder:
             },
             index=np.arange(3),
         )
-        >>> q = adb.QueryBuilder()
-        >>> q = q.groupby("grouping_column").agg({"to_max": "max", "to_mean": "mean"})
-        >>> lib.write("symbol", df)
-        >>> lib.read("symbol", query_builder=q).data
-                     to_max   to_mean
-            group_1     2.5  1.666667
+        q = adb.QueryBuilder()
+        q = q.groupby("grouping_column").agg({"to_max": "max", "to_mean": "mean"})
+        lib.write("symbol", df)
+        lib.read("symbol", query_builder=q).data
+        
+        #             to_max   to_mean
+        #    group_1     2.5  1.666667
 
         Min and max over one column, mean over another:
-        >>> df = pd.DataFrame(
+        df = pd.DataFrame(
             {
                 "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"],
                 "agg_1": [1, 2, 3, 4, 5],
@@ -519,14 +525,15 @@ class QueryBuilder:
             },
             index=np.arange(5),
         )
-        >>> q = adb.QueryBuilder()
-        >>> q = q.groupby("grouping_column")
-        >>> q = q.agg({"agg_1_min": ("agg_1", "min"), "agg_1_max": ("agg_1", "max"), "agg_2": "mean"})
-        >>> lib.write("symbol", df)
-        >>> lib.read("symbol", query_builder=q).data
-                     agg_1_min  agg_1_max     agg_2
-            group_1          1          3  1.666667
-            group_2          4          5       2.2
+        q = adb.QueryBuilder()
+        q = q.groupby("grouping_column")
+        q = q.agg({"agg_1_min": ("agg_1", "min"), "agg_1_max": ("agg_1", "max"), "agg_2": "mean"})
+        lib.write("symbol", df)
+        lib.read("symbol", query_builder=q).data
+
+        #             agg_1_min  agg_1_max     agg_2
+        #    group_1          1          3  1.666667
+        #    group_2          4          5       2.2
 
         Returns
         -------
@@ -632,59 +639,67 @@ class QueryBuilder:
         Examples
         --------
         Resample two hours worth of minutely data down to hourly data, summing the column 'to_sum':
-        >>> df = pd.DataFrame(
+
+        df = pd.DataFrame(
             {
                 "to_sum": np.arange(120),
             },
             index=pd.date_range("2024-01-01", freq="min", periods=120),
         )
-        >>> q = adb.QueryBuilder()
-        >>> q = q.resample("h").agg({"to_sum": "sum"})
-        >>> lib.write("symbol", df)
-        >>> lib.read("symbol", query_builder=q).data
-                                 to_sum
-            2024-01-01 00:00:00    1770
-            2024-01-01 01:00:00    5370
+        q = adb.QueryBuilder()
+        q = q.resample("h").agg({"to_sum": "sum"})
+        lib.write("symbol", df)
+        lib.read("symbol", query_builder=q).data
+
+        #                         to_sum
+        #    2024-01-01 00:00:00    1770
+        #    2024-01-01 01:00:00    5370
 
         As above, but specifying that the closed boundary of each time-bucket is the right hand side, and also to label
-        the output by the right boundary.
-        >>> q = adb.QueryBuilder()
-        >>> q = q.resample("h", closed="right", label="right").agg({"to_sum": "sum"})
-        >>> lib.read("symbol", query_builder=q).data
-                                 to_sum
-            2024-01-01 00:00:00       0
-            2024-01-01 01:00:00    1830
-            2024-01-01 02:00:00    5310
+        the output by the right boundary:
 
-        Nones, NaNs, and NaTs are omitted from aggregations
-        >>> df = pd.DataFrame(
+        q = adb.QueryBuilder()
+        q = q.resample("h", closed="right", label="right").agg({"to_sum": "sum"})
+        lib.read("symbol", query_builder=q).data
+        
+        #                         to_sum
+        #    2024-01-01 00:00:00       0
+        #    2024-01-01 01:00:00    1830
+        #    2024-01-01 02:00:00    5310
+
+        Nones, NaNs, and NaTs are omitted from aggregations:
+
+        df = pd.DataFrame(
             {
                 "to_mean": [1.0, np.nan, 2.0],
             },
             index=pd.date_range("2024-01-01", freq="min", periods=3),
         )
-        >>> q = adb.QueryBuilder()
-        >>> q = q.resample("h").agg({"to_mean": "mean"})
-        >>> lib.write("symbol", df)
-        >>> lib.read("symbol", query_builder=q).data
-                                 to_mean
-            2024-01-01 00:00:00      1.5
+        q = adb.QueryBuilder()
+        q = q.resample("h").agg({"to_mean": "mean"})
+        lib.write("symbol", df)
+        lib.read("symbol", query_builder=q).data
 
-        Output column names can be controlled through the format of the dict passed to agg
-        >>> df = pd.DataFrame(
+        #                         to_mean
+        #    2024-01-01 00:00:00      1.5
+
+        Output column names can be controlled through the format of the dict passed to agg:
+
+        df = pd.DataFrame(
             {
                 "agg_1": [1, 2, 3, 4, 5],
                 "agg_2": [1.0, 2.0, 3.0, np.nan, 5.0],
             },
             index=pd.date_range("2024-01-01", freq="min", periods=5),
         )
-        >>> q = adb.QueryBuilder()
-        >>> q = q.resample("h")
-        >>> q = q.agg({"agg_1_min": ("agg_1", "min"), "agg_1_max": ("agg_1", "max"), "agg_2": "mean"})
-        >>> lib.write("symbol", df)
-        >>> lib.read("symbol", query_builder=q).data
-                                 agg_1_min  agg_1_max     agg_2
-            2024-01-01 00:00:00          1          5      2.75
+        q = adb.QueryBuilder()
+        q = q.resample("h")
+        q = q.agg({"agg_1_min": ("agg_1", "min"), "agg_1_max": ("agg_1", "max"), "agg_2": "mean"})
+        lib.write("symbol", df)
+        lib.read("symbol", query_builder=q).data
+
+        #                         agg_1_min  agg_1_max     agg_2
+        #    2024-01-01 00:00:00          1          5      2.75
         """
         check(not len(self.clauses), "resample only supported as first clause in the pipeline")
         rule = rule.freqstr if isinstance(rule, pd.DateOffset) else rule
@@ -809,8 +824,8 @@ class QueryBuilder:
 
         Examples
         --------
-        >>> q = adb.QueryBuilder()
-        >>> q = q.date_range((pd.Timestamp("2000-01-01"), pd.Timestamp("2001-01-01")))
+        q = adb.QueryBuilder()
+        q = q.date_range((pd.Timestamp("2000-01-01"), pd.Timestamp("2001-01-01")))
 
         Returns
         -------
