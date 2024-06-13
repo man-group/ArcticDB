@@ -41,6 +41,8 @@ find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypasses our cpp/CMake/FindZstd.c
 find_package(azure-identity-cpp CONFIG REQUIRED)
 find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
 
+
+
 if(${BUILD_WITH_REMOTERY})
     add_compile_definitions(USE_REMOTERY)
 endif()
@@ -391,8 +393,11 @@ set(arcticdb_srcs
         codec/encode_v1.cpp
         codec/encode_v2.cpp
         codec/encoding_sizes.cpp
+        codec/thirdparty/fastpforlib/bitpacking.cpp
         codec/segment.cpp
         codec/variant_encoded_field_collection.cpp
+        codec/thirdparty/middleout/middleout.cpp
+        codec/thirdparty/middleout/scalar.cpp
         column_store/chunked_buffer.cpp
         column_store/column.cpp
         column_store/column_data.cpp
@@ -490,7 +495,7 @@ set(arcticdb_srcs
         version/version_map_batch_methods.cpp
         storage/s3/ec2_utils.cpp
         storage/lmdb/lmdb.hpp
-)
+        codec/run_length_encoding.hpp codec/null_encoding.hpp codec/thirdparty/fastpforlib/bitpackinghelpers.h codec/thirdparty/fastpforlib/bitpacking.h codec/thirdparty/fastpforlib/bitpacking.cpp codec/bitpacking.hpp codec/thirdparty/fastpforlib/pfor.hpp codec/thirdparty/fastpforlib/util.hpp)
 
 if(${ARCTICDB_INCLUDE_ROCKSDB})
     list (APPEND arcticdb_srcs
@@ -808,7 +813,7 @@ if(${TEST})
             version/test/test_sorting_info_state_machine.cpp
             version/test/version_map_model.hpp
             storage/test/common.hpp
-    )
+            codec/test/test_compression_performance.cpp)
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 
