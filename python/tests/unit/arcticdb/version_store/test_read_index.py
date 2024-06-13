@@ -14,6 +14,9 @@ from functools import reduce
 from packaging.version import Version
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb.util._versions import PANDAS_VERSION
+from arcticdb_ext.exceptions import InternalException
+from arcticdb.util.test import  CustomThing, TestCustomNormalizer
+from arcticdb.version_store._custom_normalizers import register_normalizer, clear_registered_normalizers
 
 @pytest.fixture(params=[
     # (encoding_version, dynamic_schema)
@@ -30,11 +33,10 @@ def lmdb_version_store_row_slice(request, lib_name, version_store_factory):
         encoding_version=int(request.param[0]),
         dynamic_schema=request.param[0],
         column_group_size=1,
-        segment_row_size=3
+        segment_row_size=5
     )
 
 @pytest.fixture(
-    scope="function",
     params=(
         "lmdb_version_store_v1",
         "lmdb_version_store_v2",
@@ -48,6 +50,23 @@ def lmdb_version_store_static_and_dynamic(request):
     """
     yield request.getfixturevalue(request.param)
 
+
+@pytest.fixture(
+    params=(
+        pd.RangeIndex(start=0, stop=10),
+        pd.date_range(start="01/01/2024",end="01/10/2024"),
+        pd.MultiIndex.from_arrays(
+            [
+                pd.date_range(start="01/01/2024", end="01/10/2024"),
+                pd.RangeIndex(start=0, stop=10)
+            ],
+            names=["datetime", "level"]
+        ),
+        pd.Index(["a", "b", "c", "d", "e"])
+    )
+)
+def basic_index_list(request):
+    yield request.param
 
 #@pytest.mark.skip(reason="Not implemented")
 class TestBasicReadIndex:
@@ -221,12 +240,13 @@ class TestReadIndexRange:
         pd.Index(["a", "b", "c", "d", "e"])
     ])
     def test_row_range(self, lmdb_version_store_static_and_dynamic, index):
+        row_range = (1, 3)
         lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": list(range(0, len(index)))}, index=index))
-        result = lmdb_version_store_static_and_dynamic.read_index_columns("sym", row_range=(1,3))
+        result = lmdb_version_store_static_and_dynamic.read_index_columns("sym", row_range=row_range)
         assert isinstance(result, arcticdb.VersionedItem)
         assert result.symbol == "sym"
         assert result.version == 0
-        assert result.data.equals(index[1:3])
+        assert result.data.equals(index[row_range[0]:row_range[1]])
 
     def test_date_range(self, lmdb_version_store_static_and_dynamic):
         index = pd.date_range(start="01/01/2024", end="01/10/2024")
@@ -256,10 +276,31 @@ class TestReadIndexRange:
         assert result.data.equals(pd.date_range(start="01/04/2024", end="01/10/2024"))
 
     @pytest.mark.parametrize("index", [
-        pd.RangeIndex(start=0, stop=5),
+        pd.RangeIndex(start=0, stop=10),
+        pd.RangeIndex(start=0, stop=10, step=3),
+        pd.date_range(start="01/01/2024", end="01/10/2024"),
         pd.MultiIndex.from_arrays(
             [pd.date_range(start="01/11/2024", end="01/21/2024"), pd.RangeIndex(start=10, stop=21)],
             names=["datetime", "level"]
+        ),
+        pd.Index(["a", "b", "c", "d", "e"])
+    ])
+    def test_row_range_across_row_slices(self, lmdb_version_store_row_slice, index):
+        assert lmdb_version_store_row_slice._lib_cfg.lib_desc.version.write_options.segment_row_size == 5
+        row_range = (3, 8)
+        lmdb_version_store_row_slice.write("sym", pd.DataFrame({"col": range(0, len(index))}, index=index))
+        result = lmdb_version_store_row_slice.read_index_columns("sym", row_range=row_range)
+        assert isinstance(result, arcticdb.VersionedItem)
+        assert result.symbol == "sym"
+        assert result.version == 0
+        assert result.data.equals(index[row_range[0]:row_range[1]])
+
+
+    @pytest.mark.parametrize("index", [
+        pd.RangeIndex(start=0, stop=5),
+        pd.MultiIndex.from_arrays(
+            [pd.RangeIndex(start=10, stop=21), pd.date_range(start="01/11/2024", end="01/21/2024")],
+            names=["range", "date"]
         ),
         pd.Index(["a", "b", "c", "d", "e"])
     ])
@@ -267,3 +308,73 @@ class TestReadIndexRange:
         lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": list(range(0, len(index)))}, index=index))
         with pytest.raises(Exception):
             lmdb_version_store_static_and_dynamic.read_index_columns("sym", date_range=(datetime(2024,1,4), datetime(2024,1,10)))
+
+
+class TestWithNormalizers:
+    @pytest.fixture(autouse=True)
+    @staticmethod
+    def custom_normalizer():
+        register_normalizer(TestCustomNormalizer())
+
+    def test_recursive_throws(self, lmdb_version_store_static_and_dynamic):
+        data = {"a": np.arange(5), "b": np.arange(8)}
+        lmdb_version_store_static_and_dynamic.write("sym_recursive", data, recursive_normalizers=True, pickle_on_failure=False)
+        with pytest.raises(InternalException) as exception_info:
+            lmdb_version_store_static_and_dynamic.read_index_columns("sym_recursive")
+        assert "Reading the index column is not supported when recursive or custom normalizers are used." in str(exception_info.value)
+            
+    def test_custom_throws(self, custom_normalizer, lmdb_version_store_static_and_dynamic):
+        data = CustomThing(custom_columns=["a", "b"], custom_index=[12, 13], custom_values=[[2.0, 4.0], [3.0, 5.0]])
+        lmdb_version_store_static_and_dynamic.write("sym_custom", data, pickle_on_failure=False)
+
+        with pytest.raises(InternalException) as exception_info:
+            lmdb_version_store_static_and_dynamic.read_index_columns("sym_custom")
+        assert "Reading the index column is not supported when recursive or custom normalizers are used." in str(exception_info.value)
+
+
+class TestPickled:
+    def test_throws(self, lmdb_version_store_static_and_dynamic):
+        data = {"a": np.arange(5), "b": np.arange(8)}
+        lmdb_version_store_static_and_dynamic.write("sym_recursive", data, recursive_normalizers=False, pickle_on_failure=True)
+        with pytest.raises(InternalException) as exception_info:
+            lmdb_version_store_static_and_dynamic.read_index_columns("sym_recursive")
+        assert "Reading index columns is not supported with pickled data." in str(exception_info.value)
+
+
+class TestIncompletes:
+    @pytest.mark.parametrize("index", [
+        pd.RangeIndex(start=0, stop=10),
+        pd.date_range(start="01/01/2024",end="01/10/2024"),
+        pd.MultiIndex.from_arrays(
+            [pd.date_range(start="01/01/2024", end="01/10/2024"), pd.RangeIndex(start=0, stop=10)],
+            names=["datetime", "level"]
+        ),
+        pd.Index(["a", "b", "c", "d", "e"])
+    ])
+    def test_read_index_from_incompletes(self, lmdb_version_store_static_and_dynamic, index):
+        df = pd.DataFrame({"col": range(0, len(index))}, index=index)
+        lmdb_version_store_static_and_dynamic.write("sym", df, staged=True)
+        result = lmdb_version_store_static_and_dynamic.read_index_columns("sym")
+        assert isinstance(result, arcticdb.VersionedItem)
+        assert result.symbol == "sym"
+        assert result.version == 0
+        assert result.data.equals(index)
+
+    @pytest.mark.parametrize("index", [
+        pd.RangeIndex(start=0, stop=10),
+        pd.date_range(start="01/01/2024",end="01/10/2024"),
+        pd.MultiIndex.from_arrays(
+            [pd.date_range(start="01/01/2024", end="01/10/2024"), pd.RangeIndex(start=0, stop=10)],
+            names=["datetime", "level"]
+        ),
+        pd.Index(["a", "b", "c", "d", "e"])
+    ])
+    def test_range_read_index_from_incompletes(self, lmdb_version_store_static_and_dynamic, index):
+        row_range = (1, 3)
+        df = pd.DataFrame({"col": range(0, len(index))}, index=index)
+        lmdb_version_store_static_and_dynamic.write("sym", df, staged=True)
+        result = lmdb_version_store_static_and_dynamic.read_index_columns("sym", row_range=row_range)
+        assert isinstance(result, arcticdb.VersionedItem)
+        assert result.symbol == "sym"
+        assert result.version == 0
+        assert result.data.equals(index[row_range[0]:row_range[1]])
