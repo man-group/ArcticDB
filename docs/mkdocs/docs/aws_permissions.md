@@ -4,8 +4,8 @@
 
 One of the advantages of ArcticDB is how easy it is to setup and use as a personal database.  But how can we extend this pattern to an organisation?  How can we keep it trivial to use as an individual, but allow for secure sharing of data with team-mates and groups across your organisation?  We also want this to be easy to maintain, a key challange for permissions generally.
 
-Here we model a small two team organisation, 'Acme' in AWS and create some flexible permissions, that allow users and teams to create
-and use private and shared data without any per-library setup.  The organisation consists of two teams with two employees in each.
+Here we model a small two team organisation, 'Acme', in AWS and create some flexible permissions that allow users and teams to create
+and use private and shared data without any per-library setup.
 
 - Data Team
   - Jane
@@ -17,15 +17,15 @@ and use private and shared data without any per-library setup.  The organisation
 Each user should be able to, 
 - list all ArcticDB libraries (but not their content)
 - create personal libraries that only they can read and write to
-- create team libraries that only those in my team can read and write to
+- create team libraries that only those in their team can read and write to
 
-Users will follow an ArcticDB library name convention.  The library name should one of `<USERNAME>/<LIBRARY>` or `<TEAM>/<MYLIBRARY>`, so if Jane want's to create a personal library for weather data, they would use `lib.create_library('jane@acme/weather')` (assuming AWS S3 setup below).
+Users will follow an ArcticDB library name convention.  The library name should one of `<USERNAME>/<LIBRARY>` or `<TEAM>/<MYLIBRARY>`, so if Jane wants to create a personal library for weather data, they would use `lib.create_library('jane@acme/weather')` (assuming the AWS S3 setup below).
 
-We can do this with a combination with conventions in ArcticDB and path-prefix permissions in S3.  A number of S3 backends support path based permissioning.  Here we show how to do it with AWS IAM and S3 permissions.
+We can do this with path-prefix permissions in AWS S3.  Other backends, such as Minio, support path based permissioning.
 
 ## AWS S3
 
-You should have a number of users and groups (teams) setup in AWS IAM already.  Follow the [IAM docs](https://docs.aws.amazon.com/IAM/latest/UserGuide/getting-started.html) for help with that.
+You should have a number of users setup in AWS IAM already along with a group containing all the users.  Follow the [IAM docs](https://docs.aws.amazon.com/IAM/latest/UserGuide/getting-started.html) for help with that.
 
 For Acme we've setup four users and the users are tagged with the teams they are a member of:
 
@@ -38,7 +38,7 @@ For Acme we've setup four users and the users are tagged with the teams they are
 
 We've also created a user group, `acme` with all four users in.
 
-Let's create an S3 bucket for Acme, `acme-arcticdb`, using the [cloudshell](https://console.aws.amazon.com/cloudshell/).
+Let's create an S3 bucket for Acme, `acme-arcticdb`, using [cloudshell](https://console.aws.amazon.com/cloudshell/).
 ```sh
 aws s3 mb s3://acme-arcticdb
 ```
@@ -88,7 +88,7 @@ Then setup the following access policy.  We will save this snippet to `policy.js
 
 Create the policy in AWS.
 ```
-aws iam creqte-policy --policy-name acme-arcticdb-access --policy-document file://policy.json
+aws iam create-policy --policy-name acme-arcticdb-access --policy-document file://policy.json
 ```
 
 Take note of the `Arn` in the output to the last command as you'll need it to attach the policy to a group
@@ -107,7 +107,7 @@ to those with a matching AWS IAM username or a matched user 'team' tag.
 
 #### Security note
 
-Because `${aws:username}`, `${aws:PrincipalTag/team}` and `_arctic_cfg`... are at the beginning of the path, it's important they don't contain values that can overlap. For example if you have a team called 'data' and a username for an application of 'data', they will have the same permissions, or if a username can be created that starts with `_arctic_cfg`... then that user will be able to modify all library configs.
+Because `${aws:username}`, `${aws:PrincipalTag/team}` and `_arctic_cfg`... are at the beginning of the path, it's important they don't contain values that can overlap. For example if you have a team called 'data' and a username for an application called 'data', they will have the same permissions, or if a username can be created that starts with `_arctic_cfg`... then that user will be able to modify all library configs.
 
 ## Usage
 
