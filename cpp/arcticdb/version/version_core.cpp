@@ -1528,11 +1528,19 @@ FrameAndDescriptor read_index_columns_impl(
         auto maybe_reader = get_index_segment_reader(store, pipeline_context, std::get<VersionedItem>(version_info));
         if (maybe_reader) {
             auto index_segment_reader = std::move(maybe_reader.value());
+            internal::check<ErrorCode::E_NOT_IMPLEMENTED>(
+                !index_segment_reader.is_pickled(),
+                "Reading index columns is not supported with pickled data."
+            );
+            internal::check<ErrorCode::E_NOT_IMPLEMENTED>(
+                !index_segment_reader.tsd().proto().normalization().has_custom(),
+                "Reading the index column is not supported when recursive or custom normalizers are used."
+            );
             ARCTICDB_DEBUG(log::version(), "Read index segment with {} keys", index_segment_reader.size());
             check_column_and_date_range_filterable(index_segment_reader, read_query);
             debug::check<ErrorCode::E_ASSERTION_FAILURE>(
                 read_query.columns.empty(),
-                "There shouldn't be any columns passed by the client when reading the index"
+                "There shouldn't be any columns passed by the client when reading the index."
             );
             const auto& tsd = index_segment_reader.tsd();
             read_query.columns = stream::get_index_columns_from_descriptor(tsd);
@@ -1579,9 +1587,10 @@ FrameAndDescriptor read_index_columns_impl(
         }
     }
 
-    // TODO: Is this needed
-    // if (pipeline_context->multi_key_)
-    //     return read_multi_key(store, *pipeline_context->multi_key_);
+    internal::check<ErrorCode::E_NOT_IMPLEMENTED>(
+        !pipeline_context->multi_key_,
+        "Reading the index column is not supported when recursive or custom normalizers are used."
+    );
 
     if (opt_false(read_options.incompletes_)) {
         util::check(
