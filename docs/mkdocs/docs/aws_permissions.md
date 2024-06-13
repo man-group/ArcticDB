@@ -8,11 +8,11 @@ Here we model a small two team organisation, 'Acme', in AWS and create some flex
 and use private and shared data without any per-library setup.
 
 - Data Team
-  - Jane
-  - Samir
+    - Jane
+    - Samir
 - Quant Team
-  - Alan
-  - Diana
+    - Alan
+    - Diana
 
 Each user should be able to, 
 - list all ArcticDB libraries (but not their content)
