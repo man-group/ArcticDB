@@ -65,10 +65,9 @@ def lmdb_version_store_static_and_dynamic(request):
         pd.Index(["a", "b", "c", "d", "e"])
     )
 )
-def basic_index_list(request):
+def index(request):
     yield request.param
 
-#@pytest.mark.skip(reason="Not implemented")
 class TestBasicReadIndex:
     @pytest.mark.parametrize("index", [
         pd.RangeIndex(start=0, stop=10),
@@ -88,21 +87,13 @@ class TestBasicReadIndex:
         assert result.symbol == "sym"
         assert result.version == 0
         assert result.data.equals(index)
-        
-    @pytest.mark.parametrize("index", [
-        pd.RangeIndex(start=0, stop=10),
-        pd.date_range(start="01/01/2024",end="01/10/2024"),
-        pd.MultiIndex.from_arrays(
-            [pd.date_range(start="01/01/2024", end="01/10/2024"), pd.RangeIndex(start=0, stop=10)],
-            names=["datetime", "level"]
-        ),
-        pd.Index(["a", "b", "c", "d", "e"])
-    ])
-    def test_read_index_columns_column_slice(self, lmdb_version_store_row_slice, index):
+
+    @pytest.mark.parametrize("staged", [True, False])
+    def test_read_index_columns_column_slice(self, lmdb_version_store_row_slice, index, staged):
         col1 = list(range(0, len(index)))
         col2 = [2 * i for i in range(0, len(index))]
         df = pd.DataFrame({"col": col1, "col2": col2}, index=index)
-        lmdb_version_store_row_slice.write("sym", df)
+        lmdb_version_store_row_slice.write("sym", df, staged=staged)
         result = lmdb_version_store_row_slice.read_index_columns("sym")
         assert isinstance(result, arcticdb.VersionedItem)
         assert result.symbol == "sym"
@@ -218,9 +209,7 @@ class TestReadIndexAsOf:
         data = list(range(0, len(index)))
         lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": data}, index=index))
         lmdb_version_store_static_and_dynamic.snapshot("snap")
-        # Override the symbol
         lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": [1]}, index=pd.RangeIndex(start=100, stop=101)))
-        # Make sure it's the same as the snapshot
         result = lmdb_version_store_static_and_dynamic.read_index_columns("sym", as_of="snap")
         assert isinstance(result, arcticdb.VersionedItem)
         assert result.symbol == "sym"
@@ -229,28 +218,20 @@ class TestReadIndexAsOf:
 
 
 class TestReadIndexRange:
-    @pytest.mark.parametrize("index", [
-        pd.RangeIndex(start=0, stop=5),
-        pd.RangeIndex(start=0, stop=10, step=3),
-        pd.date_range(start="01/01/2024", end="01/5/2024"),
-        pd.MultiIndex.from_arrays(
-            [pd.date_range(start="01/11/2024", end="01/21/2024"), pd.RangeIndex(start=10, stop=21)],
-            names=["datetime", "level"]
-        ),
-        pd.Index(["a", "b", "c", "d", "e"])
-    ])
-    def test_row_range(self, lmdb_version_store_static_and_dynamic, index):
+    @pytest.mark.parametrize("staged", [True, False])
+    def test_row_range(self, lmdb_version_store_static_and_dynamic, index, staged):
         row_range = (1, 3)
-        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": list(range(0, len(index)))}, index=index))
+        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": list(range(0, len(index)))}, index=index), staged=staged)
         result = lmdb_version_store_static_and_dynamic.read_index_columns("sym", row_range=row_range)
         assert isinstance(result, arcticdb.VersionedItem)
         assert result.symbol == "sym"
         assert result.version == 0
         assert result.data.equals(index[row_range[0]:row_range[1]])
 
-    def test_date_range(self, lmdb_version_store_static_and_dynamic):
+    @pytest.mark.parametrize("staged", [True, False])
+    def test_date_range(self, lmdb_version_store_static_and_dynamic, staged):
         index = pd.date_range(start="01/01/2024", end="01/10/2024")
-        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": list(range(0, len(index)))}, index=index))
+        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": list(range(0, len(index)))}, index=index), staged=staged)
         result = lmdb_version_store_static_and_dynamic.read_index_columns("sym", date_range=(datetime(2024,1,4), datetime(2024,1,8)))
         assert isinstance(result, arcticdb.VersionedItem)
         assert result.symbol == "sym"
@@ -275,16 +256,6 @@ class TestReadIndexRange:
         assert result.version == 0
         assert result.data.equals(pd.date_range(start="01/04/2024", end="01/10/2024"))
 
-    @pytest.mark.parametrize("index", [
-        pd.RangeIndex(start=0, stop=10),
-        pd.RangeIndex(start=0, stop=10, step=3),
-        pd.date_range(start="01/01/2024", end="01/10/2024"),
-        pd.MultiIndex.from_arrays(
-            [pd.date_range(start="01/11/2024", end="01/21/2024"), pd.RangeIndex(start=10, stop=21)],
-            names=["datetime", "level"]
-        ),
-        pd.Index(["a", "b", "c", "d", "e"])
-    ])
     def test_row_range_across_row_slices(self, lmdb_version_store_row_slice, index):
         assert lmdb_version_store_row_slice._lib_cfg.lib_desc.version.write_options.segment_row_size == 5
         row_range = (3, 8)
@@ -296,7 +267,7 @@ class TestReadIndexRange:
         assert result.data.equals(index[row_range[0]:row_range[1]])
 
 
-    @pytest.mark.parametrize("index", [
+    @pytest.mark.parametrize("non_datetime_index", [
         pd.RangeIndex(start=0, stop=5),
         pd.MultiIndex.from_arrays(
             [pd.RangeIndex(start=10, stop=21), pd.date_range(start="01/11/2024", end="01/21/2024")],
@@ -304,8 +275,8 @@ class TestReadIndexRange:
         ),
         pd.Index(["a", "b", "c", "d", "e"])
     ])
-    def test_date_range_throws(self, lmdb_version_store_static_and_dynamic, index):
-        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": list(range(0, len(index)))}, index=index))
+    def test_date_range_throws(self, lmdb_version_store_static_and_dynamic, non_datetime_index):
+        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": list(range(0, len(non_datetime_index)))}, index=non_datetime_index))
         with pytest.raises(Exception):
             lmdb_version_store_static_and_dynamic.read_index_columns("sym", date_range=(datetime(2024,1,4), datetime(2024,1,10)))
 
@@ -339,42 +310,3 @@ class TestPickled:
         with pytest.raises(InternalException) as exception_info:
             lmdb_version_store_static_and_dynamic.read_index_columns("sym_recursive")
         assert "Reading index columns is not supported with pickled data." in str(exception_info.value)
-
-
-class TestIncompletes:
-    @pytest.mark.parametrize("index", [
-        pd.RangeIndex(start=0, stop=10),
-        pd.date_range(start="01/01/2024",end="01/10/2024"),
-        pd.MultiIndex.from_arrays(
-            [pd.date_range(start="01/01/2024", end="01/10/2024"), pd.RangeIndex(start=0, stop=10)],
-            names=["datetime", "level"]
-        ),
-        pd.Index(["a", "b", "c", "d", "e"])
-    ])
-    def test_read_index_from_incompletes(self, lmdb_version_store_static_and_dynamic, index):
-        df = pd.DataFrame({"col": range(0, len(index))}, index=index)
-        lmdb_version_store_static_and_dynamic.write("sym", df, staged=True)
-        result = lmdb_version_store_static_and_dynamic.read_index_columns("sym")
-        assert isinstance(result, arcticdb.VersionedItem)
-        assert result.symbol == "sym"
-        assert result.version == 0
-        assert result.data.equals(index)
-
-    @pytest.mark.parametrize("index", [
-        pd.RangeIndex(start=0, stop=10),
-        pd.date_range(start="01/01/2024",end="01/10/2024"),
-        pd.MultiIndex.from_arrays(
-            [pd.date_range(start="01/01/2024", end="01/10/2024"), pd.RangeIndex(start=0, stop=10)],
-            names=["datetime", "level"]
-        ),
-        pd.Index(["a", "b", "c", "d", "e"])
-    ])
-    def test_range_read_index_from_incompletes(self, lmdb_version_store_static_and_dynamic, index):
-        row_range = (1, 3)
-        df = pd.DataFrame({"col": range(0, len(index))}, index=index)
-        lmdb_version_store_static_and_dynamic.write("sym", df, staged=True)
-        result = lmdb_version_store_static_and_dynamic.read_index_columns("sym", row_range=row_range)
-        assert isinstance(result, arcticdb.VersionedItem)
-        assert result.symbol == "sym"
-        assert result.version == 0
-        assert result.data.equals(index[row_range[0]:row_range[1]])
