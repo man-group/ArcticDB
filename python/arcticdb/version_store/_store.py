@@ -1760,17 +1760,7 @@ class NativeVersionStore:
     def _post_process_dataframe(self, read_result, read_query, query_builder):
         if read_query.row_filter is not None and (query_builder is None or query_builder.needs_post_processing()):
             # post filter
-            start_idx = end_idx = None
-            if isinstance(read_query.row_filter, _RowRange):
-                start_idx = read_query.row_filter.start - read_result.frame_data.offset
-                end_idx = read_query.row_filter.end - read_result.frame_data.offset
-            elif isinstance(read_query.row_filter, _IndexRange):
-                ts_idx = read_result.frame_data.value.data[0]
-                if len(ts_idx) != 0:
-                    start_idx = ts_idx.searchsorted(datetime64(read_query.row_filter.start_ts, "ns"), side="left")
-                    end_idx = ts_idx.searchsorted(datetime64(read_query.row_filter.end_ts, "ns"), side="right")
-            else:
-                raise ArcticNativeException("Unrecognised row_filter type: {}".format(type(read_query.row_filter)))
+            start_idx, end_idx = self._compute_filter_start_end_row(read_result, read_query)
             data = []
             for c in read_result.frame_data.value.data:
                 data.append(c[start_idx:end_idx])
@@ -1796,6 +1786,20 @@ class NativeVersionStore:
             )
 
         return vitem
+
+    def _compute_filter_start_end_row(self, read_result, read_query):
+        start_idx = end_idx = None
+        if isinstance(read_query.row_filter, _RowRange):
+            start_idx = read_query.row_filter.start - read_result.frame_data.offset
+            end_idx = read_query.row_filter.end - read_result.frame_data.offset
+        elif isinstance(read_query.row_filter, _IndexRange):
+            index = read_result.frame_data.value.data[0]
+            if len(index) != 0:
+                start_idx = index.searchsorted(datetime64(read_query.row_filter.start_ts, "ns"), side="left")
+                end_idx = index.searchsorted(datetime64(read_query.row_filter.end_ts, "ns"), side="right")
+        else:
+            raise ArcticNativeException("Unrecognised row_filter type: {}".format(type(read_query.row_filter)))
+        return (start_idx, end_idx)
 
     def _find_version(
         self, symbol: str, as_of: Optional[VersionQueryInput] = None, raise_on_missing: Optional[bool] = False, **kwargs
@@ -2841,18 +2845,31 @@ class NativeVersionStore:
             row_range=row_range,
             **kwargs,
         )
+        if row_range and row_range[0] > row_range[1]:
+            raise ArcticNativeException(
+                "Unexpected row range: {}. The start row: {} should not be larger than the end row: {}"
+                .format(row_range, row_range[0], row_range[1]))
         cpp_result = self.version_store.read_index_columns(symbol, version_query, read_query, read_options)
         read_result = ReadResult(*cpp_result)
         frame_data = FrameData.from_cpp(read_result.frame_data)
         index_type = read_result.norm.df.common.WhichOneof("index_type")
         meta = denormalize_user_metadata(read_result.udm, self._normalizer)
+        index = _denormalize_single_index(frame_data, read_result.norm.df.common)
         if index_type == "index":
-            index = _denormalize_single_index(frame_data, read_result.norm.df.common)
+            if isinstance(index, pd.RangeIndex):
+                index_meta = read_result.norm.df.common.index
+                stop = index_meta.start + read_result.frame_data.row_count * index_meta.step
+                index = pd.RangeIndex(start=index_meta.start, stop=stop, step=index_meta.step)
         elif index_type == "multi_index":
             names = frame_data.index_columns + [name[_IDX_PREFIX_LEN:] for name in frame_data.names]
             index = pd.MultiIndex.from_arrays(frame_data.data, names=names)
         else:
             raise ArcticNativeException("Unexpected undex type {}".format(index_type))
+
+        if read_query.row_filter is not None:
+            start_idx, end_idx = self._compute_filter_start_end_row(read_result, read_query)
+            index = index[start_idx:end_idx]
+
         return VersionedItem(
             symbol=read_result.version.symbol,
             library=self._library.library_path,
