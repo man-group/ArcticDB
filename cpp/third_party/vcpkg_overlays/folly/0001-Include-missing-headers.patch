@@ -1,0 +1,27 @@
+From 62fa03bc0c9eeb0b04f055bdb98847c6cf1b9908 Mon Sep 17 00:00:00 2001
+From: Julien Jerphanion <git@jjerphan.xyz>
+Date: Wed, 15 May 2024 10:21:39 +0200
+Subject: [PATCH] Include missing headers
+
+Signed-off-by: Julien Jerphanion <git@jjerphan.xyz>
+---
+ folly/system/AtFork.h | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/folly/system/AtFork.h b/folly/system/AtFork.h
+index da318ac01..009204465 100644
+--- a/folly/system/AtFork.h
++++ b/folly/system/AtFork.h
+@@ -21,6 +21,9 @@
+ #include <list>
+ #include <map>
+ #include <mutex>
++#include <stdexcept>
++#include <cstdlib>
++#include <system_error>
+ 
+ #include <folly/Function.h>
+ 
+-- 
+2.44.0
+

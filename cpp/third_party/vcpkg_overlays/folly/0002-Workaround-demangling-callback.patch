@@ -1,0 +1,27 @@
+From bbee87997214e3ac5a54ed0ae6a6915e176b3bf1 Mon Sep 17 00:00:00 2001
+From: Julien Jerphanion <git@jjerphan.xyz>
+Date: Wed, 15 May 2024 11:23:51 +0200
+Subject: [PATCH] Workaround demangling callback
+
+Signed-off-by: Julien Jerphanion <git@jjerphan.xyz>
+---
+ folly/Demangle.cpp | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/folly/Demangle.cpp b/folly/Demangle.cpp
+index 1af58f20c..b6c13ca6b 100644
+--- a/folly/Demangle.cpp
++++ b/folly/Demangle.cpp
+@@ -58,7 +58,8 @@ static constexpr auto cxxabi_demangle = static_cast<char* (*)(...)>(nullptr);
+ //
+ //  in contrast with cxxabi, where there are certainly other referenced symbols
+ 
+-#if __has_include(<demangle.h>)
++// See: https://github.com/microsoft/vcpkg/issues/25214#issuecomment-1154172978
++#if 0 // __has_include(<demangle.h>)
+ 
+ static constexpr auto liberty_demangle = cplus_demangle_v3_callback;
+ 
+-- 
+2.44.0
+
