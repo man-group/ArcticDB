@@ -18,7 +18,7 @@
       
       
       <link rel="icon" href="../../images/FullWithBorder.png">
-      <meta name="generator" content="mkdocs-1.6.0, mkdocs-material-9.5.21">
+      <meta name="generator" content="mkdocs-1.6.0, mkdocs-material-9.5.26">
     
     
       
@@ -26,7 +26,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.66ac8b77.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.6543a935.min.css">
       
         
         <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
@@ -166,7 +166,7 @@
       
     </form>
     <div class="md-search__output">
-      <div class="md-search__scrollwrap" data-md-scrollfix>
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
         <div class="md-search-result" data-md-component="search-result">
           <div class="md-search-result__meta">
             Initializing search
@@ -729,6 +729,27 @@
   
   <span class="md-ellipsis">
     Getting started with AWS S3
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../aws_permissions/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Library Permissions with AWS S3
   </span>
   
 
@@ -1599,7 +1620,7 @@ specifies the region and <code>region</code> is not set.</p>
 <h2 id="azure">Azure<a class="headerlink" href="#azure" title="Permanent link">&para;</a></h2>
 <p>The Azure URI connection scheme has the form <code>azure://[options]</code>.
 It is based on the Azure Connection String, with additional options for configuring ArcticDB.
-Please refer to https://learn.microsoft.com/en-us/azure/storage/common/storage-configure-connection-string for more details.</p>
+Please refer to <a href="https://learn.microsoft.com/en-us/azure/storage/common/storage-configure-connection-string">Azure</a> for more details.</p>
 <p><code>options</code> is a string that specifies connection specific options as <code>&lt;name&gt;=&lt;value&gt;</code> pairs joined with <code>;</code> (the final key value pair should not include a trailing <code>;</code>).</p>
 <p>Additional options specific for ArcticDB:</p>
 <table>
@@ -1620,16 +1641,20 @@ Please refer to https://learn.microsoft.com/en-us/azure/storage/common/storage-c
 </tr>
 <tr>
 <td>CA_cert_path</td>
-<td>(Non-Windows platform only) Azure CA certificate path. If not set, default path will be used. Note: For Linux distribution, default path is set to <code>/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem</code>. If the certificate cannot be found in the provided path, an Azure exception with no meaningful error code will be thrown. For more details, please see <a href="https://github.com/Azure/azure-sdk-for-cpp/issues/4738">here</a>. For example, <code>Failed to iterate azure blobs 'C' 0:</code>.<br><br>Default certificate path in various Linux distributions:<br><code>/etc/ssl/certs/ca-certificates.crt</code> for Debian/Ubuntu/Gentoo etc.<br><code>/etc/pki/tls/certs/ca-bundle.crt</code> for Fedora/RHEL 6<br><code>/etc/ssl/ca-bundle.pem</code> for OpenSUSE<br><code>/etc/pki/tls/cacert.pem</code> for OpenELEC<br><code>/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem</code> for CentOS/RHEL 7<br><code>/etc/ssl/cert.pem</code> for Alpine Linux</td>
+<td>(Linux platform only) Azure CA certificate path. If not set, python <code>ssl.get_default_verify_paths().cafile</code> will be used. If the certificate cannot be found in the provided path, an Azure exception with no meaningful error code will be thrown. For more details, please see <a href="https://github.com/Azure/azure-sdk-for-cpp/issues/4738">here</a>. For example, <code>Failed to iterate azure blobs 'C' 0:</code>.</td>
+</tr>
+<tr>
+<td>CA_cert_dir</td>
+<td>(Linux platform only) Azure CA certificate directory. If not set, python <code>ssl.get_default_verify_paths().capath</code> will be used. Certificates can only be used if corresponding hash files <a href="https://www.openssl.org/docs/man1.0.2/man3/SSL_CTX_load_verify_locations.html">exist</a>. If the certificate cannot be found in the provided path, an Azure exception with no meaningful error code will be thrown. For more details, please see <a href="https://github.com/Azure/azure-sdk-for-cpp/issues/4738">here</a>. For example, <code>Failed to iterate azure blobs 'C' 0:</code>.</td>
 </tr>
 </tbody>
 </table>
-<p>For Windows user, <code>CA_cert_path</code> cannot be set. Please set CA certificate related option on Windows setting.
-For details, you may refer to https://learn.microsoft.com/en-us/skype-sdk/sdn/articles/installing-the-trusted-root-certificate</p>
+<p>For non-Linux platforms, neither <code>CA_cert_path</code> nor <code>CA_cert_dir</code> may be set. Please set CA certificate related options using operating system settings.
+For Windows, please see <a href="https://learn.microsoft.com/en-us/skype-sdk/sdn/articles/installing-the-trusted-root-certificate">here</a></p>
 <p>Exception: Azure exceptions message always ends with <code>{AZURE_SDK_HTTP_STATUS_CODE}:{AZURE_SDK_REASON_PHRASE}</code>.</p>
-<p>Please refer to https://github.com/Azure/azure-sdk-for-cpp/blob/24ed290815d8f9dbcd758a60fdc5b6b9205f74e0/sdk/core/azure-core/inc/azure/core/http/http_status_code.hpp for
+<p>Please refer to <a href="https://github.com/Azure/azure-sdk-for-cpp/blob/24ed290815d8f9dbcd758a60fdc5b6b9205f74e0/sdk/core/azure-core/inc/azure/core/http/http_status_code.hpp">azure-sdk-for-cpp</a> for
 more details of provided status codes.</p>
-<p>Note that due to a bug in Azure C++ SDK (https://github.com/Azure/azure-sdk-for-cpp/issues/4738), Azure may not give meaningful status codes and
+<p>Note that due to a <a href="https://github.com/Azure/azure-sdk-for-cpp/issues/4738">bug</a> in Azure C++ SDK, Azure may not give meaningful status codes and
 reason phrases in the exception. To debug these instances, please set the environment variable <code>export AZURE_LOG_LEVEL</code> to <code>1</code> to turn on the SDK debug logging.</p>
 <h2 id="lmdb">LMDB<a class="headerlink" href="#lmdb" title="Permanent link">&para;</a></h2>
 <p>The LMDB connection scheme has the form <code>lmdb:///&lt;path to store LMDB files&gt;[?options]</code>.</p>
@@ -1703,7 +1728,7 @@ reason phrases in the exception. To debug these instances, please set the enviro
     <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy"], "search": "../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.a7c05c9e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.ad660dcc.min.js"></script>
       
     
   </body>

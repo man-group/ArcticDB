@@ -16,7 +16,7 @@
       
       
       <link rel="icon" href="../../images/FullWithBorder.png">
-      <meta name="generator" content="mkdocs-1.6.0, mkdocs-material-9.5.21">
+      <meta name="generator" content="mkdocs-1.6.0, mkdocs-material-9.5.26">
     
     
       
@@ -24,7 +24,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.66ac8b77.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.6543a935.min.css">
       
         
         <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
@@ -164,7 +164,7 @@
       
     </form>
     <div class="md-search__output">
-      <div class="md-search__scrollwrap" data-md-scrollfix>
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
         <div class="md-search-result" data-md-component="search-result">
           <div class="md-search-result__meta">
             Initializing search
@@ -727,6 +727,27 @@
   
   <span class="md-ellipsis">
     Getting started with AWS S3
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../aws_permissions/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Library Permissions with AWS S3
   </span>
   
 
@@ -1547,123 +1568,122 @@
 
 
 <h2 id="arcticdb.DataError" class="doc doc-heading">
-          <span class="doc doc-object-name doc-class-name">arcticdb.DataError</span>
+            <span class="doc doc-object-name doc-class-name">arcticdb.DataError</span>
 
 
 <a href="#arcticdb.DataError" class="headerlink" title="Permanent link">&para;</a></h2>
 
 
-  <div class="doc doc-contents first">
+    <div class="doc doc-contents first">
 
-  
+
       <p>Return value for batch methods which fail in some way.</p>
 
 
-
-  <table>
-    <thead>
-      <tr>
-        <th><span class="doc-section-title">ATTRIBUTE</span></th>
-        <th><span>DESCRIPTION</span></th>
-      </tr>
-    </thead>
-    <tbody>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.DataError.symbol">symbol</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>Read or modified symbol.</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code>str</code>
-                </span>
-            </p>
-          </td>
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">ATTRIBUTE</span></th>
+          <th><span>DESCRIPTION</span></th>
         </tr>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.DataError.version_request_type">version_request_type</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>For operations that support as_of, the type of version query provided. <code>None</code> otherwise.</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code>Optional[<span title="arcticdb_ext.version_store.VersionRequestType">VersionRequestType</span>]</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.DataError.version_request_data">version_request_data</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>For operations that support as_of, the value provided in the version query:
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.DataError.symbol">symbol</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>Read or modified symbol.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>str</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.DataError.version_request_type">version_request_type</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>For operations that support as_of, the type of version query provided. <code>None</code> otherwise.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>Optional[<span title="arcticdb_ext.version_store.VersionRequestType">VersionRequestType</span>]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.DataError.version_request_data">version_request_data</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>For operations that support as_of, the value provided in the version query:
     None - Operation does not support as_of, or latest version was requested
     str - The name of the snapshot provided to as_of
     int - The specific version requested if version_request_type == VersionRequestType::SPECIFIC, or
           nanoseconds since epoch if version_request_type == VersionRequestType::TIMESTAMP</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code>Optional[Union[str, int]]</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.DataError.error_code">error_code</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>For the most common error types, the ErrorCode is included here.
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>Optional[Union[str, int]]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.DataError.error_code">error_code</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>For the most common error types, the ErrorCode is included here.
 e.g. ErrorCode.E_NO_SUCH_VERSION if the version requested has been deleted
 Please see the Error Messages section of the docs for more detail.</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code>Optional[ErrorCode]</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.DataError.error_category">error_category</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>If error_code is provided, the category is also provided.
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>Optional[ErrorCode]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.DataError.error_category">error_category</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>If error_code is provided, the category is also provided.
 e.g.  ErrorCategory.MISSING_DATA if error_code is ErrorCode.E_NO_SUCH_VERSION</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code>Optional[ErrorCategory]</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.DataError.exception_string">exception_string</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>The string associated with the exception that was originally raised.</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code>str</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-    </tbody>
-  </table>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>Optional[ErrorCategory]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.DataError.exception_string">exception_string</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>The string associated with the exception that was originally raised.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>str</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
-  
+
 
   <div class="doc doc-children">
 
@@ -1679,8 +1699,7 @@ e.g.  ErrorCategory.MISSING_DATA if error_code is ErrorCode.E_NO_SUCH_VERSION</p
 
   </div>
 
-  </div>
-
+    </div>
 
 </div>
 
@@ -1689,22 +1708,21 @@ e.g.  ErrorCategory.MISSING_DATA if error_code is ErrorCode.E_NO_SUCH_VERSION</p
 
 
 <h2 id="arcticdb.version_store.library.ArcticDuplicateSymbolsInBatchException" class="doc doc-heading">
-          <span class="doc doc-object-name doc-class-name">arcticdb.version_store.library.ArcticDuplicateSymbolsInBatchException</span>
+            <span class="doc doc-object-name doc-class-name">arcticdb.version_store.library.ArcticDuplicateSymbolsInBatchException</span>
 
 
 <a href="#arcticdb.version_store.library.ArcticDuplicateSymbolsInBatchException" class="headerlink" title="Permanent link">&para;</a></h2>
 
 
-  <div class="doc doc-contents first">
-          <p class="doc doc-class-bases">
-            Bases: <code><a class="autorefs autorefs-internal" title="arcticdb.version_store.library.ArcticInvalidApiUsageException" href="#arcticdb.version_store.library.ArcticInvalidApiUsageException">ArcticInvalidApiUsageException</a></code></p>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="arcticdb.version_store.library.ArcticInvalidApiUsageException" href="#arcticdb.version_store.library.ArcticInvalidApiUsageException">ArcticInvalidApiUsageException</a></code></p>
 
-  
+
       <p>Exception indicating that duplicate symbols were passed to a batch method of this module.</p>
 
 
-  </div>
-
+    </div>
 
 </div>
 
@@ -1713,22 +1731,21 @@ e.g.  ErrorCategory.MISSING_DATA if error_code is ErrorCode.E_NO_SUCH_VERSION</p
 
 
 <h2 id="arcticdb.version_store.library.ArcticInvalidApiUsageException" class="doc doc-heading">
-          <span class="doc doc-object-name doc-class-name">arcticdb.version_store.library.ArcticInvalidApiUsageException</span>
+            <span class="doc doc-object-name doc-class-name">arcticdb.version_store.library.ArcticInvalidApiUsageException</span>
 
 
 <a href="#arcticdb.version_store.library.ArcticInvalidApiUsageException" class="headerlink" title="Permanent link">&para;</a></h2>
 
 
-  <div class="doc doc-contents first">
-          <p class="doc doc-class-bases">
-            Bases: <code><span title="arcticdb_ext.exceptions.ArcticException">ArcticException</span></code></p>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="arcticdb_ext.exceptions.ArcticException">ArcticException</span></code></p>
 
-  
+
       <p>Exception indicating an invalid call made to the Arctic API.</p>
 
 
-  </div>
-
+    </div>
 
 </div>
 
@@ -1737,22 +1754,21 @@ e.g.  ErrorCategory.MISSING_DATA if error_code is ErrorCode.E_NO_SUCH_VERSION</p
 
 
 <h2 id="arcticdb.version_store.library.ArcticUnsupportedDataTypeException" class="doc doc-heading">
-          <span class="doc doc-object-name doc-class-name">arcticdb.version_store.library.ArcticUnsupportedDataTypeException</span>
+            <span class="doc doc-object-name doc-class-name">arcticdb.version_store.library.ArcticUnsupportedDataTypeException</span>
 
 
 <a href="#arcticdb.version_store.library.ArcticUnsupportedDataTypeException" class="headerlink" title="Permanent link">&para;</a></h2>
 
 
-  <div class="doc doc-contents first">
-          <p class="doc doc-class-bases">
-            Bases: <code><a class="autorefs autorefs-internal" title="arcticdb.version_store.library.ArcticInvalidApiUsageException" href="#arcticdb.version_store.library.ArcticInvalidApiUsageException">ArcticInvalidApiUsageException</a></code></p>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="arcticdb.version_store.library.ArcticInvalidApiUsageException" href="#arcticdb.version_store.library.ArcticInvalidApiUsageException">ArcticInvalidApiUsageException</a></code></p>
 
-  
+
       <p>Exception indicating that a method does not support the type of data provided.</p>
 
 
-  </div>
-
+    </div>
 
 </div>
 
@@ -1805,7 +1821,7 @@ e.g.  ErrorCategory.MISSING_DATA if error_code is ErrorCode.E_NO_SUCH_VERSION</p
     <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy"], "search": "../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.a7c05c9e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.ad660dcc.min.js"></script>
       
     
   </body>

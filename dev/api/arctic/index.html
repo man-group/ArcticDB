@@ -18,7 +18,7 @@
       
       
       <link rel="icon" href="../../images/FullWithBorder.png">
-      <meta name="generator" content="mkdocs-1.6.0, mkdocs-material-9.5.21">
+      <meta name="generator" content="mkdocs-1.6.0, mkdocs-material-9.5.26">
     
     
       
@@ -26,7 +26,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.66ac8b77.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.6543a935.min.css">
       
         
         <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
@@ -166,7 +166,7 @@
       
     </form>
     <div class="md-search__output">
-      <div class="md-search__scrollwrap" data-md-scrollfix>
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
         <div class="md-search-result" data-md-component="search-result">
           <div class="md-search-result__meta">
             Initializing search
@@ -729,6 +729,27 @@
   
   <span class="md-ellipsis">
     Getting started with AWS S3
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../aws_permissions/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Library Permissions with AWS S3
   </span>
   
 
@@ -1727,23 +1748,22 @@ Library API section.</p>
 
 
 <h2 id="arcticdb.Arctic" class="doc doc-heading">
-          <span class="doc doc-object-name doc-class-name">arcticdb.Arctic</span>
+            <span class="doc doc-object-name doc-class-name">arcticdb.Arctic</span>
 
 
 <a href="#arcticdb.Arctic" class="headerlink" title="Permanent link">&para;</a></h2>
 
 
-  <div class="doc doc-contents first">
+    <div class="doc doc-contents first">
 
-  
+
       <p>Top-level library management class. Arctic instances can be configured against an S3 environment and enable the
 creation, deletion and retrieval of Arctic libraries.</p>
 
 
-  
+
 
   <div class="doc doc-children">
-
 
 
 
@@ -1756,9 +1776,8 @@ creation, deletion and retrieval of Arctic libraries.</p>
 <div class="doc doc-object doc-function">
 
 
-
 <h3 id="arcticdb.Arctic.__init__" class="doc doc-heading">
-          <span class="doc doc-object-name doc-function-name">__init__</span>
+            <span class="doc doc-object-name doc-function-name">__init__</span>
 
 
 <a href="#arcticdb.Arctic.__init__" class="headerlink" title="Permanent link">&para;</a></h3>
@@ -1768,58 +1787,56 @@ creation, deletion and retrieval of Arctic libraries.</p>
 <span class="p">)</span>
 </code></pre></div>
 
-  <div class="doc doc-contents ">
-  
+    <div class="doc doc-contents ">
+
       <p>Initializes a top-level Arctic library management instance.</p>
 <p>For more information on how to use Arctic Library instances please see the documentation on Library.</p>
 
 
-
-  <table>
-    <thead>
-      <tr>
-        <th><span class="doc-section-title">PARAMETER</span></th>
-        <th><span>DESCRIPTION</span></th>
-      </tr>
-    </thead>
-    <tbody>
-        <tr class="doc-section-item">
-          <td><code>uri</code></td>
-          <td class="doc-param-details">
-            <div class="doc-md-description">
-              <p>URI specifying the backing store used to access, configure, and create Arctic libraries.
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code>uri</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>URI specifying the backing store used to access, configure, and create Arctic libraries.
 For more details about the parameters, please refer to the <a href="../arctic_uri/">Arctic URI Documentation</a>.</p>
-            </div>
-            <p>
-                <span class="doc-param-annotation">
-                  <b>TYPE:</b>
-                    <code>str</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-        <tr class="doc-section-item">
-          <td><code>encoding_version</code></td>
-          <td class="doc-param-details">
-            <div class="doc-md-description">
-              <p>When creating new libraries with this Arctic instance, the default encoding version to use.
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code>str</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code>encoding_version</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>When creating new libraries with this Arctic instance, the default encoding version to use.
 Can be overridden by specifying the encoding version in the LibraryOptions argument to create_library.</p>
-            </div>
-            <p>
-                <span class="doc-param-annotation">
-                  <b>TYPE:</b>
-                    <code><span title="arcticdb.encoding_version.EncodingVersion">EncodingVersion</span></code>
-                </span>
-                <span class="doc-param-default">
-                  <b>DEFAULT:</b> 
-                    <code><span title="arcticdb.options.DEFAULT_ENCODING_VERSION">DEFAULT_ENCODING_VERSION</span></code>
-                </span>
-            </p>
-          </td>
-        </tr>
-    </tbody>
-  </table>
-
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="arcticdb.encoding_version.EncodingVersion">EncodingVersion</span></code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code><span title="arcticdb.options.DEFAULT_ENCODING_VERSION">DEFAULT_ENCODING_VERSION</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
 <p><span class="doc-section-title">Examples:</span></p>
@@ -1833,17 +1850,15 @@ Can be overridden by specifying the encoding version in the LibraryOptions argum
 <span class="gp">&gt;&gt;&gt; </span><span class="n">ac</span><span class="o">.</span><span class="n">delete_library</span><span class="p">(</span><span class="s1">&#39;travel_data&#39;</span><span class="p">)</span>
 </code></pre></div>
 
-  </div>
+    </div>
 
 </div>
-
 
 <div class="doc doc-object doc-function">
 
 
-
 <h3 id="arcticdb.Arctic.create_library" class="doc doc-heading">
-          <span class="doc doc-object-name doc-function-name">create_library</span>
+            <span class="doc doc-object-name doc-function-name">create_library</span>
 
 
 <a href="#arcticdb.Arctic.create_library" class="headerlink" title="Permanent link">&para;</a></h3>
@@ -1856,8 +1871,8 @@ Can be overridden by specifying the encoding version in the LibraryOptions argum
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store.library.Library" href="../library/#arcticdb.version_store.library.Library">Library</a></span>
 </code></pre></div>
 
-  <div class="doc doc-contents ">
-  
+    <div class="doc doc-contents ">
+
       <p>Creates the library named <code>name</code>.</p>
 <p>Arctic libraries contain named symbols which are the atomic unit of data storage within Arctic. Symbols
 contain data that in most cases strongly resembles a DataFrame and are versioned such that all modifying
@@ -1867,69 +1882,67 @@ symbol. However, concurrent writers to a single symbol are not supported other t
 explicitly state support for single-symbol concurrent writes.</p>
 
 
-
-  <table>
-    <thead>
-      <tr>
-        <th><span class="doc-section-title">PARAMETER</span></th>
-        <th><span>DESCRIPTION</span></th>
-      </tr>
-    </thead>
-    <tbody>
-        <tr class="doc-section-item">
-          <td><code>name</code></td>
-          <td class="doc-param-details">
-            <div class="doc-md-description">
-              <p>The name of the library that you wish to create.</p>
-            </div>
-            <p>
-                <span class="doc-param-annotation">
-                  <b>TYPE:</b>
-                    <code>str</code>
-                </span>
-            </p>
-          </td>
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
         </tr>
-        <tr class="doc-section-item">
-          <td><code>library_options</code></td>
-          <td class="doc-param-details">
-            <div class="doc-md-description">
-              <p>Options to use in configuring the library. Defaults if not provided are the same as documented in LibraryOptions.</p>
-            </div>
-            <p>
-                <span class="doc-param-annotation">
-                  <b>TYPE:</b>
-                    <code><span title="typing.Optional">Optional</span>[<a class="autorefs autorefs-internal" title="arcticdb.options.LibraryOptions" href="#arcticdb.LibraryOptions">LibraryOptions</a>]</code>
-                </span>
-                <span class="doc-param-default">
-                  <b>DEFAULT:</b> 
-                    <code>None</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-        <tr class="doc-section-item">
-          <td><code>enterprise_library_options</code></td>
-          <td class="doc-param-details">
-            <div class="doc-md-description">
-              <p>Enterprise options to use in configuring the library. Defaults if not provided are the same as documented in
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code>name</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The name of the library that you wish to create.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code>str</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code>library_options</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Options to use in configuring the library. Defaults if not provided are the same as documented in LibraryOptions.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="typing.Optional">Optional</span>[<a class="autorefs autorefs-internal" title="arcticdb.options.LibraryOptions" href="#arcticdb.LibraryOptions">LibraryOptions</a>]</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>None</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code>enterprise_library_options</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Enterprise options to use in configuring the library. Defaults if not provided are the same as documented in
 EnterpriseLibraryOptions. These options are only relevant to ArcticDB enterprise users.</p>
-            </div>
-            <p>
-                <span class="doc-param-annotation">
-                  <b>TYPE:</b>
-                    <code><span title="typing.Optional">Optional</span>[<span title="arcticdb.options.EnterpriseLibraryOptions">EnterpriseLibraryOptions</span>]</code>
-                </span>
-                <span class="doc-param-default">
-                  <b>DEFAULT:</b> 
-                    <code>None</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-    </tbody>
-  </table>
-
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="typing.Optional">Optional</span>[<span title="arcticdb.options.EnterpriseLibraryOptions">EnterpriseLibraryOptions</span>]</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>None</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
 <p><span class="doc-section-title">Examples:</span></p>
@@ -1939,91 +1952,85 @@ EnterpriseLibraryOptions. These options are only relevant to ArcticDB enterprise
 </code></pre></div>
 
 
-
-  <table>
-    <thead>
-      <tr>
-        <th><span class="doc-section-title">RETURNS</span></th>
-        <th><span>DESCRIPTION</span></th>
-      </tr>
-    </thead>
-    <tbody>
-        <tr class="doc-section-item">
-          <td>
-              <span class="doc-returns-annotation">
-                  <code>Library that was just created</code>
-              </span>
-          </td>
-          <td class="doc-returns-details">
-            <div class="doc-md-description">
-              
-            </div>
-          </td>
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
         </tr>
-    </tbody>
-  </table>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code>Library that was just created</code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
-  </div>
+    </div>
 
 </div>
-
 
 <div class="doc doc-object doc-function">
 
 
-
 <h3 id="arcticdb.Arctic.delete_library" class="doc doc-heading">
-          <span class="doc doc-object-name doc-function-name">delete_library</span>
+            <span class="doc doc-object-name doc-function-name">delete_library</span>
 
 
 <a href="#arcticdb.Arctic.delete_library" class="headerlink" title="Permanent link">&para;</a></h3>
 <div class="doc-signature highlight"><pre><span></span><code><span class="nf">delete_library</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="n">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
 </code></pre></div>
 
-  <div class="doc doc-contents ">
-  
+    <div class="doc doc-contents ">
+
       <p>Removes the library called <code>name</code>. This will remove the underlying data contained within the library and as
 such will take as much time as the underlying delete operations take.</p>
 <p>If no library with <code>name</code> exists then this is a no-op. In particular this method does not raise in this case.</p>
 
 
-
-  <table>
-    <thead>
-      <tr>
-        <th><span class="doc-section-title">PARAMETER</span></th>
-        <th><span>DESCRIPTION</span></th>
-      </tr>
-    </thead>
-    <tbody>
-        <tr class="doc-section-item">
-          <td><code>name</code></td>
-          <td class="doc-param-details">
-            <div class="doc-md-description">
-              <p>Name of the library to delete.</p>
-            </div>
-            <p>
-                <span class="doc-param-annotation">
-                  <b>TYPE:</b>
-                    <code>str</code>
-                </span>
-            </p>
-          </td>
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
         </tr>
-    </tbody>
-  </table>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code>name</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Name of the library to delete.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code>str</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
-  </div>
+    </div>
 
 </div>
-
 
 <div class="doc doc-object doc-function">
 
 
-
 <h3 id="arcticdb.Arctic.get_library" class="doc doc-heading">
-          <span class="doc doc-object-name doc-function-name">get_library</span>
+            <span class="doc doc-object-name doc-function-name">get_library</span>
 
 
 <a href="#arcticdb.Arctic.get_library" class="headerlink" title="Permanent link">&para;</a></h3>
@@ -2034,79 +2041,77 @@ such will take as much time as the underlying delete operations take.</p>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store.library.Library" href="../library/#arcticdb.version_store.library.Library">Library</a></span>
 </code></pre></div>
 
-  <div class="doc doc-contents ">
-  
+    <div class="doc doc-contents ">
+
       <p>Returns the library named <code>name</code>.</p>
 <p>This method can also be invoked through subscripting. <code>adb.Arctic('bucket').get_library("test")</code> is equivalent to
 <code>adb.Arctic('bucket')["test"]</code>.</p>
 
 
-
-  <table>
-    <thead>
-      <tr>
-        <th><span class="doc-section-title">PARAMETER</span></th>
-        <th><span>DESCRIPTION</span></th>
-      </tr>
-    </thead>
-    <tbody>
-        <tr class="doc-section-item">
-          <td><code>name</code></td>
-          <td class="doc-param-details">
-            <div class="doc-md-description">
-              <p>The name of the library that you wish to retrieve.</p>
-            </div>
-            <p>
-                <span class="doc-param-annotation">
-                  <b>TYPE:</b>
-                    <code>str</code>
-                </span>
-            </p>
-          </td>
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
         </tr>
-        <tr class="doc-section-item">
-          <td><code>create_if_missing</code></td>
-          <td class="doc-param-details">
-            <div class="doc-md-description">
-              <p>If True, and the library does not exist, then create it.</p>
-            </div>
-            <p>
-                <span class="doc-param-annotation">
-                  <b>TYPE:</b>
-                    <code><span title="typing.Optional">Optional</span>[bool]</code>
-                </span>
-                <span class="doc-param-default">
-                  <b>DEFAULT:</b> 
-                    <code>False</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-        <tr class="doc-section-item">
-          <td><code>library_options</code></td>
-          <td class="doc-param-details">
-            <div class="doc-md-description">
-              <p>If create_if_missing is True, and the library does not already exist, then it will be created with these
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code>name</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The name of the library that you wish to retrieve.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code>str</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code>create_if_missing</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>If True, and the library does not exist, then create it.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="typing.Optional">Optional</span>[bool]</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>False</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code>library_options</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>If create_if_missing is True, and the library does not already exist, then it will be created with these
 options, or the defaults if not provided.
 If create_if_missing is True, and the library already exists, ensures that the existing library options
 match these.
 Unused if create_if_missing is False.</p>
-            </div>
-            <p>
-                <span class="doc-param-annotation">
-                  <b>TYPE:</b>
-                    <code><span title="typing.Optional">Optional</span>[<a class="autorefs autorefs-internal" title="arcticdb.options.LibraryOptions" href="#arcticdb.LibraryOptions">LibraryOptions</a>]</code>
-                </span>
-                <span class="doc-param-default">
-                  <b>DEFAULT:</b> 
-                    <code>None</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-    </tbody>
-  </table>
-
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="typing.Optional">Optional</span>[<a class="autorefs autorefs-internal" title="arcticdb.options.LibraryOptions" href="#arcticdb.LibraryOptions">LibraryOptions</a>]</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>None</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
 <p><span class="doc-section-title">Examples:</span></p>
@@ -2117,51 +2122,47 @@ Unused if create_if_missing is False.</p>
 </code></pre></div>
 
 
-
-  <table>
-    <thead>
-      <tr>
-        <th><span class="doc-section-title">RETURNS</span></th>
-        <th><span>DESCRIPTION</span></th>
-      </tr>
-    </thead>
-    <tbody>
-        <tr class="doc-section-item">
-          <td>
-              <span class="doc-returns-annotation">
-                  <code><a class="autorefs autorefs-internal" title="arcticdb.version_store.library.Library" href="../library/#arcticdb.version_store.library.Library">Library</a></code>
-              </span>
-          </td>
-          <td class="doc-returns-details">
-            <div class="doc-md-description">
-              
-            </div>
-          </td>
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
         </tr>
-    </tbody>
-  </table>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code><a class="autorefs autorefs-internal" title="arcticdb.version_store.library.Library" href="../library/#arcticdb.version_store.library.Library">Library</a></code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
-  </div>
+    </div>
 
 </div>
-
 
 <div class="doc doc-object doc-function">
 
 
-
 <h3 id="arcticdb.Arctic.get_uri" class="doc doc-heading">
-          <span class="doc doc-object-name doc-function-name">get_uri</span>
+            <span class="doc doc-object-name doc-function-name">get_uri</span>
 
 
 <a href="#arcticdb.Arctic.get_uri" class="headerlink" title="Permanent link">&para;</a></h3>
 <div class="doc-signature highlight"><pre><span></span><code><span class="nf">get_uri</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">str</span>
 </code></pre></div>
 
-  <div class="doc doc-contents ">
-  
-      <p>Returns the URI that was used to create the Arctic instance.</p>
+    <div class="doc doc-contents ">
 
+      <p>Returns the URI that was used to create the Arctic instance.</p>
 
 
 <p><span class="doc-section-title">Examples:</span></p>
@@ -2170,128 +2171,120 @@ Unused if create_if_missing is False.</p>
 </code></pre></div>
 
 
-
-  <table>
-    <thead>
-      <tr>
-        <th><span class="doc-section-title">RETURNS</span></th>
-        <th><span>DESCRIPTION</span></th>
-      </tr>
-    </thead>
-    <tbody>
-        <tr class="doc-section-item">
-          <td>
-              <code>s3</code>
-          </td>
-          <td class="doc-returns-details">
-            <div class="doc-md-description">
-              
-            </div>
-              <p>
-                <span class="doc-returns-annotation">
-                  <b>TYPE:</b>
-                    <code>//MY_ENDPOINT:MY_BUCKET</code>
-                </span>
-              </p>
-          </td>
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
         </tr>
-    </tbody>
-  </table>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>s3</code>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                
+              </div>
+                <p>
+                  <span class="doc-returns-annotation">
+                    <b>TYPE:</b>
+                      <code>//MY_ENDPOINT:MY_BUCKET</code>
+                  </span>
+                </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
-  </div>
+    </div>
 
 </div>
-
 
 <div class="doc doc-object doc-function">
 
 
-
 <h3 id="arcticdb.Arctic.has_library" class="doc doc-heading">
-          <span class="doc doc-object-name doc-function-name">has_library</span>
+            <span class="doc doc-object-name doc-function-name">has_library</span>
 
 
 <a href="#arcticdb.Arctic.has_library" class="headerlink" title="Permanent link">&para;</a></h3>
 <div class="doc-signature highlight"><pre><span></span><code><span class="nf">has_library</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="n">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">bool</span>
 </code></pre></div>
 
-  <div class="doc doc-contents ">
-  
+    <div class="doc doc-contents ">
+
       <p>Query if the given library exists</p>
 
 
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code>name</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Name of the library to check the existence of.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code>str</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
-  <table>
-    <thead>
-      <tr>
-        <th><span class="doc-section-title">PARAMETER</span></th>
-        <th><span>DESCRIPTION</span></th>
-      </tr>
-    </thead>
-    <tbody>
-        <tr class="doc-section-item">
-          <td><code>name</code></td>
-          <td class="doc-param-details">
-            <div class="doc-md-description">
-              <p>Name of the library to check the existence of.</p>
-            </div>
-            <p>
-                <span class="doc-param-annotation">
-                  <b>TYPE:</b>
-                    <code>str</code>
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code>True if the library exists, False otherwise.</code>
                 </span>
-            </p>
-          </td>
-        </tr>
-    </tbody>
-  </table>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
-
-
-  <table>
-    <thead>
-      <tr>
-        <th><span class="doc-section-title">RETURNS</span></th>
-        <th><span>DESCRIPTION</span></th>
-      </tr>
-    </thead>
-    <tbody>
-        <tr class="doc-section-item">
-          <td>
-              <span class="doc-returns-annotation">
-                  <code>True if the library exists, False otherwise.</code>
-              </span>
-          </td>
-          <td class="doc-returns-details">
-            <div class="doc-md-description">
-              
-            </div>
-          </td>
-        </tr>
-    </tbody>
-  </table>
-
-  </div>
+    </div>
 
 </div>
-
 
 <div class="doc doc-object doc-function">
 
 
-
 <h3 id="arcticdb.Arctic.list_libraries" class="doc doc-heading">
-          <span class="doc doc-object-name doc-function-name">list_libraries</span>
+            <span class="doc doc-object-name doc-function-name">list_libraries</span>
 
 
 <a href="#arcticdb.Arctic.list_libraries" class="headerlink" title="Permanent link">&para;</a></h3>
 <div class="doc-signature highlight"><pre><span></span><code><span class="nf">list_libraries</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n">str</span><span class="p">]</span>
 </code></pre></div>
 
-  <div class="doc doc-contents ">
-  
-      <p>Lists all libraries available.</p>
+    <div class="doc doc-contents ">
 
+      <p>Lists all libraries available.</p>
 
 
 <p><span class="doc-section-title">Examples:</span></p>
@@ -2301,41 +2294,38 @@ Unused if create_if_missing is False.</p>
 </code></pre></div>
 
 
-
-  <table>
-    <thead>
-      <tr>
-        <th><span class="doc-section-title">RETURNS</span></th>
-        <th><span>DESCRIPTION</span></th>
-      </tr>
-    </thead>
-    <tbody>
-        <tr class="doc-section-item">
-          <td>
-              <span class="doc-returns-annotation">
-                  <code>A list of all library names that exist in this Arctic instance.</code>
-              </span>
-          </td>
-          <td class="doc-returns-details">
-            <div class="doc-md-description">
-              
-            </div>
-          </td>
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
         </tr>
-    </tbody>
-  </table>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code>A list of all library names that exist in this Arctic instance.</code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
-  </div>
+    </div>
 
 </div>
-
 
 <div class="doc doc-object doc-function">
 
 
-
 <h3 id="arcticdb.Arctic.modify_library_option" class="doc doc-heading">
-          <span class="doc doc-object-name doc-function-name">modify_library_option</span>
+            <span class="doc doc-object-name doc-function-name">modify_library_option</span>
 
 
 <a href="#arcticdb.Arctic.modify_library_option" class="headerlink" title="Permanent link">&para;</a></h3>
@@ -2349,69 +2339,68 @@ Unused if create_if_missing is False.</p>
 <span class="p">)</span>
 </code></pre></div>
 
-  <div class="doc doc-contents ">
-  
+    <div class="doc doc-contents ">
+
       <p>Modify an option for a library.</p>
 <p>See <code>LibraryOptions</code> and <code>EnterpriseLibraryOptions</code> for descriptions of the meanings of the various options.</p>
 <p>After the modification, this process and other processes that open the library will use the new value. Processes
 that already have the library open will not see the configuration change until they restart.</p>
 
 
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code>library</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The library to modify.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><a class="autorefs autorefs-internal" title="arcticdb.version_store.library.Library" href="../library/#arcticdb.version_store.library.Library">Library</a></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code>option</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The library option to change.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="typing.Union">Union</span>[<span title="arcticdb.options.ModifiableLibraryOption">ModifiableLibraryOption</span>, <span title="arcticdb.options.ModifiableEnterpriseLibraryOption">ModifiableEnterpriseLibraryOption</span>]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code>option_value</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The new setting for the library option.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="typing.Any">Any</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
-  <table>
-    <thead>
-      <tr>
-        <th><span class="doc-section-title">PARAMETER</span></th>
-        <th><span>DESCRIPTION</span></th>
-      </tr>
-    </thead>
-    <tbody>
-        <tr class="doc-section-item">
-          <td><code>library</code></td>
-          <td class="doc-param-details">
-            <div class="doc-md-description">
-              <p>The library to modify.</p>
-            </div>
-            <p>
-                <span class="doc-param-annotation">
-                  <b>TYPE:</b>
-                    <code><a class="autorefs autorefs-internal" title="arcticdb.version_store.library.Library" href="../library/#arcticdb.version_store.library.Library">Library</a></code>
-                </span>
-            </p>
-          </td>
-        </tr>
-        <tr class="doc-section-item">
-          <td><code>option</code></td>
-          <td class="doc-param-details">
-            <div class="doc-md-description">
-              <p>The library option to change.</p>
-            </div>
-            <p>
-                <span class="doc-param-annotation">
-                  <b>TYPE:</b>
-                    <code><span title="typing.Union">Union</span>[<span title="arcticdb.options.ModifiableLibraryOption">ModifiableLibraryOption</span>, <span title="arcticdb.options.ModifiableEnterpriseLibraryOption">ModifiableEnterpriseLibraryOption</span>]</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-        <tr class="doc-section-item">
-          <td><code>option_value</code></td>
-          <td class="doc-param-details">
-            <div class="doc-md-description">
-              <p>The new setting for the library option.</p>
-            </div>
-            <p>
-                <span class="doc-param-annotation">
-                  <b>TYPE:</b>
-                    <code><span title="typing.Any">Any</span></code>
-                </span>
-            </p>
-          </td>
-        </tr>
-    </tbody>
-  </table>
-
-  </div>
+    </div>
 
 </div>
 
@@ -2419,8 +2408,7 @@ that already have the library open will not see the configuration change until t
 
   </div>
 
-  </div>
-
+    </div>
 
 </div>
 
@@ -2429,91 +2417,89 @@ that already have the library open will not see the configuration change until t
 
 
 <h2 id="arcticdb.LibraryOptions" class="doc doc-heading">
-          <span class="doc doc-object-name doc-class-name">arcticdb.LibraryOptions</span>
+            <span class="doc doc-object-name doc-class-name">arcticdb.LibraryOptions</span>
 
 
 <a href="#arcticdb.LibraryOptions" class="headerlink" title="Permanent link">&para;</a></h2>
 
 
-  <div class="doc doc-contents first">
+    <div class="doc doc-contents first">
 
-  
+
       <p>Configuration options for ArcticDB libraries.</p>
 
 
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">ATTRIBUTE</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.LibraryOptions.dynamic_schema">dynamic_schema</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>See <code>__init__</code> for details.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>bool</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.LibraryOptions.dedup">dedup</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>See <code>__init__</code> for details.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>bool</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.LibraryOptions.rows_per_segment">rows_per_segment</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>See <code>__init__</code> for details.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>int</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.LibraryOptions.columns_per_segment">columns_per_segment</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>See <code>__init__</code> for details.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>int</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
-  <table>
-    <thead>
-      <tr>
-        <th><span class="doc-section-title">ATTRIBUTE</span></th>
-        <th><span>DESCRIPTION</span></th>
-      </tr>
-    </thead>
-    <tbody>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.LibraryOptions.dynamic_schema">dynamic_schema</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>See <code>__init__</code> for details.</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code>bool</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.LibraryOptions.dedup">dedup</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>See <code>__init__</code> for details.</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code>bool</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.LibraryOptions.rows_per_segment">rows_per_segment</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>See <code>__init__</code> for details.</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code>int</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.LibraryOptions.columns_per_segment">columns_per_segment</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>See <code>__init__</code> for details.</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code>int</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-    </tbody>
-  </table>
 
 
-  
 
   <div class="doc doc-children">
-
 
 
 
@@ -2526,9 +2512,8 @@ that already have the library open will not see the configuration change until t
 <div class="doc doc-object doc-function">
 
 
-
 <h3 id="arcticdb.LibraryOptions.__init__" class="doc doc-heading">
-          <span class="doc doc-object-name doc-function-name">__init__</span>
+            <span class="doc doc-object-name doc-function-name">__init__</span>
 
 
 <a href="#arcticdb.LibraryOptions.__init__" class="headerlink" title="Permanent link">&para;</a></h3>
@@ -2542,24 +2527,23 @@ that already have the library open will not see the configuration change until t
 <span class="p">)</span>
 </code></pre></div>
 
-  <div class="doc doc-contents ">
-  
+    <div class="doc doc-contents ">
 
 
 
-  <table>
-    <thead>
-      <tr>
-        <th><span class="doc-section-title">PARAMETER</span></th>
-        <th><span>DESCRIPTION</span></th>
-      </tr>
-    </thead>
-    <tbody>
-        <tr class="doc-section-item">
-          <td><code>dynamic_schema</code></td>
-          <td class="doc-param-details">
-            <div class="doc-md-description">
-              <p>Controls whether the library supports dynamically changing symbol schemas.</p>
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code>dynamic_schema</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Controls whether the library supports dynamically changing symbol schemas.</p>
 <p>The schema of a symbol refers to the order of the columns and the type of the columns.</p>
 <p>If False, then the schema for a symbol is set on each <code>write</code> call, and cannot then be
 modified by successive updates or appends. Each successive update or append must contain the same column set
@@ -2573,24 +2557,24 @@ should column A be of type int32 on write, and of type float on the next append,
 a float to Pandas on read. Supported promotions include (narrow) integer to (wider) integer, and integer to float.</p>
 <p>When enabled, ArcticDB will only tile across the rows of the data. This will result in slower column
 subsetting when storing a large number of columns (&gt;1,000).</p>
-            </div>
-            <p>
-                <span class="doc-param-annotation">
-                  <b>TYPE:</b>
-                    <code>bool</code>
-                </span>
-                <span class="doc-param-default">
-                  <b>DEFAULT:</b> 
-                    <code>False</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-        <tr class="doc-section-item">
-          <td><code>dedup</code></td>
-          <td class="doc-param-details">
-            <div class="doc-md-description">
-              <p>Controls whether calls to write and write_batch will attempt to deduplicate data segments against the
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code>bool</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>False</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code>dedup</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Controls whether calls to write and write_batch will attempt to deduplicate data segments against the
 previous live version of the specified symbol.</p>
 <p>If False, new data segments will always be written for the new version of the symbol being created.</p>
 <p>If True, the content hash, start index, and end index of data segments associated with the previous live
@@ -2604,24 +2588,24 @@ offset will therefore prevent this de-duplication.</p>
 <p>Note that these conditions will also be checked with write_pickle and write_pickle_batch. However, pickled
 objects are always written as a single data segment, and so dedup will only occur if the written object is
 identical to the previous version.</p>
-            </div>
-            <p>
-                <span class="doc-param-annotation">
-                  <b>TYPE:</b>
-                    <code>bool</code>
-                </span>
-                <span class="doc-param-default">
-                  <b>DEFAULT:</b> 
-                    <code>False</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-        <tr class="doc-section-item">
-          <td><code>rows_per_segment</code></td>
-          <td class="doc-param-details">
-            <div class="doc-md-description">
-              <p>Together with columns_per_segment, controls how data being written, appended, or updated is sliced into
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code>bool</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>False</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code>rows_per_segment</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Together with columns_per_segment, controls how data being written, appended, or updated is sliced into
 separate data segment objects before being written to storage.</p>
 <p>By splitting data across multiple objects in storage, calls to read and read_batch that include the
 date_range and/or columns parameters can reduce the amount of data read from storage by only reading those
@@ -2643,60 +2627,60 @@ column is written, and then another dataframe also with 50,000 rows and one colu
 will still be two data segments each with 50,000 rows.</p>
 <p>Note that for libraries with dynamic_schema enabled, columns_per_segment does not apply, and there is always
 a single column-slice. However, rows_per_segment is used, and there will be multiple row-slices.</p>
-            </div>
-            <p>
-                <span class="doc-param-annotation">
-                  <b>TYPE:</b>
-                    <code>int</code>
-                </span>
-                <span class="doc-param-default">
-                  <b>DEFAULT:</b> 
-                    <code>100000</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-        <tr class="doc-section-item">
-          <td><code>columns_per_segment</code></td>
-          <td class="doc-param-details">
-            <div class="doc-md-description">
-              <p>See rows_per_segment</p>
-            </div>
-            <p>
-                <span class="doc-param-annotation">
-                  <b>TYPE:</b>
-                    <code>int</code>
-                </span>
-                <span class="doc-param-default">
-                  <b>DEFAULT:</b> 
-                    <code>127</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-        <tr class="doc-section-item">
-          <td><code>encoding_version</code></td>
-          <td class="doc-param-details">
-            <div class="doc-md-description">
-              <p>The encoding version to use when writing data to storage.
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code>int</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>100000</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code>columns_per_segment</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>See rows_per_segment</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code>int</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>127</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code>encoding_version</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The encoding version to use when writing data to storage.
 v2 is faster, but still experimental, so use with caution.</p>
-            </div>
-            <p>
-                <span class="doc-param-annotation">
-                  <b>TYPE:</b>
-                    <code><span title="typing.Optional">Optional</span>[<span title="arcticdb.encoding_version.EncodingVersion">EncodingVersion</span>]</code>
-                </span>
-                <span class="doc-param-default">
-                  <b>DEFAULT:</b> 
-                    <code>None</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-    </tbody>
-  </table>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="typing.Optional">Optional</span>[<span title="arcticdb.encoding_version.EncodingVersion">EncodingVersion</span>]</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>None</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
-  </div>
+    </div>
 
 </div>
 
@@ -2704,8 +2688,7 @@ v2 is faster, but still experimental, so use with caution.</p>
 
   </div>
 
-  </div>
-
+    </div>
 
 </div>
 
@@ -2758,7 +2741,7 @@ v2 is faster, but still experimental, so use with caution.</p>
     <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy"], "search": "../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.a7c05c9e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.ad660dcc.min.js"></script>
       
     
   </body>

@@ -18,7 +18,7 @@
       
       
       <link rel="icon" href="../../images/FullWithBorder.png">
-      <meta name="generator" content="mkdocs-1.6.0, mkdocs-material-9.5.21">
+      <meta name="generator" content="mkdocs-1.6.0, mkdocs-material-9.5.26">
     
     
       
@@ -26,7 +26,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.66ac8b77.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.6543a935.min.css">
       
         
         <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
@@ -166,7 +166,7 @@
       
     </form>
     <div class="md-search__output">
-      <div class="md-search__scrollwrap" data-md-scrollfix>
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
         <div class="md-search-result" data-md-component="search-result">
           <div class="md-search-result__meta">
             Initializing search
@@ -729,6 +729,27 @@
   
   <span class="md-ellipsis">
     Getting started with AWS S3
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../aws_permissions/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Library Permissions with AWS S3
   </span>
   
 
@@ -1651,9 +1672,9 @@
 
 
 <h2 id="arcticdb.version_store.library.NormalizableType" class="doc doc-heading">
-          <span class="doc doc-object-name doc-attribute-name">arcticdb.version_store.library.NormalizableType</span>
+            <span class="doc doc-object-name doc-attribute-name">arcticdb.version_store.library.NormalizableType</span>
 
-  
+
   <span class="doc doc-labels">
       <small class="doc doc-label doc-label-module-attribute"><code>module-attribute</code></small>
   </span>
@@ -1662,14 +1683,15 @@
 <div class="doc-signature highlight"><pre><span></span><code><span class="n">NormalizableType</span> <span class="o">=</span> <span class="n"><span title="typing.Union">Union</span></span><span class="p">[</span><span class="n"><span title="arcticdb.version_store.library.NORMALIZABLE_TYPES">NORMALIZABLE_TYPES</span></span><span class="p">]</span>
 </code></pre></div>
 
-  <div class="doc doc-contents first">
-  
+    <div class="doc doc-contents first">
+
       <p>Types that can be normalised into Arctic's internal storage structure.</p>
+
 
 <details class="see-also" open>
   <summary>See Also</summary>
   <p>Library.write: for more documentation on normalisation.</p>
-</details>  </div>
+</details>    </div>
 
 </div>
 
@@ -1678,68 +1700,68 @@
 
 
 <h2 id="arcticdb.ReadInfoRequest" class="doc doc-heading">
-          <span class="doc doc-object-name doc-class-name">arcticdb.ReadInfoRequest</span>
+            <span class="doc doc-object-name doc-class-name">arcticdb.ReadInfoRequest</span>
 
 
 <a href="#arcticdb.ReadInfoRequest" class="headerlink" title="Permanent link">&para;</a></h2>
 
 
-  <div class="doc doc-contents first">
-          <p class="doc doc-class-bases">
-            Bases: <code><span title="typing.NamedTuple">NamedTuple</span></code></p>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="typing.NamedTuple">NamedTuple</span></code></p>
 
-  
+
       <p>ReadInfoRequest is useful for batch methods like read_metadata_batch and get_description_batch, where we
 only need to specify the symbol and the version information. Therefore, construction of this object is
 only required for these batch operations.</p>
 
 
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">ATTRIBUTE</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.ReadInfoRequest.symbol">symbol</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>See <code>read_metadata</code> method.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>str</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.ReadInfoRequest.as_of">as_of</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>See <code>read_metadata</code> method.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>Optional[AsOf], default=none</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
-  <table>
-    <thead>
-      <tr>
-        <th><span class="doc-section-title">ATTRIBUTE</span></th>
-        <th><span>DESCRIPTION</span></th>
-      </tr>
-    </thead>
-    <tbody>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.ReadInfoRequest.symbol">symbol</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>See <code>read_metadata</code> method.</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code>str</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.ReadInfoRequest.as_of">as_of</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>See <code>read_metadata</code> method.</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code>Optional[AsOf], default=none</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-    </tbody>
-  </table>
 
 <details class="see-also" open>
   <summary>See Also</summary>
   <p>Library.read: For documentation on the parameters.</p>
 </details>
 
-  
+
 
   <div class="doc doc-children">
 
@@ -1755,8 +1777,7 @@ only required for these batch operations.</p>
 
   </div>
 
-  </div>
-
+    </div>
 
 </div>
 
@@ -1765,109 +1786,109 @@ only required for these batch operations.</p>
 
 
 <h2 id="arcticdb.ReadRequest" class="doc doc-heading">
-          <span class="doc doc-object-name doc-class-name">arcticdb.ReadRequest</span>
+            <span class="doc doc-object-name doc-class-name">arcticdb.ReadRequest</span>
 
 
 <a href="#arcticdb.ReadRequest" class="headerlink" title="Permanent link">&para;</a></h2>
 
 
-  <div class="doc doc-contents first">
-          <p class="doc doc-class-bases">
-            Bases: <code><span title="typing.NamedTuple">NamedTuple</span></code></p>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="typing.NamedTuple">NamedTuple</span></code></p>
 
-  
+
       <p>ReadRequest is designed to enable batching of read operations with an API that mirrors the singular <code>read</code> API.
 Therefore, construction of this object is only required for batch read operations.</p>
 
 
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">ATTRIBUTE</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.ReadRequest.as_of">as_of</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>See <code>read</code> method.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>Optional[AsOf], default=none</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.ReadRequest.date_range">date_range</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>See <code>read</code>method.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]], default=none</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.ReadRequest.row_range">row_range</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>See <code>read</code> method.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>Optional[Tuple[int, int]], default=none</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.ReadRequest.columns">columns</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>See <code>read</code> method.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>Optional[List[str]], default=none</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.ReadRequest.query_builder">query_builder</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>See <code>read</code> method.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>Optional[Querybuilder], default=none</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
-  <table>
-    <thead>
-      <tr>
-        <th><span class="doc-section-title">ATTRIBUTE</span></th>
-        <th><span>DESCRIPTION</span></th>
-      </tr>
-    </thead>
-    <tbody>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.ReadRequest.as_of">as_of</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>See <code>read</code> method.</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code>Optional[AsOf], default=none</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.ReadRequest.date_range">date_range</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>See <code>read</code>method.</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code>Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]], default=none</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.ReadRequest.row_range">row_range</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>See <code>read</code> method.</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code>Optional[Tuple[int, int]], default=none</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.ReadRequest.columns">columns</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>See <code>read</code> method.</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code>Optional[List[str]], default=none</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.ReadRequest.query_builder">query_builder</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>See <code>read</code> method.</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code>Optional[Querybuilder], default=none</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-    </tbody>
-  </table>
 
 <details class="see-also" open>
   <summary>See Also</summary>
   <p>Library.read: For documentation on the parameters.</p>
 </details>
 
-  
+
 
   <div class="doc doc-children">
 
@@ -1883,8 +1904,7 @@ Therefore, construction of this object is only required for batch read operation
 
   </div>
 
-  </div>
-
+    </div>
 
 </div>
 
@@ -1893,120 +1913,119 @@ Therefore, construction of this object is only required for batch read operation
 
 
 <h2 id="arcticdb.version_store.library.SymbolDescription" class="doc doc-heading">
-          <span class="doc doc-object-name doc-class-name">arcticdb.version_store.library.SymbolDescription</span>
+            <span class="doc doc-object-name doc-class-name">arcticdb.version_store.library.SymbolDescription</span>
 
 
 <a href="#arcticdb.version_store.library.SymbolDescription" class="headerlink" title="Permanent link">&para;</a></h2>
 
 
-  <div class="doc doc-contents first">
-          <p class="doc doc-class-bases">
-            Bases: <code><span title="typing.NamedTuple">NamedTuple</span></code></p>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="typing.NamedTuple">NamedTuple</span></code></p>
 
-  
+
       <p>A named tuple. Descriptive information about the data stored under a particular symbol.</p>
 
 
-
-  <table>
-    <thead>
-      <tr>
-        <th><span class="doc-section-title">ATTRIBUTE</span></th>
-        <th><span>DESCRIPTION</span></th>
-      </tr>
-    </thead>
-    <tbody>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.version_store.library.SymbolDescription.columns">columns</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>Columns stored under the symbol.</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code><span title="typing.Tuple">Tuple</span>[<span title="arcticdb.version_store.library.NameWithDType">NameWithDType</span>]</code>
-                </span>
-            </p>
-          </td>
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">ATTRIBUTE</span></th>
+          <th><span>DESCRIPTION</span></th>
         </tr>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.version_store.library.SymbolDescription.index">index</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>Index of the symbol.</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code><span title="arcticdb.version_store.library.NameWithDType">NameWithDType</span></code>
-                </span>
-            </p>
-          </td>
-        </tr>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.version_store.library.SymbolDescription.index_type">index_type</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>Whether the index is a simple index or a multi_index. <code>NA</code> indicates that the stored data does not have an index.</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code>str {&#34;NA&#34;, &#34;index&#34;, &#34;multi_index&#34;}</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.version_store.library.SymbolDescription.row_count">row_count</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>Number of rows.</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code>int</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.version_store.library.SymbolDescription.last_update_time">last_update_time</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>The time of the last update to the symbol, in UTC.</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code><span title="numpy.datetime64">datetime64</span></code>
-                </span>
-            </p>
-          </td>
-        </tr>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.version_store.library.SymbolDescription.date_range">date_range</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>The values of the index column in the first and last rows of this symbol in UTC. Both values will be NaT if:
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.version_store.library.SymbolDescription.columns">columns</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>Columns stored under the symbol.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="typing.Tuple">Tuple</span>[<span title="arcticdb.version_store.library.NameWithDType">NameWithDType</span>]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.version_store.library.SymbolDescription.index">index</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>Index of the symbol.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="arcticdb.version_store.library.NameWithDType">NameWithDType</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.version_store.library.SymbolDescription.index_type">index_type</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>Whether the index is a simple index or a multi_index. <code>NA</code> indicates that the stored data does not have an index.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>str {&#34;NA&#34;, &#34;index&#34;, &#34;multi_index&#34;}</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.version_store.library.SymbolDescription.row_count">row_count</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>Number of rows.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>int</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.version_store.library.SymbolDescription.last_update_time">last_update_time</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>The time of the last update to the symbol, in UTC.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="datetime.datetime">datetime</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.version_store.library.SymbolDescription.date_range">date_range</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>The values of the index column in the first and last rows of this symbol in UTC. Both values will be NaT if:
 - the symbol is not timestamp indexed
 - the symbol is timestamp indexed, but the sorted field of this class is UNSORTED (see below)</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code><span title="typing.Tuple">Tuple</span>[<span title="typing.Union">Union</span>[<span title="datetime.datetime">datetime</span>, <span title="numpy.datetime64">datetime64</span>], <span title="typing.Union">Union</span>[<span title="datetime.datetime">datetime</span>, <span title="numpy.datetime64">datetime64</span>]]</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.version_store.library.SymbolDescription.sorted">sorted</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>One of "ASCENDING", "DESCENDING", "UNSORTED", or "UNKNOWN":
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="typing.Tuple">Tuple</span>[<span title="typing.Union">Union</span>[<span title="datetime.datetime">datetime</span>, <span title="numpy.datetime64">datetime64</span>], <span title="typing.Union">Union</span>[<span title="datetime.datetime">datetime</span>, <span title="numpy.datetime64">datetime64</span>]]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.version_store.library.SymbolDescription.sorted">sorted</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>One of "ASCENDING", "DESCENDING", "UNSORTED", or "UNKNOWN":
 ASCENDING - The data has a timestamp index, and is sorted in ascending order. Guarantees that operations such as
             append, update, and read with date_range work as expected.
 DESCENDING - The data has a timestamp index, and is sorted in descending order. Update and read with date_range
@@ -2016,20 +2035,20 @@ UNSORTED - The data has a timestamp index, and is not sorted. Can only be create
            work.
 UNKNOWN - Either the data does not have a timestamp index, or the data does have a timestamp index, but was
           written by a client that predates this information being stored.</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code>str</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-    </tbody>
-  </table>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>str</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
-  
+
 
   <div class="doc doc-children">
 
@@ -2045,8 +2064,7 @@ UNKNOWN - Either the data does not have a timestamp index, or the data does have
 
   </div>
 
-  </div>
-
+    </div>
 
 </div>
 
@@ -2055,62 +2073,61 @@ UNKNOWN - Either the data does not have a timestamp index, or the data does have
 
 
 <h2 id="arcticdb.version_store.library.SymbolVersion" class="doc doc-heading">
-          <span class="doc doc-object-name doc-class-name">arcticdb.version_store.library.SymbolVersion</span>
+            <span class="doc doc-object-name doc-class-name">arcticdb.version_store.library.SymbolVersion</span>
 
 
 <a href="#arcticdb.version_store.library.SymbolVersion" class="headerlink" title="Permanent link">&para;</a></h2>
 
 
-  <div class="doc doc-contents first">
-          <p class="doc doc-class-bases">
-            Bases: <code><span title="typing.NamedTuple">NamedTuple</span></code></p>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="typing.NamedTuple">NamedTuple</span></code></p>
 
-  
+
       <p>A named tuple. A symbol name - version pair.</p>
 
 
-
-  <table>
-    <thead>
-      <tr>
-        <th><span class="doc-section-title">ATTRIBUTE</span></th>
-        <th><span>DESCRIPTION</span></th>
-      </tr>
-    </thead>
-    <tbody>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.version_store.library.SymbolVersion.symbol">symbol</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>Symbol name.</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code>str</code>
-                </span>
-            </p>
-          </td>
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">ATTRIBUTE</span></th>
+          <th><span>DESCRIPTION</span></th>
         </tr>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.version_store.library.SymbolVersion.version">version</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>Version of the symbol.</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code>int</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-    </tbody>
-  </table>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.version_store.library.SymbolVersion.symbol">symbol</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>Symbol name.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>str</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.version_store.library.SymbolVersion.version">version</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>Version of the symbol.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>int</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
-  
+
 
   <div class="doc doc-children">
 
@@ -2126,8 +2143,7 @@ UNKNOWN - Either the data does not have a timestamp index, or the data does have
 
   </div>
 
-  </div>
-
+    </div>
 
 </div>
 
@@ -2136,119 +2152,118 @@ UNKNOWN - Either the data does not have a timestamp index, or the data does have
 
 
 <h2 id="arcticdb.VersionedItem" class="doc doc-heading">
-          <span class="doc doc-object-name doc-class-name">arcticdb.VersionedItem</span>
+            <span class="doc doc-object-name doc-class-name">arcticdb.VersionedItem</span>
 
 
 <a href="#arcticdb.VersionedItem" class="headerlink" title="Permanent link">&para;</a></h2>
 
 
-  <div class="doc doc-contents first">
+    <div class="doc doc-contents first">
 
-  
+
       <p>Return value for many operations that captures the result and associated information.</p>
 
 
-
-  <table>
-    <thead>
-      <tr>
-        <th><span class="doc-section-title">ATTRIBUTE</span></th>
-        <th><span>DESCRIPTION</span></th>
-      </tr>
-    </thead>
-    <tbody>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.VersionedItem.library">library</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>Library this result relates to.</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code>str</code>
-                </span>
-            </p>
-          </td>
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">ATTRIBUTE</span></th>
+          <th><span>DESCRIPTION</span></th>
         </tr>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.VersionedItem.symbol">symbol</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>Read or modified symbol.</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code>str</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.VersionedItem.data">data</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>For data retrieval (read) operations, contains the data read.
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.VersionedItem.library">library</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>Library this result relates to.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>str</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.VersionedItem.symbol">symbol</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>Read or modified symbol.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>str</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.VersionedItem.data">data</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>For data retrieval (read) operations, contains the data read.
 For data modification operations, the value might not be populated.</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code><span title="typing.Any">Any</span></code>
-                </span>
-            </p>
-          </td>
-        </tr>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.VersionedItem.version">version</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>For data retrieval operations, the version the <code>as_of</code> argument resolved to.
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="typing.Any">Any</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.VersionedItem.version">version</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>For data retrieval operations, the version the <code>as_of</code> argument resolved to.
 For data modification operations, the version the data has been written under.</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code>int</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.VersionedItem.metadata">metadata</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>The metadata saved alongside <code>data</code>.
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>int</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.VersionedItem.metadata">metadata</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>The metadata saved alongside <code>data</code>.
 Availability depends on the method used and may be different from that of <code>data</code>.</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code><span title="typing.Any">Any</span></code>
-                </span>
-            </p>
-          </td>
-        </tr>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.VersionedItem.host">host</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>Informational / for backwards compatibility.</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code><span title="typing.Optional">Optional</span>[str]</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-    </tbody>
-  </table>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="typing.Any">Any</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.VersionedItem.host">host</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>Informational / for backwards compatibility.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="typing.Optional">Optional</span>[str]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
-  
+
 
   <div class="doc doc-children">
 
@@ -2264,8 +2279,7 @@ Availability depends on the method used and may be different from that of <code>
 
   </div>
 
-  </div>
-
+    </div>
 
 </div>
 
@@ -2274,76 +2288,75 @@ Availability depends on the method used and may be different from that of <code>
 
 
 <h2 id="arcticdb.version_store.library.VersionInfo" class="doc doc-heading">
-          <span class="doc doc-object-name doc-class-name">arcticdb.version_store.library.VersionInfo</span>
+            <span class="doc doc-object-name doc-class-name">arcticdb.version_store.library.VersionInfo</span>
 
 
 <a href="#arcticdb.version_store.library.VersionInfo" class="headerlink" title="Permanent link">&para;</a></h2>
 
 
-  <div class="doc doc-contents first">
-          <p class="doc doc-class-bases">
-            Bases: <code><span title="typing.NamedTuple">NamedTuple</span></code></p>
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="typing.NamedTuple">NamedTuple</span></code></p>
 
-  
+
       <p>A named tuple. Descriptive information about a particular version of a symbol.</p>
 
 
-
-  <table>
-    <thead>
-      <tr>
-        <th><span class="doc-section-title">ATTRIBUTE</span></th>
-        <th><span>DESCRIPTION</span></th>
-      </tr>
-    </thead>
-    <tbody>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.version_store.library.VersionInfo.date">date</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>Time that the version was written in UTC.</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code><span title="datetime.datetime">datetime</span></code>
-                </span>
-            </p>
-          </td>
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">ATTRIBUTE</span></th>
+          <th><span>DESCRIPTION</span></th>
         </tr>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.version_store.library.VersionInfo.deleted">deleted</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>True if the version has been deleted and is only being kept alive via a snapshot.</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code>bool</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-        <tr class="doc-section-item">
-          <td><code><span title="arcticdb.version_store.library.VersionInfo.snapshots">snapshots</span></code></td>
-          <td class="doc-attribute-details">
-            <div class="doc-md-description">
-              <p>Snapshots that refer to this version.</p>
-            </div>
-            <p>
-                <span class="doc-attribute-annotation">
-                  <b>TYPE:</b>
-                    <code><span title="typing.List">List</span>[str]</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-    </tbody>
-  </table>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.version_store.library.VersionInfo.date">date</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>Time that the version was written in UTC.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="datetime.datetime">datetime</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.version_store.library.VersionInfo.deleted">deleted</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>True if the version has been deleted and is only being kept alive via a snapshot.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code>bool</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="arcticdb.version_store.library.VersionInfo.snapshots">snapshots</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>Snapshots that refer to this version.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="typing.List">List</span>[str]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
-  
+
 
   <div class="doc doc-children">
 
@@ -2359,8 +2372,7 @@ Availability depends on the method used and may be different from that of <code>
 
   </div>
 
-  </div>
-
+    </div>
 
 </div>
 
@@ -2369,25 +2381,24 @@ Availability depends on the method used and may be different from that of <code>
 
 
 <h2 id="arcticdb.WritePayload" class="doc doc-heading">
-          <span class="doc doc-object-name doc-class-name">arcticdb.WritePayload</span>
+            <span class="doc doc-object-name doc-class-name">arcticdb.WritePayload</span>
 
 
 <a href="#arcticdb.WritePayload" class="headerlink" title="Permanent link">&para;</a></h2>
 
 
-  <div class="doc doc-contents first">
+    <div class="doc doc-contents first">
 
-  
+
       <p>WritePayload is designed to enable batching of multiple operations with an API that mirrors the singular
 <code>write</code> API.</p>
 <p>Construction of <code>WritePayload</code> objects is only required for batch write operations.</p>
 <p>One instance of <code>WritePayload</code> refers to one unit that can be written through to ArcticDB.</p>
 
 
-  
+
 
   <div class="doc doc-children">
-
 
 
 
@@ -2400,9 +2411,8 @@ Availability depends on the method used and may be different from that of <code>
 <div class="doc doc-object doc-function">
 
 
-
 <h3 id="arcticdb.WritePayload.__init__" class="doc doc-heading">
-          <span class="doc doc-object-name doc-function-name">__init__</span>
+            <span class="doc doc-object-name doc-function-name">__init__</span>
 
 
 <a href="#arcticdb.WritePayload.__init__" class="headerlink" title="Permanent link">&para;</a></h3>
@@ -2413,75 +2423,75 @@ Availability depends on the method used and may be different from that of <code>
 <span class="p">)</span>
 </code></pre></div>
 
-  <div class="doc doc-contents ">
-  
+    <div class="doc doc-contents ">
+
       <p>Constructor.</p>
 
 
-
-  <table>
-    <thead>
-      <tr>
-        <th><span class="doc-section-title">PARAMETER</span></th>
-        <th><span>DESCRIPTION</span></th>
-      </tr>
-    </thead>
-    <tbody>
-        <tr class="doc-section-item">
-          <td><code>symbol</code></td>
-          <td class="doc-param-details">
-            <div class="doc-md-description">
-              <p>Symbol name. Limited to 255 characters. The following characters are not supported in symbols:
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code>symbol</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Symbol name. Limited to 255 characters. The following characters are not supported in symbols:
 <code>"*", "&amp;", "&lt;", "&gt;"</code></p>
-            </div>
-            <p>
-                <span class="doc-param-annotation">
-                  <b>TYPE:</b>
-                    <code>str</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-        <tr class="doc-section-item">
-          <td><code>data</code></td>
-          <td class="doc-param-details">
-            <div class="doc-md-description">
-              <p>Data to be written. If data is not of NormalizableType then it will be pickled.</p>
-            </div>
-            <p>
-                <span class="doc-param-annotation">
-                  <b>TYPE:</b>
-                    <code><span title="typing.Any">Any</span></code>
-                </span>
-            </p>
-          </td>
-        </tr>
-        <tr class="doc-section-item">
-          <td><code>metadata</code></td>
-          <td class="doc-param-details">
-            <div class="doc-md-description">
-              <p>Optional metadata to persist along with the symbol.</p>
-            </div>
-            <p>
-                <span class="doc-param-annotation">
-                  <b>TYPE:</b>
-                    <code><span title="typing.Any">Any</span></code>
-                </span>
-                <span class="doc-param-default">
-                  <b>DEFAULT:</b> 
-                    <code>None</code>
-                </span>
-            </p>
-          </td>
-        </tr>
-    </tbody>
-  </table>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code>str</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code>data</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Data to be written. If data is not of NormalizableType then it will be pickled.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="typing.Any">Any</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code>metadata</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Optional metadata to persist along with the symbol.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="typing.Any">Any</span></code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>None</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
 
 <details class="see-also" open>
   <summary>See Also</summary>
   <p>Library.write_pickle: For information on the implications of providing data that needs to be pickled.</p>
 </details>
-  </div>
+    </div>
 
 </div>
 
@@ -2489,8 +2499,7 @@ Availability depends on the method used and may be different from that of <code>
 
   </div>
 
-  </div>
-
+    </div>
 
 </div>
 
@@ -2543,7 +2552,7 @@ Availability depends on the method used and may be different from that of <code>
     <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy"], "search": "../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.a7c05c9e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.ad660dcc.min.js"></script>
       
     
   </body>

@@ -18,7 +18,7 @@
       
       
       <link rel="icon" href="../../images/FullWithBorder.png">
-      <meta name="generator" content="mkdocs-1.6.0, mkdocs-material-9.5.21">
+      <meta name="generator" content="mkdocs-1.6.0, mkdocs-material-9.5.26">
     
     
       
@@ -26,7 +26,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.66ac8b77.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.6543a935.min.css">
       
         
         <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
@@ -166,7 +166,7 @@
       
     </form>
     <div class="md-search__output">
-      <div class="md-search__scrollwrap" data-md-scrollfix>
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
         <div class="md-search-result" data-md-component="search-result">
           <div class="md-search-result__meta">
             Initializing search
@@ -729,6 +729,27 @@
   
   <span class="md-ellipsis">
     Getting started with AWS S3
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../aws_permissions/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Library Permissions with AWS S3
   </span>
   
 
@@ -1484,6 +1505,24 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#arcticdb.QueryBuilder.prepend" class="md-nav__link">
+    <span class="md-ellipsis">
+      prepend
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#arcticdb.QueryBuilder.resample" class="md-nav__link">
+    <span class="md-ellipsis">
+      resample
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#arcticdb.QueryBuilder.then" class="md-nav__link">
     <span class="md-ellipsis">
       then
@@ -1652,6 +1691,24 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#arcticdb.QueryBuilder.prepend" class="md-nav__link">
+    <span class="md-ellipsis">
+      prepend
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#arcticdb.QueryBuilder.resample" class="md-nav__link">
+    <span class="md-ellipsis">
+      resample
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#arcticdb.QueryBuilder.then" class="md-nav__link">
     <span class="md-ellipsis">
       then
@@ -1694,15 +1751,15 @@
 
 
 <h2 id="arcticdb.QueryBuilder" class="doc doc-heading">
-          <span class="doc doc-object-name doc-class-name">arcticdb.QueryBuilder</span>
+            <span class="doc doc-object-name doc-class-name">arcticdb.QueryBuilder</span>
 
 
 <a href="#arcticdb.QueryBuilder" class="headerlink" title="Permanent link">&para;</a></h2>
 
 
-  <div class="doc doc-contents first">
+    <div class="doc doc-contents first">
 
-  
+
       <p>Build a query to process read results with. Syntax is designed to be similar to Pandas:
     &gt;&gt;&gt; q = adb.QueryBuilder()
     &gt;&gt;&gt; q = q[q["a"] &lt; 5] (equivalent to q = q[q.a &lt; 5] provided the column name is also a valid Python variable name)
@@ -1775,10 +1832,9 @@ Query involves comparing a string to one or more numeric values, or vice versa
 Query involves arithmetic with a column containing strings</p>
 
 
-  
+
 
   <div class="doc doc-children">
-
 
 
 
@@ -1791,54 +1847,51 @@ Query involves arithmetic with a column containing strings</p>
 <div class="doc doc-object doc-function">
 
 
-
 <h3 id="arcticdb.QueryBuilder.apply" class="doc doc-heading">
-          <span class="doc doc-object-name doc-function-name">apply</span>
+            <span class="doc doc-object-name doc-function-name">apply</span>
 
 
 <a href="#arcticdb.QueryBuilder.apply" class="headerlink" title="Permanent link">&para;</a></h3>
 <div class="doc-signature highlight"><pre><span></span><code><span class="nf">apply</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">expr</span><span class="p">)</span>
 </code></pre></div>
 
-  <div class="doc doc-contents ">
-  
+    <div class="doc doc-contents ">
+
       <p>Apply enables new columns to be created using supported QueryBuilder numeric operations. See the documentation for the
 QueryBuilder class for more information on supported expressions - any expression valid in a filter is valid when using
 <code>apply</code>.</p>
 
 
-
-  <table>
-    <thead>
-      <tr>
-        <th><span class="doc-section-title">PARAMETER</span></th>
-        <th><span>DESCRIPTION</span></th>
-      </tr>
-    </thead>
-    <tbody>
-        <tr class="doc-section-item">
-          <td><code>name</code></td>
-          <td class="doc-param-details">
-            <div class="doc-md-description">
-              <p>Name of the column to be created</p>
-            </div>
-            <p>
-            </p>
-          </td>
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
         </tr>
-        <tr class="doc-section-item">
-          <td><code>expr</code></td>
-          <td class="doc-param-details">
-            <div class="doc-md-description">
-              <p>Expression</p>
-            </div>
-            <p>
-            </p>
-          </td>
-        </tr>
-    </tbody>
-  </table>
-
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code>name</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Name of the column to be created</p>
+              </div>
+              <p>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code>expr</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Expression</p>
+              </div>
+              <p>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
 <p><span class="doc-section-title">Examples:</span></p>
@@ -1868,81 +1921,76 @@ QueryBuilder class for more information on supported expressions - any expressio
 </code></pre></div>
 
 
-
-  <table>
-    <thead>
-      <tr>
-        <th><span class="doc-section-title">RETURNS</span></th>
-        <th><span>DESCRIPTION</span></th>
-      </tr>
-    </thead>
-    <tbody>
-        <tr class="doc-section-item">
-          <td>
-              <span class="doc-returns-annotation">
-                  <code><a class="autorefs autorefs-internal" title="arcticdb.version_store.processing.QueryBuilder" href="#arcticdb.QueryBuilder">QueryBuilder</a></code>
-              </span>
-          </td>
-          <td class="doc-returns-details">
-            <div class="doc-md-description">
-              <p>Modified QueryBuilder object.</p>
-            </div>
-          </td>
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
         </tr>
-    </tbody>
-  </table>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code><a class="autorefs autorefs-internal" title="arcticdb.version_store.processing.QueryBuilder" href="#arcticdb.QueryBuilder">QueryBuilder</a></code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                <p>Modified QueryBuilder object.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
-  </div>
+    </div>
 
 </div>
-
 
 <div class="doc doc-object doc-function">
 
 
-
 <h3 id="arcticdb.QueryBuilder.date_range" class="doc doc-heading">
-          <span class="doc doc-object-name doc-function-name">date_range</span>
+            <span class="doc doc-object-name doc-function-name">date_range</span>
 
 
 <a href="#arcticdb.QueryBuilder.date_range" class="headerlink" title="Permanent link">&para;</a></h3>
 <div class="doc-signature highlight"><pre><span></span><code><span class="nf">date_range</span><span class="p">(</span><span class="n">date_range</span><span class="p">:</span> <span class="n"><span title="arcticdb.supported_types.DateRangeInput">DateRangeInput</span></span><span class="p">)</span>
 </code></pre></div>
 
-  <div class="doc doc-contents ">
-  
+    <div class="doc doc-contents ">
+
       <p>DateRange to read data for.  Applicable only for Pandas data with a DateTime index. Returns only the part
 of the data that falls within the given range. The returned data object will use less memory than passing
 date_range directly as an argument to the read method, at the cost of being slightly slower.
 Must be the first clause in the QueryBuilder object.</p>
 
 
-
-  <table>
-    <thead>
-      <tr>
-        <th><span class="doc-section-title">PARAMETER</span></th>
-        <th><span>DESCRIPTION</span></th>
-      </tr>
-    </thead>
-    <tbody>
-        <tr class="doc-section-item">
-          <td><code>date_range</code></td>
-          <td class="doc-param-details">
-            <div class="doc-md-description">
-              <p>A date range in the same format as accepted by the read method.</p>
-            </div>
-            <p>
-                <span class="doc-param-annotation">
-                  <b>TYPE:</b>
-                    <code><span title="arcticdb.supported_types.DateRangeInput">DateRangeInput</span></code>
-                </span>
-            </p>
-          </td>
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
         </tr>
-    </tbody>
-  </table>
-
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code>date_range</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>A date range in the same format as accepted by the read method.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="arcticdb.supported_types.DateRangeInput">DateRangeInput</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
 <p><span class="doc-section-title">Examples:</span></p>
@@ -1951,49 +1999,46 @@ Must be the first clause in the QueryBuilder object.</p>
 </code></pre></div>
 
 
-
-  <table>
-    <thead>
-      <tr>
-        <th><span class="doc-section-title">RETURNS</span></th>
-        <th><span>DESCRIPTION</span></th>
-      </tr>
-    </thead>
-    <tbody>
-        <tr class="doc-section-item">
-          <td>
-              <span class="doc-returns-annotation">
-                  <code><a class="autorefs autorefs-internal" title="arcticdb.version_store.processing.QueryBuilder" href="#arcticdb.QueryBuilder">QueryBuilder</a></code>
-              </span>
-          </td>
-          <td class="doc-returns-details">
-            <div class="doc-md-description">
-              <p>Modified QueryBuilder object.</p>
-            </div>
-          </td>
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
         </tr>
-    </tbody>
-  </table>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code><a class="autorefs autorefs-internal" title="arcticdb.version_store.processing.QueryBuilder" href="#arcticdb.QueryBuilder">QueryBuilder</a></code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                <p>Modified QueryBuilder object.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
-  </div>
+    </div>
 
 </div>
-
 
 <div class="doc doc-object doc-function">
 
 
-
 <h3 id="arcticdb.QueryBuilder.groupby" class="doc doc-heading">
-          <span class="doc doc-object-name doc-function-name">groupby</span>
+            <span class="doc doc-object-name doc-function-name">groupby</span>
 
 
 <a href="#arcticdb.QueryBuilder.groupby" class="headerlink" title="Permanent link">&para;</a></h3>
 <div class="doc-signature highlight"><pre><span></span><code><span class="nf">groupby</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="n">str</span><span class="p">)</span>
 </code></pre></div>
 
-  <div class="doc doc-contents ">
-  
+    <div class="doc doc-contents ">
+
       <p>Group symbol by column name. GroupBy operations must be followed by an aggregation operator. Currently the following five aggregation
 operators are supported:
     * "mean" - compute the mean of the group
@@ -2004,32 +2049,30 @@ operators are supported:
 <p>For usage examples, see below.</p>
 
 
-
-  <table>
-    <thead>
-      <tr>
-        <th><span class="doc-section-title">PARAMETER</span></th>
-        <th><span>DESCRIPTION</span></th>
-      </tr>
-    </thead>
-    <tbody>
-        <tr class="doc-section-item">
-          <td><code>name</code></td>
-          <td class="doc-param-details">
-            <div class="doc-md-description">
-              <p>Name of the column to group on. Note that currently GroupBy only supports single-column groupings.</p>
-            </div>
-            <p>
-                <span class="doc-param-annotation">
-                  <b>TYPE:</b>
-                    <code>str</code>
-                </span>
-            </p>
-          </td>
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
         </tr>
-    </tbody>
-  </table>
-
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code>name</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Name of the column to group on. Note that currently GroupBy only supports single-column groupings.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code>str</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
 <p><span class="doc-section-title">Examples:</span></p>
@@ -2100,146 +2143,445 @@ operators are supported:
 </code></pre></div>
 
 
-
-  <table>
-    <thead>
-      <tr>
-        <th><span class="doc-section-title">RETURNS</span></th>
-        <th><span>DESCRIPTION</span></th>
-      </tr>
-    </thead>
-    <tbody>
-        <tr class="doc-section-item">
-          <td>
-              <span class="doc-returns-annotation">
-                  <code><a class="autorefs autorefs-internal" title="arcticdb.version_store.processing.QueryBuilder" href="#arcticdb.QueryBuilder">QueryBuilder</a></code>
-              </span>
-          </td>
-          <td class="doc-returns-details">
-            <div class="doc-md-description">
-              <p>Modified QueryBuilder object.</p>
-            </div>
-          </td>
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
         </tr>
-    </tbody>
-  </table>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code><a class="autorefs autorefs-internal" title="arcticdb.version_store.processing.QueryBuilder" href="#arcticdb.QueryBuilder">QueryBuilder</a></code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                <p>Modified QueryBuilder object.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
-  </div>
+    </div>
 
 </div>
-
 
 <div class="doc doc-object doc-function">
 
 
-
 <h3 id="arcticdb.QueryBuilder.optimise_for_memory" class="doc doc-heading">
-          <span class="doc doc-object-name doc-function-name">optimise_for_memory</span>
+            <span class="doc doc-object-name doc-function-name">optimise_for_memory</span>
 
 
 <a href="#arcticdb.QueryBuilder.optimise_for_memory" class="headerlink" title="Permanent link">&para;</a></h3>
 <div class="doc-signature highlight"><pre><span></span><code><span class="nf">optimise_for_memory</span><span class="p">()</span>
 </code></pre></div>
 
-  <div class="doc doc-contents ">
-  
+    <div class="doc doc-contents ">
+
       <p>Reduce peak memory usage during the query, at the expense of some performance.</p>
 <p>Optimisations applied:</p>
 <ul>
 <li>Memory used by strings that are present in segments read from storage, but are not required in the final dataframe that will be presented back to the user, is reclaimed earlier in the processing pipeline.</li>
 </ul>
 
-  </div>
+    </div>
 
 </div>
-
 
 <div class="doc doc-object doc-function">
 
 
-
 <h3 id="arcticdb.QueryBuilder.optimise_for_speed" class="doc doc-heading">
-          <span class="doc doc-object-name doc-function-name">optimise_for_speed</span>
+            <span class="doc doc-object-name doc-function-name">optimise_for_speed</span>
 
 
 <a href="#arcticdb.QueryBuilder.optimise_for_speed" class="headerlink" title="Permanent link">&para;</a></h3>
 <div class="doc-signature highlight"><pre><span></span><code><span class="nf">optimise_for_speed</span><span class="p">()</span>
 </code></pre></div>
 
-  <div class="doc doc-contents ">
-  
+    <div class="doc doc-contents ">
+
       <p>Process query as fast as possible (the default behaviour)</p>
 
-  </div>
+    </div>
 
 </div>
-
 
 <div class="doc doc-object doc-function">
 
 
+<h3 id="arcticdb.QueryBuilder.prepend" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">prepend</span>
+
+
+<a href="#arcticdb.QueryBuilder.prepend" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">prepend</span><span class="p">(</span><span class="n">other</span><span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Applies processing specified in other before any processing already defined for this QueryBuilder.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code>other</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>QueryBuilder to apply before this one in the processing pipeline.</p>
+              </div>
+              <p>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code><a class="autorefs autorefs-internal" title="arcticdb.version_store.processing.QueryBuilder" href="#arcticdb.QueryBuilder">QueryBuilder</a></code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                <p>Modified QueryBuilder object.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="arcticdb.QueryBuilder.resample" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">resample</span>
+
+
+<a href="#arcticdb.QueryBuilder.resample" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">resample</span><span class="p">(</span>
+    <span class="n">rule</span><span class="p">:</span> <span class="n"><span title="typing.Union">Union</span></span><span class="p">[</span><span class="n">str</span><span class="p">,</span> <span class="n"><span title="pandas.DateOffset">DateOffset</span></span><span class="p">],</span>
+    <span class="n">closed</span><span class="p">:</span> <span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span><span class="n">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">label</span><span class="p">:</span> <span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span><span class="n">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Resample symbol on the index. Symbol must be datetime indexed. Resample operations must be followed by an
+aggregation operator. Currently, the following 7 aggregation operators are supported:
+    * "mean" - compute the mean of the group
+    * "sum" - compute the sum of the group
+    * "min" - compute the min of the group
+    * "max" - compute the max of the group
+    * "count" - compute the count of group
+    * "first" - compute the first value in the group
+    * "last" - compute the last value in the group
+Note that not all aggregators are supported with all column types.:
+    * Numeric columns - support all aggregators
+    * Bool columns - support all aggregators
+    * String columns - support count, first, and last aggregators
+    * Datetime columns - support all aggregators EXCEPT sum
+Note that time-buckets which contain no index values in the symbol will NOT be included in the returned
+DataFrame. This is not the same as Pandas default behaviour.
+Resampling is currently not supported with:
+    * Dynamic schema where an aggregation column is missing from one or more of the row-slices.
+    * Sparse data.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code>rule</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The frequency at which to resample the data. Supported rule strings are ns, us, ms, s, min, h, and D, and
+multiples/combinations of these, such as 1h30min. pd.DataOffset objects representing frequencies from this
+set are also accepted.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="typing.Union">Union</span>[str, <span title="pandas.DateOffset">DateOffset</span>]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code>closed</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Which boundary of each time-bucket is closed. Must be one of 'left' or 'right'. If not provided, the default
+is left for all currently supported frequencies.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="typing.Optional">Optional</span>[str]</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>None</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code>label</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Which boundary of each time-bucket is used as the index value in the returned DataFrame. Must be one of
+'left' or 'right'. If not provided, the default is left for all currently supported frequencies.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="typing.Optional">Optional</span>[str]</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>None</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code><a class="autorefs autorefs-internal" title="arcticdb.version_store.processing.QueryBuilder" href="#arcticdb.QueryBuilder">QueryBuilder</a></code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                <p>Modified QueryBuilder object.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="arcticdb.exceptions.ArcticDbNotYetImplemented">ArcticDbNotYetImplemented</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>A frequency string or Pandas DateOffset object are provided to the rule argument outside the supported
+frequencies listed above.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code><span title="arcticdb.exceptions.ArcticNativeException">ArcticNativeException</span></code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>The closed or label arguments are not one of "left" or "right"</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code>SchemaException</code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>Raised on call to read if:
+    * If the aggregation specified is not compatible with the type of the column being aggregated as
+      specified above.
+    * The library has dynamic schema enabled, and at least one of the columns being aggregated is missing
+      from at least one row-slice.
+    * At least one of the columns being aggregated contains sparse data.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Examples:</span></p>
+    <p>Resample two hours worth of minutely data down to hourly data, summing the column 'to_sum':</p>
+    <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
+<span class="go">    {</span>
+<span class="go">        &quot;to_sum&quot;: np.arange(120),</span>
+<span class="go">    },</span>
+<span class="go">    index=pd.date_range(&quot;2024-01-01&quot;, freq=&quot;min&quot;, periods=120),</span>
+<span class="go">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="s2">&quot;h&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">&quot;to_sum&quot;</span><span class="p">:</span> <span class="s2">&quot;sum&quot;</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<span class="go">                         to_sum</span>
+<span class="go">    2024-01-01 00:00:00    1770</span>
+<span class="go">    2024-01-01 01:00:00    5370</span>
+</code></pre></div>
+    <p>As above, but specifying that the closed boundary of each time-bucket is the right hand side, and also to label
+the output by the right boundary.</p>
+    <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="s2">&quot;h&quot;</span><span class="p">,</span> <span class="n">closed</span><span class="o">=</span><span class="s2">&quot;right&quot;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;right&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">&quot;to_sum&quot;</span><span class="p">:</span> <span class="s2">&quot;sum&quot;</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<span class="go">                         to_sum</span>
+<span class="go">    2024-01-01 00:00:00       0</span>
+<span class="go">    2024-01-01 01:00:00    1830</span>
+<span class="go">    2024-01-01 02:00:00    5310</span>
+</code></pre></div>
+    <p>Nones, NaNs, and NaTs are omitted from aggregations</p>
+    <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
+<span class="go">    {</span>
+<span class="go">        &quot;to_mean&quot;: [1.0, np.nan, 2.0],</span>
+<span class="go">    },</span>
+<span class="go">    index=pd.date_range(&quot;2024-01-01&quot;, freq=&quot;min&quot;, periods=3),</span>
+<span class="go">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="s2">&quot;h&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">&quot;to_mean&quot;</span><span class="p">:</span> <span class="s2">&quot;mean&quot;</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<span class="go">                         to_mean</span>
+<span class="go">    2024-01-01 00:00:00      1.5</span>
+</code></pre></div>
+    <p>Output column names can be controlled through the format of the dict passed to agg</p>
+    <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
+<span class="go">    {</span>
+<span class="go">        &quot;agg_1&quot;: [1, 2, 3, 4, 5],</span>
+<span class="go">        &quot;agg_2&quot;: [1.0, 2.0, 3.0, np.nan, 5.0],</span>
+<span class="go">    },</span>
+<span class="go">    index=pd.date_range(&quot;2024-01-01&quot;, freq=&quot;min&quot;, periods=5),</span>
+<span class="go">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="s2">&quot;h&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">&quot;agg_1_min&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;agg_1&quot;</span><span class="p">,</span> <span class="s2">&quot;min&quot;</span><span class="p">),</span> <span class="s2">&quot;agg_1_max&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;agg_1&quot;</span><span class="p">,</span> <span class="s2">&quot;max&quot;</span><span class="p">),</span> <span class="s2">&quot;agg_2&quot;</span><span class="p">:</span> <span class="s2">&quot;mean&quot;</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<span class="go">                         agg_1_min  agg_1_max     agg_2</span>
+<span class="go">    2024-01-01 00:00:00          1          5      2.75</span>
+</code></pre></div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
 
 <h3 id="arcticdb.QueryBuilder.then" class="doc doc-heading">
-          <span class="doc doc-object-name doc-function-name">then</span>
+            <span class="doc doc-object-name doc-function-name">then</span>
 
 
 <a href="#arcticdb.QueryBuilder.then" class="headerlink" title="Permanent link">&para;</a></h3>
 <div class="doc-signature highlight"><pre><span></span><code><span class="nf">then</span><span class="p">(</span><span class="n">other</span><span class="p">)</span>
 </code></pre></div>
 
-  <div class="doc doc-contents ">
-  
+    <div class="doc doc-contents ">
+
       <p>Applies processing specified in other after any processing already defined for this QueryBuilder.</p>
 
 
-
-  <table>
-    <thead>
-      <tr>
-        <th><span class="doc-section-title">PARAMETER</span></th>
-        <th><span>DESCRIPTION</span></th>
-      </tr>
-    </thead>
-    <tbody>
-        <tr class="doc-section-item">
-          <td><code>other</code></td>
-          <td class="doc-param-details">
-            <div class="doc-md-description">
-              <p>QueryBuilder to apply after this one in the processing pipeline.</p>
-            </div>
-            <p>
-            </p>
-          </td>
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
         </tr>
-    </tbody>
-  </table>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code>other</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>QueryBuilder to apply after this one in the processing pipeline.</p>
+              </div>
+              <p>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
-
-  <table>
-    <thead>
-      <tr>
-        <th><span class="doc-section-title">RETURNS</span></th>
-        <th><span>DESCRIPTION</span></th>
-      </tr>
-    </thead>
-    <tbody>
-        <tr class="doc-section-item">
-          <td>
-              <span class="doc-returns-annotation">
-                  <code><a class="autorefs autorefs-internal" title="arcticdb.version_store.processing.QueryBuilder" href="#arcticdb.QueryBuilder">QueryBuilder</a></code>
-              </span>
-          </td>
-          <td class="doc-returns-details">
-            <div class="doc-md-description">
-              <p>Modified QueryBuilder object.</p>
-            </div>
-          </td>
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
         </tr>
-    </tbody>
-  </table>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code><a class="autorefs autorefs-internal" title="arcticdb.version_store.processing.QueryBuilder" href="#arcticdb.QueryBuilder">QueryBuilder</a></code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                <p>Modified QueryBuilder object.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
-  </div>
+    </div>
 
 </div>
 
@@ -2247,8 +2589,7 @@ operators are supported:
 
   </div>
 
-  </div>
-
+    </div>
 
 </div>
 
@@ -2301,7 +2642,7 @@ operators are supported:
     <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy"], "search": "../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.a7c05c9e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.ad660dcc.min.js"></script>
       
     
   </body>
