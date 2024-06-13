@@ -33,7 +33,25 @@ namespace arcticdb {
 
     void PrometheusInstance::configure(const MetricsConfig& config, const bool reconfigure) {
         if (configured_ && !reconfigure) {
-            arcticdb::log::version().warn("Prometheus already configured");
+            arcticdb::log::version().warn("Prometheus already configured; Existing setting will be used");
+            if (config.host != cfg_.host) {
+                arcticdb::log::version().warn("New Prometheus host is different from the existing: {} vs {}", config.host, cfg_.host);
+            }
+            if (config.port != cfg_.port) {
+                arcticdb::log::version().warn("New Prometheus port is different from the existing: {} vs {}", config.port, cfg_.port);
+            }
+            if (config.job_name != cfg_.job_name) {
+                arcticdb::log::version().warn("New Prometheus job_name is different from the existing: {} vs {}", config.job_name, cfg_.job_name);
+            }
+            if (config.instance != cfg_.instance) {
+                arcticdb::log::version().warn("New Prometheus instance is different from the existing: {} vs {}", config.instance, cfg_.instance);
+            }
+            if (config.prometheus_env != cfg_.prometheus_env) {
+                arcticdb::log::version().warn("New Prometheus env is different from the existing: {} vs {}", config.prometheus_env, cfg_.prometheus_env);
+            }
+            if (config.model_ != cfg_.model_) {
+                arcticdb::log::version().warn("New Prometheus model is different from the existing: {} vs {}", static_cast<int>(config.model_), static_cast<int>(cfg_.model_));
+            }
             return;
         }
         
