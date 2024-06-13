@@ -15,6 +15,7 @@ and use private and shared data without any per-library setup.
     - Diana
 
 Each user should be able to, 
+
 - list all ArcticDB libraries (but not their content)
 - create personal libraries that only they can read and write to
 - create team libraries that only those in their team can read and write to
@@ -31,10 +32,10 @@ For Acme we've setup four users and the users are tagged with the teams they are
 
 | aws:username | aws:PrincipalTag/team |
 | ------------ | --------------------- |
-| jane@acme    | data |
-| samir@acme   | data |
-| alan@acme    | quant |
-| diana@acme   | quant |
+| jane@acme    | data                  |
+| samir@acme   | data                  |
+| alan@acme    | quant                 |
+| diana@acme   | quant                 |
 
 We've also created a user group, `acme` with all four users in.
 
@@ -87,23 +88,22 @@ Then setup the following access policy.  We will save this snippet to `policy.js
 ```
 
 Create the policy in AWS.
-```
+```sh
 aws iam create-policy --policy-name acme-arcticdb-access --policy-document file://policy.json
 ```
 
 Take note of the `Arn` in the output to the last command as you'll need it to attach the policy to a group
 with all your users in, for this example the group is `acme`.
-```
+```sh
 aws iam attach-group-policy --policy-arn <ARN> --group-name acme
 ```
 
 If you intend to adapt that example policy to your own situation then please note that,
-- `acme-arcticdb` is the name of the bucket and will need to be replaced everywhere
-- `s3:ListBucket` is used to permission `ListObjectsV2` and needs its own section, as it applies to the bucket as a whole.  We control access to paths by checking the `s3:prefix` argument that's part of the `ListObjectsV2` request.
-- `Put`, `Get` and `Delete` can be specifed for object paths in the second section.
-- `_arctic_cfg/cref/*` is where the ArcticDB library configuration is stored and the data for each library is stored in the root of the bucket with a path that starts with the library name.
-- By using `${aws:username}` and `${aws:PrincipalTag/team}` we've restricted library access
-to those with a matching AWS IAM username or a matched user 'team' tag.
+    - `acme-arcticdb` is the name of the bucket and will need to be replaced everywhere
+    - `s3:ListBucket` is used to permission `ListObjectsV2` and needs its own section, as it applies to the bucket as a whole.  We control access to paths by checking the `s3:prefix` argument that's part of the `ListObjectsV2` request.
+    - `Put`, `Get` and `Delete` can be specifed for object paths in the second section.
+    - `_arctic_cfg/cref/*` is where the ArcticDB library configuration is stored and the data for each library is stored in the root of the bucket with a path that starts with the library name.
+    - By using `${aws:username}` and `${aws:PrincipalTag/team}` we've restricted library access to those with a matching AWS IAM username or a matched user 'team' tag.
 
 #### Security note
 
