@@ -1528,6 +1528,7 @@ FrameAndDescriptor read_index_columns_impl(
         auto maybe_reader = get_index_segment_reader(store, pipeline_context, std::get<VersionedItem>(version_info));
         if (maybe_reader) {
             auto index_segment_reader = std::move(maybe_reader.value());
+            ARCTICDB_DEBUG(log::version(), "Read index segment with {} keys", index_segment_reader.size());
             internal::check<ErrorCode::E_NOT_IMPLEMENTED>(
                 !index_segment_reader.is_pickled(),
                 "Reading index columns is not supported with pickled data."
@@ -1536,11 +1537,10 @@ FrameAndDescriptor read_index_columns_impl(
                 !index_segment_reader.tsd().proto().normalization().has_custom(),
                 "Reading the index column is not supported when recursive or custom normalizers are used."
             );
-            ARCTICDB_DEBUG(log::version(), "Read index segment with {} keys", index_segment_reader.size());
             check_column_and_date_range_filterable(index_segment_reader, read_query);
             debug::check<ErrorCode::E_ASSERTION_FAILURE>(
                 read_query.columns.empty(),
-                "There shouldn't be any columns passed by the client when reading the index."
+                "There shouldn't be any selected columns when reading the index."
             );
             const auto& tsd = index_segment_reader.tsd();
             read_query.columns = stream::get_index_columns_from_descriptor(tsd);
@@ -1549,13 +1549,18 @@ FrameAndDescriptor read_index_columns_impl(
             const StreamDescriptor stream_descriptor = pipeline_context->descriptor();
             pipeline_context->selected_columns_ = util::BitMagic(stream_descriptor.fields().size());
             pipeline_context->overall_column_bitset_ = util::BitMagic(stream_descriptor.fields().size());
+            pipeline_context->filter_columns_ = std::make_shared<FieldCollection>();
+            pipeline_context->filter_columns_set_ = std::unordered_set<std::string_view>{};
             for (int i = 0; i < read_query.columns.size(); ++i) {
                 (*(pipeline_context->selected_columns_))[i] = 1;
                 (*(pipeline_context->overall_column_bitset_))[i] = 1;
+                const Field& index_field = stream_descriptor.field(i);
+                pipeline_context->filter_columns_->add(index_field.ref());
+                pipeline_context->filter_columns_set_->insert(index_field.name());
             }
-            std::vector<FilterQuery<index::IndexSegmentReader>> queries;
             const bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
             const bool dynamic_schema = opt_false(read_options.dynamic_schema_);
+            std::vector<FilterQuery<index::IndexSegmentReader>> queries;
             build_row_read_query_filters(read_query.row_filter, dynamic_schema, bucketize_dynamic, queries);
             if (queries.empty() && index_segment_reader.seg().row_count() > 0) {
                 auto segment_start_row =
@@ -1599,32 +1604,21 @@ FrameAndDescriptor read_index_columns_impl(
         );
         const auto& query_range = std::get<IndexRange>(read_query.row_filter);
         const auto existing_range = pipeline_context->index_range();
-        if (!existing_range.specified_ || query_range.end_ > existing_range.end_)
+        if (!existing_range.specified_ || query_range.end_ > existing_range.end_) {
             read_incompletes_to_pipeline(store, pipeline_context, read_query, read_options, false, false, false);
+        }
     }
 
     if (std::holds_alternative<StreamId>(version_info) && !pipeline_context->incompletes_after_) {
         missing_data::raise<ErrorCode::E_NO_SYMBOL_DATA>(
-            "read_dataframe_impl: read returned no data for symbol {} (found no versions or append data)",
+            "read_index_columns: read returned no data for symbol {} (found no versions or append data)",
             pipeline_context->stream_id_
         );
     }
-
     modify_descriptor(pipeline_context, read_options);
-
-    pipeline_context->filter_columns_ = std::make_shared<FieldCollection>();
-    pipeline_context->filter_columns_set_ = std::unordered_set<std::string_view>{};
-    const StreamDescriptor& stream_descriptor = pipeline_context->descriptor();
-    for (int i = 0; i < read_query.columns.size(); ++i) {
-        const Field& index_field = stream_descriptor.field(i);
-        pipeline_context->filter_columns_->add(index_field.ref());
-        pipeline_context->filter_columns_set_->insert(index_field.name());
-    }
-    ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
-
+    ARCTICDB_DEBUG(log::version(), "Fetching index data to frame");
     auto buffers = std::make_shared<BufferHolder>();
     auto frame = do_direct_read_or_process(store, read_query, read_options, pipeline_context, buffers);
-
     ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
     reduce_and_fix_columns(pipeline_context, frame, read_options);
     if (pipeline_context->descriptor().index().type() == IndexDescriptor::ROWCOUNT) {
