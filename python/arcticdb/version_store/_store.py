@@ -2453,7 +2453,7 @@ class NativeVersionStore:
         dit = self.version_store.read_descriptor(symbol, version_query)
         return self.is_pickled_descriptor(dit.timeseries_descriptor)
 
-    def _get_time_range_from_ts(self, desc, min_ts, max_ts):
+    def _get_time_range_from_ts(self, desc, min_ts, max_ts, date_range_ns_precision):
         if desc.stream_descriptor.index.kind != IndexDescriptor.Type.TIMESTAMP or \
             desc.stream_descriptor.sorted == SortedValue.UNSORTED or \
             min_ts is None or \
@@ -2464,15 +2464,27 @@ class NativeVersionStore:
         if input_type == "df":
             index_metadata = desc.normalization.df.common
             tz = get_timezone_from_metadata(index_metadata)
-        if tz:
-            # If tz is provided, it is stored in UTC - hence needs to be localized to UTC before
-            # converting to the given tz
-            return (
-                _from_tz_timestamp(min_ts, "UTC").astimezone(pytz.timezone(tz)),
-                _from_tz_timestamp(max_ts, "UTC").astimezone(pytz.timezone(tz)),
-            )
+        if date_range_ns_precision:
+            # V2 API expects pandas timestamps with nanosecond precision
+            min_ts_pd = pd.Timestamp(min_ts)
+            max_ts_pd = pd.Timestamp(max_ts)
+            if tz:
+                # If tz is provided, it is stored in UTC - hence needs to be localized to UTC before converting to the
+                # given tz
+                min_ts_pd = min_ts_pd.tz_localize("UTC").tz_convert(tz)
+                max_ts_pd = max_ts_pd.tz_localize("UTC").tz_convert(tz)
+            return min_ts_pd, max_ts_pd
         else:
-            return _from_tz_timestamp(min_ts, None), _from_tz_timestamp(max_ts, None)
+            # V1 API expects datetime.datetime with microsecond precision
+            if tz:
+                # If tz is provided, it is stored in UTC - hence needs to be localized to UTC before converting to the
+                # given tz
+                return (
+                    _from_tz_timestamp(min_ts, "UTC").astimezone(pytz.timezone(tz)),
+                    _from_tz_timestamp(max_ts, "UTC").astimezone(pytz.timezone(tz)),
+                )
+            else:
+                return _from_tz_timestamp(min_ts, None), _from_tz_timestamp(max_ts, None)
 
     def get_timerange_for_symbol(
         self, symbol: str, version: Optional[VersionQueryInput] = None, **kwargs
@@ -2505,7 +2517,8 @@ class NativeVersionStore:
         min_ts, max_ts = min(start_indices), max(end_indices)
         # to get timezone info
         dit = self.version_store.read_descriptor(symbol, version_query)
-        return self._get_time_range_from_ts(dit.timeseries_descriptor, min_ts, max_ts)
+        date_range_ns_precision = False
+        return self._get_time_range_from_ts(dit.timeseries_descriptor, min_ts, max_ts, date_range_ns_precision)
 
     def name(self):
         return self._lib_cfg.lib_desc.name
@@ -2536,7 +2549,13 @@ class NativeVersionStore:
     def open_mode(self):
         return self._open_mode
 
-    def _process_info(self, symbol: str, dit, as_of: Optional[VersionQueryInput] = None) -> Dict[str, Any]:
+    def _process_info(
+            self,
+            symbol: str,
+            dit,
+            as_of: VersionQueryInput,
+            date_range_ns_precision: bool,
+    ) -> Dict[str, Any]:
         timeseries_descriptor = dit.timeseries_descriptor
         columns = [f.name for f in timeseries_descriptor.stream_descriptor.fields]
         dtypes = [f.type_desc for f in timeseries_descriptor.stream_descriptor.fields]
@@ -2584,7 +2603,7 @@ class NativeVersionStore:
             if timeseries_descriptor.normalization.df.has_synthetic_columns:
                 columns = pd.RangeIndex(0, len(columns))
 
-        date_range = self._get_time_range_from_ts(timeseries_descriptor, dit.start_index, dit.end_index)
+        date_range = self._get_time_range_from_ts(timeseries_descriptor, dit.start_index, dit.end_index, date_range_ns_precision)
         last_update = datetime64(dit.creation_ts, "ns")
         return {
             "col_names": {"columns": columns, "index": index, "index_dtype": index_dtype},
@@ -2599,7 +2618,12 @@ class NativeVersionStore:
             "sorted": SortedValue.Name(timeseries_descriptor.stream_descriptor.sorted),
         }
 
-    def get_info(self, symbol: str, version: Optional[VersionQueryInput] = None) -> Dict[str, Any]:
+    def get_info(
+            self,
+            symbol: str,
+            version: Optional[VersionQueryInput] = None,
+            **kwargs
+    ) -> Dict[str, Any]:
         """
         Returns descriptive data for `symbol`.
 
@@ -2626,9 +2650,10 @@ class NativeVersionStore:
             - date_range, `tuple`
             - sorted, `str`
         """
+        date_range_ns_precision = kwargs.get("date_range_ns_precision", False)
         version_query = self._get_version_query(version)
         dit = self.version_store.read_descriptor(symbol, version_query)
-        return self._process_info(symbol, dit, version)
+        return self._process_info(symbol, dit, version, date_range_ns_precision)
 
     def batch_get_info(
         self, symbols: List[str], as_ofs: Optional[List[VersionQueryInput]] = None
@@ -2662,9 +2687,10 @@ class NativeVersionStore:
             - sorted, `str`
         """
         throw_on_error = True
-        return self._batch_read_descriptor(symbols, as_ofs, throw_on_error)
+        date_range_ns_precision = False
+        return self._batch_read_descriptor(symbols, as_ofs, throw_on_error, date_range_ns_precision)
 
-    def _batch_read_descriptor(self, symbols, as_ofs, throw_on_error):
+    def _batch_read_descriptor(self, symbols, as_ofs, throw_on_error, date_range_ns_precision):
         as_ofs_lists = []
         if as_ofs == None:
             as_ofs_lists = [None] * len(symbols)
@@ -2684,7 +2710,7 @@ class NativeVersionStore:
             if isinstance(dit, DataError):
                 description_results.append(dit)
             else:
-                description_results.append(self._process_info(symbol, dit, as_of))
+                description_results.append(self._process_info(symbol, dit, as_of, date_range_ns_precision))
         return description_results
 
     def write_metadata(
