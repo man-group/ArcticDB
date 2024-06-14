@@ -97,7 +97,7 @@ TEST(IndexFilter, Static) {
 
     auto queries = get_column_bitset_and_query_functions<index::IndexSegmentReader>(
         read_query,
-        pipeline_context.get(),
+        pipeline_context,
         false,
         false);
 
@@ -133,7 +133,7 @@ TEST(IndexFilter, Dynamic) {
 
     auto queries = get_column_bitset_and_query_functions<index::IndexSegmentReader>(
         read_query,
-        pipeline_context.get(),
+        pipeline_context,
         true,
         false);
 
@@ -169,7 +169,7 @@ TEST(IndexFilter, StaticMulticolumn) {
 
     auto queries = get_column_bitset_and_query_functions<index::IndexSegmentReader>(
         read_query,
-        pipeline_context.get(),
+        pipeline_context,
         false,
         false);
 
@@ -209,7 +209,7 @@ TEST(IndexFilter, MultiColumnSelectAll) {
 
     auto queries = get_column_bitset_and_query_functions<index::IndexSegmentReader>(
         read_query,
-        pipeline_context.get(),
+        pipeline_context,
         false,
         false);
 
@@ -245,7 +245,7 @@ TEST(IndexFilter, StaticMulticolumnFilterColumns) {
 
     auto queries = get_column_bitset_and_query_functions<index::IndexSegmentReader>(
         read_query,
-        pipeline_context.get(),
+        pipeline_context,
         false,
         false);
 
