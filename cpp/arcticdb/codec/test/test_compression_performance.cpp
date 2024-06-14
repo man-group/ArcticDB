@@ -10,8 +10,10 @@
 #include <arcticdb/codec/run_length_encoding.hpp>
 #include <arcticdb/codec/null_encoding.hpp>
 #include <arcticdb/codec/bitpacking.hpp>
+#include <arcticdb/codec/thirdparty/fastpforlib/simdbitpacking.h>
 
 #include <arcticdb/codec/thirdparty/fastpforlib/pfor.hpp>
+#include <arcticdb/codec/thirdparty/fastpforlib/simdfastpfor.h>
 
 #include <arcticdb/codec/thirdparty/middleout/middleout.hpp>
 
@@ -182,6 +184,35 @@ TEST(PFOR, LZ4UInt32) {
     log::version().info("LZ4 uint32 {} bytes: {}", compressed_bytes, timer.display_all());
 }
 
+TEST(Bitpack, LZ4UInt32) {
+    using namespace arcticdb;
+    auto data = stock_prices_uint32();
+    const auto bytes = data.size() * sizeof(uint32_t);
+    auto size = LZ4_compressBound(static_cast<int>(bytes));
+
+    interval_timer timer;
+    std::vector<uint8_t> compressed(size);
+    timer.start_timer("Compress");
+    int compressed_bytes = LZ4_compress_default(
+        reinterpret_cast<const char *>(data.data()),
+        reinterpret_cast<char *>(compressed.data()),
+        int(bytes),
+        int(compressed.size()));
+
+    timer.stop_timer("Compress");
+
+    std::vector<uint32_t> uncompressed(data.size());
+    timer.start_timer("Decompress");
+    (void)LZ4_decompress_safe(
+        reinterpret_cast<const char*>(compressed.data()),
+        reinterpret_cast<char*>(uncompressed.data()),
+        int(compressed_bytes),
+        int(bytes)
+    );
+    timer.stop_timer("Decompress");
+    log::version().info("LZ4 uint32 {} bytes: {}", compressed_bytes, timer.display_all());
+}
+
 /*
 TEST(CompressionBenchmark, RLE) {
     using namespace arcticdb;
@@ -205,11 +236,11 @@ TEST(CompressionBenchmark, RLE) {
 }
 */
 
-TEST(CompressionBenchmark, Null) {
+TEST(Bitpack, Null) {
     using namespace arcticdb;
-    auto data = get_double();
+    auto data = stock_prices_uint32();
     const auto bytes = data.size() * sizeof(double);
-    NullEncoding<double> encoding;
+    NullEncoding<uint32_t> encoding;
     auto size = encoding.max_required_bytes(data.data(), bytes);
 
     interval_timer timer;
@@ -219,7 +250,7 @@ TEST(CompressionBenchmark, Null) {
 
     timer.stop_timer("Compress");
 
-    std::vector<double> uncompressed(data.size());
+    std::vector<uint32_t> uncompressed(data.size());
     timer.start_timer("Decompress");
     encoding.decode(compressed.data(), compressed_bytes, uncompressed.data());
     timer.stop_timer("Decompress");
@@ -288,7 +319,7 @@ TEST(CompressionBenchmark, MiddleOutInt) {
 }
 
 
-TEST(CompressionBenchmark, BitpackingInt) {
+TEST(Bitpack, BitpackingInt) {
     using namespace arcticdb;
     auto data = stock_prices_int();
     const auto bytes = data.size() * sizeof(int64_t);
@@ -317,6 +348,68 @@ TEST(PFOR, PFORUInt32) {
     std::vector<uint32_t> compressed(data.size());
     timer.start_timer("Compress");
     arcticdb_pforlib::PFor pfor;
+    size_t nvalue = compressed.size();
+    pfor.encodeArray(data.data(), data.size(), compressed.data(), nvalue);
+
+    timer.stop_timer("Compress");
+
+    std::vector<uint32_t> uncompressed(data.size());
+    timer.start_timer("uncompressed");
+    size_t recoveredsize = uncompressed.size();
+    pfor.decodeArray(compressed.data(), compressed.size(), uncompressed.data(), recoveredsize);
+    timer.stop_timer("Decompress");
+    log::version().info("PFOR uint32_t: {} bytes {}", nvalue, timer.display_all());
+}
+
+namespace test {
+void simdpack(const std::vector<uint32_t> &data,
+              std::vector<uint32_t> &out, const uint32_t bit) {
+    const size_t N = data.size();
+    for (size_t k = 0; k < N / 128; ++k) {
+        arcticdb_pforlib::SIMD_fastpack_32(&data[0] + 128 * k,
+                                           reinterpret_cast<__m128i *>(&out[0] + 4 * bit * k), bit);
+    }
+}
+
+void simdunpack(const std::vector<uint32_t> &data,
+                std::vector<uint32_t> &out, const uint32_t bit) {
+    const size_t N = out.size();
+    for (size_t k = 0; k < N / 128; ++k) {
+        arcticdb_pforlib::SIMD_fastunpack_32(
+            reinterpret_cast<const __m128i *>(&data[0] + 4 * bit * k),
+            &out[0] + 128 * k, bit);
+    }
+}
+}
+
+TEST(Bitpack, SIMDBitpackingUInt32) {
+    using namespace arcticdb;
+    auto data = stock_prices_uint32();
+    data.resize(99968);
+    interval_timer timer;
+    std::vector<uint32_t> compressed(data.size());
+    timer.start_timer("Compress");
+    arcticdb_pforlib::PFor pfor;
+    test::simdpack(data, compressed, uint32_t(21));
+
+    timer.stop_timer("Compress");
+
+    std::vector<uint32_t> uncompressed(data.size());
+    timer.start_timer("uncompressed");
+    test::simdunpack(data, compressed, uint32_t(21));
+    timer.stop_timer("Decompress");
+    log::version().info("SIMD Bitpack uint32_t: {} ", timer.display_all());
+}
+
+TEST(PFOR, SIMDPFORUInt32) {
+    using namespace arcticdb;
+    auto data = stock_prices_uint32();
+    size_t new_size = std::floor(data.size() / 256) * 256;
+    data.resize(new_size);
+    interval_timer timer;
+    std::vector<uint32_t> compressed(data.size());
+    timer.start_timer("Compress");
+    arcticdb_pforlib::SIMDFastPFor pfor;
     size_t nvalue = compressed.size();
     pfor.encodeArray(data.data(), data.size(), compressed.data(), nvalue);
 

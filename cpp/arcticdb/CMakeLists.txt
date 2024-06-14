@@ -394,6 +394,8 @@ set(arcticdb_srcs
         codec/encode_v2.cpp
         codec/encoding_sizes.cpp
         codec/thirdparty/fastpforlib/bitpacking.cpp
+        codec/thirdparty/fastpforlib/simdbitpacking.cpp
+        codec/thirdparty/fastpforlib/simdunalignedbitpacking.cpp
         codec/segment.cpp
         codec/variant_encoded_field_collection.cpp
         codec/thirdparty/middleout/middleout.cpp
@@ -495,7 +497,7 @@ set(arcticdb_srcs
         version/version_map_batch_methods.cpp
         storage/s3/ec2_utils.cpp
         storage/lmdb/lmdb.hpp
-        codec/run_length_encoding.hpp codec/null_encoding.hpp codec/thirdparty/fastpforlib/bitpackinghelpers.h codec/thirdparty/fastpforlib/bitpacking.h codec/thirdparty/fastpforlib/bitpacking.cpp codec/bitpacking.hpp codec/thirdparty/fastpforlib/pfor.hpp codec/thirdparty/fastpforlib/util.hpp)
+        codec/run_length_encoding.hpp codec/null_encoding.hpp codec/thirdparty/fastpforlib/bitpackinghelpers.h codec/thirdparty/fastpforlib/bitpacking.h codec/thirdparty/fastpforlib/bitpacking.cpp codec/bitpacking.hpp codec/thirdparty/fastpforlib/pfor.hpp codec/thirdparty/fastpforlib/util.hpp codec/thirdparty/fastpforlib/simdbitpacking.h codec/thirdparty/fastpforlib/simdfastpfor.h codec/thirdparty/fastpforlib/usimdbitpacking.hpp codec/thirdparty/fastpforlib/common.hpp codec/thirdparty/fastpforlib/simple8b.hpp codec/thirdparty/fastpforlib/delta.hpp codec/thirdparty/fastpforlib/memutil.h)
 
 if(${ARCTICDB_INCLUDE_ROCKSDB})
     list (APPEND arcticdb_srcs
