@@ -61,8 +61,7 @@ def lmdb_version_store_static_and_dynamic(request):
                 pd.RangeIndex(start=0, stop=10)
             ],
             names=["datetime", "level"]
-        ),
-        pd.Index(["a", "b", "c", "d", "e"])
+        )
     )
 )
 def index(request):
@@ -77,8 +76,7 @@ class TestBasicReadIndex:
         pd.MultiIndex.from_arrays(
             [pd.date_range(start="01/01/2024", end="01/10/2024"), pd.RangeIndex(start=0, stop=10)],
             names=["datetime", "level"]
-        ),
-        pd.Index(["a", "b", "c", None, np.nan])
+        )
     ])
     def test_read_index_columns(self, lmdb_version_store_static_and_dynamic, index):
         lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": range(0, len(index))}, index=index))
@@ -104,8 +102,7 @@ class TestBasicReadIndex:
 class TestReadEmptyIndex:
     @pytest.mark.parametrize("empty_index",[
         pd.RangeIndex(start=5,stop=5),
-        pd.DatetimeIndex([]),
-        pd.Index([])
+        pd.DatetimeIndex([])
     ])
     def test_empty_index(self, lmdb_version_store_static_and_dynamic, empty_index):
         lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": []}, index=empty_index))
@@ -177,11 +174,6 @@ class TestReadIndexAsOf:
                 [pd.date_range(start="01/11/2024", end="01/21/2024"), pd.RangeIndex(start=10, stop=21)],
                 names=["datetime", "level"]
             )
-        ],
-        [
-            pd.Index(["a", "b", "c"]),
-            pd.Index(["d", "e"]),
-            pd.Index(["f", "g", "i", "j", "k"])
         ]
     ])
     def test_as_of_version(self, lmdb_version_store_static_and_dynamic, indexes):
@@ -202,8 +194,7 @@ class TestReadIndexAsOf:
         pd.MultiIndex.from_arrays(
             [pd.date_range(start="01/11/2024", end="01/21/2024"), pd.RangeIndex(start=10, stop=21)],
             names=["datetime", "level"]
-        ),
-        pd.Index(["a", "b", "c"])
+        )
     ])
     def test_as_of_snapshot(self, lmdb_version_store_static_and_dynamic, index):
         data = list(range(0, len(index)))
@@ -272,8 +263,7 @@ class TestReadIndexRange:
         pd.MultiIndex.from_arrays(
             [pd.RangeIndex(start=10, stop=21), pd.date_range(start="01/11/2024", end="01/21/2024")],
             names=["range", "date"]
-        ),
-        pd.Index(["a", "b", "c", "d", "e"])
+        )
     ])
     def test_date_range_throws(self, lmdb_version_store_static_and_dynamic, non_datetime_index):
         lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": list(range(0, len(non_datetime_index)))}, index=non_datetime_index))

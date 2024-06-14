@@ -2829,7 +2829,6 @@ class NativeVersionStore:
     def library_tool(self) -> LibraryTool:
         return LibraryTool(self.library(), self)
 
-    # TODO: Add a docstring
     def read_index_columns(
         self,
         symbol: str,
@@ -2838,6 +2837,36 @@ class NativeVersionStore:
         row_range: Optional[Tuple[int, int]] = None,
         **kwargs,
     ) -> VersionedItem:
+        """
+        Read only the index columns for a named symbol.
+
+        Parameters
+        ----------
+        symbol : `str`
+            Symbol name.
+        as_of : `Optional[VersionQueryInput]`, default=None
+            Return the data as it was as_of the point in time. Defaults to getting the latest version.
+            `int` : specific version number. Negative indexing is supported, with -1 representing the latest version, -2 the version before that, etc.
+            `str` : snapshot name which contains the version
+            `datetime.datetime` : the version of the data that existed as_of the requested point in time
+        date_range: `Optional[DateRangeInput]`, default=None
+            DateRange to read data for.  Applicable only for Pandas data with a DateTime index. Returns only the part
+            of the data that falls within the given range. The same effect can be achieved by using the date_range
+            clause of the QueryBuilder class, which will be slower, but return data with a smaller memory footprint.
+            See the QueryBuilder.date_range docstring for more details.
+            Only one of date_range or row_range can be provided.
+        row_range: `Optional[Tuple[int, int]]`, default=None
+            Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound
+            lib.read(symbol, row_range=(start, end)).data should behave the same as df.iloc[start:end], including in
+            the handling of negative start/end values.
+            Only one of date_range or row_range can be provided.
+
+
+        Returns
+        -------
+        VersionedItem
+        """
+        
         version_query, read_options, read_query = self._get_queries(
             symbol=symbol,
             as_of=as_of,

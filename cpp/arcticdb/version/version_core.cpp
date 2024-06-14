@@ -1537,11 +1537,15 @@ FrameAndDescriptor read_index_columns_impl(
                 !index_segment_reader.tsd().proto().normalization().has_custom(),
                 "Reading the index column is not supported when recursive or custom normalizers are used."
             );
-            check_column_and_date_range_filterable(index_segment_reader, read_query);
             debug::check<ErrorCode::E_ASSERTION_FAILURE>(
                 read_query.columns.empty(),
                 "There shouldn't be any selected columns when reading the index."
             );
+            schema::check<ErrorCode::E_UNSUPPORTED_INDEX_TYPE>(
+                index_segment_reader.tsd().as_stream_descriptor().index().type() != IndexDescriptor::UNKNOWN,
+                "Cannot read unknown index type. Try updating to newer Arctic version."
+            );
+            check_column_and_date_range_filterable(index_segment_reader, read_query);
             const auto& tsd = index_segment_reader.tsd();
             read_query.columns = stream::get_index_columns_from_descriptor(tsd);
             read_query.calculate_row_filter(static_cast<int64_t>(tsd.proto().total_rows()));
@@ -1619,8 +1623,6 @@ FrameAndDescriptor read_index_columns_impl(
     ARCTICDB_DEBUG(log::version(), "Fetching index data to frame");
     auto buffers = std::make_shared<BufferHolder>();
     auto frame = do_direct_read_or_process(store, read_query, read_options, pipeline_context, buffers);
-    ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
-    reduce_and_fix_columns(pipeline_context, frame, read_options);
     if (pipeline_context->descriptor().index().type() == IndexDescriptor::ROWCOUNT) {
         frame.set_row_id(pipeline_context->rows_ - 1);
     }
