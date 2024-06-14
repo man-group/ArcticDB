@@ -1555,7 +1555,7 @@ FrameAndDescriptor read_index_columns_impl(
             pipeline_context->overall_column_bitset_ = util::BitMagic(stream_descriptor.fields().size());
             pipeline_context->filter_columns_ = std::make_shared<FieldCollection>();
             pipeline_context->filter_columns_set_ = std::unordered_set<std::string_view>{};
-            for (int i = 0; i < read_query.columns.size(); ++i) {
+            for (size_t i = 0; i < read_query.columns.size(); ++i) {
                 (*(pipeline_context->selected_columns_))[i] = 1;
                 (*(pipeline_context->overall_column_bitset_))[i] = 1;
                 const Field& index_field = stream_descriptor.field(i);
