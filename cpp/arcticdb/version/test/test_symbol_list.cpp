@@ -957,17 +957,15 @@ TEST_P(SymbolListRace, Run) {
 
     // Emulate concurrent actions by intercepting try_lock
     StorageFailureSimulator::instance()->configure({{FailureType::WRITE,
-        { FailureAction("concurrent", [&before, this](auto) {
-            //FUTURE(C++20): structured binding cannot be captured prior to 20
-            auto [unused, remove_old2, add_new2, add_other2] = GetParam();
-            if (remove_old2) {
+        { FailureAction("concurrent", [&before, remove_old, add_new, add_other, this](auto) {
+            if (remove_old) {
                 store->remove_keys(get_symbol_list_keys(), {});
             }
-            if (add_new2) {
+            if (add_new) {
                 store->write(KeyType::SYMBOL_LIST, 0, StringId{ CompactionId }, PilotedClock::nanos_since_epoch(), NumericIndex{0}, NumericIndex{0},
                         SegmentInMemory{});
             }
-            if (add_other2) {
+            if (add_other) {
                 SymbolList::add_symbol(store, symbol_2, 0);
             }
 

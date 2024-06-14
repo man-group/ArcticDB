@@ -24,5 +24,9 @@ OffsetString::offset_t OffsetString::offset() const {
 }
 
 // Given a set of string pool offsets, removes any that represent None or NaN
+void remove_nones_and_nans(ankerl::unordered_dense::set<OffsetString::offset_t>& offsets) {
+    offsets.erase(not_a_string());
+    offsets.erase(nan_placeholder());
+}
 
 } //namespace arcticdb

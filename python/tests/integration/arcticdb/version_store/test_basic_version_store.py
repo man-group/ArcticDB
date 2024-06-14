@@ -105,19 +105,6 @@ def test_s3_breaking_chars(object_version_store, breaking_char):
     assert sym not in object_version_store.list_symbols()
 
 
-def test_s3_breaking_chars_exception_compat(object_version_store):
-    """Test that chars that are not supported are raising the appropriate exception and that we fail on write without
-    corrupting the db
-    """
-    sym = "prefix*postfix"
-    df = sample_dataframe()
-    with pytest.raises(UserInputException) as e_info:
-        object_version_store.write(sym, df)
-
-    assert isinstance(e_info.value, UserInputException)
-    assert sym not in object_version_store.list_symbols()
-
-
 @pytest.mark.parametrize("prefix", ["", "prefix"])
 @pytest.mark.parametrize("suffix", ["", "suffix"])
 def test_symbol_names_with_all_chars(object_version_store, prefix, suffix):
@@ -213,6 +200,66 @@ def test_unhandled_chars_already_present_update(object_version_store, unhandled_
     new_vitem = object_version_store.read(sym)
     assert not vitem.data.equals(new_vitem.data)
     assert len(vitem.data) == len(new_vitem.data)
+
+
+# See AN-765 for why we need no_symbol_list fixture
+def test_large_symbols(basic_store_no_symbol_list):
+    # The following restrictions should be checked in the cpp layer's name_validation
+    MAX_SYMBOL_SIZE = 254
+    # TODO: Make too long name on LMDB raise a friendlier UserInputException (instead of InternalException [E_INVALID_ARGUMENT])
+    with pytest.raises((UserInputException, InternalException)):
+        basic_store_no_symbol_list.write("a" * (MAX_SYMBOL_SIZE + 1), 1)
+
+    valid_sized_sym = "a" * MAX_SYMBOL_SIZE
+    basic_store_no_symbol_list.write(valid_sized_sym, 1)
+    assert basic_store_no_symbol_list.read(valid_sized_sym).data == 1
+
+
+def test_empty_symbol_name_2(object_version_store):
+    lib = object_version_store
+    df = sample_dataframe()
+    exceptions = []
+    with pytest.raises(UserInputException) as e:
+        lib.write("", df)
+    exceptions.append(str(e.value).lower())
+    with pytest.raises(UserInputException) as e:
+        lib.append("", df, write_if_missing=True)
+    exceptions.append(str(e.value).lower())
+    with pytest.raises(UserInputException) as e:
+        lib.update("", df, upsert=True)
+    exceptions.append(str(e.value).lower())
+    with pytest.raises(UserInputException) as e:
+        lib.write_metadata("", {})
+    exceptions.append(str(e.value).lower())
+    with pytest.raises(UserInputException) as e:
+        lib.batch_write([""], [df])
+    exceptions.append(str(e.value).lower())
+    with pytest.raises(UserInputException) as e:
+        lib.batch_append([""], [df])
+    exceptions.append(str(e.value).lower())
+    with pytest.raises(UserInputException) as e:
+        lib.batch_write_metadata([""], [{}])
+    exceptions.append(str(e.value).lower())
+    assert all("symbol" in e for e in exceptions)
+
+
+@pytest.mark.parametrize(
+    "method", ("write", "append", "update", "write_metadata" ,"batch_write", "batch_append", "batch_write_metadata")
+)
+def test_empty_symbol_name(lmdb_version_store_v1, method):
+    first_arg = [""] if method.startswith("batch_") else ""
+    df = sample_dataframe()
+    second_arg = [df] if method.startswith("batch_") else df
+    with pytest.raises(UserInputException) as e:
+        getattr(lmdb_version_store_v1, method)(first_arg, second_arg)
+    assert "symbol" in str(e.value).lower()
+
+
+@pytest.mark.parametrize("method", ("snapshot", "delete_snapshot"))
+def test_empty_snapshot_name(lmdb_version_store_v1, method):
+    with pytest.raises(UserInputException) as e:
+        getattr(lmdb_version_store_v1, method)("")
+    assert "snapshot" in str(e.value).lower()
 
 
 def test_with_prune(object_and_mem_and_lmdb_version_store, symbol):
@@ -849,46 +896,6 @@ def test_empty_ndarr(basic_store):
     ndarr = np.array([])
     basic_store.write(sym, ndarr)
     assert_array_equal(basic_store.read(sym).data, ndarr)
-
-
-# The following restrictions should be checked in the cpp layer's name_validation
-MAX_SYMBOL_SIZE = 255
-UNSUPPORTED_S3_CHARS = {"*", "<", ">"}
-
-
-# See AN-765 for why we need no_symbol_list fixture
-def test_large_symbols(basic_store_no_symbol_list):
-    # TODO: Make too long name on LMDB raise a friendlier UserInputException (instead of InternalException [E_INVALID_ARGUMENT])
-    with pytest.raises((UserInputException, InternalException)):
-        basic_store_no_symbol_list.write("a" * (MAX_SYMBOL_SIZE + 1), 1)
-
-    for _ in range(5):
-        valid_sized_sym = "a" * random.randint(1, MAX_SYMBOL_SIZE - 1)
-        basic_store_no_symbol_list.write(valid_sized_sym, 1)
-        assert basic_store_no_symbol_list.read(valid_sized_sym).data == 1
-
-        valid_punctuations = "".join(list(set(string.punctuation) - set(UNSUPPORTED_S3_CHARS)))
-        valid_char_sym = "".join(
-            [random.choice(string.ascii_letters + string.digits + valid_punctuations) for _ in range(12)]
-        )
-
-        basic_store_no_symbol_list.write(valid_char_sym, 1)
-        assert basic_store_no_symbol_list.read(valid_char_sym).data == 1
-
-
-def test_unsupported_chars_in_symbols(basic_store):
-    for ch in UNSUPPORTED_S3_CHARS:
-        with pytest.raises(UserInputException):
-            basic_store.write(ch, 1)
-
-    for _ in range(5):
-        valid_punctuations = "".join(list(set(string.punctuation) - set(UNSUPPORTED_S3_CHARS)))
-        valid_char_sym = "".join(
-            [random.choice(string.ascii_letters + string.digits + valid_punctuations) for _ in range(12)]
-        )
-
-        basic_store.write(valid_char_sym, 1)
-        assert basic_store.read(valid_char_sym).data == 1
 
 
 def test_partial_read_pickled_df(basic_store):

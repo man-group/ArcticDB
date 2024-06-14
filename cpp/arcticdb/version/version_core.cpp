@@ -857,8 +857,8 @@ void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<PipelineC
         std::set<TimestampRange> unique_timestamp_ranges;
         for (auto it = pipeline_context->incompletes_begin(); it!= pipeline_context->end(); it++) {
             sorting::check<ErrorCode::E_UNSORTED_DATA>(
-                    !last_existing_index_value.has_value() || it->slice_and_key().key().start_time() > *last_existing_index_value,
-                    "Cannot append staged segments to existing data as incomplete segment contains index value <= existing data: {} <= {}",
+                    !last_existing_index_value.has_value() || it->slice_and_key().key().start_time() >= *last_existing_index_value,
+                    "Cannot append staged segments to existing data as incomplete segment contains index value < existing data: {} <= {}",
                     it->slice_and_key().key().start_time(),
                     *last_existing_index_value);
             unique_timestamp_ranges.insert({it->slice_and_key().key().start_time(), it->slice_and_key().key().end_time()});

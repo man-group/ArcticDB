@@ -87,12 +87,13 @@ jobs:
           disk-root: "D:"  # This is also the checkout directory. Total size 12GB.
         continue-on-error: true
 
+      - name: Install VS2022 BuildTools 17.9.7
+        if: matrix.os == 'windows'
+        run: choco install -y visualstudio2022buildtools --version=117.9.7.0 --params "--add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --installChannelUri https://aka.ms/vs/17/release/180911598_-255012421/channel"
+
       - name: Enable Windows compiler commands
         if: matrix.os == 'windows'
         uses: ilammy/msvc-dev-cmd@v1.12.1
-        with:
-          # The version of the toolset is specified due to faulty version discovery.
-          toolset: 14.39
 
       - name: Extra envs
         # This has to come after msvc-dev-cmd to overwrite the bad VCPKG_ROOT it sets
@@ -149,6 +150,15 @@ jobs:
           [[ $(jq '.errors' test_unit_arcticdb.json) -eq 0 ]]
         env:
           ARCTICDB_memory_loglevel: INFO
+
+      # We don't do anything with the benchmarks automatically yet, but check that they at least compile and run.
+      - name: Compile C++ Benchmarks
+        if: inputs.job_type == 'cpp-tests'
+        run: cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET --target benchmarks -j $CMAKE_BUILD_PARALLEL_LEVEL
+
+      - name: Run C++ Benchmarks
+        if: inputs.job_type == 'cpp-tests'
+        run: cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/benchmarks
 
       # ========================= build-python-wheels (CIBW) steps =========================
       - name: Get CIBuildWheel image & metadata
