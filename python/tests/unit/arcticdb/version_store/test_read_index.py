@@ -273,8 +273,7 @@ class TestReadIndexRange:
 
 class TestWithNormalizers:
     @pytest.fixture(autouse=True)
-    @staticmethod
-    def custom_normalizer():
+    def custom_normalizer(self):
         register_normalizer(TestCustomNormalizer())
 
     def test_recursive_throws(self, lmdb_version_store_static_and_dynamic):
