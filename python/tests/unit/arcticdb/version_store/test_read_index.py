@@ -28,10 +28,9 @@ from arcticdb.version_store._custom_normalizers import register_normalizer, clea
         (EncodingVersion.V2, True),
     ]
 )
-def lmdb_version_store_row_slice(request, lib_name, version_store_factory):
+def lmdb_version_store_row_slice(request, version_store_factory):
     yield version_store_factory(
         dynamic_strings=True,
-        name=lib_name,
         encoding_version=int(request.param[0]),
         dynamic_schema=request.param[1],
         column_group_size=1,
