@@ -29,12 +29,11 @@ from arcticdb.version_store._custom_normalizers import register_normalizer, clea
     ]
 )
 def lmdb_version_store_row_slice(request, lib_name, version_store_factory):
-    library_name = "{}_v{}".format(lib_name, int(request.param[0]))
     yield version_store_factory(
         dynamic_strings=True,
-        name=library_name,
+        name=lib_name,
         encoding_version=int(request.param[0]),
-        dynamic_schema=request.param[0],
+        dynamic_schema=request.param[1],
         column_group_size=1,
         segment_row_size=5
     )
