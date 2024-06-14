@@ -18,13 +18,16 @@ from arcticdb_ext.exceptions import InternalException
 from arcticdb.util.test import  CustomThing, TestCustomNormalizer
 from arcticdb.version_store._custom_normalizers import register_normalizer, clear_registered_normalizers
 
-@pytest.fixture(params=[
-    # (encoding_version, dynamic_schema)
-    (EncodingVersion.V1, False),
-    (EncodingVersion.V1, True),
-    (EncodingVersion.V2, False),
-    (EncodingVersion.V2, True),
-])
+@pytest.fixture(
+    scope="function",
+    params=[
+        # (encoding_version, dynamic_schema)
+        (EncodingVersion.V1, False),
+        (EncodingVersion.V1, True),
+        (EncodingVersion.V2, False),
+        (EncodingVersion.V2, True),
+    ]
+)
 def lmdb_version_store_row_slice(request, lib_name, version_store_factory):
     library_name = "{}_v{}".format(lib_name, int(request.param[0]))
     yield version_store_factory(
@@ -37,6 +40,7 @@ def lmdb_version_store_row_slice(request, lib_name, version_store_factory):
     )
 
 @pytest.fixture(
+    scope="function",
     params=(
         "lmdb_version_store_v1",
         "lmdb_version_store_v2",
@@ -52,6 +56,7 @@ def lmdb_version_store_static_and_dynamic(request):
 
 
 @pytest.fixture(
+    scope="function",
     params=(
         pd.RangeIndex(start=0, stop=10),
         pd.date_range(start="01/01/2024",end="01/10/2024"),
