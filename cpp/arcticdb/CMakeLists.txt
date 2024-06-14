@@ -489,7 +489,8 @@ set(arcticdb_srcs
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
         storage/s3/ec2_utils.cpp
-        storage/lmdb/lmdb.hpp util/cxx17_concepts.hpp)
+        storage/lmdb/lmdb.hpp
+)
 
 if(${ARCTICDB_INCLUDE_ROCKSDB})
     list (APPEND arcticdb_srcs

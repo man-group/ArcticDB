@@ -89,6 +89,7 @@ static void BM_merge_ordered(benchmark::State& state){
 }
 
 template <typename integer>
+requires std::integral<integer>
 void BM_hash_grouping_int(benchmark::State& state) {
     auto num_rows = state.range(0);
     auto num_unique_values = state.range(1);
@@ -116,6 +117,7 @@ void BM_hash_grouping_int(benchmark::State& state) {
     constexpr auto data_type = data_type_from_raw_type<integer>();
     Column column(make_scalar_type(data_type), num_rows, true, false);
     memcpy(column.ptr(), data.data(), num_rows * sizeof(integer));
+    column.set_row_data(num_rows - 1);
     ColumnWithStrings col_with_strings(std::move(column), {}, "random_ints");
 
     grouping::HashingGroupers::Grouper<ScalarTagType<DataTypeTag<data_type>>> grouper;
@@ -170,8 +172,8 @@ void BM_hash_grouping_string(benchmark::State& state) {
 BENCHMARK(BM_merge_interleaved)->Args({10'000, 100});
 BENCHMARK(BM_merge_ordered)->Args({10'000, 100});
 
-BENCHMARK(BM_hash_grouping_int<int8_t>)->Args({100'000, 10, 2})->Args({100'000, 100'000, 2});
-BENCHMARK(BM_hash_grouping_int<int16_t>)->Args({100'000, 10, 2})->Args({100'000, 100'000, 2});
+BENCHMARK(BM_hash_grouping_int<int8_t>)->Args({100'000, 10, 2});
+BENCHMARK(BM_hash_grouping_int<int16_t>)->Args({100'000, 10, 2})->Args({100'000, 10'000, 2});
 BENCHMARK(BM_hash_grouping_int<int32_t>)->Args({100'000, 10, 2})->Args({100'000, 100'000, 2});
 BENCHMARK(BM_hash_grouping_int<int64_t>)->Args({100'000, 10, 2})->Args({100'000, 100'000, 2});
 
