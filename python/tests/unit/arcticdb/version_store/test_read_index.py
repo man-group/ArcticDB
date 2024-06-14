@@ -104,19 +104,25 @@ class TestBasicReadIndex:
 
 
 class TestReadEmptyIndex:
-    @pytest.mark.parametrize("empty_index",[
-        pd.RangeIndex(start=5,stop=5),
-        pd.DatetimeIndex([])
-    ])
-    def test_empty_index(self, lmdb_version_store_static_and_dynamic, empty_index):
-        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": []}, index=empty_index))
+    def test_empty_range_index(self, lmdb_version_store_static_and_dynamic):
+        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": []}, index=pd.RangeIndex(start=5,stop=5)))
+        result = lmdb_version_store_static_and_dynamic.read_index_columns("sym")
+        assert isinstance(result, arcticdb.VersionedItem)
+        assert result.symbol == "sym"
+        assert result.version == 0
+        if PANDAS_VERSION < Version("2.0.0"):
+            assert result.data.equals(pd.RangeIndex(start=5,stop=5))
+        else:
+            assert result.data.equals(pd.DatetimeIndex([]))
+
+    def test_empty_datetime_index(self, lmdb_version_store_static_and_dynamic):
+        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": []}, index=pd.DatetimeIndex([])))
         result = lmdb_version_store_static_and_dynamic.read_index_columns("sym")
         assert isinstance(result, arcticdb.VersionedItem)
         assert result.symbol == "sym"
         assert result.version == 0
         assert result.data.equals(pd.DatetimeIndex([]))
 
-    @pytest.mark.skipif(PANDAS_VERSION < Version("2.0.0"), reason="This tests behavior of Pandas 2 and grater.")
     @pytest.mark.parametrize(
         "input_index,expected_index",
         [
