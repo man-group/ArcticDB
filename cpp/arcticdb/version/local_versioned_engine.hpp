@@ -179,6 +179,16 @@ public:
         bool dry_run = false
     );
 
+    static folly::Future<folly::Unit> delete_trees_responsibly_static(
+        std::shared_ptr<Store> store,
+        std::shared_ptr<VersionMap> &version_map,
+        const std::vector<IndexTypeKey>& idx_to_be_deleted,
+        const arcticdb::MasterSnapshotMap& snapshot_map,
+        const std::optional<SnapshotId>& snapshot_being_deleted,
+        const PreDeleteChecks& check,
+        bool dry_run
+    );
+
     std::set<StreamId> list_streams_internal(
         std::optional<SnapshotId> snap_name,
         const std::optional<std::string>& regex,
@@ -400,6 +410,7 @@ public:
     }
     void _test_set_store(std::shared_ptr<Store> store);
     std::shared_ptr<VersionMap> _test_get_version_map();
+    SymbolList& _test_get_symbol_list();
 
     /** Get the time used by the Store (e.g. that would be used in the AtomKey).
         For testing purposes only. */

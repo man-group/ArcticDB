@@ -243,7 +243,7 @@ folly::Future<std::pair<VariantKey, TimeseriesDescriptor>> read_timeseries_descr
 }
 
 folly::Future<bool> key_exists(const entity::VariantKey &key) override {
-    return async::submit_io_task(KeyExistsTask{&key, library_});
+    return async::submit_io_task(KeyExistsTask{key, library_});
 }
 
 bool key_exists_sync(const entity::VariantKey &key) override {

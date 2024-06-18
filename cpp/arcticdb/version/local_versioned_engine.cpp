@@ -810,15 +810,26 @@ std::unordered_map<StreamId, VersionId> min_versions_for_each_stream(const std::
 }
 
 folly::Future<folly::Unit> LocalVersionedEngine::delete_trees_responsibly(
-        const std::vector<IndexTypeKey>& orig_keys_to_delete,
+        const std::vector<IndexTypeKey>& idx_to_be_deleted,
         const arcticdb::MasterSnapshotMap& snapshot_map,
         const std::optional<SnapshotId>& snapshot_being_deleted,
         const PreDeleteChecks& check,
         const bool dry_run) {
+    return delete_trees_responsibly_static(store(), version_map(), idx_to_be_deleted, snapshot_map, snapshot_being_deleted, check, dry_run);
+}
+
+folly::Future<folly::Unit> LocalVersionedEngine::delete_trees_responsibly_static(
+        std::shared_ptr<Store> store,
+        std::shared_ptr<VersionMap> &version_map,
+        const std::vector<IndexTypeKey>& idx_to_be_deleted,
+        const arcticdb::MasterSnapshotMap& snapshot_map,
+        const std::optional<SnapshotId>& snapshot_being_deleted,
+        const PreDeleteChecks& check,
+        bool dry_run) {
     ARCTICDB_SAMPLE(DeleteTree, 0)
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_tree");
 
-    util::ContainerFilterWrapper keys_to_delete(orig_keys_to_delete);
+    util::ContainerFilterWrapper keys_to_delete(idx_to_be_deleted);
     util::ContainerFilterWrapper not_to_delete(check.could_share_data);
 
     // Each section below performs these checks:
@@ -856,12 +867,12 @@ folly::Future<folly::Unit> LocalVersionedEngine::delete_trees_responsibly(
     if (load_type != LoadType::NOT_LOADED) {
         std::unordered_map<StreamId, std::shared_ptr<VersionMapEntry>> entry_map;
         {
-            auto min_versions = min_versions_for_each_stream(orig_keys_to_delete);
+            auto min_versions = min_versions_for_each_stream(idx_to_be_deleted);
             for (const auto& min : min_versions) {
                 auto load_param = load_type == LoadType::LOAD_DOWNTO
                         ? LoadParameter{load_type, static_cast<SignedVersionId>(min.second)}
                         : LoadParameter{load_type};
-                const auto entry = version_map()->check_reload(store(), min.first, load_param, __FUNCTION__);
+                const auto entry = version_map->check_reload(store, min.first, load_param, __FUNCTION__);
                 entry_map.try_emplace(std::move(min.first), entry);
             }
         }
@@ -895,11 +906,11 @@ folly::Future<folly::Unit> LocalVersionedEngine::delete_trees_responsibly(
 
     storage::ReadKeyOpts read_opts;
     read_opts.ignores_missing_key_ = true;
-    auto data_keys_to_be_deleted = get_data_keys_set(store(), *keys_to_delete, read_opts);
+    auto data_keys_to_be_deleted = get_data_keys_set(store, *keys_to_delete, read_opts);
     log::version().debug("Candidate: {} total of data keys", data_keys_to_be_deleted.size());
 
     read_opts.dont_warn_about_missing_key = true;
-    auto data_keys_not_to_be_deleted = get_data_keys_set(store(), *not_to_delete, read_opts);
+    auto data_keys_not_to_be_deleted = get_data_keys_set(store, *not_to_delete, read_opts);
     not_to_delete.clear();
     log::version().debug("Forbidden: {} total of data keys", data_keys_not_to_be_deleted.size());
     storage::RemoveOpts remove_opts;
@@ -930,14 +941,14 @@ folly::Future<folly::Unit> LocalVersionedEngine::delete_trees_responsibly(
     folly::Future<folly::Unit> remove_keys_fut;
     if (!dry_run) {
         // Delete any associated column stats keys first
-        remove_keys_fut = store()->remove_keys(std::move(vks_column_stats), remove_opts)
-        .thenValue([this, vks_to_delete = std::move(vks_to_delete), remove_opts](auto&& ) mutable {
+        remove_keys_fut = store->remove_keys(std::move(vks_column_stats), remove_opts)
+        .thenValue([store=store, vks_to_delete = std::move(vks_to_delete), remove_opts](auto&& ) mutable {
             log::version().debug("Column Stats keys deleted.");
-            return store()->remove_keys(std::move(vks_to_delete), remove_opts);
+            return store->remove_keys(std::move(vks_to_delete), remove_opts);
         })
-        .thenValue([this, vks_data_to_delete = std::move(vks_data_to_delete), remove_opts](auto&&) mutable {
+        .thenValue([store=store, vks_data_to_delete = std::move(vks_data_to_delete), remove_opts](auto&&) mutable {
             log::version().debug("Index keys deleted.");
-            return store()->remove_keys(std::move(vks_data_to_delete), remove_opts);
+            return store->remove_keys(std::move(vks_data_to_delete), remove_opts);
         })
         .thenValue([](auto&&){
             log::version().debug("Data keys deleted.");
@@ -946,7 +957,6 @@ folly::Future<folly::Unit> LocalVersionedEngine::delete_trees_responsibly(
     }
     return remove_keys_fut;
 }
-
 
 void LocalVersionedEngine::remove_incomplete(
     const StreamId& stream_id
@@ -1810,5 +1820,9 @@ std::shared_ptr<VersionMap> LocalVersionedEngine::_test_get_version_map() {
 
 void LocalVersionedEngine::_test_set_store(std::shared_ptr<Store> store) {
     set_store(std::move(store));
+}
+
+SymbolList& LocalVersionedEngine::_test_get_symbol_list() {
+    return symbol_list();
 }
 } // arcticdb::version_store
