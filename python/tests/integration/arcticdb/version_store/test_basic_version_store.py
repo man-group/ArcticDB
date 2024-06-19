@@ -2582,3 +2582,20 @@ def test_missing_first_version_key_batch(basic_store):
     vits = lib.batch_read(symbols, as_ofs=write_times)
     for x in range(num_items):
         assert_frame_equal(vits[symbols[x]].data, expected[x])
+
+
+def test_load_streaming_data():
+    from ahl.mongo.mongoose import NativeMongoose
+    m = NativeMongoose("mktdatad")
+    lib = m.get_library("aseaton.test_streaming")
+    #lib.list_symbols()
+    #lib.version_store.get_active_incomplete_refs()
+    res = lib.read("IMBALANCE:FR US", date_range=(None, None))
+    data = res.data
+    print(data)
+
+
+def test_symbol_list():
+    import man.codex as cx
+    lib = cx.preprod.datasets.SELLSIDE_EQUITIES_BASKETS.arctic
+    lib.list_symbols()
