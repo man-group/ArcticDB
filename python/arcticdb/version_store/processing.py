@@ -602,7 +602,9 @@ class QueryBuilder:
         * Dynamic schema where an aggregation column is missing from one or more of the row-slices.
         * Sparse data.
 
-        The resample results match pandas resample with `origin="epoch"`.
+        The resample results match pandas resample with `origin="epoch"`. We plan to add an 'origin' argument in
+        a future release and will then change the default value to '"start_day"' to match the Pandas default. This
+        will change the results in cases where the rule is not a multiple of 24 hours.
 
         Parameters
         ----------
