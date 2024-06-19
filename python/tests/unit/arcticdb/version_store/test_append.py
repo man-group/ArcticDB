@@ -230,6 +230,34 @@ def test_append_out_of_order_and_sort(lmdb_version_store_ignore_order, prune_pre
             )
 
 
+@pytest.mark.parametrize("dynamic_schema", (True, False))
+@pytest.mark.parametrize("prune_previous_versions", [True, False])
+@pytest.mark.parametrize("write_sorted", [True, False])
+def test_sort_index(version_store_factory, dynamic_schema, prune_previous_versions, write_sorted):
+    lib = version_store_factory(dynamic_schema=dynamic_schema, ignore_sort_order=not write_sorted)
+    symbol = "symbol"
+
+    df_1 = pd.DataFrame(data={"col": [1, 2]}, index=[pd.Timestamp(1), pd.Timestamp(2)])
+    df_2 = pd.DataFrame(data={"col": [3, 4]}, index=[pd.Timestamp(3), pd.Timestamp(4)])
+    if not write_sorted:
+        df_1, df_2 = df_2, df_1
+    combined_df = pd.concat([df_1, df_2])
+    sorted_df = combined_df.sort_index(inplace=False)
+
+    # df should be combined as is
+    lib.write(symbol, df_1)
+    lib.append(symbol, df_2)
+    assert_frame_equal(lib.read(symbol).data, combined_df)
+
+    # sort once
+    lib.version_store.sort_index(symbol, dynamic_schema, prune_previous_versions)
+    assert_frame_equal(lib.read(symbol).data, sorted_df)
+
+    # sort again to verify it's idempotent
+    lib.version_store.sort_index(symbol, dynamic_schema, prune_previous_versions)
+    assert_frame_equal(lib.read(symbol).data, sorted_df)
+
+
 def test_upsert_with_delete(lmdb_version_store_big_map):
     lib = lmdb_version_store_big_map
     symbol = "upsert_with_delete"
