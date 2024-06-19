@@ -28,24 +28,15 @@
 namespace arcticdb::version_store {
 
     namespace {
-        // small functions to make the declare_resample_clause() function easier to read
-        timestamp pd_timestamp_max_floor_value(py::object pd_timestamp, std::string_view rule1, std::string_view rule2) {
-            return std::max(
-                    pd_timestamp.attr("floor")(rule1).attr("value").cast<timestamp>(),
-                    pd_timestamp.attr("floor")(rule2).attr("value").cast<timestamp>()
-            );
-        }
-
-        timestamp pd_timestamp_min_ceil_value(py::object pd_timestamp, std::string_view rule1, std::string_view rule2) {
-            return std::min(
-                    pd_timestamp.attr("ceil")(rule1).attr("value").cast<timestamp>(),
-                    pd_timestamp.attr("ceil")(rule2).attr("value").cast<timestamp>()
-            );
+        // floor / ceil to midnight within 24 hours of the input time
+        timestamp pd_timestamp_op(timestamp datetime, const char *ts_op) {
+            auto py_datetime = python_util::pd_Timestamp()(datetime);
+            return py_datetime.attr(ts_op)("1D").attr("value").cast<timestamp>();
         }
     }
 
     // This is replicates the origin='start_day' behaviour in pandas resample
-    // It start the buckets at 00:00 on the start date then removes buckets wholly before the start time
+    // It starts the buckets at 00:00 on the start date then removes buckets wholly before the start time
     template<ResampleBoundary closed_boundary>
     void declare_resample_clause(py::module& version) {
         std::string class_name;
@@ -61,23 +52,31 @@ namespace arcticdb::version_store {
                                                            label_boundary,
                                                            [](timestamp start, timestamp end, std::string_view rule, ResampleBoundary closed_boundary_arg) -> std::vector<timestamp> {
                                                                py::gil_scoped_acquire acquire_gil;
-                                                               auto py_start_adj = python_util::pd_Timestamp()(start - (closed_boundary_arg == ResampleBoundary::RIGHT ? 1 : 0));
-                                                               auto py_end_adj = python_util::pd_Timestamp()(end + (closed_boundary_arg == ResampleBoundary::LEFT ? 1 : 0));
-                                                               // floor/ceil("1D") is outer limit but prefer floor/ceil(rule) if tighter - to repro pandas resample behaviour
-                                                               auto py_start = python_util::pd_Timestamp()(pd_timestamp_max_floor_value(py_start_adj, "1D", "1D"));
-                                                               auto py_end = python_util::pd_Timestamp()(pd_timestamp_min_ceil_value(py_end_adj, "1D", "1D"));
+                                                               auto start_adj = start - (closed_boundary_arg == ResampleBoundary::RIGHT ? 1 : 0);
+                                                               auto end_adj = end + (closed_boundary_arg == ResampleBoundary::LEFT ? 1 : 0);
+                                                               auto start_floor = pd_timestamp_op(start_adj, "floor");
+                                                               auto end_ceil = pd_timestamp_op(end_adj, "ceil");
+                                                               auto py_start = python_util::pd_Timestamp()(start_floor);
+                                                               auto py_end = python_util::pd_Timestamp()(end_ceil);
                                                                static py::object date_range_function = py::module::import("pandas").attr("date_range");
                                                                // pass "left" to the inclusive arg - always includes left and never right
                                                                auto py_bucket_boundaries = date_range_function(py_start, py_end, nullptr, rule, nullptr, false, nullptr, "left").
                                                                        attr("values").cast<py::array_t<timestamp>>();
                                                                auto bucket_boundaries = std::vector<timestamp>(py_bucket_boundaries.data(), py_bucket_boundaries.data() + py_bucket_boundaries.size());
-                                                               // add py_end_adj as the end of the rightmost bucket
-                                                               bucket_boundaries.push_back(py_end_adj.attr("value").cast<timestamp>());
-                                                               if (start == bucket_boundaries[0])
-                                                                   return bucket_boundaries;
+                                                               // add end_adj as the end of the rightmost bucket
+                                                               bucket_boundaries.push_back(end_ceil);
                                                                // remove buckets wholly before the data
-                                                               auto start_lb= std::lower_bound(bucket_boundaries.begin(), bucket_boundaries.end(), start, std::less_equal{});
-                                                               return std::vector<timestamp>(--start_lb, bucket_boundaries.end());
+                                                               auto start_lb = std::lower_bound(bucket_boundaries.begin(), bucket_boundaries.end(), start_adj);
+                                                               if (start_lb == bucket_boundaries.end())  // .end() means not found
+                                                                   start_lb = bucket_boundaries.begin();
+                                                               else if (start_lb > bucket_boundaries.begin())
+                                                                   --start_lb;
+                                                               // remove buckets wholly after the data
+                                                               //auto end_ub = bucket_boundaries.end();
+                                                               auto end_ub = std::upper_bound(bucket_boundaries.begin(), bucket_boundaries.end(), end_adj);
+                                                               //if (end_ub < bucket_boundaries.end())
+                                                               //    ++end_ub;
+                                                               return std::vector<timestamp>(start_lb, end_ub);
                                                            });
                 }))
                 .def_property_readonly("rule", &ResampleClause<closed_boundary>::rule)
