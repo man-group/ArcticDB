@@ -241,6 +241,7 @@ decode_timeseries_descriptor(
         return std::nullopt;
 
     auto tsd = timeseries_descriptor_from_any(*maybe_any);
+    tsd.mutable_stream_descriptor()->CopyFrom(hdr.stream_descriptor());
 
     if(has_magic_numbers)
         util::check_magic<DescriptorMagic>(data);

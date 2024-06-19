@@ -340,6 +340,7 @@ std::pair<TimeseriesDescriptor, std::optional<SegmentInMemory>> get_descriptor_a
         auto [key, seg] = store->read_sync(k, opts);
         return std::make_pair(TimeseriesDescriptor{seg.timeseries_proto(), seg.index_fields()}, std::make_optional<SegmentInMemory>(seg));
     } else {
+        // TODO change so that it sets the StreamDescriptor correctly
         auto [key, tsd] = store->read_timeseries_descriptor(k, opts).get();
         return std::make_pair(std::move(tsd), std::nullopt);
     }
