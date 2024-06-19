@@ -577,8 +577,8 @@ class QueryBuilder:
             label: Optional[str] = None,
     ):
         """
-        Resample symbol on the index. Symbol must be datetime indexed. Resample operations must be followed by an
-        aggregation operator. Currently, the following 7 aggregation operators are supported:
+        Resample a symbol on the index. The symbol must be datetime indexed. Resample operations must be followed by
+        an aggregation operator. Currently, the following 7 aggregation operators are supported:
 
         * "mean" - compute the mean of the group
         * "sum" - compute the sum of the group
