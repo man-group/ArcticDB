@@ -238,6 +238,12 @@ folly::Future<std::pair<VariantKey, TimeseriesDescriptor>> read_timeseries_descr
     return read_and_continue(key, library_, opts, DecodeTimeseriesDescriptorTask{});
 }
 
+folly::Future<std::pair<TimeseriesDescriptor, StreamDescriptor>>
+read_timeseries_and_stream_descriptor(const entity::VariantKey& key,
+                                      storage::ReadKeyOpts opts) override {
+        return read_and_continue(key, library_, opts, DecodeTimeseriesAndStreamDescriptorTask{});
+}
+
 folly::Future<bool> key_exists(const entity::VariantKey &key) override {
     return async::submit_io_task(KeyExistsTask{&key, library_});
 }

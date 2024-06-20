@@ -496,6 +496,30 @@ struct DecodeMetadataAndDescriptorTask : BaseTask {
     }
 };
 
+struct DecodeTimeseriesAndStreamDescriptorTask : BaseTask {
+    ARCTICDB_MOVE_ONLY_DEFAULT(DecodeTimeseriesAndStreamDescriptorTask)
+
+    DecodeTimeseriesAndStreamDescriptorTask() = default;
+
+    std::pair<TimeseriesDescriptor, StreamDescriptor> operator()(storage::KeySegmentPair &&ks) const {
+        ARCTICDB_SAMPLE(DecodeTimeseriesAndStreamDescriptorTask, 0)
+        auto key_seg = std::move(ks);
+        ARCTICDB_DEBUG(log::storage(), "DecodeTimeseriesAndStreamDescriptorTask decoding segment of size {} with key {}",
+                       key_seg.segment().total_segment_size(), variant_key_view(key_seg.variant_key()));
+
+        auto [any, stream_descriptor] = decode_metadata_and_descriptor_fields(key_seg.segment());
+
+        auto timeseries_descriptor = decode_timeseries_descriptor(key_seg.segment());
+        util::check(static_cast<bool>(timeseries_descriptor), "Failed to decode timeseries descriptor");
+
+        auto tsd = TimeseriesDescriptor{
+                std::make_shared<TimeseriesDescriptor::Proto>(std::move(std::get<1>(*timeseries_descriptor))),
+                std::make_shared<FieldCollection>(std::move(std::get<2>(*timeseries_descriptor)))};
+
+        return std::make_pair(std::move(tsd), std::move(stream_descriptor));
+    }
+};
+
 template<typename ConstVarKeyGetter,
         typename=std::enable_if_t<!std::is_reference_v<ConstVarKeyGetter> // Make obvious if iterator& is captured
                         && std::is_same_v<decltype(*std::declval<ConstVarKeyGetter>()), const entity::VariantKey&>>>
