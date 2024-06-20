@@ -1486,7 +1486,6 @@ class NativeVersionStore:
 
     def _get_version_query(self, as_of: VersionQueryInput, **kwargs):
         version_query = _PythonVersionStoreVersionQuery()
-        version_query.set_iterate_on_failure(_assume_false("iterate_on_failure", kwargs))
 
         if isinstance(as_of, str):
             version_query.set_snap_name(as_of)
@@ -1985,7 +1984,7 @@ class NativeVersionStore:
             Only include the latest version for each returned symbol. Has no effect if `snapshot` argument is also
             specified.
         iterate_on_failure: `bool`
-            Iterate the type in the storage if the top-level key isn't present.
+            DEPRECATED: Passing this doesn't change behavior
         skip_snapshots: `bool`
             Don't populate version list with snapshot information.
             Can improve performance significantly if there are many snapshots.
@@ -2012,11 +2011,14 @@ class NativeVersionStore:
         `List[Dict]`
             List of dictionaries describing the discovered versions in the library.
         """
+        if iterate_on_failure:
+            log.warning("The iterate_on_failure argument is deprecated and will soon be removed. It's safe to remove since it doesn't change behavior.")
+
         if latest_only and snapshot and not NativeVersionStore._warned_about_list_version_latest_only_and_snapshot:
             log.warning("latest_only has no effect when snapshot is specified")
             NativeVersionStore._warned_about_list_version_latest_only_and_snapshot = True
 
-        result = self.version_store.list_versions(symbol, snapshot, latest_only, iterate_on_failure, skip_snapshots)
+        result = self.version_store.list_versions(symbol, snapshot, latest_only, skip_snapshots)
         return [
             {
                 "symbol": version_result[0],
@@ -2284,16 +2286,18 @@ class NativeVersionStore:
         as_of : `Optional[VersionQueryInput]`, default=None
             See documentation of `read` method for more details.
         iterate_on_failure: `Optional[bool]`, default=False
-            Iterate the type in the storage if the top-level key isn;t present
+            DEPRECATED: Passing this doesn't change behavior
 
         Returns
         -------
         `bool`
             True if the symbol exists as_of the specified revision, False otherwise.
         """
+        if iterate_on_failure:
+            log.warning("The iterate_on_failure argument is deprecated and will soon be removed. It's safe to remove since it doesn't change behavior.")
 
         return (
-            self._find_version(symbol, as_of=as_of, raise_on_missing=False, iterate_on_failure=iterate_on_failure)
+            self._find_version(symbol, as_of=as_of, raise_on_missing=False)
             is not None
         )
 

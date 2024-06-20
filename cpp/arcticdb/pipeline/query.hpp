@@ -96,7 +96,6 @@ using VersionQueryType = std::variant<
 
 struct VersionQuery {
     VersionQueryType content_;
-    std::optional<bool> iterate_on_failure_;
 
     void set_snap_name(const std::string& snap_name) {
         content_ = SnapshotVersionQuery{snap_name};
@@ -108,10 +107,6 @@ struct VersionQuery {
 
     void set_version(SignedVersionId version) {
         content_ = SpecificVersionQuery{version};
-    }
-
-    void set_iterate_on_failure(const std::optional<bool>& iterate_on_failure) {
-        iterate_on_failure_ = iterate_on_failure;
     }
 };
 
