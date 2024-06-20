@@ -407,6 +407,13 @@ public:
 
     const arcticdb::proto::storage::VersionStoreConfig& cfg() const override { return cfg_; }
 
+    ReadVersionOutput read_index_columns_internal(
+        const StreamId& stream_id,
+        const VersionQuery& version_query,
+        ReadQuery& read_query,
+        const ReadOptions& read_options
+    ) override;
+
 protected:
     VersionedItem compact_incomplete_dynamic(
             const StreamId& stream_id,
@@ -448,6 +455,13 @@ protected:
     SpecificAndLatestVersionKeys get_stream_index_map(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries);
+
+    std::variant<VersionedItem, StreamId> get_version_identifier(
+        const StreamId& stream_id,
+        const VersionQuery& version_query,
+        const ReadOptions& read_options,
+        const std::optional<VersionedItem>& version
+    );
 
 private:
     void initialize(const std::shared_ptr<storage::Library>& library);

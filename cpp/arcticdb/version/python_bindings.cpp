@@ -166,10 +166,10 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             return fd.arrays(obj);
         })
         .def_property_readonly("offset", [](PythonOutputFrame& self) {
-            return self.frame().offset();
-        })
+            return self.frame().offset(); })
         .def_property_readonly("names", &PythonOutputFrame::names, py::return_value_policy::reference)
-        .def_property_readonly("index_columns", &PythonOutputFrame::index_columns, py::return_value_policy::reference);
+        .def_property_readonly("index_columns", &PythonOutputFrame::index_columns, py::return_value_policy::reference)
+        .def_property_readonly("row_count", [](PythonOutputFrame& self) { return self.frame().row_count(); });
 
     py::enum_<VersionRequestType>(version, "VersionRequestType", R"pbdoc(
         Enum of possible version request types passed to as_of.
@@ -748,6 +748,18 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             [](PythonVersionStore& from, PythonVersionStore& to) {
                 to._test_set_store(from._test_get_store());
             })
+        .def(
+            "read_index_columns",
+            [&](PythonVersionStore& v,
+                const StreamId& stream_id,
+                const VersionQuery& version_query,
+                ReadQuery& read_query,
+                const ReadOptions& read_options) {
+                return adapt_read_df(v.read_index_columns(stream_id, version_query, read_query, read_options));
+            },
+            py::call_guard<SingleThreadMutexHolder>(),
+            "Read only the index columns from a dataframe"
+        )
         ;
 
     py::class_<ManualClockVersionStore, PythonVersionStore>(version, "ManualClockVersionStore")

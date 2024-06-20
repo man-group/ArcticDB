@@ -64,6 +64,7 @@ from arcticdb.version_store._normalization import (
     _from_tz_timestamp,
     restrict_data_to_date_range_only,
     normalize_dt_range_to_ts,
+    _denormalize_single_index
 )
 TimeSeriesType = Union[pd.DataFrame, pd.Series]
 
@@ -1516,7 +1517,7 @@ class NativeVersionStore:
         date_range: Optional[DateRangeInput],
         row_range: Tuple[int, int],
         columns: Optional[List[str]],
-        query_builder: QueryBuilder,
+        query_builder: Optional[QueryBuilder],
     ):
         check(date_range is None or row_range is None, "Date range and row range both specified")
         read_query = _PythonVersionStoreReadQuery()
@@ -1619,7 +1620,7 @@ class NativeVersionStore:
         read_options.set_incompletes(self.resolve_defaults("incomplete", proto_cfg, global_default=False, **kwargs))
         return read_options
 
-    def _get_queries(self, symbol, as_of, date_range, row_range, columns, query_builder, **kwargs):
+    def _get_queries(self, symbol, as_of, date_range, row_range, columns=None, query_builder=None, **kwargs):
         version_query = self._get_version_query(as_of, **kwargs)
         read_options = self._get_read_options(**kwargs)
         read_query = self._get_read_query(
@@ -1759,17 +1760,7 @@ class NativeVersionStore:
     def _post_process_dataframe(self, read_result, read_query, query_builder):
         if read_query.row_filter is not None and (query_builder is None or query_builder.needs_post_processing()):
             # post filter
-            start_idx = end_idx = None
-            if isinstance(read_query.row_filter, _RowRange):
-                start_idx = read_query.row_filter.start - read_result.frame_data.offset
-                end_idx = read_query.row_filter.end - read_result.frame_data.offset
-            elif isinstance(read_query.row_filter, _IndexRange):
-                ts_idx = read_result.frame_data.value.data[0]
-                if len(ts_idx) != 0:
-                    start_idx = ts_idx.searchsorted(datetime64(read_query.row_filter.start_ts, "ns"), side="left")
-                    end_idx = ts_idx.searchsorted(datetime64(read_query.row_filter.end_ts, "ns"), side="right")
-            else:
-                raise ArcticNativeException("Unrecognised row_filter type: {}".format(type(read_query.row_filter)))
+            start_idx, end_idx = self._compute_filter_start_end_row(read_result, read_query)
             data = []
             for c in read_result.frame_data.value.data:
                 data.append(c[start_idx:end_idx])
@@ -1795,6 +1786,20 @@ class NativeVersionStore:
             )
 
         return vitem
+
+    def _compute_filter_start_end_row(self, read_result, read_query):
+        start_idx = end_idx = None
+        if isinstance(read_query.row_filter, _RowRange):
+            start_idx = read_query.row_filter.start - read_result.frame_data.offset
+            end_idx = read_query.row_filter.end - read_result.frame_data.offset
+        elif isinstance(read_query.row_filter, _IndexRange):
+            index = read_result.frame_data.value.data[0]
+            if len(index) != 0:
+                start_idx = index.searchsorted(datetime64(read_query.row_filter.start_ts, "ns"), side="left")
+                end_idx = index.searchsorted(datetime64(read_query.row_filter.end_ts, "ns"), side="right")
+        else:
+            raise ArcticNativeException("Unrecognised row_filter type: {}".format(type(read_query.row_filter)))
+        return (start_idx, end_idx)
 
     def _find_version(
         self, symbol: str, as_of: Optional[VersionQueryInput] = None, raise_on_missing: Optional[bool] = False, **kwargs
@@ -1948,7 +1953,6 @@ class NativeVersionStore:
 
     def _adapt_read_res(self, read_result: ReadResult) -> VersionedItem:
         frame_data = FrameData.from_cpp(read_result.frame_data)
-
         meta = denormalize_user_metadata(read_result.udm, self._normalizer)
         data = self._normalizer.denormalize(frame_data, read_result.norm)
         if read_result.norm.HasField("custom"):
@@ -2824,3 +2828,83 @@ class NativeVersionStore:
 
     def library_tool(self) -> LibraryTool:
         return LibraryTool(self.library(), self)
+
+    def read_index_columns(
+        self,
+        symbol: str,
+        as_of: Optional[VersionQueryInput] = None,
+        date_range: Optional[DateRangeInput] = None,
+        row_range: Optional[Tuple[int, int]] = None,
+        **kwargs,
+    ) -> VersionedItem:
+        """
+        Read only the index columns for a named symbol.
+
+        Parameters
+        ----------
+        symbol : `str`
+            Symbol name.
+        as_of : `Optional[VersionQueryInput]`, default=None
+            Return the data as it was as_of the point in time. Defaults to getting the latest version.
+            `int` : specific version number. Negative indexing is supported, with -1 representing the latest version, -2 the version before that, etc.
+            `str` : snapshot name which contains the version
+            `datetime.datetime` : the version of the data that existed as_of the requested point in time
+        date_range: `Optional[DateRangeInput]`, default=None
+            DateRange to read data for.  Applicable only for Pandas data with a DateTime index. Returns only the part
+            of the data that falls within the given range. The same effect can be achieved by using the date_range
+            clause of the QueryBuilder class, which will be slower, but return data with a smaller memory footprint.
+            See the QueryBuilder.date_range docstring for more details.
+            Only one of date_range or row_range can be provided.
+        row_range: `Optional[Tuple[int, int]]`, default=None
+            Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound
+            lib.read(symbol, row_range=(start, end)).data should behave the same as df.iloc[start:end], including in
+            the handling of negative start/end values.
+            Only one of date_range or row_range can be provided.
+
+
+        Returns
+        -------
+        VersionedItem
+        """
+        
+        version_query, read_options, read_query = self._get_queries(
+            symbol=symbol,
+            as_of=as_of,
+            date_range=date_range,
+            row_range=row_range,
+            **kwargs,
+        )
+        if row_range and row_range[0] > row_range[1]:
+            raise ArcticNativeException(
+                "Unexpected row range: {}. The start row: {} should not be larger than the end row: {}"
+                .format(row_range, row_range[0], row_range[1]))
+        cpp_result = self.version_store.read_index_columns(symbol, version_query, read_query, read_options)
+        read_result = ReadResult(*cpp_result)
+        frame_data = FrameData.from_cpp(read_result.frame_data)
+        index_type = read_result.norm.df.common.WhichOneof("index_type")
+        meta = denormalize_user_metadata(read_result.udm, self._normalizer)
+        index = _denormalize_single_index(frame_data, read_result.norm.df.common)
+        if index_type == "index":
+            if isinstance(index, pd.RangeIndex):
+                index_meta = read_result.norm.df.common.index
+                stop = index_meta.start + read_result.frame_data.row_count * index_meta.step
+                index = pd.RangeIndex(start=index_meta.start, stop=stop, step=index_meta.step)
+        elif index_type == "multi_index":
+            names = frame_data.index_columns + [name[_IDX_PREFIX_LEN:] for name in frame_data.names]
+            index = pd.MultiIndex.from_arrays(frame_data.data, names=names)
+        else:
+            raise ArcticNativeException("Unexpected undex type {}".format(index_type))
+
+        if read_query.row_filter is not None:
+            start_idx, end_idx = self._compute_filter_start_end_row(read_result, read_query)
+            index = index[start_idx:end_idx]
+
+        return VersionedItem(
+            symbol=read_result.version.symbol,
+            library=self._library.library_path,
+            data=index,
+            version=read_result.version.version,
+            metadata=meta,
+            host=self.env,
+            timestamp=read_result.version.timestamp
+        )

@@ -141,7 +141,7 @@ version_store::ReadVersionOutput read_dataframe_from_file_internal(
     auto frame = version_store::do_direct_read_or_process(store, read_query, read_options, pipeline_context, buffers);
     ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
     reduce_and_fix_columns(pipeline_context, frame, read_options);
-    FrameAndDescriptor frame_and_descriptor{frame, timeseries_descriptor_from_pipeline_context(pipeline_context, {}, pipeline_context->bucketize_dynamic_), {}, buffers};
+    FrameAndDescriptor frame_and_descriptor{frame, timeseries_descriptor_from_pipeline_context(*pipeline_context, {}, pipeline_context->bucketize_dynamic_), {}, buffers};
     return {std::move(versioned_item), std::move(frame_and_descriptor)};
 }
 } //namespace arcticdb

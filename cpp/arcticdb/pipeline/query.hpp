@@ -121,18 +121,8 @@ using FilterQuery = folly::Function<std::unique_ptr<util::BitSet>(const Containe
 template<typename ContainerType>
 using CombinedQuery = folly::Function<std::unique_ptr<util::BitSet>(const ContainerType&)>;
 
-inline bool is_column_selected(size_t start_col, size_t end_col, const util::BitSet& sc) {
-    if (start_col == 0) {
-        auto col = sc.get_first();
-        return col < end_col;
-    } else {
-        auto col = sc.get_next(start_col - 1ULL);
-        return col != 0 && col < end_col;
-    }
-}
-
-inline FilterQuery<index::IndexSegmentReader> create_static_col_filter(util::BitSet &&selected_columns) {
-    return [sc = std::move(selected_columns)](const index::IndexSegmentReader &isr, std::unique_ptr<util::BitSet>&& input) mutable {
+inline FilterQuery<index::IndexSegmentReader> create_static_col_filter(std::shared_ptr<PipelineContext> pipeline_context) {
+    return [pipeline = std::move(pipeline_context)](const index::IndexSegmentReader &isr, std::unique_ptr<util::BitSet>&& input) mutable {
         auto res = std::make_unique<util::BitSet>(static_cast<util::BitSetSizeType>(isr.size()));
         auto start_col = isr.column(index::Fields::start_col).begin<stream::SliceTypeDescriptorTag>();
         auto end_col = isr.column(index::Fields::end_col).begin<stream::SliceTypeDescriptorTag>();
@@ -147,13 +137,13 @@ inline FilterQuery<index::IndexSegmentReader> create_static_col_filter(util::Bit
                 pos = *en;
                 std::advance(start_col, dist);
                 std::advance(end_col, dist);
-                (*res)[*en] = is_column_selected(*start_col, *end_col, sc);
+                (*res)[*en] = pipeline->overall_column_bitset_->any_range(*start_col, *end_col - 1);
                 ++en;
             }
 
         } else {
             for (std::size_t r = 0, end = isr.size(); r < end; ++r) {
-                (*res)[r] = is_column_selected(*start_col, *end_col, sc);
+                (*res)[r] = pipeline->overall_column_bitset_->any_range(*start_col, *end_col - 1);
                 ++start_col;
                 ++end_col;
             }
@@ -163,21 +153,24 @@ inline FilterQuery<index::IndexSegmentReader> create_static_col_filter(util::Bit
     };
 }
 
-inline FilterQuery<index::IndexSegmentReader> create_dynamic_col_filter(util::BitSet &&selected_columns, const std::shared_ptr<PipelineContext>& pipeline_context) {
-    return [sc = std::move(selected_columns), pipeline_context](const index::IndexSegmentReader &isr, std::unique_ptr<util::BitSet>&& input) mutable {
-        auto res = std::make_unique<util::BitSet>(static_cast<util::BitSetSizeType>(sc.size()));
+inline FilterQuery<index::IndexSegmentReader> create_dynamic_col_filter(
+    std::shared_ptr<PipelineContext> pipeline_context
+) {
+    return [pipeline = std::move(pipeline_context)](const index::IndexSegmentReader& isr, std::unique_ptr<util::BitSet>&& input) mutable {
+        auto res = std::make_unique<util::BitSet>(static_cast<util::BitSetSizeType>(pipeline->overall_column_bitset_->size())
+        );
         util::check(isr.bucketize_dynamic(), "Expected column group in index segment reader dynamic column filter");
         auto hash_bucket = isr.column(index::Fields::hash_bucket).begin<stream::SliceTypeDescriptorTag>();
         auto num_buckets = isr.column(index::Fields::num_buckets).begin<stream::SliceTypeDescriptorTag>();
 
-        bm::bvector<>::enumerator col = sc.first();
-        bm::bvector<>::enumerator col_end = sc.end();
+        bm::bvector<>::enumerator col = pipeline->overall_column_bitset_->first();
+        bm::bvector<>::enumerator col_end = pipeline->overall_column_bitset_->end();
         std::unordered_set<size_t> cols_hashes;
         while (col < col_end) {
             // we use raw_hashes for each col
             // A FrameSlice stores (hash_bucket, total_buckets) at the time of writing that slice
             // so a column will exist inside a slice iff col_hash % total_buckets == hash_bucket
-            cols_hashes.insert(bucketize(pipeline_context->desc_->field(*col).name(), std::nullopt));
+            cols_hashes.insert(bucketize(pipeline->desc_->field(*col).name(), std::nullopt));
             ++col;
         }
 
@@ -291,36 +284,54 @@ inline FilterQuery<ContainerType> create_index_filter(const IndexRange &range, b
 }
 
 template<typename ContainerType>
+inline void build_row_read_query_filters(
+    const FilterRange& range,
+    bool dynamic_schema,
+    bool column_groups,
+    std::vector<FilterQuery<ContainerType>>& queries
+) {
+    util::variant_match(
+        range,
+        [&](const RowRange& row_range) {
+            queries.emplace_back(create_row_filter<ContainerType>(RowRange{row_range.first, row_range.second}));
+        },
+        [&](const IndexRange& index_range) {
+            if (index_range.specified_) {
+                queries.emplace_back(create_index_filter<ContainerType>(index_range, dynamic_schema, column_groups));
+            }
+        },
+        [](const auto&) {}
+    );
+}
+
+template <typename ContainerType>
+inline void build_col_read_query_filters(
+    std::shared_ptr<PipelineContext> pipeline_context,
+    bool dynamic_schema,
+    bool column_groups,
+    std::vector<FilterQuery<ContainerType>>& queries
+) {
+    if (pipeline_context->overall_column_bitset_) {
+        util::check(!dynamic_schema || column_groups, "Did not expect a column bitset with dynamic schema");
+
+        if (column_groups)
+            queries.emplace_back(create_dynamic_col_filter(std::move(pipeline_context)));
+        else
+            queries.emplace_back(create_static_col_filter(std::move(pipeline_context)));
+    }
+}
+
+template<typename ContainerType>
 inline std::vector<FilterQuery<ContainerType>> build_read_query_filters(
-    std::optional<util::BitSet>& col_bitset,
-    const std::shared_ptr<PipelineContext>& pipeline_context,
+    std::shared_ptr<PipelineContext> pipeline_context,
     const FilterRange &range,
     bool dynamic_schema,
     bool column_groups) {
     using namespace arcticdb::pipelines;
     std::vector<FilterQuery<ContainerType>> queries;
 
-    util::variant_match(range,
-                        [&](const RowRange &row_range) {
-                            queries.emplace_back(
-                                    create_row_filter<ContainerType>(RowRange{row_range.first, row_range.second}));
-                        },
-                        [&](const IndexRange &index_range) {
-                            if (index_range.specified_) {
-                                queries.emplace_back(create_index_filter<ContainerType>(index_range, dynamic_schema, column_groups));
-                            }
-                        },
-                        [](const auto &) {}
-    );
-
-    if(col_bitset) {
-        util::check(!dynamic_schema || column_groups, "Did not expect a column bitset with dynamic schema");
-
-        if(column_groups)
-            queries.emplace_back(create_dynamic_col_filter(util::BitSet(*col_bitset), pipeline_context));
-        else
-            queries.emplace_back(create_static_col_filter(util::BitSet(*col_bitset)));
-    }
+    build_row_read_query_filters(range, dynamic_schema, column_groups, queries);
+    build_col_read_query_filters(std::move(pipeline_context), dynamic_schema, column_groups, queries);
 
     return queries;
 }

@@ -340,20 +340,8 @@ ReadVersionOutput LocalVersionedEngine::read_dataframe_version_internal(
     ReadQuery& read_query,
     const ReadOptions& read_options) {
     auto version = get_version_to_read(stream_id, version_query);
-    std::variant<VersionedItem, StreamId> identifier;
-    if(!version) {
-        if(opt_false(read_options.incompletes_)) {
-            log::version().warn("No index:  Key not found for {}, will attempt to use incomplete segments.", stream_id);
-            identifier = stream_id;
-        } else {
-            missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(
-                    "read_dataframe_version: version matching query '{}' not found for symbol '{}'", version_query, stream_id);
-        }
-    }
-    else  {
-        identifier = *version;
-    }
-
+    const std::variant<VersionedItem, StreamId> identifier =
+        get_version_identifier(stream_id, version_query, read_options, version);
     auto frame_and_descriptor = read_dataframe_internal(identifier, read_query, read_options);
     return ReadVersionOutput{version.value_or(VersionedItem{}), std::move(frame_and_descriptor)};
 }
@@ -1041,7 +1029,11 @@ folly::Future<ReadVersionOutput> async_read_direct(
     auto index_segment_reader = std::make_shared<index::IndexSegmentReader>(std::move(index_segment));
 
     check_column_and_date_range_filterable(*index_segment_reader, read_query);
-    add_index_columns_to_query(read_query, index_segment_reader->tsd());
+    // When read_query.columns is empty means that we want to read all columns. There is no need to add the
+    // index explicitly.
+    if (!read_query.columns.empty()) {
+        add_index_columns_to_query(read_query, index_segment_reader->tsd());
+    }
 
     auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor{index_segment_reader->tsd().as_stream_descriptor()});
     pipeline_context->set_selected_columns(read_query.columns);
@@ -1805,4 +1797,41 @@ std::shared_ptr<VersionMap> LocalVersionedEngine::_test_get_version_map() {
 void LocalVersionedEngine::_test_set_store(std::shared_ptr<Store> store) {
     set_store(std::move(store));
 }
+
+std::variant<VersionedItem, StreamId> LocalVersionedEngine::get_version_identifier(
+    const StreamId& stream_id,
+    const VersionQuery& version_query,
+    const ReadOptions& read_options,
+    const std::optional<VersionedItem>& version
+) {
+    if (!version) {
+        if (opt_false(read_options.incompletes_)) {
+            log::version().warn("No index: Key not found for {}, will attempt to use incomplete segments.", stream_id);
+            return stream_id;
+        } else {
+            missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(
+                "read_dataframe_version: version matching query '{}' not found for symbol '{}'",
+                version_query,
+                stream_id
+            );
+        }
+    }
+    return *version;
+}
+
+ReadVersionOutput LocalVersionedEngine::read_index_columns_internal(
+    const StreamId& stream_id,
+    const VersionQuery& version_query,
+    ReadQuery& read_query,
+    const ReadOptions& read_options
+) {
+    ARCTICDB_RUNTIME_SAMPLE(ReadIndexColumnsInternal, 0)
+    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: read_index_columns");
+    const std::optional<VersionedItem> version = get_version_to_read(stream_id, version_query);
+    const std::variant<VersionedItem, StreamId> identifier =
+        get_version_identifier(stream_id, version_query, read_options, version);
+    FrameAndDescriptor frame_and_descriptor = read_index_columns_impl(store(), identifier, read_query, read_options);
+    return ReadVersionOutput{version.value_or(VersionedItem{}), std::move(frame_and_descriptor)};
+}
+
 } // arcticdb::version_store
