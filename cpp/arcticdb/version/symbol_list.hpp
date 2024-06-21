@@ -165,6 +165,8 @@ class SymbolList {
         return load(data_.version_map_, store, false);
     }
 
+    size_t compact(const std::shared_ptr<Store>& store);
+
     static void add_symbol(const std::shared_ptr<Store>& store, const entity::StreamId& symbol, entity::VersionId reference_id);
 
     static void remove_symbol(const std::shared_ptr<Store>& store, const entity::StreamId& symbol, entity::VersionId reference_id);
@@ -172,6 +174,8 @@ class SymbolList {
     static void clear(const std::shared_ptr<Store>& store);
 
 private:
+    void compact_internal(const std::shared_ptr<Store>& store, LoadResult& load_result) const;
+
     [[nodiscard]] bool needs_compaction(const LoadResult& load_result) const;
 };
 
