@@ -761,13 +761,7 @@ std::set<StreamId> SymbolList::load(
                 OnExit x([&lock, &store] { lock.unlock(store); });
 
                 ARCTICDB_RUNTIME_DEBUG(log::symbol(),"Checking whether we still need to compact under lock");
-                if(!has_recent_compaction(store, load_result.maybe_previous_compaction)) {
-                    auto written = write_symbols(store,
-                                                 load_result.symbols_,
-                                                 compaction_id,
-                                                 data_.type_holder_);
-                    delete_keys(store, load_result.detach_symbol_list_keys(), std::get<AtomKey>(written));
-                }
+                compact_internal(store, load_result);
             } else {
                 ARCTICDB_RUNTIME_DEBUG(log::symbol(),"Not compacting the symbol list due to lock contention");
             }
@@ -786,6 +780,32 @@ std::set<StreamId> SymbolList::load(
     }
 
     return output;
+}
+
+size_t SymbolList::compact(const std::shared_ptr<Store>& store) {
+    auto version_map = data_.version_map_;
+    LoadResult load_result = ExponentialBackoff<StorageException>(100, 2000)
+            .go([this, &version_map, &store]() { return attempt_load(version_map, store, data_); });
+    auto num_symbol_list_keys = load_result.symbol_list_keys_.size();
+
+    ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Forcing compaction. Obtaining lock...");
+    StorageLock lock{StringId{CompactionLockName}};
+    lock.lock_timeout(store, 10000);
+    OnExit x([&lock, &store] { lock.unlock(store); });
+
+    ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Checking whether we still need to compact under lock");
+    compact_internal(store, load_result);
+    return num_symbol_list_keys;
+}
+
+void SymbolList::compact_internal(const std::shared_ptr<Store>& store, LoadResult& load_result) const {
+    if(!has_recent_compaction(store, load_result.maybe_previous_compaction)) {
+        auto written = write_symbols(store,
+                                     load_result.symbols_,
+                                     compaction_id,
+                                     data_.type_holder_);
+        delete_keys(store, load_result.detach_symbol_list_keys(), std::get<AtomKey>(written));
+    }
 }
 
 } //namespace arcticdb

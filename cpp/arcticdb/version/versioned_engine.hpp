@@ -140,6 +140,8 @@ public:
         const std::optional<bool>& opt_all_symbols
     ) = 0;
 
+    virtual size_t compact_symbol_list_internal() = 0;
+
     virtual IndexRange get_index_range(
         const StreamId &stream_id,
         const VersionQuery& version_query) = 0;
