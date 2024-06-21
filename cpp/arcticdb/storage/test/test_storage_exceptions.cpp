@@ -407,7 +407,7 @@ TEST(S3MockStorageTest, TestUnexpectedS3ErrorException ) {
     S3MockStorageFactory factory;
     auto storage = factory.create();
 
-    std::string failureSymbol = s3::MockS3Client::get_failure_trigger("sym1", StorageOperation::READ, Aws::S3::S3Errors::NETWORK_CONNECTION, false);
+    std::string failureSymbol = s3::MockS3Client::get_failure_trigger("sym{1}", StorageOperation::READ, Aws::S3::S3Errors::NETWORK_CONNECTION, false);
 
     ASSERT_THROW({
         read_in_store(*storage, failureSymbol);
@@ -460,7 +460,7 @@ TEST(AzureMockStorageTest, TestUnexpectedAzureErrorException ) {
         read_in_store(*storage, failureSymbol);
     },  UnexpectedAzureException);
 
-    failureSymbol = azure::MockAzureClient::get_failure_trigger("sym1", StorageOperation::READ,
+    failureSymbol = azure::MockAzureClient::get_failure_trigger("sym{1}", StorageOperation::READ,
                                                                 "",
                                                                 Azure::Core::Http::HttpStatusCode::InternalServerError);
 
@@ -552,7 +552,7 @@ TEST(MongoMockStorageTest, test_list) {
     }
     ASSERT_EQ(list_in_store(*store), symbols);
 
-    write_in_store(*store, mongo::MockMongoClient::get_failure_trigger("symbol_99", StorageOperation::LIST, mongo::MongoError::HostNotFound));
+    write_in_store(*store, mongo::MockMongoClient::get_failure_trigger("symbol_{99}", StorageOperation::LIST, mongo::MongoError::HostNotFound));
 
     ASSERT_THROW(list_in_store(*store), UnexpectedMongoException);
 }
