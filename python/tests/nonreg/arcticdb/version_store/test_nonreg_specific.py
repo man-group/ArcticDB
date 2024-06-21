@@ -12,7 +12,7 @@ import pytest
 import sys
 
 from arcticdb.util.test import assert_frame_equal, assert_series_equal
-from arcticdb.util._versions import IS_PANDAS_TWO
+from arcticdb_ext.storage import KeyType
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor
 from tests.util.date import DateRange
 
@@ -295,3 +295,28 @@ def test_date_range_multi_index(lmdb_version_store):
         sym, date_range=DateRange(pd.Timestamp("2099-01-01"), pd.Timestamp("2099-01-02"))
     ).data
     assert_frame_equal(result_df, expected_df)
+
+
+# TODO: Extend to all ways of setting prune previous:
+# - lib config
+# - kwarg
+# - env var
+# TODO: Extend test to all modification functions:
+# - write
+# - append
+# - update
+# - write_metadata
+# - compact_incomplete
+# - defragment_symbol_data
+# - batch_write
+# - batch_append
+# - batch_write_metadata
+def test_prune_previous(version_store_factory):
+    # TODO: Check if use_tombstones is needed
+    lib = version_store_factory(prune_previous_version=True, use_tombstones=True)
+    lt = lib.library_tool()
+    sym = "test_prune_previous"
+    lib.write(sym, pd.DataFrame({"col": [0]}))
+    lib.append(sym, pd.DataFrame({"col": [1]}))
+
+    assert len(lt.find_keys(KeyType.TABLE_DATA)) == 1
