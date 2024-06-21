@@ -19,7 +19,7 @@ and diagrams are generated, even undocumented classes / functions. This gives ab
 
 Install
 ```
-pip3 install mkdocs-material mkdocs-jupyter 'mkdocstrings[python]' black pybind11-stubgen mike
+pip3 install mkdocs-material mkdocs-jupyter 'mkdocstrings[python]' black pybind11-stubgen mike wheel
 ```
 - mkdocs-material: theme
 - mkdocs-jupyter: jupyter notebook support
