@@ -112,7 +112,8 @@ class PythonVersionStore : public LocalVersionedEngine {
     VersionedItem delete_range(
         const StreamId& stream_id,
         const UpdateQuery& query,
-        bool dynamic_schema);
+        bool dynamic_schema,
+        bool prune_previous_versions);
 
     void append_incomplete(
         const StreamId& stream_id,
