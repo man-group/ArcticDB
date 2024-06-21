@@ -44,8 +44,8 @@ std::optional<Azure::Core::RequestFailedException> has_failure_trigger(const std
         auto error_code = blob_name.substr(start, blob_name.find_last_of('_') - start);
         auto status_code_string = blob_name.substr(blob_name.find_last_of('_') + 1);
         auto status_code = Azure::Core::Http::HttpStatusCode(std::stoi(status_code_string));
-        auto error_message = fmt::format("Simulated Error, message: operation {}, error code {} statuscode {}",
-                                         operation_to_string(operation), error_code, static_cast<int>(status_code));
+        auto error_message = fmt::format("Simulated Error, message: operation {}, blob name {} error code {} statuscode {}",
+                                         operation_to_string(operation), blob_name, error_code, static_cast<int>(status_code));
 
         return get_exception(error_message, error_code, status_code);
     } catch (std::exception&) {
