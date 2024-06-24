@@ -454,13 +454,12 @@ struct DecodeMetadataTask : BaseTask {
     }
 };
 
-
 struct DecodeTimeseriesDescriptorTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(DecodeTimeseriesDescriptorTask)
 
     DecodeTimeseriesDescriptorTask() = default;
 
-    std::pair<VariantKey, TimeseriesDescriptor> operator()(storage::KeySegmentPair &&ks) const {
+    std::tuple<VariantKey, TimeseriesDescriptor, StreamDescriptor> operator()(storage::KeySegmentPair &&ks) const {
         ARCTICDB_SAMPLE(DecodeTimeseriesDescriptorTask, 0)
         auto key_seg = std::move(ks);
         ARCTICDB_DEBUG(log::storage(), "DecodeTimeseriesDescriptorTask decoding segment of size {} with key {}",
@@ -469,15 +468,16 @@ struct DecodeTimeseriesDescriptorTask : BaseTask {
         auto maybe_desc = decode_timeseries_descriptor(key_seg.segment());
 
         util::check(static_cast<bool>(maybe_desc), "Failed to decode timeseries descriptor");
-        return std::make_pair(
+        return std::make_tuple(
             std::move(key_seg.variant_key()),
             TimeseriesDescriptor{
                 std::make_shared<TimeseriesDescriptor::Proto>(std::move(std::get<1>(*maybe_desc))),
-                    std::make_shared<FieldCollection>(std::move(std::get<2>(*maybe_desc)))}
+                    std::make_shared<FieldCollection>(std::move(std::get<2>(*maybe_desc)))},
+            std::move(std::get<3>(*maybe_desc))
             );
-
     }
 };
+
 struct DecodeMetadataAndDescriptorTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(DecodeMetadataAndDescriptorTask)
 
@@ -495,30 +495,6 @@ struct DecodeMetadataAndDescriptorTask : BaseTask {
             std::move(any),
             std::move(descriptor)
             );
-    }
-};
-
-struct DecodeTimeseriesAndStreamDescriptorTask : BaseTask {
-    ARCTICDB_MOVE_ONLY_DEFAULT(DecodeTimeseriesAndStreamDescriptorTask)
-
-    DecodeTimeseriesAndStreamDescriptorTask() = default;
-
-    std::pair<TimeseriesDescriptor, StreamDescriptor> operator()(storage::KeySegmentPair &&ks) const {
-        ARCTICDB_SAMPLE(DecodeTimeseriesAndStreamDescriptorTask, 0)
-        auto key_seg = std::move(ks);
-        ARCTICDB_DEBUG(log::storage(), "DecodeTimeseriesAndStreamDescriptorTask decoding segment of size {} with key {}",
-                       key_seg.segment().total_segment_size(), variant_key_view(key_seg.variant_key()));
-
-        auto [any, stream_descriptor] = decode_metadata_and_descriptor_fields(key_seg.segment());
-
-        auto timeseries_descriptor = decode_timeseries_descriptor(key_seg.segment());
-        util::check(static_cast<bool>(timeseries_descriptor), "Failed to decode timeseries descriptor");
-
-        auto tsd = TimeseriesDescriptor{
-                std::make_shared<TimeseriesDescriptor::Proto>(std::move(std::get<1>(*timeseries_descriptor))),
-                std::make_shared<FieldCollection>(std::move(std::get<2>(*timeseries_descriptor)))};
-
-        return std::make_pair(std::move(tsd), std::move(stream_descriptor));
     }
 };
 

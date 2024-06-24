@@ -409,7 +409,7 @@ namespace arcticdb {
         }
 
 
-        folly::Future<std::pair<std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>, arcticdb::TimeseriesDescriptor>>
+        folly::Future<std::tuple<std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>, arcticdb::TimeseriesDescriptor, StreamDescriptor>>
         read_timeseries_descriptor(const entity::VariantKey& key,
                                    storage::ReadKeyOpts /*opts*/) override {
             return util::variant_match(key, [&](const AtomKey &ak) {
@@ -417,34 +417,15 @@ namespace arcticdb {
                 if (it == seg_by_atom_key_.end())
                     throw storage::KeyNotFoundException(Composite<VariantKey>(ak));
                 ARCTICDB_DEBUG(log::storage(), "Mock store removing data for atom key {}", ak);
-                return std::make_pair(key, it->second->index_descriptor());
+                return std::make_tuple(key, it->second->index_descriptor(), it->second->descriptor());
                 },
                 [&](const RefKey &rk) {
                 auto it = seg_by_ref_key_.find(rk);
                 if (it == seg_by_ref_key_.end())
                     throw storage::KeyNotFoundException(Composite<VariantKey>(rk));
                 ARCTICDB_DEBUG(log::storage(), "Mock store removing data for ref key {}", rk);
-                return std::make_pair(key, it->second->index_descriptor());
+                return std::make_tuple(key, it->second->index_descriptor(), it->second->descriptor());
             });
-        }
-
-        folly::Future<std::pair<TimeseriesDescriptor, StreamDescriptor>>
-        read_timeseries_and_stream_descriptor(const entity::VariantKey& key,
-                                              storage::ReadKeyOpts) override {
-            return util::variant_match(key, [&](const AtomKey &ak) {
-                                           auto it = seg_by_atom_key_.find(ak);
-                                           if (it == seg_by_atom_key_.end())
-                                               throw storage::KeyNotFoundException(Composite<VariantKey>(ak));
-                                           ARCTICDB_DEBUG(log::storage(), "Mock store reading descriptors for atom key {}", ak);
-                                           return std::make_pair(it->second->index_descriptor(), it->second->descriptor());
-                                       },
-                                       [&](const RefKey &rk) {
-                                           auto it = seg_by_ref_key_.find(rk);
-                                           if (it == seg_by_ref_key_.end())
-                                               throw storage::KeyNotFoundException(Composite<VariantKey>(rk));
-                                           ARCTICDB_DEBUG(log::storage(), "Mock store reading descriptors for ref key {}", rk);
-                                           return std::make_pair(it->second->index_descriptor(), it->second->descriptor());
-                                       });
         }
 
         void set_failure_sim(const arcticdb::proto::storage::VersionStoreConfig::StorageFailureSimulator &) override {}
