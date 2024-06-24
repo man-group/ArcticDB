@@ -328,6 +328,41 @@ def test_write_pickle_batch_duplicate_symbols(arctic_library):
     assert not lib.list_symbols()
 
 
+def test_write_pickle_batch_dataerror(library_factory):
+    """Only way to trigger a DataError response with write_pickle_batch is to enable dedup and delete previous version's
+    index key."""
+    lib = library_factory(LibraryOptions(dedup=True))
+    assert lib._nvs._lib_cfg.lib_desc.version.write_options.de_duplication
+
+    lib.write_pickle("s1", 1)
+    lib.write_pickle("s2", 2)
+
+    lib_tool = lib._nvs.library_tool()
+    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+    lib_tool.remove(s1_index_key)
+
+    # When
+    batch = lib.write_pickle_batch(
+        [
+            WritePayload("s1", 3, metadata="great_metadata_s1"),
+            WritePayload("s2", 4, metadata="great_metadata_s2"),
+        ]
+    )
+
+    # Then
+    assert isinstance(batch[0], DataError)
+    assert batch[0].symbol == "s1"
+    assert batch[0].version_request_type is None
+    assert batch[0].version_request_data is None
+    assert batch[0].error_code == ErrorCode.E_KEY_NOT_FOUND
+    assert batch[0].error_category == ErrorCategory.STORAGE
+
+    assert not isinstance(batch[1], DataError)
+    vit = lib.read("s2")
+    assert vit.metadata == "great_metadata_s2"
+    assert vit.data == 4
+
+
 def test_write_batch(library_factory):
     """Should be able to write different size of batch of data."""
     lib = library_factory(LibraryOptions(rows_per_segment=10))
