@@ -651,12 +651,14 @@ class Library:
         """
         self._raise_if_duplicate_symbols_in_batch(payloads)
 
-        return self._nvs.batch_write(
+        return self._nvs._batch_write_internal(
             [p.symbol for p in payloads],
             [p.data for p in payloads],
             [p.metadata for p in payloads],
             prune_previous_version=prune_previous_versions,
             pickle_on_failure=True,
+            validate_index=False,
+            throw_on_error=False,
         )
 
     def append(
