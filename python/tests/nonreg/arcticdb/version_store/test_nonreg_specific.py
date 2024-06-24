@@ -5,6 +5,8 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+import os
+
 import numpy as np
 import pandas as pd
 import datetime
@@ -12,6 +14,7 @@ import pytest
 import sys
 
 from arcticdb.util.test import assert_frame_equal, assert_series_equal
+from arcticdb_ext import set_config_int
 from arcticdb_ext.storage import KeyType
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor
 from tests.util.date import DateRange
@@ -297,26 +300,114 @@ def test_date_range_multi_index(lmdb_version_store):
     assert_frame_equal(result_df, expected_df)
 
 
-# TODO: Extend to all ways of setting prune previous:
-# - lib config
-# - kwarg
-# - env var
-# TODO: Extend test to all modification functions:
-# - write
-# - append
-# - update
-# - write_metadata
-# - compact_incomplete
-# - defragment_symbol_data
-# - batch_write
-# - batch_append
-# - batch_write_metadata
-def test_prune_previous(version_store_factory):
-    # TODO: Check if use_tombstones is needed
-    lib = version_store_factory(prune_previous_version=True, use_tombstones=True)
-    lt = lib.library_tool()
-    sym = "test_prune_previous"
-    lib.write(sym, pd.DataFrame({"col": [0]}))
-    lib.append(sym, pd.DataFrame({"col": [1]}))
+@pytest.mark.parametrize(
+    "method",
+    ("write", "append", "update", "write_metadata", "batch_write", "batch_append", "batch_write_metadata")
+)
+@pytest.mark.parametrize("lib_config", (True, False))
+@pytest.mark.parametrize("env_var", (True, False))
+@pytest.mark.parametrize("arg", (True, False, None))
+def test_prune_previous_general(version_store_factory, method, lib_config, env_var, arg):
+    lib = version_store_factory(prune_previous_version=lib_config, use_tombstones=True)
+    should_be_pruned = lib_config
+    if env_var:
+        os.environ["PRUNE_PREVIOUS_VERSION"] = "true"
+        should_be_pruned = True
+    else:
+        os.environ.pop('PRUNE_PREVIOUS_VERSION', None)
+    if arg is not None:
+        should_be_pruned = arg
 
-    assert len(lt.find_keys(KeyType.TABLE_DATA)) == 1
+    lt = lib.library_tool()
+    sym = f"test_prune_previous_general"
+    df_0 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-01", periods=10))
+    lib.write(sym, df_0)
+
+    df_1 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-11", periods=10))
+    arg_0 = [sym] if method.startswith("batch") else sym
+    arg_1 = [df_1] if method.startswith("batch") else df_1
+
+    getattr(lib, method)(arg_0, arg_1, prune_previous_version=arg)
+
+    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 1 if should_be_pruned else 2
+
+
+@pytest.mark.parametrize("append", (True, False))
+@pytest.mark.parametrize("lib_config", (True, False))
+@pytest.mark.parametrize("env_var", (True, False))
+@pytest.mark.parametrize("arg", (True, False, None))
+def test_prune_previous_compact_incomplete(version_store_factory, append, lib_config, env_var, arg):
+    lib = version_store_factory(prune_previous_version=lib_config, use_tombstones=True)
+    should_be_pruned = lib_config
+    if env_var:
+        os.environ["PRUNE_PREVIOUS_VERSION"] = "true"
+        should_be_pruned = True
+    else:
+        os.environ.pop('PRUNE_PREVIOUS_VERSION', None)
+    if arg is not None:
+        should_be_pruned = arg
+
+    lt = lib.library_tool()
+    sym = f"test_prune_previous_compact_incomplete"
+    df_0 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-01", periods=10))
+    lib.write(sym, df_0)
+
+    df_1 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-11", periods=10))
+    lib.write(sym, df_1, parallel=True)
+
+    lib.compact_incomplete(sym, append, False, prune_previous_version=arg)
+
+    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 1 if should_be_pruned else 2
+
+
+@pytest.mark.parametrize("lib_config", (True, False))
+@pytest.mark.parametrize("env_var", (True, False))
+@pytest.mark.parametrize("arg", (True, False, None))
+def test_prune_previous_delete_date_range(version_store_factory, lib_config, env_var, arg):
+    lib = version_store_factory(prune_previous_version=lib_config, use_tombstones=True)
+    should_be_pruned = lib_config
+    if env_var:
+        os.environ["PRUNE_PREVIOUS_VERSION"] = "true"
+        should_be_pruned = True
+    else:
+        os.environ.pop('PRUNE_PREVIOUS_VERSION', None)
+    if arg is not None:
+        should_be_pruned = arg
+
+    lt = lib.library_tool()
+    sym = f"test_prune_previous_delete_date_range"
+    df_0 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-01", periods=10))
+    lib.write(sym, df_0)
+
+    lib.delete(sym, (pd.Timestamp("2024-01-05"), pd.Timestamp("2024-01-07")), prune_previous_version=arg)
+
+    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 1 if should_be_pruned else 2
+
+
+@pytest.mark.parametrize("lib_config", (True, False))
+@pytest.mark.parametrize("env_var", (True, False))
+@pytest.mark.parametrize("arg", (True, False, None))
+def test_prune_previous_defragment_symbol_data(version_store_factory, lib_config, env_var, arg):
+    lib = version_store_factory(prune_previous_version=lib_config, use_tombstones=True)
+    should_be_pruned = lib_config
+    if env_var:
+        os.environ["PRUNE_PREVIOUS_VERSION"] = "true"
+        should_be_pruned = True
+    else:
+        os.environ.pop('PRUNE_PREVIOUS_VERSION', None)
+    if arg is not None:
+        should_be_pruned = arg
+
+    lt = lib.library_tool()
+    sym = f"test_prune_previous_defragment_symbol_data"
+    df_0 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-01", periods=10))
+    lib.write(sym, df_0)
+    df_1 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-11", periods=10))
+    lib.append(sym, df_1, prune_previous_version=arg)
+
+    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 1 if should_be_pruned else 2
+
+    set_config_int("SymbolDataCompact.SegmentCount", 1)
+    lib.defragment_symbol_data(sym, prune_previous_version=arg)
+
+    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 1 if should_be_pruned else 3
