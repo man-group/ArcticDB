@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import itertools
+import gc
 import time
 import sys
 
@@ -283,6 +284,20 @@ def test_with_prune(object_and_mem_and_lmdb_version_store, symbol):
     # previous versions should be accessible through snapshot
     assert_frame_equal(version_store.read(symbol, as_of="my_snap").data, modified_df)
     assert_frame_equal(version_store.read(symbol, as_of="my_snap2").data, final_df)
+
+
+def test_prune_previous_memory_usage(lmdb_version_store_very_big_map):
+    lib = lmdb_version_store_very_big_map
+    sym = "test_prune_previous_memory_usage"
+    num_versions = 8000
+    for idx in range(num_versions):
+        lib.append(sym, pd.DataFrame({"col": np.arange(idx, idx+1)}), write_if_missing=True)
+    assert len(lib.list_versions(sym)) == num_versions
+    gc.collect()
+    start = time.time()
+    lib.prune_previous_versions(sym)
+    print(f"Prune took {time.time() - start}s")
+    assert len(lib.list_versions(sym)) == 1
 
 
 def test_prune_previous_versions_explicit_method(basic_store, symbol):
