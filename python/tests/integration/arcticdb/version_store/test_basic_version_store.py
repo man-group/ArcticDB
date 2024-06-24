@@ -2539,6 +2539,7 @@ def test_load_streaming_data():
     res = lib.read("IMBALANCE:FR US", date_range=(None, None))
     data = res.data
     print(data)
+    assert res.data.size == 5
 
 
 def test_symbol_list():
