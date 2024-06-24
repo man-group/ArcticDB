@@ -1229,7 +1229,8 @@ class Library:
         metadata
             Metadata to persist along with the symbol
         prune_previous_versions : `Optional[bool]`, default=False
-            Removes previous (non-snapshotted) versions from the database.
+            Removes previous (non-snapshotted) versions from the database. Note that metadata is versioned alongside the
+            data it is referring to, and so this operation removes old versions of data as well as metadata.
 
         Returns
         -------
@@ -1253,7 +1254,8 @@ class Library:
         write_metadata_payloads : `List[WriteMetadataPayload]`
             Symbols and their corresponding metadata. There must not be any duplicate symbols in `payload`.
         prune_previous_versions : `Optional[bool]`, default=False
-            Removes previous (non-snapshotted) versions from the database.
+            Removes previous (non-snapshotted) versions from the database. Note that metadata is versioned alongside the
+            data it is referring to, and so this operation removes old versions of data as well as metadata.
 
         Returns
         -------
