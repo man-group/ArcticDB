@@ -621,7 +621,7 @@ class Library:
 
     def write_pickle_batch(
         self, payloads: List[WritePayload], prune_previous_versions: bool = False
-    ) -> List[VersionedItem]:
+    ) -> List[Union[VersionedItem, DataError]]:
         """
         Write a batch of multiple symbols, pickling their data if necessary.
 
@@ -634,9 +634,10 @@ class Library:
 
         Returns
         -------
-        List[VersionedItem]
+        List[Union[VersionedItem, DataError]]
             Structures containing metadata and version number of the written symbols in the store, in the
-            same order as `payload`.
+            same order as `payload`. If a key error or any other internal exception is raised, a DataError object is
+            returned, with symbol, error_code, error_category, and exception_string properties.
 
         Raises
         ------
