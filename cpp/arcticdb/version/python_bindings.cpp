@@ -611,6 +611,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("list_streams",
              &PythonVersionStore::list_streams,
              py::call_guard<SingleThreadMutexHolder>(), "List all the stream ids that have been written")
+        .def("compact_symbol_list",
+             &PythonVersionStore::compact_symbol_list,
+             py::call_guard<SingleThreadMutexHolder>(), "Compacts the symbol list cache into a single key in the storage")
         .def("read_metadata",
              &PythonVersionStore::read_metadata,
              py::call_guard<SingleThreadMutexHolder>(), "Get back the metadata and version info for a symbol.")

@@ -318,6 +318,8 @@ class PythonVersionStore : public LocalVersionedEngine {
         ReadQuery& read_query,
         const ReadOptions& read_options);
 
+    size_t compact_symbol_list();
+
     void clear(const bool continue_on_error = true);
     bool empty();
     void force_delete_symbol(const StreamId& stream_id);

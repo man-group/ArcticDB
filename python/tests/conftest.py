@@ -32,12 +32,11 @@ from arcticdb.storage_fixtures.mongo import auto_detect_server
 from arcticdb.storage_fixtures.in_memory import InMemoryStorageFixture
 from arcticdb.version_store._normalization import MsgPackNormalizer
 from arcticdb.util.test import create_df
-from tests.util.mark import (
+from .util.mark import (
     AZURE_TESTS_MARK,
     MONGO_TESTS_MARK,
     REAL_S3_TESTS_MARK,
-    SSL_TEST_ENABLED,
-    ARCTICDB_USING_CONDA
+    SSL_TEST_SUPPORTED,
 )
 
 # region =================================== Misc. Constants & Setup ====================================
@@ -114,13 +113,13 @@ def lmdb_library(lmdb_storage, lib_name):
 # ssl is enabled by default to maximize test coverage as ssl is enabled most of the times in real world
 @pytest.fixture(scope="session")
 def s3_storage_factory():
-    with MotoS3StorageFixtureFactory(use_ssl=SSL_TEST_ENABLED) as f:
+    with MotoS3StorageFixtureFactory(use_ssl=SSL_TEST_SUPPORTED, ssl_test_support=SSL_TEST_SUPPORTED) as f:
         yield f
 
 
 @pytest.fixture(scope="session")
 def s3_no_ssl_storage_factory():
-    with MotoS3StorageFixtureFactory(use_ssl=False) as f:
+    with MotoS3StorageFixtureFactory(use_ssl=False, ssl_test_support=SSL_TEST_SUPPORTED) as f:
         yield f
 
 
@@ -170,7 +169,7 @@ def real_s3_storage(real_s3_storage_factory):
 # ssl cannot be ON by default due to azurite performance constraints https://github.com/man-group/ArcticDB/issues/1539
 @pytest.fixture(scope="session")
 def azurite_storage_factory():
-    with AzuriteStorageFixtureFactory(use_ssl=False) as f:
+    with AzuriteStorageFixtureFactory(use_ssl=False, ssl_test_support=SSL_TEST_SUPPORTED) as f:
         yield f
 
 
@@ -182,7 +181,7 @@ def azurite_storage(azurite_storage_factory: AzuriteStorageFixtureFactory):
 
 @pytest.fixture(scope="session")
 def azurite_ssl_storage_factory():
-    with AzuriteStorageFixtureFactory(use_ssl=True) as f:
+    with AzuriteStorageFixtureFactory(use_ssl=True, ssl_test_support=SSL_TEST_SUPPORTED) as f:
         yield f
 
 

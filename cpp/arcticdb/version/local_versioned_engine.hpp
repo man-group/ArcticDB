@@ -187,6 +187,8 @@ public:
         const std::optional<bool>& opt_all_symbols
     ) override;
 
+    size_t compact_symbol_list_internal() override;
+
     VersionedItem  write_versioned_dataframe_internal(
         const StreamId& stream_id,
         const std::shared_ptr<InputTensorFrame>& frame,

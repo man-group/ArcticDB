@@ -2075,6 +2075,24 @@ class NativeVersionStore:
             use_symbol_list = False
         return list(self.version_store.list_streams(snapshot, regex, prefix, use_symbol_list, all_symbols))
 
+    def compact_symbol_list(self) -> int:
+        """
+        Compact the symbol list cache into a single key in the storage
+
+        Returns
+        -------
+        The number of symbol list keys prior to compaction
+
+
+        Raises
+        ------
+        PermissionException
+            Library has been opened in read-only mode
+        InternalException
+            Storage lock required to compact the symbol list could not be acquired
+        """
+        return self.version_store.compact_symbol_list()
+
     def list_snapshots(self, load_metadata: Optional[bool] = True) -> Dict[str, Any]:
         """
         List the snapshots in the library.
@@ -2459,9 +2477,9 @@ class NativeVersionStore:
 
     def _get_time_range_from_ts(self, desc, min_ts, max_ts):
         if desc.stream_descriptor.index.kind != IndexDescriptor.Type.TIMESTAMP or \
-            desc.stream_descriptor.sorted == SortedValue.UNSORTED or \
-            min_ts is None or \
-            max_ts is None:
+                desc.stream_descriptor.sorted == SortedValue.UNSORTED or \
+                min_ts is None or \
+                max_ts is None:
             return datetime64("nat"), datetime64("nat")
         input_type = desc.normalization.WhichOneof("input_type")
         tz = None

@@ -650,7 +650,7 @@ std::vector<SliceAndKey> read_and_process(
     // i.e. if the first processing unit needs ranges_and_keys[0] and ranges_and_keys[1], and the second needs ranges_and_keys[2] and ranges_and_keys[3]
     // then the structure will be {{0, 1}, {2, 3}}
     std::vector<std::vector<size_t>> processing_unit_indexes = read_query.clauses_[0]->structure_for_processing(ranges_and_keys, start_from);
-        component_manager->set_next_entity_id(ranges_and_keys.size());
+    component_manager->set_next_entity_id(ranges_and_keys.size());
 
     // Start reading as early as possible
     auto segment_and_slice_futures = store->batch_read_uncompressed(std::move(ranges_and_keys), columns_to_decode(pipeline_context));
@@ -1283,9 +1283,10 @@ VersionedItem sort_merge_impl(
         [&](const stream::TimeseriesIndex &timeseries_index) {
             read_query.clauses_.emplace_back(std::make_shared<Clause>(SortClause{timeseries_index.name()}));
             read_query.clauses_.emplace_back(std::make_shared<Clause>(RemoveColumnPartitioningClause{}));
-            const auto split_size = ConfigsMap::instance()->get_int("Split.RowCount", 10000);
-            read_query.clauses_.emplace_back(std::make_shared<Clause>(SplitClause{static_cast<size_t>(split_size)}));
-            read_query.clauses_.emplace_back(std::make_shared<Clause>(MergeClause{timeseries_index, DenseColumnPolicy{}, stream_id, pipeline_context->descriptor()}));
+            //const auto split_size = ConfigsMap::instance()->get_int("Split.RowCount", 10000);
+            //read_query.clauses_.emplace_back(std::make_shared<Clause>(SplitClause{static_cast<size_t>(split_size)}));
+
+            read_query.clauses_.emplace_back(std::make_shared<Clause>(MergeClause{timeseries_index, SparseColumnPolicy{}, stream_id, pipeline_context->descriptor()}));
             auto segments = read_and_process(store, pipeline_context, read_query, ReadOptions{}, pipeline_context->incompletes_after());
             pipeline_context->total_rows_ = num_versioned_rows + get_slice_rowcounts(segments);
 

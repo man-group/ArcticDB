@@ -440,7 +440,7 @@ public:
     void inflate_string_array(const TensorType<position_t> &string_refs,
                               CursoredBuffer<ChunkedBuffer> &data,
                               CursoredBuffer<Buffer> &shapes,
-                              std::vector<position_t> &offsets,
+                              boost::container::small_vector<position_t, 1> &offsets,
                               const StringPool &string_pool);
 
     void inflate_string_arrays(const StringPool &string_pool);
@@ -920,7 +920,7 @@ private:
     CursoredBuffer<ChunkedBuffer> data_;
     CursoredBuffer<Buffer> shapes_;
 
-    mutable std::vector<position_t> offsets_;
+    mutable boost::container::small_vector<position_t, 1> offsets_;
     TypeDescriptor type_;
     std::optional<TypeDescriptor> orig_type_;
     ssize_t last_logical_row_ = -1;

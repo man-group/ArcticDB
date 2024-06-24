@@ -109,9 +109,11 @@ struct IClause {
 
 using Clause = folly::Poly<IClause>;
 
-std::vector<std::vector<size_t>> structure_by_row_slice(std::vector<RangesAndKey>& ranges_and_keys,
-                                                        size_t start_from);
+std::vector<std::vector<size_t>> structure_by_row_slice(std::vector<RangesAndKey>& ranges_and_keys, size_t start_from);
+
 std::vector<std::vector<size_t>> structure_by_column_slice(std::vector<RangesAndKey>& ranges_and_keys);
+
+std::vector<std::vector<size_t>> structure_all_together(std::vector<RangesAndKey>& ranges_and_keys);
 
 Composite<ProcessingUnit> gather_entities(std::shared_ptr<ComponentManager> component_manager,
                                           Composite<EntityIds>&& entity_ids,
@@ -614,8 +616,8 @@ struct MergeClause {
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
             std::vector<RangesAndKey>& ranges_and_keys,
-            size_t start_from) {
-        return structure_by_row_slice(ranges_and_keys, start_from);
+            size_t) {
+        return structure_all_together(ranges_and_keys);
     }
 
     [[nodiscard]] Composite<EntityIds> process(Composite<EntityIds>&& entity_ids) const;
