@@ -25,7 +25,6 @@ from .api import *
 from .utils import get_ephemeral_port, GracefulProcessUtils, wait_for_server_to_come_up, safer_rmtree, get_ca_cert_for_testing
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 from arcticdb.version_store.helper import add_s3_library_to_env
-from tests.util.mark import SSL_TEST_ENABLED
 
 # All storage client libraries to be imported on-demand to speed up start-up of ad-hoc test runs
 
@@ -217,8 +216,9 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
     _bucket_id = 0
     _live_buckets: List[S3Bucket] = []
 
-    def __init__(self, use_ssl: bool):
+    def __init__(self, use_ssl: bool, ssl_test_support: bool):
         self.http_protocol = "https" if use_ssl else "http"
+        self.ssl_test_support = ssl_test_support
 
     @staticmethod
     def run_server(port, key_file, cert_file):
@@ -290,7 +290,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         self._iam_endpoint = f"{self.http_protocol}://localhost:{port}"
 
         self.ssl = self.http_protocol == "https" # In real world, using https protocol doesn't necessarily mean ssl will be verified
-        if SSL_TEST_ENABLED:
+        if self.ssl_test_support:
             self.ca, self.key_file, self.cert_file, self.client_cert_file = get_ca_cert_for_testing(self.working_dir)
         else:
             self.ca = ""

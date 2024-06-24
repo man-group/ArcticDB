@@ -315,9 +315,10 @@ class PythonResampleClause:
 class QueryBuilder:
     """
     Build a query to process read results with. Syntax is designed to be similar to Pandas:
-        >>> q = adb.QueryBuilder()
-        >>> q = q[q["a"] < 5] (equivalent to q = q[q.a < 5] provided the column name is also a valid Python variable name)
-        >>> dataframe = lib.read(symbol, query_builder=q).data
+
+        q = adb.QueryBuilder()
+        q = q[q["a"] < 5] (equivalent to q = q[q.a < 5] provided the column name is also a valid Python variable name)
+        dataframe = lib.read(symbol, query_builder=q).data
 
     For Group By and Aggregation functionality please see the documentation for the `groupby`. For projection
     functionality, see the documentation for the `apply` method.
@@ -325,47 +326,44 @@ class QueryBuilder:
     Supported arithmetic operations when projection or filtering:
 
     * Binary arithmetic: +, -, *, /
-
     * Unary arithmetic: -, abs
 
     Supported filtering operations:
 
-    # isna, isnull, notna, and notnull - return all rows where a specified column is/is not NaN or None. isna is
-    equivalent to isnull, and notna is equivalent to notnull. I.e. no distinction is made between NaN and None values
-    in column types that support both (e.g. strings).
-
-        >>> q = q[q["col"].isna()]
-
+    * isna, isnull, notna, and notnull - return all rows where a specified column is/is not NaN or None. isna is
+    equivalent to isnull, and notna is equivalent to notnull, i.e. no distinction is made between NaN and None values
+    in column types that support both (e.g. strings). For example:
+        ```
+        q = q[q["col"].isna()]
+        ```
+    
     * Binary comparisons: <, <=, >, >=, ==, !=
-
     * Unary NOT: ~
-
     * Binary combinators: &, |, ^
-
     * List membership: isin, isnotin (also accessible with == and !=)
 
     isin/isnotin accept lists, sets, frozensets, 1D ndarrays, or *args unpacking. For example:
 
-        >>> l = [1, 2, 3]
-        >>> q.isin(l)
+        l = [1, 2, 3]
+        q.isin(l)
 
     is equivalent to...
 
-        >>> q.isin(1, 2, 3)
+        q.isin(1, 2, 3)
 
     Boolean columns can be filtered on directly:
 
-        >>> q = adb.QueryBuilder()
-        >>> q = q[q["boolean_column"]]
+        q = adb.QueryBuilder()
+        q = q[q["boolean_column"]]
 
     and combined with other operations intuitively:
 
-        >>> q = adb.QueryBuilder()
-        >>> q = q[(q["boolean_column_1"] & ~q["boolean_column_2"]) & (q["numeric_column"] > 0)]
+        q = adb.QueryBuilder()
+        q = q[(q["boolean_column_1"] & ~q["boolean_column_2"]) & (q["numeric_column"] > 0)]
 
     Arbitrary combinations of these expressions is possible, for example:
 
-        >>> q = q[(((q["a"] * q["b"]) / 5) < (0.7 * q["c"])) & (q["b"] != 12)]
+        q = q[(((q["a"] * q["b"]) / 5) < (0.7 * q["c"])) & (q["b"] != 12)]
 
     See tests/unit/arcticdb/version_store/test_filtering.py for more example uses.
 
@@ -448,11 +446,12 @@ class QueryBuilder:
         """
         Group symbol by column name. GroupBy operations must be followed by an aggregation operator. Currently the following five aggregation
         operators are supported:
-            * "mean" - compute the mean of the group
-            * "sum" - compute the sum of the group
-            * "min" - compute the min of the group
-            * "max" - compute the max of the group
-            * "count" - compute the count of group
+
+        * "mean" - compute the mean of the group
+        * "sum" - compute the sum of the group
+        * "min" - compute the min of the group
+        * "max" - compute the max of the group
+        * "count" - compute the count of group
 
         For usage examples, see below.
 
@@ -464,6 +463,7 @@ class QueryBuilder:
         Examples
         --------
         Average (mean) over two groups:
+
         >>> df = pd.DataFrame(
             {
                 "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"],
@@ -475,9 +475,10 @@ class QueryBuilder:
         >>> q = q.groupby("grouping_column").agg({"to_mean": "mean"})
         >>> lib.write("symbol", df)
         >>> lib.read("symbol", query_builder=q).data
-                      to_mean
-            group_1  1.666667
-            group_2       2.2
+        
+                       to_mean
+             group_1  1.666667
+             group_2       2.2
 
         Max over one group:
 
@@ -492,6 +493,7 @@ class QueryBuilder:
         >>> q = q.groupby("grouping_column").agg({"to_max": "max"})
         >>> lib.write("symbol", df)
         >>> lib.read("symbol", query_builder=q).data
+        
                      to_max
             group_1  5
 
@@ -509,10 +511,12 @@ class QueryBuilder:
         >>> q = q.groupby("grouping_column").agg({"to_max": "max", "to_mean": "mean"})
         >>> lib.write("symbol", df)
         >>> lib.read("symbol", query_builder=q).data
+        
                      to_max   to_mean
             group_1     2.5  1.666667
 
         Min and max over one column, mean over another:
+
         >>> df = pd.DataFrame(
             {
                 "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"],
@@ -526,6 +530,7 @@ class QueryBuilder:
         >>> q = q.agg({"agg_1_min": ("agg_1", "min"), "agg_1_max": ("agg_1", "max"), "agg_2": "mean"})
         >>> lib.write("symbol", df)
         >>> lib.read("symbol", query_builder=q).data
+
                      agg_1_min  agg_1_max     agg_2
             group_1          1          3  1.666667
             group_2          4          5       2.2
@@ -572,25 +577,34 @@ class QueryBuilder:
             label: Optional[str] = None,
     ):
         """
-        Resample symbol on the index. Symbol must be datetime indexed. Resample operations must be followed by an
-        aggregation operator. Currently, the following 7 aggregation operators are supported:
-            * "mean" - compute the mean of the group
-            * "sum" - compute the sum of the group
-            * "min" - compute the min of the group
-            * "max" - compute the max of the group
-            * "count" - compute the count of group
-            * "first" - compute the first value in the group
-            * "last" - compute the last value in the group
-        Note that not all aggregators are supported with all column types.:
-            * Numeric columns - support all aggregators
-            * Bool columns - support all aggregators
-            * String columns - support count, first, and last aggregators
-            * Datetime columns - support all aggregators EXCEPT sum
+        Resample a symbol on the index. The symbol must be datetime indexed. Resample operations must be followed by
+        an aggregation operator. Currently, the following 7 aggregation operators are supported:
+
+        * "mean" - compute the mean of the group
+        * "sum" - compute the sum of the group
+        * "min" - compute the min of the group
+        * "max" - compute the max of the group
+        * "count" - compute the count of group
+        * "first" - compute the first value in the group
+        * "last" - compute the last value in the group
+
+        Note that not all aggregators are supported with all column types:
+
+        * Numeric columns - support all aggregators
+        * Bool columns - support all aggregators
+        * String columns - support count, first, and last aggregators
+        * Datetime columns - support all aggregators EXCEPT sum
+
         Note that time-buckets which contain no index values in the symbol will NOT be included in the returned
         DataFrame. This is not the same as Pandas default behaviour.
         Resampling is currently not supported with:
-            * Dynamic schema where an aggregation column is missing from one or more of the row-slices.
-            * Sparse data.
+
+        * Dynamic schema where an aggregation column is missing from one or more of the row-slices.
+        * Sparse data.
+
+        The resample results match pandas resample with `origin="epoch"`. We plan to add an 'origin' argument in
+        a future release and will then change the default value to '"start_day"' to match the Pandas default. This
+        will change the results in cases where the rule is not a multiple of 24 hours.
 
         Parameters
         ----------
@@ -619,15 +633,17 @@ class QueryBuilder:
             The closed or label arguments are not one of "left" or "right"
         SchemaException
             Raised on call to read if:
-                * If the aggregation specified is not compatible with the type of the column being aggregated as
-                  specified above.
-                * The library has dynamic schema enabled, and at least one of the columns being aggregated is missing
-                  from at least one row-slice.
-                * At least one of the columns being aggregated contains sparse data.
+
+            * If the aggregation specified is not compatible with the type of the column being aggregated as
+              specified above.
+            * The library has dynamic schema enabled, and at least one of the columns being aggregated is missing
+              from at least one row-slice.
+            * At least one of the columns being aggregated contains sparse data.
 
         Examples
         --------
         Resample two hours worth of minutely data down to hourly data, summing the column 'to_sum':
+
         >>> df = pd.DataFrame(
             {
                 "to_sum": np.arange(120),
@@ -638,21 +654,25 @@ class QueryBuilder:
         >>> q = q.resample("h").agg({"to_sum": "sum"})
         >>> lib.write("symbol", df)
         >>> lib.read("symbol", query_builder=q).data
+
                                  to_sum
             2024-01-01 00:00:00    1770
             2024-01-01 01:00:00    5370
 
         As above, but specifying that the closed boundary of each time-bucket is the right hand side, and also to label
-        the output by the right boundary.
+        the output by the right boundary:
+
         >>> q = adb.QueryBuilder()
         >>> q = q.resample("h", closed="right", label="right").agg({"to_sum": "sum"})
         >>> lib.read("symbol", query_builder=q).data
+        
                                  to_sum
             2024-01-01 00:00:00       0
             2024-01-01 01:00:00    1830
             2024-01-01 02:00:00    5310
 
-        Nones, NaNs, and NaTs are omitted from aggregations
+        Nones, NaNs, and NaTs are omitted from aggregations:
+
         >>> df = pd.DataFrame(
             {
                 "to_mean": [1.0, np.nan, 2.0],
@@ -663,10 +683,12 @@ class QueryBuilder:
         >>> q = q.resample("h").agg({"to_mean": "mean"})
         >>> lib.write("symbol", df)
         >>> lib.read("symbol", query_builder=q).data
+
                                  to_mean
             2024-01-01 00:00:00      1.5
 
-        Output column names can be controlled through the format of the dict passed to agg
+        Output column names can be controlled through the format of the dict passed to agg:
+
         >>> df = pd.DataFrame(
             {
                 "agg_1": [1, 2, 3, 4, 5],
@@ -679,6 +701,7 @@ class QueryBuilder:
         >>> q = q.agg({"agg_1_min": ("agg_1", "min"), "agg_1_max": ("agg_1", "max"), "agg_2": "mean"})
         >>> lib.write("symbol", df)
         >>> lib.read("symbol", query_builder=q).data
+
                                  agg_1_min  agg_1_max     agg_2
             2024-01-01 00:00:00          1          5      2.75
         """

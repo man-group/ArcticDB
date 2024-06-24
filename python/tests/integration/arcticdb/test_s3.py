@@ -12,7 +12,6 @@ import pandas as pd
 from arcticdb import Arctic
 from arcticdb_ext.exceptions import StorageException
 from arcticdb_ext import set_config_string
-from arcticdb.storage_fixtures.s3 import MotoS3StorageFixtureFactory
 
 
 def test_s3_storage_failures(mock_s3_store_with_error_simulation):

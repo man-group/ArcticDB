@@ -461,7 +461,7 @@ void Column::inflate_string_array(
         const TensorType<position_t> &string_refs,
         CursoredBuffer<ChunkedBuffer> &data,
         CursoredBuffer<Buffer> &shapes,
-        std::vector<position_t> &offsets,
+        boost::container::small_vector<position_t, 1> &offsets,
         const StringPool &string_pool) {
     ssize_t max_size = 0;
     for (int i = 0; i < string_refs.size(); ++i)
@@ -490,7 +490,7 @@ void Column::inflate_string_arrays(const StringPool &string_pool) {
 
     CursoredBuffer<ChunkedBuffer> data;
     CursoredBuffer<Buffer> shapes;
-    std::vector<position_t> offsets;
+    boost::container::small_vector<position_t, 1> offsets;
     for (position_t row = 0; row < row_count(); ++row) {
         auto string_refs = tensor_at<position_t>(row).value();
         inflate_string_array(string_refs, data, shapes, offsets, string_pool);

@@ -29,9 +29,6 @@ class DefaultStringViewable : public std::shared_ptr<std::string> {
         std::make_shared<std::string>(args...)),
                                             hash_(arcticdb::hash(std::string_view{*this})) {}
 
-    DefaultStringViewable(const DefaultStringViewable &that) :
-        std::shared_ptr<std::string>::shared_ptr(that), hash_(that.hash_) {}
-
     operator std::string_view() const {
         return *this->get();
     }

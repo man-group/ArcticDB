@@ -12,7 +12,7 @@ from arcticdb.storage_fixtures.api import ArcticUriFields
 from arcticdb.storage_fixtures.azure import AzureContainer
 from arcticdb.storage_fixtures.s3 import S3Bucket
 from arcticdb.adapters.s3_library_adapter import USE_AWS_CRED_PROVIDERS_TOKEN
-from tests.util.mark import AZURE_TESTS_MARK, SSL_TEST_ENABLED
+from ..util.mark import AZURE_TESTS_MARK, SSL_TEST_SUPPORTED
 
 LIB_NAME = "test_lib"
 
@@ -105,7 +105,7 @@ def test_upgrade_script_s3_rbac_ok(s3_storage: S3Bucket, monkeypatch):
 @AZURE_TESTS_MARK
 def test_upgrade_script_dryrun_azure(azurite_storage: AzureContainer):
     # Given
-    if SSL_TEST_ENABLED:
+    if SSL_TEST_SUPPORTED:
         # azurite factory doesn't set client_cert_dir by default
         azurite_storage.arctic_uri += f";CA_cert_dir={azurite_storage.factory.client_cert_dir}"
     ac = azurite_storage.create_arctic()
@@ -129,7 +129,7 @@ def test_upgrade_script_dryrun_azure(azurite_storage: AzureContainer):
 @AZURE_TESTS_MARK
 def test_upgrade_script_azure(azurite_storage: AzureContainer):
     # Given
-    if SSL_TEST_ENABLED:
+    if SSL_TEST_SUPPORTED:
         # azurite factory doesn't set client_cert_dir by default
         azurite_storage.arctic_uri += f";CA_cert_dir={azurite_storage.factory.client_cert_dir}"
     ac = azurite_storage.create_arctic()

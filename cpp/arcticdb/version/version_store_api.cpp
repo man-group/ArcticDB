@@ -504,6 +504,10 @@ std::set<StreamId> PythonVersionStore::list_streams(
     return list_streams_internal(snap_name, regex, prefix, opt_use_symbol_list, opt_all_symbols);
 }
 
+size_t PythonVersionStore::compact_symbol_list() {
+    return compact_symbol_list_internal();
+}
+
 VersionedItem PythonVersionStore::write_partitioned_dataframe(
     const StreamId& stream_id,
     const py::tuple &item,

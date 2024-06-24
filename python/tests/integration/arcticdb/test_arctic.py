@@ -35,7 +35,7 @@ from arcticdb.version_store.library import (
     ArcticInvalidApiUsageException,
 )
 
-from tests.util.mark import AZURE_TESTS_MARK, MONGO_TESTS_MARK, REAL_S3_TESTS_MARK, SSL_TESTS_MARK, SSL_TEST_ENABLED
+from ...util.mark import AZURE_TESTS_MARK, MONGO_TESTS_MARK, REAL_S3_TESTS_MARK, SSL_TESTS_MARK, SSL_TEST_SUPPORTED
 
 class ParameterDisplayStatus(Enum):
     NOT_SHOW = 1
@@ -52,7 +52,7 @@ class DefaultSetting:
 
 def edit_connection_string(uri, delimiter, storage, ssl_setting, client_cert_file, client_cert_dir):
     # Clear default setting in the uri
-    if SSL_TEST_ENABLED:
+    if SSL_TEST_SUPPORTED:
         uri = storage.replace_uri_field(uri, ArcticUriFields.CA_PATH, "", start=1, end=3).rstrip(delimiter)
         if isinstance(storage, S3Bucket) and "&ssl=" in uri:
             uri = storage.replace_uri_field(uri, ArcticUriFields.SSL, "", start=1, end=3).rstrip(delimiter)
@@ -73,10 +73,10 @@ def edit_connection_string(uri, delimiter, storage, ssl_setting, client_cert_fil
         uri += f"{delimiter}CA_cert_dir={storage.factory.client_cert_dir}"
     return uri
 
-# s3_storage will become non-ssl if SSL_TEST_ENABLED is False
-@pytest.mark.parametrize('client_cert_file', parameter_display_status if SSL_TEST_ENABLED else no_ssl_parameter_display_status)
-@pytest.mark.parametrize('client_cert_dir', parameter_display_status if SSL_TEST_ENABLED else no_ssl_parameter_display_status)
-@pytest.mark.parametrize('ssl_setting', parameter_display_status if SSL_TEST_ENABLED else no_ssl_parameter_display_status)
+# s3_storage will become non-ssl if SSL_TEST_SUPPORTED is False
+@pytest.mark.parametrize('client_cert_file', parameter_display_status if SSL_TEST_SUPPORTED else no_ssl_parameter_display_status)
+@pytest.mark.parametrize('client_cert_dir', parameter_display_status if SSL_TEST_SUPPORTED else no_ssl_parameter_display_status)
+@pytest.mark.parametrize('ssl_setting', parameter_display_status if SSL_TEST_SUPPORTED else no_ssl_parameter_display_status)
 def test_s3_verification(monkeypatch, s3_storage, client_cert_file, client_cert_dir, ssl_setting):
     storage = s3_storage
     # Leaving ca file and ca dir unset will fallback to using os default setting,
