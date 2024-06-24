@@ -620,7 +620,7 @@ class Library:
         )
 
     def write_pickle_batch(
-        self, payloads: List[WritePayload], prune_previous_versions: bool = False, staged=False
+        self, payloads: List[WritePayload], prune_previous_versions: bool = False
     ) -> List[VersionedItem]:
         """
         Write a batch of multiple symbols, pickling their data if necessary.
@@ -630,9 +630,7 @@ class Library:
         payloads : `List[WritePayload]`
             Symbols and their corresponding data. There must not be any duplicate symbols in `payload`.
         prune_previous_versions: `bool`, default=False
-            See `write`.
-        staged: `bool`, default=False
-            See `write`.
+            Removes previous (non-snapshotted) versions from the database.
 
         Returns
         -------
@@ -658,7 +656,6 @@ class Library:
             [p.metadata for p in payloads],
             prune_previous_version=prune_previous_versions,
             pickle_on_failure=True,
-            parallel=staged,
         )
 
     def append(
