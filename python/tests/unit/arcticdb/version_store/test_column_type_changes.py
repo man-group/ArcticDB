@@ -95,6 +95,7 @@ def test_changing_fixed_string_width(version_store_factory, dynamic_schema, wide
     received_update = lib.read(sym_update).data
     assert_frame_equal(expected_update, received_update)
 
+
 def test_type_promotion_stored_in_index_key(lmdb_version_store_dynamic_schema):
     lib = lmdb_version_store_dynamic_schema
     lib_tool = lib.library_tool()

@@ -232,16 +232,10 @@ folly::Future<std::tuple<VariantKey, std::optional<google::protobuf::Any>, Strea
     return read_and_continue(key, library_, opts, DecodeMetadataAndDescriptorTask{});
 }
 
-folly::Future<std::pair<VariantKey, TimeseriesDescriptor>> read_timeseries_descriptor(
+folly::Future<std::tuple<VariantKey, TimeseriesDescriptor, StreamDescriptor>> read_timeseries_descriptor(
         const entity::VariantKey &key,
         storage::ReadKeyOpts opts = storage::ReadKeyOpts{}) override {
     return read_and_continue(key, library_, opts, DecodeTimeseriesDescriptorTask{});
-}
-
-folly::Future<std::pair<TimeseriesDescriptor, StreamDescriptor>>
-read_timeseries_and_stream_descriptor(const entity::VariantKey& key,
-                                      storage::ReadKeyOpts opts) override {
-        return read_and_continue(key, library_, opts, DecodeTimeseriesAndStreamDescriptorTask{});
 }
 
 folly::Future<bool> key_exists(const entity::VariantKey &key) override {

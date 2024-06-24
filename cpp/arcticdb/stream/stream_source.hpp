@@ -76,13 +76,9 @@ struct StreamSource {
         storage::ReadKeyOpts opts = storage::ReadKeyOpts{}
         ) = 0;
 
-    virtual folly::Future<std::pair<VariantKey, TimeseriesDescriptor>>
+    virtual folly::Future<std::tuple<VariantKey, TimeseriesDescriptor, StreamDescriptor>>
         read_timeseries_descriptor(const entity::VariantKey& key,
                                    storage::ReadKeyOpts opts = storage::ReadKeyOpts{}) = 0;
-
-    virtual folly::Future<std::pair<TimeseriesDescriptor, StreamDescriptor>>
-        read_timeseries_and_stream_descriptor(const entity::VariantKey& key,
-                               storage::ReadKeyOpts opts = storage::ReadKeyOpts{}) = 0;
 
 };
 

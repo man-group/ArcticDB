@@ -56,7 +56,7 @@ std::optional<google::protobuf::Any> decode_metadata_from_segment(
 std::pair<std::optional<google::protobuf::Any>, StreamDescriptor> decode_metadata_and_descriptor_fields(
     Segment& segment);
 
-std::optional<std::tuple<google::protobuf::Any, arcticdb::proto::descriptors::TimeSeriesDescriptor, FieldCollection>> decode_timeseries_descriptor(
+std::optional<std::tuple<google::protobuf::Any, arcticdb::proto::descriptors::TimeSeriesDescriptor, FieldCollection, StreamDescriptor>> decode_timeseries_descriptor(
     Segment& segment);
 
 HashedValue hash_segment_header(const arcticdb::proto::encoding::SegmentHeader &hdr);

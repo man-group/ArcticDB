@@ -223,7 +223,8 @@ std::optional<
         std::tuple<
                 google::protobuf::Any,
                 arcticdb::proto::descriptors::TimeSeriesDescriptor,
-                FieldCollection
+                FieldCollection,
+                StreamDescriptor
         >
 >
 decode_timeseries_descriptor(
@@ -241,7 +242,6 @@ decode_timeseries_descriptor(
         return std::nullopt;
 
     auto tsd = timeseries_descriptor_from_any(*maybe_any);
-    tsd.mutable_stream_descriptor()->CopyFrom(hdr.stream_descriptor());  // TODO do not merge
 
     if(has_magic_numbers)
         util::check_magic<DescriptorMagic>(data);
@@ -252,17 +252,18 @@ decode_timeseries_descriptor(
     if(has_magic_numbers)
         util::check_magic<IndexMagic>(data);
 
+    auto stream_descriptor = StreamDescriptor{std::make_shared<StreamDescriptor::Proto>(hdr.stream_descriptor())};
     auto maybe_fields = decode_index_fields(hdr, data, begin, end);
     if(!maybe_fields) {
         auto old_fields = fields_from_proto(tsd.stream_descriptor());
-        return std::make_optional(std::make_tuple(std::move(*maybe_any), std::move(tsd), std::move(old_fields)));
+        return std::make_optional(std::make_tuple(std::move(*maybe_any), std::move(tsd), std::move(old_fields), std::move(stream_descriptor)));
     }
 
     maybe_fields->regenerate_offsets();
-    return std::make_tuple(std::move(*maybe_any), std::move(tsd), std::move(*maybe_fields));
+    return std::make_tuple(std::move(*maybe_any), std::move(tsd), std::move(*maybe_fields), std::move(stream_descriptor));
 }
 
-std::optional<std::tuple<google::protobuf::Any, arcticdb::proto::descriptors::TimeSeriesDescriptor, FieldCollection>> decode_timeseries_descriptor(
+std::optional<std::tuple<google::protobuf::Any, arcticdb::proto::descriptors::TimeSeriesDescriptor, FieldCollection, StreamDescriptor>> decode_timeseries_descriptor(
     Segment& segment) {
     auto &hdr = segment.header();
     const uint8_t* data = segment.buffer().data();

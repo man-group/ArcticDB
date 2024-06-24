@@ -52,7 +52,7 @@ StreamDescriptor LibraryTool::read_descriptor(const VariantKey& key){
 }
 
 TimeseriesDescriptor LibraryTool::read_timeseries_descriptor(const VariantKey& key){
-    return store_->read_timeseries_descriptor(key).get().second;
+    return std::get<1>(store_->read_timeseries_descriptor(key).get());
 }
 
 void LibraryTool::write(VariantKey key, Segment segment) {
