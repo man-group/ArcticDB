@@ -105,15 +105,6 @@ inline std::vector<AtomKey> get_data_keys(
     return get_data_keys(store, keys, opts);
 }
 
-template<typename KeyContainer, typename = std::enable_if<std::is_base_of_v<AtomKey, typename KeyContainer::value_type>>>
-inline std::unordered_set<AtomKey> get_data_keys_set(
-    const std::shared_ptr<stream::StreamSource>& store,
-    const KeyContainer& keys,
-    storage::ReadKeyOpts opts) {
-    auto vec = get_data_keys(store, keys, opts);
-    return {vec.begin(), vec.end()};
-}
-
 std::unordered_set<AtomKey> recurse_segment(const std::shared_ptr<stream::StreamSource>& store,
                                             SegmentInMemory segment,
                                             const std::optional<VersionId>& version_id);
@@ -151,6 +142,25 @@ inline std::unordered_set<AtomKey> recurse_segment(const std::shared_ptr<stream:
         }
     }
     return res;
+}
+
+// TODO: Better name, in multi-index keys the returned set can contain both table and multi index keys
+template<typename KeyContainer, typename = std::enable_if<std::is_base_of_v<AtomKey, typename KeyContainer::value_type>>>
+inline std::unordered_set<AtomKey> get_data_keys_set(
+        const std::shared_ptr<stream::StreamSource>& store,
+        const KeyContainer& keys,
+        ARCTICDB_UNUSED storage::ReadKeyOpts opts) {
+    std::unordered_set<AtomKey> res;
+    for (const auto& key: keys) {
+        // TODO: Ignore deleted keys
+        auto data_keys = recurse_index_key(store, key);
+        data_keys.erase(key);
+        res.merge(std::move(data_keys));
+    }
+    return res;
+
+//    auto vec = get_data_keys(store, keys, opts);
+//    return {vec.begin(), vec.end()};
 }
 
 inline VersionId get_next_version_from_key(const AtomKey& prev) {
