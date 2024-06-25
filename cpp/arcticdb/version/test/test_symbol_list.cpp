@@ -629,6 +629,66 @@ bool all_symbols_match(
     return true;
 }
 
+TEST_F(SymbolListSuite, BackwardsCompatInterleave) {
+    ConfigsMap::instance()->set_int("SymbolList.MaxDelta", 1);
+    auto version_store = get_test_engine();
+    const auto& store = version_store._test_get_store();
+    auto version_map = std::make_shared<VersionMap>();
+    SymbolList symbol_list{version_map};
+    std::vector<StreamId> expected;
+
+    SymbolList::add_symbol(store, "s", 0);
+    symbol_list.get_symbols(store, false); // trigger a compaction
+
+    SymbolList::add_symbol(store, "symbol", 0);
+    backwards_compat_write_journal(store, "symbol", std::string{AddSymbol});
+    SymbolList::add_symbol(store, "symbol", 2);
+    backwards_compat_write_journal(store, "symbol", std::string{DeleteSymbol});
+    SymbolList::add_symbol(store, "symbol", 3);
+
+    auto syms = symbol_list.get_symbols(store, false);
+    ASSERT_EQ(syms.size(), 2);
+}
+
+TEST_F(SymbolListSuite, ExtremelyBackwardsCompatInterleavedWithSomewhatBackwardsCompat) {
+    ConfigsMap::instance()->set_int("SymbolList.MaxDelta", 1);
+    auto version_store = get_test_engine();
+    const auto& store = version_store._test_get_store();
+    auto version_map = std::make_shared<VersionMap>();
+    SymbolList symbol_list{version_map};
+    std::vector<StreamId> expected;
+
+    SymbolList::add_symbol(store, "s", 0);
+    symbol_list.get_symbols(store, false); // trigger a compaction
+
+    // Very old arcticc clients wrote version numbers on the symbol list entries, which needs special handling.
+    extremely_backwards_compat_write_journal(store, "symbol", std::string{AddSymbol}, 0);
+    extremely_backwards_compat_write_journal(store, "symbol", std::string{DeleteSymbol}, 1);
+    backwards_compat_write_journal(store, "symbol", std::string{AddSymbol});
+
+    auto syms = symbol_list.get_symbols(store, false);
+    ASSERT_EQ(syms.size(), 2);
+}
+
+TEST_F(SymbolListSuite, ExtremelyBackwardsCompatInterleavedWithNewStyle) {
+    ConfigsMap::instance()->set_int("SymbolList.MaxDelta", 1);
+    auto version_store = get_test_engine();
+    const auto& store = version_store._test_get_store();
+    auto version_map = std::make_shared<VersionMap>();
+    SymbolList symbol_list{version_map};
+    std::vector<StreamId> expected;
+
+    SymbolList::add_symbol(store, "s", 0);
+    symbol_list.get_symbols(store, false); // trigger a compaction
+
+    extremely_backwards_compat_write_journal(store, "symbol", std::string{AddSymbol}, 0);
+    extremely_backwards_compat_write_journal(store, "symbol", std::string{DeleteSymbol}, 1);
+    SymbolList::add_symbol(store, "symbol", 2);
+
+    auto syms = symbol_list.get_symbols(store, false);
+    ASSERT_EQ(syms.size(), 2);
+}
+
 TEST_F(SymbolListSuite, BackwardsCompat) {
     ConfigsMap::instance()->set_int("SymbolList.MaxDelta", 5);
     auto version_store = get_test_engine();

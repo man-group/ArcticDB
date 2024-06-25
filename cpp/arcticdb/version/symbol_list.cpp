@@ -52,6 +52,16 @@ auto warning_threshold() {
             .value_or( ConfigsMap::instance()->get_int("SymbolList.MaxCompactionThreshold", 700)));
 }
 
+bool is_new_style_key(const AtomKey& key) {
+    return util::variant_match(key.end_index(),
+                               [] (std::string_view str) {
+                                   return str == version_string;
+                               },
+                               [] (NumericIndex n) {
+                                   return n == version_identifier;
+                               });
+}
+
 std::vector<SymbolListEntry> load_previous_from_version_keys(
         const std::shared_ptr<Store>& store,
         SymbolListData& data) {
@@ -111,7 +121,12 @@ std::vector<AtomKey> get_all_symbol_list_keys(
     });
 
     std::sort(output.begin(), output.end(), [] (const AtomKey& left, const AtomKey& right) {
-        return std::tie(left.start_index(), left.version_id(), left.creation_ts()) < std::tie(right.start_index(), right.version_id(), right.creation_ts());
+        // Some very old symbol list keys have a non-zero version number, but with different semantics to the new style,
+        // so ignore it. See arcticdb-man#116. Most old style symbol list keys have version ID 0 anyway.
+        auto left_version = is_new_style_key(left) ? left.version_id() : 0;
+        auto right_version = is_new_style_key(right) ? right.version_id() : 0;
+        return std::tie(left.start_index(), left_version, left.creation_ts())
+          < std::tie(right.start_index(), right_version, right.creation_ts());
     });
     return output;
 }
@@ -238,16 +253,6 @@ std::vector<SymbolListEntry> read_from_storage(
         return read_old_style_list_from_storage(seg);
     else
         return read_new_style_list_from_storage(seg);
-}
-
-bool is_new_style_key(const AtomKey& key) {
-    return util::variant_match(key.end_index(),
-    [] (std::string_view str) {
-        return str == version_string;
-    },
-    [] (NumericIndex n) {
-        return n == version_identifier;
-    });
 }
 
 MapType load_journal_keys(const std::vector<AtomKey>& keys) {
