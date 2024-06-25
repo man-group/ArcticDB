@@ -146,8 +146,8 @@ def test_basic_metadata(lmdb_version_store):
     assert vit.metadata == metadata
 
 
-def test_sorted_roundtrip(lmdb_version_store):
-    lib = lmdb_version_store
+def test_sorted_roundtrip(arctic_library):
+    lib = arctic_library
 
     symbol = "sorted_test"
     df = pd.DataFrame({"column": [1, 2, 3, 4]}, index=pd.date_range(start="1/1/2018", end="1/4/2018"))
