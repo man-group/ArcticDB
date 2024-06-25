@@ -2836,12 +2836,9 @@ class NativeVersionStore:
 
         # All other methods use prune_previous_version, but also support prune_previous_versions here in case
         # anyone is relying on it
-        if prune_previous_versions is not None:
-            prune_previous_version = prune_previous_versions
-        else:
-            prune_previous_version = self.resolve_defaults(
-                "prune_previous_version", proto_cfg, global_default=False, **kwargs
-            )
+        prune_previous_version = self.resolve_defaults(
+            "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_versions, **kwargs
+        )
 
         result = self.version_store.defragment_symbol_data(symbol, segment_size, prune_previous_version)
         return VersionedItem(
