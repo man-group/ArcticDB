@@ -241,9 +241,15 @@ std::optional<FieldCollection> decode_descriptor_fields(
 }
 
 TimeseriesDescriptor unpack_timeseries_descriptor_from_proto(
-    const google::protobuf::Any& any) {
+        const google::protobuf::Any& any, const StreamDescriptor& stream_desc, bool is_decoding_incompletes) {
 
     auto tsd = timeseries_descriptor_from_any(any);
+    if (is_decoding_incompletes) {
+        arcticc::pb2::descriptors_pb2::StreamDescriptor desc_proto;
+        copy_stream_descriptor_to_proto(stream_desc, desc_proto);
+        tsd.mutable_stream_descriptor()->CopyFrom(desc_proto);
+    }
+
     auto frame_meta = std::make_shared<arcticdb::proto::descriptors::FrameMetadata>();
     exchange_timeseries_proto(tsd, *frame_meta);
 
@@ -259,12 +265,12 @@ std::optional<TimeseriesDescriptor> decode_timeseries_descriptor_v1(
     const SegmentHeader& hdr,
     const uint8_t* data,
     const uint8_t* begin,
-    const uint8_t* end ARCTICDB_UNUSED) {
+    const StreamDescriptor& descriptor) {
     auto maybe_any = decode_metadata(hdr, data, begin);
     if(!maybe_any)
         return std::nullopt;
 
-    return unpack_timeseries_descriptor_from_proto(*maybe_any);
+    return unpack_timeseries_descriptor_from_proto(*maybe_any, descriptor, false);
 }
 
 void skip_descriptor(const uint8_t*& data, const SegmentHeader& hdr) {
@@ -304,11 +310,12 @@ std::optional<TimeseriesDescriptor> decode_timeseries_descriptor(
     const SegmentHeader& hdr,
     const uint8_t* data,
     const uint8_t* begin,
-    const uint8_t* end) {
+    const uint8_t* end,
+    const StreamDescriptor& descriptor) {
     util::check(data != nullptr, "Got null data ptr from segment");
     auto encoding_version =  EncodingVersion(hdr.encoding_version());
     if (encoding_version == EncodingVersion::V1)
-        return decode_timeseries_descriptor_v1(hdr, data, begin, end);
+        return decode_timeseries_descriptor_v1(hdr, data, begin, descriptor);
     else
         return decode_timeseries_descriptor_v2(hdr, data, begin, end);
 }
@@ -322,7 +329,38 @@ std::optional<TimeseriesDescriptor> decode_timeseries_descriptor(
     const uint8_t* begin = data;
     const uint8_t* end = data + segment.buffer().bytes();
 
-    return decode_timeseries_descriptor(hdr, data, begin, end);
+    return decode_timeseries_descriptor(hdr, data, begin, end, segment.descriptor());
+}
+
+std::optional<TimeseriesDescriptor> decode_timeseries_descriptor_for_incompletes(
+        const SegmentHeader& hdr,
+        const StreamDescriptor& desc,
+        const uint8_t* data,
+        const uint8_t* begin,
+        const uint8_t* end) {
+    util::check(data != nullptr, "Got null data ptr from segment");
+    auto encoding_version =  EncodingVersion(hdr.encoding_version());
+    if (encoding_version == EncodingVersion::V1) {
+        auto maybe_any = decode_metadata(hdr, data, begin);
+        if (!maybe_any)
+            return std::nullopt;
+
+        return unpack_timeseries_descriptor_from_proto(*maybe_any, desc, true);
+    } else {
+        return decode_timeseries_descriptor_v2(hdr, data, begin, end);
+    }
+}
+
+std::optional<TimeseriesDescriptor> decode_timeseries_descriptor_for_incompletes(
+        Segment& segment) {
+    auto &hdr = segment.header();
+    const uint8_t* data = segment.buffer().data();
+
+    util::check(data != nullptr, "Got null data ptr from segment");
+    const uint8_t* begin = data;
+    const uint8_t* end = data + segment.buffer().bytes();
+
+    return decode_timeseries_descriptor_for_incompletes(hdr, segment.descriptor(), data, begin, end);
 }
 
 std::pair<std::optional<google::protobuf::Any>, StreamDescriptor> decode_metadata_and_descriptor_fields(
@@ -446,7 +484,8 @@ void decode_v2(const Segment& segment,
 void decode_v1(const Segment& segment,
             const SegmentHeader& hdr,
             SegmentInMemory& res,
-            const StreamDescriptor& desc) {
+            const StreamDescriptor& desc,
+            bool is_decoding_incompletes) {
     ARCTICDB_SAMPLE(DecodeSegment, 0)
     const uint8_t* data = segment.buffer().data();
     if(data == nullptr) {
@@ -459,7 +498,7 @@ void decode_v1(const Segment& segment,
     decode_metadata(hdr, data, begin, res);
     if(res.has_metadata() && res.metadata()->Is<arcticdb::proto::descriptors::TimeSeriesDescriptor>()) {
         ARCTICDB_DEBUG(log::version(), "Unpacking timeseries descriptor from metadata");
-        auto tsd = unpack_timeseries_descriptor_from_proto(*res.metadata());
+        auto tsd = unpack_timeseries_descriptor_from_proto(*res.metadata(), desc, is_decoding_incompletes);
         res.set_timeseries_descriptor(tsd);
         res.reset_metadata();
     }
