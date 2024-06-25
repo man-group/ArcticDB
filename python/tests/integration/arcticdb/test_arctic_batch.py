@@ -456,7 +456,6 @@ def test_write_batch_missing_keys_dedup(library_factory):
     lib_tool.remove(s1_index_key)
 
     # When
-    df2 = generate_dataframe(["a", "b", "c"], dt, num_days, num_rows_per_day)
     batch = lib.write_batch(
         [
             WritePayload("s1", df1, metadata="great_metadata_s1"),
