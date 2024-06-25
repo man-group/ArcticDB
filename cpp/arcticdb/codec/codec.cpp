@@ -235,6 +235,9 @@ decode_timeseries_descriptor_for_incompletes(
         return std::nullopt;
 
     auto tsd = timeseries_descriptor_from_any(*maybe_any);
+
+    // Unlike `decode_timeseries_descriptor`, prefer the stream descriptor on the segment header.
+    // See PR #1647.
     tsd.mutable_stream_descriptor()->CopyFrom(hdr.stream_descriptor());
 
     if(has_magic_numbers)
