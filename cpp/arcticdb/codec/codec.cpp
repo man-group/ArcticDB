@@ -245,6 +245,8 @@ TimeseriesDescriptor unpack_timeseries_descriptor_from_proto(
 
     auto tsd = timeseries_descriptor_from_any(any);
     if (is_decoding_incompletes) {
+        // Prefer the stream descriptor on the segment header for incompletes.
+        // See PR #1647.
         arcticc::pb2::descriptors_pb2::StreamDescriptor desc_proto;
         copy_stream_descriptor_to_proto(stream_desc, desc_proto);
         tsd.mutable_stream_descriptor()->CopyFrom(desc_proto);
