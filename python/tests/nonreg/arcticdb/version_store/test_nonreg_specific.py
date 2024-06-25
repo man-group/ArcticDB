@@ -5,7 +5,6 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
-import os
 import numpy as np
 import pandas as pd
 import datetime
@@ -306,14 +305,12 @@ def test_date_range_multi_index(lmdb_version_store):
 @pytest.mark.parametrize("lib_config", (True, False))
 @pytest.mark.parametrize("env_var", (True, False))
 @pytest.mark.parametrize("arg", (True, False, None))
-def test_prune_previous_general(version_store_factory, method, lib_config, env_var, arg):
+def test_prune_previous_general(version_store_factory, monkeypatch, method, lib_config, env_var, arg):
     lib = version_store_factory(prune_previous_version=lib_config, use_tombstones=True)
     should_be_pruned = lib_config
     if env_var:
-        os.environ["PRUNE_PREVIOUS_VERSION"] = "true"
+        monkeypatch.setenv("PRUNE_PREVIOUS_VERSION", "true")
         should_be_pruned = True
-    else:
-        os.environ.pop('PRUNE_PREVIOUS_VERSION', None)
     if arg is not None:
         should_be_pruned = arg
 
@@ -335,14 +332,12 @@ def test_prune_previous_general(version_store_factory, method, lib_config, env_v
 @pytest.mark.parametrize("lib_config", (True, False))
 @pytest.mark.parametrize("env_var", (True, False))
 @pytest.mark.parametrize("arg", (True, False, None))
-def test_prune_previous_compact_incomplete(version_store_factory, append, lib_config, env_var, arg):
+def test_prune_previous_compact_incomplete(version_store_factory, monkeypatch, append, lib_config, env_var, arg):
     lib = version_store_factory(prune_previous_version=lib_config, use_tombstones=True)
     should_be_pruned = lib_config
     if env_var:
-        os.environ["PRUNE_PREVIOUS_VERSION"] = "true"
+        monkeypatch.setenv("PRUNE_PREVIOUS_VERSION", "true")
         should_be_pruned = True
-    else:
-        os.environ.pop('PRUNE_PREVIOUS_VERSION', None)
     if arg is not None:
         should_be_pruned = arg
 
@@ -362,14 +357,12 @@ def test_prune_previous_compact_incomplete(version_store_factory, append, lib_co
 @pytest.mark.parametrize("lib_config", (True, False))
 @pytest.mark.parametrize("env_var", (True, False))
 @pytest.mark.parametrize("arg", (True, False, None))
-def test_prune_previous_delete_date_range(version_store_factory, lib_config, env_var, arg):
+def test_prune_previous_delete_date_range(version_store_factory, monkeypatch, lib_config, env_var, arg):
     lib = version_store_factory(prune_previous_version=lib_config, use_tombstones=True)
     should_be_pruned = lib_config
     if env_var:
-        os.environ["PRUNE_PREVIOUS_VERSION"] = "true"
+        monkeypatch.setenv("PRUNE_PREVIOUS_VERSION", "true")
         should_be_pruned = True
-    else:
-        os.environ.pop('PRUNE_PREVIOUS_VERSION', None)
     if arg is not None:
         should_be_pruned = arg
 
@@ -386,14 +379,12 @@ def test_prune_previous_delete_date_range(version_store_factory, lib_config, env
 @pytest.mark.parametrize("lib_config", (True, False))
 @pytest.mark.parametrize("env_var", (True, False))
 @pytest.mark.parametrize("arg", (True, False, None))
-def test_prune_previous_defragment_symbol_data(version_store_factory, lib_config, env_var, arg):
+def test_prune_previous_defragment_symbol_data(version_store_factory, monkeypatch, lib_config, env_var, arg):
     lib = version_store_factory(prune_previous_version=lib_config, use_tombstones=True)
     should_be_pruned = lib_config
     if env_var:
-        os.environ["PRUNE_PREVIOUS_VERSION"] = "true"
+        monkeypatch.setenv("PRUNE_PREVIOUS_VERSION", "true")
         should_be_pruned = True
-    else:
-        os.environ.pop('PRUNE_PREVIOUS_VERSION', None)
     if arg is not None:
         should_be_pruned = arg
 
