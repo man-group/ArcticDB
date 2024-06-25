@@ -93,7 +93,7 @@ inline StreamDescriptor backwards_compat_symbol_stream_descriptor(const StreamId
     )};
 }
 
-inline StreamDescriptor baackward_compat_journal_stream_descriptor(const StreamId& action, const StreamId& id) {
+inline StreamDescriptor backward_compat_journal_stream_descriptor(const StreamId& action, const StreamId& id) {
     return util::variant_match(id,
                                [&action] (const NumericId&) {
                                    return StreamDescriptor{stream_descriptor(action, RowCountIndex(), { scalar_field(DataType::UINT64, "symbol") })};
@@ -138,8 +138,12 @@ folly::Future<VariantKey> backwards_compat_write(
     return store->write(KeyType::SYMBOL_LIST, 0, stream_id, creation_ts, NumericIndex{0}, NumericIndex{0}, std::move(list_segment));
 }
 
-void backwards_compat_write_journal(const std::shared_ptr<Store>& store, const StreamId& symbol, std::string action) {
-    SegmentInMemory seg{baackward_compat_journal_stream_descriptor(action, symbol)};
+// Very old internal ArcticDB clients (2021) wrote non-zero version IDs in symbol list entries. This API supports that.
+void extremely_backwards_compat_write_journal(const std::shared_ptr<Store>& store,
+                                              const StreamId& symbol,
+                                              const std::string& action,
+                                              VersionId version_id) {
+    SegmentInMemory seg{backward_compat_journal_stream_descriptor(action, symbol)};
     util::variant_match(symbol,
                         [&seg] (const StringId& id) {
                             seg.set_string(0, id);
@@ -150,12 +154,17 @@ void backwards_compat_write_journal(const std::shared_ptr<Store>& store, const S
 
     seg.end_row();
     try {
-        store->write_sync(KeyType::SYMBOL_LIST, 0, StreamId{ action }, IndexValue{ symbol }, IndexValue{ symbol },
+        store->write_sync(KeyType::SYMBOL_LIST, version_id, StreamId{ action }, IndexValue{ symbol }, IndexValue{ symbol },
                           std::move(seg));
     } catch ([[maybe_unused]] const arcticdb::storage::DuplicateKeyException& e)  {
         // Both version and content hash are fixed, so collision is possible
         ARCTICDB_DEBUG(log::storage(), "Symbol list DuplicateKeyException: {}", e.what());
     }
+}
+
+// Internal ArcticDB clients (2021) write symbol list entries with an obsolete schema, and always with version ID 0.
+void backwards_compat_write_journal(const std::shared_ptr<Store>& store, const StreamId& symbol, const std::string& action) {
+    extremely_backwards_compat_write_journal(store, symbol, action, 0);
 }
 
 void backwards_compat_compact(const std::shared_ptr<Store>& store, std::vector<AtomKey>&& old_keys, const BackwardsCompatCollectionType& symbols) {
