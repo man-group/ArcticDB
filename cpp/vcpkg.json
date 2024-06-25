@@ -70,7 +70,7 @@
   "overrides": [
     { "name": "openssl", "version-string": "3.3.0" },
     { "name": "aws-sdk-cpp", "version": "1.11.201" },
-    { "name": "azure-core-cpp", "version": "1.11.2" },
+    { "name": "azure-core-cpp", "version": "1.12.0" },
     { "name": "aws-c-s3", "version": "0.3.24" },
     { "name": "bitmagic", "version": "7.12.3" },
     { "name": "boost-algorithm", "version": "1.84.0" },
