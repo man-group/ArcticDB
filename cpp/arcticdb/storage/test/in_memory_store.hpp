@@ -408,7 +408,6 @@ namespace arcticdb {
             return folly::makeFuture(std::move(components));
         }
 
-
         folly::Future<std::pair<std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>, arcticdb::TimeseriesDescriptor>>
         read_timeseries_descriptor(const entity::VariantKey& key,
                                    storage::ReadKeyOpts /*opts*/) override {
@@ -428,6 +427,23 @@ namespace arcticdb {
             });
         }
 
+        folly::Future<std::pair<std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>, arcticdb::TimeseriesDescriptor>>
+        read_timeseries_descriptor_for_incompletes(const entity::VariantKey& key,
+                                   storage::ReadKeyOpts /*opts*/) override {
+            return util::variant_match(key, [&](const AtomKey &ak) {
+                                           auto it = seg_by_atom_key_.find(ak);
+                                           if (it == seg_by_atom_key_.end())
+                                               throw storage::KeyNotFoundException(Composite<VariantKey>(ak));
+                                           ARCTICDB_DEBUG(log::storage(), "Mock store read for atom key {}", ak);
+                                           auto tsd = it->second->index_descriptor();
+                                           tsd.proto_->mutable_stream_descriptor()->CopyFrom(it->second->descriptor().proto());
+                                           return std::make_pair(key, it->second->index_descriptor());
+                                       },
+                                       [&](const RefKey&) {
+                                           util::raise_rte("Not implemented");
+                                           return std::make_pair(key, TimeseriesDescriptor{});
+                                       });
+        }
 
         void set_failure_sim(const arcticdb::proto::storage::VersionStoreConfig::StorageFailureSimulator &) override {}
 
