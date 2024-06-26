@@ -220,7 +220,6 @@ inline ankerl::unordered_dense::set<AtomKey> get_data_keys_set(
     }
     auto end = std::chrono::steady_clock::now();
     log::version().warn("Spent {}ms in get_data_keys_set AtomKeyNoId", std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
-    // TODO: Return vector for data_keys_to_be_deleted, set for data_keys_not_to_be_deleted
     ankerl::unordered_dense::set<AtomKey> res_2;
     auto id = keys.begin()->id();
     res_2.reserve(res.size());
@@ -231,9 +230,6 @@ inline ankerl::unordered_dense::set<AtomKey> get_data_keys_set(
     auto end_2 = std::chrono::steady_clock::now();
     log::version().warn("Spent {}ms in get_data_keys_set AtomKeyNoId->AtomKey", std::chrono::duration_cast<std::chrono::milliseconds>(end_2 - end).count());
     return res_2;
-
-//    auto vec = get_data_keys(store, keys, opts);
-//    return {vec.begin(), vec.end()};
 }
 
 inline VersionId get_next_version_from_key(const AtomKey& prev) {
