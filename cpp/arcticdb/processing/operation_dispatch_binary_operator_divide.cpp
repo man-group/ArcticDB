@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 Man Group Operations Limited
+ * Copyright 2024 Man Group Operations Limited
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
@@ -9,7 +9,5 @@
 #include <arcticdb/processing/operation_dispatch_binary.hpp>
 
 namespace arcticdb {
-
-template VariantData visit_binary_comparator<EqualsOperator>(const VariantData&, const VariantData&, EqualsOperator&&);
-
+template VariantData visit_binary_operator<DivideOperator>(const VariantData&, const VariantData&, DivideOperator&&);
 }
