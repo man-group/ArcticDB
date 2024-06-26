@@ -105,14 +105,14 @@ inline std::vector<AtomKey> get_data_keys(
     return get_data_keys(store, keys, opts);
 }
 
-std::unordered_set<AtomKey> recurse_segment(const std::shared_ptr<stream::StreamSource>& store,
+ankerl::unordered_dense::set<AtomKey> recurse_segment(const std::shared_ptr<stream::StreamSource>& store,
                                             SegmentInMemory segment,
                                             const std::optional<VersionId>& version_id);
 
 /* Given a [multi-]index key, returns a set containing the top level [multi-]index key itself, and all of the
  * multi-index, index, and data keys referenced by this [multi-]index key.
  * If the version_id argument is provided, the returned set will only contain keys matching that version_id. */
-inline std::unordered_set<AtomKey> recurse_index_key(const std::shared_ptr<stream::StreamSource>& store,
+inline ankerl::unordered_dense::set<AtomKey> recurse_index_key(const std::shared_ptr<stream::StreamSource>& store,
                                                      const IndexTypeKey& index_key,
                                                      const std::optional<VersionId>& version_id=std::nullopt) {
     auto segment = store->read_sync(index_key).second;
@@ -121,10 +121,11 @@ inline std::unordered_set<AtomKey> recurse_index_key(const std::shared_ptr<strea
     return res;
 }
 
-inline std::unordered_set<AtomKey> recurse_segment(const std::shared_ptr<stream::StreamSource>& store,
+inline ankerl::unordered_dense::set<AtomKey> recurse_segment(const std::shared_ptr<stream::StreamSource>& store,
                                                    SegmentInMemory segment,
                                                    const std::optional<VersionId>& version_id) {
-    std::unordered_set<AtomKey> res;
+    ankerl::unordered_dense::set<AtomKey> res;
+    ankerl::unordered_dense::set<AtomKey> tmp;
     for (size_t idx = 0; idx < segment.row_count(); idx++) {
         auto key = stream::read_key_row(segment, idx);
         if ((version_id && key.version_id() == *version_id) || !version_id) {
@@ -134,7 +135,11 @@ inline std::unordered_set<AtomKey> recurse_segment(const std::shared_ptr<stream:
                     break;
                 case KeyType::TABLE_INDEX:
                 case KeyType::MULTI_KEY:
-                    res.merge(recurse_index_key(store, key, version_id));
+                    tmp = recurse_index_key(store, key, version_id);
+                    for (auto&& tmp_key: tmp) {
+                        res.emplace(std::move(tmp_key));
+                    }
+//                    res.merge(recurse_index_key(store, key, version_id));
                     break;
                 default:
                     break;
@@ -146,17 +151,23 @@ inline std::unordered_set<AtomKey> recurse_segment(const std::shared_ptr<stream:
 
 // TODO: Better name, in multi-index keys the returned set can contain both table and multi index keys
 template<typename KeyContainer, typename = std::enable_if<std::is_base_of_v<AtomKey, typename KeyContainer::value_type>>>
-inline std::unordered_set<AtomKey> get_data_keys_set(
+inline ankerl::unordered_dense::set<AtomKey> get_data_keys_set(
         const std::shared_ptr<stream::StreamSource>& store,
         const KeyContainer& keys,
         ARCTICDB_UNUSED storage::ReadKeyOpts opts) {
-    std::unordered_set<AtomKey> res;
+    auto start = std::chrono::steady_clock::now();
+    ankerl::unordered_dense::set<AtomKey> res;
     for (const auto& key: keys) {
         // TODO: Ignore deleted keys
         auto data_keys = recurse_index_key(store, key);
         data_keys.erase(key);
-        res.merge(std::move(data_keys));
+        for (auto&& tmp_key: data_keys) {
+            res.emplace(std::move(tmp_key));
+        }
+//        res.merge(std::move(data_keys));
     }
+    auto end = std::chrono::steady_clock::now();
+    log::version().warn("Spent {}ms in get_data_keys_set", std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
     return res;
 
 //    auto vec = get_data_keys(store, keys, opts);
