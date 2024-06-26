@@ -149,26 +149,88 @@ inline ankerl::unordered_dense::set<AtomKey> recurse_segment(const std::shared_p
     return res;
 }
 
+struct AtomKeyNoId {
+    VersionId version_id_ = 0;
+    timestamp creation_ts_ = 0;
+    ContentHash content_hash_ = 0;
+    KeyType key_type_ = KeyType::UNDEFINED;
+    // TODO: String indexes
+    timestamp index_start_;
+    timestamp index_end_;
+
+    using is_avalanching = void;
+
+    friend bool operator==(const AtomKeyNoId &l, const AtomKeyNoId &r) {
+        return l.version_id_ == r.version_id_
+               && l.creation_ts_ == r.creation_ts_
+               && l.content_hash_ == r.content_hash_
+               && l.key_type_ == r.key_type_
+               && l.index_start_ == r.index_start_
+               && l.index_end_ == r.index_end_;
+    }
+};
+
 // TODO: Better name, in multi-index keys the returned set can contain both table and multi index keys
 template<typename KeyContainer, typename = std::enable_if<std::is_base_of_v<AtomKey, typename KeyContainer::value_type>>>
 inline ankerl::unordered_dense::set<AtomKey> get_data_keys_set(
         const std::shared_ptr<stream::StreamSource>& store,
         const KeyContainer& keys,
-        ARCTICDB_UNUSED storage::ReadKeyOpts opts) {
+        storage::ReadKeyOpts opts) {
     auto start = std::chrono::steady_clock::now();
-    ankerl::unordered_dense::set<AtomKey> res;
-    for (const auto& key: keys) {
-        // TODO: Ignore deleted keys
-        auto data_keys = recurse_index_key(store, key);
-        data_keys.erase(key);
-        for (auto&& tmp_key: data_keys) {
-            res.emplace(std::move(tmp_key));
+    ankerl::unordered_dense::set<AtomKeyNoId> res;
+    for (const auto& index_key: keys) {
+        // TODO: Async and in parallel?
+        // TODO: Handle multi-index
+        auto segment = store->read_sync(index_key, opts).second;
+        const auto& version_col = segment.column(*segment.column_index("version_id"));
+        const auto& creation_ts_col = segment.column(*segment.column_index("creation_ts"));
+        const auto& content_hash_col = segment.column(*segment.column_index("content_hash"));
+        const auto& key_type_col = segment.column(*segment.column_index("key_type"));
+        const auto& index_start_col = segment.column(*segment.column_index("start_index"));
+        const auto& index_end_col = segment.column(*segment.column_index("start_index"));
+
+        auto version_data = version_col.data();
+        auto creation_ts_data = creation_ts_col.data();
+        auto content_hash_data = content_hash_col.data();
+        auto key_type_data = key_type_col.data();
+        auto index_start_data = index_start_col.data();
+        auto index_end_data = index_end_col.data();
+
+        using version_TDT = ScalarTagType<DataTypeTag<DataType::UINT64>>;
+        using creation_ts_TDT = ScalarTagType<DataTypeTag<DataType::INT64>>;
+        using content_hash_TDT = ScalarTagType<DataTypeTag<DataType::UINT64>>;
+        using key_type_TDT = ScalarTagType<DataTypeTag<DataType::UINT8>>;
+        using index_start_TDT = ScalarTagType<DataTypeTag<DataType::INT64>>;
+        using index_end_TDT = ScalarTagType<DataTypeTag<DataType::INT64>>;
+
+        auto version_it = version_data.template cbegin<version_TDT>();
+        auto creation_ts_it = creation_ts_data.template cbegin<creation_ts_TDT>();
+        auto content_hash_it = content_hash_data.template cbegin<content_hash_TDT>();
+        auto key_type_it = key_type_data.template cbegin<key_type_TDT>();
+        auto index_start_it = index_start_data.template cbegin<index_start_TDT>();
+        auto index_end_it = index_end_data.template cbegin<index_end_TDT>();
+
+        for (
+                size_t row_idx = 0;
+                row_idx < segment.row_count();
+                ++row_idx, ++version_it, ++creation_ts_it, ++content_hash_it, ++key_type_it, ++index_start_it, ++index_end_it) {
+            AtomKeyNoId tmp{*version_it, *creation_ts_it, *content_hash_it, KeyType(*key_type_it), *index_start_it, *index_end_it};
+            res.emplace(std::move(tmp));
         }
-//        res.merge(std::move(data_keys));
     }
     auto end = std::chrono::steady_clock::now();
-    log::version().warn("Spent {}ms in get_data_keys_set", std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
-    return res;
+    log::version().warn("Spent {}ms in get_data_keys_set AtomKeyNoId", std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
+    // TODO: Return vector for data_keys_to_be_deleted, set for data_keys_not_to_be_deleted
+    ankerl::unordered_dense::set<AtomKey> res_2;
+    auto id = keys.begin()->id();
+    res_2.reserve(res.size());
+    for (const auto& k: res) {
+        AtomKey tmp{id, k.version_id_, k.creation_ts_, k.content_hash_, k.index_start_, k.index_end_, k.key_type_};
+        res_2.emplace(std::move(tmp));
+    }
+    auto end_2 = std::chrono::steady_clock::now();
+    log::version().warn("Spent {}ms in get_data_keys_set AtomKeyNoId->AtomKey", std::chrono::duration_cast<std::chrono::milliseconds>(end_2 - end).count());
+    return res_2;
 
 //    auto vec = get_data_keys(store, keys, opts);
 //    return {vec.begin(), vec.end()};
@@ -212,3 +274,13 @@ inline void iterate_keys_of_type_for_stream(
 }
 
 } //namespace arcticdb
+
+namespace std {
+    template<>
+    struct hash<arcticdb::AtomKeyNoId> {
+        inline arcticdb::HashedValue operator()(const arcticdb::AtomKeyNoId& key) const noexcept {
+            return folly::hash::hash_combine(key.version_id_, key.creation_ts_, key.content_hash_, key.key_type_, key.index_start_,
+                                             key.index_end_);
+        }
+    };
+}
