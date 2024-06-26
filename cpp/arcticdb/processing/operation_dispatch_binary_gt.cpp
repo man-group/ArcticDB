@@ -11,6 +11,5 @@
 namespace arcticdb {
 
 template VariantData visit_binary_comparator<GreaterThanOperator>(const VariantData&, const VariantData&, GreaterThanOperator&&);
-template VariantData visit_binary_comparator<GreaterThanEqualsOperator>(const VariantData&, const VariantData&, GreaterThanEqualsOperator&&);
 
 }

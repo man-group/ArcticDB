@@ -439,9 +439,15 @@ set(arcticdb_srcs
         processing/operation_dispatch_unary.cpp
         processing/operation_dispatch_binary.cpp
         processing/operation_dispatch_binary_eq.cpp
+        processing/operation_dispatch_binary_neq.cpp
         processing/operation_dispatch_binary_gt.cpp
+        processing/operation_dispatch_binary_gte.cpp
         processing/operation_dispatch_binary_lt.cpp
-        processing/operation_dispatch_binary_operator.cpp
+        processing/operation_dispatch_binary_lte.cpp
+        processing/operation_dispatch_binary_operator_plus.cpp
+        processing/operation_dispatch_binary_operator_minus.cpp
+        processing/operation_dispatch_binary_operator_times.cpp
+        processing/operation_dispatch_binary_operator_divide.cpp
         processing/sorted_aggregation.cpp
         processing/unsorted_aggregation.cpp
         python/python_to_tensor_frame.cpp
