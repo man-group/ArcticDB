@@ -149,6 +149,8 @@ inline ankerl::unordered_dense::set<AtomKey> recurse_segment(const std::shared_p
     return res;
 }
 
+#pragma pack(push)
+#pragma pack(1)
 struct AtomKeyNoId {
     VersionId version_id_ = 0;
     timestamp creation_ts_ = 0;
@@ -158,7 +160,7 @@ struct AtomKeyNoId {
     timestamp index_start_;
     timestamp index_end_;
 
-    using is_avalanching = void;
+//    using is_avalanching = void;
 
     friend bool operator==(const AtomKeyNoId &l, const AtomKeyNoId &r) {
         return l.version_id_ == r.version_id_
@@ -169,6 +171,38 @@ struct AtomKeyNoId {
                && l.index_end_ == r.index_end_;
     }
 };
+#pragma pack(pop)
+
+static_assert(sizeof(AtomKeyNoId) == 40 + sizeof(int));
+
+struct AtomKeynoIdHash {
+    uint64_t operator()(const AtomKeyNoId& key) const noexcept {
+        // impl1
+        return ankerl::unordered_dense::detail::wyhash::hash(&key, 40 + sizeof(int));
+
+        // impl2
+//        std::array<uint8_t, 40 + sizeof(int)> packed_key;
+//        auto ptr = packed_key.data();
+//        *reinterpret_cast<VersionId*>(ptr) = key.version_id_;
+//        ptr += sizeof(VersionId);
+//        *reinterpret_cast<timestamp*>(ptr) = key.creation_ts_;
+//        ptr += sizeof(timestamp);
+//        *reinterpret_cast<ContentHash*>(ptr) = key.content_hash_;
+//        ptr += sizeof(ContentHash);
+//        *reinterpret_cast<timestamp*>(ptr) = key.index_start_;
+//        ptr += sizeof(timestamp);
+//        *reinterpret_cast<timestamp*>(ptr) = key.index_end_;
+//        ptr += sizeof(timestamp);
+//        *reinterpret_cast<KeyType*>(ptr) = key.key_type_;
+//        return ankerl::unordered_dense::detail::wyhash::hash(packed_key.data(), 41);
+
+          // impl3
+//        return folly::hash::hash_combine(key.version_id_, key.creation_ts_, key.content_hash_, key.key_type_, key.index_start_,
+//                                         key.index_end_);
+    }
+
+    using is_avalanching = void;
+};
 
 // TODO: Better name, in multi-index keys the returned set can contain both table and multi index keys
 template<typename KeyContainer, typename = std::enable_if<std::is_base_of_v<AtomKey, typename KeyContainer::value_type>>>
@@ -177,7 +211,7 @@ inline ankerl::unordered_dense::set<AtomKey> get_data_keys_set(
         const KeyContainer& keys,
         storage::ReadKeyOpts opts) {
     auto start = std::chrono::steady_clock::now();
-    ankerl::unordered_dense::set<AtomKeyNoId> res;
+    ankerl::unordered_dense::set<AtomKeyNoId, AtomKeynoIdHash> res;
     for (const auto& index_key: keys) {
         // TODO: Async and in parallel?
         // TODO: Handle multi-index
@@ -270,13 +304,3 @@ inline void iterate_keys_of_type_for_stream(
 }
 
 } //namespace arcticdb
-
-namespace std {
-    template<>
-    struct hash<arcticdb::AtomKeyNoId> {
-        inline arcticdb::HashedValue operator()(const arcticdb::AtomKeyNoId& key) const noexcept {
-            return folly::hash::hash_combine(key.version_id_, key.creation_ts_, key.content_hash_, key.key_type_, key.index_start_,
-                                             key.index_end_);
-        }
-    };
-}
