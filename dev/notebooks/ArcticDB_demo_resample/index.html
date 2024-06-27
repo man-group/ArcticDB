@@ -8,9 +8,13 @@
       
       
       
-        <link rel="canonical" href="https://docs.arcticdb.io/dev/technical/release_checks/">
+        <link rel="canonical" href="https://docs.arcticdb.io/dev/notebooks/ArcticDB_demo_resample/">
       
       
+        <link rel="prev" href="../ArcticDB_demo_querybuilder/">
+      
+      
+        <link rel="next" href="../ArcticDB_aws_public_blockchain/">
       
       
       <link rel="icon" href="../../images/FullWithBorder.png">
@@ -18,7 +22,7 @@
     
     
       
-        <title>Release checks - ArcticDB</title>
+        <title>Resample Notebook - ArcticDB</title>
       
     
     
@@ -75,6 +79,11 @@
     <label class="md-overlay" for="__drawer"></label>
     <div data-md-component="skip">
       
+        
+        <a href="#arcticdb-resample-demo" class="md-skip">
+          Skip to content
+        </a>
+      
     </div>
     <div data-md-component="announce">
       
@@ -120,7 +129,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Release checks
+              Resample Notebook
             
           </span>
         </div>
@@ -244,11 +253,13 @@
         
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../../notebooks/ArcticDB_demo_lmdb/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../ArcticDB_demo_lmdb/" class="md-tabs__link">
           
   
   Notebooks
@@ -824,7 +835,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../architecture/" class="md-nav__link">
+      <a href="../../technical/architecture/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -845,7 +856,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../on_disk_storage/" class="md-nav__link">
+      <a href="../../technical/on_disk_storage/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -866,7 +877,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../migration/" class="md-nav__link">
+      <a href="../../technical/migration/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -887,7 +898,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../contributing/" class="md-nav__link">
+      <a href="../../technical/contributing/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1031,25 +1042,30 @@
       
   
   
+    
   
   
+  
     
     
     
+      
+        
+        
       
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
         
           
-          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
             
   
   <span class="md-ellipsis">
@@ -1060,7 +1076,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             Notebooks
@@ -1074,7 +1090,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../notebooks/ArcticDB_demo_lmdb/" class="md-nav__link">
+      <a href="../ArcticDB_demo_lmdb/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1095,7 +1111,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../notebooks/ArcticDB_demo_querybuilder/" class="md-nav__link">
+      <a href="../ArcticDB_demo_querybuilder/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1113,10 +1129,30 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../notebooks/ArcticDB_demo_resample/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Resample Notebook
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   <span class="md-ellipsis">
@@ -1125,6 +1161,89 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      Setup
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#create-some-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      Create Some Data
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-simple-resample" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. Simple Resample
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-multiple-aggregators-per-column" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. Multiple Aggregators per Column
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-processing-pipeline-chaining-operations" class="md-nav__link">
+    <span class="md-ellipsis">
+      3. Processing Pipeline: Chaining Operations
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-example-ohlc-open-high-low-close-bars" class="md-nav__link">
+    <span class="md-ellipsis">
+      4. Example: OHLC (Open High Low Close) Bars
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#conclusion" class="md-nav__link">
+    <span class="md-ellipsis">
+      Conclusion
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1137,7 +1256,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../notebooks/ArcticDB_aws_public_blockchain/" class="md-nav__link">
+      <a href="../ArcticDB_aws_public_blockchain/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1158,7 +1277,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../notebooks/ArcticDB_demo_snapshots/" class="md-nav__link">
+      <a href="../ArcticDB_demo_snapshots/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1179,7 +1298,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../notebooks/ArcticDB_demo_equity_analytics/" class="md-nav__link">
+      <a href="../ArcticDB_demo_equity_analytics/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1200,7 +1319,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../notebooks/ArcticDB_demo_equity_options/" class="md-nav__link">
+      <a href="../ArcticDB_demo_equity_options/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1432,6 +1551,79 @@
   
   
   
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      Setup
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#create-some-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      Create Some Data
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-simple-resample" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. Simple Resample
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-multiple-aggregators-per-column" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. Multiple Aggregators per Column
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-processing-pipeline-chaining-operations" class="md-nav__link">
+    <span class="md-ellipsis">
+      3. Processing Pipeline: Chaining Operations
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-example-ohlc-open-high-low-close-bars" class="md-nav__link">
+    <span class="md-ellipsis">
+      4. Example: OHLC (Open High Low Close) Bars
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#conclusion" class="md-nav__link">
+    <span class="md-ellipsis">
+      Conclusion
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
   
 </nav>
                   </div>
@@ -1445,8 +1637,8 @@
                 
 
 <p>
-<h1>release_checks</h1>
-<a href="https://github.com/man-group/ArcticDB/blob/master/docs/mkdocs/docs/technical/release_checks.py">
+<h1>ArcticDB_demo_resample</h1>
+<a href="https://github.com/man-group/ArcticDB/blob/master/docs/mkdocs/docs/notebooks/ArcticDB_demo_resample.ipynb">
     <span class="twemoji">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
             <title>github</title>
@@ -1458,7 +1650,7 @@
 </a>
 |
 <a
-    href="https://colab.research.google.com/github/man-group/ArcticDB/blob/master/docs/mkdocs/docs/technical/release_checks.py">
+    href="https://colab.research.google.com/github/man-group/ArcticDB/blob/master/docs/mkdocs/docs/notebooks/ArcticDB_demo_resample.ipynb">
     <span class="twemoji">
         <svg viewBox="0 0 24 24" preserveAspectRatio="xMidYMid meet" focusable="false" width="977" height="602"
             style="height: 28px; width: 28px;">
@@ -1490,8 +1682,6 @@
   
   
 
-
-  <h1>Release checks</h1>
 
 <script>
 (function (global, factory) {
@@ -1653,6 +1843,34 @@
           notice.hidden = true
         }, 1000)
       })
+</script>
+<script>
+(function() {
+  function addWidgetsRenderer() {
+    var mimeElement = document.querySelector('script[type="application/vnd.jupyter.widget-view+json"]');
+    var scriptElement = document.createElement('script');
+    
+    var widgetRendererSrc = 'https://unpkg.com/@jupyter-widgets/html-manager@*/dist/embed-amd.js';
+    
+    var widgetState;
+
+    // Fallback for older version:
+    try {
+      widgetState = mimeElement && JSON.parse(mimeElement.innerHTML);
+
+      if (widgetState && (widgetState.version_major < 2 || !widgetState.version_major)) {
+        
+        var widgetRendererSrc = 'https://unpkg.com/@jupyter-js-widgets@*/dist/embed.js';
+        
+      }
+    } catch(e) {}
+
+    scriptElement.src = widgetRendererSrc;
+    document.body.appendChild(scriptElement);
+  }
+
+  document.addEventListener('DOMContentLoaded', addWidgetsRenderer);
+}());
 </script>
 <style type="text/css">
     pre { line-height: 125%; }
@@ -1929,7 +2147,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <!-- End of mermaid configuration --><div class="jupyter-wrapper">
 <div class="jp-Notebook" data-jp-theme-light="true" data-jp-theme-name="JupyterLab Light">
 <div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=e8872783">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=844205d7-65af-4164-bdf5-1a6db15f8927">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -1947,25 +2165,21 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
-<span class="kn">from</span> <span class="nn">pandas.testing</span> <span class="kn">import</span> <span class="n">assert_frame_equal</span>
-<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="err">!</span><span class="n">pip</span> <span class="n">install</span> <span class="n">arcticdb</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-1">import pandas as pd
-from pandas.testing import assert_frame_equal
-import numpy as np</div>
+<div class="clipboard-copy-txt" id="cell-1">!pip install arcticdb</div>
 </div>
 </div>
 </div>
 </div>
 </div>
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=7a59a552">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=395e7b38-6e1f-495f-8940-87462c6e8eb5">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [2]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-2">
@@ -1978,23 +2192,67 @@ import numpy as np</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="kn">from</span> <span class="nn">arcticdb</span> <span class="kn">import</span> <span class="n">Arctic</span>
-<span class="kn">import</span> <span class="nn">arcticdb</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="kn">import</span> <span class="nn">arcticdb</span> <span class="k">as</span> <span class="nn">adb</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-2">from arcticdb import Arctic
-import arcticdb</div>
+<div class="clipboard-copy-txt" id="cell-2">import numpy as np
+import pandas as pd
+import arcticdb as adb</div>
 </div>
 </div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=0c848d76-a292-45a9-b297-314b120c0d47">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<center><img alt="No description has been provided for this image" src="data:image/png;base64,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"/>
+</center>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=66fd9cae-39d0-4555-9c08-9f443bce8894">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h1 id="arcticdb-resample-demo">ArcticDB Resample Demo<a class="anchor-link" href="#arcticdb-resample-demo">¶</a></h1><p>This demo notebook showcases the high-performance resample capability of ArcticDB.</p>
+<p>This is what you need to know about it:</p>
+<ul>
+<li>It runs on-the-fly as part of the read</li>
+<li>This makes it much more efficient than Pandas on large datasets</li>
+<li>The usage is similar to the Pandas resample function</li>
+<li>You can apply multiple aggregators to each column</li>
+<li>It can be used for downsampling high frequency data and generating "bar" data (see example 4)</li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=ae923ddb-02ed-49a9-aa47-a87cdf0ccff7">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h2 id="setup">Setup<a class="anchor-link" href="#setup">¶</a></h2>
 </div>
 </div>
 </div>
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=cd05bed5">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=85d940e6-c8f5-4080-87a7-f8a635960c40">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [3]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-3">
@@ -2007,21 +2265,23 @@ import arcticdb</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">ver</span> <span class="o">=</span> <span class="n">arcticdb</span><span class="o">.</span><span class="n">__version__</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># object store</span>
+<span class="n">arctic</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s2">"lmdb://arcticdb_resample"</span><span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-3">ver = arcticdb.__version__</div>
+<div class="clipboard-copy-txt" id="cell-3"># object store
+arctic = adb.Arctic("lmdb://arcticdb_resample")</div>
 </div>
 </div>
 </div>
 </div>
 </div>
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=95dd645d">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=b29f9e15-88de-4d3d-b461-82e560249b54">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [4]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-4">
@@ -2034,23 +2294,38 @@ import arcticdb</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">ac</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="sa">f</span><span class="s2">"lmdb:///tmp/</span><span class="si">{</span><span class="n">ver</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
-<span class="k">assert</span> <span class="n">ac</span><span class="o">.</span><span class="n">list_libraries</span><span class="p">()</span> <span class="o">==</span> <span class="p">[]</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># library</span>
+<span class="n">lib</span> <span class="o">=</span> <span class="n">arctic</span><span class="o">.</span><span class="n">get_library</span><span class="p">(</span><span class="s1">'resample'</span><span class="p">,</span> <span class="n">create_if_missing</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-4">ac = Arctic(f"lmdb:///tmp/{ver}")
-assert ac.list_libraries() == []</div>
+<div class="clipboard-copy-txt" id="cell-4"># library
+lib = arctic.get_library('resample', create_if_missing=True)</div>
 </div>
 </div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=652ae833-b07d-4770-9dd5-fb9065816d50">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h2 id="create-some-data">Create Some Data<a class="anchor-link" href="#create-some-data">¶</a></h2><ul>
+<li>timeseries with 12,000,000 rows and a 1-second index</li>
+<li>int, float, string columns</li>
+<li>write the data into ArcticDB</li>
+</ul>
 </div>
 </div>
 </div>
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=153495ee">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=64b0c0d9-ceb2-486e-9511-c02984cc7054">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [5]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-5">
@@ -2063,25 +2338,45 @@ assert ac.list_libraries() == []</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="mi">100</span><span class="p">,</span><span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="mi">1000000</span><span class="p">,</span> <span class="mi">4</span><span class="p">)),</span> <span class="n">columns</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="s1">'ABCD'</span><span class="p">))</span>
-<span class="n">lib</span> <span class="o">=</span> <span class="n">ac</span><span class="o">.</span><span class="n">create_library</span><span class="p">(</span><span class="s2">"test"</span><span class="p">)</span>
-<span class="k">assert</span> <span class="n">ac</span><span class="o">.</span><span class="n">list_libraries</span><span class="p">()</span> <span class="o">==</span> <span class="p">[</span><span class="s2">"test"</span><span class="p">]</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># data for resampling</span>
+<span class="n">index</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="s2">"1990-01-01"</span><span class="p">,</span> <span class="n">periods</span><span class="o">=</span><span class="mi">12_000_000</span><span class="p">,</span> <span class="n">freq</span><span class="o">=</span><span class="s2">"s"</span><span class="p">)</span>
+<span class="n">int_data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">index</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">uint64</span><span class="p">)</span>
+<span class="n">float_data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mf">95.</span><span class="p">,</span> <span class="mf">105.</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">index</span><span class="p">)),</span> <span class="mi">3</span><span class="p">)</span>
+<span class="n">letters</span> <span class="o">=</span> <span class="p">[</span><span class="s1">'a'</span><span class="p">,</span><span class="s1">'b'</span><span class="p">,</span><span class="s1">'c'</span><span class="p">,</span><span class="s1">'d'</span><span class="p">,</span><span class="s1">'e'</span><span class="p">,</span><span class="s1">'f'</span><span class="p">,</span><span class="s1">'g'</span><span class="p">]</span>
+<span class="n">mkt_data</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
+    <span class="n">index</span><span class="o">=</span><span class="n">index</span><span class="p">,</span>
+    <span class="n">data</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">"id"</span><span class="p">:</span> <span class="n">int_data</span><span class="p">,</span>
+        <span class="s2">"price"</span><span class="p">:</span> <span class="n">float_data</span><span class="p">,</span>
+        <span class="s2">"category"</span><span class="p">:</span> <span class="p">(</span><span class="n">letters</span><span class="o">*</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">index</span><span class="p">)</span><span class="o">//</span><span class="nb">len</span><span class="p">(</span><span class="n">letters</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">))[:</span><span class="nb">len</span><span class="p">(</span><span class="n">index</span><span class="p">)]</span>
+    <span class="p">}</span>
+<span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-5">df = pd.DataFrame(np.random.randint(0,100,size=(1000000, 4)), columns=list('ABCD'))
-lib = ac.create_library("test")
-assert ac.list_libraries() == ["test"]</div>
+<div class="clipboard-copy-txt" id="cell-5"># data for resampling
+index = pd.date_range("1990-01-01", periods=12_000_000, freq="s")
+int_data = np.arange(len(index), dtype=np.uint64)
+float_data = np.round(np.random.uniform(95., 105., len(index)), 3)
+letters = ['a','b','c','d','e','f','g']
+mkt_data = pd.DataFrame(
+    index=index,
+    data={
+        "id": int_data,
+        "price": float_data,
+        "category": (letters*(len(index)//len(letters) + 1))[:len(index)]
+    }
+)</div>
 </div>
 </div>
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=830f345e">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=3cc7b33f-ecb0-4588-a9ee-0bfaa4de42e1">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [6]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-6">
@@ -2094,23 +2389,121 @@ assert ac.list_libraries() == ["test"]</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"s"</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
-<span class="n">assert_frame_equal</span><span class="p">(</span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"s"</span><span class="p">)</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># view the first 10 rows of the data</span>
+<span class="n">mkt_data</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-6">lib.write("s", df)
-assert_frame_equal(lib.read("s").data, df)</div>
+<div class="clipboard-copy-txt" id="cell-6"># view the first 10 rows of the data
+mkt_data.head(10)</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[6]:</div>
+<div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/html" tabindex="0">
+<div>
+<style scoped="">
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+<thead>
+<tr style="text-align: right;">
+<th></th>
+<th>id</th>
+<th>price</th>
+<th>category</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th>1990-01-01 00:00:00</th>
+<td>0</td>
+<td>95.176</td>
+<td>a</td>
+</tr>
+<tr>
+<th>1990-01-01 00:00:01</th>
+<td>1</td>
+<td>97.872</td>
+<td>b</td>
+</tr>
+<tr>
+<th>1990-01-01 00:00:02</th>
+<td>2</td>
+<td>104.930</td>
+<td>c</td>
+</tr>
+<tr>
+<th>1990-01-01 00:00:03</th>
+<td>3</td>
+<td>103.573</td>
+<td>d</td>
+</tr>
+<tr>
+<th>1990-01-01 00:00:04</th>
+<td>4</td>
+<td>97.052</td>
+<td>e</td>
+</tr>
+<tr>
+<th>1990-01-01 00:00:05</th>
+<td>5</td>
+<td>103.435</td>
+<td>f</td>
+</tr>
+<tr>
+<th>1990-01-01 00:00:06</th>
+<td>6</td>
+<td>99.339</td>
+<td>g</td>
+</tr>
+<tr>
+<th>1990-01-01 00:00:07</th>
+<td>7</td>
+<td>103.358</td>
+<td>a</td>
+</tr>
+<tr>
+<th>1990-01-01 00:00:08</th>
+<td>8</td>
+<td>104.301</td>
+<td>b</td>
+</tr>
+<tr>
+<th>1990-01-01 00:00:09</th>
+<td>9</td>
+<td>104.651</td>
+<td>c</td>
+</tr>
+</tbody>
+</table>
 </div>
 </div>
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=1adf4bf1">
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=9811863f-4d77-4571-b84b-95b341751fcd">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [7]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-7">
@@ -2123,20 +2516,882 @@ assert_frame_equal(lib.read("s").data, df)</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">ac</span><span class="o">.</span><span class="n">delete_library</span><span class="p">(</span><span class="s2">"test"</span><span class="p">)</span>
-<span class="k">assert</span> <span class="n">ac</span><span class="o">.</span><span class="n">list_libraries</span><span class="p">()</span> <span class="o">==</span> <span class="p">[]</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># write the data into ArcticDB</span>
+<span class="n">sym</span> <span class="o">=</span> <span class="s1">'market_data'</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">sym</span><span class="p">,</span> <span class="n">mkt_data</span><span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-7">ac.delete_library("test")
-assert ac.list_libraries() == []</div>
+<div class="clipboard-copy-txt" id="cell-7"># write the data into ArcticDB
+sym = 'market_data'
+lib.write(sym, mkt_data)</div>
 </div>
 </div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[7]:</div>
+<div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain" tabindex="0">
+<pre>VersionedItem(symbol='market_data', library='resample', data=n/a, version=0, metadata=None, host='LMDB(path=~/arcticdb_resample)', timestamp=1718958796318913629)</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=ece26c4e-826f-48b1-918c-f2b1aff01ad4">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h2 id="1-simple-resample">1. Simple Resample<a class="anchor-link" href="#1-simple-resample">¶</a></h2><ul>
+<li>Resample to 1-minute</li>
+<li>Use different aggregators</li>
+<li>Resample can be thought of as a time-based groupby</li>
+<li>The groups are all the rows within a time interval</li>
+<li>Run also in Pandas to compare performance and results</li>
+</ul>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=c05c6a38-5326-407d-9588-8c562c5f0f66">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [8]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="CodeMirror cm-s-jupyter">
+<div class="zeroclipboard-container">
+<clipboard-copy for="cell-8">
+<div>
+<span class="notice" hidden="">Copied!</span>
+<svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
+<path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+<path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+</svg>
+</div>
+</clipboard-copy>
+</div>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># frequency and aggregator params</span>
+<span class="n">freq1</span> <span class="o">=</span> <span class="s1">'1min'</span>
+<span class="n">aggs1</span> <span class="o">=</span> <span class="p">{</span><span class="s1">'id'</span><span class="p">:</span> <span class="s1">'max'</span><span class="p">,</span> <span class="s1">'price'</span><span class="p">:</span> <span class="s1">'last'</span><span class="p">,</span> <span class="s1">'category'</span><span class="p">:</span> <span class="s1">'count'</span><span class="p">}</span>
+</pre></div>
+<div class="clipboard-copy-txt" id="cell-8"># frequency and aggregator params
+freq1 = '1min'
+aggs1 = {'id': 'max', 'price': 'last', 'category': 'count'}</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=1829312c-24ee-4da7-959d-a5465456fdcc">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [9]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="CodeMirror cm-s-jupyter">
+<div class="zeroclipboard-container">
+<clipboard-copy for="cell-9">
+<div>
+<span class="notice" hidden="">Copied!</span>
+<svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
+<path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+<path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+</svg>
+</div>
+</clipboard-copy>
+</div>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="o">%%</span><span class="n">time</span>
+<span class="c1"># create the resample query and apply it on the read</span>
+<span class="n">q1</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="n">freq1</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">(</span><span class="n">aggs1</span><span class="p">)</span>
+<span class="n">market_data_1min_df</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">sym</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q1</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">market_data_1min_df</span><span class="p">))</span>
+<span class="n">market_data_1min_df</span><span class="o">.</span><span class="n">tail</span><span class="p">()</span>
+</pre></div>
+<div class="clipboard-copy-txt" id="cell-9">%%time
+# create the resample query and apply it on the read
+q1 = adb.QueryBuilder().resample(freq1).agg(aggs1)
+market_data_1min_df = lib.read(sym, query_builder=q1).data
+print(len(market_data_1min_df))
+market_data_1min_df.tail()</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>200000
+CPU times: user 684 ms, sys: 251 ms, total: 935 ms
+Wall time: 171 ms
+</pre>
+</div>
+</div>
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[9]:</div>
+<div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/html" tabindex="0">
+<div>
+<style scoped="">
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+<thead>
+<tr style="text-align: right;">
+<th></th>
+<th>id</th>
+<th>price</th>
+<th>category</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th>1990-05-19 21:15:00</th>
+<td>11999759</td>
+<td>104.106</td>
+<td>60</td>
+</tr>
+<tr>
+<th>1990-05-19 21:16:00</th>
+<td>11999819</td>
+<td>104.456</td>
+<td>60</td>
+</tr>
+<tr>
+<th>1990-05-19 21:17:00</th>
+<td>11999879</td>
+<td>95.570</td>
+<td>60</td>
+</tr>
+<tr>
+<th>1990-05-19 21:18:00</th>
+<td>11999939</td>
+<td>103.967</td>
+<td>60</td>
+</tr>
+<tr>
+<th>1990-05-19 21:19:00</th>
+<td>11999999</td>
+<td>97.899</td>
+<td>60</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=c8bfcc79-8cd6-4b13-aca9-cf52f4c56042">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [10]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="CodeMirror cm-s-jupyter">
+<div class="zeroclipboard-container">
+<clipboard-copy for="cell-10">
+<div>
+<span class="notice" hidden="">Copied!</span>
+<svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
+<path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+<path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+</svg>
+</div>
+</clipboard-copy>
+</div>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="o">%%</span><span class="n">time</span>
+<span class="c1"># read the full data set and resample in Pandas</span>
+<span class="n">full_df</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">sym</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<span class="n">market_data_1min_pd_df</span> <span class="o">=</span> <span class="n">full_df</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="n">freq1</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">(</span><span class="n">aggs1</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">market_data_1min_pd_df</span><span class="p">))</span>
+<span class="n">market_data_1min_pd_df</span><span class="o">.</span><span class="n">tail</span><span class="p">()</span>
+</pre></div>
+<div class="clipboard-copy-txt" id="cell-10">%%time
+# read the full data set and resample in Pandas
+full_df = lib.read(sym).data
+market_data_1min_pd_df = full_df.resample(freq1).agg(aggs1)
+print(len(market_data_1min_pd_df))
+market_data_1min_pd_df.tail()</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>200000
+CPU times: user 1.6 s, sys: 401 ms, total: 2 s
+Wall time: 1.15 s
+</pre>
+</div>
+</div>
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[10]:</div>
+<div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/html" tabindex="0">
+<div>
+<style scoped="">
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+<thead>
+<tr style="text-align: right;">
+<th></th>
+<th>id</th>
+<th>price</th>
+<th>category</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th>1990-05-19 21:15:00</th>
+<td>11999759</td>
+<td>104.106</td>
+<td>60</td>
+</tr>
+<tr>
+<th>1990-05-19 21:16:00</th>
+<td>11999819</td>
+<td>104.456</td>
+<td>60</td>
+</tr>
+<tr>
+<th>1990-05-19 21:17:00</th>
+<td>11999879</td>
+<td>95.570</td>
+<td>60</td>
+</tr>
+<tr>
+<th>1990-05-19 21:18:00</th>
+<td>11999939</td>
+<td>103.967</td>
+<td>60</td>
+</tr>
+<tr>
+<th>1990-05-19 21:19:00</th>
+<td>11999999</td>
+<td>97.899</td>
+<td>60</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=e83c9467-e0d4-447c-bf1e-2ff91bb724ad">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h2 id="2-multiple-aggregators-per-column">2. Multiple Aggregators per Column<a class="anchor-link" href="#2-multiple-aggregators-per-column">¶</a></h2><ul>
+<li>Similar to NamedAgg in Pandas</li>
+<li>Downsample to 5-minute frequency</li>
+<li>Apply both max and last aggregators to the price column</li>
+<li>For multiple aggregators, the syntax is <code>output_column_name: (input_column_name: aggregator)</code></li>
+</ul>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=70d3765a-f8c8-4cf3-beaa-2cc7a469b358">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [11]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="CodeMirror cm-s-jupyter">
+<div class="zeroclipboard-container">
+<clipboard-copy for="cell-11">
+<div>
+<span class="notice" hidden="">Copied!</span>
+<svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
+<path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+<path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+</svg>
+</div>
+</clipboard-copy>
+</div>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">q2</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span>
+<span class="n">q2</span> <span class="o">=</span> <span class="n">q2</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="s1">'5min'</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s1">'id'</span><span class="p">:</span> <span class="s1">'max'</span><span class="p">,</span> <span class="s1">'price_last'</span><span class="p">:</span> <span class="p">(</span><span class="s1">'price'</span> <span class="p">,</span><span class="s1">'last'</span><span class="p">),</span> <span class="s1">'price_count'</span><span class="p">:</span> <span class="p">(</span><span class="s1">'price'</span> <span class="p">,</span><span class="s1">'count'</span><span class="p">),</span> <span class="s1">'category'</span><span class="p">:</span> <span class="s1">'first'</span><span class="p">})</span>
+</pre></div>
+<div class="clipboard-copy-txt" id="cell-11">q2 = adb.QueryBuilder()
+q2 = q2.resample('5min').agg({'id': 'max', 'price_last': ('price' ,'last'), 'price_count': ('price' ,'count'), 'category': 'first'})</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=8c31ec4b-8454-469d-8e31-8fefd0059bac">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [12]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="CodeMirror cm-s-jupyter">
+<div class="zeroclipboard-container">
+<clipboard-copy for="cell-12">
+<div>
+<span class="notice" hidden="">Copied!</span>
+<svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
+<path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+<path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+</svg>
+</div>
+</clipboard-copy>
+</div>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="o">%%</span><span class="n">time</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">sym</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q2</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+</pre></div>
+<div class="clipboard-copy-txt" id="cell-12">%%time
+lib.read(sym, query_builder=q2).data</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>CPU times: user 1.07 s, sys: 415 ms, total: 1.49 s
+Wall time: 151 ms
+</pre>
+</div>
+</div>
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[12]:</div>
+<div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/html" tabindex="0">
+<div>
+<style scoped="">
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+<thead>
+<tr style="text-align: right;">
+<th></th>
+<th>id</th>
+<th>category</th>
+<th>price_count</th>
+<th>price_last</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th>1990-01-01 00:00:00</th>
+<td>299</td>
+<td>a</td>
+<td>300</td>
+<td>102.172</td>
+</tr>
+<tr>
+<th>1990-01-01 00:05:00</th>
+<td>599</td>
+<td>g</td>
+<td>300</td>
+<td>101.450</td>
+</tr>
+<tr>
+<th>1990-01-01 00:10:00</th>
+<td>899</td>
+<td>f</td>
+<td>300</td>
+<td>96.718</td>
+</tr>
+<tr>
+<th>1990-01-01 00:15:00</th>
+<td>1199</td>
+<td>e</td>
+<td>300</td>
+<td>96.345</td>
+</tr>
+<tr>
+<th>1990-01-01 00:20:00</th>
+<td>1499</td>
+<td>d</td>
+<td>300</td>
+<td>98.955</td>
+</tr>
+<tr>
+<th>...</th>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+</tr>
+<tr>
+<th>1990-05-19 20:55:00</th>
+<td>11998799</td>
+<td>d</td>
+<td>300</td>
+<td>100.277</td>
+</tr>
+<tr>
+<th>1990-05-19 21:00:00</th>
+<td>11999099</td>
+<td>c</td>
+<td>300</td>
+<td>103.596</td>
+</tr>
+<tr>
+<th>1990-05-19 21:05:00</th>
+<td>11999399</td>
+<td>b</td>
+<td>300</td>
+<td>96.182</td>
+</tr>
+<tr>
+<th>1990-05-19 21:10:00</th>
+<td>11999699</td>
+<td>a</td>
+<td>300</td>
+<td>99.911</td>
+</tr>
+<tr>
+<th>1990-05-19 21:15:00</th>
+<td>11999999</td>
+<td>g</td>
+<td>300</td>
+<td>97.899</td>
+</tr>
+</tbody>
+</table>
+<p>40000 rows × 4 columns</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=82ee0316-73a6-41e0-92c6-04c22cc449bb">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h2 id="3-processing-pipeline-chaining-operations">3. Processing Pipeline: Chaining Operations<a class="anchor-link" href="#3-processing-pipeline-chaining-operations">¶</a></h2><ul>
+<li>Downsample to 2.5-minutes frequency</li>
+<li>Group the resampled data by the category column</li>
+<li>Aggregate the category groups using mean</li>
+</ul>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=cce9e5d3-a479-44f3-b877-56be688be9a0">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [13]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="CodeMirror cm-s-jupyter">
+<div class="zeroclipboard-container">
+<clipboard-copy for="cell-13">
+<div>
+<span class="notice" hidden="">Copied!</span>
+<svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
+<path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+<path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+</svg>
+</div>
+</clipboard-copy>
+</div>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">q3</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span>
+<span class="n">q3</span> <span class="o">=</span> <span class="n">q3</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="s1">'2min30s'</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s1">'id'</span><span class="p">:</span> <span class="s1">'min'</span><span class="p">,</span> <span class="s1">'category'</span><span class="p">:</span> <span class="s1">'first'</span><span class="p">})</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s1">'category'</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s1">'id'</span><span class="p">:</span> <span class="s1">'mean'</span><span class="p">})</span>
+</pre></div>
+<div class="clipboard-copy-txt" id="cell-13">q3 = adb.QueryBuilder()
+q3 = q3.resample('2min30s').agg({'id': 'min', 'category': 'first'}).groupby('category').agg({'id': 'mean'})</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=8d597ad7-56e7-4d11-830b-e77e0b3671f6">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [14]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="CodeMirror cm-s-jupyter">
+<div class="zeroclipboard-container">
+<clipboard-copy for="cell-14">
+<div>
+<span class="notice" hidden="">Copied!</span>
+<svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
+<path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+<path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+</svg>
+</div>
+</clipboard-copy>
+</div>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="o">%%</span><span class="n">time</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">sym</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q3</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+</pre></div>
+<div class="clipboard-copy-txt" id="cell-14">%%time
+lib.read(sym, query_builder=q3).data</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>CPU times: user 1.12 s, sys: 309 ms, total: 1.43 s
+Wall time: 183 ms
+</pre>
+</div>
+</div>
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[14]:</div>
+<div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/html" tabindex="0">
+<div>
+<style scoped="">
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+<thead>
+<tr style="text-align: right;">
+<th></th>
+<th>id</th>
+</tr>
+<tr>
+<th>category</th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th>a</th>
+<td>5999700.0</td>
+</tr>
+<tr>
+<th>b</th>
+<td>5999925.0</td>
+</tr>
+<tr>
+<th>d</th>
+<td>5999850.0</td>
+</tr>
+<tr>
+<th>e</th>
+<td>6000075.0</td>
+</tr>
+<tr>
+<th>f</th>
+<td>5999775.0</td>
+</tr>
+<tr>
+<th>g</th>
+<td>6000000.0</td>
+</tr>
+<tr>
+<th>c</th>
+<td>6000150.0</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=d3a9268e-f843-4bd6-a2f2-b4f51b50f0ce">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h2 id="4-example-ohlc-open-high-low-close-bars">4. Example: OHLC (Open High Low Close) Bars<a class="anchor-link" href="#4-example-ohlc-open-high-low-close-bars">¶</a></h2><ul>
+<li>Downsample to 5-minute frequency</li>
+<li>Use multiple aggregators on the price column</li>
+<li>This is a simple example of how to convert tick data to OHLC bar data</li>
+</ul>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=5e1bccab-77a9-42fa-9c33-60486498355f">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [15]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="CodeMirror cm-s-jupyter">
+<div class="zeroclipboard-container">
+<clipboard-copy for="cell-15">
+<div>
+<span class="notice" hidden="">Copied!</span>
+<svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
+<path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+<path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+</svg>
+</div>
+</clipboard-copy>
+</div>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">freq_ohlc</span> <span class="o">=</span> <span class="s1">'5min'</span>
+<span class="n">agg_ohlc</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">'open'</span><span class="p">:</span> <span class="p">(</span><span class="s1">'price'</span><span class="p">,</span> <span class="s1">'first'</span><span class="p">),</span>
+    <span class="s1">'high'</span><span class="p">:</span> <span class="p">(</span><span class="s1">'price'</span><span class="p">,</span> <span class="s1">'max'</span><span class="p">),</span>
+    <span class="s1">'low'</span><span class="p">:</span> <span class="p">(</span><span class="s1">'price'</span><span class="p">,</span> <span class="s1">'min'</span><span class="p">),</span>
+    <span class="s1">'close'</span><span class="p">:</span> <span class="p">(</span><span class="s1">'price'</span><span class="p">,</span> <span class="s1">'last'</span><span class="p">)</span>
+<span class="p">}</span>
+<span class="n">q_ohlc</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="n">freq_ohlc</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">(</span><span class="n">agg_ohlc</span><span class="p">)</span>
+</pre></div>
+<div class="clipboard-copy-txt" id="cell-15">freq_ohlc = '5min'
+agg_ohlc = {
+    'open': ('price', 'first'),
+    'high': ('price', 'max'),
+    'low': ('price', 'min'),
+    'close': ('price', 'last')
+}
+q_ohlc = adb.QueryBuilder().resample(freq_ohlc).agg(agg_ohlc)</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=5a5abb8e-2de9-48a9-a0a7-7bd044a8064f">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [16]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="CodeMirror cm-s-jupyter">
+<div class="zeroclipboard-container">
+<clipboard-copy for="cell-16">
+<div>
+<span class="notice" hidden="">Copied!</span>
+<svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
+<path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+<path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+</svg>
+</div>
+</clipboard-copy>
+</div>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="o">%%</span><span class="n">time</span>
+<span class="n">ohlc_5min_bars</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">sym</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q_ohlc</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+</pre></div>
+<div class="clipboard-copy-txt" id="cell-16">%%time
+ohlc_5min_bars = lib.read(sym, query_builder=q_ohlc).data</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>CPU times: user 1.26 s, sys: 492 ms, total: 1.75 s
+Wall time: 118 ms
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=25d0d145-5f93-45ab-86ca-12e34c2be8c6">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [17]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="CodeMirror cm-s-jupyter">
+<div class="zeroclipboard-container">
+<clipboard-copy for="cell-17">
+<div>
+<span class="notice" hidden="">Copied!</span>
+<svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
+<path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+<path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+</svg>
+</div>
+</clipboard-copy>
+</div>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">ohlc_5min_bars</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
+</pre></div>
+<div class="clipboard-copy-txt" id="cell-17">ohlc_5min_bars.head()</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[17]:</div>
+<div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/html" tabindex="0">
+<div>
+<style scoped="">
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+<thead>
+<tr style="text-align: right;">
+<th></th>
+<th>close</th>
+<th>low</th>
+<th>high</th>
+<th>open</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th>1990-01-01 00:00:00</th>
+<td>102.172</td>
+<td>95.076</td>
+<td>104.992</td>
+<td>95.176</td>
+</tr>
+<tr>
+<th>1990-01-01 00:05:00</th>
+<td>101.450</td>
+<td>95.008</td>
+<td>104.999</td>
+<td>98.520</td>
+</tr>
+<tr>
+<th>1990-01-01 00:10:00</th>
+<td>96.718</td>
+<td>95.053</td>
+<td>104.990</td>
+<td>103.959</td>
+</tr>
+<tr>
+<th>1990-01-01 00:15:00</th>
+<td>96.345</td>
+<td>95.070</td>
+<td>104.969</td>
+<td>95.878</td>
+</tr>
+<tr>
+<th>1990-01-01 00:20:00</th>
+<td>98.955</td>
+<td>95.011</td>
+<td>104.983</td>
+<td>103.538</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=e2180f79-3792-4642-8e8b-51b9c41f7345">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h2 id="conclusion">Conclusion<a class="anchor-link" href="#conclusion">¶</a></h2><p>We have demonstrated the following about the ArcticDB resample feature:</p>
+<ul>
+<li>Easy to use, especially if you already resample in Pandas</li>
+<li>Very high performance - in particular much faster than reading all the data then resampling in Pandas</li>
+<li>Can be combined with other query functions to build processing pipelines</li>
+<li>Can be used to generate timeseries bars</li>
+</ul>
 </div>
 </div>
 </div>
 </div>
 </div> <!-- jp-Notebook -->
 </div> <!-- jupyter-wrapper -->
+<script type="application/vnd.jupyter.widget-state+json">
+{"state": {}, "version_major": 2, "version_minor": 0}
+</script>
 
+        <style>
+        ['pre { line-height: 125%; }\ntd.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }\nspan.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }\ntd.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }\nspan.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }\n.highlight-ipynb .hll { background-color: var(--jp-cell-editor-active-background) }\n.highlight-ipynb { background: var(--jp-cell-editor-background); color: var(--jp-mirror-editor-variable-color) }\n.highlight-ipynb .c { color: var(--jp-mirror-editor-comment-color); font-style: italic } /* Comment */\n.highlight-ipynb .err { color: var(--jp-mirror-editor-error-color) } /* Error */\n.highlight-ipynb .k { color: var(--jp-mirror-editor-keyword-color); font-weight: bold } /* Keyword */\n.highlight-ipynb .o { color: var(--jp-mirror-editor-operator-color); font-weight: bold } /* Operator */\n.highlight-ipynb .p { color: var(--jp-mirror-editor-punctuation-color) } /* Punctuation */\n.highlight-ipynb .ch { color: var(--jp-mirror-editor-comment-color); font-style: italic } /* Comment.Hashbang */\n.highlight-ipynb .cm { color: var(--jp-mirror-editor-comment-color); font-style: italic } /* Comment.Multiline */\n.highlight-ipynb .cp { color: var(--jp-mirror-editor-comment-color); font-style: italic } /* Comment.Preproc */\n.highlight-ipynb .cpf { color: var(--jp-mirror-editor-comment-color); font-style: italic } /* Comment.PreprocFile */\n.highlight-ipynb .c1 { color: var(--jp-mirror-editor-comment-color); font-style: italic } /* Comment.Single */\n.highlight-ipynb .cs { color: var(--jp-mirror-editor-comment-color); font-style: italic } /* Comment.Special */\n.highlight-ipynb .kc { color: var(--jp-mirror-editor-keyword-color); font-weight: bold } /* Keyword.Constant */\n.highlight-ipynb .kd { color: var(--jp-mirror-editor-keyword-color); font-weight: bold } /* Keyword.Declaration */\n.highlight-ipynb .kn { color: var(--jp-mirror-editor-keyword-color); font-weight: bold } /* Keyword.Namespace */\n.highlight-ipynb .kp { color: var(--jp-mirror-editor-keyword-color); font-weight: bold } /* Keyword.Pseudo */\n.highlight-ipynb .kr { color: var(--jp-mirror-editor-keyword-color); font-weight: bold } /* Keyword.Reserved */\n.highlight-ipynb .kt { color: var(--jp-mirror-editor-keyword-color); font-weight: bold } /* Keyword.Type */\n.highlight-ipynb .m { color: var(--jp-mirror-editor-number-color) } /* Literal.Number */\n.highlight-ipynb .s { color: var(--jp-mirror-editor-string-color) } /* Literal.String */\n.highlight-ipynb .ow { color: var(--jp-mirror-editor-operator-color); font-weight: bold } /* Operator.Word */\n.highlight-ipynb .pm { color: var(--jp-mirror-editor-punctuation-color) } /* Punctuation.Marker */\n.highlight-ipynb .w { color: var(--jp-mirror-editor-variable-color) } /* Text.Whitespace */\n.highlight-ipynb .mb { color: var(--jp-mirror-editor-number-color) } /* Literal.Number.Bin */\n.highlight-ipynb .mf { color: var(--jp-mirror-editor-number-color) } /* Literal.Number.Float */\n.highlight-ipynb .mh { color: var(--jp-mirror-editor-number-color) } /* Literal.Number.Hex */\n.highlight-ipynb .mi { color: var(--jp-mirror-editor-number-color) } /* Literal.Number.Integer */\n.highlight-ipynb .mo { color: var(--jp-mirror-editor-number-color) } /* Literal.Number.Oct */\n.highlight-ipynb .sa { color: var(--jp-mirror-editor-string-color) } /* Literal.String.Affix */\n.highlight-ipynb .sb { color: var(--jp-mirror-editor-string-color) } /* Literal.String.Backtick */\n.highlight-ipynb .sc { color: var(--jp-mirror-editor-string-color) } /* Literal.String.Char */\n.highlight-ipynb .dl { color: var(--jp-mirror-editor-string-color) } /* Literal.String.Delimiter */\n.highlight-ipynb .sd { color: var(--jp-mirror-editor-string-color) } /* Literal.String.Doc */\n.highlight-ipynb .s2 { color: var(--jp-mirror-editor-string-color) } /* Literal.String.Double */\n.highlight-ipynb .se { color: var(--jp-mirror-editor-string-color) } /* Literal.String.Escape */\n.highlight-ipynb .sh { color: var(--jp-mirror-editor-string-color) } /* Literal.String.Heredoc */\n.highlight-ipynb .si { color: var(--jp-mirror-editor-string-color) } /* Literal.String.Interpol */\n.highlight-ipynb .sx { color: var(--jp-mirror-editor-string-color) } /* Literal.String.Other */\n.highlight-ipynb .sr { color: var(--jp-mirror-editor-string-color) } /* Literal.String.Regex */\n.highlight-ipynb .s1 { color: var(--jp-mirror-editor-string-color) } /* Literal.String.Single */\n.highlight-ipynb .ss { color: var(--jp-mirror-editor-string-color) } /* Literal.String.Symbol */\n.highlight-ipynb .il { color: var(--jp-mirror-editor-number-color) } /* Literal.Number.Integer.Long */']
+        </style>
+        
 
 
 

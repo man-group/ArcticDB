@@ -18,7 +18,7 @@
       
       
       <link rel="icon" href="../../images/FullWithBorder.png">
-      <meta name="generator" content="mkdocs-1.6.0, mkdocs-material-9.5.26">
+      <meta name="generator" content="mkdocs-1.6.0, mkdocs-material-9.5.27">
     
     
       
@@ -1127,6 +1127,27 @@
   
   
     <li class="md-nav__item">
+      <a href="../../notebooks/ArcticDB_demo_resample/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Resample Notebook
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../notebooks/ArcticDB_aws_public_blockchain/" class="md-nav__link">
         
   
@@ -1424,15 +1445,6 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#arcticdb.QueryBuilder--isna-isnull-notna-and-notnull-return-all-rows-where-a-specified-column-isis-not-nan-or-none-isna-is" class="md-nav__link">
-    <span class="md-ellipsis">
-      isna, isnull, notna, and notnull - return all rows where a specified column is/is not NaN or None. isna is
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#arcticdb.QueryBuilder--timestamp-filtering" class="md-nav__link">
     <span class="md-ellipsis">
       Timestamp filtering
@@ -1610,15 +1622,6 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#arcticdb.QueryBuilder--isna-isnull-notna-and-notnull-return-all-rows-where-a-specified-column-isis-not-nan-or-none-isna-is" class="md-nav__link">
-    <span class="md-ellipsis">
-      isna, isnull, notna, and notnull - return all rows where a specified column is/is not NaN or None. isna is
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#arcticdb.QueryBuilder--timestamp-filtering" class="md-nav__link">
     <span class="md-ellipsis">
       Timestamp filtering
@@ -1760,58 +1763,51 @@
     <div class="doc doc-contents first">
 
 
-      <p>Build a query to process read results with. Syntax is designed to be similar to Pandas:
-    &gt;&gt;&gt; q = adb.QueryBuilder()
-    &gt;&gt;&gt; q = q[q["a"] &lt; 5] (equivalent to q = q[q.a &lt; 5] provided the column name is also a valid Python variable name)
-    &gt;&gt;&gt; dataframe = lib.read(symbol, query_builder=q).data</p>
+      <p>Build a query to process read results with. Syntax is designed to be similar to Pandas:</p>
+<pre><code>q = adb.QueryBuilder()
+q = q[q["a"] &lt; 5] (equivalent to q = q[q.a &lt; 5] provided the column name is also a valid Python variable name)
+dataframe = lib.read(symbol, query_builder=q).data
+</code></pre>
 <p>For Group By and Aggregation functionality please see the documentation for the <code>groupby</code>. For projection
 functionality, see the documentation for the <code>apply</code> method.</p>
 <p>Supported arithmetic operations when projection or filtering:</p>
 <ul>
-<li>
-<p>Binary arithmetic: +, -, *, /</p>
-</li>
-<li>
-<p>Unary arithmetic: -, abs</p>
-</li>
+<li>Binary arithmetic: +, -, *, /</li>
+<li>Unary arithmetic: -, abs</li>
 </ul>
 <p>Supported filtering operations:</p>
-<h3 id="arcticdb.QueryBuilder--isna-isnull-notna-and-notnull-return-all-rows-where-a-specified-column-isis-not-nan-or-none-isna-is">isna, isnull, notna, and notnull - return all rows where a specified column is/is not NaN or None. isna is<a class="headerlink" href="#arcticdb.QueryBuilder--isna-isnull-notna-and-notnull-return-all-rows-where-a-specified-column-isis-not-nan-or-none-isna-is" title="Permanent link">&para;</a></h3>
-<p>equivalent to isnull, and notna is equivalent to notnull. I.e. no distinction is made between NaN and None values
-in column types that support both (e.g. strings).</p>
-<pre><code>&gt;&gt;&gt; q = q[q["col"].isna()]
-</code></pre>
 <ul>
+<li>
+<p>isna, isnull, notna, and notnull - return all rows where a specified column is/is not NaN or None. isna is
+equivalent to isnull, and notna is equivalent to notnull, i.e. no distinction is made between NaN and None values
+in column types that support both (e.g. strings). For example:
+    <div class="highlight"><pre><span></span><code>q = q[q[&quot;col&quot;].isna()]
+</code></pre></div></p>
+</li>
 <li>
 <p>Binary comparisons: &lt;, &lt;=, &gt;, &gt;=, ==, !=</p>
 </li>
-<li>
-<p>Unary NOT: ~</p>
-</li>
-<li>
-<p>Binary combinators: &amp;, |, ^</p>
-</li>
-<li>
-<p>List membership: isin, isnotin (also accessible with == and !=)</p>
-</li>
+<li>Unary NOT: ~</li>
+<li>Binary combinators: &amp;, |, ^</li>
+<li>List membership: isin, isnotin (also accessible with == and !=)</li>
 </ul>
 <p>isin/isnotin accept lists, sets, frozensets, 1D ndarrays, or *args unpacking. For example:</p>
-<pre><code>&gt;&gt;&gt; l = [1, 2, 3]
-&gt;&gt;&gt; q.isin(l)
+<pre><code>l = [1, 2, 3]
+q.isin(l)
 </code></pre>
 <p>is equivalent to...</p>
-<pre><code>&gt;&gt;&gt; q.isin(1, 2, 3)
+<pre><code>q.isin(1, 2, 3)
 </code></pre>
 <p>Boolean columns can be filtered on directly:</p>
-<pre><code>&gt;&gt;&gt; q = adb.QueryBuilder()
-&gt;&gt;&gt; q = q[q["boolean_column"]]
+<pre><code>q = adb.QueryBuilder()
+q = q[q["boolean_column"]]
 </code></pre>
 <p>and combined with other operations intuitively:</p>
-<pre><code>&gt;&gt;&gt; q = adb.QueryBuilder()
-&gt;&gt;&gt; q = q[(q["boolean_column_1"] &amp; ~q["boolean_column_2"]) &amp; (q["numeric_column"] &gt; 0)]
+<pre><code>q = adb.QueryBuilder()
+q = q[(q["boolean_column_1"] &amp; ~q["boolean_column_2"]) &amp; (q["numeric_column"] &gt; 0)]
 </code></pre>
 <p>Arbitrary combinations of these expressions is possible, for example:</p>
-<pre><code>&gt;&gt;&gt; q = q[(((q["a"] * q["b"]) / 5) &lt; (0.7 * q["c"])) &amp; (q["b"] != 12)]
+<pre><code>q = q[(((q["a"] * q["b"]) / 5) &lt; (0.7 * q["c"])) &amp; (q["b"] != 12)]
 </code></pre>
 <p>See tests/unit/arcticdb/version_store/test_filtering.py for more example uses.</p>
 <h3 id="arcticdb.QueryBuilder--timestamp-filtering">Timestamp filtering<a class="headerlink" href="#arcticdb.QueryBuilder--timestamp-filtering" title="Permanent link">&para;</a></h3>
@@ -2040,12 +2036,14 @@ Must be the first clause in the QueryBuilder object.</p>
     <div class="doc doc-contents ">
 
       <p>Group symbol by column name. GroupBy operations must be followed by an aggregation operator. Currently the following five aggregation
-operators are supported:
-    * "mean" - compute the mean of the group
-    * "sum" - compute the sum of the group
-    * "min" - compute the min of the group
-    * "max" - compute the max of the group
-    * "count" - compute the count of group</p>
+operators are supported:</p>
+<ul>
+<li>"mean" - compute the mean of the group</li>
+<li>"sum" - compute the sum of the group</li>
+<li>"min" - compute the min of the group</li>
+<li>"max" - compute the max of the group</li>
+<li>"count" - compute the count of group</li>
+</ul>
 <p>For usage examples, see below.</p>
 
 
@@ -2088,11 +2086,12 @@ operators are supported:
 <span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s2">&quot;grouping_column&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">&quot;to_mean&quot;</span><span class="p">:</span> <span class="s2">&quot;mean&quot;</span><span class="p">})</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
-<span class="go">              to_mean</span>
-<span class="go">    group_1  1.666667</span>
-<span class="go">    group_2       2.2</span>
 </code></pre></div>
-    <p>Max over one group:</p>
+    <pre><code>           to_mean
+ group_1  1.666667
+ group_2       2.2
+</code></pre>
+<p>Max over one group:</p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
 <span class="go">    {</span>
 <span class="go">        &quot;grouping_column&quot;: [&quot;group_1&quot;, &quot;group_1&quot;, &quot;group_1&quot;],</span>
@@ -2104,10 +2103,11 @@ operators are supported:
 <span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s2">&quot;grouping_column&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">&quot;to_max&quot;</span><span class="p">:</span> <span class="s2">&quot;max&quot;</span><span class="p">})</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
-<span class="go">             to_max</span>
-<span class="go">    group_1  5</span>
 </code></pre></div>
-    <p>Max and Mean:</p>
+    <pre><code>         to_max
+group_1  5
+</code></pre>
+<p>Max and Mean:</p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
 <span class="go">    {</span>
 <span class="go">        &quot;grouping_column&quot;: [&quot;group_1&quot;, &quot;group_1&quot;, &quot;group_1&quot;],</span>
@@ -2120,10 +2120,11 @@ operators are supported:
 <span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s2">&quot;grouping_column&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">&quot;to_max&quot;</span><span class="p">:</span> <span class="s2">&quot;max&quot;</span><span class="p">,</span> <span class="s2">&quot;to_mean&quot;</span><span class="p">:</span> <span class="s2">&quot;mean&quot;</span><span class="p">})</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
-<span class="go">             to_max   to_mean</span>
-<span class="go">    group_1     2.5  1.666667</span>
 </code></pre></div>
-    <p>Min and max over one column, mean over another:</p>
+    <pre><code>         to_max   to_mean
+group_1     2.5  1.666667
+</code></pre>
+<p>Min and max over one column, mean over another:</p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
 <span class="go">    {</span>
 <span class="go">        &quot;grouping_column&quot;: [&quot;group_1&quot;, &quot;group_1&quot;, &quot;group_1&quot;, &quot;group_2&quot;, &quot;group_2&quot;],</span>
@@ -2137,10 +2138,11 @@ operators are supported:
 <span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">&quot;agg_1_min&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;agg_1&quot;</span><span class="p">,</span> <span class="s2">&quot;min&quot;</span><span class="p">),</span> <span class="s2">&quot;agg_1_max&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;agg_1&quot;</span><span class="p">,</span> <span class="s2">&quot;max&quot;</span><span class="p">),</span> <span class="s2">&quot;agg_2&quot;</span><span class="p">:</span> <span class="s2">&quot;mean&quot;</span><span class="p">})</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
-<span class="go">             agg_1_min  agg_1_max     agg_2</span>
-<span class="go">    group_1          1          3  1.666667</span>
-<span class="go">    group_2          4          5       2.2</span>
 </code></pre></div>
+    <pre><code>         agg_1_min  agg_1_max     agg_2
+group_1          1          3  1.666667
+group_2          4          5       2.2
+</code></pre>
 
 
 <table>
@@ -2294,25 +2296,34 @@ operators are supported:
 
     <div class="doc doc-contents ">
 
-      <p>Resample symbol on the index. Symbol must be datetime indexed. Resample operations must be followed by an
-aggregation operator. Currently, the following 7 aggregation operators are supported:
-    * "mean" - compute the mean of the group
-    * "sum" - compute the sum of the group
-    * "min" - compute the min of the group
-    * "max" - compute the max of the group
-    * "count" - compute the count of group
-    * "first" - compute the first value in the group
-    * "last" - compute the last value in the group
-Note that not all aggregators are supported with all column types.:
-    * Numeric columns - support all aggregators
-    * Bool columns - support all aggregators
-    * String columns - support count, first, and last aggregators
-    * Datetime columns - support all aggregators EXCEPT sum
-Note that time-buckets which contain no index values in the symbol will NOT be included in the returned
+      <p>Resample a symbol on the index. The symbol must be datetime indexed. Resample operations must be followed by
+an aggregation operator. Currently, the following 7 aggregation operators are supported:</p>
+<ul>
+<li>"mean" - compute the mean of the group</li>
+<li>"sum" - compute the sum of the group</li>
+<li>"min" - compute the min of the group</li>
+<li>"max" - compute the max of the group</li>
+<li>"count" - compute the count of group</li>
+<li>"first" - compute the first value in the group</li>
+<li>"last" - compute the last value in the group</li>
+</ul>
+<p>Note that not all aggregators are supported with all column types:</p>
+<ul>
+<li>Numeric columns - support all aggregators</li>
+<li>Bool columns - support all aggregators</li>
+<li>String columns - support count, first, and last aggregators</li>
+<li>Datetime columns - support all aggregators EXCEPT sum</li>
+</ul>
+<p>Note that time-buckets which contain no index values in the symbol will NOT be included in the returned
 DataFrame. This is not the same as Pandas default behaviour.
-Resampling is currently not supported with:
-    * Dynamic schema where an aggregation column is missing from one or more of the row-slices.
-    * Sparse data.</p>
+Resampling is currently not supported with:</p>
+<ul>
+<li>Dynamic schema where an aggregation column is missing from one or more of the row-slices.</li>
+<li>Sparse data.</li>
+</ul>
+<p>The resample results match pandas resample with <code>origin="epoch"</code>. We plan to add an 'origin' argument in
+a future release and will then change the default value to '"start_day"' to match the Pandas default. This
+will change the results in cases where the rule is not a multiple of 24 hours.</p>
 
 
 <table>
@@ -2446,12 +2457,14 @@ frequencies listed above.</p>
             </td>
             <td class="doc-raises-details">
               <div class="doc-md-description">
-                <p>Raised on call to read if:
-    * If the aggregation specified is not compatible with the type of the column being aggregated as
-      specified above.
-    * The library has dynamic schema enabled, and at least one of the columns being aggregated is missing
-      from at least one row-slice.
-    * At least one of the columns being aggregated contains sparse data.</p>
+                <p>Raised on call to read if:</p>
+<ul>
+<li>If the aggregation specified is not compatible with the type of the column being aggregated as
+  specified above.</li>
+<li>The library has dynamic schema enabled, and at least one of the columns being aggregated is missing
+  from at least one row-slice.</li>
+<li>At least one of the columns being aggregated contains sparse data.</li>
+</ul>
               </div>
             </td>
           </tr>
@@ -2471,21 +2484,23 @@ frequencies listed above.</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="s2">&quot;h&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">&quot;to_sum&quot;</span><span class="p">:</span> <span class="s2">&quot;sum&quot;</span><span class="p">})</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
-<span class="go">                         to_sum</span>
-<span class="go">    2024-01-01 00:00:00    1770</span>
-<span class="go">    2024-01-01 01:00:00    5370</span>
 </code></pre></div>
-    <p>As above, but specifying that the closed boundary of each time-bucket is the right hand side, and also to label
-the output by the right boundary.</p>
+    <pre><code>                     to_sum
+2024-01-01 00:00:00    1770
+2024-01-01 01:00:00    5370
+</code></pre>
+<p>As above, but specifying that the closed boundary of each time-bucket is the right hand side, and also to label
+the output by the right boundary:</p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="s2">&quot;h&quot;</span><span class="p">,</span> <span class="n">closed</span><span class="o">=</span><span class="s2">&quot;right&quot;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;right&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">&quot;to_sum&quot;</span><span class="p">:</span> <span class="s2">&quot;sum&quot;</span><span class="p">})</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
-<span class="go">                         to_sum</span>
-<span class="go">    2024-01-01 00:00:00       0</span>
-<span class="go">    2024-01-01 01:00:00    1830</span>
-<span class="go">    2024-01-01 02:00:00    5310</span>
 </code></pre></div>
-    <p>Nones, NaNs, and NaTs are omitted from aggregations</p>
+    <pre><code>                     to_sum
+2024-01-01 00:00:00       0
+2024-01-01 01:00:00    1830
+2024-01-01 02:00:00    5310
+</code></pre>
+<p>Nones, NaNs, and NaTs are omitted from aggregations:</p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
 <span class="go">    {</span>
 <span class="go">        &quot;to_mean&quot;: [1.0, np.nan, 2.0],</span>
@@ -2496,10 +2511,11 @@ the output by the right boundary.</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="s2">&quot;h&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">&quot;to_mean&quot;</span><span class="p">:</span> <span class="s2">&quot;mean&quot;</span><span class="p">})</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
-<span class="go">                         to_mean</span>
-<span class="go">    2024-01-01 00:00:00      1.5</span>
 </code></pre></div>
-    <p>Output column names can be controlled through the format of the dict passed to agg</p>
+    <pre><code>                     to_mean
+2024-01-01 00:00:00      1.5
+</code></pre>
+<p>Output column names can be controlled through the format of the dict passed to agg:</p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
 <span class="go">    {</span>
 <span class="go">        &quot;agg_1&quot;: [1, 2, 3, 4, 5],</span>
@@ -2512,9 +2528,10 @@ the output by the right boundary.</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">&quot;agg_1_min&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;agg_1&quot;</span><span class="p">,</span> <span class="s2">&quot;min&quot;</span><span class="p">),</span> <span class="s2">&quot;agg_1_max&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;agg_1&quot;</span><span class="p">,</span> <span class="s2">&quot;max&quot;</span><span class="p">),</span> <span class="s2">&quot;agg_2&quot;</span><span class="p">:</span> <span class="s2">&quot;mean&quot;</span><span class="p">})</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
-<span class="go">                         agg_1_min  agg_1_max     agg_2</span>
-<span class="go">    2024-01-01 00:00:00          1          5      2.75</span>
 </code></pre></div>
+    <pre><code>                     agg_1_min  agg_1_max     agg_2
+2024-01-01 00:00:00          1          5      2.75
+</code></pre>
 
     </div>
 

@@ -18,7 +18,7 @@
       
       
       <link rel="icon" href="../../images/FullWithBorder.png">
-      <meta name="generator" content="mkdocs-1.6.0, mkdocs-material-9.5.26">
+      <meta name="generator" content="mkdocs-1.6.0, mkdocs-material-9.5.27">
     
     
       
@@ -1127,6 +1127,27 @@
   
   
     <li class="md-nav__item">
+      <a href="../../notebooks/ArcticDB_demo_resample/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Resample Notebook
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../notebooks/ArcticDB_aws_public_blockchain/" class="md-nav__link">
         
   
@@ -1403,6 +1424,15 @@
   <a href="#arcticdb.version_store.library.Library.append_batch" class="md-nav__link">
     <span class="md-ellipsis">
       append_batch
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#arcticdb.version_store.library.Library.compact_symbol_list" class="md-nav__link">
+    <span class="md-ellipsis">
+      compact_symbol_list
     </span>
   </a>
   
@@ -1847,6 +1877,15 @@
   <a href="#arcticdb.version_store.library.Library.append_batch" class="md-nav__link">
     <span class="md-ellipsis">
       append_batch
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#arcticdb.version_store.library.Library.compact_symbol_list" class="md-nav__link">
+    <span class="md-ellipsis">
+      compact_symbol_list
     </span>
   </a>
   
@@ -2590,6 +2629,85 @@ error_code, error_category, and exception_string properties.</p>
             <td class="doc-raises-details">
               <div class="doc-md-description">
                 <p>If data that is not of NormalizableType appears in any of the payloads.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="arcticdb.version_store.library.Library.compact_symbol_list" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">compact_symbol_list</span>
+
+
+<a href="#arcticdb.version_store.library.Library.compact_symbol_list" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">compact_symbol_list</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Compact the symbol list cache into a single key in the storage</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code>The number of symbol list keys prior to compaction</code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RAISES</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code>PermissionException</code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>Library has been opened in read-only mode</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+              <span class="doc-raises-annotation">
+                  <code>InternalException</code>
+              </span>
+            </td>
+            <td class="doc-raises-details">
+              <div class="doc-md-description">
+                <p>Storage lock required to compact the symbol list could not be acquired</p>
               </div>
             </td>
           </tr>
