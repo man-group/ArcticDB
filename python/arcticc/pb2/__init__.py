@@ -3,7 +3,7 @@ import sys as _sys
 import google.protobuf as _protobuf
 
 _proto_ver = _protobuf.__version__.split(".")[0]
-if _proto_ver in "34":
+if _proto_ver in "345":
 
     _python = _sys.version_info[:2]
     if _python >= (3, 11) and _proto_ver == "3":
@@ -16,6 +16,12 @@ if _proto_ver in "34":
     elif _python <= (3, 6) and _proto_ver >= "4":
         raise RuntimeError(
             "Your environment uses protobuf 4 which does not support Python<=3.6.\n"
+            "We recommend updating your environment to use the minimum supported version of Python.\n"
+            "For more information, see: https://devguide.python.org/versions/#supported-versions"
+        )
+    elif _python <= (3, 7) and _proto_ver >= "5":
+        raise RuntimeError(
+            "Your environment uses protobuf 5 which does not support Python<=3.7.\n"
             "We recommend updating your environment to use the minimum supported version of Python.\n"
             "For more information, see: https://devguide.python.org/versions/#supported-versions"
         )
