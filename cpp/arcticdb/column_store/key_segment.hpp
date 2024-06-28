@@ -38,7 +38,7 @@ public:
 
     ARCTICDB_NO_MOVE_OR_COPY(KeySegment)
 
-    std::vector<AtomKeyPacked> materialise_packed() const;
+    [[nodiscard]] std::vector<AtomKeyPacked> materialise_packed() const;
 
 private:
     [[nodiscard]] bool check_symbols_all_same() const;

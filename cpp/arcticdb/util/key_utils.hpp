@@ -158,6 +158,7 @@ inline ankerl::unordered_dense::set<AtomKey> get_data_keys_set(
     uint64_t read_ns{0};
     auto start = std::chrono::steady_clock::now();
     ankerl::unordered_dense::set<AtomKeyPacked> res;
+    res.reserve(keys.size());
     for (const auto& index_key: keys) {
         // TODO: Handle multi-index
         auto read_start = std::chrono::steady_clock::now();
@@ -174,9 +175,8 @@ inline ankerl::unordered_dense::set<AtomKey> get_data_keys_set(
     ankerl::unordered_dense::set<AtomKey> res_2;
     auto id = keys.begin()->id();
     res_2.reserve(res.size());
-    for (const auto& k: res) {
-        AtomKey tmp{id, k.version_id_, k.creation_ts_, k.content_hash_, k.index_start_, k.index_end_, k.key_type_};
-        res_2.emplace(std::move(tmp));
+    for (const auto& key: res) {
+        res_2.emplace(key.to_atom_key(id));
     }
     auto end_2 = std::chrono::steady_clock::now();
     log::version().warn("Spent {}ms in get_data_keys_set AtomKeyNoId->AtomKey", std::chrono::duration_cast<std::chrono::milliseconds>(end_2 - end).count());
