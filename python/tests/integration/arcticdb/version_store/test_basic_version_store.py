@@ -289,7 +289,7 @@ def test_with_prune(object_and_mem_and_lmdb_version_store, symbol):
 def test_prune_previous_memory_usage(lmdb_version_store_very_big_map):
     lib = lmdb_version_store_very_big_map
     sym = "test_prune_previous_memory_usage"
-    num_versions = 100
+    num_versions = 8000
     for idx in range(num_versions):
         lib.append(sym, pd.DataFrame({"col": np.arange(idx, idx+1)}), write_if_missing=True)
     assert len(lib.list_versions(sym)) == num_versions

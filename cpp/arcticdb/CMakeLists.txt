@@ -490,6 +490,8 @@ set(arcticdb_srcs
         version/version_map_batch_methods.cpp
         storage/s3/ec2_utils.cpp
         storage/lmdb/lmdb.hpp
+        column_store/key_segment.hpp
+        column_store/key_segment.cpp
 )
 
 if(${ARCTICDB_INCLUDE_ROCKSDB})
