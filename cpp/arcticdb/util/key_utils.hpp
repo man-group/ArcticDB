@@ -155,50 +155,25 @@ struct AtomKeyNoId {
     VersionId version_id_ = 0;
     timestamp creation_ts_ = 0;
     ContentHash content_hash_ = 0;
-    KeyType key_type_ = KeyType::UNDEFINED;
     // TODO: String indexes
     timestamp index_start_;
     timestamp index_end_;
-
-//    using is_avalanching = void;
 
     friend bool operator==(const AtomKeyNoId &l, const AtomKeyNoId &r) {
         return l.version_id_ == r.version_id_
                && l.creation_ts_ == r.creation_ts_
                && l.content_hash_ == r.content_hash_
-               && l.key_type_ == r.key_type_
                && l.index_start_ == r.index_start_
                && l.index_end_ == r.index_end_;
     }
 };
 #pragma pack(pop)
 
-static_assert(sizeof(AtomKeyNoId) == 40 + sizeof(int));
+static_assert(sizeof(AtomKeyNoId) == 40);
 
-struct AtomKeynoIdHash {
+struct AtomKeyNoIdHash {
     uint64_t operator()(const AtomKeyNoId& key) const noexcept {
-        // impl1
-        return ankerl::unordered_dense::detail::wyhash::hash(&key, 40 + sizeof(int));
-
-        // impl2
-//        std::array<uint8_t, 40 + sizeof(int)> packed_key;
-//        auto ptr = packed_key.data();
-//        *reinterpret_cast<VersionId*>(ptr) = key.version_id_;
-//        ptr += sizeof(VersionId);
-//        *reinterpret_cast<timestamp*>(ptr) = key.creation_ts_;
-//        ptr += sizeof(timestamp);
-//        *reinterpret_cast<ContentHash*>(ptr) = key.content_hash_;
-//        ptr += sizeof(ContentHash);
-//        *reinterpret_cast<timestamp*>(ptr) = key.index_start_;
-//        ptr += sizeof(timestamp);
-//        *reinterpret_cast<timestamp*>(ptr) = key.index_end_;
-//        ptr += sizeof(timestamp);
-//        *reinterpret_cast<KeyType*>(ptr) = key.key_type_;
-//        return ankerl::unordered_dense::detail::wyhash::hash(packed_key.data(), 41);
-
-          // impl3
-//        return folly::hash::hash_combine(key.version_id_, key.creation_ts_, key.content_hash_, key.key_type_, key.index_start_,
-//                                         key.index_end_);
+        return ankerl::unordered_dense::detail::wyhash::hash(&key, 40);
     }
 
     using is_avalanching = void;
@@ -210,55 +185,56 @@ inline ankerl::unordered_dense::set<AtomKey> get_data_keys_set(
         const std::shared_ptr<stream::StreamSource>& store,
         const KeyContainer& keys,
         storage::ReadKeyOpts opts) {
+    uint64_t read_ns{0};
     auto start = std::chrono::steady_clock::now();
-    ankerl::unordered_dense::set<AtomKeyNoId, AtomKeynoIdHash> res;
+    ankerl::unordered_dense::set<AtomKeyNoId, AtomKeyNoIdHash> res;
     for (const auto& index_key: keys) {
         // TODO: Async and in parallel?
         // TODO: Handle multi-index
+        auto read_start = std::chrono::steady_clock::now();
         auto segment = store->read_sync(index_key, opts).second;
+        auto read_end = std::chrono::steady_clock::now();
+        read_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(read_end - read_start).count();
         const auto& version_col = segment.column(*segment.column_index("version_id"));
         const auto& creation_ts_col = segment.column(*segment.column_index("creation_ts"));
         const auto& content_hash_col = segment.column(*segment.column_index("content_hash"));
-        const auto& key_type_col = segment.column(*segment.column_index("key_type"));
         const auto& index_start_col = segment.column(*segment.column_index("start_index"));
         const auto& index_end_col = segment.column(*segment.column_index("start_index"));
 
         auto version_data = version_col.data();
         auto creation_ts_data = creation_ts_col.data();
         auto content_hash_data = content_hash_col.data();
-        auto key_type_data = key_type_col.data();
         auto index_start_data = index_start_col.data();
         auto index_end_data = index_end_col.data();
 
         using version_TDT = ScalarTagType<DataTypeTag<DataType::UINT64>>;
         using creation_ts_TDT = ScalarTagType<DataTypeTag<DataType::INT64>>;
         using content_hash_TDT = ScalarTagType<DataTypeTag<DataType::UINT64>>;
-        using key_type_TDT = ScalarTagType<DataTypeTag<DataType::UINT8>>;
         using index_start_TDT = ScalarTagType<DataTypeTag<DataType::INT64>>;
         using index_end_TDT = ScalarTagType<DataTypeTag<DataType::INT64>>;
 
         auto version_it = version_data.template cbegin<version_TDT>();
         auto creation_ts_it = creation_ts_data.template cbegin<creation_ts_TDT>();
         auto content_hash_it = content_hash_data.template cbegin<content_hash_TDT>();
-        auto key_type_it = key_type_data.template cbegin<key_type_TDT>();
         auto index_start_it = index_start_data.template cbegin<index_start_TDT>();
         auto index_end_it = index_end_data.template cbegin<index_end_TDT>();
 
         for (
                 size_t row_idx = 0;
                 row_idx < segment.row_count();
-                ++row_idx, ++version_it, ++creation_ts_it, ++content_hash_it, ++key_type_it, ++index_start_it, ++index_end_it) {
-            AtomKeyNoId tmp{*version_it, *creation_ts_it, *content_hash_it, KeyType(*key_type_it), *index_start_it, *index_end_it};
+                ++row_idx, ++version_it, ++creation_ts_it, ++content_hash_it, ++index_start_it, ++index_end_it) {
+            AtomKeyNoId tmp{*version_it, *creation_ts_it, *content_hash_it, *index_start_it, *index_end_it};
             res.emplace(std::move(tmp));
         }
     }
     auto end = std::chrono::steady_clock::now();
+    log::version().warn("Spent {}ms in get_data_keys_set read", read_ns / 1000000);
     log::version().warn("Spent {}ms in get_data_keys_set AtomKeyNoId", std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
     ankerl::unordered_dense::set<AtomKey> res_2;
     auto id = keys.begin()->id();
     res_2.reserve(res.size());
     for (const auto& k: res) {
-        AtomKey tmp{id, k.version_id_, k.creation_ts_, k.content_hash_, k.index_start_, k.index_end_, k.key_type_};
+        AtomKey tmp{id, k.version_id_, k.creation_ts_, k.content_hash_, k.index_start_, k.index_end_, KeyType::TABLE_DATA};
         res_2.emplace(std::move(tmp));
     }
     auto end_2 = std::chrono::steady_clock::now();
