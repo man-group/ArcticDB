@@ -400,10 +400,9 @@ void append_incomplete_segment(
     auto seg_row_count = seg.row_count();
 
     auto desc = stream_descriptor(stream_id, RowCountIndex{}, {});
-    auto tsd = pack_timeseries_descriptor(std::move(desc), seg_row_count, std::move(next_key), {});
+    auto tsd = pack_timeseries_descriptor(desc, seg_row_count, std::move(next_key), {});
+    seg.set_timeseries_descriptor(tsd);
 
-    seg.set_timeseries_descriptor(std::move(tsd));
-    util::check(static_cast<bool>(seg.metadata()), "Expected metadata");
     auto new_key = store->write(
             arcticdb::stream::KeyType::APPEND_DATA,
             0,
