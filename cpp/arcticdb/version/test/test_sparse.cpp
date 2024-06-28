@@ -98,6 +98,96 @@ TEST_F(SparseTestStore, SimpleRoundtrip) {
     ASSERT_EQ(val4, 6);
 }
 
+// Just write a dummy StreamDescriptor to the TimeseriesDescriptor to avoid duplicating it
+// as the same information is available in the segment header. This is how arcticc behaves so the test is important to
+// check compat with existing data.
+//
+// This functions helps to test that readers look for the StreamDescriptor on the header, not in the
+// TimeseriesDescriptor.
+//
+// Compare with `append_incomplete_segment`. Keep this function even if it duplicates `append_incomplete_segment` so
+// that we have protection against `append_incomplete_segment` changing how it writes the descriptors in future.
+void append_incomplete_segment_backwards_compat(
+        const std::shared_ptr<arcticdb::Store>& store,
+        const arcticdb::StreamId& stream_id,
+        arcticdb::SegmentInMemory &&seg) {
+    using namespace arcticdb::proto::descriptors;
+    using namespace arcticdb::stream;
+
+    auto [next_key, total_rows] = read_head(store, stream_id);
+
+    auto start_index = TimeseriesIndex::start_value_for_segment(seg);
+    auto end_index = TimeseriesIndex::end_value_for_segment(seg);
+    auto seg_row_count = seg.row_count();
+
+    // Dummy StreamDescriptor
+    auto desc = stream_descriptor(stream_id, RowCountIndex{}, {});
+
+    auto tsd = arcticdb::make_timeseries_descriptor(
+            seg_row_count,
+            std::move(desc),
+            NormalizationMetadata{},
+            std::nullopt,
+            std::nullopt,
+            std::move(next_key),
+            false);
+
+    seg.set_timeseries_descriptor(std::move(tsd));
+    auto new_key = store->write(
+            arcticdb::stream::KeyType::APPEND_DATA,
+            0,
+            stream_id,
+            start_index,
+            end_index,
+            std::move(seg)).get();
+
+    total_rows += seg_row_count;
+    write_head(store, to_atom(std::move(new_key)), total_rows);
+}
+
+TEST_F(SparseTestStore, SimpleRoundtripBackwardsCompat) {
+    using namespace arcticdb;
+    using namespace arcticdb::stream;
+    using DynamicAggregator =  Aggregator<TimeseriesIndex, DynamicSchema, stream::NeverSegmentPolicy, stream::SparseColumnPolicy>;
+    using DynamicSinkWrapper = SinkWrapperImpl<DynamicAggregator>;
+
+    const std::string stream_id("test_sparse");
+
+    DynamicSinkWrapper wrapper(stream_id, {});
+    auto& aggregator = wrapper.aggregator_;
+
+    aggregator.start_row(timestamp{0})([](auto& rb) {
+        rb.set_scalar_by_name("first",  uint32_t(5), DataType::UINT32);
+    });
+
+    aggregator.start_row(timestamp{1})([](auto& rb) {
+        rb.set_scalar_by_name("second",  uint64_t(6), DataType::UINT64);
+    });
+
+    wrapper.aggregator_.commit();
+
+    auto segment = wrapper.segment();
+    append_incomplete_segment_backwards_compat(test_store_->_test_get_store(), stream_id, std::move(segment));
+
+    ReadOptions read_options;
+    read_options.set_dynamic_schema(true);
+    read_options.set_incompletes(true);
+    pipelines::ReadQuery read_query;
+    read_query.row_filter = universal_range();
+    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options);
+    const auto& frame =read_result.frame_data.frame();;
+
+    ASSERT_EQ(frame.row_count(), 2);
+    auto val1 = frame.scalar_at<uint32_t>(0, 1);
+    ASSERT_EQ(val1, 5);
+    auto val2 = frame.scalar_at<uint64_t>(0, 2);
+    ASSERT_EQ(val2, 0);
+    auto val3 = frame.scalar_at<uint32_t>(1, 1);
+    ASSERT_EQ(val3, 0);
+    auto val4 = frame.scalar_at<uint64_t>(1, 2);
+    ASSERT_EQ(val4, 6);
+}
+
 TEST_F(SparseTestStore, DenseToSparse) {
     using namespace arcticdb;
     using namespace arcticdb::stream;
