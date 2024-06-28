@@ -39,7 +39,8 @@ Segment encode_v1(
 void decode_v1(const Segment& segment,
                const SegmentHeader& hdr,
                SegmentInMemory& res,
-               const StreamDescriptor& desc);
+               const StreamDescriptor& desc,
+               bool is_decoding_incompletes = false);
 
 void decode_v2(const Segment& segment,
                const SegmentHeader& hdr,
@@ -82,11 +83,11 @@ std::pair<std::optional<google::protobuf::Any>, StreamDescriptor> decode_metadat
 std::optional<TimeseriesDescriptor> decode_timeseries_descriptor(
     Segment& segment);
 
+std::optional<TimeseriesDescriptor> decode_timeseries_descriptor_for_incompletes(Segment& segment);
+
 HashedValue get_segment_hash(Segment& seg);
 
 SegmentDescriptorImpl read_segment_descriptor(const uint8_t*& data);
-
-TimeseriesDescriptor unpack_timeseries_descriptor_from_proto(const google::protobuf::Any& any);
 
 } // namespace arcticdb
 
