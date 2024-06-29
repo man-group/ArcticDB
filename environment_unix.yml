@@ -42,6 +42,7 @@ dependencies:
   - fmt
   - folly==2023.09.25.00
   - unordered_dense
+  - mimalloc
   # Vendored build dependencies (see `cpp/thirdparty` and `cpp/vcpkg.json`)
   # Versions must be kept in sync
   - xxhash==0.8.2
