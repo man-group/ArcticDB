@@ -219,6 +219,59 @@ std::optional<FieldCollection> decode_descriptor_fields(
     }
 }
 
+std::optional<std::tuple<google::protobuf::Any, arcticdb::proto::descriptors::TimeSeriesDescriptor, FieldCollection>>
+decode_timeseries_descriptor_for_incompletes(
+        const arcticdb::proto::encoding::SegmentHeader& hdr,
+        const uint8_t* data,
+        const uint8_t* begin,
+        const uint8_t* end) {
+    util::check(data != nullptr, "Got null data ptr from segment");
+    const auto has_magic_numbers = EncodingVersion(hdr.encoding_version()) == EncodingVersion::V2;
+    if(has_magic_numbers)
+        util::check_magic<MetadataMagic>(data);
+
+    auto maybe_any = decode_metadata(hdr, data, begin);
+    if(!maybe_any)
+        return std::nullopt;
+
+    auto tsd = timeseries_descriptor_from_any(*maybe_any);
+
+    // Unlike `decode_timeseries_descriptor`, prefer the stream descriptor on the segment header.
+    // See PR #1647.
+    tsd.mutable_stream_descriptor()->CopyFrom(hdr.stream_descriptor());
+
+    if(has_magic_numbers)
+        util::check_magic<DescriptorMagic>(data);
+
+    if(hdr.has_descriptor_field() && hdr.descriptor_field().has_ndarray())
+        data += encoding_sizes::ndarray_field_compressed_size(hdr.descriptor_field().ndarray());
+
+    if(has_magic_numbers)
+        util::check_magic<IndexMagic>(data);
+
+    auto maybe_fields = decode_index_fields(hdr, data, begin, end);
+    if(!maybe_fields) {
+        auto old_fields = fields_from_proto(tsd.stream_descriptor());
+        return std::make_optional(std::make_tuple(std::move(*maybe_any), std::move(tsd), std::move(old_fields)));
+    }
+
+    maybe_fields->regenerate_offsets();
+    return std::make_tuple(std::move(*maybe_any), std::move(tsd), std::move(*maybe_fields));
+}
+
+std::optional<std::tuple<google::protobuf::Any, arcticdb::proto::descriptors::TimeSeriesDescriptor, FieldCollection>>
+decode_timeseries_descriptor_for_incompletes(
+        Segment& segment) {
+    auto &hdr = segment.header();
+    const uint8_t* data = segment.buffer().data();
+
+    util::check(data != nullptr, "Got null data ptr from segment");
+    const uint8_t* begin = data;
+    const uint8_t* end = data + segment.buffer().bytes();
+
+    return decode_timeseries_descriptor_for_incompletes(hdr, data, begin, end);
+}
+
 std::optional<std::tuple<google::protobuf::Any, arcticdb::proto::descriptors::TimeSeriesDescriptor, FieldCollection>> decode_timeseries_descriptor(
     const arcticdb::proto::encoding::SegmentHeader& hdr,
     const uint8_t* data,
