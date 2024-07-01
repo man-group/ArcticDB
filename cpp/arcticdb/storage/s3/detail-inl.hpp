@@ -91,7 +91,7 @@ namespace s3 {
         }
 
         inline bool is_expected_error_type(Aws::S3::S3Errors err) {
-            return err == Aws::S3::S3Errors::NO_SUCH_KEY || err == Aws::S3::S3Errors::RESOURCE_NOT_FOUND || err == Aws::S3::S3Errors::NO_SUCH_BUCKET;
+            return err == Aws::S3::S3Errors::NO_SUCH_KEY;
         }
 
         inline void raise_if_unexpected_error(const Aws::S3::S3Error& err) {
