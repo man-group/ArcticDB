@@ -41,12 +41,9 @@ KeySegment::KeySegment(SegmentInMemory&& segment, SymbolStructure symbol_structu
     }
 }
 
-std::vector<AtomKeyPacked> KeySegment::materialise_packed() const {
+std::variant<std::vector<AtomKeyPacked>, std::vector<AtomKey>> KeySegment::materialise() const {
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(symbol_structure_ == SymbolStructure::SAME,
                                                     "KeySegment::materialise_packed only makes sense if all keys have same stream id");
-    std::vector<AtomKeyPacked> res;
-    res.reserve(segment_.row_count());
-
     auto version_data = version_ids_.data();
     auto creation_ts_data = creation_timestamps_.data();
     auto content_hash_data = content_hashes_.data();
@@ -57,16 +54,52 @@ std::vector<AtomKeyPacked> KeySegment::materialise_packed() const {
     auto version_it = version_data.template cbegin<version_TDT>();
     auto creation_ts_it = creation_ts_data.template cbegin<creation_ts_TDT>();
     auto content_hash_it = content_hash_data.template cbegin<content_hash_TDT>();
-    auto index_start_it = index_start_data.template cbegin<index_start_TDT>();
-    auto index_end_it = index_end_data.template cbegin<index_end_TDT>();
     auto key_types_it = key_types_data.template cbegin<key_type_TDT>();
 
-    for (size_t row_idx = 0;
-         row_idx < segment_.row_count();
-         ++row_idx, ++version_it, ++creation_ts_it, ++content_hash_it, ++index_start_it, ++index_end_it, ++key_types_it) {
-        res.emplace_back(*version_it, *creation_ts_it, *content_hash_it, KeyType(*key_types_it), *index_start_it, *index_end_it);
+    if (is_sequence_type(start_indexes_.type().data_type())) {
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                is_sequence_type(end_indexes_.type().data_type()),
+                "KeySegment::materialise() expects end index column to contain strings when the start index column does"
+                );
+        std::vector<AtomKey> res;
+        res.reserve(segment_.row_count());
+        auto stream_id_data = stream_ids_.data();
+        auto stream_id_it = stream_id_data.template cbegin<stream_id_TDT>();
+        auto index_start_it = index_start_data.template cbegin<index_start_string_TDT>();
+        auto index_end_it = index_end_data.template cbegin<index_end_string_TDT>();
+        auto& string_pool = segment_.const_string_pool();
+        for (size_t row_idx = 0;
+             row_idx < segment_.row_count();
+             ++row_idx, ++stream_id_it, ++version_it, ++creation_ts_it, ++content_hash_it, ++index_start_it, ++index_end_it, ++key_types_it) {
+            res.emplace_back(
+                    symbol_.value_or(
+                            is_sequence_type(stream_ids_.type().data_type()) ? StreamId(StringId(string_pool.get_const_view(*stream_id_it))) : StreamId(NumericId(*stream_id_it))
+                            ),
+                    *version_it,
+                    *creation_ts_it,
+                    *content_hash_it,
+                    *index_start_it,
+                    *index_end_it,
+                    KeyType(*key_types_it)
+                    );
+        }
+        return res;
+    } else {
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                is_numeric_type(end_indexes_.type().data_type()),
+                "KeySegment::materialise() expects end index column to contain numbers when the start index column does"
+        );
+        std::vector<AtomKeyPacked> res;
+        res.reserve(segment_.row_count());
+        auto index_start_it = index_start_data.template cbegin<index_start_numeric_TDT>();
+        auto index_end_it = index_end_data.template cbegin<index_end_numeric_TDT>();
+        for (size_t row_idx = 0;
+             row_idx < segment_.row_count();
+             ++row_idx, ++version_it, ++creation_ts_it, ++content_hash_it, ++index_start_it, ++index_end_it, ++key_types_it) {
+            res.emplace_back(*version_it, *creation_ts_it, *content_hash_it, KeyType(*key_types_it), *index_start_it, *index_end_it);
+        }
+        return res;
     }
-    return res;
 }
 
 bool KeySegment::check_symbols_all_same() const {

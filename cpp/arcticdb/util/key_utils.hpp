@@ -157,30 +157,44 @@ inline ankerl::unordered_dense::set<AtomKey> get_data_keys_set(
         storage::ReadKeyOpts opts) {
     uint64_t read_ns{0};
     auto start = std::chrono::steady_clock::now();
-    ankerl::unordered_dense::set<AtomKeyPacked> res;
-    res.reserve(keys.size());
+    ankerl::unordered_dense::set<AtomKey> res;
+    ankerl::unordered_dense::set<AtomKeyPacked> res_packed;
     for (const auto& index_key: keys) {
         // TODO: Handle multi-index
         auto read_start = std::chrono::steady_clock::now();
         KeySegment key_segment(store->read_sync(index_key, opts).second, SymbolStructure::SAME);
         auto read_end = std::chrono::steady_clock::now();
         read_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(read_end - read_start).count();
-        for (auto&& key_packed: key_segment.materialise_packed()) {
-            res.emplace(std::move(key_packed));
-        }
+        auto data_keys = key_segment.materialise();
+        util::variant_match(
+                data_keys,
+                [&res, &keys](std::vector<AtomKey>& atom_keys) {
+                    res.reserve(keys.size());
+                    res = ankerl::unordered_dense::set<AtomKey>(std::make_move_iterator(atom_keys.begin()),
+                                                                std::make_move_iterator(atom_keys.end()));
+                },
+                [&res_packed, &keys](std::vector<AtomKeyPacked>& atom_keys_packed) {
+                    res_packed.reserve(keys.size());
+                    for (auto&& key_packed: atom_keys_packed) {
+                        res_packed.emplace(std::move(key_packed));
+                    }
+                }
+                );
     }
     auto end = std::chrono::steady_clock::now();
     log::version().warn("Spent {}ms in get_data_keys_set read", read_ns / 1000000);
     log::version().warn("Spent {}ms in get_data_keys_set AtomKeyNoId", std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
-    ankerl::unordered_dense::set<AtomKey> res_2;
-    auto id = keys.begin()->id();
-    res_2.reserve(res.size());
-    for (const auto& key: res) {
-        res_2.emplace(key.to_atom_key(id));
+    if (!res_packed.empty()) {
+        res.reserve(res_packed.size());
+        auto id = keys.begin()->id();
+        for (const auto& key: res_packed) {
+            res.emplace(key.to_atom_key(id));
+        }
     }
+
     auto end_2 = std::chrono::steady_clock::now();
     log::version().warn("Spent {}ms in get_data_keys_set AtomKeyNoId->AtomKey", std::chrono::duration_cast<std::chrono::milliseconds>(end_2 - end).count());
-    return res_2;
+    return res;
 }
 
 inline VersionId get_next_version_from_key(const AtomKey& prev) {

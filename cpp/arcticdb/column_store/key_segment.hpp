@@ -38,7 +38,8 @@ public:
 
     ARCTICDB_NO_MOVE_OR_COPY(KeySegment)
 
-    [[nodiscard]] std::vector<AtomKeyPacked> materialise_packed() const;
+    // Returns AtomKeyPacked vector for numeric indexes, and AtomKey vector for string indexes
+    [[nodiscard]] std::variant<std::vector<AtomKeyPacked>, std::vector<AtomKey>> materialise() const;
 
 private:
     [[nodiscard]] bool check_symbols_all_same() const;
@@ -58,8 +59,10 @@ private:
     using version_TDT = ScalarTagType<DataTypeTag<DataType::UINT64>>;
     using creation_ts_TDT = ScalarTagType<DataTypeTag<DataType::INT64>>;
     using content_hash_TDT = ScalarTagType<DataTypeTag<DataType::UINT64>>;
-    using index_start_TDT = ScalarTagType<DataTypeTag<DataType::INT64>>;
-    using index_end_TDT = ScalarTagType<DataTypeTag<DataType::INT64>>;
+    using index_start_numeric_TDT = ScalarTagType<DataTypeTag<DataType::INT64>>;
+    using index_end_numeric_TDT = ScalarTagType<DataTypeTag<DataType::INT64>>;
+    using index_start_string_TDT = ScalarTagType<DataTypeTag<DataType::UINT64>>;
+    using index_end_string_TDT = ScalarTagType<DataTypeTag<DataType::UINT64>>;
     using key_type_TDT = ScalarTagType<DataTypeTag<DataType::UINT8>>;
 
     SymbolStructure symbol_structure_{SymbolStructure::UNKNOWN};
