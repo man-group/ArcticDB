@@ -10,7 +10,7 @@ dependencies:
   - gflags
   - benchmark
   - doxygen
-  - boost-cpp
+  - libboost-devel
   - grpcio
   - grpcio-tools
   - protobuf
