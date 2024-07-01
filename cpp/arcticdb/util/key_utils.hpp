@@ -155,35 +155,41 @@ inline ankerl::unordered_dense::set<AtomKey> get_data_keys_set(
         const std::shared_ptr<stream::StreamSource>& store,
         const KeyContainer& keys,
         storage::ReadKeyOpts opts) {
-    uint64_t read_ns{0};
-    auto start = std::chrono::steady_clock::now();
     ankerl::unordered_dense::set<AtomKey> res;
     ankerl::unordered_dense::set<AtomKeyPacked> res_packed;
     for (const auto& index_key: keys) {
-        // TODO: Handle multi-index
-        auto read_start = std::chrono::steady_clock::now();
-        KeySegment key_segment(store->read_sync(index_key, opts).second, SymbolStructure::SAME);
-        auto read_end = std::chrono::steady_clock::now();
-        read_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(read_end - read_start).count();
-        auto data_keys = key_segment.materialise();
-        util::variant_match(
-                data_keys,
-                [&res, &keys](std::vector<AtomKey>& atom_keys) {
-                    res.reserve(keys.size());
-                    res = ankerl::unordered_dense::set<AtomKey>(std::make_move_iterator(atom_keys.begin()),
-                                                                std::make_move_iterator(atom_keys.end()));
-                },
-                [&res_packed, &keys](std::vector<AtomKeyPacked>& atom_keys_packed) {
-                    res_packed.reserve(keys.size());
-                    for (auto&& key_packed: atom_keys_packed) {
-                        res_packed.emplace(std::move(key_packed));
+        if (index_key.type() == KeyType::MULTI_KEY) {
+            // recurse_index_key includes the input key in the returned set, remove this here
+            auto sub_keys = recurse_index_key(store, index_key);
+            sub_keys.erase(index_key);
+            for (auto&& key: sub_keys) {
+                res.emplace(std::move(key));
+            }
+        } else if (index_key.type() == KeyType::TABLE_INDEX) {
+            KeySegment key_segment(store->read_sync(index_key, opts).second, SymbolStructure::SAME);
+            auto data_keys = key_segment.materialise();
+            util::variant_match(
+                    data_keys,
+                    [&res, &keys](std::vector<AtomKey> &atom_keys) {
+                        res.reserve(keys.size());
+                        for (auto &&key: atom_keys) {
+                            res.emplace(std::move(key));
+                        }
+                    },
+                    [&res_packed, &keys](std::vector<AtomKeyPacked> &atom_keys_packed) {
+                        res_packed.reserve(keys.size());
+                        for (auto &&key_packed: atom_keys_packed) {
+                            res_packed.emplace(std::move(key_packed));
+                        }
                     }
-                }
-                );
+            );
+        } else {
+            internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
+                    "get_data_keys_set: expected index or multi-index key, received {}",
+                    index_key.type()
+                    );
+        }
     }
-    auto end = std::chrono::steady_clock::now();
-    log::version().warn("Spent {}ms in get_data_keys_set read", read_ns / 1000000);
-    log::version().warn("Spent {}ms in get_data_keys_set AtomKeyNoId", std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
     if (!res_packed.empty()) {
         res.reserve(res_packed.size());
         auto id = keys.begin()->id();
@@ -191,9 +197,6 @@ inline ankerl::unordered_dense::set<AtomKey> get_data_keys_set(
             res.emplace(key.to_atom_key(id));
         }
     }
-
-    auto end_2 = std::chrono::steady_clock::now();
-    log::version().warn("Spent {}ms in get_data_keys_set AtomKeyNoId->AtomKey", std::chrono::duration_cast<std::chrono::milliseconds>(end_2 - end).count());
     return res;
 }
 
