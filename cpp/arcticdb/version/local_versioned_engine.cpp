@@ -66,7 +66,7 @@ folly::Future<folly::Unit> LocalVersionedEngine::delete_unreferenced_pruned_inde
                     pruned_indexes);
             in_snaps.insert(key_to_keep);
             PreDeleteChecks checks{false, false, false, false, std::move(in_snaps)};
-            return delete_trees_responsibly(not_in_snaps, {}, {}, checks)
+            return delete_trees_responsibly(store(), version_map(), not_in_snaps, {}, {}, checks)
                     .thenError(folly::tag_t<std::exception>{}, [](auto const& ex) {
                         log::version().warn("Failed to clean up pruned previous versions due to: {}", ex.what());
                     });
@@ -809,16 +809,7 @@ std::unordered_map<StreamId, VersionId> min_versions_for_each_stream(const std::
     return out;
 }
 
-folly::Future<folly::Unit> LocalVersionedEngine::delete_trees_responsibly(
-        const std::vector<IndexTypeKey>& idx_to_be_deleted,
-        const arcticdb::MasterSnapshotMap& snapshot_map,
-        const std::optional<SnapshotId>& snapshot_being_deleted,
-        const PreDeleteChecks& check,
-        const bool dry_run) {
-    return delete_trees_responsibly_static(store(), version_map(), idx_to_be_deleted, snapshot_map, snapshot_being_deleted, check, dry_run);
-}
-
-folly::Future<folly::Unit> LocalVersionedEngine::delete_trees_responsibly_static(
+folly::Future<folly::Unit> delete_trees_responsibly(
         std::shared_ptr<Store> store,
         std::shared_ptr<VersionMap> &version_map,
         const std::vector<IndexTypeKey>& idx_to_be_deleted,
