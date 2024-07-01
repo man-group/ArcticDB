@@ -149,7 +149,6 @@ inline ankerl::unordered_dense::set<AtomKey> recurse_segment(const std::shared_p
     return res;
 }
 
-// TODO: Better name, in multi-index keys the returned set can contain both table and multi index keys
 template<typename KeyContainer, typename = std::enable_if<std::is_base_of_v<AtomKey, typename KeyContainer::value_type>>>
 inline ankerl::unordered_dense::set<AtomKey> get_data_keys_set(
         const std::shared_ptr<stream::StreamSource>& store,
