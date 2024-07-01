@@ -44,8 +44,6 @@ KeySegment::KeySegment(SegmentInMemory&& segment, SymbolStructure symbol_structu
 }
 
 std::variant<std::vector<AtomKeyPacked>, std::vector<AtomKey>> KeySegment::materialise() const {
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(symbol_structure_ == SymbolStructure::SAME,
-                                                    "KeySegment::materialise_packed only makes sense if all keys have same stream id");
     auto version_data = version_ids_->data();
     auto creation_ts_data = creation_timestamps_->data();
     auto content_hash_data = content_hashes_->data();
@@ -58,32 +56,8 @@ std::variant<std::vector<AtomKeyPacked>, std::vector<AtomKey>> KeySegment::mater
     auto content_hash_it = content_hash_data.template cbegin<content_hash_TDT>();
     auto key_types_it = key_types_data.template cbegin<key_type_TDT>();
 
-    if (is_sequence_type(start_indexes_->type().data_type()) || symbol_structure_ != SymbolStructure::SAME) {
-        std::vector<AtomKey> res;
-        res.reserve(segment_.row_count());
-        auto stream_id_data = stream_ids_->data();
-        auto stream_id_it = stream_id_data.template cbegin<stream_id_TDT>();
-        const bool stream_id_is_sequence_type = is_sequence_type(stream_ids_->type().data_type());
-        auto index_start_it = index_start_data.template cbegin<index_start_string_TDT>();
-        auto index_end_it = index_end_data.template cbegin<index_end_string_TDT>();
-        auto& string_pool = segment_.const_string_pool();
-        for (size_t row_idx = 0;
-             row_idx < segment_.row_count();
-             ++row_idx, ++stream_id_it, ++version_it, ++creation_ts_it, ++content_hash_it, ++index_start_it, ++index_end_it, ++key_types_it) {
-            res.emplace_back(
-                    symbol_.value_or(
-                            stream_id_is_sequence_type ? StreamId(StringId(string_pool.get_const_view(*stream_id_it))) : StreamId(NumericId(*stream_id_it))
-                            ),
-                    *version_it,
-                    *creation_ts_it,
-                    *content_hash_it,
-                    *index_start_it,
-                    *index_end_it,
-                    KeyType(*key_types_it)
-                    );
-        }
-        return res;
-    } else {
+    if (symbol_structure_ == SymbolStructure::SAME && !is_sequence_type(start_indexes_->type().data_type())) {
+        // Can return AtomKeyPacked vector, much more time and memory efficient, and most common case
         std::vector<AtomKeyPacked> res;
         res.reserve(segment_.row_count());
         auto index_start_it = index_start_data.template cbegin<index_start_numeric_TDT>();
@@ -92,6 +66,32 @@ std::variant<std::vector<AtomKeyPacked>, std::vector<AtomKey>> KeySegment::mater
              row_idx < segment_.row_count();
              ++row_idx, ++version_it, ++creation_ts_it, ++content_hash_it, ++index_start_it, ++index_end_it, ++key_types_it) {
             res.emplace_back(*version_it, *creation_ts_it, *content_hash_it, KeyType(*key_types_it), *index_start_it, *index_end_it);
+        }
+        return res;
+    } else {
+        // Fall back to returning fully materialised AtomKeys
+        std::vector<AtomKey> res;
+        res.reserve(segment_.row_count());
+        auto stream_id_data = stream_ids_->data();
+        auto stream_id_it = stream_id_data.template cbegin<stream_id_TDT>();
+        const bool stream_id_is_sequence_type = is_sequence_type(stream_ids_->type().data_type());
+        auto index_start_it = index_start_data.template cbegin<index_start_string_TDT>();
+        auto index_end_it = index_end_data.template cbegin<index_end_string_TDT>();
+        const auto& string_pool = segment_.const_string_pool();
+        for (size_t row_idx = 0;
+             row_idx < segment_.row_count();
+             ++row_idx, ++stream_id_it, ++version_it, ++creation_ts_it, ++content_hash_it, ++index_start_it, ++index_end_it, ++key_types_it) {
+            res.emplace_back(
+                    symbol_.value_or(
+                            stream_id_is_sequence_type ? StreamId(StringId(string_pool.get_const_view(*stream_id_it))) : StreamId(NumericId(*stream_id_it))
+                    ),
+                    *version_it,
+                    *creation_ts_it,
+                    *content_hash_it,
+                    *index_start_it,
+                    *index_end_it,
+                    KeyType(*key_types_it)
+            );
         }
         return res;
     }
