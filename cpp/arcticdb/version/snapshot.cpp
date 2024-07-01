@@ -187,11 +187,9 @@ std::pair<std::vector<AtomKey>, std::unordered_set<AtomKey>> get_index_keys_part
 ) {
     ARCTICDB_SAMPLE(GetIndexKeysPartitionedByInclusionInSnapshots, 0)
     auto index_keys_in_snapshot = get_index_keys_in_snapshots(store, stream_id);
-
-    std::remove_if(all_index_keys.begin(), all_index_keys.end(), [&index_keys_in_snapshot](const auto& index_key) {
+    std::erase_if(all_index_keys, [&index_keys_in_snapshot](const auto& index_key) {
         return index_keys_in_snapshot.count(index_key) == 1;
     });
-
     return {std::move(all_index_keys), std::move(index_keys_in_snapshot)};
 }
 
