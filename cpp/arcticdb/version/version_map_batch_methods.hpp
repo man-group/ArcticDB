@@ -37,7 +37,7 @@ enum class BatchGetVersionOption {
     COUNT
 };
 
-inline std::optional<std::string> collect_futures_exceptions(auto futures) {
+inline std::optional<std::string> collect_futures_exceptions(auto&& futures) {
     std::optional<std::string> all_exceptions;
     for (auto&& collected_fut: futures) {
         if (!collected_fut.hasValue()) {
@@ -60,7 +60,7 @@ inline void submit_tasks_for_range(const Inputs& inputs, TaskSubmitter submitter
     }, window_size);
 
     auto collected_futs = folly::collectAll(futures).get();
-    std::optional<std::string> all_exceptions = collect_futures_exceptions(collected_futs);
+    std::optional<std::string> all_exceptions = collect_futures_exceptions(std::move(collected_futs));
     internal::check<ErrorCode::E_RUNTIME_ERROR>(!all_exceptions.has_value(), all_exceptions.value_or(""));
 }
 

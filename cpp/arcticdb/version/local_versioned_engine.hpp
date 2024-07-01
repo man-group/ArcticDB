@@ -60,11 +60,11 @@ struct SortMergeOptions {
 folly::Future<folly::Unit> delete_trees_responsibly(
     std::shared_ptr<Store> store,
     std::shared_ptr<VersionMap> &version_map,
-    const std::vector<IndexTypeKey>& idx_to_be_deleted,
+    const std::vector<IndexTypeKey>& orig_keys_to_delete,
     const arcticdb::MasterSnapshotMap& snapshot_map,
     const std::optional<SnapshotId>& snapshot_being_deleted = std::nullopt,
     const PreDeleteChecks& check = default_pre_delete_checks,
-    bool dry_run = false
+    const bool dry_run = false
 );
 
 class LocalVersionedEngine : public VersionedEngine {

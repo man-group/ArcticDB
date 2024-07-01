@@ -812,15 +812,15 @@ std::unordered_map<StreamId, VersionId> min_versions_for_each_stream(const std::
 folly::Future<folly::Unit> delete_trees_responsibly(
         std::shared_ptr<Store> store,
         std::shared_ptr<VersionMap> &version_map,
-        const std::vector<IndexTypeKey>& idx_to_be_deleted,
+        const std::vector<IndexTypeKey>& orig_keys_to_delete,
         const arcticdb::MasterSnapshotMap& snapshot_map,
         const std::optional<SnapshotId>& snapshot_being_deleted,
         const PreDeleteChecks& check,
-        bool dry_run) {
+        const bool dry_run) {
     ARCTICDB_SAMPLE(DeleteTree, 0)
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_tree");
 
-    util::ContainerFilterWrapper keys_to_delete(idx_to_be_deleted);
+    util::ContainerFilterWrapper keys_to_delete(orig_keys_to_delete);
     util::ContainerFilterWrapper not_to_delete(check.could_share_data);
 
     // Each section below performs these checks:
@@ -858,7 +858,7 @@ folly::Future<folly::Unit> delete_trees_responsibly(
     if (load_type != LoadType::NOT_LOADED) {
         std::unordered_map<StreamId, std::shared_ptr<VersionMapEntry>> entry_map;
         {
-            auto min_versions = min_versions_for_each_stream(idx_to_be_deleted);
+            auto min_versions = min_versions_for_each_stream(orig_keys_to_delete);
             for (const auto& min : min_versions) {
                 auto load_param = load_type == LoadType::LOAD_DOWNTO
                         ? LoadParameter{load_type, static_cast<SignedVersionId>(min.second)}
