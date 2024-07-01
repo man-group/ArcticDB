@@ -47,13 +47,13 @@ private:
 
     SegmentInMemory segment_;
     // Convenience columns, just referencing columns in segment_
-    Column& stream_ids_;
-    Column& version_ids_;
-    Column& creation_timestamps_;
-    Column& content_hashes_;
-    Column& start_indexes_;
-    Column& end_indexes_;
-    Column& key_types_;
+    std::shared_ptr<Column> stream_ids_;
+    std::shared_ptr<Column> version_ids_;
+    std::shared_ptr<Column> creation_timestamps_;
+    std::shared_ptr<Column> content_hashes_;
+    std::shared_ptr<Column> start_indexes_;
+    std::shared_ptr<Column> end_indexes_;
+    std::shared_ptr<Column> key_types_;
 
     using stream_id_TDT = ScalarTagType<DataTypeTag<DataType::UINT64>>;
     using version_TDT = ScalarTagType<DataTypeTag<DataType::UINT64>>;
