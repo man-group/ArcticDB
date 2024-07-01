@@ -38,7 +38,7 @@ public:
 
     ARCTICDB_NO_MOVE_OR_COPY(KeySegment)
 
-    // Returns AtomKeyPacked vector for numeric indexes, and AtomKey vector for string indexes
+    // Returns AtomKeyPacked vector for SymbolStructure::SAME keys with numeric indexes, and AtomKey vector otherwise
     [[nodiscard]] std::variant<std::vector<AtomKeyPacked>, std::vector<AtomKey>> materialise() const;
 
 private:

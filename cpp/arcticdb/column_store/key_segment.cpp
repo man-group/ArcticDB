@@ -56,15 +56,12 @@ std::variant<std::vector<AtomKeyPacked>, std::vector<AtomKey>> KeySegment::mater
     auto content_hash_it = content_hash_data.template cbegin<content_hash_TDT>();
     auto key_types_it = key_types_data.template cbegin<key_type_TDT>();
 
-    if (is_sequence_type(start_indexes_.type().data_type())) {
-        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                is_sequence_type(end_indexes_.type().data_type()),
-                "KeySegment::materialise() expects end index column to contain strings when the start index column does"
-                );
+    if (is_sequence_type(start_indexes_.type().data_type()) || symbol_structure_ != SymbolStructure::SAME) {
         std::vector<AtomKey> res;
         res.reserve(segment_.row_count());
         auto stream_id_data = stream_ids_.data();
         auto stream_id_it = stream_id_data.template cbegin<stream_id_TDT>();
+        const bool stream_id_is_sequence_type = is_sequence_type(stream_ids_.type().data_type());
         auto index_start_it = index_start_data.template cbegin<index_start_string_TDT>();
         auto index_end_it = index_end_data.template cbegin<index_end_string_TDT>();
         auto& string_pool = segment_.const_string_pool();
@@ -73,7 +70,7 @@ std::variant<std::vector<AtomKeyPacked>, std::vector<AtomKey>> KeySegment::mater
              ++row_idx, ++stream_id_it, ++version_it, ++creation_ts_it, ++content_hash_it, ++index_start_it, ++index_end_it, ++key_types_it) {
             res.emplace_back(
                     symbol_.value_or(
-                            is_sequence_type(stream_ids_.type().data_type()) ? StreamId(StringId(string_pool.get_const_view(*stream_id_it))) : StreamId(NumericId(*stream_id_it))
+                            stream_id_is_sequence_type ? StreamId(StringId(string_pool.get_const_view(*stream_id_it))) : StreamId(NumericId(*stream_id_it))
                             ),
                     *version_it,
                     *creation_ts_it,
@@ -85,10 +82,6 @@ std::variant<std::vector<AtomKeyPacked>, std::vector<AtomKey>> KeySegment::mater
         }
         return res;
     } else {
-        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                is_numeric_type(end_indexes_.type().data_type()),
-                "KeySegment::materialise() expects end index column to contain numbers when the start index column does"
-        );
         std::vector<AtomKeyPacked> res;
         res.reserve(segment_.row_count());
         auto index_start_it = index_start_data.template cbegin<index_start_numeric_TDT>();
