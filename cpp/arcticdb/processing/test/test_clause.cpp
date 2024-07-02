@@ -237,8 +237,8 @@ TEST(Clause, AggregationSparseGroupby) {
                                    {"count", "count_int", "count_int"}});
     aggregation.set_component_manager(component_manager);
 
-    size_t num_rows{100};
-    size_t unique_grouping_values{10};
+    const size_t num_rows{100};
+    const size_t unique_grouping_values{10};
     // 1 more group because of missing values
     size_t unique_groups{unique_grouping_values + 1};
     auto proc_unit = ProcessingUnit{generate_sparse_groupby_testing_segment(num_rows, unique_grouping_values)};
@@ -250,7 +250,7 @@ TEST(Clause, AggregationSparseGroupby) {
     ASSERT_EQ(1, segments.size());
 
     using aggregation_test::check_column;
-    check_column<int64_t>(*segments[0], "sum_int", unique_groups, [unique_grouping_values](size_t idx) -> int64_t {
+    check_column<int64_t>(*segments[0], "sum_int", unique_groups, [](size_t idx) -> int64_t {
         if (idx == 0) {
             return 495;
         } else {
@@ -264,7 +264,7 @@ TEST(Clause, AggregationSparseGroupby) {
             return idx;
         }
     });
-    check_column<int64_t>(*segments[0], "max_int", unique_groups, [unique_grouping_values](size_t idx) -> int64_t {
+    check_column<int64_t>(*segments[0], "max_int", unique_groups, [](size_t idx) -> int64_t {
         if (idx == 0) {
             return 99;
         }
@@ -274,7 +274,7 @@ TEST(Clause, AggregationSparseGroupby) {
             return 90 + idx % unique_grouping_values;
         }
     });
-    check_column<double>(*segments[0], "mean_int", unique_groups, [unique_grouping_values](size_t idx) -> double {
+    check_column<double>(*segments[0], "mean_int", unique_groups, [](size_t idx) -> double {
         if (idx == 0) {
             return 49.5;
         } else {
@@ -381,7 +381,6 @@ TEST(Clause, Merge) {
 
     std::vector<SegmentInMemory> segs;
     for(auto x = 0u; x < num_segs; ++x) {
-        auto symbol = fmt::format("merge_{}", x);
         segs.emplace_back(SegmentInMemory{seg.descriptor().clone(), num_rows / num_segs, false});
     }
 

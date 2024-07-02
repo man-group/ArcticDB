@@ -13,6 +13,7 @@
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/entity/metrics.hpp>
 #include <arcticdb/util/buffer_pool.hpp>
+#include <arcticdb/util/type_handler.hpp>
 
 #if defined(_MSC_VER) && defined(_DEBUG)
 #include <crtdbg.h>
@@ -29,6 +30,7 @@ ModuleData::~ModuleData() {
 #if defined(USE_REMOTERY)
     RemoteryInstance::destroy_instance();
 #endif
+    TypeHandlerRegistry::destroy_instance();
     ARCTICDB_DEBUG(log::version(), "Destroying AWS instance");
     storage::s3::S3ApiInstance::destroy_instance();
     log::Loggers::destroy_instance();

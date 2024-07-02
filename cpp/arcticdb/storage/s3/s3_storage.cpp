@@ -9,36 +9,17 @@
 
 #include <locale>
 
-#include <google/protobuf/io/zero_copy_stream_impl_lite.h>
-#include <folly/gen/Base.h>
-#include <aws/core/auth/AWSCredentialsProvider.h>
-
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/storage/s3/s3_api.hpp>
-#include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/util/pb_util.hpp>
-#include <arcticdb/log/log.hpp>
 #include <arcticdb/util/buffer_pool.hpp>
 #include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
-#include <arcticdb/util/exponential_backoff.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/util/composite.hpp>
 
-#include <aws/s3/model/GetObjectRequest.h>
-#include <aws/s3/model/PutObjectRequest.h>
 #include <aws/s3/model/DeleteObjectRequest.h>
-#include <aws/s3/model/DeleteObjectsRequest.h>
-#include <aws/s3/model/ListObjectsV2Request.h>
-#include <aws/s3/model/HeadObjectRequest.h>
-#include <aws/s3/model/Object.h>
-#include <aws/s3/model/Delete.h>
-#include <aws/s3/model/ObjectIdentifier.h>
-
-#include <boost/interprocess/streams/bufferstream.hpp>
-
 #include <arcticdb/storage/s3/s3_real_client.hpp>
 #include <arcticdb/storage/s3/s3_mock_client.hpp>
 #include <arcticdb/storage/s3/detail-inl.hpp>
@@ -92,7 +73,6 @@ bool S3Storage::do_iterate_type_until_match(KeyType key_type, const IterateTypeP
 bool S3Storage::do_key_exists(const VariantKey& key) {
     return detail::do_key_exists_impl(key, root_folder_, bucket_name_, *s3_client_, FlatBucketizer{});
 }
-
 
 } // namespace s3
 } // namespace arcticdb::storage

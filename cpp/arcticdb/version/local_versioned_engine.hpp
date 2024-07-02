@@ -136,16 +136,12 @@ public:
         const VersionQuery& version_query
     );
 
-    FrameAndDescriptor read_dataframe_internal(
-        const std::variant<VersionedItem, StreamId>& identifier,
-        ReadQuery& read_query,
-        const ReadOptions& read_options) override;
-
     ReadVersionOutput read_dataframe_version_internal(
         const StreamId &stream_id,
         const VersionQuery& version_query,
         ReadQuery& read_query,
-        const ReadOptions& read_options) override;
+        const ReadOptions& read_options,
+        std::any& handler_data) override;
 
     DescriptorItem read_descriptor_internal(
             const StreamId& stream_id,
@@ -259,7 +255,7 @@ public:
         const std::vector<VersionId>& version_ids,
         const std::vector<StreamId>& stream_ids,
         std::vector<std::shared_ptr<pipelines::InputTensorFrame>>&& frames,
-        std::vector<std::shared_ptr<DeDupMap>> de_dup_maps,
+        const std::vector<std::shared_ptr<DeDupMap>>& de_dup_maps,
         bool validate_index
     );
 
@@ -283,7 +279,8 @@ public:
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries,
         std::vector<std::shared_ptr<ReadQuery>>& read_queries,
-        const ReadOptions& read_options);
+        const ReadOptions& read_options,
+        std::any& handler_data);
 
     std::vector<std::variant<ReadVersionOutput, DataError>> temp_batch_read_internal_direct(
         const std::vector<StreamId>& stream_ids,
@@ -439,13 +436,6 @@ protected:
     SpecificAndLatestVersionKeys get_stream_index_map(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries);
-
-    std::variant<VersionedItem, StreamId> get_version_identifier(
-        const StreamId& stream_id,
-        const VersionQuery& version_query,
-        const ReadOptions& read_options,
-        const std::optional<VersionedItem>& version
-    );
 
 private:
     void initialize(const std::shared_ptr<storage::Library>& library);

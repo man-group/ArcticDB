@@ -303,6 +303,16 @@ public:
         type_(type),
         bit_vector_(bit_vector){}
 
+    ColumnData(
+        const ChunkedBuffer* data,
+        const TypeDescriptor &type) :
+        data_(data),
+        shapes_(nullptr),
+        pos_(0),
+        shape_pos_(0),
+        type_(type),
+        bit_vector_(nullptr){}
+
     ARCTICDB_MOVE_COPY_DEFAULT(ColumnData)
 
     template<typename TDT, IteratorType iterator_type=IteratorType::REGULAR, IteratorDensity iterator_density=IteratorDensity::DENSE>
@@ -384,7 +394,7 @@ public:
     }
 
     template<typename TDT>
-    std::optional<TypedBlockData<TDT>>  last()  {
+    std::optional<TypedBlockData<TDT>> last()  {
        if(data_->blocks().empty())
            return std::nullopt;
 
@@ -431,7 +441,7 @@ public:
                 // have assigned shapes. In case of an empty tensor the corresponding entries in the shapes array must
                 // be 0. The rationale is that the shapes array describes how many elements are there in a tensor. This
                 // way we can distinguish between [] (empty array) and None (no array at all). We assume that no block,
-                // besides the first, can start with empty tensors. This means that a block is exhausted when both are
+                // besides the first, can start with empty tensors. This means that a block is exhausted when two
                 // conditions are satisfied:
                 // i) The processed size becomes equal to the block size
                 // ii) All zero-sized shapes are parsed (i.e. the shape of the current tensor is not 0)

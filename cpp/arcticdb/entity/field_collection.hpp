@@ -126,13 +126,13 @@ public:
     inline shape_t *allocate_shapes(std::size_t bytes) {
         util::check(bytes != 0, "Allocate data called with zero size");
         shapes_.ensure_bytes(bytes);
-        return reinterpret_cast<shape_t*>(shapes_.ptr());
+        return reinterpret_cast<shape_t*>(shapes_.cursor());
     }
 
     inline uint8_t *allocate_data(std::size_t bytes) {
         util::check(bytes != 0, "Allocate data called with zero size");
         buffer_.ensure_bytes(bytes);
-        return buffer_.ptr();
+        return buffer_.cursor();
     }
 
     inline void advance_data(std::size_t size) {

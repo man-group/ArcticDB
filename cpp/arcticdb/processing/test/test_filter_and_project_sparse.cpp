@@ -45,7 +45,7 @@ protected:
     }
 
     util::BitSet binary_filter(std::string_view left_column_name,
-                               std::variant<std::string_view, double, std::unordered_set<double>> right_input,
+                               const std::variant<std::string_view, double, std::unordered_set<double>>& right_input,
                                OperationType op) {
         const std::string root_node_name("binary filter");
         const std::string value_name("value");
@@ -71,7 +71,7 @@ protected:
     }
 
     std::shared_ptr<Column> binary_projection(std::string_view left_column_name,
-                                              std::variant<std::string_view, double> right_input,
+                                              const std::variant<std::string_view, double>& right_input,
                                               OperationType op) {
         const std::string output_column("binary filter");
         const std::string value_name("value");

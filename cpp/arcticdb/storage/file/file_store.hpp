@@ -126,22 +126,8 @@ version_store::ReadVersionOutput read_dataframe_from_file_internal(
     const auto header_offset = key_data.key_offset_ + key_data.key_size_;
     ARCTICDB_DEBUG(log::storage(), "Got header offset at {}", header_offset);
     single_file_storage->load_header(header_offset, data_end - header_offset);
-
-    using namespace arcticdb::pipelines;
-    auto pipeline_context = std::make_shared<PipelineContext>();
-
-    pipeline_context->stream_id_ = stream_id;
-
-    version_store::read_indexed_keys_to_pipeline(store, pipeline_context, versioned_item, read_query, read_options);
-
-    version_store::modify_descriptor(pipeline_context, read_options);
-    generate_filtered_field_descriptors(pipeline_context, read_query.columns);
-    ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
-    auto buffers = std::make_shared<BufferHolder>();
-    auto frame = version_store::do_direct_read_or_process(store, read_query, read_options, pipeline_context, buffers);
-    ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
-    reduce_and_fix_columns(pipeline_context, frame, read_options);
-    FrameAndDescriptor frame_and_descriptor{frame, timeseries_descriptor_from_pipeline_context(pipeline_context, {}, pipeline_context->bucketize_dynamic_), {}, buffers};
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data();
+    auto frame_and_descriptor = version_store::read_frame_for_version(store, versioned_item, read_query, read_options, handler_data);
     return {std::move(versioned_item), std::move(frame_and_descriptor)};
 }
 } //namespace arcticdb
