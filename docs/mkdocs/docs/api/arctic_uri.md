@@ -65,7 +65,7 @@ Options is a query string that specifies connection specific options as `<name>=
 
 | Option   | Description   |
 |----------|---------------|
-| map_size | LMDB map size (see [here](http://www.lmdb.tech/doc/group__mdb.html#gaa2506ec8dab3d969b0e609cd82e619e5)). String. Supported formats are:<br/><br>"150MB" / "20GB" / "3TB"<br/><br>The only supported units are MB / GB / TB.<br><br/>On Windows and MacOS, LMDB will materialize a file of this size, so you need to set it to a reasonable value that your system has room for, and it has a small default (order of 1GB). On Linux, this is an upper bound on the space used by LMDB and the default is large (order of 100GB). |
+| map_size | LMDB map size (see [here](http://www.lmdb.tech/doc/group__mdb.html#gaa2506ec8dab3d969b0e609cd82e619e5)). String. Supported formats are:<br/><br>"150MB" / "20GB" / "3TB"<br/><br>The only supported units are MB / GB / TB.<br><br/>On Windows and MacOS, LMDB will materialize a file of this size, so you need to set it to a reasonable value that your system has room for, and it has a small default (order of 1GB). On Linux, this is an upper bound on the space used by LMDB and the default is large (order of 100GB). <br><br> ArcticDB creates an LMDB database per library, so the `map_size` will be per library.  |
 
 Example connection strings are `lmdb:///home/user/my_lmdb` or `lmdb:///home/user/my_lmdb?map_size=2GB`.
 
