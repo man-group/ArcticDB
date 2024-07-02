@@ -12,6 +12,7 @@
 #include <arcticdb/entity/index_range.hpp>
 #include <variant>
 #include <optional>
+#include <boost/container_hash/hash.hpp>
 #include <fmt/format.h>
 
 namespace arcticdb::entity {
@@ -101,10 +102,14 @@ class AtomKeyImpl {
 
     size_t get_cached_hash() const {
         if (!hash_) {
-            // arcticdb::commutative_hash_combine needs extra template specialisations for our variant types, folly's
-            // built-in variant forwards to std::hash which should be good enough for these simple types
-            hash_ = folly::hash::hash_combine(id_, version_id_, creation_ts_, content_hash_, key_type_, index_start_,
-                    index_end_);
+            auto seed = hash(id_);
+            boost::hash_combine(seed, version_id_);
+            boost::hash_combine(seed, creation_ts_);
+            boost::hash_combine(seed, content_hash_);
+            boost::hash_combine(seed, key_type_);
+            boost::hash_combine(seed, index_start_);
+            boost::hash_combine(seed, index_end_);
+            hash_ = seed;
         }
         return *hash_;
     }
