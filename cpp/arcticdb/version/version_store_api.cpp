@@ -358,12 +358,15 @@ void PythonVersionStore::add_to_snapshot(
         util::check(inserted, "Multiple elements in add_to_snapshot with key {}", id_version.first);
     }
 
+    bool is_delete_keys_immediately = variant_key_type(snap_key) != KeyType::SNAPSHOT_REF || !cfg().write_options().delayed_deletes();
     for(auto&& key : snapshot_contents) {
         auto new_version = affected_keys.find(key.id());
         if(new_version == std::end(affected_keys)) {
             retained_keys.emplace_back(std::move(key));
         } else {
-            deleted_keys.emplace_back(std::move(key));
+            if (is_delete_keys_immediately) {
+                deleted_keys.emplace_back(std::move(key));
+            }
         }
     }
 
@@ -371,10 +374,8 @@ void PythonVersionStore::add_to_snapshot(
         retained_keys.emplace_back(std::move(key));
 
     std::sort(std::begin(retained_keys), std::end(retained_keys));
-    if(variant_key_type(snap_key) == KeyType::SNAPSHOT_REF && cfg().write_options().delayed_deletes()) {
-        tombstone_snapshot(store(), to_ref(snap_key), std::move(snap_segment), version_map()->log_changes());
-    } else {
-        delete_trees_responsibly(deleted_keys, get_master_snapshots_map(store()), snap_name).get();
+    if(is_delete_keys_immediately) {
+        delete_trees_responsibly(store(), version_map(), deleted_keys, get_master_snapshots_map(store()), snap_name).get();
         if (version_map()->log_changes()) {
             log_delete_snapshot(store(), snap_name);
         }
@@ -402,20 +403,21 @@ void PythonVersionStore::remove_from_snapshot(
         symbol_versions.emplace(stream_ids[i], version_ids[i]);
     }
 
+    bool is_delete_keys_immediately = variant_key_type(snap_key) != KeyType::SNAPSHOT_REF || !cfg().write_options().delayed_deletes();
     std::vector<AtomKey> deleted_keys;
     std::vector<AtomKey> retained_keys;
     for(auto&& key : snapshot_contents) {
         if(symbol_versions.find(SymbolVersion{key.id(), key.version_id()}) == symbol_versions.end()) {
             retained_keys.emplace_back(std::move(key));
         } else {
-            deleted_keys.emplace_back(std::move(key));
+            if (is_delete_keys_immediately) {
+                deleted_keys.emplace_back(std::move(key));
+            }
         }
     }
 
-    if(variant_key_type(snap_key) == KeyType::SNAPSHOT_REF && cfg().write_options().delayed_deletes()) {
-        tombstone_snapshot(store(), to_ref(snap_key), std::move(snap_segment), version_map()->log_changes());
-    } else {
-        delete_trees_responsibly(deleted_keys, get_master_snapshots_map(store()), snap_name).get();
+    if(is_delete_keys_immediately) {
+        delete_trees_responsibly(store(), version_map(), deleted_keys, get_master_snapshots_map(store()), snap_name).get();
         if (version_map()->log_changes()) {
             log_delete_snapshot(store(), snap_name);
         }
@@ -862,6 +864,8 @@ void PythonVersionStore::delete_snapshot_sync(const SnapshotId& snap_name, const
 
     try {
         delete_trees_responsibly(
+            store(),
+            version_map(),
             index_keys_in_current_snapshot,
             snap_map,
             snap_name).get();
