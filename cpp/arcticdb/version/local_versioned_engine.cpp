@@ -345,6 +345,7 @@ ReadVersionOutput LocalVersionedEngine::read_dataframe_version_internal(
     const VersionQuery& version_query,
     ReadQuery& read_query,
     const ReadOptions& read_options) {
+    py::gil_scoped_release release_gil;    
     auto version = get_version_to_read(stream_id, version_query);
     std::variant<VersionedItem, StreamId> identifier;
     if(!version) {
