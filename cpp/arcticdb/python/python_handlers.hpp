@@ -1,4 +1,4 @@
-/* Copyright 2023 Man Group Operations Limited
+ /* Copyright 2023 Man Group Operations Limited
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
@@ -8,72 +8,154 @@
 
 #include <entity/types.hpp>
 #include <util/type_handler.hpp>
+#include "util/bitset.hpp"
 
+// Handlers for various non-trivial Python types,
+// that conform to the interface ITypeHandler
 namespace arcticdb {
-    struct ColumnMapping;
 
-    struct EmptyHandler {
-        /// @see arcticdb::ITypeHandler
-        void handle_type(
-            const uint8_t*& data,
-            uint8_t* dest,
-            const EncodedFieldImpl& encoded_field,
-            const ColumnMapping& mapping,
-            size_t dest_bytes,
-            const std::shared_ptr<BufferHolder>& buffers,
-            EncodingVersion encding_version
-        );
+struct ColumnMapping;
+class Column;
 
-        int type_size() const;
+struct EmptyHandler {
+    void handle_type(
+        const uint8_t *&data,
+        ChunkedBuffer& dest_buffer,
+        const EncodedFieldImpl &field,
+        const ColumnMapping& m,
+        const DecodePathData& shared_data,
+        EncodingVersion encoding_version,
+        const std::shared_ptr<StringPool>& string_pool
+    );
 
-        void default_initialize(void* dest, size_t byte_size) const;
-    };
+    [[nodiscard]] int type_size() const;
 
-    struct BoolHandler {
-        void handle_type(
-            const uint8_t *&data,
-            uint8_t *dest,
-            const EncodedFieldImpl &encoded_field,
-            const ColumnMapping& mapping,
-            size_t dest_bytes,
-            const std::shared_ptr<BufferHolder>& buffers,
-            EncodingVersion encding_version
-        );
+    void convert_type(
+        const Column& source_column,
+        ChunkedBuffer& dest_buffer,
+        size_t num_rows,
+        size_t offset_bytes,
+        TypeDescriptor source_type_desc,
+        TypeDescriptor dest_type_desc,
+        const DecodePathData& shared_data,
+        const std::shared_ptr<StringPool>& string_pool
+    );
 
-        int type_size() const;
+    void default_initialize(
+        ChunkedBuffer& buffer,
+        size_t offset,
+        size_t byte_size,
+        const DecodePathData& shared_data) const;
+};
 
-        void default_initialize(void* dest, size_t byte_size) const;
-    };
+struct StringHandler {
+    void handle_type(
+        const uint8_t *&data,
+        ChunkedBuffer& dest_buffer,
+        const EncodedFieldImpl &field,
+        const ColumnMapping& m,
+        const DecodePathData& shared_data,
+        EncodingVersion encoding_version,
+        const std::shared_ptr<StringPool>& string_pool
+    );
 
-    struct DecimalHandler {
-        void handle_type(
-                const uint8_t*& data,
-                uint8_t* dest,
-                const EncodedFieldImpl& encoded_field,
-                const ColumnMapping& mapping,
-                size_t dest_bytes,
-                const std::shared_ptr<BufferHolder>& buffers
-        );
+    [[nodiscard]] int type_size() const;
+    
+    void convert_type(
+        const Column& source_column,
+        ChunkedBuffer& dest_buffer,
+        size_t num_rows,
+        size_t offset_bytes,
+        TypeDescriptor source_type_desc,
+        TypeDescriptor dest_type_desc,
+        const DecodePathData& shared_data,
+        const std::shared_ptr<StringPool>& string_pool);
 
-        int type_size() const;
-    };
+    void default_initialize(
+        ChunkedBuffer& buffer,
+        size_t offset,
+        size_t byte_size,
+        const DecodePathData& shared_data) const;
+};
 
-    struct ArrayHandler {
-        /// @see arcticdb::ITypeHandler
-        void handle_type(
-            const uint8_t*& data,
-            uint8_t* dest,
-            const EncodedFieldImpl& encoded_field,
-            const ColumnMapping& mapping,
-            size_t dest_bytes,
-            const std::shared_ptr<BufferHolder>& buffers,
-            EncodingVersion encding_version
-        );
+struct BoolHandler {
+    void handle_type(
+        const uint8_t *&data,
+        ChunkedBuffer& dest_buffer,
+        const EncodedFieldImpl &field,
+        const ColumnMapping& m,
+        const DecodePathData& shared_data,
+        EncodingVersion encoding_version,
+        const std::shared_ptr<StringPool>& string_pool
+    );
 
-        int type_size() const;
+    [[nodiscard]] int type_size() const;
 
-        void default_initialize(void* dest, size_t byte_size) const;
+    void convert_type(
+        const Column& source_column,
+        ChunkedBuffer& dest_buffer,
+        size_t num_rows,
+        size_t offset_bytes,
+        TypeDescriptor source_type_desc,
+        TypeDescriptor dest_type_desc,
+        const DecodePathData& shared_data,
+        const std::shared_ptr<StringPool>& string_pool
+    );
 
-        static std::mutex initialize_array_mutex;
-    };
+    void default_initialize(
+        ChunkedBuffer& buffer,
+        size_t offset,
+        size_t byte_size,
+        const DecodePathData& shared_data) const;
+};
+
+struct ArrayHandler {
+    void handle_type(
+        const uint8_t *&data,
+        ChunkedBuffer& dest_buffer,
+        const EncodedFieldImpl &field,
+        const ColumnMapping& m,
+        const DecodePathData& shared_data,
+        EncodingVersion encoding_version,
+        const std::shared_ptr<StringPool>& string_pool
+    );
+
+    [[nodiscard]] int type_size() const;
+
+    void default_initialize(
+        ChunkedBuffer& buffer,
+        size_t offset,
+        size_t byte_size,
+        const DecodePathData& shared_data) const;
+
+    void convert_type(
+        const Column& source_column,
+        ChunkedBuffer& dest_buffer,
+        size_t num_rows,
+        size_t offset_bytes,
+        TypeDescriptor source_type_desc,
+        TypeDescriptor dest_type_desc,
+        const DecodePathData& shared_data,
+        const std::shared_ptr<StringPool>& string_pool);
+};
+
+inline void register_array_types() {
+    using namespace arcticdb;
+    constexpr std::array<DataType, 5> array_data_types = {
+        DataType::INT64, DataType::FLOAT64, DataType::EMPTYVAL, DataType::FLOAT32, DataType::INT32};
+
+    for (auto data_type : array_data_types) {
+        TypeHandlerRegistry::instance()->register_handler(make_array_type(data_type), arcticdb::ArrayHandler());
+    }
+}
+
+inline void register_string_types() {
+    using namespace arcticdb;
+    constexpr std::array<DataType, 5> string_data_types = {
+        DataType::ASCII_DYNAMIC64, DataType::UTF_DYNAMIC64};
+
+    for (auto data_type :string_data_types) {
+        TypeHandlerRegistry::instance()->register_handler(make_scalar_type(data_type), arcticdb::StringHandler());
+    }
+}
 } //namespace arcticdb

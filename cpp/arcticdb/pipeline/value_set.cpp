@@ -125,7 +125,7 @@ namespace arcticdb {
                 if (maybe_padded_str.has_value())
                     fixed_width_string_set->insert(*maybe_padded_str);
             }
-            typed_set_fixed_width_strings_.insert(std::make_pair(width, std::move(fixed_width_string_set)));
+            typed_set_fixed_width_strings_.try_emplace(width, std::move(fixed_width_string_set));
             return typed_set_fixed_width_strings_.at(width);
         }
     }

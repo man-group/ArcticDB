@@ -374,7 +374,7 @@ struct VersionMapEntry {
                 if(!version_timestamp)
                     version_timestamp = key.creation_ts();
                 else {
-                    util::check(key.creation_ts() <= *version_timestamp, "out of order timestamp: {} > {}", key.creation_ts(), version_timestamp.value());
+                    util::check(key.creation_ts() <= *version_timestamp, "out of order timestamp: {} > {}", key.creation_ts(), *version_timestamp);
                 }
             }
             if (is_index_key_type(key.type())) {

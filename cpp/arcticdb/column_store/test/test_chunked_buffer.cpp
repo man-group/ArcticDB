@@ -56,7 +56,7 @@ TEST(ChunkedBuffer, Split) {
 }
 
 TEST(ChunkedBuffer, RapidCheckRepro) {
-    std::vector<uint8_t> input(64);
+    std::array<uint8_t, 64> input;
     using namespace arcticdb;
     auto chunk_size = 5u;
     auto split_size = 13;

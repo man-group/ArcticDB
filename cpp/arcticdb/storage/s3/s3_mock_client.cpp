@@ -55,7 +55,7 @@ S3Result<std::monostate> MockS3Client::head_object(
         const std::string &bucket_name) const {
     auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::EXISTS);
     if (maybe_error.has_value()) {
-        return {maybe_error.value()};
+        return {*maybe_error};
     }
 
     if (s3_contents.find({bucket_name, s3_object_name}) == s3_contents.end()){
@@ -70,7 +70,7 @@ S3Result<Segment> MockS3Client::get_object(
         const std::string &bucket_name) const {
     auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::READ);
     if (maybe_error.has_value()) {
-        return {maybe_error.value()};
+        return {*maybe_error};
     }
 
     auto pos = s3_contents.find({bucket_name, s3_object_name});
@@ -86,7 +86,7 @@ S3Result<std::monostate> MockS3Client::put_object(
         const std::string &bucket_name) {
     auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::WRITE);
     if (maybe_error.has_value()) {
-        return {maybe_error.value()};
+        return {*maybe_error};
     }
 
     s3_contents.insert_or_assign({bucket_name, s3_object_name}, std::move(segment));
@@ -100,7 +100,7 @@ S3Result<DeleteOutput> MockS3Client::delete_objects(
     for (auto& s3_object_name : s3_object_names){
         auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::DELETE);
         if (maybe_error.has_value()) {
-            return {maybe_error.value()};
+            return {*maybe_error};
         }
     }
 
@@ -108,7 +108,7 @@ S3Result<DeleteOutput> MockS3Client::delete_objects(
     for (auto& s3_object_name : s3_object_names){
         auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::DELETE_LOCAL);
         if (maybe_error.has_value()) {
-            output.failed_deletes.push_back({s3_object_name, "Sample error message"});
+            output.failed_deletes.emplace_back(s3_object_name, "Sample error message");
         } else {
             s3_contents.erase({bucket_name, s3_object_name});
         }
@@ -133,7 +133,7 @@ S3Result<ListObjectsOutput> MockS3Client::list_objects(
 
     auto start_from = 0u;
     if (continuation_token.has_value()) {
-        start_from = std::stoi(continuation_token.value());
+        start_from = std::stoi(*continuation_token);
     }
 
     ListObjectsOutput output;
@@ -147,7 +147,7 @@ S3Result<ListObjectsOutput> MockS3Client::list_objects(
         auto& s3_object_name = matching_names[i];
 
         auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::LIST);
-        if (maybe_error.has_value()) return {maybe_error.value()};
+        if (maybe_error.has_value()) return {*maybe_error};
 
         output.s3_object_names.emplace_back(s3_object_name);
     }

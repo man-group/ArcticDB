@@ -48,7 +48,7 @@ class RowCountSegmentPolicy {
     explicit RowCountSegmentPolicy(std::size_t row_count) : max_row_count_(row_count) {}
 
     bool operator()(AggregationStats &stats) const {
-        ARCTICDB_DEBUG(log::inmem(), "RowCountSegmentPolicy AggregationStats total_rows={}, max_row={}",
+        ARCTICDB_TRACE(log::inmem(), "RowCountSegmentPolicy AggregationStats total_rows={}, max_row={}",
             stats.total_rows_, max_row_count_);
         return stats.total_rows_ >= max_row_count_;
     }

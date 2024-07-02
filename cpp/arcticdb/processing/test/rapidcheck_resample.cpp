@@ -76,7 +76,7 @@ RC_GTEST_PROP(Resample, StructureForProcessing, ()) {
             it->key_.end_time() <= bucket_boundary_pairs.front().first) {
             it = sorted_ranges_and_keys.erase(it);
         } else {
-            it++;
+            ++it;
         }
     }
 

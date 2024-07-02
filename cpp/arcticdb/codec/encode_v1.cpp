@@ -48,7 +48,7 @@ namespace arcticdb {
             using Encoder = TypedBlockEncoderImpl<TypedBlockData, TDT, EncodingVersion::V1>;
             ARCTICDB_TRACE(log::codec(), "Column data has {} blocks", column_data.num_blocks());
             while (auto block = column_data.next<TDT>()) {
-                const auto nbytes = block.value().nbytes();
+                const auto nbytes = block->nbytes();
                 if constexpr(must_contain_data(static_cast<TypeDescriptor>(type_desc_tag))) {
                     util::check(nbytes > 0, "Zero-sized block");
                 }
@@ -75,9 +75,9 @@ namespace arcticdb {
             ARCTICDB_TRACE(log::codec(), "Column data has {} blocks", column_data.num_blocks());
             while (auto block = column_data.next<TDT>()) {
                 if constexpr(must_contain_data(static_cast<TypeDescriptor>(type_desc_tag))) {
-                    util::check(block.value().nbytes() > 0, "Zero-sized block");
+                    util::check(block->nbytes() > 0, "Zero-sized block");
                 }
-                Encoder::encode(codec_opts, block.value(), field, out, pos);
+                Encoder::encode(codec_opts, *block, field, out, pos);
             }
         });
         encode_sparse_map(column_data, field, out, pos);

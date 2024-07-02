@@ -45,10 +45,6 @@ public:
         swap(left.cursor_, right.cursor_);
     }
 
-    uint8_t* ptr() {
-        return &buffer_[cursor_.pos()];
-    }
-
     [[nodiscard]] position_t cursor_pos() const {
         return cursor_.pos();
     }
@@ -106,7 +102,7 @@ public:
         CursoredBuffer tmp{buffer_.bytes(), false};
         for(const auto& block : buffer_.blocks()) {
             tmp.ensure_bytes(block->bytes());
-            memcpy(tmp.ptr(), block->data(), block->bytes());
+            memcpy(tmp.cursor(), block->data(), block->bytes());
             tmp.commit();
         }
         util::check(cursor_ == tmp.cursor_, "Cursor mismatch on compact_blocks, {} != {}", cursor_, tmp.cursor_);

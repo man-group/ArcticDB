@@ -13,6 +13,17 @@ size_t field_collection_encoded_field_bytes(const FieldCollection& fields) {
     return calc_field_bytes(fields.num_blocks() == 0 ? 0 : fields.num_blocks() + 1); //Non-empty field collection always has shapes buffer
 }
 
+void check_expected_bytes_match(
+        std::optional<size_t> expected_bytes,
+        size_t bytes_written) {
+    util::check(
+        !expected_bytes || (bytes_written == *expected_bytes),
+        "Mismatch between actual and expected bytes: {} != {}",
+        bytes_written,
+        expected_bytes ? *expected_bytes : 0
+    );
+}
+
 size_t SegmentHeader::serialize_to_bytes(uint8_t* dst, std::optional<size_t> expected_bytes) const {
     const auto* begin = dst;
     data_.field_buffer_.fields_bytes_ = static_cast<uint32_t>(header_fields_.data_bytes());
@@ -28,12 +39,7 @@ size_t SegmentHeader::serialize_to_bytes(uint8_t* dst, std::optional<size_t> exp
     dst += sizeof(offset_);
     ARCTICDB_TRACE(log::codec(), "Wrote offsets in {} bytes", dst - begin);
     size_t bytes_written = dst - begin;
-    util::check(
-        !expected_bytes || (bytes_written == *expected_bytes),
-        "Mismatch between actual and expected bytes: {} != {}",
-        dst - begin,
-        expected_bytes ? *expected_bytes : 0
-    );
+    check_expected_bytes_match(expected_bytes, bytes_written);
     ARCTICDB_TRACE(log::codec(), "Wrote V2 header with {} bytes ({} expected)", bytes_written, expected_bytes.value_or(0));
     return bytes_written;
 }

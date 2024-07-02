@@ -40,8 +40,8 @@ PythonOutputFrame::~PythonOutputFrame() {
             column_data.type().visit_tag([&](auto type_desc_tag) {
                 using TDT = decltype(type_desc_tag);
                 constexpr auto td = TypeDescriptor(type_desc_tag);
-                if constexpr (is_pyobject_type(TypeDescriptor(type_desc_tag))) {
-                    if constexpr(is_numpy_array(td)) {
+                if constexpr (is_object_type(TypeDescriptor(type_desc_tag))) {
+                    if constexpr(is_array_type(td)) {
                         auto it = column_data.buffer().iterator(sizeof(PyObject*));
                         while(!it.finished()) {
                             util::check(reinterpret_cast<PyObject*>(it.value()) != nullptr, "Can't delete null item");

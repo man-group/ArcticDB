@@ -34,16 +34,18 @@ public:
         const StreamDescriptor &tsd,
         size_t expected_column_size = 0,
         bool presize = false,
-        bool allow_sparse = false) :
-            impl_(std::make_shared<SegmentInMemoryImpl>(tsd, expected_column_size, presize, allow_sparse)){
+        bool allow_sparse = false,
+        DataTypeMode mode = DataTypeMode::INTERNAL) :
+            impl_(std::make_shared<SegmentInMemoryImpl>(tsd, expected_column_size, presize, allow_sparse, mode)){
     }
 
     explicit SegmentInMemory(
         StreamDescriptor&& tsd,
         size_t expected_column_size = 0,
         bool presize = false,
-        bool allow_sparse = false) :
-        impl_(std::make_shared<SegmentInMemoryImpl>(std::move(tsd), expected_column_size, presize, allow_sparse)){
+        bool allow_sparse = false,
+        DataTypeMode mode = DataTypeMode::INTERNAL) :
+        impl_(std::make_shared<SegmentInMemoryImpl>(std::move(tsd), expected_column_size, presize, allow_sparse, mode)){
     }
 
     friend void swap(SegmentInMemory& left, SegmentInMemory& right) {

@@ -23,6 +23,7 @@ arcticdb::proto::descriptors::NormalizationMetadata make_timeseries_norm_meta(co
     pandas.mutable_common()->set_name(std::move(id));
     NormalizationMetadata_PandasIndex pandas_index;
     pandas_index.set_name("time");
+    pandas_index.set_is_physically_stored(true);
     pandas.mutable_common()->mutable_index()->CopyFrom(pandas_index);
     norm_meta.mutable_df()->CopyFrom(pandas);
     return norm_meta;

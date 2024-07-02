@@ -61,5 +61,4 @@ struct StaticColumnMappingIterator {
     [[nodiscard]] size_t index_fieldcount() const;
 };
 
-
 } // namespace arcticdb

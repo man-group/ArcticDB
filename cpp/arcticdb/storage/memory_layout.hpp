@@ -328,6 +328,4 @@ struct MemoryLayout {
 
 #pragma pack(pop)
 
-
-
 } //namespace arcticdb

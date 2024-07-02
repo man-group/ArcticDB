@@ -53,6 +53,10 @@ StringPool &PipelineContextRow::string_pool() {
     return *parent_->string_pools_[index_];
 }
 
+const std::shared_ptr<StringPool>& PipelineContextRow::string_pool_ptr() {
+    return parent_->string_pools_[index_];
+}
+
 void PipelineContextRow::allocate_string_pool() {
     parent_->string_pools_[index_] = std::make_shared<StringPool>();
 }

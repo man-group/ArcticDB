@@ -16,6 +16,7 @@
 #include <arcticdb/util/allocator.hpp>
 #include <arcticdb/codec/default_codecs.hpp>
 #include <arcticdb/version/version_functions.hpp>
+#include <arcticdb/version/local_versioned_engine.hpp>
 
 #include <filesystem>
 #include <chrono>
@@ -465,7 +466,7 @@ TEST(VersionStore, UpdateWithin) {
         if(update_range.contains(i))
             expected += update_val;
 
-        auto val1 = seg.scalar_at<uint8_t >(i, 1);
+        auto val1 = seg.scalar_at<uint8_t>(i, 1);
         ASSERT_EQ(val1.value(), expected);
     }
 }

@@ -48,7 +48,7 @@ struct SmallMagicNum {
 
     void check() const {
         std::string_view expected(reinterpret_cast<const char*>(&Magic), 2);
-        util::check(magic_ == Magic, "Magic number failure, expected {}({}) got {}", Magic, expected, magic_);
+        util::check(magic_ == Magic, "Small magic number failure, expected {}({}) got {}", Magic, expected, magic_);
     }
 
 private:

@@ -18,8 +18,10 @@
 
 namespace arcticdb {
 
-struct BufferHolder;
+struct DecodePathData;
 struct ColumnMapping;
+class StringPool;
+class Column;
 
 struct ITypeHandler {
     template<class Base>
@@ -31,36 +33,48 @@ struct ITypeHandler {
         /// @param[in] dest_bytes Size of dest in bytes
         void handle_type(
             const uint8_t*& source,
-            uint8_t* dest,
+            ChunkedBuffer& dest_buffer,
             const EncodedFieldImpl& encoded_field_info,
             const ColumnMapping& mapping,
-            size_t dest_bytes,
-            const std::shared_ptr<BufferHolder>& buffers,
-            EncodingVersion encoding_version
+            const DecodePathData& shared_data,
+            EncodingVersion encoding_version,
+            const std::shared_ptr<StringPool>& string_pool
         ) {
             folly::poly_call<0>(
                 *this,
                 source,
-                dest,
+                dest_buffer,
                 encoded_field_info,
                 mapping,
-                dest_bytes,
-                buffers,
-                encoding_version
+                shared_data,
+                encoding_version,
+                string_pool
             );
         }
 
         int type_size() const {
-            return folly::poly_call<1>(*this);
+            return folly::poly_call<2>(*this);
         }
 
-        void default_initialize(void* dest, size_t byte_size) const {
-            folly::poly_call<2>(*this, dest, byte_size);
+        void convert_type(
+            const Column& source_column,
+            ChunkedBuffer& dest_buffer,
+            size_t num_rows,
+            size_t offset_bytes,
+            TypeDescriptor source_type_desc,
+            TypeDescriptor dest_type_desc,
+            const DecodePathData& shared_data,
+            const std::shared_ptr<StringPool>& string_pool) {
+            folly::poly_call<1>(*this, source_column, dest_buffer, num_rows, offset_bytes, source_type_desc, dest_type_desc, shared_data, string_pool);
+        }
+
+        void default_initialize(ChunkedBuffer& buffer, size_t offset, size_t byte_size, const DecodePathData& shared_data) const {
+            folly::poly_call<3>(*this, buffer, offset, byte_size, shared_data);
         }
     };
 
     template<class T>
-    using Members = folly::PolyMembers<&T::handle_type, &T::type_size, &T::default_initialize>;
+    using Members = folly::PolyMembers<&T::handle_type, &T::convert_type, &T::type_size, &T::default_initialize>;
 };
 
 using TypeHandler = folly::Poly<ITypeHandler>;
@@ -83,5 +97,14 @@ private:
     };
     std::unordered_map<entity::TypeDescriptor, std::shared_ptr<TypeHandler>, Hasher> handlers_;
 };
+
+
+inline std::shared_ptr<TypeHandler> get_type_handler(TypeDescriptor source, TypeDescriptor target) {
+    auto handler = TypeHandlerRegistry::instance()->get_handler(source);
+    if(handler)
+        return handler;
+
+    return TypeHandlerRegistry::instance()->get_handler(target);
+}
 
 }

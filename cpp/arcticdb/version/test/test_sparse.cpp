@@ -14,6 +14,7 @@
 #include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
+#include <arcticdb/python/python_handlers.hpp>
 
 struct SparseTestStore : arcticdb::TestStore {
 protected:
@@ -241,6 +242,7 @@ TEST_F(SparseTestStore, DenseToSparse) {
 TEST_F(SparseTestStore, SimpleRoundtripStrings) {
     using namespace arcticdb;
     using namespace arcticdb::stream;
+    register_string_types();
     using DynamicAggregator =  Aggregator<TimeseriesIndex, DynamicSchema, stream::NeverSegmentPolicy, stream::SparseColumnPolicy>;
     using DynamicSinkWrapper = SinkWrapperImpl<DynamicAggregator>;
 
@@ -614,6 +616,7 @@ TEST_F(SparseTestStore, CompactWithStrings) {
     using namespace arcticdb::stream;
     using DynamicAggregator =  Aggregator<TimeseriesIndex, DynamicSchema, stream::RowCountSegmentPolicy, stream::SparseColumnPolicy>;
 
+    register_string_types();
     const std::string stream_id("test_sparse");
 
     const auto index = TimeseriesIndex::default_index();

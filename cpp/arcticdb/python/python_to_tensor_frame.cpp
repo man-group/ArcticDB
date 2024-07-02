@@ -84,6 +84,7 @@ std::variant<StringEncodingError, PyStringWrapper> pystring_to_buffer(PyObject *
 }
 
 std::variant<StringEncodingError, PyStringWrapper> py_unicode_to_buffer(PyObject *obj, std::optional<ScopedGILLock>& scoped_gil_lock) {
+    util::check(obj != nullptr, "Got null pointer in py_unicode_to_buffer");
     if(!is_unicode(obj)) {
         return StringEncodingError(
                 fmt::format("Unexpected non-unicode in Python object with type {}", obj->ob_type->tp_name));

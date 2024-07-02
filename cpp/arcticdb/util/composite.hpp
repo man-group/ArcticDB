@@ -108,7 +108,7 @@ struct Composite {
             return values_[idx];
         }
 
-        size_t level_1_size() const {
+        [[nodiscard]] size_t level_1_size() const {
             return values_.size();
         }
 

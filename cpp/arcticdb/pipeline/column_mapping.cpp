@@ -20,7 +20,7 @@ namespace arcticdb {
             source_type_desc_(context.descriptor().fields(field_col).type()),
             dest_type_desc_(frame.field(dst_col).type()),
             frame_field_descriptor_(frame.field(dst_col)),
-            dest_size_(sizeof_datatype(dest_type_desc_)),
+            dest_size_(data_type_size(dest_type_desc_, DataTypeMode::EXTERNAL)),
             num_rows_(context.slice_and_key().slice_.row_range.diff()),
             first_row_(context.slice_and_key().slice_.row_range.first - frame.offset()),
             offset_bytes_(dest_size_ * first_row_),

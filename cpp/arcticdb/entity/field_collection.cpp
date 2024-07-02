@@ -13,14 +13,14 @@ namespace arcticdb {
 std::string_view FieldCollection::add_field(const TypeDescriptor& type, std::string_view name) {
   const auto total_size = Field::calc_size(name);
   buffer_.ensure_bytes(total_size);
-  auto field = reinterpret_cast<Field*>(buffer_.ptr());
+  auto field = reinterpret_cast<Field*>(buffer_.cursor());
   field->set(type, name);
   buffer_.commit();
   offsets_.ensure<shape_t>();
-  *reinterpret_cast<shape_t*>(offsets_.ptr()) = buffer_.cursor_pos();
+  *reinterpret_cast<shape_t*>(offsets_.cursor()) = buffer_.cursor_pos();
   offsets_.commit();
   shapes_.ensure<shape_t>();
-  *reinterpret_cast<shape_t*>(shapes_.ptr()) = total_size;
+  *reinterpret_cast<shape_t*>(shapes_.cursor()) = total_size;
   shapes_.commit();
   util::check(field->name() == name, "Name mismatch in field: {} != {}", field->name(), name);
   return field->name();

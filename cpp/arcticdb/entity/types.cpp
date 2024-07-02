@@ -43,12 +43,17 @@ std::string_view datatype_to_str(const DataType dt) {
     }
 }
 
-std::size_t sizeof_datatype(const TypeDescriptor& td) {
-    return td.visit_tag([](auto tdt) {
-        using RawType = typename std::decay_t<decltype(tdt)>::DataTypeTag::raw_type;
-        auto handler = TypeHandlerRegistry::instance()->get_handler(TypeDescriptor{tdt});
-        return handler ? handler->type_size() : sizeof(RawType);
-    });
+std::size_t internal_data_type_size(const TypeDescriptor& td) {
+    return get_type_size(td.data_type());
+}
+
+std::size_t external_data_type_size(const TypeDescriptor& td) {
+    auto handler = TypeHandlerRegistry::instance()->get_handler(td);
+    return handler ? handler->type_size() : internal_data_type_size(td);
+}
+
+std::size_t data_type_size(const TypeDescriptor& td, DataTypeMode mode) {
+    return mode == DataTypeMode::EXTERNAL ? external_data_type_size(td) : internal_data_type_size(td);
 }
 
 } // namespace arcticdb

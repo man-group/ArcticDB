@@ -166,7 +166,7 @@ std::unordered_set<entity::AtomKey> get_index_keys_in_snapshots(
         if (opt_idx_for_stream_id) {
             ARCTICDB_DEBUG(log::snapshot(), "Found index key for {} at {}", stream_id, *opt_idx_for_stream_id);
             auto stream_idx = *opt_idx_for_stream_id;
-            index_keys_in_snapshots.insert(read_key_row(snapshot_segment, static_cast<ssize_t>(stream_idx)));
+            index_keys_in_snapshots.emplace(read_key_row(snapshot_segment, static_cast<ssize_t>(stream_idx)));
         } else {
             ARCTICDB_DEBUG(log::snapshot(), "Failed to find index key for {}", stream_id);
         }
@@ -207,9 +207,8 @@ std::optional<VariantKey> get_snapshot_key(const std::shared_ptr<Store>& store, 
 
     std::optional<VariantKey> ret;
     store->iterate_type(KeyType::SNAPSHOT, [&ret, &snap_name](VariantKey &&vk) {
-        auto snap_key = to_atom(std::move(vk));
-        if (snap_key.id() == snap_name) {
-            ret = snap_key;
+        if (variant_key_id(vk) == snap_name) {
+            ret = to_atom(vk);
         }
     }, fmt::format("{}", snap_name));
     return ret;

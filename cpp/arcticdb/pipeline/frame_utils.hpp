@@ -217,7 +217,7 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
             if(bitset.count() > 0)
                 agg.set_sparse_block(col, std::move(bool_buffer), std::move(bitset));
 
-        } else if constexpr(is_numpy_array(TypeDescriptor(tag))) {
+        } else if constexpr(is_array_type(TypeDescriptor(tag))) {
             auto data = const_cast<void*>(tensor.data());
             const auto ptr_data = reinterpret_cast<PyObject**>(data) + row;
 
