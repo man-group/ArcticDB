@@ -69,7 +69,7 @@ struct ARCTICDB_VISIBILITY_HIDDEN StringEncodingError {
                 error_message_);
     }
 
-    size_t row_index_in_slice_;
+    size_t row_index_in_slice_ = 0UL;
     std::string error_message_;
 };
 

@@ -13,23 +13,24 @@
 #include <google/protobuf/any.h>
 #include <google/protobuf/any.pb.h>
 
-
 namespace arcticdb {
 
     SegmentInMemoryImpl::SegmentInMemoryImpl() = default;
 
-    SegmentInMemoryImpl::SegmentInMemoryImpl( const StreamDescriptor& desc, size_t expected_column_size, bool presize, bool allow_sparse)
-        : descriptor_(std::make_shared<StreamDescriptor>(StreamDescriptor{ desc.id(), desc.index() }))
-        , allow_sparse_(allow_sparse)
-    {
-        on_descriptor_change(desc, expected_column_size, presize, allow_sparse);
+    SegmentInMemoryImpl::SegmentInMemoryImpl(
+        const StreamDescriptor& desc,
+        size_t expected_column_size,
+        bool presize,
+        bool allow_sparse,
+        DataTypeMode mode) :
+            descriptor_(std::make_shared<StreamDescriptor>(StreamDescriptor{ desc.id(), desc.index() })),
+            allow_sparse_(allow_sparse) {
+        on_descriptor_change(desc, expected_column_size, presize, allow_sparse, mode);
     }
 
-    SegmentInMemoryImpl::~SegmentInMemoryImpl()
-    {
+    SegmentInMemoryImpl::~SegmentInMemoryImpl() {
         ARCTICDB_TRACE(log::version(), "Destroying segment in memory");
     }
-
 
 // Append any columns that exist both in this segment and in the 'other' segment onto the
 // end of the column in this segment. Any columns that exist in this segment but not in the
@@ -83,13 +84,18 @@ void SegmentInMemoryImpl::generate_column_map() const {
     }
 }
 
-void SegmentInMemoryImpl::create_columns(size_t old_size, size_t expected_column_size, bool presize, bool allow_sparse) {
+void SegmentInMemoryImpl::create_columns(
+        size_t old_size,
+        size_t expected_column_size,
+        bool presize,
+        bool allow_sparse,
+        DataTypeMode mode) {
     columns_.reserve(descriptor_->field_count());
     for (size_t i = old_size; i < size_t(descriptor_->field_count()); ++i) {
         auto type = descriptor_->fields(i).type();
         util::check(type.data_type() != DataType::UNKNOWN, "Can't create column in create_columns with unknown data type");
         columns_.emplace_back(
-                std::make_shared<Column>(descriptor_->fields(i).type(), expected_column_size, presize, allow_sparse));
+                std::make_shared<Column>(descriptor_->fields(i).type(), expected_column_size, presize, allow_sparse, mode));
     }
     generate_column_map();
 }
@@ -119,13 +125,18 @@ bool SegmentInMemoryImpl::is_index_sorted() const {
  * @param descriptor
  * @return false is descriptor change is not compatible and should trigger a segment commit
  */
-size_t SegmentInMemoryImpl::on_descriptor_change(const StreamDescriptor &descriptor, size_t expected_column_size, bool presize, bool allow_sparse) {
+size_t SegmentInMemoryImpl::on_descriptor_change(
+        const StreamDescriptor &descriptor,
+        size_t expected_column_size,
+        bool presize,
+        bool allow_sparse,
+        DataTypeMode mode) {
     ARCTICDB_TRACE(log::storage(), "Entering descriptor change: descriptor is currently {}, incoming descriptor '{}'",
                    *descriptor_, descriptor);
 
     std::size_t old_size = descriptor_->fields().size();
     *descriptor_ = descriptor;
-    create_columns(old_size, expected_column_size, presize, allow_sparse);
+    create_columns(old_size, expected_column_size, presize, allow_sparse, mode);
     ARCTICDB_TRACE(log::storage(), "Descriptor change: descriptor is now {}", *descriptor_);
     return old_size;
 }

@@ -75,32 +75,36 @@ folly::Future<std::vector<VariantKey>> fetch_data(
     const std::shared_ptr<PipelineContext> &context,
     const std::shared_ptr<stream::StreamSource>& ssource,
     bool dynamic_schema,
-    std::shared_ptr<BufferHolder> buffers
-    );
+    DecodePathData shared_data,
+    std::any& handler_data);
 
 void decode_into_frame_static(
     SegmentInMemory &frame,
     PipelineContextRow &context,
     Segment &&seg,
-    const std::shared_ptr<BufferHolder>& buffers
-    );
+    const DecodePathData& shared_data,
+    std::any& handler_data);
 
 void decode_into_frame_dynamic(
-        SegmentInMemory &frame,
-        PipelineContextRow &context,
-        Segment &&seg,
-        const std::shared_ptr<BufferHolder>& buffers
-);
+    SegmentInMemory &frame,
+    PipelineContextRow &context,
+    Segment &&seg,
+    const DecodePathData& shared_data,
+    std::any& handler_data);
 
 void reduce_and_fix_columns(
-        std::shared_ptr<PipelineContext> &context,
-        SegmentInMemory &frame,
-        const ReadOptions& read_options
-);
+    std::shared_ptr<PipelineContext> &context,
+    SegmentInMemory &frame,
+    const ReadOptions& read_options,
+    std::any& handler_data);
+
+StreamDescriptor get_filtered_descriptor(
+    const StreamDescriptor& desc,
+    const std::shared_ptr<FieldCollection>& filter_columns);
 
 size_t get_index_field_count(const SegmentInMemory& frame);
 
-StreamDescriptor get_filtered_descriptor(
-        const StreamDescriptor& desc,
-        const std::shared_ptr<FieldCollection>& filter_columns);
+
+
+
 } // namespace  arcticdb::pipelines

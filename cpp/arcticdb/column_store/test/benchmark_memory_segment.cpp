@@ -58,7 +58,7 @@ SegmentInMemory get_shuffled_segment(const StreamId& id, size_t num_rows, size_t
         // We ensure the column we're sorting by is NOT sparse. As of 2023/12 sorting by sparse columns is not supported.
         auto num_set = num_rows;
         if (i!=0 && sparsity_percentage.has_value()){
-            num_set = size_t(num_rows * (1-sparsity_percentage.value()));
+            num_set = size_t(num_rows * (1 - *sparsity_percentage));
         }
         auto has_value = get_sparse_bits(num_rows, num_set, g);
         for (auto j=0u; j<num_rows; ++j){

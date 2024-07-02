@@ -20,7 +20,6 @@
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/version/version_map_batch_methods.hpp>
 #include <arcticdb/util/container_filter_wrapper.hpp>
-#include <arcticdb/python/gil_lock.hpp>
 
 namespace arcticdb::version_store {
 
@@ -171,19 +170,6 @@ ColumnStats LocalVersionedEngine::get_column_stats_info_version_internal(
             stream_id
             );
     return get_column_stats_info_internal(versioned_item.value());
-}
-
-FrameAndDescriptor LocalVersionedEngine::read_dataframe_internal(
-    const std::variant<VersionedItem, StreamId>& identifier,
-    ReadQuery& read_query,
-    const ReadOptions& read_options) {
-    ARCTICDB_RUNTIME_SAMPLE(ReadDataFrameInternal, 0)
-    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: read_dataframe");
-    return read_dataframe_impl(
-        store(),
-        identifier,
-        read_query,
-        read_options);
 }
 
 std::set<StreamId> LocalVersionedEngine::list_streams_internal(
@@ -346,15 +332,36 @@ IndexRange LocalVersionedEngine::get_index_range(
     return index::get_index_segment_range(version->key_, store());
 }
 
+std::variant<VersionedItem, StreamId> get_version_identifier(
+        const StreamId& stream_id,
+        const VersionQuery& version_query,
+        const ReadOptions& read_options,
+        const std::optional<VersionedItem>& version) {
+    if (!version) {
+        if (opt_false(read_options.incompletes_)) {
+            log::version().warn("No index: Key not found for {}, will attempt to use incomplete segments.", stream_id);
+            return stream_id;
+        } else {
+            missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(
+                "read_dataframe_version: version matching query '{}' not found for symbol '{}'",
+                version_query,
+                stream_id
+            );
+        }
+    }
+    return *version;
+}
+
 ReadVersionOutput LocalVersionedEngine::read_dataframe_version_internal(
     const StreamId &stream_id,
     const VersionQuery& version_query,
     ReadQuery& read_query,
-    const ReadOptions& read_options) {
+    const ReadOptions& read_options,
+    std::any& handler_data) {
+    py::gil_scoped_release release_gil;
     auto version = get_version_to_read(stream_id, version_query);
-    const std::variant<VersionedItem, StreamId> identifier =
-        get_version_identifier(stream_id, version_query, read_options, version);
-    auto frame_and_descriptor = read_dataframe_internal(identifier, read_query, read_options);
+    const auto identifier = get_version_identifier(stream_id, version_query, read_options, version);
+    auto frame_and_descriptor = read_frame_for_version(store(), identifier, read_query, read_options, handler_data);
     return ReadVersionOutput{version.value_or(VersionedItem{}), std::move(frame_and_descriptor)};
 }
 
@@ -469,7 +476,7 @@ std::shared_ptr<DeDupMap> LocalVersionedEngine::get_de_dup_map(
         auto maybe_undeleted_prev = get_latest_undeleted_version(store(), version_map(), stream_id);
         if (maybe_undeleted_prev) {
             // maybe_undeleted_prev is index key
-            auto data_keys = get_data_keys(store(), {maybe_undeleted_prev.value()}, storage::ReadKeyOpts{});
+            auto data_keys = get_data_keys(store(), {*maybe_undeleted_prev}, storage::ReadKeyOpts{});
             for (const auto& data_key: data_keys) {
                 de_dup_map->insert_key(data_key);
             }
@@ -488,7 +495,6 @@ std::shared_ptr<DeDupMap> LocalVersionedEngine::get_de_dup_map(
     }
     return de_dup_map;
 }
-
 
 VersionedItem LocalVersionedEngine::sort_index(const StreamId& stream_id, bool dynamic_schema, bool prune_previous_versions) {
     auto maybe_prev = get_latest_undeleted_version(store(), version_map(), stream_id);
@@ -1030,68 +1036,34 @@ VersionedItem LocalVersionedEngine::defragment_symbol_data(const StreamId& strea
 }
 
 folly::Future<ReadVersionOutput> async_read_direct(
-    const std::shared_ptr<Store>& store,
-    const VariantKey& index_key,
-    SegmentInMemory&& index_segment,
-    std::shared_ptr<ReadQuery> read_query,
-    std::shared_ptr<BufferHolder> buffers,
-    const ReadOptions& read_options) {
-    auto index_segment_reader = std::make_shared<index::IndexSegmentReader>(std::move(index_segment));
-    const auto& tsd = index_segment_reader->tsd();
-
-    check_column_and_date_range_filterable(*index_segment_reader, *read_query);
-    add_index_columns_to_query(*read_query, tsd);
-    read_query->calculate_row_filter(static_cast<int64_t>(tsd.total_rows()));
-
-    auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor{tsd.as_stream_descriptor()});
-    pipeline_context->set_selected_columns(read_query->columns);
-
-    const bool dynamic_schema = opt_false(read_options.dynamic_schema_);
-    const bool bucketize_dynamic = index_segment_reader->bucketize_dynamic();
-
-    auto queries = get_column_bitset_and_query_functions<index::IndexSegmentReader>(
-        *read_query,
-        pipeline_context,
-        dynamic_schema,
-        bucketize_dynamic);
-
-    pipeline_context->slice_and_keys_ = filter_index(*index_segment_reader, combine_filter_functions(queries));
-
-    generate_filtered_field_descriptors(pipeline_context, read_query->columns);
-    mark_index_slices(pipeline_context, dynamic_schema, bucketize_dynamic);
-    auto frame = allocate_frame(pipeline_context);
-
-    return fetch_data(frame, pipeline_context, store, dynamic_schema, buffers).thenValue(
-        [pipeline_context, frame, read_options](auto &&) mutable {
-            ScopedGILLock gil_lock;
-            reduce_and_fix_columns(pipeline_context, frame, read_options);
-        }).thenValue(
-        [index_segment_reader, frame, index_key, buffers, read_query, pipeline_context](auto &&) mutable {
-            if (read_query->columns && read_query->columns->empty() &&
-                pipeline_context->descriptor().index().type() == IndexDescriptor::Type::ROWCOUNT) {
-                frame.set_row_id(index_segment_reader->tsd().total_rows() - 1);
-            }
-            return ReadVersionOutput{VersionedItem{to_atom(index_key)},
-                                  FrameAndDescriptor{frame, std::move(index_segment_reader->mutable_tsd()), {}, buffers}};
-        });
+        const std::shared_ptr<Store>& store,
+        const VariantKey& index_key,
+        SegmentInMemory&& index_segment,
+        const std::shared_ptr<ReadQuery>& read_query,
+        DecodePathData shared_data,
+        std::any& handler_data,
+        const ReadOptions& read_options) {
+    return async_read_direct_impl(store, index_key, std::move(index_segment), read_query, shared_data, handler_data, read_options);
 }
 
 std::vector<ReadVersionOutput> LocalVersionedEngine::batch_read_keys(const std::vector<AtomKey> &keys) {
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data();
     py::gil_scoped_release release_gil;
     std::vector<folly::Future<std::pair<entity::VariantKey, SegmentInMemory>>> index_futures;
     for (auto &index_key: keys) {
         index_futures.emplace_back(store()->read(index_key));
     }
     auto indexes = folly::collect(index_futures).get();
-
     std::vector<folly::Future<ReadVersionOutput>> results_fut;
     auto i = 0u;
     for (auto&& [index_key, index_segment] : indexes) {
+        DecodePathData shared_data;
         results_fut.emplace_back(async_read_direct(store(),
                                                    keys[i],
                                                    std::move(index_segment),
                                                    std::make_shared<ReadQuery>(),
-                                                   std::make_shared<BufferHolder>(),
+                                                   shared_data,
+                                                   handler_data,
                                                    ReadOptions{}));
         ++i;
     }
@@ -1104,6 +1076,7 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::te
     const std::vector<VersionQuery> &version_queries,
     std::vector<std::shared_ptr<ReadQuery>> &read_queries,
     const ReadOptions &read_options) {
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data();
     py::gil_scoped_release release_gil;
 
     auto versions = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
@@ -1118,13 +1091,15 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::te
                        })
             .thenValue([store = store(),
                         read_query = read_queries.empty() ? std::make_shared<ReadQuery>(): read_queries[idx],
-                        read_options](auto&& key_segment_pair) {
+                        read_options,
+                        &handler_data](auto&& key_segment_pair) {
                 auto [index_key, index_segment] = std::move(key_segment_pair);
                 return async_read_direct(store,
                                          index_key,
                                          std::move(index_segment),
                                          read_query,
-                                         std::make_shared<BufferHolder>(),
+                                         DecodePathData{},
+                                         handler_data,
                                          read_options);
             })
         );
@@ -1159,7 +1134,8 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
     const std::vector<StreamId>& stream_ids,
     const std::vector<VersionQuery>& version_queries,
     std::vector<std::shared_ptr<ReadQuery>>& read_queries,
-    const ReadOptions& read_options) {
+    const ReadOptions& read_options,
+    std::any& handler_data) {
     // This read option should always be set when calling batch_read
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_error_.has_value(),
                                                     "ReadOptions::batch_throw_on_error_ should always be set here");
@@ -1172,22 +1148,19 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
 
     std::vector<std::variant<ReadVersionOutput, DataError>> read_versions_or_errors;
     read_versions_or_errors.reserve(stream_ids.size());
-    for (size_t idx=0; idx < stream_ids.size(); idx++) {
-        auto version_query = version_queries.size() > idx ? version_queries[idx] : VersionQuery{};
-        auto read_query = read_queries.size() > idx ? *read_queries[idx] : ReadQuery{};
+    for (size_t i=0; i < stream_ids.size(); ++i) {
+        auto version_query = version_queries.size() > i ? version_queries[i] : VersionQuery{};
+        auto read_query = read_queries.size() > i ? *read_queries[i] : ReadQuery{};
         // TODO: https://github.com/man-group/ArcticDB/issues/241
         // Remove this try-catch in favour of the implementation in temp_batch_read_internal_direct as part of #241
         try {
-            auto read_version = read_dataframe_version_internal(stream_ids[idx],
-                                                                version_query,
-                                                                read_query,
-                                                                read_options);
+            auto read_version = read_dataframe_version_internal(stream_ids[i], version_query, read_query, read_options, handler_data);
             read_versions_or_errors.emplace_back(std::move(read_version));
         } catch (const NoSuchVersionException& e) {
             if (*read_options.batch_throw_on_error_) {
                 throw;
             }
-            read_versions_or_errors.emplace_back(DataError(stream_ids[idx],
+            read_versions_or_errors.emplace_back(DataError(stream_ids[i],
                                                            e.what(),
                                                            version_query.content_,
                                                            ErrorCode::E_NO_SUCH_VERSION));
@@ -1195,7 +1168,7 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
             if (*read_options.batch_throw_on_error_) {
                 throw;
             }
-            read_versions_or_errors.emplace_back(DataError(stream_ids[idx],
+            read_versions_or_errors.emplace_back(DataError(stream_ids[i],
                                                            e.what(),
                                                            version_query.content_,
                                                            ErrorCode::E_KEY_NOT_FOUND));
@@ -1203,7 +1176,7 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
             if (*read_options.batch_throw_on_error_) {
                 throw;
             }
-            read_versions_or_errors.emplace_back(DataError(stream_ids[idx],
+            read_versions_or_errors.emplace_back(DataError(stream_ids[i],
                                                            e.what(),
                                                            version_query.content_,
                                                            ErrorCode::E_KEY_NOT_FOUND));
@@ -1211,7 +1184,7 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
             if (*read_options.batch_throw_on_error_) {
                 throw;
             }
-            read_versions_or_errors.emplace_back(DataError(stream_ids[idx],
+            read_versions_or_errors.emplace_back(DataError(stream_ids[i],
                                                            e.what(),
                                                            version_query.content_));
         }
@@ -1266,7 +1239,7 @@ std::vector<folly::Future<AtomKey>> LocalVersionedEngine::batch_write_internal(
     const std::vector<VersionId>& version_ids,
     const std::vector<StreamId>& stream_ids,
     std::vector<std::shared_ptr<pipelines::InputTensorFrame>>&& frames,
-    std::vector<std::shared_ptr<DeDupMap>> de_dup_maps,
+    const std::vector<std::shared_ptr<DeDupMap>>& de_dup_maps,
     bool validate_index
 ) {
     ARCTICDB_SAMPLE(WriteDataFrame, 0)
@@ -1810,27 +1783,6 @@ std::shared_ptr<VersionMap> LocalVersionedEngine::_test_get_version_map() {
 
 void LocalVersionedEngine::_test_set_store(std::shared_ptr<Store> store) {
     set_store(std::move(store));
-}
-
-std::variant<VersionedItem, StreamId> LocalVersionedEngine::get_version_identifier(
-    const StreamId& stream_id,
-    const VersionQuery& version_query,
-    const ReadOptions& read_options,
-    const std::optional<VersionedItem>& version
-) {
-    if (!version) {
-        if (opt_false(read_options.incompletes_)) {
-            log::version().warn("No index: Key not found for {}, will attempt to use incomplete segments.", stream_id);
-            return stream_id;
-        } else {
-            missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(
-                "read_dataframe_version: version matching query '{}' not found for symbol '{}'",
-                version_query,
-                stream_id
-            );
-        }
-    }
-    return *version;
 }
 
 } // arcticdb::version_store

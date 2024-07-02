@@ -212,7 +212,7 @@ inline SegmentInMemory generate_groupby_testing_segment(size_t num_rows, size_t 
     SegmentInMemory seg;
     auto int_repeated_values_col = std::make_shared<Column>(generate_int_column_repeated_values(num_rows, unique_values));
     seg.add_column(scalar_field(int_repeated_values_col->type().data_type(), "int_repeated_values"), int_repeated_values_col);
-    std::vector<std::string> col_names = { "sum_int", "min_int", "max_int", "mean_int", "count_int" };
+    std::array<std::string, 5> col_names = { "sum_int", "min_int", "max_int", "mean_int", "count_int" };
     for (const auto& name: col_names)
     {
         auto col = std::make_shared<Column>(generate_int_column(num_rows));
@@ -227,7 +227,7 @@ inline SegmentInMemory generate_groupby_testing_sparse_segment(size_t num_rows, 
     SegmentInMemory seg;
     auto int_repeated_values_col = std::make_shared<Column>(generate_int_column_repeated_values(num_rows, unique_values));
     seg.add_column(scalar_field(int_repeated_values_col->type().data_type(), "int_repeated_values"), int_repeated_values_col);
-    std::vector<std::string> col_names = { "sum_int", "min_int", "max_int", "mean_int", "count_int" };
+    std::array<std::string, 5> col_names = { "sum_int", "min_int", "max_int", "mean_int", "count_int" };
     for (const auto& name: col_names)
     {
         auto col = std::make_shared<Column>(generate_int_sparse_column(num_rows));
@@ -243,7 +243,7 @@ inline SegmentInMemory generate_sparse_groupby_testing_segment(size_t num_rows, 
     auto int_sparse_repeated_values_col = std::make_shared<Column>(generate_int_column_sparse_repeated_values(num_rows, unique_values));
     int_sparse_repeated_values_col->mark_absent_rows(num_rows-1);
     seg.add_column(scalar_field(int_sparse_repeated_values_col->type().data_type(), "int_sparse_repeated_values"), int_sparse_repeated_values_col);
-    std::vector<std::string> col_names = { "sum_int", "min_int", "max_int", "mean_int", "count_int" };
+    std::array<std::string_view, 5> col_names = { "sum_int", "min_int", "max_int", "mean_int", "count_int" };
     for (const auto& name: col_names)
     {
         auto col = std::make_shared<Column>(generate_int_column(num_rows));
@@ -350,11 +350,11 @@ inline auto get_test_config_data() {
  *
  * See also python_version_store_in_memory() and stream_test_common.hpp for alternatives using LMDB.
  */
-template<typename VerStoreType = version_store::LocalVersionedEngine>
-inline VerStoreType get_test_engine(storage::LibraryDescriptor::VariantStoreConfig cfg = {}) {
+template<typename VersionStoreType = version_store::LocalVersionedEngine>
+inline VersionStoreType get_test_engine(storage::LibraryDescriptor::VariantStoreConfig cfg = {}) {
     auto [path, storages] = get_test_config_data();
     auto library = std::make_shared<arcticdb::storage::Library>(path, std::move(storages), std::move(cfg));
-    return VerStoreType(library);
+    return VersionStoreType(library);
 }
 
 /**

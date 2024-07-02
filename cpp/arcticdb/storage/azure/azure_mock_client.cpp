@@ -61,7 +61,7 @@ void MockAzureClient::write_blob(
 
     auto maybe_exception = has_failure_trigger(blob_name, StorageOperation::WRITE);
     if (maybe_exception.has_value()) {
-        throw maybe_exception.value();
+        throw *maybe_exception;
     }
 
     azure_contents.insert_or_assign(blob_name, std::move(segment));
@@ -74,7 +74,7 @@ Segment MockAzureClient::read_blob(
 
     auto maybe_exception = has_failure_trigger(blob_name, StorageOperation::READ);
     if (maybe_exception.has_value()) {
-        throw maybe_exception.value();
+        throw *maybe_exception;
     }
 
     auto pos = azure_contents.find(blob_name);
@@ -93,7 +93,7 @@ void MockAzureClient::delete_blobs(
     for (auto& blob_name : blob_names) {
         auto maybe_exception = has_failure_trigger(blob_name, StorageOperation::DELETE);
         if (maybe_exception.has_value()) {
-            throw maybe_exception.value();
+            throw *maybe_exception;
         }
     }
 
@@ -105,7 +105,7 @@ void MockAzureClient::delete_blobs(
 bool MockAzureClient::blob_exists(const std::string& blob_name) {
     auto maybe_exception = has_failure_trigger(blob_name, StorageOperation::EXISTS);
     if (maybe_exception.has_value()) {
-        throw maybe_exception.value();
+        throw *maybe_exception;
     }
 
     return azure_contents.find(blob_name) != azure_contents.end();
@@ -119,7 +119,7 @@ Azure::Storage::Blobs::ListBlobsPagedResponse MockAzureClient::list_blobs(const 
 
             auto maybe_exception = has_failure_trigger(blob_name, StorageOperation::LIST);
             if (maybe_exception.has_value()) {
-                throw maybe_exception.value();
+                throw *maybe_exception;
             }
 
             Azure::Storage::Blobs::Models::BlobItem blobItem;

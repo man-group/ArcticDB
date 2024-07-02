@@ -290,10 +290,6 @@ TEST(Resample, ProcessMultipleSegments) {
     using index_TDT = TypeDescriptorTag<DataTypeTag<DataType::NANOSECONDS_UTC64>, DimensionTag<Dimension ::Dim0>>;
     using col_TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension ::Dim0>>;
 
-    std::vector<std::shared_ptr<SegmentInMemory>> segs;
-    std::vector<std::shared_ptr<pipelines::RowRange>> row_ranges;
-    std::vector<std::shared_ptr<pipelines::ColRange>> col_ranges;
-
     auto index_column = std::make_shared<Column>(static_cast<TypeDescriptor>(index_TDT{}), 0, false, true);
     auto sum_column = std::make_shared<Column>(static_cast<TypeDescriptor>(col_TDT{}), 0, false, true);
     index_column->set_scalar<int64_t>(0, 0);

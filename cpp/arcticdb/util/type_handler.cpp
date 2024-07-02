@@ -26,6 +26,10 @@ std::shared_ptr<TypeHandler> TypeHandlerRegistry::get_handler(const entity::Type
     return it == std::end(handlers_) ? std::shared_ptr<TypeHandler>{} : it->second;
 }
 
+void TypeHandlerRegistry::destroy_instance() {
+    TypeHandlerRegistry::instance_.reset();
+}
+
 void TypeHandlerRegistry::register_handler(const entity::TypeDescriptor& type_descriptor, TypeHandler&& handler) {
      handlers_.try_emplace(type_descriptor, std::make_shared<TypeHandler>(std::move(handler)));
 }

@@ -35,6 +35,7 @@ struct PipelineContextRow {
     [[nodiscard]] const StringPool& string_pool() const;
     StringPool& string_pool();
     void set_string_pool(const std::shared_ptr<StringPool>& pool);
+    const std::shared_ptr<StringPool>& string_pool_ptr();
     void allocate_string_pool();
     [[nodiscard]] const SliceAndKey& slice_and_key() const;
     SliceAndKey& slice_and_key();
@@ -107,13 +108,9 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
     // written in, desc_ will be modified such that the return matches what's requested, and this'll be set to the
     // original value. It's only set in this edge case.
     std::optional<StreamDescriptor> orig_desc_;
-    // Usually same as what's in desc_. For joins this can be mutated.
     StreamId stream_id_;
     VersionId version_id_ = 0;
-    // Used to keep track of the total number of rows when compacting incomplete segments and
-    // in sort merge
     size_t total_rows_ = 0;
-    // The number of rows according to the timeseries descriptor
     size_t rows_ = 0;
     std::shared_ptr<arcticdb::proto::descriptors::NormalizationMetadata> norm_meta_;
     std::unique_ptr<arcticdb::proto::descriptors::UserDefinedMetadata> user_meta_;

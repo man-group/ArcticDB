@@ -15,7 +15,7 @@
 
 namespace arcticdb {
 
-AtomKey make_test_index_key(std::string id,
+AtomKey make_test_index_key(const std::string& id,
                            VersionId version_id,
                            KeyType key_type,
     const IndexValue& index_start = NumericIndex{0},

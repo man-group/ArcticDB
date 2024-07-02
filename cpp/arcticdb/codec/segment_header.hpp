@@ -22,7 +22,7 @@ static constexpr std::array<std::string_view, 5> offset_names_ = {
     "COLUMN"
 };
 
-inline void write_fixed_header(std::uint8_t *dst, const FixedHeader& hdr) {
+inline void write_fixed_header(std::uint8_t *dst, FixedHeader hdr) {
     ARCTICDB_DEBUG(log::codec(), "Writing header with size {}", hdr.header_bytes);
     auto h = reinterpret_cast<FixedHeader*>(dst);
     *h = hdr;
