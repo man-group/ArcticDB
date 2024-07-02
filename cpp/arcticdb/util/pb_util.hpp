@@ -21,21 +21,21 @@
 namespace arcticdb::util {
 
 
-namespace {
+namespace detail {
 constexpr char TYPE_URL[] = "cxx.arctic.org";
 }
 
 template<class Msg>
 void pack_to_any(const Msg &msg, google::protobuf::Any &any) {
-    any.PackFrom(msg, TYPE_URL);
+    any.PackFrom(msg, detail::TYPE_URL);
 }
 
 inline folly::StringPiece get_arcticdb_pb_type_name(const google::protobuf::Any &any) {
     folly::StringPiece sp{any.type_url()};
-    if (!sp.startsWith(TYPE_URL)) {
+    if (!sp.startsWith(detail::TYPE_URL)) {
         util::raise_rte("Not a valid arcticc proto msg", any.DebugString());
     }
-    return sp.subpiece(sizeof(TYPE_URL), sp.size());
+    return sp.subpiece(sizeof(detail::TYPE_URL), sp.size());
 }
 
 template<class Msg>

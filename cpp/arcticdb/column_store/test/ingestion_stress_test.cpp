@@ -17,6 +17,7 @@
 #include <arcticdb/stream/test/stream_test_common.hpp>
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/pipeline/query.hpp>
+#include <arcticdb/util/native_handler.hpp>
 
 using namespace arcticdb;
 namespace as = arcticdb::stream;
@@ -37,7 +38,7 @@ TEST(IngestionStress, ScalarInt) {
 
     std::vector<FieldRef> columns;
     for (auto i = 0; i < NumColumns; ++i)
-        columns.push_back(scalar_field(DataType::UINT64, "uint64"));
+        columns.emplace_back(scalar_field(DataType::UINT64, "uint64"));
 
     const auto index = as::TimeseriesIndex::default_index();
     as::FixedSchema schema{
@@ -126,7 +127,9 @@ TEST_F(IngestionStressStore, ScalarIntAppend) {
     ro.set_incompletes(true);
     ReadQuery read_query;
     read_query.row_filter = universal_range();
-    auto read_result = test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, ro);
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    auto read_result = test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, ro, handler_data);
     GTEST_COUT << "columns in res: " << read_result.frame_data.index_columns().size();
 }
 
@@ -212,7 +215,9 @@ TEST_F(IngestionStressStore, ScalarIntDynamicSchema) {
     read_options.set_incompletes(true);
     ReadQuery read_query;
     read_query.row_filter = universal_range();
-    auto read_result = test_store_->read_dataframe_internal(symbol, read_query, read_options);
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    auto read_result = test_store_->read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options, handler_data);
 }
 
 TEST_F(IngestionStressStore, DynamicSchemaWithStrings) {
@@ -263,6 +268,8 @@ TEST_F(IngestionStressStore, DynamicSchemaWithStrings) {
     read_options.set_incompletes(true);
     ReadQuery read_query;
     read_query.row_filter = universal_range();
-    auto read_result = test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, read_options);
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    auto read_result = test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, read_options, handler_data);
     ARCTICDB_DEBUG(log::version(), "result columns: {}", read_result.frame_data.names());
 }

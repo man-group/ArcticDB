@@ -49,6 +49,8 @@ public:
 
     std::vector<VariantKey> find_keys(arcticdb::entity::KeyType);
 
+    bool key_exists(const VariantKey& key);
+
     std::vector<bool> batch_key_exists(const std::vector<VariantKey>& keys);
 
     std::string get_key_path(const VariantKey& key);

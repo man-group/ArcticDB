@@ -38,6 +38,18 @@ struct CompactIncompleteOptions {
     bool validate_index_{true}; // Default value as unused in sort_merge
 };
 
+struct ReadVersionOutput {
+    ReadVersionOutput() = delete;
+    ReadVersionOutput(VersionedItem&& versioned_item, FrameAndDescriptor&& frame_and_descriptor):
+        versioned_item_(std::move(versioned_item)),
+        frame_and_descriptor_(std::move(frame_and_descriptor)) {}
+
+    ARCTICDB_MOVE_ONLY_DEFAULT(ReadVersionOutput)
+
+    VersionedItem versioned_item_;
+    FrameAndDescriptor frame_and_descriptor_;
+};
+
 VersionedItem write_dataframe_impl(
     const std::shared_ptr<Store>& store,
     VersionId version_id,
@@ -113,13 +125,8 @@ ColumnStats get_column_stats_info_impl(
 
 FrameAndDescriptor read_multi_key(
     const std::shared_ptr<Store>& store,
-    const SegmentInMemory& index_key_seg);
-
-FrameAndDescriptor read_dataframe_impl(
-    const std::shared_ptr<Store>& store,
-    const std::variant<VersionedItem, StreamId>& version_info,
-    ReadQuery & read_query,
-    const ReadOptions& read_options);
+    const SegmentInMemory& index_key_seg,
+    std::any& handler_data);
 
 FrameAndDescriptor read_segment_impl(
     const std::shared_ptr<Store>& store,
@@ -143,18 +150,30 @@ struct PredefragmentationInfo{
     size_t segments_need_compaction;
     std::optional<size_t> append_after;
 };
+
+folly::Future<version_store::ReadVersionOutput> async_read_direct_impl(
+    const std::shared_ptr<Store>& store,
+    const VariantKey& index_key,
+    SegmentInMemory&& index_segment,
+    const std::shared_ptr<ReadQuery>& read_query,
+    DecodePathData shared_data,
+    std::any& handler_data,
+    const ReadOptions& read_options);
+
 SegmentInMemory prepare_output_frame(
     std::vector<SliceAndKey>&& items,
     const std::shared_ptr<PipelineContext>& pipeline_context,
     const std::shared_ptr<Store>& store,
-    const ReadOptions& read_options);
+    const ReadOptions& read_options,
+    std::any& handler_data);
 
 SegmentInMemory do_direct_read_or_process(
     const std::shared_ptr<Store>& store,
     ReadQuery& read_query,
     const ReadOptions& read_options,
     const std::shared_ptr<PipelineContext>& pipeline_context,
-    const std::shared_ptr<BufferHolder>& buffers);
+    const DecodePathData& shared_data,
+    std::any& handler_data);
 
 PredefragmentationInfo get_pre_defragmentation_info(
         const std::shared_ptr<Store>& store,
@@ -171,6 +190,7 @@ VersionedItem defragment_symbol_data_impl(
         const UpdateInfo& update_info,
         const WriteOptions& options,
         size_t segment_size);
+
         
 VersionedItem sort_merge_impl(
     const std::shared_ptr<Store>& store,
@@ -193,6 +213,14 @@ void read_indexed_keys_to_pipeline(
 void add_index_columns_to_query(
     const ReadQuery& read_query, 
     const TimeseriesDescriptor& desc);
+
+FrameAndDescriptor read_frame_for_version(
+    const std::shared_ptr<Store>& store,
+    const std::variant<VersionedItem, StreamId>& version_info,
+    ReadQuery& read_query,
+    const ReadOptions& read_options,
+    std::any& handler_data
+);
 
 } //namespace arcticdb::version_store
 

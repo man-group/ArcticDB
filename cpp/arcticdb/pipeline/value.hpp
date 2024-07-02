@@ -55,6 +55,12 @@ struct Value {
         assign(other);
     }
 
+    Value& operator=(const Value& other) {
+        data_type_ = other.data_type_;
+        assign(other);
+        return *this;
+    }
+
     Value& operator==(const Value& other) {
         data_type_ = other.data_type_;
         assign(other);

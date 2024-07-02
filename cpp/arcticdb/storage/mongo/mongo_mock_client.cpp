@@ -103,7 +103,7 @@ bool MockMongoClient::write_segment(
 
     auto failure = has_failure_trigger(key, StorageOperation::WRITE);
     if (failure.has_value()) {
-        throw_if_exception(failure.value());
+        throw_if_exception(*failure);
         return false;
     }
 
@@ -120,7 +120,7 @@ UpdateResult MockMongoClient::update_segment(
 
     auto failure = has_failure_trigger(key, StorageOperation::WRITE);
     if (failure.has_value()) {
-        throw_if_exception(failure.value());
+        throw_if_exception(*failure);
         return {std::nullopt};
     }
 
@@ -140,7 +140,7 @@ std::optional<KeySegmentPair> MockMongoClient::read_segment(
     auto mongo_key = MongoKey(database_name, collection_name, key);
     auto failure = has_failure_trigger(mongo_key, StorageOperation::READ);
     if (failure.has_value()) {
-        throw_if_exception(failure.value());
+        throw_if_exception(*failure);
         return std::nullopt;
     }
 
@@ -159,7 +159,7 @@ DeleteResult MockMongoClient::remove_keyvalue(
     auto mongo_key = MongoKey(database_name, collection_name, key);
     auto failure = has_failure_trigger(mongo_key, StorageOperation::DELETE);
     if (failure.has_value()) {
-        throw_if_exception(failure.value());
+        throw_if_exception(*failure);
         return {std::nullopt};
     }
 
@@ -179,7 +179,7 @@ bool MockMongoClient::key_exists(
     auto mongo_key = MongoKey(database_name, collection_name, key);
     auto failure = has_failure_trigger(mongo_key, StorageOperation::EXISTS);
     if (failure.has_value()) {
-        throw_if_exception(failure.value());
+        throw_if_exception(*failure);
         return false;
     }
 
@@ -198,7 +198,7 @@ std::vector<VariantKey> MockMongoClient::list_keys(
         if (matches_prefix(key.first, database_name, collection_name, prefix_str)) {
             auto failure = has_failure_trigger(key.first, StorageOperation::LIST);
             if (failure.has_value()) {
-                throw_if_exception(failure.value());
+                throw_if_exception(*failure);
                 return {};
             }
             output.push_back(key.first.doc_key_.key_);

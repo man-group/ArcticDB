@@ -20,7 +20,7 @@ struct BatchReadArgs {
     };
 
     BatchReadArgs() :
-        batch_size_(ConfigsMap::instance()->get_int("BatchRead.BatchSize", 100)),
+        batch_size_(ConfigsMap::instance()->get_int("BatchRead.BatchSize", 200)),
         scheduler_(Scheduler::CPU) {}
 
     explicit BatchReadArgs(size_t batch_size) :
@@ -28,7 +28,7 @@ struct BatchReadArgs {
         scheduler_(Scheduler::CPU) {}
 
     explicit BatchReadArgs(Scheduler scheduler) :
-        batch_size_(ConfigsMap::instance()->get_int("BatchRead.BatchSize", 100)),
+        batch_size_(ConfigsMap::instance()->get_int("BatchRead.BatchSize", 200)),
         scheduler_(scheduler) { }
 
     size_t batch_size_;

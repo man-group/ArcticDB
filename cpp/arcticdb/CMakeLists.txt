@@ -244,6 +244,9 @@ set(arcticdb_srcs
         pipeline/value_set.hpp
         pipeline/write_frame.hpp
         pipeline/write_options.hpp
+        python/python_strings.hpp
+        python/python_handler_data.hpp
+        pipeline/string_reducers.hpp
         processing/aggregation_utils.hpp
         processing/component_manager.hpp
         processing/operation_dispatch.hpp
@@ -335,6 +338,7 @@ set(arcticdb_srcs
         util/format_bytes.hpp
         util/format_date.hpp
         util/hash.hpp
+        util/spinlock.hpp
         util/key_utils.hpp
         util/lock_table.hpp
         util/magic_num.hpp
@@ -358,6 +362,7 @@ set(arcticdb_srcs
         util/timeouts.hpp
         util/timer.hpp
         util/trace.hpp
+        util/lazy.hpp
         util/type_traits.hpp
         util/variant.hpp
         version/de_dup_map.hpp
@@ -423,6 +428,7 @@ set(arcticdb_srcs
         pipeline/value_set.cpp
         pipeline/write_frame.cpp
         python/normalization_checks.cpp
+        python/python_strings.cpp
         processing/processing_unit.cpp
         processing/aggregation_utils.cpp
         processing/clause.cpp
@@ -495,8 +501,7 @@ set(arcticdb_srcs
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
         storage/s3/ec2_utils.cpp
-        storage/lmdb/lmdb.hpp
-        )
+        util/buffer_holder.cpp util/native_handler.hpp)
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
@@ -635,7 +640,11 @@ set(arcticdb_python_srcs
         storage/python_bindings.cpp
         stream/python_bindings.cpp
         toolbox/python_bindings.cpp
-        version/python_bindings.cpp)
+        version/python_bindings.cpp
+        python/reader.hpp
+        python/adapt_read_dataframe.hpp
+        python/python_handlers.hpp
+        python/python_handlers.cpp)
 
 add_library(arcticdb_python STATIC ${arcticdb_python_srcs})
 
@@ -668,10 +677,6 @@ pybind11_add_module(arcticdb_ext MODULE
         python/python_module.cpp
         python/arctic_version.cpp
         python/arctic_version.hpp
-        python/reader.hpp
-        python/adapt_read_dataframe.hpp
-        python/python_handlers.hpp
-        python/python_handlers.cpp
         )
 
 set (additional_link_flags "")
@@ -796,7 +801,6 @@ if(${TEST})
             util/test/test_string_utils.cpp
             util/test/test_tracing_allocator.cpp
             version/test/test_append.cpp
-            version/test/test_merge.cpp
             version/test/test_sparse.cpp
             version/test/test_stream_version_data.cpp
             version/test/test_symbol_list.cpp
@@ -805,6 +809,7 @@ if(${TEST})
             version/test/test_version_store.cpp
             version/test/test_sorting_info_state_machine.cpp
             version/test/version_map_model.hpp
+            python/python_handlers.cpp
             storage/test/common.hpp
             version/test/test_sort_index.cpp
     )

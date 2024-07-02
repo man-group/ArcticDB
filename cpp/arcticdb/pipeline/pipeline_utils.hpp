@@ -12,10 +12,27 @@
 #include <arcticdb/pipeline/read_frame.hpp>
 #include <arcticdb/pipeline/read_options.hpp>
 #include <arcticdb/pipeline/read_pipeline.hpp>
+#include <arcticdb/column_store/memory_segment.hpp>
+#include <arcticdb/util/type_handler.hpp>
 
 namespace arcticdb::pipelines {
 
-inline ReadResult make_read_result_from_frame(FrameAndDescriptor& frame_and_desc, const AtomKey& key) {
+inline void apply_type_handlers(SegmentInMemory seg, std::any& handler_data) {
+    DecodePathData shared_data;
+    if(seg.empty())
+        return;
+
+    for(auto i = 0U; i < seg.num_columns(); ++i) {
+        auto& column = seg.column(i);
+        if(auto handler = TypeHandlerRegistry::instance()->get_handler(column.type()); handler) {
+            auto buffer = ChunkedBuffer::presized(seg.row_count() * data_type_size(column.type(), DataTypeMode::EXTERNAL));
+            handler->convert_type(column, buffer, seg.row_count(), 0, column.type(), column.type(), shared_data, handler_data, seg.string_pool_ptr());
+            std::swap(column.buffer(), buffer);
+        }
+    }
+}
+
+inline ReadResult read_result_from_single_frame(FrameAndDescriptor& frame_and_desc, const AtomKey& key) {
     auto pipeline_context = std::make_shared<PipelineContext>(frame_and_desc.frame_.descriptor());
     SliceAndKey sk{FrameSlice{frame_and_desc.frame_},key};
     pipeline_context->slice_and_keys_.emplace_back(std::move(sk));
@@ -28,8 +45,9 @@ inline ReadResult make_read_result_from_frame(FrameAndDescriptor& frame_and_desc
     pipeline_context->begin()->set_string_pool(frame_and_desc.frame_.string_pool_ptr());
     auto descriptor = std::make_shared<StreamDescriptor>(frame_and_desc.frame_.descriptor());
     pipeline_context->begin()->set_descriptor(std::move(descriptor));
-    reduce_and_fix_columns(pipeline_context, frame_and_desc.frame_, ReadOptions{});
-
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data();
+    reduce_and_fix_columns(pipeline_context, frame_and_desc.frame_, ReadOptions{}, handler_data);
+    apply_type_handlers(frame_and_desc.frame_, handler_data);
     return create_python_read_result(VersionedItem{key}, std::move(frame_and_desc));
 }
 
