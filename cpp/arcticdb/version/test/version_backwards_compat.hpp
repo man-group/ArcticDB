@@ -38,7 +38,7 @@ std::deque<AtomKey> backwards_compat_delete_all_versions(
     output.assign(std::begin(indexes), std::end(indexes));
 
     if (auto ref_key = get_symbol_ref_key(store, stream_id); ref_key) {
-        store->remove_key(ref_key.value()).wait();
+        store->remove_key(*ref_key).wait();
     }
     version_map->remove_entry_version_keys(store, entry, stream_id);
     entry->clear();

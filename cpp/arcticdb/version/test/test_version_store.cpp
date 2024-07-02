@@ -16,6 +16,8 @@
 #include <arcticdb/util/allocator.hpp>
 #include <arcticdb/codec/default_codecs.hpp>
 #include <arcticdb/version/version_functions.hpp>
+#include <arcticdb/version/local_versioned_engine.hpp>
+#include <arcticdb/util/native_handler.hpp>
 
 #include <filesystem>
 #include <chrono>
@@ -252,7 +254,9 @@ TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {
 
     auto vit = test_store_->compact_incomplete(symbol, false, false, true, false);
     ReadQuery read_query;
-    auto read_result = test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, ReadOptions{});
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    auto read_result = test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
     const auto& seg = read_result.frame_data.frame();
 
     count = 0;
@@ -358,6 +362,7 @@ TEST_F(VersionStoreTest, StressBatchReadUncompressed) {
 
     std::vector<std::shared_ptr<ReadQuery>> read_queries;
     ReadOptions read_options;
+    register_native_handler_data_factory();
     read_options.set_batch_throw_on_error(true);
     auto latest_versions = test_store_->batch_read(symbols, std::vector<VersionQuery>(10), read_queries, read_options);
     for(auto&& [idx, version] : folly::enumerate(latest_versions)) {
@@ -457,7 +462,9 @@ TEST(VersionStore, UpdateWithin) {
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
 
     ReadQuery read_query;
-    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
     const auto& seg = read_result.frame_and_descriptor_.frame_;
 
     for(auto i = 0u; i < num_rows; ++i) {
@@ -465,7 +472,7 @@ TEST(VersionStore, UpdateWithin) {
         if(update_range.contains(i))
             expected += update_val;
 
-        auto val1 = seg.scalar_at<uint8_t >(i, 1);
+        auto val1 = seg.scalar_at<uint8_t>(i, 1);
         ASSERT_EQ(val1.value(), expected);
     }
 }
@@ -498,7 +505,9 @@ TEST(VersionStore, UpdateBefore) {
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
 
     ReadQuery read_query;
-    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
     const auto& seg = read_result.frame_and_descriptor_.frame_;
 
     for(auto i = 0u; i < num_rows + update_range.diff(); ++i) {
@@ -539,7 +548,9 @@ TEST(VersionStore, UpdateAfter) {
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
 
     ReadQuery read_query;
-    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
     const auto& seg = read_result.frame_and_descriptor_.frame_;
 
     for(auto i = 0u; i < num_rows + update_range.diff(); ++i) {
@@ -581,7 +592,9 @@ TEST(VersionStore, UpdateIntersectBefore) {
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
 
     ReadQuery read_query;
-    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
     const auto &seg = read_result.frame_and_descriptor_.frame_;
 
     for (auto i = 0u; i < num_rows + 5; ++i) {
@@ -623,7 +636,9 @@ TEST(VersionStore, UpdateIntersectAfter) {
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
 
     ReadQuery read_query;
-    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
     const auto &seg = read_result.frame_and_descriptor_.frame_;
 
     for (auto i = 0u; i < num_rows + 5; ++i) {
@@ -675,7 +690,9 @@ TEST(VersionStore, UpdateWithinSchemaChange) {
     ReadOptions read_options;
     read_options.set_dynamic_schema(true);
     ReadQuery read_query;
-    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options);
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options, handler_data);
     const auto &seg = read_result.frame_and_descriptor_.frame_;
 
     for (auto i = 0u;i < num_rows; ++i) {
@@ -736,7 +753,9 @@ TEST(VersionStore, UpdateWithinTypeAndSchemaChange) {
     ReadOptions read_options;
     read_options.set_dynamic_schema(true);
     ReadQuery read_query;
-    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options);
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options, handler_data);
     const auto &seg = read_result.frame_and_descriptor_.frame_;
 
     for (auto i = 0u;i < num_rows; ++i) {

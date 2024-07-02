@@ -9,7 +9,7 @@
 #include <arcticdb/storage/memory/memory_storage.hpp>
 #include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
-
+#include <arcticdb/util/native_handler.hpp>
 
 TEST(InMemory, ReadTwice) {
     using namespace arcticdb;
@@ -28,6 +28,8 @@ TEST(InMemory, ReadTwice) {
     version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false, false);
 
     ReadQuery read_query;
-    auto read_result1 = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
-    auto read_result2 = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    auto read_result1 = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
+    auto read_result2 = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
 }

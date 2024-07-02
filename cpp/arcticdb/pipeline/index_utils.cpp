@@ -16,13 +16,13 @@ namespace arcticdb::pipelines::index {
 
 template <class IndexType>
 folly::Future<entity::AtomKey> write_index(
-   const TimeseriesDescriptor& metadata,
+    const TimeseriesDescriptor& metadata,
     std::vector<SliceAndKey> &&sk,
     const IndexPartialKey &partial_key,
     const std::shared_ptr<stream::StreamSink> &sink
     ) {
     auto slice_and_keys = std::move(sk);
-    IndexWriter<IndexType> writer(sink, partial_key, std::move(metadata));
+    IndexWriter<IndexType> writer(sink, partial_key, metadata);
     for (const auto &slice_and_key : slice_and_keys) {
         writer.add(slice_and_key.key(), slice_and_key.slice_);
     }

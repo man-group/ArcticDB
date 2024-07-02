@@ -53,7 +53,7 @@ class InMemoryConfigResolver final : public ConfigResolver {
     explicit InMemoryConfigResolver(const T &environments) :
         environments_() {
         for (auto &&[environment_name, env_storages] : environments) {
-            environments_.insert(std::make_pair(environment_name, env_storages));
+            environments_.emplace(environment_name, env_storages);
         }
     }
 

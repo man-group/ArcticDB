@@ -322,6 +322,23 @@ class ChunkedBufferImpl {
         }
     }
 
+    void memset_buffer(size_t offset, size_t bytes, char value) {
+        auto [block, pos, block_index] = block_and_offset(offset);
+        while(bytes > 0) {
+            const auto size_to_write = block->bytes() - pos;
+            memset(block->data() + pos, size_to_write, value);
+            bytes -= size_to_write;
+            if(bytes > 0) {
+                ++block_index;
+                if(block_index == blocks_.size())
+                    return;
+
+                block = blocks_[block_index];
+                pos = 0;
+            }
+        }
+    }
+
     template<typename T>
     T *ptr_cast(size_t pos_bytes, size_t required_bytes) {
         check_bytes(pos_bytes, required_bytes);

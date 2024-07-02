@@ -688,7 +688,7 @@ ReadResult PythonVersionStore::read_column_stats_version(
     const VersionQuery& version_query) {
     ARCTICDB_SAMPLE(ReadColumnStats, 0)
     auto [versioned_item, frame_and_descriptor] = read_column_stats_version_internal(stream_id, version_query);
-    return make_read_result_from_frame(frame_and_descriptor, versioned_item.key_);
+    return read_result_from_single_frame(frame_and_descriptor, versioned_item.key_);
 }
 
 ColumnStats PythonVersionStore::get_column_stats_info_version(
@@ -765,61 +765,13 @@ std::unordered_map<VersionId, bool> PythonVersionStore::get_all_tombstoned_versi
     return ::arcticdb::get_all_tombstoned_versions(store(), version_map(), stream_id);
 }
 
-FrameAndDescriptor create_frame(const StreamId& target_id, SegmentInMemory seg, const ReadOptions& read_options) {
-    auto context = std::make_shared<PipelineContext>(seg, in_memory_key(KeyType::TABLE_DATA, target_id, VersionId{0}));
-    seg.unsparsify();
-    reduce_and_fix_columns(context, seg, read_options);
-    auto norm_meta = make_timeseries_norm_meta(target_id);
-    const auto desc = make_timeseries_descriptor(seg.row_count(), seg.descriptor().clone(), std::move(norm_meta), std::nullopt, std::nullopt, std::nullopt, false);
-    return FrameAndDescriptor{std::move(seg), desc, {}, {}};
-}
-
-ReadResult PythonVersionStore::read_dataframe_merged(
-    const StreamId& target_id,
-    const std::vector<StreamId> &stream_ids,
-    const VersionQuery&, // TODO batch_get_specific_version
-    const ReadQuery &query,
-    const ReadOptions& read_options) {
-    if (stream_ids.empty())
-        util::raise_rte("No symbols given");
-
-    auto stream_index_map = batch_get_latest_version(store(), version_map(), stream_ids, false);
-    std::vector<AtomKey> index_keys;
-    std::transform(stream_index_map->begin(), stream_index_map->end(), std::back_inserter(index_keys),
-                   [](auto &stream_key) { return to_atom(stream_key.second); });
-
-    if(stream_index_map->empty())
-        throw NoDataFoundException("No data found for any symbols");
-
-    auto [key, metadata, descriptor] = store()->read_metadata_and_descriptor(stream_index_map->begin()->second).get();
-    auto index = index_type_from_descriptor(descriptor);
-
-    FrameAndDescriptor final_frame;
-    VariantColumnPolicy density_policy = read_options.allow_sparse_ ? VariantColumnPolicy{SparseColumnPolicy{}} : VariantColumnPolicy{DenseColumnPolicy{}};
-
-    merge_frames_for_keys(
-        target_id,
-        std::move(index),
-        NeverSegmentPolicy{},
-        density_policy,
-        index_keys,
-        query,
-        store(),
-        [&final_frame, &target_id, &read_options](auto &&seg) {
-            final_frame = create_frame(target_id, std::forward<decltype(seg)>(seg), read_options);
-        });
-
-    const auto version = VersionedItem{to_atom((*stream_index_map)[stream_ids[0]])};
-    return create_python_read_result(version, std::move(final_frame));
-}
-
 std::vector<std::variant<ReadResult, DataError>> PythonVersionStore::batch_read(
     const std::vector<StreamId>& stream_ids,
     const std::vector<VersionQuery>& version_queries,
     std::vector<std::shared_ptr<ReadQuery>>& read_queries,
     const ReadOptions& read_options) {
-    
-    auto read_versions_or_errors = batch_read_internal(stream_ids, version_queries, read_queries, read_options);
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data();
+    auto read_versions_or_errors = batch_read_internal(stream_ids, version_queries, read_queries, read_options, handler_data);
     std::vector<std::variant<ReadResult, DataError>> res;
     for (auto&& [idx, read_version_or_error]: folly::enumerate(read_versions_or_errors)) {
         util::variant_match(
@@ -834,16 +786,6 @@ std::vector<std::variant<ReadResult, DataError>> PythonVersionStore::batch_read(
                 );
     }
     return res;
-}
-
-ReadResult PythonVersionStore::read_dataframe_version(
-    const StreamId &stream_id,
-    const VersionQuery& version_query,
-    ReadQuery& read_query,
-    const ReadOptions& read_options) {
-
-    auto opt_version_and_frame = read_dataframe_version_internal(stream_id, version_query, read_query, read_options);
-    return create_python_read_result(opt_version_and_frame.versioned_item_, std::move(opt_version_and_frame.frame_and_descriptor_));
 }
 
 void PythonVersionStore::delete_snapshot(const SnapshotId& snap_name) {
@@ -887,6 +829,17 @@ void PythonVersionStore::delete_snapshot_sync(const SnapshotId& snap_name, const
     } catch(const std::exception &ex) {
         log::version().warn("Garbage collection of unreachable deleted index keys failed due to: {}", ex.what());
     }
+}
+
+ReadResult PythonVersionStore::read_dataframe_version(
+    const StreamId &stream_id,
+    const VersionQuery& version_query,
+    ReadQuery& read_query,
+    const ReadOptions& read_options,
+    std::any& handler_data) {
+
+    auto opt_version_and_frame = read_dataframe_version_internal(stream_id, version_query, read_query, read_options, handler_data);
+    return create_python_read_result(opt_version_and_frame.versioned_item_, std::move(opt_version_and_frame.frame_and_descriptor_));
 }
 
 namespace {
@@ -1133,7 +1086,7 @@ ReadResult PythonVersionStore::read_index(
         throw NoDataFoundException(fmt::format("read_index: version not found for symbol '{}'", stream_id));
 
     auto res = read_index_impl(store(), *version);
-    return make_read_result_from_frame(res, version->key_);
+    return read_result_from_single_frame(res, version->key_);
 }
 
 std::vector<AtomKey> PythonVersionStore::get_version_history(const StreamId& stream_id) {
@@ -1157,7 +1110,7 @@ void PythonVersionStore::clear(const bool continue_on_error) {
     if (store()->fast_delete()) {
         // Most storage backends have a fast deletion method for a db/collection equivalent, eg. drop() for mongo and
         // lmdb and iterating each key is always going to be suboptimal.
-        ARCTICDB_DEBUG(log::version(), "fast deleting library as supported by storage");
+        ARCTICDB_DEBUG(log::version(), "Fast deleting library as supported by storage");
         return;
     }
 

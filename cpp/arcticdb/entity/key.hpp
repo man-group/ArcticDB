@@ -216,9 +216,8 @@ inline std::vector<KeyType> key_types_read_precedence() {
 } //namespace arcticdb::entity
 
 namespace std {
-    template <> struct hash<arcticdb::entity::KeyType >
-    {
-        size_t operator()(const arcticdb::entity::KeyType & kt) const {
+    template <> struct hash<arcticdb::entity::KeyType> {
+        size_t operator()(arcticdb::entity::KeyType kt) const {
             return std::hash<int>{}(static_cast<int>(kt));
         }
     };

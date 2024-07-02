@@ -183,7 +183,7 @@ S3Result<DeleteOutput> RealS3Client::delete_objects(
     // RemoveOpts.ignores_missing_key_
     std::vector<FailedDelete> failed_deletes;
     for (const auto &failed_key: outcome.GetResult().GetErrors()) {
-        failed_deletes.push_back({failed_key.GetKey(), failed_key.GetMessage()});
+        failed_deletes.emplace_back(failed_key.GetKey(), failed_key.GetMessage());
     }
 
     DeleteOutput result = {failed_deletes};
@@ -202,7 +202,7 @@ S3Result<ListObjectsOutput> RealS3Client::list_objects(
     request.WithBucket(bucket_name.c_str());
     request.SetPrefix(name_prefix.c_str());
     if (continuation_token.has_value())
-        request.SetContinuationToken(continuation_token.value());
+        request.SetContinuationToken(*continuation_token);
 
     auto outcome = s3_client.ListObjectsV2(request);
 

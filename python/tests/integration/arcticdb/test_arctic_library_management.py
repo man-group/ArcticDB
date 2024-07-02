@@ -277,7 +277,10 @@ def test_create_library_with_all_chars(arctic_client_no_lmdb, prefix, suffix):
         except UserInputException:
             pass
 
-    assert set(ac.list_libraries()) == created_libraries
+    result = set(ac.list_libraries())
+    print(result)
+    print(created_libraries)
+    assert result == created_libraries
 
 
 def test_do_not_persist_s3_details(s3_storage):
@@ -357,7 +360,8 @@ def test_separation_between_libraries(arctic_client):
 
 def add_path_prefix(storage_fixture, prefix):
     if "path_prefix".casefold() in storage_fixture.arctic_uri.casefold():
-        return storage_fixture.replace_uri_field(storage_fixture.arctic_uri, ArcticUriFields.PATH_PREFIX, prefix, start=3, end=2)
+        return storage_fixture.replace_uri_field(storage_fixture.arctic_uri, ArcticUriFields.PATH_PREFIX,
+                                                 prefix, start=3, end=2)
 
     if "azure" in storage_fixture.arctic_uri:  # azure connection string has a different format
         return f"{storage_fixture.arctic_uri};Path_prefix={prefix}"

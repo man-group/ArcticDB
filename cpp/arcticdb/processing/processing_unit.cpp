@@ -21,9 +21,11 @@ void ProcessingUnit::apply_filter(
                                   std::move(bitset),
                                   filter_down_stringpool);
         auto num_rows = seg.is_null() ? 0 : seg.row_count();
-        row_ranges_->at(idx) = std::make_shared<pipelines::RowRange>(row_ranges_->at(idx)->first, row_ranges_->at(idx)->first + num_rows);
+        auto& row_range = row_ranges_->at(idx);
+        row_range = std::make_shared<pipelines::RowRange>(row_range->first, row_range->first + num_rows);
         auto num_cols = seg.is_null() ? 0 : seg.descriptor().field_count() - seg.descriptor().index().field_count();
-        col_ranges_->at(idx) = std::make_shared<pipelines::ColRange>(col_ranges_->at(idx)->first, col_ranges_->at(idx)->first + num_cols);
+        auto& col_range = col_ranges_->at(idx);
+        col_range = std::make_shared<pipelines::ColRange>(col_range->first, col_range->first + num_cols);
         segments_->at(idx) = std::make_shared<SegmentInMemory>(std::move(seg));
     }
 }
@@ -52,7 +54,7 @@ VariantData ProcessingUnit::get(const VariantNode &name) {
             if (auto opt_idx = segment->column_index(column_name.value)) {
                 return VariantData(ColumnWithStrings(
                         segment->column_ptr(
-                        position_t(position_t(opt_idx.value()))),
+                        position_t(position_t(*opt_idx))),
                         segment->string_pool_ptr(),
                         column_name.value));
             }

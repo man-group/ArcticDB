@@ -197,14 +197,15 @@ namespace arcticdb {
                         auto new_segs = partition_segment(*seg, row_to_bucket, bucket_counts);
                         for (auto && [output_idx, new_seg]: folly::enumerate(new_segs)) {
                             if (bucket_counts.at(output_idx) > 0) {
-                                if (!procs.at(output_idx).segments_.has_value()) {
-                                    procs.at(output_idx).segments_ = std::make_optional<std::vector<std::shared_ptr<SegmentInMemory>>>();
-                                    procs.at(output_idx).row_ranges_ = std::make_optional<std::vector<std::shared_ptr<pipelines::RowRange>>>();
-                                    procs.at(output_idx).col_ranges_ = std::make_optional<std::vector<std::shared_ptr<pipelines::ColRange>>>();
+                                auto& proc = procs.at(output_idx);
+                                if (!proc.segments_.has_value()) {
+                                    proc.segments_ = std::make_optional<std::vector<std::shared_ptr<SegmentInMemory>>>();
+                                    proc.row_ranges_ = std::make_optional<std::vector<std::shared_ptr<pipelines::RowRange>>>();
+                                    proc.col_ranges_ = std::make_optional<std::vector<std::shared_ptr<pipelines::ColRange>>>();
                                 }
-                                procs.at(output_idx).segments_->emplace_back(std::make_shared<SegmentInMemory>(std::move(new_seg)));
-                                procs.at(output_idx).row_ranges_->emplace_back(input.row_ranges_->at(input_idx));
-                                procs.at(output_idx).col_ranges_->emplace_back(input.col_ranges_->at(input_idx));
+                                proc.segments_->emplace_back(std::make_shared<SegmentInMemory>(std::move(new_seg)));
+                                proc.row_ranges_->emplace_back(input.row_ranges_->at(input_idx));
+                                proc.col_ranges_->emplace_back(input.col_ranges_->at(input_idx));
                             }
                         }
                     }

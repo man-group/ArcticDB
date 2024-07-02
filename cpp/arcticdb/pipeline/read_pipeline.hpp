@@ -102,7 +102,7 @@ inline util::BitSet build_column_bitset(const StreamDescriptor& desc, const std:
 
 inline auto add_index_column(const std::vector<std::string>& columns, const StreamDescriptor& desc) {
     std::vector<std::string> columns_with_index{columns};
-    columns_with_index.push_back(std::string{desc.fields(0).name()});
+    columns_with_index.emplace_back(desc.fields(0).name());
     return columns_with_index;
 }
 

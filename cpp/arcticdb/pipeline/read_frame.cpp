@@ -10,7 +10,6 @@
 #include <arcticdb/codec/encoding_sizes.hpp>
 #include <arcticdb/codec/codec.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
-#include <arcticdb/pipeline/index_segment_reader.hpp>
 #include <arcticdb/pipeline/read_frame.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
@@ -25,18 +24,19 @@
 #include <arcticdb/pipeline/column_mapping.hpp>
 #include <arcticdb/util/magic_num.hpp>
 #include <arcticdb/codec/segment_identifier.hpp>
+#include <arcticdb/util/spinlock.hpp>
+#include <arcticdb/python/python_strings.hpp>
+#include <arcticdb/pipeline/string_reducers.hpp>
 
 #include <ankerl/unordered_dense.h>
-#include <google/protobuf/util/message_differencer.h>
 #include <folly/gen/Base.h>
-#include <folly/concurrency/ConcurrentHashMap.h>
 
 namespace arcticdb::pipelines {
 
 /*
    _  _  _
   |i||_||_|    We mark the first slice of each row of the grid as requiring a fetch_index
-  |i||_||_|    This helps us calculating the row_count during allocation. Note that all slices
+  |i||_||_|    This helps us calculate the row_count during allocation. Note that all slices
   |i||_||_|    contain the relevant index, but we only want to count it once per grid row.
 
  */
@@ -71,7 +71,7 @@ SegmentInMemory allocate_frame(const std::shared_ptr<PipelineContext>& context) 
     ARCTICDB_SAMPLE_DEFAULT(AllocFrame)
     auto [offset, row_count] = offset_and_row_count(context);
     ARCTICDB_DEBUG(log::version(), "Allocated frame with offset {} and row count {}", offset, row_count);
-    SegmentInMemory output{get_filtered_descriptor(context),  row_count, true};
+    SegmentInMemory output{get_filtered_descriptor(context),  row_count, true, false, DataTypeMode::EXTERNAL};
     output.set_offset(static_cast<position_t>(offset));
     output.set_row_data(static_cast<ssize_t>(row_count - 1));
     output.init_column_map();
@@ -130,6 +130,16 @@ const uint8_t* skip_heading_fields(const SegmentHeader & hdr, const uint8_t*& da
     return data;
 }
 
+const uint8_t* skip_to_string_pool(const SegmentHeader & hdr, const uint8_t* data) {
+    const uint8_t* output = data;
+    const auto& body_fields = hdr.body_fields();
+    const auto magic_number_size = hdr.encoding_version() == EncodingVersion::V2 ? sizeof(ColumnMagic) : 0;
+    for(auto i = 0U; i < body_fields.size(); ++i)
+        output += encoding_sizes::field_compressed_size(hdr.body_fields().at(i)) + magic_number_size;
+
+    return output;
+}
+
 void decode_string_pool(const SegmentHeader& hdr, const uint8_t*& data, const uint8_t *begin ARCTICDB_UNUSED, const uint8_t* end, PipelineContextRow &context) {
     if (hdr.has_string_pool_field()) {
         ARCTICDB_DEBUG(log::codec(), "Decoding string pool at position: {}", data - begin);
@@ -172,7 +182,7 @@ void decode_index_field(
         } else {
             auto &buffer = frame.column(0).data().buffer(); // TODO assert size
             auto &frame_field_descriptor = frame.field(0); //TODO better method
-            auto sz = sizeof_datatype(frame_field_descriptor.type());
+            auto sz = data_type_size(frame_field_descriptor.type(), DataTypeMode::EXTERNAL);
             const auto& slice_and_key = context.slice_and_key();
             auto offset = sz * (slice_and_key.slice_.row_range.first - frame.offset());
             auto tot_size = sz * slice_and_key.slice_.row_range.diff();
@@ -195,15 +205,18 @@ void decode_index_field(
 
 void decode_or_expand(
     const uint8_t*& data,
-    uint8_t* dest,
+    ChunkedBuffer& dest_buffer,
     const EncodedFieldImpl& encoded_field_info,
-    size_t dest_bytes,
-    std::shared_ptr<BufferHolder> buffers,
+    const DecodePathData& shared_data,
+    std::any& handler_data,
 	EncodingVersion encoding_version,
-    const ColumnMapping& m) {
-    if(auto handler = TypeHandlerRegistry::instance()->get_handler(m.source_type_desc_); handler) {
-        handler->handle_type(data, dest, encoded_field_info, m, dest_bytes, std::move(buffers), encoding_version);
+    const ColumnMapping& m,
+    const std::shared_ptr<StringPool>& string_pool) {
+    if(auto handler = get_type_handler(m.source_type_desc_, m.dest_type_desc_); handler) {
+        handler->handle_type(data, dest_buffer, encoded_field_info, m, shared_data, handler_data, encoding_version, string_pool);
     } else {
+        auto* dest = dest_buffer.data() + m.offset_bytes_;  // TODO only works with contiguous data
+        const auto dest_bytes = m.dest_bytes_;
         std::optional<util::BitMagic> bv;
         if (encoded_field_info.has_ndarray() && encoded_field_info.ndarray().sparse_map_bytes() > 0) {
             const auto &ndarray = encoded_field_info.ndarray();
@@ -290,7 +303,8 @@ void decode_into_frame_static(
     SegmentInMemory &frame,
     PipelineContextRow &context,
     Segment &&s,
-    const std::shared_ptr<BufferHolder>& buffers) {
+    const DecodePathData& shared_data,
+    std::any& handler_data) {
     auto seg = std::move(s);
     ARCTICDB_SAMPLE_DEFAULT(DecodeIntoFrame)
     const uint8_t *data = seg.buffer().data();
@@ -309,6 +323,9 @@ void decode_into_frame_static(
     // data == end in case we have empty data types (e.g. {EMPTYVAL, Dim0}, {EMPTYVAL, Dim1}) for which we store nothing
     // in storage as they can be reconstructed in the type handler on the read path.
     if (data != end || !fields.empty()) {
+        auto string_pool_data = skip_to_string_pool(hdr, data);
+        decode_string_pool(hdr, string_pool_data, begin, end, context);
+
         auto& index_field = fields.at(0u);
         decode_index_field(frame, index_field, data, begin, end, context, encoding_version);
 
@@ -345,12 +362,13 @@ void decode_into_frame_static(
             );
             decode_or_expand(
                 data,
-                buffer.data() + m.offset_bytes_,
+                buffer,
                 encoded_field,
-                m.dest_bytes_,
-                buffers,
+                shared_data,
+                handler_data,
                 encoding_version,
-                m
+                m,
+                context.string_pool_ptr()
             );
             ARCTICDB_TRACE(log::codec(), "Decoded column {} to position {}", field_name, data - begin);
 
@@ -370,8 +388,6 @@ void decode_into_frame_static(
                     util::check_magic_in_place<ColumnMagic>(data);
             }
         }
-
-        decode_string_pool(hdr, data, begin, end, context);
     }
     ARCTICDB_TRACE(log::codec(), "Frame decoded into static schema");
 }
@@ -380,7 +396,8 @@ void decode_into_frame_dynamic(
     SegmentInMemory& frame,
     PipelineContextRow& context,
     Segment&& s,
-    const std::shared_ptr<BufferHolder>& buffers
+    const DecodePathData& shared_data,
+    std::any& handler_data
 ) {
     ARCTICDB_SAMPLE_DEFAULT(DecodeIntoFrame)
     auto seg = std::move(s);
@@ -397,6 +414,9 @@ void decode_into_frame_dynamic(
     const bool has_magic_numbers = encoding_version == EncodingVersion::V2;
 
     if (!hdr.body_fields().empty()) {
+        auto string_pool_data = skip_to_string_pool(hdr, data);
+        decode_string_pool(hdr, string_pool_data, begin, end, context);
+
         const auto& fields = hdr.body_fields();
         auto& index_field = fields.at(0u);
         decode_index_field(frame, index_field, data, begin, end, context, encoding_version);
@@ -438,16 +458,17 @@ void decode_into_frame_dynamic(
             );
             decode_or_expand(
                 data,
-                buffer.data() + m.offset_bytes_,
+                buffer,
                 encoded_field,
-                m.dest_bytes_,
-                buffers,
+                shared_data,
+                handler_data,
                 encoding_version,
-                m
+                m,
+                context.string_pool_ptr()
             );
 
             if (!trivially_compatible_types(m.source_type_desc_, m.dest_type_desc_) && !source_is_empty) {
-                m.dest_type_desc_.visit_tag([&buffer, &m, buffers] (auto dest_desc_tag) {
+                m.dest_type_desc_.visit_tag([&buffer, &m, shared_data] (auto dest_desc_tag) {
                     using DestinationType =  typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
                     m.source_type_desc_.visit_tag([&buffer, &m] (auto src_desc_tag ) {
                         using SourceType =  typename decltype(src_desc_tag)::DataTypeTag::raw_type;
@@ -455,9 +476,9 @@ void decode_into_frame_dynamic(
                             // If the source and destination types are different, then sizeof(destination type) >= sizeof(source type)
                             // We have decoded the column of source type directly onto the output buffer above
                             // We therefore need to iterate backwards through the source values, static casting them to the destination
-                            // type to avoid overriding values we haven't casted yet.
-                            const auto src_ptr_offset = sizeof_datatype(m.source_type_desc_) * (m.num_rows_ - 1);
-                            const auto dest_ptr_offset = sizeof_datatype(m.dest_type_desc_) * (m.num_rows_ - 1);
+                            // type to avoid overriding values we haven't cast yet.
+                            const auto src_ptr_offset = data_type_size(m.source_type_desc_, DataTypeMode::INTERNAL) * (m.num_rows_ - 1);
+                            const auto dest_ptr_offset = data_type_size(m.dest_type_desc_, DataTypeMode::INTERNAL) * (m.num_rows_ - 1);
                             auto src_ptr = reinterpret_cast<SourceType *>(buffer.data() + m.offset_bytes_ + src_ptr_offset);
                             auto dest_ptr = reinterpret_cast<DestinationType *>(buffer.data() + m.offset_bytes_ + dest_ptr_offset);
                             for (auto i = 0u; i < m.num_rows_; ++i) {
@@ -471,8 +492,6 @@ void decode_into_frame_dynamic(
             }
             ARCTICDB_TRACE(log::codec(), "Decoded column {} to position {}", frame.field(dst_col).name(), data - begin);
         }
-
-        decode_string_pool(hdr, data, begin, end, context);
     } else {
         ARCTICDB_DEBUG(log::version(), "Empty segment");
     }
@@ -488,19 +507,25 @@ class NullValueReducer {
     std::shared_ptr<PipelineContext> context_;
     SegmentInMemory frame_;
     size_t pos_;
+    DecodePathData shared_data_;
+    std::any& handler_data_;
 
 public:
     NullValueReducer(
         Column &column,
         std::shared_ptr<PipelineContext> &context,
-        SegmentInMemory frame) :
+        SegmentInMemory frame,
+        DecodePathData shared_data,
+        std::any& handler_data) :
         column_(column),
         context_(context),
         frame_(std::move(frame)),
-        pos_(frame_.offset()) {
+        pos_(frame_.offset()),
+        shared_data_(std::move(shared_data)),
+        handler_data_(handler_data){
     }
 
-    [[nodiscard]] size_t cursor(const PipelineContextRow &context_row) const {
+    [[nodiscard]] static size_t cursor(const PipelineContextRow &context_row) {
         return context_row.slice_and_key().slice_.row_range.first;
     }
 
@@ -509,8 +534,13 @@ public:
         auto sz_to_advance = slice_and_key.slice_.row_range.diff();
         auto current_pos = context_row.slice_and_key().slice_.row_range.first;
         if (current_pos != pos_) {
-            auto num_rows = current_pos - pos_;
-            column_.default_initialize_rows(pos_ - frame_.offset(), num_rows, false);
+            const auto num_rows = current_pos - pos_;
+            const auto start_row = pos_ - frame_.offset();
+            if (const std::shared_ptr<TypeHandler>& handler = arcticdb::TypeHandlerRegistry::instance()->get_handler(column_.type()); handler) {
+                handler->default_initialize(column_.buffer(), start_row * handler->type_size(), num_rows * handler->type_size(), shared_data_, handler_data_);
+            } else {
+                column_.default_initialize_rows(start_row, num_rows, false);
+            }
             pos_ = current_pos + sz_to_advance;
         }
         else
@@ -522,543 +552,41 @@ public:
         auto end =  frame_.offset() + total_rows;
         if(pos_ != end) {
             util::check(pos_ < end, "Overflow in finalize {} > {}", pos_, end);
-            auto num_rows =  end - pos_;
-            column_.default_initialize_rows(pos_ - frame_.offset(), num_rows, false);
-        }
-    }
-};
-
-size_t get_max_string_size_in_column(
-        ChunkedBuffer &src_buffer,
-        std::shared_ptr<PipelineContext> &context,
-        SegmentInMemory &frame,
-        const Field &frame_field,
-        const FrameSliceMap& slice_map,
-        bool check_all) {
-    const auto column_data = slice_map.columns_.find(frame_field.name());
-    util::check(column_data != slice_map.columns_.end(), "Data for column {} was not generated in map", frame_field.name());
-    auto column_width = size_t{0};
-
-    for (const auto &row : column_data->second) {
-        PipelineContextRow context_row{context, row.second.context_index_};
-        size_t string_size = 0;
-        if(check_all || context_row.compacted()) {
-            string_size = get_max_string_size(context_row, src_buffer, frame.offset());
-        } else {
-            string_size = get_first_string_size(context_row, src_buffer, frame.offset());
-        }
-
-        column_width = std::max(
-            column_width,
-            std::max(column_width, string_size)
-        );
-    }
-
-    return column_width;
-}
-
-class StringReducer {
-protected:
-    Column& column_;
-    std::shared_ptr<PipelineContext> context_;
-    SegmentInMemory frame_;
-    const Field& frame_field_;
-    size_t row_ ;
-    ChunkedBuffer& src_buffer_;
-    size_t column_width_;
-    ChunkedBuffer dest_buffer_;
-    uint8_t *dst_;
-
-public:
-    StringReducer(
-        Column& column,
-        std::shared_ptr<PipelineContext> context,
-        SegmentInMemory frame,
-        const Field& frame_field,
-        size_t alloc_width) :
-        column_(column),
-        context_(std::move(context)),
-        frame_(std::move(frame)),
-        frame_field_(frame_field),
-        row_(0),
-        src_buffer_(column.data().buffer()),
-        column_width_(alloc_width),
-        dest_buffer_(ChunkedBuffer::presized(frame_.row_count() * column_width_)),
-        dst_(dest_buffer_.data()) {
-        if (dest_buffer_.bytes() > 0) {
-            std::memset(dest_buffer_.data(), 0, dest_buffer_.bytes());
-        }
-    }
-
-    virtual void finalize() {
-    }
-
-    virtual ~StringReducer() {
-        src_buffer_ = std::move(dest_buffer_);
-        column_.set_inflated(frame_.row_count());
-    }
-
-public:
-    virtual void reduce(PipelineContextRow& context_row, size_t column_index) = 0;
-};
-
-using LockType = std::mutex;
-
-class EmptyDynamicStringReducer {
-protected:
-    Column& column_;
-    SegmentInMemory frame_;
-    size_t row_ ;
-    ChunkedBuffer& src_buffer_;
-    size_t column_width_;
-    ChunkedBuffer dest_buffer_;
-    uint8_t *dst_;
-    PyObject** ptr_dest_;
-    std::shared_ptr<LockType> lock_;
-    std::shared_ptr<PyObject> py_nan_;
-
-public:
-    EmptyDynamicStringReducer(
-        Column& column,
-        SegmentInMemory frame,
-        const Field&,
-        size_t alloc_width,
-        std::shared_ptr<LockType> spinlock) :
-        column_(column),
-        frame_(std::move(frame)),
-        row_(0),
-        src_buffer_(column.data().buffer()),
-        column_width_(alloc_width),
-        dest_buffer_(ChunkedBuffer::presized(frame_.row_count() * column_width_)),
-        dst_(dest_buffer_.data()),
-        ptr_dest_(reinterpret_cast<PyObject**>(dst_)),
-        lock_(std::move(spinlock)),
-        py_nan_(create_py_nan(lock_),[lock=lock_](PyObject* py_obj) {
-            lock->lock();
-            Py_DECREF(py_obj);
-            lock->unlock(); }) {
-    }
-
-    ~EmptyDynamicStringReducer() {
-        src_buffer_ = std::move(dest_buffer_);
-        column_.set_inflated(frame_.row_count());
-    }
-
-    void reduce(size_t end) {
-        auto none = py::none{};
-        auto ptr_src = get_offset_ptr_at(row_, src_buffer_);
-        auto non_counter = 0u;
-        for (; row_ < end; ++row_, ++ptr_src, ++ptr_dest_) {
-            auto offset = *ptr_src;
-            if (offset == not_a_string()) {
-                ++non_counter;
-                *ptr_dest_ = none.ptr();
-            } else if (offset == nan_placeholder()) {
-                *ptr_dest_ = py_nan_.get();
-                Py_INCREF(py_nan_.get());
+            const auto num_rows = end - pos_;
+            const auto start_row = pos_ - frame_.offset();
+            if (const std::shared_ptr<TypeHandler>& handler = arcticdb::TypeHandlerRegistry::instance()->get_handler(column_.type()); handler) {
+                handler->default_initialize(column_.buffer(), start_row * handler->type_size(), num_rows * handler->type_size(), shared_data_, handler_data_);
             } else {
-                util::raise_rte("Got unexpected offset in default initialization column");
+                column_.default_initialize_rows(start_row, num_rows, false);
             }
-        }
-
-        if(non_counter != 0u) {
-            lock_->lock();
-            for(auto j = 0u; j < non_counter; ++j)
-                none.inc_ref();
-            lock_->unlock();
         }
     }
 };
-
-class FixedStringReducer : public StringReducer{
-public:
-    FixedStringReducer(
-        Column& column,
-        std::shared_ptr<PipelineContext> &context,
-        SegmentInMemory frame,
-        const Field& frame_field,
-        size_t alloc_width) :
-        StringReducer(column, context, std::move(frame), frame_field, alloc_width) {
-    }
-
-    void reduce(PipelineContextRow& context_row, size_t) override {
-        size_t end = context_row.slice_and_key().slice_.row_range.second - frame_.offset();
-        for (; row_ < end; ++row_) {
-            auto val = get_string_from_buffer(row_, src_buffer_, context_row.string_pool());
-                util::variant_match(val,
-                    [&] (std::string_view sv) {
-                        std::memcpy(dst_, sv.data(), sv.size());
-                },
-                [&] (entity::position_t ) {
-                    memset(dst_, 0, column_width_);
-                });
-            dst_ += column_width_;
-        }
-    }
-};
-
-class UnicodeConvertingStringReducer : public StringReducer {
-    static constexpr size_t UNICODE_PREFIX = 4;
-    arcticdb::PortableEncodingConversion conv_;
-    uint8_t *buf_;
-
-public:
-    UnicodeConvertingStringReducer(
-        Column &column,
-        std::shared_ptr<PipelineContext> context,
-        SegmentInMemory frame,
-        const Field& frame_field,
-        size_t alloc_width) :
-        StringReducer(column, std::move(context), std::move(frame), frame_field, alloc_width * UNICODE_WIDTH),
-        conv_("UTF32", "UTF8"),
-        buf_(new uint8_t[column_width_ + UNICODE_PREFIX]) {
-    }
-
-    void reduce(PipelineContextRow &context_row, size_t) override {
-        size_t end = context_row.slice_and_key().slice_.row_range.second - frame_.offset();
-        for (; row_ < end; ++row_) {
-            auto val = get_string_from_buffer(row_, src_buffer_, context_row.string_pool());
-            util::variant_match(val,
-                                [&] (std::string_view sv) {
-                                    memset(buf_, 0, column_width_);
-                                    auto success = conv_.convert(sv.data(), sv.size(), buf_, column_width_);
-                                    util::check(success, "Failed to convert utf8 to utf32 for string {}", sv);
-                                    memcpy(dst_, buf_, column_width_);
-                                },
-                                [&] (entity::position_t ) {
-                                    memset(dst_, 0, column_width_);
-                                });
-
-            dst_ += column_width_;
-        }
-    }
-
-    ~UnicodeConvertingStringReducer() override {
-        delete[] buf_;
-    }
-};
-
-
-namespace {
-
-enum class PyStringConstructor {
-    Unicode_FromUnicode,
-    Unicode_FromStringAndSize,
-    Bytes_FromStringAndSize
-};
-
-inline PyStringConstructor get_string_constructor(bool has_type_conversion, bool is_utf) {
-    if (is_utf) {
-        if (has_type_conversion) {
-            return PyStringConstructor::Unicode_FromUnicode;
-
-        } else {
-            return PyStringConstructor::Unicode_FromStringAndSize;
-
-        }
-    } else {
-        return PyStringConstructor::Bytes_FromStringAndSize;
-    }
-}
-}
-
-using UniqueStringMapType = folly::ConcurrentHashMap<std::string_view, PyObject*>;
-
-class DynamicStringReducer : public StringReducer {
-    PyObject** ptr_dest_;
-    std::shared_ptr<UniqueStringMapType> unique_string_map_;
-    std::shared_ptr<PyObject> py_nan_;
-    std::shared_ptr<LockType> lock_;
-    bool do_lock_ = false;
-
-    struct UnicodeFromUnicodeCreator {
-        static PyObject* create(std::string_view sv, bool) {
-            const auto size = sv.size() + 4;
-            auto* buffer = reinterpret_cast<char*>(alloca(size));
-            memset(buffer, 0, size);
-            memcpy(buffer, sv.data(), sv.size());
-
-            const auto actual_length = std::min(sv.size() / UNICODE_WIDTH, wcslen(reinterpret_cast<const wchar_t *>(buffer)));
-            return PyUnicode_FromKindAndData(PyUnicode_4BYTE_KIND, reinterpret_cast<const UnicodeType*>(sv.data()), actual_length);
-        }
-    };
-
-    struct UnicodeFromStringAndSizeCreator {
-        static PyObject* create(std::string_view sv, bool) {
-            const auto actual_length = sv.size();
-            return PyUnicode_FromStringAndSize(sv.data(), actual_length);
-        }
-    };
-
-    struct BytesFromStringAndSizeCreator {
-        static PyObject* create(std::string_view sv, bool has_type_conversion) {
-            const auto actual_length = has_type_conversion ? std::min(sv.size(), strlen(sv.data())) : sv.size();
-            return PYBIND11_BYTES_FROM_STRING_AND_SIZE(sv.data(), actual_length);
-        }
-    };
-
-    template<typename StringCreator, typename LockPolicy>
-    void assign_strings_shared(size_t end, const entity::position_t* ptr_src, bool has_type_conversion, const StringPool& string_pool) {
-        LockPolicy::lock(*lock_);
-        auto none = std::make_unique<py::none>(py::none{});
-        LockPolicy::unlock(*lock_);
-        size_t none_count = 0u;
-        for (; row_ < end; ++row_, ++ptr_src, ++ptr_dest_) {
-            auto offset = *ptr_src;
-            if(offset == not_a_string()) {
-                *ptr_dest_ = none->ptr();
-                ++none_count;
-            } else if (offset == nan_placeholder()) {
-                *ptr_dest_ = py_nan_.get();
-                Py_INCREF(py_nan_.get());
-            } else {
-                const auto sv = get_string_from_pool(offset, string_pool);
-                if (auto it = unique_string_map_->find(sv); it != unique_string_map_->end()) {
-                    *ptr_dest_ = it->second;
-                    LockPolicy::lock(*lock_);
-                    Py_INCREF(*ptr_dest_);
-                    LockPolicy::unlock(*lock_);
-                } else {
-                    LockPolicy::lock(*lock_);
-                    *ptr_dest_ = StringCreator::create(sv, has_type_conversion) ;
-                    Py_INCREF(*ptr_dest_);
-                    LockPolicy::unlock(*lock_);
-                    unique_string_map_->emplace(sv, *ptr_dest_);
-                }
-            }
-        }
-        LockPolicy::lock(*lock_);
-        for(auto i = 0u; i < none_count; ++i)
-            Py_INCREF(none->ptr());
-
-        none.reset();
-        LockPolicy::unlock(*lock_);
-    }
-
-
-    template<typename StringCreator, typename LockPolicy>
-    void assign_strings_local(size_t end, const entity::position_t* ptr_src, bool has_type_conversion, const StringPool& string_pool) {
-        LockPolicy::lock(*lock_);
-        auto none = std::make_unique<py::none>(py::none{});
-        LockPolicy::unlock(*lock_);
-        size_t none_count = 0u;
-        ankerl::unordered_dense::map<entity::position_t, std::pair<PyObject*, std::unique_ptr<std::mutex>>> local_map;
-        local_map.reserve(end - row_);
-        // TODO this is no good for non-contigous blocks, but we currently expect
-        // output data to be contiguous
-        for (; row_ < end; ++row_, ++ptr_src, ++ptr_dest_) {
-            auto offset = *ptr_src;
-            if(offset == not_a_string()) {
-                *ptr_dest_ = none->ptr();
-                ++none_count;
-            } else if (offset == nan_placeholder()) {
-                *ptr_dest_ = py_nan_.get();
-                Py_INCREF(py_nan_.get());
-            } else {
-                auto it = local_map.find(offset);
-                if(it != local_map.end()) {
-                    auto& object_and_lock = it->second;
-                    *ptr_dest_ = object_and_lock.first;
-                    LockPolicy::lock(*object_and_lock.second);
-                    Py_INCREF(*ptr_dest_);
-                    LockPolicy::unlock(*object_and_lock.second);
-                } else {
-                    const auto sv = get_string_from_pool(offset, string_pool);
-                    LockPolicy::lock(*lock_);
-                    *ptr_dest_ = StringCreator::create(sv, has_type_conversion);
-                    LockPolicy::unlock(*lock_);
-                    PyObject* dest = *ptr_dest_;
-                    local_map.insert(std::make_pair(std::move(offset), std::make_pair(std::move(dest), std::make_unique<std::mutex>())));
-                }
-            }
-        }
-
-        LockPolicy::lock(*lock_);
-        for(auto i = 0u; i < none_count; ++i)
-            Py_INCREF(none->ptr());
-
-        none.reset();
-        LockPolicy::unlock(*lock_);
-    }
-
-    template<typename LockPolicy>
-    inline void process_string_views(
-        bool has_type_conversion,
-        bool is_utf,
-        size_t end,
-        const entity::position_t* ptr_src,
-        const StringPool& string_pool) {
-        auto string_constructor = get_string_constructor(has_type_conversion, is_utf);
-
-        switch(string_constructor) {
-        case PyStringConstructor::Unicode_FromUnicode:
-            if(unique_string_map_)
-                assign_strings_shared<UnicodeFromUnicodeCreator, LockPolicy>(end, ptr_src, has_type_conversion, string_pool);
-            else
-                assign_strings_local<UnicodeFromUnicodeCreator, LockPolicy>(end, ptr_src, has_type_conversion, string_pool);
-            break;
-        case PyStringConstructor::Unicode_FromStringAndSize:
-            if(unique_string_map_)
-                assign_strings_shared<UnicodeFromStringAndSizeCreator, LockPolicy>(end, ptr_src, has_type_conversion, string_pool);
-            else
-                assign_strings_local<UnicodeFromStringAndSizeCreator, LockPolicy>(end, ptr_src, has_type_conversion, string_pool);
-            break;
-        case PyStringConstructor::Bytes_FromStringAndSize:
-            if(unique_string_map_)
-                assign_strings_shared<BytesFromStringAndSizeCreator, LockPolicy>(end, ptr_src, has_type_conversion, string_pool);
-            else
-                assign_strings_local<BytesFromStringAndSizeCreator, LockPolicy>(end, ptr_src, has_type_conversion, string_pool);
-            break;
-        }
-    }
-
-public:
-    DynamicStringReducer(
-        Column& column,
-        std::shared_ptr<PipelineContext> &context,
-        SegmentInMemory frame,
-        const Field& frame_field,
-        std::shared_ptr<UniqueStringMapType> unique_string_map,
-        std::shared_ptr<PyObject> py_nan,
-        std::shared_ptr<LockType> lock,
-        bool do_lock) :
-        StringReducer(column, context, std::move(frame), frame_field, sizeof(entity::position_t)),
-        ptr_dest_(reinterpret_cast<PyObject**>(dst_)),
-        unique_string_map_(std::move(unique_string_map)),
-        py_nan_(py_nan),
-        lock_(std::move(lock)),
-        do_lock_(do_lock) {
-            if(!py_nan_)
-                py_nan_ = std::shared_ptr<PyObject>(create_py_nan(lock_),[lock=lock_](PyObject* py_obj) {
-                    lock->lock();
-                    Py_DECREF(py_obj);
-                    lock->unlock();
-                });
-            util::check(static_cast<bool>(py_nan_), "Got null nan in string reducer");
-    }
-
-    struct LockActive {
-        static void lock(LockType& lock) {
-            lock.lock();
-        }
-
-        static void unlock(LockType& lock) {
-            lock.unlock();
-        }
-    };
-
-    struct LockDisabled {
-        static void lock(LockType&) { }
-
-        static void unlock(LockType&) { }
-    };
-
-    void reduce(PipelineContextRow& context_row, size_t column_index) override {
-        const auto& segment_descriptor = context_row.descriptor();
-        const auto& segment_field = segment_descriptor[column_index];
-
-        const bool trivially_compatible = trivially_compatible_types(frame_field_.type(), segment_field.type());
-        // In case the segment type is EMPTYVAL the empty type handler should have ran and set all missing values
-        // to not_a_string()
-        util::check(trivially_compatible || is_empty_type(segment_field.type().data_type()),
-            "String types are not trivially compatible. Cannot convert from type {} to {} in frame field.",
-            frame_field_.type(),
-            segment_field.type()
-        );
-
-        auto is_utf = is_utf_type(slice_value_type(frame_field_.type().data_type()));
-        size_t end =  context_row.slice_and_key().slice_.row_range.second - frame_.offset();
-
-        const auto is_type_different = frame_field_.type() != segment_field.type();
-        auto ptr_src = get_offset_ptr_at(row_, src_buffer_);
-        if(do_lock_)
-            process_string_views<LockActive>(is_type_different, is_utf, end, ptr_src, context_row.string_pool());
-        else
-            process_string_views<LockDisabled>(is_type_different, is_utf, end, ptr_src, context_row.string_pool());
-    }
-
-    void finalize() override {
-        auto total_rows = frame_.row_count();
-        if(row_!= total_rows) {
-            auto none = py::none{};
-            const auto diff = total_rows - row_;
-            for(; row_ < total_rows; ++row_, ++ptr_dest_) {
-                *ptr_dest_ = none.ptr();
-            }
-
-            lock_->lock();
-            for(auto i = 0u; i < diff; ++i) {
-                none.inc_ref();
-            }
-            lock_->unlock();
-        }
-    }
-};
-
-bool was_coerced_from_dynamic_to_fixed(DataType field_type, const Column& column) {
-    return field_type == DataType::UTF_FIXED64
-        && column.has_orig_type()
-        && column.orig_type().data_type() == DataType::UTF_DYNAMIC64;
-}
-
-std::unique_ptr<StringReducer> get_string_reducer(
-    Column& column,
-    std::shared_ptr<PipelineContext>& context,
-    SegmentInMemory frame,
-    const Field& frame_field,
-    const FrameSliceMap& slice_map,
-    std::shared_ptr<UniqueStringMapType>& unique_string_map,
-    std::shared_ptr<PyObject> py_nan,
-    std::shared_ptr<LockType>& spinlock,
-    bool do_lock
-    ) {
-    const auto& field_type = frame_field.type().data_type();
-    std::unique_ptr<StringReducer> string_reducer;
-
-    if (is_fixed_string_type(field_type)) {
-        if (was_coerced_from_dynamic_to_fixed(field_type, column)) {
-            const auto alloc_width = get_max_string_size_in_column(column.data().buffer(), context, frame, frame_field, slice_map, true);
-            string_reducer = std::make_unique<UnicodeConvertingStringReducer>(column, context, frame, frame_field, alloc_width);
-        } else {
-            const auto alloc_width = get_max_string_size_in_column(column.data().buffer(), context, frame, frame_field, slice_map, false);
-            string_reducer = std::make_unique<FixedStringReducer>(column, context, frame, frame_field, alloc_width);
-        }
-    } else {
-        string_reducer = std::make_unique<DynamicStringReducer>(column, context, frame, frame_field, unique_string_map, py_nan, spinlock, do_lock);
-    }
-    return string_reducer;
-}
 
 struct ReduceColumnTask : async::BaseTask {
     SegmentInMemory frame_;
     size_t column_index_;
     std::shared_ptr<FrameSliceMap> slice_map_;
     std::shared_ptr<PipelineContext> context_;
-    std::shared_ptr<UniqueStringMapType> unique_string_map_;
-    std::shared_ptr<PyObject> py_nan_;
-    std::shared_ptr<LockType> lock_;
+    DecodePathData shared_data_;
+    std::any& handler_data_;
     bool dynamic_schema_;
-    bool do_lock_;
 
     ReduceColumnTask(
-        const SegmentInMemory& frame,
+        SegmentInMemory frame,
         size_t c,
         std::shared_ptr<FrameSliceMap> slice_map,
         std::shared_ptr<PipelineContext>& context,
-        std::shared_ptr<UniqueStringMapType> unique_string_map,
-        std::shared_ptr<PyObject> py_nan,
-        std::shared_ptr<LockType> lock,
-        bool dynamic_schema,
-        bool do_lock) :
-        frame_(frame),
+        DecodePathData shared_data,
+        std::any& handler_data,
+        bool dynamic_schema) :
+        frame_(std::move(frame)),
         column_index_(c),
         slice_map_(std::move(slice_map)),
         context_(context),
-        unique_string_map_(std::move(unique_string_map)),
-        py_nan_(py_nan),
-        lock_(std::move(lock)),
-        dynamic_schema_(dynamic_schema),
-        do_lock_(do_lock) {
+        shared_data_(std::move(shared_data)),
+        handler_data_(handler_data),
+        dynamic_schema_(dynamic_schema) {
     }
 
     folly::Unit operator()() {
@@ -1068,15 +596,14 @@ struct ReduceColumnTask : async::BaseTask {
 
         const auto column_data = slice_map_->columns_.find(frame_field.name());
         if(dynamic_schema_ && column_data == slice_map_->columns_.end()) {
-            column.default_initialize_rows(0, frame_.row_count(), false);
-            bool dynamic_type = is_dynamic_string_type(field_type);
-            if(dynamic_type) {
-                EmptyDynamicStringReducer reducer(column, frame_, frame_field, sizeof(entity::position_t), lock_);
-                reducer.reduce(frame_.row_count());
+            if (const std::shared_ptr<TypeHandler>& handler = arcticdb::TypeHandlerRegistry::instance()->get_handler(column.type()); handler) {
+                handler->default_initialize(column.buffer(), 0, frame_.row_count() * handler->type_size(), shared_data_, handler_data_);
+            } else {
+                column.default_initialize_rows(0, frame_.row_count(), false);
             }
         } else {
             if(dynamic_schema_) {
-                NullValueReducer null_reducer{column, context_, frame_};
+                NullValueReducer null_reducer{column, context_, frame_, shared_data_, handler_data_};
                 for (const auto &row : column_data->second) {
                     PipelineContextRow context_row{context_, row.second.context_index_};
                     null_reducer.reduce(context_row);
@@ -1084,23 +611,28 @@ struct ReduceColumnTask : async::BaseTask {
                 null_reducer.finalize();
             }
             if (is_sequence_type(field_type)) {
-                auto string_reducer = get_string_reducer(column, context_, frame_, frame_field, *slice_map_, unique_string_map_, py_nan_, lock_, do_lock_);
-                for (const auto &row : column_data->second) {
-                    PipelineContextRow context_row{context_, row.second.context_index_};
-                    if(context_row.slice_and_key().slice().row_range.diff() > 0)
-                        string_reducer->reduce(context_row, row.second.column_index_);
+                if (is_fixed_string_type(field_type)) {
+                    auto string_reducer = get_fixed_string_reducer(column, context_, frame_, frame_field, *slice_map_);
+                    for (const auto &row : column_data->second) {
+                        PipelineContextRow context_row{context_, row.second.context_index_};
+                        if (context_row.slice_and_key().slice().row_range.diff() > 0)
+                            string_reducer->reduce(context_row, row.second.column_index_);
+                    }
+                    string_reducer->finalize();
                 }
-                string_reducer->finalize();
+
+                column.set_inflated(frame_.row_count());
             }
         }
         return folly::Unit{};
     }
 };
 
-void reduce_and_fix_columns(
+    void reduce_and_fix_columns(
         std::shared_ptr<PipelineContext> &context,
         SegmentInMemory &frame,
-        const ReadOptions& read_options
+        const ReadOptions& read_options,
+        std::any& handler_data
 ) {
     ARCTICDB_SAMPLE_DEFAULT(ReduceAndFixStringCol)
     ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
@@ -1109,44 +641,13 @@ void reduce_and_fix_columns(
 
     bool dynamic_schema = opt_false(read_options.dynamic_schema_);
     auto slice_map = std::make_shared<FrameSliceMap>(context, dynamic_schema);
-    static auto spinlock = std::make_shared<LockType>();
-    std::shared_ptr<UniqueStringMapType> unique_string_map;
-    std::shared_ptr<PyObject> py_nan;
+    DecodePathData shared_data;
 
-    if (opt_false(read_options.optimise_string_memory_)) {
-        ARCTICDB_DEBUG(log::version(), "Optimising dynamic string memory consumption");
-        unique_string_map = std::make_shared<UniqueStringMapType>();
-        py_nan = std::shared_ptr<PyObject>(create_py_nan(spinlock),[lock=spinlock](PyObject* py_obj) {
-            lock->lock();
-            Py_DECREF(py_obj);
-            lock->unlock(); });
-    } else {
-        ARCTICDB_DEBUG(log::version(), "Not optimising dynamic string memory consumption");
-    }
+    static const auto batch_size = ConfigsMap::instance()->get_int("ReduceColumns.BatchSize", 100);
+    folly::collect(folly::window(frame.descriptor().fields().size(), [&] (size_t field) {
+        return async::submit_cpu_task(ReduceColumnTask(frame, field, slice_map, context, shared_data, handler_data, dynamic_schema));
+    }, batch_size)).via(&async::io_executor()).get();
 
-    constexpr bool parallel_strings = false;
-    if(parallel_strings) {
-        std::vector<folly::Future<folly::Unit>> jobs;
-        static const auto batch_size = ConfigsMap::instance()->get_int("StringAllocation.BatchSize", 50);
-        for (size_t c = 0; c < static_cast<size_t>(frame.descriptor().fields().size()); ++c) {
-            jobs.emplace_back(async::submit_cpu_task(ReduceColumnTask(frame, c, slice_map, context, unique_string_map, py_nan, spinlock, dynamic_schema, true)));
-            if(jobs.size() == static_cast<size_t>(batch_size)) {
-                folly::collect(jobs).get();
-                jobs.clear();
-            }
-        }
-
-        if(!jobs.empty())
-            folly::collect(jobs).get();
-    } else {
-        for (size_t c = 0; c < static_cast<size_t>(frame.descriptor().fields().size()); ++c) {
-            ReduceColumnTask(frame, c, slice_map, context, unique_string_map, py_nan, spinlock, dynamic_schema, false)();
-        }
-    }
-
-    if (unique_string_map) {
-        ARCTICDB_DEBUG(log::version(), "Found {} unique dynamic strings in reduce_and_fix_columns", unique_string_map->size());
-    }
 }
 
 folly::Future<std::vector<VariantKey>> fetch_data(
@@ -1154,11 +655,12 @@ folly::Future<std::vector<VariantKey>> fetch_data(
     const std::shared_ptr<PipelineContext> &context,
     const std::shared_ptr<stream::StreamSource>& ssource,
     bool dynamic_schema,
-    std::shared_ptr<BufferHolder> buffers
+    DecodePathData shared_data,
+    std::any& handler_data
     ) {
     ARCTICDB_SAMPLE_DEFAULT(FetchSlices)
     if (frame.empty())
-        return folly::Future<std::vector<VariantKey>>(std::vector<VariantKey>{});
+        return {std::vector<VariantKey>{}};
 
     std::vector<std::pair<VariantKey, stream::StreamSource::ReadContinuation>> keys_and_continuations;
     keys_and_continuations.reserve(context->slice_and_keys_.size());
@@ -1167,12 +669,14 @@ folly::Future<std::vector<VariantKey>> fetch_data(
         ARCTICDB_SUBSAMPLE_DEFAULT(QueueReadContinuations)
         for ( auto& row : *context) {
             keys_and_continuations.emplace_back(row.slice_and_key().key(),
-            [row=row, frame=frame, dynamic_schema=dynamic_schema, buffers](auto &&ks) mutable {
+            [row=row, frame=frame, dynamic_schema=dynamic_schema, shared_data, &handler_data](auto &&ks) mutable {
                 auto key_seg = std::forward<storage::KeySegmentPair>(ks);
-                if(dynamic_schema)
-                    decode_into_frame_dynamic(frame, row, std::move(key_seg.segment()), buffers);
-                else
-                    decode_into_frame_static(frame, row, std::move(key_seg.segment()), buffers);
+                if(dynamic_schema) {
+                    decode_into_frame_dynamic(frame, row, std::move(key_seg.segment()), shared_data, handler_data);
+                } else {
+                    decode_into_frame_static(frame, row, std::move(key_seg.segment()), shared_data, handler_data);
+                }
+
                 return key_seg.variant_key();
             });
         }
