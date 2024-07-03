@@ -34,7 +34,7 @@ def _log_and_run(*cmd, **kwargs):
 
 class CompileProto(Command):
     # When adding new protobuf versions, also update: setup.cfg, python/arcticdb/__init__.py
-    _PROTOBUF_TO_GRPC_VERSION = {"3": "<=1.30.*", "4": ">=1.49"}
+    _PROTOBUF_TO_GRPC_VERSION = {"3": "<=1.30.*", "4": ">=1.49", "5": ">=1.64"}
 
     description = '"protoc" generate code _pb2.py from .proto files'
     user_options = [
@@ -70,6 +70,10 @@ class CompileProto(Command):
                 # No available on PyPI for this configuration
                 # See the first release's: https://pypi.org/project/protobuf/4.21.1/#files
                 print(f"Python protobuf {proto_ver} do not run on Python {python}. Skipping...")
+            elif not ARCTICDB_USING_CONDA and python <= (3, 7) and proto_ver >= "5":
+                # Not compatible with Python<=3.7 as
+                # GRPCIO >= 1.64.0 is not available on Python<=3.7 https://pypi.org/project/grpcio-tools/1.64.0/#files
+                print(f"Python protobuf {proto_ver} does not run on Python {python}. Skipping...")
             else:
                 self._compile_one_version(proto_ver, os.path.join(output_dir, proto_ver))
 
