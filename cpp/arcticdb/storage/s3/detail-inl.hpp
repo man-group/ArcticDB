@@ -47,9 +47,15 @@ namespace s3 {
         inline void raise_s3_exception(const Aws::S3::S3Error& err){
             std::string error_message;
             auto type = err.GetErrorType();
-            // s3_client.HeadObject returns RESOURCE_NOT_FOUND if a key is not found.
-            if(type == Aws::S3::S3Errors::NO_SUCH_KEY || type == Aws::S3::S3Errors::RESOURCE_NOT_FOUND) {
+            if(type == Aws::S3::S3Errors::NO_SUCH_KEY) {
                 throw KeyNotFoundException(fmt::format("Key Not Found Error: S3Error#{} {}: {}",
+                                                       int(err.GetErrorType()),
+                                                       err.GetExceptionName().c_str(),
+                                                       err.GetMessage().c_str()));
+            }
+
+            if(type == Aws::S3::S3Errors::RESOURCE_NOT_FOUND) {
+                throw KeyNotFoundException(fmt::format("Resource Not Found Error: S3Error#{} {}: {}",
                                                        int(err.GetErrorType()),
                                                        err.GetExceptionName().c_str(),
                                                        err.GetMessage().c_str()));
@@ -341,6 +347,14 @@ namespace s3 {
             } while (continuation_token.has_value());
         }
 
+        inline void log_key_exists_error(const VariantKey& key, const Aws::S3::S3Error& error) {
+            ARCTICDB_DEBUG(log::storage(), "Head object returned false for key {} {} {}:{}",
+                           variant_key_view(key),
+                           int(error.GetErrorType()),
+                           error.GetExceptionName().c_str(),
+                           error.GetMessage().c_str());
+        }
+
         template<class KeyBucketizer>
         bool do_key_exists_impl(
                 const VariantKey &key,
@@ -357,16 +371,19 @@ namespace s3 {
                     bucket_name);
 
             if (!head_object_result.is_success()) {
-                auto &error = head_object_result.get_error();
-                raise_if_unexpected_error(error);
+                const auto &error = head_object_result.get_error();
 
-                ARCTICDB_DEBUG(log::storage(), "Head object returned false for key {} {} {}:{}",
-                               variant_key_view(key),
-                               int(error.GetErrorType()),
-                               error.GetExceptionName().c_str(),
-                               error.GetMessage().c_str());
+                if(error.GetErrorType() == Aws::S3::S3Errors::RESOURCE_NOT_FOUND) {
+                    auto read_object_result = s3_client.get_object(s3_object_name, bucket_name);
+                    if(!read_object_result.is_success()) {
+                        const auto& read_object_error = read_object_result.get_error();
+                        raise_if_unexpected_error(read_object_error);
+                    }
+                    log_key_exists_error(key, error);
+                    return read_object_result.is_success();
+                }
+                log_key_exists_error(key, error);
             }
-
             return head_object_result.is_success();
         }
 
