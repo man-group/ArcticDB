@@ -1020,7 +1020,9 @@ class Library:
             Only one of date_range or row_range can be provided.
 
         columns: List[str], default=None
-            Applicable only for Pandas data. Determines which columns to return data for.
+            Applicable only for Pandas data. Determines which columns to return data for. Special values:
+            - ``None``: Return a dataframe containing all columns
+            - ``[]``: Return a dataframe containing only the index column
 
         query_builder: Optional[QueryBuilder], default=None
             A QueryBuilder object to apply to the dataframe before it is returned. For more information see the
@@ -1049,14 +1051,22 @@ class Library:
         1       6
         2       7
         """
-        return self._nvs.read(
-            symbol=symbol,
-            as_of=as_of,
-            date_range=date_range,
-            row_range=row_range,
-            columns=columns,
-            query_builder=query_builder,
-        )
+        if columns == []:
+            return self._nvs._read_index_columns(
+                symbol=symbol,
+                as_of=as_of,
+                date_range=date_range,
+                row_range=row_range
+            )
+        else:
+            return self._nvs.read(
+                symbol=symbol,
+                as_of=as_of,
+                date_range=date_range,
+                row_range=row_range,
+                columns=columns,
+                query_builder=query_builder,
+            )
 
     def read_batch(
         self, symbols: List[Union[str, ReadRequest]], query_builder: Optional[QueryBuilder] = None

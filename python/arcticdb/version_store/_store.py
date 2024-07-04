@@ -2847,7 +2847,7 @@ class NativeVersionStore:
     def library_tool(self) -> LibraryTool:
         return LibraryTool(self.library(), self)
 
-    def read_index_columns(
+    def _read_index_columns(
         self,
         symbol: str,
         as_of: Optional[VersionQueryInput] = None,
@@ -2920,7 +2920,7 @@ class NativeVersionStore:
         return VersionedItem(
             symbol=read_result.version.symbol,
             library=self._library.library_path,
-            data=index,
+            data=pd.DataFrame({}, index=index),
             version=read_result.version.version,
             metadata=meta,
             host=self.env,
