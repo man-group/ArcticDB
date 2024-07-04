@@ -54,27 +54,16 @@ struct AppendMapEntry {
     }
 };
 
-
 AppendMapEntry entry_from_key(
     const std::shared_ptr<stream::StreamSource>& store,
     const entity::AtomKey& key,
     bool load_data);
-
-//std::pair<std::optional<entity::AtomKey>, size_t> read_head(
-//    const std::shared_ptr<stream::StreamSource>& store,
-//    StreamId stream_id);
 
 std::vector<AppendMapEntry> get_incomplete_append_slices_for_stream_id(
     const std::shared_ptr<Store> &store,
     const StreamId &stream_id,
     bool via_iteration,
     bool load_data);
-
-inline bool has_appends_key(
-    const std::shared_ptr<stream::StreamSource>& store,
-    const RefKey& ref_key) {
-    return store->key_exists(ref_key).get();
-}
 
 inline std::vector<AppendMapEntry> load_via_iteration(
     const std::shared_ptr<Store>& store,
@@ -84,7 +73,6 @@ inline std::vector<AppendMapEntry> load_via_iteration(
     auto prefix = std::holds_alternative<StringId>(stream_id) ? std::get<StringId>(stream_id) : std::string();
 
     std::vector<AppendMapEntry> output;
-
     store->iterate_type(KeyType::APPEND_DATA, [&store, load_data, &output, &stream_id] (const auto& vk) {
         const auto& key = to_atom(vk);
         if(key.id() != stream_id)
@@ -137,15 +125,11 @@ void fix_slice_rowcounts(std::vector<AppendMapEntry>& entries, size_t complete_r
 }
 
 TimeseriesDescriptor pack_timeseries_descriptor(
-    StreamDescriptor&& descriptor,
+    const StreamDescriptor& descriptor,
     size_t total_rows,
     std::optional<AtomKey>&& next_key,
     arcticdb::proto::descriptors::NormalizationMetadata&& norm_meta) {
-    util::check(descriptor.proto().has_index(), "Stream descriptor without index in pack_timeseries_descriptor");
-    auto tsd = make_timeseries_descriptor(total_rows, std::move(descriptor), std::move(norm_meta), std::nullopt, std::nullopt, std::move(next_key), false);
-    if(ConfigsMap::instance()->get_int("VersionStore.Encoding", 1) == 1) {
-        tsd.copy_to_self_proto();
-    }
+    auto tsd = make_timeseries_descriptor(total_rows, descriptor, std::move(norm_meta), std::nullopt, std::nullopt, std::move(next_key), false);
     return tsd;
 }
 
@@ -169,21 +153,30 @@ SegmentInMemory incomplete_segment_from_frame(
     std::visit([&](const auto& idx) {
         using IdxType = std::decay_t<decltype(idx)>;
         using SingleSegmentAggregator = Aggregator<IdxType, FixedSchema, NeverSegmentPolicy>;
-
+        auto copy_prev_key = prev_key;
         auto timeseries_desc = index_descriptor_from_frame(frame, existing_rows, std::move(prev_key));
         util::check(!timeseries_desc.fields().empty(), "Expected fields not to be empty in incomplete segment");
         auto norm_meta = timeseries_desc.proto().normalization();
-        StreamDescriptor descriptor(std::make_shared<StreamDescriptor::Proto>(std::move(*timeseries_desc.mutable_proto().mutable_stream_descriptor())), timeseries_desc.fields_ptr());
+        auto descriptor = timeseries_desc.as_stream_descriptor();
         SingleSegmentAggregator agg{FixedSchema{descriptor, index}, [&](auto&& segment) {
-            auto tsd = pack_timeseries_descriptor(std::move(descriptor), existing_rows + num_rows, std::move(prev_key), std::move(norm_meta));
-            segment.set_timeseries_descriptor(std::move(tsd));
+            auto tsd = pack_timeseries_descriptor(descriptor, existing_rows + num_rows, std::move(copy_prev_key), std::move(norm_meta));
+            segment.set_timeseries_descriptor(tsd);
             output = std::forward<SegmentInMemory>(segment);
         }};
 
         if (has_index) {
             util::check(static_cast<bool>(index_tensor), "Expected index tensor for index type {}", agg.descriptor().index());
-            auto opt_error = aggregator_set_data(agg.descriptor().field(0).type(), index_tensor.value(), agg, 0, num_rows, offset_in_frame, slice_num_for_column,
-                                num_rows, allow_sparse);
+            auto opt_error = aggregator_set_data(
+                agg.descriptor().field(0).type(),
+                index_tensor.value(),
+                agg,
+                0,
+                num_rows,
+                offset_in_frame,
+                slice_num_for_column,
+                num_rows,
+                allow_sparse);
+
             if (opt_error.has_value()) {
                 opt_error->raise(agg.descriptor().field(0).name());
             }
@@ -278,9 +271,9 @@ void write_head(const std::shared_ptr<Store>& store, const AtomKey& next_key, si
     ARCTICDB_DEBUG(log::version(), "Writing append map head with key {}", next_key);
     auto desc = stream_descriptor(next_key.id(), RowCountIndex{}, {});
     SegmentInMemory segment(desc);
-    auto tsd = pack_timeseries_descriptor(std::move(desc), total_rows, next_key, {});
-    segment.set_timeseries_descriptor(std::move(tsd));
-    store->write(KeyType::APPEND_REF, next_key.id(), std::move(segment)).get();
+    auto tsd = pack_timeseries_descriptor(desc, total_rows, next_key, {});
+    segment.set_timeseries_descriptor(tsd);
+    store->write_sync(KeyType::APPEND_REF, next_key.id(), std::move(segment));
 }
 
 void remove_incomplete_segments(
@@ -316,18 +309,17 @@ std::vector<AppendMapEntry> load_via_list(
 std::pair<std::optional<AtomKey>, size_t> read_head(const std::shared_ptr<StreamSource>& store, StreamId stream_id) {
     auto ref_key = RefKey{std::move(stream_id), KeyType::APPEND_REF};
     auto output = std::make_pair<std::optional<AtomKey>, size_t>(std::nullopt, 0);
+    try {
+        auto [key, seg] = store->read_sync(ref_key);
+        const auto &tsd = seg.index_descriptor();
+        if (tsd.proto().has_next_key())
+            output.first = key_from_proto(tsd.proto().next_key());
 
-    if(!has_appends_key(store, ref_key))
-        return output;
-
-    auto fut = store->read(ref_key);
-    auto [key, seg] = std::move(fut).get();
-    const auto& tsd = seg.index_descriptor();
-    if(tsd.proto().has_next_key()) {
-        output.first = decode_key(tsd.proto().next_key());
+        output.second = tsd.total_rows();
+    } catch (storage::KeyNotFoundException& ex) {
+        ARCTICDB_RUNTIME_DEBUG(log::version(), "Failed to get head of append list for {}: {}", ref_key, ex.what());
     }
 
-    output.second = tsd.proto().total_rows();
     return output;
 }
 
@@ -338,18 +330,18 @@ std::pair<TimeseriesDescriptor, std::optional<SegmentInMemory>> get_descriptor_a
     storage::ReadKeyOpts opts = storage::ReadKeyOpts{}) {
     if(load_data) {
         auto [key, seg] = store->read_sync(k, opts);
-        return std::make_pair(TimeseriesDescriptor{seg.timeseries_proto(), seg.index_fields()}, std::make_optional<SegmentInMemory>(seg));
+        return std::make_pair(seg.index_descriptor(), std::make_optional<SegmentInMemory>(seg));
     } else {
-        auto [key, tsd] = store->read_timeseries_descriptor(k, opts).get();
+        auto [key, tsd] = store->read_timeseries_descriptor_for_incompletes(k, opts).get();
         return std::make_pair(std::move(tsd), std::nullopt);
     }
 }
 
-AppendMapEntry create_entry(const arcticdb::proto::descriptors::TimeSeriesDescriptor& tsd) {
+AppendMapEntry create_entry(const TimeseriesDescriptor& tsd) {
     AppendMapEntry entry;
 
-    if(tsd.has_next_key())
-        entry.next_key_ = decode_key(tsd.next_key());
+    if(tsd.proto().has_next_key())
+        entry.next_key_ = key_from_proto(tsd.proto().next_key());
 
     entry.total_rows_ = tsd.total_rows();
     return entry;
@@ -359,7 +351,7 @@ AppendMapEntry entry_from_key(const std::shared_ptr<StreamSource>& store, const 
     auto opts = storage::ReadKeyOpts{};
     opts.dont_warn_about_missing_key = true;
     auto [tsd, seg] = get_descriptor_and_data(store, key, load_data, opts);
-    auto entry = create_entry(tsd.proto());
+    auto entry = create_entry(tsd);
     auto descriptor = std::make_shared<StreamDescriptor>();
     auto desc = std::make_shared<StreamDescriptor>(tsd.as_stream_descriptor());
     auto index_field_count = desc->index().field_count();
@@ -407,9 +399,10 @@ void append_incomplete_segment(
     auto end_index = TimeseriesIndex::end_value_for_segment(seg);
     auto seg_row_count = seg.row_count();
 
-    auto tsd = pack_timeseries_descriptor(seg.descriptor().clone(), seg_row_count, std::move(next_key), {});
-    seg.set_timeseries_descriptor(std::move(tsd));
-    util::check(static_cast<bool>(seg.metadata()), "Expected metadata");
+    auto desc = stream_descriptor(stream_id, RowCountIndex{}, {});
+    auto tsd = pack_timeseries_descriptor(desc, seg_row_count, std::move(next_key), {});
+    seg.set_timeseries_descriptor(tsd);
+
     auto new_key = store->write(
             arcticdb::stream::KeyType::APPEND_DATA,
             0,
@@ -440,7 +433,7 @@ std::vector<AppendMapEntry> get_incomplete_append_slices_for_stream_id(
     if(!entries.empty()) {
         auto index_desc = entries[0].descriptor().index();
 
-        if (index_desc.type() != IndexDescriptor::ROWCOUNT) {
+        if (index_desc.type() != IndexDescriptorImpl::Type::ROWCOUNT) {
             std::sort(std::begin(entries), std::end(entries));
         } else {
             // Can't sensibly sort rowcount indexes, so you'd better have written them in the right order

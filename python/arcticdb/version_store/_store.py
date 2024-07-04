@@ -21,7 +21,8 @@ from pandas import Timestamp, to_datetime, Timedelta
 from typing import Any, Optional, Union, List, Sequence, Tuple, Dict, Set
 from contextlib import contextmanager
 
-from arcticc.pb2.descriptors_pb2 import IndexDescriptor, TypeDescriptor, SortedValue
+from arcticc.pb2.descriptors_pb2 import IndexDescriptor, TypeDescriptor
+from arcticdb_ext.version_store import SortedValue
 from arcticc.pb2.storage_pb2 import LibraryConfig, EnvironmentConfigsMap
 from arcticdb.preconditions import check
 from arcticdb.supported_types import DateRangeInput, ExplicitlySupportedDates
@@ -34,6 +35,7 @@ from arcticdb_ext.storage import (
     LibraryIndex as _LibraryIndex,
     Library as _Library,
 )
+from arcticdb_ext.types import IndexKind
 from arcticdb.version_store.read_result import ReadResult
 from arcticdb_ext.version_store import IndexRange as _IndexRange
 from arcticdb_ext.version_store import RowRange as _RowRange
@@ -46,6 +48,7 @@ from arcticdb_ext.version_store import PythonVersionStoreVersionQuery as _Python
 from arcticdb_ext.version_store import ColumnStats as _ColumnStats
 from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticdb_ext.version_store import DataError
+from arcticdb_ext.version_store import sorted_value_name
 from arcticdb.authorization.permissions import OpenMode
 from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticNativeException
 from arcticdb.flattener import Flattener
@@ -2475,11 +2478,22 @@ class NativeVersionStore:
         dit = self.version_store.read_descriptor(symbol, version_query)
         return self.is_pickled_descriptor(dit.timeseries_descriptor)
 
+
+    @staticmethod
+    def _does_not_have_date_range(desc, min_ts, max_ts):
+        if desc.index.kind() != IndexKind.TIMESTAMP:
+            return True
+        if desc.sorted == SortedValue.UNSORTED:
+            return True
+        if min_ts is None:
+            return True
+        if max_ts is None:
+            return True
+
+        return False
+
     def _get_time_range_from_ts(self, desc, min_ts, max_ts):
-        if desc.stream_descriptor.index.kind != IndexDescriptor.Type.TIMESTAMP or \
-                desc.stream_descriptor.sorted == SortedValue.UNSORTED or \
-                min_ts is None or \
-                max_ts is None:
+        if self._does_not_have_date_range(desc, min_ts, max_ts):
             return datetime64("nat"), datetime64("nat")
         input_type = desc.normalization.WhichOneof("input_type")
         tz = None
@@ -2560,8 +2574,8 @@ class NativeVersionStore:
 
     def _process_info(self, symbol: str, dit, as_of: Optional[VersionQueryInput] = None) -> Dict[str, Any]:
         timeseries_descriptor = dit.timeseries_descriptor
-        columns = [f.name for f in timeseries_descriptor.stream_descriptor.fields]
-        dtypes = [f.type_desc for f in timeseries_descriptor.stream_descriptor.fields]
+        columns = [f.name for f in timeseries_descriptor.fields]
+        dtypes = [f.type for f in timeseries_descriptor.fields]
         index = []
         index_dtype = []
         input_type = timeseries_descriptor.normalization.WhichOneof("input_type")
@@ -2618,7 +2632,7 @@ class NativeVersionStore:
             "normalization_metadata": timeseries_descriptor.normalization,
             "type": self.get_arctic_style_type_info_for_norm(timeseries_descriptor),
             "date_range": date_range,
-            "sorted": SortedValue.Name(timeseries_descriptor.stream_descriptor.sorted),
+            "sorted": sorted_value_name(timeseries_descriptor.sorted),
         }
 
     def get_info(self, symbol: str, version: Optional[VersionQueryInput] = None) -> Dict[str, Any]:

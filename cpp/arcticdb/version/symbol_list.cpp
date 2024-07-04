@@ -32,7 +32,7 @@ using CollectionType = std::vector<SymbolListEntry>;
 constexpr std::string_view version_string = "_v2_";
 constexpr NumericIndex version_identifier = std::numeric_limits<NumericIndex>::max();
 
-SymbolListData::SymbolListData(std::shared_ptr<VersionMap> version_map, entity::StreamId type_indicator, uint32_t seed) :
+SymbolListData::SymbolListData(std::shared_ptr<VersionMap> version_map, StreamId type_indicator, uint32_t seed) :
     type_holder_(std::move(type_indicator)),
     seed_(seed),
     version_map_(std::move(version_map)){
@@ -50,6 +50,16 @@ struct LoadResult {
 auto warning_threshold() {
     return 2 * static_cast<size_t>(ConfigsMap::instance()->get_int("SymbolList.MaxDelta")
             .value_or( ConfigsMap::instance()->get_int("SymbolList.MaxCompactionThreshold", 700)));
+}
+
+bool is_new_style_key(const AtomKey& key) {
+    return util::variant_match(key.end_index(),
+                               [] (std::string_view str) {
+                                   return str == version_string;
+                               },
+                               [] (NumericIndex n) {
+                                   return n == version_identifier;
+                               });
 }
 
 std::vector<SymbolListEntry> load_previous_from_version_keys(
@@ -111,7 +121,12 @@ std::vector<AtomKey> get_all_symbol_list_keys(
     });
 
     std::sort(output.begin(), output.end(), [] (const AtomKey& left, const AtomKey& right) {
-        return std::tie(left.start_index(), left.version_id(), left.creation_ts()) < std::tie(right.start_index(), right.version_id(), right.creation_ts());
+        // Some very old symbol list keys have a non-zero version number, but with different semantics to the new style,
+        // so ignore it. See arcticdb-man#116. Most old style symbol list keys have version ID 0 anyway.
+        auto left_version = is_new_style_key(left) ? left.version_id() : 0;
+        auto right_version = is_new_style_key(right) ? right.version_id() : 0;
+        return std::tie(left.start_index(), left_version, left.creation_ts())
+          < std::tie(right.start_index(), right_version, right.creation_ts());
     });
     return output;
 }
@@ -144,7 +159,6 @@ T scalar_at(const SegmentInMemory& seg, position_t row, position_t col){
     util::check(scalar.has_value(), "Symbol list trying to call scalar_at for missing row {}, column {}", row, col);
     return scalar.value();
 }
-
 
 StreamId stream_id_from_segment(
         DataType data_type,
@@ -187,7 +201,7 @@ std::vector<SymbolListEntry> read_old_style_list_from_storage(const SegmentInMem
 
 std::vector<SymbolListEntry> read_new_style_list_from_storage(const SegmentInMemory& seg) {
     std::vector<SymbolListEntry> output;
-    if(seg.row_count() == 0)
+    if(seg.empty())
         return output;
 
     const auto data_type = get_symbol_data_type(seg);
@@ -238,16 +252,6 @@ std::vector<SymbolListEntry> read_from_storage(
         return read_old_style_list_from_storage(seg);
     else
         return read_new_style_list_from_storage(seg);
-}
-
-bool is_new_style_key(const AtomKey& key) {
-    return util::variant_match(key.end_index(),
-    [] (std::string_view str) {
-        return str == version_string;
-    },
-    [] (NumericIndex n) {
-        return n == version_identifier;
-    });
 }
 
 MapType load_journal_keys(const std::vector<AtomKey>& keys) {
@@ -311,7 +315,6 @@ bool contains_unknown_reference_ids(const std::vector<SymbolEntryData>& updated)
     });
 }
 
-
 SymbolVectorResult cannot_validate_symbol_vector() {
     return {ProblematicResult{true}};
 }
@@ -373,8 +376,6 @@ ProblematicResult is_problematic(
 
     if(existing.reference_id_ < latest.reference_id_)
         return not_a_problem();
-
-
 
     if(all_same_action)
         return not_a_problem();
@@ -677,11 +678,6 @@ SegmentInMemory write_entries_to_symbol_segment(
 
 SegmentInMemory create_empty_segment(const StreamId& stream_id) {
     SegmentInMemory output{StreamDescriptor{stream_id}};
-    google::protobuf::Any any = {};
-    arcticdb::proto::descriptors::SymbolListDescriptor metadata;
-    metadata.set_enabled(true);
-    any.PackFrom(metadata);
-    output.set_metadata(std::move(any));
     return output;
 }
 
@@ -701,6 +697,7 @@ VariantKey write_symbols(
         segment = write_entries_to_symbol_segment(stream_id, type_holder, symbols);
     }
 
+    ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Writing symbol segment with stream id {} and {} rows", stream_id, segment.row_count());
     return store->write_sync(KeyType::SYMBOL_LIST, 0, stream_id, NumericIndex{ 0 }, NumericIndex{ 0 }, std::move(segment));
 }
 

@@ -35,7 +35,7 @@ class FlatIndexingPolicy {
   public:
     template<class C>
     FlatIndexingPolicy(StreamId stream_id, C&& c) :
-        callback_(std::move(c)),
+        callback_(std::forward<decltype(c)>(c)),
         schema_(idx_schema(stream_id, DataIndexType::default_index())),
         segment_(schema_.default_descriptor()) {}
 
@@ -50,8 +50,14 @@ class FlatIndexingPolicy {
         }
     }
 
-    void set_metadata(google::protobuf::Any &&meta) {
-        segment_.set_metadata(std::move(meta));
+    void finalize() {
+        if (ARCTICDB_LIKELY(!segment_.empty())) {
+            callback_(std::move(segment_));
+        }
+    }
+
+    void set_timeseries_descriptor(const TimeseriesDescriptor& timeseries_descriptor) {
+        segment_.set_timeseries_descriptor(timeseries_descriptor);
     }
 
   private:
@@ -65,7 +71,7 @@ class IndexAggregator {
   public:
     template<class C>
     IndexAggregator(StreamId stream_id, C &&c):
-        indexing_policy_(stream_id, std::move(c)) {}
+        indexing_policy_(stream_id, std::forward<decltype(c)>(c)) {}
 
     void add_key(const AtomKey &key) {
         indexing_policy_.add_key(key);
@@ -75,8 +81,12 @@ class IndexAggregator {
         indexing_policy_.commit();
     }
 
-    void set_metadata(google::protobuf::Any &&meta) {
-        indexing_policy_.set_metadata(std::move(meta));
+    void finalize() {
+        indexing_policy_.finalize();
+    }
+
+    void set_timeseries_descriptor(const TimeseriesDescriptor& timeseries_descriptor) {
+        indexing_policy_.set_timeseries_descriptor(timeseries_descriptor);
     }
 
   private:

@@ -24,7 +24,7 @@ struct TypedBlockData {
     template <class ValueType>
     class TypedColumnBlockIterator :  public boost::iterator_facade<TypedColumnBlockIterator<ValueType>, ValueType, boost::random_access_traversal_tag> {
       public:
-        TypedColumnBlockIterator(ValueType* ptr)
+        explicit TypedColumnBlockIterator(ValueType* ptr)
             :  ptr_(ptr) { }
 
         TypedColumnBlockIterator(const TypedColumnBlockIterator& other)
@@ -38,7 +38,9 @@ struct TypedBlockData {
             :  ptr_(nullptr) { }
 
         TypedColumnBlockIterator& operator=(const TypedColumnBlockIterator& other) {
-            ptr_ = other.ptr_;
+            if(&other != this)
+                ptr_ = other.ptr_;
+
             return *this;
         }
 
@@ -92,12 +94,29 @@ struct TypedBlockData {
         block_(nullptr)
     {}
 
-    std::size_t nbytes() const { return nbytes_; }
-    std::size_t row_count() const { return row_count_; }
-    TypeDescriptor type() const { return static_cast<TypeDescriptor>(TDT()); }
-    const shape_t *shapes() const { return shapes_; }
-    const raw_type *data() const { return data_; }
-    const MemBlock *mem_block() const { return block_; }
+    [[nodiscard]] std::size_t nbytes() const {
+        return nbytes_;
+    }
+
+    [[nodiscard]] std::size_t row_count() const {
+        return row_count_;
+    }
+
+    [[nodiscard]] TypeDescriptor type() const {
+        return static_cast<TypeDescriptor>(TDT());
+    }
+
+    [[nodiscard]] const shape_t *shapes() const {
+        return shapes_;
+    }
+
+    [[nodiscard]] const raw_type *data() const {
+        return data_;
+    }
+
+    [[nodiscard]] const MemBlock *mem_block() const {
+        return block_;
+    }
 
     raw_type operator[](size_t pos) const {
         return reinterpret_cast<const raw_type*>(block_->data())[pos];
@@ -111,7 +130,7 @@ struct TypedBlockData {
         return TypedColumnBlockIterator<const raw_type>(data_ + row_count_);
     }
 
-    size_t offset() const {
+    [[nodiscard]] size_t offset() const {
         return block_->offset_;
     }
 
@@ -142,13 +161,12 @@ struct ColumnData {
  * ColumnData is just a thin wrapper that helps in iteration over all the blocks in the column
  */
 public:
-
     template<typename RawType>
     struct Enumeration {
         ssize_t idx_{0};
         RawType* ptr_{nullptr};
 
-        inline ssize_t idx() const {
+        [[nodiscard]] inline ssize_t idx() const {
             return idx_;
         }
 
@@ -321,15 +339,15 @@ public:
         return ColumnDataIterator<TDT, iterator_type, iterator_density, true>(this, end_ptr);
     }
 
-    TypeDescriptor type() const {
+    [[nodiscard]] TypeDescriptor type() const {
         return type_;
     }
 
-    const ChunkedBuffer &buffer() const {
+    [[nodiscard]] const ChunkedBuffer &buffer() const {
         return *data_;
     }
 
-    const util::BitMagic* bit_vector() const {
+    [[nodiscard]] const util::BitMagic* bit_vector() const {
         return bit_vector_;
     }
 
@@ -343,7 +361,7 @@ public:
         return shape;
     }
 
-    size_t num_blocks() const {
+    [[nodiscard]] size_t num_blocks() const {
         return data_->blocks().size();
     }
 

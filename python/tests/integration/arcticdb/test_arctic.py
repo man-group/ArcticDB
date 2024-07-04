@@ -18,6 +18,7 @@ from enum import Enum
 
 from arcticdb_ext.exceptions import InternalException, UserInputException
 from arcticdb_ext.storage import NoDataFoundException
+from arcticdb_ext.version_store import SortedValue
 from arcticdb.exceptions import ArcticDbNotYetImplemented, LibraryNotFound, MismatchingLibraryOptions
 from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
 from arcticdb.arctic import Arctic
@@ -134,6 +135,25 @@ def test_azurite_ssl_verification(azurite_ssl_storage, monkeypatch, client_cert_
     ac = Arctic(uri)
     lib = ac.create_library("test")
     lib.write("sym", pd.DataFrame())
+
+
+def test_basic_metadata(lmdb_version_store):
+    lib = lmdb_version_store
+    df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
+    metadata = {"fluffy" : "muppets"}
+    lib.write("my_symbol", df, metadata=metadata)
+    vit = lib.read_metadata("my_symbol")
+    assert vit.metadata == metadata
+
+
+def test_sorted_roundtrip(arctic_library):
+    lib = arctic_library
+
+    symbol = "sorted_test"
+    df = pd.DataFrame({"column": [1, 2, 3, 4]}, index=pd.date_range(start="1/1/2018", end="1/4/2018"))
+    lib.write(symbol, df)
+    desc = lib.get_description(symbol)
+    assert desc.sorted == 'ASCENDING'
 
 
 def test_basic_write_read_update_and_append(arctic_library):

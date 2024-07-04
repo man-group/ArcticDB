@@ -242,6 +242,12 @@ folly::Future<std::pair<VariantKey, TimeseriesDescriptor>> read_timeseries_descr
     return read_and_continue(key, library_, opts, DecodeTimeseriesDescriptorTask{});
 }
 
+folly::Future<std::pair<VariantKey, TimeseriesDescriptor>> read_timeseries_descriptor_for_incompletes(
+        const entity::VariantKey &key,
+        storage::ReadKeyOpts opts = storage::ReadKeyOpts{}) override {
+    return read_and_continue(key, library_, opts, DecodeTimeseriesDescriptorForIncompletesTask{});
+}
+
 folly::Future<bool> key_exists(const entity::VariantKey &key) override {
     return async::submit_io_task(KeyExistsTask{&key, library_});
 }
@@ -338,7 +344,7 @@ std::vector<folly::Future<bool>> batch_key_exists(
 }
 
 
-    folly::Future<SliceAndKey> async_write(
+folly::Future<SliceAndKey> async_write(
             folly::Future<std::tuple<PartialKey, SegmentInMemory, pipelines::FrameSlice>> &&input_fut,
             const std::shared_ptr<DeDupMap> &de_dup_map) override {
         using KeyOptSegment = std::pair<VariantKey, std::optional<Segment>>;

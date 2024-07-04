@@ -8,6 +8,7 @@
 
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/entity/atom_key.hpp>
+#include <arcticdb/entity/protobuf_mappings.hpp>
 #include <arcticdb/storage/constants.hpp>
 #include <arcticdb/storage/library_path.hpp>
 #include <arcticdb/storage/open_mode.hpp>
@@ -45,7 +46,7 @@ void MappedFileStorage::init() {
             EncodingVersion{
             static_cast<uint16_t>(config_.encoding_version())}).max_compressed_bytes_;
         StreamId id = config_.has_str_id() ? StreamId{} : NumericId{};
-        data_size += entity::max_key_size(id, IndexDescriptor{config_.index()});
+        data_size += entity::max_key_size(id, index_descriptor_from_proto(config_.index()));
         file_.create_file(config_.path(), data_size);
     } else {
         ARCTICDB_DEBUG(log::storage(), "Opening existing mapped file storage at path {}", config_.path());
@@ -64,10 +65,10 @@ void MappedFileStorage::do_load_header(size_t header_offset, size_t header_size)
     multi_segment_header_.set_segment(std::move(header));
 }
 
-uint64_t MappedFileStorage::get_data_offset(const Segment& seg, size_t header_size) {
+uint64_t MappedFileStorage::get_data_offset(const Segment& seg) {
     ARCTICDB_SAMPLE(MappedFileStorageGetOffset, 0)
     std::lock_guard lock{offset_mutex_};
-    const auto segment_size = seg.total_segment_size(header_size);
+    const auto segment_size = seg.size();
     ARCTICDB_DEBUG(log::storage(), "Mapped file storage returning offset {} and adding {} bytes", offset_, segment_size);
     const auto previous_offset = offset_;
     offset_ += segment_size;
@@ -76,12 +77,11 @@ uint64_t MappedFileStorage::get_data_offset(const Segment& seg, size_t header_si
 
 uint64_t MappedFileStorage::write_segment(Segment&& seg) {
     auto segment = std::move(seg);
-    const auto header_size = segment.segment_header_bytes_size();
-    auto offset = get_data_offset(segment, header_size);
+    auto offset = get_data_offset(segment);
     auto* data = file_.data() + offset;
     ARCTICDB_SUBSAMPLE(FileStorageMemCpy, 0)
-    ARCTICDB_DEBUG(log::storage(), "Mapped file storage writing segment of size {} at offset {}",  segment.total_segment_size(header_size), offset);
-    segment.write_to(data, header_size);
+    segment.write_to(data);
+    ARCTICDB_DEBUG(log::storage(), "Mapped file storage wrote segment of size {} at offset {}",  segment.size(), offset);
     return offset;
 }
 
@@ -89,8 +89,8 @@ void MappedFileStorage::do_write(Composite<KeySegmentPair>&& kvs) {
     ARCTICDB_SAMPLE(MappedFileStorageWriteValues, 0)
     auto key_values = std::move(kvs);
     key_values.broadcast([this] (auto key_seg) {
-        const auto size = key_seg.segment().total_segment_size();
         const auto offset = write_segment(std::move(key_seg.segment()));
+        const auto size = key_seg.segment().size();
         multi_segment_header_.add_key_and_offset(key_seg.atom_key(), offset, size);
     });
 }

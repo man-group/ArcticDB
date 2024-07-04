@@ -14,76 +14,57 @@ namespace arcticdb {
 TimeseriesDescriptor make_timeseries_descriptor(
         // TODO: It would be more explicit to use uint64_t instead of size_t. Not doing now as it involves a lot of type changes and needs to be done carefully.
         size_t total_rows,
-        StreamDescriptor&& desc,
+        const StreamDescriptor& desc,
         arcticdb::proto::descriptors::NormalizationMetadata&& norm_meta,
         std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>&& um,
         std::optional<AtomKey>&& prev_key,
         std::optional<AtomKey>&& next_key,
-        bool bucketize_dynamic
-    ) {
-    arcticdb::proto::descriptors::TimeSeriesDescriptor time_series_descriptor;
-    time_series_descriptor.set_total_rows(total_rows);
-    *time_series_descriptor.mutable_stream_descriptor() = std::move(desc.proto());
-    time_series_descriptor.mutable_normalization()->CopyFrom(norm_meta);
+        bool bucketize_dynamic) {
+    auto frame_desc = std::make_shared<FrameDescriptorImpl>();
+    frame_desc->total_rows_ = total_rows;
+    frame_desc->column_groups_ = bucketize_dynamic;
+
+    auto segment_desc = std::make_shared<SegmentDescriptorImpl>();
+    segment_desc->index_ = desc.index();
+    segment_desc->sorted_ = desc.sorted();
+
+    auto proto = std::make_shared<TimeseriesDescriptor::Proto>();
+    proto->mutable_normalization()->CopyFrom(norm_meta);
     auto user_meta = std::move(um);
     if(user_meta)
-      *time_series_descriptor.mutable_user_meta() = std::move(*user_meta);
+      *proto->mutable_user_meta() = std::move(*user_meta);
 
     if(prev_key)
-      *time_series_descriptor.mutable_next_key() = encode_key(prev_key.value());
+       proto->mutable_next_key()->CopyFrom(key_to_proto(prev_key.value()));
 
     if(next_key)
-      time_series_descriptor.mutable_next_key()->CopyFrom(encode_key(next_key.value()));
-
-    if(bucketize_dynamic)
-      time_series_descriptor.mutable_column_groups()->set_enabled(true);
+        proto->mutable_next_key()->CopyFrom(key_to_proto(next_key.value()));
 
     //TODO maybe need ensure_norm_meta?
-    return TimeseriesDescriptor{std::make_shared<TimeseriesDescriptor::Proto>(std::move(time_series_descriptor)), desc.fields_ptr()};
+    return TimeseriesDescriptor{std::move(frame_desc), std::move(segment_desc), std::move(proto), desc.fields_ptr(), desc.id()};
 }
 
-
-TimeseriesDescriptor timseries_descriptor_from_index_segment(
-    size_t total_rows,
-    pipelines::index::IndexSegmentReader&& index_segment_reader,
-    std::optional<AtomKey>&& prev_key,
-    bool bucketize_dynamic
-) {
+TimeseriesDescriptor timeseries_descriptor_from_pipeline_context(
+        const std::shared_ptr<pipelines::PipelineContext>& pipeline_context,
+        std::optional<AtomKey>&& prev_key,
+        bool bucketize_dynamic) {
     return make_timeseries_descriptor(
-        total_rows,
-        StreamDescriptor{std::make_shared<StreamDescriptor::Proto>(std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_stream_descriptor())),index_segment_reader.mutable_tsd().fields_ptr()},
-        std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_normalization()),
-        std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_user_meta()),
+        pipeline_context->total_rows_,
+        pipeline_context->descriptor(),
+        std::move(*pipeline_context->norm_meta_),
+        pipeline_context->user_meta_ ? std::make_optional<arcticdb::proto::descriptors::UserDefinedMetadata>(std::move(*pipeline_context->user_meta_)) : std::nullopt,
         std::move(prev_key),
         std::nullopt,
         bucketize_dynamic);
 }
 
-TimeseriesDescriptor timeseries_descriptor_from_pipeline_context(
-    pipelines::PipelineContext& pipeline_context,
-    std::optional<AtomKey>&& prev_key,
-    bool bucketize_dynamic) {
-    return make_timeseries_descriptor(
-        pipeline_context.total_rows_,
-        StreamDescriptor{std::make_shared<StreamDescriptor::Proto>(std::move(pipeline_context.desc_->mutable_proto())),
-            pipeline_context.desc_->fields_ptr()},
-        std::move(*pipeline_context.norm_meta_),
-        pipeline_context.user_meta_ ? std::make_optional<arcticdb::proto::descriptors::UserDefinedMetadata>(std::move(*pipeline_context.user_meta_)) : std::nullopt,
-        std::move(prev_key),
-        std::nullopt,
-        bucketize_dynamic
-        );
-}
-
 TimeseriesDescriptor index_descriptor_from_frame(
         const std::shared_ptr<pipelines::InputTensorFrame>& frame,
         size_t existing_rows,
-        std::optional<entity::AtomKey>&& prev_key
-) {
+        std::optional<entity::AtomKey>&& prev_key) {
     return make_timeseries_descriptor(
         frame->num_rows + existing_rows,
-        StreamDescriptor{std::make_shared<StreamDescriptor::Proto>(std::move(frame->desc.mutable_proto())),
-           frame->desc.fields_ptr()},
+        frame->desc,
         std::move(frame->norm_meta),
         std::move(frame->user_meta),
         std::move(prev_key),
@@ -150,7 +131,7 @@ std::pair<size_t, size_t> offset_and_row_count(const std::shared_ptr<pipelines::
 }
 
 bool index_is_not_timeseries_or_is_sorted_ascending(const pipelines::InputTensorFrame& frame) {
-    return !std::holds_alternative<stream::TimeseriesIndex>(frame.index) || frame.desc.get_sorted() == SortedValue::ASCENDING;
+    return !std::holds_alternative<stream::TimeseriesIndex>(frame.index) || frame.desc.sorted() == SortedValue::ASCENDING;
 }
 
 }

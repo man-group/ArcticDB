@@ -401,7 +401,6 @@ def test_parallel_append_exactly_matches_existing(lmdb_version_store):
     assert lib.get_info(sym)["sorted"] == "ASCENDING"
 
 
-
 def test_parallel_append_overlapping_with_existing(lmdb_version_store):
     lib = lmdb_version_store
     sym = "test_parallel_append_overlapping_with_existing"

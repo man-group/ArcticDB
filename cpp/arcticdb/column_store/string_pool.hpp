@@ -101,6 +101,10 @@ class StringBlock {
 
     uint8_t * pos_data(size_t required_size);
 
+    [[nodiscard]] size_t num_blocks() {
+        return data_.buffer().num_blocks();
+    }
+
     StringHead* head_at(position_t pos) {
         auto data = data_.buffer().ptr_cast<uint8_t>(pos, sizeof(StringHead));
         return reinterpret_cast<StringHead*>(data);
@@ -166,6 +170,8 @@ class StringPool {
     const Buffer& shapes() const;
 
     size_t size() const;
+
+    [[nodiscard]] size_t num_blocks() const;
 
     py::buffer_info as_buffer_info() const;
 

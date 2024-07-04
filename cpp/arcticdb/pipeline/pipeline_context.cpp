@@ -28,12 +28,13 @@ PipelineContext::PipelineContext(SegmentInMemory& frame, const AtomKey& key) :
     map->set_from_descriptor(frame.descriptor());
 
     auto descriptor = std::make_shared<StreamDescriptor>(frame.descriptor());
-    segment_descriptors_[0] = (std::move(descriptor));
+    segment_descriptors_[0] = std::move(descriptor);
 }
 
 void PipelineContext::set_selected_columns(const std::vector<std::string>& columns) {
     util::check(static_cast<bool>(desc_), "Descriptor not set in set_selected_columns");
-    selected_columns_ = requested_column_bitset_including_index(desc_->proto(), columns);
+    selected_columns_ = requested_column_bitset_including_index(*desc_, columns);
+
 }
 
 const std::optional<util::BitSet>& PipelineContextRow::get_selected_columns() const {
@@ -84,6 +85,10 @@ const StreamDescriptor& PipelineContextRow::descriptor() const {
 
 void PipelineContextRow::set_descriptor(std::shared_ptr<StreamDescriptor>&& desc) {
     parent_->segment_descriptors_[index_] = std::move(desc);
+}
+
+void PipelineContextRow::set_descriptor(const StreamDescriptor& desc) {
+    parent_->segment_descriptors_[index_] = std::make_shared<StreamDescriptor>(desc);
 }
 
 void PipelineContextRow::set_descriptor(const std::shared_ptr<StreamDescriptor>& desc) {

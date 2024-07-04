@@ -154,6 +154,9 @@ SegmentInMemoryImpl SegmentInMemoryImpl::clone() const {
     }
     output.allow_sparse_ = allow_sparse_;
     output.compacted_ = compacted_;
+    if(tsd_)
+        output.set_timeseries_descriptor(tsd_->clone());
+
     return output;
 }
 
@@ -324,14 +327,6 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::filter(util::BitSet&& 
         output->set_metadata(std::move(metadata));
     }
     return output;
-}
-
-std::shared_ptr<arcticdb::proto::descriptors::TimeSeriesDescriptor> SegmentInMemoryImpl::timeseries_proto() {
-    if(!tsd_) {
-        tsd_ = std::make_shared<arcticdb::proto::descriptors::TimeSeriesDescriptor>();
-        metadata_->UnpackTo(tsd_.get());
-    }
-    return tsd_;
 }
 
 std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::get_output_segment(size_t num_values, bool pre_allocate) const {
@@ -652,22 +647,20 @@ void SegmentInMemoryImpl::sort(position_t idx) {
     }
 }
 
-void SegmentInMemoryImpl::set_timeseries_descriptor(TimeseriesDescriptor&& tsd) {
-    index_fields_ = tsd.fields_ptr();
-    tsd_ = tsd.proto_ptr();
-    util::check(!tsd_->has_stream_descriptor() || tsd_->stream_descriptor().has_index(), "Stream descriptor without index in set_timeseries_descriptor");
-    google::protobuf::Any any;
-    any.PackFrom(tsd.proto());
-    set_metadata(std::move(any));
+void SegmentInMemoryImpl::set_timeseries_descriptor(const TimeseriesDescriptor& tsd) {
+    tsd_ = tsd;
+}
+
+void SegmentInMemoryImpl::reset_timeseries_descriptor() {
+    tsd_.reset();
+}
+
+void SegmentInMemoryImpl::reset_metadata() {
+    metadata_.reset();
 }
 
 void SegmentInMemoryImpl::set_metadata(google::protobuf::Any&& meta) {
     util::check_arg(!metadata_, "Cannot override previously set metadata");
-    if (meta.ByteSizeLong())
-        metadata_ = std::make_unique<google::protobuf::Any>(std::move(meta));
-}
-
-void SegmentInMemoryImpl::override_metadata(google::protobuf::Any&& meta) {
     if (meta.ByteSizeLong())
         metadata_ = std::make_unique<google::protobuf::Any>(std::move(meta));
 }

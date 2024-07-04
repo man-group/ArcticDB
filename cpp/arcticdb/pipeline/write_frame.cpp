@@ -5,11 +5,8 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/column_store/string_pool.hpp>
-#include <arcticdb/entity/native_tensor.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
-#include <arcticdb/pipeline/index_writer.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
@@ -18,14 +15,11 @@
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/entity/protobufs.hpp>
-#include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/python/python_types.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/stream/append_map.hpp>
-#include <arcticdb/version/version_utils.hpp>
-#include <arcticdb/entity/merge_descriptors.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/util/format_date.hpp>
 #include <vector>
@@ -85,7 +79,7 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
 
         auto rows_to_write = slice_.row_range.second - slice_.row_range.first;
         if (frame_->desc.index().field_count() > 0) {
-            util::check(static_cast<bool>(frame_->index_tensor), "Got null index tensor in write_slices");
+            util::check(static_cast<bool>(frame_->index_tensor), "Got null index tensor in WriteToSegmentTask");
             auto opt_error = aggregator_set_data(
                 frame_->desc.fields(0).type(),
                 frame_->index_tensor.value(),
@@ -109,7 +103,7 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
         }
 
         agg.end_block_write(rows_to_write);
-        agg.commit();
+        agg.finalize();
         return output;
     });
 }
@@ -160,20 +154,6 @@ folly::Future<std::vector<SliceAndKey>> write_slices(
     }, write_window)).via(&async::io_executor());
 }
 
-folly::Future<entity::VariantKey> write_multi_index(
-        const std::shared_ptr<InputTensorFrame>& frame,
-        std::vector<SliceAndKey>&& slice_and_keys,
-        const IndexPartialKey& partial_key,
-        const std::shared_ptr<stream::StreamSink>& sink
-) {
-    auto timeseries_desc = index_descriptor_from_frame(frame, frame->offset);
-    index::IndexWriter<stream::RowCountIndex> writer(sink, partial_key, std::move(timeseries_desc));
-    for (auto &slice_and_key : slice_and_keys) {
-        writer.add(slice_and_key.key(), slice_and_key.slice_);
-    }
-    return writer.commit();
-}
-
 folly::Future<std::vector<SliceAndKey>> slice_and_write(
         const std::shared_ptr<InputTensorFrame> &frame,
         const SlicingPolicy &slicing,
@@ -183,6 +163,9 @@ folly::Future<std::vector<SliceAndKey>> slice_and_write(
         bool sparsify_floats) {
     ARCTICDB_SUBSAMPLE_DEFAULT(SliceFrame)
     auto slices = slice(*frame, slicing);
+    if(slices.empty())
+        return folly::makeFuture(std::vector<SliceAndKey>{});
+
     ARCTICDB_SUBSAMPLE_DEFAULT(SliceAndWrite)
     return write_slices(frame, std::move(slices), slicing, std::move(key), sink, de_dup_map, sparsify_floats);
 }
@@ -199,7 +182,7 @@ write_frame(
     auto fut_slice_keys = slice_and_write(frame, slicing, IndexPartialKey{key}, store, de_dup_map, sparsify_floats);
     // Write the keys of the slices into an index segment
     ARCTICDB_SUBSAMPLE_DEFAULT(WriteIndex)
-    return std::move(fut_slice_keys).thenValue([frame=frame, key = std::move(key), &store](auto&& slice_keys) mutable {
+    return std::move(fut_slice_keys).thenValue([frame=frame, key=std::move(key), &store](auto&& slice_keys) mutable {
         return index::write_index(frame, std::forward<decltype(slice_keys)>(slice_keys), key, store);
     });
 }
@@ -221,7 +204,7 @@ folly::Future<entity::AtomKey> append_frame(
                             auto& frame_index = frame->index_tensor.value();
                             util::check(frame_index.data_type() == DataType::NANOSECONDS_UTC64,
                                         "Expected timestamp index in append, got type {}", frame_index.data_type());
-                            if (index_segment_reader.tsd().proto().total_rows() != 0 && frame_index.size() != 0) {
+                            if (index_segment_reader.tsd().total_rows() != 0 && frame_index.size() != 0) {
                                 auto first_index = NumericIndex{*frame_index.ptr_cast<timestamp>(0)};
                                 auto prev = std::get<NumericIndex>(index_segment_reader.last()->key().end_index());
                                 util::check(ignore_sort_order || prev - 1 <= first_index,
@@ -241,7 +224,7 @@ folly::Future<entity::AtomKey> append_frame(
         slices_to_write.insert(std::end(slices_to_write), std::make_move_iterator(std::begin(slice_and_keys_to_append)), std::make_move_iterator(std::end(slice_and_keys_to_append)));
         std::sort(std::begin(slices_to_write), std::end(slices_to_write));
         auto tsd = index::get_merged_tsd(frame->num_rows + frame->offset, dynamic_schema, index_segment_reader.tsd(), frame);
-        return index::write_index(stream::index_type_from_descriptor(tsd.as_stream_descriptor()), std::move(tsd), std::move(slices_to_write), key, store);
+        return index::write_index(stream::index_type_from_descriptor(tsd.as_stream_descriptor()), tsd, std::move(slices_to_write), key, store);
     });
 }
 
@@ -270,12 +253,11 @@ static RowRange partial_rewrite_row_range(
 }
 
 std::optional<SliceAndKey> rewrite_partial_segment(
-    const SliceAndKey& existing,
-    IndexRange index_range,
-    VersionId version_id,
-    AffectedSegmentPart affected_part,
-    const std::shared_ptr<Store>& store
-) {
+        const SliceAndKey& existing,
+        const IndexRange& index_range,
+        VersionId version_id,
+        AffectedSegmentPart affected_part,
+        const std::shared_ptr<Store>& store) {
     const auto& key = existing.key();
     auto kv = store->read(key).get();
     const SegmentInMemory& segment = kv.second;
@@ -294,6 +276,7 @@ std::optional<SliceAndKey> rewrite_partial_segment(
         RowRange{0, num_rows},
         existing.slice_.hash_bucket(),
         existing.slice_.num_buckets()};
+
     auto fut_key = store->write(
         key.type(),
         version_id,
@@ -312,16 +295,19 @@ std::vector<SliceAndKey> flatten_and_fix_rows(const std::array<std::vector<Slice
     for (const std::vector<SliceAndKey>& group : groups) {
         if (group.empty())
             continue;
+
         auto group_start = group.begin()->slice_.row_range.first;
         auto group_end = std::accumulate(std::begin(group), std::end(group), 0ULL, [](size_t a, const SliceAndKey& sk) {
             return std::max(a, sk.slice_.row_range.second);
         });
+
         std::transform(std::begin(group), std::end(group), std::back_inserter(output), [&](SliceAndKey sk) {
             auto range_start = global_count + (sk.slice_.row_range.first - group_start);
             auto new_range = RowRange{range_start, range_start + (sk.slice_.row_range.diff())};
             sk.slice_.row_range = new_range;
             return sk;
         });
+
         global_count += (group_end - group_start);
     }
     return output;

@@ -28,7 +28,6 @@ struct UpdateMetadataTask : async::BaseTask {
         store_(std::move(store)),
         update_info_(std::move(update_info)),
         user_meta_(std::move(user_meta)) {
-
     }
 
     AtomKey operator()() const {
@@ -37,14 +36,14 @@ struct UpdateMetadataTask : async::BaseTask {
         auto index_key = *(update_info_.previous_index_key_);
         auto segment = store_->read_sync(index_key).second;
 
-        auto tsd = segment.index_descriptor();
-        google::protobuf::Any output = {};
-        tsd.mutable_proto().mutable_user_meta()->CopyFrom(user_meta_);
-        output.PackFrom(tsd.proto());
-
-        segment.override_metadata(std::move(output));
-        return to_atom(store_->write_sync(index_key.type(), update_info_.next_version_id_, index_key.id(), index_key.start_index(),
-                                           index_key.end_index(), std::move(segment)));
+        segment.mutable_index_descriptor().mutable_proto().mutable_user_meta()->CopyFrom(user_meta_);
+        return to_atom(store_->write_sync(
+                index_key.type(),
+                update_info_.next_version_id_,
+                index_key.id(),
+                index_key.start_index(),
+                index_key.end_index(),
+                std::move(segment)));
     }
 };
 
@@ -59,12 +58,12 @@ struct AsyncRestoreVersionTask : async::BaseTask {
         std::shared_ptr<Store> store,
         std::shared_ptr<VersionMap> version_map,
         StreamId stream_id,
-        const entity::AtomKey& index_key,
+        entity::AtomKey index_key,
         std::optional<AtomKey> maybe_prev) :
         store_(std::move(store)),
         version_map_(std::move(version_map)),
         stream_id_(std::move(stream_id)),
-        index_key_(index_key),
+        index_key_(std::move(index_key)),
         maybe_prev_(std::move(maybe_prev)) {
     }
 
@@ -171,6 +170,5 @@ struct WriteAndPrunePreviousTask : async::BaseTask {
         return version_map_->write_and_prune_previous(store_, key_, maybe_prev_);
     }
 };
-
 
 } //namespace arcticdb

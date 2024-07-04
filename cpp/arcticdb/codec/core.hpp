@@ -14,13 +14,14 @@
 #include <arcticdb/util/hash.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/log/log.hpp>
+#include <arcticdb/util/dump_bytes.hpp>
 
 #include <type_traits>
 
 namespace arcticdb::detail {
 using namespace arcticdb::entity;
 
-struct BlockProtobufHelper {
+struct BlockDataHelper {
     std::size_t count_;
     std::size_t bytes_;
 
@@ -39,8 +40,8 @@ struct BlockProtobufHelper {
 
 struct NdArrayBlock {
     std::size_t item_count_;
-    BlockProtobufHelper shapes_;
-    BlockProtobufHelper values_;
+    BlockDataHelper shapes_;
+    BlockDataHelper values_;
 
     template <typename EncodedFieldType>
     void update_field_size(EncodedFieldType &field) const {
@@ -103,12 +104,12 @@ class CodecHelper {
         return v;
     }
 
-    static BlockProtobufHelper scalar_block(std::size_t elt) {
-        return {elt, elt * sizeof(T)};
+    static BlockDataHelper scalar_block(std::size_t row_count) {
+        return {row_count, row_count * sizeof(T)};
     }
 
-    static NdArrayBlock nd_array_block(std::size_t elt, const shape_t *shape) {
-        std::size_t shape_count = static_cast<std::size_t>(dim) * elt;
+    static NdArrayBlock nd_array_block(std::size_t row_count, const shape_t *shape) {
+        std::size_t shape_count = static_cast<std::size_t>(dim) * row_count;
         std::size_t total_values_count = 0;
         if constexpr (dim == Dimension::Dim1) {
             for (std::size_t i = 0; i < shape_count; ++i, ++shape) {
@@ -122,7 +123,7 @@ class CodecHelper {
         }
         std::size_t shape_bytes = shape_count * sizeof(shape_t);
         std::size_t data_bytes = total_values_count * sizeof(T);
-        return NdArrayBlock{elt, {shape_count, shape_bytes}, {total_values_count, data_bytes}};
+        return NdArrayBlock{row_count, {shape_count, shape_bytes}, {total_values_count, data_bytes}};
     }
 };
 
@@ -145,7 +146,7 @@ struct ShapeEncodingFromBlock {
     template<class T, class EncodedFieldType>
     static std::size_t encode_block(
         const T *in,
-        BlockProtobufHelper &block_utils,
+        BlockDataHelper &block_utils,
         HashAccum &hasher,
         T *out,
         std::size_t out_capacity,
@@ -214,11 +215,10 @@ struct GenericBlockEncoder {
         }
     }
 
-    template <typename EncodedFieldType>
     static void encode(
         const typename EncoderType::Opts &opts,
         const BlockType& block,
-        EncodedFieldType& field,
+        EncodedFieldImpl& field,
         Buffer& out,
         std::ptrdiff_t& pos
     ) {
@@ -245,7 +245,7 @@ struct GenericBlockEncoder {
             auto t_out = reinterpret_cast<T *>(out.data() + pos);
             const auto total_items_count = field_nd_array->items_count() + block_row_count;
             field_nd_array->set_items_count(total_items_count);
-            auto value_pb = field_nd_array->add_values();
+            auto value_pb = field_nd_array->add_values(EncodingVersion::V1);
             const auto compressed_size = EncoderType::encode_block(opts,
                 block.data(),
                 helper_scalar_block,
@@ -254,6 +254,7 @@ struct GenericBlockEncoder {
                 max_compressed_size,
                 pos,
                 *value_pb->mutable_codec());
+
             helper_scalar_block.set_block_data(*value_pb, helper.hasher_.digest(), compressed_size);
             helper_scalar_block.set_version(*value_pb, EncoderType::VERSION);
         } else {
@@ -281,7 +282,7 @@ struct GenericBlockEncoder {
             HashedValue shape_hash = helper.get_digest_and_reset();
 
             // write values
-            auto value_pb = field_nd_array->add_values();
+            auto value_pb = field_nd_array->add_values(EncodingVersion::V1);
             auto t_out = reinterpret_cast<T *>(out.data() + pos);
             const auto values_comp_size = EncoderType::encode_block(
                 opts,
@@ -339,7 +340,7 @@ public:
 
         Helper helper;
         helper.hasher_.reset(helper.seed);
-        auto helper_scalar_block = BlockProtobufHelper{block.nbytes() / sizeof(T), block.nbytes()};
+        auto helper_scalar_block = BlockDataHelper{block.nbytes() / sizeof(T), block.nbytes()};
         ARCTICDB_TRACE(log::codec(), "Generic block encode writing scalar of {} elements", block.row_count());
 
         const auto uncompressed_size = helper_scalar_block.bytes_;

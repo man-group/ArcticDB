@@ -99,28 +99,20 @@ public:
         return impl_->column_index(name);
     }
 
-    std::shared_ptr<FieldCollection> index_fields() const {
-        return impl_->index_fields();
-    }
-
-    bool has_index_fields() const {
-        return impl_->has_index_fields();
-    }
-
-    TimeseriesDescriptor index_descriptor() {
+    const TimeseriesDescriptor& index_descriptor() const {
         return impl_->index_descriptor();
     }
 
-    FieldCollection&& detach_index_fields() {
-        return impl_->detach_index_fields();
+    TimeseriesDescriptor& mutable_index_descriptor() {
+        return impl_->mutable_index_descriptor();
     }
 
-    std::shared_ptr<arcticdb::proto::descriptors::TimeSeriesDescriptor> timeseries_proto() {
-        return impl_->timeseries_proto();
+    bool has_index_descriptor() const {
+        return impl_->has_index_descriptor();
     }
 
-    void set_index_fields(std::shared_ptr<FieldCollection> fields) {
-        impl_->set_index_fields(std::move(fields));
+    TimeseriesDescriptor&& detach_index_descriptor() {
+        return impl_->detach_index_descriptor();
     }
 
     void init_column_map() const  {
@@ -240,9 +232,13 @@ public:
         return impl_->string_array_at(row, col);
     }
 
-    void set_timeseries_descriptor(TimeseriesDescriptor&& tsd) {
+    void set_timeseries_descriptor(const TimeseriesDescriptor& tsd) {
         util::check(!tsd.proto_is_null(), "Got null timeseries descriptor in set_timeseries_descriptor");
-        impl_->set_timeseries_descriptor(std::move(tsd));
+        impl_->set_timeseries_descriptor(tsd);
+    }
+
+    void reset_timeseries_descriptor() {
+        impl_->reset_timeseries_descriptor();
     }
 
     size_t num_columns() const { return impl_->num_columns(); }
@@ -253,6 +249,14 @@ public:
 
     void unsparsify() {
         impl_->unsparsify();
+    }
+
+    bool has_user_metadata() const {
+        return impl_->has_user_metadata();
+    }
+
+    const arcticdb::proto::descriptors::UserDefinedMetadata& user_metadata() const {
+        return impl_->user_metadata();
     }
 
     void sparsify() {
@@ -337,16 +341,16 @@ public:
         return impl_->string_pool_ptr();
     }
 
+    void reset_metadata() {
+        impl_->reset_metadata();
+    }
+
     void set_metadata(google::protobuf::Any &&meta) {
         impl_->set_metadata(std::move(meta));
     }
 
     bool has_metadata() {
         return impl_->has_metadata();
-    }
-
-    void override_metadata(google::protobuf::Any &&meta) {
-        impl_->override_metadata(std::move(meta));
     }
 
     ssize_t get_row_id() {
@@ -473,10 +477,6 @@ public:
         return output;
     }
 
-    StreamId get_index_col_name() const{
-        return impl_->get_index_col_name();
-    }
-
 private:
     explicit SegmentInMemory(std::shared_ptr<SegmentInMemoryImpl> impl) :
             impl_(std::move(impl)) {}
@@ -484,4 +484,4 @@ private:
     std::shared_ptr<SegmentInMemoryImpl> impl_;
 };
 
-}
+} //namespace arcticdb

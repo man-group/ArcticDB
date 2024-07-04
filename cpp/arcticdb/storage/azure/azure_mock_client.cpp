@@ -84,7 +84,7 @@ Segment MockAzureClient::read_blob(
         throw get_exception(message, error_code, Azure::Core::Http::HttpStatusCode::NotFound);
     }
 
-    return pos->second;
+    return std::move(pos->second);
 }
 
 void MockAzureClient::delete_blobs(

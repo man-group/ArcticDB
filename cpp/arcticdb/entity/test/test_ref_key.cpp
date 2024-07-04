@@ -11,6 +11,6 @@
 TEST(RefKey, Basic) {
     using namespace arcticdb::entity;
     RefKey rk{ "HelloWorld", KeyType::STORAGE_INFO};
-    ASSERT_EQ(rk.id(), VariantId("HelloWorld"));
+    ASSERT_EQ(rk.id(), arcticdb::VariantId("HelloWorld"));
     ASSERT_EQ(rk.type(), KeyType::STORAGE_INFO);
 }

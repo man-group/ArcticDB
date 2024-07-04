@@ -59,6 +59,7 @@ public:
                 stream_descriptor_ = segment.descriptor();
             }
         }
+        segment.reset_timeseries_descriptor();
         AggregatorType::stats().update_many(segment.row_count(), segment.num_bytes());
         //TODO very specific use-case, you probably don't want this
         if(convert_int_to_float)
@@ -71,6 +72,10 @@ public:
             commit();
         }
         util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
+    }
+
+    void finalize() override {
+        commit();
     }
 
     void commit() override {
@@ -98,7 +103,7 @@ public:
 
         if (AggregatorType::segment().row_count() > 0) {
             auto slice = merge_slices(slices_, AggregatorType::segment().descriptor());
-            AggregatorType::commit_impl();
+            AggregatorType::commit_impl(false);
             slice_callback_(std::move(slice));
         }
         segments_.clear();

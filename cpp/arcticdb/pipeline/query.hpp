@@ -265,20 +265,20 @@ template<typename ContainerType>
 inline FilterQuery<ContainerType> create_index_filter(const IndexRange &range, bool dynamic_schema, bool column_groups) {
     static_assert(std::is_same_v<ContainerType, index::IndexSegmentReader>);
     return [rg = range, dynamic_schema, column_groups](const ContainerType &container, std::unique_ptr<util::BitSet>&& input) mutable {
-        auto index_type = container.seg().template scalar_at<uint8_t>(0u, int(index::Fields::index_type));
-
-        switch (index_type.value()) {
-        case IndexDescriptor::TIMESTAMP: {
+        auto maybe_index_type = container.seg().template scalar_at<uint8_t>(0u, int(index::Fields::index_type));
+        const auto index_type = IndexDescriptor::Type(maybe_index_type.value());
+        switch (index_type) {
+        case IndexDescriptorImpl::Type::TIMESTAMP: {
             return build_bitset_for_index<ContainerType, TimeseriesIndex>(container,
                                                                           rg,
                                                                           dynamic_schema,
                                                                           column_groups,
                                                                           std::move(input));
         }
-        case IndexDescriptor::STRING: {
+        case IndexDescriptorImpl::Type::STRING: {
             return build_bitset_for_index<ContainerType, TableIndex>(container, rg, dynamic_schema, column_groups, std::move(input));
         }
-        default:util::raise_rte("Unknown index type {} in create_index_filter", uint32_t(index_type.value()));
+        default:util::raise_rte("Unknown index type {} in create_index_filter", uint32_t(index_type));
         }
     };
 }
@@ -353,7 +353,7 @@ inline std::vector<FilterQuery<ContainerType>> build_update_query_filters(
     // be appended to, the type of the frame being appended, and the specified range, if supplied.
     std::vector<FilterQuery<ContainerType>> queries;
     util::variant_match(range,
-                        [&](const  RowRange &row_range) {
+                        [&](const RowRange &row_range) {
                             util::check(std::holds_alternative<stream::RowCountIndex>(index), "Cannot partition by row count when a timeseries-indexed frame was supplied");
                             queries.emplace_back(
                                     create_row_filter<ContainerType>(RowRange{row_range.first, row_range.second}));

@@ -28,10 +28,9 @@ class IndexWriter {
 public:
     ARCTICDB_MOVE_ONLY_DEFAULT(IndexWriter)
 
-    IndexWriter(std::shared_ptr<stream::StreamSink> sink, IndexPartialKey partial_key, TimeseriesDescriptor &&meta, const std::optional<KeyType>& key_type = std::nullopt) :
-            bucketize_columns_(meta.proto().has_column_groups() && meta.proto().column_groups().enabled()),
+    IndexWriter(std::shared_ptr<stream::StreamSink> sink, IndexPartialKey partial_key, const TimeseriesDescriptor &tsd, const std::optional<KeyType>& key_type = std::nullopt) :
+            bucketize_columns_(tsd.column_groups()),
             partial_key_(std::move(partial_key)),
-            meta_(std::move(meta)),
             agg_(Desc::schema(partial_key_.id, bucketize_columns_),
             [&](auto &&segment) {
             on_segment(std::forward<SegmentInMemory>(segment));
@@ -40,11 +39,7 @@ public:
             sink_(std::move(sink)),
             key_being_committed_(folly::Future<AtomKey>::makeEmpty()),
             key_type_(key_type) {
-        static const auto encoding = ConfigsMap::instance()->get_int("VersionStore.Encoding", 1);
-        if(encoding == 1) {
-            meta_.copy_to_self_proto();
-        }
-        agg_.segment().set_timeseries_descriptor(std::move(meta_)); //TODO very weird, why this short-lived member?
+        agg_.segment().set_timeseries_descriptor(tsd);
     }
 
     void add(const arcticdb::entity::AtomKey &key, const FrameSlice &slice) {
@@ -102,7 +97,7 @@ public:
     }
 
     folly::Future<arcticdb::entity::AtomKey> commit() {
-        agg_.commit();
+        agg_.finalize();
         return std::move(key_being_committed_);
     }
 
@@ -127,7 +122,6 @@ private:
 
     bool bucketize_columns_ = false;
     IndexPartialKey partial_key_;
-    TimeseriesDescriptor meta_;
     SliceAggregator agg_;
     std::shared_ptr<stream::StreamSink> sink_;
     folly::Future<arcticdb::entity::AtomKey> key_being_committed_;

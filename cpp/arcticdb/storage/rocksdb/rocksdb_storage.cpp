@@ -20,6 +20,7 @@
 #include <rocksdb/options.h>
 #include <rocksdb/utilities/options_util.h>
 #include <rocksdb/slice.h>
+#include <folly/gen/Base.h>
 
 namespace arcticdb::storage::rocksdb {
 
@@ -236,11 +237,10 @@ void RocksDBStorage::do_write_internal(Composite<KeySegmentPair>&& kvs) {
             auto k_str = to_serialized_key(kv.variant_key());
 
             auto& seg = kv.segment();
-            auto hdr_sz = seg.segment_header_bytes_size();
-            auto total_sz = seg.total_segment_size(hdr_sz);
+            auto total_sz = seg.calculate_size();
             std::string seg_data;
             seg_data.resize(total_sz);
-            seg.write_to(reinterpret_cast<std::uint8_t *>(seg_data.data()), hdr_sz);
+            seg.write_to(reinterpret_cast<std::uint8_t *>(seg_data.data()));
             auto allow_override = std::holds_alternative<RefKey>(kv.variant_key());
             if (!allow_override && do_key_exists(kv.variant_key())) {
                 throw DuplicateKeyException(kv.variant_key());

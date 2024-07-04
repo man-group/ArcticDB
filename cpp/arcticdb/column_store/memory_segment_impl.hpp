@@ -32,7 +32,7 @@ namespace arcticdb {
 class SegmentInMemoryImpl;
 
 namespace {
-inline std::shared_ptr<SegmentInMemoryImpl> allocate_sparse_segment(const StreamId& id, const IndexDescriptor& index);
+inline std::shared_ptr<SegmentInMemoryImpl> allocate_sparse_segment(const StreamId& id, const IndexDescriptorImpl& index);
 
 inline std::shared_ptr<SegmentInMemoryImpl> allocate_dense_segment(const StreamDescriptor& descriptor, size_t row_count);
 
@@ -51,7 +51,7 @@ inline void check_output_bitset(const arcticdb::util::BitSet& output,
                                  "Mismatch in output bitset in filter_segment");
     }
 }
-} // namespace anon
+} // namespace
 
 
 class SegmentInMemoryImpl {
@@ -417,12 +417,14 @@ public:
         row_id_++;
     }
 
-    std::shared_ptr<FieldCollection> index_fields() const {
-        return index_fields_;
+    const TimeseriesDescriptor& index_descriptor() const {
+        util::check(tsd_.has_value(), "Index descriptor requested but not set");
+        return *tsd_;
     }
 
-    void set_index_fields(std::shared_ptr<FieldCollection> index_fields) {
-        index_fields_ = std::move(index_fields);
+    TimeseriesDescriptor& mutable_index_descriptor() {
+        util::check(tsd_.has_value(), "Index descriptor requested but not set");
+        return *tsd_;
     }
 
     void end_block_write(ssize_t size) {
@@ -717,8 +719,10 @@ public:
 
     StringPool &string_pool() { return *string_pool_; } //TODO protected
 
+    void reset_metadata();
+
     void set_metadata(google::protobuf::Any&& meta);
-    void override_metadata(google::protobuf::Any&& meta);
+
     bool has_metadata() const;
 
     const google::protobuf::Any* metadata() const;
@@ -762,21 +766,26 @@ public:
                                                 bool filter_down_stringpool=false,
                                                 bool validate=false) const;
 
-    std::shared_ptr<arcticdb::proto::descriptors::TimeSeriesDescriptor> timeseries_proto();
-
-    TimeseriesDescriptor index_descriptor() {
-        return {timeseries_proto(), index_fields_};
+    bool has_index_descriptor() const {
+        return tsd_.has_value();
     }
 
-    bool has_index_fields() const {
-        return static_cast<bool>(index_fields_);
+    TimeseriesDescriptor&& detach_index_descriptor() {
+        util::check(tsd_.has_value(), "No index descriptor on segment");
+        return std::move(*tsd_);
     }
 
-    FieldCollection&& detach_index_fields() {
-        return std::move(*index_fields_);
+    void set_timeseries_descriptor(const TimeseriesDescriptor& tsd);
+
+    void reset_timeseries_descriptor();
+
+    bool has_user_metadata() {
+        return tsd_.has_value() && !tsd_->proto_is_null() && tsd_->proto().has_user_meta();
     }
 
-    void set_timeseries_descriptor(TimeseriesDescriptor&& tsd);
+    const arcticdb::proto::descriptors::UserDefinedMetadata& user_metadata() const {
+        return tsd_->user_metadata();
+    }
 
     /// @brief Construct a copy of the segment containing only rows in [start_row; end_row)
     /// @param start_row Start of the row range (inclusive)
@@ -800,10 +809,6 @@ public:
 
     std::vector<std::shared_ptr<SegmentInMemoryImpl>> split(size_t rows) const;
 
-    StreamId get_index_col_name() const{
-        return descriptor().id();
-    }
-
 private:
     ssize_t row_id_ = -1;
     std::shared_ptr<StreamDescriptor> descriptor_ = std::make_shared<StreamDescriptor>();
@@ -816,12 +821,11 @@ private:
     bool allow_sparse_ = false;
     bool compacted_ = false;
     util::MagicNum<'M', 'S', 'e', 'g'> magic_;
-    std::shared_ptr<FieldCollection> index_fields_;
-    std::shared_ptr<arcticdb::proto::descriptors::TimeSeriesDescriptor> tsd_;
+    std::optional<TimeseriesDescriptor> tsd_;
 };
 
 namespace {
-inline std::shared_ptr<SegmentInMemoryImpl> allocate_sparse_segment(const StreamId& id, const IndexDescriptor& index) {
+inline std::shared_ptr<SegmentInMemoryImpl> allocate_sparse_segment(const StreamId& id, const IndexDescriptorImpl& index) {
     return std::make_shared<SegmentInMemoryImpl>(StreamDescriptor{id, index}, 0, false, true);
 }
 

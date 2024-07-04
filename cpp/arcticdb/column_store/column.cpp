@@ -131,6 +131,10 @@ Column Column::clone() const {
     return output;
 }
 
+bool Column::empty() const {
+    return row_count() == 0;
+}
+
 bool Column::is_sparse() const {
     if(last_logical_row_ != last_physical_row_) {
         util::check(static_cast<bool>(sparse_map_), "Expected sparse map in column with logical row {} and physical row {}", last_logical_row_, last_physical_row_);
@@ -744,10 +748,6 @@ size_t Column::num_shapes() const  {
 
 void Column::set_sparse_bit_for_row(size_t sparse_location) {
     sparse_map()[bv_size(sparse_location)] = true;
-}
-
-bool Column::empty() const {
-    return row_count() == 0;
 }
 
 void Column::regenerate_offsets() const {
