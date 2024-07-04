@@ -1812,8 +1812,4 @@ std::shared_ptr<VersionMap> LocalVersionedEngine::_test_get_version_map() {
 void LocalVersionedEngine::_test_set_store(std::shared_ptr<Store> store) {
     set_store(std::move(store));
 }
-
-SymbolList& LocalVersionedEngine::_test_get_symbol_list() {
-    return symbol_list();
-}
 } // arcticdb::version_store

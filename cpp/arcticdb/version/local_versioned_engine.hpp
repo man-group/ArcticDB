@@ -394,7 +394,6 @@ public:
     }
     void _test_set_store(std::shared_ptr<Store> store);
     std::shared_ptr<VersionMap> _test_get_version_map();
-    SymbolList& _test_get_symbol_list();
 
     /** Get the time used by the Store (e.g. that would be used in the AtomKey).
         For testing purposes only. */

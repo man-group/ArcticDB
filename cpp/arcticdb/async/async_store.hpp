@@ -247,7 +247,7 @@ folly::Future<bool> key_exists(const entity::VariantKey &key) override {
 }
 
 bool key_exists_sync(const entity::VariantKey &key) override {
-    return KeyExistsTask{&key, library_}();
+    return KeyExistsTask{key, library_}();
 }
 
 bool supports_prefix_matching() const override {
@@ -331,8 +331,8 @@ std::vector<folly::Future<bool>> batch_key_exists(
         const std::vector<entity::VariantKey> &keys) override {
     std::vector<folly::Future<bool>> res;
     res.reserve(keys.size());
-    for (auto itr = keys.cbegin(); itr < keys.cend(); ++itr) {
-        res.push_back(async::submit_io_task(KeyExistsTask(itr, library_)));
+    for (const auto &key : keys) {
+        res.push_back(async::submit_io_task(KeyExistsTask(key, library_)));
     }
     return res;
 }

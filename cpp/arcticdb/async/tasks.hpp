@@ -492,54 +492,18 @@ struct DecodeMetadataAndDescriptorTask : BaseTask {
             );
     }
 };
-template<class...>
-using voider = void;
-template <typename Iter, typename U, typename = void>
-struct is_iter_of : std::false_type{};
-
-template <typename Iter, typename U>
-struct is_iter_of<Iter, U, voider<decltype(*(std::declval<Iter>()))>> : std::is_constructible<U, decltype(*(std::declval<Iter>()))> {};
-
-template<typename T, typename U>
-struct is_pointer_of : std::false_type {};
-
-template<typename T, typename U>
-struct is_pointer_of<T*, U> : std::is_same<std::remove_pointer_t<T*>, U> {};
-
-template<typename T, typename U>
-using is_same_cvref_removed = std::is_same<std::remove_cvref_t<T>, U>;
-
-template<typename T,
-        typename=std::enable_if_t< // Make obvious if iterator& is captured
-                        is_same_cvref_removed<T, entity::VariantKey>::value
-                        || is_iter_of<T, entity::VariantKey>::value
-                        || is_pointer_of<T, entity::VariantKey>::value>>
 struct KeyExistsTask : BaseTask {
-    T key_;
+    const VariantKey key_;
     std::shared_ptr<storage::Library> lib_;
 
-    /**
-     * @param key Could be a vector iterator, a pointer or a value to a const VariantKey.
-     */
-    KeyExistsTask(T key, std::shared_ptr<storage::Library> lib): key_(key), lib_(std::move(lib)) {
+    KeyExistsTask(auto &&key, std::shared_ptr<storage::Library> lib): key_(std::forward<decltype(key)>(key)), lib_(std::move(lib)) {
         // ARCTICDB_DEBUG(log::storage(), "Creating key exists task for key {}", variant_key_view(*key_));
-        ARCTICDB_DEBUG(log::storage(), "Creating key exists task for key {}",
-        [](const auto& key){
-            if constexpr (is_same_cvref_removed<T, entity::VariantKey>::value) {
-                return variant_key_view(key);
-            } else {
-                return variant_key_view(*key);
-            }
-        }(key_));
+        ARCTICDB_DEBUG(log::storage(), "Creating key exists task for key {}",key_);
     }
 
     bool operator()() {
         ARCTICDB_SAMPLE(KeyExistsTask, 0)
-        if constexpr (is_same_cvref_removed<T, entity::VariantKey>::value) {
-            return lib_->key_exists(key_);
-        } else { 
-            return lib_->key_exists(*key_);
-        }
+        return lib_->key_exists(key_);
     }
 };
 
