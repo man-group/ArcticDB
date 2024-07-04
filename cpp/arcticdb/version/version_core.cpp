@@ -748,8 +748,6 @@ void read_indexed_keys_to_pipeline(
     ARCTICDB_DEBUG(log::version(), "Read index segment with {} keys", index_segment_reader.size());
     check_column_and_date_range_filterable(index_segment_reader, read_query);
 
-    // When read_query.columns is empty means that we want to read all columns. There is no need to add the
-    // index explicitly.
     if (!read_query.columns.empty()) {
         add_index_columns_to_query(read_query, index_segment_reader.tsd());
     }
@@ -798,8 +796,6 @@ void read_incompletes_to_pipeline(
     pipeline_context->incompletes_after_ = pipeline_context->slice_and_keys_.size();
 
     // If there are only incompletes we need to add the index here
-    // When read_query.columns is empty means that we want to read all columns. There is no need to add the
-    // index explicitly.
     if(pipeline_context->slice_and_keys_.empty() && !read_query.columns.empty()) {
         add_index_columns_to_query(read_query, incomplete_segments.begin()->segment(store).index_descriptor());
     }
