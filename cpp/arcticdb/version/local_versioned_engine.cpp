@@ -1035,7 +1035,7 @@ folly::Future<ReadVersionOutput> async_read_direct(
     auto index_segment_reader = std::make_shared<index::IndexSegmentReader>(std::move(index_segment));
 
     check_column_and_date_range_filterable(*index_segment_reader, read_query);
-    if (!read_query.columns.empty()) {
+    if (read_query.columns.has_value()) {
         add_index_columns_to_query(read_query, index_segment_reader->tsd());
     }
     auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor{index_segment_reader->tsd().as_stream_descriptor()});

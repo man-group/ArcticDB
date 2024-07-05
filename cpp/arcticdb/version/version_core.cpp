@@ -685,16 +685,17 @@ SegmentInMemory read_direct(const std::shared_ptr<Store>& store,
 }
 
 void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDescriptor& desc) {
+    util::check(read_query.columns.has_value(), "The index has to be added explicitly only if part of the columns are selected");
     auto index_columns = stream::get_index_columns_from_descriptor(desc);
     if(index_columns.empty())
         return;
 
     std::vector<std::string> index_columns_to_add;
     for(const auto& index_column : index_columns) {
-        if(std::find(std::begin(read_query.columns), std::end(read_query.columns), index_column) == std::end(read_query.columns))
+        if(std::find(std::begin(*read_query.columns), std::end(*read_query.columns), index_column) == std::end(*read_query.columns))
             index_columns_to_add.push_back(std::string(index_column));
     }
-    read_query.columns.insert(std::begin(read_query.columns), std::begin(index_columns_to_add), std::end(index_columns_to_add));
+    read_query.columns->insert(std::begin(*read_query.columns), std::begin(index_columns_to_add), std::end(index_columns_to_add));
 }
 
 FrameAndDescriptor read_segment_impl(
@@ -748,7 +749,7 @@ void read_indexed_keys_to_pipeline(
     ARCTICDB_DEBUG(log::version(), "Read index segment with {} keys", index_segment_reader.size());
     check_column_and_date_range_filterable(index_segment_reader, read_query);
 
-    if (!read_query.columns.empty()) {
+    if (read_query.columns.has_value()) {
         add_index_columns_to_query(read_query, index_segment_reader.tsd());
     }
 
@@ -796,7 +797,7 @@ void read_incompletes_to_pipeline(
     pipeline_context->incompletes_after_ = pipeline_context->slice_and_keys_.size();
 
     // If there are only incompletes we need to add the index here
-    if(pipeline_context->slice_and_keys_.empty() && !read_query.columns.empty()) {
+    if(pipeline_context->slice_and_keys_.empty() && read_query.columns.has_value()) {
         add_index_columns_to_query(read_query, incomplete_segments.begin()->segment(store).index_descriptor());
     }
 
@@ -1535,7 +1536,7 @@ FrameAndDescriptor read_index_columns_impl(
                 "Reading the index column is not supported when recursive or custom normalizers are used."
             );
             debug::check<ErrorCode::E_ASSERTION_FAILURE>(
-                read_query.columns.empty(),
+                read_query.columns.has_value() && read_query.columns->empty(),
                 "There shouldn't be any selected columns when reading the index."
             );
             schema::check<ErrorCode::E_UNSUPPORTED_INDEX_TYPE>(
@@ -1552,7 +1553,7 @@ FrameAndDescriptor read_index_columns_impl(
             pipeline_context->overall_column_bitset_ = util::BitMagic(stream_descriptor.fields().size());
             pipeline_context->filter_columns_ = std::make_shared<FieldCollection>();
             pipeline_context->filter_columns_set_ = std::unordered_set<std::string_view>{};
-            for (size_t i = 0; i < read_query.columns.size(); ++i) {
+            for (size_t i = 0; i < read_query.columns->size(); ++i) {
                 (*(pipeline_context->selected_columns_))[i] = 1;
                 (*(pipeline_context->overall_column_bitset_))[i] = 1;
                 const Field& index_field = stream_descriptor.field(i);

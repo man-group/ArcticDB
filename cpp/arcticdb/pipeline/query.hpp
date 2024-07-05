@@ -42,7 +42,9 @@ struct SignedRowRange {
 };
 
 struct ReadQuery {
-    mutable std::vector<std::string> columns; // empty <=> all columns
+    // std::nullopt -> all columns
+    // empty vector -> only the index
+    mutable std::optional<std::vector<std::string>> columns;
     std::optional<SignedRowRange> row_range;
     FilterRange row_filter; // no filter by default
     std::vector<std::shared_ptr<Clause>> clauses_;

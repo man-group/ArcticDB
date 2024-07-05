@@ -180,7 +180,7 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
         desc_ = desc;
     }
 
-    void set_selected_columns(const std::vector<std::string>& columns);
+    void set_selected_columns(const std::optional<std::vector<std::string>>& columns);
 
     IndexRange index_range() const {
         if(slice_and_keys_.empty())
