@@ -2884,29 +2884,29 @@ class NativeVersionStore:
         read_result = ReadResult(*cpp_result)
         frame_data = FrameData.from_cpp(read_result.frame_data)
         index_type = read_result.norm.df.common.WhichOneof("index_type")
-        meta = denormalize_user_metadata(read_result.udm, self._normalizer)
-        index = _denormalize_single_index(frame_data, read_result.norm.df.common)
-        if index_type == "index":
-            if isinstance(index, pd.RangeIndex):
-                index_meta = read_result.norm.df.common.index
-                stop = index_meta.start + read_result.frame_data.row_count * index_meta.step
-                index = pd.RangeIndex(start=index_meta.start, stop=stop, step=index_meta.step)
-        elif index_type == "multi_index":
-            names = frame_data.index_columns + [name[_IDX_PREFIX_LEN:] for name in frame_data.names]
-            index = pd.MultiIndex.from_arrays(frame_data.data, names=names)
+        if index_type == "index" and not read_result.norm.df.common.index.is_physically_stored:
+            index_meta = read_result.norm.df.common.index
+            if read_result.frame_data.row_count > 0:
+                step = index_meta.step if index_meta.step != 0 else 1
+                stop = index_meta.start + read_result.frame_data.row_count * step
+                index = pd.RangeIndex(start=index_meta.start, stop=stop, step=step)
+                if row_range:
+                    index=index[row_range[0]:row_range[1]]
+            else:
+                index = pd.DatetimeIndex([])
+            meta = denormalize_user_metadata(read_result.udm, self._normalizer)
+            return VersionedItem(
+                symbol=read_result.version.symbol,
+                library=self._library.library_path,
+                data=pd.DataFrame({}, index=index),
+                version=read_result.version.version,
+                metadata=meta,
+                host=self.env,
+                timestamp=read_result.version.timestamp
+            )
         else:
-            raise ArcticNativeException("Unexpected undex type {}".format(index_type))
+            return self._post_process_dataframe(read_result, read_query, None)
 
         if read_query.row_filter is not None:
             start_idx, end_idx = self._compute_filter_start_end_row(read_result, read_query)
             index = index[start_idx:end_idx]
-
-        return VersionedItem(
-            symbol=read_result.version.symbol,
-            library=self._library.library_path,
-            data=pd.DataFrame({}, index=index),
-            version=read_result.version.version,
-            metadata=meta,
-            host=self.env,
-            timestamp=read_result.version.timestamp
-        )

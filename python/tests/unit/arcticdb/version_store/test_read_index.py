@@ -87,7 +87,8 @@ class TestBasicReadIndex:
         assert isinstance(result, arcticdb.VersionedItem)
         assert result.symbol == "sym"
         assert result.version == 0
-        assert result.data.equals(pd.DataFrame({}, index=index))
+        assert result.data.index.equals(index)
+        assert result.data.empty
 
     @pytest.mark.parametrize("staged", [True, False])
     def test_read_index_columns_column_slice(self, lmdb_version_store_row_slice, index, staged):
@@ -99,7 +100,8 @@ class TestBasicReadIndex:
         assert isinstance(result, arcticdb.VersionedItem)
         assert result.symbol == "sym"
         assert result.version == 0
-        assert result.data.equals(pd.DataFrame({}, index))
+        assert result.data.index.equals(index)
+        assert result.data.empty
 
 
 class TestReadEmptyIndex:
@@ -110,9 +112,10 @@ class TestReadEmptyIndex:
         assert result.symbol == "sym"
         assert result.version == 0
         if PANDAS_VERSION < Version("2.0.0"):
-            assert result.data.equals(pd.DataFrame({}, pd.RangeIndex(start=5,stop=5)))
+            assert result.data.index.equals(pd.RangeIndex(start=5,stop=5))
         else:
-            assert result.data.equals(pd.DataFrame({}, pd.DatetimeIndex([])))
+            assert result.data.index.equals(pd.DatetimeIndex([]))
+        assert result.data.empty
 
     def test_empty_datetime_index(self, lmdb_version_store_static_and_dynamic):
         lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": []}, index=pd.DatetimeIndex([])))
@@ -120,7 +123,9 @@ class TestReadEmptyIndex:
         assert isinstance(result, arcticdb.VersionedItem)
         assert result.symbol == "sym"
         assert result.version == 0
-        assert result.data.equals(pd.DataFrame({}, pd.DatetimeIndex([])))
+        assert result.data.index.equals(pd.DatetimeIndex([]))
+        assert result.data.empty
+
 
     @pytest.mark.parametrize(
         "input_index,expected_index",
@@ -158,7 +163,9 @@ class TestReadEmptyIndex:
         # if there is no explicit dtype for the *first* column Arctic will set its dtype
         # to datetime64[ns] while Pandas sets it to object.
         # Note: Pandas 1 and Pandas 2 behave differently with respect to the dtype of empty columns
-        assert result.data.equals(pd.DataFrame({}, expected_index))
+        assert result.data.index.equals(expected_index)
+        assert result.data.empty
+
 
 
 
@@ -195,7 +202,9 @@ class TestReadIndexAsOf:
             assert isinstance(read_index_result, arcticdb.VersionedItem)
             assert read_index_result.symbol == "sym"
             assert read_index_result.version == i
-            assert read_index_result.data.equals(pd.DataFrame({}, reduce(lambda current, new: current.append(new), indexes[:i+1])))
+            assert read_index_result.data.index.equals(reduce(lambda current, new: current.append(new), indexes[:i+1]))
+            assert read_index_result.data.empty
+
 
     @pytest.mark.parametrize("index", [
         pd.RangeIndex(start=0, stop=5),
@@ -214,7 +223,8 @@ class TestReadIndexAsOf:
         assert isinstance(result, arcticdb.VersionedItem)
         assert result.symbol == "sym"
         assert result.version == 0
-        assert result.data.equals(pd.DataFrame({}, index))
+        assert result.data.index.equals(index)
+        assert result.data.empty
 
 
 class TestReadIndexRange:
@@ -226,7 +236,8 @@ class TestReadIndexRange:
         assert isinstance(result, arcticdb.VersionedItem)
         assert result.symbol == "sym"
         assert result.version == 0
-        assert result.data.equals(pd.DataFrame({}, index[row_range[0]:row_range[1]]))
+        assert result.data.index.equals(index[row_range[0]:row_range[1]])
+        assert result.data.empty
 
     @pytest.mark.parametrize("staged", [True, False])
     def test_date_range(self, lmdb_version_store_static_and_dynamic, staged):
@@ -236,7 +247,8 @@ class TestReadIndexRange:
         assert isinstance(result, arcticdb.VersionedItem)
         assert result.symbol == "sym"
         assert result.version == 0
-        assert result.data.equals(pd.DataFrame({}, pd.date_range(start="01/04/2024", end="01/08/2024")))
+        assert result.data.index.equals(pd.date_range(start="01/04/2024", end="01/08/2024"))
+        assert result.data.empty
 
     def test_date_range_left_open(self, lmdb_version_store_static_and_dynamic):
         index = pd.date_range(start="01/01/2024", end="01/10/2024")
@@ -245,7 +257,8 @@ class TestReadIndexRange:
         assert isinstance(result, arcticdb.VersionedItem)
         assert result.symbol == "sym"
         assert result.version == 0
-        assert result.data.equals(pd.DataFrame({}, pd.date_range(start="01/01/2024", end="01/08/2024")))
+        assert result.data.index.equals(pd.date_range(start="01/01/2024", end="01/08/2024"))
+        assert result.data.empty
 
     def test_date_range_right_open(self, lmdb_version_store_static_and_dynamic):
         index = pd.date_range(start="01/01/2024", end="01/10/2024")
@@ -254,7 +267,8 @@ class TestReadIndexRange:
         assert isinstance(result, arcticdb.VersionedItem)
         assert result.symbol == "sym"
         assert result.version == 0
-        assert result.data.equals(pd.DataFrame({}, pd.date_range(start="01/04/2024", end="01/10/2024")))
+        assert result.data.index.equals(pd.date_range(start="01/04/2024", end="01/10/2024"))
+        assert result.data.empty
 
     def test_row_range_across_row_slices(self, lmdb_version_store_row_slice, index):
         assert lmdb_version_store_row_slice._lib_cfg.lib_desc.version.write_options.segment_row_size == 5
@@ -264,7 +278,8 @@ class TestReadIndexRange:
         assert isinstance(result, arcticdb.VersionedItem)
         assert result.symbol == "sym"
         assert result.version == 0
-        assert result.data.equals(pd.DataFrame({}, index[row_range[0]:row_range[1]]))
+        assert result.data.index.equals(index[row_range[0]:row_range[1]])
+        assert result.data.empty
 
 
     @pytest.mark.parametrize("non_datetime_index", [
