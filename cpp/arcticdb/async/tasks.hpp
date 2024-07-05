@@ -497,7 +497,6 @@ struct KeyExistsTask : BaseTask {
     std::shared_ptr<storage::Library> lib_;
 
     KeyExistsTask(auto &&key, std::shared_ptr<storage::Library> lib): key_(std::forward<decltype(key)>(key)), lib_(std::move(lib)) {
-        // ARCTICDB_DEBUG(log::storage(), "Creating key exists task for key {}", variant_key_view(*key_));
         ARCTICDB_DEBUG(log::storage(), "Creating key exists task for key {}",key_);
     }
 

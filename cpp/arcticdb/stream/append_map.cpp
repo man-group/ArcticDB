@@ -111,7 +111,7 @@ std::set<StreamId> get_active_incomplete_refs(const std::shared_ptr<Store>& stor
     for (const auto& vk: ref_keys) {
         const auto& stream_id = variant_key_id(vk);
         auto [next_key, _] = read_head(store, stream_id);
-        if (next_key && store->key_exists(next_key.value()).get()) {
+        if (next_key && store->key_exists(std::move(next_key.value())).get()) {
             output.insert(stream_id);
         }
     }
