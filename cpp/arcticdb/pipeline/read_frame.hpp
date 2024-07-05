@@ -75,21 +75,21 @@ folly::Future<std::vector<VariantKey>> fetch_data(
     const std::shared_ptr<PipelineContext> &context,
     const std::shared_ptr<stream::StreamSource>& ssource,
     bool dynamic_schema,
-    std::shared_ptr<BufferHolder> buffers
+    DecodePathData shared_data
     );
 
 void decode_into_frame_static(
     SegmentInMemory &frame,
     PipelineContextRow &context,
     Segment &&seg,
-    const std::shared_ptr<BufferHolder>& buffers
+    const DecodePathData& shared_data
     );
 
 void decode_into_frame_dynamic(
         SegmentInMemory &frame,
         PipelineContextRow &context,
         Segment &&seg,
-        const std::shared_ptr<BufferHolder>& buffers
+        const DecodePathData& shared_data
 );
 
 void reduce_and_fix_columns(

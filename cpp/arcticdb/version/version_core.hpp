@@ -149,7 +149,7 @@ SegmentInMemory do_direct_read_or_process(
     ReadQuery& read_query,
     const ReadOptions& read_options,
     const std::shared_ptr<PipelineContext>& pipeline_context,
-    const std::shared_ptr<BufferHolder>& buffers);
+    const DecodePathData& shared_data);
 
 PredefragmentationInfo get_pre_defragmentation_info(
         const std::shared_ptr<Store>& store,

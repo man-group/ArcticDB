@@ -1043,7 +1043,7 @@ folly::Future<ReadVersionOutput> async_read_direct(
     const VariantKey& index_key,
     SegmentInMemory&& index_segment,
     const ReadQuery& read_query,
-    std::shared_ptr<BufferHolder> buffers,
+    DecodePathData shared_data,
     const ReadOptions& read_options) {
     auto index_segment_reader = std::make_shared<index::IndexSegmentReader>(std::move(index_segment));
 
@@ -1067,14 +1067,14 @@ folly::Future<ReadVersionOutput> async_read_direct(
     mark_index_slices(pipeline_context, dynamic_schema, bucketize_dynamic);
     auto frame = allocate_frame(pipeline_context);
 
-    return fetch_data(frame, pipeline_context, store, dynamic_schema, buffers).thenValue(
+    return fetch_data(frame, pipeline_context, store, dynamic_schema, shared_data).thenValue(
         [pipeline_context, frame, read_options](auto &&) mutable {
             ScopedGILLock gil_lock;
             reduce_and_fix_columns(pipeline_context, frame, read_options);
         }).thenValue(
-        [index_segment_reader, frame, index_key, buffers](auto &&) {
+        [index_segment_reader, frame, index_key, shared_data](auto &&) {
             return ReadVersionOutput{VersionedItem{to_atom(index_key)},
-                                  FrameAndDescriptor{frame, std::move(index_segment_reader->mutable_tsd()), {}, buffers}};
+                                  FrameAndDescriptor{frame, std::move(index_segment_reader->mutable_tsd()), {}, shared_data.buffers()}};
         });
 }
 
@@ -1093,7 +1093,7 @@ std::vector<ReadVersionOutput> LocalVersionedEngine::batch_read_keys(
     auto i = 0u;
     util::check(read_queries.empty() || read_queries.size() == keys.size(), "Expected read queries to either be empty or equal to size of keys");
     for (auto&& [index_key, index_segment] : indexes) {
-        results_fut.emplace_back(async_read_direct(store(), keys[i], std::move(index_segment), read_queries.empty() ? ReadQuery{} : read_queries[i], std::make_shared<BufferHolder>(), read_options));
+        results_fut.emplace_back(async_read_direct(store(), keys[i], std::move(index_segment), read_queries.empty() ? ReadQuery{} : read_queries[i], DecodePathData{}, read_options));
         ++i;
     }
     Allocator::instance()->trim();
@@ -1124,7 +1124,7 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::te
                                          index_key,
                                          std::move(index_segment),
                                          read_query,
-                                         std::make_shared<BufferHolder>(),
+                                         DecodePathData{},
                                          read_options);
             })
         );

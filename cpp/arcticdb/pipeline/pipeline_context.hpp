@@ -35,6 +35,7 @@ struct PipelineContextRow {
     [[nodiscard]] const StringPool& string_pool() const;
     StringPool& string_pool();
     void set_string_pool(const std::shared_ptr<StringPool>& pool);
+    const std::shared_ptr<StringPool>& string_pool_ptr();
     void allocate_string_pool();
     [[nodiscard]] const SliceAndKey& slice_and_key() const;
     SliceAndKey& slice_and_key();

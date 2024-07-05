@@ -18,8 +18,9 @@
 
 namespace arcticdb {
 
-struct BufferHolder;
+struct DecodePathData;
 struct ColumnMapping;
+class StringPool;
 
 struct ITypeHandler {
     template<class Base>
@@ -35,8 +36,9 @@ struct ITypeHandler {
             const EncodedFieldImpl& encoded_field_info,
             const ColumnMapping& mapping,
             size_t dest_bytes,
-            const std::shared_ptr<BufferHolder>& buffers,
-            EncodingVersion encoding_version
+            const DecodePathData& shared_data,
+            EncodingVersion encoding_version,
+            const std::shared_ptr<StringPool>& string_pool
         ) {
             folly::poly_call<0>(
                 *this,
@@ -45,8 +47,9 @@ struct ITypeHandler {
                 encoded_field_info,
                 mapping,
                 dest_bytes,
-                buffers,
-                encoding_version
+                shared_data,
+                encoding_version,
+                string_pool
             );
         }
 

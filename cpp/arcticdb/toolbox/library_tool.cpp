@@ -60,6 +60,10 @@ void LibraryTool::write(VariantKey key, Segment& segment) {
     store_->write_compressed_sync(std::move(kv));
 }
 
+bool LibraryTool::key_exists(const VariantKey& key) {
+    return store_->key_exists_sync(key);
+}
+
 void LibraryTool::remove(VariantKey key) {
     store_->remove_key_sync(std::move(key), storage::RemoveOpts{});
 }

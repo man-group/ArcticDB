@@ -11,6 +11,7 @@
 #include <arcticdb/util/buffer_holder.hpp>
 #include <arcticdb/pipeline/column_mapping.hpp>
 #include <arcticdb/util/sparse_utils.hpp>
+#include <arcticdb/python/python_strings.hpp>
 
 namespace arcticdb {
 
@@ -61,8 +62,9 @@ void EmptyHandler::handle_type(
     const EncodedFieldImpl& field,
     const ColumnMapping& mapping,
     size_t dest_bytes,
-    const std::shared_ptr<BufferHolder>&,
-    EncodingVersion encoding_version
+    const DecodePathData&,
+    EncodingVersion encoding_version,
+    const std::shared_ptr<StringPool>&
 ) {
     ARCTICDB_SAMPLE(HandleEmpty, 0)
     util::check(dest != nullptr, "Got null destination pointer");
@@ -112,7 +114,7 @@ void BoolHandler::handle_type(
     const EncodedFieldImpl &field,
     const ColumnMapping& m,
     size_t,
-    const std::shared_ptr<BufferHolder>&,
+    const DecodePathData&,
     EncodingVersion encoding_version) {
     ARCTICDB_SAMPLE(HandleBool, 0)
     util::check(dest != nullptr, "Got null destination pointer");
@@ -153,6 +155,50 @@ void BoolHandler::default_initialize(void *dest, size_t byte_size) const {
     fill_with_none(reinterpret_cast<const PyObject**>(dest), byte_size / type_size());
 }
 
+void StringHandler::handle_type(
+    const uint8_t *&data,
+    uint8_t *dest,
+    const EncodedFieldImpl &field,
+    const ColumnMapping& m,
+    size_t,
+    const DecodePathData& shared_data,
+    EncodingVersion encoding_version,
+    const std::shared_ptr<StringPool>& ) {
+    ARCTICDB_SAMPLE(HandleBool, 0)
+    util::check(dest != nullptr, "Got null destination pointer in string handler");
+    util::check(field.has_ndarray(), "String handler expected array");
+    ARCTICDB_DEBUG(log::version(), "String handler got encoded field: {}", field.DebugString());
+    auto ptr_dest = reinterpret_cast<const PyObject**>(dest);
+    const auto &ndarray = field.ndarray();
+    const auto bytes = encoding_sizes::data_uncompressed_size(ndarray);
+    ChunkedBuffer decoded_data = ChunkedBuffer::presized(bytes);
+    SliceDataSink decoded_data_sink{decoded_data.data(), bytes};
+    std::optional<util::BitSet> sparse_map;
+    data += decode_field(m.source_type_desc_, field, data, decoded_data_sink, sparse_map, encoding_version);
+    DynamicStringReducer string_reducer{shared_data, m.num_rows_};
+    if (sparse_map.has_value()) {
+        ARCTICDB_TRACE(log::codec(), "String handler using a sparse map");
+       // unsigned last_row = 0u;
+       // for (auto en = sparse_map->first(); en < sparse_map->end(); ++en, last_row++) {
+
+        //}
+        //fill_with_none(ptr_dest, m.num_rows_ - last_row);
+        util::raise_rte("Sparse not handled");
+    } else {
+        ARCTICDB_TRACE(log::codec(), "String handler didn't find a sparse map. Assuming dense array.");
+        string_reducer.reduce(m.source_type_desc_, m.dest_type_desc_, m.num_rows_, );
+    }
+    string_reducer.finalize();
+}
+
+int StringHandler::type_size() const {
+    return sizeof(PyObject *);
+}
+
+void StringHandler::default_initialize(void *dest, size_t byte_size) const {
+    fill_with_none(reinterpret_cast<const PyObject**>(dest), byte_size / type_size());
+}
+
 std::mutex ArrayHandler::initialize_array_mutex;
 
 void ArrayHandler::handle_type(
@@ -161,8 +207,9 @@ void ArrayHandler::handle_type(
     const EncodedFieldImpl &field,
     const ColumnMapping& m,
     size_t,
-    const std::shared_ptr<BufferHolder>& buffers,
-    EncodingVersion encoding_version
+    const DecodePathData& shared_data,
+    EncodingVersion encoding_version,
+    const std::shared_ptr<StringPool>&
 ) {
     ARCTICDB_SAMPLE(HandleArray, 0)
     util::check(field.has_ndarray(), "Expected ndarray in array object handler");
@@ -173,7 +220,7 @@ void ArrayHandler::handle_type(
         fill_with_none(ptr_dest, m.num_rows_);
         return;
     }
-    std::shared_ptr<Column> column = buffers->get_buffer(m.source_type_desc_, true);
+    std::shared_ptr<Column> column = shared_data.buffers()->get_buffer(m.source_type_desc_, true);
     column->check_magic();
     ARCTICDB_DEBUG(log::version(), "Column got buffer at {}", uintptr_t(column.get()));
     auto bv = std::make_optional(util::BitSet{});

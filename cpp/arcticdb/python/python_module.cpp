@@ -290,16 +290,35 @@ void register_metrics(py::module && m){
     ;
 }
 
+void register_array_types() {
+    using namespace arcticdb;
+    constexpr std::array<DataType, 5> array_data_types = {
+        DataType::INT64, DataType::FLOAT64, DataType::EMPTYVAL, DataType::FLOAT32, DataType::INT32};
+
+    for (auto data_type : array_data_types) {
+        TypeHandlerRegistry::instance()->register_handler(make_array_type(data_type), arcticdb::ArrayHandler());
+    }
+}
+
+void register_string_types() {
+    using namespace arcticdb;
+    constexpr std::array<DataType, 5> string_data_types = {
+        DataType::ASCII_DYNAMIC64, DataType::UTF_DYNAMIC64};
+
+    for (auto data_type :string_data_types) {
+        TypeHandlerRegistry::instance()->register_handler(make_array_type(data_type), arcticdb::StringHandler());
+    }
+}
+
 /// Register handling of non-trivial types. For more information @see arcticdb::TypeHandlerRegistry and
 /// @see arcticdb::ITypeHandler
 void register_type_handlers() {
     using namespace arcticdb;
-    TypeHandlerRegistry::instance()->register_handler(TypeDescriptor{DataType::EMPTYVAL, Dimension::Dim0}, arcticdb::EmptyHandler());
-    constexpr std::array<DataType, 5> allowed_array_types = {DataType::INT64, DataType::FLOAT64, DataType::EMPTYVAL, DataType::FLOAT32, DataType::INT32};
-    for(const DataType& data_type : allowed_array_types) {
-        TypeHandlerRegistry::instance()->register_handler(TypeDescriptor{data_type, Dimension::Dim1}, arcticdb::ArrayHandler());
-    }
-    TypeHandlerRegistry::instance()->register_handler(TypeDescriptor{DataType::BOOL_OBJECT8, Dimension::Dim0}, arcticdb::BoolHandler());
+    TypeHandlerRegistry::instance()->register_handler(make_scalar_type(DataType::EMPTYVAL), arcticdb::EmptyHandler());
+    TypeHandlerRegistry::instance()->register_handler(make_scalar_type(DataType::BOOL_OBJECT8),  arcticdb::BoolHandler());
+
+    register_array_types();
+    register_string_types();
 }
 
 PYBIND11_MODULE(arcticdb_ext, m) {

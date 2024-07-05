@@ -487,6 +487,10 @@ inline TypeDescriptor make_scalar_type(DataType dt) {
     return TypeDescriptor{dt, Dimension::Dim0};
 }
 
+inline TypeDescriptor make_array_type(DataType dt) {
+    return TypeDescriptor{dt, Dimension::Dim1};
+}
+
 template<typename DT, typename D>
 struct TypeDescriptorTag {
     static_assert(std::is_base_of_v<DataTypeTagBase, DT>);

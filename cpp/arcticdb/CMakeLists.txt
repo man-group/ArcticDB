@@ -503,7 +503,7 @@ set(arcticdb_srcs
         version/version_map_batch_methods.cpp
         storage/s3/ec2_utils.cpp
         storage/lmdb/lmdb.hpp
-        )
+        util/spinlock.hpp python/python_strings.cpp python/python_strings.hpp pipeline/string_reducers.hpp)
 
 if(${ARCTICDB_INCLUDE_ROCKSDB})
     list (APPEND arcticdb_srcs
