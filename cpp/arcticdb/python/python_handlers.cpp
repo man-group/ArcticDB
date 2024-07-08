@@ -115,7 +115,8 @@ void BoolHandler::handle_type(
     const ColumnMapping& m,
     size_t,
     const DecodePathData&,
-    EncodingVersion encoding_version) {
+    EncodingVersion encoding_version,
+    const std::shared_ptr<StringPool>& ) {
     ARCTICDB_SAMPLE(HandleBool, 0)
     util::check(dest != nullptr, "Got null destination pointer");
     util::check(field.has_ndarray(), "Bool handler expected array");
@@ -163,19 +164,19 @@ void StringHandler::handle_type(
     size_t,
     const DecodePathData& shared_data,
     EncodingVersion encoding_version,
-    const std::shared_ptr<StringPool>& ) {
+    const std::shared_ptr<StringPool>& string_pool) {
     ARCTICDB_SAMPLE(HandleBool, 0)
     util::check(dest != nullptr, "Got null destination pointer in string handler");
     util::check(field.has_ndarray(), "String handler expected array");
     ARCTICDB_DEBUG(log::version(), "String handler got encoded field: {}", field.DebugString());
-    auto ptr_dest = reinterpret_cast<const PyObject**>(dest);
     const auto &ndarray = field.ndarray();
     const auto bytes = encoding_sizes::data_uncompressed_size(ndarray);
     ChunkedBuffer decoded_data = ChunkedBuffer::presized(bytes);
     SliceDataSink decoded_data_sink{decoded_data.data(), bytes};
     std::optional<util::BitSet> sparse_map;
     data += decode_field(m.source_type_desc_, field, data, decoded_data_sink, sparse_map, encoding_version);
-    DynamicStringReducer string_reducer{shared_data, m.num_rows_};
+    auto ptr_dest = reinterpret_cast<PyObject**>(dest);
+    DynamicStringReducer string_reducer{shared_data, ptr_dest, m.num_rows_};
     if (sparse_map.has_value()) {
         ARCTICDB_TRACE(log::codec(), "String handler using a sparse map");
        // unsigned last_row = 0u;
@@ -186,7 +187,7 @@ void StringHandler::handle_type(
         util::raise_rte("Sparse not handled");
     } else {
         ARCTICDB_TRACE(log::codec(), "String handler didn't find a sparse map. Assuming dense array.");
-        string_reducer.reduce(m.source_type_desc_, m.dest_type_desc_, m.num_rows_, );
+        string_reducer.reduce(m.source_type_desc_, m.dest_type_desc_, m.num_rows_, *string_pool, reinterpret_cast<const position_t*>(decoded_data.data()));
     }
     string_reducer.finalize();
 }

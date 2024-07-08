@@ -100,19 +100,19 @@ inline void DynamicStringReducer::process_string_views(
 
     switch (string_constructor) {
     case PyStringConstructor::Unicode_FromUnicode:
-        if (unique_string_map_)
+        if (shared_data_.unique_string_map())
             assign_strings_shared<UnicodeFromUnicodeCreator>(end, ptr_src, has_type_conversion, string_pool);
         else
             assign_strings_local<UnicodeFromUnicodeCreator>(end, ptr_src, has_type_conversion, string_pool);
         break;
     case PyStringConstructor::Unicode_FromStringAndSize:
-        if (unique_string_map_)
+        if (shared_data_.unique_string_map())
             assign_strings_shared<UnicodeFromStringAndSizeCreator>(end, ptr_src, has_type_conversion, string_pool);
         else
             assign_strings_local<UnicodeFromStringAndSizeCreator>(end, ptr_src, has_type_conversion, string_pool);
         break;
     case PyStringConstructor::Bytes_FromStringAndSize:
-        if (unique_string_map_)
+        if (shared_data_.unique_string_map())
             assign_strings_shared<BytesFromStringAndSizeCreator>(end, ptr_src, has_type_conversion, string_pool);
         else
             assign_strings_local<BytesFromStringAndSizeCreator>(end, ptr_src, has_type_conversion, string_pool);
@@ -122,8 +122,10 @@ inline void DynamicStringReducer::process_string_views(
 
 DynamicStringReducer::DynamicStringReducer(
     DecodePathData shared_data,
+    PyObject** ptr_dest,
     size_t total_rows) :
         shared_data_(std::move(shared_data)),
+        ptr_dest_(ptr_dest),
     py_nan_(std::shared_ptr<PyObject>(create_py_nan(shared_data_.spin_lock()), [spinlock=shared_data_.spin_lock()](PyObject *py_obj) {
         spinlock->lock();
         Py_DECREF(py_obj);

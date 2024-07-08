@@ -306,7 +306,7 @@ void register_string_types() {
         DataType::ASCII_DYNAMIC64, DataType::UTF_DYNAMIC64};
 
     for (auto data_type :string_data_types) {
-        TypeHandlerRegistry::instance()->register_handler(make_array_type(data_type), arcticdb::StringHandler());
+        TypeHandlerRegistry::instance()->register_handler(make_scalar_type(data_type), arcticdb::StringHandler());
     }
 }
 

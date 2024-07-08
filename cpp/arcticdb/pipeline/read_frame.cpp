@@ -366,7 +366,7 @@ void decode_into_frame_static(
                 shared_data,
                 encoding_version,
                 m,
-                context.string_pool()
+                context.string_pool_ptr()
             );
             ARCTICDB_TRACE(log::codec(), "Decoded column {} to position {}", field_name, data - begin);
 

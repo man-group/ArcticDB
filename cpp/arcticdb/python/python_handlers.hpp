@@ -24,7 +24,8 @@ struct EmptyHandler {
         const ColumnMapping &mapping,
         size_t dest_bytes,
         const DecodePathData& shared_data,
-        EncodingVersion encoding_version
+        EncodingVersion encoding_version,
+        const std::shared_ptr<StringPool>&
     );
 
     int type_size() const;
@@ -57,7 +58,7 @@ struct BoolHandler {
         const ColumnMapping &mapping,
         size_t dest_bytes,
         const DecodePathData& shared_data,
-        EncodingVersion encding_version,
+        EncodingVersion encoding_version,
         const std::shared_ptr<StringPool>&
     );
 

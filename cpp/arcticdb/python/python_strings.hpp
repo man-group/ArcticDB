@@ -44,17 +44,22 @@ public:
 
 class DynamicStringReducer  {
     size_t row_ = 0U;
-    PyObject** ptr_dest_ = nullptr;
-    std::shared_ptr<UniqueStringMapType> unique_string_map_;
     DecodePathData shared_data_;
+    PyObject ** ptr_dest_;
     std::shared_ptr<PyObject> py_nan_;
     size_t total_rows_;
 public:
     DynamicStringReducer(
         DecodePathData shared_data,
+        PyObject** ptr_dest_,
         size_t total_rows);
 
-    void reduce(TypeDescriptor source_type, TypeDescriptor target_type, size_t num_rows, const StringPool& string_pool, const position_t* ptr_src);
+    void reduce(
+        TypeDescriptor source_type,
+        TypeDescriptor target_type,
+        size_t num_rows,
+        const StringPool& string_pool,
+        const position_t* ptr_src);
 
     void finalize();
 
@@ -116,7 +121,7 @@ private:
                 inc_ref(py_nan_.get());
             } else {
                 const auto sv = get_string_from_pool(offset, string_pool);
-                if (auto it = unique_string_map_->find(sv); it != unique_string_map_->end()) {
+                if (auto it = shared_data_.unique_string_map()->find(sv); it != shared_data_.unique_string_map()->end()) {
                     *ptr_dest_ = it->second;
                     safe_incref(*ptr_dest_);
                 } else {
@@ -124,7 +129,7 @@ private:
                     *ptr_dest_ = StringCreator::create(sv, has_type_conversion) ;
                     Py_INCREF(*ptr_dest_);
                     lock().unlock();
-                    unique_string_map_->emplace(sv, *ptr_dest_);
+                    shared_data_.unique_string_map()->emplace(sv, *ptr_dest_);
                 }
             }
         }
@@ -199,8 +204,6 @@ private:
         size_t end,
         const entity::position_t* ptr_src,
         const StringPool& string_pool);
-
-
 };
 
 } // namespace arcticdb
