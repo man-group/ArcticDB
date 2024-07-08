@@ -1197,6 +1197,9 @@ FrameAndDescriptor read_dataframe_impl(
     ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
 
     DecodePathData shared_data;
+    if(read_options.optimise_string_memory_)
+        shared_data.set_optimize_for_memory();
+
     auto frame = do_direct_read_or_process(store, read_query, read_options, pipeline_context, shared_data);
 
     ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");

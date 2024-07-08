@@ -109,6 +109,7 @@ private:
 
     template<typename StringCreator>
     void assign_strings_shared(size_t end, const entity::position_t* ptr_src, bool has_type_conversion, const StringPool& string_pool) {
+        ARCTICDB_SAMPLE(AssignStringsShared, 0)
         auto none = get_py_none();
         size_t none_count = 0u;
         for (; row_ < end; ++row_, ++ptr_src, ++ptr_dest_) {
@@ -144,6 +145,7 @@ private:
 
     template<typename StringCreator>
     void assign_strings_local(size_t end, const entity::position_t* ptr_src, bool has_type_conversion, const StringPool& string_pool) {
+        ARCTICDB_SAMPLE(AssignStringsLocal, 0)
         auto none = get_py_none();
         size_t none_count = 0u;
 
@@ -152,7 +154,7 @@ private:
         auto row = row_;
         auto src = ptr_src;
         for (; row < end; ++row, ++src) {
-            const auto offset = *ptr_src;
+            const auto offset = *src;
             if(offset != not_a_string() && offset != nan_placeholder()) {
                 ++unique_counts[offset];
             }
@@ -162,6 +164,7 @@ private:
         py_strings.reserve(unique_counts.size());
 
         {
+            ARCTICDB_SUBSAMPLE(CreatePythonStrings, 0)
             py::gil_scoped_acquire gil_lock;
             for (const auto &[offset, count] : unique_counts) {
                 const auto sv = get_string_from_pool(offset, string_pool);
@@ -173,8 +176,9 @@ private:
             }
         }
 
-        for (; row_ < end; ++row_, ++ptr_dest_) {
-            auto offset = *ptr_src;
+        ARCTICDB_SUBSAMPLE(WriteStringsToColumn, 0)
+        for (; row_ < end; ++row_, ++ptr_dest_, ++ptr_src) {
+            const auto offset = *ptr_src;
             if(offset == not_a_string()) {
                 *ptr_dest_ = none->ptr();
                 ++none_count;

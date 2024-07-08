@@ -48,6 +48,7 @@ struct DecodePathDataImpl {
     LazyInit<BufferHolder> buffer_holder_;
     LazyInit<SpinLock> spin_lock_;
     LazyInit<UniqueStringMapType> unique_string_map_;
+    bool optimize_for_memory_ = false;
 };
 
 struct DecodePathData {
@@ -62,6 +63,14 @@ public:
 
     const std::shared_ptr<UniqueStringMapType>& unique_string_map() const {
         return data_->unique_string_map_.instance();
+    }
+
+    bool optimize_for_memory() const {
+        return data_->optimize_for_memory_;
+    }
+
+    void set_optimize_for_memory() {
+        data_->optimize_for_memory_ = true;
     }
 private:
     std::shared_ptr<DecodePathDataImpl> data_ = std::make_shared<DecodePathDataImpl>();

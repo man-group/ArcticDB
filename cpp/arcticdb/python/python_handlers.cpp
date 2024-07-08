@@ -165,7 +165,7 @@ void StringHandler::handle_type(
     const DecodePathData& shared_data,
     EncodingVersion encoding_version,
     const std::shared_ptr<StringPool>& string_pool) {
-    ARCTICDB_SAMPLE(HandleBool, 0)
+    ARCTICDB_SAMPLE(HandleString, 0)
     util::check(dest != nullptr, "Got null destination pointer in string handler");
     util::check(field.has_ndarray(), "String handler expected array");
     ARCTICDB_DEBUG(log::version(), "String handler got encoded field: {}", field.DebugString());

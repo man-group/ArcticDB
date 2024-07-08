@@ -100,19 +100,19 @@ inline void DynamicStringReducer::process_string_views(
 
     switch (string_constructor) {
     case PyStringConstructor::Unicode_FromUnicode:
-        if (shared_data_.unique_string_map())
+        if (shared_data_.optimize_for_memory())
             assign_strings_shared<UnicodeFromUnicodeCreator>(end, ptr_src, has_type_conversion, string_pool);
         else
             assign_strings_local<UnicodeFromUnicodeCreator>(end, ptr_src, has_type_conversion, string_pool);
         break;
     case PyStringConstructor::Unicode_FromStringAndSize:
-        if (shared_data_.unique_string_map())
+        if (shared_data_.optimize_for_memory())
             assign_strings_shared<UnicodeFromStringAndSizeCreator>(end, ptr_src, has_type_conversion, string_pool);
         else
             assign_strings_local<UnicodeFromStringAndSizeCreator>(end, ptr_src, has_type_conversion, string_pool);
         break;
     case PyStringConstructor::Bytes_FromStringAndSize:
-        if (shared_data_.unique_string_map())
+        if (shared_data_.optimize_for_memory())
             assign_strings_shared<BytesFromStringAndSizeCreator>(end, ptr_src, has_type_conversion, string_pool);
         else
             assign_strings_local<BytesFromStringAndSizeCreator>(end, ptr_src, has_type_conversion, string_pool);

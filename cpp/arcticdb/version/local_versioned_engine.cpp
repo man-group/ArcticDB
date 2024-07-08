@@ -345,6 +345,7 @@ ReadVersionOutput LocalVersionedEngine::read_dataframe_version_internal(
     const VersionQuery& version_query,
     ReadQuery& read_query,
     const ReadOptions& read_options) {
+    ARCTICDB_SAMPLE(ReadDataFrameVersion, 0)
     py::gil_scoped_release release_gil;    
     auto version = get_version_to_read(stream_id, version_query);
     std::variant<VersionedItem, StreamId> identifier;
@@ -1069,7 +1070,6 @@ folly::Future<ReadVersionOutput> async_read_direct(
 
     return fetch_data(frame, pipeline_context, store, dynamic_schema, shared_data).thenValue(
         [pipeline_context, frame, read_options](auto &&) mutable {
-            ScopedGILLock gil_lock;
             reduce_and_fix_columns(pipeline_context, frame, read_options);
         }).thenValue(
         [index_segment_reader, frame, index_key, shared_data](auto &&) {
