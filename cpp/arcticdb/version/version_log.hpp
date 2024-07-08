@@ -25,24 +25,11 @@ namespace arcticdb {
     };
 
     inline void log_event(const std::shared_ptr<StreamSink>& store, const StreamId& id, std::string action, VersionId version_id=0) {
-        static const auto max_trial_config = ConfigsMap::instance()->get_int("Storage.MaxOpLogWriteRetries", 2);
-        auto max_trials = max_trial_config;
-        while (true) {
-            try {
+        ExponentialBackoff<StorageException>(100, 2000)
+            .go([&store, &id, &action, &version_id]() {
                 SegmentInMemory seg{log_stream_descriptor(action)};
                 store->write_sync(KeyType::LOG, version_id, StreamId{action}, IndexValue{id}, IndexValue{id}, std::move(seg));
-                break;
-            } catch (const std::exception &err) {
-                if (--max_trials <= 0) {
-                    throw;
-                }
-                log::storage().warn(
-                        "Failed to write op log for operation: {} for stream {} because of:{} . Retrying",
-                        action, id, err.what());
-                continue;
-            }
-        }
-        
+            });
     }
 
     inline void log_write(const std::shared_ptr<StreamSink>& store, const StreamId& symbol,  VersionId version_id) {
