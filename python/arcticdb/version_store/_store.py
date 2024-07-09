@@ -2209,6 +2209,9 @@ class NativeVersionStore:
         Note that this requires data to be removed from the underlying storage which can be slow if the underlying
         delete primitives offered by the storage are slow.
 
+        This method does not remove any ``incomplete`` data, i.e. data written with ``append(..., incomplete=True)`` or
+        ``write(..., incomplete=True)``, use ``remove_incomplete`` for that.
+
         Parameters
         ----------
         symbol : `str`
