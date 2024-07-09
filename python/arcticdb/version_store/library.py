@@ -1338,7 +1338,7 @@ class Library:
 
         Note that this may require data to be removed from the underlying storage which can be slow.
 
-        This method does not remove any staged data, use `delete_staged_data` for that.
+        This method does not remove any staged data, use ``delete_staged_data`` for that.
 
         If no symbol called ``symbol`` exists then this is a no-op. In particular this method does not raise in this case.
 
