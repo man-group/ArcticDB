@@ -537,6 +537,10 @@ static void hash_field(const arcticdb::proto::encoding::EncodedField &field, Has
 
 HashedValue hash_segment_header(const arcticdb::proto::encoding::SegmentHeader &hdr) {
     HashAccum accum;
+    if(hdr.has_descriptor_field()) {
+        hash_field(hdr.descriptor_field(), accum);
+    }
+
     if (hdr.has_metadata_field()) {
         hash_field(hdr.metadata_field(), accum);
     }

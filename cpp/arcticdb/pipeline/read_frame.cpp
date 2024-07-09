@@ -1128,6 +1128,7 @@ struct ReduceColumnTask : async::BaseTask {
             }
             if (is_sequence_type(field_type)) {
                 auto string_reducer = get_string_reducer(column, context_, frame_, frame_field, *slice_map_, unique_string_map_, py_nan_, lock_, do_lock_);
+                util::check(column_data != std::end(slice_map_->columns_), "Failed to find mapping for field {}", frame_field.name());
                 for (const auto &row : column_data->second) {
                     PipelineContextRow context_row{context_, row.second.context_index_};
                     if(context_row.slice_and_key().slice().row_range.diff() > 0)
