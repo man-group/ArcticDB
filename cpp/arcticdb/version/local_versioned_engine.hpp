@@ -116,11 +116,13 @@ public:
 
     std::optional<VersionedItem> get_specific_version(
         const StreamId &stream_id,
-        SignedVersionId signed_version_id);
+        SignedVersionId signed_version_id,
+        const VersionQuery& version_query);
 
     std::optional<VersionedItem> get_version_at_time(
         const StreamId& stream_id,
-        timestamp as_of);
+        timestamp as_of,
+        const VersionQuery& version_query);
 
     std::optional<VersionedItem> get_version_from_snapshot(
         const StreamId& stream_id,
