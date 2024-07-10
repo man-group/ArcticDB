@@ -1051,22 +1051,15 @@ class Library:
         1       6
         2       7
         """
-        if columns == []:
-            return self._nvs._read_index_columns(
-                symbol=symbol,
-                as_of=as_of,
-                date_range=date_range,
-                row_range=row_range
-            )
-        else:
-            return self._nvs.read(
-                symbol=symbol,
-                as_of=as_of,
-                date_range=date_range,
-                row_range=row_range,
-                columns=columns,
-                query_builder=query_builder,
-            )
+        return self._nvs.read(
+            symbol=symbol,
+            as_of=as_of,
+            date_range=date_range,
+            row_range=row_range,
+            columns=columns,
+            query_builder=query_builder,
+            implement_read_index=True
+        )
 
     def read_batch(
         self, symbols: List[Union[str, ReadRequest]], query_builder: Optional[QueryBuilder] = None

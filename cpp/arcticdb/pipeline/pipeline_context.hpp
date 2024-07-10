@@ -244,6 +244,8 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
         util::check(static_cast<bool>(norm_meta_), "No normalization metadata defined");
         return norm_meta_->input_type_case() == arcticdb::proto::descriptors::NormalizationMetadata::InputTypeCase::kMsgPackFrame;
     }
+
+    bool only_index_column_selected() const;
 };
 
 }

@@ -746,6 +746,15 @@ void read_indexed_keys_to_pipeline(
         return;
 
     auto index_segment_reader = std::move(maybe_reader.value());
+    internal::check<ErrorCode::E_NOT_IMPLEMENTED>(
+        !(index_segment_reader.tsd().proto().normalization().has_custom() && read_query.columns &&
+          read_query.columns->empty()),
+        "Reading the index column is not supported when recursive or custom normalizers are used."
+    );
+    internal::check<ErrorCode::E_NOT_IMPLEMENTED>(
+        !(index_segment_reader.is_pickled() && read_query.columns && read_query.columns->empty()),
+        "Reading index columns is not supported with pickled data."
+    );
     ARCTICDB_DEBUG(log::version(), "Read index segment with {} keys", index_segment_reader.size());
     check_column_and_date_range_filterable(index_segment_reader, read_query);
 
@@ -1174,8 +1183,13 @@ FrameAndDescriptor read_dataframe_impl(
         read_indexed_keys_to_pipeline(store, pipeline_context, std::get<VersionedItem>(version_info), read_query, read_options);
     }
 
-    if(pipeline_context->multi_key_)
+    if (pipeline_context->multi_key_) {
+        internal::check<ErrorCode::E_NOT_IMPLEMENTED>(
+            !read_query.columns || (!pipeline_context->only_index_column_selected() && !read_query.columns->empty()),
+            "Reading the index column is not supported when recursive or custom normalizers are used."
+        );
         return read_multi_key(store, *pipeline_context->multi_key_);
+    }
 
     if(opt_false(read_options.incompletes_)) {
         util::check(std::holds_alternative<IndexRange>(read_query.row_filter), "Streaming read requires date range filter");
@@ -1199,7 +1213,12 @@ FrameAndDescriptor read_dataframe_impl(
 
     ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
     reduce_and_fix_columns(pipeline_context, frame, read_options);
-    return {frame, timeseries_descriptor_from_pipeline_context(pipeline_context, {}, pipeline_context->bucketize_dynamic_), {}, buffers};
+    const bool only_index_column_selected = pipeline_context->only_index_column_selected();
+    if (only_index_column_selected &&
+        pipeline_context->descriptor().index().type() == IndexDescriptor::Type::ROWCOUNT) {
+        frame.set_row_id(pipeline_context->rows_ - 1);
+    }
+    return {std::move(frame), timeseries_descriptor_from_pipeline_context(pipeline_context, {}, pipeline_context->bucketize_dynamic_), {}, buffers};
 }
 
 VersionedItem collate_and_write(

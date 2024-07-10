@@ -1541,8 +1541,7 @@ class NativeVersionStore:
         if date_range is not None:
             read_query.row_filter = _normalize_dt_range(date_range)
 
-        if columns is not None:
-            read_query.columns = list(columns)
+        read_query.columns = columns
 
         return read_query
 
@@ -1678,6 +1677,9 @@ class NativeVersionStore:
         -------
         VersionedItem
         """
+        implement_read_index = "implement_read_index" in kwargs and kwargs["implement_read_index"]
+        if not implement_read_index and columns == []:
+            columns = None
         version_query, read_options, read_query = self._get_queries(
             symbol=symbol,
             as_of=as_of,
@@ -1688,7 +1690,32 @@ class NativeVersionStore:
             **kwargs,
         )
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
-        return self._post_process_dataframe(read_result, read_query, query_builder)
+        index_type = read_result.norm.df.common.WhichOneof("index_type")
+        index_is_rowcount = index_type == "index" and not read_result.norm.df.common.index.is_physically_stored
+        # Usually the length of the rowcount index is determined by the length of the columns in the DF
+        # if only the index is selected this is impossible.
+        if implement_read_index and columns == [] and index_is_rowcount:
+            index_meta = read_result.norm.df.common.index
+            if read_result.frame_data.row_count > 0:
+                step = index_meta.step if index_meta.step != 0 else 1
+                stop = index_meta.start + read_result.frame_data.row_count * step
+                index = pd.RangeIndex(start=index_meta.start, stop=stop, step=step)
+                if row_range:
+                    index=index[row_range[0]:row_range[1]]
+            else:
+                index = pd.DatetimeIndex([])
+            meta = denormalize_user_metadata(read_result.udm, self._normalizer)
+            return VersionedItem(
+                symbol=read_result.version.symbol,
+                library=self._library.library_path,
+                data=pd.DataFrame({}, index=index),
+                version=read_result.version.version,
+                metadata=meta,
+                host=self.env,
+                timestamp=read_result.version.timestamp
+            )
+        else:
+            return self._post_process_dataframe(read_result, read_query, query_builder)
 
     def head(
         self,
