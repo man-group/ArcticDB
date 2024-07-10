@@ -1633,6 +1633,27 @@ class NativeVersionStore:
     def _get_column_stats(self, column_stats):
         return None if column_stats is None else _ColumnStats(column_stats)
 
+    def _postprocess_df_with_only_rowcount_idx(self, read_result, row_range):
+        index_meta = read_result.norm.df.common.index
+        if read_result.frame_data.row_count > 0:
+            step = index_meta.step if index_meta.step != 0 else 1
+            stop = index_meta.start + read_result.frame_data.row_count * step
+            index = pd.RangeIndex(start=index_meta.start, stop=stop, step=step)
+            if row_range:
+                index=index[row_range[0]:row_range[1]]
+        else:
+            index = pd.DatetimeIndex([])
+        meta = denormalize_user_metadata(read_result.udm, self._normalizer)
+        return VersionedItem(
+            symbol=read_result.version.symbol,
+            library=self._library.library_path,
+            data=pd.DataFrame({}, index=index),
+            version=read_result.version.version,
+            metadata=meta,
+            host=self.env,
+            timestamp=read_result.version.timestamp
+        )
+
     def read(
         self,
         symbol: str,
@@ -1692,28 +1713,8 @@ class NativeVersionStore:
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
         index_type = read_result.norm.df.common.WhichOneof("index_type")
         index_is_rowcount = index_type == "index" and not read_result.norm.df.common.index.is_physically_stored
-        # Usually the length of the rowcount index is determined by the length of the columns in the DF
-        # if only the index is selected this is impossible.
         if implement_read_index and columns == [] and index_is_rowcount:
-            index_meta = read_result.norm.df.common.index
-            if read_result.frame_data.row_count > 0:
-                step = index_meta.step if index_meta.step != 0 else 1
-                stop = index_meta.start + read_result.frame_data.row_count * step
-                index = pd.RangeIndex(start=index_meta.start, stop=stop, step=step)
-                if row_range:
-                    index=index[row_range[0]:row_range[1]]
-            else:
-                index = pd.DatetimeIndex([])
-            meta = denormalize_user_metadata(read_result.udm, self._normalizer)
-            return VersionedItem(
-                symbol=read_result.version.symbol,
-                library=self._library.library_path,
-                data=pd.DataFrame({}, index=index),
-                version=read_result.version.version,
-                metadata=meta,
-                host=self.env,
-                timestamp=read_result.version.timestamp
-            )
+            return self._postprocess_df_with_only_rowcount_idx(read_result, row_range)
         else:
             return self._post_process_dataframe(read_result, read_query, query_builder)
 
@@ -1744,14 +1745,21 @@ class NativeVersionStore:
         -------
         VersionedItem
         """
-
+        implement_read_index = "implement_read_index" in kwargs and kwargs["implement_read_index"]
+        if not implement_read_index and columns == []:
+            columns = None
         q = QueryBuilder()
         q = q._head(n)
         version_query, read_options, read_query = self._get_queries(
             symbol=symbol, as_of=as_of, date_range=None, row_range=None, columns=columns, query_builder=q, **kwargs
         )
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
-        return self._post_process_dataframe(read_result, read_query, q)
+        index_type = read_result.norm.df.common.WhichOneof("index_type")
+        index_is_rowcount = index_type == "index" and not read_result.norm.df.common.index.is_physically_stored
+        if implement_read_index and columns == [] and index_is_rowcount:
+            return self._postprocess_df_with_only_rowcount_idx(read_result, (0, n))
+        else:
+            return self._post_process_dataframe(read_result, read_query, q)
 
     def tail(
         self, symbol: str, n: int = 5, as_of: VersionQueryInput = None, columns: Optional[List[str]] = None, **kwargs
@@ -1776,13 +1784,21 @@ class NativeVersionStore:
         VersionedItem
         """
 
+        implement_read_index = "implement_read_index" in kwargs and kwargs["implement_read_index"]
+        if not implement_read_index and columns == []:
+            columns = None
         q = QueryBuilder()
         q = q._tail(n)
         version_query, read_options, read_query = self._get_queries(
             symbol=symbol, as_of=as_of, date_range=None, row_range=None, columns=columns, query_builder=q, **kwargs
         )
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
-        return self._post_process_dataframe(read_result, read_query, q)
+        index_type = read_result.norm.df.common.WhichOneof("index_type")
+        index_is_rowcount = index_type == "index" and not read_result.norm.df.common.index.is_physically_stored
+        if implement_read_index and columns == [] and index_is_rowcount:
+            return self._postprocess_df_with_only_rowcount_idx(read_result, (-n, None))
+        else:
+            return self._post_process_dataframe(read_result, read_query, q)
 
     def _read_dataframe(self, symbol, version_query, read_query, read_options):
         return ReadResult(*self.version_store.read_dataframe_version(symbol, version_query, read_query, read_options))

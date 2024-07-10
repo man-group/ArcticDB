@@ -1213,8 +1213,8 @@ FrameAndDescriptor read_dataframe_impl(
 
     ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
     reduce_and_fix_columns(pipeline_context, frame, read_options);
-    const bool only_index_column_selected = pipeline_context->only_index_column_selected();
-    if (only_index_column_selected &&
+    if (read_query.columns &&
+        read_query.columns->empty() &&
         pipeline_context->descriptor().index().type() == IndexDescriptor::Type::ROWCOUNT) {
         frame.set_row_id(pipeline_context->rows_ - 1);
     }

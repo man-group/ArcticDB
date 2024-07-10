@@ -1563,7 +1563,7 @@ class Library:
         -------
         VersionedItem object that contains a .data and .metadata element.
         """
-        return self._nvs.head(symbol=symbol, n=n, as_of=as_of, columns=columns)
+        return self._nvs.head(symbol=symbol, n=n, as_of=as_of, columns=columns, implement_read_index=True)
 
     def tail(
         self, symbol: str, n: int = 5, as_of: Optional[Union[int, str]] = None, columns: List[str] = None
@@ -1586,7 +1586,7 @@ class Library:
         -------
         VersionedItem object that contains a .data and .metadata element.
         """
-        return self._nvs.tail(symbol=symbol, n=n, as_of=as_of, columns=columns)
+        return self._nvs.tail(symbol=symbol, n=n, as_of=as_of, columns=columns, implement_read_index=True)
 
     @staticmethod
     def _info_to_desc(info: Dict[str, Any]) -> SymbolDescription:
