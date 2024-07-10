@@ -408,14 +408,6 @@ public:
     }
 
     const arcticdb::proto::storage::VersionStoreConfig& cfg() const override { return cfg_; }
-
-    ReadVersionOutput read_index_columns_internal(
-        const StreamId& stream_id,
-        const VersionQuery& version_query,
-        ReadQuery& read_query,
-        const ReadOptions& read_options
-    ) override;
-
 protected:
     VersionedItem compact_incomplete_dynamic(
             const StreamId& stream_id,

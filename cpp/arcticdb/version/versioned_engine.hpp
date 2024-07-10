@@ -181,12 +181,6 @@ public:
     virtual void set_store(std::shared_ptr<Store> store)= 0;
     virtual timestamp latest_timestamp(const std::string& symbol) = 0;
     virtual void flush_version_map() = 0;
-    virtual ReadVersionOutput read_index_columns_internal(
-        const StreamId& stream_id,
-        const VersionQuery& version_query,
-        ReadQuery& read_query,
-        const ReadOptions& read_options
-    ) = 0;
 };
 
 } // arcticdb::version_store

@@ -312,12 +312,6 @@ class PythonVersionStore : public LocalVersionedEngine {
         const std::optional<bool>& use_symbol_list = std::nullopt,
         const std::optional<bool>& all_symbols = std::nullopt);
 
-    ReadResult read_index_columns(
-        const StreamId& stream_id,
-        const VersionQuery& version_query,
-        ReadQuery& read_query,
-        const ReadOptions& read_options);
-
     size_t compact_symbol_list();
 
     void clear(const bool continue_on_error = true);
