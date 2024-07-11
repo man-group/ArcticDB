@@ -562,8 +562,6 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
     bool prune_previous_versions
     ) {
     ARCTICDB_SAMPLE(WriteVersionedMultiKey, 0)
-    py::gil_scoped_release release_gil;
-
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write_versioned_composite_data");
     auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id, VersionQuery{});
     auto version_id = get_next_version_from_key(maybe_prev);
@@ -582,7 +580,9 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
     }
 
     auto frames = create_input_tensor_frames(sub_keys, items, norm_metas, user_metas, cfg().write_options().empty_types());
+    auto release_gil = std::make_unique<py::gil_scoped_release>();
     auto index_keys = folly::collect(batch_write_internal(std::move(version_ids), sub_keys, std::move(frames), std::move(de_dup_maps), false)).get();
+    release_gil.reset();
     auto multi_key = write_multi_index_entry(store(), index_keys, stream_id, metastruct, user_meta, version_id);
     auto versioned_item = VersionedItem(to_atom(std::move(multi_key)));
     write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, maybe_prev);
