@@ -218,13 +218,16 @@ class TestReadIndexAsOf:
             )
         ]
     ])
-    def test_as_of_version(self, lmdb_version_store_static_and_dynamic, indexes):
+    @pytest.mark.parametrize("dynamic_schema", [False, True])
+    def test_as_of_version(self, lmdb_storage, lib_name, dynamic_schema, indexes):
         data = [list(range(0, len(index))) for index in indexes]
-        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": data[0]}, index=indexes[0]))
+        ac = lmdb_storage.create_arctic()
+        lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema))
+        lib.write("sym", pd.DataFrame({"col": data[0]}, index=indexes[0]))
         for i in range(1, len(indexes)):
-            lmdb_version_store_static_and_dynamic.append("sym", pd.DataFrame({"col": data[i]}, index=indexes[i]))
+            lib.append("sym", pd.DataFrame({"col": data[i]}, index=indexes[i]))
         for i in range(0, len(indexes)):
-            read_index_result = lmdb_version_store_static_and_dynamic.read("sym", columns=[], as_of=i, implement_read_index=True)
+            read_index_result = lib.read("sym", columns=[], as_of=i)
             assert isinstance(read_index_result, arcticdb.VersionedItem)
             assert read_index_result.symbol == "sym"
             assert read_index_result.version == i
@@ -240,12 +243,15 @@ class TestReadIndexAsOf:
             names=["datetime", "level"]
         )
     ])
-    def test_as_of_snapshot(self, lmdb_version_store_static_and_dynamic, index):
+    @pytest.mark.parametrize("dynamic_schema", [False, True])
+    def test_as_of_snapshot(self, lmdb_storage, lib_name, dynamic_schema, index):
         data = list(range(0, len(index)))
-        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": data}, index=index))
-        lmdb_version_store_static_and_dynamic.snapshot("snap")
-        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": [1]}, index=pd.RangeIndex(start=100, stop=101)))
-        result = lmdb_version_store_static_and_dynamic.read("sym", as_of="snap", columns=[], implement_read_index=True)
+        ac = lmdb_storage.create_arctic()
+        lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema))
+        lib.write("sym", pd.DataFrame({"col": data}, index=index))
+        lib.snapshot("snap")
+        lib.write("sym", pd.DataFrame({"col": [1]}, index=pd.RangeIndex(start=100, stop=101)))
+        result = lib.read("sym", as_of="snap", columns=[])
         assert isinstance(result, arcticdb.VersionedItem)
         assert result.symbol == "sym"
         assert result.version == 0
