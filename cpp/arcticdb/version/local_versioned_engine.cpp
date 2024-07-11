@@ -507,7 +507,7 @@ VersionedItem LocalVersionedEngine::sort_index(const StreamId& stream_id, bool d
         });
     }
 
-    auto total_rows = adjust_slice_rowcounts(slice_and_keys);
+    auto total_rows = adjust_slice_rowcounts(slice_and_keys, std::make_optional<size_t>(0U));
 
     auto index = index_type_from_descriptor(index_segment_reader.tsd().as_stream_descriptor());
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
