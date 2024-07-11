@@ -306,7 +306,7 @@ void adjust_slice_rowcounts(
     const std::shared_ptr<pipelines::PipelineContext>& pipeline_context);
 
 size_t get_slice_rowcounts(
-    std::vector<pipelines::SliceAndKey> & slice_and_keys);
+    std::vector<pipelines::SliceAndKey>& slice_and_keys);
 
 std::pair<size_t, size_t> offset_and_row_count(
     const std::shared_ptr<pipelines::PipelineContext>& context);
