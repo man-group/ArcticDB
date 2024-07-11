@@ -21,17 +21,17 @@ void StreamVersionData::react(const pipelines::VersionQuery &version_query) {
 
 void StreamVersionData::do_react(std::monostate) {
     ++count_;
-    load_strategy_ = union_of_undeleted_strategies(load_strategy_, LoadStrategy{LoadType::LOAD_LATEST, LoadObjective::UNDELETED});
+    load_strategy_ = union_of_undeleted_strategies(load_strategy_, LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY});
 }
 
 void StreamVersionData::do_react(const pipelines::SpecificVersionQuery &specific_version) {
     ++count_;
-    load_strategy_ = union_of_undeleted_strategies(load_strategy_, LoadStrategy{LoadType::LOAD_DOWNTO, LoadObjective::UNDELETED, specific_version.version_id_});
+    load_strategy_ = union_of_undeleted_strategies(load_strategy_, LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, specific_version.version_id_});
 }
 
 void StreamVersionData::do_react(const pipelines::TimestampVersionQuery &timestamp_query) {
     ++count_;
-    load_strategy_ = union_of_undeleted_strategies(load_strategy_, LoadStrategy{LoadType::LOAD_FROM_TIME, LoadObjective::UNDELETED, timestamp_query.timestamp_});
+    load_strategy_ = union_of_undeleted_strategies(load_strategy_, LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, timestamp_query.timestamp_});
 }
 
 void StreamVersionData::do_react(const pipelines::SnapshotVersionQuery &snapshot_query) {
