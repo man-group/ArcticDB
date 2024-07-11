@@ -537,7 +537,7 @@ TEST(Segment, ColumnNamesProduceDifferentHashes) {
     in_mem_seg_2.end_row();
 
     auto seg_1 = encode_dispatch(std::move(in_mem_seg_1), codec::default_lz4_codec(), EncodingVersion::V1);
-    auto seg_2 = encode_dispatch(std::move(in_mem_seg_2), codec::default_lz4_codec(), EncodingVersion::V2);
+    auto seg_2 = encode_dispatch(std::move(in_mem_seg_2), codec::default_lz4_codec(), EncodingVersion::V1);
 
     auto hash_1 = hash_segment_header(seg_1.header());
     auto hash_2 = hash_segment_header(seg_2.header());
@@ -567,7 +567,7 @@ TEST(Segment, ColumnNamesProduceDifferentHashesEmpty) {
     SegmentInMemory in_mem_seg_2{stream_desc_1.clone()};
 
     auto seg_1 = encode_dispatch(std::move(in_mem_seg_1), codec::default_lz4_codec(), EncodingVersion::V1);
-    auto seg_2 = encode_dispatch(std::move(in_mem_seg_2), codec::default_lz4_codec(), EncodingVersion::V2);
+    auto seg_2 = encode_dispatch(std::move(in_mem_seg_2), codec::default_lz4_codec(), EncodingVersion::V1);
 
     auto hash_1 = hash_segment_header(seg_1.header());
     auto hash_2 = hash_segment_header(seg_2.header());
