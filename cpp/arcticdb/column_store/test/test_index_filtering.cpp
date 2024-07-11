@@ -86,6 +86,7 @@ TEST(IndexFilter, Static) {
     for (auto &slice_and_key : slice_and_keys) {
         writer.add(slice_and_key.key(), slice_and_key.slice());
     }
+
     auto key_fut = writer.commit();
     auto key = std::move(key_fut).get();
     auto seg = mock_store->read(key, storage::ReadKeyOpts{}).get();

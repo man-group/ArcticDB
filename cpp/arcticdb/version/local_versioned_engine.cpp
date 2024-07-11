@@ -9,6 +9,7 @@
 #include <arcticdb/codec/default_codecs.hpp>
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/storage/storage.hpp>
+#include <arcticdb/storage/store.hpp>
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/util/optional_defaults.hpp>
 #include <arcticdb/version/snapshot.hpp>
@@ -33,6 +34,14 @@ LocalVersionedEngine::LocalVersionedEngine(
     initialize(library);
 }
 
+template<class ClockType>
+LocalVersionedEngine::LocalVersionedEngine(
+    const std::shared_ptr<Store>& store,
+    const ClockType&) :
+    store_(store),
+    symbol_list_(std::make_shared<SymbolList>(version_map_)){
+}
+
 void LocalVersionedEngine::initialize(const std::shared_ptr<storage::Library>& library) {
     configure(library->config());
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Created versioned engine at {} for library path {}  with config {}", uintptr_t(this),
@@ -49,6 +58,7 @@ void LocalVersionedEngine::initialize(const std::shared_ptr<storage::Library>& l
 }
 
 template LocalVersionedEngine::LocalVersionedEngine(const std::shared_ptr<storage::Library>& library, const util::SysClock&);
+template LocalVersionedEngine::LocalVersionedEngine(const std::shared_ptr<Store>& library, const util::SysClock&);
 template LocalVersionedEngine::LocalVersionedEngine(const std::shared_ptr<storage::Library>& library, const util::ManualClock&);
 
 folly::Future<folly::Unit> LocalVersionedEngine::delete_unreferenced_pruned_indexes(
@@ -504,7 +514,7 @@ VersionedItem LocalVersionedEngine::sort_index(const StreamId& stream_id, bool d
         });
     }
 
-    auto total_rows = adjust_slice_rowcounts(slice_and_keys);
+    auto total_rows = adjust_slice_rowcounts(slice_and_keys, std::make_optional<size_t>(0U));
 
     auto index = index_type_from_descriptor(index_segment_reader.tsd().as_stream_descriptor());
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();

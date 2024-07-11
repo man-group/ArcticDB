@@ -47,23 +47,7 @@ public:
         agg_.segment().set_timeseries_descriptor(std::move(meta_)); //TODO very weird, why this short-lived member?
     }
 
-    void add(const arcticdb::entity::AtomKey &key, const FrameSlice &slice) {
-        // ensure sorted by col group then row group, this is normally the case but in append scenario,
-        // one will need to ensure that this holds, otherwise the assumptions in the read pipeline will be
-        // broken.
-        ARCTICDB_DEBUG(log::version(), "Writing key {} to the index", key);
-        util::check_arg(!current_col_.has_value() || *current_col_ <= slice.col_range.first,
-                        "expected increasing column group, last col range left value {}, arg {}",
-                        current_col_.value_or(-1), slice.col_range
-        );
-
-        bool new_col_group = !current_col_.has_value() || *current_col_ < slice.col_range.first;
-        util::check_arg(!current_row_.has_value() || new_col_group
-                        ||
-                        (*current_col_ == slice.col_range.first && *current_row_ < slice.row_range.first),
-                        "expected increasing row group, last col range left value {}, arg {}",
-                        current_col_.value_or(-1), slice.col_range
-        );
+    void add_unchecked(const arcticdb::entity::AtomKey& key, const FrameSlice& slice) {
         auto add_to_row ARCTICDB_UNUSED = [&](auto &rb) {
             rb.set_scalar(int(Fields::version_id), key.version_id());
             rb.set_scalar(int(Fields::creation_ts), key.creation_ts());
@@ -94,6 +78,27 @@ public:
             std::visit([&rb](auto &&val) { rb.set_scalar(int(Fields::start_index), val); }, key.start_index());
             add_to_row(rb);
         });
+    }
+
+    void add(const arcticdb::entity::AtomKey &key, const FrameSlice &slice) {
+        // ensure sorted by col group then row group, this is normally the case but in append scenario,
+        // one will need to ensure that this holds, otherwise the assumptions in the read pipeline will be
+        // broken.
+        ARCTICDB_DEBUG(log::version(), "Writing key {} to the index", key);
+        util::check_arg(!current_col_.has_value() || *current_col_ <= slice.col_range.first,
+                        "expected increasing column group, last col range left value {}, arg {}",
+                        current_col_.value_or(-1), slice.col_range
+        );
+
+        bool new_col_group = !current_col_.has_value() || *current_col_ < slice.col_range.first;
+        util::check_arg(!current_row_.has_value() || new_col_group
+                        ||
+                        (*current_col_ == slice.col_range.first && *current_row_ < slice.row_range.first),
+                        "expected increasing row group, last col range left value {}, arg {}",
+                        current_col_.value_or(-1), slice.col_range
+        );
+
+        add_unchecked(key, slice);
 
         if (new_col_group) {
             current_col_ = slice.col_range.first;

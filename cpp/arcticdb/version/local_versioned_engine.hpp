@@ -54,12 +54,10 @@ class LocalVersionedEngine : public VersionedEngine {
 public:
     LocalVersionedEngine() = default;
 
-    template<class ClockType = util::SysClock>
+    template<class ClockType=util::SysClock>
     explicit LocalVersionedEngine(
         const std::shared_ptr<storage::Library>& library,
         const ClockType& = ClockType{});
-
-
 
     virtual ~LocalVersionedEngine() = default;
 
@@ -396,6 +394,15 @@ public:
     void _test_set_store(std::shared_ptr<Store> store);
     std::shared_ptr<VersionMap> _test_get_version_map();
 
+
+    template<typename ClockType>
+    static LocalVersionedEngine _test_init_from_store(
+        const std::shared_ptr<Store>& store,
+        const ClockType& clock
+    ) {
+        return LocalVersionedEngine(store, clock);
+    }
+
     /** Get the time used by the Store (e.g. that would be used in the AtomKey).
         For testing purposes only. */
     entity::timestamp get_store_current_timestamp_for_tests() {
@@ -446,8 +453,14 @@ protected:
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries);
 
+
 private:
     void initialize(const std::shared_ptr<storage::Library>& library);
+
+    template<class ClockType=util::SysClock>
+    explicit LocalVersionedEngine(
+        const std::shared_ptr<Store>& store,
+        const ClockType& = ClockType{});
 
     std::shared_ptr<Store> store_;
     arcticdb::proto::storage::VersionStoreConfig cfg_;

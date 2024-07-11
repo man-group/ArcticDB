@@ -98,12 +98,12 @@ void adjust_slice_rowcounts(const std::shared_ptr<pipelines::PipelineContext>& p
     pipeline_context->total_rows_ = adjust_slice_rowcounts(pipeline_context->slice_and_keys_);
 }
 
-size_t adjust_slice_rowcounts(std::vector<pipelines::SliceAndKey> & slice_and_keys) {
+size_t adjust_slice_rowcounts(std::vector<pipelines::SliceAndKey> & slice_and_keys, const std::optional<size_t>& first_row) {
     using namespace arcticdb::pipelines;
     if(slice_and_keys.empty())
 		return 0u;
-	
-	auto offset = slice_and_keys[0].slice_.row_range.first;
+
+    auto offset = first_row.value_or(slice_and_keys[0].slice_.row_range.first);
 	auto diff = slice_and_keys[0].slice_.row_range.diff();
     auto col_begin = slice_and_keys[0].slice_.col_range.first;
 	
