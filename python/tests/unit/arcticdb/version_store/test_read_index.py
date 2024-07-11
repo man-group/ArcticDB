@@ -260,59 +260,70 @@ class TestReadIndexAsOf:
 
 
 class TestReadIndexRange:
-    @pytest.mark.parametrize("staged", [True, False])
-    def test_row_range(self, lmdb_version_store_static_and_dynamic, index, staged):
+    @pytest.mark.parametrize("dynamic_schema", [False, True])
+    def test_row_range(self, lmdb_storage, lib_name, dynamic_schema, index):
         row_range = (1, 3)
-        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": list(range(0, len(index)))}, index=index), staged=staged)
-        result = lmdb_version_store_static_and_dynamic.read("sym", row_range=row_range, columns=[], implement_read_index=True)
+        ac = lmdb_storage.create_arctic()
+        lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema))
+        lib.write("sym", pd.DataFrame({"col": list(range(0, len(index)))}, index=index))
+        result = lib.read("sym", row_range=row_range, columns=[])
         assert isinstance(result, arcticdb.VersionedItem)
         assert result.symbol == "sym"
         assert result.version == 0
         assert result.data.index.equals(index[row_range[0]:row_range[1]])
         assert result.data.empty
 
-    @pytest.mark.parametrize("staged", [True, False])
-    def test_date_range(self, lmdb_version_store_static_and_dynamic, staged):
+    @pytest.mark.parametrize("dynamic_schema", [False, True])
+    def test_date_range(self, lmdb_storage, lib_name, dynamic_schema):
         index = pd.date_range(start="01/01/2024", end="01/10/2024")
-        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": list(range(0, len(index)))}, index=index), staged=staged)
-        result = lmdb_version_store_static_and_dynamic.read("sym", date_range=(datetime(2024,1,4), datetime(2024,1,8)), columns=[], implement_read_index=True)
+        ac = lmdb_storage.create_arctic()
+        lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema))
+        lib.write("sym", pd.DataFrame({"col": list(range(0, len(index)))}, index=index))
+        result = lib.read("sym", date_range=(datetime(2024,1,4), datetime(2024,1,8)), columns=[])
         assert isinstance(result, arcticdb.VersionedItem)
         assert result.symbol == "sym"
         assert result.version == 0
         assert result.data.index.equals(pd.date_range(start="01/04/2024", end="01/08/2024"))
         assert result.data.empty
 
-    def test_date_range_left_open(self, lmdb_version_store_static_and_dynamic):
+    @pytest.mark.parametrize("dynamic_schema", [False, True])
+    def test_date_range_left_open(self, lmdb_storage, lib_name, dynamic_schema):
+        ac = lmdb_storage.create_arctic()
+        lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema))
         index = pd.date_range(start="01/01/2024", end="01/10/2024")
-        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": list(range(0, len(index)))}, index=index))
-        result = lmdb_version_store_static_and_dynamic.read("sym", date_range=(None, datetime(2024,1,8)), columns=[], implement_read_index=True)
+        lib.write("sym", pd.DataFrame({"col": list(range(0, len(index)))}, index=index))
+        result = lib.read("sym", date_range=(None, datetime(2024,1,8)), columns=[])
         assert isinstance(result, arcticdb.VersionedItem)
         assert result.symbol == "sym"
         assert result.version == 0
         assert result.data.index.equals(pd.date_range(start="01/01/2024", end="01/08/2024"))
         assert result.data.empty
 
-    def test_date_range_right_open(self, lmdb_version_store_static_and_dynamic):
+    @pytest.mark.parametrize("dynamic_schema", [False, True])
+    def test_date_range_right_open(self, lmdb_storage, lib_name, dynamic_schema):
+        ac = lmdb_storage.create_arctic()
+        lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema))
         index = pd.date_range(start="01/01/2024", end="01/10/2024")
-        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": list(range(0, len(index)))}, index=index))
-        result = lmdb_version_store_static_and_dynamic.read("sym", date_range=(datetime(2024,1,4), None), columns=[], implement_read_index=True)
+        lib.write("sym", pd.DataFrame({"col": list(range(0, len(index)))}, index=index))
+        result = lib.read("sym", date_range=(datetime(2024,1,4), None), columns=[])
         assert isinstance(result, arcticdb.VersionedItem)
         assert result.symbol == "sym"
         assert result.version == 0
         assert result.data.index.equals(pd.date_range(start="01/04/2024", end="01/10/2024"))
         assert result.data.empty
 
-    def test_row_range_across_row_slices(self, lmdb_version_store_row_slice, index):
-        assert lmdb_version_store_row_slice._lib_cfg.lib_desc.version.write_options.segment_row_size == 5
+    @pytest.mark.parametrize("dynamic_schema", [False, True])
+    def test_row_range_across_row_slices(self, lmdb_storage, lib_name, dynamic_schema, index):
+        ac = lmdb_storage.create_arctic()
+        lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema, rows_per_segment=5, columns_per_segment=2))
         row_range = (3, 8)
-        lmdb_version_store_row_slice.write("sym", pd.DataFrame({"col": range(0, len(index))}, index=index))
-        result = lmdb_version_store_row_slice.read("sym", row_range=row_range, columns=[], implement_read_index=True)
+        lib.write("sym", pd.DataFrame({"col": range(0, len(index))}, index=index))
+        result = lib.read("sym", row_range=row_range, columns=[])
         assert isinstance(result, arcticdb.VersionedItem)
         assert result.symbol == "sym"
         assert result.version == 0
         assert result.data.index.equals(index[row_range[0]:row_range[1]])
         assert result.data.empty
-
 
     @pytest.mark.parametrize("non_datetime_index", [
         pd.RangeIndex(start=0, stop=5),
@@ -321,37 +332,49 @@ class TestReadIndexRange:
             names=["range", "date"]
         )
     ])
-    def test_date_range_throws(self, lmdb_version_store_static_and_dynamic, non_datetime_index):
-        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": list(range(0, len(non_datetime_index)))}, index=non_datetime_index))
+    @pytest.mark.parametrize("dynamic_schema", [False, True])
+    def test_date_range_throws(self, lmdb_storage, lib_name, dynamic_schema, non_datetime_index):
+        ac = lmdb_storage.create_arctic()
+        lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema))
+        lib.write("sym", pd.DataFrame({"col": list(range(0, len(non_datetime_index)))}, index=non_datetime_index))
         with pytest.raises(Exception):
-            lmdb_version_store_static_and_dynamic.read("sym", date_range=(datetime(2024,1,4), datetime(2024,1,10)), columns=[], implement_read_index=True)
+            lib.read("sym", date_range=(datetime(2024,1,4), datetime(2024,1,10)), columns=[])
 
 
 class TestWithNormalizers:
-    @pytest.fixture(autouse=True)
-    def custom_normalizer(self):
-        register_normalizer(TestCustomNormalizer())
 
-    def test_recursive_throws(self, lmdb_version_store_static_and_dynamic):
+    @pytest.mark.parametrize("dynamic_schema", [False, True])
+    def test_recursive_throws(self, lmdb_storage, lib_name, dynamic_schema):
         data = {"a": np.arange(5), "b": np.arange(8)}
-        lmdb_version_store_static_and_dynamic.write("sym_recursive", data, recursive_normalizers=True, pickle_on_failure=False)
+        ac = lmdb_storage.create_arctic()
+        lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema))
+        lib._nvs.write("sym_recursive", data, recursive_normalizers=True)
         with pytest.raises(InternalException) as exception_info:
-            lmdb_version_store_static_and_dynamic.read("sym_recursive", columns=[], implement_read_index=True)
+            lib.read("sym_recursive", columns=[])
         assert "Reading the index column is not supported when recursive or custom normalizers are used." in str(exception_info.value)
-            
-    def test_custom_throws(self, custom_normalizer, lmdb_version_store_static_and_dynamic):
+
+    @pytest.mark.parametrize("dynamic_schema", [False, True])
+    def test_custom_throws(self, lmdb_storage, lib_name, dynamic_schema):
+        register_normalizer(TestCustomNormalizer())
+        ac = lmdb_storage.create_arctic()
+        lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema))
         data = CustomThing(custom_columns=["a", "b"], custom_index=[12, 13], custom_values=[[2.0, 4.0], [3.0, 5.0]])
-        lmdb_version_store_static_and_dynamic.write("sym_custom", data, pickle_on_failure=False)
+        lib._nvs.write("sym_custom", data)
 
         with pytest.raises(InternalException) as exception_info:
-            lmdb_version_store_static_and_dynamic.read("sym_custom", columns=[], implement_read_index=True)
+            lib.read("sym_custom", columns=[])
         assert "Reading the index column is not supported when recursive or custom normalizers are used." in str(exception_info.value)
 
+
+class Dummy:
+    pass
 
 class TestPickled:
-    def test_throws(self, lmdb_version_store_static_and_dynamic):
-        data = {"a": np.arange(5), "b": np.arange(8)}
-        lmdb_version_store_static_and_dynamic.write("sym_recursive", data, recursive_normalizers=False, pickle_on_failure=True)
+    @pytest.mark.parametrize("dynamic_schema", [False, True])
+    def test_throws(self, lmdb_storage, lib_name, dynamic_schema):
+        ac = lmdb_storage.create_arctic()
+        lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema))
+        lib.write_pickle("sym_recursive", pd.DataFrame({"col": [Dummy(), Dummy()]}))
         with pytest.raises(InternalException) as exception_info:
-            lmdb_version_store_static_and_dynamic.read("sym_recursive", columns=[], implement_read_index=True)
+            lib.read("sym_recursive", columns=[])
         assert "Reading index columns is not supported with pickled data." in str(exception_info.value)
