@@ -17,6 +17,7 @@ from arcticdb.util._versions import PANDAS_VERSION
 from arcticdb_ext.exceptions import InternalException
 from arcticdb.util.test import  CustomThing, TestCustomNormalizer
 from arcticdb.version_store._custom_normalizers import register_normalizer, clear_registered_normalizers
+from arcticdb.options import LibraryOptions
 
 @pytest.fixture(
     scope="function",
@@ -57,12 +58,11 @@ def lmdb_version_store_static_and_dynamic(request):
     scope="function",
     params=(
         pd.RangeIndex(start=0, stop=10),
+        pd.RangeIndex(start=0, stop=10, step=2),
+        pd.RangeIndex(start=5, stop=25, step=5),
         pd.date_range(start="01/01/2024",end="01/10/2024"),
         pd.MultiIndex.from_arrays(
-            [
-                pd.date_range(start="01/01/2024", end="01/10/2024"),
-                pd.RangeIndex(start=0, stop=10)
-            ],
+            [pd.date_range(start="01/01/2024", end="01/10/2024"), pd.RangeIndex(start=0, stop=10)],
             names=["datetime", "level"]
         )
     )
@@ -71,72 +71,53 @@ def index(request):
     yield request.param
 
 class TestBasicReadIndex:
-    @pytest.mark.parametrize("index", [
-        pd.RangeIndex(start=0, stop=10),
-        pd.RangeIndex(start=0, stop=10, step=2),
-        pd.RangeIndex(start=5, stop=25, step=5),
-        pd.date_range(start="01/01/2024",end="01/10/2024"),
-        pd.MultiIndex.from_arrays(
-            [pd.date_range(start="01/01/2024", end="01/10/2024"), pd.RangeIndex(start=0, stop=10)],
-            names=["datetime", "level"]
-        )
-    ])
-    def test_read_index_columns(self, lmdb_version_store_static_and_dynamic, index):
-        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": range(0, len(index))}, index=index))
-        result = lmdb_version_store_static_and_dynamic.read("sym", columns=[], implement_read_index=True)
+
+    @pytest.mark.parametrize("dynamic_schema", [False, True])
+    def test_read_index_columns(self, lmdb_storage, index, lib_name, dynamic_schema):
+        ac = lmdb_storage.create_arctic()
+        lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema))
+        df = pd.DataFrame({"col": range(0, len(index))}, index=index)
+        lib.write("sym", df)
+        result = lib.read("sym", columns=[])
         assert isinstance(result, arcticdb.VersionedItem)
         assert result.symbol == "sym"
         assert result.version == 0
         assert result.data.index.equals(index)
         assert result.data.empty
 
-    @pytest.mark.parametrize("staged", [True, False])
-    def test_read_index_columns_column_slice(self, lmdb_version_store_row_slice, index, staged):
+    @pytest.mark.parametrize("dynamic_schema", [False, True])
+    def test_read_index_columns_silce(self, lmdb_storage, index, lib_name, dynamic_schema):
         col1 = list(range(0, len(index)))
         col2 = [2 * i for i in range(0, len(index))]
-        df = pd.DataFrame({"col": col1, "col2": col2}, index=index)
-        lmdb_version_store_row_slice.write("sym", df, staged=staged)
-        result = lmdb_version_store_row_slice.read("sym", columns=[], implement_read_index=True)
+        df = pd.DataFrame({"col": col1, "col2": col2, "col3": col1}, index=index)
+        ac = lmdb_storage.create_arctic()
+        lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema, rows_per_segment=5, columns_per_segment=2))
+        lib.write("sym", df)
+        result = lib.read("sym", columns=[])
         assert isinstance(result, arcticdb.VersionedItem)
         assert result.symbol == "sym"
         assert result.version == 0
         assert result.data.index.equals(index)
         assert result.data.empty
 
-    @pytest.mark.parametrize("index", [
-        pd.RangeIndex(start=0, stop=10),
-        pd.RangeIndex(start=0, stop=10, step=2),
-        pd.RangeIndex(start=5, stop=25, step=5),
-        pd.date_range(start="01/01/2024",end="01/10/2024"),
-        pd.MultiIndex.from_arrays(
-            [pd.date_range(start="01/01/2024", end="01/10/2024"), pd.RangeIndex(start=0, stop=10)],
-            names=["datetime", "level"]
-        )
-    ])
-    def test_read_index_columns_head(self, lmdb_version_store_static_and_dynamic, index):
-        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": range(0, len(index))}, index=index))
-        result = lmdb_version_store_static_and_dynamic.head("sym", columns=[], implement_read_index=True, n=3)
+    @pytest.mark.parametrize("dynamic_schema", [False, True])
+    def test_read_index_columns_head(self, lmdb_storage, index, lib_name, dynamic_schema):
+        ac = lmdb_storage.create_arctic()
+        lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema))
+        lib.write("sym", pd.DataFrame({"col": range(0, len(index))}, index=index))
+        result = lib.head("sym", columns=[], n=3)
         assert isinstance(result, arcticdb.VersionedItem)
         assert result.symbol == "sym"
         assert result.version == 0
         assert result.data.index.equals(index[:3])
         assert result.data.empty
 
-    @pytest.mark.parametrize("index", [
-        pd.RangeIndex(start=0, stop=10),
-        pd.RangeIndex(start=0, stop=10, step=2),
-        pd.RangeIndex(start=5, stop=25, step=5),
-        pd.date_range(start="01/01/2024",end="01/10/2024"),
-        pd.MultiIndex.from_arrays(
-            [pd.date_range(start="01/01/2024", end="01/10/2024"), pd.RangeIndex(start=0, stop=10)],
-            names=["datetime", "level"]
-        )
-    ])
-    def test_read_index_columns_tail(self, lmdb_version_store_static_and_dynamic, index):
-        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": range(0, len(index))}, index=index))
-        result = lmdb_version_store_static_and_dynamic.tail("sym", columns=[], implement_read_index=True, n=3)
-        print(result.data.index)
-        print(index[-3:])
+    @pytest.mark.parametrize("dynamic_schema", [False, True])
+    def test_read_index_columns_tail(self, lmdb_storage, index, lib_name, dynamic_schema):
+        ac = lmdb_storage.create_arctic()
+        lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema))
+        lib.write("sym", pd.DataFrame({"col": range(0, len(index))}, index=index))
+        result = lib.tail("sym", columns=[], n=3)
         assert isinstance(result, arcticdb.VersionedItem)
         assert result.symbol == "sym"
         assert result.version == 0
