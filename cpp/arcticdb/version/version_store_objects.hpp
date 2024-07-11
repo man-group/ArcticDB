@@ -43,8 +43,8 @@ struct PreDeleteChecks {
     std::unordered_set<IndexTypeKey> could_share_data {};
 
     LoadType calc_load_type() const {
-        if (prev_version) return LoadType::LOAD_ALL;
-        if (version_visible | next_version) return LoadType::LOAD_DOWNTO;
+        if (prev_version) return LoadType::ALL;
+        if (version_visible | next_version) return LoadType::DOWNTO;
         return LoadType::NOT_LOADED;
     }
 };

@@ -193,7 +193,7 @@ inline void read_symbol_ref(const std::shared_ptr<StreamSource>& store, const St
 
     LoadProgress load_progress;
     entry.head_ = read_segment_with_keys(key_seg_pair.second, entry, load_progress);
-    entry.loaded_with_progress_ = load_progress;
+    entry.load_progress_ = load_progress;
 }
 
 inline void write_symbol_ref(std::shared_ptr<StreamSink> store,
@@ -295,7 +295,7 @@ inline bool continue_when_loading_from_time(const LoadStrategy &load_strategy, c
 }
 
 inline bool continue_when_loading_latest(const LoadStrategy& load_strategy, const std::shared_ptr<VersionMapEntry> &entry) {
-    if (!(load_strategy.load_type_ == LoadType::LOAD_LATEST && entry->get_first_index(load_strategy.should_include_deleted()).first))
+    if (!(load_strategy.load_type_ == LoadType::LATEST && entry->get_first_index(load_strategy.should_include_deleted()).first))
         return true;
 
     ARCTICDB_DEBUG(log::version(), "Exiting because we found the latest version with include_deleted: {}", load_strategy.should_include_deleted());
@@ -336,16 +336,16 @@ inline bool penultimate_key_contains_required_version_id(const AtomKey& key, con
 }
 
 inline bool key_exists_in_ref_entry(const LoadStrategy& load_strategy, const VersionMapEntry& ref_entry, std::optional<AtomKey>& cached_penultimate_key) {
-    if (load_strategy.load_type_ == LoadType::LOAD_LATEST && is_index_key_type(ref_entry.keys_[0].type()))
+    if (load_strategy.load_type_ == LoadType::LATEST && is_index_key_type(ref_entry.keys_[0].type()))
         return true;
 
     if(cached_penultimate_key && is_partial_load_type(load_strategy.load_type_)) {
         load_strategy.validate();
-        if(load_strategy.load_type_ == LoadType::LOAD_DOWNTO && penultimate_key_contains_required_version_id(*cached_penultimate_key, load_strategy)) {
+        if(load_strategy.load_type_ == LoadType::DOWNTO && penultimate_key_contains_required_version_id(*cached_penultimate_key, load_strategy)) {
             return true;
         }
 
-        if(load_strategy.load_type_ == LoadType::LOAD_FROM_TIME && cached_penultimate_key->creation_ts() <= load_strategy.load_from_time_.value()) {
+        if(load_strategy.load_type_ == LoadType::FROM_TIME && cached_penultimate_key->creation_ts() <= load_strategy.load_from_time_.value()) {
             return true;
         }
     }

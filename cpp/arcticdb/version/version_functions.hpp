@@ -19,7 +19,7 @@ inline std::optional<AtomKey> get_latest_undeleted_version(
     const std::shared_ptr<VersionMap> &version_map,
     const StreamId &stream_id) {
     ARCTICDB_RUNTIME_SAMPLE(GetLatestUndeletedVersion, 0)
-    LoadStrategy load_strategy{LoadType::LOAD_LATEST, LoadObjective::UNDELETED};
+    LoadStrategy load_strategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY};
     const auto entry = version_map->check_reload(store, stream_id, load_strategy, __FUNCTION__);
     return entry->get_first_index(false).first;
 }
@@ -29,7 +29,7 @@ inline std::pair<std::optional<AtomKey>, bool> get_latest_version(
     const std::shared_ptr<VersionMap> &version_map,
     const StreamId &stream_id) {
     ARCTICDB_SAMPLE(GetLatestVersion, 0)
-    LoadStrategy load_strategy{LoadType::LOAD_LATEST, LoadObjective::ANY};
+    LoadStrategy load_strategy{LoadType::LATEST, LoadObjective::INCLUDE_DELETED};
     auto entry = version_map->check_reload(store, stream_id, load_strategy, __FUNCTION__);
     return entry->get_first_index(true);
 }
@@ -40,7 +40,7 @@ inline version_store::UpdateInfo get_latest_undeleted_version_and_next_version_i
         const std::shared_ptr<VersionMap> &version_map,
         const StreamId &stream_id) {
     ARCTICDB_SAMPLE(GetLatestUndeletedVersionAndHighestVersionId, 0)
-    LoadStrategy load_strategy{LoadType::LOAD_LATEST, LoadObjective::UNDELETED};
+    LoadStrategy load_strategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY};
     auto entry = version_map->check_reload(store, stream_id, load_strategy, __FUNCTION__);
     auto latest_version = entry->get_first_index(true).first;
     auto latest_undeleted_version = entry->get_first_index(false).first;
@@ -54,7 +54,7 @@ inline std::vector<AtomKey> get_all_versions(
     const StreamId &stream_id
     ) {
     ARCTICDB_SAMPLE(GetAllVersions, 0)
-    LoadStrategy load_strategy{LoadType::LOAD_ALL, LoadObjective::UNDELETED};
+    LoadStrategy load_strategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY};
     auto entry = version_map->check_reload(store, stream_id, load_strategy, __FUNCTION__);
     return entry->get_indexes(false);
 }
@@ -65,7 +65,7 @@ inline std::optional<AtomKey> get_specific_version(
         const StreamId &stream_id,
         SignedVersionId signed_version_id,
         bool include_deleted = false) {
-    LoadStrategy load_strategy{LoadType::LOAD_DOWNTO, LoadObjective::UNDELETED, signed_version_id};
+    LoadStrategy load_strategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, signed_version_id};
     auto entry = version_map->check_reload(store, stream_id, load_strategy, __FUNCTION__);
     VersionId version_id;
     if (signed_version_id >= 0) {
@@ -138,7 +138,7 @@ inline std::unordered_map<VersionId, bool> get_all_tombstoned_versions(
     const std::shared_ptr<Store> &store,
     const std::shared_ptr<VersionMap> &version_map,
     const StreamId &stream_id) {
-    LoadStrategy load_strategy{LoadType::LOAD_ALL, LoadObjective::ANY};
+    LoadStrategy load_strategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED};
     auto entry = version_map->check_reload(store, stream_id, load_strategy, __FUNCTION__);
     std::unordered_map<VersionId, bool> result;
     for (auto key: entry->get_tombstoned_indexes())
@@ -155,7 +155,7 @@ inline version_store::TombstoneVersionResult tombstone_version(
     bool allow_tombstoning_beyond_latest_version=false,
     const std::optional<timestamp>& creation_ts=std::nullopt) {
     ARCTICDB_DEBUG(log::version(), "Tombstoning version {} for stream {}", version_id, stream_id);
-    LoadStrategy load_strategy{LoadType::LOAD_ALL, LoadObjective::UNDELETED};
+    LoadStrategy load_strategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY};
     auto entry = version_map->check_reload(store, stream_id, load_strategy, __FUNCTION__);
     // Might as well do the previous/next version check while we find the required version_id.
     // But if entry is empty, it's possible the load failed (since iterate_on_failure=false above), so set the flag
@@ -217,7 +217,7 @@ inline std::optional<AtomKey> load_index_key_from_time(
     const std::shared_ptr<VersionMap> &version_map,
     const StreamId &stream_id,
     timestamp from_time) {
-    LoadStrategy load_strategy{LoadType::LOAD_FROM_TIME, LoadObjective::UNDELETED, from_time};
+    LoadStrategy load_strategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, from_time};
     auto entry = version_map->check_reload(store, stream_id, load_strategy, __FUNCTION__);
     auto indexes = entry->get_indexes(false);
     return get_index_key_from_time(from_time, indexes);
@@ -227,7 +227,7 @@ inline std::vector<AtomKey> get_index_and_tombstone_keys(
     const std::shared_ptr<Store> &store,
     const std::shared_ptr<VersionMap> &version_map,
     const StreamId &stream_id) {
-    LoadStrategy load_strategy{LoadType::LOAD_ALL, LoadObjective::ANY};
+    LoadStrategy load_strategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED};
     const auto entry = version_map->check_reload(store, stream_id, load_strategy, __FUNCTION__);
     std::vector<AtomKey> res;
     std::copy_if(std::begin(entry->keys_), std::end(entry->keys_), std::back_inserter(res),
