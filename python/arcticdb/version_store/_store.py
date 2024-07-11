@@ -992,10 +992,10 @@ class NativeVersionStore:
         return {v.symbol: v for v in versioned_items}
 
     def _batch_read_to_versioned_items(
-        self, symbols, as_ofs, date_ranges, row_ranges, columns, query_builder, throw_on_error, kwargs=None
+        self, symbols, as_ofs, date_ranges, row_ranges, columns, query_builder, throw_on_error, **kwargs
     ):
-        if kwargs is None:
-            kwargs = dict()
+        implement_read_index = "implement_read_index" in kwargs and kwargs["implement_read_index"]
+        columns = [None if not implement_read_index and c == [] else c for c in columns]
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
         read_queries = self._get_read_queries(len(symbols), date_ranges, row_ranges, columns, query_builder)
         read_options = self._get_read_options(**kwargs)
@@ -1011,7 +1011,13 @@ class NativeVersionStore:
                 query = None
                 if query_builder is not None:
                     query = query_builder if isinstance(query_builder, QueryBuilder) else query_builder[i]
-                vitem = self._post_process_dataframe(read_result, read_query, query)
+                index_type = read_result.norm.df.common.WhichOneof("index_type")
+                index_is_rowcount = index_type == "index" and not read_result.norm.df.common.index.is_physically_stored
+                if implement_read_index and columns[i] == [] and index_is_rowcount:
+                    vitem = self._postprocess_df_with_only_rowcount_idx(read_result, row_ranges[i])
+                else:
+                    vitem = self._post_process_dataframe(read_result, read_query, query)
+
                 versioned_items.append(vitem)
         return versioned_items
 

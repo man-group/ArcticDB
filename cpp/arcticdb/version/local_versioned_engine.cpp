@@ -1060,7 +1060,11 @@ folly::Future<ReadVersionOutput> async_read_direct(
             ScopedGILLock gil_lock;
             reduce_and_fix_columns(pipeline_context, frame, read_options);
         }).thenValue(
-        [index_segment_reader, frame, index_key, buffers](auto &&) {
+        [index_segment_reader, frame, index_key, buffers, read_query, pipeline_context](auto &&) mutable {
+            if (read_query.columns && read_query.columns->empty() &&
+                pipeline_context->descriptor().index().type() == IndexDescriptor::Type::ROWCOUNT) {
+                frame.set_row_id(index_segment_reader->tsd().total_rows() - 1);
+            }
             return ReadVersionOutput{VersionedItem{to_atom(index_key)},
                                   FrameAndDescriptor{frame, std::move(index_segment_reader->mutable_tsd()), {}, buffers}};
         });

@@ -18,6 +18,8 @@ from arcticdb_ext.exceptions import InternalException
 from arcticdb.util.test import  CustomThing, TestCustomNormalizer
 from arcticdb.version_store._custom_normalizers import register_normalizer, clear_registered_normalizers
 from arcticdb.options import LibraryOptions
+from arcticdb import ReadRequest
+from arcticdb.util.test import assert_frame_equal
 
 @pytest.fixture(
     scope="function",
@@ -366,6 +368,25 @@ class TestWithNormalizers:
         assert "Reading the index column is not supported when recursive or custom normalizers are used." in str(exception_info.value)
 
 
+class TestReadBatch:
+    @pytest.mark.parametrize("dynamic_schema", [False, True])
+    def test_read_batch(self, lmdb_storage, lib_name, dynamic_schema, index):
+        ac = lmdb_storage.create_arctic()
+        lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema))
+        df1 = pd.DataFrame({"a": range(0, len(index))}, index=index)
+        df2 = pd.DataFrame({"b": range(0, len(index))})
+        df3 = pd.DataFrame({"c": range(0, len(index))}, index=index)
+        lib.write("a", df1)
+        lib.write("b", df2)
+        lib.write("c", df3)
+        res = lib.read_batch([ReadRequest("a", columns=[]), ReadRequest("b", columns=[]), ReadRequest("c")])
+        assert(res[0].data.index.equals(df1.index))
+        assert(res[0].data.empty)
+        assert(res[1].data.index.equals(df2.index))
+        assert(res[1].data.empty)
+        assert_frame_equal(res[2].data, df3)
+
+
 class Dummy:
     pass
 
@@ -408,3 +429,18 @@ class TestReadIndexV1LibraryNonReg:
         assert v1_lib.tail("sym").data.columns.equals(df.columns)
         assert v1_lib.tail("sym", columns=None).data.columns.equals(df.columns)
         assert v1_lib.tail("sym", columns=[]).data.columns.equals(df.columns)
+
+    @pytest.mark.parametrize("dynamic_schema", [False, True])
+    def test_read_batch(self, version_store_factory, dynamic_schema, index):
+        v1_lib = version_store_factory(dynamic_schema=dynamic_schema)
+        df = pd.DataFrame({"col": range(0, len(index))}, index=index)
+        df1 = pd.DataFrame({"a": range(0, len(index))}, index=index)
+        df2 = pd.DataFrame({"b": range(0, len(index))})
+        df3 = pd.DataFrame({"c": range(0, len(index))}, index=index)
+        v1_lib.write("a", df1)
+        v1_lib.write("b", df2)
+        v1_lib.write("c", df3)
+        res = v1_lib.batch_read(["a", "b", "c"], columns=[[], None, []])
+        assert_frame_equal(res['a'].data, df1)
+        assert_frame_equal(res['b'].data, df2)
+        assert_frame_equal(res['c'].data, df3)
