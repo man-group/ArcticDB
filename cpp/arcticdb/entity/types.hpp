@@ -410,6 +410,7 @@ struct TypeDescriptor;
 
 inline void set_data_type(DataType data_type, TypeDescriptor &type_desc);
 
+#pragma pack(push, 1)
 struct TypeDescriptor {
     DataType data_type_;
     Dimension dimension_;
@@ -458,6 +459,7 @@ struct TypeDescriptor {
         return get_byte_count(slice_bit_size(data_type_));
     }
 };
+#pragma pack(pop)
 
 /// @brief Check if the type must contain data
 /// Some types are allowed not to have any data, e.g. empty arrays or the empty type (which by design denotes the
@@ -597,6 +599,7 @@ struct FieldRef {
     }
 };
 
+#pragma pack(push, 1)
 struct Field {
     uint32_t size_ = 0;
     TypeDescriptor type_;
@@ -645,6 +648,7 @@ public:
     void set(TypeDescriptor type, std::string_view name) {
         type_ = type;
         size_ = name.size();
+        name_[1] = 0;
         memcpy(name_, name.data(), size_);
     }
 
@@ -660,6 +664,7 @@ public:
         return lt < rt;
     }
 };
+#pragma pack(pop)
 
 struct FieldWrapper {
     std::vector<uint8_t> data_;
