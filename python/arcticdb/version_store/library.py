@@ -1333,10 +1333,12 @@ class Library:
         Delete all versions of the symbol from the library, unless ``version`` is specified, in which case only those
         versions are deleted.
 
-        This may not actually delete the underlying data if a snapshot still references the version. See `snapshot` for
+        This may not actually delete the underlying data if a snapshot still references the version. See ``snapshot`` for
         more detail.
 
         Note that this may require data to be removed from the underlying storage which can be slow.
+
+        This method does not remove any staged data, use ``delete_staged_data`` for that.
 
         If no symbol called ``symbol`` exists then this is a no-op. In particular this method does not raise in this case.
 
