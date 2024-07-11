@@ -25,8 +25,11 @@ namespace arcticdb {
     };
 
     inline void log_event(const std::shared_ptr<StreamSink>& store, const StreamId& id, std::string action, VersionId version_id=0) {
-        SegmentInMemory seg{log_stream_descriptor(action)};
-        store->write_sync(KeyType::LOG, version_id, StreamId{action}, IndexValue{id}, IndexValue{id}, std::move(seg));
+        ExponentialBackoff<StorageException>(100, 2000)
+            .go([&store, &id, &action, &version_id]() {
+                SegmentInMemory seg{log_stream_descriptor(action)};
+                store->write_sync(KeyType::LOG, version_id, StreamId{action}, IndexValue{id}, IndexValue{id}, std::move(seg));
+            });
     }
 
     inline void log_write(const std::shared_ptr<StreamSink>& store, const StreamId& symbol,  VersionId version_id) {
