@@ -587,6 +587,11 @@ void hash_field(const EncodedFieldType &field, HashAccum &accum) {
 
 HashedValue get_segment_hash(Segment& seg) {
     HashAccum accum;
+    const auto& fields = seg.fields_ptr();
+    if(fields && !fields->empty()) {
+        hash_buffer(fields->buffer(), accum);
+    }
+
     const auto& hdr = seg.header();
     if(hdr.encoding_version() == EncodingVersion::V1) {
         // The hashes are part of the encoded fields protobuf in the v1 header, which is not

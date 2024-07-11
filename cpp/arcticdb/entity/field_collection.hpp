@@ -187,6 +187,10 @@ public:
         return at(pos);
     }
 
+    const ChunkedBuffer& buffer() const {
+        return buffer_.buffer();
+    }
+
     friend bool operator==(const FieldCollection& left, const FieldCollection& right);
 
     void regenerate_offsets();
