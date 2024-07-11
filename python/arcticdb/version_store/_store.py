@@ -995,7 +995,7 @@ class NativeVersionStore:
         self, symbols, as_ofs, date_ranges, row_ranges, columns, query_builder, throw_on_error, **kwargs
     ):
         implement_read_index = "implement_read_index" in kwargs and kwargs["implement_read_index"]
-        columns = [None if not implement_read_index and c == [] else c for c in columns]
+        columns = [None if not implement_read_index and c == [] else c for c in columns] if columns else columns
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
         read_queries = self._get_read_queries(len(symbols), date_ranges, row_ranges, columns, query_builder)
         read_options = self._get_read_options(**kwargs)
