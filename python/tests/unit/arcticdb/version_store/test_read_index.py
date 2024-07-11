@@ -378,3 +378,33 @@ class TestPickled:
         with pytest.raises(InternalException) as exception_info:
             lib.read("sym_recursive", columns=[])
         assert "Reading index columns is not supported with pickled data." in str(exception_info.value)
+
+
+class TestReadIndexV1LibraryNonReg:
+
+    @pytest.mark.parametrize("dynamic_schema", [False, True])
+    def test_read(self, version_store_factory, index, dynamic_schema):
+        v1_lib = version_store_factory(dynamic_schema=dynamic_schema)
+        df = pd.DataFrame({"col": range(0, len(index))}, index=index)
+        v1_lib.write("sym", df)
+        assert v1_lib.read("sym").data.columns.equals(df.columns)
+        assert v1_lib.read("sym", columns=None).data.columns.equals(df.columns)
+        assert v1_lib.read("sym", columns=[]).data.columns.equals(df.columns)
+
+    @pytest.mark.parametrize("dynamic_schema", [False, True])
+    def test_head(self, version_store_factory, index, dynamic_schema):
+        v1_lib = version_store_factory(dynamic_schema=dynamic_schema)
+        df = pd.DataFrame({"col": range(0, len(index))}, index=index)
+        v1_lib.write("sym", df)
+        assert v1_lib.head("sym").data.columns.equals(df.columns)
+        assert v1_lib.head("sym", columns=None).data.columns.equals(df.columns)
+        assert v1_lib.head("sym", columns=[]).data.columns.equals(df.columns)
+
+    @pytest.mark.parametrize("dynamic_schema", [False, True])
+    def test_tail(self, version_store_factory, index, dynamic_schema):
+        v1_lib = version_store_factory(dynamic_schema=dynamic_schema)
+        df = pd.DataFrame({"col": range(0, len(index))}, index=index)
+        v1_lib.write("sym", df)
+        assert v1_lib.tail("sym").data.columns.equals(df.columns)
+        assert v1_lib.tail("sym", columns=None).data.columns.equals(df.columns)
+        assert v1_lib.tail("sym", columns=[]).data.columns.equals(df.columns)
