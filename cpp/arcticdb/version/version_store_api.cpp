@@ -562,6 +562,7 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
     bool prune_previous_versions
     ) {
     ARCTICDB_SAMPLE(WriteVersionedMultiKey, 0)
+    py::gil_scoped_release release_gil;
 
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write_versioned_composite_data");
     auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id, VersionQuery{});
