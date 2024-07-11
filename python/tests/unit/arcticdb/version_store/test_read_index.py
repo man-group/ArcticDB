@@ -126,9 +126,12 @@ class TestBasicReadIndex:
 
 
 class TestReadEmptyIndex:
-    def test_empty_range_index(self, lmdb_version_store_static_and_dynamic):
-        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": []}, index=pd.RangeIndex(start=5,stop=5)))
-        result = lmdb_version_store_static_and_dynamic.read("sym", columns=[], implement_read_index=True)
+    @pytest.mark.parametrize("dynamic_schema", [False, True])
+    def test_empty_range_index(self, lmdb_storage, lib_name, dynamic_schema):
+        ac = lmdb_storage.create_arctic()
+        lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema))
+        lib.write("sym", pd.DataFrame({"col": []}, index=pd.RangeIndex(start=5,stop=5)))
+        result = lib.read("sym", columns=[])
         assert isinstance(result, arcticdb.VersionedItem)
         assert result.symbol == "sym"
         assert result.version == 0
@@ -138,9 +141,12 @@ class TestReadEmptyIndex:
             assert result.data.index.equals(pd.DatetimeIndex([]))
         assert result.data.empty
 
-    def test_empty_datetime_index(self, lmdb_version_store_static_and_dynamic):
-        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col": []}, index=pd.DatetimeIndex([])))
-        result = lmdb_version_store_static_and_dynamic.read("sym", columns=[], implement_read_index=True)
+    @pytest.mark.parametrize("dynamic_schema", [False, True])
+    def test_empty_datetime_index(self, lmdb_storage, lib_name, dynamic_schema):
+        ac = lmdb_storage.create_arctic()
+        lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema))
+        lib.write("sym", pd.DataFrame({"col": []}, index=pd.DatetimeIndex([])))
+        result = lib.read("sym", columns=[])
         assert isinstance(result, arcticdb.VersionedItem)
         assert result.symbol == "sym"
         assert result.version == 0
@@ -173,10 +179,13 @@ class TestReadEmptyIndex:
             )
         ]
     )
-    def test_empty_multiindex(self, lmdb_version_store_static_and_dynamic, input_index, expected_index):
+    @pytest.mark.parametrize("dynamic_schema", [False, True])
+    def test_empty_multiindex(self, lmdb_storage, lib_name, dynamic_schema, input_index, expected_index):
+        ac = lmdb_storage.create_arctic()
+        lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema))
         index = pd.MultiIndex.from_arrays([[], np.array([], dtype="int"), np.array([], dtype="float"), []])
-        lmdb_version_store_static_and_dynamic.write("sym", pd.DataFrame({"col_0": [],"col_1": []}, index=input_index))
-        result = lmdb_version_store_static_and_dynamic.read("sym", columns=[], implement_read_index=True)
+        lib.write("sym", pd.DataFrame({"col_0": [],"col_1": []}, index=input_index))
+        result = lib.read("sym", columns=[])
         assert isinstance(result, arcticdb.VersionedItem)
         assert result.symbol == "sym"
         assert result.version == 0
