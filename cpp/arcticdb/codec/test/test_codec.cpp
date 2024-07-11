@@ -14,6 +14,7 @@
 #include <arcticdb/stream/row_builder.hpp>
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/codec/typed_block_encoder_impl.hpp>
+#include <arcticdb/codec/default_codecs.hpp>
 
 #include <gtest/gtest.h>
 
@@ -496,4 +497,78 @@ TEST(Segment, KeepAlive) {
         std::any_cast<TransactionalThing>(seg4.keepalive()).magic_.check();
     }
     ASSERT_EQ(TransactionalThing::destroyed, true);
+}
+
+TEST(Segment, ColumnNamesProduceDifferentHashes) {
+    const auto stream_desc_1 = stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {
+        scalar_field(DataType::UINT8, "ints1"),
+        scalar_field(DataType::UINT8, "ints2"),
+        scalar_field(DataType::UINT8, "ints3"),
+        scalar_field(DataType::UINT8, "ints4"),
+        scalar_field(DataType::UINT8, "ints5")
+    });
+
+    SegmentInMemory in_mem_seg_1{stream_desc_1.clone()};
+
+    in_mem_seg_1.set_scalar(0, uint8_t(0));
+    in_mem_seg_1.set_scalar(1, uint8_t(0));
+    in_mem_seg_1.set_scalar(2, uint8_t(0));
+    in_mem_seg_1.set_scalar(3, uint8_t(0));
+    in_mem_seg_1.set_scalar(4, uint8_t(0));
+    in_mem_seg_1.end_row();
+
+    const auto stream_desc_2 = stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {
+        scalar_field(DataType::UINT8, "ints6"),
+        scalar_field(DataType::UINT8, "ints7"),
+        scalar_field(DataType::UINT8, "ints8"),
+        scalar_field(DataType::UINT8, "ints9"),
+        scalar_field(DataType::UINT8, "ints10")
+    });
+
+    SegmentInMemory in_mem_seg_2{stream_desc_1.clone()};
+
+    in_mem_seg_2.set_scalar(0, uint8_t(0));
+    in_mem_seg_2.set_scalar(1, uint8_t(0));
+    in_mem_seg_2.set_scalar(2, uint8_t(0));
+    in_mem_seg_2.set_scalar(3, uint8_t(0));
+    in_mem_seg_2.set_scalar(4, uint8_t(0));
+    in_mem_seg_2.end_row();
+
+    auto seg_1 = encode_dispatch(std::move(in_mem_seg_1), codec::default_lz4_codec(), EncodingVersion::V1);
+    auto seg_2 = encode_dispatch(std::move(in_mem_seg_2), codec::default_lz4_codec(), EncodingVersion::V1);
+
+    auto hash_1 = hash_segment_header(seg_1.header());
+    auto hash_2 = hash_segment_header(seg_2.header());
+
+    ASSERT_NE(hash_1, hash_2);
+}
+
+TEST(Segment, ColumnNamesProduceDifferentHashesEmpty) {
+    const auto stream_desc_1 = stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {
+        scalar_field(DataType::UINT8, "ints1"),
+        scalar_field(DataType::UINT8, "ints2"),
+        scalar_field(DataType::UINT8, "ints3"),
+        scalar_field(DataType::UINT8, "ints4"),
+        scalar_field(DataType::UINT8, "ints5")
+    });
+
+    SegmentInMemory in_mem_seg_1{stream_desc_1.clone()};
+
+    const auto stream_desc_2 = stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {
+        scalar_field(DataType::UINT8, "ints6"),
+        scalar_field(DataType::UINT8, "ints7"),
+        scalar_field(DataType::UINT8, "ints8"),
+        scalar_field(DataType::UINT8, "ints9"),
+        scalar_field(DataType::UINT8, "ints10")
+    });
+
+    SegmentInMemory in_mem_seg_2{stream_desc_1.clone()};
+
+    auto seg_1 = encode_dispatch(std::move(in_mem_seg_1), codec::default_lz4_codec(), EncodingVersion::V1);
+    auto seg_2 = encode_dispatch(std::move(in_mem_seg_2), codec::default_lz4_codec(), EncodingVersion::V1);
+
+    auto hash_1 = hash_segment_header(seg_1.header());
+    auto hash_2 = hash_segment_header(seg_2.header());
+
+    ASSERT_NE(hash_1, hash_2);
 }
