@@ -38,7 +38,7 @@ void PipelineContext::set_selected_columns(const std::optional<std::vector<std::
 
 bool PipelineContext::only_index_column_selected() const {
     return overall_column_bitset_ &&
-        (overall_column_bitset_->count() == 1 && (*overall_column_bitset_)[0] || overall_column_bitset_->count() == 0);
+        ((overall_column_bitset_->count() == 1 && (*overall_column_bitset_)[0]) || overall_column_bitset_->count() == 0);
 }
 
 const std::optional<util::BitSet>& PipelineContextRow::get_selected_columns() const {
