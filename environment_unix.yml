@@ -3,6 +3,7 @@ channels:
   - conda-forge
 dependencies:
   # Build tools
+  - libcxx==17.0.6
   - cxx-compiler
   - c-compiler
   - cmake
