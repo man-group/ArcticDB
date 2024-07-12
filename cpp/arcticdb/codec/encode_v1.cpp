@@ -158,6 +158,7 @@ namespace arcticdb {
         ARCTICDB_DEBUG(log::codec(), "Block count {} header size {} ratio {}",
             in_mem_seg.num_blocks(), segment_header->ByteSizeLong(),
             in_mem_seg.num_blocks() ? segment_header->ByteSizeLong() / in_mem_seg.num_blocks() : 0);
+        util::check(segment_header->has_stream_descriptor(), "Expected stream descriptor field");
         return {std::move(arena), segment_header, std::move(out_buffer), in_mem_seg.descriptor().fields_ptr()};
     }
 }

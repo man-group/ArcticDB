@@ -334,6 +334,7 @@ public:
     }
 
     ChunkedBuffer &buffer()  {
+        util::check(data_ != nullptr, "Got null buffer in column data");
         return *const_cast<ChunkedBuffer*>(data_);
     }
 

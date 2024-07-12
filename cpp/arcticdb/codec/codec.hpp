@@ -63,7 +63,7 @@ std::optional<std::tuple<google::protobuf::Any, arcticdb::proto::descriptors::Ti
 decode_timeseries_descriptor_for_incompletes(
         Segment& segment);
 
-HashedValue hash_segment_header(const arcticdb::proto::encoding::SegmentHeader &hdr);
+HashedValue hash_segment_data(const arcticdb::proto::encoding::SegmentHeader &hdr, const std::shared_ptr<FieldCollection>& fields);
 } // namespace arcticdb
 
 #define ARCTICDB_SEGMENT_ENCODER_H_
