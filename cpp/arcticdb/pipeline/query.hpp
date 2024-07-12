@@ -291,19 +291,18 @@ inline void build_row_read_query_filters(
     const FilterRange& range,
     bool dynamic_schema,
     bool column_groups,
-    std::vector<FilterQuery<ContainerType>>& queries
-) {
-    util::variant_match(
-        range,
-        [&](const RowRange& row_range) {
-            queries.emplace_back(create_row_filter<ContainerType>(RowRange{row_range.first, row_range.second}));
-        },
-        [&](const IndexRange& index_range) {
-            if (index_range.specified_) {
-                queries.emplace_back(create_index_filter<ContainerType>(index_range, dynamic_schema, column_groups));
-            }
-        },
-        [](const auto&) {}
+    std::vector<FilterQuery<ContainerType>>& queries) {
+    util::variant_match(range,
+                        [&](const RowRange &row_range) {
+                            queries.emplace_back(
+                                    create_row_filter<ContainerType>(RowRange{row_range.first, row_range.second}));
+                        },
+                        [&](const IndexRange &index_range) {
+                            if (index_range.specified_) {
+                                queries.emplace_back(create_index_filter<ContainerType>(index_range, dynamic_schema, column_groups));
+                            }
+                        },
+                        [](const auto &) {}
     );
 }
 
@@ -344,7 +343,7 @@ inline void build_col_read_query_filters(
 
 template<typename ContainerType>
 inline std::vector<FilterQuery<ContainerType>> build_read_query_filters(
-    std::shared_ptr<PipelineContext> pipeline_context,
+    const std::shared_ptr<PipelineContext>& pipeline_context,
     const FilterRange &range,
     bool dynamic_schema,
     bool column_groups) {
@@ -352,7 +351,7 @@ inline std::vector<FilterQuery<ContainerType>> build_read_query_filters(
     std::vector<FilterQuery<ContainerType>> queries;
 
     build_row_read_query_filters(range, dynamic_schema, column_groups, queries);
-    build_col_read_query_filters(std::move(pipeline_context), dynamic_schema, column_groups, queries);
+    build_col_read_query_filters(pipeline_context, dynamic_schema, column_groups, queries);
 
     return queries;
 }

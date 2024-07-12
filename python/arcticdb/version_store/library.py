@@ -1022,7 +1022,7 @@ class Library:
         columns: List[str], default=None
             Applicable only for Pandas data. Determines which columns to return data for. Special values:
             - ``None``: Return a dataframe containing all columns
-            - ``[]``: Return a dataframe containing only the index column
+            - ``[]``: Return a dataframe containing only the index columns
 
         query_builder: Optional[QueryBuilder], default=None
             A QueryBuilder object to apply to the dataframe before it is returned. For more information see the
