@@ -8,7 +8,7 @@ def read_strings():
     script_directory = os.path.dirname(os.path.abspath(__file__))
     file_path = "{}/blns.txt".format(script_directory)
 
-    with open(file_path, 'r') as file:
+    with open(file_path, 'r', errors="ignore") as file:
         lines = file.readlines()
 
     filtered_lines = [line.strip() for line in lines if line.strip() and not line.strip().startswith('#')]
