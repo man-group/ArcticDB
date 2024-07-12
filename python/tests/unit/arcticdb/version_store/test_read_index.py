@@ -23,41 +23,6 @@ from arcticdb.util.test import assert_frame_equal
 
 @pytest.fixture(
     scope="function",
-    params=[
-        # (encoding_version, dynamic_schema)
-        (EncodingVersion.V1, False),
-        (EncodingVersion.V1, True),
-        (EncodingVersion.V2, False),
-        (EncodingVersion.V2, True),
-    ]
-)
-def lmdb_version_store_row_slice(request, version_store_factory):
-    return version_store_factory(
-        dynamic_strings=True,
-        encoding_version=int(request.param[0]),
-        dynamic_schema=request.param[1],
-        column_group_size=1,
-        segment_row_size=5
-    )
-
-@pytest.fixture(
-    scope="function",
-    params=(
-        "lmdb_version_store_v1",
-        "lmdb_version_store_v2",
-        "lmdb_version_store_dynamic_schema_v1",
-        "lmdb_version_store_dynamic_schema_v2",
-    ),
-)
-def lmdb_version_store_static_and_dynamic(request):
-    """
-    Designed to test all combinations between schema and encoding version for LMDB
-    """
-    yield request.getfixturevalue(request.param)
-
-
-@pytest.fixture(
-    scope="function",
     params=(
         pd.RangeIndex(start=0, stop=10),
         pd.RangeIndex(start=0, stop=10, step=2),
