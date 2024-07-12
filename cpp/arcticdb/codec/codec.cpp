@@ -535,11 +535,8 @@ static void hash_field(const arcticdb::proto::encoding::EncodedField &field, Has
     }
 }
 
-HashedValue hash_segment_header(const arcticdb::proto::encoding::SegmentHeader &hdr) {
+HashedValue hash_segment_data(const arcticdb::proto::encoding::SegmentHeader &hdr, const std::shared_ptr<FieldCollection>& fields) {
     HashAccum accum;
-    if(hdr.has_descriptor_field()) {
-        hash_field(hdr.descriptor_field(), accum);
-    }
     if (hdr.has_metadata_field()) {
         hash_field(hdr.metadata_field(), accum);
     }
@@ -548,6 +545,9 @@ HashedValue hash_segment_header(const arcticdb::proto::encoding::SegmentHeader &
     }
     if(hdr.has_string_pool_field()) {
         hash_field(hdr.string_pool_field(), accum);
+    }
+    if(fields && !fields->empty()) {
+        hash_buffer(fields->buffer(), accum);
     }
     return accum.digest();
 }

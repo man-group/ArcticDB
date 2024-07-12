@@ -179,6 +179,10 @@ public:
         return {&buffer_.buffer(), &shapes_.buffer(), type_, nullptr};
     }
 
+    const ChunkedBuffer& buffer() const {
+        return buffer_.buffer();
+    }
+
     const Field& operator[](size_t pos) const {
         return at(pos);
     }

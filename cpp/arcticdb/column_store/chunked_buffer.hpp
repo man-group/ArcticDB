@@ -13,7 +13,7 @@
 #include <arcticdb/util/allocator.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/column_store/block.hpp>
-
+#include <arcticdb/util/hash.hpp>
 #include <boost/container/small_vector.hpp>
 
 #include <cstdint>
@@ -428,4 +428,11 @@ std::vector<ChunkedBufferImpl<BlockSize>> split(const ChunkedBufferImpl<BlockSiz
 
 template <size_t BlockSize>
 ChunkedBufferImpl<BlockSize> truncate(const ChunkedBufferImpl<BlockSize>& input, size_t start_byte, size_t end_byte);
+
+inline HashedValue hash_buffer(const ChunkedBuffer& buffer, HashAccum& accum) {
+    for(const auto& block : buffer.blocks()) {
+        accum(block->data(), block->bytes());
+    }
+    return accum.digest();
+}
 }

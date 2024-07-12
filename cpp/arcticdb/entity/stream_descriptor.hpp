@@ -22,7 +22,6 @@ struct StreamDescriptor {
 
     std::shared_ptr<Proto> data_ = std::make_shared<Proto>();
     std::shared_ptr<FieldCollection> fields_ = std::make_shared<FieldCollection>();
-    ;
 
     StreamDescriptor() = default;
     ~StreamDescriptor() = default;

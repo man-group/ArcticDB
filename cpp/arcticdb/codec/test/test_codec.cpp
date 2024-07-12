@@ -525,7 +525,7 @@ TEST(Segment, ColumnNamesProduceDifferentHashes) {
         scalar_field(DataType::UINT8, "ints10")
     });
 
-    SegmentInMemory in_mem_seg_2{stream_desc_1.clone()};
+    SegmentInMemory in_mem_seg_2{stream_desc_2.clone()};
 
     in_mem_seg_2.set_scalar(0, uint8_t(0));
     in_mem_seg_2.set_scalar(1, uint8_t(0));
@@ -537,8 +537,8 @@ TEST(Segment, ColumnNamesProduceDifferentHashes) {
     auto seg_1 = encode_dispatch(std::move(in_mem_seg_1), codec::default_lz4_codec(), EncodingVersion::V1);
     auto seg_2 = encode_dispatch(std::move(in_mem_seg_2), codec::default_lz4_codec(), EncodingVersion::V1);
 
-    auto hash_1 = hash_segment_header(seg_1.header());
-    auto hash_2 = hash_segment_header(seg_2.header());
+    auto hash_1 = hash_segment_data(seg_1.header(), seg_1.fields_ptr());
+    auto hash_2 = hash_segment_data(seg_2.header(), seg_2.fields_ptr());
 
     ASSERT_NE(hash_1, hash_2);
 }
@@ -562,13 +562,13 @@ TEST(Segment, ColumnNamesProduceDifferentHashesEmpty) {
         scalar_field(DataType::UINT8, "ints10")
     });
 
-    SegmentInMemory in_mem_seg_2{stream_desc_1.clone()};
+    SegmentInMemory in_mem_seg_2{stream_desc_2.clone()};
 
     auto seg_1 = encode_dispatch(std::move(in_mem_seg_1), codec::default_lz4_codec(), EncodingVersion::V1);
     auto seg_2 = encode_dispatch(std::move(in_mem_seg_2), codec::default_lz4_codec(), EncodingVersion::V1);
 
-    auto hash_1 = hash_segment_header(seg_1.header());
-    auto hash_2 = hash_segment_header(seg_2.header());
+    auto hash_1 = hash_segment_data(seg_1.header(), seg_1.fields_ptr());
+    auto hash_2 = hash_segment_data(seg_2.header(), seg_2.fields_ptr());
 
     ASSERT_NE(hash_1, hash_2);
 }
