@@ -103,10 +103,11 @@ class TestReadEmptyIndex:
         assert result.symbol == "sym"
         assert result.version == 0
         if PANDAS_VERSION < Version("2.0.0"):
-            assert result.data.index.equals(pd.RangeIndex(start=5,stop=5))
+            assert result.data.index.equals(pd.RangeIndex(start=0,stop=0,step=1))
         else:
             assert result.data.index.equals(pd.DatetimeIndex([]))
         assert result.data.empty
+        assert result.data.index.equals(lib.read("sym").data.index)
 
     @pytest.mark.parametrize("dynamic_schema", [False, True])
     def test_empty_datetime_index(self, lmdb_storage, lib_name, dynamic_schema):
@@ -119,6 +120,7 @@ class TestReadEmptyIndex:
         assert result.version == 0
         assert result.data.index.equals(pd.DatetimeIndex([]))
         assert result.data.empty
+        assert result.data.index.equals(lib.read("sym").data.index)
 
 
     @pytest.mark.parametrize(

@@ -70,7 +70,8 @@ from arcticdb.version_store._normalization import (
     _denormalize_single_index
 )
 TimeSeriesType = Union[pd.DataFrame, pd.Series]
-
+from arcticdb.util._versions import PANDAS_VERSION
+from packaging.version import Version
 
 IS_WINDOWS = sys.platform == "win32"
 
@@ -1647,6 +1648,8 @@ class NativeVersionStore:
             index = pd.RangeIndex(start=index_meta.start, stop=stop, step=step)
             if row_range:
                 index=index[row_range[0]:row_range[1]]
+        elif PANDAS_VERSION < Version("2.0.0"):
+            index = pd.RangeIndex(start=0, stop=0,step=1)
         else:
             index = pd.DatetimeIndex([])
         meta = denormalize_user_metadata(read_result.udm, self._normalizer)
@@ -1718,7 +1721,9 @@ class NativeVersionStore:
         )
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
         index_type = read_result.norm.df.common.WhichOneof("index_type")
-        index_is_rowcount = index_type == "index" and not read_result.norm.df.common.index.is_physically_stored
+        index_is_rowcount = (index_type == "index" and
+                             not read_result.norm.df.common.index.is_physically_stored and
+                             len(read_result.frame_data.index_columns) == 0)
         if implement_read_index and columns == [] and index_is_rowcount:
             return self._postprocess_df_with_only_rowcount_idx(read_result, row_range)
         else:
