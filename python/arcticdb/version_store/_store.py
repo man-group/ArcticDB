@@ -1013,12 +1013,7 @@ class NativeVersionStore:
                 query = None
                 if query_builder is not None:
                     query = query_builder if isinstance(query_builder, QueryBuilder) else query_builder[i]
-                index_type = read_result.norm.df.common.WhichOneof("index_type")
-                index_is_rowcount = index_type == "index" and not read_result.norm.df.common.index.is_physically_stored
-                if implement_read_index and columns[i] == [] and index_is_rowcount:
-                    vitem = self._postprocess_df_with_only_rowcount_idx(read_result, row_ranges[i])
-                else:
-                    vitem = self._post_process_dataframe(read_result, read_query, query)
+                vitem = self._post_process_dataframe(read_result, read_query, query, implement_read_index)
 
                 versioned_items.append(vitem)
         return versioned_items
@@ -1725,14 +1720,7 @@ class NativeVersionStore:
             **kwargs,
         )
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
-        index_type = read_result.norm.df.common.WhichOneof("index_type")
-        index_is_rowcount = (index_type == "index" and
-                             not read_result.norm.df.common.index.is_physically_stored and
-                             len(read_result.frame_data.index_columns) == 0)
-        if implement_read_index and columns == [] and index_is_rowcount:
-            return self._postprocess_df_with_only_rowcount_idx(read_result, row_range)
-        else:
-            return self._post_process_dataframe(read_result, read_query, query_builder)
+        return self._post_process_dataframe(read_result, read_query, query_builder, implement_read_index)
 
     def head(
         self,
@@ -1769,12 +1757,7 @@ class NativeVersionStore:
             symbol=symbol, as_of=as_of, date_range=None, row_range=None, columns=columns, query_builder=q, **kwargs
         )
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
-        index_type = read_result.norm.df.common.WhichOneof("index_type")
-        index_is_rowcount = index_type == "index" and not read_result.norm.df.common.index.is_physically_stored
-        if implement_read_index and columns == [] and index_is_rowcount:
-            return self._postprocess_df_with_only_rowcount_idx(read_result, (0, n))
-        else:
-            return self._post_process_dataframe(read_result, read_query, q)
+        return self._post_process_dataframe(read_result, read_query, q, implement_read_index, head=n)
 
     def tail(
         self, symbol: str, n: int = 5, as_of: VersionQueryInput = None, columns: Optional[List[str]] = None, **kwargs
@@ -1807,17 +1790,26 @@ class NativeVersionStore:
             symbol=symbol, as_of=as_of, date_range=None, row_range=None, columns=columns, query_builder=q, **kwargs
         )
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
-        index_type = read_result.norm.df.common.WhichOneof("index_type")
-        index_is_rowcount = index_type == "index" and not read_result.norm.df.common.index.is_physically_stored
-        if implement_read_index and columns == [] and index_is_rowcount:
-            return self._postprocess_df_with_only_rowcount_idx(read_result, (-n, None))
-        else:
-            return self._post_process_dataframe(read_result, read_query, q)
+        return self._post_process_dataframe(read_result, read_query, q, implement_read_index, tail=n)
 
     def _read_dataframe(self, symbol, version_query, read_query, read_options):
         return ReadResult(*self.version_store.read_dataframe_version(symbol, version_query, read_query, read_options))
 
-    def _post_process_dataframe(self, read_result, read_query, query_builder):
+    def _post_process_dataframe(self, read_result, read_query, query_builder, implement_read_index=False, head=None, tail=None):
+        index_type = read_result.norm.df.common.WhichOneof("index_type")
+        index_is_rowcount = (index_type == "index" and
+                             not read_result.norm.df.common.index.is_physically_stored and
+                             len(read_result.frame_data.index_columns) == 0)
+        if implement_read_index and read_query.columns == [] and index_is_rowcount:
+            row_range = None
+            if head:
+                row_range=(0, head)
+            elif tail:
+                row_range=(-tail, None)
+            elif read_query.row_filter is not None and (query_builder is None or query_builder.needs_post_processing()):
+                row_range = self._compute_filter_start_end_row(read_result, read_query)
+            return self._postprocess_df_with_only_rowcount_idx(read_result, row_range)
+
         if read_query.row_filter is not None and (query_builder is None or query_builder.needs_post_processing()):
             # post filter
             start_idx, end_idx = self._compute_filter_start_end_row(read_result, read_query)

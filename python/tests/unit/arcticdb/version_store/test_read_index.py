@@ -68,27 +68,29 @@ class TestBasicReadIndex:
         assert result.data.empty
 
     @pytest.mark.parametrize("dynamic_schema", [False, True])
-    def test_read_index_columns_head(self, lmdb_storage, index, lib_name, dynamic_schema):
+    @pytest.mark.parametrize("n", [3, -3])
+    def test_read_index_columns_head(self, lmdb_storage, index, lib_name, dynamic_schema, n):
         ac = lmdb_storage.create_arctic()
         lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema))
         lib.write("sym", pd.DataFrame({"col": range(0, len(index))}, index=index))
-        result = lib.head("sym", columns=[], n=3)
+        result = lib.head("sym", columns=[], n=n)
         assert isinstance(result, arcticdb.VersionedItem)
         assert result.symbol == "sym"
         assert result.version == 0
-        assert result.data.index.equals(index[:3])
+        assert result.data.index.equals(index[:n])
         assert result.data.empty
 
     @pytest.mark.parametrize("dynamic_schema", [False, True])
-    def test_read_index_columns_tail(self, lmdb_storage, index, lib_name, dynamic_schema):
+    @pytest.mark.parametrize("n", [3, -3])
+    def test_read_index_columns_tail(self, lmdb_storage, index, lib_name, dynamic_schema, n):
         ac = lmdb_storage.create_arctic()
         lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema))
         lib.write("sym", pd.DataFrame({"col": range(0, len(index))}, index=index))
-        result = lib.tail("sym", columns=[], n=3)
+        result = lib.tail("sym", columns=[], n=n)
         assert isinstance(result, arcticdb.VersionedItem)
         assert result.symbol == "sym"
         assert result.version == 0
-        assert result.data.index.equals(index[-3:])
+        assert result.data.index.equals(index[-n:])
         assert result.data.empty
 
 
