@@ -889,6 +889,7 @@ class Library:
         symbol: str,
         mode: Optional[StagedDataFinalizeMethod] = StagedDataFinalizeMethod.WRITE,
         prune_previous_versions: bool = False,
+        validate_index=True,
     ):
         """
         Finalises staged data, making it available for reads.
@@ -903,6 +904,10 @@ class Library:
             new timeseries. Append collects the staged data and appends them to the latest version.
         prune_previous_versions: bool, default=False
             Removes previous (non-snapshotted) versions from the database.
+        validate_index: bool, default=True
+            If True, will verify that the index of the symbol after this operation supports date range searches and
+            update operations. This requires that the indexes of the incomplete segments are non-overlapping with each
+            other, and, in the case of append=True, fall after the last index value in the previous version.
 
         See Also
         --------
@@ -914,6 +919,7 @@ class Library:
             append=mode == StagedDataFinalizeMethod.APPEND,
             convert_int_to_float=False,
             prune_previous_version=prune_previous_versions,
+            validate_index=validate_index,
         )
 
     def sort_and_finalize_staged_data(

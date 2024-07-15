@@ -216,7 +216,7 @@ folly::Future<arcticdb::entity::VariantKey> write_incomplete_frame(
     using namespace arcticdb::pipelines;
 
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
-            !validate_index && !index_is_not_timeseries_or_is_sorted_ascending(frame),
+            !validate_index || index_is_not_timeseries_or_is_sorted_ascending(frame),
             "When writing/appending staged data in parallel, input data must be sorted.");
 
     auto index_range = frame->index_range;
