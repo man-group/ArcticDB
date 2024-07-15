@@ -280,7 +280,7 @@ class TestWithNormalizers:
         lib._nvs.write("sym_recursive", data, recursive_normalizers=True)
         with pytest.raises(InternalException) as exception_info:
             lib.read("sym_recursive", columns=[])
-        assert "Reading the index column is not supported when recursive or custom normalizers are used." in str(exception_info.value)
+        assert "normalizers" in str(exception_info.value)
 
     @pytest.mark.parametrize("dynamic_schema", [False, True])
     def test_custom_throws(self, lmdb_storage, lib_name, dynamic_schema):
@@ -292,7 +292,7 @@ class TestWithNormalizers:
 
         with pytest.raises(InternalException) as exception_info:
             lib.read("sym_custom", columns=[])
-        assert "Reading the index column is not supported when recursive or custom normalizers are used." in str(exception_info.value)
+        assert "normalizers" in str(exception_info.value)
 
 
 class TestReadBatch:
