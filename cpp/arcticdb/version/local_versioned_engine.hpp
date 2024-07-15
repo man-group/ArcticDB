@@ -407,9 +407,21 @@ public:
         return store()->current_timestamp();
     }
 
+    template<typename ClockType>
+    static LocalVersionedEngine _test_init_from_store(
+        const std::shared_ptr<Store>& store,
+        const ClockType& clock
+    ) {
+        return LocalVersionedEngine(store, clock);
+    }
+
     const arcticdb::proto::storage::VersionStoreConfig& cfg() const override { return cfg_; }
 
 protected:
+    template<class ClockType=util::SysClock>
+    explicit LocalVersionedEngine(
+        const std::shared_ptr<Store>& store,
+        const ClockType& = ClockType{});
     VersionedItem compact_incomplete_dynamic(
             const StreamId& stream_id,
             const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
