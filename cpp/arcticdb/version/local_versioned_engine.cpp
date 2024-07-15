@@ -978,8 +978,9 @@ std::set<StreamId> LocalVersionedEngine::get_active_incomplete_refs() {
 
 void LocalVersionedEngine::append_incomplete_frame(
     const StreamId& stream_id,
-    const std::shared_ptr<InputTensorFrame>& frame) const {
-    arcticdb::append_incomplete(store_, stream_id, frame);
+    const std::shared_ptr<InputTensorFrame>& frame,
+    bool validate_index) const {
+    arcticdb::append_incomplete(store_, stream_id, frame, validate_index);
 }
 
 void LocalVersionedEngine::append_incomplete_segment(
@@ -990,27 +991,21 @@ void LocalVersionedEngine::append_incomplete_segment(
 
 void LocalVersionedEngine::write_parallel_frame(
     const StreamId& stream_id,
-    const std::shared_ptr<InputTensorFrame>& frame) const {
-    write_parallel(store_, stream_id, frame);
+    const std::shared_ptr<InputTensorFrame>& frame,
+    bool validate_index) const {
+    write_parallel(store_, stream_id, frame, validate_index);
 }
 
 VersionedItem LocalVersionedEngine::compact_incomplete_dynamic(
     const StreamId& stream_id,
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
-    bool append,
-    bool convert_int_to_float,
-    bool via_iteration,
-    bool sparsify,
-    bool prune_previous_versions) {
+    const CompactIncompleteOptions& options) {
     log::version().debug("Compacting incomplete symbol {}", stream_id);
 
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id, VersionQuery{});
-    auto versioned_item =  compact_incomplete_impl(
-            store_, stream_id, user_meta, update_info,
-            append, convert_int_to_float, via_iteration, sparsify, get_write_options());
+    auto versioned_item =  compact_incomplete_impl(store_, stream_id, user_meta, update_info, options, get_write_options());
 
-    write_version_and_prune_previous(
-        prune_previous_versions, versioned_item.key_, update_info.previous_index_key_);
+    write_version_and_prune_previous(options.prune_previous_versions_, versioned_item.key_, update_info.previous_index_key_);
 
     if(cfg_.symbol_list())
         symbol_list().add_symbol(store_, stream_id, update_info.next_version_id_);
@@ -1683,10 +1678,10 @@ std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> Local
 VersionedItem LocalVersionedEngine::sort_merge_internal(
     const StreamId& stream_id,
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
-    const SortMergeOptions& option) {
+    const CompactIncompleteOptions& options) {
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id, VersionQuery{});
-    auto versioned_item = sort_merge_impl(store_, stream_id, user_meta, update_info, option.append_, option.convert_int_to_float_, option.via_iteration_, option.sparsify_);
-    write_version_and_prune_previous(option.prune_previous_versions_, versioned_item.key_, update_info.previous_index_key_);
+    auto versioned_item = sort_merge_impl(store_, stream_id, user_meta, update_info, options);
+    write_version_and_prune_previous(options.prune_previous_versions_, versioned_item.key_, update_info.previous_index_key_);
     return versioned_item;
 }
 
