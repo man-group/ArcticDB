@@ -183,19 +183,14 @@ std::unordered_set<entity::AtomKey> get_index_keys_in_snapshots(
 std::pair<std::vector<AtomKey>, std::unordered_set<AtomKey>> get_index_keys_partitioned_by_inclusion_in_snapshots(
         const std::shared_ptr<Store>& store,
         const StreamId& stream_id,
-        const std::vector<entity::AtomKey> &all_index_keys
+        std::vector<entity::AtomKey>&& all_index_keys
 ) {
     ARCTICDB_SAMPLE(GetIndexKeysPartitionedByInclusionInSnapshots, 0)
     auto index_keys_in_snapshot = get_index_keys_in_snapshots(store, stream_id);
-
-    std::vector<entity::AtomKey> index_keys_not_in_snapshot;
-    for (const auto &index_key: all_index_keys) {
-        if (!index_keys_in_snapshot.count(index_key)) {
-            index_keys_not_in_snapshot.emplace_back(index_key);
-        }
-    }
-
-    return std::make_pair(index_keys_not_in_snapshot, index_keys_in_snapshot);
+    all_index_keys.erase(std::remove_if(all_index_keys.begin(), all_index_keys.end(), [&index_keys_in_snapshot](const auto& index_key) {
+        return index_keys_in_snapshot.count(index_key) == 1;
+    }), all_index_keys.end());
+    return {std::move(all_index_keys), std::move(index_keys_in_snapshot)};
 }
 
 VariantKey get_ref_key(const SnapshotId& snap_name) {

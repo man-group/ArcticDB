@@ -52,7 +52,7 @@ template LocalVersionedEngine::LocalVersionedEngine(const std::shared_ptr<storag
 template LocalVersionedEngine::LocalVersionedEngine(const std::shared_ptr<storage::Library>& library, const util::ManualClock&);
 
 folly::Future<folly::Unit> LocalVersionedEngine::delete_unreferenced_pruned_indexes(
-        const std::vector<AtomKey> &pruned_indexes,
+        std::vector<AtomKey>&& pruned_indexes,
         const AtomKey& key_to_keep
 ) {
     try {
@@ -62,7 +62,7 @@ folly::Future<folly::Unit> LocalVersionedEngine::delete_unreferenced_pruned_inde
             auto [not_in_snaps, in_snaps] = get_index_keys_partitioned_by_inclusion_in_snapshots(
                     store(),
                     pruned_indexes.begin()->id(),
-                    pruned_indexes);
+                    std::move(pruned_indexes));
             in_snaps.insert(key_to_keep);
             PreDeleteChecks checks{false, false, false, false, std::move(in_snaps)};
             return delete_trees_responsibly(not_in_snaps, {}, {}, checks)
@@ -883,11 +883,11 @@ folly::Future<folly::Unit> LocalVersionedEngine::delete_trees_responsibly(
 
     storage::ReadKeyOpts read_opts;
     read_opts.ignores_missing_key_ = true;
-    auto data_keys_to_be_deleted = get_data_keys_set(store(), *keys_to_delete, read_opts);
+    auto data_keys_to_be_deleted = recurse_index_keys(store(), *keys_to_delete, read_opts);
     log::version().debug("Candidate: {} total of data keys", data_keys_to_be_deleted.size());
 
     read_opts.dont_warn_about_missing_key = true;
-    auto data_keys_not_to_be_deleted = get_data_keys_set(store(), *not_to_delete, read_opts);
+    auto data_keys_not_to_be_deleted = recurse_index_keys(store(), *not_to_delete, read_opts);
     not_to_delete.clear();
     log::version().debug("Forbidden: {} total of data keys", data_keys_not_to_be_deleted.size());
     storage::RemoveOpts remove_opts;
@@ -1212,7 +1212,7 @@ void LocalVersionedEngine::write_version_and_prune_previous(
         const std::optional<IndexTypeKey>& previous_key) {
     if (prune_previous_versions) {
         auto pruned_indexes = version_map()->write_and_prune_previous(store(), new_version, previous_key);
-        delete_unreferenced_pruned_indexes(pruned_indexes, new_version).get();
+        delete_unreferenced_pruned_indexes(std::move(pruned_indexes), new_version).get();
     }
     else {
         version_map()->write_version(store(), new_version, previous_key);

@@ -8,6 +8,7 @@
 #pragma once
 
 #include <memory>
+#include <arcticdb/column_store/key_segment.hpp>
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/stream/stream_reader.hpp>
@@ -105,23 +106,15 @@ inline std::vector<AtomKey> get_data_keys(
     return get_data_keys(store, keys, opts);
 }
 
-template<typename KeyContainer, typename = std::enable_if<std::is_base_of_v<AtomKey, typename KeyContainer::value_type>>>
-inline std::unordered_set<AtomKey> get_data_keys_set(
-    const std::shared_ptr<stream::StreamSource>& store,
-    const KeyContainer& keys,
-    storage::ReadKeyOpts opts) {
-    auto vec = get_data_keys(store, keys, opts);
-    return {vec.begin(), vec.end()};
-}
-
-std::unordered_set<AtomKey> recurse_segment(const std::shared_ptr<stream::StreamSource>& store,
+ankerl::unordered_dense::set<AtomKey> recurse_segment(const std::shared_ptr<stream::StreamSource>& store,
                                             SegmentInMemory segment,
                                             const std::optional<VersionId>& version_id);
 
-/* Given a [multi-]index key, returns a set containing the top level [multi-]index key itself, and all of the
+/* Given a [multi-]index key, returns a set containing the top level [multi-]index key itself, and all the
  * multi-index, index, and data keys referenced by this [multi-]index key.
- * If the version_id argument is provided, the returned set will only contain keys matching that version_id. */
-inline std::unordered_set<AtomKey> recurse_index_key(const std::shared_ptr<stream::StreamSource>& store,
+ * If the version_id argument is provided, the returned set will only contain keys matching that version_id.
+ * Note that this differs from recurse_index_keys, which does not inclide the passed in keys in the returned set. */
+inline ankerl::unordered_dense::set<AtomKey> recurse_index_key(const std::shared_ptr<stream::StreamSource>& store,
                                                      const IndexTypeKey& index_key,
                                                      const std::optional<VersionId>& version_id=std::nullopt) {
     auto segment = store->read_sync(index_key).second;
@@ -130,10 +123,10 @@ inline std::unordered_set<AtomKey> recurse_index_key(const std::shared_ptr<strea
     return res;
 }
 
-inline std::unordered_set<AtomKey> recurse_segment(const std::shared_ptr<stream::StreamSource>& store,
+inline ankerl::unordered_dense::set<AtomKey> recurse_segment(const std::shared_ptr<stream::StreamSource>& store,
                                                    SegmentInMemory segment,
                                                    const std::optional<VersionId>& version_id) {
-    std::unordered_set<AtomKey> res;
+    ankerl::unordered_dense::set<AtomKey> res;
     for (size_t idx = 0; idx < segment.row_count(); idx++) {
         auto key = stream::read_key_row(segment, idx);
         if ((version_id && key.version_id() == *version_id) || !version_id) {
@@ -142,12 +135,69 @@ inline std::unordered_set<AtomKey> recurse_segment(const std::shared_ptr<stream:
                     res.emplace(std::move(key));
                     break;
                 case KeyType::TABLE_INDEX:
-                case KeyType::MULTI_KEY:
-                    res.merge(recurse_index_key(store, key, version_id));
+                case KeyType::MULTI_KEY: {
+                    auto sub_keys = recurse_index_key(store, key, version_id);
+                    for (auto&& sub_key: sub_keys) {
+                        res.emplace(std::move(sub_key));
+                    }
                     break;
+                }
                 default:
                     break;
             }
+        }
+    }
+    return res;
+}
+
+/* Given a container of [multi-]index keys, returns a set containing all the multi-index, index, and data keys
+ * referenced by these [multi-]index keys.
+ * Note that this differs from recurse_index_key, which includes the passed in key in the returned set. */
+template<typename KeyContainer, typename = std::enable_if<std::is_base_of_v<AtomKey, typename KeyContainer::value_type>>>
+inline ankerl::unordered_dense::set<AtomKey> recurse_index_keys(
+        const std::shared_ptr<stream::StreamSource>& store,
+        const KeyContainer& keys,
+        storage::ReadKeyOpts opts) {
+    ankerl::unordered_dense::set<AtomKey> res;
+    ankerl::unordered_dense::set<AtomKeyPacked> res_packed;
+    for (const auto& index_key: keys) {
+        if (index_key.type() == KeyType::MULTI_KEY) {
+            // recurse_index_key includes the input key in the returned set, remove this here
+            auto sub_keys = recurse_index_key(store, index_key);
+            sub_keys.erase(index_key);
+            for (auto&& key: sub_keys) {
+                res.emplace(std::move(key));
+            }
+        } else if (index_key.type() == KeyType::TABLE_INDEX) {
+            KeySegment key_segment(store->read_sync(index_key, opts).second, SymbolStructure::SAME);
+            auto data_keys = key_segment.materialise();
+            util::variant_match(
+                    data_keys,
+                    [&res, &keys](std::vector<AtomKey> &atom_keys) {
+                        res.reserve(keys.size());
+                        for (auto &&key: atom_keys) {
+                            res.emplace(std::move(key));
+                        }
+                    },
+                    [&res_packed, &keys](std::vector<AtomKeyPacked> &atom_keys_packed) {
+                        res_packed.reserve(keys.size());
+                        for (auto &&key_packed: atom_keys_packed) {
+                            res_packed.emplace(std::move(key_packed));
+                        }
+                    }
+            );
+        } else {
+            internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
+                    "recurse_index_keys: expected index or multi-index key, received {}",
+                    index_key.type()
+                    );
+        }
+    }
+    if (!res_packed.empty()) {
+        res.reserve(res_packed.size() + res.size());
+        auto id = keys.begin()->id();
+        for (const auto& key: res_packed) {
+            res.emplace(key.to_atom_key(id));
         }
     }
     return res;

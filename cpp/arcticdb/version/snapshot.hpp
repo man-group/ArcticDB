@@ -59,7 +59,7 @@ std::unordered_set<entity::AtomKey> get_index_keys_in_snapshots(
 std::pair<std::vector<AtomKey>, std::unordered_set<AtomKey>> get_index_keys_partitioned_by_inclusion_in_snapshots(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
-    const std::vector<entity::AtomKey> &all_index_keys
+    std::vector<entity::AtomKey>&& all_index_keys
 );
 
 std::vector<AtomKey> get_versions_from_segment(
