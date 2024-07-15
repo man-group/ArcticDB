@@ -381,8 +381,8 @@ class Library:
         Note that `write` is not designed for multiple concurrent writers over a single symbol *unless the staged
         keyword argument is set to True*. If ``staged`` is True, written segments will be staged and left in an
         "incomplete" stage, unable to be read until they are finalized. This enables multiple
-        writers to a single symbol - all writing staged data at the same time - with one process able to later finalise
-        all staged data rendering the data readable by clients. To finalise staged data, see `finalize_staged_data`.
+        writers to a single symbol - all writing staged data at the same time - with one process able to later finalize
+        all staged data rendering the data readable by clients. To finalize staged data, see `finalize_staged_data`.
 
         Note: ArcticDB will use the 0-th level index of the Pandas DataFrame for its on-disk index.
 
@@ -402,8 +402,7 @@ class Library:
             Removes previous (non-snapshotted) versions from the database.
         staged : bool, default=False
             Whether to write to a staging area rather than immediately to the library.
-            Each unit of staged data must a) be datetime indexed and b) not overlap with any other unit of
-            staged data. Note that this will create symbols with Dynamic Schema enabled.
+            See documentation on `finalize_staged_data` for more information.
         validate_index: bool, default=True
             If True, verify that the index of `data` supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
@@ -892,7 +891,7 @@ class Library:
         validate_index=True,
     ):
         """
-        Finalises staged data, making it available for reads.
+        Finalizes staged data, making it available for reads.
 
         Parameters
         ----------
@@ -900,14 +899,15 @@ class Library:
             Symbol to finalize data for.
 
         mode : `StagedDataFinalizeMethod`, default=StagedDataFinalizeMethod.WRITE
-            Finalise mode. Valid options are WRITE or APPEND. Write collects the staged data and writes them to a
-            new timeseries. Append collects the staged data and appends them to the latest version.
+            Finalize mode. Valid options are WRITE or APPEND. Write collects the staged data and writes them to a
+            new version. Append collects the staged data and appends them to the latest version.
         prune_previous_versions: bool, default=False
             Removes previous (non-snapshotted) versions from the database.
         validate_index: bool, default=True
-            If True, will verify that the index of the symbol after this operation supports date range searches and
-            update operations. This requires that the indexes of the incomplete segments are non-overlapping with each
-            other, and, in the case of append=True, fall after the last index value in the previous version.
+            If True, and staged segments are timeseries, will verify that the index of the symbol after this operation
+            supports date range searches and update operations. This requires that the indexes of the staged segments
+            are non-overlapping with each other, and, in the case of `StagedDataFinalizeMethod.APPEND`, fall after the
+            last index value in the previous version.
 
         See Also
         --------
@@ -939,7 +939,7 @@ class Library:
             Symbol to finalize data for.
 
         mode : `StagedDataFinalizeMethod`, default=StagedDataFinalizeMethod.WRITE
-            Finalise mode. Valid options are WRITE or APPEND. Write collects the staged data and writes them to a
+            Finalize mode. Valid options are WRITE or APPEND. Write collects the staged data and writes them to a
             new timeseries. Append collects the staged data and appends them to the latest version.
         prune_previous_versions : bool, default=False
             Removes previous (non-snapshotted) versions from the database.
