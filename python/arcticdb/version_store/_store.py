@@ -1898,6 +1898,7 @@ class NativeVersionStore:
         sparsify: Optional[bool] = False,
         metadata: Optional[Any] = None,
         prune_previous_version: Optional[bool] = None,
+        validate_index: bool = False,
     ):
         """
         Compact previously written un-indexed chunks of data, produced by a tick collector or parallel
@@ -1922,6 +1923,10 @@ class NativeVersionStore:
             Add user-defined metadata in the same way as write etc
         prune_previous_version
             Removes previous (non-snapshotted) versions from the database.
+        validate_index: bool, default=False
+            If True, will verify that the index of the symbol after this operation supports date range searches and
+            update operations. This requires that the indexes of the incomplete segments are non-overlapping with each
+            other, and, in the case of append=True, fall after the last index value in the previous version.
         Returns
         -------
         VersionedItem
@@ -1932,7 +1937,7 @@ class NativeVersionStore:
         )
         udm = normalize_metadata(metadata) if metadata is not None else None
         return self.version_store.compact_incomplete(
-            symbol, append, convert_int_to_float, via_iteration, sparsify, udm, prune_previous_version
+            symbol, append, convert_int_to_float, via_iteration, sparsify, udm, prune_previous_version, validate_index
         )
 
     @staticmethod

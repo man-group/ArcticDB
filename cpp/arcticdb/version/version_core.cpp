@@ -854,14 +854,17 @@ void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<PipelineC
                     "Cannot append staged segments to existing data as incomplete segment contains index value <= existing data: {} <= {}",
                     it->slice_and_key().key().start_time(),
                     *last_existing_index_value);
-            unique_timestamp_ranges.insert({it->slice_and_key().key().start_time(), it->slice_and_key().key().end_time()});
-        }
+            auto [_, inserted] = unique_timestamp_ranges.insert({it->slice_and_key().key().start_time(), it->slice_and_key().key().end_time()});
+            sorting::check<ErrorCode::E_UNSORTED_DATA>(
+                    inserted,
+                    "Cannot finalize staged data as incomplete segments overlap one another");
+        };
         for (auto it = unique_timestamp_ranges.begin(); it != unique_timestamp_ranges.end(); it++) {
             auto next_it = std::next(it);
             if (next_it != unique_timestamp_ranges.end()) {
                 sorting::check<ErrorCode::E_UNSORTED_DATA>(
                         next_it->first >= it->second,
-                        "Cannot append staged segments to existing data as incomplete segment index values overlap one another: ({}, {}) intersects ({}, {})",
+                        "Cannot finalize staged data as incomplete segment index values overlap one another: ({}, {}) intersects ({}, {})",
                         it->first, it->second - 1, next_it->first, next_it->second - 1);
             }
         }
@@ -1316,6 +1319,7 @@ VersionedItem compact_incomplete_impl(
     bool convert_int_to_float,
     bool via_iteration,
     bool sparsify,
+    bool validate_index,
     const WriteOptions& write_options) {
 
     auto pipeline_context = std::make_shared<PipelineContext>();
@@ -1337,7 +1341,9 @@ VersionedItem compact_incomplete_impl(
     if (pipeline_context->slice_and_keys_.size() == prev_size) {
         util::raise_rte("No incomplete segments found for {}", stream_id);
     }
-    check_incompletes_index_ranges_dont_overlap(pipeline_context, previous_sorted_value);
+    if (validate_index) {
+        check_incompletes_index_ranges_dont_overlap(pipeline_context, previous_sorted_value);
+    }
     const auto& first_seg = pipeline_context->slice_and_keys_.begin()->segment(store);
 
     std::vector<entity::VariantKey> delete_keys;

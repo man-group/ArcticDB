@@ -128,7 +128,8 @@ class PythonVersionStore : public LocalVersionedEngine {
             bool via_iteration = true,
             bool sparsify = false,
             const std::optional<py::object>& user_meta = std::nullopt,
-            bool prune_previous_versions = false);
+            bool prune_previous_versions = false,
+            bool validate_index = false);
 
     void write_parallel(
         const StreamId& stream_id,

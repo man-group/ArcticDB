@@ -979,13 +979,14 @@ VersionedItem LocalVersionedEngine::compact_incomplete_dynamic(
     bool convert_int_to_float,
     bool via_iteration,
     bool sparsify,
-    bool prune_previous_versions) {
+    bool prune_previous_versions,
+    bool validate_index) {
     log::version().debug("Compacting incomplete symbol {}", stream_id);
 
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
     auto versioned_item =  compact_incomplete_impl(
             store_, stream_id, user_meta, update_info,
-            append, convert_int_to_float, via_iteration, sparsify, get_write_options());
+            append, convert_int_to_float, via_iteration, sparsify, validate_index, get_write_options());
 
     write_version_and_prune_previous(
         prune_previous_versions, versioned_item.key_, update_info.previous_index_key_);

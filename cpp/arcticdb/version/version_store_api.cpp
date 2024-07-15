@@ -699,14 +699,15 @@ VersionedItem PythonVersionStore::compact_incomplete(
         bool via_iteration /*= true */,
         bool sparsify /*= false */,
         const std::optional<py::object>& user_meta /* = std::nullopt */,
-        bool prune_previous_versions) {
+        bool prune_previous_versions,
+        bool validate_index) {
     std::optional<arcticdb::proto::descriptors::UserDefinedMetadata> meta;
     if (user_meta && !user_meta->is_none()) {
         meta = std::make_optional<arcticdb::proto::descriptors::UserDefinedMetadata>();
         python_util::pb_from_python(*user_meta, *meta);
     }
     return compact_incomplete_dynamic(stream_id, meta, append, convert_int_to_float, via_iteration, sparsify,
-        prune_previous_versions);
+        prune_previous_versions, validate_index);
 }
 
 VersionedItem PythonVersionStore::sort_merge(
