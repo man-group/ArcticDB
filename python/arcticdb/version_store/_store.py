@@ -995,7 +995,7 @@ class NativeVersionStore:
     def _batch_read_to_versioned_items(
         self, symbols, as_ofs, date_ranges, row_ranges, columns, query_builder, throw_on_error, **kwargs
     ):
-        implement_read_index = "implement_read_index" in kwargs and kwargs["implement_read_index"]
+        implement_read_index = kwargs.get("implement_read_index", False)
         columns = [None if not implement_read_index and c == [] else c for c in columns] if columns else columns
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
         read_queries = self._get_read_queries(len(symbols), date_ranges, row_ranges, columns, query_builder)
@@ -1707,7 +1707,7 @@ class NativeVersionStore:
         -------
         VersionedItem
         """
-        implement_read_index = "implement_read_index" in kwargs and kwargs["implement_read_index"]
+        implement_read_index = kwargs.get("implement_read_index", False)
         if not implement_read_index and columns == []:
             columns = None
         version_query, read_options, read_query = self._get_queries(
@@ -1756,7 +1756,7 @@ class NativeVersionStore:
         -------
         VersionedItem
         """
-        implement_read_index = "implement_read_index" in kwargs and kwargs["implement_read_index"]
+        implement_read_index = kwargs.get("implement_read_index", False)
         if not implement_read_index and columns == []:
             columns = None
         q = QueryBuilder()
@@ -1795,7 +1795,7 @@ class NativeVersionStore:
         VersionedItem
         """
 
-        implement_read_index = "implement_read_index" in kwargs and kwargs["implement_read_index"]
+        implement_read_index = kwargs.get("implement_read_index", False)
         if not implement_read_index and columns == []:
             columns = None
         q = QueryBuilder()
