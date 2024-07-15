@@ -996,7 +996,8 @@ class NativeVersionStore:
         self, symbols, as_ofs, date_ranges, row_ranges, columns, query_builder, throw_on_error, **kwargs
     ):
         implement_read_index = kwargs.get("implement_read_index", False)
-        columns = [None if not implement_read_index and c == [] else c for c in columns] if columns else columns
+        if columns:
+            columns = [self._resolve_empty_columns(c, implement_read_index) for c in columns]
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
         read_queries = self._get_read_queries(len(symbols), date_ranges, row_ranges, columns, query_builder)
         read_options = self._get_read_options(**kwargs)
@@ -1663,6 +1664,11 @@ class NativeVersionStore:
             timestamp=read_result.version.timestamp
         )
 
+    def _resolve_empty_columns(self, columns, implement_read_index):
+        if not implement_read_index and columns == []:
+            columns = None
+        return columns
+
     def read(
         self,
         symbol: str,
@@ -1708,8 +1714,7 @@ class NativeVersionStore:
         VersionedItem
         """
         implement_read_index = kwargs.get("implement_read_index", False)
-        if not implement_read_index and columns == []:
-            columns = None
+        columns = self._resolve_empty_columns(columns, implement_read_index)
         version_query, read_options, read_query = self._get_queries(
             symbol=symbol,
             as_of=as_of,
@@ -1757,8 +1762,7 @@ class NativeVersionStore:
         VersionedItem
         """
         implement_read_index = kwargs.get("implement_read_index", False)
-        if not implement_read_index and columns == []:
-            columns = None
+        columns = self._resolve_empty_columns(columns, implement_read_index)
         q = QueryBuilder()
         q = q._head(n)
         version_query, read_options, read_query = self._get_queries(
@@ -1796,8 +1800,7 @@ class NativeVersionStore:
         """
 
         implement_read_index = kwargs.get("implement_read_index", False)
-        if not implement_read_index and columns == []:
-            columns = None
+        columns = self._resolve_empty_columns(columns, implement_read_index)
         q = QueryBuilder()
         q = q._tail(n)
         version_query, read_options, read_query = self._get_queries(
