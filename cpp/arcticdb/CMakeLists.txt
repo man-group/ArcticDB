@@ -201,6 +201,7 @@ set(arcticdb_srcs
         column_store/column_data_random_accessor.hpp
         column_store/column.hpp
         column_store/column_utils.hpp
+        column_store/key_segment.hpp
         column_store/memory_segment.hpp
         column_store/memory_segment_impl.hpp
         column_store/row_ref.hpp
@@ -400,6 +401,7 @@ set(arcticdb_srcs
         column_store/chunked_buffer.cpp
         column_store/column.cpp
         column_store/column_data.cpp
+        column_store/key_segment.cpp
         column_store/memory_segment_impl.cpp
         column_store/memory_segment_impl.cpp
         column_store/string_pool.cpp
