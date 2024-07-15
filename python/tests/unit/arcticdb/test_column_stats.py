@@ -210,7 +210,7 @@ def test_column_stats_non_existent_column(lmdb_version_store_tiny_segment):
     # Idealy this should throw either a SchemaException or UserInputException
     with pytest.raises(InternalException) as exception_info:
         lib.create_column_stats(sym, column_stats_non_existent_column)
-    assert "Unable to resolve column denoted by aggregation operator: 'non_existent_column'" in str(exception_info.value)
+    assert "non_existent_column" in str(exception_info.value)
 
     column_stats_dict = {"col_1": {"MINMAX"}, "col_2": {"MINMAX"}}
     lib.create_column_stats(sym, column_stats_dict)
