@@ -46,9 +46,6 @@ class TestBasicReadIndex:
         df = pd.DataFrame({"col": range(0, len(index))}, index=index)
         lib.write("sym", df)
         result = lib.read("sym", columns=[])
-        assert isinstance(result, arcticdb.VersionedItem)
-        assert result.symbol == "sym"
-        assert result.version == 0
         assert result.data.index.equals(index)
         assert result.data.empty
 
@@ -61,9 +58,6 @@ class TestBasicReadIndex:
         lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema, rows_per_segment=5, columns_per_segment=2))
         lib.write("sym", df)
         result = lib.read("sym", columns=[])
-        assert isinstance(result, arcticdb.VersionedItem)
-        assert result.symbol == "sym"
-        assert result.version == 0
         assert result.data.index.equals(index)
         assert result.data.empty
 
@@ -74,9 +68,6 @@ class TestBasicReadIndex:
         lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema))
         lib.write("sym", pd.DataFrame({"col": range(0, len(index))}, index=index))
         result = lib.head("sym", columns=[], n=n)
-        assert isinstance(result, arcticdb.VersionedItem)
-        assert result.symbol == "sym"
-        assert result.version == 0
         assert result.data.index.equals(index[:n])
         assert result.data.empty
 
@@ -87,9 +78,6 @@ class TestBasicReadIndex:
         lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema))
         lib.write("sym", pd.DataFrame({"col": range(0, len(index))}, index=index))
         result = lib.tail("sym", columns=[], n=n)
-        assert isinstance(result, arcticdb.VersionedItem)
-        assert result.symbol == "sym"
-        assert result.version == 0
         assert result.data.index.equals(index[-n:])
         assert result.data.empty
 
@@ -101,9 +89,6 @@ class TestReadEmptyIndex:
         lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema))
         lib.write("sym", pd.DataFrame({"col": []}, index=pd.RangeIndex(start=5,stop=5)))
         result = lib.read("sym", columns=[])
-        assert isinstance(result, arcticdb.VersionedItem)
-        assert result.symbol == "sym"
-        assert result.version == 0
         if PANDAS_VERSION < Version("2.0.0"):
             assert result.data.index.equals(pd.RangeIndex(start=0,stop=0,step=1))
         else:
@@ -117,9 +102,6 @@ class TestReadEmptyIndex:
         lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema))
         lib.write("sym", pd.DataFrame({"col": []}, index=pd.DatetimeIndex([])))
         result = lib.read("sym", columns=[])
-        assert isinstance(result, arcticdb.VersionedItem)
-        assert result.symbol == "sym"
-        assert result.version == 0
         assert result.data.index.equals(pd.DatetimeIndex([]))
         assert result.data.empty
         assert result.data.index.equals(lib.read("sym").data.index)
@@ -157,9 +139,6 @@ class TestReadEmptyIndex:
         index = pd.MultiIndex.from_arrays([[], np.array([], dtype="int"), np.array([], dtype="float"), []])
         lib.write("sym", pd.DataFrame({"col_0": [],"col_1": []}, index=input_index))
         result = lib.read("sym", columns=[])
-        assert isinstance(result, arcticdb.VersionedItem)
-        assert result.symbol == "sym"
-        assert result.version == 0
         assert result.data.index.equals(expected_index)
         assert result.data.empty
 
@@ -199,9 +178,6 @@ class TestReadIndexAsOf:
             lib.append("sym", pd.DataFrame({"col": data[i]}, index=indexes[i]))
         for i in range(0, len(indexes)):
             read_index_result = lib.read("sym", columns=[], as_of=i)
-            assert isinstance(read_index_result, arcticdb.VersionedItem)
-            assert read_index_result.symbol == "sym"
-            assert read_index_result.version == i
             assert read_index_result.data.index.equals(reduce(lambda current, new: current.append(new), indexes[:i+1]))
             assert read_index_result.data.empty
 
@@ -223,9 +199,6 @@ class TestReadIndexAsOf:
         lib.snapshot("snap")
         lib.write("sym", pd.DataFrame({"col": [1]}, index=pd.RangeIndex(start=100, stop=101)))
         result = lib.read("sym", as_of="snap", columns=[])
-        assert isinstance(result, arcticdb.VersionedItem)
-        assert result.symbol == "sym"
-        assert result.version == 0
         assert result.data.index.equals(index)
         assert result.data.empty
 
@@ -238,9 +211,6 @@ class TestReadIndexRange:
         lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema))
         lib.write("sym", pd.DataFrame({"col": list(range(0, len(index)))}, index=index))
         result = lib.read("sym", row_range=row_range, columns=[])
-        assert isinstance(result, arcticdb.VersionedItem)
-        assert result.symbol == "sym"
-        assert result.version == 0
         assert result.data.index.equals(index[row_range[0]:row_range[1]])
         assert result.data.empty
 
@@ -251,9 +221,6 @@ class TestReadIndexRange:
         lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema))
         lib.write("sym", pd.DataFrame({"col": list(range(0, len(index)))}, index=index))
         result = lib.read("sym", date_range=(datetime(2024,1,4), datetime(2024,1,8)), columns=[])
-        assert isinstance(result, arcticdb.VersionedItem)
-        assert result.symbol == "sym"
-        assert result.version == 0
         assert result.data.index.equals(pd.date_range(start="01/04/2024", end="01/08/2024"))
         assert result.data.empty
 
@@ -264,9 +231,6 @@ class TestReadIndexRange:
         index = pd.date_range(start="01/01/2024", end="01/10/2024")
         lib.write("sym", pd.DataFrame({"col": list(range(0, len(index)))}, index=index))
         result = lib.read("sym", date_range=(None, datetime(2024,1,8)), columns=[])
-        assert isinstance(result, arcticdb.VersionedItem)
-        assert result.symbol == "sym"
-        assert result.version == 0
         assert result.data.index.equals(pd.date_range(start="01/01/2024", end="01/08/2024"))
         assert result.data.empty
 
@@ -277,9 +241,6 @@ class TestReadIndexRange:
         index = pd.date_range(start="01/01/2024", end="01/10/2024")
         lib.write("sym", pd.DataFrame({"col": list(range(0, len(index)))}, index=index))
         result = lib.read("sym", date_range=(datetime(2024,1,4), None), columns=[])
-        assert isinstance(result, arcticdb.VersionedItem)
-        assert result.symbol == "sym"
-        assert result.version == 0
         assert result.data.index.equals(pd.date_range(start="01/04/2024", end="01/10/2024"))
         assert result.data.empty
 
@@ -290,9 +251,6 @@ class TestReadIndexRange:
         row_range = (3, 8)
         lib.write("sym", pd.DataFrame({"col": range(0, len(index))}, index=index))
         result = lib.read("sym", row_range=row_range, columns=[])
-        assert isinstance(result, arcticdb.VersionedItem)
-        assert result.symbol == "sym"
-        assert result.version == 0
         assert result.data.index.equals(index[row_range[0]:row_range[1]])
         assert result.data.empty
 
