@@ -370,6 +370,7 @@ def _denormalize_single_index(item, norm_meta):
                 return RangeIndex(start=0, stop=0, step=1)
         # this means that the index is not a datetime index and it's been represented as a regular field in the stream
         item.index_columns.append(item.names.pop(0))
+
     if len(item.index_columns) == 1:
         name = int(item.index_columns[0]) if norm_meta.index.is_int else item.index_columns[0]
         rtn = Index(item.data[0] if len(item.data) > 0 else [], name=name)
