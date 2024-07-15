@@ -50,7 +50,7 @@ class TestBasicReadIndex:
         assert result.data.empty
 
     @pytest.mark.parametrize("dynamic_schema", [False, True])
-    def test_read_index_columns_silce(self, lmdb_storage, index, lib_name, dynamic_schema):
+    def test_read_index_column_and_row_silce(self, lmdb_storage, index, lib_name, dynamic_schema):
         col1 = list(range(0, len(index)))
         col2 = [2 * i for i in range(0, len(index))]
         df = pd.DataFrame({"col": col1, "col2": col2, "col3": col1}, index=index)
