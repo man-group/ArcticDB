@@ -855,6 +855,7 @@ void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<PipelineC
                     it->slice_and_key().key().start_time(),
                     *last_existing_index_value);
             auto [_, inserted] = unique_timestamp_ranges.insert({it->slice_and_key().key().start_time(), it->slice_and_key().key().end_time()});
+            // This is correct because incomplete segments aren't column sliced
             sorting::check<ErrorCode::E_UNSORTED_DATA>(
                     inserted,
                     "Cannot finalize staged data as incomplete segments overlap one another");

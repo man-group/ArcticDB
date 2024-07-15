@@ -94,7 +94,8 @@ public:
 
     void append_incomplete_frame(
         const StreamId& stream_id,
-        const std::shared_ptr<InputTensorFrame>& frame) const override;
+        const std::shared_ptr<InputTensorFrame>& frame,
+        bool validate_index) const override;
 
     void remove_incomplete(
         const StreamId& stream_id
@@ -142,7 +143,8 @@ public:
 
     void write_parallel_frame(
         const StreamId& stream_id,
-        const std::shared_ptr<InputTensorFrame>& frame) const override;
+        const std::shared_ptr<InputTensorFrame>& frame,
+        bool validate_index) const override;
 
     void delete_tree(
         const std::vector<IndexTypeKey>& idx_to_be_deleted,

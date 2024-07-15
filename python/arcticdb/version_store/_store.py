@@ -578,10 +578,10 @@ class NativeVersionStore:
         # TODO: allow_sparse for write_parallel / recursive normalizers as well.
         if isinstance(item, NPDDataFrame):
             if parallel:
-                self.version_store.write_parallel(symbol, item, norm_meta, udm)
+                self.version_store.write_parallel(symbol, item, norm_meta, udm, validate_index)
                 return None
             elif incomplete:
-                self.version_store.append_incomplete(symbol, item, norm_meta, udm)
+                self.version_store.append_incomplete(symbol, item, norm_meta, udm, validate_index)
                 return None
             else:
                 vit = self.version_store.write_versioned_dataframe(
@@ -708,7 +708,7 @@ class NativeVersionStore:
         if isinstance(item, NPDDataFrame):
             with _diff_long_stream_descriptor_mismatch(self):
                 if incomplete:
-                    self.version_store.append_incomplete(symbol, item, norm_meta, udm)
+                    self.version_store.append_incomplete(symbol, item, norm_meta, udm, validate_index)
                 else:
                     vit = self.version_store.append(
                         symbol, item, norm_meta, udm, write_if_missing, prune_previous_version, validate_index
