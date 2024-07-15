@@ -13,6 +13,7 @@
 #include <variant>
 #include <optional>
 #include <fmt/format.h>
+#include <ankerl/unordered_dense.h>
 
 namespace arcticdb::entity {
 
@@ -222,7 +223,70 @@ inline AtomKey null_key() {
     return atom_key_builder().build("", KeyType::UNDEFINED);
 }
 
+// Useful in the (common) case where you have a lot of keys all with the same StreamId_
+// Has no heap allocation, as such is only suitable for non-string indexes.
+// Better would be to use intrusive pointers for strings into a local (e.g. per read call) deduped pool
+// Using #pragma pack means the ankerl hashing can just treat the struct as an opaque buffer
+#pragma pack(push)
+#pragma pack(1)
+struct AtomKeyPacked {
+
+    AtomKeyPacked(VersionId version_id,
+                  timestamp creation_ts,
+                  ContentHash content_hash,
+                  KeyType key_type,
+                  timestamp index_start,
+                  timestamp index_end):
+            version_id_(version_id),
+            creation_ts_(creation_ts),
+            content_hash_(content_hash),
+            key_type_(key_type),
+            index_start_(index_start),
+            index_end_(index_end) {}
+
+    AtomKeyPacked(const AtomKey& atom_key):
+            version_id_(atom_key.version_id()),
+            creation_ts_(atom_key.creation_ts()),
+            key_type_(atom_key.type()),
+            index_start_(atom_key.start_time()),
+            index_end_(atom_key.end_time()) {}
+
+    AtomKey to_atom_key(const StreamId& stream_id) const {
+        return AtomKey(stream_id, version_id_, creation_ts_, content_hash_, index_start_, index_end_, key_type_);
+    }
+
+    VersionId version_id_ = 0;
+    timestamp creation_ts_ = 0;
+    ContentHash content_hash_ = 0;
+    KeyType key_type_ = KeyType::UNDEFINED;
+    timestamp index_start_;
+    timestamp index_end_;
+
+    friend bool operator==(const AtomKeyPacked &l, const AtomKeyPacked &r) {
+        return l.version_id_ == r.version_id_
+               && l.creation_ts_ == r.creation_ts_
+               && l.content_hash_ == r.content_hash_
+               && l.key_type_ == r.key_type_
+               && l.index_start_ == r.index_start_
+               && l.index_end_ == r.index_end_;
+    }
+};
+constexpr size_t AtomKeyPackedSize = 40 + sizeof(int);
+static_assert(sizeof(AtomKeyPacked) == AtomKeyPackedSize);
+#pragma pack(pop)
+
 } // namespace arcticdb::entity
+
+// Could also do this for std::hash, but in cases where this struct is being used you should probably be using a more
+// efficient hashing algorithm
+template <>
+struct ankerl::unordered_dense::hash<arcticdb::entity::AtomKeyPacked> {
+    using is_avalanching = void;
+
+    [[nodiscard]] uint64_t operator()(const arcticdb::entity::AtomKeyPacked& key) const noexcept {
+        return ankerl::unordered_dense::detail::wyhash::hash(&key, arcticdb::entity::AtomKeyPackedSize);
+    }
+};
 
 
 // The formatting below deals with the display of keys in logs etc., i.e. in a human-readable

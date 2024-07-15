@@ -958,7 +958,7 @@ void PythonVersionStore::prune_previous_versions(const StreamId& stream_id) {
 
     auto previous = ::arcticdb::get_specific_version(store(), version_map(), stream_id, *prev_id, VersionQuery{});
     auto [_, pruned_indexes] = version_map()->tombstone_from_key_or_all(store(), stream_id, previous);
-    delete_unreferenced_pruned_indexes(pruned_indexes, *latest).get();
+    delete_unreferenced_pruned_indexes(std::move(pruned_indexes), *latest).get();
 }
 
 void PythonVersionStore::delete_all_versions(const StreamId& stream_id) {
