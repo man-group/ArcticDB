@@ -363,8 +363,6 @@ def test_parallel_overlapping_incomplete_segments(lmdb_version_store, append, va
         assert_frame_equal(received, expected)
 
 
-# TODO: Add test to test_arctic.py covering V2 API
-# TODO: Also modify other tests here so that write/append calls also respect validate_index, not just parralel/incomplete kwargs
 @pytest.mark.parametrize("append", (True, False))
 @pytest.mark.parametrize("validate_index", (True, False, None))
 def test_parallel_all_incomplete_segments_same_index(lmdb_version_store_v1, append, validate_index):
