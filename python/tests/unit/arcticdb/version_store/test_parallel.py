@@ -419,7 +419,8 @@ def test_parallel_append_overlapping_with_existing(lmdb_version_store, validate_
 
 
 @pytest.mark.parametrize("sortedness", ("DESCENDING", "UNSORTED"))
-def test_parallel_append_existing_data_unsorted(lmdb_version_store, sortedness):
+@pytest.mark.parametrize("validate_index", (True, False, None))
+def test_parallel_append_existing_data_unsorted(lmdb_version_store, sortedness, validate_index):
     lib = lmdb_version_store
     sym = "test_parallel_append_existing_data_unsorted"
     last_index_date = "2024-01-01" if sortedness == "DESCENDING" else "2024-01-03"
@@ -431,8 +432,18 @@ def test_parallel_append_existing_data_unsorted(lmdb_version_store, sortedness):
     assert lib.get_info(sym)["sorted"] == sortedness
     df_1 = pd.DataFrame({"col": [3, 4]}, index=[pd.Timestamp("2024-01-05"), pd.Timestamp("2024-01-06")])
     lib.append(sym, df_1, incomplete=True)
-    with pytest.raises(SortingException):
-        lib.compact_incomplete(sym, True, False)
+    if validate_index:
+        with pytest.raises(SortingException):
+            lib.compact_incomplete(sym, True, False, validate_index=True)
+    else:
+        if validate_index is None:
+            # Test the default case with no arg provided
+            lib.compact_incomplete(sym, True, False)
+        else:
+            lib.compact_incomplete(sym, True, False, validate_index=False)
+        expected = pd.concat([df_0, df_1])
+        received = lib.read(sym).data
+        assert_frame_equal(expected, received)
 
 
 @pytest.mark.xfail(reason="See https://github.com/man-group/ArcticDB/issues/1250")
