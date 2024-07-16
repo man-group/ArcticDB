@@ -285,10 +285,7 @@ public:
         bool upsert,
         bool throw_on_error);
 
-    std::vector<ReadVersionOutput> batch_read_keys(
-        const std::vector<AtomKey> &keys,
-        std::vector<ReadQuery> &read_queries,
-        const ReadOptions& read_options);
+    std::vector<ReadVersionOutput> batch_read_keys(const std::vector<AtomKey> &keys);
 
     std::vector<std::variant<ReadVersionOutput, DataError>> batch_read_internal(
         const std::vector<StreamId>& stream_ids,

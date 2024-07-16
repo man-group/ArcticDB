@@ -637,8 +637,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              py::call_guard<SingleThreadMutexHolder>(), "Read a dataframe from the store")
         .def("batch_read_keys",
              [&](PythonVersionStore& v, std::vector<AtomKey> atom_keys) {
-                std::vector<ReadQuery> empty_read_queries;
-                 return python_util::adapt_read_dfs(frame_to_read_result(v.batch_read_keys(atom_keys, empty_read_queries, ReadOptions{})));
+                 return python_util::adapt_read_dfs(frame_to_read_result(v.batch_read_keys(atom_keys)));
              },
              py::call_guard<SingleThreadMutexHolder>(), "Read a specific version of a dataframe from the store")
         .def("batch_write",

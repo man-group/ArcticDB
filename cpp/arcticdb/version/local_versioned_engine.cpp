@@ -1072,10 +1072,7 @@ folly::Future<ReadVersionOutput> async_read_direct(
         });
 }
 
-std::vector<ReadVersionOutput> LocalVersionedEngine::batch_read_keys(
-    const std::vector<AtomKey> &keys,
-    std::vector<ReadQuery> &read_queries,
-    const ReadOptions& read_options) {
+std::vector<ReadVersionOutput> LocalVersionedEngine::batch_read_keys(const std::vector<AtomKey> &keys) {
     py::gil_scoped_release release_gil;
     std::vector<folly::Future<std::pair<entity::VariantKey, SegmentInMemory>>> index_futures;
     for (auto &index_key: keys) {
@@ -1085,10 +1082,9 @@ std::vector<ReadVersionOutput> LocalVersionedEngine::batch_read_keys(
 
     std::vector<folly::Future<ReadVersionOutput>> results_fut;
     auto i = 0u;
-    util::check(read_queries.empty() || read_queries.size() == keys.size(), "Expected read queries to either be empty or equal to size of keys");
     for (auto&& [index_key, index_segment] : indexes) {
         ReadQuery empty_read_query;
-        results_fut.emplace_back(async_read_direct(store(), keys[i], std::move(index_segment), read_queries.empty() ? empty_read_query: read_queries[i], std::make_shared<BufferHolder>(), read_options));
+        results_fut.emplace_back(async_read_direct(store(), keys[i], std::move(index_segment), empty_read_query, std::make_shared<BufferHolder>(), ReadOptions{}));
         ++i;
     }
     Allocator::instance()->trim();
