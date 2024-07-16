@@ -28,7 +28,9 @@ TEST(SortIndex, Basic) {
     }
 
     auto copy = keys_and_slices;
-    std::random_shuffle(std::begin(keys_and_slices), std::end(keys_and_slices));
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(std::begin(keys_and_slices), std::end(keys_and_slices), g);
     const auto version_id = VersionId{0};
 
     const IndexPartialKey& partial_key{stream_id, version_id};
@@ -69,7 +71,9 @@ TEST(SortIndex, Nonzero) {
         keys_and_slices.emplace_back(SliceAndKey{slice, key});
     }
 
-    std::random_shuffle(std::begin(keys_and_slices), std::end(keys_and_slices));
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(std::begin(keys_and_slices), std::end(keys_and_slices), g);
     const auto version_id = VersionId{0};
 
     const IndexPartialKey& partial_key{stream_id, version_id};
