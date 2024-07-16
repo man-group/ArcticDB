@@ -1034,30 +1034,30 @@ folly::Future<ReadVersionOutput> async_read_direct(
     const std::shared_ptr<Store>& store,
     const VariantKey& index_key,
     SegmentInMemory&& index_segment,
-    ReadQuery& read_query,
+    std::shared_ptr<ReadQuery> read_query,
     std::shared_ptr<BufferHolder> buffers,
     const ReadOptions& read_options) {
     auto index_segment_reader = std::make_shared<index::IndexSegmentReader>(std::move(index_segment));
     const auto& tsd = index_segment_reader->tsd();
 
-    check_column_and_date_range_filterable(*index_segment_reader, read_query);
-    add_index_columns_to_query(read_query, tsd);
-    read_query.calculate_row_filter(static_cast<int64_t>(tsd.proto().total_rows()));
+    check_column_and_date_range_filterable(*index_segment_reader, *read_query);
+    add_index_columns_to_query(*read_query, tsd);
+    read_query->calculate_row_filter(static_cast<int64_t>(tsd.proto().total_rows()));
 
     auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor{tsd.as_stream_descriptor()});
-    pipeline_context->set_selected_columns(read_query.columns);
+    pipeline_context->set_selected_columns(read_query->columns);
     const bool dynamic_schema = opt_false(read_options.dynamic_schema_);
     const bool bucketize_dynamic = index_segment_reader->bucketize_dynamic();
 
     auto queries = get_column_bitset_and_query_functions<index::IndexSegmentReader>(
-        read_query,
+        *read_query,
         pipeline_context,
         dynamic_schema,
         bucketize_dynamic);
 
     pipeline_context->slice_and_keys_ = filter_index(*index_segment_reader, combine_filter_functions(queries));
 
-    generate_filtered_field_descriptors(pipeline_context, read_query.columns);
+    generate_filtered_field_descriptors(pipeline_context, read_query->columns);
     mark_index_slices(pipeline_context, dynamic_schema, bucketize_dynamic);
     auto frame = allocate_frame(pipeline_context);
 
@@ -1083,8 +1083,12 @@ std::vector<ReadVersionOutput> LocalVersionedEngine::batch_read_keys(const std::
     std::vector<folly::Future<ReadVersionOutput>> results_fut;
     auto i = 0u;
     for (auto&& [index_key, index_segment] : indexes) {
-        ReadQuery empty_read_query;
-        results_fut.emplace_back(async_read_direct(store(), keys[i], std::move(index_segment), empty_read_query, std::make_shared<BufferHolder>(), ReadOptions{}));
+        results_fut.emplace_back(async_read_direct(store(),
+                                                   keys[i],
+                                                   std::move(index_segment),
+                                                   std::make_shared<ReadQuery>(),
+                                                   std::make_shared<BufferHolder>(),
+                                                   ReadOptions{}));
         ++i;
     }
     Allocator::instance()->trim();
@@ -1101,8 +1105,6 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::te
     auto versions = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<ReadVersionOutput>> read_versions_futs;
     for (auto&& [idx, version] : folly::enumerate(versions)) {
-        auto empty_read_query = std::make_shared<ReadQuery>();
-        auto read_query = read_queries.empty() ? empty_read_query: read_queries[idx];
         read_versions_futs.emplace_back(std::move(version)
             .thenValue([store = store()](auto&& maybe_index_key) {
                            missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
@@ -1110,12 +1112,14 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::te
                                    "Version not found for symbol");
                            return store->read(*maybe_index_key);
                        })
-            .thenValue([store = store(), read_query, read_options](auto&& key_segment_pair) {
+            .thenValue([store = store(),
+                        read_query = read_queries.empty() ? std::make_shared<ReadQuery>(): read_queries[idx],
+                        read_options](auto&& key_segment_pair) {
                 auto [index_key, index_segment] = std::move(key_segment_pair);
                 return async_read_direct(store,
                                          index_key,
                                          std::move(index_segment),
-                                         *read_query,
+                                         read_query,
                                          std::make_shared<BufferHolder>(),
                                          read_options);
             })
