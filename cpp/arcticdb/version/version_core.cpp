@@ -685,17 +685,18 @@ SegmentInMemory read_direct(const std::shared_ptr<Store>& store,
 }
 
 void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDescriptor& desc) {
-    util::check(read_query.columns.has_value(), "The index has to be added explicitly only if part of the columns are selected");
-    auto index_columns = stream::get_index_columns_from_descriptor(desc);
-    if(index_columns.empty())
-        return;
+    if (read_query.columns.has_value()) {
+        auto index_columns = stream::get_index_columns_from_descriptor(desc);
+        if(index_columns.empty())
+            return;
 
-    std::vector<std::string> index_columns_to_add;
-    for(const auto& index_column : index_columns) {
-        if(std::find(std::begin(*read_query.columns), std::end(*read_query.columns), index_column) == std::end(*read_query.columns))
-            index_columns_to_add.push_back(std::string(index_column));
+        std::vector<std::string> index_columns_to_add;
+        for(const auto& index_column : index_columns) {
+            if(std::find(std::begin(*read_query.columns), std::end(*read_query.columns), index_column) == std::end(*read_query.columns))
+                index_columns_to_add.push_back(std::string(index_column));
+        }
+        read_query.columns->insert(std::begin(*read_query.columns), std::begin(index_columns_to_add), std::end(index_columns_to_add));
     }
-    read_query.columns->insert(std::begin(*read_query.columns), std::begin(index_columns_to_add), std::end(index_columns_to_add));
 }
 
 FrameAndDescriptor read_segment_impl(
@@ -758,9 +759,7 @@ void read_indexed_keys_to_pipeline(
     ARCTICDB_DEBUG(log::version(), "Read index segment with {} keys", index_segment_reader.size());
     check_column_and_date_range_filterable(index_segment_reader, read_query);
 
-    if (read_query.columns.has_value()) {
-        add_index_columns_to_query(read_query, index_segment_reader.tsd());
-    }
+    add_index_columns_to_query(read_query, index_segment_reader.tsd());
 
     const auto& tsd = index_segment_reader.tsd();
     read_query.calculate_row_filter(static_cast<int64_t>(tsd.total_rows()));
@@ -806,7 +805,7 @@ void read_incompletes_to_pipeline(
     pipeline_context->incompletes_after_ = pipeline_context->slice_and_keys_.size();
 
     // If there are only incompletes we need to add the index here
-    if(pipeline_context->slice_and_keys_.empty() && read_query.columns.has_value()) {
+    if(pipeline_context->slice_and_keys_.empty()) {
         add_index_columns_to_query(read_query, incomplete_segments.begin()->segment(store).index_descriptor());
     }
 
