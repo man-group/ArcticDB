@@ -1184,7 +1184,7 @@ FrameAndDescriptor read_dataframe_impl(
 
     if (pipeline_context->multi_key_) {
         user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-            !read_query.columns || (!pipeline_context->only_index_column_selected() && !read_query.columns->empty()),
+            !read_query.columns || (!pipeline_context->only_index_columns_selected() && !read_query.columns->empty()),
             "Reading the index column is not supported when recursive or custom normalizers are used."
         );
         return read_multi_key(store, *pipeline_context->multi_key_);

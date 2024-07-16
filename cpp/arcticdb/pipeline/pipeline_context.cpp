@@ -36,7 +36,7 @@ void PipelineContext::set_selected_columns(const std::optional<std::vector<std::
     selected_columns_ = requested_column_bitset_including_index(*desc_, columns);
 }
 
-bool PipelineContext::only_index_column_selected() const {
+bool PipelineContext::only_index_columns_selected() const {
     return overall_column_bitset_ &&
         ((overall_column_bitset_->count() == 1 && (*overall_column_bitset_)[0]) || overall_column_bitset_->count() == 0);
 }

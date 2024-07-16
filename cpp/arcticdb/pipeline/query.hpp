@@ -128,7 +128,7 @@ inline FilterQuery<index::IndexSegmentReader> create_static_col_filter(std::shar
         auto res = std::make_unique<util::BitSet>(static_cast<util::BitSetSizeType>(isr.size()));
         auto start_col = isr.column(index::Fields::start_col).begin<stream::SliceTypeDescriptorTag>();
         auto end_col = isr.column(index::Fields::end_col).begin<stream::SliceTypeDescriptorTag>();
-        const bool selected_only_index = pipeline->only_index_column_selected();
+        const bool selected_only_index = pipeline->only_index_columns_selected();
         if (input) {
             bm::bvector<>::enumerator en = input->first();
             bm::bvector<>::enumerator en_end = input->end();
@@ -313,7 +313,7 @@ inline void build_col_read_query_filters(
     bool column_groups,
     std::vector<FilterQuery<ContainerType>>& queries
 ) {
-    if (pipeline_context->only_index_column_selected() && pipeline_context->overall_column_bitset_->count() > 0) {
+    if (pipeline_context->only_index_columns_selected() && pipeline_context->overall_column_bitset_->count() > 0) {
         auto query = [pipeline = std::move(pipeline_context
                       )](const index::IndexSegmentReader& isr, std::unique_ptr<util::BitSet>&&) mutable {
             auto res = std::make_unique<util::BitSet>(static_cast<util::BitSetSizeType>(isr.size()));
