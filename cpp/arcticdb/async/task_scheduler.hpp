@@ -13,6 +13,8 @@
 #include <arcticdb/util/exponential_backoff.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/util/home_directory.hpp>
+#include <arcticdb/util/string_utils.hpp>
+
 #include <arcticdb/async/base_task.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 
@@ -67,8 +69,8 @@ public:
                 ARCTICDB_SAMPLE_THREAD();
               func();
             });
-
-    }
+    
+  }
 
     virtual const std::string& getNamePrefix() const override{
         return named_factory_.getNamePrefix();
@@ -101,15 +103,45 @@ struct SchedulerWrapper : public SchedulerType {
     }
 };
 
-inline int64_t get_cgroup_value(const std::string& cgroup_file) {
+struct CGroupValues {
+    int64_t cpu_quota;
+    int64_t cpu_period;
+};
+
+inline int64_t get_cgroup_value_v1(const std::string& cgroup_file) {
     if(const auto path = std::filesystem::path{fmt::format("/sys/fs/cgroup/{}",cgroup_file)}; std::filesystem::exists(path)){
         std::ifstream strm(path.string());
-        util::check(static_cast<bool>(strm), "Failed to open cgroups cpu file for read at path '{}': {}", path.string(), std::strerror(errno));
+        util::check(static_cast<bool>(strm), "Failed to open cgroups v1 cpu file for read at path '{}': {}", path.string(), std::strerror(errno));
         std::string str;
         std::getline(strm, str);
         return std::stol(str);
     }
     return static_cast<int64_t>(-1);
+}
+
+inline CGroupValues get_cgroup_values_v1() {
+    return CGroupValues{get_cgroup_value_v1("cpu/cpu.cfs_quota_us"), get_cgroup_value_v1("cpu/cpu.cfs_period_us")};
+}
+
+// In cgroup v2, the /sys/fs/cgroup/cpu.max file is used and the format is $MAX $PERIOD
+// the default is max 100000
+inline CGroupValues get_cgroup_values_v2() {
+    if(const auto path = std::filesystem::path{"/sys/fs/cgroup/cpu.max"}; std::filesystem::exists(path)){
+        std::ifstream strm(path.string());
+        util::check(static_cast<bool>(strm), "Failed to open cgroups v2 cpu file for read at path '{}': {}", path.string(), std::strerror(errno));
+        std::string str;
+        std::getline(strm, str);
+        auto values = util::split_to_array<2>(str, ' ');
+
+        auto quota = std::string{values[0]};
+        auto period = std::string{values[1]};
+        if (quota == std::string("max"))
+            return CGroupValues{0, std::stol(period)};
+
+        return CGroupValues{std::stol(quota), std::stol(period)};
+    }
+
+    return CGroupValues{-1, -1};
 }
 
 inline auto get_default_num_cpus() {
@@ -118,11 +150,15 @@ inline auto get_default_num_cpus() {
         return static_cast<int64_t>(cpu_count);
     #else
         auto quota_count = 0UL;
-        auto quota = get_cgroup_value("cpu/cpu.cfs_quota_us");
-        auto period = get_cgroup_value("cpu/cpu.cfs_period_us");
+        auto cgroup_val = get_cgroup_values_v1();
 
-        if (quota > -1 && period > 0)
-            quota_count = static_cast<int64_t>(ceil(static_cast<double>(quota) / static_cast<double>(period)));
+        // if cgroup v1 values are not found, try to get values from cgroup v2
+        // if both are -1, this means that we haven't found valid cgroup v1 files
+        if (cgroup_val.cpu_quota == -1 && cgroup_val.cpu_period == -1)
+            cgroup_val = get_cgroup_values_v2();
+
+        if (cgroup_val.cpu_quota > -1 && cgroup_val.cpu_period > 0)
+            quota_count = static_cast<int64_t>(ceil(static_cast<double>(cgroup_val.cpu_quota) / static_cast<double>(cgroup_val.cpu_period)));
 
         auto limit_count = quota_count != 0 ? quota_count : cpu_count;
         return std::min(static_cast<int64_t>(cpu_count), static_cast<int64_t>(limit_count));
@@ -148,7 +184,7 @@ class TaskScheduler {
     using CPUSchedulerType = folly::FutureExecutor<folly::CPUThreadPoolExecutor>;
     using IOSchedulerType = folly::FutureExecutor<folly::IOThreadPoolExecutor>;
 
-    explicit TaskScheduler(const std::optional<size_t>& cpu_thread_count = std::nullopt, const std::optional<size_t>& io_thread_count = std::nullopt) :
+     explicit TaskScheduler(const std::optional<size_t>& cpu_thread_count = std::nullopt, const std::optional<size_t>& io_thread_count = std::nullopt) :
         cpu_thread_count_(cpu_thread_count ? *cpu_thread_count : ConfigsMap::instance()->get_int("VersionStore.NumCPUThreads", get_default_num_cpus())),
         io_thread_count_(io_thread_count ? *io_thread_count : ConfigsMap::instance()->get_int("VersionStore.NumIOThreads", (int) (cpu_thread_count_ * 1.5))),
         cpu_exec_(cpu_thread_count_, std::make_shared<InstrumentedNamedFactory>("CPUPool")) ,
