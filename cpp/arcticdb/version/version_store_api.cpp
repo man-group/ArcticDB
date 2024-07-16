@@ -796,7 +796,7 @@ ReadResult PythonVersionStore::read_dataframe_merged(
 std::vector<std::variant<ReadResult, DataError>> PythonVersionStore::batch_read(
     const std::vector<StreamId>& stream_ids,
     const std::vector<VersionQuery>& version_queries,
-    std::vector<ReadQuery>& read_queries,
+    std::vector<std::shared_ptr<ReadQuery>>& read_queries,
     const ReadOptions& read_options) {
     
     auto read_versions_or_errors = batch_read_internal(stream_ids, version_queries, read_queries, read_options);

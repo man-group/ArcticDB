@@ -1528,6 +1528,14 @@ class NativeVersionStore:
         check(date_range is None or row_range is None, "Date range and row range both specified")
         read_query = _PythonVersionStoreReadQuery()
 
+        if date_range is not None and query_builder is not None:
+            q = QueryBuilder()
+            query_builder = q.date_range(date_range).then(query_builder)
+
+        if row_range is not None and query_builder is not None:
+            q = QueryBuilder()
+            query_builder = q._row_range(row_range).then(query_builder)
+
         if query_builder:
             read_query.add_clauses(query_builder.clauses)
 
@@ -1674,13 +1682,13 @@ class NativeVersionStore:
         -------
         VersionedItem
         """
-        if date_range is not None and query_builder is not None:
-            q = QueryBuilder()
-            query_builder = q.date_range(date_range).then(query_builder)
-
-        if row_range is not None and query_builder is not None:
-            q = QueryBuilder()
-            query_builder = q._row_range(row_range).then(query_builder)
+        # if date_range is not None and query_builder is not None:
+        #     q = QueryBuilder()
+        #     query_builder = q.date_range(date_range).then(query_builder)
+        #
+        # if row_range is not None and query_builder is not None:
+        #     q = QueryBuilder()
+        #     query_builder = q._row_range(row_range).then(query_builder)
 
         version_query, read_options, read_query = self._get_queries(
             symbol=symbol,

@@ -1034,15 +1034,17 @@ folly::Future<ReadVersionOutput> async_read_direct(
     const std::shared_ptr<Store>& store,
     const VariantKey& index_key,
     SegmentInMemory&& index_segment,
-    const ReadQuery& read_query,
+    ReadQuery& read_query,
     std::shared_ptr<BufferHolder> buffers,
     const ReadOptions& read_options) {
     auto index_segment_reader = std::make_shared<index::IndexSegmentReader>(std::move(index_segment));
+    const auto& tsd = index_segment_reader->tsd();
 
     check_column_and_date_range_filterable(*index_segment_reader, read_query);
-    add_index_columns_to_query(read_query, index_segment_reader->tsd());
+    add_index_columns_to_query(read_query, tsd);
+    read_query.calculate_row_filter(static_cast<int64_t>(tsd.proto().total_rows()));
 
-    auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor{index_segment_reader->tsd().as_stream_descriptor()});
+    auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor{tsd.as_stream_descriptor()});
     pipeline_context->set_selected_columns(read_query.columns);
     const bool dynamic_schema = opt_false(read_options.dynamic_schema_);
     const bool bucketize_dynamic = index_segment_reader->bucketize_dynamic();
@@ -1072,7 +1074,7 @@ folly::Future<ReadVersionOutput> async_read_direct(
 
 std::vector<ReadVersionOutput> LocalVersionedEngine::batch_read_keys(
     const std::vector<AtomKey> &keys,
-    const std::vector<ReadQuery> &read_queries,
+    std::vector<ReadQuery> &read_queries,
     const ReadOptions& read_options) {
     py::gil_scoped_release release_gil;
     std::vector<folly::Future<std::pair<entity::VariantKey, SegmentInMemory>>> index_futures;
@@ -1085,7 +1087,8 @@ std::vector<ReadVersionOutput> LocalVersionedEngine::batch_read_keys(
     auto i = 0u;
     util::check(read_queries.empty() || read_queries.size() == keys.size(), "Expected read queries to either be empty or equal to size of keys");
     for (auto&& [index_key, index_segment] : indexes) {
-        results_fut.emplace_back(async_read_direct(store(), keys[i], std::move(index_segment), read_queries.empty() ? ReadQuery{} : read_queries[i], std::make_shared<BufferHolder>(), read_options));
+        ReadQuery empty_read_query;
+        results_fut.emplace_back(async_read_direct(store(), keys[i], std::move(index_segment), read_queries.empty() ? empty_read_query: read_queries[i], std::make_shared<BufferHolder>(), read_options));
         ++i;
     }
     Allocator::instance()->trim();
@@ -1095,14 +1098,15 @@ std::vector<ReadVersionOutput> LocalVersionedEngine::batch_read_keys(
 std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::temp_batch_read_internal_direct(
     const std::vector<StreamId> &stream_ids,
     const std::vector<VersionQuery> &version_queries,
-    std::vector<ReadQuery> &read_queries,
+    std::vector<std::shared_ptr<ReadQuery>> &read_queries,
     const ReadOptions &read_options) {
     py::gil_scoped_release release_gil;
 
     auto versions = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<ReadVersionOutput>> read_versions_futs;
     for (auto&& [idx, version] : folly::enumerate(versions)) {
-        auto read_query = read_queries.empty() ? ReadQuery{} : read_queries[idx];
+        auto empty_read_query = std::make_shared<ReadQuery>();
+        auto read_query = read_queries.empty() ? empty_read_query: read_queries[idx];
         read_versions_futs.emplace_back(std::move(version)
             .thenValue([store = store()](auto&& maybe_index_key) {
                            missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
@@ -1115,7 +1119,7 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::te
                 return async_read_direct(store,
                                          index_key,
                                          std::move(index_segment),
-                                         read_query,
+                                         *read_query,
                                          std::make_shared<BufferHolder>(),
                                          read_options);
             })
@@ -1150,14 +1154,14 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::te
 std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::batch_read_internal(
     const std::vector<StreamId>& stream_ids,
     const std::vector<VersionQuery>& version_queries,
-    std::vector<ReadQuery>& read_queries,
+    std::vector<std::shared_ptr<ReadQuery>>& read_queries,
     const ReadOptions& read_options) {
     // This read option should always be set when calling batch_read
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_error_.has_value(),
                                                     "ReadOptions::batch_throw_on_error_ should always be set here");
 
     if(std::none_of(std::begin(read_queries), std::end(read_queries), [] (const auto& read_query) {
-        return !read_query.clauses_.empty();
+        return !read_query->clauses_.empty();
     })) {
         return temp_batch_read_internal_direct(stream_ids, version_queries, read_queries, read_options);
     }
@@ -1166,7 +1170,7 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
     read_versions_or_errors.reserve(stream_ids.size());
     for (size_t idx=0; idx < stream_ids.size(); idx++) {
         auto version_query = version_queries.size() > idx ? version_queries[idx] : VersionQuery{};
-        auto read_query = read_queries.size() > idx ? read_queries[idx] : ReadQuery{};
+        auto read_query = read_queries.size() > idx ? *read_queries[idx] : ReadQuery{};
         // TODO: https://github.com/man-group/ArcticDB/issues/241
         // Remove this try-catch in favour of the implementation in temp_batch_read_internal_direct as part of #241
         try {

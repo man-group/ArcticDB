@@ -281,7 +281,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def_property_readonly("end", &DateRangeClause::end)
             .def("__str__", &DateRangeClause::to_string);
 
-    py::class_<ReadQuery>(version, "PythonVersionStoreReadQuery")
+    py::class_<ReadQuery, std::shared_ptr<ReadQuery>>(version, "PythonVersionStoreReadQuery")
             .def(py::init())
             .def_readwrite("columns",&ReadQuery::columns)
             .def_readwrite("row_range",&ReadQuery::row_range)
@@ -627,13 +627,18 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              &PythonVersionStore::force_release_lock,
              py::call_guard<SingleThreadMutexHolder>(), "Force release a lock.")
         .def("batch_read",
-             [&](PythonVersionStore& v, const std::vector<StreamId> &stream_ids,  const std::vector<VersionQuery>& version_queries, std::vector<ReadQuery> read_queries, const ReadOptions& read_options){
+             [&](PythonVersionStore& v,
+                 const std::vector<StreamId> &stream_ids,
+                 const std::vector<VersionQuery>& version_queries,
+                 std::vector<std::shared_ptr<ReadQuery>>& read_queries,
+                 const ReadOptions& read_options){
                  return python_util::adapt_read_dfs(v.batch_read(stream_ids, version_queries, read_queries, read_options));
              },
              py::call_guard<SingleThreadMutexHolder>(), "Read a dataframe from the store")
         .def("batch_read_keys",
              [&](PythonVersionStore& v, std::vector<AtomKey> atom_keys) {
-                 return python_util::adapt_read_dfs(frame_to_read_result(v.batch_read_keys(atom_keys, {}, ReadOptions{})));
+                std::vector<ReadQuery> empty_read_queries;
+                 return python_util::adapt_read_dfs(frame_to_read_result(v.batch_read_keys(atom_keys, empty_read_queries, ReadOptions{})));
              },
              py::call_guard<SingleThreadMutexHolder>(), "Read a specific version of a dataframe from the store")
         .def("batch_write",

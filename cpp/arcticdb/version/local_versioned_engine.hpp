@@ -287,19 +287,19 @@ public:
 
     std::vector<ReadVersionOutput> batch_read_keys(
         const std::vector<AtomKey> &keys,
-        const std::vector<ReadQuery> &read_queries,
+        std::vector<ReadQuery> &read_queries,
         const ReadOptions& read_options);
 
     std::vector<std::variant<ReadVersionOutput, DataError>> batch_read_internal(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries,
-        std::vector<ReadQuery>& read_queries,
+        std::vector<std::shared_ptr<ReadQuery>>& read_queries,
         const ReadOptions& read_options);
 
     std::vector<std::variant<ReadVersionOutput, DataError>> temp_batch_read_internal_direct(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries,
-        std::vector<ReadQuery>& read_queries,
+        std::vector<std::shared_ptr<ReadQuery>>& read_queries,
         const ReadOptions& read_options);
 
     std::vector<std::variant<DescriptorItem, DataError>> batch_read_descriptor_internal(
