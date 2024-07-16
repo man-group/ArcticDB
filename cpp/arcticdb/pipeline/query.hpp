@@ -139,8 +139,7 @@ inline FilterQuery<index::IndexSegmentReader> create_static_col_filter(std::shar
                 pos = *en;
                 std::advance(start_col, dist);
                 std::advance(end_col, dist);
-                (*res)[*en] =
-                    pipeline->overall_column_bitset_->any_range(*start_col, *end_col - 1) || selected_only_index;
+                (*res)[*en] = selected_only_index || pipeline->overall_column_bitset_->any_range(*start_col, *end_col - 1);
                 ++en;
             }
 
