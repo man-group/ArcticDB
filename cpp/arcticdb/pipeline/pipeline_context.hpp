@@ -124,10 +124,7 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
     /// return as a result of a read operation,
     std::optional<util::BitSet> selected_columns_;
     /// All columns that must be read. This is a superset of PipelineContext::selected_columns_ and is used in cases where
-    /// PipelineContext::selected_columns_ depend on other columns.
-    /// Example: DataFrame with one column: "col", a query builder projecting col + 1 onto an artificial column "proj". The user
-    /// does a read and needs only the projected column. PipelineContext::selected_columns_ will be ["proj"], while
-    /// PipelineContext::overall_column_bitset_ will be ["col", "proj"]
+    /// PipelineContext::selected_columns_ depend on other columns, e.g. when projecting a column with the QueryBuilder.
     std::optional<util::BitSet> overall_column_bitset_;
     // Stores the field descriptors for the columns in PipelineContext::selected_columns_
     std::shared_ptr<FieldCollection> filter_columns_;
