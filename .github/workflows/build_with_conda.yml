@@ -17,6 +17,8 @@ jobs:
       always() &&
       !cancelled()
     runs-on: ubuntu-latest
+    env:
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     services:
       mongodb:
         image: mongo:4.4
@@ -102,7 +104,8 @@ jobs:
 
       fail-fast: false
     runs-on: ${{ matrix.os }}
-
+    env:
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     steps:
       - uses: actions/checkout@v3.3.0
         with:
