@@ -747,12 +747,12 @@ void read_indexed_keys_to_pipeline(
         return;
 
     auto index_segment_reader = std::move(maybe_reader.value());
-    internal::check<ErrorCode::E_NOT_IMPLEMENTED>(
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
         !(index_segment_reader.tsd().proto().normalization().has_custom() && read_query.columns &&
           read_query.columns->empty()),
         "Reading the index column is not supported when recursive or custom normalizers are used."
     );
-    internal::check<ErrorCode::E_NOT_IMPLEMENTED>(
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
         !(index_segment_reader.is_pickled() && read_query.columns && read_query.columns->empty()),
         "Reading index columns is not supported with pickled data."
     );
@@ -1183,7 +1183,7 @@ FrameAndDescriptor read_dataframe_impl(
     }
 
     if (pipeline_context->multi_key_) {
-        internal::check<ErrorCode::E_NOT_IMPLEMENTED>(
+        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
             !read_query.columns || (!pipeline_context->only_index_column_selected() && !read_query.columns->empty()),
             "Reading the index column is not supported when recursive or custom normalizers are used."
         );
