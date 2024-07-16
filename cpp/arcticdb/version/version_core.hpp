@@ -127,6 +127,7 @@ VersionedItem compact_incomplete_impl(
     bool convert_int_to_float,
     bool via_iteration,
     bool sparsify,
+    bool validate_index,
     const WriteOptions& write_options);
 
 struct PredefragmentationInfo{

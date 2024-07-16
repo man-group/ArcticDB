@@ -453,6 +453,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              py::arg("sparsify") = false,
              py::arg("user_meta") = std::nullopt,
              py::arg("prune_previous_versions") = false,
+             py::arg("validate_index") = false,
              py::call_guard<SingleThreadMutexHolder>(), "Compact incomplete segments")
          .def("sort_merge",
              &PythonVersionStore::sort_merge,

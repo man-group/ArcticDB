@@ -956,8 +956,9 @@ std::set<StreamId> LocalVersionedEngine::get_active_incomplete_refs() {
 
 void LocalVersionedEngine::append_incomplete_frame(
     const StreamId& stream_id,
-    const std::shared_ptr<InputTensorFrame>& frame) const {
-    arcticdb::append_incomplete(store_, stream_id, frame);
+    const std::shared_ptr<InputTensorFrame>& frame,
+    bool validate_index) const {
+    arcticdb::append_incomplete(store_, stream_id, frame, validate_index);
 }
 
 void LocalVersionedEngine::append_incomplete_segment(
@@ -968,8 +969,9 @@ void LocalVersionedEngine::append_incomplete_segment(
 
 void LocalVersionedEngine::write_parallel_frame(
     const StreamId& stream_id,
-    const std::shared_ptr<InputTensorFrame>& frame) const {
-    write_parallel(store_, stream_id, frame);
+    const std::shared_ptr<InputTensorFrame>& frame,
+    bool validate_index) const {
+    write_parallel(store_, stream_id, frame, validate_index);
 }
 
 VersionedItem LocalVersionedEngine::compact_incomplete_dynamic(
@@ -979,13 +981,14 @@ VersionedItem LocalVersionedEngine::compact_incomplete_dynamic(
     bool convert_int_to_float,
     bool via_iteration,
     bool sparsify,
-    bool prune_previous_versions) {
+    bool prune_previous_versions,
+    bool validate_index) {
     log::version().debug("Compacting incomplete symbol {}", stream_id);
 
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
     auto versioned_item =  compact_incomplete_impl(
             store_, stream_id, user_meta, update_info,
-            append, convert_int_to_float, via_iteration, sparsify, get_write_options());
+            append, convert_int_to_float, via_iteration, sparsify, validate_index, get_write_options());
 
     write_version_and_prune_previous(
         prune_previous_versions, versioned_item.key_, update_info.previous_index_key_);

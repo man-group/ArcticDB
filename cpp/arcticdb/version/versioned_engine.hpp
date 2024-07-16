@@ -75,7 +75,8 @@ public:
 
     virtual void append_incomplete_frame(
         const StreamId& stream_id,
-        const std::shared_ptr<InputTensorFrame>& frame) const = 0;
+        const std::shared_ptr<InputTensorFrame>& frame,
+        bool validate_index) const = 0;
 
     virtual void append_incomplete_segment(
         const StreamId& stream_id,
@@ -87,7 +88,8 @@ public:
 
     virtual void write_parallel_frame(
         const StreamId& stream_id,
-        const std::shared_ptr<InputTensorFrame>& frame) const = 0;
+        const std::shared_ptr<InputTensorFrame>& frame,
+        bool validate_index) const = 0;
 
     /**
      * Delete the given index keys, and their associated data excluding those shared with keys not in the argument.
