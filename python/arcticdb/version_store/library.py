@@ -319,7 +319,8 @@ class ReadLibrary:
         self._dev_tools = DevTools(nvs)
 
     def __repr__(self):
-        return "Library(%s, path=%s, storage=%s)" % (
+        return "%s(%s, path=%s, storage=%s)" % (
+            self.__class__.__name__,
             self.arctic_instance_desc,
             self._nvs._lib_cfg.lib_desc.name,
             self._nvs.get_backing_store(),
@@ -578,7 +579,7 @@ class ReadLibrary:
         --------
         read_metadata
         """
-        symbol_strings, as_ofs = self.parse_list_of_symbols(symbols)
+        symbol_strings, as_ofs = self._parse_list_of_symbols(symbols)
 
         include_errors_and_none_meta = True
         return self._nvs._batch_read_metadata_to_versioned_items(symbol_strings, as_ofs, include_errors_and_none_meta)
@@ -797,7 +798,7 @@ class ReadLibrary:
         return self._info_to_desc(info)
 
     @staticmethod
-    def parse_list_of_symbols(symbols: List[Union[str, ReadInfoRequest]]) -> (List, List):
+    def _parse_list_of_symbols(symbols: List[Union[str, ReadInfoRequest]]) -> Tuple[List, List]:
         symbol_strings = []
         as_ofs = []
 
@@ -846,7 +847,7 @@ class ReadLibrary:
         SymbolDescription
             For documentation on each field.
         """
-        symbol_strings, as_ofs = self.parse_list_of_symbols(symbols)
+        symbol_strings, as_ofs = self._parse_list_of_symbols(symbols)
 
         throw_on_error = False
         descriptions = self._nvs._batch_read_descriptor(symbol_strings, as_ofs, throw_on_error)
@@ -1948,32 +1949,6 @@ class Library(ReadLibrary):
         info = self._nvs.get_info(symbol, as_of)
         return self._info_to_desc(info)
 
-    @staticmethod
-    def parse_list_of_symbols(symbols: List[Union[str, ReadInfoRequest]]) -> (List, List):
-        symbol_strings = []
-        as_ofs = []
-
-        def handle_read_request(s: ReadInfoRequest):
-            symbol_strings.append(s.symbol)
-            as_ofs.append(s.as_of)
-
-        def handle_symbol(s: str):
-            symbol_strings.append(s)
-            as_ofs.append(None)
-
-        for s in symbols:
-            if isinstance(s, str):
-                handle_symbol(s)
-            elif isinstance(s, ReadInfoRequest):
-                handle_read_request(s)
-            else:
-                raise ArcticInvalidApiUsageException(
-                    f"Unsupported item in the symbols argument s=[{s}] type(s)=[{type(s)}]. Only [str] and"
-                    " [ReadInfoRequest] are supported."
-                )
-
-        return (symbol_strings, as_ofs)
-
     def get_description_batch(
         self, symbols: List[Union[str, ReadInfoRequest]]
     ) -> List[Union[SymbolDescription, DataError]]:
@@ -1998,7 +1973,7 @@ class Library(ReadLibrary):
         SymbolDescription
             For documentation on each field.
         """
-        symbol_strings, as_ofs = self.parse_list_of_symbols(symbols)
+        symbol_strings, as_ofs = self._parse_list_of_symbols(symbols)
 
         throw_on_error = False
         descriptions = self._nvs._batch_read_descriptor(symbol_strings, as_ofs, throw_on_error)

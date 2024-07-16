@@ -11,7 +11,7 @@ from typing import List, Optional, Any, Union
 from arcticdb.options import DEFAULT_ENCODING_VERSION, LibraryOptions, EnterpriseLibraryOptions
 from arcticdb_ext.storage import LibraryManager
 from arcticdb.exceptions import LibraryNotFound, MismatchingLibraryOptions
-from arcticdb.version_store.library import ArcticInvalidApiUsageException, Library
+from arcticdb.version_store.library import ArcticInvalidApiUsageException, Library, ReadLibrary
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter
 from arcticdb.adapters.s3_library_adapter import S3LibraryAdapter
@@ -22,6 +22,7 @@ from arcticdb.adapters.in_memory_library_adapter import InMemoryLibraryAdapter
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb.exceptions import UnsupportedLibraryOptionValue, UnknownLibraryOption
 from arcticdb.options import ModifiableEnterpriseLibraryOption, ModifiableLibraryOption
+from arcticdb.authorization.permissions import OpenMode
 
 
 logger = logging.getLogger(__name__)
@@ -90,29 +91,36 @@ class Arctic:
         self._uri = uri
 
     def __getitem__(self, name: str) -> Library:
-        lib_mgr_name = self._library_adapter.get_name_for_library_manager(name)
-        if not self._library_manager.has_library(lib_mgr_name):
-            raise LibraryNotFound(name)
-
-        storage_override = self._library_adapter.get_storage_override()
-        lib = NativeVersionStore(
-            self._library_manager.get_library(lib_mgr_name, storage_override),
-            repr(self._library_adapter),
-            lib_cfg=self._library_manager.get_library_config(lib_mgr_name, storage_override),
-        )
-        if self._accessed_libs is not None:
-            self._accessed_libs.append(lib)
-        return Library(repr(self), lib)
-
+        return self._get_library_from_manager(name, read_only=False)
+    
     def __repr__(self):
         return "Arctic(config=%r)" % self._library_adapter
 
     def __contains__(self, name: str):
         return self.has_library(name)
 
+    def _get_library_from_manager(self, name: str, read_only: bool) -> Union[Library, ReadLibrary]:
+        lib_mgr_name = self._library_adapter.get_name_for_library_manager(name)
+        if not self._library_manager.has_library(lib_mgr_name):
+            raise LibraryNotFound(name)
+
+        storage_override = self._library_adapter.get_storage_override()
+        nvs = NativeVersionStore(
+            self._library_manager.get_library(lib_mgr_name, storage_override),
+            repr(self._library_adapter),
+            lib_cfg=self._library_manager.get_library_config(lib_mgr_name, storage_override),
+            open_mode=OpenMode.READ if read_only else OpenMode.DELETE,
+        )
+        if self._accessed_libs is not None:
+            self._accessed_libs.append(nvs)
+        if read_only:
+            return ReadLibrary(repr(self), nvs)
+        else:
+            return Library(repr(self), nvs)
+
     def get_library(
         self, name: str, create_if_missing: Optional[bool] = False, library_options: Optional[LibraryOptions] = None, read_only: Optional[bool] = False
-    ) -> Library:
+    ) -> Union[Library, ReadLibrary]:
         """
         Returns the library named ``name``.
 
@@ -135,8 +143,8 @@ class Arctic:
             Unused if create_if_missing is False.
 
         read_only: Optional[bool], default = False
-            If True, return a simplified library API without any write/update/delete capabilities (a ReadLibrary).
-            This does not check that the backend permissions are read only.
+            If True return a read-only library API, one without any write/update/delete capabilities (a ReadLibrary).
+            This does not ensure that the backend permissions are read only.
 
         Examples
         --------
@@ -151,10 +159,14 @@ class Arctic:
         """
         if library_options and not create_if_missing:
             raise ArcticInvalidApiUsageException(
-                "In get_library, library_options must be falsey if create_if_missing is falsey"
+                "In get_library, cannot specify library_options if create_if_missing=False"
+            )
+        if create_if_missing and read_only:
+            raise ArcticInvalidApiUsageException(
+                "In get_library, cannot combine create_if_missing=True with read_only=True"
             )
         try:
-            lib = self[name]
+            lib = self._get_library_from_manager(name, read_only=read_only)
             if create_if_missing and library_options:
                 if library_options.encoding_version is None:
                     library_options.encoding_version = self._encoding_version
@@ -163,7 +175,7 @@ class Arctic:
             return lib
         except LibraryNotFound as e:
             if create_if_missing:
-                return self.create_library(name, library_options)
+                return self.create_library(name, library_options, read_only=read_only)
             else:
                 raise e
 
@@ -218,7 +230,7 @@ class Arctic:
         self._library_manager.write_library_config(cfg, lib_mgr_name, self._library_adapter.get_masking_override())
         if self._created_lib_names is not None:
             self._created_lib_names.append(name)
-        return self.get_library(name)
+        return self.get_library(name, create_if_missing=False)
 
     def delete_library(self, name: str) -> None:
         """
