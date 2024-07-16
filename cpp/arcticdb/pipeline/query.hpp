@@ -313,19 +313,19 @@ inline void build_col_read_query_filters(
     std::vector<FilterQuery<ContainerType>>& queries
 ) {
     if (pipeline_context->only_index_columns_selected() && pipeline_context->overall_column_bitset_->count() > 0) {
-        auto query = [pipeline = std::move(pipeline_context
-                      )](const index::IndexSegmentReader& isr, std::unique_ptr<util::BitSet>&&) mutable {
+        auto query = [pipeline = std::move(pipeline_context)](const index::IndexSegmentReader& isr, std::unique_ptr<util::BitSet>&&) mutable {
             auto res = std::make_unique<util::BitSet>(static_cast<util::BitSetSizeType>(isr.size()));
             auto start_row = isr.column(index::Fields::start_row).begin<stream::SliceTypeDescriptorTag>();
             auto start_row_end = isr.column(index::Fields::start_row).end<stream::SliceTypeDescriptorTag>();
             size_t index_segment_row = 0;
-            while (true) {
-                (*res)[index_segment_row++] = true;
-                const auto previous_start_row = *start_row;
-                ++start_row;
-                if (previous_start_row >= *start_row || start_row == start_row_end) {
-                    break;
+            ankerl::unordered_dense::set<decltype(start_row)::value_type> requested_start_rows;
+            while (start_row != start_row_end) {
+                if (requested_start_rows.find(*start_row) == requested_start_rows.end()) {
+                    (*res)[index_segment_row] = true;
+                    requested_start_rows.insert(*start_row);
                 }
+                ++index_segment_row;
+                ++start_row;
             }
             return res;
         };

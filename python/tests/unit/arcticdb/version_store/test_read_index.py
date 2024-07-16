@@ -14,7 +14,7 @@ from functools import reduce
 from packaging.version import Version
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb.util._versions import PANDAS_VERSION
-from arcticdb_ext.exceptions import InternalException
+from arcticdb_ext.exceptions import UserInputException
 from arcticdb.util.test import  CustomThing, TestCustomNormalizer
 from arcticdb.version_store._custom_normalizers import register_normalizer, clear_registered_normalizers
 from arcticdb.options import LibraryOptions
@@ -50,7 +50,7 @@ class TestBasicReadIndex:
         assert result.data.empty
 
     @pytest.mark.parametrize("dynamic_schema", [False, True])
-    def test_read_index_column_and_row_silce(self, lmdb_storage, index, lib_name, dynamic_schema):
+    def test_read_index_column_and_row_slice(self, lmdb_storage, index, lib_name, dynamic_schema):
         col1 = list(range(0, len(index)))
         col2 = [2 * i for i in range(0, len(index))]
         df = pd.DataFrame({"col": col1, "col2": col2, "col3": col1}, index=index)
@@ -278,7 +278,7 @@ class TestWithNormalizers:
         ac = lmdb_storage.create_arctic()
         lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema))
         lib._nvs.write("sym_recursive", data, recursive_normalizers=True)
-        with pytest.raises(InternalException) as exception_info:
+        with pytest.raises(UserInputException) as exception_info:
             lib.read("sym_recursive", columns=[])
         assert "normalizers" in str(exception_info.value)
 
@@ -290,7 +290,7 @@ class TestWithNormalizers:
         data = CustomThing(custom_columns=["a", "b"], custom_index=[12, 13], custom_values=[[2.0, 4.0], [3.0, 5.0]])
         lib._nvs.write("sym_custom", data)
 
-        with pytest.raises(InternalException) as exception_info:
+        with pytest.raises(UserInputException) as exception_info:
             lib.read("sym_custom", columns=[])
         assert "normalizers" in str(exception_info.value)
 
@@ -341,9 +341,9 @@ class TestPickled:
         ac = lmdb_storage.create_arctic()
         lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema))
         lib.write_pickle("sym_recursive", pd.DataFrame({"col": [Dummy(), Dummy()]}))
-        with pytest.raises(InternalException) as exception_info:
+        with pytest.raises(UserInputException) as exception_info:
             lib.read("sym_recursive", columns=[])
-        assert "Reading index columns is not supported with pickled data." in str(exception_info.value)
+        assert "pickled" in str(exception_info.value)
 
 
 class TestReadIndexV1LibraryNonReg:
