@@ -101,7 +101,7 @@ def test_querybuilder_date_range_then_project(lmdb_version_store_tiny_segment, b
 
 
 @pytest.mark.parametrize("batch", [True, False])
-@pytest.mark.parametrize("use_date_range_clause", [False])
+@pytest.mark.parametrize("use_date_range_clause", [True, False])
 def test_querybuilder_date_range_then_groupby(lmdb_version_store_tiny_segment, batch, use_date_range_clause):
     lib = lmdb_version_store_tiny_segment
     symbol = "test_querybuilder_date_range_then_groupby"

@@ -286,7 +286,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def_readwrite("columns",&ReadQuery::columns)
             .def_readwrite("row_range",&ReadQuery::row_range)
             .def_readwrite("row_filter",&ReadQuery::row_filter)
-            .def_readwrite("needs_post_processing",&ReadQuery::needs_post_processing)
+            .def_readonly("needs_post_processing",&ReadQuery::needs_post_processing)
             // Unsurprisingly, pybind11 doesn't understand folly::poly, so use vector of variants here
             .def("add_clauses",
                  [](ReadQuery& self,
@@ -300,6 +300,14 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                 for (auto&& clause: clauses) {
                     util::variant_match(
                         clause,
+                        [&](std::shared_ptr<RowRangeClause> clause) {
+                            self.needs_post_processing = false;
+                            _clauses.emplace_back(std::make_shared<Clause>(*clause));
+                        },
+                        [&](std::shared_ptr<DateRangeClause> clause) {
+                            self.needs_post_processing = false;
+                            _clauses.emplace_back(std::make_shared<Clause>(*clause));
+                        },
                         [&](auto&& clause) {_clauses.emplace_back(std::make_shared<Clause>(*clause));}
                     );
                 }

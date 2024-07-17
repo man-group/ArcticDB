@@ -1535,7 +1535,6 @@ class NativeVersionStore:
 
         if query_builder:
             read_query.add_clauses(query_builder.clauses)
-            read_query.needs_post_processing = query_builder.needs_post_processing()
 
         if row_range is not None:
             read_query.row_range = _SignedRowRange(row_range[0], row_range[1])
