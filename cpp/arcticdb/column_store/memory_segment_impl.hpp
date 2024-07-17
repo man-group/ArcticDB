@@ -18,6 +18,7 @@
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/column_store/column_map.hpp>
 #include <arcticdb/entity/stream_descriptor.hpp>
+#include <arcticdb/stream/index.hpp>
 
 #include <boost/iterator/iterator_facade.hpp>
 #include <folly/container/Enumerate.h>
@@ -141,48 +142,48 @@ public:
      * As a result this is probably not what you want unless you *know* that it is what you want.
      */
     template<class ValueType>
-        class RowIterator
-            : public boost::iterator_facade<RowIterator<ValueType>, ValueType, boost::random_access_traversal_tag> {
-        public:
-            RowIterator(SegmentInMemoryImpl *parent,
-                        ssize_t row_id_,
-                        size_t column_id) :
-                        location_(parent, row_id_, column_id) {
-            }
+    class RowIterator
+        : public boost::iterator_facade<RowIterator<ValueType>, ValueType, boost::random_access_traversal_tag> {
+    public:
+        RowIterator(SegmentInMemoryImpl *parent,
+                    ssize_t row_id_,
+                    size_t column_id) :
+                    location_(parent, row_id_, column_id) {
+        }
 
-            RowIterator(SegmentInMemoryImpl *parent,
-                        ssize_t row_id_) :
-                        location_(parent, row_id_, 0) {
-            }
+        RowIterator(SegmentInMemoryImpl *parent,
+                    ssize_t row_id_) :
+                    location_(parent, row_id_, 0) {
+        }
 
-            template<class OtherValue>
-                explicit RowIterator(const RowIterator<OtherValue> &other)
-                : location_(other.location_) {}
+        template<class OtherValue>
+            explicit RowIterator(const RowIterator<OtherValue> &other)
+            : location_(other.location_) {}
 
 
-        private:
-            friend class boost::iterator_core_access;
+    private:
+        friend class boost::iterator_core_access;
 
-            template<class> friend
-                class SegmentIterator;
+        template<class> friend
+            class SegmentIterator;
 
-            template<class OtherValue>
-            bool equal(const RowIterator<OtherValue> &other) const {
-                return location_ == other.location_;
-            }
+        template<class OtherValue>
+        bool equal(const RowIterator<OtherValue> &other) const {
+            return location_ == other.location_;
+        }
 
-            void increment() { ++location_.column_id_; }
+        void increment() { ++location_.column_id_; }
 
-            void decrement() { --location_.column_id_; }
+        void decrement() { --location_.column_id_; }
 
-            void advance(ptrdiff_t n) { location_.column_id_ += n; }
+        void advance(ptrdiff_t n) { location_.column_id_ += n; }
 
-            ValueType &dereference() const {
-                return location_;
-            }
+        ValueType &dereference() const {
+            return location_;
+        }
 
-            mutable Location location_;
-        };
+        mutable Location location_;
+    };
 
     struct Row {
         Row() = default;
@@ -262,12 +263,47 @@ public:
             return row_id_ == other.row_id_ && parent_ == other.parent_;
         }
 
+        size_t hash() const{
+            const Row const_row(parent_, row_id_);
+            auto iter = const_row.begin();
+            size_t ans = 0;
+            std::stringstream visited_values;
+            while (iter != const_row.end()) {
+                auto dt = iter->get_field().type().data_type();
+                auto col_name = iter->get_field().name();
+                if (iter->has_value()) {
+                    if (is_sequence_type(dt)) {
+                        iter->visit_string([&ans, &visited_values, &dt, &col_name](std::optional<std::string_view> val) {
+                            if (static_cast<bool>(val)) {
+                                ans = folly::hash::commutative_hash_combine_generic(ans, folly::Hash{}, val.value(), col_name);
+                                visited_values << "|" << ans << ":" << datatype_to_str(dt) << ":" << col_name << ":" << val.value();
+                            }
+                        });
+                    } else {
+                        iter->visit([&ans, &visited_values, &dt, &col_name](auto val) {
+                            if (static_cast<bool>(val) && (!is_floating_point_type(dt) || !std::isnan(static_cast<float>(val.value())))) {
+                                ans = folly::hash::commutative_hash_combine_generic(ans, folly::Hash{}, val.value(), col_name);
+                                visited_values << "|" << ans << ":" << datatype_to_str(dt) << ":" << col_name << ":" << val.value();
+                            }
+                        });
+                    }
+                }
+                iter++;
+            }
+            ARCTICDB_DEBUG(log::version(), "Hash is {}, visited values are {}", ans, visited_values.str());
+            return ans;
+        }
+
         void assert_same_parent(const Row &other) const {
             util::check(parent_ == other.parent_, "Invalid iterator comparison, different parents");
         }
 
         void swap_parent(const Row &other) {
             parent_ = other.parent_;
+        }
+
+        size_t get_hash(bool use_cache=true) const{
+            return parent_->get_row_hash(row_id_, use_cache);
         }
 
         template<class S>
@@ -367,7 +403,61 @@ public:
     using iterator = SegmentIterator<Row>;
     using const_iterator = SegmentIterator<const Row>;
 
+    struct RowsHasher {
+        std::optional<SegmentInMemoryImpl::iterator> last_iterator_;
+        std::unordered_multimap<timestamp, SegmentInMemoryImpl::Row> incoming_hashed_rows_;
+        std::unordered_map<ssize_t, size_t> row_id_to_hash_;
 
+        bool match_row_with_previous_incoming_rows(const SegmentInMemoryImpl::Row& row) {
+            // only to be used with timeseries index
+            // slows down the tick data pipeline
+            //            if (!std::holds_alternative<stream::TimeseriesIndex>(stream::index_type_from_descriptor(row.descriptor().index)))
+            //                return false;
+            timestamp index = row.index<stream::TimeseriesIndex>();
+            auto range_with_same_index = incoming_hashed_rows_.equal_range(index);
+            while (range_with_same_index.first != range_with_same_index.second) {
+                // dont call get_hash() unless needed - unnecessairly hashing rows
+                // the hash value is memoised - so multiple calls are fine
+                auto hash_val = row.get_hash(true);
+                if (range_with_same_index.first->second.get_hash() == hash_val)
+                    return true;
+                range_with_same_index.first++;
+            }
+            incoming_hashed_rows_.insert({index, row});
+            return false;
+        }
+
+        bool match_row_with_self_rows(const SegmentInMemoryImpl::Row& row,
+                                    SegmentInMemoryImpl::iterator begin,
+                                    SegmentInMemoryImpl::iterator end
+                                    ) {
+            if (begin != end && row < *(end-1)) {
+                // If less than first row, then it has to be dedup-ed with some row earlier
+                ARCTICDB_DEBUG(log::version(), "index less than last row, skipping");
+                return true;
+            }
+
+            auto range_with_same_index = std::equal_range(last_iterator_.value(), end, row);
+
+            // The next iterator to start the search from again will be the first point where the value matched
+            // since the index is sorted
+            last_iterator_ = range_with_same_index.first;
+            while (range_with_same_index.first != range_with_same_index.second) {
+                if (row.get_hash(true) == range_with_same_index.first->get_hash(true)) {
+                    // If hashes and index match, assume they are same rows
+                    return true;
+                }
+                range_with_same_index.first++;
+            }
+            ARCTICDB_DEBUG(log::version(), "Not found match_index_with_rows");
+            return false;
+        }
+
+        void reset_iterator(SegmentInMemoryImpl::iterator it) {
+            last_iterator_ = it;
+            incoming_hashed_rows_.clear();
+        }
+    };
 
     SegmentInMemoryImpl();
 
@@ -809,6 +899,18 @@ public:
 
     std::vector<std::shared_ptr<SegmentInMemoryImpl>> split(size_t rows) const;
 
+    size_t get_row_hash(ssize_t row_id, bool use_cache=true) {
+        // cache should be invalidated when new column is added
+        if (use_cache) {
+            auto it = rows_hasher_.row_id_to_hash_.find(row_id);
+            if (it != rows_hasher_.row_id_to_hash_.end())
+                return it->second;
+        }
+        size_t hash = Row(this, row_id).hash();
+        rows_hasher_.row_id_to_hash_[row_id] = hash;
+        return hash;
+    }
+
 private:
     ssize_t row_id_ = -1;
     std::shared_ptr<StreamDescriptor> descriptor_ = std::make_shared<StreamDescriptor>();
@@ -822,6 +924,7 @@ private:
     bool compacted_ = false;
     util::MagicNum<'M', 'S', 'e', 'g'> magic_;
     std::optional<TimeseriesDescriptor> tsd_;
+    RowsHasher rows_hasher_;
 };
 
 namespace {

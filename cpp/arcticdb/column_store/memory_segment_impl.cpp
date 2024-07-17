@@ -9,6 +9,7 @@
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/pipeline/string_pool_utils.hpp>
+#include <arcticdb/util/format_date.hpp>
 
 #include <google/protobuf/any.h>
 #include <google/protobuf/any.pb.h>
@@ -511,6 +512,44 @@ void SegmentInMemoryImpl::concatenate(SegmentInMemoryImpl&& other, bool unique_c
             add_column(*field, other.column_ptr(field.index));
         }
     }
+}
+
+bool SegmentInMemoryImpl::is_row_duplicate(
+    const SegmentInMemoryImpl::Row& row
+) {
+    // Assumption: We continue scanning from last_iterator because incoming rows are assumed to be sorted
+    // We use last_iterator to tell us where we left off the previous time (since rows are sorted by index)
+    if (rows_hasher_.match_row_with_previous_incoming_rows(row))
+        return true;
+
+    auto index_desc = row.descriptor().index();
+    util::check(index_desc == descriptor().index(),
+        "Index mismatch in is_row_duplicate {} vs {}", index_desc.type(), descriptor().index().type());
+
+    // No rows present in master segment
+    if (row_count() == 0)
+        return false;
+
+    if (rows_hasher_.match_row_with_self_rows(row, begin(), end()))
+        return true;
+
+    return false;
+}
+
+util::BitSet SegmentInMemoryImpl::get_duplicates_bitset(SegmentInMemoryImpl& other) {
+    util::BitSet duplicates (other.row_count());
+    if (other.row_count() == 0)
+        return duplicates;
+    rows_hasher_.reset_iterator(begin());
+    for(auto row: other) {
+        if (!is_row_duplicate(row)) {
+            duplicates.set(row.row_id_, true);
+        } else {
+            ARCTICDB_DEBUG(log::version(), "Discarding row with index {} due to duplication",
+                util::format_timestamp(row.index<stream::TimeseriesIndex>()));
+        }
+    }
+    return duplicates;
 }
 
 position_t SegmentInMemoryImpl::add_column(FieldRef field, size_t num_rows, bool presize) {

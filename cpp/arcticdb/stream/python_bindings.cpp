@@ -115,11 +115,18 @@ void register_types(py::module &m) {
         .def("fields", [](const StreamDescriptor& desc){
             return field_collection_to_ref_vector(desc.fields());
         })
+        .def("fields_in_list", [](const StreamDescriptor& desc){
+            py::list result = py::cast(field_collection_to_ref_vector(desc.fields()));
+            return result;
+        })
     );
 
     py::class_<TimeseriesDescriptor>(m, "TimeseriesDescriptor")
         .def_property_readonly("fields", [](const TimeseriesDescriptor& desc){
             return field_collection_to_ref_vector(desc.fields());
+        }).def_property_readonly("fields_in_list", [](const TimeseriesDescriptor& desc){
+            py::list result = py::cast(field_collection_to_ref_vector(desc.fields()));
+            return result;
         }).def_property_readonly("normalization", [](const TimeseriesDescriptor& self) {
             return python_util::pb_to_python(self.normalization());
         }).def_property_readonly("sorted", [](const TimeseriesDescriptor& self) {

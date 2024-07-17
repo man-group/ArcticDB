@@ -43,9 +43,13 @@ public:
         SliceCallBack&& slice_callback,
         Schema &&schema,
         typename AggregatorType::Callback &&c,
-        SegmentingPolicy &&segmenting_policy = SegmentingPolicy{}) :
+        SegmentingPolicy &&segmenting_policy = SegmentingPolicy{},
+        std::optional<SegmentInMemory>&& last_committed_segment_ = std::nullopt) :
         AggregatorType(std::move(schema), std::move(c), std::move(segmenting_policy)),
-        slice_callback_(std::move(slice_callback)) {
+        slice_callback_(std::move(slice_callback)),
+        dedup_rows_(false),
+        last_committed_segment_(std::move(last_committed_segment_)),
+        previous_reduction_in_size_(0) {
     }
 
     void add_segment(SegmentInMemory&& seg, const pipelines::FrameSlice& slice, bool convert_int_to_float) {
@@ -78,12 +82,17 @@ public:
         commit();
     }
 
+    void set_dedup_rows(bool dedup_rows) {
+        dedup_rows_ = dedup_rows;
+    }
+
     void commit() override {
         if(segments_.empty())
             return;
 
         util::check(segments_.size() == slices_.size(), "Segment and slice size mismatch, {} != {}", segments_.size(), slices_.size());
-        if(segments_.size() == 1) {
+        std::vector<std::size_t> segments_final_sizes;
+        if(segments_.size() == 1 && !dedup_rows_) {
             // One segment, and it could be huge, so don't duplicate it
             AggregatorType::segment() = segments_[0];
             if(!DensityPolicy::allow_sparse){ //static schema must have all columns as column slicing is removed
@@ -98,11 +107,13 @@ public:
         }
         else {
             AggregatorType::segment().init_column_map();
-            merge_segments(segments_, AggregatorType::segment(), DensityPolicy::allow_sparse);
+            merge_segments(segments_, AggregatorType::segment(), dedup_rows_, last_committed_segment_, segments_final_sizes, DensityPolicy::allow_sparse);
         }
 
         if (AggregatorType::segment().row_count() > 0) {
-            auto slice = merge_slices(slices_, AggregatorType::segment().descriptor());
+            auto [slice, new_reduction_in_size] = merge_slices(slices_, AggregatorType::segment().descriptor(), dedup_rows_, segments_final_sizes, previous_reduction_in_size_);
+            previous_reduction_in_size_ = new_reduction_in_size;
+            last_committed_segment_ = AggregatorType::segment().clone();
             AggregatorType::commit_impl(false);
             slice_callback_(std::move(slice));
         }
@@ -114,7 +125,10 @@ private:
     std::vector<SegmentInMemory> segments_;
     std::vector<pipelines::FrameSlice> slices_;
     SliceCallBack slice_callback_;
+    bool dedup_rows_;
+    std::optional<SegmentInMemory> last_committed_segment_;
     std::optional<StreamDescriptor> stream_descriptor_;
+    ssize_t previous_reduction_in_size_;
 };
 
 } // namespace arcticdb
