@@ -320,8 +320,9 @@ inline void build_col_read_query_filters(
             size_t index_segment_row = 0;
             ankerl::unordered_dense::set<decltype(start_row)::value_type> requested_start_rows;
             while (start_row != start_row_end) {
-                if (requested_start_rows.find(*start_row) == requested_start_rows.end()) {
-                    (*res)[index_segment_row] = true;
+                auto [it, inserted] = requested_start_rows.insert(*start_row);
+                if (inserted) {
+                    res->set_bit(index_segment_row, true);
                     requested_start_rows.insert(*start_row);
                 }
                 ++index_segment_row;
