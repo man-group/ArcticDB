@@ -44,46 +44,51 @@ namespace s3 {
         template<class It>
         using Range = folly::Range<It>;
 
-        inline void raise_s3_exception(const Aws::S3::S3Error& err){
+        inline void raise_s3_exception(const Aws::S3::S3Error& err, const std::string& object_name) {
             std::string error_message;
             auto type = err.GetErrorType();
             // s3_client.HeadObject returns RESOURCE_NOT_FOUND if a key is not found.
             if(type == Aws::S3::S3Errors::NO_SUCH_KEY || type == Aws::S3::S3Errors::RESOURCE_NOT_FOUND) {
-                throw KeyNotFoundException(fmt::format("Key Not Found Error: S3Error#{} {}: {}",
+                throw KeyNotFoundException(fmt::format("Key Not Found Error: S3Error#{} {}: {} for object '{}'",
                                                        int(err.GetErrorType()),
                                                        err.GetExceptionName().c_str(),
-                                                       err.GetMessage().c_str()));
+                                                       err.GetMessage().c_str(),
+                                                       object_name));
             }
 
             if(type == Aws::S3::S3Errors::ACCESS_DENIED || type == Aws::S3::S3Errors::INVALID_ACCESS_KEY_ID || type == Aws::S3::S3Errors::SIGNATURE_DOES_NOT_MATCH) {
-                raise<ErrorCode::E_PERMISSION>(fmt::format("Permission error: S3Error#{} {}: {}",
+                raise<ErrorCode::E_PERMISSION>(fmt::format("Permission error: S3Error#{} {}: {} for object '{}'",
                                                            int(err.GetErrorType()),
                                                            err.GetExceptionName().c_str(),
-                                                           err.GetMessage().c_str()));
+                                                           err.GetMessage().c_str(),
+                                                           object_name));
             }
 
             if(err.ShouldRetry()) {
-                raise<ErrorCode::E_S3_RETRYABLE>(fmt::format("Retry-able error: S3Error#{} {}: {}",
-                                                           int(err.GetErrorType()),
-                                                           err.GetExceptionName().c_str(),
-                                                           err.GetMessage().c_str()));
+                raise<ErrorCode::E_S3_RETRYABLE>(fmt::format("Retry-able error: S3Error#{} {}: {} for object '{}'",
+                                                             int(err.GetErrorType()),
+                                                             err.GetExceptionName().c_str(),
+                                                             err.GetMessage().c_str(),
+                                                             object_name));
             }
 
             // We create a more detailed error explanation in case of NETWORK_CONNECTION errors to remedy #880.
             if (type == Aws::S3::S3Errors::NETWORK_CONNECTION) {
-                error_message = fmt::format("Unexpected network error: S3Error#{}: {} {} "
+                error_message = fmt::format("Unexpected network error: S3Error#{}: {} {} for object '{}' "
                                             "This could be due to a connectivity issue or too many open Arctic instances. "
                                             "Having more than one open Arctic instance is not advised, you should reuse them. "
                                             "If you absolutely need many open Arctic instances, consider increasing `ulimit -n`.",
                                             int(err.GetErrorType()),
                                             err.GetExceptionName().c_str(),
-                                            err.GetMessage().c_str());
+                                            err.GetMessage().c_str(),
+                                            object_name);
             }
             else {
-                error_message = fmt::format("Unexpected error: S3Error#{} {}: {}",
+                error_message = fmt::format("Unexpected error: S3Error#{} {}: {} for object '{}'",
                                             int(err.GetErrorType()),
                                             err.GetExceptionName().c_str(),
-                                            err.GetMessage().c_str());
+                                            err.GetMessage().c_str(),
+                                            object_name);
             }
 
             log::storage().error(error_message);
@@ -94,9 +99,9 @@ namespace s3 {
             return err == Aws::S3::S3Errors::NO_SUCH_KEY || err == Aws::S3::S3Errors::RESOURCE_NOT_FOUND || err == Aws::S3::S3Errors::NO_SUCH_BUCKET;
         }
 
-        inline void raise_if_unexpected_error(const Aws::S3::S3Error& err) {
+        inline void raise_if_unexpected_error(const Aws::S3::S3Error& err, const std::string& object_name) {
             if (!is_expected_error_type(err.GetErrorType())) {
-                raise_s3_exception(err);
+                raise_s3_exception(err, object_name);
             }
         }
 
@@ -126,7 +131,7 @@ namespace s3 {
                             if (!put_object_result.is_success()) {
                                 auto& error = put_object_result.get_error();
                                 // No DuplicateKeyException is thrown because S3 overwrites the given key if it already exists.
-                                raise_s3_exception(error);
+                                raise_s3_exception(error, s3_object_name);
                             }
                         }
                     });
@@ -176,7 +181,7 @@ namespace s3 {
                                                variant_key_view(k));
                             } else {
                                 auto &error = get_object_result.get_error();
-                                raise_if_unexpected_error(error);
+                                raise_if_unexpected_error(error, s3_object_name);
 
                                 log::storage().log(
                                     opts.dont_warn_about_missing_key ? spdlog::level::debug : spdlog::level::warn,
@@ -241,7 +246,8 @@ namespace s3 {
                                     }
                                 } else {
                                     auto& error = delete_object_result.get_error();
-                                    raise_s3_exception(error);
+                                    std::string failed_objects = fmt::format("{}", fmt::join(to_delete, ", "));
+                                    raise_s3_exception(error, failed_objects);
                                 }
                                 to_delete.clear();
                             }
@@ -335,7 +341,7 @@ namespace s3 {
                                         error.GetMessage().c_str());
                     // We don't raise on expected errors like NoSuchKey because we want to return an empty list
                     // instead of raising.
-                    raise_if_unexpected_error(error);
+                    raise_if_unexpected_error(error, key_prefix);
                     return;
                 }
             } while (continuation_token.has_value());
@@ -358,7 +364,7 @@ namespace s3 {
 
             if (!head_object_result.is_success()) {
                 auto &error = head_object_result.get_error();
-                raise_if_unexpected_error(error);
+                raise_if_unexpected_error(error, s3_object_name);
 
                 ARCTICDB_DEBUG(log::storage(), "Head object returned false for key {} {} {}:{}",
                                variant_key_view(key),

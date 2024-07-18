@@ -61,27 +61,41 @@ std::string get_error_code(const Azure::Core::RequestFailedException& e) {
     return error_code;
 }
 
-void raise_azure_exception(const Azure::Core::RequestFailedException& e) {
+void raise_azure_exception(const Azure::Core::RequestFailedException& e, const std::string& object_name) {
     auto error_code = get_error_code(e);
     auto status_code = e.StatusCode;
     std::string error_message;
 
     if(status_code == Azure::Core::Http::HttpStatusCode::NotFound && error_code == AzureErrorCode_to_string(AzureErrorCode::BlobNotFound)) {
-        throw KeyNotFoundException(fmt::format("Key Not Found Error: AzureError#{} {}: {}",
-                                               static_cast<int>(status_code), error_code, e.ReasonPhrase));
+        throw KeyNotFoundException(fmt::format("Key Not Found Error: AzureError#{} {}: {} for object {}",
+                                               static_cast<int>(status_code),
+                                               error_code, 
+                                               e.ReasonPhrase,
+                                               object_name));
     }
 
     if(status_code == Azure::Core::Http::HttpStatusCode::Unauthorized || status_code == Azure::Core::Http::HttpStatusCode::Forbidden) {
-        raise<ErrorCode::E_PERMISSION>(fmt::format("Permission error: AzureError#{} {}: {}",
-                                                   static_cast<int>(status_code), error_code, e.ReasonPhrase));
+        raise<ErrorCode::E_PERMISSION>(fmt::format("Permission error: AzureError#{} {}: {} for object {}",
+                                                   static_cast<int>(status_code),
+                                                   error_code,
+                                                   e.ReasonPhrase,
+                                                   object_name));
     }
 
     if(static_cast<int>(status_code) >= 500) {
-        error_message = fmt::format("Unexpected Server Error: AzureError#{} {}: {} {}",
-                                    static_cast<int>(status_code), error_code, e.ReasonPhrase, e.what());
+        error_message = fmt::format("Unexpected Server Error: AzureError#{} {}: {} {} for object {}",
+                                    static_cast<int>(status_code),
+                                    error_code,
+                                    e.ReasonPhrase,
+                                    e.what(),
+                                    object_name);
     } else {
-        error_message = fmt::format("Unexpected Error: AzureError#{} {}: {} {}",
-                                    static_cast<int>(status_code), error_code, e.ReasonPhrase, e.what());
+        error_message = fmt::format("Unexpected Error: AzureError#{} {}: {} {} for object {}",
+                                    static_cast<int>(status_code),
+                                    error_code,
+                                    e.ReasonPhrase,
+                                    e.what(),
+                                    object_name);
     }
 
     raise<ErrorCode::E_UNEXPECTED_AZURE_ERROR>(error_message);
@@ -92,12 +106,12 @@ bool is_expected_error_type(const std::string& error_code, Azure::Core::Http::Ht
                                                                           error_code == AzureErrorCode_to_string(AzureErrorCode::ContainerNotFound));
 }
 
-void raise_if_unexpected_error(const Azure::Core::RequestFailedException& e) {
+void raise_if_unexpected_error(const Azure::Core::RequestFailedException& e, const std::string& object_name) {
     auto error_code = get_error_code(e);
     auto status_code = e.StatusCode;
 
     if(!is_expected_error_type(error_code, status_code)) {
-        raise_azure_exception(e);
+        raise_azure_exception(e, object_name);
     }
 }
 
@@ -127,7 +141,7 @@ void do_write_impl(
                         azure_client.write_blob(blob_name, std::move(seg), upload_option, request_timeout);
                     }
                     catch (const Azure::Core::RequestFailedException& e) {
-                        raise_azure_exception(e);
+                        raise_azure_exception(e, blob_name);
                     }
 
                 }
@@ -174,7 +188,7 @@ void do_read_impl(Composite<VariantKey> && ks,
                     ARCTICDB_DEBUG(log::storage(), "Read key {}: {}", variant_key_type(k), variant_key_view(k));
                 }
                 catch (const Azure::Core::RequestFailedException& e) {
-                    raise_if_unexpected_error(e);
+                    raise_if_unexpected_error(e, blob_name);
                     if (!opts.dont_warn_about_missing_key) {
                         log::storage().warn("Failed to read azure segment with key '{}' {} {}: {}",
                                                 k,
@@ -205,9 +219,9 @@ void do_remove_impl(Composite<VariantKey>&& ks,
         auto submit_batch = [&azure_client, &request_timeout](auto &to_delete) {
             try {
                 azure_client.delete_blobs(to_delete, request_timeout);
-            }
-            catch (const Azure::Core::RequestFailedException& e) {
-                raise_azure_exception(e);
+            } catch (const Azure::Core::RequestFailedException& e) {
+                std::string failed_objects = fmt::format("{}", fmt::join(to_delete, ", "));
+                raise_azure_exception(e, failed_objects);
             }
             to_delete.clear();
         };
@@ -269,7 +283,7 @@ void do_iterate_type_impl(KeyType key_type,
             }
         }
         catch (const Azure::Core::RequestFailedException& e) {
-            raise_if_unexpected_error(e);
+            raise_if_unexpected_error(e, key_prefix);
             log::storage().warn("Failed to iterate azure blobs '{}' {}: {}",
                                 key_type,
                                 static_cast<int>(e.StatusCode),
@@ -289,7 +303,7 @@ bool do_key_exists_impl(
             return azure_client.blob_exists(blob_name);
         }
         catch (const Azure::Core::RequestFailedException& e) {
-            raise_if_unexpected_error(e);
+            raise_if_unexpected_error(e, blob_name);
             log::storage().debug("Failed to check azure key '{}' {} {}: {}",
                                 key,
                                 blob_name,

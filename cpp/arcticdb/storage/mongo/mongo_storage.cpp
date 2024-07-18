@@ -36,30 +36,40 @@ std::string MongoStorage::collection_name(KeyType k) {
  * - mongocxx::operation_exception has an error_code which is returned by the server as documented here: https://www.mongodb.com/docs/manual/reference/error-codes/
  * - some relevant error codes returned by the server are defined in MongoError enum.
  */
-void raise_mongo_exception(const mongocxx::operation_exception& e) {
+void raise_mongo_exception(const mongocxx::operation_exception& e, const std::string& object_name) {
     auto error_code = e.code().value();
 
     if (error_code == static_cast<int>(MongoError::NoSuchKey) || error_code == static_cast<int>(MongoError::KeyNotFound)) {
-        throw KeyNotFoundException(fmt::format("Key Not Found Error: MongoError#{}: {}", error_code, e.what()));
+        throw KeyNotFoundException(fmt::format("Key Not Found Error: MongoError#{}: {} for object {}",
+                                                error_code,
+                                                e.what(),
+                                                object_name));
     }
 
     if (error_code == static_cast<int>(MongoError::UnAuthorized) || error_code == static_cast<int>(MongoError::AuthenticationFailed)) {
-        raise<ErrorCode::E_PERMISSION>(fmt::format("Permission error: MongoError#{}: {}", error_code, e.what()));
+        raise<ErrorCode::E_PERMISSION>(fmt::format("Permission error: MongoError#{}: {} for object {}",
+                                                    error_code,
+                                                    e.what(),
+                                                    object_name));
     }
 
-    raise<ErrorCode::E_UNEXPECTED_MONGO_ERROR>(fmt::format("Unexpected Mongo Error: MongoError#{}: {} {} {}",
-                                                           error_code, e.code().category().name(), e.code().message(), e.what()));
+    raise<ErrorCode::E_UNEXPECTED_MONGO_ERROR>(fmt::format("Unexpected Mongo Error: MongoError#{}: {} {} {} for object {}",
+                                                           error_code,
+                                                           e.what(),
+                                                           e.code().category().name(),
+                                                           e.code().message(),
+                                                           object_name));
 }
 
 bool is_expected_error_type(int error_code) {
     return error_code == static_cast<int>(MongoError::KeyNotFound) || error_code == static_cast<int>(MongoError::NoSuchKey);
 }
 
-void raise_if_unexpected_error(const mongocxx::operation_exception& e) {
+void raise_if_unexpected_error(const mongocxx::operation_exception& e, const std::string& object_name) {
     auto error_code = e.code().value();
 
     if (!is_expected_error_type(error_code)) {
-        raise_mongo_exception(e);
+        raise_mongo_exception(e, object_name);
     }
 }
 
@@ -81,7 +91,8 @@ void MongoStorage::do_write(Composite<KeySegmentPair>&& kvs) {
                 auto success = client_->write_segment(db_, collection, std::move(kv));
                 storage::check<ErrorCode::E_MONGO_BULK_OP_NO_REPLY>(success, "Mongo did not acknowledge write for key {}", key_view);
             } catch (const mongocxx::operation_exception& ex) {
-                raise_mongo_exception(ex);
+                std::string object_name = std::string(key_view);
+                raise_mongo_exception(ex, object_name);
             }
         }
     });
@@ -107,7 +118,8 @@ void MongoStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) {
                             fmt::format("update called with upsert=false but key does not exist: {}", key_view));
                 }
             } catch (const mongocxx::operation_exception& ex) {
-                raise_mongo_exception(ex);
+                std::string object_name = std::string(key_view);
+                raise_mongo_exception(ex, object_name);
             }
         }
     });
@@ -133,7 +145,8 @@ void MongoStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visito
                 }
 
             } catch (const mongocxx::operation_exception& ex) {
-                raise_if_unexpected_error(ex);
+                std::string object_name = std::string(variant_key_view(k));
+                raise_if_unexpected_error(ex, object_name);
 
                 log::storage().log(
                         opts.dont_warn_about_missing_key ? spdlog::level::debug : spdlog::level::warn,
@@ -180,7 +193,8 @@ void MongoStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) {
                 }
             } catch (const mongocxx::operation_exception& ex) {
                 // mongo delete does not throw exception if key not found, it returns 0 as delete count
-                raise_mongo_exception(ex);
+                std::string object_name = std::string(variant_key_view(k));
+                raise_mongo_exception(ex, object_name);
             }
         }
     });
@@ -198,7 +212,7 @@ void MongoStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& v
         keys = client_->list_keys(db_, collection, key_type, prefix);
     } catch (const mongocxx::operation_exception& ex) {
         // We don't raise when key is not found because we want to return an empty list instead of raising.
-        raise_if_unexpected_error(ex);
+        raise_if_unexpected_error(ex, collection);
         log::storage().warn("Failed to iterate key type with key '{}' {}: {}",
                             key_type,
                             ex.code().value(),
@@ -214,7 +228,8 @@ bool MongoStorage::do_key_exists(const VariantKey& key) {
     try {
         return client_->key_exists(db_, collection, key);
     } catch (const mongocxx::operation_exception& ex) {
-        raise_if_unexpected_error(ex);
+        std::string object_name = std::string(variant_key_view(key));
+        raise_if_unexpected_error(ex, object_name);
     }
 
     return false;
