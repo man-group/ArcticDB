@@ -66,36 +66,25 @@ void raise_azure_exception(const Azure::Core::RequestFailedException& e, const s
     auto status_code = e.StatusCode;
     std::string error_message;
 
+    auto error_message_suffix = fmt::format("AzureError#{} {}: {} {} for object {}",
+                                    static_cast<int>(status_code),
+                                    error_code,
+                                    e.ReasonPhrase,
+                                    e.what(),
+                                    object_name);
+
     if(status_code == Azure::Core::Http::HttpStatusCode::NotFound && error_code == AzureErrorCode_to_string(AzureErrorCode::BlobNotFound)) {
-        throw KeyNotFoundException(fmt::format("Key Not Found Error: AzureError#{} {}: {} for object {}",
-                                               static_cast<int>(status_code),
-                                               error_code, 
-                                               e.ReasonPhrase,
-                                               object_name));
+        throw KeyNotFoundException(fmt::format("Key Not Found Error: {}", error_message_suffix));
     }
 
     if(status_code == Azure::Core::Http::HttpStatusCode::Unauthorized || status_code == Azure::Core::Http::HttpStatusCode::Forbidden) {
-        raise<ErrorCode::E_PERMISSION>(fmt::format("Permission error: AzureError#{} {}: {} for object {}",
-                                                   static_cast<int>(status_code),
-                                                   error_code,
-                                                   e.ReasonPhrase,
-                                                   object_name));
+        raise<ErrorCode::E_PERMISSION>(fmt::format("Permission Error: {}", error_message_suffix));
     }
 
     if(static_cast<int>(status_code) >= 500) {
-        error_message = fmt::format("Unexpected Server Error: AzureError#{} {}: {} {} for object {}",
-                                    static_cast<int>(status_code),
-                                    error_code,
-                                    e.ReasonPhrase,
-                                    e.what(),
-                                    object_name);
+        error_message = fmt::format("Unexpected Server Error: {}", error_message_suffix);
     } else {
-        error_message = fmt::format("Unexpected Error: AzureError#{} {}: {} {} for object {}",
-                                    static_cast<int>(status_code),
-                                    error_code,
-                                    e.ReasonPhrase,
-                                    e.what(),
-                                    object_name);
+        error_message = fmt::format("Unexpected Error: {}", error_message_suffix);
     }
 
     raise<ErrorCode::E_UNEXPECTED_AZURE_ERROR>(error_message);

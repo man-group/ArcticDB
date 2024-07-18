@@ -33,31 +33,24 @@ namespace fg = folly::gen;
 void raise_lmdb_exception(const ::lmdb::error& e, const std::string& object_name) {
     auto error_code = e.code();
 
+    auto error_message_suffix = fmt::format("LMDBError#{}: {} for object {}",
+                                             error_code,
+                                             e.what(),
+                                             object_name);
+
     if (error_code == MDB_NOTFOUND) {
-        throw KeyNotFoundException(fmt::format("Key Not Found Error: LMDBError#{}: {} for object {}",
-                                                error_code,
-                                                e.what(),
-                                                object_name));
+        throw KeyNotFoundException(fmt::format("Key Not Found Error: {}", error_message_suffix));
     }
 
     if (error_code == MDB_KEYEXIST) {
-        throw DuplicateKeyException(fmt::format("Duplicate Key Error: LMDBError#{}: {} for object {}",
-                                                 error_code, 
-                                                 e.what(),
-                                                 object_name));
+        throw DuplicateKeyException(fmt::format("Duplicate Key Error: {}", error_message_suffix));
     }
 
     if (error_code == MDB_MAP_FULL) {
-        throw LMDBMapFullException(fmt::format("Map Full Error: LMDBError#{}: {} for object {}",
-                                                error_code,
-                                                e.what(),
-                                                object_name));
+        throw LMDBMapFullException(fmt::format("Map Full Error: {}", error_message_suffix));
     }
 
-    raise<ErrorCode::E_UNEXPECTED_LMDB_ERROR>(fmt::format("Unexpected LMDB Error: LMDBError#{}: {} for object {}",
-                                                           error_code,
-                                                           e.what(),
-                                                           object_name));
+    raise<ErrorCode::E_UNEXPECTED_LMDB_ERROR>(fmt::format("Unexpected LMDB Error: {}", error_message_suffix));
 }
 
 ::lmdb::env& LmdbStorage::env() {

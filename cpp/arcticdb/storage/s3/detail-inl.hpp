@@ -47,48 +47,40 @@ namespace s3 {
         inline void raise_s3_exception(const Aws::S3::S3Error& err, const std::string& object_name) {
             std::string error_message;
             auto type = err.GetErrorType();
+            
+            auto error_message_suffix = fmt::format("S3Error#{} {}: {} for object '{}'",
+                                                    int(err.GetErrorType()),
+                                                    err.GetExceptionName().c_str(),
+                                                    err.GetMessage().c_str(),
+                                                    object_name);
+
             // s3_client.HeadObject returns RESOURCE_NOT_FOUND if a key is not found.
             if(type == Aws::S3::S3Errors::NO_SUCH_KEY || type == Aws::S3::S3Errors::RESOURCE_NOT_FOUND) {
-                throw KeyNotFoundException(fmt::format("Key Not Found Error: S3Error#{} {}: {} for object '{}'",
-                                                       int(err.GetErrorType()),
-                                                       err.GetExceptionName().c_str(),
-                                                       err.GetMessage().c_str(),
-                                                       object_name));
+                throw KeyNotFoundException(fmt::format("Key Not Found Error: {}",
+                                                       error_message_suffix));
             }
 
             if(type == Aws::S3::S3Errors::ACCESS_DENIED || type == Aws::S3::S3Errors::INVALID_ACCESS_KEY_ID || type == Aws::S3::S3Errors::SIGNATURE_DOES_NOT_MATCH) {
-                raise<ErrorCode::E_PERMISSION>(fmt::format("Permission error: S3Error#{} {}: {} for object '{}'",
-                                                           int(err.GetErrorType()),
-                                                           err.GetExceptionName().c_str(),
-                                                           err.GetMessage().c_str(),
-                                                           object_name));
+                raise<ErrorCode::E_PERMISSION>(fmt::format("Permission error: {}",
+                                                           error_message_suffix));
             }
 
             if(err.ShouldRetry()) {
-                raise<ErrorCode::E_S3_RETRYABLE>(fmt::format("Retry-able error: S3Error#{} {}: {} for object '{}'",
-                                                             int(err.GetErrorType()),
-                                                             err.GetExceptionName().c_str(),
-                                                             err.GetMessage().c_str(),
-                                                             object_name));
+                raise<ErrorCode::E_S3_RETRYABLE>(fmt::format("Retry-able error: {}",
+                                                           error_message_suffix));
             }
 
             // We create a more detailed error explanation in case of NETWORK_CONNECTION errors to remedy #880.
             if (type == Aws::S3::S3Errors::NETWORK_CONNECTION) {
-                error_message = fmt::format("Unexpected network error: S3Error#{}: {} {} for object '{}' "
+                error_message = fmt::format("Unexpected network error: {} "
                                             "This could be due to a connectivity issue or too many open Arctic instances. "
                                             "Having more than one open Arctic instance is not advised, you should reuse them. "
                                             "If you absolutely need many open Arctic instances, consider increasing `ulimit -n`.",
-                                            int(err.GetErrorType()),
-                                            err.GetExceptionName().c_str(),
-                                            err.GetMessage().c_str(),
-                                            object_name);
+                                            error_message_suffix);
             }
             else {
-                error_message = fmt::format("Unexpected error: S3Error#{} {}: {} for object '{}'",
-                                            int(err.GetErrorType()),
-                                            err.GetExceptionName().c_str(),
-                                            err.GetMessage().c_str(),
-                                            object_name);
+                error_message = fmt::format("Unexpected error: {}",
+                                            error_message_suffix);
             }
 
             log::storage().error(error_message);

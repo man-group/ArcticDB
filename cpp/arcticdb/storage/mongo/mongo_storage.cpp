@@ -38,27 +38,20 @@ std::string MongoStorage::collection_name(KeyType k) {
  */
 void raise_mongo_exception(const mongocxx::operation_exception& e, const std::string& object_name) {
     auto error_code = e.code().value();
+    auto mongo_error_suffix = fmt::format("MongoError#{}: {} for object {}", error_code, e.what(), object_name);
 
     if (error_code == static_cast<int>(MongoError::NoSuchKey) || error_code == static_cast<int>(MongoError::KeyNotFound)) {
-        throw KeyNotFoundException(fmt::format("Key Not Found Error: MongoError#{}: {} for object {}",
-                                                error_code,
-                                                e.what(),
-                                                object_name));
+        throw KeyNotFoundException(fmt::format("Key Not Found Error: {}", mongo_error_suffix));
     }
 
     if (error_code == static_cast<int>(MongoError::UnAuthorized) || error_code == static_cast<int>(MongoError::AuthenticationFailed)) {
-        raise<ErrorCode::E_PERMISSION>(fmt::format("Permission error: MongoError#{}: {} for object {}",
-                                                    error_code,
-                                                    e.what(),
-                                                    object_name));
+        raise<ErrorCode::E_PERMISSION>(fmt::format("Permission error: {}", mongo_error_suffix));
     }
 
-    raise<ErrorCode::E_UNEXPECTED_MONGO_ERROR>(fmt::format("Unexpected Mongo Error: MongoError#{}: {} {} {} for object {}",
-                                                           error_code,
-                                                           e.what(),
+    raise<ErrorCode::E_UNEXPECTED_MONGO_ERROR>(fmt::format("Unexpected Mongo Error: {} {} {}",
+                                                           mongo_error_suffix,
                                                            e.code().category().name(),
-                                                           e.code().message(),
-                                                           object_name));
+                                                           e.code().message()));
 }
 
 bool is_expected_error_type(int error_code) {
