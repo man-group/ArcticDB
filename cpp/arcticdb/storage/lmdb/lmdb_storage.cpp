@@ -207,8 +207,8 @@ std::vector<VariantKey> LmdbStorage::do_remove_internal(Composite<VariantKey>&& 
                     }
                 } catch (const ::lmdb::not_found_error&) {
                     if (!opts.ignores_missing_key_) {
-                        log::storage().warn("Failed to delete segment for key {}", variant_key_view(k) );
-                                            failed_deletes.push_back(k);
+                        log::storage().warn("Failed to delete segment for key {}", variant_key_view(k));
+                        failed_deletes.push_back(k);
                     }
                 } catch (const ::lmdb::error& ex) {
                     raise_lmdb_exception(ex, stored_key);
