@@ -104,19 +104,19 @@ struct SchedulerWrapper : public SchedulerType {
 };
 
 struct CGroupValues {
-    int64_t cpu_quota;
-    int64_t cpu_period;
+    std::optional<double> cpu_quota = std::nullopt;
+    std::optional<double> cpu_period = std::nullopt;
 };
 
-inline int64_t get_cgroup_value_v1(const std::string& cgroup_file) {
+inline std::optional<double> get_cgroup_value_v1(const std::string& cgroup_file) {
     if(const auto path = std::filesystem::path{fmt::format("/sys/fs/cgroup/{}",cgroup_file)}; std::filesystem::exists(path)){
         std::ifstream strm(path.string());
         util::check(static_cast<bool>(strm), "Failed to open cgroups v1 cpu file for read at path '{}': {}", path.string(), std::strerror(errno));
         std::string str;
         std::getline(strm, str);
-        return std::stol(str);
+        return std::stod(str);
     }
-    return static_cast<int64_t>(-1);
+    return std::nullopt;
 }
 
 inline CGroupValues get_cgroup_values_v1() {
@@ -136,32 +136,32 @@ inline CGroupValues get_cgroup_values_v2() {
         auto quota = std::string{values[0]};
         auto period = std::string{values[1]};
         if (quota == std::string("max"))
-            return CGroupValues{0, std::stol(period)};
+            return CGroupValues{0, std::stod(period)};
 
-        return CGroupValues{std::stol(quota), std::stol(period)};
+        return CGroupValues{std::stod(quota), std::stod(period)};
     }
 
-    return CGroupValues{-1, -1};
+    return CGroupValues{};
 }
 
 inline auto get_default_num_cpus() {
-    auto cpu_count = std::thread::hardware_concurrency() == 0 ? 16 : std::thread::hardware_concurrency();
+    int64_t cpu_count = std::thread::hardware_concurrency() == 0 ? 16 : std::thread::hardware_concurrency();
     #ifdef _WIN32
         return static_cast<int64_t>(cpu_count);
     #else
-        auto quota_count = 0UL;
+        int64_t quota_count = 0UL;
         auto cgroup_val = get_cgroup_values_v1();
 
         // if cgroup v1 values are not found, try to get values from cgroup v2
-        // if both are -1, this means that we haven't found valid cgroup v1 files
-        if (cgroup_val.cpu_quota == -1 && cgroup_val.cpu_period == -1)
+        if (!cgroup_val.cpu_quota.has_value() || !cgroup_val.cpu_period.has_value())
             cgroup_val = get_cgroup_values_v2();
 
-        if (cgroup_val.cpu_quota > -1 && cgroup_val.cpu_period > 0)
-            quota_count = static_cast<int64_t>(ceil(static_cast<double>(cgroup_val.cpu_quota) / static_cast<double>(cgroup_val.cpu_period)));
+        if ((cgroup_val.cpu_quota.has_value() && cgroup_val.cpu_period.has_value()) &&
+             (cgroup_val.cpu_quota.value() > -1 && cgroup_val.cpu_period.value() > 0))
+            quota_count = static_cast<int64_t>(ceil(cgroup_val.cpu_quota.value() / cgroup_val.cpu_period.value()));
 
-        auto limit_count = quota_count != 0 ? quota_count : cpu_count;
-        return std::min(static_cast<int64_t>(cpu_count), static_cast<int64_t>(limit_count));
+        int64_t limit_count = quota_count != 0 ? quota_count : cpu_count;
+        return std::min(cpu_count, limit_count);
     #endif
 }
 
