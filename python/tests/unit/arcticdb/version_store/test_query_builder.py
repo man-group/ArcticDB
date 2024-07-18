@@ -111,6 +111,52 @@ def test_reuse_querybuilder(lmdb_version_store_tiny_segment):
     assert_frame_equal(expected, received)
 
 
+def test_reuse_querybuilder_date_range(lmdb_version_store_tiny_segment):
+    lib = lmdb_version_store_tiny_segment
+    symbol = "test_reuse_querybuilder_date_range"
+    df = pd.DataFrame(
+        {"col1": np.arange(1, 11, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
+    )
+    lib.write(symbol, df)
+
+    q = QueryBuilder()
+    q = q[q["col1"].isin(2, 3, 7)]
+
+    expected_0 = df.query("col1 in [2, 3]")
+    received_0 = lib.read(symbol, date_range=(None, pd.Timestamp("2000-01-06")), query_builder=q).data
+    assert_frame_equal(expected_0, received_0)
+
+    received_1 = lib.read(symbol, date_range=(None, pd.Timestamp("2000-01-06")), query_builder=q).data
+    assert_frame_equal(expected_0, received_1)
+
+    expected_2 = df.query("col1 in [2, 3, 7]")
+    received_2 = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(expected_2, received_2)
+
+
+def test_reuse_querybuilder_date_range_batch(lmdb_version_store_tiny_segment):
+    lib = lmdb_version_store_tiny_segment
+    symbol = "test_reuse_querybuilder_date_range_batch"
+    df = pd.DataFrame(
+        {"col1": np.arange(1, 11, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
+    )
+    lib.write(symbol, df)
+
+    q = QueryBuilder()
+    q = q[q["col1"].isin(2, 3, 7)]
+
+    expected_0 = df.query("col1 in [2, 3]")
+    received_0 = lib.batch_read([symbol], date_ranges=[(None, pd.Timestamp("2000-01-06"))], query_builder=q)[symbol].data
+    assert_frame_equal(expected_0, received_0)
+
+    received_1 = lib.batch_read([symbol], date_ranges=[(None, pd.Timestamp("2000-01-06"))], query_builder=[q])[symbol].data
+    assert_frame_equal(expected_0, received_1)
+
+    expected_2 = df.query("col1 in [2, 3, 7]")
+    received_2 = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(expected_2, received_2)
+
+
 @pytest.mark.parametrize("batch", [True, False])
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
 def test_querybuilder_date_range_then_filter(lmdb_version_store_tiny_segment, batch, use_date_range_clause):
