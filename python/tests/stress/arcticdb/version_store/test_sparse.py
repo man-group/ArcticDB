@@ -31,8 +31,6 @@ def test_sparse_interleaved(sym, lmdb_version_store):
     dd = lib.read(sym, dynamic_schema=True).data
 
     assert dd["float"][2] == df["float"][2]
-
-    # TODO: This should be NaN
     assert np.isnan(dd["float"][1])
 
 
@@ -41,9 +39,8 @@ def test_sparse_chunked(sym, lmdb_version_store):
     df = get_dataframe_dense_till(100, 30)
     lib.write(sym, df, allow_sparse=True)
     dd = lib.read(sym, allow_sparse=True).data
-    assert dd["float"][2] == df["float"][2]
 
-    # TODO: This should be NaN
+    assert dd["float"][2] == df["float"][2]
     assert dd["float"][1] == 1.0
     assert dd["float"][2] == 2.0
 
