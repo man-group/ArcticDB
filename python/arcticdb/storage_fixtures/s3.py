@@ -216,9 +216,10 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
     _bucket_id = 0
     _live_buckets: List[S3Bucket] = []
 
-    def __init__(self, use_ssl: bool, ssl_test_support: bool):
+    def __init__(self, use_ssl: bool, ssl_test_support: bool, bucket_versioning: bool):
         self.http_protocol = "https" if use_ssl else "http"
         self.ssl_test_support = ssl_test_support
+        self.bucket_versioning = bucket_versioning
 
     @staticmethod
     def run_server(port, key_file, cert_file):
@@ -369,6 +370,13 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         bucket = f"test_bucket_{self._bucket_id}"
         self._s3_admin.create_bucket(Bucket=bucket)
         self._bucket_id += 1
+        if self.bucket_versioning:
+            self._s3_admin.put_bucket_versioning(
+                Bucket=bucket,
+                VersioningConfiguration={
+                    'Status': 'Enabled'
+                }
+            )
 
         out = S3Bucket(self, bucket)
         self._live_buckets.append(out)

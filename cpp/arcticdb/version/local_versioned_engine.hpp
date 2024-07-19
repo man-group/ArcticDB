@@ -57,6 +57,16 @@ struct SortMergeOptions {
     bool prune_previous_versions_;
 };
 
+folly::Future<folly::Unit> delete_trees_responsibly(
+    std::shared_ptr<Store> store,
+    std::shared_ptr<VersionMap> &version_map,
+    const std::vector<IndexTypeKey>& orig_keys_to_delete,
+    const arcticdb::MasterSnapshotMap& snapshot_map,
+    const std::optional<SnapshotId>& snapshot_being_deleted = std::nullopt,
+    const PreDeleteChecks& check = default_pre_delete_checks,
+    const bool dry_run = false
+);
+
 class LocalVersionedEngine : public VersionedEngine {
 
 public:
@@ -160,24 +170,8 @@ public:
         const PreDeleteChecks& checks = default_pre_delete_checks
     ) override {
         auto snapshot_map = get_master_snapshots_map(store());
-        delete_trees_responsibly(idx_to_be_deleted, snapshot_map, std::nullopt, checks).get();
+        delete_trees_responsibly(store(), version_map(), idx_to_be_deleted, snapshot_map, std::nullopt, checks).get();
     };
-
-    /**
-     * Locally extends delete_tree() with more features.
-     *
-     * @param snapshot_map Result from get_master_snapshots_map()
-     * @param snapshot_being_deleted Pass in the name and content of a SNAPSHOT(_REF) whose contents are being deleted
-     * to exclude it from shared data check
-     * @param dry_run Only do the check, but don't actually delete anything.
-     */
-    folly::Future<folly::Unit> delete_trees_responsibly(
-        const std::vector<IndexTypeKey>& idx_to_be_deleted,
-        const arcticdb::MasterSnapshotMap& snapshot_map,
-        const std::optional<SnapshotId>& snapshot_being_deleted = std::nullopt,
-        const PreDeleteChecks& check = default_pre_delete_checks,
-        bool dry_run = false
-    );
 
     std::set<StreamId> list_streams_internal(
         std::optional<SnapshotId> snap_name,
