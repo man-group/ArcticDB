@@ -13,6 +13,7 @@ from arcticdb.storage_fixtures.azure import AzureContainer
 from arcticdb.storage_fixtures.s3 import S3Bucket
 from arcticdb.adapters.s3_library_adapter import USE_AWS_CRED_PROVIDERS_TOKEN
 from ..util.mark import AZURE_TESTS_MARK, SSL_TEST_SUPPORTED
+from ..util.storage_test import get_s3_storage_config
 
 LIB_NAME = "test_lib"
 
@@ -20,14 +21,6 @@ LIB_NAME = "test_lib"
 def create_library_config(ac: Arctic, name: str):
     cfg = ac._library_adapter.get_library_config(name, LibraryOptions(), EnterpriseLibraryOptions())
     ac._library_manager.write_library_config(cfg, name, test_only_validation_toggle=False)
-
-
-def _get_s3_storage_config(cfg):
-    primary_storage_name = cfg.lib_desc.storage_ids[0]
-    primary_any = cfg.storage_by_id[primary_storage_name]
-    s3_config = S3Config()
-    primary_any.config.Unpack(s3_config)
-    return s3_config
 
 
 def _get_azure_storage_config(cfg):
@@ -47,7 +40,7 @@ def test_upgrade_script_dryrun_s3(s3_storage: S3Bucket):
 
     # Then
     config = ac._library_manager.get_library_config(LIB_NAME)
-    storage_config = _get_s3_storage_config(config)
+    storage_config = get_s3_storage_config(config)
     assert storage_config.bucket_name == s3_storage.bucket
     assert storage_config.credential_name == s3_storage.key.id
     assert storage_config.credential_key == s3_storage.key.secret
@@ -60,7 +53,7 @@ def test_upgrade_script_s3(s3_storage: S3Bucket):
     run(uri=s3_storage.arctic_uri, run=True)
 
     config = ac._library_manager.get_library_config(LIB_NAME)
-    storage_config = _get_s3_storage_config(config)
+    storage_config = get_s3_storage_config(config)
     assert storage_config.bucket_name == ""
     assert storage_config.credential_name == ""
     assert storage_config.credential_key == ""
@@ -93,7 +86,7 @@ def test_upgrade_script_s3_rbac_ok(s3_storage: S3Bucket, monkeypatch):
 
     ac = Arctic(uri)
     config = ac._library_manager.get_library_config(LIB_NAME)
-    s3_storage = _get_s3_storage_config(config)
+    s3_storage = get_s3_storage_config(config)
     assert s3_storage.bucket_name == s3_storage.bucket_name
     assert s3_storage.credential_name == USE_AWS_CRED_PROVIDERS_TOKEN
     assert s3_storage.credential_key == USE_AWS_CRED_PROVIDERS_TOKEN

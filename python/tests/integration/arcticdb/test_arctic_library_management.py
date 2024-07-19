@@ -25,6 +25,7 @@ from arcticdb.version_store.library import (
 )
 
 from tests.util.mark import AZURE_TESTS_MARK, MONGO_TESTS_MARK, REAL_S3_TESTS_MARK
+from tests.util.storage_test import get_s3_storage_config
 
 from arcticdb.options import ModifiableEnterpriseLibraryOption, ModifiableLibraryOption
 
@@ -283,19 +284,12 @@ def test_do_not_persist_s3_details(s3_storage):
     """We apply an in-memory overlay for these instead. In particular we should absolutely not persist credentials
     in the storage."""
 
-    def _get_s3_storage_config(cfg):
-        primary_storage_name = cfg.lib_desc.storage_ids[0]
-        primary_any = cfg.storage_by_id[primary_storage_name]
-        s3_config = S3Config()
-        primary_any.config.Unpack(s3_config)
-        return s3_config
-
     ac = Arctic(s3_storage.arctic_uri)
     lib = ac.create_library("test")
     lib.write("sym", pd.DataFrame())
 
     config = ac._library_manager.get_library_config("test")
-    s3_storage = _get_s3_storage_config(config)
+    s3_storage = get_s3_storage_config(config)
     assert s3_storage.bucket_name == ""
     assert s3_storage.credential_name == ""
     assert s3_storage.credential_key == ""

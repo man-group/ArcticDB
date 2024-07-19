@@ -125,6 +125,7 @@ using SinkConf = arcticdb::proto::logger::SinkConfig;
 Loggers::Loggers()
         : impl_(std::make_unique<Impl>()) {
     impl_->unconfigured_->set_level(get_default_log_level());
+    impl_->unconfigured_->set_pattern(DefaultLogPattern);
 }
 
 Loggers::~Loggers() = default;
