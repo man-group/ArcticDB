@@ -18,7 +18,7 @@
       
       
       <link rel="icon" href="../../images/FullWithBorder.png">
-      <meta name="generator" content="mkdocs-1.6.0, mkdocs-material-9.5.27">
+      <meta name="generator" content="mkdocs-1.6.0, mkdocs-material-9.5.29">
     
     
       
@@ -26,7 +26,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.6543a935.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.76a95c52.min.css">
       
         
         <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
@@ -2370,7 +2370,25 @@ not combined in any way with the metadata stored in the previous version.</p>
             <td><code>prune_previous_versions</code></td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>Removes previous (non-snapshotted) versions from the database when True.</p>
+                <p>Removes previous (non-snapshotted) versions from the database.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code>bool</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>False</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code>default</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Removes previous (non-snapshotted) versions from the database.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
@@ -2789,6 +2807,24 @@ It is for achieving smallest no. of segment after compaction. Please refer to be
               </p>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td><code>prune_previous_versions</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Removes previous (non-snapshotted) versions from the database.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code>bool</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>False</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -2901,6 +2937,7 @@ versions are deleted.</p>
 <p>This may not actually delete the underlying data if a snapshot still references the version. See <code>snapshot</code> for
 more detail.</p>
 <p>Note that this may require data to be removed from the underlying storage which can be slow.</p>
+<p>This method does not remove any staged data, use <code>delete_staged_data</code> for that.</p>
 <p>If no symbol called <code>symbol</code> exists then this is a no-op. In particular this method does not raise in this case.</p>
 
 
@@ -2964,6 +3001,7 @@ more detail.</p>
     <span class="n">date_range</span><span class="p">:</span> <span class="n"><span title="typing.Tuple">Tuple</span></span><span class="p">[</span>
         <span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span><span class="n"><span title="arcticdb.supported_types.Timestamp">Timestamp</span></span><span class="p">],</span> <span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span><span class="n"><span title="arcticdb.supported_types.Timestamp">Timestamp</span></span><span class="p">]</span>
     <span class="p">],</span>
+    <span class="n">prune_previous_versions</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span>
 </code></pre></div>
 
@@ -3006,6 +3044,24 @@ open ended.</p>
                   <span class="doc-param-annotation">
                     <b>TYPE:</b>
                       <code><span title="typing.Tuple">Tuple</span>[<span title="typing.Optional">Optional</span>[<span title="arcticdb.supported_types.Timestamp">Timestamp</span>], <span title="typing.Optional">Optional</span>[<span title="arcticdb.supported_types.Timestamp">Timestamp</span>]]</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code>prune_previous_versions</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Removes previous (non-snapshotted) versions from the database.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code>bool</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>False</code>
                   </span>
               </p>
             </td>
@@ -3183,7 +3239,7 @@ symbol(s) as the underlying data will be removed as well.</p>
     <span class="n">mode</span><span class="p">:</span> <span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span>
         <span class="n"><span title="arcticdb.version_store.library.StagedDataFinalizeMethod">StagedDataFinalizeMethod</span></span>
     <span class="p">]</span> <span class="o">=</span> <span class="n">StagedDataFinalizeMethod</span><span class="o">.</span><span class="n">WRITE</span><span class="p">,</span>
-    <span class="n">prune_previous_versions</span><span class="p">:</span> <span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span><span class="n">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">prune_previous_versions</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="n">metadata</span><span class="p">:</span> <span class="n"><span title="typing.Any">Any</span></span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span>
 </code></pre></div>
@@ -3243,7 +3299,7 @@ new timeseries. Append collects the staged data and appends them to the latest v
               <p>
                   <span class="doc-param-annotation">
                     <b>TYPE:</b>
-                      <code><span title="typing.Optional">Optional</span>[bool]</code>
+                      <code>bool</code>
                   </span>
                   <span class="doc-param-default">
                     <b>DEFAULT:</b>
@@ -4932,7 +4988,7 @@ or, the library has no symbol.</p>
     <span class="n">mode</span><span class="p">:</span> <span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span>
         <span class="n"><span title="arcticdb.version_store.library.StagedDataFinalizeMethod">StagedDataFinalizeMethod</span></span>
     <span class="p">]</span> <span class="o">=</span> <span class="n">StagedDataFinalizeMethod</span><span class="o">.</span><span class="n">WRITE</span><span class="p">,</span>
-    <span class="n">prune_previous_versions</span><span class="p">:</span> <span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span><span class="n">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">prune_previous_versions</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span>
 </code></pre></div>
 
@@ -4988,12 +5044,12 @@ new timeseries. Append collects the staged data and appends them to the latest v
             <td><code>prune_previous_versions</code></td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>Remove previous versions from version list. Uses library default if left as None.</p>
+                <p>Removes previous (non-snapshotted) versions from the database.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
                     <b>TYPE:</b>
-                      <code>`Optional[bool]`</code>
+                      <code>bool</code>
                   </span>
                   <span class="doc-param-default">
                     <b>DEFAULT:</b>
@@ -5159,7 +5215,7 @@ new timeseries. Append collects the staged data and appends them to the latest v
     <span class="n">date_range</span><span class="p">:</span> <span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span>
         <span class="n"><span title="typing.Tuple">Tuple</span></span><span class="p">[</span><span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span><span class="n"><span title="arcticdb.supported_types.Timestamp">Timestamp</span></span><span class="p">],</span> <span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span><span class="n"><span title="arcticdb.supported_types.Timestamp">Timestamp</span></span><span class="p">]]</span>
     <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">prune_previous_versions</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">prune_previous_versions</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></span>
 </code></pre></div>
 
@@ -5273,9 +5329,13 @@ modified, even if <code>data</code> covers a wider date range.</p>
             <td><code>prune_previous_versions</code></td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>Removes previous (non-snapshotted) versions from the database when True.</p>
+                <p>Removes previous (non-snapshotted) versions from the database.</p>
               </div>
               <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code>bool</code>
+                  </span>
                   <span class="doc-param-default">
                     <b>DEFAULT:</b>
                       <code>False</code>
@@ -5631,7 +5691,7 @@ This tests that the data is sorted in ascending order, using Pandas DataFrame.in
             <td><code>prune_previous_versions</code></td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>See <code>write</code>.</p>
+                <p>Removes previous (non-snapshotted) versions from the database.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
@@ -5767,7 +5827,11 @@ error_code, error_category, and exception_string properties.</p>
 
 
 <a href="#arcticdb.version_store.library.Library.write_metadata" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><span class="nf">write_metadata</span><span class="p">(</span><span class="n">symbol</span><span class="p">:</span> <span class="n">str</span><span class="p">,</span> <span class="n">metadata</span><span class="p">:</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></span>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">write_metadata</span><span class="p">(</span>
+    <span class="n">symbol</span><span class="p">:</span> <span class="n">str</span><span class="p">,</span>
+    <span class="n">metadata</span><span class="p">:</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">,</span>
+    <span class="n">prune_previous_versions</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
@@ -5815,6 +5879,25 @@ metadata.</p>
               </p>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td><code>prune_previous_versions</code></td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Removes previous (non-snapshotted) versions from the database. Note that metadata is versioned alongside the
+data it is referring to, and so this operation removes old versions of data as well as metadata.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code>bool</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>False</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -5856,7 +5939,7 @@ metadata.</p>
 <a href="#arcticdb.version_store.library.Library.write_metadata_batch" class="headerlink" title="Permanent link">&para;</a></h3>
 <div class="doc-signature highlight"><pre><span></span><code><span class="nf">write_metadata_batch</span><span class="p">(</span>
     <span class="n">write_metadata_payloads</span><span class="p">:</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><span title="arcticdb.version_store.library.WriteMetadataPayload">WriteMetadataPayload</span></span><span class="p">],</span>
-    <span class="n">prune_previous_versions</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">prune_previous_versions</span><span class="p">:</span> <span class="n">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><span title="typing.Union">Union</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="arcticdb.version_store._store.VersionedItem" href="../library_types/#arcticdb.VersionedItem">VersionedItem</a></span><span class="p">,</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb_ext.version_store.DataError" href="../exceptions/#arcticdb.DataError">DataError</a></span><span class="p">]]</span>
 </code></pre></div>
 
@@ -5895,16 +5978,17 @@ readable before another symbol.</p>
             <td><code>prune_previous_versions</code></td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>Remove previous versions from version list. Uses library default if left as None.</p>
+                <p>Removes previous (non-snapshotted) versions from the database. Note that metadata is versioned alongside the
+data it is referring to, and so this operation removes old versions of data as well as metadata.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
                     <b>TYPE:</b>
-                      <code>`Optional[bool]`</code>
+                      <code>bool</code>
                   </span>
                   <span class="doc-param-default">
                     <b>DEFAULT:</b>
-                      <code>None</code>
+                      <code>False</code>
                   </span>
               </p>
             </td>
@@ -6183,7 +6267,7 @@ the Pickle library. There are significant downsides to storing data in this way:
             <td><code>prune_previous_versions</code></td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>See <code>write</code>.</p>
+                <p>Removes previous (non-snapshotted) versions from the database.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
@@ -6201,7 +6285,7 @@ the Pickle library. There are significant downsides to storing data in this way:
             <td><code>staged</code></td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>See <code>write</code>.</p>
+                <p>See documentation on <code>write</code>.</p>
               </div>
               <p>
                   <span class="doc-param-default">
@@ -6330,7 +6414,7 @@ write_pickle: For information on the implications of providing data that needs t
     <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy"], "search": "../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.ad660dcc.min.js"></script>
+      <script src="../../assets/javascripts/bundle.fe8b6f2b.min.js"></script>
       
     
   </body>
