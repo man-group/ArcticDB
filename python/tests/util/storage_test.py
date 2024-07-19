@@ -8,6 +8,7 @@ import re
 from datetime import datetime
 
 from arcticdb import Arctic
+from arcticc.pb2.s3_storage_pb2 import Config as S3Config
 
 
 # TODO: Remove this when the latest version that we support
@@ -81,6 +82,14 @@ def get_real_s3_uri(shared_path: bool = True):
         f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix={path_prefix}"
     )
     return aws_uri
+
+
+def get_s3_storage_config(cfg):
+    primary_storage_name = cfg.lib_desc.storage_ids[0]
+    primary_any = cfg.storage_by_id[primary_storage_name]
+    s3_config = S3Config()
+    primary_any.config.Unpack(s3_config)
+    return s3_config
 
 
 def normalize_lib_name(lib_name):

@@ -514,24 +514,17 @@ struct DecodeMetadataAndDescriptorTask : BaseTask {
             );
     }
 };
-
-template<typename ConstVarKeyGetter,
-        typename=std::enable_if_t<!std::is_reference_v<ConstVarKeyGetter> // Make obvious if iterator& is captured
-                        && std::is_same_v<decltype(*std::declval<ConstVarKeyGetter>()), const entity::VariantKey&>>>
 struct KeyExistsTask : BaseTask {
-    ConstVarKeyGetter key_;
+    const VariantKey key_;
     std::shared_ptr<storage::Library> lib_;
 
-    /**
-     * @param key Could be a vector iterator or a pointer to a const VariantKey.
-     */
-    KeyExistsTask(ConstVarKeyGetter key, std::shared_ptr<storage::Library> lib): key_(key), lib_(std::move(lib)) {
-        ARCTICDB_DEBUG(log::storage(), "Creating key exists task for key {}", variant_key_view(*key_));
+    KeyExistsTask(auto &&key, std::shared_ptr<storage::Library> lib): key_(std::forward<decltype(key)>(key)), lib_(std::move(lib)) {
+        ARCTICDB_DEBUG(log::storage(), "Creating key exists task for key {}",key_);
     }
 
     bool operator()() {
         ARCTICDB_SAMPLE(KeyExistsTask, 0)
-        return lib_->key_exists(*key_);
+        return lib_->key_exists(key_);
     }
 };
 
