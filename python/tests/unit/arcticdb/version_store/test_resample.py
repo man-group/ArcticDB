@@ -9,19 +9,43 @@ from functools import partial
 import numpy as np
 import pandas as pd
 import pytest
+import datetime as dt
 
 from arcticdb import QueryBuilder
 from arcticdb.exceptions import ArcticDbNotYetImplemented, SchemaException
 from arcticdb.util.test import assert_frame_equal
 from arcticdb.util._versions import IS_PANDAS_TWO
 
+# Pandas recommended way to resample and exclude buckets with no index values, which is our behaviour
+# See https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#sparse-resampling
+def round(t, freq):
+    freq = pd.tseries.frequencies.to_offset(freq)
+    td = pd.Timedelta(freq)
+    return pd.Timestamp((t.value // td.value) * td.value)
+
+def generic_sparse_resample_test(lib, sym, rule, aggregations, date_range=None):
+    # Pandas doesn't have a good date_range equivalent in resample, so just use read for that
+    expected = lib.read(sym, date_range=date_range).data
+
+    # Pandas 1.X needs None as the first argument to agg with named aggregators
+    expected = expected.groupby(partial(round, freq=rule)).agg(None, **aggregations)
+    expected = expected.reindex(columns=sorted(expected.columns))
+    
+    q = QueryBuilder()
+    q = q.resample(rule).agg(aggregations)
+    received = lib.read(sym, date_range=date_range, query_builder=q).data
+    received = received.reindex(columns=sorted(received.columns))
+
+    assert_frame_equal(expected, received, check_dtype=False)
+
 def generic_resample_test(lib, sym, rule, aggregations, date_range=None, closed=None, label=None):
     # Pandas doesn't have a good date_range equivalent in resample, so just use read for that
     expected = lib.read(sym, date_range=date_range).data
+
     # Pandas 1.X needs None as the first argument to agg with named aggregators
     expected = expected.resample(rule, closed=closed, label=label).agg(None, **aggregations)
     expected = expected.reindex(columns=sorted(expected.columns))
-
+    
     q = QueryBuilder()
     q = q.resample(rule, closed=closed, label=label).agg(aggregations)
     received = lib.read(sym, date_range=date_range, query_builder=q).data
@@ -88,6 +112,83 @@ def test_resampling_duplicated_index_value_on_segment_boundary(lmdb_version_stor
         {"sum": ("col", "sum")},
         closed=closed,
     )
+
+
+class TestResamplingBucketInsideSegment:
+
+    def test_all_buckets_have_values(self, lmdb_version_store_v1):
+        lib = lmdb_version_store_v1
+        sym = "test_inner_buckets_are_empty"
+        idx = pd.DatetimeIndex([
+            dt.datetime(2023, 12, 7, 23, 59, 47, 500000),
+            dt.datetime(2023, 12, 7, 23, 59, 48, 500000),
+            dt.datetime(2023, 12, 7, 23, 59, 49, 500000),
+            dt.datetime(2023, 12, 7, 23, 59, 50, 500000),
+            dt.datetime(2023, 12, 7, 23, 59, 51, 500000),
+            dt.datetime(2023, 12, 7, 23, 59, 52, 500000),
+            dt.datetime(2023, 12, 7, 23, 59, 53, 500000),
+            dt.datetime(2023, 12, 7, 23, 59, 55, 500000)
+        ])
+        df = pd.DataFrame({"mid": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]}, index=idx)
+        lib.write(sym, df)
+    
+        date_range = (dt.datetime(2023, 12, 7, 23, 59, 48), dt.datetime(2023, 12, 7, 23, 59, 52))
+        generic_sparse_resample_test(lib, sym, 's', {'high': ('mid', 'max')}, date_range=date_range)
+
+    @pytest.mark.parametrize("closed", ("left", "right"))
+    def test_first_bucket_is_empy(self, lmdb_version_store_v1, closed):
+        lib = lmdb_version_store_v1
+        sym = "test_first_bucket_is_empy"
+        idx = pd.DatetimeIndex([
+            dt.datetime(2023, 12, 7, 23, 59, 48, 342000),
+            dt.datetime(2023, 12, 7, 23, 59, 49, 717000),
+            dt.datetime(2023, 12, 7, 23, 59, 49, 921000),
+            dt.datetime(2023, 12, 7, 23, 59, 50, 75000),
+            dt.datetime(2023, 12, 7, 23, 59, 50, 76000),
+            dt.datetime(2023, 12, 7, 23, 59, 55, 75000)
+        ])
+        df = pd.DataFrame({"mid": [1, 2, 3, 4, 5, 6]}, index=idx)
+        lib.write(sym, df)
+    
+        date_range = (dt.datetime(2023, 12, 7, 23, 59, 49), dt.datetime(2023, 12, 7, 23, 59, 50))
+        generic_resample_test(lib, sym, 's', {'high': ('mid', 'max')}, date_range=date_range, closed=closed)
+
+    @pytest.mark.parametrize("closed", ("left", "right"))
+    def test_last_bucket_is_empty(self, lmdb_version_store_v1, closed):
+        lib = lmdb_version_store_v1
+        sym = "test_last_bucket_is_empty"
+        idx = pd.DatetimeIndex([
+            dt.datetime(2023, 12, 7, 23, 59, 47, 342000),
+            dt.datetime(2023, 12, 7, 23, 59, 48, 342000),
+            dt.datetime(2023, 12, 7, 23, 59, 49, 717000),
+            dt.datetime(2023, 12, 7, 23, 59, 49, 921000),
+            dt.datetime(2023, 12, 7, 23, 59, 50, 75000),
+            dt.datetime(2023, 12, 7, 23, 59, 50, 76000),
+            dt.datetime(2023, 12, 7, 23, 59, 55, 75000)
+        ])
+        df = pd.DataFrame({"mid": [1, 2, 3, 4, 5, 6, 7]}, index=idx)
+        lib.write(sym, df)
+    
+        date_range = (dt.datetime(2023, 12, 7, 23, 59, 48), dt.datetime(2023, 12, 7, 23, 59, 49, 500000))
+        generic_resample_test(lib, sym, 's', {'high': ('mid', 'max')}, date_range=date_range, closed=closed)
+    
+    def test_inner_buckets_are_empty(self, lmdb_version_store_v1):
+        lib = lmdb_version_store_v1
+        sym = "test_inner_buckets_are_empty"
+        idx = pd.DatetimeIndex([
+            dt.datetime(2023, 12, 7, 23, 59, 48, 342000),
+            dt.datetime(2023, 12, 7, 23, 59, 49, 717000),
+            dt.datetime(2023, 12, 7, 23, 59, 49, 921000),
+            dt.datetime(2023, 12, 7, 23, 59, 52, 75000),
+            dt.datetime(2023, 12, 7, 23, 59, 53, 76000),
+            dt.datetime(2023, 12, 7, 23, 59, 55, 75000)
+        ])
+        df = pd.DataFrame({"mid": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]}, index=idx)
+        lib.write(sym, df)
+    
+        date_range = (dt.datetime(2023, 12, 7, 23, 59, 48), dt.datetime(2023, 12, 7, 23, 59, 55))
+        generic_sparse_resample_test(lib, sym, 's', {'high': ('mid', 'max')}, date_range=date_range)
+        
 
 
 def test_resampling_timezones(lmdb_version_store_v1):
@@ -258,42 +359,20 @@ def test_resampling_empty_bucket_in_range(lmdb_version_store_v1):
     )
     lib.write(sym, df)
 
-    # Pandas recommended way to resample and exclude buckets with no index values, which is our behaviour
-    # See https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#sparse-resampling
-    def round(t, freq):
-        freq = pd.tseries.frequencies.to_offset(freq)
-        td = pd.Timedelta(freq)
-        return pd.Timestamp((t.value // td.value) * td.value)
-
-    expected = df.groupby(partial(round, freq="us")).agg(
+    generic_sparse_resample_test(
+        lib,
+        sym,
+        "us",
         {
-            "to_sum": "sum",
-            "to_mean": "mean",
-            "to_min": "min",
-            "to_max": "max",
-            "to_first": "first",
-            "to_last": "last",
-            "to_count": "count",
+            "to_sum": ("to_sum", "sum"),
+            "to_mean": ("to_mean", "mean"),
+            "to_min": ("to_min", "min"),
+            "to_max": ("to_max", "max"),
+            "to_first": ("to_first", "first"),
+            "to_last": ("to_last", "last"),
+            "to_count": ("to_count", "count"),
         }
     )
-    expected = expected.reindex(columns=sorted(expected.columns))
-    # expected["to_count"] = expected["to_count"].astype(np.uint64)
-
-    q = QueryBuilder()
-    q = q.resample("us").agg(
-        {
-            "to_sum": "sum",
-            "to_mean": "mean",
-            "to_min": "min",
-            "to_max": "max",
-            "to_first": "first",
-            "to_last": "last",
-            "to_count": "count",
-        }
-    )
-    received = lib.read(sym, query_builder=q).data
-    received = received.reindex(columns=sorted(received.columns))
-    assert_frame_equal(expected, received, check_dtype=False)
 
 
 @pytest.mark.parametrize("use_date_range", (True, False))
