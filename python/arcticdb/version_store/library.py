@@ -241,6 +241,8 @@ class ReadRequest(NamedTuple):
 
     Attributes
     ----------
+    symbol: str
+        See `read` method.
     as_of: Optional[AsOf], default=none
         See `read` method.
     date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]], default=none
