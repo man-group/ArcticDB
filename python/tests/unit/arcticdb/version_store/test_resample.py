@@ -23,7 +23,7 @@ def round(t, freq):
     td = pd.Timedelta(freq)
     return pd.Timestamp((t.value // td.value) * td.value)
 
-def generic_sparse_resample_test(lib, sym, rule, aggregations, date_range=None):
+def generic_resample_test_with_empty_buckets(lib, sym, rule, aggregations, date_range=None):
     # Pandas doesn't have a good date_range equivalent in resample, so just use read for that
     expected = lib.read(sym, date_range=date_range).data
     # Pandas 1.X needs None as the first argument to agg with named aggregators
@@ -117,21 +117,13 @@ class TestResamplingBucketInsideSegment:
     def test_all_buckets_have_values(self, lmdb_version_store_v1):
         lib = lmdb_version_store_v1
         sym = "test_inner_buckets_are_empty"
-        idx = pd.DatetimeIndex([
-            dt.datetime(2023, 12, 7, 23, 59, 47, 500000),
-            dt.datetime(2023, 12, 7, 23, 59, 48, 500000),
-            dt.datetime(2023, 12, 7, 23, 59, 49, 500000),
-            dt.datetime(2023, 12, 7, 23, 59, 50, 500000),
-            dt.datetime(2023, 12, 7, 23, 59, 51, 500000),
-            dt.datetime(2023, 12, 7, 23, 59, 52, 500000),
-            dt.datetime(2023, 12, 7, 23, 59, 53, 500000),
-            dt.datetime(2023, 12, 7, 23, 59, 55, 500000)
-        ])
+        start = dt.datetime(2023, 12, 7, 23, 59, 47, 500000);
+        idx = [start + i * pd.Timedelta('1s') for i in range(0, 8)]
         df = pd.DataFrame({"mid": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]}, index=idx)
         lib.write(sym, df)
     
         date_range = (dt.datetime(2023, 12, 7, 23, 59, 48), dt.datetime(2023, 12, 7, 23, 59, 52))
-        generic_sparse_resample_test(lib, sym, 's', {'high': ('mid', 'max')}, date_range=date_range)
+        generic_resample_test_with_empty_buckets(lib, sym, 's', {'high': ('mid', 'max')}, date_range=date_range)
 
     @pytest.mark.parametrize("closed", ("left", "right"))
     def test_first_bucket_is_empy(self, lmdb_version_store_v1, closed):
@@ -185,7 +177,7 @@ class TestResamplingBucketInsideSegment:
         lib.write(sym, df)
     
         date_range = (dt.datetime(2023, 12, 7, 23, 59, 48), dt.datetime(2023, 12, 7, 23, 59, 55))
-        generic_sparse_resample_test(lib, sym, 's', {'high': ('mid', 'max')}, date_range=date_range)
+        generic_resample_test_with_empty_buckets(lib, sym, 's', {'high': ('mid', 'max')}, date_range=date_range)
         
 
 
@@ -357,7 +349,7 @@ def test_resampling_empty_bucket_in_range(lmdb_version_store_v1):
     )
     lib.write(sym, df)
 
-    generic_sparse_resample_test(
+    generic_resample_test_with_empty_buckets(
         lib,
         sym,
         "us",

@@ -785,6 +785,8 @@ std::shared_ptr<Column> ResampleClause<closed_boundary>::generate_output_index_c
         auto index_column_data = input_index_column->data();
         const auto cend = index_column_data.cend<IndexTDT>();
         auto it = index_column_data.cbegin<IndexTDT>();
+        // In case the passed date_range does not span the whole segment we need to skip the index values
+        // which are before the date range start.
         while (it != cend && *it < date_range_->first) {
             ++it;
         }
