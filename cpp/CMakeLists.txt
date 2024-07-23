@@ -15,7 +15,7 @@ project(arcticdb VERSION 0.0.1)
 enable_testing()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(ARCTICDB_MSVC_OMIT_RUNTIME_CHECKS OFF)
+set(ARCTICDB_MSVC_OMIT_RUNTIME_CHECKS OFF CACHE BOOL "")
 option(
     ARCTICDB_USING_CONDA
     "Whether ArcticDB's build system relies on conda for resolving its dependencies."
@@ -71,6 +71,7 @@ if(WIN32)
         "$<$<CONFIG:Release>:/MT;/Ox>"
     )
     if(${ARCTICDB_MSVC_OMIT_RUNTIME_CHECKS})
+        message(STATUS "Removing MSVC runtime checks")
         foreach(flag_var CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_DEBUG CMAKE_CXX_FLAGS_RELEASE CMAKE_CXX_FLAGS_MINSIZEREL CMAKE_CXX_FLAGS_RELWITHDEBINFO)
             STRING (REGEX REPLACE "/RTC[^ ]*" "" ${flag_var} "${${flag_var}}")
         endforeach()
