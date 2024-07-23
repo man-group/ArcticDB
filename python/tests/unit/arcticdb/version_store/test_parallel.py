@@ -301,9 +301,9 @@ def test_compact_incomplete_sets_sortedness(lmdb_version_store):
 
 @pytest.mark.parametrize("append", (True, False))
 @pytest.mark.parametrize("validate_index", (True, False, None))
-def test_parallel_sortedness_checks(lmdb_version_store, append, validate_index):
+def test_parallel_sortedness_checks_unsorted_data(lmdb_version_store, append, validate_index):
     lib = lmdb_version_store
-    sym = "test_parallel_sortedness_checks"
+    sym = "test_parallel_sortedness_checks_unsorted_data"
     if append:
         df_0 = pd.DataFrame({"col": [1, 2]}, index=[pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")])
         lib.write(sym, df_0)
@@ -326,6 +326,28 @@ def test_parallel_sortedness_checks(lmdb_version_store, append, validate_index):
                 lib.append(sym, df_1, incomplete=True, validate_index=False)
             else:
                 lib.write(sym, df_1, parallel=True, validate_index=False)
+
+
+@pytest.mark.parametrize("append", (True, False))
+@pytest.mark.parametrize("validate_index", (True, False, None))
+def test_parallel_sortedness_checks_sorted_data(lmdb_version_store, append, validate_index):
+    lib = lmdb_version_store
+    sym = "test_parallel_sortedness_checks_unsorted_data"
+    if append:
+        df_0 = pd.DataFrame({"col": [1, 2]}, index=[pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")])
+        lib.write(sym, df_0)
+    df_1 = pd.DataFrame({"col": [3, 4]}, index=[pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-04")])
+    df_2 = pd.DataFrame({"col": [5, 6]}, index=[pd.Timestamp("2024-01-05"), pd.Timestamp("2024-01-06")])
+    if append:
+        lib.append(sym, df_1, incomplete=True, validate_index=validate_index)
+        lib.append(sym, df_2, incomplete=True, validate_index=validate_index)
+    else:
+        lib.write(sym, df_1, parallel=True, validate_index=validate_index)
+        lib.write(sym, df_2, parallel=True, validate_index=validate_index)
+    lib.compact_incomplete(sym, append, False, validate_index=validate_index)
+    expected = pd.concat([df_0, df_1, df_2]) if append else pd.concat([df_1, df_2])
+    received = lib.read(sym).data
+    assert_frame_equal(expected, received)
 
 
 @pytest.mark.parametrize("append", (True, False))

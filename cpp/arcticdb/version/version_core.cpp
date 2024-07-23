@@ -855,22 +855,26 @@ void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<PipelineC
         for (auto it = pipeline_context->incompletes_begin(); it!= pipeline_context->end(); it++) {
             sorting::check<ErrorCode::E_UNSORTED_DATA>(
                     !last_existing_index_value.has_value() || it->slice_and_key().key().start_time() >= *last_existing_index_value,
-                    "Cannot append staged segments to existing data as incomplete segment contains index value < existing data: {} <= {}",
-                    it->slice_and_key().key().start_time(),
-                    *last_existing_index_value);
+                    "Cannot append staged segments to existing data as incomplete segment contains index value < existing data (in UTC): {} <= {}",
+                    date_and_time(it->slice_and_key().key().start_time()),
+                    date_and_time(*last_existing_index_value));
             auto [_, inserted] = unique_timestamp_ranges.insert({it->slice_and_key().key().start_time(), it->slice_and_key().key().end_time()});
             // This is correct because incomplete segments aren't column sliced
             sorting::check<ErrorCode::E_UNSORTED_DATA>(
                     inserted,
-                    "Cannot finalize staged data as incomplete segments overlap one another");
+                    "Cannot finalize staged data as 2 or more incomplete segments cover identical index values (in UTC): ({}, {})",
+                    date_and_time(it->slice_and_key().key().start_time()), date_and_time(it->slice_and_key().key().end_time()));
         };
         for (auto it = unique_timestamp_ranges.begin(); it != unique_timestamp_ranges.end(); it++) {
             auto next_it = std::next(it);
             if (next_it != unique_timestamp_ranges.end()) {
                 sorting::check<ErrorCode::E_UNSORTED_DATA>(
                         next_it->first >= it->second,
-                        "Cannot finalize staged data as incomplete segment index values overlap one another: ({}, {}) intersects ({}, {})",
-                        it->first, it->second - 1, next_it->first, next_it->second - 1);
+                        "Cannot finalize staged data as incomplete segment index values overlap one another (in UTC): ({}, {}) intersects ({}, {})",
+                        date_and_time(it->first),
+                        date_and_time(it->second - 1),
+                        date_and_time(next_it->first),
+                        date_and_time(next_it->second - 1));
             }
         }
     }
