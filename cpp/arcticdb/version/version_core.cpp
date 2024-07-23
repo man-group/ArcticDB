@@ -596,7 +596,7 @@ void set_output_descriptors(
 
 std::shared_ptr<std::unordered_set<std::string>> columns_to_decode(const std::shared_ptr<PipelineContext>& pipeline_context) {
     std::shared_ptr<std::unordered_set<std::string>> res;
-    ARCTICDB_DEBUG(log::version(), "Creating columns list with {} bits set", pipeline_context->overall_column_bitset_->count());
+    ARCTICDB_DEBUG(log::version(), "Creating columns list with {} bits set", pipeline_context->overall_column_bitset_ ? pipeline_context->overall_column_bitset_->count() : -1);
     if(pipeline_context->overall_column_bitset_) {
         res = std::make_shared<std::unordered_set<std::string>>();
         auto en = pipeline_context->overall_column_bitset_->first();
