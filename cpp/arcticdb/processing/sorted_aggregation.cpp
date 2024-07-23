@@ -52,6 +52,7 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const 
                             input_agg_column->column_->type().data_type(),
                             [this,
                             &output_it,
+                            &output_end_it,
                             &bucket_aggregator,
                             &agg_column = *input_agg_column,
                             &input_index_column = input_index_columns.at(idx),
@@ -74,11 +75,15 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const 
                                     const auto index_cend = index_data.template cend<IndexTDT>();
                                     auto agg_data = agg_column.column_->data();
                                     auto agg_it = agg_data.template cbegin<typename input_type_info::TDT>();
+                                    bool bucket_has_values = false;
                                     for (auto index_it = index_data.template cbegin<IndexTDT>(); index_it != index_cend && !reached_end_of_buckets; ++index_it, ++agg_it) {
                                         if (ARCTICDB_LIKELY(current_bucket.contains(*index_it))) {
                                             push_to_aggregator<input_type_info::data_type>(bucket_aggregator, *agg_it, agg_column);
-                                        } else if (ARCTICDB_LIKELY(index_value_past_end_of_bucket(*index_it, *bucket_end_it))) {
-                                            *output_it++ = finalize_aggregator<output_type_info::data_type>(bucket_aggregator, string_pool);
+                                            bucket_has_values = true;
+                                        } else if (ARCTICDB_LIKELY(index_value_past_end_of_bucket(*index_it, *bucket_end_it)) && output_it != output_end_it) {
+                                            if (bucket_has_values) {
+                                                *output_it++ = finalize_aggregator<output_type_info::data_type>(bucket_aggregator, string_pool);
+                                            }
                                             // The following code is equivalent to:
                                             // if constexpr (closed_boundary == ResampleBoundary::LEFT) {
                                             //     bucket_end_it = std::upper_bound(bucket_end_it, bucket_boundaries_end, *index_it);
@@ -102,9 +107,11 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const 
                                                 }
                                             }
                                             if (ARCTICDB_LIKELY(!reached_end_of_buckets)) {
+                                                bucket_has_values = false;
                                                 current_bucket.set_boundaries(*bucket_start_it, *bucket_end_it);
                                                 if (ARCTICDB_LIKELY(current_bucket.contains(*index_it))) {
                                                     push_to_aggregator<input_type_info::data_type>(bucket_aggregator, *agg_it, agg_column);
+                                                    bucket_has_values = true;
                                                 }
                                             }
                                         }
