@@ -81,10 +81,12 @@ struct SnapshotVersionQuery {
 
 struct TimestampVersionQuery {
     timestamp timestamp_;
+    bool iterate_snapshots_if_tombstoned;
 };
 
 struct SpecificVersionQuery {
     SignedVersionId version_id_;
+    bool iterate_snapshots_if_tombstoned;
 };
 
 using VersionQueryType = std::variant<
@@ -102,12 +104,12 @@ struct VersionQuery {
         content_ = SnapshotVersionQuery{snap_name};
     }
 
-    void set_timestamp(timestamp ts) {
-        content_ = TimestampVersionQuery{ts};
+    void set_timestamp(timestamp ts, bool iterate_snapshots_if_tombstoned) {
+        content_ = TimestampVersionQuery{ts, iterate_snapshots_if_tombstoned};
     }
 
-    void set_version(SignedVersionId version) {
-        content_ = SpecificVersionQuery{version};
+    void set_version(SignedVersionId version, bool iterate_snapshots_if_tombstoned) {
+        content_ = SpecificVersionQuery{version, iterate_snapshots_if_tombstoned};
     }
 
     void set_iterate_on_failure(const std::optional<bool>& iterate_on_failure) {

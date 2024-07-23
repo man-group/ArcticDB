@@ -992,7 +992,7 @@ class NativeVersionStore:
             columns=columns,
             query_builder=query_builder,
             throw_on_error=throw_on_error,
-            kwargs=kwargs,
+            **kwargs,
         )
         check(
             all(v is not None for v in versioned_items),
@@ -1001,10 +1001,8 @@ class NativeVersionStore:
         return {v.symbol: v for v in versioned_items}
 
     def _batch_read_to_versioned_items(
-        self, symbols, as_ofs, date_ranges, row_ranges, columns, query_builder, throw_on_error, kwargs=None
+        self, symbols, as_ofs, date_ranges, row_ranges, columns, query_builder, throw_on_error, **kwargs
     ):
-        if kwargs is None:
-            kwargs = dict()
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
         read_queries = self._get_read_queries(len(symbols), date_ranges, row_ranges, columns, query_builder)
         read_options = self._get_read_options(**kwargs)
@@ -1500,13 +1498,14 @@ class NativeVersionStore:
     def _get_version_query(self, as_of: VersionQueryInput, **kwargs):
         version_query = _PythonVersionStoreVersionQuery()
         version_query.set_iterate_on_failure(_assume_false("iterate_on_failure", kwargs))
+        iterate_snapshots_if_tombstoned = _assume_true("iterate_snapshots_if_tombstoned", kwargs)
 
         if isinstance(as_of, str):
             version_query.set_snap_name(as_of)
         elif isinstance(as_of, int):
-            version_query.set_version(as_of)
+            version_query.set_version(as_of, iterate_snapshots_if_tombstoned)
         elif isinstance(as_of, (datetime, Timestamp)):
-            version_query.set_timestamp(Timestamp(as_of).value)
+            version_query.set_timestamp(Timestamp(as_of).value, iterate_snapshots_if_tombstoned)
         elif as_of is not None:
             raise ArcticNativeException("Unexpected combination of read parameters")
 
@@ -2653,7 +2652,7 @@ class NativeVersionStore:
             "sorted": sorted_value_name(timeseries_descriptor.sorted),
         }
 
-    def get_info(self, symbol: str, version: Optional[VersionQueryInput] = None) -> Dict[str, Any]:
+    def get_info(self, symbol: str, version: Optional[VersionQueryInput] = None, **kwargs) -> Dict[str, Any]:
         """
         Returns descriptive data for `symbol`.
 
@@ -2680,7 +2679,7 @@ class NativeVersionStore:
             - date_range, `tuple`
             - sorted, `str`
         """
-        version_query = self._get_version_query(version)
+        version_query = self._get_version_query(version, **kwargs)
         dit = self.version_store.read_descriptor(symbol, version_query)
         return self._process_info(symbol, dit, version)
 

@@ -239,7 +239,9 @@ std::optional<VersionedItem> LocalVersionedEngine::get_specific_version(
     const VersionQuery& version_query) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: get_specific_version");
     auto key = ::arcticdb::get_specific_version(store(), version_map(), stream_id, signed_version_id, version_query);
-    if (!key) {
+    if (key) {
+        return VersionedItem{std::move(key.value())};
+    } else if (std::get<SpecificVersionQuery>(version_query.content_).iterate_snapshots_if_tombstoned) {
         VersionId version_id;
         if (signed_version_id >= 0) {
             version_id = static_cast<VersionId>(signed_version_id);
@@ -264,14 +266,15 @@ std::optional<VersionedItem> LocalVersionedEngine::get_specific_version(
         });
         if (index_key != index_keys.end()) {
             ARCTICDB_DEBUG(log::version(), "Found version {} for symbol {} in snapshot:", version_id, stream_id);
-            key = *index_key;
+            return VersionedItem{std::move(*index_key)};
         } else {
             ARCTICDB_DEBUG(log::version(), "get_specific_version: "
                                  "version id not found for stream {} version {}", stream_id, version_id);
             return std::nullopt;
         }
+    } else {
+        return std::nullopt;
     }
-    return VersionedItem{std::move(key.value())};
 }
 
 std::optional<VersionedItem> LocalVersionedEngine::get_version_at_time(
@@ -281,7 +284,7 @@ std::optional<VersionedItem> LocalVersionedEngine::get_version_at_time(
     ) {
 
     auto index_key = load_index_key_from_time(store(), version_map(), stream_id, as_of, version_query);
-    if (!index_key) {
+    if (!index_key && std::get<TimestampVersionQuery>(version_query.content_).iterate_snapshots_if_tombstoned) {
         auto index_keys = get_index_keys_in_snapshots(store(), stream_id);
         auto vector_index_keys = std::vector<AtomKey>(index_keys.begin(), index_keys.end());
         std::sort(std::begin(vector_index_keys), std::end(vector_index_keys),

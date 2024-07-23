@@ -378,17 +378,16 @@ def test_non_existent_list_versions_latest_only(arctic_library):
 
 def test_delete_version_with_snapshot(arctic_library):
     lib = arctic_library
-    df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
-    lib.write("symbol", df, metadata={"very": "interesting"})
-    lib.write("symbol", df, metadata={"muy": "interesante"}, prune_previous_versions=False)
-    lib.snapshot("my_snap")
-    lib.delete("symbol", versions=1)
-    assert lib["symbol"].version == 0
-    assert lib["symbol"].metadata == {"very": "interesting"}
-    assert lib.read("symbol", as_of=1).version == 1
-    assert lib.read("symbol", as_of=1).metadata == {"muy": "interesante"}
-    assert lib.read("symbol", as_of="my_snap").version == 1
-    assert lib.read("symbol", as_of="my_snap").metadata == {"muy": "interesante"}
+    sym = "test_delete_version_with_snapshot"
+    df = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-01", periods=10))
+    lib.write(sym, df)
+    lib.snapshot("snap")
+    lib.delete(sym)
+
+    for method in ["read", "head", "tail", "read_metadata", "get_description"]:
+        for as_of in [0, pd.Timestamp("2200-01-01")]:
+            with pytest.raises(NoDataFoundException):
+                getattr(lib, method)(sym, as_of=as_of)
 
 
 def test_list_versions_with_snapshot(arctic_library):

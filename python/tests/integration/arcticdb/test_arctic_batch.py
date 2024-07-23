@@ -1096,6 +1096,26 @@ def test_read_batch_query_builder_version_doesnt_exist(arctic_library):
     assert batch[2].error_category == ErrorCategory.MISSING_DATA
 
 
+def test_delete_version_with_snapshot_batch(arctic_library):
+    lib = arctic_library
+    sym = "test_delete_version_with_snapshot_batch"
+    df = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-01", periods=10))
+    lib.write(sym, df)
+    lib.snapshot("snap")
+    lib.delete(sym)
+
+    q = QueryBuilder()
+    q = q.apply("new_col", q["col"] + 1)
+
+    for as_of in [0, pd.Timestamp("2200-01-01")]:
+        read_request = ReadRequest(sym, as_of=as_of)
+        read_info_request = ReadInfoRequest(sym, as_of=as_of)
+        assert isinstance(lib.read_batch([read_request])[0], DataError)
+        assert isinstance(lib.read_batch([read_request], query_builder=q)[0], DataError)
+        assert isinstance(lib.read_metadata_batch([read_info_request])[0], DataError)
+        assert isinstance(lib.get_description_batch([read_info_request])[0], DataError)
+
+
 def test_get_description_batch(arctic_library):
     lib = arctic_library
 

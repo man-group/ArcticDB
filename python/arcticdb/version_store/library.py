@@ -1066,6 +1066,7 @@ class Library:
             row_range=row_range,
             columns=columns,
             query_builder=query_builder,
+            iterate_snapshots_if_tombstoned=False,
         )
 
     def read_batch(
@@ -1165,7 +1166,14 @@ class Library:
                 )
         throw_on_error = False
         return self._nvs._batch_read_to_versioned_items(
-            symbol_strings, as_ofs, date_ranges, row_ranges, columns, query_builder or query_builders, throw_on_error
+            symbol_strings,
+            as_ofs,
+            date_ranges,
+            row_ranges,
+            columns,
+            query_builder or query_builders,
+            throw_on_error,
+            iterate_snapshots_if_tombstoned=False,
         )
 
     def read_metadata(self, symbol: str, as_of: Optional[AsOf] = None) -> VersionedItem:
@@ -1187,7 +1195,7 @@ class Library:
             Structure containing metadata and version number of the affected symbol in the store. The data attribute
             will be None.
         """
-        return self._nvs.read_metadata(symbol, as_of)
+        return self._nvs.read_metadata(symbol, as_of, iterate_snapshots_if_tombstoned=False)
 
     def read_metadata_batch(self, symbols: List[Union[str, ReadInfoRequest]]) -> List[Union[VersionedItem, DataError]]:
         """
@@ -1587,7 +1595,7 @@ class Library:
         -------
         VersionedItem object that contains a .data and .metadata element.
         """
-        return self._nvs.head(symbol=symbol, n=n, as_of=as_of, columns=columns)
+        return self._nvs.head(symbol=symbol, n=n, as_of=as_of, columns=columns, iterate_snapshots_if_tombstoned=False)
 
     def tail(
         self, symbol: str, n: int = 5, as_of: Optional[Union[int, str]] = None, columns: List[str] = None
@@ -1610,7 +1618,7 @@ class Library:
         -------
         VersionedItem object that contains a .data and .metadata element.
         """
-        return self._nvs.tail(symbol=symbol, n=n, as_of=as_of, columns=columns)
+        return self._nvs.tail(symbol=symbol, n=n, as_of=as_of, columns=columns, iterate_snapshots_if_tombstoned=False)
 
     @staticmethod
     def _info_to_desc(info: Dict[str, Any]) -> SymbolDescription:
@@ -1659,7 +1667,7 @@ class Library:
         SymbolDescription
             For documentation on each field.
         """
-        info = self._nvs.get_info(symbol, as_of)
+        info = self._nvs.get_info(symbol, as_of, iterate_snapshots_if_tombstoned=False)
         return self._info_to_desc(info)
 
     @staticmethod
