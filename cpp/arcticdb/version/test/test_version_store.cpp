@@ -165,6 +165,7 @@ TEST_F(VersionStoreTest, SortMerge) {
     using namespace arcticdb::storage;
     using namespace arcticdb::stream;
     using namespace arcticdb::pipelines;
+    using namespace arcticdb::version_store;
 
     size_t count = 0;
 
@@ -191,10 +192,18 @@ TEST_F(VersionStoreTest, SortMerge) {
     std::shuffle(data.begin(), data.end(), mt);
 
     for(auto&& frame : data) {
-        test_store_->append_incomplete_frame(symbol, std::move(frame.input_frame_));
+        test_store_->append_incomplete_frame(symbol, std::move(frame.input_frame_), true);
     }
 
-    test_store_->sort_merge_internal(symbol, std::nullopt, arcticdb::version_store::SortMergeOptions{true, false, false, false, false});
+    CompactIncompleteOptions options{
+            .prune_previous_versions_=false,
+            .append_=true,
+            .convert_int_to_float_=false,
+            .via_iteration_=false,
+            .sparsify_=false
+    };
+
+    test_store_->sort_merge_internal(symbol, std::nullopt, options);
 }
 
 TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {
@@ -238,7 +247,7 @@ TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {
     std::shuffle(data.begin(), data.end(), mt);
 
     for(auto& frame : data) {
-        test_store_->write_parallel_frame(symbol, std::move(frame.input_frame_));
+        test_store_->write_parallel_frame(symbol, std::move(frame.input_frame_), true);
     }
 
     auto vit = test_store_->compact_incomplete(symbol, false, false, true, false);
@@ -283,17 +292,17 @@ TEST_F(VersionStoreTest, GetIncompleteSymbols) {
     std::string stream_id1{"thing1"};
     auto wrapper1 = get_test_simple_frame(stream_id1, 15, 2);
     auto& frame1 = wrapper1.frame_;
-    test_store_->append_incomplete_frame(stream_id1, std::move(frame1));
+    test_store_->append_incomplete_frame(stream_id1, std::move(frame1), true);
 
     std::string stream_id2{"thing2"};
     auto wrapper2 = get_test_simple_frame(stream_id2, 15, 2);
     auto& frame2 = wrapper2.frame_;
-    test_store_->append_incomplete_frame(stream_id2, std::move(frame2));
+    test_store_->append_incomplete_frame(stream_id2, std::move(frame2), true);
 
     std::string stream_id3{"thing3"};
     auto wrapper3 = get_test_simple_frame(stream_id3, 15, 2);
     auto& frame3 = wrapper3.frame_;
-    test_store_->append_incomplete_frame(stream_id3, std::move(frame3));
+    test_store_->append_incomplete_frame(stream_id3, std::move(frame3), true);
 
     std::set<StreamId> expected{ stream_id1, stream_id2, stream_id3};
     auto result = test_store_->get_incomplete_symbols();
