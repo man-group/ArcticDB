@@ -34,7 +34,7 @@ def _log_and_run(*cmd, **kwargs):
 
 class CompileProto(Command):
     # When adding new protobuf versions, also update: setup.cfg, python/arcticdb/__init__.py
-    _PROTOBUF_TO_GRPC_VERSION = {"3": "<=1.30.*", "4": ">=1.49", "5": ">=1.64"}
+    _PROTOBUF_TO_GRPC_VERSION = {"3": "<1.31", "4": ">=1.49", "5": ">=1.64"}
 
     description = '"protoc" generate code _pb2.py from .proto files'
     user_options = [
