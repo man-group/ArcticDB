@@ -49,14 +49,6 @@ struct KeySizesInfo {
     size_t uncompressed_size; // bytes
 };
 
-struct SortMergeOptions {
-    bool append_;
-    bool convert_int_to_float_;
-    bool via_iteration_;
-    bool sparsify_;
-    bool prune_previous_versions_;
-};
-
 folly::Future<folly::Unit> delete_trees_responsibly(
     std::shared_ptr<Store> store,
     std::shared_ptr<VersionMap> &version_map,
@@ -112,7 +104,8 @@ public:
 
     void append_incomplete_frame(
         const StreamId& stream_id,
-        const std::shared_ptr<InputTensorFrame>& frame) const override;
+        const std::shared_ptr<InputTensorFrame>& frame,
+        bool validate_index) const override;
 
     void remove_incomplete(
         const StreamId& stream_id
@@ -163,7 +156,8 @@ public:
 
     void write_parallel_frame(
         const StreamId& stream_id,
-        const std::shared_ptr<InputTensorFrame>& frame) const override;
+        const std::shared_ptr<InputTensorFrame>& frame,
+        bool validate_index) const override;
 
     void delete_tree(
         const std::vector<IndexTypeKey>& idx_to_be_deleted,
@@ -262,7 +256,7 @@ public:
     VersionedItem sort_merge_internal(
         const StreamId& stream_id,
         const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
-        const SortMergeOptions& option);
+        const CompactIncompleteOptions& options);
 
     std::vector<folly::Future<AtomKey>> batch_write_internal(
         const std::vector<VersionId>& version_ids,
@@ -419,11 +413,7 @@ protected:
     VersionedItem compact_incomplete_dynamic(
             const StreamId& stream_id,
             const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
-            bool append,
-            bool convert_int_to_float,
-            bool via_iteration,
-            bool sparsify,
-            bool prune_previous_versions);
+            const CompactIncompleteOptions& options);
 
     /**
      * Take tombstoned indexes that have been pruned in the version map and perform the actual deletion

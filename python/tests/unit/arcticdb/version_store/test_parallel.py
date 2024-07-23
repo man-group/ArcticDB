@@ -300,18 +300,54 @@ def test_compact_incomplete_sets_sortedness(lmdb_version_store):
 
 
 @pytest.mark.parametrize("append", (True, False))
-def test_parallel_sortedness_checks(lmdb_version_store, append):
+@pytest.mark.parametrize("validate_index", (True, False, None))
+def test_parallel_sortedness_checks_unsorted_data(lmdb_version_store, append, validate_index):
     lib = lmdb_version_store
-    sym = "test_parallel_sortedness_checks"
+    sym = "test_parallel_sortedness_checks_unsorted_data"
     if append:
         df_0 = pd.DataFrame({"col": [1, 2]}, index=[pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")])
         lib.write(sym, df_0)
     df_1 = pd.DataFrame({"col": [3, 4]}, index=[pd.Timestamp("2024-01-04"), pd.Timestamp("2024-01-03")])
-    with pytest.raises(SortingException):
-        if append:
-            lib.append(sym, df_1, incomplete=True)
+    if validate_index:
+        with pytest.raises(SortingException):
+            if append:
+                lib.append(sym, df_1, incomplete=True, validate_index=True)
+            else:
+                lib.write(sym, df_1, parallel=True, validate_index=True)
+    else:
+        if validate_index is None:
+            # Test default behaviour when arg isn't provided
+            if append:
+                lib.append(sym, df_1, incomplete=True)
+            else:
+                lib.write(sym, df_1, parallel=True)
         else:
-            lib.write(sym, df_1, parallel=True)
+            if append:
+                lib.append(sym, df_1, incomplete=True, validate_index=False)
+            else:
+                lib.write(sym, df_1, parallel=True, validate_index=False)
+
+
+@pytest.mark.parametrize("append", (True, False))
+@pytest.mark.parametrize("validate_index", (True, False, None))
+def test_parallel_sortedness_checks_sorted_data(lmdb_version_store, append, validate_index):
+    lib = lmdb_version_store
+    sym = "test_parallel_sortedness_checks_unsorted_data"
+    if append:
+        df_0 = pd.DataFrame({"col": [1, 2]}, index=[pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")])
+        lib.write(sym, df_0)
+    df_1 = pd.DataFrame({"col": [3, 4]}, index=[pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-04")])
+    df_2 = pd.DataFrame({"col": [5, 6]}, index=[pd.Timestamp("2024-01-05"), pd.Timestamp("2024-01-06")])
+    if append:
+        lib.append(sym, df_1, incomplete=True, validate_index=validate_index)
+        lib.append(sym, df_2, incomplete=True, validate_index=validate_index)
+    else:
+        lib.write(sym, df_1, parallel=True, validate_index=validate_index)
+        lib.write(sym, df_2, parallel=True, validate_index=validate_index)
+    lib.compact_incomplete(sym, append, False, validate_index=validate_index)
+    expected = pd.concat([df_0, df_1, df_2]) if append else pd.concat([df_1, df_2])
+    received = lib.read(sym).data
+    assert_frame_equal(expected, received)
 
 
 @pytest.mark.parametrize("append", (True, False))
@@ -369,7 +405,8 @@ def test_parallel_all_same_index_values(lmdb_version_store, append):
 
 
 @pytest.mark.parametrize("append", (True, False))
-def test_parallel_overlapping_incomplete_segments(lmdb_version_store, append):
+@pytest.mark.parametrize("validate_index", (True, False, None))
+def test_parallel_overlapping_incomplete_segments(lmdb_version_store, append, validate_index):
     lib = lmdb_version_store
     sym = "test_parallel_overlapping_incomplete_segments"
     if append:
@@ -383,8 +420,18 @@ def test_parallel_overlapping_incomplete_segments(lmdb_version_store, append):
     else:
         lib.write(sym, df_2, parallel=True)
         lib.write(sym, df_1, parallel=True)
-    with pytest.raises(SortingException):
-        lib.compact_incomplete(sym, append, False)
+    if validate_index:
+        with pytest.raises(SortingException):
+            lib.compact_incomplete(sym, append, False, validate_index=True)
+    else:
+        if validate_index is None:
+            # Test default behaviour when arg isn't provided
+            lib.compact_incomplete(sym, append, False)
+        else:
+            lib.compact_incomplete(sym, append, False, validate_index=False)
+        received = lib.read(sym).data
+        expected = pd.concat([df_0, df_1, df_2]) if append else pd.concat([df_1, df_2])
+        assert_frame_equal(received, expected)
 
 
 def test_parallel_append_exactly_matches_existing(lmdb_version_store):
@@ -401,19 +448,64 @@ def test_parallel_append_exactly_matches_existing(lmdb_version_store):
     assert lib.get_info(sym)["sorted"] == "ASCENDING"
 
 
-def test_parallel_append_overlapping_with_existing(lmdb_version_store):
+@pytest.mark.parametrize("append", (True, False))
+@pytest.mark.parametrize("validate_index", (True, False, None))
+def test_parallel_all_incomplete_segments_same_index(lmdb_version_store_v1, append, validate_index):
+    lib = lmdb_version_store_v1
+    sym = "test_parallel_all_incomplete_segments_same_index"
+    if append:
+        df_0 = pd.DataFrame({"col": [1, 2]}, index=[pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")])
+        lib.write(sym, df_0)
+    df_1 = pd.DataFrame({"col": [3, 4]}, index=[pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-04")])
+    df_2 = pd.DataFrame({"col": [5, 6]}, index=[pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-04")])
+    if append:
+        lib.append(sym, df_2, incomplete=True)
+        lib.append(sym, df_1, incomplete=True)
+    else:
+        lib.write(sym, df_2, parallel=True)
+        lib.write(sym, df_1, parallel=True)
+    if validate_index:
+        with pytest.raises(SortingException):
+            lib.compact_incomplete(sym, append, False, validate_index=True)
+    else:
+        if validate_index is None:
+            # Test default behaviour when arg isn't provided
+            lib.compact_incomplete(sym, append, False)
+        else:
+            lib.compact_incomplete(sym, append, False, validate_index=False)
+        received = lib.read(sym).data
+        # Order is arbitrary if all index values are the same
+        if received["col"].iloc[-1] == 6:
+            expected = pd.concat([df_0, df_1, df_2]) if append else pd.concat([df_1, df_2])
+        else:
+            expected = pd.concat([df_0, df_2, df_1]) if append else pd.concat([df_2, df_1])
+        assert_frame_equal(received, expected)
+
+
+@pytest.mark.parametrize("validate_index", (True, False, None))
+def test_parallel_append_overlapping_with_existing(lmdb_version_store, validate_index):
     lib = lmdb_version_store
     sym = "test_parallel_append_overlapping_with_existing"
     df_0 = pd.DataFrame({"col": [1, 2]}, index=[pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")])
     lib.write(sym, df_0)
     df_1 = pd.DataFrame({"col": [3, 4]}, index=[pd.Timestamp("2024-01-01T12"), pd.Timestamp("2024-01-03")])
     lib.append(sym, df_1, incomplete=True)
-    with pytest.raises(SortingException):
-        lib.compact_incomplete(sym, True, False)
+    if validate_index:
+        with pytest.raises(SortingException):
+            lib.compact_incomplete(sym, True, False, validate_index=validate_index)
+    else:
+        if validate_index is None:
+            # Test default behaviour when arg isn't provided
+            lib.compact_incomplete(sym, True, False)
+        else:
+            lib.compact_incomplete(sym, True, False, validate_index=False)
+        received = lib.read(sym).data
+        assert_frame_equal(received, pd.concat([df_0, df_1]))
 
 
 @pytest.mark.parametrize("sortedness", ("DESCENDING", "UNSORTED"))
-def test_parallel_append_existing_data_unsorted(lmdb_version_store, sortedness):
+@pytest.mark.parametrize("validate_index", (True, False, None))
+def test_parallel_append_existing_data_unsorted(lmdb_version_store, sortedness, validate_index):
     lib = lmdb_version_store
     sym = "test_parallel_append_existing_data_unsorted"
     last_index_date = "2024-01-01" if sortedness == "DESCENDING" else "2024-01-03"
@@ -425,8 +517,18 @@ def test_parallel_append_existing_data_unsorted(lmdb_version_store, sortedness):
     assert lib.get_info(sym)["sorted"] == sortedness
     df_1 = pd.DataFrame({"col": [3, 4]}, index=[pd.Timestamp("2024-01-05"), pd.Timestamp("2024-01-06")])
     lib.append(sym, df_1, incomplete=True)
-    with pytest.raises(SortingException):
-        lib.compact_incomplete(sym, True, False)
+    if validate_index:
+        with pytest.raises(SortingException):
+            lib.compact_incomplete(sym, True, False, validate_index=True)
+    else:
+        if validate_index is None:
+            # Test the default case with no arg provided
+            lib.compact_incomplete(sym, True, False)
+        else:
+            lib.compact_incomplete(sym, True, False, validate_index=False)
+        expected = pd.concat([df_0, df_1])
+        received = lib.read(sym).data
+        assert_frame_equal(expected, received)
 
 
 def test_parallel_no_column_slicing(lmdb_version_store_tiny_segment):

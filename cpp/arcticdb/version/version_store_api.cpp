@@ -649,7 +649,8 @@ void PythonVersionStore::append_incomplete(
     const StreamId& stream_id,
     const py::tuple &item,
     const py::object &norm,
-    const py::object & user_meta) const {
+    const py::object & user_meta,
+    bool validate_index) const {
 
     using namespace arcticdb::entity;
     using namespace arcticdb::stream;
@@ -657,7 +658,7 @@ void PythonVersionStore::append_incomplete(
 
     // Turn the input into a standardised frame object
     auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta, cfg().write_options().empty_types());
-    append_incomplete_frame(stream_id, frame);
+    append_incomplete_frame(stream_id, frame, validate_index);
 }
 
 VersionedItem PythonVersionStore::write_metadata(
@@ -707,14 +708,22 @@ VersionedItem PythonVersionStore::compact_incomplete(
         bool via_iteration /*= true */,
         bool sparsify /*= false */,
         const std::optional<py::object>& user_meta /* = std::nullopt */,
-        bool prune_previous_versions) {
+        bool prune_previous_versions,
+        bool validate_index) {
     std::optional<arcticdb::proto::descriptors::UserDefinedMetadata> meta;
     if (user_meta && !user_meta->is_none()) {
         meta = std::make_optional<arcticdb::proto::descriptors::UserDefinedMetadata>();
         python_util::pb_from_python(*user_meta, *meta);
     }
-    return compact_incomplete_dynamic(stream_id, meta, append, convert_int_to_float, via_iteration, sparsify,
-        prune_previous_versions);
+    CompactIncompleteOptions options{
+        .prune_previous_versions_=prune_previous_versions,
+        .append_=append,
+        .convert_int_to_float_=convert_int_to_float,
+        .via_iteration_=via_iteration,
+        .sparsify_=sparsify,
+        .validate_index_=validate_index
+    };
+    return compact_incomplete_dynamic(stream_id, meta, options);
 }
 
 VersionedItem PythonVersionStore::sort_merge(
@@ -731,20 +740,28 @@ VersionedItem PythonVersionStore::sort_merge(
         meta = std::make_optional<arcticdb::proto::descriptors::UserDefinedMetadata>();
         python_util::pb_from_python(user_meta, *meta);
     }
-    return sort_merge_internal(stream_id, meta, SortMergeOptions{append, convert_int_to_float, via_iteration, sparsify, prune_previous_versions});
+    CompactIncompleteOptions options{
+        .prune_previous_versions_=prune_previous_versions,
+        .append_=append,
+        .convert_int_to_float_=convert_int_to_float,
+        .via_iteration_=via_iteration,
+        .sparsify_=sparsify
+    };
+    return sort_merge_internal(stream_id, meta, options);
 }
 
 void PythonVersionStore::write_parallel(
     const StreamId& stream_id,
     const py::tuple &item,
     const py::object &norm,
-    const py::object & user_meta) const {
+    const py::object & user_meta,
+    bool validate_index) const {
     using namespace arcticdb::entity;
     using namespace arcticdb::stream;
     using namespace arcticdb::pipelines;
 
     auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta, cfg().write_options().empty_types());
-    write_parallel_frame(stream_id, frame);
+    write_parallel_frame(stream_id, frame, validate_index);
 }
 
 std::unordered_map<VersionId, bool> PythonVersionStore::get_all_tombstoned_versions(const StreamId &stream_id) {

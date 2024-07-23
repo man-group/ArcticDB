@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from typing import List
 from enum import Enum
 
-from arcticdb_ext.exceptions import InternalException, UserInputException
+from arcticdb_ext.exceptions import InternalException, SortingException, UserInputException
 from arcticdb_ext.storage import NoDataFoundException
 from arcticdb_ext.version_store import SortedValue
 from arcticdb.exceptions import ArcticDbNotYetImplemented, LibraryNotFound, MismatchingLibraryOptions
@@ -258,6 +258,32 @@ def test_staged_data(arctic_library, finalize_method):
     sym_without_metadata_vit = lib.read(sym_without_metadata)
     assert_frame_equal(expected, sym_without_metadata_vit.data)
     assert sym_without_metadata_vit.metadata is None
+
+
+@pytest.mark.parametrize("finalize_method", (StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE))
+@pytest.mark.parametrize("validate_index", (True, False, None))
+def test_parallel_writes_and_appends_index_validation(arctic_library, finalize_method, validate_index):
+    lib = arctic_library
+    sym = "test_parallel_writes_and_appends_index_validation"
+    if finalize_method == StagedDataFinalizeMethod.APPEND:
+        df_0 = pd.DataFrame({"col": [1, 2]}, index=[pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")])
+        lib.write(sym, df_0)
+    df_1 = pd.DataFrame({"col": [3, 4]}, index=[pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-04")])
+    df_2 = pd.DataFrame({"col": [5, 6]}, index=[pd.Timestamp("2024-01-03T12"), pd.Timestamp("2024-01-05")])
+    lib.write(sym, df_2, staged=True)
+    lib.write(sym, df_1, staged=True)
+    if validate_index is None:
+        # Test default behaviour when arg isn't provided
+        with pytest.raises(SortingException):
+            lib.finalize_staged_data(sym, finalize_method)
+    elif validate_index:
+        with pytest.raises(SortingException):
+            lib.finalize_staged_data(sym, finalize_method, validate_index=True)
+    else:
+        lib.finalize_staged_data(sym, finalize_method, validate_index=False)
+        received = lib.read(sym).data
+        expected = pd.concat([df_0, df_1, df_2]) if finalize_method == StagedDataFinalizeMethod.APPEND else pd.concat([df_1, df_2])
+        assert_frame_equal(received, expected)
 
 
 def test_snapshots_and_deletes(arctic_library):
