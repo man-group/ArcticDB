@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 from hypothesis import assume, given, settings
 from hypothesis.extra.pandas import column, data_frames, range_indexes
 import numpy as np
@@ -162,8 +163,8 @@ def test_project_multiply_col_val(lmdb_version_store_dynamic_schema_v1, df):
         index=range_indexes(),
     )
 )
-def test_project_divide_val_col(s3_version_store_dynamic_schema_v2, df):
-    lib = s3_version_store_dynamic_schema_v2
+def test_project_divide_val_col(lmdb_version_store_dynamic_schema_v2, df):
+    lib = lmdb_version_store_dynamic_schema_v2
     assume(not df.empty)
     symbol = "test_project_divide_val_col"
 

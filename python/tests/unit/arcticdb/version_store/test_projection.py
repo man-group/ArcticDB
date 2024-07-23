@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 from hypothesis import assume, given, settings
 from hypothesis.extra.pandas import column, data_frames, range_indexes
 import numpy as np
@@ -19,8 +20,8 @@ from arcticdb.util.hypothesis import (
 )
 
 
-def test_project(local_object_version_store):
-    lib = local_object_version_store
+def test_project(lmdb_version_store):
+    lib = lmdb_version_store
     df = pd.DataFrame(
         {
             "VWAP": np.arange(0, 10, dtype=np.float64),
