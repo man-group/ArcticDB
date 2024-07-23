@@ -65,7 +65,8 @@
     "azure-identity-cpp",
     "azure-storage-blobs-cpp",
     "rocksdb",
-    "benchmark"
+    "benchmark",
+    "mimalloc"
   ],
   "overrides": [
     { "name": "openssl", "version-string": "3.3.0" },

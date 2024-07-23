@@ -14,7 +14,7 @@
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/util/thread_cached_int.hpp>
 #include <folly/concurrency/ConcurrentHashMap.h>
-
+#include <mimalloc.h>
 #include <fmt/std.h>
 
 namespace arcticdb {
@@ -167,9 +167,9 @@ namespace arcticdb {
     template<class TracingPolicy, class ClockType>
     uint8_t* AllocatorImpl<TracingPolicy, ClockType>::get_alignment(size_t size) {
 #ifdef _WIN32
-        return  static_cast<uint8_t*>(_aligned_malloc(size, alignment));
+        return  static_cast<uint8_t*>(mi_malloc_aligned(size, alignment));
 #else
-        return static_cast<uint8_t*>(std::malloc(size));
+        return static_cast<uint8_t*>(mi_malloc(size));
 #endif
     }
 
@@ -189,10 +189,10 @@ namespace arcticdb {
         }
         else {
             ARCTICDB_TRACE(log::codec(), "Doing normal allocation of size {}", size);
-            ret = static_cast<uint8_t*>(std::malloc(size));
+            ret = static_cast<uint8_t*>(mi_malloc(size));
         }
 #else
-        ret = static_cast<uint8_t*>(std::malloc(size));
+        ret = static_cast<uint8_t*>(mi_malloc(size));
 #endif
         return ret;
     }
@@ -208,10 +208,10 @@ namespace arcticdb {
         }
         else {
             ARCTICDB_TRACE(log::codec(), "Doing normal free of address {}", uintptr_t(p));
-            std::free(p);
+            mi_free(p);
         }
 #else
-        std::free(p);
+        mi_free(p);
         free_count_of<TracingPolicy, ClockType>().increment(1);
         maybe_trim();
 #endif
@@ -229,21 +229,21 @@ namespace arcticdb {
                 return p;
             else {
                 page_size_slab_allocator_->deallocate(raw_pointer);
-                ret = static_cast<uint8_t*>(std::malloc(size));
+                ret = static_cast<uint8_t*>(mi_malloc(size));
             }
         }
         else {
             ARCTICDB_TRACE(log::codec(), "Doing normal realloc of address {} and size {}", uintptr_t(p), size);
             if (use_slab_allocator && size == page_size) {
-                std::free(p);
+                mi_free(p);
                 ret = reinterpret_cast<uint8_t*>(page_size_slab_allocator_->allocate());
             }
             else {
-                ret = static_cast<uint8_t*>(std::realloc(p, size));
+                ret = static_cast<uint8_t*>(mi_realloc(p, size));
             }
         }
 #else
-        ret = static_cast<uint8_t*>(std::realloc(p, size));
+        ret = static_cast<uint8_t*>(mi_realloc(p, size));
 #endif
         return ret;
     }
