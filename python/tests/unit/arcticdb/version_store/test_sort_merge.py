@@ -195,13 +195,24 @@ def test_prune_previous(lmdb_storage, lib_name):
     assert_frame_equal(df, lib.read("sym").data)
     assert len(lib.list_versions("sym")) == 1
 
-@pytest.mark.xfail(reason="Bug")
-def test_empty_df_in_staged_segment(lmdb_storage, lib_name):
-    ac = lmdb_storage.create_arctic()
-    lib = ac.create_library(lib_name)
-    lib.write("sym", pd.DataFrame([]), staged=True)
-    lib.sort_and_finalize_staged_data("sym")
-    assert_frame_equal(lib.read("sym").data, pd.DataFrame([]))
+class TestEmptySegments:
+    @pytest.mark.xfail(reason="Bug. Throws: `E_ASSERTION_FAILURE Descriptor id mismatch in atom key sym != 0")
+    def test_empty_df_in_staged_segment(self, lmdb_storage, lib_name):
+        ac = lmdb_storage.create_arctic()
+        lib = ac.create_library(lib_name)
+        lib.write("sym", pd.DataFrame([]), staged=True)
+        lib.sort_and_finalize_staged_data("sym")
+        assert_frame_equal(lib.read("sym").data, pd.DataFrame([]))
+
+    @pytest.mark.xfail(reason="Bug. Throws: E_ASSERTION_FAILURE Allocate data called with zero size")
+    def test_df_without_rows(self, lmdb_storage, lib_name):
+        ac = lmdb_storage.create_arctic()
+        lib = ac.create_library(lib_name)
+        df = pd.DataFrame({"col": []}, index=pd.DatetimeIndex([]))
+        lib.write("sym", df, staged=True)
+        lib.sort_and_finalize_staged_data("sym")
+        assert_frame_equal(lib.read("sym").data, df)
+
 
 @pytest.mark.xfail(reason="Throws: E_ASSERTION_FAILURE Stream descriptor not found in pipeline context")
 def test_finalize_without_adding_segments(lmdb_storage, lib_name):
