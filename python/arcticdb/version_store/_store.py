@@ -612,7 +612,7 @@ class NativeVersionStore:
         dataframe: TimeSeriesType,
         metadata: Optional[Any] = None,
         incomplete: bool = False,
-        prune_previous_version: Optional[bool] = None,
+        prune_previous_version: bool = False,
         validate_index: bool = False,
         **kwargs,
     ) -> Optional[VersionedItem]:
@@ -686,11 +686,6 @@ class NativeVersionStore:
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
         coerce_columns = kwargs.get("coerce_columns", None)
 
-        proto_cfg = self._lib_cfg.lib_desc.version.write_options
-        prune_previous_version = self.resolve_defaults(
-            "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version, **kwargs
-        )
-
         _handle_categorical_columns(symbol, dataframe)
 
         udm, item, norm_meta = self._try_normalize(
@@ -722,7 +717,7 @@ class NativeVersionStore:
         metadata: Any = None,
         date_range: Optional[DateRangeInput] = None,
         upsert: bool = False,
-        prune_previous_version: Optional[bool] = None,
+        prune_previous_version: bool = False,
         **kwargs,
     ) -> VersionedItem:
         """
@@ -785,15 +780,10 @@ class NativeVersionStore:
         """
         update_query = _PythonVersionStoreUpdateQuery()
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
-        proto_cfg = self._lib_cfg.lib_desc.version.write_options
         dynamic_schema = self.resolve_defaults(
-            "dynamic_schema", proto_cfg, False, **kwargs
+            "dynamic_schema", self._lib_cfg.lib_desc.version.write_options, False, **kwargs
         )
         coerce_columns = kwargs.get("coerce_columns", None)
-
-        prune_previous_version = self.resolve_defaults(
-            "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version, **kwargs
-        )
 
         if date_range is not None:
             start, end = normalize_dt_range_to_ts(date_range)
@@ -2215,22 +2205,12 @@ class NativeVersionStore:
             least one snapshot).
         """
         if date_range is not None:
-            proto_cfg = self._lib_cfg.lib_desc.version.write_options
             dynamic_schema = self.resolve_defaults(
-                "dynamic_schema", proto_cfg, False, **kwargs
+                "dynamic_schema", self._lib_cfg.lib_desc.version.write_options, False, **kwargs
             )
-            # All other methods use prune_previous_version, but also support prune_previous_versions here in case
-            # anyone is relying on it
-            prune_previous_versions = _assume_false("prune_previous_versions", kwargs)
-            if prune_previous_versions:
-                prune_previous_version = True
-            else:
-                prune_previous_version = self.resolve_defaults(
-                    "prune_previous_version", proto_cfg, global_default=False, **kwargs
-                )
             update_query = _PythonVersionStoreUpdateQuery()
             update_query.row_filter = _normalize_dt_range(date_range)
-            self.version_store.delete_range(symbol, update_query, dynamic_schema, prune_previous_version)
+            self.version_store.delete_range(symbol, update_query, dynamic_schema)
 
         else:
             self.version_store.delete(symbol)
@@ -2770,13 +2750,7 @@ class NativeVersionStore:
         """
         return self.version_store.is_symbol_fragmented(symbol, segment_size)
 
-    def defragment_symbol_data(
-            self,
-            symbol: str,
-            segment_size: Optional[int] = None,
-            prune_previous_versions: Optional[bool] = None,
-            **kwargs,
-    ) -> VersionedItem:
+    def defragment_symbol_data(self, symbol: str, segment_size: Optional[int] = None) -> VersionedItem:
         """
         Compacts fragmented segments by merging row-sliced segments (https://docs.arcticdb.io/technical/on_disk_storage/#data-layer).
         This method calls `is_symbol_fragmented` to determine whether to proceed with the defragmentation operation.
@@ -2834,17 +2808,10 @@ class NativeVersionStore:
         in the future. This API will allow overriding the setting as well.
         """
 
-        proto_cfg = self._lib_cfg.lib_desc.version.write_options
-        if proto_cfg.bucketize_dynamic:
+        if self._lib_cfg.lib_desc.version.write_options.bucketize_dynamic:
             raise ArcticDbNotYetImplemented(f"Support for library with 'bucketize_dynamic' ON is not implemented yet")
 
-        # All other methods use prune_previous_version, but also support prune_previous_versions here in case
-        # anyone is relying on it
-        prune_previous_version = self.resolve_defaults(
-            "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_versions, **kwargs
-        )
-
-        result = self.version_store.defragment_symbol_data(symbol, segment_size, prune_previous_version)
+        result = self.version_store.defragment_symbol_data(symbol, segment_size)
         return VersionedItem(
             symbol=result.symbol,
             library=self._library.library_path,

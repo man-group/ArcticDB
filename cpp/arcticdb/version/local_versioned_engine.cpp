@@ -537,15 +537,15 @@ VersionedItem LocalVersionedEngine::sort_index(const StreamId& stream_id, bool d
 VersionedItem LocalVersionedEngine::delete_range_internal(
     const StreamId& stream_id,
     const UpdateQuery & query,
-    const DeleteRangeOptions& option) {
+    bool dynamic_schema) {
     auto maybe_prev = get_latest_undeleted_version(store(), version_map(), stream_id);
     util::check(maybe_prev.has_value(), "Cannot delete from non-existent symbol {}", stream_id);
     auto versioned_item = delete_range_impl(store(),
                                             *maybe_prev,
                                             query,
                                             get_write_options(),
-                                            option.dynamic_schema_);
-    write_version_and_prune_previous(option.prune_previous_versions_, versioned_item.key_, maybe_prev);
+                                            dynamic_schema);
+    version_map()->write_version(store(), versioned_item.key_, maybe_prev);
     return versioned_item;
 }
 
@@ -1018,9 +1018,7 @@ bool LocalVersionedEngine::is_symbol_fragmented(const StreamId& stream_id, std::
     return is_symbol_fragmented_impl(pre_defragmentation_info.segments_need_compaction);
 }
 
-VersionedItem LocalVersionedEngine::defragment_symbol_data(const StreamId& stream_id,
-                                                           std::optional<size_t> segment_size,
-                                                           bool prune_previous_versions) {
+VersionedItem LocalVersionedEngine::defragment_symbol_data(const StreamId& stream_id, std::optional<size_t> segment_size) {
     log::version().info("Defragmenting data for symbol {}", stream_id);
 
     // Currently defragmentation only for latest version - is there a use-case to allow compaction for older data?
@@ -1032,7 +1030,7 @@ VersionedItem LocalVersionedEngine::defragment_symbol_data(const StreamId& strea
             store(), stream_id, update_info, options,
             segment_size.has_value() ? *segment_size : options.segment_row_size);
 
-    write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, update_info.previous_index_key_);
+    version_map_->write_version(store_, versioned_item.key_, update_info.previous_index_key_);
 
     if(cfg_.symbol_list())
         symbol_list().add_symbol(store_, stream_id, versioned_item.key_.version_id());

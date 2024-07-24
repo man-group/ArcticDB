@@ -632,9 +632,8 @@ VersionedItem PythonVersionStore::update(
 VersionedItem PythonVersionStore::delete_range(
     const StreamId& stream_id,
     const UpdateQuery& query,
-    bool dynamic_schema,
-    bool prune_previous_versions) {
-    return delete_range_internal(stream_id, query, DeleteRangeOptions{dynamic_schema, prune_previous_versions});
+    bool dynamic_schema) {
+    return delete_range_internal(stream_id, query, dynamic_schema);
 }
 
 void PythonVersionStore::append_incomplete(

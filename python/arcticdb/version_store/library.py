@@ -547,7 +547,7 @@ class Library:
         payloads : `List[WritePayload]`
             Symbols and their corresponding data. There must not be any duplicate symbols in `payload`.
         prune_previous_versions: `bool`, default=False
-            Removes previous (non-snapshotted) versions from the database.
+            See `write`.
         validate_index: bool, default=True
             Verify that each entry in the batch has an index that supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
@@ -623,9 +623,9 @@ class Library:
         payloads : `List[WritePayload]`
             Symbols and their corresponding data. There must not be any duplicate symbols in `payload`.
         prune_previous_versions: `bool`, default=False
-            Removes previous (non-snapshotted) versions from the database.
+            See `write`.
         staged: `bool`, default=False
-            See documentation on `write`.
+            See `write`.
 
         Returns
         -------
@@ -681,8 +681,8 @@ class Library:
         metadata
             Optional metadata to persist along with the new symbol version. Note that the metadata is
             not combined in any way with the metadata stored in the previous version.
-        prune_previous_versions, default=False
-            Removes previous (non-snapshotted) versions from the database.
+        prune_previous_versions
+            Removes previous (non-snapshotted) versions from the database when True.
         validate_index: bool, default=True
             If True, verify that the index of `data` supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
@@ -793,7 +793,7 @@ class Library:
         metadata: Any = None,
         upsert: bool = False,
         date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None,
-        prune_previous_versions: bool = False,
+        prune_previous_versions=False,
     ) -> VersionedItem:
         """
         Overwrites existing symbol data with the contents of ``data``. The entire range between the first and last index
@@ -820,8 +820,8 @@ class Library:
             ``data``. This allows the user to update with data that might only be a subset of the stored value. Leaving
             any part of the tuple as None leaves that part of the range open ended. Only data with date_range will be
             modified, even if ``data`` covers a wider date range.
-        prune_previous_versions: bool, default=False
-            Removes previous (non-snapshotted) versions from the database.
+        prune_previous_versions
+            Removes previous (non-snapshotted) versions from the database when True.
 
         Returns
         -------
@@ -923,10 +923,7 @@ class Library:
         )
 
     def sort_and_finalize_staged_data(
-        self,
-        symbol: str,
-        mode: Optional[StagedDataFinalizeMethod] = StagedDataFinalizeMethod.WRITE,
-        prune_previous_versions: bool = False,
+        self, symbol: str, mode: Optional[StagedDataFinalizeMethod] = StagedDataFinalizeMethod.WRITE
     ):
         """
         sort_merge will sort and finalize staged data. This differs from `finalize_staged_data` in that it
@@ -941,8 +938,6 @@ class Library:
         mode : `StagedDataFinalizeMethod`, default=StagedDataFinalizeMethod.WRITE
             Finalize mode. Valid options are WRITE or APPEND. Write collects the staged data and writes them to a
             new timeseries. Append collects the staged data and appends them to the latest version.
-        prune_previous_versions : bool, default=False
-            Removes previous (non-snapshotted) versions from the database.
 
         See Also
         --------
@@ -1201,12 +1196,7 @@ class Library:
         include_errors_and_none_meta = True
         return self._nvs._batch_read_metadata_to_versioned_items(symbol_strings, as_ofs, include_errors_and_none_meta)
 
-    def write_metadata(
-            self,
-            symbol: str,
-            metadata: Any,
-            prune_previous_versions: bool = False,
-    ) -> VersionedItem:
+    def write_metadata(self, symbol: str, metadata: Any) -> VersionedItem:
         """
         Write metadata under the specified symbol name to this library. The data will remain unchanged.
         A new version will be created.
@@ -1222,19 +1212,16 @@ class Library:
             Symbol name for the item
         metadata
             Metadata to persist along with the symbol
-        prune_previous_versions : bool, default=False
-            Removes previous (non-snapshotted) versions from the database. Note that metadata is versioned alongside the
-            data it is referring to, and so this operation removes old versions of data as well as metadata.
 
         Returns
         -------
         VersionedItem
             Structure containing metadata and version number of the affected symbol in the store.
         """
-        return self._nvs.write_metadata(symbol, metadata, prune_previous_version=prune_previous_versions)
+        return self._nvs.write_metadata(symbol, metadata, prune_previous_version=False)
 
     def write_metadata_batch(
-        self, write_metadata_payloads: List[WriteMetadataPayload], prune_previous_versions: bool = False,
+        self, write_metadata_payloads: List[WriteMetadataPayload], prune_previous_versions=None
     ) -> List[Union[VersionedItem, DataError]]:
         """
         Write metadata to multiple symbols in a batch fashion. This is more efficient than making multiple `write_metadata` calls
@@ -1247,9 +1234,8 @@ class Library:
         ----------
         write_metadata_payloads : `List[WriteMetadataPayload]`
             Symbols and their corresponding metadata. There must not be any duplicate symbols in `payload`.
-        prune_previous_versions : bool, default=False
-            Removes previous (non-snapshotted) versions from the database. Note that metadata is versioned alongside the
-            data it is referring to, and so this operation removes old versions of data as well as metadata.
+        prune_previous_versions : `Optional[bool]`, default=None
+            Remove previous versions from version list. Uses library default if left as None.
 
         Returns
         -------
@@ -1371,12 +1357,7 @@ class Library:
         """
         self._nvs.prune_previous_versions(symbol)
 
-    def delete_data_in_range(
-            self,
-            symbol: str,
-            date_range: Tuple[Optional[Timestamp], Optional[Timestamp]],
-            prune_previous_versions: bool = False,
-    ):
+    def delete_data_in_range(self, symbol: str, date_range: Tuple[Optional[Timestamp], Optional[Timestamp]]):
         """Delete data within the given date range, creating a new version of ``symbol``.
 
         The existing symbol version must be timeseries-indexed.
@@ -1385,11 +1366,10 @@ class Library:
         ----------
         symbol
             Symbol name.
+
         date_range
             The date range in which to delete data. Leaving any part of the tuple as None leaves that part of the range
             open ended.
-        prune_previous_versions : bool, default=False
-            Removes previous (non-snapshotted) versions from the database.
 
         Examples
         --------
@@ -1405,7 +1385,7 @@ class Library:
         """
         if date_range is None:
             raise ArcticInvalidApiUsageException("date_range must be given but was None")
-        self._nvs.delete(symbol, date_range=date_range, prune_previous_version=prune_previous_versions)
+        self._nvs.delete(symbol, date_range=date_range)
 
     def delete_snapshot(self, snapshot_name: str) -> None:
         """
@@ -1731,12 +1711,7 @@ class Library:
         """
         return self._nvs.is_symbol_fragmented(symbol, segment_size)
 
-    def defragment_symbol_data(
-            self,
-            symbol: str,
-            segment_size: Optional[int] = None,
-            prune_previous_versions: bool = False,
-    ) -> VersionedItem:
+    def defragment_symbol_data(self, symbol: str, segment_size: Optional[int] = None) -> VersionedItem:
         """
         Compacts fragmented segments by merging row-sliced segments (https://docs.arcticdb.io/technical/on_disk_storage/#data-layer).
         This method calls `is_symbol_fragmented` to determine whether to proceed with the defragmentation operation.
@@ -1759,8 +1734,6 @@ class Library:
             If parameter is not provided, library option - "segment_row_size" will be used
             Note that no. of rows per segment, after compaction, may exceed the target.
             It is for achieving smallest no. of segment after compaction. Please refer to below example for further explanation.
-        prune_previous_versions : bool, default=False
-            Removes previous (non-snapshotted) versions from the database.
 
         Returns
         -------
@@ -1795,7 +1768,7 @@ class Library:
         Config map setting - SymbolDataCompact.SegmentCount will be replaced by a library setting
         in the future. This API will allow overriding the setting as well.
         """
-        return self._nvs.defragment_symbol_data(symbol, segment_size, prune_previous_versions)
+        return self._nvs.defragment_symbol_data(symbol, segment_size)
 
     @property
     def name(self):

@@ -79,7 +79,7 @@ public:
     VersionedItem delete_range_internal(
         const StreamId& stream_id,
         const UpdateQuery& query,
-        const DeleteRangeOptions& option) override;
+        bool dynamic_schema) override;
 
     void append_incomplete_segment(
         const StreamId& stream_id,
@@ -326,9 +326,7 @@ public:
 
     bool is_symbol_fragmented(const StreamId& stream_id, std::optional<size_t> segment_size) override;
 
-    VersionedItem defragment_symbol_data(const StreamId& stream_id,
-                                         std::optional<size_t> segment_size,
-                                         bool prune_previous_versions) override;
+    VersionedItem defragment_symbol_data(const StreamId& stream_id, std::optional<size_t> segment_size) override;
     
     StorageLockWrapper get_storage_lock(const StreamId& stream_id) override;
 
