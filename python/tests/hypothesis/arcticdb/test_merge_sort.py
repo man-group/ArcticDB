@@ -47,7 +47,7 @@ class StagedWrite(RuleBasedStateMachine):
         pre_append_arctic = self.lib.read("sym").data if "sym" in self.lib.list_symbols() else pd.DataFrame([])
 
         if len(pre_append_arctic) > 0 and len(self.df) > 0 and pre_append_arctic.index[-1] > self.df.index[0]:
-            # Make sure appends kepp the index ordered
+            # Make sure appends keep the index ordered
             with pytest.raises(Exception) as exception_info:
                 self.lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
             assert "append" in str(exception_info.value)
