@@ -220,3 +220,12 @@ def test_finalize_without_adding_segments(lmdb_storage, lib_name):
     lib = ac.create_library(lib_name)
     lib.write("sym", pd.DataFrame({"col": [1]}, index=pd.DatetimeIndex([np.datetime64('2023-01-01')])))
     lib.sort_and_finalize_staged_data("sym")
+
+def test_type_mismatch_throws(lmdb_storage, lib_name):
+    ac = lmdb_storage.create_arctic()
+    lib = ac.create_library(lib_name)
+    lib.write("sym", pd.DataFrame({"col": [1]}, index=pd.DatetimeIndex([np.datetime64('2023-01-01')])), staged=True)
+    lib.write("sym", pd.DataFrame({"col": ["a"]}, index=pd.DatetimeIndex([np.datetime64('2023-01-02')])), staged=True)
+    with pytest.raises(Exception) as exception_info:
+        lib.sort_and_finalize_staged_data("sym")
+    assert all(x in str(exception_info.value) for x in ["INT64", "type"])
