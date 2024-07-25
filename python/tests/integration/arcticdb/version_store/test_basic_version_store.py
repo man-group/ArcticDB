@@ -2191,6 +2191,41 @@ def test_batch_read_date_range(basic_store_tombstone_and_sync_passive, use_date_
         assert_frame_equal(vit.data, dfs[x].loc[start:end])
 
 
+@pytest.mark.parametrize("use_row_range_clause", [True, False])
+def test_batch_read_row_range(lmdb_version_store_v1, use_row_range_clause):
+    lib = lmdb_version_store_v1
+    num_symbols = 5
+    num_rows = 10
+    symbols = [f"sym_{i}" for i in range(num_symbols)]
+
+    dfs = []
+    for j in range(num_symbols):
+        df = get_sample_dataframe(num_rows, j)
+        df.index = np.arange(num_rows)
+        dfs.append(df)
+
+    for idx, symbol in enumerate(symbols):
+        lib.write(symbol, dfs[idx])
+
+    row_ranges = []
+    for j in range(num_symbols):
+        row_ranges.append((j * (num_rows // num_symbols), ((j + 1) * (num_rows // num_symbols))))
+
+    if use_row_range_clause:
+        qbs = []
+        for row_range in row_ranges:
+            q = QueryBuilder()
+            q = q._row_range(row_range)
+            qbs.append(q)
+        result_dict = lib.batch_read(symbols, query_builder=qbs)
+    else:
+        result_dict = lib.batch_read(symbols, row_ranges=row_ranges)
+    for idx, sym in enumerate(result_dict.keys()):
+        df = result_dict[sym].data
+        row_range = row_ranges[idx]
+        assert_frame_equal(df, dfs[idx].iloc[row_range[0]:row_range[1]])
+
+
 def test_batch_read_columns(basic_store_tombstone_and_sync_passive):
     lmdb_version_store = basic_store_tombstone_and_sync_passive
     columns_of_interest = ["strings", "uint8"]

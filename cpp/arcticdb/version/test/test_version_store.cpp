@@ -342,7 +342,7 @@ TEST_F(VersionStoreTest, StressBatchReadUncompressed) {
         }
     }
 
-    std::vector<ReadQuery> read_queries;
+    std::vector<std::shared_ptr<ReadQuery>> read_queries;
     ReadOptions read_options;
     read_options.set_batch_throw_on_error(true);
     auto latest_versions = test_store_->batch_read(symbols, std::vector<VersionQuery>(10), read_queries, read_options);

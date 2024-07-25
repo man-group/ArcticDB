@@ -36,8 +36,9 @@ def test_reuse_querybuilder(lmdb_version_store_tiny_segment):
     assert_frame_equal(expected, received)
 
 
+@pytest.mark.parametrize("batch", [True, False])
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
-def test_querybuilder_date_range_then_filter(lmdb_version_store_tiny_segment, use_date_range_clause):
+def test_querybuilder_date_range_then_filter(lmdb_version_store_tiny_segment, batch, use_date_range_clause):
     lib = lmdb_version_store_tiny_segment
     symbol = "test_querybuilder_date_range_then_filter"
     df = pd.DataFrame(
@@ -53,15 +54,22 @@ def test_querybuilder_date_range_then_filter(lmdb_version_store_tiny_segment, us
     q = q[q["col1"].isin(0, 3, 6, 9)]
 
     if use_date_range_clause:
-        received = lib.read(symbol, query_builder=q).data
+        if batch:
+            received = lib.batch_read([symbol], query_builder=q)[symbol].data
+        else:
+            received = lib.read(symbol, query_builder=q).data
     else:
-        received = lib.read(symbol, date_range=date_range, query_builder=q).data
+        if batch:
+            received = lib.batch_read([symbol], date_ranges=[date_range], query_builder=q)[symbol].data
+        else:
+            received = lib.read(symbol, date_range=date_range, query_builder=q).data
     expected = df.query("col1 in [3, 6]")
     assert_frame_equal(expected, received)
 
 
+@pytest.mark.parametrize("batch", [True, False])
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
-def test_querybuilder_date_range_then_project(lmdb_version_store_tiny_segment, use_date_range_clause):
+def test_querybuilder_date_range_then_project(lmdb_version_store_tiny_segment, batch, use_date_range_clause):
     lib = lmdb_version_store_tiny_segment
     symbol = "test_querybuilder_date_range_then_project"
     df = pd.DataFrame(
@@ -78,16 +86,23 @@ def test_querybuilder_date_range_then_project(lmdb_version_store_tiny_segment, u
     q = q.apply("new_col", (q["col1"] * q["col2"]) + 13)
 
     if use_date_range_clause:
-        received = lib.read(symbol, query_builder=q).data
+        if batch:
+            received = lib.batch_read([symbol], query_builder=q)[symbol].data
+        else:
+            received = lib.read(symbol, query_builder=q).data
     else:
-        received = lib.read(symbol, date_range=date_range, query_builder=q).data
+        if batch:
+            received = lib.batch_read([symbol], date_ranges=[date_range], query_builder=q)[symbol].data
+        else:
+            received = lib.read(symbol, date_range=date_range, query_builder=q).data
     expected = df.iloc[3:-3]
     expected["new_col"] = expected["col1"] * expected["col2"] + 13
     assert_frame_equal(expected, received)
 
 
+@pytest.mark.parametrize("batch", [True, False])
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
-def test_querybuilder_date_range_then_groupby(lmdb_version_store_tiny_segment, use_date_range_clause):
+def test_querybuilder_date_range_then_groupby(lmdb_version_store_tiny_segment, batch, use_date_range_clause):
     lib = lmdb_version_store_tiny_segment
     symbol = "test_querybuilder_date_range_then_groupby"
     df = pd.DataFrame(
@@ -107,9 +122,15 @@ def test_querybuilder_date_range_then_groupby(lmdb_version_store_tiny_segment, u
     q = q.groupby("col1").agg({"col2": "sum"})
 
     if use_date_range_clause:
-        received = lib.read(symbol, query_builder=q).data
+        if batch:
+            received = lib.batch_read([symbol], query_builder=q)[symbol].data
+        else:
+            received = lib.read(symbol, query_builder=q).data
     else:
-        received = lib.read(symbol, date_range=date_range, query_builder=q).data
+        if batch:
+            received = lib.batch_read([symbol], date_ranges=[date_range], query_builder=q)[symbol].data
+        else:
+            received = lib.read(symbol, date_range=date_range, query_builder=q).data
     received.sort_index(inplace=True)
 
     expected = df.iloc[3:-3]
@@ -117,10 +138,11 @@ def test_querybuilder_date_range_then_groupby(lmdb_version_store_tiny_segment, u
     assert_frame_equal(expected, received)
 
 
+@pytest.mark.parametrize("batch", [True, False])
 @pytest.mark.parametrize("use_row_range_clause", [True, False])
-def test_querybuilder_row_range(lmdb_version_store_tiny_segment, use_row_range_clause):
+def test_querybuilder_row_range(lmdb_version_store_tiny_segment, batch, use_row_range_clause):
     lib = lmdb_version_store_tiny_segment
-    symbol = "test_querybuilder_row_range_then_filter"
+    symbol = "test_querybuilder_row_range"
     df = pd.DataFrame({"col1": np.arange(10), "col2": np.arange(100, 110)}, index=np.arange(10))
     lib.write(symbol, df)
 
@@ -131,16 +153,22 @@ def test_querybuilder_row_range(lmdb_version_store_tiny_segment, use_row_range_c
         q = q._row_range(row_range)
 
     if use_row_range_clause:
-        received = lib.read(symbol, query_builder=q).data
+        if batch:
+            received = lib.batch_read([symbol], query_builder=q)[symbol].data
+        else:
+            received = lib.read(symbol, query_builder=q).data
     else:
-        received = lib.read(symbol, row_range=row_range).data
-
+        if batch:
+            received = lib.batch_read([symbol], row_ranges=[row_range])[symbol].data
+        else:
+            received = lib.read(symbol, row_range=row_range).data
     expected = df.iloc[3:7]
     assert_frame_equal(expected, received)
 
 
+@pytest.mark.parametrize("batch", [True, False])
 @pytest.mark.parametrize("use_row_range_clause", [True, False])
-def test_querybuilder_row_range_then_filter(lmdb_version_store_tiny_segment, use_row_range_clause):
+def test_querybuilder_row_range_then_filter(lmdb_version_store_tiny_segment, batch, use_row_range_clause):
     lib = lmdb_version_store_tiny_segment
     symbol = "test_querybuilder_row_range_then_filter"
     df = pd.DataFrame({"col1": np.arange(10), "col2": np.arange(100, 110)}, index=np.arange(10))
@@ -154,15 +182,22 @@ def test_querybuilder_row_range_then_filter(lmdb_version_store_tiny_segment, use
     q = q[q["col1"].isin(0, 3, 6, 9)]
 
     if use_row_range_clause:
-        received = lib.read(symbol, query_builder=q).data
+        if batch:
+            received = lib.batch_read([symbol], query_builder=q)[symbol].data
+        else:
+            received = lib.read(symbol, query_builder=q).data
     else:
-        received = lib.read(symbol, row_range=row_range, query_builder=q).data
+        if batch:
+            received = lib.batch_read([symbol], row_ranges=[row_range], query_builder=q)[symbol].data
+        else:
+            received = lib.read(symbol, row_range=row_range, query_builder=q).data
     expected = df.query("col1 in [3, 6]")
     assert_frame_equal(expected, received)
 
 
+@pytest.mark.parametrize("batch", [True, False])
 @pytest.mark.parametrize("use_row_range_clause", [True, False])
-def test_querybuilder_row_range_then_project(lmdb_version_store_tiny_segment, use_row_range_clause):
+def test_querybuilder_row_range_then_project(lmdb_version_store_tiny_segment, batch, use_row_range_clause):
     lib = lmdb_version_store_tiny_segment
     symbol = "test_querybuilder_row_range_then_project"
     df = pd.DataFrame(
@@ -179,16 +214,23 @@ def test_querybuilder_row_range_then_project(lmdb_version_store_tiny_segment, us
     q = q.apply("new_col", (q["col1"] * q["col2"]) + 13)
 
     if use_row_range_clause:
-        received = lib.read(symbol, query_builder=q).data
+        if batch:
+            received = lib.batch_read([symbol], query_builder=q)[symbol].data
+        else:
+            received = lib.read(symbol, query_builder=q).data
     else:
-        received = lib.read(symbol, row_range=row_range, query_builder=q).data
+        if batch:
+            received = lib.batch_read([symbol], row_ranges=[row_range], query_builder=q)[symbol].data
+        else:
+            received = lib.read(symbol, row_range=row_range, query_builder=q).data
     expected = df.iloc[3:-3]
     expected["new_col"] = expected["col1"] * expected["col2"] + 13
     assert_frame_equal(expected, received)
 
 
+@pytest.mark.parametrize("batch", [True, False])
 @pytest.mark.parametrize("use_row_range_clause", [True, False])
-def test_querybuilder_row_range_then_groupby(lmdb_version_store_tiny_segment, use_row_range_clause):
+def test_querybuilder_row_range_then_groupby(lmdb_version_store_tiny_segment, batch, use_row_range_clause):
     lib = lmdb_version_store_tiny_segment
     symbol = "test_querybuilder_row_range_then_groupby"
     df = pd.DataFrame(
@@ -208,9 +250,15 @@ def test_querybuilder_row_range_then_groupby(lmdb_version_store_tiny_segment, us
     q = q.groupby("col1").agg({"col2": "sum"})
 
     if use_row_range_clause:
-        received = lib.read(symbol, query_builder=q).data
+        if batch:
+            received = lib.batch_read([symbol], query_builder=q)[symbol].data
+        else:
+            received = lib.read(symbol, query_builder=q).data
     else:
-        received = lib.read(symbol, row_range=row_range, query_builder=q).data
+        if batch:
+            received = lib.batch_read([symbol], row_ranges=[row_range], query_builder=q)[symbol].data
+        else:
+            received = lib.read(symbol, row_range=row_range, query_builder=q).data
     received.sort_index(inplace=True)
 
     expected = df.iloc[3:-3]
