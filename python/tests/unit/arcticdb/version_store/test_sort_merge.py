@@ -229,3 +229,11 @@ def test_type_mismatch_throws(lmdb_storage, lib_name):
     with pytest.raises(Exception) as exception_info:
         lib.sort_and_finalize_staged_data("sym")
     assert all(x in str(exception_info.value) for x in ["INT64", "type"])
+
+def test_append_to_missing_symbol(lmdb_storage, lib_name):
+    ac = lmdb_storage.create_arctic()
+    lib = ac.create_library(lib_name)
+    df = pd.DatetimeIndex([np.datetime64('2023-01-01')])
+    lib.write("sym", pd.DataFrame({"col": [1]}, index=df), staged=True)
+    lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+    assert_frame_equal(lib.read("sym").data, df)
