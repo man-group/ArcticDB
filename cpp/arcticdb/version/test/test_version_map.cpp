@@ -872,6 +872,75 @@ TEST(VersionMap, CacheInvalidationWithTombstoneAllAfterLoad) {
     ASSERT_FALSE(version_map->has_cached_entry(id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(0)}));
 }
 
+TEST(VersionMap, CompactionUpdateCache) {
+    using namespace arcticdb;
+    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId id{"test"};
+
+    auto version_map = std::make_shared<VersionMap>();
+
+    // We load all to keep everything in the cache
+    auto entry = version_map->check_reload(
+            store,
+            id,
+            LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED},
+            __FUNCTION__);
+
+    // Write 10 versions
+    for (auto i=0; i<10; ++i) {
+        auto key = atom_key_with_version(id, i, i);
+        version_map->write_version(store, key, std::nullopt);
+    }
+
+    auto assert_keys_in_entry_and_store = [&store, &id](std::shared_ptr<VersionMapEntry> entry, int expected_version_keys, int expected_index_keys, int expected_tombstone_keys){
+        int present_version_keys = 0, present_index_keys = 0, present_tombstone_keys = 0;
+        auto all_entry_keys = entry->keys_;
+        if (entry->head_) all_entry_keys.push_back(entry->head_.value());
+        for (const auto& key : all_entry_keys) {
+            if (key.type() == KeyType::VERSION) ++present_version_keys;
+            if (key.type() == KeyType::TABLE_INDEX) ++present_index_keys;
+            if (key.type() == KeyType::TOMBSTONE) ++present_tombstone_keys;
+        }
+        ASSERT_EQ(present_version_keys, expected_version_keys);
+        ASSERT_EQ(present_index_keys, expected_index_keys);
+        ASSERT_EQ(present_tombstone_keys, expected_tombstone_keys);
+
+        int version_keys_in_store = 0;
+        store->iterate_type(KeyType::VERSION, [&](VariantKey &&){++version_keys_in_store;});
+        ASSERT_EQ(version_keys_in_store, expected_version_keys);
+    };
+
+    assert_keys_in_entry_and_store(entry, 10, 10, 0);
+    version_map->compact(store, id);
+    assert_keys_in_entry_and_store(entry, 2, 10, 0);
+
+
+    // Write 10 more versions but delete some
+    for (auto i=10; i<20; ++i) {
+        auto key = atom_key_with_version(id, i, i);
+        version_map->write_version(store, key, std::nullopt);
+        if (i%3 == 0) {
+            version_map->write_tombstone(store, VersionId{static_cast<uint64_t>(i)}, id, entry);
+        }
+    }
+    assert_keys_in_entry_and_store(entry, 15, 20, 3);
+    version_map->compact(store, id);
+    assert_keys_in_entry_and_store(entry, 2, 20, 3);
+    // TODO: If we ever use compact_and_remove_deleted_indexes fix the below assertions (method is currently unused with TODOs to fix):
+    // version_map->compact_and_remove_deleted_indexes(store, id);
+    // assert_keys_in_entry_and_store(entry, 2, 17, 3);
+
+    // Flush and reload to see that what we have in storage also matches what we have in the cache.
+    version_map->flush();
+    entry = version_map->check_reload(
+            store,
+            id,
+            LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED},
+            __FUNCTION__);
+    assert_keys_in_entry_and_store(entry, 2, 20, 3);
+}
+
 #define GTEST_COUT std::cerr << "[          ] [ INFO ]"
 
 TEST_F(VersionMapStore, StressTestWrite) {
