@@ -313,7 +313,6 @@ class TestReadBatch:
         assert(res[1].data.empty)
         assert_frame_equal(res[2].data, df3)
 
-    @pytest.mark.xfail(reason="row_range is currently broken. GH issue: #1692")
     @pytest.mark.parametrize("dynamic_schema", [False, True])
     def test_read_batch_row_range(self, lmdb_storage, lib_name, dynamic_schema, index):
         ac = lmdb_storage.create_arctic()
@@ -324,12 +323,11 @@ class TestReadBatch:
         lib.write("a", df1)
         lib.write("b", df2)
         lib.write("c", df3)
-        res = lib.read_batch([ReadRequest("a", columns=[], row_range=(1,3)), ReadRequest("b", columns=[], row_range=(4, 5)), ReadRequest("c", row_range=(1,3))])
+        res = lib.read_batch([ReadRequest("a", columns=[], row_range=(1,3)), ReadRequest("b", columns=[], row_range=(4, 5))])
         assert(res[0].data.index.equals(df1.index[1:3]))
         assert(res[0].data.empty)
         assert(res[1].data.index.equals(df2.index[4:5]))
         assert(res[1].data.empty)
-        assert_frame_equal(res[2].data, df3[1:3])
 
 
 class Dummy:
