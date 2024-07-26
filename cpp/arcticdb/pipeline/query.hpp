@@ -46,6 +46,7 @@ struct ReadQuery {
     std::optional<SignedRowRange> row_range;
     FilterRange row_filter; // no filter by default
     std::vector<std::shared_ptr<Clause>> clauses_;
+    bool needs_post_processing{true};
 
     ReadQuery() = default;
 

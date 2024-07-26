@@ -1017,10 +1017,7 @@ class NativeVersionStore:
             else:
                 read_result = ReadResult(*read_results[i])
                 read_query = read_queries[i]
-                query = None
-                if query_builder is not None:
-                    query = query_builder if isinstance(query_builder, QueryBuilder) else query_builder[i]
-                vitem = self._post_process_dataframe(read_result, read_query, query)
+                vitem = self._post_process_dataframe(read_result, read_query)
                 versioned_items.append(vitem)
         return versioned_items
 
@@ -1696,7 +1693,7 @@ class NativeVersionStore:
             **kwargs,
         )
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
-        return self._post_process_dataframe(read_result, read_query, query_builder)
+        return self._post_process_dataframe(read_result, read_query)
 
     def head(
         self,
@@ -1732,7 +1729,7 @@ class NativeVersionStore:
             symbol=symbol, as_of=as_of, date_range=None, row_range=None, columns=columns, query_builder=q, **kwargs
         )
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
-        return self._post_process_dataframe(read_result, read_query, q)
+        return self._post_process_dataframe(read_result, read_query)
 
     def tail(
         self, symbol: str, n: int = 5, as_of: VersionQueryInput = None, columns: Optional[List[str]] = None, **kwargs
@@ -1763,13 +1760,13 @@ class NativeVersionStore:
             symbol=symbol, as_of=as_of, date_range=None, row_range=None, columns=columns, query_builder=q, **kwargs
         )
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
-        return self._post_process_dataframe(read_result, read_query, q)
+        return self._post_process_dataframe(read_result, read_query)
 
     def _read_dataframe(self, symbol, version_query, read_query, read_options):
         return ReadResult(*self.version_store.read_dataframe_version(symbol, version_query, read_query, read_options))
 
-    def _post_process_dataframe(self, read_result, read_query, query_builder):
-        if read_query.row_filter is not None and (query_builder is None or query_builder.needs_post_processing()):
+    def _post_process_dataframe(self, read_result, read_query):
+        if read_query.row_filter is not None and read_query.needs_post_processing:
             # post filter
             start_idx = end_idx = None
             if isinstance(read_query.row_filter, _RowRange):
