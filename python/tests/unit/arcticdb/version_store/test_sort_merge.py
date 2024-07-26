@@ -4,8 +4,8 @@ from pandas.testing import assert_frame_equal
 import pytest
 from arcticdb.version_store.library import StagedDataFinalizeMethod
 
-def test_merge_single_column(arctic_library):
-    lib = arctic_library
+def test_merge_single_column(lmdb_library):
+    lib = lmdb_library
 
     dates1 = [np.datetime64('2023-01-01'), np.datetime64('2023-01-03'), np.datetime64('2023-01-05')]
     dates2 = [np.datetime64('2023-01-02'), np.datetime64('2023-01-04'), np.datetime64('2023-01-06')]
@@ -29,8 +29,8 @@ def test_merge_single_column(arctic_library):
     assert_frame_equal(lib.read(sym1).data, expected_df)
 
 
-def test_merge_two_column(arctic_library):
-    lib = arctic_library
+def test_merge_two_column(lmdb_library):
+    lib = lmdb_library
 
     dates1 = [np.datetime64('2023-01-01'), np.datetime64('2023-01-03'), np.datetime64('2023-01-05')]
     dates2 = [np.datetime64('2023-01-02'), np.datetime64('2023-01-04'), np.datetime64('2023-01-06')]
@@ -54,8 +54,8 @@ def test_merge_two_column(arctic_library):
     assert_frame_equal(lib.read(sym1).data, expected_df)
 
 
-def test_merge_dynamic(arctic_library):
-    lib = arctic_library
+def test_merge_dynamic(lmdb_library):
+    lib = lmdb_library
 
     dates1 = [np.datetime64('2023-01-01'), np.datetime64('2023-01-03'), np.datetime64('2023-01-05')]
     dates2 = [np.datetime64('2023-01-02'), np.datetime64('2023-01-04'), np.datetime64('2023-01-06')]
@@ -79,8 +79,8 @@ def test_merge_dynamic(arctic_library):
     assert_frame_equal(lib.read(sym1).data, expected_df)
 
 
-def test_merge_strings(arctic_library):
-    lib = arctic_library
+def test_merge_strings(lmdb_library):
+    lib = lmdb_library
 
     dates1 = [np.datetime64('2023-01-01'), np.datetime64('2023-01-03'), np.datetime64('2023-01-05')]
     dates2 = [np.datetime64('2023-01-02'), np.datetime64('2023-01-04'), np.datetime64('2023-01-06')]
@@ -104,8 +104,8 @@ def test_merge_strings(arctic_library):
     assert_frame_equal(lib.read(sym1).data, expected_df)
 
 
-def test_merge_strings_dynamic(arctic_library):
-    lib = arctic_library
+def test_merge_strings_dynamic(lmdb_library):
+    lib = lmdb_library
 
     dates1 = [np.datetime64('2023-01-01'), np.datetime64('2023-01-03'), np.datetime64('2023-01-05')]
     dates2 = [np.datetime64('2023-01-02'), np.datetime64('2023-01-04'), np.datetime64('2023-01-06')]
@@ -130,18 +130,16 @@ def test_merge_strings_dynamic(arctic_library):
 
 
 @pytest.mark.xfail(reason="Unsorted segments are not implemented")
-def test_unordered_segment(lmdb_storage, lib_name):
-    ac = lmdb_storage.create_arctic()
-    lib = ac.create_library(lib_name)
+def test_unordered_segment(lmdb_library):
+    lib = lmdb_library
     dates = [np.datetime64('2023-01-03'), np.datetime64('2023-01-01'), np.datetime64('2023-01-05')]
     df = pd.DataFrame({"col": [2, 1, 3]}, index=dates)
     lib.write("sym", df, staged=True)
     lib.sort_and_finalize_staged_data("sym")
     assert_frame_equal(lib.read('sym'), pd.DataFrame({"col": [1, 2, 3]}, index=[np.datetime64('2023-01-01'), np.datetime64('2023-01-03'), np.datetime64('2023-01-05')]))
 
-def test_repeating_index_values(lmdb_storage, lib_name):
-    ac = lmdb_storage.create_arctic()
-    lib = ac.create_library(lib_name)
+def test_repeating_index_values(lmdb_library):
+    lib = lmdb_library
     dates = [np.datetime64('2023-01-01'), np.datetime64('2023-01-03'), np.datetime64('2023-01-05')]
     df1 = pd.DataFrame({"col": [1,2,3]}, index=dates)
     df2 = pd.DataFrame({"col": [4,5,6]}, index=dates)
@@ -149,45 +147,51 @@ def test_repeating_index_values(lmdb_storage, lib_name):
     lib.write("sym", df2, staged=True)
     lib.sort_and_finalize_staged_data("sym")
     expected_index = pd.DatetimeIndex([np.datetime64('2023-01-01'), np.datetime64('2023-01-01'), np.datetime64('2023-01-03'),
-                                       np.datetime64('2023-01-03'), np.datetime64('2023-01-05'), np.datetime64('2023-01-05')])
+                                       np.datetime64('2023-01-03'), np.datetime64('2023-01-05'), np.datetime64('2023-01-05')],
+                                      dtype="datetime64[ns]")
     data = lib.read("sym").data
     assert data.index.equals(expected_index)
     for i in range(0, len(data["col"])):
         assert data["col"][i] == df1["col"][i // 2] or data["col"][i] == df2["col"][i // 2]
 
 class TestMergeSortAppend:
-    def test_appended_values_are_after(self, lmdb_storage, lib_name):
-        ac = lmdb_storage.create_arctic()
-        lib = ac.create_library(lib_name)
-        initial_df = pd.DataFrame({"col": [1, 2, 3]}, index=pd.DatetimeIndex([np.datetime64('2023-01-01'), np.datetime64('2023-01-02'), np.datetime64('2023-01-03')]))
+    def test_appended_values_are_after(self, lmdb_library):
+        lib = lmdb_library
+        initial_df = pd.DataFrame(
+            {"col": [1, 2, 3]},
+            index=pd.DatetimeIndex([np.datetime64('2023-01-01'), np.datetime64('2023-01-02'), np.datetime64('2023-01-03')], dtype="datetime64[ns]")
+        )
         lib.write("sym", initial_df)
-        df1 = pd.DataFrame({"col": [4, 7, 8]}, index=pd.DatetimeIndex([np.datetime64('2023-01-05'), np.datetime64('2023-01-09'), np.datetime64('2023-01-10')]))
-        df2 = pd.DataFrame({"col": [5, 6]}, index=pd.DatetimeIndex([np.datetime64('2023-01-06'), np.datetime64('2023-01-08')]))
+        df1 = pd.DataFrame(
+            {"col": [4, 7, 8]},
+            index=pd.DatetimeIndex([np.datetime64('2023-01-05'), np.datetime64('2023-01-09'), np.datetime64('2023-01-10')], dtype="datetime64[ns]")
+        )
+        df2 = pd.DataFrame({"col": [5, 6]}, index=pd.DatetimeIndex([np.datetime64('2023-01-06'), np.datetime64('2023-01-08')], dtype="datetime64[ns]"))
         lib.write("sym", df1, staged=True)
         lib.write("sym", df2, staged=True)
         lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
         expected_index = pd.DatetimeIndex([np.datetime64('2023-01-01'), np.datetime64('2023-01-02'), np.datetime64('2023-01-03'), np.datetime64('2023-01-05'),
-                                           np.datetime64('2023-01-06'), np.datetime64('2023-01-08'), np.datetime64('2023-01-09'), np.datetime64('2023-01-10')])
+                                           np.datetime64('2023-01-06'), np.datetime64('2023-01-08'), np.datetime64('2023-01-09'), np.datetime64('2023-01-10')],
+                                          dtype="datetime64[ns]")
         expected_df = pd.DataFrame({"col": range(1, 9)}, index=expected_index)
         assert_frame_equal(lib.read("sym").data, expected_df)
 
     @pytest.mark.xfail(reason="Does not throw and creates dataframe with unordered index.")
-    def test_appended_df_interleaves_with_storage(self, lmdb_storage, lib_name):
-        ac = lmdb_storage.create_arctic()
-        lib = ac.create_library(lib_name)
-        initial_df = pd.DataFrame({"col": [1, 3]}, index=pd.DatetimeIndex([np.datetime64('2023-01-01'), np.datetime64('2023-01-03')]))
+    def test_appended_df_interleaves_with_storage(self, lmdb_library):
+        lib = lmdb_library
+        initial_df = pd.DataFrame({"col": [1, 3]}, index=pd.DatetimeIndex([np.datetime64('2023-01-01'), np.datetime64('2023-01-03')], dtype="datetime64[ns]"))
         lib.write("sym", initial_df)
-        df1 = pd.DataFrame({"col": [2]}, index=pd.DatetimeIndex([np.datetime64('2023-01-02')]))
+        df1 = pd.DataFrame({"col": [2]}, index=pd.DatetimeIndex([np.datetime64('2023-01-02')], dtype="datetime64[ns]"))
         lib.write("sym", df1, staged=True)
         with pytest.raises(Exception) as exception_info:
             lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
         assert "append" in str(exception_info.value)
 
 
-def test_prune_previous(lmdb_storage, lib_name):
-    ac = lmdb_storage.create_arctic()
-    lib = ac.create_library(lib_name)
-    df = pd.DataFrame({"col": [1, 3]}, index=pd.DatetimeIndex([np.datetime64('2023-01-01'), np.datetime64('2023-01-03')]))
+def test_prune_previous(lmdb_library):
+    lib = lmdb_library
+    idx = pd.DatetimeIndex([np.datetime64('2023-01-01'), np.datetime64('2023-01-03')], dtype="datetime64[ns]")
+    df = pd.DataFrame({"col": [1, 3]}, index=idx)
     lib.write("sym", df)
     lib.write("sym", df)
     lib.write("sym", df, staged=True)
@@ -197,17 +201,15 @@ def test_prune_previous(lmdb_storage, lib_name):
 
 class TestEmptySegments:
     @pytest.mark.xfail(reason="Bug. Throws: `E_ASSERTION_FAILURE Descriptor id mismatch in atom key sym != 0")
-    def test_empty_df_in_staged_segment(self, lmdb_storage, lib_name):
-        ac = lmdb_storage.create_arctic()
-        lib = ac.create_library(lib_name)
+    def test_empty_df_in_staged_segment(self, lmdb_library):
+        lib = lmdb_library
         lib.write("sym", pd.DataFrame([]), staged=True)
         lib.sort_and_finalize_staged_data("sym")
         assert_frame_equal(lib.read("sym").data, pd.DataFrame([]))
 
     @pytest.mark.xfail(reason="Bug. Throws: E_ASSERTION_FAILURE Allocate data called with zero size")
-    def test_df_without_rows(self, lmdb_storage, lib_name):
-        ac = lmdb_storage.create_arctic()
-        lib = ac.create_library(lib_name)
+    def test_df_without_rows(self, lmdb_library):
+        lib = lmdb_library
         df = pd.DataFrame({"col": []}, index=pd.DatetimeIndex([]))
         lib.write("sym", df, staged=True)
         lib.sort_and_finalize_staged_data("sym")
@@ -215,25 +217,22 @@ class TestEmptySegments:
 
 
 @pytest.mark.xfail(reason="Throws: E_ASSERTION_FAILURE Stream descriptor not found in pipeline context")
-def test_finalize_without_adding_segments(lmdb_storage, lib_name):
-    ac = lmdb_storage.create_arctic()
-    lib = ac.create_library(lib_name)
+def test_finalize_without_adding_segments(lmdb_library):
+    lib = lmdb_library
     lib.write("sym", pd.DataFrame({"col": [1]}, index=pd.DatetimeIndex([np.datetime64('2023-01-01')])))
     lib.sort_and_finalize_staged_data("sym")
 
-def test_type_mismatch_throws(lmdb_storage, lib_name):
-    ac = lmdb_storage.create_arctic()
-    lib = ac.create_library(lib_name)
+def test_type_mismatch_throws(lmdb_library):
+    lib = lmdb_library
     lib.write("sym", pd.DataFrame({"col": [1]}, index=pd.DatetimeIndex([np.datetime64('2023-01-01')])), staged=True)
     lib.write("sym", pd.DataFrame({"col": ["a"]}, index=pd.DatetimeIndex([np.datetime64('2023-01-02')])), staged=True)
     with pytest.raises(Exception) as exception_info:
         lib.sort_and_finalize_staged_data("sym")
     assert all(x in str(exception_info.value) for x in ["INT64", "type"])
 
-def test_append_to_missing_symbol(lmdb_storage, lib_name):
-    ac = lmdb_storage.create_arctic()
-    lib = ac.create_library(lib_name)
-    df = pd.DataFrame({"col": [1]}, index=pd.DatetimeIndex([np.datetime64('2023-01-01')]))
+def test_append_to_missing_symbol(lmdb_library):
+    lib = lmdb_library
+    df = pd.DataFrame({"col": [1]}, index=pd.DatetimeIndex([np.datetime64('2023-01-01')], dtype="datetime64[ns]"))
     lib.write("sym", df, staged=True)
     lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
     assert_frame_equal(lib.read("sym").data, df)
