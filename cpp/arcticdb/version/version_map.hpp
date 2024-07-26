@@ -364,7 +364,7 @@ public:
         if (validate_)
             new_entry->validate();
 
-        std::swap(entry, new_entry);
+        std::swap(*entry, *new_entry);
     }
 
     VariantKey journal_single_key(
@@ -456,7 +456,7 @@ public:
         if (validate_)
             new_entry->validate();
 
-        std::swap(entry, new_entry);
+        std::swap(*entry, *new_entry);
     }
 
     void overwrite_symbol_tree(
