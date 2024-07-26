@@ -716,6 +716,26 @@ def test_read_batch_date_ranges_dates_not_times(arctic_library):
     )
 
 
+def test_read_batch_row_ranges(arctic_library):
+    lib = arctic_library
+    df = pd.DataFrame({"column": [1, 2, 3, 4]}, index=pd.date_range(start="1/1/2018", end="1/4/2018"))
+    lib.write("symbol", df)
+
+    batch = lib.read_batch(
+        [
+            ReadRequest("symbol", row_range=(0, 2)),
+            ReadRequest("symbol", row_range=(0, 3)),
+        ]
+    )
+
+    assert_frame_equal(
+        batch[0].data, pd.DataFrame({"column": [1, 2]}, index=pd.date_range(start="1/1/2018", end="1/2/2018"))
+    )
+    assert_frame_equal(
+        batch[1].data, pd.DataFrame({"column": [1, 2, 3]}, index=pd.date_range(start="1/1/2018", end="1/3/2018"))
+    )
+
+
 def test_read_batch_overall_query_builder_and_per_request_query_builder_raises(arctic_library):
     lib = arctic_library
 

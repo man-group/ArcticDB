@@ -241,6 +241,8 @@ class ReadRequest(NamedTuple):
 
     Attributes
     ----------
+    symbol: str
+        See `read` method.
     as_of: Optional[AsOf], default=none
         See `read` method.
     date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]], default=none
@@ -387,8 +389,8 @@ class Library:
         Note that `write` is not designed for multiple concurrent writers over a single symbol *unless the staged
         keyword argument is set to True*. If ``staged`` is True, written segments will be staged and left in an
         "incomplete" stage, unable to be read until they are finalized. This enables multiple
-        writers to a single symbol - all writing staged data at the same time - with one process able to later finalise
-        all staged data rendering the data readable by clients. To finalise staged data, see `finalize_staged_data`.
+        writers to a single symbol - all writing staged data at the same time - with one process able to later finalize
+        all staged data rendering the data readable by clients. To finalize staged data, see `finalize_staged_data`.
 
         Note: ArcticDB will use the 0-th level index of the Pandas DataFrame for its on-disk index.
 
@@ -408,8 +410,7 @@ class Library:
             Removes previous (non-snapshotted) versions from the database.
         staged : bool, default=False
             Whether to write to a staging area rather than immediately to the library.
-            Each unit of staged data must a) be datetime indexed and b) not overlap with any other unit of
-            staged data. Note that this will create symbols with Dynamic Schema enabled.
+            See documentation on `finalize_staged_data` for more information.
         validate_index: bool, default=True
             If True, verify that the index of `data` supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
@@ -554,7 +555,7 @@ class Library:
         payloads : `List[WritePayload]`
             Symbols and their corresponding data. There must not be any duplicate symbols in `payload`.
         prune_previous_versions: `bool`, default=False
-            See `write`.
+            Removes previous (non-snapshotted) versions from the database.
         validate_index: bool, default=True
             Verify that each entry in the batch has an index that supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
@@ -630,9 +631,9 @@ class Library:
         payloads : `List[WritePayload]`
             Symbols and their corresponding data. There must not be any duplicate symbols in `payload`.
         prune_previous_versions: `bool`, default=False
-            See `write`.
+            Removes previous (non-snapshotted) versions from the database.
         staged: `bool`, default=False
-            See `write`.
+            See documentation on `write`.
 
         Returns
         -------
@@ -688,8 +689,8 @@ class Library:
         metadata
             Optional metadata to persist along with the new symbol version. Note that the metadata is
             not combined in any way with the metadata stored in the previous version.
-        prune_previous_versions
-            Removes previous (non-snapshotted) versions from the database when True.
+        prune_previous_versions, default=False
+            Removes previous (non-snapshotted) versions from the database.
         validate_index: bool, default=True
             If True, verify that the index of `data` supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
@@ -800,7 +801,7 @@ class Library:
         metadata: Any = None,
         upsert: bool = False,
         date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None,
-        prune_previous_versions=False,
+        prune_previous_versions: bool = False,
     ) -> VersionedItem:
         """
         Overwrites existing symbol data with the contents of ``data``. The entire range between the first and last index
@@ -831,8 +832,8 @@ class Library:
             ``data``. This allows the user to update with data that might only be a subset of the stored value. Leaving
             any part of the tuple as None leaves that part of the range open ended. Only data with date_range will be
             modified, even if ``data`` covers a wider date range.
-        prune_previous_versions
-            Removes previous (non-snapshotted) versions from the database when True.
+        prune_previous_versions: bool, default=False
+            Removes previous (non-snapshotted) versions from the database.
 
         Returns
         -------
@@ -898,11 +899,12 @@ class Library:
         self,
         symbol: str,
         mode: Optional[StagedDataFinalizeMethod] = StagedDataFinalizeMethod.WRITE,
-        prune_previous_versions: Optional[bool] = False,
+        prune_previous_versions: bool = False,
         metadata: Any = None,
+        validate_index=True,
     ):
         """
-        Finalises staged data, making it available for reads.
+        Finalizes staged data, making it available for reads.
 
         Parameters
         ----------
@@ -910,12 +912,17 @@ class Library:
             Symbol to finalize data for.
 
         mode : `StagedDataFinalizeMethod`, default=StagedDataFinalizeMethod.WRITE
-            Finalise mode. Valid options are WRITE or APPEND. Write collects the staged data and writes them to a
-            new timeseries. Append collects the staged data and appends them to the latest version.
-        prune_previous_versions
+            Finalize mode. Valid options are WRITE or APPEND. Write collects the staged data and writes them to a
+            new version. Append collects the staged data and appends them to the latest version.
+        prune_previous_versions: bool, default=False
             Removes previous (non-snapshotted) versions from the database.
         metadata : Any, default=None
             Optional metadata to persist along with the symbol.
+        validate_index: bool, default=True
+            If True, and staged segments are timeseries, will verify that the index of the symbol after this operation
+            supports date range searches and update operations. This requires that the indexes of the staged segments
+            are non-overlapping with each other, and, in the case of `StagedDataFinalizeMethod.APPEND`, fall after the
+            last index value in the previous version.
 
         See Also
         --------
@@ -928,10 +935,14 @@ class Library:
             convert_int_to_float=False,
             metadata=metadata,
             prune_previous_version=prune_previous_versions,
+            validate_index=validate_index,
         )
 
     def sort_and_finalize_staged_data(
-        self, symbol: str, mode: Optional[StagedDataFinalizeMethod] = StagedDataFinalizeMethod.WRITE, prune_previous_versions: Optional[bool] = False
+        self,
+        symbol: str,
+        mode: Optional[StagedDataFinalizeMethod] = StagedDataFinalizeMethod.WRITE,
+        prune_previous_versions: bool = False,
     ):
         """
         sort_merge will sort and finalize staged data. This differs from `finalize_staged_data` in that it
@@ -944,11 +955,11 @@ class Library:
             Symbol to finalize data for.
 
         mode : `StagedDataFinalizeMethod`, default=StagedDataFinalizeMethod.WRITE
-            Finalise mode. Valid options are WRITE or APPEND. Write collects the staged data and writes them to a
+            Finalize mode. Valid options are WRITE or APPEND. Write collects the staged data and writes them to a
             new timeseries. Append collects the staged data and appends them to the latest version.
 
-        prune_previous_versions : `Optional[bool]`, default=False
-            Remove previous versions from version list. Uses library default if left as None.
+        prune_previous_versions : bool, default=False
+            Removes previous (non-snapshotted) versions from the database.
 
         See Also
         --------
@@ -956,7 +967,12 @@ class Library:
             Documentation on the ``staged`` parameter explains the concept of staged data in more detail.
         """
 
-        self._nvs.version_store.sort_merge(symbol, None, mode == StagedDataFinalizeMethod.APPEND, prune_previous_versions=prune_previous_versions)
+        self._nvs.version_store.sort_merge(
+            symbol,
+            None,
+            mode == StagedDataFinalizeMethod.APPEND,
+            prune_previous_versions=prune_previous_versions,
+        )
 
     def get_staged_symbols(self) -> List[str]:
         """
@@ -1210,7 +1226,12 @@ class Library:
         include_errors_and_none_meta = True
         return self._nvs._batch_read_metadata_to_versioned_items(symbol_strings, as_ofs, include_errors_and_none_meta)
 
-    def write_metadata(self, symbol: str, metadata: Any) -> VersionedItem:
+    def write_metadata(
+            self,
+            symbol: str,
+            metadata: Any,
+            prune_previous_versions: bool = False,
+    ) -> VersionedItem:
         """
         Write metadata under the specified symbol name to this library. The data will remain unchanged.
         A new version will be created.
@@ -1226,16 +1247,19 @@ class Library:
             Symbol name for the item
         metadata
             Metadata to persist along with the symbol
+        prune_previous_versions : bool, default=False
+            Removes previous (non-snapshotted) versions from the database. Note that metadata is versioned alongside the
+            data it is referring to, and so this operation removes old versions of data as well as metadata.
 
         Returns
         -------
         VersionedItem
             Structure containing metadata and version number of the affected symbol in the store.
         """
-        return self._nvs.write_metadata(symbol, metadata, prune_previous_version=False)
+        return self._nvs.write_metadata(symbol, metadata, prune_previous_version=prune_previous_versions)
 
     def write_metadata_batch(
-        self, write_metadata_payloads: List[WriteMetadataPayload], prune_previous_versions=None
+        self, write_metadata_payloads: List[WriteMetadataPayload], prune_previous_versions: bool = False,
     ) -> List[Union[VersionedItem, DataError]]:
         """
         Write metadata to multiple symbols in a batch fashion. This is more efficient than making multiple `write_metadata` calls
@@ -1248,8 +1272,9 @@ class Library:
         ----------
         write_metadata_payloads : `List[WriteMetadataPayload]`
             Symbols and their corresponding metadata. There must not be any duplicate symbols in `payload`.
-        prune_previous_versions : `Optional[bool]`, default=None
-            Remove previous versions from version list. Uses library default if left as None.
+        prune_previous_versions : bool, default=False
+            Removes previous (non-snapshotted) versions from the database. Note that metadata is versioned alongside the
+            data it is referring to, and so this operation removes old versions of data as well as metadata.
 
         Returns
         -------
@@ -1373,7 +1398,12 @@ class Library:
         """
         self._nvs.prune_previous_versions(symbol)
 
-    def delete_data_in_range(self, symbol: str, date_range: Tuple[Optional[Timestamp], Optional[Timestamp]]):
+    def delete_data_in_range(
+            self,
+            symbol: str,
+            date_range: Tuple[Optional[Timestamp], Optional[Timestamp]],
+            prune_previous_versions: bool = False,
+    ):
         """Delete data within the given date range, creating a new version of ``symbol``.
 
         The existing symbol version must be timeseries-indexed.
@@ -1382,10 +1412,11 @@ class Library:
         ----------
         symbol
             Symbol name.
-
         date_range
             The date range in which to delete data. Leaving any part of the tuple as None leaves that part of the range
             open ended.
+        prune_previous_versions : bool, default=False
+            Removes previous (non-snapshotted) versions from the database.
 
         Examples
         --------
@@ -1401,7 +1432,7 @@ class Library:
         """
         if date_range is None:
             raise ArcticInvalidApiUsageException("date_range must be given but was None")
-        self._nvs.delete(symbol, date_range=date_range)
+        self._nvs.delete(symbol, date_range=date_range, prune_previous_version=prune_previous_versions)
 
     def delete_snapshot(self, snapshot_name: str) -> None:
         """
@@ -1538,7 +1569,6 @@ class Library:
             symbol=symbol,
             snapshot=snapshot,
             latest_only=latest_only,
-            iterate_on_failure=False,
             skip_snapshots=skip_snapshots,
         )
         return {
@@ -1753,7 +1783,12 @@ class Library:
         """
         return self._nvs.is_symbol_fragmented(symbol, segment_size)
 
-    def defragment_symbol_data(self, symbol: str, segment_size: Optional[int] = None, prune_previous_versions:bool = False) -> VersionedItem:
+    def defragment_symbol_data(
+            self,
+            symbol: str,
+            segment_size: Optional[int] = None,
+            prune_previous_versions: bool = False,
+    ) -> VersionedItem:
         """
         Compacts fragmented segments by merging row-sliced segments (https://docs.arcticdb.io/technical/on_disk_storage/#data-layer).
         This method calls `is_symbol_fragmented` to determine whether to proceed with the defragmentation operation.
@@ -1776,6 +1811,8 @@ class Library:
             If parameter is not provided, library option - "segment_row_size" will be used
             Note that no. of rows per segment, after compaction, may exceed the target.
             It is for achieving smallest no. of segment after compaction. Please refer to below example for further explanation.
+        prune_previous_versions : bool, default=False
+            Removes previous (non-snapshotted) versions from the database.
 
         Returns
         -------

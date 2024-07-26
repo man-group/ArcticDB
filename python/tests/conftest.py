@@ -113,13 +113,19 @@ def lmdb_library(lmdb_storage, lib_name):
 # ssl is enabled by default to maximize test coverage as ssl is enabled most of the times in real world
 @pytest.fixture(scope="session")
 def s3_storage_factory():
-    with MotoS3StorageFixtureFactory(use_ssl=SSL_TEST_SUPPORTED, ssl_test_support=SSL_TEST_SUPPORTED) as f:
+    with MotoS3StorageFixtureFactory(use_ssl=SSL_TEST_SUPPORTED, ssl_test_support=SSL_TEST_SUPPORTED, bucket_versioning=False) as f:
         yield f
 
 
 @pytest.fixture(scope="session")
 def s3_no_ssl_storage_factory():
-    with MotoS3StorageFixtureFactory(use_ssl=False, ssl_test_support=SSL_TEST_SUPPORTED) as f:
+    with MotoS3StorageFixtureFactory(use_ssl=False, ssl_test_support=SSL_TEST_SUPPORTED, bucket_versioning=False) as f:
+        yield f
+
+
+@pytest.fixture(scope="session")
+def s3_bucket_versioning_storage_factory():
+    with MotoS3StorageFixtureFactory(use_ssl=False, ssl_test_support=False, bucket_versioning=True) as f:
         yield f
 
 
@@ -132,6 +138,16 @@ def s3_storage(s3_storage_factory):
 @pytest.fixture
 def s3_no_ssl_storage(s3_no_ssl_storage_factory):
     with s3_no_ssl_storage_factory.create_fixture() as f:
+        yield f
+
+
+# s3 storage is picked just for its versioning capabilities for verifying arcticdb atomicity
+@pytest.fixture
+def s3_bucket_versioning_storage(s3_bucket_versioning_storage_factory):
+    with s3_bucket_versioning_storage_factory.create_fixture() as f:
+        s3_admin = f.factory._s3_admin
+        bucket = f.bucket
+        assert s3_admin.get_bucket_versioning(Bucket=bucket)["Status"] == "Enabled"
         yield f
 
 

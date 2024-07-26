@@ -131,8 +131,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def(py::init())
         .def("set_snap_name", &VersionQuery::set_snap_name)
         .def("set_timestamp", &VersionQuery::set_timestamp)
-        .def("set_version", &VersionQuery::set_version)
-        .def("set_iterate_on_failure", &VersionQuery::set_iterate_on_failure);
+        .def("set_version", &VersionQuery::set_version);
 
     py::class_<ReadOptions>(version, "PythonVersionStoreReadOptions")
         .def(py::init())
@@ -322,11 +321,12 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def_property_readonly("end", &DateRangeClause::end)
             .def("__str__", &DateRangeClause::to_string);
 
-    py::class_<ReadQuery>(version, "PythonVersionStoreReadQuery")
+    py::class_<ReadQuery, std::shared_ptr<ReadQuery>>(version, "PythonVersionStoreReadQuery")
             .def(py::init())
             .def_readwrite("columns",&ReadQuery::columns)
             .def_readwrite("row_range",&ReadQuery::row_range)
             .def_readwrite("row_filter",&ReadQuery::row_filter)
+            .def_readonly("needs_post_processing",&ReadQuery::needs_post_processing)
             // Unsurprisingly, pybind11 doesn't understand folly::poly, so use vector of variants here
             .def("add_clauses",
                  [](ReadQuery& self,
@@ -342,6 +342,22 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                 for (auto&& clause: clauses) {
                     util::variant_match(
                         clause,
+                        [&](std::shared_ptr<RowRangeClause> clause) {
+                            self.needs_post_processing = false;
+                            _clauses.emplace_back(std::make_shared<Clause>(*clause));
+                        },
+                        [&](std::shared_ptr<DateRangeClause> clause) {
+                            self.needs_post_processing = false;
+                            _clauses.emplace_back(std::make_shared<Clause>(*clause));
+                        },
+                        [&](std::shared_ptr<ResampleClause<ResampleBoundary::LEFT>> clause) {
+                            self.needs_post_processing = false;
+                            _clauses.emplace_back(std::make_shared<Clause>(*clause));
+                        },
+                        [&](std::shared_ptr<ResampleClause<ResampleBoundary::RIGHT>> clause) {
+                            self.needs_post_processing = false;
+                            _clauses.emplace_back(std::make_shared<Clause>(*clause));
+                        },
                         [&](auto&& clause) {_clauses.emplace_back(std::make_shared<Clause>(*clause));}
                     );
                 }
@@ -496,6 +512,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              py::arg("sparsify") = false,
              py::arg("user_meta") = std::nullopt,
              py::arg("prune_previous_versions") = false,
+             py::arg("validate_index") = false,
              py::call_guard<SingleThreadMutexHolder>(), "Compact incomplete segments")
          .def("sort_merge",
              &PythonVersionStore::sort_merge,
@@ -670,13 +687,17 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              &PythonVersionStore::force_release_lock,
              py::call_guard<SingleThreadMutexHolder>(), "Force release a lock.")
         .def("batch_read",
-             [&](PythonVersionStore& v, const std::vector<StreamId> &stream_ids,  const std::vector<VersionQuery>& version_queries, std::vector<ReadQuery> read_queries, const ReadOptions& read_options){
+             [&](PythonVersionStore& v,
+                 const std::vector<StreamId> &stream_ids,
+                 const std::vector<VersionQuery>& version_queries,
+                 std::vector<std::shared_ptr<ReadQuery>>& read_queries,
+                 const ReadOptions& read_options){
                  return python_util::adapt_read_dfs(v.batch_read(stream_ids, version_queries, read_queries, read_options));
              },
              py::call_guard<SingleThreadMutexHolder>(), "Read a dataframe from the store")
         .def("batch_read_keys",
              [&](PythonVersionStore& v, std::vector<AtomKey> atom_keys) {
-                 return python_util::adapt_read_dfs(frame_to_read_result(v.batch_read_keys(atom_keys, {}, ReadOptions{})));
+                 return python_util::adapt_read_dfs(frame_to_read_result(v.batch_read_keys(atom_keys)));
              },
              py::call_guard<SingleThreadMutexHolder>(), "Read a specific version of a dataframe from the store")
         .def("batch_write",
@@ -714,10 +735,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                 const std::optional<StreamId> & s_id,
                 const std::optional<SnapshotId> & snap_id,
                 const std::optional<bool>& latest,
-                const std::optional<bool>& iterate_on_failure,
                 const std::optional<bool>& skip_snapshots
                 ){
-                 return v.list_versions(s_id, snap_id, latest, iterate_on_failure, skip_snapshots);
+                 return v.list_versions(s_id, snap_id, latest, skip_snapshots);
              },
              py::call_guard<SingleThreadMutexHolder>(), "List all the version ids for this store.")
         .def("_compact_version_map",

@@ -136,7 +136,7 @@ TEST(PythonVersionStore, IterationVsRefWrite) {
     auto ref_entry = std::make_shared<VersionMapEntry>();
 
     version_map->load_via_iteration(mock_store, stream_id, iter_entry);
-    version_map->load_via_ref_key(mock_store, stream_id, LoadParameter{LoadType::LOAD_ALL}, ref_entry);
+    version_map->load_via_ref_key(mock_store, stream_id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, ref_entry);
 
     EXPECT_EQ(std::string(iter_entry->head_.value().view()), std::string(ref_entry->head_.value().view()));
     ASSERT_EQ(iter_entry->keys_.size(), ref_entry->keys_.size());
@@ -151,7 +151,7 @@ TEST(PythonVersionStore, IterationVsRefWrite) {
     auto ref_entry_compact = std::make_shared<VersionMapEntry>();
 
     version_map->load_via_iteration(mock_store, stream_id, iter_entry_compact);
-    version_map->load_via_ref_key(mock_store, stream_id, LoadParameter{LoadType::LOAD_ALL}, ref_entry_compact);
+    version_map->load_via_ref_key(mock_store, stream_id, LoadStrategy{LoadType::ALL, arcticdb::LoadObjective::INCLUDE_DELETED}, ref_entry_compact);
 
     EXPECT_EQ(std::string(iter_entry_compact->head_.value().view()), std::string(ref_entry_compact->head_.value().view()));
     ASSERT_EQ(iter_entry_compact->keys_.size(), ref_entry_compact->keys_.size());
@@ -165,6 +165,7 @@ TEST_F(VersionStoreTest, SortMerge) {
     using namespace arcticdb::storage;
     using namespace arcticdb::stream;
     using namespace arcticdb::pipelines;
+    using namespace arcticdb::version_store;
 
     size_t count = 0;
 
@@ -191,10 +192,18 @@ TEST_F(VersionStoreTest, SortMerge) {
     std::shuffle(data.begin(), data.end(), mt);
 
     for(auto&& frame : data) {
-        test_store_->append_incomplete_frame(symbol, std::move(frame.input_frame_));
+        test_store_->append_incomplete_frame(symbol, std::move(frame.input_frame_), true);
     }
 
-    test_store_->sort_merge_internal(symbol, std::nullopt, arcticdb::version_store::SortMergeOptions{true, false, false, false, false});
+    CompactIncompleteOptions options{
+            .prune_previous_versions_=false,
+            .append_=true,
+            .convert_int_to_float_=false,
+            .via_iteration_=false,
+            .sparsify_=false
+    };
+
+    test_store_->sort_merge_internal(symbol, std::nullopt, options);
 }
 
 TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {
@@ -238,7 +247,7 @@ TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {
     std::shuffle(data.begin(), data.end(), mt);
 
     for(auto& frame : data) {
-        test_store_->write_parallel_frame(symbol, std::move(frame.input_frame_));
+        test_store_->write_parallel_frame(symbol, std::move(frame.input_frame_), true);
     }
 
     auto vit = test_store_->compact_incomplete(symbol, false, false, true, false);
@@ -283,17 +292,17 @@ TEST_F(VersionStoreTest, GetIncompleteSymbols) {
     std::string stream_id1{"thing1"};
     auto wrapper1 = get_test_simple_frame(stream_id1, 15, 2);
     auto& frame1 = wrapper1.frame_;
-    test_store_->append_incomplete_frame(stream_id1, std::move(frame1));
+    test_store_->append_incomplete_frame(stream_id1, std::move(frame1), true);
 
     std::string stream_id2{"thing2"};
     auto wrapper2 = get_test_simple_frame(stream_id2, 15, 2);
     auto& frame2 = wrapper2.frame_;
-    test_store_->append_incomplete_frame(stream_id2, std::move(frame2));
+    test_store_->append_incomplete_frame(stream_id2, std::move(frame2), true);
 
     std::string stream_id3{"thing3"};
     auto wrapper3 = get_test_simple_frame(stream_id3, 15, 2);
     auto& frame3 = wrapper3.frame_;
-    test_store_->append_incomplete_frame(stream_id3, std::move(frame3));
+    test_store_->append_incomplete_frame(stream_id3, std::move(frame3), true);
 
     std::set<StreamId> expected{ stream_id1, stream_id2, stream_id3};
     auto result = test_store_->get_incomplete_symbols();
@@ -347,7 +356,7 @@ TEST_F(VersionStoreTest, StressBatchReadUncompressed) {
         }
     }
 
-    std::vector<ReadQuery> read_queries;
+    std::vector<std::shared_ptr<ReadQuery>> read_queries;
     ReadOptions read_options;
     read_options.set_batch_throw_on_error(true);
     auto latest_versions = test_store_->batch_read(symbols, std::vector<VersionQuery>(10), read_queries, read_options);
@@ -381,21 +390,21 @@ TEST(VersionStore, TestReadTimestampAt) {
 
   auto version_map = version_store._test_get_version_map();
   version_map->write_version(mock_store, key1, std::nullopt);
-  auto key = load_index_key_from_time(mock_store, version_map, id, timestamp(0), pipelines::VersionQuery{});
+  auto key = load_index_key_from_time(mock_store, version_map, id, timestamp(0));
   ASSERT_EQ(key.value().content_hash(), 3);
 
   version_map->write_version(mock_store, key2, key1);
-  key = load_index_key_from_time(mock_store, version_map, id, timestamp(0), pipelines::VersionQuery{});
+  key = load_index_key_from_time(mock_store, version_map, id, timestamp(0));
   ASSERT_EQ(key.value().content_hash(), 3);
-  key = load_index_key_from_time(mock_store, version_map, id, timestamp(1), pipelines::VersionQuery{});
+  key = load_index_key_from_time(mock_store, version_map, id, timestamp(1));
   ASSERT_EQ(key.value().content_hash(), 4);
 
   version_map->write_version(mock_store, key3, key2);
-  key = load_index_key_from_time(mock_store, version_map, id, timestamp(0), pipelines::VersionQuery{});
+  key = load_index_key_from_time(mock_store, version_map, id, timestamp(0));
   ASSERT_EQ(key.value().content_hash(), 3);
-  key = load_index_key_from_time(mock_store, version_map, id, timestamp(1), pipelines::VersionQuery{});
+  key = load_index_key_from_time(mock_store, version_map, id, timestamp(1));
   ASSERT_EQ(key.value().content_hash(), 4);
-  key = load_index_key_from_time(mock_store, version_map, id, timestamp(2), pipelines::VersionQuery{});
+  key = load_index_key_from_time(mock_store, version_map, id, timestamp(2));
   ASSERT_EQ(key.value().content_hash(), 5);
 }
 
@@ -413,7 +422,7 @@ TEST(VersionStore, TestReadTimestampAtInequality) {
 
   auto version_map = version_store._test_get_version_map();
   version_map->write_version(mock_store, key1, std::nullopt);
-  auto key = load_index_key_from_time(mock_store, version_map, id, timestamp(1), pipelines::VersionQuery{});
+  auto key = load_index_key_from_time(mock_store, version_map, id, timestamp(1));
   ASSERT_EQ(static_cast<bool>(key), true);
   ASSERT_EQ(key.value().content_hash(), 3);
 }

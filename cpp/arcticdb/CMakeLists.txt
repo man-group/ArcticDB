@@ -201,6 +201,7 @@ set(arcticdb_srcs
         column_store/column_data_random_accessor.hpp
         column_store/column.hpp
         column_store/column_utils.hpp
+        column_store/key_segment.hpp
         column_store/memory_segment.hpp
         column_store/memory_segment_impl.hpp
         column_store/row_ref.hpp
@@ -400,6 +401,7 @@ set(arcticdb_srcs
         column_store/chunked_buffer.cpp
         column_store/column.cpp
         column_store/column_data.cpp
+        column_store/key_segment.cpp
         column_store/memory_segment_impl.cpp
         column_store/memory_segment_impl.cpp
         column_store/string_pool.cpp
@@ -824,7 +826,7 @@ if(${TEST})
             version/test/test_sorting_info_state_machine.cpp
             version/test/version_map_model.hpp
             storage/test/common.hpp
-         )
+            version/test/test_sort_index.cpp)
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 

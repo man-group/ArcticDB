@@ -72,19 +72,17 @@ TEST(VersionMap, WithPredecessors) {
     auto version_map = std::make_shared<VersionMap>();
     version_map->set_validate(true);
     version_map->write_version(store, key1, std::nullopt);
-    pipelines::VersionQuery version_query;
-    version_query.set_iterate_on_failure(false);
-    auto latest = get_latest_undeleted_version(store, version_map, id, version_query);
+    auto latest = get_latest_undeleted_version(store, version_map, id);
     ASSERT_TRUE(latest);
     ASSERT_EQ(latest.value(), key1);
     version_map->write_version(store, key2, key1);
 
-    latest = get_latest_undeleted_version(store, version_map, id, version_query);
+    latest = get_latest_undeleted_version(store, version_map, id);
     ASSERT_EQ(latest.value(), key2);
     version_map->write_version(store, key3, key2);
 
     std::vector<AtomKey> expected{ key3, key2, key1};
-    auto result = get_all_versions(store, version_map, id, version_query);
+    auto result = get_all_versions(store, version_map, id);
     ASSERT_EQ(result, expected);
 
 }
@@ -96,52 +94,49 @@ TEST(VersionMap, TombstoneDelete) {
     auto key4 = atom_key_builder().version_id(4).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(6).start_index(
         7).end_index(8).build(id, KeyType::TABLE_INDEX);
 
-    pipelines::VersionQuery version_query;
-    version_query.set_iterate_on_failure(false);
-
     auto version_map = std::make_shared<VersionMap>();
     version_map->set_validate(true);
     version_map->write_version(store, key1, std::nullopt);
-    auto latest = get_latest_undeleted_version(store, version_map, id, version_query);
+    auto latest = get_latest_undeleted_version(store, version_map, id);
     ASSERT_TRUE(latest);
     ASSERT_EQ(latest.value(), key1);
     version_map->write_version(store, key2, key1);
 
-    latest = get_latest_undeleted_version(store, version_map, id, version_query);
+    latest = get_latest_undeleted_version(store, version_map, id);
     ASSERT_EQ(latest.value(), key2);
     version_map->write_version(store, key3, key2);
 
-    latest = get_latest_undeleted_version(store, version_map, id, version_query);
+    latest = get_latest_undeleted_version(store, version_map, id);
     ASSERT_EQ(latest.value(), key3);
     version_map->write_version(store, key4, key3);
 
-    auto del_res = tombstone_version(store, version_map, id, VersionId{2}, pipelines::VersionQuery{});
+    auto del_res = tombstone_version(store, version_map, id, VersionId{2});
 
     ASSERT_FALSE(del_res.no_undeleted_left);
     ASSERT_EQ(del_res.keys_to_delete.front(), key2);
     ASSERT_THAT(del_res.could_share_data, UnorderedElementsAre(key1, key3));
 
     std::vector<AtomKey> expected{key4, key3, key1};
-    auto result = get_all_versions(store, version_map, id, version_query);
+    auto result = get_all_versions(store, version_map, id);
     ASSERT_EQ(result, expected);
 
-    del_res = tombstone_version(store, version_map, id, VersionId{3}, pipelines::VersionQuery{});
+    del_res = tombstone_version(store, version_map, id, VersionId{3});
     ASSERT_FALSE(del_res.no_undeleted_left);
     ASSERT_EQ(del_res.keys_to_delete.front(), key3);
     ASSERT_THAT(del_res.could_share_data, UnorderedElementsAre(key1, key4));
 
-    latest = get_latest_undeleted_version(store, version_map, id, version_query);
+    latest = get_latest_undeleted_version(store, version_map, id);
     ASSERT_EQ(latest.value(), key4);
 
-    del_res = tombstone_version(store, version_map, id, VersionId{4}, pipelines::VersionQuery{});
+    del_res = tombstone_version(store, version_map, id, VersionId{4});
     ASSERT_FALSE(del_res.no_undeleted_left);
     ASSERT_EQ(del_res.keys_to_delete.front(), key4);
     ASSERT_EQ(*del_res.could_share_data.begin(), key1);
 
-    latest = get_latest_undeleted_version(store, version_map, id, version_query);
+    latest = get_latest_undeleted_version(store, version_map, id);
     ASSERT_EQ(latest.value(), key1);
 
-    del_res = tombstone_version(store, version_map, id, VersionId{1}, pipelines::VersionQuery{});
+    del_res = tombstone_version(store, version_map, id, VersionId{1});
     ASSERT_TRUE(del_res.no_undeleted_left);
     ASSERT_EQ(del_res.keys_to_delete.front(), key1);
     ASSERT_TRUE(del_res.could_share_data.empty());
@@ -161,7 +156,7 @@ TEST(VersionMap, PingPong) {
         4).end_index(5).build(id, KeyType::TABLE_INDEX);
 
     left->write_version(store, key1, std::nullopt);
-    auto latest = get_latest_undeleted_version(store, right, id, pipelines::VersionQuery{});
+    auto latest = get_latest_undeleted_version(store, right, id);
     ASSERT_EQ(latest.value(), key1);
 
     auto key2 = atom_key_builder().version_id(2).creation_ts(3).content_hash(4).start_index(
@@ -175,9 +170,9 @@ TEST(VersionMap, PingPong) {
     left->write_version(store, key3, key2);
 
     std::vector<AtomKey> expected{ key3, key2, key1};
-    auto left_result = get_all_versions(store, left, id, pipelines::VersionQuery{});
+    auto left_result = get_all_versions(store, left, id);
     ASSERT_EQ(left_result, expected);
-    auto right_result = get_all_versions(store, right, id, pipelines::VersionQuery{});
+    auto right_result = get_all_versions(store, right, id);
     ASSERT_EQ(right_result, expected);
 }
 
@@ -202,14 +197,14 @@ TEST(VersionMap, TestLoadsRefAndIteration) {
     ScopedConfig reload_interval("VersionMap.ReloadInterval", 0); // always reload
 
     std::vector<AtomKey> expected{ key3, key2, key1};
-    auto result = get_all_versions(store, version_map, id, pipelines::VersionQuery{});
+    auto result = get_all_versions(store, version_map, id);
     ASSERT_EQ(result, expected);
 
     auto entry_iteration = std::make_shared<VersionMapEntry>();
     version_map->load_via_iteration(store, id, entry_iteration);
 
     auto entry_ref = std::make_shared<VersionMapEntry>();
-    version_map->load_via_ref_key(store, id, LoadParameter{LoadType::LOAD_ALL}, entry_ref);
+    version_map->load_via_ref_key(store, id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, entry_ref);
 
     ASSERT_EQ(entry_iteration->head_, entry_ref->head_);
     ASSERT_EQ(entry_iteration->keys_.size(), entry_ref->keys_.size());
@@ -240,7 +235,7 @@ TEST(VersionMap, TestCompact) {
     ASSERT_EQ(store->num_ref_keys(), 1);
 
     std::vector<AtomKey> expected{ key3, key2, key1};
-    auto result = get_all_versions(store, version_map, id, pipelines::VersionQuery{});
+    auto result = get_all_versions(store, version_map, id);
     ASSERT_EQ(result, expected);
 }
 
@@ -254,7 +249,7 @@ TEST(VersionMap, TestCompactWithDelete) {
     version_map->write_version(store, key1, std::nullopt);
     version_map->write_version(store, key2, key1);
     version_map->write_version(store, key3, key2);
-    tombstone_version(store, version_map, id, 2, pipelines::VersionQuery{});
+    tombstone_version(store, version_map, id, 2);
 
     ScopedConfig max_blocks("VersionMap.MaxVersionBlocks", 1);
     ScopedConfig reload_interval("VersionMap.ReloadInterval", 0); // always reload
@@ -264,7 +259,7 @@ TEST(VersionMap, TestCompactWithDelete) {
     ASSERT_EQ(store->num_ref_keys(), 1);
 
     std::vector<AtomKey> expected{ key3, key1};
-    auto result = get_all_versions(store, version_map, id, pipelines::VersionQuery{});
+    auto result = get_all_versions(store, version_map, id);
     ASSERT_EQ(result, expected);
 }
 
@@ -280,8 +275,8 @@ TEST(VersionMap, TestLatestVersionWithDeleteTombstones) {
     version_map->write_version(store, key1, std::nullopt);
     version_map->write_version(store, key2, key1);
     version_map->write_version(store, key3, key2);
-    tombstone_version(store, version_map, id, 2, pipelines::VersionQuery{});
-    auto [maybe_prev, deleted] = get_latest_version(store, version_map, id, pipelines::VersionQuery{});
+    tombstone_version(store, version_map, id, 2);
+    auto [maybe_prev, deleted] = get_latest_version(store, version_map, id);
     auto version_id = get_next_version_from_key(maybe_prev);
     ASSERT_EQ(version_id, 4);
 }
@@ -296,14 +291,14 @@ TEST(VersionMap, TestCompactWithDeleteTombstones) {
     version_map->write_version(store, key1, std::nullopt);
     version_map->write_version(store, key2, key1);
     version_map->write_version(store, key3, key2);
-    tombstone_version(store, version_map, id, 2, pipelines::VersionQuery{});
+    tombstone_version(store, version_map, id, 2);
 
     ScopedConfig max_blocks("VersionMap.MaxVersionBlocks", 1);
     ScopedConfig reload_interval("VersionMap.ReloadInterval", 0); // always reload
     version_map->compact(store, id);
 
     std::vector<AtomKey> expected{ key3, key1};
-    auto result = get_all_versions(store, version_map, id, pipelines::VersionQuery{});
+    auto result = get_all_versions(store, version_map, id);
     ASSERT_EQ(result, expected);
 }
 
@@ -333,35 +328,6 @@ void write_old_style_journal_entry(const AtomKey &key, std::shared_ptr<StreamSin
     });
     journal_agg.add_key(key);
     journal_agg.commit();
-}
-
-TEST(VersionMap, IterateOnFailure) {
-    auto store = std::make_shared<InMemoryStore>();
-    StreamId id{"test1"};
-
-    auto version_map = std::make_shared<VersionMap>();
-    version_map->set_validate(true);
-    auto key1 =
-        atom_key_builder().version_id(1).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(3).start_index(
-            4).end_index(5).build(id, KeyType::TABLE_INDEX);
-    version_map->write_version(store, key1, std::nullopt);
-    auto key2 =
-        atom_key_builder().version_id(2).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(4).start_index(
-            5).end_index(6).build(id, KeyType::TABLE_INDEX);
-    version_map->write_version(store, key2, key1);
-    auto key3 =
-        atom_key_builder().version_id(3).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(5).start_index(
-            6).end_index(7).build(id, KeyType::TABLE_INDEX);
-    version_map->write_version(store, key3, key2);
-
-    RefKey ref_key{id, KeyType::VERSION_REF};
-    store->remove_key_sync(ref_key, storage::RemoveOpts{});
-
-    std::vector<AtomKey> expected{ key3, key2, key1};
-    pipelines::VersionQuery version_query;
-    version_query.set_iterate_on_failure(true);
-    auto result = get_all_versions(store, version_map, id, version_query);
-    ASSERT_EQ(result, expected);
 }
 
 TEST(VersionMap, GetNextVersionInEntry) {
@@ -426,7 +392,7 @@ TEST(VersionMap, FixRefKey) {
     ASSERT_TRUE(version_map->check_ref_key(store, id));
 
     std::vector<AtomKey> expected{key3, key2, key1};
-    auto result = get_all_versions(store, version_map, id, pipelines::VersionQuery{});
+    auto result = get_all_versions(store, version_map, id);
     ASSERT_EQ(result, expected);
 }
 
@@ -452,7 +418,7 @@ TEST(VersionMap, FixRefKeyTombstones) {
     auto key5 = atom_key_with_version(id, 1, 1696590624590123209);
     version_map->write_version(store, key5, key4);
     auto key6 = atom_key_with_version(id, 0, 1696590624612743245);
-    auto entry = version_map->check_reload(store, id, LoadParameter{LoadType::LOAD_LATEST},  __FUNCTION__);
+    auto entry = version_map->check_reload(store, id, LoadStrategy{LoadType::LATEST, LoadObjective::INCLUDE_DELETED}, __FUNCTION__);
     version_map->journal_single_key(store, key5, entry->head_.value());
 
     auto valid = version_map->check_ref_key(store, id);
@@ -485,11 +451,11 @@ TEST(VersionMap, RewriteVersionKeys) {
     ASSERT_TRUE(version_map->check_ref_key(store, id));
 
     // This will just write tombstone key
-    arcticdb::tombstone_version(store, version_map, id, 2, pipelines::VersionQuery{});
-    arcticdb::tombstone_version(store, version_map, id, 1, pipelines::VersionQuery{});
+    arcticdb::tombstone_version(store, version_map, id, 2);
+    arcticdb::tombstone_version(store, version_map, id, 1);
 
-    auto index_key1 = arcticdb::get_specific_version(store, version_map, id, 1, pipelines::VersionQuery{});
-    auto index_key2 = arcticdb::get_specific_version(store, version_map, id, 2, pipelines::VersionQuery{});
+    auto index_key1 = arcticdb::get_specific_version(store, version_map, id, 1);
+    auto index_key2 = arcticdb::get_specific_version(store, version_map, id, 2);
 
     // will be null since they were tombstoned (but not actually deleted
     ASSERT_FALSE(index_key1.has_value());
@@ -497,15 +463,15 @@ TEST(VersionMap, RewriteVersionKeys) {
 
     version_map->remove_and_rewrite_version_keys(store, id);
 
-    auto final_index_key1 = arcticdb::get_specific_version(store, version_map, id, 1, pipelines::VersionQuery{});
-    auto final_index_key2 = arcticdb::get_specific_version(store, version_map, id, 2, pipelines::VersionQuery{});
+    auto final_index_key1 = arcticdb::get_specific_version(store, version_map, id, 1);
+    auto final_index_key2 = arcticdb::get_specific_version(store, version_map, id, 2);
 
     // will not be null anymore since the data actually existed
     ASSERT_TRUE(final_index_key1.has_value());
     ASSERT_TRUE(final_index_key2.has_value());
 
     std::vector<AtomKey> expected{key3, key2, key1};
-    auto result = get_all_versions(store, version_map, id, pipelines::VersionQuery{});
+    auto result = get_all_versions(store, version_map, id);
     ASSERT_EQ(result, expected);
 }
 
@@ -529,11 +495,11 @@ TEST(VersionMap, RecoverDeleted) {
 
     deleted = version_map->find_deleted_version_keys(store, id);
     ASSERT_EQ(deleted.size(), 3);
-    EXPECT_THROW({ get_all_versions(store, version_map, id, pipelines::VersionQuery{}); }, std::runtime_error);
+    EXPECT_THROW({ get_all_versions(store, version_map, id); }, std::runtime_error);
     version_map->recover_deleted(store, id);
 
     std::vector<AtomKey> expected{ key3, key2, key1};
-    auto result = get_all_versions(store, version_map, id, pipelines::VersionQuery{});
+    auto result = get_all_versions(store, version_map, id);
     ASSERT_EQ(result, expected);
 }
 
@@ -548,9 +514,9 @@ TEST(VersionMap, StorageLogging) {
     version_map->write_version(store, key2, key1);
     version_map->write_version(store, key3, key2);
 
-    tombstone_version(store, version_map, id, key1.version_id(), pipelines::VersionQuery{});
-    tombstone_version(store, version_map, id, key3.version_id(), pipelines::VersionQuery{});
-    tombstone_version(store, version_map, id, key2.version_id(), pipelines::VersionQuery{});
+    tombstone_version(store, version_map, id, key1.version_id());
+    tombstone_version(store, version_map, id, key3.version_id());
+    tombstone_version(store, version_map, id, key2.version_id());
 
     std::unordered_set<AtomKey> log_keys;
 
@@ -578,7 +544,7 @@ std::shared_ptr<VersionMapEntry> write_two_versions(std::shared_ptr<InMemoryStor
     auto entry = version_map->check_reload(
             store,
             id,
-            LoadParameter{LoadType::NOT_LOADED},
+            LoadStrategy{LoadType::NOT_LOADED, LoadObjective::INCLUDE_DELETED},
             __FUNCTION__);
 
     auto key1 = atom_key_with_version(id, 0, 0);
@@ -586,12 +552,241 @@ std::shared_ptr<VersionMapEntry> write_two_versions(std::shared_ptr<InMemoryStor
     write_symbol_ref(store, key1, std::nullopt, entry->head_.value());
     auto key2 = atom_key_with_version(id, 1, 1);
     version_map->do_write(store, key2, entry);
+    // We override the symbol ref without a prev_key on purpose. This way we'll only load the version=1 from the ref key
     write_symbol_ref(store, key2, std::nullopt, entry->head_.value());
 
     return entry;
 }
 
-TEST(VersionMap, CacheInvalidationLoadDownTo) {
+// Produces the following version chain: v0 <- tombstone_all <- v1 <- v2 <- tombstone
+void write_alternating_deleted_undeleted(std::shared_ptr<InMemoryStore> store, std::shared_ptr<VersionMap> version_map, StreamId id) {
+    auto entry = version_map->check_reload(
+            store,
+            id,
+            LoadStrategy{LoadType::NOT_LOADED, LoadObjective::INCLUDE_DELETED},
+            __FUNCTION__);
+
+    auto key1 = atom_key_with_version(id, 0, 0);
+    auto key2 = atom_key_with_version(id, 1, 1);
+    auto key3 = atom_key_with_version(id, 2, 2);
+
+    // Write version 0
+    version_map->do_write(store, key1, entry);
+    write_symbol_ref(store, key1, std::nullopt, entry->head_.value());
+
+    // Tombstone_all on version 0
+    version_map->delete_all_versions(store, id);
+
+    // Write version 1
+    version_map->do_write(store, key2, entry);
+    write_symbol_ref(store, key2, std::nullopt, entry->head_.value());
+
+    // Write version 2
+    version_map->do_write(store, key3, entry);
+    write_symbol_ref(store, key3, std::nullopt, entry->head_.value());
+
+    // Tombstone version 2
+    version_map->write_tombstone(store, VersionId{2}, id, entry, timestamp{3});
+}
+
+TEST(VersionMap, FollowingVersionChain){
+    // Set up the version chain v0(tombstone_all) <- v1 <- v2(tombstoned)
+    auto store = std::make_shared<InMemoryStore>();
+    auto version_map = std::make_shared<VersionMap>();
+    StreamId id{"test"};
+    write_alternating_deleted_undeleted(store, version_map, id);
+
+    auto check_strategy_loads_to = [&](LoadStrategy load_strategy, VersionId should_load_to){
+        auto ref_entry = VersionMapEntry{};
+        read_symbol_ref(store, id, ref_entry);
+        auto follow_result = std::make_shared<VersionMapEntry>();
+
+        version_map->follow_version_chain(store, ref_entry, follow_result, load_strategy);
+        EXPECT_EQ(follow_result->load_progress_.oldest_loaded_index_version_, VersionId{should_load_to});
+    };
+
+    check_strategy_loads_to(LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(0)}, 0);
+    check_strategy_loads_to(LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(-2)}, 1);
+    // DOWN_TO will not skip through tombstoned versions even when include_deleted=false
+    check_strategy_loads_to(LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(-1)}, 2);
+    check_strategy_loads_to(LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(0)}, 0);
+
+    // FROM_TIME when include_deleted=false will skip through deleted versions to go to the latest undeleted version before the timestamp.
+    check_strategy_loads_to(LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(10)}, 1);
+    check_strategy_loads_to(LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(0)}, 0);
+    check_strategy_loads_to(LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(2)}, 2);
+    check_strategy_loads_to(LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(0)}, 0);
+
+    check_strategy_loads_to(LoadStrategy{LoadType::LATEST, LoadObjective::INCLUDE_DELETED}, 2);
+    check_strategy_loads_to(LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY}, 1);
+
+    check_strategy_loads_to(LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, 0);
+    check_strategy_loads_to(LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY}, 0);
+}
+
+TEST(VersionMap, FollowingVersionChainWithCaching){
+    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
+    // Set up the version chain v0(tombstone_all) <- v1 <- v2(tombstoned)
+    auto store = std::make_shared<InMemoryStore>();
+    auto version_map = std::make_shared<VersionMap>();
+    StreamId id{"test"};
+    write_alternating_deleted_undeleted(store, version_map, id);
+    // We create an empty version map after populating the versions
+    version_map = std::make_shared<VersionMap>();
+
+    auto check_loads_versions = [&](LoadStrategy load_strategy, uint32_t should_load_any, uint32_t should_load_undeleted){
+        auto loaded = version_map->check_reload(store, id, load_strategy, __FUNCTION__);
+        EXPECT_EQ(loaded->get_indexes(true).size(), should_load_any);
+        EXPECT_EQ(loaded->get_indexes(false).size(), should_load_undeleted);
+    };
+
+    check_loads_versions(LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(-1)}, 1, 0);
+    // FROM_TIME should not be cached by the DOWNTO and should reload from storage up to the latest undeleted version, hence loading 2 versions, 1 of which is undeleted.
+    check_loads_versions(LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(10)}, 2, 1);
+    // LATEST should be cached by the FROM_TIME, so we still have the same 2 loaded versions
+    check_loads_versions(LoadStrategy{LoadType::LATEST, LoadObjective::INCLUDE_DELETED}, 2, 1);
+    // This FROM_TIME should still use the cached 2 versions
+    check_loads_versions(LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(1)}, 2, 1);
+
+    // We just get the entry to use for the tombstone and the write
+    auto entry = version_map->check_reload(
+            store,
+            id,
+            LoadStrategy{LoadType::NOT_LOADED, LoadObjective::INCLUDE_DELETED},
+            __FUNCTION__);
+    // We delete the only undeleted key
+    version_map->write_tombstone(store, VersionId{1}, id, entry, timestamp{4});
+
+    // LATEST should still be cached, but the cached entry now needs to have no undeleted keys
+    check_loads_versions(LoadStrategy{LoadType::LATEST, LoadObjective::INCLUDE_DELETED}, 2, 0);
+    // FROM_TIME UNDELETED_ONLY should no longer be cached even though we used the same request before because the undeleted key it went to got deleted. So it will load the entire version chain
+    check_loads_versions(LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(10)}, 3, 0);
+
+    // We add a new undeleted key
+    auto key4 = atom_key_with_version(id, 3, 5);
+    version_map->do_write(store, key4, entry);
+    write_symbol_ref(store, key4, std::nullopt, entry->head_.value());
+
+    // LATEST should still be cached, but the cached entry now needs to have one more undeleted version
+    check_loads_versions(LoadStrategy{LoadType::LATEST, LoadObjective::INCLUDE_DELETED}, 4, 1);
+
+    // We delete everything with a tombstone_all
+    version_map->delete_all_versions(store, id);
+
+    // LATEST should still be cached, but now have no undeleted versions
+    check_loads_versions(LoadStrategy{LoadType::LATEST, LoadObjective::INCLUDE_DELETED}, 4, 0);
+}
+
+TEST(VersionMap, FollowingVersionChainEndEarlyOnTombstoneAll) {
+    auto store = std::make_shared<InMemoryStore>();
+    auto version_map = std::make_shared<VersionMap>();
+    StreamId id{"test"};
+
+    write_two_versions(store, version_map, id);
+    // Deleting should add a TOMBSTONE_ALL which should end searching for undeleted versions early.
+    version_map->delete_all_versions(store, id);
+
+    auto ref_entry = VersionMapEntry{};
+    read_symbol_ref(store, id, ref_entry);
+    auto follow_result = std::make_shared<VersionMapEntry>();
+
+    for (auto load_strategy: {
+        LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(0)},
+        LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(0)},
+        LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY},
+        LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY}
+    }) {
+        follow_result->clear();
+        version_map->follow_version_chain(store, ref_entry, follow_result, load_strategy);
+        // When loading with any of the specified load strategies with include_deleted=false we should end following the version chain early
+        // at version 1 because that's when we encounter the TOMBSTONE_ALL.
+        EXPECT_EQ(follow_result->load_progress_.oldest_loaded_index_version_, VersionId{1});
+    }
+
+    for (auto load_strategy: {
+            LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(0)},
+            LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(0)},
+            LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}
+    }) {
+        follow_result->clear();
+        version_map->follow_version_chain(store, ref_entry, follow_result, load_strategy);
+        // When loading with any of the specified load strategies with include_deleted=true we should continue to the beginning
+        // at version 0 even though it was deleted.
+        EXPECT_EQ(follow_result->load_progress_.oldest_loaded_index_version_, VersionId{0});
+    }
+}
+
+TEST(VersionMap, CacheInvalidation) {
+    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
+    // Set up the version chain v0(tombstone_all) <- v1 <- v2(tombstoned)
+    auto store = std::make_shared<InMemoryStore>();
+    auto version_map = std::make_shared<VersionMap>();
+    StreamId id{"test"};
+    write_alternating_deleted_undeleted(store, version_map, id);
+
+    auto check_caching = [&](LoadStrategy to_load, LoadStrategy to_check_if_cached, bool expected_outcome){
+        auto clean_version_map = std::make_shared<VersionMap>();
+        // Load to_load inside the clean version map cache
+        clean_version_map->check_reload(store, id, to_load, __FUNCTION__);
+        // Check whether to_check_if_cached is being cached by to_load
+        EXPECT_EQ(clean_version_map->has_cached_entry(id, to_check_if_cached), expected_outcome);
+    };
+
+    auto check_all_caching = [&](const std::vector<LoadStrategy>& to_load, const std::vector<LoadStrategy>& to_check_if_cached, bool expected_result){
+        for (auto to_load_strategy : to_load) {
+            for (auto to_check_if_cached_param : to_check_if_cached){
+                check_caching(to_load_strategy, to_check_if_cached_param, expected_result);
+            }
+        }
+    };
+
+    auto load_all_param = LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED};
+    auto load_all_undeleted_param = LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY};
+    check_caching(load_all_param, load_all_undeleted_param, true);
+    check_caching(load_all_undeleted_param, load_all_param, false);
+
+    constexpr auto num_versions = 3u;
+    std::vector<LoadStrategy> should_load_to_v[num_versions] = {
+        // Different parameters which should all load to v0
+        std::vector<LoadStrategy>{
+            LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(0)},
+            LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(-3)},
+            LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(0)},
+        },
+
+        // Different parameters which should all load to v1
+        std::vector<LoadStrategy>{
+            LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(1)},
+            LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(-2)},
+            LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(1)},
+            LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY,
+                         static_cast<timestamp>(2)}, // when include_deleted=false FROM_TIME searches for an undeleted version
+            LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY},
+        },
+
+        // Different parameters which should all load to v2
+        std::vector<LoadStrategy>{
+            LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(2)},
+            LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(-1)},
+            LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(2)},
+            LoadStrategy{LoadType::LATEST, LoadObjective::INCLUDE_DELETED},
+        }
+    };
+
+    for (auto i=0u; i<num_versions; ++i){
+        for (auto j=0u; j<num_versions; ++j){
+            // For every two versions we check that all load params for earlier versions cache load paramse for later versions:
+            check_all_caching(should_load_to_v[i], should_load_to_v[j], i<=j);
+        }
+
+        // ALL and LOAD_UNDELETED because they both load to v0 (UNDELETED_ONLY will load v0 because only there it will load
+        check_all_caching({load_all_param, load_all_undeleted_param}, should_load_to_v[i], true);
+        check_all_caching(should_load_to_v[i], {load_all_param, load_all_undeleted_param}, false);
+    }
+}
+
+
+TEST(VersionMap, CacheInvalidationWithTombstoneAfterLoad) {
     using namespace arcticdb;
     // Given - symbol with 2 versions - load downto version 1
     // never time-invalidate the cache so we can test our other cache invalidation logic
@@ -599,323 +794,82 @@ TEST(VersionMap, CacheInvalidationLoadDownTo) {
     auto store = std::make_shared<InMemoryStore>();
 
     auto version_map = std::make_shared<VersionMap>();
-
     StreamId id{"test"};
     write_two_versions(store, version_map, id);
+
+    // Use a clean version_map
+    version_map = std::make_shared<VersionMap>();
 
     auto entry = version_map->check_reload(
             store,
             id,
-            LoadParameter{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(1)},
+            LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(1)},
             __FUNCTION__);
 
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_LATEST_UNDELETED}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(1)}));
+    ASSERT_FALSE(version_map->has_cached_entry(id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(0)}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(-1)}));
+    ASSERT_FALSE(version_map->has_cached_entry(id, LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(-2)}));
 
     // When - we delete version 1 and reload
-    uint64_t ver_to_delete = 1;
-    auto tombstone = version_map->write_tombstone(store, ver_to_delete, id, entry);
-    entry->tombstones_.try_emplace(ver_to_delete, std::move(tombstone));
+    version_map->write_tombstone(store, VersionId{1}, id, entry);
 
-    ASSERT_FALSE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_LATEST_UNDELETED}));
+    // Now when the cached version is deleted, we should invalidate the cache for load parameters which look for undeleted.
+    ASSERT_FALSE(version_map->has_cached_entry(id, LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY}));
+    ASSERT_FALSE(version_map->has_cached_entry(id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(1)}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::LATEST, LoadObjective::INCLUDE_DELETED}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(1)}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(-1)}));
 
-    LoadParameter load_param{LoadType::LOAD_LATEST_UNDELETED};
-    const auto latest_undeleted_entry = version_map->check_reload(store, id, load_param, __FUNCTION__);
+    LoadStrategy load_strategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY};
+    const auto latest_undeleted_entry = version_map->check_reload(store, id, load_strategy, __FUNCTION__);
 
     // Then - version 0 should be returned
     ASSERT_TRUE(latest_undeleted_entry->get_first_index(false).first.has_value());
 }
 
-TEST(VersionMap, CacheInvalidationLoadDownToFurther) {
+TEST(VersionMap, CacheInvalidationWithTombstoneAllAfterLoad) {
     using namespace arcticdb;
-    // Given - symbol with 2 versions - load downto version 1
+    // Given - symbol with 2 versions - load downto version 0
     // never time-invalidate the cache so we can test our other cache invalidation logic
     ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
     auto store = std::make_shared<InMemoryStore>();
 
     auto version_map = std::make_shared<VersionMap>();
-
     StreamId id{"test"};
     write_two_versions(store, version_map, id);
+
+    // Use a clean version_map
+    version_map = std::make_shared<VersionMap>();
 
     auto entry = version_map->check_reload(
             store,
             id,
-            LoadParameter{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(1)},
+            LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(0)},
             __FUNCTION__);
 
-    ASSERT_FALSE(version_map->has_cached_entry(id,
-                                               LoadParameter{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(0)}));
-    ASSERT_EQ(entry->get_indexes(false).size(), 1);
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(1)}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(0)}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(-1)}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(-2)}));
 
-    // When - we load down to version 0
-    const auto reloaded = version_map->check_reload(
-            store,
-            id,
-            LoadParameter{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(0)},
-            __FUNCTION__);
+    // When - we delete version 1
+    auto tombstone_key = version_map->write_tombstone(store, VersionId{1}, id, entry);
 
-    // Then - version 0 should be returned
-    ASSERT_EQ(entry->get_indexes(false).size(), 2);
-    ASSERT_TRUE(
-            version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(0)}));
-}
+    // We should not invalidate the cache because the version we loaded to is still undeleted
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(1)}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(0)}));
 
-TEST(VersionMap, CacheInvalidationLoadDownToAfterLoadLatest) {
-    using namespace arcticdb;
-    // Given - symbol with 2 versions - load down to version 1
-    // never time-invalidate the cache so we can test our other cache invalidation logic
-    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
-    auto store = std::make_shared<InMemoryStore>();
-    StreamId id{"test"};
+    // When - we delete all versions without reloading
+    version_map->write_tombstone_all_key_internal(store, tombstone_key, entry);
 
-    auto version_map = std::make_shared<VersionMap>();
-
-    auto entry = version_map->check_reload(
-            store,
-            id,
-            LoadParameter{LoadType::LOAD_LATEST},
-            __FUNCTION__);
-
-    auto key = atom_key_with_version(id, 0, 0);
-    version_map->do_write(store, key, entry);
-    write_symbol_ref(store, key, std::nullopt, entry->head_.value());
-
-    // When - we load latest then down to version 0
-    auto reloaded = version_map->check_reload(
-            store,
-            id,
-            LoadParameter{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(0)},
-            __FUNCTION__);
-
-    // Then - version 0 should be returned
-    ASSERT_EQ(reloaded->get_indexes(false).size(), 1);
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(0)}));
-}
-
-TEST(VersionMap, CacheInvalidationAfterLoadLatestUndeleted) {
-    using namespace arcticdb;
-    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
-    auto store = std::make_shared<InMemoryStore>();
-
-    auto version_map = std::make_shared<VersionMap>();
-
-    StreamId id{"test"};
-    write_two_versions(store, version_map, id);
-
-    version_map->check_reload(
-            store,
-            id,
-            LoadParameter{LoadType::LOAD_LATEST_UNDELETED},
-            __FUNCTION__);
-
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_LATEST_UNDELETED}));
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_LATEST}));
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::NOT_LOADED}));
-    ASSERT_FALSE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_ALL}));
-    ASSERT_FALSE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_FROM_TIME, static_cast<timestamp>(1234)}));
-    ASSERT_FALSE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_UNDELETED}));
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(1)}));
-    ASSERT_FALSE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(0)}));
-
-    const auto reloaded = version_map->check_reload(
-            store,
-            id,
-            LoadParameter{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(0)},
-            __FUNCTION__);
-
-    ASSERT_EQ(reloaded->get_indexes(false).size(), 2);
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(0)}));
-}
-
-TEST(VersionMap, CacheInvalidationAfterLoadFromTime) {
-    using namespace arcticdb;
-    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
-    auto store = std::make_shared<InMemoryStore>();
-
-    auto version_map = std::make_shared<VersionMap>();
-
-    StreamId id{"test"};
-    write_two_versions(store, version_map, id);
-
-    version_map->check_reload(
-            store,
-            id,
-            LoadParameter{LoadType::LOAD_FROM_TIME, static_cast<timestamp>(123)},
-            __FUNCTION__);
-
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_LATEST_UNDELETED}));
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_LATEST}));
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::NOT_LOADED}));
-    ASSERT_FALSE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_ALL}));
-    ASSERT_FALSE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_FROM_TIME, static_cast<timestamp>(1234)}));
-    ASSERT_FALSE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_UNDELETED}));
-    ASSERT_FALSE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(1)}));
-
-    const auto reloaded = version_map->check_reload(
-            store,
-            id,
-            LoadParameter{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(0)},
-            __FUNCTION__);
-
-    ASSERT_EQ(reloaded->get_indexes(false).size(), 2);
-}
-
-TEST(VersionMap, CacheInvalidationAfterLoadFromTimeTombstoned) {
-    using namespace arcticdb;
-    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
-    auto store = std::make_shared<InMemoryStore>();
-
-    auto version_map = std::make_shared<VersionMap>();
-
-    StreamId id{"test"};
-    auto entry = write_two_versions(store, version_map, id);
-
-    uint64_t ver_to_delete = 1;
-    auto tombstone = version_map->write_tombstone(store, ver_to_delete, id, entry);
-
-    version_map->check_reload(
-            store,
-            id,
-            LoadParameter{LoadType::LOAD_FROM_TIME, static_cast<timestamp>(2)},
-            __FUNCTION__);
-
-    // LOAD_FROM_TIME always goes at least as far back as the latest undeleted version, even if that is earlier than
-    // the specified load_from_time_or_until
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_LATEST_UNDELETED}));
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_LATEST}));
-
-    const auto reloaded = version_map->check_reload(
-            store,
-            id,
-            LoadParameter{LoadType::LOAD_LATEST_UNDELETED},
-            __FUNCTION__);
-
-    ASSERT_EQ(reloaded->get_indexes(false).size(), 1);
-    ASSERT_EQ(reloaded->get_indexes(true).size(), 2);
-}
-
-TEST(VersionMap, CacheInvalidationLoadAllAfterLoadFromTime) {
-    using namespace arcticdb;
-    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
-    auto store = std::make_shared<InMemoryStore>();
-
-    auto version_map = std::make_shared<VersionMap>();
-
-    StreamId id{"test"};
-    write_two_versions(store, version_map, id);
-
-    auto reloaded = version_map->check_reload(
-            store,
-            id,
-            LoadParameter{LoadType::LOAD_FROM_TIME, static_cast<timestamp>(1)},
-            __FUNCTION__);
-
-    ASSERT_FALSE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_ALL}));
-    ASSERT_EQ(reloaded->get_indexes(false).size(), 1);
-
-    reloaded = version_map->check_reload(
-            store,
-            id,
-            LoadParameter{LoadType::LOAD_ALL},
-            __FUNCTION__);
-
-    ASSERT_EQ(reloaded->get_indexes(false).size(), 2);
-}
-
-TEST(VersionMap, CacheInvalidationAfterLoadUndeleted) {
-    using namespace arcticdb;
-    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
-    auto store = std::make_shared<InMemoryStore>();
-    StreamId id{"test"};
-
-    auto version_map = std::make_shared<VersionMap>();
-
-    auto entry = version_map->check_reload(
-            store,
-            id,
-            LoadParameter{LoadType::NOT_LOADED},
-            __FUNCTION__);
-
-    auto key1 = atom_key_with_version(id, 0, 0);
-    version_map->do_write(store, key1, entry);
-    write_symbol_ref(store, key1, std::nullopt, entry->head_.value());
-    auto key2 = atom_key_with_version(id, 1, 1);
-    version_map->do_write(store, key2, entry);
-    write_symbol_ref(store, key2, std::nullopt, entry->head_.value());
-    auto key3 = atom_key_with_version(id, 2, 2);
-    version_map->do_write(store, key3, entry);
-    write_symbol_ref(store, key3, std::nullopt, entry->head_.value());
-
-    auto tombstone_all = get_tombstone_all_key(key2, 3);
-    entry->try_set_tombstone_all(tombstone_all);
-    version_map->do_write(store, tombstone_all, entry);
-    write_symbol_ref(store, key2, std::nullopt, entry->head_.value());
-
-    entry = version_map->check_reload(
-            store,
-            id,
-            LoadParameter{LoadType::LOAD_UNDELETED},
-            __FUNCTION__);
-
-    ASSERT_EQ(entry->get_indexes(true).size(), 2);
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_LATEST_UNDELETED}));
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_LATEST}));
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::NOT_LOADED}));
-    ASSERT_FALSE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_ALL}));
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_FROM_TIME, static_cast<timestamp>(1234)}));
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_UNDELETED}));
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(1)}));
-
-    // Should not rely on the cache upon (eg) a LOAD_ALL here hence pick up an extra INDEX
-    auto reloaded = version_map->check_reload(
-            store,
-            id,
-            LoadParameter{LoadType::LOAD_ALL},
-            __FUNCTION__);
-
-    ASSERT_EQ(reloaded->get_indexes(true).size(), 3);
-}
-
-TEST(VersionMap, CacheInvalidationAfterLoadAll) {
-    using namespace arcticdb;
-    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
-    auto store = std::make_shared<InMemoryStore>();
-    StreamId id{"test"};
-
-    auto version_map = std::make_shared<VersionMap>();
-
-    auto entry = version_map->check_reload(
-            store,
-            id,
-            LoadParameter{LoadType::LOAD_ALL},
-            __FUNCTION__);
-
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_LATEST_UNDELETED}));
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_LATEST}));
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::NOT_LOADED}));
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_ALL}));
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_FROM_TIME, static_cast<timestamp>(1234)}));
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_UNDELETED}));
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadParameter{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(1)}));
-
-    // Write a key to storage but not the in memory version map
-    auto key = atom_key_with_version(id, 0, 0);
-    auto other_version_map = std::make_shared<VersionMap>();
-    auto other_entry = other_version_map->check_reload(
-            store,
-            id,
-            LoadParameter{LoadType::LOAD_ALL},
-            __FUNCTION__);
-    other_version_map->do_write(store, key, other_entry);
-
-    // Then - it should not be visible to the original map as we rely on the cache
-    auto reloaded = version_map->check_reload(
-            store,
-            id,
-            LoadParameter{LoadType::LOAD_UNDELETED},
-            __FUNCTION__);
-
-    ASSERT_TRUE(reloaded->get_indexes(false).empty());
+    // We should invalidate cached undeleted checks
+    ASSERT_FALSE(version_map->has_cached_entry(id, LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY}));
+    ASSERT_FALSE(version_map->has_cached_entry(id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(1)}));
+    ASSERT_FALSE(version_map->has_cached_entry(id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(0)}));
 }
 
 #define GTEST_COUT std::cerr << "[          ] [ INFO ]"

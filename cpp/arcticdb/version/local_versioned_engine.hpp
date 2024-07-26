@@ -49,13 +49,15 @@ struct KeySizesInfo {
     size_t uncompressed_size; // bytes
 };
 
-struct SortMergeOptions {
-    bool append_;
-    bool convert_int_to_float_;
-    bool via_iteration_;
-    bool sparsify_;
-    bool prune_previous_versions_;
-};
+folly::Future<folly::Unit> delete_trees_responsibly(
+    std::shared_ptr<Store> store,
+    std::shared_ptr<VersionMap> &version_map,
+    const std::vector<IndexTypeKey>& orig_keys_to_delete,
+    const arcticdb::MasterSnapshotMap& snapshot_map,
+    const std::optional<SnapshotId>& snapshot_being_deleted = std::nullopt,
+    const PreDeleteChecks& check = default_pre_delete_checks,
+    const bool dry_run = false
+);
 
 class LocalVersionedEngine : public VersionedEngine {
 
@@ -102,25 +104,23 @@ public:
 
     void append_incomplete_frame(
         const StreamId& stream_id,
-        const std::shared_ptr<InputTensorFrame>& frame) const override;
+        const std::shared_ptr<InputTensorFrame>& frame,
+        bool validate_index) const override;
 
     void remove_incomplete(
         const StreamId& stream_id
     ) override;
 
     std::optional<VersionedItem> get_latest_version(
-        const StreamId &stream_id,
-        const VersionQuery& version_query);
+        const StreamId &stream_id);
 
     std::optional<VersionedItem> get_specific_version(
         const StreamId &stream_id,
-        SignedVersionId signed_version_id,
-        const VersionQuery& version_query);
+        SignedVersionId signed_version_id);
 
     std::optional<VersionedItem> get_version_at_time(
         const StreamId& stream_id,
-        timestamp as_of,
-        const VersionQuery& version_query);
+        timestamp as_of);
 
     std::optional<VersionedItem> get_version_from_snapshot(
         const StreamId& stream_id,
@@ -153,31 +153,16 @@ public:
 
     void write_parallel_frame(
         const StreamId& stream_id,
-        const std::shared_ptr<InputTensorFrame>& frame) const override;
+        const std::shared_ptr<InputTensorFrame>& frame,
+        bool validate_index) const override;
 
     void delete_tree(
         const std::vector<IndexTypeKey>& idx_to_be_deleted,
         const PreDeleteChecks& checks = default_pre_delete_checks
     ) override {
         auto snapshot_map = get_master_snapshots_map(store());
-        delete_trees_responsibly(idx_to_be_deleted, snapshot_map, std::nullopt, checks).get();
+        delete_trees_responsibly(store(), version_map(), idx_to_be_deleted, snapshot_map, std::nullopt, checks).get();
     };
-
-    /**
-     * Locally extends delete_tree() with more features.
-     *
-     * @param snapshot_map Result from get_master_snapshots_map()
-     * @param snapshot_being_deleted Pass in the name and content of a SNAPSHOT(_REF) whose contents are being deleted
-     * to exclude it from shared data check
-     * @param dry_run Only do the check, but don't actually delete anything.
-     */
-    folly::Future<folly::Unit> delete_trees_responsibly(
-        const std::vector<IndexTypeKey>& idx_to_be_deleted,
-        const arcticdb::MasterSnapshotMap& snapshot_map,
-        const std::optional<SnapshotId>& snapshot_being_deleted = std::nullopt,
-        const PreDeleteChecks& check = default_pre_delete_checks,
-        bool dry_run = false
-    );
 
     std::set<StreamId> list_streams_internal(
         std::optional<SnapshotId> snap_name,
@@ -268,7 +253,7 @@ public:
     VersionedItem sort_merge_internal(
         const StreamId& stream_id,
         const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
-        const SortMergeOptions& option);
+        const CompactIncompleteOptions& options);
 
     std::vector<folly::Future<AtomKey>> batch_write_internal(
         const std::vector<VersionId>& version_ids,
@@ -292,21 +277,18 @@ public:
         bool upsert,
         bool throw_on_error);
 
-    std::vector<ReadVersionOutput> batch_read_keys(
-        const std::vector<AtomKey> &keys,
-        const std::vector<ReadQuery> &read_queries,
-        const ReadOptions& read_options);
+    std::vector<ReadVersionOutput> batch_read_keys(const std::vector<AtomKey> &keys);
 
     std::vector<std::variant<ReadVersionOutput, DataError>> batch_read_internal(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries,
-        std::vector<ReadQuery>& read_queries,
+        std::vector<std::shared_ptr<ReadQuery>>& read_queries,
         const ReadOptions& read_options);
 
     std::vector<std::variant<ReadVersionOutput, DataError>> temp_batch_read_internal_direct(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries,
-        std::vector<ReadQuery>& read_queries,
+        std::vector<std::shared_ptr<ReadQuery>>& read_queries,
         const ReadOptions& read_options);
 
     std::vector<std::variant<DescriptorItem, DataError>> batch_read_descriptor_internal(
@@ -407,16 +389,24 @@ public:
         return store()->current_timestamp();
     }
 
+    template<typename ClockType>
+    static LocalVersionedEngine _test_init_from_store(
+        const std::shared_ptr<Store>& store,
+        const ClockType& clock
+    ) {
+        return LocalVersionedEngine(store, clock);
+    }
+
     const arcticdb::proto::storage::VersionStoreConfig& cfg() const override { return cfg_; }
 protected:
+    template<class ClockType=util::SysClock>
+    explicit LocalVersionedEngine(
+        const std::shared_ptr<Store>& store,
+        const ClockType& = ClockType{});
     VersionedItem compact_incomplete_dynamic(
             const StreamId& stream_id,
             const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
-            bool append,
-            bool convert_int_to_float,
-            bool via_iteration,
-            bool sparsify,
-            bool prune_previous_versions);
+            const CompactIncompleteOptions& options);
 
     /**
      * Take tombstoned indexes that have been pruned in the version map and perform the actual deletion
@@ -425,7 +415,7 @@ protected:
      * @param pruned_indexes Must all share the same id() and should be tombstoned.
      */
     folly::Future<folly::Unit> delete_unreferenced_pruned_indexes(
-            const std::vector<AtomKey> &pruned_indexes,
+            std::vector<AtomKey>&& pruned_indexes,
             const AtomKey& key_to_keep
     );
 

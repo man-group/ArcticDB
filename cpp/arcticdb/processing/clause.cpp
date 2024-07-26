@@ -784,7 +784,13 @@ std::shared_ptr<Column> ResampleClause<closed_boundary>::generate_output_index_c
     for (const auto& input_index_column: input_index_columns) {
         auto index_column_data = input_index_column->data();
         const auto cend = index_column_data.cend<IndexTDT>();
-        for (auto it = index_column_data.cbegin<IndexTDT>(); it != cend; ++it) {
+        auto it = index_column_data.cbegin<IndexTDT>();
+        // In case the passed date_range does not span the whole segment we need to skip the index values
+        // which are before the date range start.
+        while (it != cend && *it < date_range_->first) {
+            ++it;
+        }
+        for (;it != cend && *it <= date_range_->second; ++it) {
             if (ARCTICDB_LIKELY(current_bucket.contains(*it))) {
                 if (ARCTICDB_UNLIKELY(!current_bucket_added_to_index)) {
                     *output_index_column_it++ = label_boundary_ == ResampleBoundary::LEFT ? *std::prev(bucket_end_it) : *bucket_end_it;

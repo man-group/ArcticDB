@@ -585,10 +585,10 @@ class NativeVersionStore:
         # TODO: allow_sparse for write_parallel / recursive normalizers as well.
         if isinstance(item, NPDDataFrame):
             if parallel:
-                self.version_store.write_parallel(symbol, item, norm_meta, udm)
+                self.version_store.write_parallel(symbol, item, norm_meta, udm, validate_index)
                 return None
             elif incomplete:
-                self.version_store.append_incomplete(symbol, item, norm_meta, udm)
+                self.version_store.append_incomplete(symbol, item, norm_meta, udm, validate_index)
                 return None
             else:
                 vit = self.version_store.write_versioned_dataframe(
@@ -619,7 +619,7 @@ class NativeVersionStore:
         dataframe: TimeSeriesType,
         metadata: Optional[Any] = None,
         incomplete: bool = False,
-        prune_previous_version: bool = False,
+        prune_previous_version: Optional[bool] = None,
         validate_index: bool = False,
         **kwargs,
     ) -> Optional[VersionedItem]:
@@ -693,6 +693,11 @@ class NativeVersionStore:
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
         coerce_columns = kwargs.get("coerce_columns", None)
 
+        proto_cfg = self._lib_cfg.lib_desc.version.write_options
+        prune_previous_version = self.resolve_defaults(
+            "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version, **kwargs
+        )
+
         _handle_categorical_columns(symbol, dataframe)
 
         udm, item, norm_meta = self._try_normalize(
@@ -710,7 +715,7 @@ class NativeVersionStore:
         if isinstance(item, NPDDataFrame):
             with _diff_long_stream_descriptor_mismatch(self):
                 if incomplete:
-                    self.version_store.append_incomplete(symbol, item, norm_meta, udm)
+                    self.version_store.append_incomplete(symbol, item, norm_meta, udm, validate_index)
                 else:
                     vit = self.version_store.append(
                         symbol, item, norm_meta, udm, write_if_missing, prune_previous_version, validate_index
@@ -724,7 +729,7 @@ class NativeVersionStore:
         metadata: Any = None,
         date_range: Optional[DateRangeInput] = None,
         upsert: bool = False,
-        prune_previous_version: bool = False,
+        prune_previous_version: Optional[bool] = None,
         **kwargs,
     ) -> VersionedItem:
         """
@@ -787,10 +792,15 @@ class NativeVersionStore:
         """
         update_query = _PythonVersionStoreUpdateQuery()
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
+        proto_cfg = self._lib_cfg.lib_desc.version.write_options
         dynamic_schema = self.resolve_defaults(
-            "dynamic_schema", self._lib_cfg.lib_desc.version.write_options, False, **kwargs
+            "dynamic_schema", proto_cfg, False, **kwargs
         )
         coerce_columns = kwargs.get("coerce_columns", None)
+
+        prune_previous_version = self.resolve_defaults(
+            "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version, **kwargs
+        )
 
         if date_range is not None:
             start, end = normalize_dt_range_to_ts(date_range)
@@ -1010,11 +1020,7 @@ class NativeVersionStore:
             else:
                 read_result = ReadResult(*read_results[i])
                 read_query = read_queries[i]
-                query = None
-                if query_builder is not None:
-                    query = query_builder if isinstance(query_builder, QueryBuilder) else query_builder[i]
-                vitem = self._post_process_dataframe(read_result, read_query, query, implement_read_index)
-
+                vitem = self._post_process_dataframe(read_result, read_query, implement_read_index)
                 versioned_items.append(vitem)
         return versioned_items
 
@@ -1493,7 +1499,6 @@ class NativeVersionStore:
 
     def _get_version_query(self, as_of: VersionQueryInput, **kwargs):
         version_query = _PythonVersionStoreVersionQuery()
-        version_query.set_iterate_on_failure(_assume_false("iterate_on_failure", kwargs))
 
         if isinstance(as_of, str):
             version_query.set_snap_name(as_of)
@@ -1720,7 +1725,7 @@ class NativeVersionStore:
             **kwargs,
         )
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
-        return self._post_process_dataframe(read_result, read_query, query_builder, implement_read_index)
+        return self._post_process_dataframe(read_result, read_query, implement_read_index)
 
     def head(
         self,
@@ -1757,7 +1762,7 @@ class NativeVersionStore:
             symbol=symbol, as_of=as_of, date_range=None, row_range=None, columns=columns, query_builder=q, **kwargs
         )
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
-        return self._post_process_dataframe(read_result, read_query, q, implement_read_index, head=n)
+        return self._post_process_dataframe(read_result, read_query, implement_read_index, head=n)
 
     def tail(
         self, symbol: str, n: int = 5, as_of: VersionQueryInput = None, columns: Optional[List[str]] = None, **kwargs
@@ -1790,12 +1795,12 @@ class NativeVersionStore:
             symbol=symbol, as_of=as_of, date_range=None, row_range=None, columns=columns, query_builder=q, **kwargs
         )
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
-        return self._post_process_dataframe(read_result, read_query, q, implement_read_index, tail=n)
+        return self._post_process_dataframe(read_result, read_query, implement_read_index, tail=n)
 
     def _read_dataframe(self, symbol, version_query, read_query, read_options):
         return ReadResult(*self.version_store.read_dataframe_version(symbol, version_query, read_query, read_options))
 
-    def _post_process_dataframe(self, read_result, read_query, query_builder, implement_read_index=False, head=None, tail=None):
+    def _post_process_dataframe(self, read_result, read_query, implement_read_index=False, head=None, tail=None):
         index_type = read_result.norm.df.common.WhichOneof("index_type")
         index_is_rowcount = (index_type == "index" and
                              not read_result.norm.df.common.index.is_physically_stored and
@@ -1810,7 +1815,7 @@ class NativeVersionStore:
                 row_range = self._compute_filter_start_end_row(read_result, read_query)
             return self._postprocess_df_with_only_rowcount_idx(read_result, row_range)
 
-        if read_query.row_filter is not None and (query_builder is None or query_builder.needs_post_processing()):
+        if read_query.row_filter is not None and read_query.needs_post_processing:
             # post filter
             start_idx, end_idx = self._compute_filter_start_end_row(read_result, read_query)
             data = []
@@ -1947,6 +1952,7 @@ class NativeVersionStore:
         sparsify: Optional[bool] = False,
         metadata: Optional[Any] = None,
         prune_previous_version: Optional[bool] = None,
+        validate_index: bool = False,
     ):
         """
         Compact previously written un-indexed chunks of data, produced by a tick collector or parallel
@@ -1971,6 +1977,10 @@ class NativeVersionStore:
             Add user-defined metadata in the same way as write etc
         prune_previous_version
             Removes previous (non-snapshotted) versions from the database.
+        validate_index: bool, default=False
+            If True, will verify that the index of the symbol after this operation supports date range searches and
+            update operations. This requires that the indexes of the incomplete segments are non-overlapping with each
+            other, and, in the case of append=True, fall after the last index value in the previous version.
         Returns
         -------
         VersionedItem
@@ -1981,7 +1991,7 @@ class NativeVersionStore:
         )
         udm = normalize_metadata(metadata) if metadata is not None else None
         return self.version_store.compact_incomplete(
-            symbol, append, convert_int_to_float, via_iteration, sparsify, udm, prune_previous_version
+            symbol, append, convert_int_to_float, via_iteration, sparsify, udm, prune_previous_version, validate_index
         )
 
     @staticmethod
@@ -2041,7 +2051,7 @@ class NativeVersionStore:
             Only include the latest version for each returned symbol. Has no effect if `snapshot` argument is also
             specified.
         iterate_on_failure: `bool`
-            Iterate the type in the storage if the top-level key isn't present.
+            DEPRECATED: Passing this doesn't change behavior
         skip_snapshots: `bool`
             Don't populate version list with snapshot information.
             Can improve performance significantly if there are many snapshots.
@@ -2068,11 +2078,14 @@ class NativeVersionStore:
         `List[Dict]`
             List of dictionaries describing the discovered versions in the library.
         """
+        if iterate_on_failure:
+            log.warning("The iterate_on_failure argument is deprecated and will soon be removed. It's safe to remove since it doesn't change behavior.")
+
         if latest_only and snapshot and not NativeVersionStore._warned_about_list_version_latest_only_and_snapshot:
             log.warning("latest_only has no effect when snapshot is specified")
             NativeVersionStore._warned_about_list_version_latest_only_and_snapshot = True
 
-        result = self.version_store.list_versions(symbol, snapshot, latest_only, iterate_on_failure, skip_snapshots)
+        result = self.version_store.list_versions(symbol, snapshot, latest_only, skip_snapshots)
         return [
             {
                 "symbol": version_result[0],
@@ -2278,13 +2291,22 @@ class NativeVersionStore:
             Remove previous versions from version list. Uses library default if left as None.
         """
         if date_range is not None:
+            proto_cfg = self._lib_cfg.lib_desc.version.write_options
             dynamic_schema = self.resolve_defaults(
-                "dynamic_schema", self._lib_cfg.lib_desc.version.write_options, False, **kwargs
+                "dynamic_schema", proto_cfg, False, **kwargs
             )
+            # All other methods use prune_previous_version, but also support prune_previous_versions here in case
+            # anyone is relying on it
             prune_previous_versions = _assume_false("prune_previous_versions", kwargs)
+            if prune_previous_versions:
+                prune_previous_version = True
+            else:
+                prune_previous_version = self.resolve_defaults(
+                    "prune_previous_version", proto_cfg, global_default=False, **kwargs
+                )
             update_query = _PythonVersionStoreUpdateQuery()
             update_query.row_filter = _normalize_dt_range(date_range)
-            self.version_store.delete_range(symbol, update_query, dynamic_schema, prune_previous_versions)
+            self.version_store.delete_range(symbol, update_query, dynamic_schema, prune_previous_version)
 
         else:
             self.version_store.delete(symbol)
@@ -2361,16 +2383,18 @@ class NativeVersionStore:
         as_of : `Optional[VersionQueryInput]`, default=None
             See documentation of `read` method for more details.
         iterate_on_failure: `Optional[bool]`, default=False
-            Iterate the type in the storage if the top-level key isn;t present
+            DEPRECATED: Passing this doesn't change behavior
 
         Returns
         -------
         `bool`
             True if the symbol exists as_of the specified revision, False otherwise.
         """
+        if iterate_on_failure:
+            log.warning("The iterate_on_failure argument is deprecated and will soon be removed. It's safe to remove since it doesn't change behavior.")
 
         return (
-            self._find_version(symbol, as_of=as_of, raise_on_missing=False, iterate_on_failure=iterate_on_failure)
+            self._find_version(symbol, as_of=as_of, raise_on_missing=False)
             is not None
         )
 
@@ -2833,7 +2857,13 @@ class NativeVersionStore:
         """
         return self.version_store.is_symbol_fragmented(symbol, segment_size)
 
-    def defragment_symbol_data(self, symbol: str, segment_size: Optional[int] = None, prune_previous_versions: Optional[bool] = False) -> VersionedItem:
+    def defragment_symbol_data(
+            self,
+            symbol: str,
+            segment_size: Optional[int] = None,
+            prune_previous_versions: Optional[bool] = None,
+            **kwargs,
+    ) -> VersionedItem:
         """
         Compacts fragmented segments by merging row-sliced segments (https://docs.arcticdb.io/technical/on_disk_storage/#data-layer).
         This method calls `is_symbol_fragmented` to determine whether to proceed with the defragmentation operation.
@@ -2893,10 +2923,17 @@ class NativeVersionStore:
         in the future. This API will allow overriding the setting as well.
         """
 
-        if self._lib_cfg.lib_desc.version.write_options.bucketize_dynamic:
+        proto_cfg = self._lib_cfg.lib_desc.version.write_options
+        if proto_cfg.bucketize_dynamic:
             raise ArcticDbNotYetImplemented(f"Support for library with 'bucketize_dynamic' ON is not implemented yet")
 
-        result = self.version_store.defragment_symbol_data(symbol, segment_size, prune_previous_versions)
+        # All other methods use prune_previous_version, but also support prune_previous_versions here in case
+        # anyone is relying on it
+        prune_previous_version = self.resolve_defaults(
+            "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_versions, **kwargs
+        )
+
+        result = self.version_store.defragment_symbol_data(symbol, segment_size, prune_previous_version)
         return VersionedItem(
             symbol=result.symbol,
             library=self._library.library_path,

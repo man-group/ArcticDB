@@ -589,11 +589,7 @@ void set_output_descriptors(
 
 std::shared_ptr<std::unordered_set<std::string>> columns_to_decode(const std::shared_ptr<PipelineContext>& pipeline_context) {
     std::shared_ptr<std::unordered_set<std::string>> res;
-    ARCTICDB_DEBUG(
-        log::version(),
-        "Creating columns list with {} bits set",
-        pipeline_context->overall_column_bitset_ ? pipeline_context->overall_column_bitset_->count() : 0
-    );
+    ARCTICDB_DEBUG(log::version(), "Creating columns list with {} bits set", pipeline_context->overall_column_bitset_ ? pipeline_context->overall_column_bitset_->count() : -1);
     if(pipeline_context->overall_column_bitset_) {
         res = std::make_shared<std::unordered_set<std::string>>();
         auto en = pipeline_context->overall_column_bitset_->first();
@@ -861,18 +857,26 @@ void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<PipelineC
         for (auto it = pipeline_context->incompletes_begin(); it!= pipeline_context->end(); it++) {
             sorting::check<ErrorCode::E_UNSORTED_DATA>(
                     !last_existing_index_value.has_value() || it->slice_and_key().key().start_time() >= *last_existing_index_value,
-                    "Cannot append staged segments to existing data as incomplete segment contains index value < existing data: {} <= {}",
-                    it->slice_and_key().key().start_time(),
-                    *last_existing_index_value);
-            unique_timestamp_ranges.insert({it->slice_and_key().key().start_time(), it->slice_and_key().key().end_time()});
-        }
+                    "Cannot append staged segments to existing data as incomplete segment contains index value < existing data (in UTC): {} <= {}",
+                    date_and_time(it->slice_and_key().key().start_time()),
+                    date_and_time(*last_existing_index_value));
+            auto [_, inserted] = unique_timestamp_ranges.insert({it->slice_and_key().key().start_time(), it->slice_and_key().key().end_time()});
+            // This is correct because incomplete segments aren't column sliced
+            sorting::check<ErrorCode::E_UNSORTED_DATA>(
+                    inserted,
+                    "Cannot finalize staged data as 2 or more incomplete segments cover identical index values (in UTC): ({}, {})",
+                    date_and_time(it->slice_and_key().key().start_time()), date_and_time(it->slice_and_key().key().end_time()));
+        };
         for (auto it = unique_timestamp_ranges.begin(); it != unique_timestamp_ranges.end(); it++) {
             auto next_it = std::next(it);
             if (next_it != unique_timestamp_ranges.end()) {
                 sorting::check<ErrorCode::E_UNSORTED_DATA>(
                         next_it->first >= it->second,
-                        "Cannot append staged segments to existing data as incomplete segment index values overlap one another: ({}, {}) intersects ({}, {})",
-                        it->first, it->second - 1, next_it->first, next_it->second - 1);
+                        "Cannot finalize staged data as incomplete segment index values overlap one another (in UTC): ({}, {}) intersects ({}, {})",
+                        date_and_time(it->first),
+                        date_and_time(it->second - 1),
+                        date_and_time(next_it->first),
+                        date_and_time(next_it->second - 1));
             }
         }
     }
@@ -1261,25 +1265,27 @@ VersionedItem sort_merge_impl(
     const StreamId& stream_id,
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& norm_meta,
     const UpdateInfo& update_info,
-    bool append,
-    bool convert_int_to_float,
-    bool via_iteration,
-    bool sparsify
-    ) {
+    const CompactIncompleteOptions& options) {
     auto pipeline_context = std::make_shared<PipelineContext>();
     pipeline_context->stream_id_ = stream_id;
     pipeline_context->version_id_ = update_info.next_version_id_;
     ReadQuery read_query;
 
     std::optional<SortedValue> previous_sorted_value;
-    if(append && update_info.previous_index_key_.has_value()) {
+    if(options.append_ && update_info.previous_index_key_.has_value()) {
         read_indexed_keys_to_pipeline(store, pipeline_context, *(update_info.previous_index_key_), read_query, ReadOptions{});
         previous_sorted_value.emplace(pipeline_context->desc_->sorted());
     }
 
     auto num_versioned_rows = pipeline_context->total_rows_;
 
-    read_incompletes_to_pipeline(store, pipeline_context, read_query, ReadOptions{}, convert_int_to_float, via_iteration, sparsify);
+    read_incompletes_to_pipeline(store,
+                                 pipeline_context,
+                                 read_query,
+                                 ReadOptions{},
+                                 options.convert_int_to_float_,
+                                 options.via_iteration_,
+                                 options.sparsify_);
 
     std::vector<entity::VariantKey> delete_keys;
     for(auto sk = pipeline_context->incompletes_begin(); sk != pipeline_context->end(); ++sk) {
@@ -1322,7 +1328,7 @@ VersionedItem sort_merge_impl(
                 aggregator.add_segment(
                     std::move(sk->segment(store)),
                     sk->slice(),
-                    convert_int_to_float);
+                    options.convert_int_to_float_);
 
                 sk->unset_segment();
             }
@@ -1352,10 +1358,7 @@ VersionedItem compact_incomplete_impl(
     const StreamId& stream_id,
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
     const UpdateInfo& update_info,
-    bool append,
-    bool convert_int_to_float,
-    bool via_iteration,
-    bool sparsify,
+    const CompactIncompleteOptions& options,
     const WriteOptions& write_options) {
 
     auto pipeline_context = std::make_shared<PipelineContext>();
@@ -1367,17 +1370,25 @@ VersionedItem compact_incomplete_impl(
 
     std::optional<SegmentInMemory> last_indexed;
     std::optional<SortedValue> previous_sorted_value;
-    if(append && update_info.previous_index_key_.has_value()) {
+    if(options.append_ && update_info.previous_index_key_.has_value()) {
         read_indexed_keys_to_pipeline(store, pipeline_context, *(update_info.previous_index_key_), read_query, read_options);
         previous_sorted_value.emplace(pipeline_context->desc_->sorted());
     }
 
     auto prev_size = pipeline_context->slice_and_keys_.size();
-    read_incompletes_to_pipeline(store, pipeline_context, ReadQuery{}, ReadOptions{}, convert_int_to_float, via_iteration, sparsify);
+    read_incompletes_to_pipeline(store,
+                                 pipeline_context,
+                                 ReadQuery{},
+                                 ReadOptions{},
+                                 options.convert_int_to_float_,
+                                 options.via_iteration_,
+                                 options.sparsify_);
     if (pipeline_context->slice_and_keys_.size() == prev_size) {
         util::raise_rte("No incomplete segments found for {}", stream_id);
     }
-    check_incompletes_index_ranges_dont_overlap(pipeline_context, previous_sorted_value);
+    if (options.validate_index_) {
+        check_incompletes_index_ranges_dont_overlap(pipeline_context, previous_sorted_value);
+    }
     const auto& first_seg = pipeline_context->slice_and_keys_.begin()->segment(store);
 
     std::vector<entity::VariantKey> delete_keys;
@@ -1393,11 +1404,11 @@ VersionedItem compact_incomplete_impl(
     auto policies = std::make_tuple(
         index,
         dynamic_schema ? VariantSchema{DynamicSchema::default_schema(index, stream_id)} : VariantSchema{FixedSchema::default_schema(index, stream_id)},
-        sparsify ? VariantColumnPolicy{SparseColumnPolicy{}} : VariantColumnPolicy{DenseColumnPolicy{}}
+        options.sparsify_ ? VariantColumnPolicy{SparseColumnPolicy{}} : VariantColumnPolicy{DenseColumnPolicy{}}
         );
 
     util::variant_match(std::move(policies), [
-        &fut_vec, &slices, pipeline_context=pipeline_context, &store, convert_int_to_float, &previous_sorted_value, &write_options] (auto &&idx, auto &&schema, auto &&column_policy) {
+        &fut_vec, &slices, pipeline_context=pipeline_context, &store, &options, &previous_sorted_value, &write_options] (auto &&idx, auto &&schema, auto &&column_policy) {
         using IndexType = std::remove_reference_t<decltype(idx)>;
         using SchemaType = std::remove_reference_t<decltype(schema)>;
         using ColumnPolicyType = std::remove_reference_t<decltype(column_policy)>;
@@ -1408,7 +1419,7 @@ VersionedItem compact_incomplete_impl(
                 fut_vec,
                 slices,
                 store,
-                convert_int_to_float,
+                options.convert_int_to_float_,
                 write_options.segment_row_size);
         if constexpr(std::is_same_v<IndexType, TimeseriesIndex>) {
             pipeline_context->desc_->set_sorted(deduce_sorted(previous_sorted_value.value_or(SortedValue::ASCENDING), SortedValue::ASCENDING));

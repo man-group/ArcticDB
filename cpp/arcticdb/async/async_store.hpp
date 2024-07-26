@@ -248,12 +248,20 @@ folly::Future<std::pair<VariantKey, TimeseriesDescriptor>> read_timeseries_descr
     return read_and_continue(key, library_, opts, DecodeTimeseriesDescriptorForIncompletesTask{});
 }
 
+folly::Future<bool> key_exists(entity::VariantKey &&key) {
+    return async::submit_io_task(KeyExistsTask{std::move(key), library_});
+}
+
 folly::Future<bool> key_exists(const entity::VariantKey &key) override {
-    return async::submit_io_task(KeyExistsTask{&key, library_});
+    return async::submit_io_task(KeyExistsTask{key, library_});
 }
 
 bool key_exists_sync(const entity::VariantKey &key) override {
-    return KeyExistsTask{&key, library_}();
+    return KeyExistsTask{key, library_}();
+}
+
+bool key_exists_sync(entity::VariantKey &&key) {
+    return KeyExistsTask{std::move(key), library_}();
 }
 
 bool supports_prefix_matching() const override {
@@ -337,8 +345,8 @@ std::vector<folly::Future<bool>> batch_key_exists(
         const std::vector<entity::VariantKey> &keys) override {
     std::vector<folly::Future<bool>> res;
     res.reserve(keys.size());
-    for (auto itr = keys.cbegin(); itr < keys.cend(); ++itr) {
-        res.push_back(async::submit_io_task(KeyExistsTask(itr, library_)));
+    for (const auto &key : keys) {
+        res.push_back(async::submit_io_task(KeyExistsTask(key, library_)));
     }
     return res;
 }

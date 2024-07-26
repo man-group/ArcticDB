@@ -37,6 +37,16 @@ enum class BatchGetVersionOption {
     COUNT
 };
 
+inline std::optional<std::string> collect_futures_exceptions(auto&& futures) {
+    std::optional<std::string> all_exceptions;
+    for (auto&& collected_fut: futures) {
+        if (!collected_fut.hasValue()) {
+            all_exceptions = all_exceptions.value_or("").append(collected_fut.exception().what().toStdString()).append("\n");
+        }
+    }
+    return all_exceptions;
+}
+
 template <typename Inputs, typename TaskSubmitter, typename ResultHandler>
 inline void submit_tasks_for_range(const Inputs& inputs, TaskSubmitter submitter, ResultHandler result_handler) {
     const auto window_size = async::TaskScheduler::instance()->io_thread_count() * 2;
@@ -50,12 +60,7 @@ inline void submit_tasks_for_range(const Inputs& inputs, TaskSubmitter submitter
     }, window_size);
 
     auto collected_futs = folly::collectAll(futures).get();
-    std::optional<std::string> all_exceptions;
-    for (auto&& collected_fut: collected_futs) {
-        if (!collected_fut.hasValue()) {
-            all_exceptions = all_exceptions.value_or("").append(collected_fut.exception().what().toStdString()).append("\n");
-        }
-    }
+    std::optional<std::string> all_exceptions = collect_futures_exceptions(std::move(collected_futs));
     internal::check<ErrorCode::E_RUNTIME_ERROR>(!all_exceptions.has_value(), all_exceptions.value_or(""));
 }
 
@@ -64,13 +69,13 @@ inline std::shared_ptr<std::unordered_map<StreamId, SymbolStatus>> batch_check_l
     const std::shared_ptr<VersionMap> &version_map,
     const std::shared_ptr<std::vector<StreamId>> &symbols) {
     ARCTICDB_SAMPLE(BatchGetLatestVersion, 0)
-    const LoadParameter load_param{LoadType::LOAD_LATEST_UNDELETED};
+    const LoadStrategy load_strategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY};
     auto output = std::make_shared<std::unordered_map<StreamId, SymbolStatus>>();
     auto mutex = std::make_shared<std::mutex>();
 
     submit_tasks_for_range(*symbols,
-        [store, version_map, &load_param](auto &symbol) {
-          return async::submit_io_task(CheckReloadTask{store, version_map, symbol, load_param});
+        [store, version_map, &load_strategy](auto &symbol) {
+          return async::submit_io_task(CheckReloadTask{store, version_map, symbol, load_strategy});
         },
         [output, mutex](const auto& id, const std::shared_ptr<VersionMapEntry> &entry) {
           auto index_key = entry->get_first_index(false).first;
@@ -100,13 +105,13 @@ inline std::shared_ptr<std::unordered_map<StreamId, AtomKey>> batch_get_latest_v
     const std::vector<StreamId> &stream_ids,
     bool include_deleted) {
     ARCTICDB_SAMPLE(BatchGetLatestVersion, 0)
-    const LoadParameter load_param{include_deleted ? LoadType::LOAD_LATEST : LoadType::LOAD_LATEST_UNDELETED};
+    const LoadStrategy load_strategy{LoadType::LATEST, include_deleted ? LoadObjective::INCLUDE_DELETED : LoadObjective::UNDELETED_ONLY};
     auto output = std::make_shared<std::unordered_map<StreamId, AtomKey>>();
     auto mutex = std::make_shared<std::mutex>();
 
     submit_tasks_for_range(stream_ids,
-            [store, version_map, &load_param](auto& stream_id) {
-                return async::submit_io_task(CheckReloadTask{store, version_map, stream_id, load_param});
+            [store, version_map, &load_strategy](auto& stream_id) {
+                return async::submit_io_task(CheckReloadTask{store, version_map, stream_id, load_strategy});
             },
             [output, include_deleted, mutex](auto id, auto entry) {
                 auto [index_key, deleted] = entry->get_first_index(include_deleted);
@@ -129,7 +134,7 @@ inline std::vector<folly::Future<std::pair<std::optional<AtomKey>, std::optional
         vector_fut.push_back(async::submit_io_task(CheckReloadTask{store,
                                                                    version_map,
                                                                    stream_id,
-                                                                   LoadParameter{LoadType::LOAD_LATEST_UNDELETED}})
+                                                                   LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY}})
                                  .thenValue([](const std::shared_ptr<VersionMapEntry>& entry){
                                      return std::make_pair(entry->get_first_index(false).first, entry->get_first_index(true).first);
                                  }));
@@ -147,7 +152,7 @@ inline std::vector<folly::Future<version_store::UpdateInfo>> batch_get_latest_un
         vector_fut.push_back(async::submit_io_task(CheckReloadTask{store,
                                                      version_map,
                                                      stream_id,
-                                                     LoadParameter{LoadType::LOAD_LATEST_UNDELETED}})
+                                                     LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY}})
         .thenValue([](auto entry){
             auto latest_version = entry->get_first_index(true).first;
             auto latest_undeleted_version = entry->get_first_index(false).first;
@@ -194,8 +199,8 @@ inline std::shared_ptr<std::unordered_map<StreamId, AtomKey>> batch_get_specific
 
     MapRandomAccessWrapper wrapper{sym_versions};
     submit_tasks_for_range(wrapper, [store, version_map](auto& sym_version) {
-            LoadParameter load_param{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(sym_version.second)};
-            return async::submit_io_task(CheckReloadTask{store, version_map, sym_version.first, load_param});
+            LoadStrategy load_strategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(sym_version.second)};
+            return async::submit_io_task(CheckReloadTask{store, version_map, sym_version.first, load_strategy});
         },
         [output, option, output_mutex, store, tombstoned_vers, tombstoned_vers_mutex]
                     (auto sym_version, const std::shared_ptr<VersionMapEntry>& entry) {
@@ -247,8 +252,8 @@ inline std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKe
 
     submit_tasks_for_range(wrapper, [store, version_map](auto sym_version) {
                 auto first_version = *std::min_element(std::begin(sym_version.second), std::end(sym_version.second));
-                LoadParameter load_param{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(first_version)};
-                return async::submit_io_task(CheckReloadTask{store, version_map, sym_version.first, load_param});
+                LoadStrategy load_strategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(first_version)};
+                return async::submit_io_task(CheckReloadTask{store, version_map, sym_version.first, load_strategy});
             },
 
             [output, &sym_versions, include_deleted, mutex](auto sym_version, const std::shared_ptr<VersionMapEntry>& entry) {
@@ -266,9 +271,13 @@ inline std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKe
 
     return output;
 }
+
+// [StreamVersionData] is used to combine different [VersionQuery]s for a stream_id into a list of needed snapshots and
+// a single [LoadStrategy] which will query the union of all version queries.
+// It only ever produces load parameters where to_load=UNDELETED_ONLY.
 struct StreamVersionData {
     size_t count_ = 0;
-    LoadParameter load_param_ = LoadParameter{LoadType::NOT_LOADED};
+    LoadStrategy load_strategy_ = LoadStrategy{LoadType::NOT_LOADED, LoadObjective::UNDELETED_ONLY};
     boost::container::small_vector<SnapshotId, 1> snapshots_;
 
     explicit StreamVersionData(const pipelines::VersionQuery& version_query);

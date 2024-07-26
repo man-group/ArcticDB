@@ -20,59 +20,18 @@ void StreamVersionData::react(const pipelines::VersionQuery &version_query) {
 }
 
 void StreamVersionData::do_react(std::monostate) {
-    if (load_param_.load_type_ == LoadType::NOT_LOADED)
-        load_param_ = LoadParameter{LoadType::LOAD_LATEST_UNDELETED};
-
     ++count_;
+    load_strategy_ = union_of_undeleted_strategies(load_strategy_, LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY});
 }
 
 void StreamVersionData::do_react(const pipelines::SpecificVersionQuery &specific_version) {
     ++count_;
-    switch (load_param_.load_type_) {
-    case LoadType::NOT_LOADED:
-        [[fallthrough]];
-    case LoadType::LOAD_LATEST_UNDELETED:
-        load_param_ = LoadParameter{LoadType::LOAD_DOWNTO, specific_version.version_id_};
-        break;
-    case LoadType::LOAD_DOWNTO:
-        util::check(load_param_.load_until_version_.has_value(),
-                    "Expect LOAD_DOWNTO to have version specified");
-        if ((specific_version.version_id_ >= 0 && is_positive_version_query(load_param_)) ||
-            (specific_version.version_id_ < 0 && load_param_.load_until_version_.value() < 0)) {
-            load_param_.load_until_version_ = std::min(load_param_.load_until_version_.value(), specific_version.version_id_);
-        } else {
-            load_param_ = LoadParameter{LoadType::LOAD_UNDELETED};
-        }
-        break;
-    case LoadType::LOAD_FROM_TIME:
-        [[fallthrough]];
-    case LoadType::LOAD_UNDELETED:
-        load_param_ = LoadParameter{LoadType::LOAD_UNDELETED};
-        break;
-    default:util::raise_rte("Unexpected load state {} applying specific version query", load_param_.load_type_);
-    }
+    load_strategy_ = union_of_undeleted_strategies(load_strategy_, LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, specific_version.version_id_});
 }
 
 void StreamVersionData::do_react(const pipelines::TimestampVersionQuery &timestamp_query) {
     ++count_;
-    switch (load_param_.load_type_) {
-    case LoadType::NOT_LOADED:
-        [[fallthrough]];
-    case LoadType::LOAD_LATEST_UNDELETED:
-        load_param_ = LoadParameter{LoadType::LOAD_FROM_TIME, timestamp_query.timestamp_};
-        break;
-    case LoadType::LOAD_FROM_TIME:
-        util::check(load_param_.load_from_time_.has_value(),
-                    "Expect LOAD_TO_TIME to have timestamp specified");
-        load_param_.load_from_time_ = std::min(load_param_.load_from_time_.value(), timestamp_query.timestamp_);
-        break;
-    case LoadType::LOAD_DOWNTO:
-        [[fallthrough]];
-    case LoadType::LOAD_UNDELETED:
-        load_param_ = LoadParameter{LoadType::LOAD_UNDELETED};
-        break;
-    default:util::raise_rte("Unexpected load state {} applying specific version query", load_param_.load_type_);
-    }
+    load_strategy_ = union_of_undeleted_strategies(load_strategy_, LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, timestamp_query.timestamp_});
 }
 
 void StreamVersionData::do_react(const pipelines::SnapshotVersionQuery &snapshot_query) {
@@ -222,7 +181,7 @@ folly::Future<VersionEntryOrSnapshot> set_up_version_future(
 ) {
     if (version_data.count_ == 1) {
         return async::submit_io_task(CheckReloadTask{store, version_map, symbol,
-                                                     version_data.load_param_}).thenValue(
+                                                     version_data.load_strategy_}).thenValue(
             [](std::shared_ptr<VersionMapEntry> version_map_entry) {
                 return VersionEntryOrSnapshot{std::move(version_map_entry)};
             });
@@ -235,7 +194,7 @@ folly::Future<VersionEntryOrSnapshot> set_up_version_future(
                         CheckReloadTask{store,
                                         version_map,
                                         symbol,
-                                        version_data.load_param_}).thenValue(
+                                        version_data.load_strategy_}).thenValue(
                         [](std::shared_ptr<VersionMapEntry> version_map_entry) {
                             return VersionEntryOrSnapshot{
                                 std::move(version_map_entry)};

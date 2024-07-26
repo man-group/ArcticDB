@@ -63,12 +63,6 @@ inline entity::VariantKey write_multi_index_entry(
     return multi_key_fut.wait().value();
 }
 
-struct LoadProgress {
-    VersionId loaded_until_ = std::numeric_limits<VersionId>::max();
-    VersionId oldest_loaded_index_version_ = std::numeric_limits<VersionId>::max();
-    timestamp earliest_loaded_timestamp_ = std::numeric_limits<timestamp>::max();
-};
-
 inline std::optional<AtomKey> read_segment_with_keys(
     const SegmentInMemory &seg,
     VersionMapEntry &entry,
@@ -76,7 +70,9 @@ inline std::optional<AtomKey> read_segment_with_keys(
     ssize_t row = 0;
     std::optional<AtomKey> next;
     VersionId oldest_loaded_index = std::numeric_limits<VersionId>::max();
+    VersionId oldest_loaded_undeleted_index = std::numeric_limits<VersionId>::max();
     timestamp earliest_loaded_timestamp = std::numeric_limits<timestamp>::max();
+    timestamp earliest_loaded_undeleted_timestamp = std::numeric_limits<timestamp>::max();
 
     for (; row < ssize_t(seg.row_count()); ++row) {
         auto key = read_key_row(seg, row);
@@ -85,12 +81,12 @@ inline std::optional<AtomKey> read_segment_with_keys(
         if (is_index_key_type(key.type())) {
             entry.keys_.push_back(key);
             oldest_loaded_index = std::min(oldest_loaded_index, key.version_id());
+            earliest_loaded_timestamp = std::min(earliest_loaded_timestamp, key.creation_ts());
 
-            // Note that LOAD_FROM_TIME is implicitly loading undeleted. If there was a requirement
-            // to load from a particular time disregarding whether symbols are deleted or not, there would
-            // need to be an additional termination condition
-            if(!entry.is_tombstoned(key))
-                earliest_loaded_timestamp = std::min(earliest_loaded_timestamp, key.creation_ts());
+            if(!entry.is_tombstoned(key)) {
+                oldest_loaded_undeleted_index = std::min(oldest_loaded_undeleted_index, key.version_id());
+                earliest_loaded_undeleted_timestamp = std::min(earliest_loaded_timestamp, key.creation_ts());
+            }
 
         } else if (key.type() == KeyType::TOMBSTONE) {
             entry.tombstones_.try_emplace(key.version_id(), key);
@@ -108,9 +104,10 @@ inline std::optional<AtomKey> read_segment_with_keys(
         }
     }
     util::check(row == ssize_t(seg.row_count()), "Unexpected ordering in journal segment");
-    load_progress.loaded_until_ = oldest_loaded_index;
-    load_progress.oldest_loaded_index_version_ = std::min(load_progress.oldest_loaded_index_version_, load_progress.loaded_until_);
+    load_progress.oldest_loaded_index_version_ = std::min(load_progress.oldest_loaded_index_version_, oldest_loaded_index);
+    load_progress.oldest_loaded_undeleted_index_version_ = std::min(load_progress.oldest_loaded_undeleted_index_version_, oldest_loaded_undeleted_index);
     load_progress.earliest_loaded_timestamp_ = std::min(load_progress.earliest_loaded_timestamp_, earliest_loaded_timestamp);
+    load_progress.earliest_loaded_undeleted_timestamp_ = std::min(load_progress.earliest_loaded_undeleted_timestamp_, earliest_loaded_undeleted_timestamp);
     return next;
 }
 
@@ -193,7 +190,7 @@ inline void read_symbol_ref(const std::shared_ptr<StreamSource>& store, const St
 
     LoadProgress load_progress;
     entry.head_ = read_segment_with_keys(key_seg_pair.second, entry, load_progress);
-    entry.loaded_until_ = load_progress.loaded_until_;
+    entry.load_progress_ = load_progress;
 }
 
 inline void write_symbol_ref(std::shared_ptr<StreamSink> store,
@@ -231,35 +228,39 @@ inline std::optional<VersionId> get_version_id_negative_index(VersionId latest, 
 
 std::unordered_map<StreamId, size_t> get_num_version_entries(const std::shared_ptr<Store> &store, size_t batch_size);
 
-inline bool is_positive_version_query(const LoadParameter& load_params) {
-    return load_params.load_until_version_.value() >= 0;
+inline bool is_positive_version_query(const LoadStrategy& load_strategy) {
+    return load_strategy.load_until_version_.value() >= 0;
 }
 
-inline bool loaded_until_version_id(const LoadParameter &load_params, const LoadProgress& load_progress, const std::optional<VersionId>& latest_version) {
-    if (!load_params.load_until_version_)
-        return false;
+inline bool continue_when_loading_version(const LoadStrategy& load_strategy, const LoadProgress& load_progress, const std::optional<VersionId>& latest_version) {
+    if (!load_strategy.load_until_version_)
+        // Should continue when not loading down to a version
+        return true;
 
-    if (is_positive_version_query(load_params)) {
-        if (load_progress.loaded_until_ > static_cast<VersionId>(*load_params.load_until_version_)) {
-            return false;
+    if (is_positive_version_query(load_strategy)) {
+        if (load_progress.oldest_loaded_index_version_ > static_cast<VersionId>(*load_strategy.load_until_version_)) {
+            // Should continue when version was not reached
+            return true;
         }
     } else {
         if (latest_version.has_value()) {
-            if (auto opt_version_id = get_version_id_negative_index(*latest_version, *load_params.load_until_version_);
-                opt_version_id && load_progress.loaded_until_ > *opt_version_id) {
-                    return false;
+            if (auto opt_version_id = get_version_id_negative_index(*latest_version, *load_strategy.load_until_version_);
+                opt_version_id && load_progress.oldest_loaded_index_version_ > *opt_version_id) {
+                    // Should continue when version was not reached
+                    return true;
             }
         } else {
-            return false;
+            // Should continue if not yet reached any index key
+            return true;
         }
     }
     ARCTICDB_DEBUG(log::version(),
                    "Exiting load downto because loaded to version {} for request {} with {} total versions",
-                   load_progress.loaded_until_,
-                   *load_params.load_until_version_,
+                   load_progress.oldest_loaded_index_version_,
+                   *load_strategy.load_until_version_,
                    latest_version.value()
                   );
-    return true;
+    return false;
 }
 
 inline void set_latest_version(const std::shared_ptr<VersionMapEntry>& entry, std::optional<VersionId>& latest_version) {
@@ -274,78 +275,79 @@ static constexpr timestamp nanos_to_seconds(timestamp nanos) {
     return nanos / timestamp(10000000000);
 }
 
-inline bool loaded_until_timestamp(const LoadParameter &load_params, const LoadProgress& load_progress) {
-    if (!load_params.load_from_time_ || load_progress.earliest_loaded_timestamp_ > *load_params.load_from_time_)
-        return false;
+inline bool continue_when_loading_from_time(const LoadStrategy &load_strategy, const LoadProgress& load_progress) {
+    if (!load_strategy.load_from_time_)
+        return true;
+
+    auto loaded_deleted_or_undeleted_timestamp = load_strategy.should_include_deleted() ? load_progress.earliest_loaded_timestamp_ : load_progress.earliest_loaded_undeleted_timestamp_;
+
+    if (loaded_deleted_or_undeleted_timestamp > *load_strategy.load_from_time_)
+        return true;
 
     ARCTICDB_DEBUG(log::version(),
                    "Exiting load from timestamp because request {} <= {}",
-                   *load_params.load_from_time_,
-                   load_progress.earliest_loaded_timestamp_);
-    return true;
-}
-
-inline bool load_latest_ongoing(const LoadParameter &load_params, const std::shared_ptr<VersionMapEntry> &entry) {
-    if (!(load_params.load_type_ == LoadType::LOAD_LATEST_UNDELETED && entry->get_first_index(false).first) &&
-        !(load_params.load_type_ == LoadType::LOAD_LATEST && entry->get_first_index(true).first))
-        return true;
-
-    ARCTICDB_DEBUG(log::version(), "Exiting because we found a non-deleted index in load latest");
+                   loaded_deleted_or_undeleted_timestamp,
+                   *load_strategy.load_from_time_);
     return false;
 }
 
-inline bool looking_for_undeleted(const LoadParameter& load_params, const std::shared_ptr<VersionMapEntry>& entry, const LoadProgress& load_progress) {
-    if(!(load_params.load_type_ == LoadType::LOAD_UNDELETED || load_params.load_type_ == LoadType::LOAD_LATEST_UNDELETED)) {
+inline bool continue_when_loading_latest(const LoadStrategy& load_strategy, const std::shared_ptr<VersionMapEntry> &entry) {
+    if (!(load_strategy.load_type_ == LoadType::LATEST && entry->get_first_index(load_strategy.should_include_deleted()).first))
+        return true;
+
+    ARCTICDB_DEBUG(log::version(), "Exiting because we found the latest version with include_deleted: {}", load_strategy.should_include_deleted());
+    return false;
+}
+
+inline bool continue_when_loading_undeleted(const LoadStrategy& load_strategy, const std::shared_ptr<VersionMapEntry>& entry, const LoadProgress& load_progress) {
+    if (load_strategy.should_include_deleted()){
         return true;
     }
 
     if(entry->tombstone_all_) {
-        const bool is_deleted_by_tombstone_all = entry->tombstone_all_->version_id() >= load_progress.oldest_loaded_index_version_;
-        if(is_deleted_by_tombstone_all) {
+        // We need the check below because it is possible to have a tombstone_all which doesn't cover all version keys after it.
+        // For example when we use prune_previous_versions (without write) we write a tombstone_all key which applies to keys
+        // before the previous one. So it's possible the version chain can look like:
+        // v0 <- v1 <- v2 <- tombstone_all(version=1)
+        // In this case we need to terminate at v1.
+        const bool is_deleted_by_tombstone_all =
+                entry->tombstone_all_->version_id() >= load_progress.oldest_loaded_index_version_;
+        if (is_deleted_by_tombstone_all) {
             ARCTICDB_DEBUG(
-                log::version(),
-                "Exiting because tombstone all key deletes all versions beyond: {} and the oldest loaded index has version: {}",
-                entry->tombstone_all_->version_id(),
-                load_progress.oldest_loaded_index_version_);
+                    log::version(),
+                    "Exiting because tombstone all key deletes all versions beyond: {} and the oldest loaded index has version: {}",
+                    entry->tombstone_all_->version_id(),
+                    load_progress.oldest_loaded_index_version_);
             return false;
-        } else {
-            return true;
         }
+    }
+    return true;
+}
+
+inline bool penultimate_key_contains_required_version_id(const AtomKey& key, const LoadStrategy& load_strategy) {
+    if(is_positive_version_query(load_strategy)) {
+        return key.version_id() <= static_cast<VersionId>(load_strategy.load_until_version_.value());
     } else {
-        return true;
+        return *load_strategy.load_until_version_ == -1;
     }
 }
 
-inline bool penultimate_key_contains_required_version_id(const AtomKey& key, const LoadParameter& load_params) {
-    if(is_positive_version_query(load_params)) {
-        return key.version_id() <= static_cast<VersionId>(load_params.load_until_version_.value());
-    } else {
-        return *load_params.load_until_version_ == -1;
-    }
-}
-
-inline bool key_exists_in_ref_entry(const LoadParameter& load_params, const VersionMapEntry& ref_entry, std::optional<AtomKey>& cached_penultimate_key, LoadProgress& load_progress) {
-    if (is_latest_load_type(load_params.load_type_) && is_index_key_type(ref_entry.keys_[0].type()))
+inline bool key_exists_in_ref_entry(const LoadStrategy& load_strategy, const VersionMapEntry& ref_entry, std::optional<AtomKey>& cached_penultimate_key) {
+    if (load_strategy.load_type_ == LoadType::LATEST && is_index_key_type(ref_entry.keys_[0].type()))
         return true;
 
-    if(cached_penultimate_key && is_partial_load_type(load_params.load_type_)) {
-        load_params.validate();
-        if(load_params.load_type_ == LoadType::LOAD_DOWNTO && penultimate_key_contains_required_version_id(*cached_penultimate_key, load_params)) {
-            load_progress.loaded_until_ = cached_penultimate_key->version_id();
+    if(cached_penultimate_key && is_partial_load_type(load_strategy.load_type_)) {
+        load_strategy.validate();
+        if(load_strategy.load_type_ == LoadType::DOWNTO && penultimate_key_contains_required_version_id(*cached_penultimate_key, load_strategy)) {
             return true;
         }
 
-        if(load_params.load_type_ == LoadType::LOAD_FROM_TIME &&cached_penultimate_key->creation_ts() <= load_params.load_from_time_.value()) {
-            load_progress.loaded_until_ = cached_penultimate_key->version_id();
+        if(load_strategy.load_type_ == LoadType::FROM_TIME && cached_penultimate_key->creation_ts() <= load_strategy.load_from_time_.value()) {
             return true;
         }
     }
 
     return false;
-}
-
-inline void set_loaded_until(const LoadProgress& load_progress, const std::shared_ptr<VersionMapEntry>& entry) {
-    entry->loaded_until_ = load_progress.loaded_until_;
 }
 
 inline SortedValue deduce_sorted(SortedValue existing_frame, SortedValue input_frame) {

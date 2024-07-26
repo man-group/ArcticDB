@@ -29,6 +29,15 @@ namespace arcticdb::version_store {
 using namespace arcticdb::entity;
 using namespace arcticdb::pipelines;
 
+struct CompactIncompleteOptions {
+    bool prune_previous_versions_;
+    bool append_;
+    bool convert_int_to_float_;
+    bool via_iteration_;
+    bool sparsify_;
+    bool validate_index_{true}; // Default value as unused in sort_merge
+};
+
 VersionedItem write_dataframe_impl(
     const std::shared_ptr<Store>& store,
     VersionId version_id,
@@ -125,10 +134,7 @@ VersionedItem compact_incomplete_impl(
     const StreamId& stream_id,
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
     const UpdateInfo& update_info,
-    bool append,
-    bool convert_int_to_float,
-    bool via_iteration,
-    bool sparsify,
+    const CompactIncompleteOptions& options,
     const WriteOptions& write_options);
 
 struct PredefragmentationInfo{
@@ -171,11 +177,7 @@ VersionedItem sort_merge_impl(
     const StreamId& stream_id,
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
     const UpdateInfo& update_info,
-    bool append,
-    bool convert_int_to_float,
-    bool via_iteration,
-    bool sparsify
-    );
+    const CompactIncompleteOptions& options);
 
 void modify_descriptor(
     const std::shared_ptr<pipelines::PipelineContext>& pipeline_context,
