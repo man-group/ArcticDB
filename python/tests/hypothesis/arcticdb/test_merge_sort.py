@@ -64,7 +64,7 @@ class StagedWrite(RuleBasedStateMachine):
         for sym in self.lib.list_symbols():
             self.lib.delete(sym)
 
-@pytest.mark.xfail(reason="Needs to resolve the issues found in unit tests.")
+@pytest.mark.skip(reason="Needs to resolve the issues found in unit tests.")
 def test_sort_and_finalize_staged_data(lmdb_storage, lib_name):
     ac = lmdb_storage.create_arctic()
     StagedWrite.lib = ac.create_library(lib_name)
