@@ -1811,7 +1811,7 @@ class NativeVersionStore:
                 row_range=(0, head)
             elif tail:
                 row_range=(-tail, None)
-            elif read_query.row_filter is not None and (query_builder is None or query_builder.needs_post_processing()):
+            elif read_query.row_filter is not None:
                 row_range = self._compute_filter_start_end_row(read_result, read_query)
             return self._postprocess_df_with_only_rowcount_idx(read_result, row_range)
 
