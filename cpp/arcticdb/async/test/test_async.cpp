@@ -210,7 +210,7 @@ TEST(Async, NumCoresCgroupV1) {
     std::string test_path{"./test_v1"};
     std::string cpu_quota_path{"./test_v1/cpu/cpu.cfs_quota_us"};
     std::string cpu_period_path{"./test_v1/cpu/cpu.cfs_period_us"};
-    std::filesystem::create_directories(test_path);
+    std::filesystem::create_directories("./test_v1/cpu");
 
     // Test the happy path
     std::ofstream cpuset(cpu_quota_path);
