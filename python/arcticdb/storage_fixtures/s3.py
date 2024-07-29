@@ -96,6 +96,7 @@ class S3Bucket(StorageFixture):
             use_mock_storage_for_testing=self.factory.use_mock_storage_for_testing,
             ssl=self.factory.ssl,
             ca_cert_path=self.factory.client_cert_file,
+            is_nfs_layout=False
         )# client_cert_dir is skipped on purpose; It will be tested manually in other tests
         return cfg
 
@@ -126,6 +127,34 @@ class S3Bucket(StorageFixture):
         dest = destination.get_boto_bucket()
         for key in self.iter_underlying_object_names():
             dest.copy({"Bucket": self.bucket, "Key": key}, key, SourceClient=source_client)
+
+
+class NfsS3Bucket(S3Bucket):
+
+    def create_test_cfg(self, lib_name: str) -> EnvironmentConfigsMap:
+        cfg = EnvironmentConfigsMap()
+        if self.factory.default_prefix:
+            with_prefix = f"{self.factory.default_prefix}/{lib_name}"
+        else:
+            with_prefix = False
+
+        add_s3_library_to_env(
+            cfg,
+            lib_name=lib_name,
+            env_name=Defaults.ENV,
+            credential_name=self.key.id,
+            credential_key=self.key.secret,
+            bucket_name=self.bucket,
+            endpoint=self.factory.endpoint,
+            with_prefix=with_prefix,
+            is_https=self.factory.endpoint.startswith("https://"),
+            region=self.factory.region,
+            use_mock_storage_for_testing=self.factory.use_mock_storage_for_testing,
+            ssl=self.factory.ssl,
+            ca_cert_path=self.factory.client_cert_file,
+            is_nfs_layout=True
+        )# client_cert_dir is skipped on purpose; It will be tested manually in other tests
+        return cfg
 
 
 class BaseS3StorageFixtureFactory(StorageFixtureFactory):
@@ -395,3 +424,14 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
 
 
 _PermissionCapableFactory = MotoS3StorageFixtureFactory
+
+
+class MotoNfsBackedS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
+
+    def create_fixture(self) -> NfsS3Bucket:
+        bucket = f"test_bucket_{self._bucket_id}"
+        self._s3_admin.create_bucket(Bucket=bucket)
+        self._bucket_id += 1
+        out = NfsS3Bucket(self, bucket)
+        self._live_buckets.append(out)
+        return out
