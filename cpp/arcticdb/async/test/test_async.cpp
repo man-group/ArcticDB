@@ -224,11 +224,8 @@ TEST(Async, NumCoresCgroupV1) {
     int64_t def_cpu_core = arcticdb::async::get_default_num_cpus(test_path);
 
     int64_t hardware_cpu_count = std::thread::hardware_concurrency() == 0 ? 16 : std::thread::hardware_concurrency();
-    #ifdef _WIN32
-        ASSERT_EQ(hardware_cpu_count, def_cpu_core);
-    #else
-        ASSERT_EQ(1, def_cpu_core);
-    #endif
+
+    ASSERT_EQ(1, def_cpu_core);
 
     // test the error value path
     std::ofstream cpuset3(cpu_period_path);
@@ -260,11 +257,7 @@ TEST(Async, NumCoresCgroupV2) {
     int64_t def_cpu_core = arcticdb::async::get_default_num_cpus(test_path);
 
     int64_t hardware_cpu_count = std::thread::hardware_concurrency() == 0 ? 16 : std::thread::hardware_concurrency();
-    #ifdef _WIN32
-        ASSERT_EQ(hardware_cpu_count, def_cpu_core);
-    #else
-        ASSERT_EQ(1, def_cpu_core);
-    #endif
+    ASSERT_EQ(1, def_cpu_core);
 
     // test the error value path
     std::ofstream cpuset2(cpu_max_path);
