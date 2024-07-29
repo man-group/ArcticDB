@@ -205,3 +205,89 @@ TEST(Async, DynamicSizing) {
     p.setValue(5);
     (void)std::move(f2).get();
 }
+
+TEST(Async, NumCoresCgroupV1) {
+    std::string test_path{"./test_v1"};
+    std::string cpu_quota_path{"./test_v1/cpu/cpu.cfs_quota_us"};
+    std::string cpu_period_path{"./test_v1/cpu/cpu.cfs_period_us"};
+    std::filesystem::create_directories(test_path);
+
+    // Test the happy path
+    std::ofstream cpuset(cpu_quota_path);
+    cpuset << "100000\n";
+    cpuset.close();
+
+    std::ofstream cpuset2(cpu_period_path);
+    cpuset2 << "100000\n";
+    cpuset2.close();
+
+    int64_t def_cpu_core = arcticdb::async::get_default_num_cpus(test_path);
+
+    int64_t hardware_cpu_count = std::thread::hardware_concurrency() == 0 ? 16 : std::thread::hardware_concurrency();
+    #ifdef _WIN32
+        ASSERT_EQ(hardware_cpu_count, def_cpu_core);
+    #else
+        ASSERT_EQ(1, def_cpu_core);
+    #endif
+
+    // test the error value path
+    std::ofstream cpuset3(cpu_period_path);
+    cpuset3 << "-1\n";
+    cpuset3.close();
+
+    def_cpu_core = arcticdb::async::get_default_num_cpus(test_path);
+    
+    ASSERT_EQ(hardware_cpu_count, def_cpu_core);
+
+    // test the string value path - should raise an exception
+    std::ofstream cpuset4(cpu_period_path);
+    cpuset4 << "test\n";
+    cpuset4.close();
+
+    ASSERT_THROW(arcticdb::async::get_default_num_cpus(test_path), std::invalid_argument);
+}
+
+TEST(Async, NumCoresCgroupV2) {
+    std::string test_path{"./test_v2"};
+    std::string cpu_max_path{"./test_v2/cpu.max"};
+    std::filesystem::create_directories(test_path);
+
+    // Test the happy path
+    std::ofstream cpuset(cpu_max_path);
+    cpuset << "100000 100000\n";
+    cpuset.close();
+
+    int64_t def_cpu_core = arcticdb::async::get_default_num_cpus(test_path);
+
+    int64_t hardware_cpu_count = std::thread::hardware_concurrency() == 0 ? 16 : std::thread::hardware_concurrency();
+    #ifdef _WIN32
+        ASSERT_EQ(hardware_cpu_count, def_cpu_core);
+    #else
+        ASSERT_EQ(1, def_cpu_core);
+    #endif
+
+    // test the error value path
+    std::ofstream cpuset2(cpu_max_path);
+    cpuset2 << "-1 100000\n";
+    cpuset2.close();
+
+    def_cpu_core = arcticdb::async::get_default_num_cpus(test_path);
+    
+    ASSERT_EQ(hardware_cpu_count, def_cpu_core);
+
+    // test the max value - should be the hardware cpu count
+    std::ofstream cpuset3(cpu_max_path);
+    cpuset3 << "max 100000\n";
+    cpuset3.close();
+
+    def_cpu_core = arcticdb::async::get_default_num_cpus(test_path);
+    
+    ASSERT_EQ(hardware_cpu_count, def_cpu_core);
+
+    // test the string value path - should raise an exception
+    std::ofstream cpuset4(cpu_max_path);
+    cpuset4 << "test 100000\n";
+    cpuset4.close();
+
+    ASSERT_THROW(arcticdb::async::get_default_num_cpus(test_path), std::invalid_argument);
+}
