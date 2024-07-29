@@ -5,13 +5,14 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+import re
 
 import pytest
 import pandas as pd
 
-from arcticdb import Arctic
 from arcticdb_ext.exceptions import StorageException
 from arcticdb_ext import set_config_string
+from arcticdb.util.test import create_df
 
 
 def test_s3_storage_failures(mock_s3_store_with_error_simulation):
@@ -47,3 +48,21 @@ def test_s3_running_on_aws_fast_check(lib_name, s3_storage_factory, run_on_aws):
         assert lib_tool.inspect_env_variable("AWS_EC2_METADATA_DISABLED") == None
     else:
         assert lib_tool.inspect_env_variable("AWS_EC2_METADATA_DISABLED") == "true"
+
+
+def test_nfs_backed_s3_storage(lib_name, nfs_backed_s3_storage):
+    # Given
+    lib = nfs_backed_s3_storage.create_version_store_factory(lib_name)()
+
+    # When
+    lib.write("s", data=create_df())
+
+    # Then - should be written in "bucketized" structure
+    bucket = nfs_backed_s3_storage.get_boto_bucket()
+    objects = bucket.objects.all()
+
+    # Expect one or two repetitions of 3 digit "buckets" in the object names
+    bucketized_pattern = r".*/(sl|tdata|tindex|ver|vref)/([0-9]{1,3}/){1,2}.*"
+
+    for o in objects:
+        assert re.match(bucketized_pattern, o.key), f"Object {o.key} does not match pattern {bucketized_pattern}"
