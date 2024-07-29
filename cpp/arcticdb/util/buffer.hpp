@@ -309,11 +309,17 @@ public:
     }
 
     [[nodiscard]] BufferView view() const {
-        if (std::holds_alternative<std::shared_ptr<Buffer>>(buffer_)) {
-            return std::get<std::shared_ptr<Buffer>>(buffer_)->view();
-        } else {
-            return std::get<BufferView>(buffer_);
-        }
+        return util::variant_match(buffer_,
+                                   [](const std::monostate &) -> BufferView {
+                                       util::raise_rte("Underlying buffer in view() is unexpectedly monostate");
+                                   },
+                                   [](const BufferView &b) {
+                                       return b;
+                                   },
+                                   [](const std::shared_ptr<Buffer> b) {
+                                       return b->view();
+                                   }
+        );
     }
 
     [[nodiscard]] std::size_t bytes() const {
