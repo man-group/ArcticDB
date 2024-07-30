@@ -10,7 +10,6 @@ import enum
 import hypothesis
 import os
 import pytest
-import numpy as np
 import pandas as pd
 import platform
 import random
@@ -25,6 +24,7 @@ from arcticdb.storage_fixtures.azure import AzuriteStorageFixtureFactory
 from arcticdb.storage_fixtures.lmdb import LmdbStorageFixture
 from arcticdb.storage_fixtures.s3 import (
     MotoS3StorageFixtureFactory,
+    MotoNfsBackedS3StorageFixtureFactory,
     real_s3_from_environment_variables,
     mock_s3_with_error_simulation,
 )
@@ -107,9 +107,21 @@ def s3_storage_factory():
         yield f
 
 
+@pytest.fixture(scope="session")
+def nfs_backed_s3_storage_factory():
+    with MotoNfsBackedS3StorageFixtureFactory(use_ssl=False, ssl_test_support=False, bucket_versioning=False) as f:
+        yield f
+
+
 @pytest.fixture
 def s3_storage(s3_storage_factory):
     with s3_storage_factory.create_fixture() as f:
+        yield f
+
+
+@pytest.fixture
+def nfs_backed_s3_storage(nfs_backed_s3_storage_factory):
+    with nfs_backed_s3_storage_factory.create_fixture() as f:
         yield f
 
 

@@ -226,9 +226,13 @@ def get_s3_proto(
     region=None,
     use_virtual_addressing=False,
     use_mock_storage_for_testing=None,
+    is_nfs_layout=False,
 ):
     env = cfg.env_by_id[env_name]
-    s3 = S3Config()
+    if is_nfs_layout:
+        s3 = NfsConfig()
+    else:
+        s3 = S3Config()
     if bucket_name is not None:
         s3.bucket_name = bucket_name
     if credential_name is not None:
@@ -274,6 +278,7 @@ def add_s3_library_to_env(
     region=None,
     use_virtual_addressing=False,
     use_mock_storage_for_testing=None,
+    is_nfs_layout=False
 ):
     env = cfg.env_by_id[env_name]
     if with_prefix and isinstance(with_prefix, str) and (with_prefix.endswith("/") or "//" in with_prefix):
@@ -295,6 +300,7 @@ def add_s3_library_to_env(
         region=region,
         use_virtual_addressing=use_virtual_addressing,
         use_mock_storage_for_testing=use_mock_storage_for_testing,
+        is_nfs_layout=is_nfs_layout
     )
 
     _add_lib_desc_to_env(env, lib_name, sid, description)
