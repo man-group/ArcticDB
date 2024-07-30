@@ -224,24 +224,27 @@ TEST(Async, NumCoresCgroupV1) {
     int64_t def_cpu_core = arcticdb::async::get_default_num_cpus(test_path);
 
     int64_t hardware_cpu_count = std::thread::hardware_concurrency() == 0 ? 16 : std::thread::hardware_concurrency();
+    #ifdef _WIN32
+        ASSERT_EQ(hardware_cpu_count, def_cpu_core);
+    #else
+        ASSERT_EQ(1, def_cpu_core);
 
-    ASSERT_EQ(1, def_cpu_core);
+        // test the error value path
+        std::ofstream cpuset3(cpu_period_path);
+        cpuset3 << "-1\n";
+        cpuset3.close();
 
-    // test the error value path
-    std::ofstream cpuset3(cpu_period_path);
-    cpuset3 << "-1\n";
-    cpuset3.close();
+        def_cpu_core = arcticdb::async::get_default_num_cpus(test_path);
+        
+        ASSERT_EQ(hardware_cpu_count, def_cpu_core);
 
-    def_cpu_core = arcticdb::async::get_default_num_cpus(test_path);
-    
-    ASSERT_EQ(hardware_cpu_count, def_cpu_core);
+        // test the string value path - should raise an exception
+        std::ofstream cpuset4(cpu_period_path);
+        cpuset4 << "test\n";
+        cpuset4.close();
 
-    // test the string value path - should raise an exception
-    std::ofstream cpuset4(cpu_period_path);
-    cpuset4 << "test\n";
-    cpuset4.close();
-
-    ASSERT_THROW(arcticdb::async::get_default_num_cpus(test_path), std::invalid_argument);
+        ASSERT_THROW(arcticdb::async::get_default_num_cpus(test_path), std::invalid_argument);
+    #endif
 }
 
 TEST(Async, NumCoresCgroupV2) {
