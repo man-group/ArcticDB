@@ -210,3 +210,34 @@ def test_resample_ohlcvt(num_rows, freq):
     end = time.time()
 
     print(f"Downsampling OHLCVT {num_rows}->{len(df)} rows took {end - start}")
+
+
+def test_write_wide_data():
+    sym = f"wide_data"
+    lib.delete(sym)
+
+    num_rows = 2_600
+    num_cols = 27_000
+
+    index = pd.date_range("2000-01-01", periods=num_rows)
+    cols = [f"col_{idx}" for idx in range(num_cols)]
+    data = dict()
+    for col in cols:
+        data[col] = 100 * rng.random(num_rows, dtype=np.float64)
+    df = pd.DataFrame(data, index=index)
+    lib.write(sym, df)
+
+
+def test_resample_wide_data():
+    sym = f"wide_data"
+    num_cols = 27_000
+    cols = [f"col_{idx}" for idx in range(num_cols)]
+    aggs = dict()
+    for col in cols:
+        aggs[col] = "last"
+    q = QueryBuilder().resample("30D").agg(aggs)
+
+    start = time.time()
+    df = lib.read(sym, query_builder=q).data
+    end = time.time()
+    print(f"Downsampling wide df ({num_cols} columns) 2600->{len(df)} rows took {end - start}")
