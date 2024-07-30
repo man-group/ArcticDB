@@ -21,6 +21,7 @@ from typing import Union, Any
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 import trustme
+import random
 
 _WINDOWS = platform.system() == "Windows"
 _DEBUG = os.getenv("ACTIONS_RUNNER_DEBUG", default=None) in (1, "True")
@@ -31,7 +32,7 @@ def get_ephemeral_port(seed=0):
     # https://stackoverflow.com/a/61685162/ and multiple test runners call this function at roughly the same time, they
     # may get the same port! Below more sophisticated implementation uses the PID to avoid that:
     pid = os.getpid()
-    port = (pid // 1000 + pid) % 1000 + seed * 1000 + 10000  # Crude hash
+    port = (pid // 1000 + pid) % 1000 + seed * 1000 + 10000 + random.randint(0, 99)  # Crude hash
     while port < 65535:
         try:
             with socketserver.TCPServer(("localhost", port), None):
