@@ -12,7 +12,7 @@
 #include <arcticdb/version/de_dup_map.hpp>
 
 namespace arcticdb::async {
-std::pair<entity::VariantKey, std::optional<Segment>> lookup_match_in_dedup_map(
+std::pair<entity::VariantKey, std::optional<std::shared_ptr<Segment>>> lookup_match_in_dedup_map(
     const std::shared_ptr<DeDupMap> &de_dup_map,
     storage::KeySegmentPair&& key_seg) {
     std::optional<AtomKey> de_dup_key;

@@ -38,8 +38,8 @@ ReadResult LibraryTool::read(const VariantKey& key) {
 Segment LibraryTool::read_to_segment(const VariantKey& key) {
     auto kv = store_->read_compressed_sync(key, storage::ReadKeyOpts{});
     util::check(kv.has_segment(), "Failed to read key: {}", key);
-    kv.segment().force_own_buffer();
-    return std::move(kv.segment());
+    kv.segment()->force_own_buffer();
+    return std::move(*kv.segment());
 }
 
 std::optional<google::protobuf::Any> LibraryTool::read_metadata(const VariantKey& key){

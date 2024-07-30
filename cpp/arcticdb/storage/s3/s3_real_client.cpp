@@ -132,7 +132,7 @@ S3Result<Segment> RealS3Client::get_object(
 
 S3Result<std::monostate> RealS3Client::put_object(
         const std::string &s3_object_name,
-        Segment &&segment,
+        Segment* segment,
         const std::string &bucket_name) {
 
     ARCTICDB_SUBSAMPLE(S3StorageWritePreamble, 0)
@@ -141,7 +141,8 @@ S3Result<std::monostate> RealS3Client::put_object(
     request.SetKey(s3_object_name.c_str());
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Set s3 key {}", request.GetKey().c_str());
 
-    auto [dst, write_size, buffer] = segment.serialize_header();
+    // TODO some sort of call once on the serialize header?
+    auto [dst, write_size, buffer] = segment->serialize_header();
     auto body = std::make_shared<boost::interprocess::bufferstream>(
             reinterpret_cast<char *>(dst), write_size);
     util::check(body->good(), "Overflow of bufferstream with size {}", write_size);
@@ -155,7 +156,7 @@ S3Result<std::monostate> RealS3Client::put_object(
     }
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Wrote key '{}', with {} bytes of data",
                            s3_object_name,
-                           segment.size());
+                           segment->size());
     return {std::monostate()};
 }
 

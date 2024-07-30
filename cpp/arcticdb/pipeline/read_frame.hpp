@@ -81,14 +81,14 @@ folly::Future<std::vector<VariantKey>> fetch_data(
 void decode_into_frame_static(
     SegmentInMemory &frame,
     PipelineContextRow &context,
-    Segment &&seg,
+    Segment* seg,
     const std::shared_ptr<BufferHolder>& buffers
     );
 
 void decode_into_frame_dynamic(
         SegmentInMemory &frame,
         PipelineContextRow &context,
-        Segment &&seg,
+        Segment* seg,
         const std::shared_ptr<BufferHolder>& buffers
 );
 

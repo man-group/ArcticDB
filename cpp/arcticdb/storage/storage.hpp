@@ -13,7 +13,7 @@
 
 namespace arcticdb::storage {
 
-using ReadVisitor = std::function<void(const VariantKey&, Segment &&)>;
+using ReadVisitor = std::function<void(const VariantKey&, Segment&&)>;
 
 class DuplicateKeyException : public ArcticSpecificException<ErrorCode::E_DUPLICATE_KEY> {
 public:
@@ -128,8 +128,8 @@ public:
     KeySegmentPair read(KeyType&& key, ReadKeyOpts opts) {
         KeySegmentPair key_seg;
         const ReadVisitor& visitor = [&key_seg](const VariantKey & vk, Segment&& value) {
-            key_seg.variant_key() = vk;
-            key_seg.segment() = std::move(value);
+            auto vk_copy = vk;
+            key_seg = KeySegmentPair{std::move(vk_copy), std::move(value)};
         };
 
         read(std::forward<KeyType>(key), visitor, opts);

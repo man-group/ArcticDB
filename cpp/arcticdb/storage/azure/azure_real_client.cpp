@@ -47,11 +47,11 @@ Azure::Storage::Blobs::BlobClientOptions RealAzureClient::get_client_options(con
 
 void RealAzureClient::write_blob(
         const std::string& blob_name,
-        Segment&& segment,
+        std::shared_ptr<Segment> segment,
         const Azure::Storage::Blobs::UploadBlockBlobFromOptions& upload_option,
         unsigned int request_timeout) {
 
-    auto [dst, write_size, buffer] = segment.serialize_header();
+    auto [dst, write_size, buffer] = segment->serialize_header();
     ARCTICDB_SUBSAMPLE(AzureStorageUploadObject, 0)
     auto blob_client = container_client.GetBlockBlobClient(blob_name);
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Writing key '{}' with {} bytes of data",

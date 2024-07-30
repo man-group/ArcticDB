@@ -18,11 +18,11 @@
 namespace arcticdb::storage::memory {
 
 void add_serialization_fields(KeySegmentPair& kv) {
-    auto& segment = kv.segment();
-    auto& hdr = segment.header();
-    (void)segment.calculate_size();
+    auto segment = kv.segment();
+    auto& hdr = segment->header();
+    (void)segment->calculate_size();
     if(hdr.encoding_version() == EncodingVersion::V2) {
-        const auto* src = segment.buffer().data();
+        const auto* src = segment->buffer().data();
         set_body_fields(hdr, src);
     }
 }
@@ -48,7 +48,7 @@ void add_serialization_fields(KeySegmentPair& kv) {
                                             key_vec.erase(it);
                                         }
                                         add_serialization_fields(kv);
-                                        key_vec.try_emplace(key, std::move(kv.segment()));
+                                        key_vec.try_emplace(key, kv.segment());
                                     },
                                     [&](const AtomKey &key) {
                                         if (key_vec.find(key) != key_vec.end()) {
@@ -83,7 +83,7 @@ void add_serialization_fields(KeySegmentPair& kv) {
                 }
 
                 add_serialization_fields(kv);
-                key_vec.insert(std::make_pair(kv.variant_key(), kv.segment().clone()));
+                key_vec.insert(std::make_pair(kv.variant_key(), std::make_shared<Segment>(kv.segment()->clone())));
             }
         });
     }
@@ -99,7 +99,7 @@ void add_serialization_fields(KeySegmentPair& kv) {
 
                 if(it != key_vec.end()) {
                     ARCTICDB_DEBUG(log::storage(), "Read key {}: {}", variant_key_type(k), variant_key_view(k));
-                    visitor(k, it->second.clone());
+                    visitor(k, it->second->clone());
                 } else {
                     throw KeyNotFoundException(std::move(ks));
                 }

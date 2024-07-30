@@ -9,6 +9,7 @@
 
 #include <arcticdb/entity/key.hpp>
 #include <arcticdb/codec/segment.hpp>
+#include <utility>
 
 namespace arcticdb::storage {
     using namespace entity;
@@ -18,31 +19,24 @@ namespace arcticdb::storage {
      * not contain any positioning information for the contained data.
      */
     class KeySegmentPair {
-        struct KeySegmentData {
-            VariantKey key_;
-            Segment segment_;
-
-            KeySegmentData() = default;
-            explicit KeySegmentData(VariantKey &&key) : key_(std::move(key)), segment_() {}
-            KeySegmentData(VariantKey &&key, Segment &&segment) : key_(std::move(key)), segment_(std::move(segment)) {}
-
-            ARCTICDB_NO_MOVE_OR_COPY(KeySegmentData)
-        };
-
     public:
-        KeySegmentPair() : data_(std::make_shared<KeySegmentData>()) {}
-        explicit KeySegmentPair(VariantKey &&key) : data_(std::make_shared<KeySegmentData>(std::move(key))) {}
+        KeySegmentPair() : key_(), segment_(std::make_shared<Segment>()) {}
+        explicit KeySegmentPair(VariantKey &&key) : key_(std::move(key)), segment_(std::make_shared<Segment>()) {}
         KeySegmentPair(VariantKey &&key, Segment&& segment) :
-            data_(std::make_shared<KeySegmentData>(std::move(key), std::move(segment))) {}
+            key_(std::move(key)), segment_(std::make_shared<Segment>(std::move(segment))) {}
+
+        KeySegmentPair(VariantKey&& key, std::shared_ptr<Segment>& segment) : key_(std::move(key)), segment_(segment) {}
 
         ARCTICDB_MOVE_COPY_DEFAULT(KeySegmentPair)
 
-        Segment &segment() {
-            return data_->segment_;
+        std::shared_ptr<Segment>& segment() {
+            return segment_;
         }
 
         Segment&& release_segment() {
-            return std::move(data_->segment_);
+            auto tmp = segment_;
+            segment_.reset();
+            return std::move(*tmp);
         }
 
         AtomKey &atom_key() {
@@ -66,15 +60,15 @@ namespace arcticdb::storage {
         }
 
         VariantKey& variant_key() {
-            return data_->key_;
+            return key_;
         }
 
         [[nodiscard]] const VariantKey& variant_key() const {
-            return data_->key_;
+            return key_;
         }
 
         [[nodiscard]] const Segment &segment() const {
-            return data_->segment_;
+            return *segment_;
         }
 
         [[nodiscard]] bool has_segment() const {
@@ -90,7 +84,8 @@ namespace arcticdb::storage {
         }
 
     private:
-        std::shared_ptr<KeySegmentData> data_;
+        VariantKey key_;
+        std::shared_ptr<Segment> segment_;
     };
 
     template<class T, std::enable_if_t<std::is_same_v<T, EnvironmentName> || std::is_same_v<T, StorageName>, int> = 0>
