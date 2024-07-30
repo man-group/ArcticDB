@@ -108,8 +108,8 @@ struct CGroupValues {
     std::optional<double> cpu_period = std::nullopt;
 };
 
-inline std::optional<double> get_cgroup_value_v1(const std::string& cgroup_file) {
-    if(const auto path = std::filesystem::path{fmt::format("/sys/fs/cgroup/{}",cgroup_file)}; std::filesystem::exists(path)){
+inline std::optional<double> get_cgroup_value_v1(const std::string& cgroup_folder, const std::string& cgroup_file) {
+    if(const auto path = std::filesystem::path{fmt::format("{}/{}", cgroup_folder, cgroup_file)}; std::filesystem::exists(path)){
         std::ifstream strm(path.string());
         util::check(static_cast<bool>(strm), "Failed to open cgroups v1 cpu file for read at path '{}': {}", path.string(), std::strerror(errno));
         std::string str;
@@ -119,14 +119,14 @@ inline std::optional<double> get_cgroup_value_v1(const std::string& cgroup_file)
     return std::nullopt;
 }
 
-inline CGroupValues get_cgroup_values_v1() {
-    return CGroupValues{get_cgroup_value_v1("cpu/cpu.cfs_quota_us"), get_cgroup_value_v1("cpu/cpu.cfs_period_us")};
+inline CGroupValues get_cgroup_values_v1(const std::string& cgroup_folder) {
+    return CGroupValues{get_cgroup_value_v1(cgroup_folder, "cpu/cpu.cfs_quota_us"), get_cgroup_value_v1(cgroup_folder, "cpu/cpu.cfs_period_us")};
 }
 
 // In cgroup v2, the /sys/fs/cgroup/cpu.max file is used and the format is $MAX $PERIOD
 // the default is max 100000
-inline CGroupValues get_cgroup_values_v2() {
-    if(const auto path = std::filesystem::path{"/sys/fs/cgroup/cpu.max"}; std::filesystem::exists(path)){
+inline CGroupValues get_cgroup_values_v2(const std::string& cgroup_folder) {
+    if(const auto path = std::filesystem::path{fmt::format("{}/cpu.max", cgroup_folder)}; std::filesystem::exists(path)){
         std::ifstream strm(path.string());
         util::check(static_cast<bool>(strm), "Failed to open cgroups v2 cpu file for read at path '{}': {}", path.string(), std::strerror(errno));
         std::string str;
@@ -144,17 +144,17 @@ inline CGroupValues get_cgroup_values_v2() {
     return CGroupValues{};
 }
 
-inline auto get_default_num_cpus() {
+inline auto get_default_num_cpus(const std::string& cgroup_folder) {
     int64_t cpu_count = std::thread::hardware_concurrency() == 0 ? 16 : std::thread::hardware_concurrency();
     #ifdef _WIN32
         return static_cast<int64_t>(cpu_count);
     #else
         int64_t quota_count = 0UL;
-        auto cgroup_val = get_cgroup_values_v1();
+        auto cgroup_val = get_cgroup_values_v1(cgroup_folder);
 
         // if cgroup v1 values are not found, try to get values from cgroup v2
         if (!cgroup_val.cpu_quota.has_value() || !cgroup_val.cpu_period.has_value())
-            cgroup_val = get_cgroup_values_v2();
+            cgroup_val = get_cgroup_values_v2(cgroup_folder);
 
         if ((cgroup_val.cpu_quota.has_value() && cgroup_val.cpu_period.has_value()) &&
              (cgroup_val.cpu_quota.value() > -1 && cgroup_val.cpu_period.value() > 0))
@@ -185,7 +185,8 @@ class TaskScheduler {
     using IOSchedulerType = folly::FutureExecutor<folly::IOThreadPoolExecutor>;
 
      explicit TaskScheduler(const std::optional<size_t>& cpu_thread_count = std::nullopt, const std::optional<size_t>& io_thread_count = std::nullopt) :
-        cpu_thread_count_(cpu_thread_count ? *cpu_thread_count : ConfigsMap::instance()->get_int("VersionStore.NumCPUThreads", get_default_num_cpus())),
+        cgroup_folder_("/sys/fs/cgroup"),
+        cpu_thread_count_(cpu_thread_count ? *cpu_thread_count : ConfigsMap::instance()->get_int("VersionStore.NumCPUThreads", get_default_num_cpus(cgroup_folder_))),
         io_thread_count_(io_thread_count ? *io_thread_count : ConfigsMap::instance()->get_int("VersionStore.NumIOThreads", (int) (cpu_thread_count_ * 1.5))),
         cpu_exec_(cpu_thread_count_, std::make_shared<InstrumentedNamedFactory>("CPUPool")) ,
         io_exec_(io_thread_count_,  std::make_shared<InstrumentedNamedFactory>("IOPool")){
@@ -280,6 +281,7 @@ class TaskScheduler {
     }
 
 private:
+    std::string cgroup_folder_;
     size_t cpu_thread_count_;
     size_t io_thread_count_;
     SchedulerWrapper<CPUSchedulerType> cpu_exec_;
