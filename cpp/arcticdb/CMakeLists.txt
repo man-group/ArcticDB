@@ -526,7 +526,12 @@ set(arcticdb_srcs
         version/version_core.cpp
         version/version_store_api.cpp
         version/version_utils.cpp
-        version/version_map_batch_methods.cpp)
+        version/symbol_list.cpp
+        version/version_map_batch_methods.cpp
+        storage/s3/ec2_utils.cpp
+        storage/lmdb/lmdb.hpp
+        version/version_result.hpp)
+
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 

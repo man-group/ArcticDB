@@ -17,6 +17,7 @@
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/stream/merge_utils.hpp>
+#include <arcticdb/version/version_result.hpp>
 
 namespace arcticdb {
 
@@ -27,22 +28,16 @@ static const StreamId compaction_id{StringId{CompactionId}};
 using MapType =  std::unordered_map<StreamId, std::vector<SymbolEntryData>>;
 using Compaction = std::vector<AtomKey>::const_iterator;
 using MaybeCompaction = std::optional<Compaction>;
-using CollectionType = std::vector<SymbolListEntry>;
 
 constexpr std::string_view version_string = "_v2_";
 constexpr NumericIndex version_identifier = std::numeric_limits<NumericIndex>::max();
 
-SymbolListData::SymbolListData(std::shared_ptr<VersionMap> version_map, StreamId type_indicator, uint32_t seed) :
-    type_holder_(std::move(type_indicator)),
-    seed_(seed),
-    version_map_(std::move(version_map)){
-}
-
 struct LoadResult {
     std::vector<AtomKey> symbol_list_keys_;
     MaybeCompaction maybe_previous_compaction;
-    CollectionType symbols_;
+    std::vector<SymbolListEntry> symbols_;
     timestamp timestamp_ = 0L;
+    bool version_data_present_ = false;
 
     std::vector<AtomKey>&& detach_symbol_list_keys() { return std::move(symbol_list_keys_); }
 };
@@ -54,12 +49,12 @@ auto warning_threshold() {
 
 bool is_new_style_key(const AtomKey& key) {
     return util::variant_match(key.end_index(),
-                               [] (std::string_view str) {
-                                   return str == version_string;
-                               },
-                               [] (NumericIndex n) {
-                                   return n == version_identifier;
-                               });
+        [] (std::string_view str) {
+           return str == version_string;
+        },
+        [] (NumericIndex n) {
+           return n == version_identifier;
+        });
 }
 
 std::vector<SymbolListEntry> load_previous_from_version_keys(
@@ -239,7 +234,8 @@ std::vector<SymbolListEntry> read_new_style_list_from_storage(const SegmentInMem
 
 std::vector<SymbolListEntry> read_from_storage(
         const std::shared_ptr<StreamSource>& store,
-        const AtomKey& key) {
+        const AtomKey& key,
+        bool& contains_version_data) {
     ARCTICDB_DEBUG(log::symbol(), "Reading list from storage with key {}", key);
     auto [_, seg] = store->read_sync(key);
     if(seg.row_count() == 0)
@@ -248,13 +244,15 @@ std::vector<SymbolListEntry> read_from_storage(
     missing_data::check<ErrorCode::E_UNREADABLE_SYMBOL_LIST>( seg.descriptor().field_count() > 0,
                                                               "Expected at least one column in symbol list with key {}", key);
 
-    if(seg.descriptor().field_count() == 1)
+    if(seg.descriptor().field_count() == 1) {
         return read_old_style_list_from_storage(seg);
-    else
+    } else {
+        contains_version_data = true;
         return read_new_style_list_from_storage(seg);
+    }
 }
 
-MapType load_journal_keys(const std::vector<AtomKey>& keys) {
+MapType load_journal_keys(const std::vector<AtomKey>& keys, bool& contains_version_data) {
     MapType map;
     for(const auto& key : keys) {
         const auto& action_id = key.id();
@@ -262,7 +260,10 @@ MapType load_journal_keys(const std::vector<AtomKey>& keys) {
             continue;
 
         const auto& symbol = key.start_index();
-        const auto version_id = is_new_style_key(key) ? key.version_id() : unknown_version_id;
+        const bool new_style_key =  is_new_style_key(key);
+        contains_version_data = contains_version_data && new_style_key;
+
+        const auto version_id = new_style_key ? key.version_id() : unknown_version_id;
         const auto timestamp = key.creation_ts();
         ActionType action = std::get<StringId>(action_id) == DeleteSymbol ? ActionType::DELETE : ActionType::ADD;
         map[symbol].emplace_back(version_id, timestamp, action);
@@ -386,15 +387,16 @@ ProblematicResult is_problematic(
     return ProblematicResult{latest};
 }
 
-CollectionType merge_existing_with_journal_keys(
+std::vector<SymbolListEntry> merge_existing_with_journal_keys(
         const std::shared_ptr<VersionMap>& version_map,
         const std::shared_ptr<Store>& store,
         const std::vector<AtomKey>& keys,
-        std::vector<SymbolListEntry>&& existing) {
+        std::vector<SymbolListEntry>&& existing,
+        bool& contains_version_data) {
     auto existing_keys = std::move(existing);
-    auto update_map = load_journal_keys(keys);
+    auto update_map = load_journal_keys(keys, contains_version_data);
 
-    CollectionType symbols;
+    std::vector<SymbolListEntry> symbols;
     std::map<StreamId, std::pair<VersionId, timestamp>> problematic_symbols;
     const auto min_allowed_interval = ConfigsMap::instance()->get_int("SymbolList.MinIntervalNs", 100'000'000LL);
 
@@ -462,25 +464,27 @@ CollectionType merge_existing_with_journal_keys(
     return symbols;
 }
 
-CollectionType load_from_symbol_list_keys(
+std::vector<SymbolListEntry> load_from_symbol_list_keys(
         const std::shared_ptr<VersionMap>& version_map,
         const std::shared_ptr<Store>& store,
         const std::vector<AtomKey>& keys,
-        const Compaction& compaction) {
+        const Compaction& compaction,
+        bool& contains_version_data) {
     ARCTICDB_RUNTIME_DEBUG(log::symbol(),"Loading symbols from symbol list keys");
 
-    auto previous_compaction = read_from_storage(store, *compaction);
-    return merge_existing_with_journal_keys(version_map, store, keys, std::move(previous_compaction));
+    auto previous_compaction = read_from_storage(store, *compaction, contains_version_data);
+    return merge_existing_with_journal_keys(version_map, store, keys, std::move(previous_compaction), contains_version_data);
 }
 
-CollectionType load_from_version_keys(
+std::vector<SymbolListEntry> load_from_version_keys(
         const std::shared_ptr<VersionMap>& version_map,
         const std::shared_ptr<Store>& store,
         const std::vector<AtomKey>& keys,
         SymbolListData& data) {
     ARCTICDB_RUNTIME_DEBUG(log::symbol(),"Loading symbols from version keys");
     auto previous_entries = load_previous_from_version_keys(store, data);
-    return merge_existing_with_journal_keys(version_map, store, keys, std::move(previous_entries));
+    bool unused = false;
+    return merge_existing_with_journal_keys(version_map, store, keys, std::move(previous_entries), unused);
 }
 
 LoadResult attempt_load(
@@ -491,9 +495,10 @@ LoadResult attempt_load(
     LoadResult load_result;
     load_result.symbol_list_keys_ = get_all_symbol_list_keys(store, data);
     load_result.maybe_previous_compaction = last_compaction(load_result.symbol_list_keys_);
+    bool contains_version_data = false;
 
     if (load_result.maybe_previous_compaction)
-        load_result.symbols_ = load_from_symbol_list_keys(version_map, store, load_result.symbol_list_keys_, *load_result.maybe_previous_compaction);
+        load_result.symbols_ = load_from_symbol_list_keys(version_map, store, load_result.symbol_list_keys_, *load_result.maybe_previous_compaction, contains_version_data);
     else {
         load_result.symbols_ = load_from_version_keys(version_map, store, load_result.symbol_list_keys_, data);
         std::unordered_set<StreamId> keys_in_versions;
@@ -505,6 +510,7 @@ LoadResult attempt_load(
     }
 
     load_result.timestamp_ = store->current_timestamp();
+    load_result.version_data_present_ = contains_version_data;
     return load_result;
 }
 
@@ -643,7 +649,7 @@ void write_entry(
 SegmentInMemory write_entries_to_symbol_segment(
     const StreamId& stream_id,
     const StreamId& type_holder,
-    const CollectionType& symbols
+    const std::vector<SymbolListEntry>& symbols
     ) {
     SegmentInMemory added_segment{add_symbol_stream_descriptor(stream_id, type_holder)};
     SegmentInMemory deleted_segment{delete_symbol_stream_descriptor(stream_id, type_holder)};
@@ -683,7 +689,7 @@ SegmentInMemory create_empty_segment(const StreamId& stream_id) {
 
 VariantKey write_symbols(
         const std::shared_ptr<Store>& store,
-        const CollectionType& symbols,
+        const std::vector<SymbolListEntry>& symbols,
         const StreamId& stream_id,
         const StreamId& type_holder)  {
     ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Writing {} symbols to symbol list cache", symbols.size());
@@ -748,9 +754,7 @@ std::set<StreamId> SymbolList::load(
         const std::shared_ptr<VersionMap>& version_map,
         const std::shared_ptr<Store>& store,
         bool no_compaction) {
-    LoadResult load_result = ExponentialBackoff<StorageException>(100, 2000)
-            .go([this, &version_map, &store]() { return attempt_load(version_map, store, data_); });
-
+    auto load_result = load_with_retry(version_map, store);
     if (!no_compaction && needs_compaction(load_result)) {
         ARCTICDB_RUNTIME_DEBUG(log::symbol(),"Compaction necessary. Obtaining lock...");
         try {
@@ -779,10 +783,28 @@ std::set<StreamId> SymbolList::load(
     return output;
 }
 
+std::optional<std::vector<VersionResult>> SymbolList::get_latest_versions(const std::shared_ptr<Store>& store) {
+    auto version_map = data_.version_map_;
+    auto load_result = load_with_retry(version_map, store);
+    if(!load_result.version_data_present_)
+        return std::nullopt;
+
+    std::vector<VersionResult> output;
+    for(const auto& entry : load_result.symbols_) {
+        if(entry.action_ == ActionType::ADD)
+            output.push_back({entry.stream_id_, entry.reference_id_, entry.timestamp_, {}, false});
+    }
+    return output;
+}
+
+LoadResult SymbolList::load_with_retry(const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store) {
+    return ExponentialBackoff<StorageException>(100, 2000)
+        .go([this, &version_map, &store]() { return attempt_load(version_map, store, data_); });
+}
+
 size_t SymbolList::compact(const std::shared_ptr<Store>& store) {
     auto version_map = data_.version_map_;
-    LoadResult load_result = ExponentialBackoff<StorageException>(100, 2000)
-            .go([this, &version_map, &store]() { return attempt_load(version_map, store, data_); });
+    auto load_result = load_with_retry(version_map, store);
     auto num_symbol_list_keys = load_result.symbol_list_keys_.size();
 
     ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Forcing compaction. Obtaining lock...");

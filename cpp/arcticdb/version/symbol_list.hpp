@@ -12,6 +12,7 @@
 
 #include <arcticdb/async/base_task.hpp>
 #include <arcticdb/version/version_map.hpp>
+#include <arcticdb/version/version_result.hpp>
 
 #include <folly/futures/Future.h>
 
@@ -23,13 +24,10 @@ struct LoadResult;
 class Store;
 
 struct SymbolListData {
-    StreamId type_holder_;
-    uint32_t seed_;
+    StreamId type_holder_ = StringId();
+    uint32_t seed_ = 0;
     std::shared_ptr<VersionMap> version_map_;
     std::atomic<bool> warned_expected_slowdown_ = false;
-
-    explicit SymbolListData(std::shared_ptr<VersionMap> version_map, StreamId type_indicator = StringId(),
-                            uint32_t seed = 0);
 };
 
 constexpr std::string_view CompactionId = "__symbols__";
@@ -145,9 +143,11 @@ ProblematicResult is_problematic(const std::vector<SymbolEntryData>& updated, ti
 class SymbolList {
     SymbolListData data_;
   public:
-    explicit SymbolList(std::shared_ptr<VersionMap> version_map, StreamId type_indicator = StringId(),
-                        uint32_t seed = 0) :
-        data_(std::move(version_map), std::move(type_indicator), seed) {
+    explicit SymbolList(
+            std::shared_ptr<VersionMap> version_map,
+            StreamId type_indicator = StringId(),
+            uint32_t seed = 0) :
+        data_(std::move(type_indicator), seed, std::move(version_map), false) {
     }
 
     std::set<StreamId> load(const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store, bool no_compaction);
@@ -169,7 +169,11 @@ class SymbolList {
 
     static void clear(const std::shared_ptr<Store>& store);
 
+    std::optional<std::vector<VersionResult>> get_latest_versions(const std::shared_ptr<Store>& store);
+
 private:
+    LoadResult load_with_retry(const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store);
+
     void compact_internal(const std::shared_ptr<Store>& store, LoadResult& load_result) const;
 
     [[nodiscard]] bool needs_compaction(const LoadResult& load_result) const;
