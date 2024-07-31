@@ -12,7 +12,6 @@
 
 #include <arcticdb/processing/processing_unit.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
-#include <arcticdb/util/composite.hpp>
 #include <arcticdb/util/offset_string.hpp>
 
 #include <arcticdb/processing/clause.hpp>
@@ -79,42 +78,27 @@ std::vector<std::vector<size_t>> structure_all_together(std::vector<RangesAndKey
  * At time of writing, all clauses require segments, row ranges, and column ranges. Some also require atom keys and
  * partitioning buckets, so these can optionally be populated in the output processing units as well.
  */
-Composite<ProcessingUnit> gather_entities(std::shared_ptr<ComponentManager> component_manager,
-                                          Composite<EntityIds>&& entity_ids,
-                                          bool include_atom_keys,
-                                          bool include_bucket,
-                                          bool include_initial_expected_get_calls) {
-    return entity_ids.transform([&component_manager, include_atom_keys, include_bucket, include_initial_expected_get_calls]
-    (const EntityIds& entity_ids) -> ProcessingUnit {
-        ProcessingUnit res;
-        res.set_segments(component_manager->get<std::shared_ptr<SegmentInMemory>>(entity_ids));
-        res.set_row_ranges(component_manager->get<std::shared_ptr<RowRange>>(entity_ids));
-        res.set_col_ranges(component_manager->get<std::shared_ptr<ColRange>>(entity_ids));
+ProcessingUnit gather_entities(std::shared_ptr<ComponentManager> component_manager,
+                               std::vector<EntityId>&& entity_ids,
+                               bool include_atom_keys,
+                               bool include_initial_expected_get_calls) {
+    ProcessingUnit res;
+    res.set_segments(component_manager->get<std::shared_ptr<SegmentInMemory>>(entity_ids));
+    res.set_row_ranges(component_manager->get<std::shared_ptr<RowRange>>(entity_ids));
+    res.set_col_ranges(component_manager->get<std::shared_ptr<ColRange>>(entity_ids));
 
-        if (include_atom_keys) {
-            res.set_atom_keys(component_manager->get<std::shared_ptr<AtomKey>>(entity_ids));
+    if (include_atom_keys) {
+        res.set_atom_keys(component_manager->get<std::shared_ptr<AtomKey>>(entity_ids));
+    }
+    if (include_initial_expected_get_calls) {
+        std::vector<uint64_t> segment_initial_expected_get_calls;
+        segment_initial_expected_get_calls.reserve(entity_ids.size());
+        for (auto entity_id: entity_ids) {
+            segment_initial_expected_get_calls.emplace_back(component_manager->get_initial_expected_get_calls<std::shared_ptr<SegmentInMemory>>(entity_id));
         }
-        if (include_bucket) {
-            std::vector<bucket_id> buckets{component_manager->get<bucket_id>(entity_ids)};
-            // Each entity_id has a bucket, but they must all be the same within one processing unit
-            if (buckets.size() > 0) {
-                internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                        std::adjacent_find(buckets.begin(), buckets.end(), std::not_equal_to<>() ) == buckets.end(),
-                        "Partitioning error: segments to be processed together must be in the same bucket"
-                        );
-                res.set_bucket(buckets.at(0));
-            }
-        }
-        if (include_initial_expected_get_calls) {
-            std::vector<uint64_t> segment_initial_expected_get_calls;
-            segment_initial_expected_get_calls.reserve(entity_ids.size());
-            for (auto entity_id: entity_ids) {
-                segment_initial_expected_get_calls.emplace_back(component_manager->get_initial_expected_get_calls<std::shared_ptr<SegmentInMemory>>(entity_id));
-            }
-            res.set_segment_initial_expected_get_calls(std::move(segment_initial_expected_get_calls));
-        }
-        return res;
-    });
+        res.set_segment_initial_expected_get_calls(std::move(segment_initial_expected_get_calls));
+    }
+    return res;
 }
 
 /*
@@ -124,10 +108,10 @@ Composite<ProcessingUnit> gather_entities(std::shared_ptr<ComponentManager> comp
  * Elements that share an index in the optional vectors of a ProcessingUnit correspond to the same entity, and so are
  * pushed into the component manager with the same ID.
  */
-EntityIds push_entities(std::shared_ptr<ComponentManager> component_manager, ProcessingUnit&& proc) {
-    std::optional<EntityIds> res;
+std::vector<EntityId> push_entities(std::shared_ptr<ComponentManager> component_manager, ProcessingUnit&& proc) {
+    std::optional<std::vector<EntityId>> res;
     if (proc.segments_.has_value()) {
-        res = std::make_optional<EntityIds>(component_manager->add(std::move(*proc.segments_)));
+        res = std::make_optional<std::vector<EntityId>>(component_manager->add(std::move(*proc.segments_)));
     }
     if (proc.row_ranges_.has_value()) {
         res = component_manager->add(std::move(*proc.row_ranges_), res);
@@ -145,10 +129,17 @@ EntityIds push_entities(std::shared_ptr<ComponentManager> component_manager, Pro
     return *res;
 }
 
-std::vector<Composite<EntityIds>> single_partition(std::vector<Composite<EntityIds>> &&comps) {
-    std::vector<Composite<EntityIds>> v;
-    v.push_back(merge_composites_shallow(std::move(comps)));
-    return v;
+std::vector<EntityId> flatten_entities(std::vector<std::vector<EntityId>>&& entity_ids_vec) {
+    size_t res_size = std::accumulate(entity_ids_vec.cbegin(),
+                                      entity_ids_vec.cend(),
+                                      size_t(0),
+                                      [](size_t acc, const std::vector<EntityId>& vec) { return acc + vec.size(); });
+    std::vector<EntityId> res;
+    res.reserve(res_size);
+    for (const auto& entity_ids: entity_ids_vec) {
+        res.insert(res.end(), entity_ids.begin(), entity_ids.end());
+    }
+    return res;
 }
 
 class GroupingMap {
@@ -220,37 +211,36 @@ struct SegmentWrapper {
     }
 };
 
-Composite<EntityIds> PassthroughClause::process(Composite<EntityIds>&& entity_ids) const {
+std::vector<EntityId> PassthroughClause::process(std::vector<EntityId>&& entity_ids) const {
     return std::move(entity_ids);
 }
 
-Composite<EntityIds> FilterClause::process(
-        Composite<EntityIds>&& entity_ids
-        ) const {
-    auto procs = gather_entities(component_manager_, std::move(entity_ids));
-    Composite<EntityIds> output;
-    procs.broadcast([&output, this](auto&& proc) {
-        proc.set_expression_context(expression_context_);
-        auto variant_data = proc.get(expression_context_->root_node_name_);
-        util::variant_match(variant_data,
-                            [&proc, &output, this](util::BitSet& bitset) {
-                                if (bitset.count() > 0) {
-                                    proc.apply_filter(std::move(bitset), optimisation_);
-                                    output.push_back(push_entities(component_manager_, std::move(proc)));
-                                } else {
-                                    log::version().debug("Filter returned empty result");
-                                }
-                            },
-                            [](EmptyResult) {
-                               log::version().debug("Filter returned empty result");
-                            },
-                            [&output, &proc, this](FullResult) {
-                                output.push_back(push_entities(component_manager_, std::move(proc)));
-                            },
-                            [](const auto &) {
-                                util::raise_rte("Expected bitset from filter clause");
-                            });
-    });
+std::vector<EntityId> FilterClause::process(std::vector<EntityId>&& entity_ids) const {
+    if (entity_ids.empty()) {
+        return {};
+    }
+    auto proc = gather_entities(component_manager_, std::move(entity_ids));
+    proc.set_expression_context(expression_context_);
+    auto variant_data = proc.get(expression_context_->root_node_name_);
+    std::vector<EntityId> output;
+    util::variant_match(variant_data,
+                        [&proc, &output, this](util::BitSet &bitset) {
+                            if (bitset.count() > 0) {
+                                proc.apply_filter(std::move(bitset), optimisation_);
+                                output = push_entities(component_manager_, std::move(proc));
+                            } else {
+                                log::version().debug("Filter returned empty result");
+                            }
+                        },
+                        [](EmptyResult) {
+                            log::version().debug("Filter returned empty result");
+                        },
+                        [&output, &proc, this](FullResult) {
+                            output = push_entities(component_manager_, std::move(proc));
+                        },
+                        [](const auto &) {
+                            util::raise_rte("Expected bitset from filter clause");
+                        });
     return output;
 }
 
@@ -258,32 +248,33 @@ std::string FilterClause::to_string() const {
     return expression_context_ ? fmt::format("WHERE {}", expression_context_->root_node_name_.value) : "";
 }
 
-Composite<EntityIds> ProjectClause::process(Composite<EntityIds>&& entity_ids) const {
-    auto procs = gather_entities(component_manager_, std::move(entity_ids));
-    Composite<EntityIds> output;
-    procs.broadcast([&output, this](auto&& proc) {
-        proc.set_expression_context(expression_context_);
-        auto variant_data = proc.get(expression_context_->root_node_name_);
-        util::variant_match(variant_data,
-                            [&proc, &output, this](ColumnWithStrings &col) {
+std::vector<EntityId> ProjectClause::process(std::vector<EntityId>&& entity_ids) const {
+    if (entity_ids.empty()) {
+        return {};
+    }
+    auto proc = gather_entities(component_manager_, std::move(entity_ids));
+    proc.set_expression_context(expression_context_);
+    auto variant_data = proc.get(expression_context_->root_node_name_);
+    std::vector<EntityId> output;
+    util::variant_match(variant_data,
+                        [&proc, &output, this](ColumnWithStrings &col) {
 
-                                const auto data_type = col.column_->type().data_type();
-                                const std::string_view name = output_column_;
+                            const auto data_type = col.column_->type().data_type();
+                            const std::string_view name = output_column_;
 
-                                proc.segments_->back()->add_column(scalar_field(data_type, name), col.column_);
-                                ++proc.col_ranges_->back()->second;
-                                output.push_back(push_entities(component_manager_, std::move(proc)));
-                            },
-                            [&proc, &output, this](const EmptyResult&) {
-                                if(expression_context_->dynamic_schema_)
-                                    output.push_back(push_entities(component_manager_, std::move(proc)));
-                                else
-                                    util::raise_rte("Cannot project from empty column with static schema");
-                            },
-                            [](const auto &) {
-                                util::raise_rte("Expected column from projection clause");
-                            });
-    });
+                            proc.segments_->back()->add_column(scalar_field(data_type, name), col.column_);
+                            ++proc.col_ranges_->back()->second;
+                            output = push_entities(component_manager_, std::move(proc));
+                        },
+                        [&proc, &output, this](const EmptyResult &) {
+                            if (expression_context_->dynamic_schema_)
+                                output = push_entities(component_manager_, std::move(proc));
+                            else
+                                util::raise_rte("Cannot project from empty column with static schema");
+                        },
+                        [](const auto &) {
+                            util::raise_rte("Expected column from projection clause");
+                        });
     return output;
 }
 
@@ -324,11 +315,15 @@ AggregationClause::AggregationClause(const std::string& grouping_column,
     str_.append("}");
 }
 
-Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_ids) const {
-    auto procs = gather_entities(component_manager_, std::move(entity_ids)).as_range();
+std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_ids) const {
+    if (entity_ids.empty()) {
+        return {};
+    }
+    auto proc = gather_entities(component_manager_, std::move(entity_ids));
+    auto row_slices = split_by_row_slice(std::move(proc));
 
     // Sort procs following row range descending order, as we are going to iterate through them backwards
-    std::sort(std::begin(procs), std::end(procs),
+    std::sort(std::begin(row_slices), std::end(row_slices),
               [](const auto& left, const auto& right) {
                   return left.row_ranges_->at(0)->start() >= right.row_ranges_->at(0)->start();
     });
@@ -342,15 +337,15 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
     }
 
     // Work out the common type between the processing units for the columns being aggregated
-    for (auto& proc: procs) {
+    for (auto& row_slice: row_slices) {
         for (auto agg_data: folly::enumerate(aggregators_data)) {
             // Check that segments row ranges are the same
             internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                std::all_of(proc.row_ranges_->begin(), proc.row_ranges_->end(), [&] (const auto& row_range) {return row_range->start() == proc.row_ranges_->at(0)->start();}),
+                std::all_of(row_slice.row_ranges_->begin(), row_slice.row_ranges_->end(), [&] (const auto& row_range) {return row_range->start() == row_slice.row_ranges_->at(0)->start();}),
                 "Expected all data segments in one processing unit to have the same row ranges");
 
             auto input_column_name = aggregators_.at(agg_data.index).get_input_column_name();
-            auto input_column = proc.get(input_column_name);
+            auto input_column = row_slice.get(input_column_name);
             if (std::holds_alternative<ColumnWithStrings>(input_column)) {
                 agg_data->add_data_type(std::get<ColumnWithStrings>(input_column).column_->type().data_type());
             }
@@ -364,14 +359,14 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
     GroupingMap grouping_map;
     // Iterating backwards as we are going to erase from this vector as we go along
     // This is to spread out deallocation of the input segments
-    for (auto it = procs.rbegin(); it != procs.rend(); ++it) {
-        auto& proc = *it;
-        auto partitioning_column = proc.get(ColumnName(grouping_column_));
+    for (auto it = row_slices.rbegin(); it != row_slices.rend(); ++it) {
+        auto& row_slice = *it;
+        auto partitioning_column = row_slice.get(ColumnName(grouping_column_));
         if (std::holds_alternative<ColumnWithStrings>(partitioning_column)) {
             ColumnWithStrings col = std::get<ColumnWithStrings>(partitioning_column);
             details::visit_type(
                 col.column_->type().data_type(),
-                [&proc_ = proc, &grouping_map, &next_group_id, &aggregators_data, &string_pool, &col,
+                [&row_slice, &grouping_map, &next_group_id, &aggregators_data, &string_pool, &col,
                         &num_unique, &grouping_data_type, this](auto data_type_tag) {
                     using col_type_info = ScalarTypeInfo<decltype(data_type_tag)>;
                     grouping_data_type = col_type_info::data_type;
@@ -457,7 +452,7 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
                     for (auto agg_data: folly::enumerate(aggregators_data)) {
                         auto input_column_name = aggregators_.at(
                                 agg_data.index).get_input_column_name();
-                        auto input_column = proc_.get(input_column_name);
+                        auto input_column = row_slice.get(input_column_name);
                         std::optional<ColumnWithStrings> opt_input_column;
                         if (std::holds_alternative<ColumnWithStrings>(input_column)) {
                             auto column_with_strings = std::get<ColumnWithStrings>(input_column);
@@ -472,7 +467,7 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
         } else {
             util::raise_rte("Expected single column from expression");
         }
-        procs.erase(std::next(it).base());
+        row_slices.erase(std::next(it).base());
     }
     SegmentInMemory seg;
     auto index_col = std::make_shared<Column>(make_scalar_type(grouping_data_type), grouping_map.size(), true, false);
@@ -506,7 +501,7 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
 
     seg.set_string_pool(string_pool);
     seg.set_row_id(num_unique - 1);
-    return Composite<EntityIds>(push_entities(component_manager_, ProcessingUnit(std::move(seg))));
+    return push_entities(component_manager_, ProcessingUnit(std::move(seg)));
 }
 
 [[nodiscard]] std::string AggregationClause::to_string() const {
@@ -662,10 +657,12 @@ void ResampleClause<closed_boundary>::advance_boundary_past_value(const std::vec
 }
 
 template<ResampleBoundary closed_boundary>
-Composite<EntityIds> ResampleClause<closed_boundary>::process(Composite<EntityIds>&& entity_ids) const {
-    auto procs = gather_entities(component_manager_, std::move(entity_ids), false, false, true).as_range();
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(procs.size() == 1, "Expected a single ProcessingUnit on entry to ResampleClause::process");
-    auto row_slices = split_by_row_slice(std::move(procs[0]));
+std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<EntityId>&& entity_ids) const {
+    if (entity_ids.empty()) {
+        return {};
+    }
+    auto proc = gather_entities(component_manager_, std::move(entity_ids), false, true);
+    auto row_slices = split_by_row_slice(std::move(proc));
     // If the expected get calls for the segments in the first row slice are 2, the first bucket overlapping this row
     // slice is being computed by the call to process dealing with the row slices above these. Otherwise, this call
     // should do it
@@ -721,7 +718,7 @@ Composite<EntityIds> ResampleClause<closed_boundary>::process(Composite<EntityId
         seg.add_column(scalar_field(aggregated_column->type().data_type(), aggregator.get_output_column_name().value), aggregated_column);
     }
     seg.set_row_data(output_index_column->row_count() - 1);
-    return Composite<EntityIds>(push_entities(component_manager_, ProcessingUnit(std::move(seg), std::move(output_row_range))));
+    return push_entities(component_manager_, ProcessingUnit(std::move(seg), std::move(output_row_range)));
 }
 
 template<ResampleBoundary closed_boundary>
@@ -822,75 +819,78 @@ std::shared_ptr<Column> ResampleClause<closed_boundary>::generate_output_index_c
 template struct ResampleClause<ResampleBoundary::LEFT>;
 template struct ResampleClause<ResampleBoundary::RIGHT>;
 
-[[nodiscard]] Composite<EntityIds> RemoveColumnPartitioningClause::process(Composite<EntityIds>&& entity_ids) const {
-    auto procs = gather_entities(component_manager_, std::move(entity_ids));
-    Composite<EntityIds> output;
-    procs.broadcast([&output, this](ProcessingUnit &proc) {
-        size_t min_start_row = std::numeric_limits<size_t>::max();
-        size_t max_end_row = 0;
-        size_t min_start_col = std::numeric_limits<size_t>::max();
-        size_t max_end_col = 0;
-        std::optional<SegmentInMemory> output_seg;
-        for (auto&& [idx, segment]: folly::enumerate(proc.segments_.value())) {
-            min_start_row = std::min(min_start_row, proc.row_ranges_->at(idx)->start());
-            max_end_row = std::max(max_end_row, proc.row_ranges_->at(idx)->end());
-            min_start_col = std::min(min_start_col, proc.col_ranges_->at(idx)->start());
-            max_end_col = std::max(max_end_col, proc.col_ranges_->at(idx)->end());
-            if (output_seg.has_value()) {
-                merge_string_columns(*segment, output_seg->string_pool_ptr(), false);
-                output_seg->concatenate(std::move(*segment), true);
-            } else {
-                output_seg = std::make_optional<SegmentInMemory>(std::move(*segment));
-            }
-        }
+[[nodiscard]] std::vector<EntityId> RemoveColumnPartitioningClause::process(std::vector<EntityId>&& entity_ids) const {
+    if (entity_ids.empty()) {
+        return {};
+    }
+    auto proc = gather_entities(component_manager_, std::move(entity_ids));
+    size_t min_start_row = std::numeric_limits<size_t>::max();
+    size_t max_end_row = 0;
+    size_t min_start_col = std::numeric_limits<size_t>::max();
+    size_t max_end_col = 0;
+    std::optional<SegmentInMemory> output_seg;
+    for (auto&& [idx, segment]: folly::enumerate(proc.segments_.value())) {
+        min_start_row = std::min(min_start_row, proc.row_ranges_->at(idx)->start());
+        max_end_row = std::max(max_end_row, proc.row_ranges_->at(idx)->end());
+        min_start_col = std::min(min_start_col, proc.col_ranges_->at(idx)->start());
+        max_end_col = std::max(max_end_col, proc.col_ranges_->at(idx)->end());
         if (output_seg.has_value()) {
-            output.push_back(push_entities(component_manager_, ProcessingUnit(std::move(*output_seg),
-                                                                RowRange{min_start_row, max_end_row},
-                                                                ColRange{min_start_col, max_end_col})));
+            merge_string_columns(*segment, output_seg->string_pool_ptr(), false);
+            output_seg->concatenate(std::move(*segment), true);
+        } else {
+            output_seg = std::make_optional<SegmentInMemory>(std::move(*segment));
         }
-    });
+    }
+    std::vector<EntityId> output;
+    if (output_seg.has_value()) {
+        output = push_entities(component_manager_,
+                               ProcessingUnit(std::move(*output_seg),
+                               RowRange{min_start_row, max_end_row},
+                               ColRange{min_start_col, max_end_col}));
+    }
     return output;
 }
 
-Composite<EntityIds> SplitClause::process(Composite<EntityIds>&& entity_ids) const {
-    auto procs = gather_entities(component_manager_, std::move(entity_ids));
-    Composite<EntityIds> ret;
-    procs.broadcast([this, &ret](auto &&p) {
-        auto proc = std::forward<decltype(p)>(p);
-        for (auto&& [idx, seg]: folly::enumerate(proc.segments_.value())) {
-            auto split_segs = seg->split(rows_);
-            size_t start_row = proc.row_ranges_->at(idx)->start();
-            size_t end_row = 0;
-            for (auto&& split_seg : split_segs) {
-                end_row = start_row + split_seg.row_count();
-                ret.push_back(push_entities(component_manager_, ProcessingUnit(std::move(split_seg),
-                                                                 RowRange(start_row, end_row),
-                                                                 std::move(*proc.col_ranges_->at(idx)))));
-                start_row = end_row;
-            }
+std::vector<EntityId> SplitClause::process(std::vector<EntityId>&& entity_ids) const {
+    if (entity_ids.empty()) {
+        return {};
+    }
+    auto proc = gather_entities(component_manager_, std::move(entity_ids));
+    std::vector<EntityId> ret;
+    for (auto&& [idx, seg]: folly::enumerate(proc.segments_.value())) {
+        auto split_segs = seg->split(rows_);
+        size_t start_row = proc.row_ranges_->at(idx)->start();
+        size_t end_row = 0;
+        for (auto&& split_seg : split_segs) {
+            end_row = start_row + split_seg.row_count();
+            auto new_entity_ids = push_entities(component_manager_,
+                                                ProcessingUnit(std::move(split_seg),
+                                                RowRange(start_row, end_row),
+                                                std::move(*proc.col_ranges_->at(idx))));
+            ret.insert(ret.end(), new_entity_ids.begin(), new_entity_ids.end());
+            start_row = end_row;
         }
-    });
+    }
     return ret;
 }
 
-Composite<EntityIds> SortClause::process(Composite<EntityIds>&& entity_ids) const {
-    auto procs = gather_entities(component_manager_, std::move(entity_ids));
-    Composite<EntityIds> output;
-    procs.broadcast([&output, this](auto&& proc) {
-        for (auto& seg: proc.segments_.value()) {
-            // This modifies the segment in place, which goes against the ECS principle of all entities being immutable
-            // Only used by SortMerge right now and so this is fine, although it would not generalise well
-            seg->sort(column_);
-        }
-        output.push_back(push_entities(component_manager_, std::move(proc)));
-    });
-    return output;
+std::vector<EntityId> SortClause::process(std::vector<EntityId>&& entity_ids) const {
+    if (entity_ids.empty()) {
+        return {};
+    }
+    auto proc = gather_entities(component_manager_, std::move(entity_ids));
+    for (auto& seg: proc.segments_.value()) {
+        // This modifies the segment in place, which goes against the ECS principle of all entities being immutable
+        // Only used by SortMerge right now and so this is fine, although it would not generalise well
+        seg->sort(column_);
+    }
+    return push_entities(component_manager_, std::move(proc));
 }
 
 template<typename IndexType, typename DensityPolicy, typename QueueType, typename Comparator, typename StreamId>
 void merge_impl(
         std::shared_ptr<ComponentManager> component_manager,
-        Composite<EntityIds> &ret,
+        std::vector<std::vector<EntityId>>& ret,
         QueueType &input_streams,
         bool add_symbol_column,
         StreamId stream_id,
@@ -903,7 +903,7 @@ void merge_impl(
     SegmentationPolicy segmentation_policy{static_cast<size_t>(num_segment_rows)};
 
     auto func = [&component_manager, &ret, &row_range, &col_range](auto &&segment) {
-        ret.push_back(push_entities(component_manager, ProcessingUnit{std::forward<SegmentInMemory>(segment), row_range, col_range}));
+        ret.emplace_back(push_entities(component_manager, ProcessingUnit{std::forward<SegmentInMemory>(segment), row_range, col_range}));
     };
 
     using AggregatorType = stream::Aggregator<IndexType, stream::DynamicSchema, SegmentationPolicy, DensityPolicy>;
@@ -925,19 +925,18 @@ void merge_impl(
 
 // MergeClause receives a list of DataFrames as input and merge them into a single one where all 
 // the rows are sorted by time stamp
-Composite<EntityIds> MergeClause::process(Composite<EntityIds>&& entity_ids) const {
+std::vector<EntityId> MergeClause::process(std::vector<EntityId>&& entity_ids) const {
     return std::move(entity_ids);
 }
 
-std::optional<std::vector<Composite<EntityIds>>> MergeClause::repartition(
-    std::vector<Composite<EntityIds>> &&comps) const {
+std::optional<std::vector<std::vector<EntityId>>> MergeClause::repartition(std::vector<std::vector<EntityId>>&& entity_ids_vec) const {
 
     // TODO this is a hack because we don't currently have a way to
     // specify any particular input shape unless a clause is the
     // first one and can use structure_for_processing. Ideally
     // merging should be parallel like resampling
-    auto entity_ids = merge_composites(std::move(comps));
-    auto procs = gather_entities(component_manager_, std::move(entity_ids));
+    auto entity_ids = flatten_entities(std::move(entity_ids_vec));
+    auto proc = gather_entities(component_manager_, std::move(entity_ids));
 
     auto compare =
             [](const std::unique_ptr<SegmentWrapper> &left,
@@ -954,24 +953,22 @@ std::optional<std::vector<Composite<EntityIds>>> MergeClause::repartition(
     size_t max_end_row = 0;
     size_t min_start_col = std::numeric_limits<size_t>::max();
     size_t max_end_col = 0;
-    procs.broadcast([&input_streams, &min_start_row, &max_end_row, &min_start_col, &max_end_col](auto&& proc) {
-        for (auto&& [idx, segment]: folly::enumerate(proc.segments_.value())) {
-            size_t start_row = proc.row_ranges_->at(idx)->start();
-            size_t end_row = proc.row_ranges_->at(idx)->end();
-            min_start_row = std::min(start_row, min_start_row);
-            max_end_row = std::max(end_row, max_end_row);
+    for (auto&& [idx, segment]: folly::enumerate(proc.segments_.value())) {
+        size_t start_row = proc.row_ranges_->at(idx)->start();
+        size_t end_row = proc.row_ranges_->at(idx)->end();
+        min_start_row = std::min(start_row, min_start_row);
+        max_end_row = std::max(end_row, max_end_row);
 
-            size_t start_col = proc.col_ranges_->at(idx)->start();
-            size_t end_col = proc.col_ranges_->at(idx)->end();
-            min_start_col = std::min(start_col, min_start_col);
-            max_end_col = std::max(end_col, max_end_col);
+        size_t start_col = proc.col_ranges_->at(idx)->start();
+        size_t end_col = proc.col_ranges_->at(idx)->end();
+        min_start_col = std::min(start_col, min_start_col);
+        max_end_col = std::max(end_col, max_end_col);
 
-            input_streams.push(std::make_unique<SegmentWrapper>(std::move(*segment)));
-        }
-    });
+        input_streams.push(std::make_unique<SegmentWrapper>(std::move(*segment)));
+    }
     const RowRange row_range{min_start_row, max_end_row};
     const ColRange col_range{min_start_col, max_end_col};
-    Composite<EntityIds> ret;
+    std::vector<std::vector<EntityId>> ret;
     std::visit(
             [this, &ret, &input_streams, &comp=compare, stream_id=stream_id_, &row_range, &col_range](auto idx, auto density) {
                 merge_impl<decltype(idx), decltype(density), decltype(input_streams), decltype(comp), decltype(stream_id)>(component_manager_,
@@ -984,15 +981,15 @@ std::optional<std::vector<Composite<EntityIds>>> MergeClause::repartition(
                                                                                                       idx,
                                                                                                       stream_descriptor_);
             }, index_, density_policy_);
-
-    std::vector<Composite<EntityIds>> output;
-    output.emplace_back(std::move(ret));
-    return std::make_optional(std::move(output));
+    return ret;
 }
 
 
-Composite<EntityIds> ColumnStatsGenerationClause::process(Composite<EntityIds>&& entity_ids) const {
-    auto procs = gather_entities(component_manager_, std::move(entity_ids), true);
+std::vector<EntityId> ColumnStatsGenerationClause::process(std::vector<EntityId>&& entity_ids) const {
+    internal::check<ErrorCode::E_INVALID_ARGUMENT>(
+            !entity_ids.empty(),
+            "ColumnStatsGenerationClause::process does not make sense with no processing units");
+    auto proc = gather_entities(component_manager_, std::move(entity_ids), true);
     std::vector<ColumnStatsAggregatorData> aggregators_data;
     internal::check<ErrorCode::E_INVALID_ARGUMENT>(
             static_cast<bool>(column_stats_aggregators_),
@@ -1004,29 +1001,23 @@ Composite<EntityIds> ColumnStatsGenerationClause::process(Composite<EntityIds>&&
     ankerl::unordered_dense::set<IndexValue> start_indexes;
     ankerl::unordered_dense::set<IndexValue> end_indexes;
 
-    internal::check<ErrorCode::E_INVALID_ARGUMENT>(
-            !procs.empty(),
-            "ColumnStatsGenerationClause::process does not make sense with no processing units");
-    procs.broadcast(
-            [&start_indexes, &end_indexes, &aggregators_data, this](auto &proc) {
-                for (const auto& key: proc.atom_keys_.value()) {
-                    start_indexes.insert(key->start_index());
-                    end_indexes.insert(key->end_index());
-                }
-                for (auto agg_data : folly::enumerate(aggregators_data)) {
-                    auto input_column_name = column_stats_aggregators_->at(agg_data.index).get_input_column_name();
-                    auto input_column = proc.get(input_column_name);
-                    if (std::holds_alternative<ColumnWithStrings>(input_column)) {
-                        auto input_column_with_strings = std::get<ColumnWithStrings>(input_column);
-                        agg_data->aggregate(input_column_with_strings);
-                    } else {
-                        if (!processing_config_.dynamic_schema_)
-                            internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
-                                "Unable to resolve column denoted by aggregation operator: '{}'",
-                                input_column_name);
-                    }
-                }
-            });
+    for (const auto& key: proc.atom_keys_.value()) {
+        start_indexes.insert(key->start_index());
+        end_indexes.insert(key->end_index());
+    }
+    for (auto agg_data : folly::enumerate(aggregators_data)) {
+        auto input_column_name = column_stats_aggregators_->at(agg_data.index).get_input_column_name();
+        auto input_column = proc.get(input_column_name);
+        if (std::holds_alternative<ColumnWithStrings>(input_column)) {
+            auto input_column_with_strings = std::get<ColumnWithStrings>(input_column);
+            agg_data->aggregate(input_column_with_strings);
+        } else {
+            if (!processing_config_.dynamic_schema_)
+                internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
+                    "Unable to resolve column denoted by aggregation operator: '{}'",
+                    input_column_name);
+        }
+    }
 
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
             start_indexes.size() == 1 && end_indexes.size() == 1,
@@ -1052,7 +1043,7 @@ Composite<EntityIds> ColumnStatsGenerationClause::process(Composite<EntityIds>&&
         seg.concatenate(agg_data->finalize(column_stats_aggregators_->at(agg_data.index).get_output_column_names()));
     }
     seg.set_row_id(0);
-    return Composite<EntityIds>(push_entities(component_manager_, ProcessingUnit(std::move(seg))));
+    return push_entities(component_manager_, ProcessingUnit(std::move(seg)));
 }
 
 std::vector<std::vector<size_t>> RowRangeClause::structure_for_processing(
@@ -1064,33 +1055,33 @@ std::vector<std::vector<size_t>> RowRangeClause::structure_for_processing(
     return structure_by_row_slice(ranges_and_keys, start_from);
 }
 
-Composite<EntityIds> RowRangeClause::process(Composite<EntityIds> &&entity_ids) const {
-    auto procs = gather_entities(component_manager_, std::move(entity_ids));
-    Composite<EntityIds> output;
-    procs.broadcast([&output, this](ProcessingUnit &proc) {
-        for (auto&& [idx, row_range]: folly::enumerate(proc.row_ranges_.value())) {
-            if ((start_ > row_range->start() && start_ < row_range->end()) ||
-                (end_ > row_range->start() && end_ < row_range->end())) {
-                // Zero-indexed within this slice
-                size_t start_row{0};
-                size_t end_row{row_range->diff()};
-                if (start_ > row_range->start() && start_ < row_range->end()) {
-                    start_row = start_ - row_range->start();
-                }
-                if (end_ > row_range->start() && end_ < row_range->end()) {
-                    end_row = end_ - (row_range->start());
-                }
-                auto truncated_segment = proc.segments_->at(idx)->truncate(start_row, end_row, false);
-                auto num_rows = truncated_segment.is_null() ? 0 : truncated_segment.row_count();
-                proc.row_ranges_->at(idx) = std::make_shared<pipelines::RowRange>(proc.row_ranges_->at(idx)->first, proc.row_ranges_->at(idx)->first + num_rows);
-                auto num_cols = truncated_segment.is_null() ? 0 : truncated_segment.descriptor().field_count() - truncated_segment.descriptor().index().field_count();
-                proc.col_ranges_->at(idx) = std::make_shared<pipelines::ColRange>(proc.col_ranges_->at(idx)->first, proc.col_ranges_->at(idx)->first + num_cols);
-                proc.segments_->at(idx) = std::make_shared<SegmentInMemory>(std::move(truncated_segment));
-            } // else all rows in this segment are required, do nothing
-        }
-        output.push_back(push_entities(component_manager_, std::move(proc)));
-    });
-    return output;
+std::vector<EntityId> RowRangeClause::process(std::vector<EntityId>&& entity_ids) const {
+    if (entity_ids.empty()) {
+        return {};
+    }
+    auto proc = gather_entities(component_manager_, std::move(entity_ids));
+    std::vector<EntityId> output;
+    for (auto&& [idx, row_range]: folly::enumerate(proc.row_ranges_.value())) {
+        if ((start_ > row_range->start() && start_ < row_range->end()) ||
+            (end_ > row_range->start() && end_ < row_range->end())) {
+            // Zero-indexed within this slice
+            size_t start_row{0};
+            size_t end_row{row_range->diff()};
+            if (start_ > row_range->start() && start_ < row_range->end()) {
+                start_row = start_ - row_range->start();
+            }
+            if (end_ > row_range->start() && end_ < row_range->end()) {
+                end_row = end_ - (row_range->start());
+            }
+            auto truncated_segment = proc.segments_->at(idx)->truncate(start_row, end_row, false);
+            auto num_rows = truncated_segment.is_null() ? 0 : truncated_segment.row_count();
+            proc.row_ranges_->at(idx) = std::make_shared<pipelines::RowRange>(proc.row_ranges_->at(idx)->first, proc.row_ranges_->at(idx)->first + num_rows);
+            auto num_cols = truncated_segment.is_null() ? 0 : truncated_segment.descriptor().field_count() - truncated_segment.descriptor().index().field_count();
+            proc.col_ranges_->at(idx) = std::make_shared<pipelines::ColRange>(proc.col_ranges_->at(idx)->first, proc.col_ranges_->at(idx)->first + num_cols);
+            proc.segments_->at(idx) = std::make_shared<SegmentInMemory>(std::move(truncated_segment));
+        } // else all rows in this segment are required, do nothing
+    }
+    return push_entities(component_manager_, std::move(proc));
 }
 
 void RowRangeClause::set_processing_config(const ProcessingConfig& processing_config) {
@@ -1151,27 +1142,27 @@ std::vector<std::vector<size_t>> DateRangeClause::structure_for_processing(
     return structure_by_row_slice(ranges_and_keys, start_from);
 }
 
-Composite<EntityIds> DateRangeClause::process(Composite<EntityIds> &&entity_ids) const {
-    auto procs = gather_entities(component_manager_, std::move(entity_ids), true);
-    Composite<EntityIds> output;
-    procs.broadcast([&output, this](ProcessingUnit &proc) {
-        // We are only interested in the index, which is in every SegmentInMemory in proc.segments_, so just use the first
-        auto row_range = proc.row_ranges_->at(0);
-        auto [start_index, end_index] = proc.atom_keys_->at(0)->time_range();
-        if ((start_ > start_index && start_ < end_index) || (end_ >= start_index && end_ < end_index)) {
-            size_t start_row{0};
-            size_t end_row{row_range->diff()};
-            if (start_ > start_index && start_ < end_index) {
-                start_row = proc.segments_->at(0)->column_ptr(0)->search_sorted<timestamp>(start_);
-            }
-            if (end_ >= start_index && end_ < end_index) {
-                end_row = proc.segments_->at(0)->column_ptr(0)->search_sorted<timestamp>(end_, true);
-            }
-            proc.truncate(start_row, end_row);
-        } // else all rows in the processing unit are required, do nothing
-        output.push_back(push_entities(component_manager_, std::move(proc)));
-    });
-    return output;
+std::vector<EntityId> DateRangeClause::process(std::vector<EntityId> &&entity_ids) const {
+    if (entity_ids.empty()) {
+        return {};
+    }
+    auto proc = gather_entities(component_manager_, std::move(entity_ids), true);
+    std::vector<EntityId> output;
+    // We are only interested in the index, which is in every SegmentInMemory in proc.segments_, so just use the first
+    auto row_range = proc.row_ranges_->at(0);
+    auto [start_index, end_index] = proc.atom_keys_->at(0)->time_range();
+    if ((start_ > start_index && start_ < end_index) || (end_ >= start_index && end_ < end_index)) {
+        size_t start_row{0};
+        size_t end_row{row_range->diff()};
+        if (start_ > start_index && start_ < end_index) {
+            start_row = proc.segments_->at(0)->column_ptr(0)->search_sorted<timestamp>(start_);
+        }
+        if (end_ >= start_index && end_ < end_index) {
+            end_row = proc.segments_->at(0)->column_ptr(0)->search_sorted<timestamp>(end_, true);
+        }
+        proc.truncate(start_row, end_row);
+    } // else all rows in the processing unit are required, do nothing
+    return push_entities(component_manager_, std::move(proc));
 }
 
 std::string DateRangeClause::to_string() const {
