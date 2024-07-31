@@ -82,14 +82,14 @@ S3Result<Segment> MockS3Client::get_object(
 
 S3Result<std::monostate> MockS3Client::put_object(
         const std::string &s3_object_name,
-        Segment* segment,
+        Segment &&segment,
         const std::string &bucket_name) {
     auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::WRITE);
     if (maybe_error.has_value()) {
         return {maybe_error.value()};
     }
 
-    s3_contents.insert_or_assign({bucket_name, s3_object_name}, segment->clone());
+    s3_contents.insert_or_assign({bucket_name, s3_object_name}, std::move(segment));
 
     return {std::monostate()};
 }

@@ -58,11 +58,11 @@ class MappedFileStorage final : public SingleFileStorage {
 
     void do_finalize(KeyData key_data) override;
 
-    uint64_t get_data_offset(Segment* seg);
+    uint64_t get_data_offset(const Segment& seg);
 
     void do_load_header(size_t header_offset, size_t header_size) override;
 
-    uint64_t write_segment(Segment* seg);
+    uint64_t write_segment(Segment&& seg);
 
     uint8_t* do_read_raw(size_t offset, size_t bytes) override;
 

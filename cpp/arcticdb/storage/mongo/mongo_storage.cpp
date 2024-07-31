@@ -134,7 +134,7 @@ void MongoStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visito
                     keys_not_found.push_back(k);
                 }
                 else {
-                    visitor(k, std::move(*(kv.value().segment())));
+                    visitor(k, std::move(kv.value().segment()));
                 }
 
             } catch (const mongocxx::operation_exception& ex) {

@@ -124,14 +124,14 @@ std::string NfsBackedStorage::name() const {
 
 void NfsBackedStorage::do_write(Composite<KeySegmentPair>&& kvs) {
     auto enc = kvs.transform([] (auto&& key_seg) {
-        return KeySegmentPair{encode_object_id(key_seg.variant_key()), key_seg.segment()};
+        return KeySegmentPair{encode_object_id(key_seg.variant_key()), std::move(key_seg.segment())};
     });
     s3::detail::do_write_impl(std::move(enc), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
 }
 
 void NfsBackedStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts) {
     auto enc = kvs.transform([] (auto&& key_seg) {
-        return KeySegmentPair{encode_object_id(key_seg.variant_key()), key_seg.segment()};
+        return KeySegmentPair{encode_object_id(key_seg.variant_key()), std::move(key_seg.segment())};
     });
     s3::detail::do_update_impl(std::move(enc), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
 }

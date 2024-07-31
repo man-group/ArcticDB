@@ -75,9 +75,10 @@ void LmdbStorage::do_write_internal(Composite<KeySegmentPair>&& kvs, ::lmdb::txn
         for (auto &kv : group.values()) {
             ARCTICDB_DEBUG(log::storage(), "Lmdb storage writing segment with key {}", kv.key_view());
             auto k = to_serialized_key(kv.variant_key());
+            auto &seg = kv.segment();
             int64_t overwrite_flag = std::holds_alternative<RefKey>(kv.variant_key()) ? 0 : MDB_NOOVERWRITE;
             try {
-                lmdb_client_->write(db_name, k, kv.release_segment(), txn, dbi, overwrite_flag);
+                lmdb_client_->write(db_name, k, std::move(seg), txn, dbi, overwrite_flag);
             } catch (const ::lmdb::key_exist_error& e) {
                 throw DuplicateKeyException(fmt::format("Key already exists: {}: {}", kv.variant_key(), e.what()));
             } catch (const ::lmdb::error& ex) {

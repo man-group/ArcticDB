@@ -37,7 +37,7 @@ public:
 
     S3Result<std::monostate> put_object(
             const std::string& s3_object_name,
-            Segment* segment,
+            Segment&& segment,
             const std::string& bucket_name) override;
 
     S3Result<DeleteOutput> delete_objects(

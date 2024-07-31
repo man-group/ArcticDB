@@ -134,12 +134,12 @@ auto build_document(storage::KeySegmentPair &kv) {
     using builder::stream::document;
 
     const auto &key = kv.variant_key();
-    auto segment = kv.segment();
-    const auto total_size = segment->calculate_size();
+    auto &segment = kv.segment();
+    const auto total_size = segment.calculate_size();
     /*thread_local*/ std::vector<uint8_t> buffer{};
     buffer.resize(total_size);
     bsoncxx::types::b_binary data = {};
-    kv.segment()->write_to(buffer.data());
+    kv.segment().write_to(buffer.data());
     data.size = uint32_t(total_size);
     data.bytes = buffer.data();
 

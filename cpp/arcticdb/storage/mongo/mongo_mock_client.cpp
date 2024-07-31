@@ -107,7 +107,7 @@ bool MockMongoClient::write_segment(
         return false;
     }
 
-    mongo_contents.insert_or_assign(std::move(key), kv.segment());
+    mongo_contents.insert_or_assign(std::move(key), std::move(kv.segment()));
     return true;
 }
 
@@ -129,7 +129,7 @@ UpdateResult MockMongoClient::update_segment(
         return {0}; // upsert is false, don't update and return 0 as modified_count
     }
 
-    mongo_contents.insert_or_assign(std::move(key), kv.segment());
+    mongo_contents.insert_or_assign(std::move(key), std::move(kv.segment()));
     return {key_found ? 1 : 0};
 }
 
@@ -149,7 +149,7 @@ std::optional<KeySegmentPair> MockMongoClient::read_segment(
         return std::nullopt;
     }
 
-    return KeySegmentPair(std::move(mongo_key.doc_key_.key_), it->second);
+    return KeySegmentPair(std::move(mongo_key.doc_key_.key_), std::move(it->second));
 }
 
 DeleteResult MockMongoClient::remove_keyvalue(

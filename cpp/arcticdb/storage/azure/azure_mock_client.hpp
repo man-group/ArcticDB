@@ -24,7 +24,7 @@ public:
 
     void write_blob(
             const std::string& blob_name,
-            std::shared_ptr<Segment> segment,
+            Segment&& segment,
             const Azure::Storage::Blobs::UploadBlockBlobFromOptions& upload_option,
             unsigned int request_timeout) override;
 
@@ -49,7 +49,7 @@ public:
 
 private:
     // Stores a mapping from blob_name to a Segment.
-    std::map<std::string, std::shared_ptr<Segment>> azure_contents;
+    std::map<std::string, Segment> azure_contents;
 };
 
 }

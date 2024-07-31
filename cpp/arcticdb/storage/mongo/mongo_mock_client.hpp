@@ -115,7 +115,7 @@ public:
             std::string database_name,
             std::string collection_name) override;
 private:
-    std::map<MongoKey, std::shared_ptr<Segment>> mongo_contents;
+    std::map<MongoKey, Segment> mongo_contents;
 
     bool has_key(const MongoKey& key);
 };

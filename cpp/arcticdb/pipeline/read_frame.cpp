@@ -289,18 +289,19 @@ bool remaining_fields_empty(IteratorType it, const PipelineContextRow& context) 
 void decode_into_frame_static(
     SegmentInMemory &frame,
     PipelineContextRow &context,
-    Segment* seg,
+    Segment &&s,
     const std::shared_ptr<BufferHolder>& buffers) {
+    auto seg = std::move(s);
     ARCTICDB_SAMPLE_DEFAULT(DecodeIntoFrame)
-    const uint8_t *data = seg->buffer().data();
+    const uint8_t *data = seg.buffer().data();
     const uint8_t *begin = data;
-    const uint8_t *end = begin + seg->buffer().bytes();
-    auto &hdr = seg->header();
+    const uint8_t *end = begin + seg.buffer().bytes();
+    auto &hdr = seg.header();
     auto index_fieldcount = get_index_field_count(frame);
     data = skip_heading_fields(hdr, data);
-    context.set_descriptor(seg->descriptor());
+    context.set_descriptor(seg.descriptor());
     context.set_compacted(hdr.compacted());
-    ARCTICDB_DEBUG(log::version(), "Num fields: {}", seg->descriptor().field_count());
+    ARCTICDB_DEBUG(log::version(), "Num fields: {}", seg.descriptor().field_count());
     const auto encoding_version = hdr.encoding_version();
     const bool has_magic_nums = encoding_version == EncodingVersion::V2;
     const auto& fields = hdr.body_fields();
@@ -378,17 +379,18 @@ void decode_into_frame_static(
 void decode_into_frame_dynamic(
     SegmentInMemory& frame,
     PipelineContextRow& context,
-    Segment* seg,
+    Segment&& s,
     const std::shared_ptr<BufferHolder>& buffers
 ) {
     ARCTICDB_SAMPLE_DEFAULT(DecodeIntoFrame)
-    const uint8_t *data = seg->buffer().data();
+    auto seg = std::move(s);
+    const uint8_t *data = seg.buffer().data();
     const uint8_t *begin = data;
-    const uint8_t *end = begin + seg->buffer().bytes();
-    auto &hdr = seg->header();
+    const uint8_t *end = begin + seg.buffer().bytes();
+    auto &hdr = seg.header();
     auto index_fieldcount = get_index_field_count(frame);
     data = skip_heading_fields(hdr, data);
-    context.set_descriptor(std::make_shared<StreamDescriptor>(seg->descriptor()));
+    context.set_descriptor(std::make_shared<StreamDescriptor>(seg.descriptor()));
     context.set_compacted(hdr.compacted());
 
     const auto encoding_version = hdr.encoding_version();
@@ -1168,9 +1170,9 @@ folly::Future<std::vector<VariantKey>> fetch_data(
             [row=row, frame=frame, dynamic_schema=dynamic_schema, buffers](auto &&ks) mutable {
                 auto key_seg = std::forward<storage::KeySegmentPair>(ks);
                 if(dynamic_schema)
-                    decode_into_frame_dynamic(frame, row, key_seg.segment().get(), buffers);
+                    decode_into_frame_dynamic(frame, row, std::move(key_seg.segment()), buffers);
                 else
-                    decode_into_frame_static(frame, row, key_seg.segment().get(), buffers);
+                    decode_into_frame_static(frame, row, std::move(key_seg.segment()), buffers);
                 return key_seg.variant_key();
             });
         }
