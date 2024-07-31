@@ -591,8 +591,13 @@ void set_output_descriptors(
                 final_stream_descriptor.add_field(FieldRef{nh.mapped(), nh.key()});
             }
         }
-        for (const auto& [name, type]: new_fields) {
-            final_stream_descriptor.add_field(FieldRef{type, name});
+        // Iterate through new_stream_descriptor->fields() rather than remaining new_fields to preserve ordering
+        // e.g. if there were two projections then users will expect the column produced by the first one to appear
+        // first in the output df
+        for (const auto& field: new_stream_descriptor->fields()) {
+            if (new_fields.contains(field.name())) {
+                final_stream_descriptor.add_field(field);
+            }
         }
         pipeline_context->set_descriptor(final_stream_descriptor);
     }
