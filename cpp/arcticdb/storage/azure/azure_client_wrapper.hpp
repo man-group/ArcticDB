@@ -50,11 +50,11 @@ public:
     using Config = arcticdb::proto::azure_storage::Config;
     virtual void write_blob(
             const std::string& blob_name,
-            Segment&& segment,
+            const Segment& segment,
             const Azure::Storage::Blobs::UploadBlockBlobFromOptions& upload_option,
             unsigned int request_timeout) = 0;
 
-    virtual Segment read_blob(
+    virtual std::shared_ptr<Segment> read_blob(
             const std::string& blob_name,
             const Azure::Storage::Blobs::DownloadBlobToOptions& download_option,
             unsigned int request_timeout) = 0;

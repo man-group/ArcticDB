@@ -57,11 +57,11 @@ EncodedFieldCollection decode_encoded_fields(
     const uint8_t* data,
     const uint8_t* begin ARCTICDB_UNUSED);
 
-SegmentInMemory decode_segment(Segment&& segment);
+SegmentInMemory decode_segment(const Segment& segment);
 
 void decode_into_memory_segment(
     const Segment& segment,
-    SegmentHeader& hdr,
+    const SegmentHeader& hdr,
     SegmentInMemory& res,
     const entity::StreamDescriptor& desc);
 
@@ -78,12 +78,12 @@ std::optional<google::protobuf::Any> decode_metadata_from_segment(
     const Segment& segment);
 
 std::pair<std::optional<google::protobuf::Any>, StreamDescriptor> decode_metadata_and_descriptor_fields(
-    Segment& segment);
+    const Segment& segment);
 
 std::optional<TimeseriesDescriptor> decode_timeseries_descriptor(
-    Segment& segment);
+    const Segment& segment);
 
-std::optional<TimeseriesDescriptor> decode_timeseries_descriptor_for_incompletes(Segment& segment);
+std::optional<TimeseriesDescriptor> decode_timeseries_descriptor_for_incompletes(const Segment& segment);
 
 HashedValue get_segment_hash(Segment& seg);
 

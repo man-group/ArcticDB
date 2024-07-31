@@ -261,14 +261,14 @@ struct ReadCompressedSlicesTask : BaseTask {
 
     ARCTICDB_MOVE_ONLY_DEFAULT(ReadCompressedSlicesTask)
 
-     Composite<std::pair<Segment, pipelines::SliceAndKey>> read() {
+    Composite<std::pair<std::shared_ptr<Segment>, pipelines::SliceAndKey>> read() {
         return slice_and_keys_.transform([that=this](const auto &sk){
             ARCTICDB_DEBUG(log::version(), "Reading key {}", sk.key());
-            return std::make_pair(that->lib_->read(sk.key()).release_segment(), sk);
+            return std::make_pair(that->lib_->read(sk.key()).segment_ptr(), sk);
         });
-     }
+    }
 
-    Composite<std::pair<Segment, pipelines::SliceAndKey>> operator()() {
+    auto operator()() {
         ARCTICDB_SAMPLE(ReadCompressed, 0)
         return read();
     }
@@ -302,9 +302,9 @@ struct CopyCompressedTask : BaseTask {
     VariantKey copy() {
         return std::visit([that = this](const auto &source_key) {
             auto key_seg = that->lib_->read(source_key);
-            auto target_key_seg = stream::make_target_key<ClockType>(that->key_type_, that->stream_id_, that->version_id_, source_key, std::move(key_seg.segment()));
+            auto target_key_seg = stream::make_target_key<ClockType>(that->key_type_, that->stream_id_, that->version_id_, source_key, key_seg.segment_ptr());
             auto return_key = target_key_seg.variant_key();
-            that->lib_->write(Composite<storage::KeySegmentPair>{std::move(target_key_seg) });
+            that->lib_->write(Composite<storage::KeySegmentPair>{std::move(target_key_seg)});
             return return_key;
         }, source_key_);
     }
@@ -320,14 +320,13 @@ struct DecodeSegmentTask : BaseTask {
 
     DecodeSegmentTask() = default;
 
-    std::pair<VariantKey, SegmentInMemory> operator()(storage::KeySegmentPair &&ks) const {
+    std::pair<VariantKey, SegmentInMemory> operator()(storage::KeySegmentPair &&key_seg) const {
         ARCTICDB_SAMPLE(DecodeAtomTask, 0)
 
-        auto key_seg = std::move(ks);
         ARCTICDB_DEBUG(log::storage(), "ReadAndDecodeAtomTask decoding segment with key {}",
                              variant_key_view(key_seg.variant_key()));
 
-        return {key_seg.variant_key(), decode_segment(std::move(key_seg.segment()))};
+        return {key_seg.variant_key(), decode_segment(key_seg.segment())};
     }
 };
 
@@ -468,7 +467,7 @@ struct DecodeTimeseriesDescriptorTask : BaseTask {
 
         util::check(static_cast<bool>(maybe_desc), "Failed to decode timeseries descriptor");
         return std::make_pair(
-            std::move(key_seg.variant_key()),
+            key_seg.variant_key(),
             std::move(*maybe_desc));
 
     }
@@ -491,7 +490,7 @@ struct DecodeTimeseriesDescriptorForIncompletesTask : BaseTask {
 
         util::check(static_cast<bool>(maybe_desc), "Failed to decode timeseries descriptor");
         return std::make_pair(
-                std::move(key_seg.variant_key()),
+                key_seg.variant_key(),
                 std::move(*maybe_desc));
     }
 };
@@ -508,7 +507,7 @@ struct DecodeMetadataAndDescriptorTask : BaseTask {
 
         auto [any, descriptor] = decode_metadata_and_descriptor_fields(key_seg.segment());
         return std::make_tuple(
-            std::move(key_seg.variant_key()),
+            key_seg.variant_key(),
             std::move(any),
             std::move(descriptor)
             );

@@ -11,6 +11,7 @@
 #include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/storage/s3/s3_real_client.hpp>
 #include <arcticdb/storage/s3/s3_client_wrapper.hpp>
+#include <utility>
 
 namespace arcticdb::storage::nfs_backed {
 
@@ -124,20 +125,20 @@ std::string NfsBackedStorage::name() const {
 
 void NfsBackedStorage::do_write(Composite<KeySegmentPair>&& kvs) {
     auto enc = kvs.transform([] (auto&& key_seg) {
-        return KeySegmentPair{encode_object_id(key_seg.variant_key()), std::move(key_seg.segment())};
+      return KeySegmentPair{encode_object_id(key_seg.variant_key()), key_seg.segment_ptr()};
     });
     s3::detail::do_write_impl(std::move(enc), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
 }
 
 void NfsBackedStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts) {
     auto enc = kvs.transform([] (auto&& key_seg) {
-        return KeySegmentPair{encode_object_id(key_seg.variant_key()), std::move(key_seg.segment())};
+      return KeySegmentPair{encode_object_id(key_seg.variant_key()), key_seg.segment_ptr()};
     });
     s3::detail::do_update_impl(std::move(enc), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
 }
 
 void NfsBackedStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
-    auto func = [visitor] (const VariantKey& k, Segment&& seg) mutable {
+    auto func = [visitor] (const VariantKey& k, std::shared_ptr<Segment> seg) mutable {
         visitor(unencode_object_id(k), std::move(seg));
     };
 

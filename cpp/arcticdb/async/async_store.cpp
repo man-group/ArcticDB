@@ -12,7 +12,7 @@
 #include <arcticdb/version/de_dup_map.hpp>
 
 namespace arcticdb::async {
-std::pair<entity::VariantKey, std::optional<Segment>> lookup_match_in_dedup_map(
+std::pair<entity::VariantKey, std::optional<std::shared_ptr<Segment>>> lookup_match_in_dedup_map(
     const std::shared_ptr<DeDupMap> &de_dup_map,
     storage::KeySegmentPair&& key_seg) {
     std::optional<AtomKey> de_dup_key;
@@ -20,8 +20,7 @@ std::pair<entity::VariantKey, std::optional<Segment>> lookup_match_in_dedup_map(
         ARCTICDB_DEBUG(log::version(),
                        "No existing key with same contents: writing new object {}",
                        key_seg.atom_key());
-        return std::make_pair(std::move(key_seg.atom_key()), std::make_optional(std::move(key_seg.segment())));
-
+        return std::make_pair(key_seg.atom_key(), std::make_optional(key_seg.segment_ptr()));
     } else {
         ARCTICDB_DEBUG(log::version(),
                        "Found existing key with same contents: using existing object {}",

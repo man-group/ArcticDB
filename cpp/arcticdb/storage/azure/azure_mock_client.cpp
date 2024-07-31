@@ -55,7 +55,7 @@ std::optional<Azure::Core::RequestFailedException> has_failure_trigger(const std
 
 void MockAzureClient::write_blob(
         const std::string& blob_name,
-        arcticdb::Segment&& segment,
+        const arcticdb::Segment& segment,
         const Azure::Storage::Blobs::UploadBlockBlobFromOptions&,
         unsigned int) {
 
@@ -64,10 +64,10 @@ void MockAzureClient::write_blob(
         throw maybe_exception.value();
     }
 
-    azure_contents.insert_or_assign(blob_name, std::move(segment));
+    azure_contents.insert_or_assign(blob_name, segment.clone());
 }
 
-Segment MockAzureClient::read_blob(
+std::shared_ptr<Segment> MockAzureClient::read_blob(
         const std::string& blob_name,
         const Azure::Storage::Blobs::DownloadBlobToOptions&,
         unsigned int) {
@@ -84,7 +84,7 @@ Segment MockAzureClient::read_blob(
         throw get_exception(message, error_code, Azure::Core::Http::HttpStatusCode::NotFound);
     }
 
-    return std::move(pos->second);
+    return std::make_shared<Segment>(std::move(pos->second));
 }
 
 void MockAzureClient::delete_blobs(

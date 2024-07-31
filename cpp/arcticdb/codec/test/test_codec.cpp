@@ -317,9 +317,9 @@ TYPED_TEST(SegmentStringEncodingTest, EncodeSingleString) {
     lz4ptr->set_acceleration(1);
     auto copy = s.clone();
     constexpr EncodingVersion encoding_version = TypeParam::value;
-    Segment seg = encode_dispatch(s.clone(), opt, encoding_version);
+    auto seg = encode_dispatch(s.clone(), opt, encoding_version);
 
-    SegmentInMemory res = decode_segment(std::move(seg));
+    SegmentInMemory res = decode_segment(seg);
     ASSERT_EQ(copy.string_at(0, 1), res.string_at(0, 1));
     ASSERT_EQ(std::string("happy"), res.string_at(0, 1));
 }
@@ -346,7 +346,7 @@ TYPED_TEST(SegmentStringEncodingTest, EncodeStringsBasic) {
     constexpr EncodingVersion encoding_version = TypeParam::value;
     Segment seg = encode_dispatch(SegmentInMemory{s}, opt, encoding_version);
 
-    SegmentInMemory res = decode_segment(std::move(seg));
+    SegmentInMemory res = decode_segment(seg);
     ASSERT_EQ(copy.string_at(0, 1), res.string_at(0, 1));
     ASSERT_EQ(std::string("happy"), res.string_at(0, 1));
     ASSERT_EQ(copy.string_at(1, 3), res.string_at(1, 3));
@@ -444,7 +444,7 @@ TEST(Segment, RoundtripTimeseriesDescriptorWriteToBufferV1) {
     auto copy = in_mem_seg.clone();
     auto seg = encode_v1(std::move(in_mem_seg), codec::default_lz4_codec());
     std::vector<uint8_t> vec;
-    const auto bytes = seg.calculate_size();
+    const auto bytes = seg.size();
     vec.resize(bytes);
     seg.write_to(vec.data());
     auto unserialized = Segment::from_bytes(vec.data(), bytes);
@@ -462,7 +462,7 @@ TEST(Segment, RoundtripStringsWriteToBufferV1) {
     auto copy = in_mem_seg.clone();
     auto seg = encode_v1(std::move(in_mem_seg), codec::default_lz4_codec());
     std::vector<uint8_t> vec;
-    const auto bytes = seg.calculate_size();
+    const auto bytes = seg.size();
     vec.resize(bytes);
     seg.write_to(vec.data());
     auto unserialized = Segment::from_bytes(vec.data(), bytes);
@@ -501,7 +501,7 @@ TEST(Segment, RoundtripTimeseriesDescriptorWriteToBufferV2) {
     auto copy = in_mem_seg.clone();
     auto seg = encode_v2(std::move(in_mem_seg), codec::default_lz4_codec());
     std::vector<uint8_t> vec;
-    const auto bytes = seg.calculate_size();
+    const auto bytes = seg.size();
     ARCTICDB_DEBUG(log::codec(), "## Resizing buffer to {} bytes", bytes);
     vec.resize(bytes);
     seg.write_to(vec.data());

@@ -36,11 +36,10 @@ namespace arcticdb::async {
     }
 
     pipelines::SegmentAndSlice DecodeSliceTask::decode_into_slice(storage::KeySegmentPair&& key_segment_pair) {
-        auto key = std::move(key_segment_pair.atom_key());
-        auto seg = std::move(key_segment_pair.release_segment());
-        ARCTICDB_DEBUG(log::storage(), "ReadAndDecodeAtomTask decoding segment of size {} with key {}",
+        const Segment& seg = key_segment_pair.segment();
+        ARCTICDB_DEBUG(log::storage(), "decode_into_slice with key_segment_pair decoding segment of size {} with key {}",
                        seg.size(),
-                       key);
+                       key_segment_pair.atom_key());
         auto &hdr = seg.header();
         const auto& desc = seg.descriptor();
         auto descriptor = async::get_filtered_descriptor(desc, columns_to_decode_);
@@ -53,7 +52,7 @@ namespace arcticdb::async {
 
     pipelines::SliceAndKey DecodeSlicesTask::decode_into_slice(std::pair<Segment, pipelines::SliceAndKey>&& sk_pair) const {
         auto [seg, sk] = std::move(sk_pair);
-        ARCTICDB_DEBUG(log::storage(), "ReadAndDecodeAtomTask decoding segment with key {}",
+        ARCTICDB_DEBUG(log::storage(), "decode_into_slice with sk_pair decoding segment with key {}",
                       variant_key_view(sk.key()));
 
         auto &hdr = seg.header();

@@ -140,7 +140,7 @@ void RocksDBStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visi
                         s.ToString());
                 failed_reads.push_back(k);
             } else {
-                visitor(k, Segment::from_bytes(reinterpret_cast<uint8_t*>(value.data()), value.size()));
+                visitor(k, std::make_shared<Segment>(Segment::from_bytes(reinterpret_cast<uint8_t*>(value.data()), value.size())));
             }
         }
     });
@@ -237,7 +237,7 @@ void RocksDBStorage::do_write_internal(Composite<KeySegmentPair>&& kvs) {
             auto k_str = to_serialized_key(kv.variant_key());
 
             auto& seg = kv.segment();
-            auto total_sz = seg.calculate_size();
+            auto total_sz = seg.size();
             std::string seg_data;
             seg_data.resize(total_sz);
             seg.write_to(reinterpret_cast<std::uint8_t *>(seg_data.data()));

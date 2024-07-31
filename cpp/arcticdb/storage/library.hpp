@@ -24,6 +24,7 @@
 #include <folly/concurrency/ConcurrentHashMap.h>
 #include <boost/core/noncopyable.hpp>
 #include <filesystem>
+#include <utility>
 
 
 
@@ -122,10 +123,10 @@ class Library {
     }
 
     KeySegmentPair read(VariantKey key, ReadKeyOpts opts = ReadKeyOpts{}) {
-        KeySegmentPair res{VariantKey{key}};
+        KeySegmentPair res;
         util::check(!std::holds_alternative<StringId>(variant_key_id(key)) || !std::get<StringId>(variant_key_id(key)).empty(), "Unexpected empty id");
-        const ReadVisitor& visitor = [&res](const VariantKey&, Segment&& value) {
-            res.segment() = std::move(value);
+        const ReadVisitor& visitor = [&res](const VariantKey& k, std::shared_ptr<Segment> value) {
+            res = KeySegmentPair{k, std::move(value)};
         };
 
         read(Composite<VariantKey>(std::move(key)), visitor, opts);

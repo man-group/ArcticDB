@@ -35,16 +35,15 @@ std::optional<Segment> RealLmdbClient::read(const std::string&, std::string& pat
         return std::nullopt;
     }
 
-    auto segment = Segment::from_bytes(reinterpret_cast<std::uint8_t *>(mdb_val.mv_data), mdb_val.mv_size);
-    return segment;
+    return Segment::from_bytes(reinterpret_cast<std::uint8_t *>(mdb_val.mv_data), mdb_val.mv_size);
 }
 
-void RealLmdbClient::write(const std::string&, std::string& path, arcticdb::Segment&& seg,
+void RealLmdbClient::write(const std::string&, std::string& path, const arcticdb::Segment& seg,
                            ::lmdb::txn& txn, ::lmdb::dbi& dbi, int64_t overwrite_flag) {
     MDB_val mdb_key{path.size(), path.data()};
 
     MDB_val mdb_val;
-    mdb_val.mv_size = seg.calculate_size();
+    mdb_val.mv_size = seg.size();
 
     ARCTICDB_SUBSAMPLE(LmdbPut, 0)
     int rc = ::mdb_put(txn.handle(), dbi.handle(), &mdb_key, &mdb_val, MDB_RESERVE | overwrite_flag);

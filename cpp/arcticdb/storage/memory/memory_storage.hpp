@@ -47,7 +47,7 @@ namespace arcticdb::storage::memory {
 
         std::string do_key_path(const VariantKey&) const final { return {}; };
 
-        using KeyMap = folly::ConcurrentHashMap<VariantKey, Segment>;
+        using KeyMap = folly::ConcurrentHashMap<VariantKey, std::shared_ptr<Segment>>;
         // This is pre-populated so that concurrent access is fine.
         // An outer folly::ConcurrentHashMap would only return const inner hash maps which is no good.
         using TypeMap = std::unordered_map<KeyType, KeyMap>;

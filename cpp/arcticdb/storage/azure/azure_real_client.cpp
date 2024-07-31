@@ -47,7 +47,7 @@ Azure::Storage::Blobs::BlobClientOptions RealAzureClient::get_client_options(con
 
 void RealAzureClient::write_blob(
         const std::string& blob_name,
-        Segment&& segment,
+        const Segment& segment,
         const Azure::Storage::Blobs::UploadBlockBlobFromOptions& upload_option,
         unsigned int request_timeout) {
 
@@ -60,7 +60,7 @@ void RealAzureClient::write_blob(
     blob_client.UploadFrom(dst, write_size, upload_option, get_context(request_timeout));
 }
 
-Segment RealAzureClient::read_blob(
+std::shared_ptr<Segment> RealAzureClient::read_blob(
         const std::string& blob_name,
         const Azure::Storage::Blobs::DownloadBlobToOptions& download_option,
         unsigned int request_timeout) {
@@ -72,7 +72,7 @@ Segment RealAzureClient::read_blob(
     blob_client.DownloadTo(buffer->preamble(), buffer->available(), download_option, get_context(request_timeout));
     ARCTICDB_SUBSAMPLE(AzureStorageVisitSegment, 0)
 
-    return Segment::from_buffer(std::move(buffer));
+    return std::make_shared<Segment>(Segment::from_buffer(std::move(buffer)));
 }
 
 void RealAzureClient::delete_blobs(
