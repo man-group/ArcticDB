@@ -48,10 +48,10 @@ inline std::optional<std::string> collect_futures_exceptions(auto&& futures) {
 }
 
 template <typename Inputs, typename TaskSubmitter, typename ResultHandler>
-inline void submit_tasks_for_range(const Inputs& inputs, TaskSubmitter submitter, ResultHandler result_handler) {
+inline void submit_tasks_for_range(Inputs inputs, TaskSubmitter submitter, ResultHandler result_handler) {
     const auto window_size = async::TaskScheduler::instance()->io_thread_count() * 2;
 
-    auto futures = folly::window(inputs, [&submitter, &result_handler](const auto &input) {
+    auto futures = folly::window(std::move(inputs), [&submitter, &result_handler](const auto &input) {
         return submitter(input).thenValue([&result_handler, &input](auto &&r) {
             auto result = std::forward<decltype(r)>(r);
             result_handler(input, std::move(result));
@@ -163,27 +163,6 @@ inline std::vector<folly::Future<version_store::UpdateInfo>> batch_get_latest_un
     return vector_fut;
 }
 
-template <typename MapType>
-struct MapRandomAccessWrapper {
-    const MapType& map_;
-
-    using iterator = typename MapType::iterator;
-
-    explicit MapRandomAccessWrapper(const MapType& map) :
-        map_(map) {
-    }
-
-    [[nodiscard]] size_t size() const {
-        return map_.size();
-    }
-
-    auto& operator[](size_t pos) const {
-        auto it = std::begin(map_);
-        std::advance(it, pos);
-        return *it;
-    }
-};
-
 // This version assumes that there is only one version per symbol, so no need for the state machine below
 inline std::shared_ptr<std::unordered_map<StreamId, AtomKey>> batch_get_specific_version(
     const std::shared_ptr<Store>& store,
@@ -197,8 +176,8 @@ inline std::shared_ptr<std::unordered_map<StreamId, AtomKey>> batch_get_specific
     auto tombstoned_vers = std::make_shared<std::vector<std::pair<StreamId, AtomKey>>>();
     auto tombstoned_vers_mutex = std::make_shared<std::mutex>();
 
-    MapRandomAccessWrapper wrapper{sym_versions};
-    submit_tasks_for_range(wrapper, [store, version_map](auto& sym_version) {
+    auto tasks_input = std::vector(sym_versions.begin(), sym_versions.end());
+    submit_tasks_for_range(std::move(tasks_input), [store, version_map](auto& sym_version) {
             LoadStrategy load_strategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(sym_version.second)};
             return async::submit_io_task(CheckReloadTask{store, version_map, sym_version.first, load_strategy});
         },
@@ -243,14 +222,14 @@ using VersionVectorType = std::vector<VersionId>;
 inline std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>> batch_get_specific_versions(
         const std::shared_ptr<Store>& store,
         const std::shared_ptr<VersionMap>& version_map,
-        std::map<StreamId, VersionVectorType>& sym_versions,
+        const std::map<StreamId, VersionVectorType>& sym_versions,
         bool include_deleted = true) {
     ARCTICDB_SAMPLE(BatchGetLatestVersion, 0)
     auto output = std::make_shared<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>>();
-    MapRandomAccessWrapper wrapper{sym_versions};
     auto mutex = std::make_shared<std::mutex>();
 
-    submit_tasks_for_range(wrapper, [store, version_map](auto sym_version) {
+    auto tasks_input = std::vector(sym_versions.begin(), sym_versions.end());
+    submit_tasks_for_range(std::move(tasks_input), [store, version_map](auto sym_version) {
                 auto first_version = *std::min_element(std::begin(sym_version.second), std::end(sym_version.second));
                 LoadStrategy load_strategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(first_version)};
                 return async::submit_io_task(CheckReloadTask{store, version_map, sym_version.first, load_strategy});
