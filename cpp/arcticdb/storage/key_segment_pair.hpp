@@ -33,6 +33,12 @@ namespace arcticdb::storage {
             return segment_;
         }
 
+        Segment&& release_segment() {
+            auto tmp = segment_;
+            segment_.reset();
+            return std::move(*tmp);
+        }
+
         AtomKey &atom_key() {
             util::check(std::holds_alternative<AtomKey>(variant_key()), "Expected atom key access");
             return std::get<AtomKey >(variant_key());
