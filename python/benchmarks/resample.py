@@ -89,3 +89,44 @@ class Resample:
             # raise SkipNotImplemented(f"{aggregation} not supported on columns of type {col_type}")
         else:
             self.lib.read(col_type, date_range=self.date_range, query_builder=self.query_builder)
+
+
+class ResampleWide:
+    number = 5
+
+    LIB_NAME = "resample_wide"
+    CONNECTION_STRING = "lmdb://resample_wide?map_size=5GB"
+    SYM = "resample_wide"
+    NUM_COLS = 30_000
+    COLS = [f"col_{idx}" for idx in range(NUM_COLS)]
+
+    def setup_cache(self):
+        ac = Arctic(self.CONNECTION_STRING)
+        ac.delete_library(self.LIB_NAME)
+        lib = ac.create_library(self.LIB_NAME)
+        rng = np.random.default_rng()
+        num_rows = 3000
+        index = pd.date_range(pd.Timestamp(0, unit="us"), freq="us", periods=num_rows)
+        data = dict()
+        for col in self.COLS:
+            data[col] = 100 * rng.random(num_rows, dtype=np.float64)
+        df = pd.DataFrame(data, index=index)
+        lib.write(self.SYM, df)
+
+    def teardown(self):
+        del self.lib
+        del self.ac
+
+    def setup(self):
+        self.ac = Arctic(self.CONNECTION_STRING)
+        self.lib = self.ac[self.LIB_NAME]
+        aggs = dict()
+        for col in self.COLS:
+            aggs[col] = "last"
+        self.query_builder = QueryBuilder().resample("30us").agg(aggs)
+
+    def time_resample_wide(self):
+        self.lib.read(self.SYM, query_builder=self.query_builder)
+
+    def peakmem_resample_wide(self):
+        self.lib.read(self.SYM, query_builder=self.query_builder)

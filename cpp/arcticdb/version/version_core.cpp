@@ -567,28 +567,37 @@ void set_output_descriptors(
         }
     });
     if (new_stream_descriptor.has_value()) {
+        // Finding and erasing fields from the FieldCollection contained in StreamDescriptor is O(n) in number of fields
+        // So maintain map from field names to types in the new_stream_descriptor to make these operations O(1)
+        // Cannot use set of FieldRef as the name in the output might match the input, but with a different type after processing
+        std::unordered_map<std::string_view, TypeDescriptor> new_fields;
+        for (const auto& field: new_stream_descriptor->fields()) {
+            new_fields.emplace(field.name(), field.type());
+        }
         // Columns might be in a different order to the original dataframe, so reorder here
         auto original_stream_descriptor = pipeline_context->descriptor();
         StreamDescriptor final_stream_descriptor{original_stream_descriptor.id()};
         final_stream_descriptor.set_index(new_stream_descriptor->index());
-        // Erase field from new_stream_descriptor as we add them to final_stream_descriptor, as all fields left in new_stream_descriptor
+        // Erase field from new_fields as we add them to final_stream_descriptor, as all fields left in new_fields
         // after these operations were created by the processing pipeline, and so should be appended
         // Index columns should always appear first
         if (index_column.has_value()) {
-            auto opt_idx = new_stream_descriptor->find_field(*index_column);
-            internal::check<ErrorCode::E_ASSERTION_FAILURE>(opt_idx.has_value(), "New index column not found in processing pipeline");
-            final_stream_descriptor.add_field(new_stream_descriptor->field(*opt_idx));
-            new_stream_descriptor->erase_field(*opt_idx);
+            const auto nh = new_fields.extract(*index_column);
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(!nh.empty(), "New index column not found in processing pipeline");
+            final_stream_descriptor.add_field(FieldRef{nh.mapped(), nh.key()});
         }
         for (const auto& field: original_stream_descriptor.fields()) {
-            if (auto position = new_stream_descriptor->find_field(field.name()); position.has_value()) {
-                final_stream_descriptor.add_field(new_stream_descriptor->field(*position));
-
-                new_stream_descriptor->erase_field(*position);
+            if (const auto nh = new_fields.extract(field.name()); nh) {
+                final_stream_descriptor.add_field(FieldRef{nh.mapped(), nh.key()});
             }
         }
+        // Iterate through new_stream_descriptor->fields() rather than remaining new_fields to preserve ordering
+        // e.g. if there were two projections then users will expect the column produced by the first one to appear
+        // first in the output df
         for (const auto& field: new_stream_descriptor->fields()) {
-            final_stream_descriptor.add_field(field);
+            if (new_fields.contains(field.name())) {
+                final_stream_descriptor.add_field(field);
+            }
         }
         pipeline_context->set_descriptor(final_stream_descriptor);
     }

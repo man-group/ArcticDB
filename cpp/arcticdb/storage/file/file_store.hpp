@@ -89,7 +89,7 @@ void write_dataframe_to_file_internal(
     auto store = std::make_shared<async::AsyncStore<PilotedClock>>(library, codec_opts, encoding_version);
     auto dedup_map = std::make_shared<DeDupMap>();
     size_t batch_size = ConfigsMap::instance()->get_int("FileWrite.BatchSize", 50);
-    auto index_fut = folly::collect(folly::window(segments, [store, dedup_map] (auto key_seg) {
+    auto index_fut = folly::collect(folly::window(std::move(segments), [store, dedup_map] (auto key_seg) {
         return store->async_write(key_seg, dedup_map);
     }, batch_size)).via(&async::io_executor())
     .thenValue([&frame, stream_id, store] (auto&& slice_and_keys) {
