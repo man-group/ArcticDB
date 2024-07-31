@@ -27,7 +27,6 @@
 #include <arcticdb/stream/schema.hpp>
 #include <arcticdb/pipeline/index_writer.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
-#include <arcticdb/util/composite.hpp>
 #include <arcticdb/pipeline/column_mapping.hpp>
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/version/version_utils.hpp>
@@ -416,10 +415,10 @@ FrameAndDescriptor read_multi_key(
     return {res.frame_, multi_key_desc, keys, std::shared_ptr<BufferHolder>{}};
 }
 
-Composite<EntityIds> process_clauses(
+std::vector<EntityId> process_clauses(
         std::shared_ptr<ComponentManager> component_manager,
         std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures,
-        const std::vector<std::vector<size_t>>& processing_unit_indexes,
+        std::vector<std::vector<size_t>>&& processing_unit_indexes,
         std::vector<std::shared_ptr<Clause>> clauses ) { // pass by copy deliberately as we don't want to modify read_query
     std::vector<folly::FutureSplitter<pipelines::SegmentAndSlice>> segment_and_slice_future_splitters;
     segment_and_slice_future_splitters.reserve(segment_and_slice_futures.size());
@@ -440,91 +439,79 @@ Composite<EntityIds> process_clauses(
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
             std::all_of(segment_proc_unit_counts.begin(), segment_proc_unit_counts.end(), [](const size_t& val) { return val != 0; }),
             "All segments should be needed by at least one ProcessingUnit");
-    // Convert vector of vectors into vector of 1-element composites
-    // At this stage, each Composite contains a single list of entity IDs, which may refer to a row-slice, a column-slice, a
-    // general rectangular slice, or some more exotic collection of segments based on the clause's processing
-    // parallelisation.
-    std::vector<Composite<EntityIds>> vec_comp_entity_ids;
-    vec_comp_entity_ids.reserve(processing_unit_indexes.size());
-    for (const auto& list: processing_unit_indexes) {
-        EntityIds entity_ids;
-        for (auto idx: list) {
-            entity_ids.emplace_back(idx);
-        }
-        vec_comp_entity_ids.emplace_back(Composite<EntityIds>(std::move(entity_ids)));
-    }
+    // Give this a more descriptive name as we modify it between clauses
+    std::vector<std::vector<EntityId>> entity_ids_vec{std::move(processing_unit_indexes)};
 
     // Used to make sure each entity is only added into the component manager once
     std::vector<std::mutex> entity_added_mtx(segment_and_slice_futures.size());
     std::vector<bool> entity_added(segment_and_slice_futures.size(), false);
-    std::vector<folly::Future<Composite<EntityIds>>> futures;
+    std::vector<folly::Future<std::vector<EntityId>>> futures;
     bool first_clause{true};
     // Reverse the order of clauses and iterate through them backwards so that the erase is efficient
     std::reverse(clauses.begin(), clauses.end());
     while (!clauses.empty()) {
-        for (auto&& comp_entity_ids: vec_comp_entity_ids) {
+        for (auto&& entity_ids: entity_ids_vec) {
             if (first_clause) {
-                internal::check<ErrorCode::E_ASSERTION_FAILURE>(comp_entity_ids.is_single(),
-                                                                "Expected Composite of size 1 on entry to process_clauses");
                 std::vector<folly::Future<pipelines::SegmentAndSlice>> local_futs;
-                for (auto id: std::get<EntityIds>(comp_entity_ids[0])) {
+                local_futs.reserve(entity_ids.size());
+                for (auto id: entity_ids) {
                     local_futs.emplace_back(segment_and_slice_future_splitters[id].getFuture());
                 }
                 futures.emplace_back(
                         folly::collect(local_futs)
                         .via(&async::cpu_executor())
                         .thenValue([component_manager,
-                                           &segment_proc_unit_counts,
-                                           &entity_added_mtx,
-                                           &entity_added,
-                                           &clauses,
-                                           comp_entity_ids = std::move(comp_entity_ids)](std::vector<pipelines::SegmentAndSlice>&& segment_and_slices) mutable {
-                            auto entity_ids = std::get<EntityIds>(comp_entity_ids[0]);
+                                    &segment_proc_unit_counts,
+                                    &entity_added_mtx,
+                                    &entity_added,
+                                    &clauses,
+                                    entity_ids = std::move(entity_ids)](std::vector<pipelines::SegmentAndSlice>&& segment_and_slices) mutable {
                             for (auto&& [idx, segment_and_slice]: folly::enumerate(segment_and_slices)) {
-                                std::lock_guard<std::mutex> lock(entity_added_mtx[entity_ids[idx]]);
-                                if (!entity_added[entity_ids[idx]]) {
+                                auto entity_id = entity_ids[idx];
+                                std::lock_guard<std::mutex> lock(entity_added_mtx[entity_id]);
+                                if (!entity_added[entity_id]) {
                                     component_manager->add(
                                             std::make_shared<SegmentInMemory>(std::move(segment_and_slice.segment_in_memory_)),
-                                            entity_ids[idx], segment_proc_unit_counts[entity_ids[idx]]);
+                                            entity_id, segment_proc_unit_counts[entity_id]);
                                     component_manager->add(
                                             std::make_shared<RowRange>(std::move(segment_and_slice.ranges_and_key_.row_range_)),
-                                            entity_ids[idx]);
+                                            entity_id);
                                     component_manager->add(
                                             std::make_shared<ColRange>(std::move(segment_and_slice.ranges_and_key_.col_range_)),
-                                            entity_ids[idx]);
+                                            entity_id);
                                     component_manager->add(
                                             std::make_shared<AtomKey>(std::move(segment_and_slice.ranges_and_key_.key_)),
-                                            entity_ids[idx]);
-                                    entity_added[entity_ids[idx]] = true;
+                                            entity_id);
+                                    entity_added[entity_id] = true;
                                 }
                             }
-                            return async::submit_cpu_task(async::MemSegmentProcessingTask(clauses, std::move(comp_entity_ids)));
+                            return async::MemSegmentProcessingTask(clauses, std::move(entity_ids))();
                         }));
             } else {
                 futures.emplace_back(
                         async::submit_cpu_task(
                                 async::MemSegmentProcessingTask(clauses,
-                                                                std::move(comp_entity_ids))
+                                                                std::move(entity_ids))
                         )
                 );
             }
         }
         first_clause = false;
-        vec_comp_entity_ids = folly::collect(futures).get();
+        entity_ids_vec = folly::collect(futures).get();
         futures.clear();
         while (clauses.size() > 0 && !clauses.back()->clause_info().requires_repartition_) {
             clauses.erase(clauses.end() - 1);
         }
         if (clauses.size() > 0 && clauses.back()->clause_info().requires_repartition_) {
-            vec_comp_entity_ids = clauses.back()->repartition(std::move(vec_comp_entity_ids)).value();
+            entity_ids_vec = clauses.back()->repartition(std::move(entity_ids_vec)).value();
             clauses.erase(clauses.end() - 1);
         }
     }
-    return merge_composites(std::move(vec_comp_entity_ids));
+    return flatten_entities(std::move(entity_ids_vec));
 }
 
 void set_output_descriptors(
-        const Composite<ProcessingUnit>& comp_processing_units,
+        const ProcessingUnit& proc,
         const std::vector<std::shared_ptr<Clause>>& clauses,
         const std::shared_ptr<PipelineContext>& pipeline_context) {
     std::optional<std::string> index_column;
@@ -539,26 +526,22 @@ void set_output_descriptors(
         }
     }
     std::optional<StreamDescriptor> new_stream_descriptor;
-    comp_processing_units.broadcast([&new_stream_descriptor](const auto& proc) {
-        if (!new_stream_descriptor.has_value()) {
-            if (proc.segments_.has_value() && proc.segments_->size() > 0) {
-                new_stream_descriptor = std::make_optional<StreamDescriptor>();
-                new_stream_descriptor->set_index(proc.segments_->at(0)->descriptor().index());
-                for (size_t idx = 0; idx < new_stream_descriptor->index().field_count(); idx++) {
-                    new_stream_descriptor->add_field(proc.segments_->at(0)->descriptor().field(idx));
-                }
-            }
+    if (proc.segments_.has_value() && proc.segments_->size() > 0) {
+        new_stream_descriptor = std::make_optional<StreamDescriptor>();
+        new_stream_descriptor->set_index(proc.segments_->at(0)->descriptor().index());
+        for (size_t idx = 0; idx < new_stream_descriptor->index().field_count(); idx++) {
+            new_stream_descriptor->add_field(proc.segments_->at(0)->descriptor().field(idx));
         }
-        if (new_stream_descriptor.has_value() && proc.segments_.has_value()) {
-            std::vector<std::shared_ptr<FieldCollection>> fields;
-            for (const auto& segment: *proc.segments_) {
-                fields.push_back(segment->descriptor().fields_ptr());
-            }
-            new_stream_descriptor = merge_descriptors(*new_stream_descriptor,
-                                                      fields,
-                                                      std::vector<std::string>{});
+    }
+    if (new_stream_descriptor.has_value() && proc.segments_.has_value()) {
+        std::vector<std::shared_ptr<FieldCollection>> fields;
+        for (const auto& segment: *proc.segments_) {
+            fields.push_back(segment->descriptor().fields_ptr());
         }
-    });
+        new_stream_descriptor = merge_descriptors(*new_stream_descriptor,
+                                                  fields,
+                                                  std::vector<std::string>{});
+    }
     if (new_stream_descriptor.has_value()) {
         // Finding and erasing fields from the FieldCollection contained in StreamDescriptor is O(n) in number of fields
         // So maintain map from field names to types in the new_stream_descriptor to make these operations O(1)
@@ -627,12 +610,12 @@ std::vector<RangesAndKey> generate_ranges_and_keys(const std::vector<SliceAndKey
  * Processes the slices in the given pipeline_context.
  *
  * Slices are processed in an order defined by the first clause in the pipeline, with slices corresponding to the same
- * processing unit collected into a single Composite<SliceAndKey>. Slices contained within a single
- * Composite<SliceAndKey> are processed within a single thread.
+ * processing unit collected into a single ProcessingUnit. Slices contained within a single ProcessingUnit are processed
+ * within a single thread.
  *
- * The processing of a Composite<SliceAndKey> is scheduled via the Async Store. Within a single thread, the
+ * The processing of a ProcessingUnit is scheduled via the Async Store. Within a single thread, the
  * segments will be retrieved from storage and decompressed before being passed to a MemSegmentProcessingTask which
- * will process all clauses up until a reducing clause.
+ * will process all clauses up until a clause that requires a repartition.
  */
 std::vector<SliceAndKey> read_and_process(
     const std::shared_ptr<Store>& store,
@@ -662,16 +645,16 @@ std::vector<SliceAndKey> read_and_process(
 
     auto processed_entity_ids = process_clauses(component_manager,
                                                 std::move(segment_and_slice_futures),
-                                                processing_unit_indexes,
+                                                std::move(processing_unit_indexes),
                                                 read_query.clauses_);
-    auto comp_processing_units = gather_entities(component_manager, std::move(processed_entity_ids));
+    auto proc = gather_entities(component_manager, std::move(processed_entity_ids));
 
     if (std::any_of(read_query.clauses_.begin(), read_query.clauses_.end(), [](const std::shared_ptr<Clause>& clause) {
         return clause->clause_info().modifies_output_descriptor_;
     })) {
-        set_output_descriptors(comp_processing_units, read_query.clauses_, pipeline_context);
+        set_output_descriptors(proc, read_query.clauses_, pipeline_context);
     }
-    return collect_segments(std::move(comp_processing_units));
+    return collect_segments(std::move(proc));
 }
 
 SegmentInMemory read_direct(const std::shared_ptr<Store>& store,

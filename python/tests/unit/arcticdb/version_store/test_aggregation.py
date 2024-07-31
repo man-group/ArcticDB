@@ -290,7 +290,6 @@ def test_first_aggregation(local_object_version_store):
 
     df = pd.DataFrame({"get_first": [100.0, 2.7, 5.8, np.nan]}, index=["group_1", "group_2", "group_3", "group_4"])
     df.index.rename("grouping_column", inplace=True)
-    res.data.sort_index(inplace=True)
 
     assert_frame_equal(res.data, df)
 
@@ -364,7 +363,6 @@ def test_last_aggregation(local_object_version_store):
 
     df = pd.DataFrame({"get_last": [3.45, 2.7, 5.8, np.nan, 6.9]}, index=["group_1", "group_2", "group_3", "group_4", "group_5"])
     df.index.rename("grouping_column", inplace=True)
-    res.data.sort_index(inplace=True)
 
     assert_frame_equal(res.data, df)
 
@@ -403,7 +401,6 @@ def test_sum_aggregation(local_object_version_store):
 
     df = pd.DataFrame({"to_sum": [4, 4]}, index=["group_1", "group_2"])
     df.index.rename("grouping_column", inplace=True)
-    res.data.sort_index(inplace=True)
 
     assert_frame_equal(res.data, df)
 
@@ -446,7 +443,6 @@ def test_mean_aggregation_float(local_object_version_store):
 
     df = pd.DataFrame({"to_mean": [(1.1 + 1.4 + 2.5) / 3, 2.2]}, index=["group_1", "group_2"])
     df.index.rename("grouping_column", inplace=True)
-    res.data.sort_index(inplace=True)
 
     assert_frame_equal(res.data, df)
 

@@ -40,10 +40,10 @@ void time_merge_on_segments(const std::vector<SegmentInMemory> &segments, benchm
     // Pauses the timing while setting up the merge clause to only time the merging itself
     state.PauseTiming();
     auto component_manager = std::make_shared<ComponentManager>();
-    Composite<EntityIds> entity_ids;
+    std::vector<EntityId> entity_ids;
     for (auto& segment : segments){
         auto proc_unit = ProcessingUnit{segment.clone()};
-        entity_ids.push_back(push_entities(component_manager, std::move(proc_unit)));
+        entity_ids.push_back(push_entities(component_manager, std::move(proc_unit))[0]);
     }
 
     auto stream_id = StreamId("Merge");

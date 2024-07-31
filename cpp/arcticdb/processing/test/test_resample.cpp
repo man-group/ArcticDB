@@ -242,12 +242,11 @@ TEST(Resample, ProcessOneSegment) {
     seg.set_row_id(num_rows - 1);
 
     auto proc_unit = ProcessingUnit{std::move(seg)};
-    auto entity_ids = Composite<EntityIds>(push_entities(component_manager, std::move(proc_unit)));
+    auto entity_ids = push_entities(component_manager, std::move(proc_unit));
 
-    auto resampled = gather_entities(component_manager, resample.process(std::move(entity_ids))).as_range();
-    ASSERT_EQ(1, resampled.size());
-    ASSERT_TRUE(resampled[0].segments_.has_value());
-    auto segments = resampled[0].segments_.value();
+    auto resampled = gather_entities(component_manager, resample.process(std::move(entity_ids)));
+    ASSERT_TRUE(resampled.segments_.has_value());
+    auto segments = resampled.segments_.value();
     ASSERT_EQ(1, segments.size());
     auto resampled_seg = *segments[0];
 
@@ -345,12 +344,12 @@ TEST(Resample, ProcessMultipleSegments) {
     component_manager->add(col_range_2, id_2);
 
 
-    auto ids_0 = Composite<EntityIds>(EntityIds{id_0, id_1});
-    auto ids_1 = Composite<EntityIds>(EntityIds{id_1});
-    auto ids_2 = Composite<EntityIds>(EntityIds{id_2});
+    std::vector<EntityId> ids_0{id_0, id_1};
+    std::vector<EntityId> ids_1{id_1};
+    std::vector<EntityId> ids_2{id_2};
 
-    auto resampled_0 = gather_entities(component_manager, resample.process(std::move(ids_0))).as_range();
-    auto resampled_seg_0 = *resampled_0[0].segments_.value()[0];
+    auto resampled_0 = gather_entities(component_manager, resample.process(std::move(ids_0)));
+    auto resampled_seg_0 = *resampled_0.segments_.value()[0];
     auto& resampled_index_column_0 = resampled_seg_0.column(0);
     auto& resampled_sum_column_0 = resampled_seg_0.column(1);
     ASSERT_EQ(-5, resampled_index_column_0.scalar_at<int64_t>(0));
@@ -358,8 +357,8 @@ TEST(Resample, ProcessMultipleSegments) {
     ASSERT_EQ(0, resampled_sum_column_0.scalar_at<int64_t>(0));
     ASSERT_EQ(30, resampled_sum_column_0.scalar_at<int64_t>(1));
 
-    auto resampled_1 = gather_entities(component_manager, resample.process(std::move(ids_1))).as_range();
-    auto resampled_seg_1 = *resampled_1[0].segments_.value()[0];
+    auto resampled_1 = gather_entities(component_manager, resample.process(std::move(ids_1)));
+    auto resampled_seg_1 = *resampled_1.segments_.value()[0];
     auto& resampled_index_column_1 = resampled_seg_1.column(0);
     auto& resampled_sum_column_1 = resampled_seg_1.column(1);
     ASSERT_EQ(25, resampled_index_column_1.scalar_at<int64_t>(0));
@@ -367,8 +366,8 @@ TEST(Resample, ProcessMultipleSegments) {
     ASSERT_EQ(30, resampled_sum_column_1.scalar_at<int64_t>(0));
     ASSERT_EQ(40, resampled_sum_column_1.scalar_at<int64_t>(1));
 
-    auto resampled_2 = gather_entities(component_manager, resample.process(std::move(ids_2))).as_range();
-    auto resampled_seg_2 = *resampled_2[0].segments_.value()[0];
+    auto resampled_2 = gather_entities(component_manager, resample.process(std::move(ids_2)));
+    auto resampled_seg_2 = *resampled_2.segments_.value()[0];
     auto& resampled_index_column_2 = resampled_seg_2.column(0);
     auto& resampled_sum_column_2 = resampled_seg_2.column(1);
     ASSERT_EQ(46, resampled_index_column_2.scalar_at<int64_t>(0));

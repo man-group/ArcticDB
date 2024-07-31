@@ -8,7 +8,6 @@
 #pragma once
 
 #include <atomic>
-#include <unordered_map>
 
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/util/constructors.hpp>
@@ -16,8 +15,7 @@
 namespace arcticdb {
 
 using namespace pipelines;
-using EntityId = uint64_t;
-using EntityIds = std::vector<EntityId>;
+using EntityId = size_t;
 using bucket_id = uint8_t;
 
 class ComponentManager {
@@ -28,8 +26,8 @@ public:
     void set_next_entity_id(EntityId id);
 
     template<typename T>
-    EntityIds add(std::vector<T>&& components, const std::optional<EntityIds>& ids=std::nullopt) {
-        EntityIds insertion_ids;
+    std::vector<EntityId> add(std::vector<T>&& components, const std::optional<std::vector<EntityId>>& ids=std::nullopt) {
+        std::vector<EntityId> insertion_ids;
         if (ids.has_value()) {
             insertion_ids = *ids;
         } else {
@@ -79,7 +77,7 @@ public:
     }
 
     template<typename T>
-    std::vector<T> get(const EntityIds& ids) {
+    std::vector<T> get(const std::vector<EntityId>& ids) {
         if constexpr(std::is_same_v<T, std::shared_ptr<SegmentInMemory>>) {
             return segment_map_.get(ids);
         } else if constexpr(std::is_same_v<T, std::shared_ptr<RowRange>>) {
@@ -115,12 +113,12 @@ private:
     public:
         explicit ComponentMap(std::string&& entity_type, bool track_expected_gets):
                 entity_type_(std::move(entity_type)),
-                opt_expected_get_calls_map_(track_expected_gets ? std::make_optional<std::unordered_map<EntityId, uint64_t>>() : std::nullopt),
-                opt_expected_get_calls_initial_map_(track_expected_gets ? std::make_optional<std::unordered_map<EntityId, uint64_t>>() : std::nullopt){
+                opt_expected_get_calls_map_(track_expected_gets ? std::make_optional<ankerl::unordered_dense::map<EntityId, uint64_t>>() : std::nullopt),
+                opt_expected_get_calls_initial_map_(track_expected_gets ? std::make_optional<ankerl::unordered_dense::map<EntityId, uint64_t>>() : std::nullopt){
         };
         ARCTICDB_NO_MOVE_OR_COPY(ComponentMap)
 
-        void add(const EntityIds& ids,
+        void add(const std::vector<EntityId>& ids,
                  std::vector<T>&& entities) {
             std::lock_guard <std::mutex> lock(mtx_);
             for (auto [idx, id]: folly::enumerate(ids)) {
@@ -158,7 +156,7 @@ private:
                                                                 entity_type_, id);
             }
         }
-        std::vector<T> get(const EntityIds& ids) {
+        std::vector<T> get(const std::vector<EntityId>& ids) {
             std::vector<T> res;
             res.reserve(ids.size());
             std::lock_guard <std::mutex> lock(mtx_);
@@ -200,11 +198,11 @@ private:
     private:
         // Just used for logging/exception messages
         std::string entity_type_;
-        std::unordered_map<EntityId, T> map_;
+        ankerl::unordered_dense::map<EntityId, T> map_;
         // If not nullopt, tracks the number of calls to get for each entity id, and erases from maps when it has been
         // called this many times
-        std::optional<std::unordered_map<EntityId, uint64_t>> opt_expected_get_calls_map_;
-        std::optional<std::unordered_map<EntityId, uint64_t>> opt_expected_get_calls_initial_map_;
+        std::optional<ankerl::unordered_dense::map<EntityId, uint64_t>> opt_expected_get_calls_map_;
+        std::optional<ankerl::unordered_dense::map<EntityId, uint64_t>> opt_expected_get_calls_initial_map_;
         std::mutex mtx_;
     };
 
