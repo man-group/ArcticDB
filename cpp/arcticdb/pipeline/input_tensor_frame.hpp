@@ -42,8 +42,8 @@ struct InputTensorFrame {
     std::optional<entity::NativeTensor> index_tensor;
     std::vector<entity::NativeTensor> field_tensors;
     IndexRange index_range;
-    size_t num_rows = 0;
-    mutable size_t offset = 0;
+    ssize_t num_rows = 0;
+    mutable ssize_t offset = 0;
     mutable bool bucketize_dynamic = 0;
 
     void set_offset(ssize_t off) const {

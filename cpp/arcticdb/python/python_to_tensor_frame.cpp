@@ -227,7 +227,7 @@ std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
         util::check(index_tensor.ndim() == 1, "Multi-dimensional indexes not handled");
         util::check(index_tensor.shape() != nullptr, "Index tensor expected to contain shapes");
         std::string index_column_name = !idx_names.empty() ? idx_names[0] : "index";
-        res->num_rows = static_cast<size_t>(index_tensor.shape(0));
+        res->num_rows = index_tensor.shape(0);
         // TODO handle string indexes
         if (index_tensor.data_type() == DataType::NANOSECONDS_UTC64) {
             res->desc.set_index_field_count(1);
@@ -253,7 +253,7 @@ std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
 
     for (auto i = 0u; i < col_vals.size(); ++i) {
         auto tensor = obj_to_tensor(col_vals[i].ptr(), empty_types);
-        res->num_rows = std::max(res->num_rows, static_cast<size_t>(tensor.shape(0)));
+        res->num_rows = std::max(res->num_rows, static_cast<ssize_t>(tensor.shape(0)));
         if(tensor.expanded_dim() == 1) {
             res->desc.add_field(scalar_field(tensor.data_type(), col_names[i]));
         } else if(tensor.expanded_dim() == 2) {
@@ -305,7 +305,7 @@ std::shared_ptr<InputTensorFrame> py_none_to_frame() {
     const shape_t shapes = 1;
     constexpr int ndim = 1;
     auto tensor = NativeTensor{8, ndim, &strides, &shapes, DataType::UINT64, 8, none_char, ndim};
-    res->num_rows = std::max(res->num_rows, static_cast<size_t>(tensor.shape(0)));
+    res->num_rows = std::max(res->num_rows, static_cast<ssize_t>(tensor.shape(0)));
     res->desc.add_field(scalar_field(tensor.data_type(), col_name));
     res->field_tensors.push_back(std::move(tensor));
 
