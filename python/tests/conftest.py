@@ -407,7 +407,7 @@ def s3_version_store(s3_version_store_v1, s3_version_store_v2, encoding_version)
     elif encoding_version == EncodingVersion.V2:
         return s3_version_store_v2
     else:
-        raise ValueError(f"Unexoected encoding version: {encoding_version}")
+        raise ValueError(f"Unexpected encoding version: {encoding_version}")
 
 
 @pytest.fixture(scope="function")

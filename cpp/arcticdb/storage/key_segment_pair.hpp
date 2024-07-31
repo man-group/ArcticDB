@@ -18,36 +18,39 @@ namespace arcticdb::storage {
      * not contain any positioning information for the contained data.
      */
     class KeySegmentPair {
-        struct KeySegmentData {
-            VariantKey key_;
-            Segment segment_;
-
-            KeySegmentData() = default;
-            explicit KeySegmentData(VariantKey &&key) : key_(std::move(key)), segment_() {}
-            KeySegmentData(VariantKey &&key, Segment &&segment) : key_(std::move(key)), segment_(std::move(segment)) {}
-
-            ARCTICDB_NO_MOVE_OR_COPY(KeySegmentData)
-        };
-
     public:
-        KeySegmentPair() : data_(std::make_shared<KeySegmentData>()) {}
-        explicit KeySegmentPair(VariantKey &&key) : data_(std::make_shared<KeySegmentData>(std::move(key))) {}
-        KeySegmentPair(VariantKey &&key, Segment&& segment) :
-            data_(std::make_shared<KeySegmentData>(std::move(key), std::move(segment))) {}
+        // TODO tidy up these millions of constructors
+        KeySegmentPair() : key_(std::make_shared<VariantKey>()), segment_(std::make_shared<Segment>()) {}
+        explicit KeySegmentPair(VariantKey &&key)
+        : key_(std::make_shared<VariantKey>(std::move(key))),
+          segment_(std::make_shared<Segment>()) {}
+
+        KeySegmentPair(VariantKey &&key, Segment&& segment)
+      : key_(std::make_shared<VariantKey>(std::move(key))),
+        segment_(std::make_shared<Segment>(std::move(segment))) {}
+
+        KeySegmentPair(VariantKey&& key, std::shared_ptr<Segment> segment)
+        : key_(std::make_shared<VariantKey>(std::move(key))),
+        segment_(segment)
+        {}
+
+        KeySegmentPair(const VariantKey& key, Segment&& segment)
+        : key_(std::make_shared<VariantKey>(key)), segment_(std::make_shared<Segment>(std::move(segment))) {}
 
         ARCTICDB_MOVE_COPY_DEFAULT(KeySegmentPair)
 
-        Segment &segment() {
-            return data_->segment_;
+        Segment& segment() {
+            // TODO this is dangerous
+            return *segment_;
+        }
+
+        std::shared_ptr<Segment> segment_ptr() {
+          return segment_;
         }
 
         Segment&& release_segment() {
-            return std::move(data_->segment_);
-        }
-
-        AtomKey &atom_key() {
-            util::check(std::holds_alternative<AtomKey>(variant_key()), "Expected atom key access");
-            return std::get<AtomKey >(variant_key());
+            // TODO this is dangerous
+            return std::move(*segment_);
         }
 
         [[nodiscard]] const AtomKey &atom_key() const {
@@ -55,26 +58,22 @@ namespace arcticdb::storage {
             return std::get<AtomKey >(variant_key());
         }
 
-        RefKey &ref_key() {
+        [[nodiscard]] const RefKey& ref_key() const {
             util::check(std::holds_alternative<RefKey>(variant_key()), "Expected ref key access");
             return std::get<RefKey >(variant_key());
         }
 
-        [[nodiscard]] const RefKey &ref_key() const {
-            util::check(std::holds_alternative<RefKey>(variant_key()), "Expected ref key access");
-            return std::get<RefKey >(variant_key());
-        }
-
-        VariantKey& variant_key() {
-            return data_->key_;
+        template<typename T>
+        void set_key(T&& key) {
+          key_ = std::make_shared<VariantKey>(key);
         }
 
         [[nodiscard]] const VariantKey& variant_key() const {
-            return data_->key_;
+            return *key_;
         }
 
-        [[nodiscard]] const Segment &segment() const {
-            return data_->segment_;
+        [[nodiscard]] const Segment& segment() const {
+            return *segment_;
         }
 
         [[nodiscard]] bool has_segment() const {
@@ -90,7 +89,8 @@ namespace arcticdb::storage {
         }
 
     private:
-        std::shared_ptr<KeySegmentData> data_;
+        std::shared_ptr<VariantKey> key_;
+        std::shared_ptr<Segment> segment_;
     };
 
     template<class T, std::enable_if_t<std::is_same_v<T, EnvironmentName> || std::is_same_v<T, StorageName>, int> = 0>
