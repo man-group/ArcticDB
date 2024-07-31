@@ -270,3 +270,21 @@ TEST_F(VersionMapBatchStore, CombinedQueries) {
         }
     }
 }
+
+TEST_F(VersionMapBatchStore, SpecificVersionsShouldCopyInput) {
+    SKIP_WIN("Exceeds LMDB map size");
+    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
+    auto store = test_store_->_test_get_store();
+    auto version_map = std::make_shared<VersionMap>();
+    std::string symbol = "symbol";
+    std::string symbol_2 = "symbol_2";
+
+    add_versions_for_stream(version_map, store, symbol, 5);
+
+    for (uint64_t i=0; i<1000; ++i) {
+        auto sym_versions = std::map<StreamId, VersionVectorType>{{symbol, {4}}};
+        batch_get_specific_versions(store, version_map, sym_versions);
+        // We add to the sym_versions a missing symbol after the batch_get to mimic the issue: https://github.com/man-group/ArcticDB/issues/1716
+        sym_versions.insert({symbol_2, {50}});
+    }
+}
