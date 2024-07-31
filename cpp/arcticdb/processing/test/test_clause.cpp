@@ -52,10 +52,10 @@ TEST(Clause, PartitionEmptyColumn) {
     partition.set_component_manager(component_manager);
 
     auto proc_unit = ProcessingUnit{generate_groupby_testing_empty_segment(100, 10)};
-    auto entity_ids = Composite<EntityIds>(push_entities(component_manager, std::move(proc_unit)));
-    auto partitioned = gather_entities(component_manager, partition.process(std::move(entity_ids)));
+    auto entity_ids = push_entities(component_manager, std::move(proc_unit));
+    auto processed = partition.process(std::move(entity_ids));
 
-    ASSERT_TRUE(partitioned.empty());
+    ASSERT_TRUE(processed.empty());
 }
 
 TEST(Clause, AggregationEmptyColumn) {
@@ -73,12 +73,11 @@ TEST(Clause, AggregationEmptyColumn) {
     size_t num_rows{100};
     size_t unique_grouping_values{10};
     auto proc_unit = ProcessingUnit{generate_groupby_testing_segment(num_rows, unique_grouping_values)};
-    auto entity_ids = Composite<EntityIds>(push_entities(component_manager, std::move(proc_unit)));
+    auto entity_ids = push_entities(component_manager, std::move(proc_unit));
 
-    auto aggregated = gather_entities(component_manager, aggregation.process(std::move(entity_ids))).as_range();
-    ASSERT_EQ(1, aggregated.size());
-    ASSERT_TRUE(aggregated[0].segments_.has_value());
-    auto segments = aggregated[0].segments_.value();
+    auto aggregated = gather_entities(component_manager, aggregation.process(std::move(entity_ids)));
+    ASSERT_TRUE(aggregated.segments_.has_value());
+    auto segments = aggregated.segments_.value();
     ASSERT_EQ(1, segments.size());
     auto segment = segments[0];
 
@@ -148,12 +147,11 @@ TEST(Clause, AggregationColumn)
     size_t num_rows{100};
     size_t unique_grouping_values{10};
     auto proc_unit = ProcessingUnit{generate_groupby_testing_segment(num_rows, unique_grouping_values)};
-    auto entity_ids = Composite<EntityIds>(push_entities(component_manager, std::move(proc_unit)));
+    auto entity_ids = push_entities(component_manager, std::move(proc_unit));
 
-    auto aggregated = gather_entities(component_manager, aggregation.process(std::move(entity_ids))).as_range();
-    ASSERT_EQ(1, aggregated.size());
-    ASSERT_TRUE(aggregated[0].segments_.has_value());
-    auto segments = aggregated[0].segments_.value();
+    auto aggregated = gather_entities(component_manager, aggregation.process(std::move(entity_ids)));
+    ASSERT_TRUE(aggregated.segments_.has_value());
+    auto segments = aggregated.segments_.value();
     ASSERT_EQ(1, segments.size());
 
     using aggregation_test::check_column;
@@ -180,12 +178,11 @@ TEST(Clause, AggregationSparseColumn)
     size_t num_rows{100};
     size_t unique_grouping_values{10};
     auto proc_unit = ProcessingUnit{generate_groupby_testing_sparse_segment(num_rows, unique_grouping_values)};
-    auto entity_ids = Composite<EntityIds>(push_entities(component_manager, std::move(proc_unit)));
+    auto entity_ids = push_entities(component_manager, std::move(proc_unit));
 
-    auto aggregated = gather_entities(component_manager, aggregation.process(std::move(entity_ids))).as_range();
-    ASSERT_EQ(1, aggregated.size());
-    ASSERT_TRUE(aggregated[0].segments_.has_value());
-    auto segments = aggregated[0].segments_.value();
+    auto aggregated = gather_entities(component_manager, aggregation.process(std::move(entity_ids)));
+    ASSERT_TRUE(aggregated.segments_.has_value());
+    auto segments = aggregated.segments_.value();
     ASSERT_EQ(1, segments.size());
 
     using aggregation_test::check_column;
@@ -245,12 +242,11 @@ TEST(Clause, AggregationSparseGroupby) {
     // 1 more group because of missing values
     size_t unique_groups{unique_grouping_values + 1};
     auto proc_unit = ProcessingUnit{generate_sparse_groupby_testing_segment(num_rows, unique_grouping_values)};
-    auto entity_ids = Composite<EntityIds>(push_entities(component_manager, std::move(proc_unit)));
+    auto entity_ids = push_entities(component_manager, std::move(proc_unit));
 
-    auto aggregated = gather_entities(component_manager, aggregation.process(std::move(entity_ids))).as_range();
-    ASSERT_EQ(1, aggregated.size());
-    ASSERT_TRUE(aggregated[0].segments_.has_value());
-    auto segments = aggregated[0].segments_.value();
+    auto aggregated = gather_entities(component_manager, aggregation.process(std::move(entity_ids)));
+    ASSERT_TRUE(aggregated.segments_.has_value());
+    auto segments = aggregated.segments_.value();
     ASSERT_EQ(1, segments.size());
 
     using aggregation_test::check_column;
@@ -304,13 +300,12 @@ TEST(Clause, Passthrough) {
     auto seg = get_standard_timeseries_segment("passthrough");
     auto copied = seg.clone();
     auto proc_unit = ProcessingUnit{std::move(seg)};;
-    auto entity_ids = Composite<EntityIds>(push_entities(component_manager, std::move(proc_unit)));
+    auto entity_ids = push_entities(component_manager, std::move(proc_unit));
 
-    auto ret = gather_entities(component_manager, passthrough.process(std::move(entity_ids))).as_range();
-    ASSERT_EQ(ret.size(), 1);
-    ASSERT_TRUE(ret[0].segments_.has_value());
-    ASSERT_EQ(ret[0].segments_->size(), 1);
-    ASSERT_EQ(*ret[0].segments_->at(0), copied);
+    auto ret = gather_entities(component_manager, passthrough.process(std::move(entity_ids)));
+    ASSERT_TRUE(ret.segments_.has_value());
+    ASSERT_EQ(ret.segments_->size(), 1);
+    ASSERT_EQ(*ret.segments_->at(0), copied);
 }
 
 TEST(Clause, Sort) {
@@ -326,12 +321,11 @@ TEST(Clause, Sort) {
     std::mt19937 urng(rng());
     std::shuffle(seg.begin(), seg.end(), urng);
     auto proc_unit = ProcessingUnit{std::move(seg)};
-    auto entity_ids = Composite<EntityIds>(push_entities(component_manager, std::move(proc_unit)));
+    auto entity_ids = push_entities(component_manager, std::move(proc_unit));
 
-    auto res = gather_entities(component_manager, sort_clause.process(std::move(entity_ids))).as_range();
-    ASSERT_EQ(res.size(), 1);
-    ASSERT_TRUE(res[0].segments_.has_value());
-    ASSERT_EQ(*res[0].segments_->at(0), copied);
+    auto res = gather_entities(component_manager, sort_clause.process(std::move(entity_ids)));
+    ASSERT_TRUE(res.segments_.has_value());
+    ASSERT_EQ(*res.segments_->at(0), copied);
 }
 
 TEST(Clause, Split) {
@@ -345,10 +339,11 @@ TEST(Clause, Split) {
     auto seg = get_standard_timeseries_segment(symbol, 100);
     auto copied = seg.clone();
     auto proc_unit = ProcessingUnit{std::move(seg)};
-    auto entity_ids = Composite<EntityIds>(push_entities(component_manager, std::move(proc_unit)));
+    auto entity_ids = push_entities(component_manager, std::move(proc_unit));
 
-    auto res = gather_entities(component_manager, split_clause.process(std::move(entity_ids))).as_range();
-    ASSERT_EQ(res.size(), 10);
+    auto res = gather_entities(component_manager, split_clause.process(std::move(entity_ids)));
+    ASSERT_TRUE(res.segments_.has_value());
+    ASSERT_EQ(res.segments_->size(), 10);
 
     FieldCollection desc;
     const auto& fields = copied.descriptor().fields();
@@ -358,12 +353,9 @@ TEST(Clause, Split) {
         desc.add_field(field->ref());
     }
     SegmentSinkWrapper seg_wrapper(symbol, TimeseriesIndex::default_index(), std::move(desc));
-    for (auto& item: res) {
-        ASSERT_TRUE(item.segments_.has_value());
-        ASSERT_EQ(item.segments_->size(), 1);
-        auto segment = *item.segments_->at(0);
-        pipelines::FrameSlice slice(segment);
-        seg_wrapper.aggregator_.add_segment(std::move(segment), slice, false);
+    for (auto segment: res.segments_.value()) {
+        pipelines::FrameSlice slice(*segment);
+        seg_wrapper.aggregator_.add_segment(std::move(*segment), slice, false);
     }
     seg_wrapper.aggregator_.commit();
 
@@ -385,7 +377,6 @@ TEST(Clause, Merge) {
     MergeClause merge_clause{TimeseriesIndex{"time"}, SparseColumnPolicy{}, stream_id, descriptor};
     merge_clause.set_component_manager(component_manager);
 
-    Composite<EntityIds> entity_ids;
     auto seg = get_standard_timeseries_segment(std::get<StringId>(stream_id), num_rows);
 
     std::vector<SegmentInMemory> segs;
@@ -411,17 +402,18 @@ TEST(Clause, Merge) {
         current.end_row();
     }
 
+    std::vector<EntityId> entity_ids;
     for(auto x = 0u; x < num_segs; ++x) {
         auto proc_unit = ProcessingUnit{std::move(segs[x])};
-        entity_ids.push_back(push_entities(component_manager, std::move(proc_unit)));
+        entity_ids.push_back(push_entities(component_manager, std::move(proc_unit))[0]);
     }
 
-    Composite<EntityIds> processed_ids = merge_clause.process(std::move(entity_ids));
-    std::vector<Composite<EntityIds>> vec;
+    std::vector<EntityId> processed_ids = merge_clause.process(std::move(entity_ids));
+    std::vector<std::vector<EntityId>> vec;
     vec.emplace_back(std::move(processed_ids));
     auto repartitioned = merge_clause.repartition(std::move(vec));
-    auto res = gather_entities(component_manager, std::move(repartitioned->at(0))).as_range();
-    ASSERT_EQ(res.size(), 1u);
-    const auto& received = res[0];
-    ASSERT_EQ(*received.segments_->at(0), seg);
+    auto res = gather_entities(component_manager, std::move(repartitioned->at(0)));
+    ASSERT_TRUE(res.segments_.has_value());
+    ASSERT_EQ(res.segments_->size(), 1u);
+    ASSERT_EQ(*res.segments_->at(0), seg);
 }

@@ -110,19 +110,14 @@ namespace arcticdb {
 
     std::vector<ProcessingUnit> split_by_row_slice(ProcessingUnit&& proc);
 
-    inline std::vector<pipelines::SliceAndKey> collect_segments(Composite<ProcessingUnit>&& p) {
-        auto procs = std::move(p);
+    inline std::vector<pipelines::SliceAndKey> collect_segments(ProcessingUnit&& proc) {
         std::vector<pipelines::SliceAndKey> output;
-
-        procs.broadcast([&output] (auto&& p) {
-            auto proc = std::forward<ProcessingUnit>(p);
-            internal::check<ErrorCode::E_ASSERTION_FAILURE>(proc.segments_.has_value() && proc.row_ranges_.has_value() && proc.col_ranges_.has_value(),
-                                                            "collect_segments requires all of segments, row_ranges, and col_ranges to be present");
-            for (auto&& [idx, segment]: folly::enumerate(*proc.segments_)) {
-                pipelines::FrameSlice frame_slice(*proc.col_ranges_->at(idx), *proc.row_ranges_->at(idx));
-                output.emplace_back(std::move(*segment), std::move(frame_slice));
-            }
-        });
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(proc.segments_.has_value() && proc.row_ranges_.has_value() && proc.col_ranges_.has_value(),
+                                                        "collect_segments requires all of segments, row_ranges, and col_ranges to be present");
+        for (auto&& [idx, segment]: folly::enumerate(*proc.segments_)) {
+            pipelines::FrameSlice frame_slice(*proc.col_ranges_->at(idx), *proc.row_ranges_->at(idx));
+            output.emplace_back(std::move(*segment), std::move(frame_slice));
+        }
 
         return output;
     }
@@ -169,12 +164,12 @@ namespace arcticdb {
     }
 
     template<typename GrouperType, typename BucketizerType>
-    Composite<ProcessingUnit> partition_processing_segment(
+    std::vector<ProcessingUnit> partition_processing_segment(
             ProcessingUnit& input,
             const ColumnName& grouping_column_name,
             bool dynamic_schema) {
 
-        Composite<ProcessingUnit> output;
+        std::vector<ProcessingUnit> output;
         auto get_result = input.get(ColumnName(grouping_column_name));
         if (std::holds_alternative<ColumnWithStrings>(get_result)) {
             auto partitioning_column = std::get<ColumnWithStrings>(get_result);
@@ -216,7 +211,7 @@ namespace arcticdb {
                     for (auto&& [idx, proc]: folly::enumerate(procs)) {
                         if (bucket_counts.at(idx) > 0) {
                             proc.bucket_ = idx;
-                            output.push_back(std::move(proc));
+                            output.emplace_back(std::move(proc));
                         }
                     }
                 }

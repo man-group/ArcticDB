@@ -395,18 +395,18 @@ struct SegmentFunctionTask : BaseTask {
 
 struct MemSegmentProcessingTask : BaseTask {
     std::vector<std::shared_ptr<Clause>> clauses_;
-    Composite<EntityIds> entity_ids_;
+    std::vector<EntityId> entity_ids_;
 
     explicit MemSegmentProcessingTask(
            std::vector<std::shared_ptr<Clause>> clauses,
-           Composite<EntityIds>&& entity_ids) :
+           std::vector<EntityId>&& entity_ids) :
         clauses_(std::move(clauses)),
         entity_ids_(std::move(entity_ids)) {
     }
 
     ARCTICDB_MOVE_ONLY_DEFAULT(MemSegmentProcessingTask)
 
-    Composite<EntityIds> operator()() {
+    std::vector<EntityId> operator()() {
         std::ranges::reverse_view reversed_clauses{clauses_};
         for (const auto& clause: reversed_clauses) {
             entity_ids_ = clause->process(std::move(entity_ids_));
