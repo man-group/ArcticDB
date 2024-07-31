@@ -378,6 +378,7 @@ def test_sum_aggregation_dynamic(s3_version_store_dynamic_schema_v2):
     q = q.groupby("grouping_column").agg({"to_sum": "sum"})
 
     received = lib.read(symbol, query_builder=q).data
+    received.sort_index(inplace=True)
     expected = expected.groupby("grouping_column").agg({"to_sum": "sum"})
     assert_equal_value(received, expected)
 
@@ -396,6 +397,7 @@ def test_sum_aggregation_with_range_index_dynamic(lmdb_version_store_dynamic_sch
     q = q.groupby("grouping_column").agg({"to_sum": "sum"})
 
     received = lib.read(symbol, query_builder=q).data
+    received.sort_index(inplace=True)
     expected = expected.groupby("grouping_column").agg({"to_sum": "sum"})
     assert_equal_value(received, expected)
 

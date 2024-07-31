@@ -109,29 +109,42 @@ std::vector<ProcessingUnit> split_by_row_slice(ProcessingUnit&& proc) {
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(input.col_ranges_.has_value(), "split_by_row_slice needs ColRanges");
     auto include_expected_get_calls = input.segment_initial_expected_get_calls_.has_value();
 
-    std::map<RowRange, ProcessingUnit> output_map;
-    for (auto [idx, row_range_ptr]: folly::enumerate(*input.row_ranges_)) {
-        if (auto it = output_map.find(*row_range_ptr); it != output_map.end()) {
-            it->second.segments_->emplace_back(input.segments_->at(idx));
-            it->second.row_ranges_->emplace_back(input.row_ranges_->at(idx));
-            it->second.col_ranges_->emplace_back(input.col_ranges_->at(idx));
+    std::vector<ProcessingUnit> output;
+    // Some clauses (e.g. AggregationClause) are lossy about row-ranges. We can assume that if all of the input column
+    // ranges start with zero, that every segment belongs to a different logical row-slice
+    if (std::all_of(input.col_ranges_->begin(), input.col_ranges_->end(), [](const auto& col_range) { return col_range->start() == 0; })) {
+        output.reserve(input.segments_->size());
+        for (size_t idx = 0; idx < input.segments_->size(); ++idx) {
+            ProcessingUnit proc_tmp(std::move(*input.segments_->at(idx)), std::move(*input.row_ranges_->at(idx)), std::move(*input.col_ranges_->at(idx)));
             if (include_expected_get_calls) {
-                it->second.segment_initial_expected_get_calls_->emplace_back(input.segment_initial_expected_get_calls_->at(idx));
+                proc_tmp.set_segment_initial_expected_get_calls({input.segment_initial_expected_get_calls_->at(idx)});
             }
-        } else {
-            auto [inserted_it, _] = output_map.emplace(*row_range_ptr, ProcessingUnit{});
-            inserted_it->second.segments_.emplace(1, input.segments_->at(idx));
-            inserted_it->second.row_ranges_.emplace(1, input.row_ranges_->at(idx));
-            inserted_it->second.col_ranges_.emplace(1, input.col_ranges_->at(idx));
-            if (include_expected_get_calls) {
-                inserted_it->second.segment_initial_expected_get_calls_.emplace(1, input.segment_initial_expected_get_calls_->at(idx));
+            output.emplace_back(std::move(proc_tmp));
+        }
+    } else {
+        std::map<RowRange, ProcessingUnit> output_map;
+        for (auto [idx, row_range_ptr]: folly::enumerate(*input.row_ranges_)) {
+            if (auto it = output_map.find(*row_range_ptr); it != output_map.end()) {
+                it->second.segments_->emplace_back(input.segments_->at(idx));
+                it->second.row_ranges_->emplace_back(input.row_ranges_->at(idx));
+                it->second.col_ranges_->emplace_back(input.col_ranges_->at(idx));
+                if (include_expected_get_calls) {
+                    it->second.segment_initial_expected_get_calls_->emplace_back(input.segment_initial_expected_get_calls_->at(idx));
+                }
+            } else {
+                auto [inserted_it, _] = output_map.emplace(*row_range_ptr, ProcessingUnit{});
+                inserted_it->second.segments_.emplace(1, input.segments_->at(idx));
+                inserted_it->second.row_ranges_.emplace(1, input.row_ranges_->at(idx));
+                inserted_it->second.col_ranges_.emplace(1, input.col_ranges_->at(idx));
+                if (include_expected_get_calls) {
+                    inserted_it->second.segment_initial_expected_get_calls_.emplace(1, input.segment_initial_expected_get_calls_->at(idx));
+                }
             }
         }
-    }
-    std::vector<ProcessingUnit> output;
-    output.reserve(output_map.size());
-    for (auto&& [_, processing_unit]: output_map) {
-        output.emplace_back(std::move(processing_unit));
+        output.reserve(output_map.size());
+        for (auto &&[_, processing_unit]: output_map) {
+            output.emplace_back(std::move(processing_unit));
+        }
     }
 
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(!output.empty(), "Unexpected empty output in split_by_row_slice");

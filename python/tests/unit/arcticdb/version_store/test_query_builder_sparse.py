@@ -130,6 +130,7 @@ class TestQueryBuilderSparse:
         q = q.groupby("sparse1").agg(aggs)
         received = lmdb_version_store.read(self.sym, query_builder=q).data
         received = received.reindex(columns=sorted(received.columns))
+        received.sort_index(inplace=True)
         assert_frame_equal(expected, received, check_dtype=False)
 
 
