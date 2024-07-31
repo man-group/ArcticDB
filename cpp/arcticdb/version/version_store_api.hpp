@@ -32,6 +32,7 @@
 #include <arcticdb/version/local_versioned_engine.hpp>
 #include <arcticdb/entity/read_result.hpp>
 #include <arcticdb/version/version_log.hpp>
+#include <arcticdb/version/version_result.hpp>
 
 #include <type_traits>
 #include <iostream>
@@ -260,7 +261,7 @@ class PythonVersionStore : public LocalVersionedEngine {
         const std::vector<VersionId>& version_ids
         );
 
-    std::vector<std::tuple<StreamId, VersionId, timestamp, std::vector<SnapshotId>, bool>> list_versions(
+    std::vector<VersionResult> list_versions(
         const std::optional<StreamId> &stream_id,
         const std::optional<SnapshotId>& snap_name,
         const std::optional<bool> &latest_only,
