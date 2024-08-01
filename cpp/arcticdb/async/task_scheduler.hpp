@@ -144,7 +144,7 @@ inline CGroupValues get_cgroup_values_v2(const std::string& cgroup_folder) {
     return CGroupValues{};
 }
 
-inline auto get_default_num_cpus(const std::string& cgroup_folder) {
+inline auto get_default_num_cpus([[maybe_unused]] const std::string& cgroup_folder) {
     int64_t cpu_count = std::thread::hardware_concurrency() == 0 ? 16 : std::thread::hardware_concurrency();
     #ifdef _WIN32
         return static_cast<int64_t>(cpu_count);
