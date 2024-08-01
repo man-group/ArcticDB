@@ -29,7 +29,8 @@
 #include <arcticdb/pipeline/pipeline_utils.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/version/snapshot.hpp>
-#include <storage/file/file_store.hpp>
+#include <arcticdb/storage/file/file_store.hpp>
+#include <arcticdb/version/version_result.hpp>
 
 #include <regex>
 
@@ -119,27 +120,17 @@ void PythonVersionStore::reload_symbol_list() {
     symbol_list().load(version_map(), store(), false);
 }
 
-// To be sorted on timestamp
-using VersionResult = std::tuple<StreamId, VersionId, timestamp, std::vector<SnapshotId>, bool>;
-struct VersionComp {
-    bool operator() (const VersionResult& v1, const VersionResult& v2) const {
-        return std::tie(std::get<0>(v1), std::get<2>(v1)) >
-        std::tie(std::get<0>(v2), std::get<2>(v2));
-    }
-};
 
 using SymbolVersionToSnapshotMap = std::unordered_map<std::pair<StreamId, VersionId>, std::vector<SnapshotId>>;
 using SymbolVersionTimestampMap = std::unordered_map<std::pair<StreamId, VersionId>, timestamp>;
 
-using VersionResultVector = std::vector<VersionResult>;
-
-VersionResultVector list_versions_for_snapshot(
+std::vector<VersionResult> list_versions_for_snapshot(
     const std::set<StreamId>& stream_ids,
     std::optional<SnapshotId> snap_name,
     SnapshotMap& versions_for_snapshots,
     SymbolVersionToSnapshotMap& snapshots_for_symbol) {
 
-    VersionResultVector res;
+    std::vector<VersionResult> res;
     util::check(versions_for_snapshots.count(snap_name.value()) != 0, "Snapshot not found");
     std::unordered_map<StreamId, AtomKey> version_for_stream_in_snapshot;
     for (const auto& key_in_snap: versions_for_snapshots[snap_name.value()]) {
@@ -156,11 +147,10 @@ VersionResultVector list_versions_for_snapshot(
             s_id,
             version_key.version_id(),
             version_key.creation_ts(),
-            snapshots_for_symbol[{s_id, version_key.version_id()}],
-            false);
+            snapshots_for_symbol[{s_id, version_key.version_id()}]);
     }
 
-    std::sort(res.begin(), res.end(), VersionComp());
+    std::sort(res.begin(), res.end());
     return res;
 }
 
@@ -186,37 +176,34 @@ void get_snapshot_version_info(
 }
 
 
-VersionResultVector get_latest_versions_for_symbols(
+std::vector<VersionResult> get_latest_versions_for_symbols(
     const std::shared_ptr<Store>& store,
     const std::shared_ptr<VersionMap>& version_map,
     const std::set<StreamId>& stream_ids,
     SymbolVersionToSnapshotMap& snapshots_for_symbol
 ) {
-    VersionResultVector res;
-    for (auto &s_id: stream_ids) {
-            const auto& opt_version_key = get_latest_undeleted_version(store, version_map, s_id);
-            if (opt_version_key) {
-                res.emplace_back(
-                    s_id,
-                    opt_version_key->version_id(),
-                    opt_version_key->creation_ts(),
-                    snapshots_for_symbol[{s_id, opt_version_key->version_id()}],
-                    false);
-            }
+    std::vector<VersionResult> res;
+    std::vector<StreamId> stream_id_vector(std::begin(stream_ids), std::end(stream_ids));
+    auto versions = batch_get_latest_version(store, version_map, stream_id_vector, false);
+    for (const auto& [stream_id, key] : *versions) {
+        res.emplace_back(
+            stream_id,
+            key.version_id(),
+            key.creation_ts(),
+            snapshots_for_symbol[{key.id(), key.version_id()}]);
     }
-    std::sort(res.begin(), res.end(), VersionComp());
+    std::sort(res.begin(), res.end());
     return res;
 }
 
-
-VersionResultVector get_all_versions_for_symbols(
+std::vector<VersionResult> get_all_versions_for_symbols(
     const std::shared_ptr<Store>& store,
     const std::shared_ptr<VersionMap>& version_map,
     const std::set<StreamId>& stream_ids,
     SymbolVersionToSnapshotMap& snapshots_for_symbol,
     const SymbolVersionTimestampMap& creation_ts_for_version_symbol
     ) {
-    VersionResultVector res;
+    std::vector<VersionResult> res;
     std::unordered_set<std::pair<StreamId, VersionId>> unpruned_versions;
     for (auto &s_id: stream_ids) {
             auto all_versions = get_all_versions(store, version_map, s_id);
@@ -243,11 +230,11 @@ VersionResultVector get_all_versions_for_symbols(
                 }
             }
     }
-    std::sort(res.begin(), res.end(), VersionComp());
+    std::sort(res.begin(), res.end());
     return res;
 }
 
-VersionResultVector PythonVersionStore::list_versions(
+std::vector<VersionResult> PythonVersionStore::list_versions(
     const std::optional<StreamId> &stream_id,
     const std::optional<SnapshotId> &snap_name,
     const std::optional<bool>& latest_only,
@@ -256,13 +243,21 @@ VersionResultVector PythonVersionStore::list_versions(
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: list_versions");
     auto stream_ids = std::set<StreamId>();
 
+    const bool do_snapshots = !skip_snapshots.value_or(false) || snap_name;
+    const auto latest = latest_only.value_or(false);
+
+    // Optimization to get version and timestamp info from the symbol list if we have it
+    if(latest && !do_snapshots && !stream_id) {
+        auto versions_from_symbol_list = symbol_list().get_latest_versions(store());
+        if(versions_from_symbol_list)
+            return *versions_from_symbol_list;
+    }
+
     if (stream_id) {
         stream_ids.insert(*stream_id);
     } else {
         stream_ids = list_streams(snap_name);
     }
-
-    const bool do_snapshots = !opt_false(skip_snapshots) || snap_name;
 
     SymbolVersionToSnapshotMap snapshots_for_symbol;
     SymbolVersionTimestampMap creation_ts_for_version_symbol;
@@ -274,10 +269,11 @@ VersionResultVector PythonVersionStore::list_versions(
             return list_versions_for_snapshot(stream_ids, snap_name, *versions_for_snapshots, snapshots_for_symbol);
     }
 
-   if(opt_false(latest_only))
-       return get_latest_versions_for_symbols(store(), version_map(), stream_ids, snapshots_for_symbol);
-   else
-       return get_all_versions_for_symbols(store(), version_map(), stream_ids, snapshots_for_symbol, creation_ts_for_version_symbol);
+    if(latest) {
+        return get_latest_versions_for_symbols(store(), version_map(), stream_ids, snapshots_for_symbol);
+    } else {
+        return get_all_versions_for_symbols(store(), version_map(), stream_ids, snapshots_for_symbol, creation_ts_for_version_symbol);
+    }
 }
 
 namespace {
