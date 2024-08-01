@@ -861,6 +861,9 @@ class QueryBuilder:
             self._python_clauses.append(PythonFilterClause(item))
             return self
 
+    def __setitem__(self, key, item):
+        return self.apply(key, item)
+
     def __getattr__(self, key):
         return self[key]
 
