@@ -102,8 +102,8 @@ Segment encode_segment(SegmentInMemory segment_in_memory, const py::object &opts
     return encode_dispatch(std::move(segment_in_memory), opts_cpp, encoding_version);
 }
 
-SegmentInMemory decode_python_segment(Segment& segment) {
-    return decode_segment(std::move(segment));
+SegmentInMemory decode_python_segment(const Segment& segment) {
+    return decode_segment(&segment);
 }
 
 class BufferPairDataSink {

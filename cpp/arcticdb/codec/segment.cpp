@@ -238,7 +238,7 @@ Segment Segment::from_buffer(const std::shared_ptr<Buffer>& buffer) {
     return{std::move(seg_hdr), buffer, std::move(desc_data), std::move(fields), stream_id, readable_size};
 }
 
-size_t Segment::write_proto_header(uint8_t* dst) {
+size_t Segment::write_proto_header(uint8_t* dst) const {
     const auto& header = generate_header_proto();
     const auto hdr_size = proto_size();
     FixedHeader hdr = {MAGIC_NUMBER, HEADER_VERSION_V1, std::uint32_t(hdr_size)};
@@ -256,7 +256,7 @@ size_t Segment::write_binary_header(uint8_t* dst) const {
     return bytes_written;
 }
 
-std::pair<uint8_t*, size_t> Segment::serialize_header_v2(size_t expected_bytes) {
+std::pair<uint8_t*, size_t> Segment::serialize_header_v2(size_t expected_bytes) const {
     ARCTICDB_TRACE(log::codec(), "Calculating bytes for header {}", header_);
     const auto header_bytes = header_.bytes() + sizeof(FixedHeader);
     FixedHeader hdr = {MAGIC_NUMBER, HEADER_VERSION_V2, std::uint32_t(expected_bytes)};
@@ -268,7 +268,7 @@ std::pair<uint8_t*, size_t> Segment::serialize_header_v2(size_t expected_bytes) 
     return std::make_pair(buffer->preamble(), calculate_size());
 }
 
-std::pair<uint8_t*, size_t> Segment::serialize_v1_header_in_place(size_t total_hdr_size) {
+std::pair<uint8_t*, size_t> Segment::serialize_v1_header_in_place(size_t total_hdr_size) const {
     const auto &buffer = buffer_.get_owning_buffer();
     auto base_ptr = buffer->preamble() + (buffer->preamble_bytes() - total_hdr_size);
     util::check(base_ptr + total_hdr_size == buffer->data(), "Expected base ptr to align with data ptr, {} != {}",fmt::ptr(base_ptr + total_hdr_size),fmt::ptr(buffer->data()));
@@ -277,7 +277,7 @@ std::pair<uint8_t*, size_t> Segment::serialize_v1_header_in_place(size_t total_h
     return std::make_pair(base_ptr, calculate_size());
 }
 
-std::tuple<uint8_t*, size_t, std::unique_ptr<Buffer>> Segment::serialize_v1_header_to_buffer(size_t hdr_size) {
+std::tuple<uint8_t*, size_t, std::unique_ptr<Buffer>> Segment::serialize_v1_header_to_buffer(size_t hdr_size) const {
     auto tmp = std::make_unique<Buffer>();
     ARCTICDB_TRACE(log::storage(), "Header doesn't fit in internal buffer, needed {} bytes but had {}, writing to temp buffer at {:x}", hdr_size, buffer_.preamble_bytes(),uintptr_t(tmp->data()));
     tmp->ensure(calculate_size());
@@ -289,7 +289,7 @@ std::tuple<uint8_t*, size_t, std::unique_ptr<Buffer>> Segment::serialize_v1_head
     return std::make_tuple(tmp->preamble(), calculate_size(), std::move(tmp));
 }
 
-std::tuple<uint8_t*, size_t, std::unique_ptr<Buffer>> Segment::serialize_header_v1() {
+std::tuple<uint8_t*, size_t, std::unique_ptr<Buffer>> Segment::serialize_header_v1() const {
     auto proto_header = generate_v1_header(header_, desc_);
     const auto hdr_size = proto_header.ByteSizeLong();
     auto total_hdr_size = hdr_size + FIXED_HEADER_SIZE;
@@ -302,7 +302,7 @@ std::tuple<uint8_t*, size_t, std::unique_ptr<Buffer>> Segment::serialize_header_
     }
 }
 
-std::tuple<uint8_t*, size_t, std::unique_ptr<Buffer>> Segment::serialize_header() {
+std::tuple<uint8_t*, size_t, std::unique_ptr<Buffer>> Segment::serialize_header() const {
     if (header_.encoding_version() == EncodingVersion::V1) {
         return serialize_header_v1();
     } else {
@@ -323,22 +323,23 @@ std::tuple<uint8_t*, size_t, std::unique_ptr<Buffer>> Segment::serialize_header(
     return desc_.fields(pos);
 }
 
-const arcticdb::proto::encoding::SegmentHeader& Segment::generate_header_proto() {
+const arcticdb::proto::encoding::SegmentHeader& Segment::generate_header_proto() const {
     if(!proto_)
         proto_ = std::make_unique<arcticdb::proto::encoding::SegmentHeader>(generate_v1_header(header_, desc_));
 
     return *proto_;
 }
 
-void Segment::write_to(std::uint8_t* dst) {
+void Segment::write_to(std::uint8_t* dst) const {
     ARCTICDB_SAMPLE(SegmentWriteToStorage, RMTSF_Aggregate)
     ARCTICDB_SUBSAMPLE(SegmentWriteHeader, RMTSF_Aggregate)
 
     size_t header_size;
-    if(header_.encoding_version() == EncodingVersion::V1)
+    if(header_.encoding_version() == EncodingVersion::V1) {
         header_size = write_proto_header(dst);
-    else
+    } else {
         header_size = write_binary_header(dst);
+    }
 
     ARCTICDB_SUBSAMPLE(SegmentWriteBody, RMTSF_Aggregate)
     ARCTICDB_DEBUG(log::codec(), "Writing {} bytes to body at offset {}", buffer().bytes(), FIXED_HEADER_SIZE + header_size);

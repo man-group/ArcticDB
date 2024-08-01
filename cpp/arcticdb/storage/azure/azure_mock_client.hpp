@@ -24,11 +24,11 @@ public:
 
     void write_blob(
             const std::string& blob_name,
-            Segment&& segment,
+            const Segment& segment,
             const Azure::Storage::Blobs::UploadBlockBlobFromOptions& upload_option,
             unsigned int request_timeout) override;
 
-    Segment read_blob(
+    std::shared_ptr<Segment> read_blob(
             const std::string& blob_name,
             const Azure::Storage::Blobs::DownloadBlobToOptions& download_option,
             unsigned int request_timeout) override;

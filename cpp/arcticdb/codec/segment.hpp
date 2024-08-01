@@ -139,39 +139,39 @@ class Segment {
 
     static Segment from_bytes(const std::uint8_t *src, std::size_t readable_size, bool copy_data = false);
 
-    void write_to(std::uint8_t *dst);
+    void write_to(std::uint8_t *dst) const;
 
-    std::tuple<uint8_t*, size_t, std::unique_ptr<Buffer>> serialize_header();
+    std::tuple<uint8_t*, size_t, std::unique_ptr<Buffer>> serialize_header() const;
 
-    size_t write_proto_header(uint8_t* dst);
+    size_t write_proto_header(uint8_t* dst) const;
 
     [[nodiscard]] std::size_t size() const {
         util::check(size_.has_value(), "Segment size has not been set");
         return *size_;
     }
 
-    [[nodiscard]] std::size_t calculate_size() {
+    std::size_t calculate_size() const {  // TODO rename get_size
         if(!size_.has_value())
             size_ = FIXED_HEADER_SIZE + segment_header_bytes_size() + buffer_bytes();
 
         return *size_;
     }
 
-    const arcticdb::proto::encoding::SegmentHeader& generate_header_proto();
+    const arcticdb::proto::encoding::SegmentHeader& generate_header_proto() const;
 
-    [[nodiscard]] size_t proto_size() {
+    [[nodiscard]] size_t proto_size() const {
         util::check(static_cast<bool>(proto_), "Proto has not been generated");
 
         return proto_->ByteSizeLong();
     }
 
-    [[nodiscard]] std::size_t segment_header_bytes_size() {
+    [[nodiscard]] std::size_t segment_header_bytes_size() const {
         if(header_.encoding_version() == EncodingVersion::V1) {
             generate_header_proto();
             return proto_size();
-        }
-        else
+        } else {
             return header_.bytes();
+        }
     }
 
     [[nodiscard]] std::size_t buffer_bytes() const {
@@ -253,18 +253,18 @@ class Segment {
         size_(size) {
     }
 
-    std::tuple<uint8_t*, size_t,  std::unique_ptr<Buffer>> serialize_v1_header_to_buffer(size_t total_hdr_size);
-    std::pair<uint8_t*, size_t> serialize_v1_header_in_place(size_t total_header_size);
-    std::tuple<uint8_t*, size_t, std::unique_ptr<Buffer>> serialize_header_v1();
-    std::pair<uint8_t*, size_t> serialize_header_v2(size_t expected_bytes);
+    std::tuple<uint8_t*, size_t,  std::unique_ptr<Buffer>> serialize_v1_header_to_buffer(size_t total_hdr_size) const;
+    std::pair<uint8_t*, size_t> serialize_v1_header_in_place(size_t total_header_size) const;
+    std::tuple<uint8_t*, size_t, std::unique_ptr<Buffer>> serialize_header_v1() const;
+    std::pair<uint8_t*, size_t> serialize_header_v2(size_t expected_bytes) const;
     size_t write_binary_header(uint8_t* dst) const;
 
     SegmentHeader header_;
     VariantBuffer buffer_;
     StreamDescriptor desc_;
     std::any keepalive_;
-    std::unique_ptr<arcticdb::proto::encoding::SegmentHeader> proto_;
-    std::optional<size_t> size_;
+    mutable std::unique_ptr<arcticdb::proto::encoding::SegmentHeader> proto_;  // computed on first read and cached
+    mutable std::optional<size_t> size_;  // computed on first read and cached
 };
 
 } //namespace arcticdb

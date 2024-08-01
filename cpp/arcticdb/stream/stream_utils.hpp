@@ -404,9 +404,9 @@ storage::KeySegmentPair make_target_key(KeyType key_type,
                            const StreamId &stream_id,
                            VersionId version_id,
                            const VariantKey &source_key,
-                           Segment&& segment) {
+                           std::shared_ptr<Segment> segment) {
     if (is_ref_key_class(key_type)) {
-        return {RefKey{stream_id, key_type}, std::move(segment)};
+        return {RefKey{stream_id, key_type}, segment};
     } else {
         util::check(!is_ref_key_class(variant_key_type(source_key)),
             "Cannot convert ref key {} to {}", source_key, key_type);
@@ -416,7 +416,7 @@ storage::KeySegmentPair make_target_key(KeyType key_type,
             .content_hash(atom_source_key.content_hash())
             .build(stream_id, key_type);
 
-        return {new_key, std::move(segment)};
+        return {new_key, segment};
     }
 }
 

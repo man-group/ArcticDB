@@ -118,7 +118,7 @@ namespace s3 {
                             auto s3_object_name = object_path(b.bucketize(key_type_dir, k), k);
                             auto &seg = kv.segment();
 
-                            auto put_object_result = s3_client.put_object(s3_object_name, std::move(seg), bucket_name);
+                            auto put_object_result = s3_client.put_object(s3_object_name, seg, bucket_name);
 
                             if (!put_object_result.is_success()) {
                                 auto& error = put_object_result.get_error();
@@ -167,7 +167,7 @@ namespace s3 {
                             if (get_object_result.is_success()) {
                                 ARCTICDB_SUBSAMPLE(S3StorageVisitSegment, 0)
 
-                                visitor(k, std::move(get_object_result.get_output()));
+                                visitor(k, std::make_shared<Segment>(std::move(get_object_result.get_output())));
 
                                 ARCTICDB_DEBUG(log::storage(), "Read key {}: {}", variant_key_type(k),
                                                variant_key_view(k));

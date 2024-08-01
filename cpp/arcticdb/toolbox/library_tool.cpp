@@ -29,18 +29,17 @@ LibraryTool::LibraryTool(std::shared_ptr<storage::Library> lib) {
 }
 
 ReadResult LibraryTool::read(const VariantKey& key) {
-    auto segment = read_to_segment(key);
-    auto segment_ptr = std::make_unique<Segment>(std::move(segment));
-    auto segment_in_memory = decode_segment(segment_ptr.get());
+    const Segment& segment = read_to_segment(key);
+    auto segment_in_memory = decode_segment(&segment);
     auto frame_and_descriptor = frame_and_descriptor_from_segment(std::move(segment_in_memory));
     return pipelines::make_read_result_from_frame(frame_and_descriptor, to_atom(key));
 }
 
-Segment LibraryTool::read_to_segment(const VariantKey& key) {
+const Segment& LibraryTool::read_to_segment(const VariantKey& key) {
     auto kv = store_->read_compressed_sync(key, storage::ReadKeyOpts{});
     util::check(kv.has_segment(), "Failed to read key: {}", key);
-    kv.segment().force_own_buffer();
-    return std::move(kv.segment());
+    kv.segment_ptr()->force_own_buffer();
+    return kv.segment();  // TODO is this right? When does `kv.segment_` go out of scope??
 }
 
 std::optional<google::protobuf::Any> LibraryTool::read_metadata(const VariantKey& key){

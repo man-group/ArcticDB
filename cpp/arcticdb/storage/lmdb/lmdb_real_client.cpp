@@ -35,11 +35,10 @@ std::optional<Segment> RealLmdbClient::read(const std::string&, std::string& pat
         return std::nullopt;
     }
 
-    auto segment = Segment::from_bytes(reinterpret_cast<std::uint8_t *>(mdb_val.mv_data), mdb_val.mv_size);
-    return segment;
+    return Segment::from_bytes(reinterpret_cast<std::uint8_t *>(mdb_val.mv_data), mdb_val.mv_size);
 }
 
-void RealLmdbClient::write(const std::string&, std::string& path, arcticdb::Segment&& seg,
+void RealLmdbClient::write(const std::string&, std::string& path, const arcticdb::Segment& seg,
                            ::lmdb::txn& txn, ::lmdb::dbi& dbi, int64_t overwrite_flag) {
     MDB_val mdb_key{path.size(), path.data()};
 

@@ -140,7 +140,7 @@ void RocksDBStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visi
                         s.ToString());
                 failed_reads.push_back(k);
             } else {
-                visitor(k, Segment::from_bytes(reinterpret_cast<uint8_t*>(value.data()), value.size()));
+                visitor(k, std::make_shared<Segment>(Segment::from_bytes(reinterpret_cast<uint8_t*>(value.data()), value.size())));
             }
         }
     });

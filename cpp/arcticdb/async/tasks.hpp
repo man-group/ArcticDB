@@ -302,9 +302,9 @@ struct CopyCompressedTask : BaseTask {
     VariantKey copy() {
         return std::visit([that = this](const auto &source_key) {
             auto key_seg = that->lib_->read(source_key);
-            auto target_key_seg = stream::make_target_key<ClockType>(that->key_type_, that->stream_id_, that->version_id_, source_key, std::move(key_seg.segment()));
+            auto target_key_seg = stream::make_target_key<ClockType>(that->key_type_, that->stream_id_, that->version_id_, source_key, key_seg.segment_ptr());
             auto return_key = target_key_seg.variant_key();
-            that->lib_->write(Composite<storage::KeySegmentPair>{std::move(target_key_seg) });
+            that->lib_->write(Composite<storage::KeySegmentPair>{std::move(target_key_seg)});
             return return_key;
         }, source_key_);
     }
@@ -464,7 +464,7 @@ struct DecodeTimeseriesDescriptorTask : BaseTask {
         auto key_seg = std::move(ks);
         ARCTICDB_DEBUG(log::storage(), "DecodeTimeseriesDescriptorTask decoding segment with key {}", variant_key_view(key_seg.variant_key()));
 
-        auto maybe_desc = decode_timeseries_descriptor(key_seg.segment());
+        auto maybe_desc = decode_timeseries_descriptor(*key_seg.segment_ptr());
 
         util::check(static_cast<bool>(maybe_desc), "Failed to decode timeseries descriptor");
         return std::make_pair(
@@ -487,11 +487,11 @@ struct DecodeTimeseriesDescriptorForIncompletesTask : BaseTask {
                 "DecodeTimeseriesDescriptorForIncompletesTask decoding segment with key {}",
                 variant_key_view(key_seg.variant_key()));
 
-        auto maybe_desc = decode_timeseries_descriptor_for_incompletes(key_seg.segment());
+        auto maybe_desc = decode_timeseries_descriptor_for_incompletes(*key_seg.segment_ptr());
 
         util::check(static_cast<bool>(maybe_desc), "Failed to decode timeseries descriptor");
         return std::make_pair(
-                std::move(key_seg.variant_key()),
+                key_seg.variant_key(),
                 std::move(*maybe_desc));
     }
 };
@@ -506,9 +506,9 @@ struct DecodeMetadataAndDescriptorTask : BaseTask {
         auto key_seg = std::move(ks);
         ARCTICDB_DEBUG(log::storage(), "DecodeMetadataAndDescriptorTask decoding segment with key {}", variant_key_view(key_seg.variant_key()));
 
-        auto [any, descriptor] = decode_metadata_and_descriptor_fields(key_seg.segment());
+        auto [any, descriptor] = decode_metadata_and_descriptor_fields(*key_seg.segment_ptr());
         return std::make_tuple(
-            std::move(key_seg.variant_key()),
+            key_seg.variant_key(),
             std::move(any),
             std::move(descriptor)
             );

@@ -76,8 +76,7 @@ uint64_t MappedFileStorage::get_data_offset(const Segment& seg) {
     return previous_offset;
 }
 
-uint64_t MappedFileStorage::write_segment(Segment&& seg) {
-    auto segment = std::move(seg);
+uint64_t MappedFileStorage::write_segment(const Segment& segment) {
     auto offset = get_data_offset(segment);
     auto* data = file_.data() + offset;
     ARCTICDB_SUBSAMPLE(FileStorageMemCpy, 0)
@@ -90,7 +89,7 @@ void MappedFileStorage::do_write(Composite<KeySegmentPair>&& kvs) {
     ARCTICDB_SAMPLE(MappedFileStorageWriteValues, 0)
     auto key_values = std::move(kvs);
     key_values.broadcast([this] (auto key_seg) {
-        const auto offset = write_segment(std::move(key_seg.segment()));
+        const auto offset = write_segment(key_seg.segment());
         const auto size = key_seg.segment().size();
         multi_segment_header_.add_key_and_offset(key_seg.atom_key(), offset, size);
     });
@@ -108,7 +107,7 @@ void MappedFileStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& v
         util::check(maybe_offset.has_value(), "Failed to find key {} in file", key);
         auto [offset, bytes] = std::move(maybe_offset.value());
         auto segment = Segment::from_bytes(file_.data() + offset, bytes);
-        visitor(key, std::move(segment));
+        visitor(key, std::make_shared<Segment>(std::move(segment)));
     });
 }
 

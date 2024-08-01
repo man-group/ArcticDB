@@ -20,7 +20,7 @@
 
 namespace arcticdb::async {
 
-std::pair<VariantKey, std::optional<Segment>> lookup_match_in_dedup_map(
+std::pair<VariantKey, std::optional<std::shared_ptr<Segment>>> lookup_match_in_dedup_map(
     const std::shared_ptr<DeDupMap> &de_dup_map,
     storage::KeySegmentPair&& key_seg);
 
@@ -355,7 +355,7 @@ std::vector<folly::Future<bool>> batch_key_exists(
 folly::Future<SliceAndKey> async_write(
             folly::Future<std::tuple<PartialKey, SegmentInMemory, pipelines::FrameSlice>> &&input_fut,
             const std::shared_ptr<DeDupMap> &de_dup_map) override {
-        using KeyOptSegment = std::pair<VariantKey, std::optional<Segment>>;
+        using KeyOptSegment = std::pair<VariantKey, std::optional<std::shared_ptr<Segment>>>;
         return std::move(input_fut).thenValue([this] (auto&& input) {
             auto [key, seg, slice] = std::forward<decltype(input)>(input);
             auto key_seg = EncodeAtomTask{
@@ -375,7 +375,7 @@ folly::Future<SliceAndKey> async_write(
             auto [key_opt_segment, slice] = std::forward<decltype(item)>(item);
             if (key_opt_segment.second)
                 lib->write(Composite<storage::KeySegmentPair>({VariantKey{key_opt_segment.first},
-                                                               std::move(*key_opt_segment.second)}));
+                                                               *key_opt_segment.second}));
 
             return SliceAndKey{slice, to_atom(key_opt_segment.first)};
         });

@@ -11,6 +11,7 @@
 #include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/storage/s3/s3_real_client.hpp>
 #include <arcticdb/storage/s3/s3_client_wrapper.hpp>
+#include <utility>
 
 namespace arcticdb::storage::nfs_backed {
 
@@ -137,7 +138,7 @@ void NfsBackedStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts) {
 }
 
 void NfsBackedStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
-    auto func = [visitor] (const VariantKey& k, Segment&& seg) mutable {
+    auto func = [visitor] (const VariantKey& k, std::shared_ptr<Segment> seg) mutable {
         visitor(unencode_object_id(k), std::move(seg));
     };
 

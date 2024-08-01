@@ -29,7 +29,8 @@ namespace arcticdb::storage {
       : key_(std::make_shared<VariantKey>(std::move(key))),
         segment_(std::make_shared<Segment>(std::move(segment))) {}
 
-        KeySegmentPair(VariantKey&& key, std::shared_ptr<Segment> segment)
+        template<typename K>
+        KeySegmentPair(K&& key, std::shared_ptr<Segment> segment)
         : key_(std::make_shared<VariantKey>(std::move(key))),
         segment_(segment)
         {}
@@ -38,11 +39,6 @@ namespace arcticdb::storage {
         : key_(std::make_shared<VariantKey>(key)), segment_(std::make_shared<Segment>(std::move(segment))) {}
 
         ARCTICDB_MOVE_COPY_DEFAULT(KeySegmentPair)
-
-        Segment& segment() {
-            // TODO this is dangerous
-            return *segment_;
-        }
 
         std::shared_ptr<Segment> segment_ptr() {
           return segment_;
