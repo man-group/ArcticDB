@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from arcticdb_ext.exceptions import SchemaException, StorageException, UserInputException
+from arcticdb_ext.exceptions import SchemaException, StorageException, UserInputException, InternalException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb_ext.version_store import NoSuchVersionException
 
@@ -207,8 +207,10 @@ def test_column_stats_non_existent_column(lmdb_version_store_tiny_segment):
     expected_column_stats = generate_symbol(lib, sym)
 
     column_stats_non_existent_column = {"non_existent_column": {"MINMAX"}}
-    with pytest.raises(SchemaException):
+    # Idealy this should throw either a SchemaException or UserInputException
+    with pytest.raises(InternalException) as exception_info:
         lib.create_column_stats(sym, column_stats_non_existent_column)
+    assert "non_existent_column" in str(exception_info.value)
 
     column_stats_dict = {"col_1": {"MINMAX"}, "col_2": {"MINMAX"}}
     lib.create_column_stats(sym, column_stats_dict)

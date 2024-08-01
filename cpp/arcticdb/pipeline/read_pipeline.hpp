@@ -112,15 +112,15 @@ inline bool contains_index_column(const std::vector<std::string>& columns, const
             != std::end(columns);
 }
 
-inline std::optional<util::BitSet> requested_column_bitset_including_index(const StreamDescriptor& desc, const std::vector<std::string>& columns) {
+inline std::optional<util::BitSet> requested_column_bitset_including_index(const StreamDescriptor& desc, const std::optional<std::vector<std::string>>& columns) {
     // Add the index column if it's not there
-    if (!columns.empty()) {
-        if(!contains_index_column(columns, desc)) {
+    if (columns.has_value()) {
+        if(!contains_index_column(*columns, desc)) {
             ARCTICDB_DEBUG(log::version(), "Specified columns missing index column");
-            return build_column_bitset(desc, add_index_column(columns, desc));
+            return build_column_bitset(desc, add_index_column(*columns, desc));
+        } else {
+            return build_column_bitset(desc, *columns);
         }
-        else
-            return build_column_bitset(desc, columns);
     }
     return std::nullopt;
 }
@@ -171,9 +171,9 @@ inline std::optional<util::BitSet> overall_column_bitset(
     }
 }
 
-inline void generate_filtered_field_descriptors(PipelineContext& context, const std::vector<std::string>& columns) {
-    if (!columns.empty()) {
-        std::unordered_set<std::string_view> column_set{std::begin(columns), std::end(columns)};
+inline void generate_filtered_field_descriptors(PipelineContext& context, const std::optional<std::vector<std::string>>& columns) {
+    if (columns.has_value()) {
+        std::unordered_set<std::string_view> column_set{std::begin(*columns), std::end(*columns)};
         
         context.filter_columns_ = std::make_shared<FieldCollection>();
         const auto& desc = context.descriptor();
@@ -189,7 +189,7 @@ inline void generate_filtered_field_descriptors(PipelineContext& context, const 
     }
 }
 
-inline void generate_filtered_field_descriptors(std::shared_ptr<PipelineContext>& context, const std::vector<std::string>& columns) {
+inline void generate_filtered_field_descriptors(std::shared_ptr<PipelineContext>& context, const std::optional<std::vector<std::string>>& columns) {
     generate_filtered_field_descriptors(*context, columns);
 }
 
@@ -207,7 +207,7 @@ inline std::vector<FilterQuery<ContainerType>> get_column_bitset_and_query_funct
                                                                          query.clauses_,
                                                                          pipeline_context->selected_columns_);
     }
-    return build_read_query_filters<ContainerType>(pipeline_context->overall_column_bitset_, pipeline_context, query.row_filter, dynamic_schema, column_groups);
+    return build_read_query_filters<ContainerType>(pipeline_context, query.row_filter, dynamic_schema, column_groups);
 }
 
 } // arcticdb::pipelines

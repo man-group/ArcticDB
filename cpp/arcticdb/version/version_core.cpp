@@ -44,29 +44,22 @@ void modify_descriptor(const std::shared_ptr<pipelines::PipelineContext>& pipeli
     auto& desc = *pipeline_context->desc_;
     if (opt_false(read_options.force_strings_to_object_)) {
         auto& fields = desc.fields();
-        std::for_each(
-            std::begin(fields),
-            std::end(fields),
-            [](auto& field_desc) {
-                if (field_desc.type().data_type() == DataType::ASCII_FIXED64)
-                    set_data_type(DataType::ASCII_DYNAMIC64, field_desc.mutable_type());
+        for (Field& field_desc : fields) {
+            if (field_desc.type().data_type() == DataType::ASCII_FIXED64)
+                set_data_type(DataType::ASCII_DYNAMIC64, field_desc.mutable_type());
 
-                if (field_desc.type().data_type() == DataType::UTF_FIXED64)
-                    set_data_type(DataType::UTF_DYNAMIC64, field_desc.mutable_type());
-            });
-    }
-    else if (opt_false(read_options.force_strings_to_fixed_)) {
+            if (field_desc.type().data_type() == DataType::UTF_FIXED64)
+                set_data_type(DataType::UTF_DYNAMIC64, field_desc.mutable_type());
+        }
+    } else if (opt_false(read_options.force_strings_to_fixed_)) {
         auto& fields = desc.fields();
-        std::for_each(
-            std::begin(fields),
-            std::end(fields),
-            [](auto& field_desc) {
-                if (field_desc.type().data_type() == DataType::ASCII_DYNAMIC64)
-                    set_data_type(DataType::ASCII_FIXED64, field_desc.mutable_type());
+        for (Field& field_desc : fields) {
+            if (field_desc.type().data_type() == DataType::ASCII_DYNAMIC64)
+                set_data_type(DataType::ASCII_FIXED64, field_desc.mutable_type());
 
-                if (field_desc.type().data_type() == DataType::UTF_DYNAMIC64)
-                    set_data_type(DataType::UTF_FIXED64, field_desc.mutable_type());
-            });
+            if (field_desc.type().data_type() == DataType::UTF_DYNAMIC64)
+                set_data_type(DataType::UTF_FIXED64, field_desc.mutable_type());
+        }
     }
 }
 
@@ -697,17 +690,17 @@ SegmentInMemory read_direct(const std::shared_ptr<Store>& store,
 }
 
 void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDescriptor& desc) {
-    if(!read_query.columns.empty()) {
+    if (read_query.columns.has_value()) {
         auto index_columns = stream::get_index_columns_from_descriptor(desc);
         if(index_columns.empty())
             return;
 
         std::vector<std::string> index_columns_to_add;
         for(const auto& index_column : index_columns) {
-            if(std::find(std::begin(read_query.columns), std::end(read_query.columns), index_column) == std::end(read_query.columns))
+            if(std::find(std::begin(*read_query.columns), std::end(*read_query.columns), index_column) == std::end(*read_query.columns))
                 index_columns_to_add.push_back(std::string(index_column));
         }
-        read_query.columns.insert(std::begin(read_query.columns), std::begin(index_columns_to_add), std::end(index_columns_to_add));
+        read_query.columns->insert(std::begin(*read_query.columns), std::begin(index_columns_to_add), std::end(index_columns_to_add));
     }
 }
 
@@ -759,6 +752,15 @@ void read_indexed_keys_to_pipeline(
         return;
 
     auto index_segment_reader = std::move(maybe_reader.value());
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+        !(index_segment_reader.tsd().proto().normalization().has_custom() && read_query.columns &&
+          read_query.columns->empty()),
+        "Reading the index column is not supported when recursive or custom normalizers are used."
+    );
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+        !(index_segment_reader.is_pickled() && read_query.columns && read_query.columns->empty()),
+        "Reading index columns is not supported with pickled data."
+    );
     ARCTICDB_DEBUG(log::version(), "Read index segment with {} keys", index_segment_reader.size());
     check_column_and_date_range_filterable(index_segment_reader, read_query);
 
@@ -1193,8 +1195,13 @@ FrameAndDescriptor read_dataframe_impl(
         read_indexed_keys_to_pipeline(store, pipeline_context, std::get<VersionedItem>(version_info), read_query, read_options);
     }
 
-    if(pipeline_context->multi_key_)
+    if (pipeline_context->multi_key_) {
+        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+            !read_query.columns || (!pipeline_context->only_index_columns_selected() && !read_query.columns->empty()),
+            "Reading the index column is not supported when recursive or custom normalizers are used."
+        );
         return read_multi_key(store, *pipeline_context->multi_key_);
+    }
 
     if(opt_false(read_options.incompletes_)) {
         util::check(std::holds_alternative<IndexRange>(read_query.row_filter), "Streaming read requires date range filter");
@@ -1218,7 +1225,12 @@ FrameAndDescriptor read_dataframe_impl(
 
     ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
     reduce_and_fix_columns(pipeline_context, frame, read_options);
-    return {frame, timeseries_descriptor_from_pipeline_context(pipeline_context, {}, pipeline_context->bucketize_dynamic_), {}, buffers};
+    if (read_query.columns &&
+        read_query.columns->empty() &&
+        pipeline_context->descriptor().index().type() == IndexDescriptor::Type::ROWCOUNT) {
+        frame.set_row_id(pipeline_context->rows_ - 1);
+    }
+    return {std::move(frame), timeseries_descriptor_from_pipeline_context(pipeline_context, {}, pipeline_context->bucketize_dynamic_), {}, buffers};
 }
 
 VersionedItem collate_and_write(

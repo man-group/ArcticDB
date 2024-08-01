@@ -28,7 +28,12 @@ size_t SegmentHeader::serialize_to_bytes(uint8_t* dst, std::optional<size_t> exp
     dst += sizeof(offset_);
     ARCTICDB_TRACE(log::codec(), "Wrote offsets in {} bytes", dst - begin);
     size_t bytes_written = dst - begin;
-    util::check(!expected_bytes || bytes_written == *expected_bytes, "Mismatch between actual and expected bytes: {} != {}", dst - begin, *expected_bytes);
+    util::check(
+        !expected_bytes || (bytes_written == *expected_bytes),
+        "Mismatch between actual and expected bytes: {} != {}",
+        dst - begin,
+        expected_bytes ? *expected_bytes : 0
+    );
     ARCTICDB_TRACE(log::codec(), "Wrote V2 header with {} bytes ({} expected)", bytes_written, expected_bytes.value_or(0));
     return bytes_written;
 }

@@ -119,8 +119,7 @@ FrameAndDescriptor read_dataframe_impl(
     const std::shared_ptr<Store>& store,
     const std::variant<VersionedItem, StreamId>& version_info,
     ReadQuery & read_query,
-    const ReadOptions& read_options
-    );
+    const ReadOptions& read_options);
 
 FrameAndDescriptor read_segment_impl(
     const std::shared_ptr<Store>& store,

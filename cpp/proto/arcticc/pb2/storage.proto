@@ -64,6 +64,8 @@ message VersionStoreConfig {
         bool set_tz = 54;
         bool ignore_sort_order = 55;
         bool fast_tombstone_all = 56;
+        // If this is set to false the will be no column slicing when dynamic schema is on
+        // Even if there are hundreds of thousands of columns the row slice will contain all of them
         bool bucketize_dynamic = 57;
         uint32 max_num_buckets = 58;
         bool empty_types = 59;

@@ -529,7 +529,7 @@ def test_group_column_not_present(lmdb_version_store):
     q = q.groupby("grouping_column").agg({"to_mean": "mean"})
     symbol = "test_group_column_not_present"
     lmdb_version_store.write(symbol, df)
-    with pytest.raises(InternalException) as e_info:
+    with pytest.raises(SchemaException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 

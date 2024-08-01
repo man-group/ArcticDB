@@ -67,9 +67,11 @@ from arcticdb.version_store._normalization import (
     _from_tz_timestamp,
     restrict_data_to_date_range_only,
     normalize_dt_range_to_ts,
+    _denormalize_single_index
 )
 TimeSeriesType = Union[pd.DataFrame, pd.Series]
-
+from arcticdb.util._versions import PANDAS_VERSION
+from packaging.version import Version
 
 IS_WINDOWS = sys.platform == "win32"
 
@@ -999,10 +1001,11 @@ class NativeVersionStore:
         return {v.symbol: v for v in versioned_items}
 
     def _batch_read_to_versioned_items(
-        self, symbols, as_ofs, date_ranges, row_ranges, columns, query_builder, throw_on_error, kwargs=None
+        self, symbols, as_ofs, date_ranges, row_ranges, columns, query_builder, throw_on_error, **kwargs
     ):
-        if kwargs is None:
-            kwargs = dict()
+        implement_read_index = kwargs.get("implement_read_index", False)
+        if columns:
+            columns = [self._resolve_empty_columns(c, implement_read_index) for c in columns]
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
         read_queries = self._get_read_queries(len(symbols), date_ranges, row_ranges, columns, query_builder)
         read_options = self._get_read_options(**kwargs)
@@ -1015,7 +1018,7 @@ class NativeVersionStore:
             else:
                 read_result = ReadResult(*read_results[i])
                 read_query = read_queries[i]
-                vitem = self._post_process_dataframe(read_result, read_query)
+                vitem = self._post_process_dataframe(read_result, read_query, implement_read_index)
                 versioned_items.append(vitem)
         return versioned_items
 
@@ -1523,7 +1526,7 @@ class NativeVersionStore:
         date_range: Optional[DateRangeInput],
         row_range: Tuple[int, int],
         columns: Optional[List[str]],
-        query_builder: QueryBuilder,
+        query_builder: Optional[QueryBuilder],
     ):
         check(date_range is None or row_range is None, "Date range and row range both specified")
         read_query = _PythonVersionStoreReadQuery()
@@ -1544,8 +1547,7 @@ class NativeVersionStore:
         if date_range is not None:
             read_query.row_filter = _normalize_dt_range(date_range)
 
-        if columns is not None:
-            read_query.columns = list(columns)
+        read_query.columns = columns
 
         return read_query
 
@@ -1626,7 +1628,7 @@ class NativeVersionStore:
         read_options.set_incompletes(self.resolve_defaults("incomplete", proto_cfg, global_default=False, **kwargs))
         return read_options
 
-    def _get_queries(self, symbol, as_of, date_range, row_range, columns, query_builder, **kwargs):
+    def _get_queries(self, symbol, as_of, date_range, row_range, columns=None, query_builder=None, **kwargs):
         version_query = self._get_version_query(as_of, **kwargs)
         read_options = self._get_read_options(**kwargs)
         read_query = self._get_read_query(
@@ -1636,6 +1638,34 @@ class NativeVersionStore:
 
     def _get_column_stats(self, column_stats):
         return None if column_stats is None else _ColumnStats(column_stats)
+
+    def _postprocess_df_with_only_rowcount_idx(self, read_result, row_range):
+        index_meta = read_result.norm.df.common.index
+        if read_result.frame_data.row_count > 0:
+            step = index_meta.step if index_meta.step != 0 else 1
+            stop = index_meta.start + read_result.frame_data.row_count * step
+            index = pd.RangeIndex(start=index_meta.start, stop=stop, step=step)
+            if row_range:
+                index=index[row_range[0]:row_range[1]]
+        elif PANDAS_VERSION < Version("2.0.0"):
+            index = pd.RangeIndex(start=0, stop=0,step=1)
+        else:
+            index = pd.DatetimeIndex([])
+        meta = denormalize_user_metadata(read_result.udm, self._normalizer)
+        return VersionedItem(
+            symbol=read_result.version.symbol,
+            library=self._library.library_path,
+            data=pd.DataFrame({}, index=index),
+            version=read_result.version.version,
+            metadata=meta,
+            host=self.env,
+            timestamp=read_result.version.timestamp
+        )
+
+    def _resolve_empty_columns(self, columns, implement_read_index):
+        if not implement_read_index and columns == []:
+            columns = None
+        return columns
 
     def read(
         self,
@@ -1681,6 +1711,8 @@ class NativeVersionStore:
         -------
         VersionedItem
         """
+        implement_read_index = kwargs.get("implement_read_index", False)
+        columns = self._resolve_empty_columns(columns, implement_read_index)
         version_query, read_options, read_query = self._get_queries(
             symbol=symbol,
             as_of=as_of,
@@ -1691,7 +1723,7 @@ class NativeVersionStore:
             **kwargs,
         )
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
-        return self._post_process_dataframe(read_result, read_query)
+        return self._post_process_dataframe(read_result, read_query, implement_read_index)
 
     def head(
         self,
@@ -1720,14 +1752,15 @@ class NativeVersionStore:
         -------
         VersionedItem
         """
-
+        implement_read_index = kwargs.get("implement_read_index", False)
+        columns = self._resolve_empty_columns(columns, implement_read_index)
         q = QueryBuilder()
         q = q._head(n)
         version_query, read_options, read_query = self._get_queries(
             symbol=symbol, as_of=as_of, date_range=None, row_range=None, columns=columns, query_builder=q, **kwargs
         )
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
-        return self._post_process_dataframe(read_result, read_query)
+        return self._post_process_dataframe(read_result, read_query, implement_read_index, head=n)
 
     def tail(
         self, symbol: str, n: int = 5, as_of: VersionQueryInput = None, columns: Optional[List[str]] = None, **kwargs
@@ -1752,31 +1785,37 @@ class NativeVersionStore:
         VersionedItem
         """
 
+        implement_read_index = kwargs.get("implement_read_index", False)
+        columns = self._resolve_empty_columns(columns, implement_read_index)
         q = QueryBuilder()
         q = q._tail(n)
         version_query, read_options, read_query = self._get_queries(
             symbol=symbol, as_of=as_of, date_range=None, row_range=None, columns=columns, query_builder=q, **kwargs
         )
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
-        return self._post_process_dataframe(read_result, read_query)
+        return self._post_process_dataframe(read_result, read_query, implement_read_index, tail=n)
 
     def _read_dataframe(self, symbol, version_query, read_query, read_options):
         return ReadResult(*self.version_store.read_dataframe_version(symbol, version_query, read_query, read_options))
 
-    def _post_process_dataframe(self, read_result, read_query):
+    def _post_process_dataframe(self, read_result, read_query, implement_read_index=False, head=None, tail=None):
+        index_type = read_result.norm.df.common.WhichOneof("index_type")
+        index_is_rowcount = (index_type == "index" and
+                             not read_result.norm.df.common.index.is_physically_stored and
+                             len(read_result.frame_data.index_columns) == 0)
+        if implement_read_index and read_query.columns == [] and index_is_rowcount:
+            row_range = None
+            if head:
+                row_range=(0, head)
+            elif tail:
+                row_range=(-tail, None)
+            elif read_query.row_filter is not None:
+                row_range = self._compute_filter_start_end_row(read_result, read_query)
+            return self._postprocess_df_with_only_rowcount_idx(read_result, row_range)
+
         if read_query.row_filter is not None and read_query.needs_post_processing:
             # post filter
-            start_idx = end_idx = None
-            if isinstance(read_query.row_filter, _RowRange):
-                start_idx = read_query.row_filter.start - read_result.frame_data.offset
-                end_idx = read_query.row_filter.end - read_result.frame_data.offset
-            elif isinstance(read_query.row_filter, _IndexRange):
-                ts_idx = read_result.frame_data.value.data[0]
-                if len(ts_idx) != 0:
-                    start_idx = ts_idx.searchsorted(datetime64(read_query.row_filter.start_ts, "ns"), side="left")
-                    end_idx = ts_idx.searchsorted(datetime64(read_query.row_filter.end_ts, "ns"), side="right")
-            else:
-                raise ArcticNativeException("Unrecognised row_filter type: {}".format(type(read_query.row_filter)))
+            start_idx, end_idx = self._compute_filter_start_end_row(read_result, read_query)
             data = []
             for c in read_result.frame_data.value.data:
                 data.append(c[start_idx:end_idx])
@@ -1802,6 +1841,20 @@ class NativeVersionStore:
             )
 
         return vitem
+
+    def _compute_filter_start_end_row(self, read_result, read_query):
+        start_idx = end_idx = None
+        if isinstance(read_query.row_filter, _RowRange):
+            start_idx = read_query.row_filter.start - read_result.frame_data.offset
+            end_idx = read_query.row_filter.end - read_result.frame_data.offset
+        elif isinstance(read_query.row_filter, _IndexRange):
+            index = read_result.frame_data.value.data[0]
+            if len(index) != 0:
+                start_idx = index.searchsorted(datetime64(read_query.row_filter.start_ts, "ns"), side="left")
+                end_idx = index.searchsorted(datetime64(read_query.row_filter.end_ts, "ns"), side="right")
+        else:
+            raise ArcticNativeException("Unrecognised row_filter type: {}".format(type(read_query.row_filter)))
+        return (start_idx, end_idx)
 
     def _find_version(
         self, symbol: str, as_of: Optional[VersionQueryInput] = None, raise_on_missing: Optional[bool] = False, **kwargs
@@ -1960,7 +2013,6 @@ class NativeVersionStore:
 
     def _adapt_read_res(self, read_result: ReadResult) -> VersionedItem:
         frame_data = FrameData.from_cpp(read_result.frame_data)
-
         meta = denormalize_user_metadata(read_result.udm, self._normalizer)
         data = self._normalizer.denormalize(frame_data, read_result.norm)
         if read_result.norm.HasField("custom"):
