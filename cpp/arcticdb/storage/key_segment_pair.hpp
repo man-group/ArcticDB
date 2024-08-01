@@ -48,19 +48,21 @@ namespace arcticdb::storage {
           return segment_;
         }
 
-        Segment&& release_segment() {
-            // TODO this is dangerous
-            return std::move(*segment_);
+        // TODO is there really any point to this API?
+        std::shared_ptr<Segment> release_segment() {
+            auto tmp = segment_;
+            segment_ = std::make_shared<Segment>();
+            return tmp;
         }
 
         [[nodiscard]] const AtomKey &atom_key() const {
             util::check(std::holds_alternative<AtomKey>(variant_key()), "Expected atom key access");
-            return std::get<AtomKey >(variant_key());
+            return std::get<AtomKey>(variant_key());
         }
 
         [[nodiscard]] const RefKey& ref_key() const {
             util::check(std::holds_alternative<RefKey>(variant_key()), "Expected ref key access");
-            return std::get<RefKey >(variant_key());
+            return std::get<RefKey>(variant_key());
         }
 
         template<typename T>

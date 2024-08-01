@@ -547,7 +547,7 @@ void decode_v1(const Segment& segment,
 
 void decode_into_memory_segment(
     const Segment& segment,
-    SegmentHeader& hdr,
+    const SegmentHeader& hdr,
     SegmentInMemory& res,
     const StreamDescriptor& desc)
 {
@@ -557,16 +557,15 @@ void decode_into_memory_segment(
         decode_v1(segment, hdr, res, desc);
 }
 
-SegmentInMemory decode_segment(Segment&& s) {
-    auto segment = std::move(s);
-    auto &hdr = segment.header();
-    ARCTICDB_TRACE(log::codec(), "Decoding descriptor: {}", segment.descriptor());
-    auto descriptor = segment.descriptor();
+SegmentInMemory decode_segment(const Segment* const segment) {
+    auto &hdr = segment->header();
+    ARCTICDB_TRACE(log::codec(), "Decoding descriptor: {}", segment->descriptor());
+    auto descriptor = segment->descriptor();
     descriptor.fields().regenerate_offsets();
     ARCTICDB_TRACE(log::codec(), "Creating segment");
     SegmentInMemory res(std::move(descriptor));
     ARCTICDB_TRACE(log::codec(), "Decoding segment");
-    decode_into_memory_segment(segment, hdr, res, res.descriptor());
+    decode_into_memory_segment(*segment, hdr, res, res.descriptor());
     ARCTICDB_TRACE(log::codec(), "Returning segment");
     return res;
 }

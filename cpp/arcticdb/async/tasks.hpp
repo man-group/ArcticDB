@@ -261,14 +261,14 @@ struct ReadCompressedSlicesTask : BaseTask {
 
     ARCTICDB_MOVE_ONLY_DEFAULT(ReadCompressedSlicesTask)
 
-     Composite<std::pair<Segment, pipelines::SliceAndKey>> read() {
+    Composite<std::pair<std::shared_ptr<Segment>, pipelines::SliceAndKey>> read() {
         return slice_and_keys_.transform([that=this](const auto &sk){
             ARCTICDB_DEBUG(log::version(), "Reading key {}", sk.key());
-            return std::make_pair(that->lib_->read(sk.key()).release_segment(), sk);
+            return std::make_pair(that->lib_->read(sk.key()).segment_ptr(), sk);
         });
-     }
+    }
 
-    Composite<std::pair<Segment, pipelines::SliceAndKey>> operator()() {
+    auto operator()() {
         ARCTICDB_SAMPLE(ReadCompressed, 0)
         return read();
     }
@@ -327,7 +327,7 @@ struct DecodeSegmentTask : BaseTask {
         ARCTICDB_DEBUG(log::storage(), "ReadAndDecodeAtomTask decoding segment with key {}",
                              variant_key_view(key_seg.variant_key()));
 
-        return {key_seg.variant_key(), decode_segment(std::move(key_seg.segment()))};
+        return {key_seg.variant_key(), decode_segment(key_seg.segment_ptr().get())};
     }
 };
 

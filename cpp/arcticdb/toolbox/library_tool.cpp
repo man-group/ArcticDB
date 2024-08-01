@@ -30,7 +30,8 @@ LibraryTool::LibraryTool(std::shared_ptr<storage::Library> lib) {
 
 ReadResult LibraryTool::read(const VariantKey& key) {
     auto segment = read_to_segment(key);
-    auto segment_in_memory = decode_segment(std::move(segment));
+    auto segment_ptr = std::make_unique<Segment>(std::move(segment));
+    auto segment_in_memory = decode_segment(segment_ptr.get());
     auto frame_and_descriptor = frame_and_descriptor_from_segment(std::move(segment_in_memory));
     return pipelines::make_read_result_from_frame(frame_and_descriptor, to_atom(key));
 }
