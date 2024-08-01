@@ -15,4 +15,4 @@ from arcticdb.version_store.library import StagedDataFinalizeMethod, WriteMetada
 
 set_config_from_env_vars(_os.environ)
 
-__version__ = "dev"
+__version__ = "4.5.0rc3"
