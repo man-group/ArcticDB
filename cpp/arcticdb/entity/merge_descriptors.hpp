@@ -18,13 +18,13 @@ StreamDescriptor merge_descriptors(
 entity::StreamDescriptor merge_descriptors(
     const entity::StreamDescriptor &original,
     const std::vector<std::shared_ptr<FieldCollection>> &entries,
-    const std::vector<std::string> &filtered_columns,
+    const std::optional<std::vector<std::string>> &filtered_columns,
     const std::optional<entity::IndexDescriptorImpl>& default_index = std::nullopt);
 
 entity::StreamDescriptor merge_descriptors(
     const entity::StreamDescriptor &original,
     const std::vector<pipelines::SliceAndKey> &entries,
-    const std::vector<std::string> &filtered_columns,
+    const std::optional<std::vector<std::string>> &filtered_columns,
     const std::optional<entity::IndexDescriptorImpl>& default_index = std::nullopt);
 
 entity::StreamDescriptor merge_descriptors(

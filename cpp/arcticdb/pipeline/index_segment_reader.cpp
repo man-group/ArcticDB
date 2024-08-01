@@ -103,7 +103,7 @@ bool IndexSegmentReader::has_timestamp_index() const {
 
 void check_column_and_date_range_filterable(const pipelines::index::IndexSegmentReader& index_segment_reader, const ReadQuery& read_query) {
     util::check(!index_segment_reader.is_pickled()
-                    || (read_query.columns.empty() && std::holds_alternative<std::monostate>(read_query.row_filter)),
+                    || (!read_query.columns.has_value() && std::holds_alternative<std::monostate>(read_query.row_filter)),
                 "The data for this symbol is pickled and does not support column stats, date_range, row_range, or column queries");
     util::check(index_segment_reader.has_timestamp_index() || !std::holds_alternative<IndexRange>(read_query.row_filter),
                 "Cannot apply date range filter to symbol with non-timestamp index");

@@ -31,9 +31,14 @@ PipelineContext::PipelineContext(SegmentInMemory& frame, const AtomKey& key) :
     segment_descriptors_[0] = std::move(descriptor);
 }
 
-void PipelineContext::set_selected_columns(const std::vector<std::string>& columns) {
+void PipelineContext::set_selected_columns(const std::optional<std::vector<std::string>>& columns) {
     util::check(static_cast<bool>(desc_), "Descriptor not set in set_selected_columns");
     selected_columns_ = requested_column_bitset_including_index(*desc_, columns);
+}
+
+bool PipelineContext::only_index_columns_selected() const {
+    return overall_column_bitset_ &&
+        ((overall_column_bitset_->count() == 1 && (*overall_column_bitset_)[0]) || overall_column_bitset_->count() == 0);
 }
 
 const std::optional<util::BitSet>& PipelineContextRow::get_selected_columns() const {

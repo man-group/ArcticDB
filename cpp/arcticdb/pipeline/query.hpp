@@ -42,7 +42,9 @@ struct SignedRowRange {
 };
 
 struct ReadQuery {
-    mutable std::vector<std::string> columns; // empty <=> all columns
+    // std::nullopt -> all columns
+    // empty vector -> only the index
+    mutable std::optional<std::vector<std::string>> columns;
     std::optional<SignedRowRange> row_range;
     FilterRange row_filter; // no filter by default
     std::vector<std::shared_ptr<Clause>> clauses_;
@@ -117,22 +119,12 @@ using FilterQuery = folly::Function<std::unique_ptr<util::BitSet>(const Containe
 template<typename ContainerType>
 using CombinedQuery = folly::Function<std::unique_ptr<util::BitSet>(const ContainerType&)>;
 
-inline bool is_column_selected(size_t start_col, size_t end_col, const util::BitSet& sc) {
-    if (start_col == 0) {
-        auto col = sc.get_first();
-        return col < end_col;
-    } else {
-        auto col = sc.get_next(start_col - 1ULL);
-        return col != 0 && col < end_col;
-    }
-}
-
-inline FilterQuery<index::IndexSegmentReader> create_static_col_filter(util::BitSet &&selected_columns) {
-    return [sc = std::move(selected_columns)](const index::IndexSegmentReader &isr, std::unique_ptr<util::BitSet>&& input) mutable {
+inline FilterQuery<index::IndexSegmentReader> create_static_col_filter(std::shared_ptr<PipelineContext> pipeline_context) {
+    return [pipeline = std::move(pipeline_context)](const index::IndexSegmentReader &isr, std::unique_ptr<util::BitSet>&& input) mutable {
         auto res = std::make_unique<util::BitSet>(static_cast<util::BitSetSizeType>(isr.size()));
         auto start_col = isr.column(index::Fields::start_col).begin<stream::SliceTypeDescriptorTag>();
         auto end_col = isr.column(index::Fields::end_col).begin<stream::SliceTypeDescriptorTag>();
-
+        const bool selected_only_index = pipeline->only_index_columns_selected();
         if (input) {
             bm::bvector<>::enumerator en = input->first();
             bm::bvector<>::enumerator en_end = input->end();
@@ -143,13 +135,13 @@ inline FilterQuery<index::IndexSegmentReader> create_static_col_filter(util::Bit
                 pos = *en;
                 std::advance(start_col, dist);
                 std::advance(end_col, dist);
-                (*res)[*en] = is_column_selected(*start_col, *end_col, sc);
+                (*res)[*en] = selected_only_index || pipeline->overall_column_bitset_->any_range(*start_col, *end_col - 1);
                 ++en;
             }
 
         } else {
             for (std::size_t r = 0, end = isr.size(); r < end; ++r) {
-                (*res)[r] = is_column_selected(*start_col, *end_col, sc);
+                (*res)[r] = pipeline->overall_column_bitset_->any_range(*start_col, *end_col - 1);
                 ++start_col;
                 ++end_col;
             }
@@ -159,21 +151,24 @@ inline FilterQuery<index::IndexSegmentReader> create_static_col_filter(util::Bit
     };
 }
 
-inline FilterQuery<index::IndexSegmentReader> create_dynamic_col_filter(util::BitSet &&selected_columns, const std::shared_ptr<PipelineContext>& pipeline_context) {
-    return [sc = std::move(selected_columns), pipeline_context](const index::IndexSegmentReader &isr, std::unique_ptr<util::BitSet>&& input) mutable {
-        auto res = std::make_unique<util::BitSet>(static_cast<util::BitSetSizeType>(sc.size()));
+inline FilterQuery<index::IndexSegmentReader> create_dynamic_col_filter(
+    std::shared_ptr<PipelineContext> pipeline_context
+) {
+    return [pipeline = std::move(pipeline_context)](const index::IndexSegmentReader& isr, std::unique_ptr<util::BitSet>&& input) mutable {
+        auto res = std::make_unique<util::BitSet>(static_cast<util::BitSetSizeType>(pipeline->overall_column_bitset_->size())
+        );
         util::check(isr.bucketize_dynamic(), "Expected column group in index segment reader dynamic column filter");
         auto hash_bucket = isr.column(index::Fields::hash_bucket).begin<stream::SliceTypeDescriptorTag>();
         auto num_buckets = isr.column(index::Fields::num_buckets).begin<stream::SliceTypeDescriptorTag>();
 
-        bm::bvector<>::enumerator col = sc.first();
-        bm::bvector<>::enumerator col_end = sc.end();
+        bm::bvector<>::enumerator col = pipeline->overall_column_bitset_->first();
+        bm::bvector<>::enumerator col_end = pipeline->overall_column_bitset_->end();
         std::unordered_set<size_t> cols_hashes;
         while (col < col_end) {
             // we use raw_hashes for each col
             // A FrameSlice stores (hash_bucket, total_buckets) at the time of writing that slice
             // so a column will exist inside a slice iff col_hash % total_buckets == hash_bucket
-            cols_hashes.insert(bucketize(pipeline_context->desc_->field(*col).name(), std::nullopt));
+            cols_hashes.insert(bucketize(pipeline->desc_->field(*col).name(), std::nullopt));
             ++col;
         }
 
@@ -287,15 +282,11 @@ inline FilterQuery<ContainerType> create_index_filter(const IndexRange &range, b
 }
 
 template<typename ContainerType>
-inline std::vector<FilterQuery<ContainerType>> build_read_query_filters(
-    std::optional<util::BitSet>& col_bitset,
-    const std::shared_ptr<PipelineContext>& pipeline_context,
-    const FilterRange &range,
+inline void build_row_read_query_filters(
+    const FilterRange& range,
     bool dynamic_schema,
-    bool column_groups) {
-    using namespace arcticdb::pipelines;
-    std::vector<FilterQuery<ContainerType>> queries;
-
+    bool column_groups,
+    std::vector<FilterQuery<ContainerType>>& queries) {
     util::variant_match(range,
                         [&](const RowRange &row_range) {
                             queries.emplace_back(
@@ -308,15 +299,55 @@ inline std::vector<FilterQuery<ContainerType>> build_read_query_filters(
                         },
                         [](const auto &) {}
     );
+}
 
-    if(col_bitset) {
+template <typename ContainerType>
+inline void build_col_read_query_filters(
+    std::shared_ptr<PipelineContext> pipeline_context,
+    bool dynamic_schema,
+    bool column_groups,
+    std::vector<FilterQuery<ContainerType>>& queries
+) {
+    if (pipeline_context->only_index_columns_selected() && pipeline_context->overall_column_bitset_->count() > 0) {
+        auto query = [pipeline = std::move(pipeline_context)](const index::IndexSegmentReader& isr, std::unique_ptr<util::BitSet>&&) mutable {
+            auto res = std::make_unique<util::BitSet>(static_cast<util::BitSetSizeType>(isr.size()));
+            auto start_row = isr.column(index::Fields::start_row).begin<stream::SliceTypeDescriptorTag>();
+            auto start_row_end = isr.column(index::Fields::start_row).end<stream::SliceTypeDescriptorTag>();
+            size_t index_segment_row = 0;
+            ankerl::unordered_dense::set<decltype(start_row)::value_type> requested_start_rows;
+            while (start_row != start_row_end) {
+                auto [it, inserted] = requested_start_rows.insert(*start_row);
+                if (inserted) {
+                    res->set_bit(index_segment_row, true);
+                    requested_start_rows.insert(*start_row);
+                }
+                ++index_segment_row;
+                ++start_row;
+            }
+            return res;
+        };
+        queries.push_back(std::move(query));
+    } else if (pipeline_context->overall_column_bitset_) {
         util::check(!dynamic_schema || column_groups, "Did not expect a column bitset with dynamic schema");
 
-        if(column_groups)
-            queries.emplace_back(create_dynamic_col_filter(util::BitSet(*col_bitset), pipeline_context));
+        if (column_groups)
+            queries.emplace_back(create_dynamic_col_filter(std::move(pipeline_context)));
         else
-            queries.emplace_back(create_static_col_filter(util::BitSet(*col_bitset)));
+            queries.emplace_back(create_static_col_filter(std::move(pipeline_context)));
     }
+}
+
+template<typename ContainerType>
+inline std::vector<FilterQuery<ContainerType>> build_read_query_filters(
+    const std::shared_ptr<PipelineContext>& pipeline_context,
+    const FilterRange &range,
+    bool dynamic_schema,
+    bool column_groups) {
+    using namespace arcticdb::pipelines;
+    std::vector<FilterQuery<ContainerType>> queries;
+
+    build_row_read_query_filters(range, dynamic_schema, column_groups, queries);
+    build_col_read_query_filters(pipeline_context, dynamic_schema, column_groups, queries);
 
     return queries;
 }

@@ -1036,7 +1036,9 @@ class Library:
             Only one of date_range or row_range can be provided.
 
         columns: List[str], default=None
-            Applicable only for Pandas data. Determines which columns to return data for.
+            Applicable only for Pandas data. Determines which columns to return data for. Special values:
+            - ``None``: Return a dataframe containing all columns
+            - ``[]``: Return a dataframe containing only the index columns
 
         query_builder: Optional[QueryBuilder], default=None
             A QueryBuilder object to apply to the dataframe before it is returned. For more information see the
@@ -1072,6 +1074,7 @@ class Library:
             row_range=row_range,
             columns=columns,
             query_builder=query_builder,
+            implement_read_index=True
         )
 
     def read_batch(
@@ -1171,7 +1174,7 @@ class Library:
                 )
         throw_on_error = False
         return self._nvs._batch_read_to_versioned_items(
-            symbol_strings, as_ofs, date_ranges, row_ranges, columns, query_builder or query_builders, throw_on_error
+            symbol_strings, as_ofs, date_ranges, row_ranges, columns, query_builder or query_builders, throw_on_error, implement_read_index=True
         )
 
     def read_metadata(self, symbol: str, as_of: Optional[AsOf] = None) -> VersionedItem:
@@ -1592,7 +1595,7 @@ class Library:
         -------
         VersionedItem object that contains a .data and .metadata element.
         """
-        return self._nvs.head(symbol=symbol, n=n, as_of=as_of, columns=columns)
+        return self._nvs.head(symbol=symbol, n=n, as_of=as_of, columns=columns, implement_read_index=True)
 
     def tail(
         self, symbol: str, n: int = 5, as_of: Optional[Union[int, str]] = None, columns: List[str] = None
@@ -1615,7 +1618,7 @@ class Library:
         -------
         VersionedItem object that contains a .data and .metadata element.
         """
-        return self._nvs.tail(symbol=symbol, n=n, as_of=as_of, columns=columns)
+        return self._nvs.tail(symbol=symbol, n=n, as_of=as_of, columns=columns, implement_read_index=True)
 
     @staticmethod
     def _info_to_desc(info: Dict[str, Any]) -> SymbolDescription:

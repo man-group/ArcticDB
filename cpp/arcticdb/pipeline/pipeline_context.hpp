@@ -120,12 +120,18 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
     std::vector<SliceAndKey> slice_and_keys_;
     util::BitSet fetch_index_;
     std::vector<std::shared_ptr<StringPool>> string_pools_;
+    /// Columns the user selected explicitly via the columns read option. These are the columns we must
+    /// return as a result of a read operation,
     std::optional<util::BitSet> selected_columns_;
-    std::shared_ptr<FieldCollection> filter_columns_;
-    std::vector<std::shared_ptr<StreamDescriptor>> segment_descriptors_;
-    std::optional<std::unordered_set<std::string_view>> filter_columns_set_;
-    std::optional<SegmentInMemory> multi_key_;
+    /// All columns that must be read. This is a superset of PipelineContext::selected_columns_ and is used in cases where
+    /// PipelineContext::selected_columns_ depend on other columns, e.g. when projecting a column with the QueryBuilder.
     std::optional<util::BitSet> overall_column_bitset_;
+    // Stores the field descriptors for the columns in PipelineContext::selected_columns_
+    std::shared_ptr<FieldCollection> filter_columns_;
+    // Set of the field names in PipelineContext::filter_columns_ used for faster search
+    std::optional<std::unordered_set<std::string_view>> filter_columns_set_;
+    std::vector<std::shared_ptr<StreamDescriptor>> segment_descriptors_;
+    std::optional<SegmentInMemory> multi_key_;
     std::vector<unsigned char> compacted_;
     std::optional<size_t> incompletes_after_;
     bool bucketize_dynamic_ = false;
@@ -171,7 +177,7 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
         desc_ = desc;
     }
 
-    void set_selected_columns(const std::vector<std::string>& columns);
+    void set_selected_columns(const std::optional<std::vector<std::string>>& columns);
 
     IndexRange index_range() const {
         if(slice_and_keys_.empty())
@@ -192,6 +198,7 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
         swap(left.fetch_index_, right.fetch_index_);
         swap(left.string_pools_, right.string_pools_);
         swap(left.selected_columns_, right.selected_columns_);
+        swap(left.overall_column_bitset_, right.overall_column_bitset_);
         swap(left.filter_columns_, right.filter_columns_);
         swap(left.segment_descriptors_, right.segment_descriptors_);
         swap(left.filter_columns_set_, right.filter_columns_set_);
@@ -234,6 +241,8 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
         util::check(static_cast<bool>(norm_meta_), "No normalization metadata defined");
         return norm_meta_->input_type_case() == arcticdb::proto::descriptors::NormalizationMetadata::InputTypeCase::kMsgPackFrame;
     }
+
+    bool only_index_columns_selected() const;
 };
 
 }
