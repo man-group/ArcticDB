@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import pandas as pd
 from arcticdb.storage_fixtures.s3 import real_s3_from_environment_variables
 import json
@@ -107,17 +108,38 @@ def save_asv_results(lib, json_path):
         commit_hash = file_path.name.split("-")[0]
         print(f"Processing {full_path}")
         df = asv_json_to_df(full_path)
-        lib.write(commit_hash, df)
+
+        benchmark_file = df["test_name"].iloc[0].split(".")[0]
+
+        sym = f"{commit_hash}_{benchmark_file}"
+        lib.write(sym, df)
 
 
 def extract_asv_results(lib, json_path):
     syms = lib.list_symbols()
 
+    syms_to_process = {}
+
     for sym in syms:
-        print(f"Processing {sym}...")
+        commit_hash = sym[: sym.find("_")]
+        benchmark_file = sym[sym.find("_") + 1 :]
+        print(
+            f"Reading data for commit hash {commit_hash} for file {benchmark_file}..."
+        )
         results_df = lib.read(sym).data
+
+        if commit_hash not in syms_to_process:
+            syms_to_process[commit_hash] = results_df
+        else:
+            syms_to_process[commit_hash] = pd.concat(
+                [syms_to_process[commit_hash], results_df]
+            )
+
+    for commit_hash, results_df in syms_to_process.items():
+        print(f"Processing {commit_hash}...")
+
         json_data = df_to_asv_json(results_df)
-        full_json_path = get_result_json_path(json_path, sym, json_data)
+        full_json_path = get_result_json_path(json_path, commit_hash, json_data)
 
         print(f"Writing {full_json_path}...")
         with open(full_json_path, "w") as out:

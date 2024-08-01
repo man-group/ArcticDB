@@ -29,7 +29,8 @@ jobs:
         run: | 
           python3 build_tooling/get_commits_for_benchmark.py ${{ inputs.run_all_benchmarks == true && '--run_all_benchmarks' || ''}}
     outputs:
-      matrix: ${{ steps.get_tags.outputs.commits }}
+      commits: ${{ steps.get_tags.outputs.commits }}
+      benchmark_files: ${{ steps.get_tags.outputs.benchmark_files }}
 
 
   benchmark_commits:
@@ -37,12 +38,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix: 
-        commits: ${{ fromJson(needs.get_commits_to_benchmark.outputs.matrix)}}  
-    name: Benchmark commit ${{ matrix.commits }}
+        commits: ${{ fromJson(needs.get_commits_to_benchmark.outputs.commits)}}  
+        benchmark_files: ${{ fromJson(needs.get_commits_to_benchmark.outputs.benchmark_files)}}  
+    name: Benchmark commit ${{ matrix.commits }} for ${{ matrix.benchmark_files }}
     uses: ./.github/workflows/benchmark_commits.yml
     secrets: inherit
     with:
       commit: ${{ matrix.commits }}
+      benchmark_file: ${{ matrix.benchmark_files }}
+      cibw_image_tag: ${{ needs.cibw_docker_image.outputs.tag }}
       run_all_benchmarks: ${{ inputs.run_all_benchmarks || false }}
       run_on_pr_head: ${{ github.event_name == 'pull_request_target' }}
 

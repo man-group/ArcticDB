@@ -5,8 +5,19 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import pandas as pd
 import numpy as np
+
+# Common parameters between BasicFunctions and ModificationFunctions
+WIDE_DF_ROWS = 5_000
+WIDE_DF_COLS = 30_000
+# We use larger dataframes for non-batch methods
+PARAMS = [1_000_000, 1_500_000]
+PARAM_NAMES = ["rows"]
+BATCH_PARAMS = ([25_000, 50_000], [500, 1000])
+BATCH_PARAM_NAMES = ["rows", "num_symbols"]
+DATE_RANGE = pd.date_range("2022-12-31", "2023-01-01")
 
 
 def generate_pseudo_random_dataframe(n, freq="s", end_timestamp="1/1/2023"):
@@ -37,7 +48,9 @@ def generate_random_floats_dataframe(num_rows, num_cols):
     return pd.DataFrame(data, columns=columns)
 
 
-def generate_random_floats_dataframe_with_index(num_rows, num_cols, freq="s", end_timestamp="1/1/2023"):
+def generate_random_floats_dataframe_with_index(
+    num_rows, num_cols, freq="s", end_timestamp="1/1/2023"
+):
     timestamps = pd.date_range(end=end_timestamp, periods=num_rows, freq=freq)
     df = generate_random_floats_dataframe(num_rows, num_cols)
     df.index = timestamps
@@ -51,7 +64,9 @@ def generate_benchmark_df(n, freq="min", end_timestamp="1/1/2023"):
     dt = pd.DataFrame()
     dt["id1"] = np.random.choice([f"id{str(i).zfill(3)}" for i in range(1, k + 1)], n)
     dt["id2"] = np.random.choice([f"id{str(i).zfill(3)}" for i in range(1, k + 1)], n)
-    dt["id3"] = np.random.choice([f"id{str(i).zfill(10)}" for i in range(1, n // k + 1)], n)
+    dt["id3"] = np.random.choice(
+        [f"id{str(i).zfill(10)}" for i in range(1, n // k + 1)], n
+    )
     dt["id4"] = np.random.choice(range(1, k + 1), n)
     dt["id5"] = np.random.choice(range(1, k + 1), n)
     dt["id6"] = np.random.choice(range(1, n // k + 1), n)

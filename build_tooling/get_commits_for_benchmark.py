@@ -5,10 +5,12 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import os
 import re
 import subprocess
 from argparse import ArgumentParser
+from pathlib import Path
 
 
 def get_git_tags():
@@ -56,10 +58,21 @@ else:
 
 short_commits = [commit[:8] for commit in commits]
 
+benchmark_files = Path("python/benchmarks").rglob("*.py")
+benchmark_files = [
+    str(file.parts[-1].replace(".py", ""))
+    for file in benchmark_files
+    if "__init__.py" not in str(file)
+    and "common.py" not in str(file)
+    and "non_asv" not in str(file)
+]
+
 print(
     "Git tags and their corresponding commits: " + str(list(zip(tags, short_commits)))
 )
+print("Benchmark files: " + str(benchmark_files))
 
 if "GITHUB_OUTPUT" in os.environ:
     with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
         print(f"commits={str(short_commits)}", file=fh)
+        print(f"benchmark_files={str(benchmark_files)}", file=fh)

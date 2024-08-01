@@ -5,12 +5,15 @@ on:
       run_all_benchmarks: {required: true, type: boolean, description: Run all benchmarks or just the one for the given commit}
       commit:             {required: true, type: string, description: commit hash that will be benchmarked}
       run_on_pr_head:     {required: false, default: false, type: boolean, description: Specifies if the benchmark should run on PR head branch}
+      benchmark_file:     {required: true, type: string, description: name of the file whose benchmakrs will be used for benchmarking}
+      cibw_image_tag:     {required: true, type: string, description: Linux only. As built by cibw_docker_image.yml workflow}
 jobs:
   start_ec2_runner:
     uses: ./.github/workflows/ec2_runner_jobs.yml
     secrets: inherit
     with:
       job_type: start
+      instance-type: 'm6i.8xlarge'
 
   benchmark_commit:
     timeout-minutes: 1200
@@ -25,8 +28,8 @@ jobs:
       SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
       VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
       VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
-      CMAKE_C_COMPILER_LAUNCHER: sccache
-      CMAKE_CXX_COMPILER_LAUNCHER: sccache
+      # CMAKE_C_COMPILER_LAUNCHER: sccache
+      # CMAKE_CXX_COMPILER_LAUNCHER: sccache
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     defaults:
       run: {shell: bash}
@@ -61,7 +64,18 @@ jobs:
           bucket: "arcticdb-ci-benchmark-results"
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
           aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
-          strategy_branch: "${{ inputs.commit }}"
+          strategy_branch: "${{ inputs.commit }}_${{ inputs.benchmark_file }}"
+
+      - name: Extra envs
+        shell: bash -l {0}
+        run: |
+          . build_tooling/vcpkg_caching.sh # Linux follower needs another call in CIBW
+          echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
+          VCPKG_ROOT=$PLATFORM_VCPKG_ROOT" | tee -a $GITHUB_ENV
+          cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
+          echo "ARCTICDB_CODE_COVERAGE_BUILD=1" | tee -a $GITHUB_ENV
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
 
       - name: Install ASV
         shell: bash -el {0}
@@ -76,13 +90,13 @@ jobs:
         shell: bash -el {0}
         run: | 
           git config --global --add safe.directory .
-          python -m asv run -v --show-stderr ${{ inputs.commit }}^!
+          python -m asv run -v --show-stderr ${{ inputs.commit }}^! -b ${{ inputs.benchmark_file }}.*
         
       - name: Benchmark against master
         if: github.event_name == 'pull_request_target' && inputs.run_all_benchmarks == false
         shell: bash -el {0}
         run: |
-          python -m asv continuous -v --show-stderr origin/master HEAD -f 1.15
+          python -m asv continuous -v --show-stderr origin/master HEAD -f 1.15 -b ${{ inputs.benchmark_file }}.*
 
       - name: Add results to ArcticDB database
         shell: bash -el {0}
