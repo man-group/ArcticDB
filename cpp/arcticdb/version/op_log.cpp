@@ -47,8 +47,8 @@ namespace arcticdb {
           .version_id(version_id_)
           .creation_ts(creation_ts_)
           .content_hash(content_hash_.value())
-          .start_index(std::move(id_))
-          .end_index(std::move(id_))
+          .start_index(id_)
+          .end_index(id_)
           .build<KeyType::LOG>(std::move(action_));
     }
 }
