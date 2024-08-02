@@ -35,7 +35,7 @@ public:
 
     ReadResult read(const VariantKey& key);
 
-    const Segment& read_to_segment(const VariantKey& key);
+    Segment read_to_segment(const VariantKey& key);
 
     [[nodiscard]] std::optional<google::protobuf::Any> read_metadata(const VariantKey& key);
 

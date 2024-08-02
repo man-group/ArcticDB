@@ -35,11 +35,11 @@ ReadResult LibraryTool::read(const VariantKey& key) {
     return pipelines::make_read_result_from_frame(frame_and_descriptor, to_atom(key));
 }
 
-const Segment& LibraryTool::read_to_segment(const VariantKey& key) {
+Segment LibraryTool::read_to_segment(const VariantKey& key) {
     auto kv = store_->read_compressed_sync(key, storage::ReadKeyOpts{});
     util::check(kv.has_segment(), "Failed to read key: {}", key);
     kv.segment_ptr()->force_own_buffer();
-    return kv.segment();  // TODO is this right? When does `kv.segment_` go out of scope??
+    return std::move(*kv.segment_ptr());
 }
 
 std::optional<google::protobuf::Any> LibraryTool::read_metadata(const VariantKey& key){
