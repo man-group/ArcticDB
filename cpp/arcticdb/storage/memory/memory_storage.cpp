@@ -48,14 +48,14 @@ void add_serialization_fields(KeySegmentPair& kv) {
                                             key_vec.erase(it);
                                         }
                                         add_serialization_fields(kv);
-                                        key_vec.try_emplace(key, kv.release_segment());
+                                        key_vec.try_emplace(key, kv.segment_ptr());
                                     },
                                     [&](const AtomKey &key) {
                                         if (key_vec.find(key) != key_vec.end()) {
                                             throw DuplicateKeyException(key);
                                         }
                                         add_serialization_fields(kv);
-                                        key_vec.try_emplace(key, kv.release_segment());
+                                        key_vec.try_emplace(key, kv.segment_ptr());
                                     }
                 );
             }
@@ -83,7 +83,7 @@ void add_serialization_fields(KeySegmentPair& kv) {
                 }
 
                 add_serialization_fields(kv);
-                key_vec.insert(std::make_pair(kv.variant_key(), kv.release_segment()));
+                key_vec.insert(std::make_pair(kv.variant_key(), kv.segment_ptr()));
             }
         });
     }

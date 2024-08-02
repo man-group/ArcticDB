@@ -56,7 +56,7 @@ void MappedFileStorage::init() {
 
 SegmentInMemory MappedFileStorage::read_segment(size_t offset, size_t bytes) const  {
     auto index_segment = Segment::from_bytes(file_.data() + offset, bytes);
-    return decode_segment(&index_segment);
+    return decode_segment(index_segment);
 }
 
 void MappedFileStorage::do_load_header(size_t header_offset, size_t header_size) {

@@ -44,13 +44,6 @@ namespace arcticdb::storage {
           return segment_;
         }
 
-        // TODO is there really any point to this API?
-        std::shared_ptr<Segment> release_segment() {
-            auto tmp = segment_;
-            segment_ = std::make_shared<Segment>();
-            return tmp;
-        }
-
         [[nodiscard]] const AtomKey &atom_key() const {
             util::check(std::holds_alternative<AtomKey>(variant_key()), "Expected atom key access");
             return std::get<AtomKey>(variant_key());

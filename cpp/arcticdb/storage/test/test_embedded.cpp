@@ -183,11 +183,11 @@ TEST_P(SimpleTestSuite, Strings) {
     storage->write(std::move(kv));
 
     as::KeySegmentPair res;
-    storage->read(save_k, [&](auto &&k, auto &&seg) {
+    storage->read(save_k, [&res](auto &&k, auto &&seg) {
         res = as::KeySegmentPair{k, std::move(seg)};
     }, as::ReadKeyOpts{});
 
-    SegmentInMemory res_mem = decode_segment(res.segment_ptr().get());
+    SegmentInMemory res_mem = decode_segment(res.segment());
     ASSERT_EQ(s.string_at(0, 1), res_mem.string_at(0, 1));
     ASSERT_EQ(std::string("happy"), res_mem.string_at(0, 1));
     ASSERT_EQ(s.string_at(1, 3), res_mem.string_at(1, 3));

@@ -326,7 +326,7 @@ struct DecodeSegmentTask : BaseTask {
         ARCTICDB_DEBUG(log::storage(), "ReadAndDecodeAtomTask decoding segment with key {}",
                              variant_key_view(key_seg.variant_key()));
 
-        return {key_seg.variant_key(), decode_segment(key_seg.segment_ptr().get())};
+        return {key_seg.variant_key(), decode_segment(key_seg.segment())};
     }
 };
 
