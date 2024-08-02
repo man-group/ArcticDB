@@ -530,7 +530,6 @@ struct FieldRef {
     }
 };
 
-
 struct Field {
     uint32_t size_ = 0;
     TypeDescriptor type_;
@@ -538,8 +537,6 @@ struct Field {
     char name_[NameSize] = {};
 
     ARCTICDB_NO_MOVE_OR_COPY(Field)
-
-
 
 private:
     explicit Field(const FieldRef& ref) {

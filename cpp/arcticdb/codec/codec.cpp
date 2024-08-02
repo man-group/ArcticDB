@@ -535,7 +535,7 @@ static void hash_field(const arcticdb::proto::encoding::EncodedField &field, Has
     }
 }
 
-HashedValue hash_segment_data(const arcticdb::proto::encoding::SegmentHeader &hdr, const std::shared_ptr<FieldCollection>& fields) {
+HashedValue hash_segment_data(const arcticdb::proto::encoding::SegmentHeader &hdr, const std::shared_ptr<FieldCollection>& /*fields*/) {
     HashAccum accum;
     if (hdr.has_metadata_field()) {
         hash_field(hdr.metadata_field(), accum);
