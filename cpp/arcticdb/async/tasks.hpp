@@ -320,10 +320,9 @@ struct DecodeSegmentTask : BaseTask {
 
     DecodeSegmentTask() = default;
 
-    std::pair<VariantKey, SegmentInMemory> operator()(storage::KeySegmentPair &&ks) const {
+    std::pair<VariantKey, SegmentInMemory> operator()(storage::KeySegmentPair &&key_seg) const {
         ARCTICDB_SAMPLE(DecodeAtomTask, 0)
 
-        auto key_seg = std::move(ks);
         ARCTICDB_DEBUG(log::storage(), "ReadAndDecodeAtomTask decoding segment with key {}",
                              variant_key_view(key_seg.variant_key()));
 

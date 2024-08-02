@@ -127,7 +127,7 @@ def test_delete_library_tool(version_store_factory, sym):
 
 
 def test_delete_snapshot(version_store_factory):
-    lmdb_version_store = version_store_factory(col_per_group=5, row_per_segment=10)
+    lmdb_version_store = version_store_factory(col_per_group=7, row_per_segment=500)
     lt = lmdb_version_store.library_tool()
 
     symbol = "test_delete_snapshot"

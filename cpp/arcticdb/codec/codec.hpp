@@ -61,7 +61,7 @@ SegmentInMemory decode_segment(const Segment* segment);
 
 void decode_into_memory_segment(
     const Segment& segment,
-    SegmentHeader& hdr,
+    const SegmentHeader& hdr,
     SegmentInMemory& res,
     const entity::StreamDescriptor& desc);
 
