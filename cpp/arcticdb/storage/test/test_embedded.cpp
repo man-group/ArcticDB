@@ -109,6 +109,7 @@ TEST_P(SimpleTestSuite, Example) {
     as::KeySegmentPair res;
     storage->read(k, [&](auto &&k, auto &&seg) {
         res = as::KeySegmentPair{k, std::move(seg)};
+        res.segment_ptr()->force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
     }, storage::ReadKeyOpts{});
 
     res = storage->read(k, as::ReadKeyOpts{});
@@ -131,6 +132,7 @@ TEST_P(SimpleTestSuite, Example) {
     as::KeySegmentPair update_res;
     storage->read(k, [&](auto &&k, auto &&seg) {
         update_res = as::KeySegmentPair{k, std::move(seg)};
+        update_res.segment_ptr()->force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
     }, as::ReadKeyOpts{});
 
     update_res = storage->read(k, as::ReadKeyOpts{});
@@ -185,6 +187,7 @@ TEST_P(SimpleTestSuite, Strings) {
     as::KeySegmentPair res;
     storage->read(save_k, [&res](auto &&k, auto &&seg) {
         res = as::KeySegmentPair{k, std::move(seg)};
+        res.segment_ptr()->force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
     }, as::ReadKeyOpts{});
 
     SegmentInMemory res_mem = decode_segment(res.segment());
