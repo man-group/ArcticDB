@@ -319,7 +319,7 @@ TYPED_TEST(SegmentStringEncodingTest, EncodeSingleString) {
     constexpr EncodingVersion encoding_version = TypeParam::value;
     Segment seg = encode_dispatch(s.clone(), opt, encoding_version);
 
-    SegmentInMemory res = decode_segment(std::move(seg));
+    SegmentInMemory res = decode_segment(&seg);
     ASSERT_EQ(copy.string_at(0, 1), res.string_at(0, 1));
     ASSERT_EQ(std::string("happy"), res.string_at(0, 1));
 }
@@ -346,7 +346,7 @@ TYPED_TEST(SegmentStringEncodingTest, EncodeStringsBasic) {
     constexpr EncodingVersion encoding_version = TypeParam::value;
     Segment seg = encode_dispatch(SegmentInMemory{s}, opt, encoding_version);
 
-    SegmentInMemory res = decode_segment(std::move(seg));
+    SegmentInMemory res = decode_segment(&seg);
     ASSERT_EQ(copy.string_at(0, 1), res.string_at(0, 1));
     ASSERT_EQ(std::string("happy"), res.string_at(0, 1));
     ASSERT_EQ(copy.string_at(1, 3), res.string_at(1, 3));

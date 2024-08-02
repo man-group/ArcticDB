@@ -108,9 +108,7 @@ TEST_P(SimpleTestSuite, Example) {
 
     as::KeySegmentPair res;
     storage->read(k, [&](auto &&k, auto &&seg) {
-        res.atom_key() = std::get<AtomKey>(k);
-        res.segment() = std::move(seg);
-        res.segment().force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
+        res = as::KeySegmentPair{k, std::move(seg)};
     }, storage::ReadKeyOpts{});
 
     res = storage->read(k, as::ReadKeyOpts{});
@@ -132,9 +130,7 @@ TEST_P(SimpleTestSuite, Example) {
 
     as::KeySegmentPair update_res;
     storage->read(k, [&](auto &&k, auto &&seg) {
-        update_res.atom_key() = std::get<AtomKey>(k);
-        update_res.segment() = std::move(seg);
-        update_res.segment().force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
+        update_res = as::KeySegmentPair{k, std::move(seg)};
     }, as::ReadKeyOpts{});
 
     update_res = storage->read(k, as::ReadKeyOpts{});
@@ -188,12 +184,10 @@ TEST_P(SimpleTestSuite, Strings) {
 
     as::KeySegmentPair res;
     storage->read(save_k, [&](auto &&k, auto &&seg) {
-        res.atom_key() = std::get<AtomKey>(k);
-        res.segment() = std::move(seg);
-        res.segment().force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
+        res = as::KeySegmentPair{k, std::move(seg)};
     }, as::ReadKeyOpts{});
 
-    SegmentInMemory res_mem = decode_segment(std::move(res.segment()));
+    SegmentInMemory res_mem = decode_segment(res.segment_ptr().get());
     ASSERT_EQ(s.string_at(0, 1), res_mem.string_at(0, 1));
     ASSERT_EQ(std::string("happy"), res_mem.string_at(0, 1));
     ASSERT_EQ(s.string_at(1, 3), res_mem.string_at(1, 3));
