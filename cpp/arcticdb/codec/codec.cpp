@@ -546,9 +546,9 @@ HashedValue hash_segment_data(const arcticdb::proto::encoding::SegmentHeader &hd
     if(hdr.has_string_pool_field()) {
         hash_field(hdr.string_pool_field(), accum);
     }
-    if(fields && !fields->empty()) {
-        hash_buffer(fields->buffer(), accum);
-    }
+   // if(fields && !fields->empty()) {
+   //     hash_buffer(fields->buffer(), accum);
+   // }
     return accum.digest();
 }
 
