@@ -90,7 +90,7 @@ struct EncodeAtomTask : BaseTask {
         auto enc_seg = ::arcticdb::encode_dispatch(std::move(segment_), *codec_meta_, encoding_version_);
         auto content_hash = hash_segment_data(enc_seg.header(), enc_seg.fields_ptr());
         AtomKey k = partial_key_.build_key(creation_ts_, content_hash);
-        log::version().info("Got hash {} for key {}", content_hash, k);
+        ARCTICDB_DEBUG(log::codec(), "Got hash {} for key {}", content_hash, k);
         return {std::move(k), std::move(enc_seg)};
     }
 

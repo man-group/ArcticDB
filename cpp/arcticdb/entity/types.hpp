@@ -530,6 +530,8 @@ struct FieldRef {
     }
 };
 
+#pragma pack(push)
+#pragma pack(1)
 struct Field {
     uint32_t size_ = 0;
     TypeDescriptor type_;
@@ -578,6 +580,7 @@ public:
     void set(TypeDescriptor type, std::string_view name) {
         type_ = type;
         size_ = name.size();
+        name_[1] = 0;
         memcpy(name_, name.data(), size_);
     }
 
@@ -593,6 +596,7 @@ public:
         return lt < rt;
     }
 };
+#pragma pack(pop)
 
 struct FieldWrapper {
     std::vector<uint8_t> data_;
