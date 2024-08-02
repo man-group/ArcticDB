@@ -265,7 +265,7 @@ std::pair<uint8_t*, size_t> Segment::serialize_header_v2(size_t expected_bytes) 
     auto* dst = buffer->preamble();
     write_fixed_header(dst, hdr);
     header_.serialize_to_bytes(dst + FIXED_HEADER_SIZE, expected_bytes);
-    return std::make_pair(buffer->preamble(), calculate_size());
+    return std::make_pair(buffer->preamble(), size());
 }
 
 std::pair<uint8_t*, size_t> Segment::serialize_v1_header_in_place(size_t total_hdr_size) const {
@@ -274,19 +274,19 @@ std::pair<uint8_t*, size_t> Segment::serialize_v1_header_in_place(size_t total_h
     util::check(base_ptr + total_hdr_size == buffer->data(), "Expected base ptr to align with data ptr, {} != {}",fmt::ptr(base_ptr + total_hdr_size),fmt::ptr(buffer->data()));
     write_proto_header(base_ptr);
     ARCTICDB_TRACE(log::storage(), "Header fits in internal buffer {:x} with {} bytes space: {}", intptr_t (base_ptr), buffer->preamble_bytes() - total_hdr_size,dump_bytes(buffer->data(), buffer->bytes(), 100u));
-    return std::make_pair(base_ptr, calculate_size());
+    return std::make_pair(base_ptr, size());
 }
 
 std::tuple<uint8_t*, size_t, std::unique_ptr<Buffer>> Segment::serialize_v1_header_to_buffer(size_t hdr_size) const {
     auto tmp = std::make_unique<Buffer>();
     ARCTICDB_TRACE(log::storage(), "Header doesn't fit in internal buffer, needed {} bytes but had {}, writing to temp buffer at {:x}", hdr_size, buffer_.preamble_bytes(),uintptr_t(tmp->data()));
-    tmp->ensure(calculate_size());
+    tmp->ensure(size());
     auto* dst = tmp->preamble();
     write_proto_header(dst);
     std::memcpy(dst + FIXED_HEADER_SIZE + hdr_size,
                 buffer().data(),
                 buffer().bytes());
-    return std::make_tuple(tmp->preamble(), calculate_size(), std::move(tmp));
+    return std::make_tuple(tmp->preamble(), size(), std::move(tmp));
 }
 
 std::tuple<uint8_t*, size_t, std::unique_ptr<Buffer>> Segment::serialize_header_v1() const {

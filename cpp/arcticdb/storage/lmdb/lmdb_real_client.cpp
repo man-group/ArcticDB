@@ -43,7 +43,7 @@ void RealLmdbClient::write(const std::string&, std::string& path, const arcticdb
     MDB_val mdb_key{path.size(), path.data()};
 
     MDB_val mdb_val;
-    mdb_val.mv_size = seg.calculate_size();
+    mdb_val.mv_size = seg.size();
 
     ARCTICDB_SUBSAMPLE(LmdbPut, 0)
     int rc = ::mdb_put(txn.handle(), dbi.handle(), &mdb_key, &mdb_val, MDB_RESERVE | overwrite_flag);

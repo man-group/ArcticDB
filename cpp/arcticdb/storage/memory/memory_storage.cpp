@@ -20,7 +20,6 @@ namespace arcticdb::storage::memory {
 void add_serialization_fields(KeySegmentPair& kv) {
     auto segment = kv.segment_ptr();
     auto& hdr = segment->header();
-    segment->calculate_size();
     if(hdr.encoding_version() == EncodingVersion::V2) {
         const auto* src = segment->buffer().data();
         set_body_fields(hdr, src);

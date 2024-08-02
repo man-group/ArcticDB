@@ -444,7 +444,7 @@ TEST(Segment, RoundtripTimeseriesDescriptorWriteToBufferV1) {
     auto copy = in_mem_seg.clone();
     auto seg = encode_v1(std::move(in_mem_seg), codec::default_lz4_codec());
     std::vector<uint8_t> vec;
-    const auto bytes = seg.calculate_size();
+    const auto bytes = seg.size();
     vec.resize(bytes);
     seg.write_to(vec.data());
     auto unserialized = Segment::from_bytes(vec.data(), bytes);
@@ -462,7 +462,7 @@ TEST(Segment, RoundtripStringsWriteToBufferV1) {
     auto copy = in_mem_seg.clone();
     auto seg = encode_v1(std::move(in_mem_seg), codec::default_lz4_codec());
     std::vector<uint8_t> vec;
-    const auto bytes = seg.calculate_size();
+    const auto bytes = seg.size();
     vec.resize(bytes);
     seg.write_to(vec.data());
     auto unserialized = Segment::from_bytes(vec.data(), bytes);
@@ -501,7 +501,7 @@ TEST(Segment, RoundtripTimeseriesDescriptorWriteToBufferV2) {
     auto copy = in_mem_seg.clone();
     auto seg = encode_v2(std::move(in_mem_seg), codec::default_lz4_codec());
     std::vector<uint8_t> vec;
-    const auto bytes = seg.calculate_size();
+    const auto bytes = seg.size();
     ARCTICDB_DEBUG(log::codec(), "## Resizing buffer to {} bytes", bytes);
     vec.resize(bytes);
     seg.write_to(vec.data());
