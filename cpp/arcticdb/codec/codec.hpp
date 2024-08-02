@@ -78,12 +78,12 @@ std::optional<google::protobuf::Any> decode_metadata_from_segment(
     const Segment& segment);
 
 std::pair<std::optional<google::protobuf::Any>, StreamDescriptor> decode_metadata_and_descriptor_fields(
-    Segment& segment);
+    const Segment& segment);
 
 std::optional<TimeseriesDescriptor> decode_timeseries_descriptor(
-    Segment& segment);
+    const Segment& segment);
 
-std::optional<TimeseriesDescriptor> decode_timeseries_descriptor_for_incompletes(Segment& segment);
+std::optional<TimeseriesDescriptor> decode_timeseries_descriptor_for_incompletes(const Segment& segment);
 
 HashedValue get_segment_hash(Segment& seg);
 

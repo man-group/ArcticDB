@@ -463,11 +463,11 @@ struct DecodeTimeseriesDescriptorTask : BaseTask {
         auto key_seg = std::move(ks);
         ARCTICDB_DEBUG(log::storage(), "DecodeTimeseriesDescriptorTask decoding segment with key {}", variant_key_view(key_seg.variant_key()));
 
-        auto maybe_desc = decode_timeseries_descriptor(*key_seg.segment_ptr());
+        auto maybe_desc = decode_timeseries_descriptor(key_seg.segment());
 
         util::check(static_cast<bool>(maybe_desc), "Failed to decode timeseries descriptor");
         return std::make_pair(
-            std::move(key_seg.variant_key()),
+            key_seg.variant_key(),
             std::move(*maybe_desc));
 
     }
@@ -486,7 +486,7 @@ struct DecodeTimeseriesDescriptorForIncompletesTask : BaseTask {
                 "DecodeTimeseriesDescriptorForIncompletesTask decoding segment with key {}",
                 variant_key_view(key_seg.variant_key()));
 
-        auto maybe_desc = decode_timeseries_descriptor_for_incompletes(*key_seg.segment_ptr());
+        auto maybe_desc = decode_timeseries_descriptor_for_incompletes(key_seg.segment());
 
         util::check(static_cast<bool>(maybe_desc), "Failed to decode timeseries descriptor");
         return std::make_pair(
@@ -505,7 +505,7 @@ struct DecodeMetadataAndDescriptorTask : BaseTask {
         auto key_seg = std::move(ks);
         ARCTICDB_DEBUG(log::storage(), "DecodeMetadataAndDescriptorTask decoding segment with key {}", variant_key_view(key_seg.variant_key()));
 
-        auto [any, descriptor] = decode_metadata_and_descriptor_fields(*key_seg.segment_ptr());
+        auto [any, descriptor] = decode_metadata_and_descriptor_fields(key_seg.segment());
         return std::make_tuple(
             key_seg.variant_key(),
             std::move(any),

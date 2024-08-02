@@ -323,7 +323,7 @@ std::optional<TimeseriesDescriptor> decode_timeseries_descriptor(
 }
 
 std::optional<TimeseriesDescriptor> decode_timeseries_descriptor(
-    Segment& segment) {
+    const Segment& segment) {
     const auto &hdr = segment.header();
     const uint8_t* data = segment.buffer().data();
 
@@ -354,7 +354,7 @@ std::optional<TimeseriesDescriptor> decode_timeseries_descriptor_for_incompletes
 }
 
 std::optional<TimeseriesDescriptor> decode_timeseries_descriptor_for_incompletes(
-        Segment& segment) {
+        const Segment& segment) {
     auto &hdr = segment.header();
     const uint8_t* data = segment.buffer().data();
 
@@ -366,7 +366,7 @@ std::optional<TimeseriesDescriptor> decode_timeseries_descriptor_for_incompletes
 }
 
 std::pair<std::optional<google::protobuf::Any>, StreamDescriptor> decode_metadata_and_descriptor_fields(
-    Segment& segment) {
+    const Segment& segment) {
     auto &hdr = segment.header();
     const uint8_t* data = segment.buffer().data();
 

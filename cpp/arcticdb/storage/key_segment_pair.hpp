@@ -21,6 +21,7 @@ namespace arcticdb::storage {
     public:
         // TODO tidy up these millions of constructors
         KeySegmentPair() : key_(std::make_shared<VariantKey>()), segment_(std::make_shared<Segment>()) {}
+
         explicit KeySegmentPair(VariantKey &&key)
         : key_(std::make_shared<VariantKey>(std::move(key))),
           segment_(std::make_shared<Segment>()) {}
