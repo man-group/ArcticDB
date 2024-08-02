@@ -12,6 +12,7 @@ from math import inf
 
 import numpy as np
 import pandas as pd
+from pandas.tseries.frequencies import to_offset
 
 from typing import Dict, NamedTuple, Optional, Tuple, Union
 
@@ -310,6 +311,8 @@ class PythonResampleClause:
     closed: _ResampleBoundary
     label: _ResampleBoundary
     aggregations: Dict[str, Union[str, Tuple[str, str]]] = None
+    # In nanosecods
+    offset: Optional[int] = None
 
 
 class QueryBuilder:
@@ -575,6 +578,7 @@ class QueryBuilder:
             rule: Union[str, pd.DateOffset],
             closed: Optional[str] = None,
             label: Optional[str] = None,
+            offset: Optional[Union[str, pd.Timedelta]] = None
     ):
         """
         Resample a symbol on the index. The symbol must be datetime indexed. Resample operations must be followed by
@@ -618,6 +622,9 @@ class QueryBuilder:
         label: Optional['str'], default=None
             Which boundary of each time-bucket is used as the index value in the returned DataFrame. Must be one of
             'left' or 'right'. If not provided, the default is left for all currently supported frequencies.
+        offset: Optional[Union[str, pd.Timedelta]] = None
+            Offset the start of each bucket. Supported strings are the same as in `pd.Timedelta`. If offset is larger than
+            rule then `offset` modulo `rule` is used as an offset.
 
         Returns
         -------
@@ -716,6 +723,13 @@ class QueryBuilder:
             raise ArcticDbNotYetImplemented(f"Frequency string '{rule}' not yet supported. Valid frequency strings "
                                             f"are ns, us, ms, s, min, h, D, and multiples/combinations thereof such "
                                             f"as 1h30min")
+        if offset:
+            try:
+                offset_ns = to_offset(offset).nanos
+            except ValueError:
+                raise UserInputException(f'Argument offset must be pd.Timedelta or pd.Timedelta covertible string. Got "{offset}" instead.')
+        else:
+            offset_ns = 0
 
         # This set is documented here:
         # https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Series.resample.html#pandas.Series.resample
@@ -730,10 +744,10 @@ class QueryBuilder:
         check(closed in boundary_map.keys(), f"closed kwarg to resample must be `left`, 'right', or None, but received '{closed}'")
         check(label in boundary_map.keys(), f"label kwarg to resample must be `left`, 'right', or None, but received '{closed}'")
         if boundary_map[closed] == _ResampleBoundary.LEFT:
-            self.clauses.append(_ResampleClauseLeftClosed(rule, boundary_map[label]))
+            self.clauses.append(_ResampleClauseLeftClosed(rule, boundary_map[label], offset_ns))
         else:
-            self.clauses.append(_ResampleClauseRightClosed(rule, boundary_map[label]))
-        self._python_clauses.append(PythonResampleClause(rule=rule, closed=boundary_map[closed], label=boundary_map[label]))
+            self.clauses.append(_ResampleClauseRightClosed(rule, boundary_map[label], offset_ns))
+        self._python_clauses.append(PythonResampleClause(rule=rule, closed=boundary_map[closed], label=boundary_map[label], offset=offset_ns))
         return self
 
     def is_resample(self):
