@@ -10,6 +10,7 @@
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/storage/library.hpp>
 #include <arcticdb/storage/storage_options.hpp>
+#include <arcticdb/storage/store.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/hash.hpp>
 #include <arcticdb/stream/stream_utils.hpp>
@@ -19,6 +20,7 @@
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/async/base_task.hpp>
+#include <arcticdb/async/bit_rate_stats.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/processing/processing_unit.hpp>
 #include <arcticdb/util/constructors.hpp>
@@ -312,6 +314,112 @@ struct CopyCompressedTask : BaseTask {
     VariantKey operator()() {
         ARCTICDB_SAMPLE(CopyCompressed, 0)
         return copy();
+    }
+};
+
+struct AllOk {};
+
+struct FailedTargets {
+    std::set<std::string, std::less<>> failed_targets_;
+};
+
+using ProcessingResult = std::variant<AllOk, FailedTargets>;
+
+struct CopyCompressedInterStoreTask : async::BaseTask {
+    CopyCompressedInterStoreTask(entity::VariantKey key_to_read,
+                                 std::optional<entity::AtomKey> key_to_write,
+                                 bool check_key_exists_on_targets,
+                                 bool retry_on_failure,
+                                 std::shared_ptr<Store> source_store,
+                                 std::vector<std::shared_ptr<Store>> target_stores,
+                                 std::shared_ptr<BitRateStats> bit_rate_stats=nullptr)
+        : key_to_read_(std::move(key_to_read)),
+          key_to_write_(std::move(key_to_write)),
+          check_key_exists_on_targets_(check_key_exists_on_targets),
+          retry_on_failure_(retry_on_failure),
+          source_store_(std::move(source_store)),
+          target_stores_(std::move(target_stores)),
+          bit_rate_stats_(std::move(bit_rate_stats)){
+        ARCTICDB_DEBUG(log::storage(), "Creating copy compressed inter-store task from key {}: {} -> {}: {}",
+                       variant_key_type(key_to_read_),
+                       variant_key_view(key_to_read_),
+                       key_to_write_.has_value() ? variant_key_type(key_to_write_.value()) : variant_key_type(key_to_read_),
+                       key_to_write_.has_value() ? variant_key_view(key_to_write_.value()) : variant_key_view(key_to_read_));
+    }
+
+    ARCTICDB_MOVE_ONLY_DEFAULT(CopyCompressedInterStoreTask)
+
+    ProcessingResult operator()() {
+        auto res = copy();
+
+        if (!res.empty() && retry_on_failure_) {
+            res = copy();
+        }
+
+        if (!res.empty()) {
+            return FailedTargets{std::move(res)};
+        }
+
+        return AllOk{};
+    }
+
+private:
+    entity::VariantKey key_to_read_;
+    std::optional<entity::AtomKey> key_to_write_;
+    bool check_key_exists_on_targets_;
+    bool retry_on_failure_;
+    std::shared_ptr<Store> source_store_;
+    std::vector<std::shared_ptr<Store>> target_stores_;
+    std::shared_ptr<BitRateStats> bit_rate_stats_;
+
+    // Returns an empty set if the copy succeeds, otherwise the set contains the names of the target stores that failed
+    std::set<std::string, std::less<>> copy() {
+        ARCTICDB_SAMPLE(copy, 0)
+        std::size_t bytes{0};
+        interval timer;
+        timer.start();
+        if (check_key_exists_on_targets_) {
+            target_stores_.erase(std::remove_if(target_stores_.begin(), target_stores_.end(),
+                                                [that=this](const std::shared_ptr<Store>& target_store) {
+                                                    return target_store->key_exists_sync(that->key_to_read_);
+                                                }), target_stores_.end());
+        }
+        std::set<std::string, std::less<>> failed_targets;
+        if (!target_stores_.empty()) {
+            storage::KeySegmentPair key_segment_pair;
+            try {
+                key_segment_pair = source_store_->read_compressed_sync(key_to_read_, storage::ReadKeyOpts{});
+            } catch (const storage::KeyNotFoundException& e) {
+                log::storage().debug("Key {} not found on the source: {}", variant_key_view(key_to_read_), e.what());
+                return failed_targets;
+            }
+            bytes = key_segment_pair.segment().size();
+            if (key_to_write_.has_value()) {
+                key_segment_pair.set_key(*key_to_write_);
+            }
+
+            for (auto & target_store : target_stores_) {
+                try {
+                    auto key_segment_pair_copy = key_segment_pair;
+                    target_store->write_compressed_sync(std::move(key_segment_pair_copy));
+                } catch (const storage::DuplicateKeyException& e) {
+                    log::storage().debug("Key {} already exists on the target: {}", variant_key_view(key_to_read_), e.what());
+                } catch (const storage::KeyNotFoundException& e) {
+                    log::storage().debug("Key {} not found on the source: {}", variant_key_view(key_to_read_), e.what());
+                } catch (const std::exception& e) {
+                    auto name = target_store->name();
+                    log::storage().error("Failed to write key {} to store {}: {}", variant_key_view(key_to_read_), name, e.what());
+                    failed_targets.insert(name);
+                }
+            }
+        }
+        timer.end();
+        auto time_ms = timer.get_results_total() * 1000;
+        if (bit_rate_stats_) {
+            bit_rate_stats_->add_stat(bytes, time_ms);
+        }
+
+        return failed_targets;
     }
 };
 
