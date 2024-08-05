@@ -43,6 +43,7 @@ TEST(MongoStorage, ClientSession) {
 
     storage.read(k, [&](auto &&k, auto &&seg) {
         res = as::KeySegmentPair{k, std::move(seg)};
+
     }, as::ReadKeyOpts{});
 
     res = storage.read(k, as::ReadKeyOpts{});
@@ -69,6 +70,7 @@ TEST(MongoStorage, ClientSession) {
 
     storage.read(k, [&](auto &&k, auto &&seg) {
         update_res = as::KeySegmentPair{k, std::move(seg)};
+        update_res.segment_ptr()->force_own_buffer();
     }, as::ReadKeyOpts{});
 
     update_res = storage.read(k, as::ReadKeyOpts{});
@@ -90,6 +92,7 @@ TEST(MongoStorage, ClientSession) {
 
     storage.read(numeric_k, [&](auto &&k, auto &&seg) {
         numeric_res = as::KeySegmentPair{k, std::move(seg)};
+        numeric_res.segment_ptr()->force_own_buffer();
     }, as::ReadKeyOpts{});
 
     numeric_res = storage.read(numeric_k, as::ReadKeyOpts{});
