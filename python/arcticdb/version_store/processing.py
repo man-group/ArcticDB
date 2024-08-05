@@ -312,7 +312,7 @@ class PythonResampleClause:
     label: _ResampleBoundary
     aggregations: Dict[str, Union[str, Tuple[str, str]]] = None
     # In nanosecods
-    offset: Optional[int] = None
+    offset: int = 0
 
 
 class QueryBuilder:
@@ -899,9 +899,9 @@ class QueryBuilder:
                 self.clauses.append(_AggregationClause(self.clauses[-1].grouping_column, python_clause.aggregations))
             elif isinstance(python_clause, PythonResampleClause):
                 if python_clause.closed == _ResampleBoundary.LEFT:
-                    self.clauses.append(_ResampleClauseLeftClosed(python_clause.rule, python_clause.label))
+                    self.clauses.append(_ResampleClauseLeftClosed(python_clause.rule, python_clause.label, python_clause.offset))
                 else:
-                    self.clauses.append(_ResampleClauseRightClosed(python_clause.rule, python_clause.label))
+                    self.clauses.append(_ResampleClauseRightClosed(python_clause.rule, python_clause.label, python_clause.offset))
                 if python_clause.aggregations is not None:
                     self.clauses[-1].set_aggregations(python_clause.aggregations)
             elif isinstance(python_clause, PythonRowRangeClause):
