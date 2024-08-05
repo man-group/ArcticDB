@@ -516,8 +516,8 @@ class TestResamplingOffset:
         return {f"to_{agg}": (col, agg) for agg in ALL_AGGREGATIONS}
 
     @pytest.mark.parametrize("offset", ("30s", pd.Timedelta(seconds=30)))
-    def test_offset_smaller_than_freq(self, lmdb_library, closed, offset):
-        lib = lmdb_library
+    def test_offset_smaller_than_freq(self, lmdb_version_store_v1, closed, offset):
+        lib = lmdb_version_store_v1
         sym = "test_offset_smaller_than_freq"
         idx = pd.date_range(pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-04"), freq="min")
         rng = np.random.default_rng()
@@ -533,8 +533,8 @@ class TestResamplingOffset:
         )
 
     @pytest.mark.parametrize("offset", ("2min37s", pd.Timedelta(minutes=2, seconds=37)))
-    def test_offset_larger_than_freq(self, lmdb_library, closed, offset):
-        lib = lmdb_library
+    def test_offset_larger_than_freq(self, lmdb_version_store_v1, closed, offset):
+        lib = lmdb_version_store_v1
         sym = "test_offset_larger_than_freq"
         idx = pd.date_range(pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-04"), freq="min")
         rng = np.random.default_rng()
@@ -550,8 +550,8 @@ class TestResamplingOffset:
         )
 
     @pytest.mark.parametrize("offset", ("30s", pd.Timedelta(seconds=30)))
-    def test_values_on_offset_boundary(self, lmdb_library, closed, offset):
-        lib = lmdb_library
+    def test_values_on_offset_boundary(self, lmdb_version_store_v1, closed, offset):
+        lib = lmdb_version_store_v1
         sym = "test_offset_larger_than_freq"
         start = pd.Timestamp("2024-01-02")
         end = pd.Timestamp("2024-01-04")
@@ -577,8 +577,8 @@ class TestResamplingOffset:
         (dt.datetime(2024, 1, 2, 5, 0, 45), dt.datetime(2024, 1, 3, 5, 0, 50)),
         (dt.datetime(2024, 1, 2, 5, 0, 30, 1), dt.datetime(2024, 1, 3, 5, 0, 29, 999999))
     ])
-    def test_with_date_range(self, lmdb_library, closed, date_range, offset):
-        lib = lmdb_library
+    def test_with_date_range(self, lmdb_version_store_v1, closed, date_range, offset):
+        lib = lmdb_version_store_v1
         sym = "test_offset_larger_than_freq"
         start = pd.Timestamp("2024-01-02")
         end = pd.Timestamp("2024-01-04")
