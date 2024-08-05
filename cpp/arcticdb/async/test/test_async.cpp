@@ -13,6 +13,7 @@
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/util/test/config_common.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
+#include <arcticdb/stream/test/stream_test_common.hpp>
 #include <arcticdb/util/random.h>
 
 #include <fmt/format.h>
@@ -20,6 +21,7 @@
 #include <string>
 #include <vector>
 
+using namespace arcticdb;
 namespace ac = arcticdb;
 namespace aa = arcticdb::async;
 namespace as = arcticdb::storage;
@@ -290,4 +292,70 @@ TEST(Async, NumCoresCgroupV2) {
 
         ASSERT_THROW(arcticdb::async::get_default_num_cpus(test_path), std::invalid_argument);
     #endif
+}
+
+std::shared_ptr<arcticdb::Store> create_store(const storage::LibraryPath &library_path,
+                  as::LibraryIndex &library_index,
+                  const storage::UserAuth &user_auth,
+                  std::shared_ptr<proto::encoding::VariantCodec> &codec_opt) {
+    auto lib = library_index.get_library(library_path, as::OpenMode::WRITE, user_auth);
+    auto store = aa::AsyncStore(lib, *codec_opt, ac::EncodingVersion::V1);
+    return std::make_shared<aa::AsyncStore<>>(std::move(store));
+}
+
+TEST(Async, CopyCompressedInterStore) {
+    using namespace arcticdb::async;
+
+    // Given
+    as::EnvironmentName environment_name{"research"};
+    as::StorageName storage_name("storage_name");
+    as::LibraryPath library_path{"a", "b"};
+    namespace ap = arcticdb::pipelines;
+
+    auto config = proto::nfs_backed_storage::Config();
+    config.set_use_mock_storage_for_testing(true);
+
+    auto env_config = arcticdb::get_test_environment_config(
+        library_path, storage_name, environment_name, std::make_optional(config));
+    auto config_resolver = as::create_in_memory_resolver(env_config);
+    as::LibraryIndex library_index{environment_name, config_resolver};
+
+    as::UserAuth user_auth{"abc"};
+    auto codec_opt = std::make_shared<arcticdb::proto::encoding::VariantCodec>();
+
+    auto source_store = create_store(library_path, library_index, user_auth, codec_opt);
+
+    // When - we write a key to the source and copy it
+    const arcticdb::entity::RefKey& key = arcticdb::entity::RefKey{"abc", KeyType::VERSION_REF};
+    auto segment_in_memory = get_test_frame<arcticdb::stream::TimeseriesIndex>("symbol", {}, 10, 0).segment_;
+    auto segment = encode_dispatch(segment_in_memory.clone(), *codec_opt, arcticdb::EncodingVersion::V1);
+    source_store->write_compressed_sync(as::KeySegmentPair{key, std::move(segment)});
+
+    auto targets = std::vector<std::shared_ptr<arcticdb::Store>>{
+        create_store(library_path, library_index, user_auth, codec_opt),
+        create_store(library_path, library_index, user_auth, codec_opt),
+        create_store(library_path, library_index, user_auth, codec_opt)
+    };
+
+    CopyCompressedInterStoreTask task{
+        key,
+        std::nullopt,
+        false,
+        false,
+        source_store,
+        targets,
+        std::shared_ptr<BitRateStats>()
+    };
+
+    arcticdb::async::TaskScheduler sched{1};
+    auto res = sched.submit_io_task(std::move(task)).get();
+
+    // Then
+    ASSERT_TRUE(std::holds_alternative<AllOk>(res));
+    for (const auto& target_store : targets) {
+        auto read_result = target_store->read_sync(key);
+        ASSERT_EQ(std::get<RefKey>(read_result.first), key);
+        ASSERT_GT(segment_in_memory.row_count(), 0);
+        ASSERT_EQ(read_result.second.row_count(), segment_in_memory.row_count());
+    }
 }
