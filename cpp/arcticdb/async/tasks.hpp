@@ -395,7 +395,7 @@ private:
             }
             bytes = key_segment_pair.segment().size();
             if (key_to_write_.has_value()) {
-                key_segment_pair.set_key(*key_to_write_);
+                key_segment_pair.atom_key() = *key_to_write_;
             }
 
             for (auto & target_store : target_stores_) {

@@ -316,7 +316,7 @@ TEST(Async, CopyCompressedInterStore) {
     config.set_use_mock_storage_for_testing(true);
 
     auto env_config = arcticdb::get_test_environment_config(
-        library_path, storage_name, environment_name, std::make_optional(config));
+        library_path, storage_name, environment_name);
     auto config_resolver = as::create_in_memory_resolver(env_config);
     as::LibraryIndex library_index{environment_name, config_resolver};
 
