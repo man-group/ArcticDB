@@ -696,3 +696,39 @@ TEST(Segment, TestIdenticalProduceSameHashes) {
 
     ASSERT_EQ(hash_1, hash_2);
 }
+
+TEST(Segment, TestIdenticalProduceSameHashesV2) {
+    const auto stream_desc_1 = stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {
+        scalar_field(DataType::UINT8, "a"),
+        scalar_field(DataType::UINT8, "b"),
+        scalar_field(DataType::UINT8, "c"),
+        scalar_field(DataType::UINT8, "d"),
+        scalar_field(DataType::UINT8, "e")
+    });
+
+    SegmentInMemory in_mem_seg_1{stream_desc_1.clone()};
+
+    in_mem_seg_1.set_scalar(0, uint8_t(0));
+    in_mem_seg_1.set_scalar(1, uint8_t(0));
+    in_mem_seg_1.set_scalar(2, uint8_t(0));
+    in_mem_seg_1.set_scalar(3, uint8_t(0));
+    in_mem_seg_1.set_scalar(4, uint8_t(0));
+    in_mem_seg_1.end_row();
+
+    SegmentInMemory in_mem_seg_2{stream_desc_1.clone()};
+
+    in_mem_seg_2.set_scalar(0, uint8_t(0));
+    in_mem_seg_2.set_scalar(1, uint8_t(0));
+    in_mem_seg_2.set_scalar(2, uint8_t(0));
+    in_mem_seg_2.set_scalar(3, uint8_t(0));
+    in_mem_seg_2.set_scalar(4, uint8_t(0));
+    in_mem_seg_2.end_row();
+
+    auto seg_1 = encode_dispatch(std::move(in_mem_seg_1), codec::default_lz4_codec(), EncodingVersion::V2);
+    auto seg_2 = encode_dispatch(std::move(in_mem_seg_2), codec::default_lz4_codec(), EncodingVersion::V2);
+
+    auto hash_1 = get_segment_hash(seg_1);
+    auto hash_2 = get_segment_hash(seg_2);
+
+    ASSERT_EQ(hash_1, hash_2);
+}
