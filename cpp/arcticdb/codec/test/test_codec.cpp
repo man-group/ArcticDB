@@ -663,11 +663,11 @@ TEST(Segment, ColumnNamesProduceDifferentHashesEmptyV2) {
 
 TEST(Segment, TestIdenticalProduceSameHashes) {
     const auto stream_desc_1 = stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {
-        scalar_field(DataType::UINT8, "ints1"),
-        scalar_field(DataType::UINT8, "ints2"),
-        scalar_field(DataType::UINT8, "ints3"),
-        scalar_field(DataType::UINT8, "ints4"),
-        scalar_field(DataType::UINT8, "ints5")
+        scalar_field(DataType::UINT8, "a"),
+        scalar_field(DataType::UINT8, "b"),
+        scalar_field(DataType::UINT8, "c"),
+        scalar_field(DataType::UINT8, "d"),
+        scalar_field(DataType::UINT8, "e")
     });
 
     SegmentInMemory in_mem_seg_1{stream_desc_1.clone()};
