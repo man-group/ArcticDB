@@ -648,6 +648,7 @@ public:
     void set(TypeDescriptor type, std::string_view name) {
         type_ = type;
         size_ = name.size();
+        // There are always two characters, so we need to set the second in case of a one-letter column name
         name_[1] = 0;
         memcpy(name_, name.data(), size_);
     }
