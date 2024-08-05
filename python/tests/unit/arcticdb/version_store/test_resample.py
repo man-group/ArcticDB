@@ -507,14 +507,16 @@ def test_resampling_empty_type_column(lmdb_version_store_empty_types_v1):
     with pytest.raises(SchemaException):
         lib.read(sym, query_builder=q)
 
+@pytest.mark.skipif(not IS_PANDAS_TWO, reason="Pandas 0 and 1 do not have offset param")
+@pytest.mark.parametrize("closed", ["left", "right"])
 class TestResamplingOffset:
 
     @staticmethod
     def all_aggregations_dict(col):
         return {f"to_{agg}": (col, agg) for agg in ALL_AGGREGATIONS}
 
-    @pytest.mark.parametrize("closed", ["left", "right"])
-    def test_offset_smaller_than_freq(self, lmdb_library, closed):
+    @pytest.mark.parametrize("offset", ("30s", pd.Timedelta(seconds=30)))
+    def test_offset_smaller_than_freq(self, lmdb_library, closed, offset):
         lib = lmdb_library
         sym = "test_offset_smaller_than_freq"
         idx = pd.date_range(pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-04"), freq="min")
@@ -530,8 +532,8 @@ class TestResamplingOffset:
             offset="30s"
         )
 
-    @pytest.mark.parametrize("closed", ["left", "right"])
-    def test_offset_larger_than_freq(self, lmdb_library, closed):
+    @pytest.mark.parametrize("offset", ("2min37s", pd.Timedelta(minutes=2, seconds=37)))
+    def test_offset_larger_than_freq(self, lmdb_library, closed, offset):
         lib = lmdb_library
         sym = "test_offset_larger_than_freq"
         idx = pd.date_range(pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-04"), freq="min")
@@ -544,11 +546,11 @@ class TestResamplingOffset:
             "2min",
             self.all_aggregations_dict("col"),
             closed=closed,
-            offset="2min37s"
+            offset=offset
         )
 
-    @pytest.mark.parametrize("closed", ["left", "right"])
-    def test_values_on_offset_boundary(self, lmdb_library, closed):
+    @pytest.mark.parametrize("offset", ("30s", pd.Timedelta(seconds=30)))
+    def test_values_on_offset_boundary(self, lmdb_library, closed, offset):
         lib = lmdb_library
         sym = "test_offset_larger_than_freq"
         start = pd.Timestamp("2024-01-02")
@@ -566,16 +568,16 @@ class TestResamplingOffset:
             "2min",
             self.all_aggregations_dict("col"),
             closed=closed,
-            offset="30s"
+            offset=offset
         )
 
-    @pytest.mark.parametrize("closed", ["left", "right"])
+    @pytest.mark.parametrize("offset", ("30s", pd.Timedelta(seconds=30)))
     @pytest.mark.parametrize("date_range", [
         (dt.datetime(2024, 1, 2, 5, 0, 30), dt.datetime(2024, 1, 3, 5, 0, 30)),
         (dt.datetime(2024, 1, 2, 5, 0, 45), dt.datetime(2024, 1, 3, 5, 0, 50)),
         (dt.datetime(2024, 1, 2, 5, 0, 30, 1), dt.datetime(2024, 1, 3, 5, 0, 29, 999999))
     ])
-    def test_with_date_range(self, lmdb_library, closed, date_range):
+    def test_with_date_range(self, lmdb_library, closed, date_range, offset):
         lib = lmdb_library
         sym = "test_offset_larger_than_freq"
         start = pd.Timestamp("2024-01-02")
@@ -593,6 +595,6 @@ class TestResamplingOffset:
             "2min",
             self.all_aggregations_dict("col"),
             closed=closed,
-            offset="30s",
+            offset=offset,
             date_range=date_range
         )

@@ -622,7 +622,7 @@ class QueryBuilder:
         label: Optional['str'], default=None
             Which boundary of each time-bucket is used as the index value in the returned DataFrame. Must be one of
             'left' or 'right'. If not provided, the default is left for all currently supported frequencies.
-        offset: Optional[Union[str, pd.Timedelta]] = None
+        offset: Optional[Union[str, pd.Timedelta]] default=None
             Offset the start of each bucket. Supported strings are the same as in `pd.Timedelta`. If offset is larger than
             rule then `offset` modulo `rule` is used as an offset.
 

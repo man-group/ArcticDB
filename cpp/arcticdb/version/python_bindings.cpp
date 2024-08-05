@@ -34,16 +34,19 @@ namespace arcticdb::version_store {
     ResampleBoundary closed_boundary_arg,
     timestamp offset
 ) {
-    timestamp start_with_offset = (start - offset) % rule;
-    timestamp end_with_offset = (end - offset) % rule;
+    const timestamp ns_to_prev_offset_start = (start - offset) % rule;
+    const timestamp ns_to_prev_offset_end = (end - offset) % rule;
     if (closed_boundary_arg == ResampleBoundary::RIGHT) {
-        start_with_offset = start_with_offset > 0 ? start - start_with_offset : start - rule;
-        end_with_offset = end_with_offset > 0 ? end + (rule - end_with_offset) : end;
+        return {
+            ns_to_prev_offset_start > 0 ? start - ns_to_prev_offset_start : start - rule,
+            ns_to_prev_offset_end > 0 ? end + (rule - ns_to_prev_offset_end) : end
+        };
     } else {
-        start_with_offset = start_with_offset > 0 ? start - start_with_offset : start;
-        end_with_offset = end_with_offset > 0 ? end + (rule - end_with_offset) : end + rule;
+        return {
+            ns_to_prev_offset_start > 0 ? start - ns_to_prev_offset_start : start,
+            ns_to_prev_offset_end > 0 ? end + (rule - ns_to_prev_offset_end) : end + rule
+        };
     }
-    return {start_with_offset, end_with_offset};
 }
 
 std::vector<timestamp> generate_buckets(
@@ -53,10 +56,11 @@ std::vector<timestamp> generate_buckets(
     ResampleBoundary closed_boundary_arg,
     timestamp offset
 ) {
-    const timestamp rule_ns = [&rule]() {
+    timestamp rule_ns;
+    {
         py::gil_scoped_acquire acquire_gil;
-        return python_util::pd_to_offset(rule);
-    }();
+        rule_ns = python_util::pd_to_offset(rule);
+    }
     const auto [start_with_offset, end_with_offset] = compute_first_last_dates(start, end, rule_ns, closed_boundary_arg, offset);
     const auto bucket_boundary_count = (end_with_offset - start_with_offset) / rule_ns + 1;
     std::vector<timestamp> res;
