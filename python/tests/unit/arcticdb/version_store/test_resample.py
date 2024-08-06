@@ -14,7 +14,8 @@ import datetime as dt
 from arcticdb import QueryBuilder
 from arcticdb.exceptions import ArcticDbNotYetImplemented, SchemaException
 from arcticdb.util.test import assert_frame_equal
-from arcticdb.util._versions import IS_PANDAS_TWO
+from packaging.version import Version
+from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION
 
 ALL_AGGREGATIONS = ["sum", "mean", "min", "max", "first", "last", "count"]
 
@@ -43,7 +44,7 @@ def generic_resample_test(lib, sym, rule, aggregations, date_range=None, closed=
     # Pandas doesn't have a good date_range equivalent in resample, so just use read for that
     expected = lib.read(sym, date_range=date_range).data
     # Pandas 1.X needs None as the first argument to agg with named aggregators
-    if IS_PANDAS_TWO:
+    if PANDAS_VERSION >= Version("1.1.0"):
         expected = expected.resample(rule, closed=closed, label=label, offset=offset).agg(None, **aggregations)
     else:
         expected = expected.resample(rule, closed=closed, label=label).agg(None, **aggregations)
@@ -510,7 +511,7 @@ def test_resampling_empty_type_column(lmdb_version_store_empty_types_v1):
     with pytest.raises(SchemaException):
         lib.read(sym, query_builder=q)
 
-@pytest.mark.skipif(not IS_PANDAS_TWO, reason="Pandas 0 and 1 do not have offset param")
+@pytest.mark.skipif(PANDAS_VERSION < Version("1.1.0"), reason="Pandas < 1.1.0 do not have offset param")
 @pytest.mark.parametrize("closed", ["left", "right"])
 class TestResamplingOffset:
 
