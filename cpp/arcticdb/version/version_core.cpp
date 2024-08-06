@@ -1288,7 +1288,6 @@ VersionedItem sort_merge_impl(
 
     std::vector<FrameSlice> slices;
     std::vector<folly::Future<VariantKey>> fut_vec;
-    std::optional<SegmentInMemory> last_indexed;
     auto index = stream::index_type_from_descriptor(pipeline_context->descriptor());
     util::variant_match(index,
         [&](const stream::TimeseriesIndex &timeseries_index) {
@@ -1299,6 +1298,15 @@ VersionedItem sort_merge_impl(
 
             read_query.clauses_.emplace_back(std::make_shared<Clause>(MergeClause{timeseries_index, SparseColumnPolicy{}, stream_id, pipeline_context->descriptor()}));
             auto segments = read_and_process(store, pipeline_context, read_query, ReadOptions{}, pipeline_context->incompletes_after());
+            if (options.append_ && update_info.previous_index_key_.has_value() &&
+                update_info.previous_index_key_->start_time() > std::get<timestamp>(TimeseriesIndex::start_value_for_segment(segments[0].segment_.value()))) {
+                store->remove_keys(delete_keys).get();
+                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                    "Cannot append index starting at {} to data frame with index ending at {}",
+                    std::get<timestamp>(TimeseriesIndex::start_value_for_segment(segments[0].segment_.value())),
+                    update_info.previous_index_key_->start_time()
+                );
+            }
             pipeline_context->total_rows_ = num_versioned_rows + get_slice_rowcounts(segments);
 
             auto index = index_type_from_descriptor(pipeline_context->descriptor());
