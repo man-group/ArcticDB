@@ -306,9 +306,10 @@ struct EncodedFieldImpl : public EncodedField {
 
     [[nodiscard]] const EncodedBlock& shapes(size_t n) const {
         util::check(shapes_count_ != 0, "No shape allocated");
-        if(!is_old_style_shapes())
-            return blocks()[n];
-        else
+        if(!is_old_style_shapes()) {
+            util::check(n == 0, "Block index must be 0 not {} if not using old style shapes", n);
+            return blocks()[0];
+        } else
             return blocks()[n * 2];
     }
 
