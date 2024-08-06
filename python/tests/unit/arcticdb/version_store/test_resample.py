@@ -43,7 +43,10 @@ def generic_resample_test(lib, sym, rule, aggregations, date_range=None, closed=
     # Pandas doesn't have a good date_range equivalent in resample, so just use read for that
     expected = lib.read(sym, date_range=date_range).data
     # Pandas 1.X needs None as the first argument to agg with named aggregators
-    expected = expected.resample(rule, closed=closed, label=label, offset=offset).agg(None, **aggregations)
+    if IS_PANDAS_TWO:
+        expected = expected.resample(rule, closed=closed, label=label, offset=offset).agg(None, **aggregations)
+    else:
+        expected = expected.resample(rule, closed=closed, label=label).agg(None, **aggregations)
     expected = expected.reindex(columns=sorted(expected.columns))
 
     q = QueryBuilder()
