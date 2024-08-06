@@ -176,7 +176,6 @@ class TestMergeSortAppend:
         expected_df = pd.DataFrame({"col": range(1, 9)}, index=expected_index)
         assert_frame_equal(lib.read("sym").data, expected_df)
 
-    @pytest.mark.xfail(reason="Does not throw and creates dataframe with unordered index.")
     def test_appended_df_interleaves_with_storage(self, lmdb_library):
         lib = lmdb_library
         initial_df = pd.DataFrame({"col": [1, 3]}, index=pd.DatetimeIndex([np.datetime64('2023-01-01'), np.datetime64('2023-01-03')], dtype="datetime64[ns]"))
