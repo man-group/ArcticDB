@@ -91,7 +91,7 @@ std::optional<Segment> MockLmdbClient::read(const std::string& db_name, std::str
     return std::make_optional<Segment>(lmdb_contents_.at(key).clone());
 }
 
-void MockLmdbClient::write(const std::string& db_name, std::string& path, arcticdb::Segment&& segment,
+void MockLmdbClient::write(const std::string& db_name, std::string& path, arcticdb::Segment& segment,
                            ::lmdb::txn&, ::lmdb::dbi&, int64_t) {
     LmdbKey key = {db_name, path};
             raise_if_has_failure_trigger(key, StorageOperation::WRITE);
@@ -99,7 +99,7 @@ void MockLmdbClient::write(const std::string& db_name, std::string& path, arctic
     if(has_key(key)) {
         raise_key_exists_error(lmdb_operation_string(StorageOperation::WRITE));
     } else {
-        lmdb_contents_.try_emplace(key, std::move(segment));
+        lmdb_contents_.try_emplace(key, segment.clone());
     }
 }
 

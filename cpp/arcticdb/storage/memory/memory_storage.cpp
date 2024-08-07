@@ -18,11 +18,11 @@
 namespace arcticdb::storage::memory {
 
 void add_serialization_fields(KeySegmentPair& kv) {
-    auto& segment = kv.segment();
-    auto& hdr = segment.header();
-    (void)segment.calculate_size();
+    auto segment = kv.segment_ptr();
+    auto& hdr = segment->header();
+    (void)segment->calculate_size();
     if(hdr.encoding_version() == EncodingVersion::V2) {
-        const auto* src = segment.buffer().data();
+        const auto* src = segment->buffer().data();
         set_body_fields(hdr, src);
     }
 }
@@ -48,14 +48,14 @@ void add_serialization_fields(KeySegmentPair& kv) {
                                             key_vec.erase(it);
                                         }
                                         add_serialization_fields(kv);
-                                        key_vec.try_emplace(key, std::move(kv.segment()));
+                                        key_vec.try_emplace(key, std::move(*kv.release_segment()));
                                     },
                                     [&](const AtomKey &key) {
                                         if (key_vec.find(key) != key_vec.end()) {
                                             throw DuplicateKeyException(key);
                                         }
                                         add_serialization_fields(kv);
-                                        key_vec.try_emplace(key, std::move(kv.segment()));
+                                        key_vec.try_emplace(key, std::move(*kv.release_segment()));
                                     }
                 );
             }

@@ -61,7 +61,7 @@ public:
 
     virtual S3Result<std::monostate> put_object(
             const std::string& s3_object_name,
-            Segment&& segment,
+            Segment& segment,
             const std::string& bucket_name,
             PutHeader header = PutHeader::NONE) = 0;
 

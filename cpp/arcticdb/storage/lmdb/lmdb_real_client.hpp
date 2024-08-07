@@ -34,7 +34,7 @@ public:
     void write(
             const std::string& db_name,
             std::string& path,
-            Segment&& segment,
+            Segment& segment,
             ::lmdb::txn& txn,
             ::lmdb::dbi& dbi,
             int64_t overwrite_flag) override;

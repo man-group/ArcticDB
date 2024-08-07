@@ -35,19 +35,25 @@ namespace arcticdb::storage {
 
         ARCTICDB_MOVE_COPY_DEFAULT(KeySegmentPair)
 
-        // TODO aseaton remove
-        Segment& segment() {
+        std::unique_ptr<Segment> release_segment() {
             util::check(segment_, "Attempting to access segment_ but it has not been set");
-            return *segment_;
+            auto tmp = std::make_unique<Segment>(std::move(*segment_));
+            segment_ = std::make_shared<Segment>();
+            return tmp;
         }
 
         [[nodiscard]] std::shared_ptr<Segment> segment_ptr() const {
+          util::check(segment_, "Attempting to access segment_ptr it is empty");
           return segment_;
         }
 
         template<typename T>
         void set_key(T&& key) {
           key_ = std::make_shared<VariantKey>(std::forward<T>(key));
+        }
+
+        void set_segment(Segment&& segment) {
+          segment_ = std::make_shared<Segment>(std::move(segment));
         }
 
         [[nodiscard]] const AtomKey &atom_key() const {

@@ -557,8 +557,7 @@ void decode_into_memory_segment(
         decode_v1(segment, hdr, res, desc);
 }
 
-SegmentInMemory decode_segment(Segment&& s) {
-    auto segment = std::move(s);
+SegmentInMemory decode_segment(Segment& segment) {
     auto &hdr = segment.header();
     ARCTICDB_TRACE(log::codec(), "Decoding descriptor: {}", segment.descriptor());
     auto descriptor = segment.descriptor();
