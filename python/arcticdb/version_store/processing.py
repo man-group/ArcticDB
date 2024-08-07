@@ -583,6 +583,8 @@ class QueryBuilder:
         return self
 
     def __eq__(self, right):
+        if not isinstance(right, QueryBuilder):
+            return False
         return self._optimisation == right._optimisation and self._python_clauses == right._python_clauses
 
     def __str__(self):
