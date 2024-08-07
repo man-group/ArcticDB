@@ -27,6 +27,50 @@
 
 namespace arcticdb::version_store {
 
+[[nodiscard]] static std::pair<timestamp, timestamp> compute_first_last_dates(
+    timestamp start,
+    timestamp end,
+    timestamp rule,
+    ResampleBoundary closed_boundary_arg,
+    timestamp offset
+) {
+    const timestamp ns_to_prev_offset_start = (start - offset) % rule;
+    const timestamp ns_to_prev_offset_end = (end - offset) % rule;
+    if (closed_boundary_arg == ResampleBoundary::RIGHT) {
+        return {
+            ns_to_prev_offset_start > 0 ? start - ns_to_prev_offset_start : start - rule,
+            ns_to_prev_offset_end > 0 ? end + (rule - ns_to_prev_offset_end) : end
+        };
+    } else {
+        return {
+            ns_to_prev_offset_start > 0 ? start - ns_to_prev_offset_start : start,
+            ns_to_prev_offset_end > 0 ? end + (rule - ns_to_prev_offset_end) : end + rule
+        };
+    }
+}
+
+std::vector<timestamp> generate_buckets(
+    timestamp start,
+    timestamp end,
+    std::string_view rule,
+    ResampleBoundary closed_boundary_arg,
+    timestamp offset
+) {
+    timestamp rule_ns;
+    {
+        py::gil_scoped_acquire acquire_gil;
+        rule_ns = python_util::pd_to_offset(rule);
+    }
+    const auto [start_with_offset, end_with_offset] = compute_first_last_dates(start, end, rule_ns, closed_boundary_arg, offset);
+    const auto bucket_boundary_count = (end_with_offset - start_with_offset) / rule_ns + 1;
+    std::vector<timestamp> res;
+    res.reserve(bucket_boundary_count);
+    for (auto boundary = start_with_offset; boundary <= end_with_offset; boundary += rule_ns) {
+        res.push_back(boundary);
+    }
+    return res;
+}
+
 template<ResampleBoundary closed_boundary>
 void declare_resample_clause(py::module& version) {
     std::string class_name;
@@ -37,17 +81,8 @@ void declare_resample_clause(py::module& version) {
         class_name = "ResampleClauseRightClosed";
     }
     py::class_<ResampleClause<closed_boundary>, std::shared_ptr<ResampleClause<closed_boundary>>>(version, class_name.c_str())
-            .def(py::init([](std::string rule, ResampleBoundary label_boundary){
-                return ResampleClause<closed_boundary>(rule,
-                                                       label_boundary,
-                                                       [](timestamp start, timestamp end, std::string_view rule, ResampleBoundary closed_boundary_arg) -> std::vector<timestamp> {
-                                                           py::gil_scoped_acquire acquire_gil;
-                                                           auto py_start = python_util::pd_Timestamp()(start - (closed_boundary_arg == ResampleBoundary::RIGHT ? 1 : 0)).attr("floor")(rule);
-                                                           auto py_end = python_util::pd_Timestamp()(end + (closed_boundary_arg == ResampleBoundary::LEFT ? 1 : 0)).attr("ceil")(rule);
-                                                           static py::object date_range_function = py::module::import("pandas").attr("date_range");
-                                                           auto py_bucket_boundaries = date_range_function(py_start, py_end, nullptr, rule, nullptr, false).attr("values").cast<py::array_t<timestamp>>();
-                                                           return std::vector<timestamp>(py_bucket_boundaries.data(), py_bucket_boundaries.data() + py_bucket_boundaries.size());
-                                                       });
+            .def(py::init([](std::string rule, ResampleBoundary label_boundary, timestamp offset){
+                return ResampleClause<closed_boundary>(rule, label_boundary, generate_buckets, offset);
             }))
             .def_property_readonly("rule", &ResampleClause<closed_boundary>::rule)
             .def("set_aggregations", [](ResampleClause<closed_boundary>& self,

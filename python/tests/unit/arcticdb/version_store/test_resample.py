@@ -14,7 +14,10 @@ import datetime as dt
 from arcticdb import QueryBuilder
 from arcticdb.exceptions import ArcticDbNotYetImplemented, SchemaException
 from arcticdb.util.test import assert_frame_equal
-from arcticdb.util._versions import IS_PANDAS_TWO
+from packaging.version import Version
+from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION
+
+ALL_AGGREGATIONS = ["sum", "mean", "min", "max", "first", "last", "count"]
 
 # Pandas recommended way to resample and exclude buckets with no index values, which is our behaviour
 # See https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#sparse-resampling
@@ -37,15 +40,18 @@ def generic_resample_test_with_empty_buckets(lib, sym, rule, aggregations, date_
 
     assert_frame_equal(expected, received, check_dtype=False)
 
-def generic_resample_test(lib, sym, rule, aggregations, date_range=None, closed=None, label=None):
+def generic_resample_test(lib, sym, rule, aggregations, date_range=None, closed=None, label=None, offset=None):
     # Pandas doesn't have a good date_range equivalent in resample, so just use read for that
     expected = lib.read(sym, date_range=date_range).data
     # Pandas 1.X needs None as the first argument to agg with named aggregators
-    expected = expected.resample(rule, closed=closed, label=label).agg(None, **aggregations)
+    if PANDAS_VERSION >= Version("1.1.0"):
+        expected = expected.resample(rule, closed=closed, label=label, offset=offset).agg(None, **aggregations)
+    else:
+        expected = expected.resample(rule, closed=closed, label=label).agg(None, **aggregations)
     expected = expected.reindex(columns=sorted(expected.columns))
 
     q = QueryBuilder()
-    q = q.resample(rule, closed=closed, label=label).agg(aggregations)
+    q = q.resample(rule, closed=closed, label=label, offset=offset).agg(aggregations)
     received = lib.read(sym, date_range=date_range, query_builder=q).data
     received = received.reindex(columns=sorted(received.columns))
 
@@ -504,3 +510,95 @@ def test_resampling_empty_type_column(lmdb_version_store_empty_types_v1):
     q = q.resample("s").agg({"col": "first"})
     with pytest.raises(SchemaException):
         lib.read(sym, query_builder=q)
+
+@pytest.mark.skipif(PANDAS_VERSION < Version("1.1.0"), reason="Pandas < 1.1.0 do not have offset param")
+@pytest.mark.parametrize("closed", ["left", "right"])
+class TestResamplingOffset:
+
+    @staticmethod
+    def all_aggregations_dict(col):
+        return {f"to_{agg}": (col, agg) for agg in ALL_AGGREGATIONS}
+
+    @pytest.mark.parametrize("offset", ("30s", pd.Timedelta(seconds=30)))
+    def test_offset_smaller_than_freq(self, lmdb_version_store_v1, closed, offset):
+        lib = lmdb_version_store_v1
+        sym = "test_offset_smaller_than_freq"
+        idx = pd.date_range(pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-04"), freq="min")
+        rng = np.random.default_rng()
+        df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
+        lib.write(sym, df)
+        generic_resample_test(
+            lib,
+            sym,
+            "2min",
+            self.all_aggregations_dict("col"),
+            closed=closed,
+            offset="30s"
+        )
+
+    @pytest.mark.parametrize("offset", ("2min37s", pd.Timedelta(minutes=2, seconds=37)))
+    def test_offset_larger_than_freq(self, lmdb_version_store_v1, closed, offset):
+        lib = lmdb_version_store_v1
+        sym = "test_offset_larger_than_freq"
+        idx = pd.date_range(pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-04"), freq="min")
+        rng = np.random.default_rng()
+        df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
+        lib.write(sym, df)
+        generic_resample_test(
+            lib,
+            sym,
+            "2min",
+            self.all_aggregations_dict("col"),
+            closed=closed,
+            offset=offset
+        )
+
+    @pytest.mark.parametrize("offset", ("30s", pd.Timedelta(seconds=30)))
+    def test_values_on_offset_boundary(self, lmdb_version_store_v1, closed, offset):
+        lib = lmdb_version_store_v1
+        sym = "test_offset_larger_than_freq"
+        start = pd.Timestamp("2024-01-02")
+        end = pd.Timestamp("2024-01-04")
+        idx = pd.date_range(start, end, freq="30s")
+        idx_1_nano_before = pd.date_range(start - pd.Timedelta(1), end - pd.Timedelta(1), freq="min")
+        idx_1_nano_after = pd.date_range(start + pd.Timedelta(1), end + pd.Timedelta(1), freq="min")
+        idx = idx.join(idx_1_nano_before, how="outer").join(idx_1_nano_after, how="outer")
+        rng = np.random.default_rng()
+        df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
+        lib.write(sym, df)
+        generic_resample_test(
+            lib,
+            sym,
+            "2min",
+            self.all_aggregations_dict("col"),
+            closed=closed,
+            offset=offset
+        )
+
+    @pytest.mark.parametrize("offset", ("30s", pd.Timedelta(seconds=30)))
+    @pytest.mark.parametrize("date_range", [
+        (dt.datetime(2024, 1, 2, 5, 0, 30), dt.datetime(2024, 1, 3, 5, 0, 30)),
+        (dt.datetime(2024, 1, 2, 5, 0, 45), dt.datetime(2024, 1, 3, 5, 0, 50)),
+        (dt.datetime(2024, 1, 2, 5, 0, 30, 1), dt.datetime(2024, 1, 3, 5, 0, 29, 999999))
+    ])
+    def test_with_date_range(self, lmdb_version_store_v1, closed, date_range, offset):
+        lib = lmdb_version_store_v1
+        sym = "test_offset_larger_than_freq"
+        start = pd.Timestamp("2024-01-02")
+        end = pd.Timestamp("2024-01-04")
+        idx = pd.date_range(start, end, freq="30s")
+        idx_1_nano_before = pd.date_range(start - pd.Timedelta(1), end - pd.Timedelta(1), freq="min")
+        idx_1_nano_after = pd.date_range(start + pd.Timedelta(1), end + pd.Timedelta(1), freq="min")
+        idx = idx.join(idx_1_nano_before, how="outer").join(idx_1_nano_after, how="outer")
+        rng = np.random.default_rng()
+        df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
+        lib.write(sym, df)
+        generic_resample_test(
+            lib,
+            sym,
+            "2min",
+            self.all_aggregations_dict("col"),
+            closed=closed,
+            offset=offset,
+            date_range=date_range
+        )

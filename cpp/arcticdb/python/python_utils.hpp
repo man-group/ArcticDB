@@ -248,4 +248,9 @@ inline std::vector<NamedAggregator> named_aggregators_from_dict(const std::unord
     return named_aggregators;
 }
 
+inline auto pd_to_offset(std::string_view rule) {
+    static py::object to_offset = py::module::import("pandas").attr("tseries").attr("frequencies").attr("to_offset");
+    return to_offset(rule).attr("nanos").cast<timestamp>();
+}
+
 } // namespace arcticdb::python_util
