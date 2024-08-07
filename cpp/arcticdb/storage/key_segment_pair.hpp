@@ -18,16 +18,6 @@ namespace arcticdb::storage {
      * not contain any positioning information for the contained data.
      */
     class KeySegmentPair {
-        struct KeySegmentData {
-            VariantKey key_;
-            Segment segment_;
-
-            KeySegmentData() = default;
-            explicit KeySegmentData(VariantKey &&key) : key_(std::move(key)), segment_() {}
-            KeySegmentData(VariantKey &&key, Segment &&segment) : key_(std::move(key)), segment_(std::move(segment)) {}
-
-            ARCTICDB_NO_MOVE_OR_COPY(KeySegmentData)
-        };
 
     public:
         KeySegmentPair() = default;
