@@ -325,6 +325,7 @@ struct FailedTargets {
 
 using ProcessingResult = std::variant<AllOk, FailedTargets>;
 
+// Used in arcticdb-enterprise, do not remove without checking whether it is still used there
 struct CopyCompressedInterStoreTask : async::BaseTask {
     CopyCompressedInterStoreTask(entity::VariantKey key_to_read,
                                  std::optional<entity::AtomKey> key_to_write,

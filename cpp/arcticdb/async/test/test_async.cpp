@@ -312,7 +312,8 @@ TEST(Async, CopyCompressedInterStore) {
     as::LibraryPath library_path{"a", "b"};
     namespace ap = arcticdb::pipelines;
 
-    auto config = proto::nfs_backed_storage::Config();
+    //auto config = proto::nfs_backed_storage::Config();
+    auto config = proto::s3_storage::Config();
     config.set_use_mock_storage_for_testing(true);
 
     auto env_config = arcticdb::get_test_environment_config(
@@ -328,7 +329,8 @@ TEST(Async, CopyCompressedInterStore) {
     // When - we write a key to the source and copy it
     const arcticdb::entity::RefKey& key = arcticdb::entity::RefKey{"abc", KeyType::VERSION_REF};
     auto segment_in_memory = get_test_frame<arcticdb::stream::TimeseriesIndex>("symbol", {}, 10, 0).segment_;
-    auto segment = encode_dispatch(segment_in_memory.clone(), *codec_opt, arcticdb::EncodingVersion::V1);
+    ASSERT_GT(segment_in_memory.row_count(), 0);
+    auto segment = encode_dispatch(std::move(segment_in_memory), *codec_opt, arcticdb::EncodingVersion::V1);
     source_store->write_compressed_sync(as::KeySegmentPair{key, std::move(segment)});
 
     auto targets = std::vector<std::shared_ptr<arcticdb::Store>>{
@@ -355,7 +357,6 @@ TEST(Async, CopyCompressedInterStore) {
     for (const auto& target_store : targets) {
         auto read_result = target_store->read_sync(key);
         ASSERT_EQ(std::get<RefKey>(read_result.first), key);
-        ASSERT_GT(segment_in_memory.row_count(), 0);
         ASSERT_EQ(read_result.second.row_count(), segment_in_memory.row_count());
     }
 }
