@@ -417,10 +417,11 @@ struct ResampleClause {
     // This will contain the data range specified by the user (if any) intersected with the range of timestamps for the symbol
     std::optional<TimestampRange> date_range_;
     // Inject this as a callback in the ctor to avoid language-specific dependencies this low down in the codebase
-    std::function<std::vector<timestamp>(timestamp, timestamp, std::string_view, ResampleBoundary)> generate_bucket_boundaries_;
+    std::function<std::vector<timestamp>(timestamp, timestamp, std::string_view, ResampleBoundary, timestamp)> generate_bucket_boundaries_;
     std::vector<timestamp> bucket_boundaries_;
     std::vector<SortedAggregatorInterface> aggregators_;
     std::string str_;
+    timestamp offset_;
 
     ResampleClause() = delete;
 
@@ -428,10 +429,12 @@ struct ResampleClause {
 
     ResampleClause(const std::string& rule,
                    ResampleBoundary label_boundary,
-                   std::function<std::vector<timestamp>(timestamp, timestamp, std::string_view, ResampleBoundary)>&& generate_bucket_boundaries):
+                   std::function<std::vector<timestamp>(timestamp, timestamp, std::string_view, ResampleBoundary, timestamp)>&& generate_bucket_boundaries,
+                   timestamp offset):
             rule_(rule),
             label_boundary_(label_boundary),
-            generate_bucket_boundaries_(std::move(generate_bucket_boundaries)){
+            generate_bucket_boundaries_(std::move(generate_bucket_boundaries)),
+            offset_(offset) {
         clause_info_.can_combine_with_column_selection_ = false;
         clause_info_.modifies_output_descriptor_ = true;
     }
