@@ -61,33 +61,35 @@ inline void merge_string_columns(const SegmentInMemory& segment, const std::shar
     }
 }
 
-inline bool dedup_rows_from_segment(
-    bool dedup_with_last_committed,
-    SegmentInMemory& merged,
-    std::optional<SegmentInMemory> last_committed_segment,
+inline bool dedup_rows_from_last_committed_segment(
+    SegmentInMemory& last_committed_segment,
     std::vector<SegmentInMemory>& history,
     std::vector<size_t>& segments_final_sizes
-    ) {
-    //TODO: should definitely moved this to a separate function and not called here
-    if (dedup_with_last_committed && last_committed_segment) {
-        auto last_committed_filter_bitset = last_committed_segment->get_duplicates_bitset(*history.rbegin());
-        auto set_rows = last_committed_filter_bitset.count();
-        ARCTICDB_DEBUG(log::version(), "filter_bitset.count() with last_committed is {} ", set_rows);
-        if (set_rows > 0) {
-            // Now we have atleast one row which doesn't match with previous committed
-            // segment, thus no more segments after this will match since segments are sorted
-            // by time
-            log::version().info("Non zero rows found - stopping dedup with last_committed_segment now");
-            dedup_with_last_committed = false;
-        } else {
-            segments_final_sizes.push_back(0);
-            return true;
-        }
+) {
+    auto last_committed_filter_bitset = last_committed_segment.get_duplicates_bitset(*history.rbegin());
+    auto set_rows = last_committed_filter_bitset.count();
+    ARCTICDB_DEBUG(log::version(), "filter_bitset.count() with last_committed is {} ", set_rows);
+    if (set_rows > 0) {
+        // Now we have atleast one row which doesn't match with previous committed
+        // segment, thus no more segments after this will match since segments are sorted
+        // by time
+        log::version().info("Non zero rows found - stopping dedup with last_committed_segment now");
         if (set_rows != history.rbegin()->row_count()) {
             // filter segment in case it's needed
             history.emplace_back(filter_segment(*history.rbegin(), std::move(last_committed_filter_bitset)));
         }
+        return false;
+    } else {
+        segments_final_sizes.push_back(0);
+        return true;
     }
+}
+
+inline bool dedup_rows_from_segment(
+    SegmentInMemory& merged,
+    std::vector<SegmentInMemory>& history,
+    std::vector<size_t>& segments_final_sizes
+    ) {
     // TODO: Currently, the original segment will be copied twice - once while filtering and once when
     // TODO: appending to merged. Combine the append and filter functionality.
     auto filter_bitset = merged.get_duplicates_bitset(*history.rbegin());
@@ -97,7 +99,7 @@ inline bool dedup_rows_from_segment(
         segments_final_sizes.push_back(0);
         return true;
     }
-    if (set_rows < history.rbegin()->row_count()) {
+    else if (set_rows < history.rbegin()->row_count()) {
         ARCTICDB_DEBUG(log::version(), "Some rows are dup-ed, removing them");
         history.emplace_back(filter_segment(*history.rbegin(), std::move(filter_bitset)));
     }
@@ -117,8 +119,18 @@ inline void merge_segments(
     bool dedup_with_last_committed = true;
     for (auto &segment : segments) {
         std::vector<SegmentInMemory> history{(segment)}; //TODO - a single SegmentInMemory suffices
-        if (dedup_rows && dedup_rows_from_segment(dedup_with_last_committed, merged, last_committed_segment, history, segments_final_sizes)){
-            continue;
+        if (dedup_rows){        
+            if (dedup_with_last_committed && last_committed_segment) {
+                if (dedup_rows_from_last_committed_segment(*last_committed_segment, history, segments_final_sizes)) {
+                    continue;
+                }
+                else {
+                    dedup_with_last_committed = false;
+                }
+            }
+            if (dedup_rows_from_segment(merged, history, segments_final_sizes)) {
+                continue;
+            }
         }
         ARCTICDB_DEBUG(log::version(), "Appending segment with {} rows", history.rbegin()->row_count());
         for(const auto& field : history.rbegin()->descriptor().fields()) {

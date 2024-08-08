@@ -302,8 +302,8 @@ public:
             parent_ = other.parent_;
         }
 
-        size_t get_hash(bool use_cache=true) const{
-            return parent_->get_row_hash(row_id_, use_cache);
+        size_t get_hash() const{
+            return parent_->get_row_hash(row_id_);
         }
 
         template<class S>
@@ -418,7 +418,7 @@ public:
             while (range_with_same_index.first != range_with_same_index.second) {
                 // dont call get_hash() unless needed - unnecessairly hashing rows
                 // the hash value is memoised - so multiple calls are fine
-                auto hash_val = row.get_hash(true);
+                auto hash_val = row.get_hash();
                 if (range_with_same_index.first->second.get_hash() == hash_val)
                     return true;
                 range_with_same_index.first++;
@@ -443,7 +443,7 @@ public:
             // since the index is sorted
             last_iterator_ = range_with_same_index.first;
             while (range_with_same_index.first != range_with_same_index.second) {
-                if (row.get_hash(true) == range_with_same_index.first->get_hash(true)) {
+                if (row.get_hash() == range_with_same_index.first->get_hash()) {
                     // If hashes and index match, assume they are same rows
                     return true;
                 }
@@ -899,13 +899,11 @@ public:
 
     std::vector<std::shared_ptr<SegmentInMemoryImpl>> split(size_t rows) const;
 
-    size_t get_row_hash(ssize_t row_id, bool use_cache=true) {
+    size_t get_row_hash(ssize_t row_id) {
         // cache should be invalidated when new column is added
-        if (use_cache) {
-            auto it = rows_hasher_.row_id_to_hash_.find(row_id);
-            if (it != rows_hasher_.row_id_to_hash_.end())
-                return it->second;
-        }
+        auto it = rows_hasher_.row_id_to_hash_.find(row_id);
+        if (it != rows_hasher_.row_id_to_hash_.end())
+            return it->second;
         size_t hash = Row(this, row_id).hash();
         rows_hasher_.row_id_to_hash_[row_id] = hash;
         return hash;
