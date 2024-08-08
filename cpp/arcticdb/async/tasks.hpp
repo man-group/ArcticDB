@@ -278,7 +278,12 @@ struct CopyCompressedTask : BaseTask {
     VariantKey copy() {
         return std::visit([that = this](const auto &source_key) {
             auto key_seg = that->lib_->read(source_key);
-            auto target_key_seg = stream::make_target_key<ClockType>(that->key_type_, that->stream_id_, that->version_id_, source_key, key_seg.release_segment());
+            auto target_key_seg = stream::make_target_key<ClockType>(
+                that->key_type_,
+                that->stream_id_,
+                that->version_id_,
+                source_key,
+                std::move(*key_seg.release_segment()));
             auto return_key = target_key_seg.variant_key();
             that->lib_->write(Composite<storage::KeySegmentPair>{std::move(target_key_seg) });
             return return_key;

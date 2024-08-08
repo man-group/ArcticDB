@@ -35,10 +35,10 @@ namespace arcticdb::storage {
 
         ARCTICDB_MOVE_COPY_DEFAULT(KeySegmentPair)
 
-        Segment&& release_segment() {
-            auto tmp = std::make_shared<Segment>();
-            std::swap(tmp, segment_);
-            return std::move(*tmp);
+        std::unique_ptr<Segment> release_segment() {
+            auto tmp = std::make_unique<Segment>(std::move(*segment_));
+            segment_ = std::make_shared<Segment>();
+            return tmp;
         }
 
         [[nodiscard]] std::shared_ptr<Segment> segment_ptr() const {
