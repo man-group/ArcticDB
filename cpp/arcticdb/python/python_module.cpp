@@ -19,6 +19,7 @@
 #include <arcticdb/util/trace.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/python/arctic_version.hpp>
+#include <arcticdb/python/python_handler_data.hpp>
 #include <arcticdb/entity/metrics.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
@@ -298,6 +299,8 @@ void register_type_handlers() {
 
     register_array_types();
     register_string_types();
+
+    TypeHandlerRegistry::instance()->set_handler_data({PythonHandlerData{}});
 }
 
 PYBIND11_MODULE(arcticdb_ext, m) {

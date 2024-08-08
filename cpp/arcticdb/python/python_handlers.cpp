@@ -113,8 +113,9 @@ int EmptyHandler::type_size() const {
     return sizeof(PyObject *);
 }
 
-void EmptyHandler::default_initialize(ChunkedBuffer& buffer, size_t bytes_offset, size_t byte_size, const DecodePathData& shared_data) const {
-    fill_with_none(buffer, bytes_offset, byte_size / type_size(), *shared_data.spin_lock());
+void EmptyHandler::default_initialize(ChunkedBuffer& buffer, size_t bytes_offset, size_t byte_size, const DecodePathData&) const {
+    auto& handler_data = get_handler_data();
+    fill_with_none(buffer, bytes_offset, byte_size / type_size(), handler_data.spin_lock());
 }
 
 void BoolHandler::handle_type(
@@ -151,7 +152,7 @@ void BoolHandler::convert_type(
         size_t offset_bytes,
         arcticdb::entity::TypeDescriptor,
         arcticdb::entity::TypeDescriptor,
-        const arcticdb::DecodePathData &shared_data,
+        const arcticdb::DecodePathData &,
         const std::shared_ptr<StringPool> &) {
     const auto& sparse_map = source_column.opt_sparse_map();
     const auto num_bools = sparse_map.has_value() ? sparse_map->count() : num_rows;
@@ -160,15 +161,16 @@ void BoolHandler::convert_type(
     util::check(dest_data != nullptr, "Got null destination pointer");
     auto ptr_dest = reinterpret_cast<PyObject**>(dest_data);
     if (sparse_map.has_value()) {
+        auto& handler_data = get_handler_data();
         ARCTICDB_TRACE(log::codec(), "Bool handler using a sparse map");
         unsigned last_row = 0u;
-        for (auto en = sparse_map->first(); en < sparse_map->end(); ++en, last_row++) {
+        for (auto en = sparse_map->first(); en < sparse_map->end(); ++en, ++last_row) {
             const auto current_pos = *en;
-            ptr_dest = fill_with_none(ptr_dest, current_pos - last_row, *shared_data.spin_lock());
+            ptr_dest = fill_with_none(ptr_dest, current_pos - last_row, handler_data.spin_lock());
             last_row = current_pos;
             *ptr_dest++ = py::bool_(static_cast<bool>(*ptr_src++)).release().ptr();
         }
-        fill_with_none(ptr_dest, num_rows - last_row, *shared_data.spin_lock());
+        fill_with_none(ptr_dest, num_rows - last_row, handler_data.spin_lock());
     } else {
         ARCTICDB_TRACE(log::codec(), "Bool handler didn't find a sparse map. Assuming dense array.");
         std::transform(ptr_src, ptr_src + num_bools, ptr_dest, [](uint8_t value) {
@@ -181,8 +183,9 @@ int BoolHandler::type_size() const {
     return sizeof(PyObject *);
 }
 
-void BoolHandler::default_initialize(ChunkedBuffer& buffer, size_t bytes_offset, size_t byte_size, const DecodePathData& shared_data) const {
-    fill_with_none(buffer, bytes_offset, byte_size / type_size(), *shared_data.spin_lock());
+void BoolHandler::default_initialize(ChunkedBuffer& buffer, size_t bytes_offset, size_t byte_size, const DecodePathData&) const {
+    auto& handler_data = get_handler_data();
+    fill_with_none(buffer, bytes_offset, byte_size / type_size(), handler_data.spin_lock());
 }
 
 void StringHandler::handle_type(
@@ -199,7 +202,7 @@ void StringHandler::handle_type(
     const auto &ndarray = field.ndarray();
     const auto bytes = encoding_sizes::data_uncompressed_size(ndarray);
 
-    auto decoded_data = [&m, &ndarray, bytes, &dest_buffer]() -> Column {
+    auto decoded_data = [&m, &ndarray, bytes, &dest_buffer]() {
         if(ndarray.sparse_map_bytes() > 0) {
             return Column(m.source_type_desc_, bytes / get_type_size(m.source_type_desc_.data_type()));
         } else {
@@ -244,8 +247,9 @@ int StringHandler::type_size() const {
     return sizeof(PyObject *);
 }
 
-void StringHandler::default_initialize(ChunkedBuffer& buffer, size_t bytes_offset, size_t byte_size, const DecodePathData& shared_data) const {
-    fill_with_none(buffer, bytes_offset, byte_size / type_size(), *shared_data.spin_lock());
+void StringHandler::default_initialize(ChunkedBuffer& buffer, size_t bytes_offset, size_t byte_size, const DecodePathData&) const {
+    auto& handler_data = get_handler_data();
+    fill_with_none(buffer, bytes_offset, byte_size / type_size(), handler_data.spin_lock());
 }
 
 [[nodiscard]] static inline py::dtype generate_python_dtype(const TypeDescriptor &td, stride_t type_byte_size) {
@@ -287,7 +291,7 @@ void ArrayHandler::handle_type(
         api.PyArray_Type_,
         descr.ptr(),
         ndim,
-        reinterpret_cast<const Py_intptr_t*>(shape_ptr),
+        static_cast<const Py_intptr_t*>(shape_ptr),
         nullptr,
         const_cast<void*>(source_ptr),
         flags,
@@ -302,7 +306,7 @@ void ArrayHandler::convert_type(
     size_t offset_bytes,
     arcticdb::entity::TypeDescriptor source_type_desc,
     arcticdb::entity::TypeDescriptor,
-    const arcticdb::DecodePathData &shared_data,
+    const arcticdb::DecodePathData&,
     const std::shared_ptr<StringPool> &) { //TODO we don't handle string arrays at the moment
     auto* ptr_dest = dest_buffer.ptr_cast<PyObject *>(offset_bytes / type_size(), num_rows * type_size());
     ARCTICDB_SUBSAMPLE(InitArrayAcquireGIL, 0)
@@ -316,7 +320,8 @@ void ArrayHandler::convert_type(
 
     auto column_data = source_column.data();
     if (source_column.is_sparse()) {
-        python_util::prefill_with_none(ptr_dest, num_rows, source_column.sparse_map().count(), *shared_data.spin_lock());
+        auto& handler_data = get_handler_data();
+        python_util::prefill_with_none(ptr_dest, num_rows, source_column.sparse_map().count(), handler_data.spin_lock());
 
         auto en = sparse_map->first();
 
@@ -357,8 +362,9 @@ int ArrayHandler::type_size() const {
     return sizeof(PyObject *);
 }
 
-void ArrayHandler::default_initialize(ChunkedBuffer& buffer, size_t offset, size_t byte_size, const DecodePathData& shared_data) const {
-    fill_with_none(buffer, offset, byte_size / type_size(), *shared_data.spin_lock());
+void ArrayHandler::default_initialize(ChunkedBuffer& buffer, size_t offset, size_t byte_size, const DecodePathData&) const {
+    auto& handler_data = get_handler_data();
+    fill_with_none(buffer, offset, byte_size / type_size(), handler_data.spin_lock());
 }
 
 } //namespace arcticdb

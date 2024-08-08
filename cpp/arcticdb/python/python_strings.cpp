@@ -6,12 +6,12 @@
  */
 #include <arcticdb/python/python_strings.hpp>
 
-#include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/pipeline/frame_slice_map.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/util/buffer_holder.hpp>
+#include <arcticdb/python/python_handlers.hpp>
 
 namespace arcticdb {
 
@@ -65,13 +65,9 @@ DynamicStringReducer::DynamicStringReducer(
     size_t total_rows) :
         shared_data_(std::move(shared_data)),
         ptr_dest_(ptr_dest),
-        py_nan_(std::shared_ptr<PyObject>(create_py_nan(shared_data_.spin_lock()), [spinlock=shared_data_.spin_lock()](PyObject *py_obj) {
-        spinlock->lock();
-        Py_DECREF(py_obj);
-        spinlock->unlock();
-    })),
-
-    total_rows_(total_rows) {
+        total_rows_(total_rows) {
+    auto& handler_data = get_handler_data();
+    py_nan_ = handler_data.py_nan_;
     util::check(static_cast<bool>(py_nan_), "Got null nan in string reducer");
 }
 
@@ -102,7 +98,7 @@ void DynamicStringReducer::finalize() {
             *ptr_dest_ = none.ptr();
         }
 
-        increment_none_count(diff, none);
+        increment_none_refcount(diff, none);
     }
 }
 

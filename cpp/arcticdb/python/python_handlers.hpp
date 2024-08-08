@@ -6,9 +6,9 @@
  */
 #pragma once
 
-#include <entity/types.hpp>
-#include <util/type_handler.hpp>
-#include "util/bitset.hpp"
+#include <arcticdb/entity/types.hpp>
+#include <arcticdb/util/type_handler.hpp>
+#include <arcticdb/util/bitset.hpp>
 
 // Handlers for various non-trivial Python types,
 // that conform to the interface ITypeHandler
@@ -16,6 +16,7 @@ namespace arcticdb {
 
 struct ColumnMapping;
 class Column;
+
 
 struct EmptyHandler {
     void handle_type(

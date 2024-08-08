@@ -104,7 +104,7 @@ inline void prefill_with_none(
     size_t sparse_count,
     SpinLock& spin_lock,
     IncrementRefCount inc_ref_count = IncrementRefCount::ON) {
-    spin_lock.lock();
+    std::lock_guard lock(spin_lock);
     auto none = py::none();
     for (auto i = 0U; i < num_rows; ++i)
         *ptr_dest++ = none.ptr();

@@ -10,11 +10,14 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/codec/segment_header.hpp>
+#include <arcticdb/util/lazy.hpp>
+#include <arcticdb/util/spinlock.hpp>
 
 #include <folly/Poly.h>
 
 #include <memory>
 #include <mutex>
+#include <any>
 
 namespace arcticdb {
 
@@ -91,7 +94,18 @@ public:
 
     std::shared_ptr<TypeHandler> get_handler(const entity::TypeDescriptor& type_descriptor) const;
     void register_handler(const entity::TypeDescriptor& type_descriptor, TypeHandler&& handler);
+
+    void set_handler_data(std::any&& data) {
+        handler_data_ = std::move(data);
+    }
+
+    std::any& get_handler_data() {
+        return handler_data_;
+    }
+
 private:
+    std::any handler_data_;
+
     struct Hasher {
         size_t operator()(const entity::TypeDescriptor val) const;
     };

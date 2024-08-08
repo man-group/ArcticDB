@@ -12,11 +12,16 @@
 #include <arcticdb/util/spinlock.hpp>
 #include <arcticdb/pipeline/string_pool_utils.hpp>
 #include <arcticdb/util/buffer_holder.hpp>
-#include "python_utils.hpp"
-#include "gil_lock.hpp"
-#include "python_to_tensor_frame.hpp"
+#include <arcticdb/python/python_utils.hpp>
+#include <arcticdb/python/gil_lock.hpp>
+#include <arcticdb/python/python_to_tensor_frame.hpp>
+#include <arcticdb/python/python_handler_data.hpp>
 
 namespace arcticdb {
+
+inline PythonHandlerData& get_handler_data() {
+    return std::any_cast<PythonHandlerData&>(TypeHandlerRegistry::instance()->get_handler_data());
+}
 
 class DynamicStringReducer  {
     size_t row_ = 0U;
@@ -72,9 +77,9 @@ private:
     }
 
     [[nodiscard]] std::unique_ptr<py::none> get_py_none() {
-        lock().lock();
+        auto& handler_data = get_handler_data();
+        std::lock_guard lock(handler_data.spin_lock());
         auto none = std::make_unique<py::none>(py::none{});
-        lock().unlock();
         return none;
     }
 
@@ -95,20 +100,21 @@ private:
         return unique_counts;
     }
 
-    size_t write_strings_to_destination(
+    std::pair<size_t, size_t> write_strings_to_destination(
         size_t num_rows,
         const Column& source_column,
         std::unique_ptr<py::none>& none,
         const ankerl::unordered_dense::map<entity::position_t, PyObject*> py_strings,
         const std::optional<util::BitSet>& sparse_map) {
-        size_t none_count;
+        std::pair<size_t, size_t> counts;
         if(sparse_map) {
-            prefill_with_none(ptr_dest_, num_rows, 0, *shared_data_.spin_lock(), python_util::IncrementRefCount::OFF);
-            none_count = write_strings_to_column_sparse(num_rows, source_column, none, py_strings, *sparse_map);
+            auto& handler_data = get_handler_data();
+            prefill_with_none(ptr_dest_, num_rows, 0, handler_data.spin_lock(), python_util::IncrementRefCount::OFF);
+            counts = write_strings_to_column_sparse(num_rows, source_column, none, py_strings, *sparse_map);
         } else {
-            none_count = write_strings_to_column_dense(num_rows, source_column, none, py_strings);
+            counts = write_strings_to_column_dense(num_rows, source_column, none, py_strings);
         }
-        return none_count;
+        return counts;
     }
 
     template<typename StringCreator>
@@ -125,8 +131,9 @@ private:
 
         ARCTICDB_SUBSAMPLE(WriteStringsToColumn, 0)
         auto none = get_py_none();
-        auto none_count = write_strings_to_destination(num_rows, source_column, none, py_strings, sparse_map);
-        increment_none_count(none_count, none);
+        auto [none_count, nan_count] = write_strings_to_destination(num_rows, source_column, none, py_strings, sparse_map);
+        increment_none_refcount(none_count, none);
+        increment_nan_refcount(nan_count);
     }
 
     ankerl::unordered_dense::map<entity::position_t, PyObject*> get_allocated_strings(
@@ -177,8 +184,9 @@ private:
             }
         }
         auto none = get_py_none();
-        auto none_count = write_strings_to_destination(num_rows, source_column, none, allocated, source_column.opt_sparse_map());
-        increment_none_count(none_count, none);
+        auto [none_count, nan_count] = write_strings_to_destination(num_rows, source_column, none, allocated, source_column.opt_sparse_map());
+        increment_none_refcount(none_count, none);
+        increment_nan_refcount(nan_count);
     }
 
     template<typename StringCreator>
@@ -204,20 +212,26 @@ private:
         return py_strings;
     }
 
-    void increment_none_count(size_t none_count, py::none& none) {
-        lock().lock();
+    void increment_none_refcount(size_t none_count, py::none& none) {
+        auto handler_data = get_handler_data();
+        std::lock_guard(handler_data.spin_lock());
         for(auto i = 0u; i < none_count; ++i)
             Py_INCREF(none.ptr());
-
-        lock().unlock();
     }
 
-    void increment_none_count(size_t none_count, std::unique_ptr<py::none>& none) {
-        util::check(static_cast<bool>(none), "Got null pointer to py::none in increment_none_count");
-        increment_none_count(none_count, *none);
+    void increment_none_refcount(size_t none_count, std::unique_ptr<py::none>& none) {
+        util::check(static_cast<bool>(none), "Got null pointer to py::none in increment_none_refcount");
+        increment_none_refcount(none_count, *none);
     }
 
-    size_t write_strings_to_column_dense(
+    void increment_nan_refcount(size_t none_count) {
+        auto handler_data = get_handler_data();
+        std::lock_guard(handler_data.spin_lock());
+        for(auto i = 0u; i < none_count; ++i)
+            Py_INCREF(py_nan_.get());
+    }
+
+    std::pair<size_t, size_t> write_strings_to_column_dense(
         size_t ,
         const Column& source_column,
         const std::unique_ptr<py::none>& none,
@@ -227,6 +241,7 @@ private:
         auto src = data.cbegin<ScalarTagType<DataTypeTag<DataType::UINT64>>, IteratorType::REGULAR, IteratorDensity::DENSE>();
         auto end = data.cend<ScalarTagType<DataTypeTag<DataType::UINT64>>, IteratorType::REGULAR, IteratorDensity::DENSE>();
         size_t none_count = 0u;
+        size_t nan_count = 0u;
         for (; src != end; ++src, ++ptr_dest_, ++row_) {
             const auto offset = *src;
             if(offset == not_a_string()) {
@@ -234,15 +249,15 @@ private:
                 ++none_count;
             } else if (offset == nan_placeholder()) {
                 *ptr_dest_ = py_nan_.get();
-                inc_ref(py_nan_.get());
+                ++nan_count;
             } else {
                 *ptr_dest_ = py_strings.at(offset);
             }
         }
-        return none_count;
+        return {none_count, nan_count};
     }
 
-    size_t write_strings_to_column_sparse(
+    std::pair<size_t, size_t> write_strings_to_column_sparse(
         size_t num_rows,
         const Column& source_column,
         const std::unique_ptr<py::none>& none,
@@ -254,6 +269,7 @@ private:
         auto en = sparse_map.first();
         auto en_end = sparse_map.end();
         auto none_count = 0UL;
+        auto nan_count = 0UL;
         while(en != en_end) {
             const auto offset = *src;
             if(offset == not_a_string()) {
@@ -261,7 +277,7 @@ private:
                 ++none_count;
             } else if (offset == nan_placeholder()) {
                 ptr_dest_[*en] = py_nan_.get();
-                inc_ref(py_nan_.get());
+                ++nan_count;
             } else {
                 ptr_dest_[*en] = py_strings.at(offset);
             }
@@ -271,11 +287,7 @@ private:
         ptr_dest_ += num_rows;
         row_ += num_rows;
         none_count += num_rows - sparse_map.count();
-        return none_count;
-    }
-
-    SpinLock& lock() {
-        return *shared_data_.spin_lock();
+        return {none_count, nan_count};
     }
 
     inline void process_string_views(

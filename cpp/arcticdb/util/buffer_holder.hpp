@@ -9,6 +9,7 @@
 
 #include <arcticdb/util/spinlock.hpp>
 #include <arcticdb/util/constructors.hpp>
+#include <arcticdb/util/lazy.hpp>
 
 #include <vector>
 #include <folly/concurrency/ConcurrentHashMap.h>
@@ -31,24 +32,9 @@ struct BufferHolder {
 
 using UniqueStringMapType = folly::ConcurrentHashMap<std::string_view, PyObject*>;
 
-template<typename T>
-class LazyInit {
-public:
-    const std::shared_ptr<T>& instance() const {
-        std::call_once(init_, [&]() {
-            instance_ = std::make_shared<T>();
-        });
-        return instance_;
-    }
-
-private:
-    mutable std::shared_ptr<T> instance_;
-    mutable std::once_flag init_;
-};
 
 struct DecodePathDataImpl {
     LazyInit<BufferHolder> buffer_holder_;
-    LazyInit<SpinLock> spin_lock_;
     LazyInit<UniqueStringMapType> unique_string_map_;
     bool optimize_for_memory_ = false;
 };
@@ -57,10 +43,6 @@ struct DecodePathData {
 public:
     const std::shared_ptr<BufferHolder>& buffers() const {
         return data_->buffer_holder_.instance();
-    }
-
-    const std::shared_ptr<SpinLock>& spin_lock() const {
-        return data_->spin_lock_.instance();
     }
 
     const std::shared_ptr<UniqueStringMapType>& unique_string_map() const {

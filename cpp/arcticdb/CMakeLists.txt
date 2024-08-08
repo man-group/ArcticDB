@@ -509,7 +509,7 @@ set(arcticdb_srcs
         storage/lmdb/lmdb.hpp
         util/spinlock.hpp
         python/python_strings.cpp
-        util/buffer_holder.cpp)
+        util/buffer_holder.cpp util/lazy.hpp python/python_handler_data.hpp)
 
 if(${ARCTICDB_INCLUDE_ROCKSDB})
     list (APPEND arcticdb_srcs
