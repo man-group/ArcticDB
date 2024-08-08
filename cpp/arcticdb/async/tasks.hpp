@@ -250,32 +250,6 @@ struct PassThroughTask : BaseTask {
     }
 };
 
-struct ReadCompressedSlicesTask : BaseTask {
-    Composite<pipelines::SliceAndKey> slice_and_keys_;
-    std::shared_ptr<storage::Library> lib_;
-
-    ReadCompressedSlicesTask(Composite<pipelines::SliceAndKey>&& sk, std::shared_ptr<storage::Library> lib)
-            : slice_and_keys_(std::move(sk)),
-            lib_(std::move(lib)) {
-        ARCTICDB_DEBUG(log::storage(), "Creating read compressed slices task for slice and key {}",
-                             slice_and_keys_);
-    }
-
-    ARCTICDB_MOVE_ONLY_DEFAULT(ReadCompressedSlicesTask)
-
-     Composite<std::pair<Segment, pipelines::SliceAndKey>> read() {
-        return slice_and_keys_.transform([that=this](const auto &sk){
-            ARCTICDB_DEBUG(log::version(), "Reading key {}", sk.key());
-            return std::make_pair(that->lib_->read(sk.key()).release_segment(), sk);
-        });
-     }
-
-    Composite<std::pair<Segment, pipelines::SliceAndKey>> operator()() {
-        ARCTICDB_SAMPLE(ReadCompressed, 0)
-        return read();
-    }
-};
-
 template <typename ClockType>
 struct CopyCompressedTask : BaseTask {
     entity::VariantKey source_key_;
