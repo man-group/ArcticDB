@@ -376,8 +376,7 @@ private:
 
             for (auto & target_store : target_stores_) {
                 try {
-                    auto key_segment_pair_copy = key_segment_pair;
-                    target_store->write_compressed_sync(std::move(key_segment_pair_copy));
+                    target_store->write_compressed_sync(key_segment_pair);
                 } catch (const storage::DuplicateKeyException& e) {
                     log::storage().debug("Key {} already exists on the target: {}", variant_key_view(key_to_read_), e.what());
                 } catch (const storage::KeyNotFoundException& e) {
