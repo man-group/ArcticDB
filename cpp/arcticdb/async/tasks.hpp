@@ -291,16 +291,17 @@ struct CopyCompressedTask : BaseTask {
     }
 };
 
-struct AllOk {};
-
-struct FailedTargets {
-    std::set<std::string, std::less<>> failed_targets_;
-};
-
-using ProcessingResult = std::variant<AllOk, FailedTargets>;
-
 // Used in arcticdb-enterprise, do not remove without checking whether it is still used there
 struct CopyCompressedInterStoreTask : async::BaseTask {
+
+    struct AllOk {};
+
+    struct FailedTargets {
+        std::set<std::string, std::less<>> failed_targets_;
+    };
+
+    using ProcessingResult = std::variant<AllOk, FailedTargets>;
+
     CopyCompressedInterStoreTask(entity::VariantKey key_to_read,
                                  std::optional<entity::AtomKey> key_to_write,
                                  bool check_key_exists_on_targets,

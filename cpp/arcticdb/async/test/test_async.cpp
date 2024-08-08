@@ -354,7 +354,7 @@ TEST(Async, CopyCompressedInterStore) {
     auto res = sched.submit_io_task(std::move(task)).get();
 
     // Then
-    ASSERT_TRUE(std::holds_alternative<AllOk>(res));
+    ASSERT_TRUE(std::holds_alternative<CopyCompressedInterStoreTask::AllOk>(res));
     for (const auto& target_store : targets) {
         auto read_result = target_store->read_sync(key);
         ASSERT_EQ(std::get<RefKey>(read_result.first), key);
