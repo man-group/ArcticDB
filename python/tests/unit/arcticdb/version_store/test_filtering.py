@@ -45,6 +45,9 @@ from arcticdb_ext import set_config_int
 # from tests.util.mark import MACOS_CONDA_BUILD
 
 
+pytestmark = pytest.mark.pipeline
+
+
 def generic_filter_test(version_store, symbol, df, arctic_query, pandas_query, dynamic_strings=True):
     version_store.write(symbol, df, dynamic_strings=dynamic_strings)
     expected = df.query(pandas_query)

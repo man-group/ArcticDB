@@ -19,6 +19,10 @@ from arcticdb.util.hypothesis import (
 )
 
 
+import pytest
+pytestmark = pytest.mark.pipeline
+
+
 def test_project_dynamic(lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1
     symbol = "test_project_dynamic"

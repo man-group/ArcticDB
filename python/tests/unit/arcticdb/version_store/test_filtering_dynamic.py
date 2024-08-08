@@ -36,6 +36,9 @@ from arcticdb.util.hypothesis import (
 from arcticdb_ext.exceptions import InternalException
 
 
+pytestmark = pytest.mark.pipeline
+
+
 def generic_dynamic_filter_test(version_store, symbol, df, arctic_query, pandas_query, dynamic_strings=True):
     version_store.delete(symbol)
     expected, slices = make_dynamic(df)

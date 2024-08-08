@@ -17,6 +17,9 @@ from arcticdb.util.test import assert_frame_equal
 from arcticdb_ext.exceptions import SchemaException
 
 
+pytestmark = pytest.mark.pipeline
+
+
 def test_reuse_querybuilder(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     symbol = "test_reuse_querybuilder"
