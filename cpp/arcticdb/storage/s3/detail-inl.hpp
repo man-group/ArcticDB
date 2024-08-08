@@ -116,9 +116,8 @@ namespace s3 {
                         for (auto &kv: group.values()) {
                             auto &k = kv.variant_key();
                             auto s3_object_name = object_path(b.bucketize(key_type_dir, k), k);
-                            auto &seg = kv.segment();
 
-                            auto put_object_result = s3_client.put_object(s3_object_name, std::move(seg), bucket_name);
+                            auto put_object_result = s3_client.put_object(s3_object_name, *kv.segment_ptr(), bucket_name);
 
                             if (!put_object_result.is_success()) {
                                 auto& error = put_object_result.get_error();

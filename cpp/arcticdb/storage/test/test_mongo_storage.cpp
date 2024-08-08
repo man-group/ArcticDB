@@ -43,8 +43,8 @@ TEST(MongoStorage, ClientSession) {
 
     storage.read(k, [&](auto &&k, auto &&seg) {
         res.set_key(k);
-        res.segment() = std::move(seg);
-        res.segment().force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
+        res.set_segment(std::move(seg));
+        res.segment_ptr()->force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
     }, as::ReadKeyOpts{});
 
     res = storage.read(k, as::ReadKeyOpts{});
@@ -71,8 +71,8 @@ TEST(MongoStorage, ClientSession) {
 
     storage.read(k, [&](auto &&k, auto &&seg) {
         update_res.set_key(k);
-        update_res.segment() = std::move(seg);
-        update_res.segment().force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
+        update_res.set_segment(std::move(seg));
+        update_res.segment_ptr()->force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
     }, as::ReadKeyOpts{});
 
     update_res = storage.read(k, as::ReadKeyOpts{});
@@ -94,8 +94,8 @@ TEST(MongoStorage, ClientSession) {
 
     storage.read(numeric_k, [&](auto &&k, auto &&seg) {
         numeric_res.set_key(k);
-        numeric_res.segment() = std::move(seg);
-        numeric_res.segment().force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
+        numeric_res.set_segment(std::move(seg));
+        numeric_res.segment_ptr()->force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
     }, as::ReadKeyOpts{});
 
     numeric_res = storage.read(numeric_k, as::ReadKeyOpts{});
