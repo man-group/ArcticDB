@@ -29,6 +29,8 @@ from arcticdb.version_store.helper import ArcticFileConfig
 from arcticdb.config import _DEFAULT_ENVS_PATH
 from arcticdb_ext import set_config_int, get_config_int, unset_config_int
 
+from arcticdb import log
+
 
 def create_df(start=0, columns=1) -> pd.DataFrame:
     data = {}
@@ -242,12 +244,12 @@ def dataframe_for_date(dt, identifiers):
     return pd.DataFrame(random_floats(length), index=index)
 
 
-def get_symbols(lib):
-    return sorted(lib.list_symbols(all_symbols=True))
+def get_symbols(lib, all_symbols=True):
+    return sorted(lib.list_symbols(all_symbols=all_symbols))
 
 
-def get_versions(lib):
-    symbols = get_symbols(lib)
+def get_versions(lib, all_symbols=True):
+    symbols = get_symbols(lib, all_symbols)
     versions_dict = dict()
     for sym in symbols:
         versions_list = lib.list_versions(sym)
@@ -308,10 +310,12 @@ def apply_lib_cfg(lib_cfg: LibraryDescriptor, cfg_dict: Mapping[str, Any]):
 
 
 def compare_version_data(source_lib, target_libs, versions):
+    log.version.debug("Source {} versions: {}".format(source_lib, versions))
     for symbol, symbol_versions in versions.items():
         for version, version_info in symbol_versions.items():
             source_vit = source_lib.read(symbol, as_of=version)
             for target_lib in target_libs:
+                log.version.debug("Target {} versions: {}".format(target_lib, target_lib.list_versions(symbol)))
                 target_vit = target_lib.read(symbol, as_of=version)
                 try:
                     compare_data(
@@ -372,29 +376,29 @@ def libraries_identical(source_lib, target_libs):
             symbols_target = get_symbols(target_lib)
             if symbols_source != symbols_target:
                 print("symbols_source != symbols_target")
-                print("symbols_source: {}".format(symbols_source))
-                print("symbols_target: {}".format(symbols_target))
+                print("symbols_source {} : {}".format(source_lib, symbols_source))
+                print("symbols_target {} : {}".format(target_lib, symbols_target))
                 return False
 
             versions_target = get_versions(target_lib)
             if versions_source != versions_target:
                 print("versions_source != versions_target")
-                print("versions_source: {}".format(versions_source))
-                print("versions_target: {}".format(versions_target))
+                print("versions_source {} : {}".format(source_lib, versions_source))
+                print("versions_target {} : {}".format(target_lib, versions_target))
                 return False
 
             snapshots_target = get_snapshots(target_lib)
             if snapshots_source != snapshots_target:
                 print("snapshots_source != snapshots_target")
-                print("snapshots_source: {}".format(snapshots_source))
-                print("snapshots_target: {}".format(snapshots_target))
+                print("snapshots_source {} : {}".format(source_lib, snapshots_source))
+                print("snapshots_target {} : {}".format(target_lib, snapshots_target))
                 return False
 
             snapshot_versions_target = get_snapshot_versions(target_lib)
             if snapshot_versions_source != snapshot_versions_target:
                 print("snapshot_versions_source != snapshots_target")
-                print("snapshot_versions_source: {}".format(snapshot_versions_source))
-                print("snapshot_versions_target: {}".format(snapshot_versions_target))
+                print("snapshot_versions_source {} : {}".format(source_lib, snapshot_versions_source))
+                print("snapshot_versions_target {} : {}".format(target_lib, snapshot_versions_target))
                 return False
 
         compare_version_data(source_lib, target_libs, versions_source)
