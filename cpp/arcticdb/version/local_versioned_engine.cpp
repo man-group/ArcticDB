@@ -923,15 +923,10 @@ folly::Future<folly::Unit> delete_trees_responsibly(
 
     folly::Future<folly::Unit> remove_keys_fut;
     if (!dry_run) {
-        for (const auto& key : vks_column_stats) {
-            log::version().debug("Column Stats key to be deleted: {}", key);
-        }
-        for (const auto& key : vks_to_delete) {
-            log::version().debug("Index key to be deleted: {}", key);
-        }
-        for (const auto& key : vks_data_to_delete) {
-            log::version().debug("Data key to be deleted: {}", key);
-        }
+        ARCTICDB_TRACE(log::version(), fmt::format("Column Stats keys to be deleted: {}", fmt::join(vks_column_stats, ", ")));
+        ARCTICDB_TRACE(log::version(), fmt::format("Index keys to be deleted: {}", fmt::join(vks_to_delete, ", ")));
+        ARCTICDB_TRACE(log::version(), fmt::format("Data keys to be deleted: {}", fmt::join(vks_data_to_delete, ", ")));
+
         // Delete any associated column stats keys first
         remove_keys_fut = store->remove_keys(std::move(vks_column_stats), remove_opts)
         .thenValue([store=store, vks_to_delete = std::move(vks_to_delete), remove_opts](auto&& ) mutable {

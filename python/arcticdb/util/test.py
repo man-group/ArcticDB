@@ -310,12 +310,10 @@ def apply_lib_cfg(lib_cfg: LibraryDescriptor, cfg_dict: Mapping[str, Any]):
 
 
 def compare_version_data(source_lib, target_libs, versions):
-    log.version.debug("Source {} versions: {}".format(source_lib, versions))
     for symbol, symbol_versions in versions.items():
         for version, version_info in symbol_versions.items():
             source_vit = source_lib.read(symbol, as_of=version)
             for target_lib in target_libs:
-                log.version.debug("Target {} versions: {}".format(target_lib, target_lib.list_versions(symbol)))
                 target_vit = target_lib.read(symbol, as_of=version)
                 try:
                     compare_data(
