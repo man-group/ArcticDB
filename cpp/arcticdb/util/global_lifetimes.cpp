@@ -13,7 +13,7 @@
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/entity/metrics.hpp>
 #include <arcticdb/util/buffer_pool.hpp>
-#include <arcticdb/util/type_handler.hpp?
+#include <arcticdb/util/type_handler.hpp>
 
 #if defined(_MSC_VER) && defined(_DEBUG)
 #include <crtdbg.h>
