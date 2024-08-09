@@ -52,19 +52,24 @@ struct Raise {
     }
 };
 
+template<typename T>
+concept Testable = requires(T a) {
+    !a;  // contextual conversion of a to bool must be possible
+};
+
 template<ErrorCode code, ErrorCategory error_category>
 struct Check {
     static constexpr Raise<code, error_category> raise{};
 
-    template<typename...Args>
-    void operator()(bool cond, fmt::format_string<Args...> format, Args&&...args) const {
+    template<Testable Cond, typename...Args>
+    void operator()(Cond cond, fmt::format_string<Args...> format, Args&&...args) const {
         if (ARCTICDB_UNLIKELY(!cond)) {
             raise(format, std::forward<Args>(args)...);
         }
     }
 
-    template<typename FormatString, typename...Args>
-    void operator()(bool cond, FormatString format, Args&&...args) const {
+    template<Testable Cond, typename FormatString, typename...Args>
+    void operator()(Cond cond, FormatString format, Args&&...args) const {
         if (ARCTICDB_UNLIKELY(!cond)) {
             raise(format, std::forward<Args>(args)...);
         }
