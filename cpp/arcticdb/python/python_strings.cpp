@@ -69,6 +69,7 @@ DynamicStringReducer::DynamicStringReducer(
     auto& handler_data = get_handler_data();
     py_nan_ = handler_data.py_nan_;
     util::check(static_cast<bool>(py_nan_), "Got null nan in string reducer");
+    util::check(is_py_nan(py_nan_.get()), "Got the wrong value in global nan");
 }
 
 void DynamicStringReducer::reduce(const Column& source_column,

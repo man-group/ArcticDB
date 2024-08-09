@@ -9,6 +9,7 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/type_handler.hpp>
 #include <arcticdb/util/bitset.hpp>
+#include <arcticdb/python/python_handler_data.hpp>
 
 // Handlers for various non-trivial Python types,
 // that conform to the interface ITypeHandler
@@ -158,5 +159,9 @@ inline void register_string_types() {
     for (auto data_type :string_data_types) {
         TypeHandlerRegistry::instance()->register_handler(make_scalar_type(data_type), arcticdb::StringHandler());
     }
+}
+
+inline void register_python_handler_data() {
+    TypeHandlerRegistry::instance()->set_handler_data({PythonHandlerData{}});
 }
 } //namespace arcticdb

@@ -300,7 +300,7 @@ void register_type_handlers() {
     register_array_types();
     register_string_types();
 
-    TypeHandlerRegistry::instance()->set_handler_data({PythonHandlerData{}});
+    register_python_handler_data();
 }
 
 PYBIND11_MODULE(arcticdb_ext, m) {
@@ -311,11 +311,13 @@ PYBIND11_MODULE(arcticdb_ext, m) {
     )pbdoc";
     auto programName ="__arcticdb_logger__";
     google::InitGoogleLogging(programName);
+    using namespace arcticdb;
 #ifndef WIN32
     // No fork() in Windows, so no need to register the handler
     pthread_atfork(nullptr, nullptr, &SingleThreadMutexHolder::reset_mutex);
     pthread_atfork(nullptr, nullptr, &reinit_scheduler);
     pthread_atfork(nullptr, nullptr, &reinit_lmdb_warning);
+    pthread_atfork(nullptr, nullptr, &register_python_handler_data);
 #endif
     // Set up the global exception handlers first, so module-specific exception handler can override it:
     auto exceptions = m.def_submodule("exceptions");
