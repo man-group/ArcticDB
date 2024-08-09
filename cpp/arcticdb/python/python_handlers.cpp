@@ -291,7 +291,7 @@ void ArrayHandler::handle_type(
         api.PyArray_Type_,
         descr.ptr(),
         ndim,
-        static_cast<const Py_intptr_t*>(shape_ptr),
+        reinterpret_cast<const Py_intptr_t*>(shape_ptr),
         nullptr,
         const_cast<void*>(source_ptr),
         flags,

@@ -91,6 +91,7 @@ public:
 
     static void init();
     static std::shared_ptr<TypeHandlerRegistry> instance();
+    static void destroy_instance();
 
     std::shared_ptr<TypeHandler> get_handler(const entity::TypeDescriptor& type_descriptor) const;
     void register_handler(const entity::TypeDescriptor& type_descriptor, TypeHandler&& handler);
