@@ -9,6 +9,9 @@ from arcticdb.util.test import assert_frame_equal
 from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
 
 
+pytestmark = pytest.mark.pipeline
+
+
 class TestQueryBuilderSparse:
     sym = "TestQueryBuilderSparse"
     df = None
@@ -176,9 +179,9 @@ def test_query_builder_sparse_dynamic_schema_type_change(lmdb_version_store_dyna
         ),
     ),
 )
-def test_query_builder_sparse_hypothesis(lmdb_version_store, df):
+def test_query_builder_sparse_hypothesis(lmdb_version_store_v1, df):
     assume(not df.empty and not df["sparse1"].isnull().all() and not df["sparse2"].isnull().all())
-    lib = lmdb_version_store
+    lib = lmdb_version_store_v1
     sym = "test_query_builder_sparse_hypothesis"
 
     df.index = pd.date_range("2024-01-01", periods=len(df))

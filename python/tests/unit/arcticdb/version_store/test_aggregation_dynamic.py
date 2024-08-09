@@ -30,6 +30,9 @@ from arcticdb.util.hypothesis import (
 from tests.util.mark import MACOS_CONDA_BUILD
 
 
+pytestmark = pytest.mark.pipeline
+
+
 def assert_equal_value(data, expected):
     received = data.reindex(sorted(data.columns), axis=1)
     received.sort_index(inplace=True)

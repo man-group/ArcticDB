@@ -12,6 +12,9 @@ from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.exceptions import InternalException
 
 
+pytestmark = pytest.mark.pipeline
+
+
 def generic_row_range_test(version_store, symbol, df, start_row, end_row):
     version_store.write(symbol, df)
 

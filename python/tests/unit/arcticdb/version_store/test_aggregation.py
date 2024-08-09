@@ -23,6 +23,9 @@ from hypothesis import assume, given, settings
 from hypothesis.extra.pandas import column, data_frames, range_indexes
 
 
+pytestmark = pytest.mark.pipeline
+
+
 def test_group_on_float_column_with_nans(lmdb_version_store):
     lib = lmdb_version_store
     sym = "test_group_on_float_column_with_nans"

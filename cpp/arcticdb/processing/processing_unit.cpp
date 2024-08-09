@@ -18,7 +18,7 @@ void ProcessingUnit::apply_filter(
 
     for (auto&& [idx, segment]: folly::enumerate(*segments_)) {
         auto seg = filter_segment(*segment,
-                                  std::move(bitset),
+                                  bitset,
                                   filter_down_stringpool);
         auto num_rows = seg.is_null() ? 0 : seg.row_count();
         row_ranges_->at(idx) = std::make_shared<pipelines::RowRange>(row_ranges_->at(idx)->first, row_ranges_->at(idx)->first + num_rows);

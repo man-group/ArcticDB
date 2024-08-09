@@ -19,6 +19,10 @@ from arcticdb.util.hypothesis import (
 )
 
 
+import pytest
+pytestmark = pytest.mark.pipeline
+
+
 def test_project(local_object_version_store):
     lib = local_object_version_store
     df = pd.DataFrame(
