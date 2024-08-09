@@ -214,7 +214,7 @@ private:
 
     void increment_none_refcount(size_t none_count, py::none& none) {
         auto handler_data = get_handler_data();
-        std::lock_guard(handler_data.spin_lock());
+        std::lock_guard lock(handler_data.spin_lock());
         for(auto i = 0u; i < none_count; ++i)
             Py_INCREF(none.ptr());
     }
@@ -226,7 +226,7 @@ private:
 
     void increment_nan_refcount(size_t none_count) {
         auto handler_data = get_handler_data();
-        std::lock_guard(handler_data.spin_lock());
+        std::lock_guard lock(handler_data.spin_lock());
         for(auto i = 0u; i < none_count; ++i)
             Py_INCREF(py_nan_.get());
     }
