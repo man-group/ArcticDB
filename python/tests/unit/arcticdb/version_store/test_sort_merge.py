@@ -189,12 +189,19 @@ class TestMergeSortAppend:
 
     def test_appended_df_start_same_as_df_end(self, lmdb_library):
         lib = lmdb_library
-        df = pd.DataFrame({"col": [1]}, index=pd.DatetimeIndex([np.datetime64('2023-01-01')]))
+        df = pd.DataFrame(
+            {"col": [1, 2, 3]},
+            index=pd.DatetimeIndex([np.datetime64('2023-01-01'), np.datetime64('2023-01-02'), np.datetime64('2023-01-03')], dtype="datetime64[ns]")
+        )
         lib.write("sym", df)
-        lib.write("sym", df, staged=True)
+        df_to_append = pd.DataFrame(
+            {"col": [4, 5, 6]},
+            index=pd.DatetimeIndex([np.datetime64('2023-01-03'), np.datetime64('2023-01-04'), np.datetime64('2023-01-05')], dtype="datetime64[ns]")
+        )
+        lib.write("sym", df_to_append, staged=True)
         lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
         res = lib.read("sym").data
-        expected_df = pd.DataFrame({"col": [1, 1]}, index=pd.DatetimeIndex([np.datetime64('2023-01-01'), np.datetime64('2023-01-01')]))
+        expected_df = pd.concat([df, df_to_append])
         assert_frame_equal(lib.read("sym").data, expected_df)
 
 

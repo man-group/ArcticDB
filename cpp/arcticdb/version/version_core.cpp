@@ -1304,7 +1304,7 @@ VersionedItem sort_merge_impl(
                 user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
                     "Cannot append index starting at {} to data frame with index ending at {}",
                     std::get<timestamp>(TimeseriesIndex::start_value_for_segment(segments[0].segment_.value())),
-                    update_info.previous_index_key_->start_time()
+                    update_info.previous_index_key_->end_time() - 1
                 );
             }
             pipeline_context->total_rows_ = num_versioned_rows + get_slice_rowcounts(segments);
