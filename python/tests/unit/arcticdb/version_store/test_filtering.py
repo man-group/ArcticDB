@@ -5,8 +5,6 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
-import copy
-import pickle
 import math
 from datetime import datetime
 from hypothesis import assume, given, settings
@@ -68,39 +66,6 @@ def generic_filter_test_strings(version_store, symbol, df, arctic_query, pandas_
         generic_filter_test(version_store, symbol, df, arctic_query, pandas_query, dynamic_strings)
         arctic_query.optimise_for_memory()
         generic_filter_test(version_store, symbol, df, arctic_query, pandas_query, dynamic_strings)
-
-
-def test_querybuilder_shallow_copy(lmdb_version_store):
-    df = DataFrame({"a": [0, 1]}, index=np.arange(2))
-    q = QueryBuilder()
-    q = q[q["a"] > 1]
-    q_copy = copy.copy(q)
-    pandas_query = "a > 1"
-    generic_filter_test(lmdb_version_store, "test_querybuilder_shallow_copy", df, q, pandas_query)
-    generic_filter_test(lmdb_version_store, "test_querybuilder_shallow_copy", df, q_copy, pandas_query)
-
-
-def test_querybuilder_deepcopy(lmdb_version_store):
-    df = DataFrame({"a": [0, 1]}, index=np.arange(2))
-    q = QueryBuilder()
-    q = q[q["a"] > 1]
-    q_copy = copy.deepcopy(q)
-    pandas_query = "a > 1"
-    generic_filter_test(lmdb_version_store, "test_querybuilder_deepcopy", df, q, pandas_query)
-    del q
-    generic_filter_test(lmdb_version_store, "test_querybuilder_deepcopy", df, q_copy, pandas_query)
-
-
-def test_querybuilder_pickle(lmdb_version_store):
-    df = DataFrame({"a": [0, 1]}, index=np.arange(2))
-    q = QueryBuilder()
-    q = q[q["a"] > 1]
-    q_pickled = pickle.dumps(q)
-    pandas_query = "a > 1"
-    generic_filter_test(lmdb_version_store, "test_querybuilder_pickle", df, q, pandas_query)
-    del q
-    q_unpickled = pickle.loads(q_pickled)
-    generic_filter_test(lmdb_version_store, "test_querybuilder_pickle", df, q_unpickled, pandas_query)
 
 
 @pytest.mark.parametrize(

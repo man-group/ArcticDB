@@ -5,6 +5,8 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+import copy
+import pickle
 import numpy as np
 import pandas as pd
 import pickle
@@ -14,10 +16,80 @@ import dateutil
 
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.util.test import assert_frame_equal
-from arcticdb_ext.exceptions import SchemaException
 
 
 pytestmark = pytest.mark.pipeline
+
+def test_querybuilder_shallow_copy(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_querybuilder_shallow_copy"
+    df = pd.DataFrame({"a": [0, 1]}, index=np.arange(2))
+    lib.write(sym, df)
+    q = QueryBuilder()
+    q = q[q["a"] == 1]
+    q_copy = copy.copy(q)
+    expected = df[df["a"] == 1]
+    assert_frame_equal(expected, lib.read(sym, query_builder=q).data)
+    assert_frame_equal(expected, lib.read(sym, query_builder=q_copy).data)
+
+
+def test_querybuilder_deepcopy(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_querybuilder_deepcopy"
+    df = pd.DataFrame({"a": [0, 1]}, index=np.arange(2))
+    lib.write(sym, df)
+    q = QueryBuilder()
+    q = q[q["a"] == 1]
+    q_copy = copy.deepcopy(q)
+    expected = df[df["a"] == 1]
+    assert_frame_equal(expected, lib.read(sym, query_builder=q).data)
+    assert_frame_equal(expected, lib.read(sym, query_builder=q_copy).data)
+
+
+def test_querybuilder_pickle(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_querybuilder_pickle"
+    df = pd.DataFrame({"a": [0, 1]}, index=np.arange(2))
+    lib.write(sym, df)
+    q = QueryBuilder()
+    q = q[q["a"] == 1]
+    q_pickled = pickle.dumps(q)
+    expected = df[df["a"] == 1]
+    assert_frame_equal(expected, lib.read(sym, query_builder=q).data)
+    del q
+    q_unpickled = pickle.loads(q_pickled)
+    assert_frame_equal(expected, lib.read(sym, query_builder=q_unpickled).data)
+
+
+def test_querybuilder_pickling_all_clauses():
+    """QueryBuilder must be pickleable with all possible clauses."""
+    q = QueryBuilder()
+    # PythonDateRangeClause
+    q = q.date_range((pd.Timestamp("2000-01-04"), pd.Timestamp("2000-01-07")))
+
+    # PythonFilterClause
+    q = q[q["col1"].isin(2, 3, 7)]
+
+    # PythonProjectionClause
+    q = q.apply("new_col", (q["col1"] * q["col2"]) + 13)
+
+    # PythonGroupByClause
+    q = q.groupby("col1")
+
+    # PythonAggregationClause
+    q = q.agg({"col2": "sum", "new_col": ("col2", "mean")})
+
+    assert pickle.loads(pickle.dumps(q)) == q
+
+    # PythonResampleClause
+    q = QueryBuilder()
+    q = q.resample("T", "right", "left")
+
+    assert pickle.loads(pickle.dumps(q)) == q
+
+    q = q.agg({"col2": "sum", "new_col": ("col2", "sum")})
+
+    assert pickle.loads(pickle.dumps(q)) == q
 
 
 def test_reuse_querybuilder(lmdb_version_store_tiny_segment):
@@ -529,36 +601,3 @@ def test_querybuilder_resample_then_groupby(lmdb_version_store_tiny_segment):
     expected = df.resample("us").agg({"grouping_col": "sum", "agg_col": "sum"})
     expected = expected.groupby("grouping_col").agg({"agg_col": "sum"})
     assert_frame_equal(expected, received, check_dtype=False)
-
-
-def test_querybuilder_pickling():
-    """QueryBuilder must be pickleable with all possible clauses."""
-
-    # TODO: Also check that `PythonRowRangeClause` is pickleable once `QueryBuilder.row_range` is implemented.
-    q = QueryBuilder()
-    # PythonDateRangeClause
-    q = q.date_range((pd.Timestamp("2000-01-04"), pd.Timestamp("2000-01-07")))
-
-    # PythonFilterClause
-    q = q[q["col1"].isin(2, 3, 7)]
-
-    # PythonProjectionClause
-    q = q.apply("new_col", (q["col1"] * q["col2"]) + 13)
-
-    # PythonGroupByClause
-    q = q.groupby("col1")
-
-    # PythonAggregationClause
-    q = q.agg({"col2": "sum", "new_col": ("col2", "mean")})
-
-    assert pickle.loads(pickle.dumps(q)) == q
-
-    # PythonResampleClause
-    q = QueryBuilder()
-    q = q.resample("T", "right", "left")
-
-    assert pickle.loads(pickle.dumps(q)) == q
-
-    q = q.agg({"col2": "sum", "new_col": ("col2", "sum")})
-
-    assert pickle.loads(pickle.dumps(q)) == q
