@@ -325,7 +325,7 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
     // Sort procs following row range descending order, as we are going to iterate through them backwards
     std::sort(std::begin(row_slices), std::end(row_slices),
               [](const auto& left, const auto& right) {
-                  return left.row_ranges_->at(0)->start() >= right.row_ranges_->at(0)->start();
+                  return left.row_ranges_->at(0)->start() > right.row_ranges_->at(0)->start();
     });
 
     std::vector<GroupingAggregatorData> aggregators_data;
