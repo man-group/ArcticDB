@@ -37,6 +37,7 @@ namespace arcticdb::storage {
 
         // TODO aseaton remove
         Segment& segment() {
+            util::check(segment_, "Attempting to access segment_ but it has not been set");
             return *segment_;
         }
 
@@ -60,10 +61,12 @@ namespace arcticdb::storage {
         }
 
         [[nodiscard]] const VariantKey& variant_key() const {
+            util::check(key_, "Attempting to access key_ but it has not been set");
             return *key_;
         }
 
         [[nodiscard]] const Segment &segment() const {
+            util::check(segment_, "Attempting to access segment_ (const) but it has not been set");
             return *segment_;
         }
 

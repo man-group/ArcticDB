@@ -294,12 +294,8 @@ struct CopyCompressedTask : BaseTask {
 // Used in arcticdb-enterprise, do not remove without checking whether it is still used there
 struct CopyCompressedInterStoreTask : async::BaseTask {
 
-    struct AllOk {};
-
-    struct FailedTargets {
-        std::set<std::string, std::less<>> failed_targets_;
-    };
-
+    using AllOk = std::monostate;
+    using FailedTargets = std::unordered_set<std::string>;
     using ProcessingResult = std::variant<AllOk, FailedTargets>;
 
     CopyCompressedInterStoreTask(entity::VariantKey key_to_read,
@@ -333,7 +329,7 @@ struct CopyCompressedInterStoreTask : async::BaseTask {
         }
 
         if (!res.empty()) {
-            return FailedTargets{std::move(res)};
+            return res;
         }
 
         return AllOk{};
@@ -349,7 +345,7 @@ private:
     std::shared_ptr<BitRateStats> bit_rate_stats_;
 
     // Returns an empty set if the copy succeeds, otherwise the set contains the names of the target stores that failed
-    std::set<std::string, std::less<>> copy() {
+    std::unordered_set<std::string> copy() {
         ARCTICDB_SAMPLE(copy, 0)
         std::size_t bytes{0};
         interval timer;
@@ -360,7 +356,7 @@ private:
                                                     return target_store->key_exists_sync(that->key_to_read_);
                                                 }), target_stores_.end());
         }
-        std::set<std::string, std::less<>> failed_targets;
+        std::unordered_set<std::string> failed_targets;
         if (!target_stores_.empty()) {
             storage::KeySegmentPair key_segment_pair;
             try {
