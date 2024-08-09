@@ -587,9 +587,9 @@ bool SymbolList::needs_compaction(const LoadResult& load_result) const {
 
     auto n_keys = static_cast<int64_t>(load_result.symbol_list_keys_.size());
     if (auto fixed = ConfigsMap::instance()->get_int("SymbolList.MaxDelta")) {
-        auto result = n_keys > fixed.value();
+        auto result = n_keys > *fixed;
         log::version().debug("Symbol list: Fixed draw for compaction. needs_compaction=[{}] n_keys=[{}], MaxDelta=[{}]",
-                             result, n_keys, fixed.value());
+                             result, n_keys, *fixed);
         return result;
     }
 

@@ -36,15 +36,11 @@ namespace py = pybind11;
 
 namespace arcticdb {
 
-/// @cond
-
 // this is needed to make templates of templates work
 // since py::array_t has more than one template parameter
 // (the rest are defaulted)
 template< class T>
 using py_array_t = py::array_t<T>;
-
-/// @endcond
 
 using namespace arcticdb::entity;
 
@@ -230,12 +226,9 @@ public:
         TypeDescriptor type,
         size_t expected_rows,
         bool presize,
-        bool allow_sparse) :
-            // Array types are stored on disk as flat sequences. The python layer cannot work with this. We need to pass
-            // it pointers to an array type (at numpy arrays at the moment). When we allocate a column for an array we
-            // need to allocate space for one pointer per row. This also affects how we handle arrays to python as well.
-            // Check cpp/arcticdb/column_store/column_utils.hpp::array_at and cpp/arcticdb/column_store/column.hpp::Column
-            data_(expected_rows * entity::sizeof_datatype(type), presize),
+        bool allow_sparse,
+        DataTypeMode mode = DataTypeMode::INTERNAL) :
+            data_(expected_rows * entity::data_type_size(type, mode), presize),
             type_(type),
             allow_sparse_(allow_sparse) {
         ARCTICDB_TRACE(log::inmem(), "Creating column with descriptor {}", type);
@@ -364,10 +357,10 @@ public:
         util::check_arg(last_logical_row_ + 1 == row_offset, "set_array expected row {}, actual {} ", last_logical_row_ + 1, row_offset);
         data_.ensure_bytes(val.nbytes());
         shapes_.ensure<shape_t>(val.ndim());
-        memcpy(shapes_.ptr(), val.shape(), val.ndim() * sizeof(shape_t));
+        memcpy(shapes_.cursor(), val.shape(), val.ndim() * sizeof(shape_t));
         auto info = val.request();
         util::FlattenHelper flatten(val);
-        auto data_ptr = reinterpret_cast<T*>(data_.ptr());
+        auto data_ptr = reinterpret_cast<T*>(data_.cursor());
         flatten.flatten(data_ptr, reinterpret_cast<const T *>(info.ptr));
         update_offsets(val.nbytes());
         data_.commit();
@@ -382,10 +375,10 @@ public:
         util::check_arg(last_logical_row_ + 1 == row_offset, "set_array expected row {}, actual {} ", last_logical_row_ + 1, row_offset);
         data_.ensure_bytes(val.nbytes());
         shapes_.ensure<shape_t>(val.ndim());
-        memcpy(shapes_.ptr(), val.shape(), val.ndim() * sizeof(shape_t));
+        memcpy(shapes_.cursor(), val.shape(), val.ndim() * sizeof(shape_t));
         auto info = val.request();
         util::FlattenHelper<T, py_array_t> flatten(val);
-        auto data_ptr = reinterpret_cast<T*>(data_.ptr());
+        auto data_ptr = reinterpret_cast<T*>(data_.cursor());
         flatten.flatten(data_ptr, reinterpret_cast<const T*>(info.ptr));
         update_offsets(val.nbytes());
         data_.commit();
@@ -526,13 +519,13 @@ public:
 
     inline shape_t *allocate_shapes(std::size_t bytes) {
         shapes_.ensure_bytes(bytes);
-        return reinterpret_cast<shape_t *>(shapes_.ptr());
+        return reinterpret_cast<shape_t *>(shapes_.cursor());
     }
 
     inline uint8_t *allocate_data(std::size_t bytes) {
         util::check(bytes != 0, "Allocate data called with zero size");
         data_.ensure_bytes(bytes);
-        return data_.ptr();
+        return data_.cursor();
     }
 
     inline void advance_data(std::size_t size) {

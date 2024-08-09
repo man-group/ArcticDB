@@ -189,7 +189,7 @@ void Column::sparsify() {
 void Column::string_array_prologue(ssize_t row_offset, size_t num_strings) {
     util::check_arg(last_logical_row_ + 1 == row_offset, "string_array_prologue expected row {}, actual {} ", last_logical_row_ + 1, row_offset);
     shapes_.ensure<shape_t>();
-    auto shape_cursor = reinterpret_cast<shape_t *>(shapes_.ptr());
+    auto shape_cursor = reinterpret_cast<shape_t *>(shapes_.cursor());
     *shape_cursor = shape_t(num_strings);
     data_.ensure<entity::position_t>(num_strings);
 }
@@ -207,7 +207,7 @@ void Column::set_string_array(ssize_t row_offset,
                         char *input,
                         StringPool &string_pool) {
     string_array_prologue(row_offset, num_strings);
-    auto data_ptr = reinterpret_cast<entity::position_t*>(data_.ptr());
+    auto data_ptr = reinterpret_cast<entity::position_t*>(data_.cursor());
     for (size_t i = 0; i < num_strings; ++i) {
         auto off = string_pool.get(std::string_view(input, string_size));
         *data_ptr++ = off.offset();
@@ -218,7 +218,7 @@ void Column::set_string_array(ssize_t row_offset,
 
 void Column::set_string_list(ssize_t row_offset, const std::vector<std::string> &input, StringPool &string_pool) {
     string_array_prologue(row_offset, input.size());
-    auto data_ptr = reinterpret_cast<entity::position_t*>(data_.ptr());
+    auto data_ptr = reinterpret_cast<entity::position_t*>(data_.cursor());
     for (const auto &str : input) {
         auto off = string_pool.get(str.data());
         *data_ptr++ = off.offset();
@@ -454,7 +454,7 @@ void Column::set_shapes_buffer(size_t row_count) {
     CursoredBuffer<Buffer> shapes;
     shapes.ensure<shape_t>();
     shape_t rc(row_count);
-    memcpy(shapes.ptr(), &rc, sizeof(shape_t));
+    memcpy(shapes.cursor(), &rc, sizeof(shape_t));
     shapes.commit();
     swap(shapes_, shapes);
 }
@@ -678,7 +678,7 @@ void Column::set_empty_array(ssize_t row_offset, int dimension_count) {
     magic_.check();
     util::check_arg(last_logical_row_ + 1 == row_offset, "set_array expected row {}, actual {} ", last_logical_row_ + 1, row_offset);
     shapes_.ensure<shape_t>(dimension_count);
-    memset(shapes_.ptr(), 0, dimension_count * sizeof(shape_t));
+    memset(shapes_.cursor(), 0, dimension_count * sizeof(shape_t));
     shapes_.commit();
     ++last_logical_row_;
 }

@@ -128,10 +128,10 @@ void ColumnEncoderV2::encode_blocks(
         while (auto block = column_data.next<TDT>()) {
             if constexpr(must_contain_data(static_cast<TypeDescriptor>(type_desc_tag))) {
                 util::check(block->nbytes() > 0, "Zero-sized block");
-                Encoder::encode_values(codec_opts, block.value(), field, out, pos);
+                Encoder::encode_values(codec_opts, *block, field, out, pos);
             } else {
                 if(block->nbytes() > 0)
-                    Encoder::encode_values(codec_opts, block.value(), field, out, pos);
+                    Encoder::encode_values(codec_opts, *block, field, out, pos);
             }
         }
     });
@@ -152,14 +152,14 @@ std::pair<size_t, size_t> ColumnEncoderV2::max_compressed_size(
         max_compressed_bytes += ShapesEncoder::max_compressed_size(codec::default_shapes_codec(), shapes_block);
         uncompressed_bytes += shapes_byte_count;
         while (auto block = column_data.next<TDT>()) {
-            const auto nbytes = block.value().nbytes();
+            const auto nbytes = block->nbytes();
             if constexpr(must_contain_data(static_cast<TypeDescriptor>(type_desc_tag))) {
                 util::check(nbytes > 0, "Zero-sized block");
                 uncompressed_bytes += nbytes;
-                max_compressed_bytes += Encoder::max_compressed_size(codec_opts, block.value());
+                max_compressed_bytes += Encoder::max_compressed_size(codec_opts, *block);
             } else if(nbytes > 0) {
                 uncompressed_bytes += nbytes;
-                max_compressed_bytes += Encoder::max_compressed_size(codec_opts, block.value());
+                max_compressed_bytes += Encoder::max_compressed_size(codec_opts, *block);
             }
         }
         add_bitmagic_compressed_size(column_data, max_compressed_bytes, uncompressed_bytes);
@@ -335,14 +335,15 @@ static void encode_encoded_fields(
     auto out_buffer = std::make_shared<Buffer>(max_compressed_size + encoded_buffer_size, preamble);
     ARCTICDB_TRACE(log::codec(), "Encoding descriptor: {}", in_mem_seg.descriptor());
 
-    auto descriptor_data = in_mem_seg.descriptor().data_ptr();
+    const auto& descriptor = in_mem_seg.descriptor();
+    auto descriptor_data = descriptor.data_ptr();
     descriptor_data->uncompressed_bytes_ = uncompressed_size;
 
     write_magic<MetadataMagic>(*out_buffer, pos);
     encode_metadata<EncodingPolicyV2>(in_mem_seg, segment_header, codec_opts, *out_buffer, pos);
     write_magic<SegmentDescriptorMagic>(*out_buffer, pos);
-    write_segment_descriptor(*out_buffer, pos, in_mem_seg.descriptor().data());
-    write_identifier(*out_buffer, pos, in_mem_seg.descriptor().id());
+    write_segment_descriptor(*out_buffer, pos, descriptor.data());
+    write_identifier(*out_buffer, pos, descriptor.id());
     write_magic<DescriptorFieldsMagic>(*out_buffer, pos);
     encode_field_descriptors(in_mem_seg, segment_header, codec_opts, *out_buffer, pos);
     write_magic<IndexMagic>(*out_buffer, pos);

@@ -59,22 +59,22 @@ void verify_name(
                     c);
         }
     }
-    if (unsupported_prefix.has_value() && name[0] == unsupported_prefix.value()) {
+    if (unsupported_prefix.has_value() && name[0] == *unsupported_prefix) {
         user_input::raise<ErrorCode::E_INVALID_CHAR_IN_NAME>(
                 "The {} starts with an unsupported prefix. {}: {} Unsupported prefix: {} ",
                 name_type_for_error,
                 name_type_for_error,
                 name,
-                unsupported_prefix.value()
+                *unsupported_prefix
         );
     }
-    if (unsupported_suffix.has_value() && name[name.size() - 1] == unsupported_suffix.value()) {
+    if (unsupported_suffix.has_value() && name[name.size() - 1] == *unsupported_suffix) {
         user_input::raise<ErrorCode::E_INVALID_CHAR_IN_NAME>(
                 "The {} ends with an unsupported suffix. {}: {} Unsupported suffix: {} ",
                 name_type_for_error,
                 name_type_for_error,
                 name,
-                unsupported_suffix.value()
+                *unsupported_suffix
         );
     }
 }

@@ -382,7 +382,7 @@ inline std::vector<std::string> get_index_columns_from_descriptor(const Timeseri
 
     std::vector<std::string> index_columns;
     for(auto field_idx = 0; field_idx < index_till; ++field_idx)
-        index_columns.push_back(std::string{stream_descriptor.fields(field_idx).name()});
+        index_columns.emplace_back(std::string{stream_descriptor.fields(field_idx).name()});
 
     return index_columns;
 }

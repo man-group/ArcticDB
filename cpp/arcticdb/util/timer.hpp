@@ -120,8 +120,7 @@ public:
 
     ~interval_timer() {
         for (const auto &current : intervals_) {
-            if (current.second != nullptr)
-                delete (current.second);
+            delete (current.second);
         }
     }
 

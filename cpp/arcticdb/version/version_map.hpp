@@ -347,10 +347,10 @@ public:
                     if (!store->key_exists(key).get())
                         ARCTICDB_DEBUG(log::version(), "Removing deleted key {}", key);
                     else {
-                        if(tombstone.value().type() == KeyType::TOMBSTONE_ALL)
-                            new_entry->try_set_tombstone_all(tombstone.value());
+                        if(tombstone->type() == KeyType::TOMBSTONE_ALL)
+                            new_entry->try_set_tombstone_all(*tombstone);
                         else
-                            new_entry->tombstones_.insert(std::make_pair(key.version_id(), tombstone.value()));
+                            new_entry->tombstones_.insert(std::make_pair(key.version_id(), *tombstone));
 
                         new_entry->keys_.push_back(key);
                     }

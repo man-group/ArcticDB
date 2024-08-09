@@ -124,7 +124,7 @@ inline FilterQuery<index::IndexSegmentReader> create_static_col_filter(std::shar
         auto res = std::make_unique<util::BitSet>(static_cast<util::BitSetSizeType>(isr.size()));
         auto start_col = isr.column(index::Fields::start_col).begin<stream::SliceTypeDescriptorTag>();
         auto end_col = isr.column(index::Fields::end_col).begin<stream::SliceTypeDescriptorTag>();
-        const bool selected_only_index = pipeline->only_index_columns_selected();
+        const bool only_index_selected = pipeline->only_index_columns_selected();
         if (input) {
             bm::bvector<>::enumerator en = input->first();
             bm::bvector<>::enumerator en_end = input->end();
@@ -135,7 +135,7 @@ inline FilterQuery<index::IndexSegmentReader> create_static_col_filter(std::shar
                 pos = *en;
                 std::advance(start_col, dist);
                 std::advance(end_col, dist);
-                (*res)[*en] = selected_only_index || pipeline->overall_column_bitset_->any_range(*start_col, *end_col - 1);
+                (*res)[*en] = only_index_selected || pipeline->overall_column_bitset_->any_range(*start_col, *end_col - 1);
                 ++en;
             }
 

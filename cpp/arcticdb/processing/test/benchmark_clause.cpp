@@ -124,7 +124,7 @@ void BM_hash_grouping_int(benchmark::State& state) {
     grouping::ModuloBucketizer bucketizer(num_buckets);
 
     for (auto _ : state) {
-        auto buckets = get_buckets(col_with_strings, grouper, bucketizer);
+        auto buckets ARCTICDB_UNUSED = get_buckets(col_with_strings, grouper, bucketizer);
     }
 }
 
@@ -165,7 +165,7 @@ void BM_hash_grouping_string(benchmark::State& state) {
     grouping::ModuloBucketizer bucketizer(num_buckets);
 
     for (auto _ : state) {
-        auto buckets = get_buckets(col_with_strings, grouper, bucketizer);
+        auto buckets ARCTICDB_UNUSED = get_buckets(col_with_strings, grouper, bucketizer);
     }
 }
 

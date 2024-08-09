@@ -14,7 +14,7 @@
 #include <arcticdb/util/test/rapidcheck_generators.hpp>
 #include <arcticdb/storage/test/in_memory_store.hpp>
 
-RC_GTEST_PROP(ColumnStore, RapidCheck, (std::map<std::string, TestDataFrame>
+RC_GTEST_PROP(ColumnStore, RapidCheck, (const std::map<std::string, TestDataFrame>&
     data_frames)) {
     using namespace arcticdb;
 

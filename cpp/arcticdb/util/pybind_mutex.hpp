@@ -37,7 +37,7 @@ public:
     manually unlocked anyway, if it is locked.
 */
     static void reset_mutex() {
-        single_thread_mutex.release();
+        (void)single_thread_mutex.release();
         single_thread_mutex = std::make_unique<std::mutex>();
     }
 };

@@ -71,8 +71,8 @@ TEST(Append, MergeDescriptorsPromote) {
     std::vector<std::shared_ptr<FieldCollection>> new_desc_fields;
     new_desc_fields.emplace_back(std::make_shared<FieldCollection>(fields_from_range(get_new_fields()[0])));
     auto new_desc = merge_descriptors(original, std::move(new_desc_fields), std::vector<std::string>{});
-    std::vector<std::shared_ptr<FieldCollection>> expected_desc_fields;
-    expected_desc_fields.emplace_back(std::make_shared<FieldCollection>(fields_from_range(get_new_fields()[0])));
+    std::array<std::shared_ptr<FieldCollection>, 1> expected_desc_fields;
+    expected_desc_fields[0] = std::make_shared<FieldCollection>(fields_from_range(get_new_fields()[0]));
 
     auto result = std::equal(std::begin(new_desc.fields()), std::end(new_desc.fields()), std::begin(*expected_desc_fields[0]), std::end(*expected_desc_fields[0]), []
         (const auto& left, const auto& right) {

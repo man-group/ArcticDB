@@ -80,7 +80,7 @@ RocksDBStorage::RocksDBStorage(const LibraryPath &library_path, OpenMode mode, c
     storage::check<ErrorCode::E_UNEXPECTED_ROCKSDB_ERROR>(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
     util::check(handles.size() == column_families.size(), "Open returned wrong number of handles.");
     for (std::size_t i = 0; i < handles.size(); i++) {
-        handles_by_key_type_.emplace(column_families[i].name, handles[i]);
+        handles_by_key_type_.try_emplace(column_families[i].name, handles[i]);
     }
     handles.clear();
 }
@@ -179,7 +179,7 @@ bool RocksDBStorage::do_fast_delete() {
         }
         auto key_type_name = fmt::format("{}", key_type);
         auto handle = handles_by_key_type_.at(key_type_name);
-        ARCTICDB_DEBUG(log::storage(), "dropping {}", key_type_name);
+        ARCTICDB_DEBUG(log::storage(), "RocksDB storage dropping key_type {}", key_type_name);
         db_->DropColumnFamily(handle);
     });
     return true;

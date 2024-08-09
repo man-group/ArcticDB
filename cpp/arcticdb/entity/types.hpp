@@ -48,7 +48,6 @@ using VersionId = uint64_t;
 using SignedVersionId = int64_t;
 using GenerationId = VersionId;
 using timestamp = int64_t;
-// TODO: shape_t probably should be unsigned. Negative shapes don't make sense. This will involve a lot of changes in native_tensor.hpp
 using shape_t = int64_t;
 using stride_t = int64_t;
 using position_t = int64_t;
@@ -59,7 +58,6 @@ inline NumericId safe_convert_to_numeric_id(uint64_t input) {
                 "Numeric symbol greater than 2^63 is not supported.");
     return static_cast<NumericId>(input);
 }
-
 
 // See: https://github.com/python/cpython/issues/105156
 // See: https://peps.python.org/pep-0393/
@@ -102,6 +100,11 @@ enum class ValueType : uint8_t {
     /// Nullable booleans
     BOOL_OBJECT = 14,
     COUNT // Not a real value type, should not be added to proto descriptor. Used to count the number of items in the enum
+};
+
+enum class DataTypeMode : uint8_t {
+    INTERNAL = 0,
+    EXTERNAL = 1
 };
 
 // Sequence types are composed of more than one element
@@ -334,7 +337,7 @@ constexpr char get_dtype_specifier(ValueType vt) {
     case ValueType::NANOSECONDS_UTC: return 'M';
     case ValueType::UTF8_FIXED: return 'U';
     case ValueType::ASCII_FIXED: return 'S';
-    case ValueType::BYTES: return 'O';
+    case ValueType::BYTES:
     case ValueType::EMPTY: return 'O';
     default:return 'x';
     }
@@ -455,7 +458,7 @@ struct TypeDescriptor {
         return slice_bit_size(data_type_);
     }
 
-    [[nodiscard]] constexpr int get_type_byte_size() const {
+    [[nodiscard]] constexpr int get_type_bytes() const {
         return get_byte_count(slice_bit_size(data_type_));
     }
 };
@@ -471,22 +474,29 @@ constexpr bool must_contain_data(TypeDescriptor td) {
 
 /// @biref Check if type descriptor corresponds to numpy array type
 /// @important Be sure to match this with the type handler registry in: cpp/arcticdb/python/python_module.cpp#register_type_handlers
-constexpr bool is_numpy_array(TypeDescriptor td) {
+constexpr bool is_array_type(TypeDescriptor td) {
     return (is_numeric_type(td.data_type()) || is_bool_type(td.data_type()) || is_empty_type(td.data_type())) &&
         (td.dimension() == Dimension::Dim1);
 }
 
-constexpr bool is_pyobject_type(TypeDescriptor td) {
-    return is_dynamic_string_type(slice_value_type(td.data_type())) || is_bool_object_type(td.data_type()) ||
-        is_numpy_array(td);
+constexpr bool is_object_type(TypeDescriptor td) {
+    return is_dynamic_string_type(slice_value_type(td.data_type()))
+    || is_bool_object_type(td.data_type())
+    || is_array_type(td);
 }
 
 inline void set_data_type(DataType data_type, TypeDescriptor &type_desc) {
     type_desc.data_type_ = data_type;
 }
 
+std::size_t data_type_size(const TypeDescriptor& td, DataTypeMode mode);
+
 inline TypeDescriptor make_scalar_type(DataType dt) {
     return TypeDescriptor{dt, Dimension::Dim0};
+}
+
+inline TypeDescriptor make_array_type(DataType dt) {
+    return TypeDescriptor{dt, Dimension::Dim1};
 }
 
 template<typename DT, typename D>
@@ -708,8 +718,6 @@ inline bool operator==(const Field &l, const Field &r) {
 inline bool operator!=(const Field &l, const Field &r) {
     return !(l == r);
 }
-
-std::size_t sizeof_datatype(const TypeDescriptor &td);
 
 } // namespace entity
 

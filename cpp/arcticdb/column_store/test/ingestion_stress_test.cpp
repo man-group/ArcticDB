@@ -37,7 +37,7 @@ TEST(IngestionStress, ScalarInt) {
 
     std::vector<FieldRef> columns;
     for (auto i = 0; i < NumColumns; ++i)
-        columns.push_back(scalar_field(DataType::UINT64, "uint64"));
+        columns.emplace_back(scalar_field(DataType::UINT64, "uint64"));
 
     const auto index = as::TimeseriesIndex::default_index();
     as::FixedSchema schema{
@@ -212,7 +212,7 @@ TEST_F(IngestionStressStore, ScalarIntDynamicSchema) {
     read_options.set_incompletes(true);
     ReadQuery read_query;
     read_query.row_filter = universal_range();
-    auto read_result = test_store_->read_dataframe_internal(symbol, read_query, read_options);
+    auto read_result = test_store_->read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options);
 }
 
 TEST_F(IngestionStressStore, DynamicSchemaWithStrings) {

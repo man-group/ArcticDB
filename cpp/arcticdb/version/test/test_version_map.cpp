@@ -338,10 +338,11 @@ TEST(VersionMap, GetNextVersionInEntry) {
     ASSERT_FALSE(get_next_version_in_entry(entry, 5));
     ASSERT_FALSE(get_prev_version_in_entry(entry, 0));
 
-    entry->keys_.push_back(AtomKeyBuilder().version_id(5).build<KeyType::TABLE_INDEX>(""));
-    entry->keys_.push_back(AtomKeyBuilder().version_id(3).build<KeyType::TABLE_INDEX>(""));
-    entry->keys_.push_back(AtomKeyBuilder().version_id(1).build<KeyType::TABLE_INDEX>(""));
-    entry->keys_.push_back(AtomKeyBuilder().version_id(0).build<KeyType::TABLE_INDEX>(""));
+    auto& keys = entry->keys_;
+    keys.push_back(AtomKeyBuilder().version_id(5).build<KeyType::TABLE_INDEX>(""));
+    keys.push_back(AtomKeyBuilder().version_id(3).build<KeyType::TABLE_INDEX>(""));
+    keys.push_back(AtomKeyBuilder().version_id(1).build<KeyType::TABLE_INDEX>(""));
+    keys.push_back(AtomKeyBuilder().version_id(0).build<KeyType::TABLE_INDEX>(""));
 
     ASSERT_EQ(get_prev_version_in_entry(entry, 5).value(), 3);
     ASSERT_FALSE(get_next_version_in_entry(entry, 5));
@@ -540,7 +541,10 @@ TEST(VersionMap, StorageLogging) {
     ASSERT_EQ(tomb_keys, 3u);
 }
 
-std::shared_ptr<VersionMapEntry> write_two_versions(std::shared_ptr<InMemoryStore> store, std::shared_ptr<VersionMap> version_map, StreamId id) {
+std::shared_ptr<VersionMapEntry> write_two_versions(
+    std::shared_ptr<InMemoryStore> store,
+    std::shared_ptr<VersionMap> version_map,
+    const StreamId& id) {
     auto entry = version_map->check_reload(
             store,
             id,

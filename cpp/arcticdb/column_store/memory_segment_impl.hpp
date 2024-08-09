@@ -375,7 +375,8 @@ public:
         const StreamDescriptor& desc,
         size_t expected_column_size,
         bool presize,
-        bool allow_sparse);
+        bool allow_sparse,
+        DataTypeMode mode = DataTypeMode::INTERNAL);
 
     ~SegmentInMemoryImpl();
 
@@ -399,13 +400,20 @@ public:
 
     void generate_column_map() const;
 
-    void create_columns(size_t old_size, size_t expected_column_size, bool presize, bool allow_sparse);
+    void create_columns(
+        size_t old_size,
+        size_t expected_column_size,
+        bool presize,
+        bool allow_sparse,
+        DataTypeMode mode);
 
-    /**
-     * @param descriptor
-     * @return false is descriptor change is not compatible and should trigger a segment commit
-     */
-    size_t on_descriptor_change(const StreamDescriptor &descriptor, size_t expected_column_size, bool presize, bool allow_sparse);
+    size_t on_descriptor_change(
+        const StreamDescriptor &descriptor,
+        size_t expected_column_size,
+        bool presize,
+        bool allow_sparse,
+        DataTypeMode mode
+        );
 
     std::optional<std::size_t> column_index(std::string_view name) const;
 
@@ -703,7 +711,7 @@ public:
         row_id_ = rid;
     }
 
-    ssize_t get_row_id() {
+    ssize_t get_row_id() const {
         return row_id_;
     }
 

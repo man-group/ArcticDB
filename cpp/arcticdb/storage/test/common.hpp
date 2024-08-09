@@ -47,7 +47,7 @@ inline std::string read_in_store(Storage &store, std::string symbol, entity::Key
     return std::get<StringId>(result.atom_key().id());
 }
 
-inline void remove_in_store(Storage &store, std::vector<std::string> symbols, entity::KeyType key_type = entity::KeyType::TABLE_DATA) {
+inline void remove_in_store(Storage &store, const std::vector<std::string>& symbols, entity::KeyType key_type = entity::KeyType::TABLE_DATA) {
     auto to_remove = std::vector<VariantKey>();
     for (auto &symbol: symbols) {
         to_remove.emplace_back(get_test_key(symbol, key_type));

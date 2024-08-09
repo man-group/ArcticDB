@@ -279,7 +279,7 @@ TestTensorFrame get_test_frame(const StreamId &id,
     return output;
 }
 
-inline auto get_test_empty_timeseries_segment(StreamId id, size_t num_rows) {
+inline auto get_test_empty_timeseries_segment(const StreamId& id, size_t num_rows) {
     return SegmentInMemory{get_test_descriptor<stream::TimeseriesIndex>(id, get_test_timeseries_fields()), num_rows};
 }
 

@@ -69,7 +69,7 @@ Segment RealAzureClient::read_blob(
     auto blob_client = container_client.GetBlockBlobClient(blob_name);
     auto properties = blob_client.GetProperties(Azure::Storage::Blobs::GetBlobPropertiesOptions{}, get_context(request_timeout)).Value;
     std::shared_ptr<Buffer> buffer = std::make_shared<Buffer>(properties.BlobSize);
-    blob_client.DownloadTo(buffer->preamble(), buffer->available(), download_option, get_context(request_timeout));
+    blob_client.DownloadTo(buffer->data(), buffer->available(), download_option, get_context(request_timeout));
     ARCTICDB_SUBSAMPLE(AzureStorageVisitSegment, 0)
 
     return Segment::from_buffer(std::move(buffer));

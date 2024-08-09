@@ -161,12 +161,12 @@ class AtomKeyBuilder {
         return *this;
     }
 
-    auto& start_index(const timestamp& iv) {
+    auto& start_index(timestamp iv) {
         index_start_ = NumericIndex{iv};
         return *this;
     }
 
-    auto& end_index(const timestamp& iv) {
+    auto& end_index(timestamp iv) {
         index_end_ = NumericIndex{iv};
         return *this;
     }

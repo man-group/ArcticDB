@@ -303,6 +303,16 @@ public:
         type_(type),
         bit_vector_(bit_vector){}
 
+    ColumnData(
+        const ChunkedBuffer* data,
+        const TypeDescriptor &type) :
+        data_(data),
+        shapes_(nullptr),
+        pos_(0),
+        shape_pos_(0),
+        type_(type),
+        bit_vector_(nullptr){}
+
     ARCTICDB_MOVE_COPY_DEFAULT(ColumnData)
 
     template<typename TDT, IteratorType iterator_type=IteratorType::REGULAR, IteratorDensity iterator_density=IteratorDensity::DENSE>

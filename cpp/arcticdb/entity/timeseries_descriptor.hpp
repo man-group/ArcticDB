@@ -80,7 +80,7 @@ struct TimeseriesDescriptor {
         return proto_->user_meta();
     }
 
-    const arcticdb::proto::descriptors::NormalizationMetadata normalization() const {
+    const arcticdb::proto::descriptors::NormalizationMetadata& normalization() const {
         return proto_->normalization();
     }
 

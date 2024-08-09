@@ -55,6 +55,7 @@ void raise_if_has_failure_trigger(const LmdbKey& key, StorageOperation operation
         error_code = stoi(path.substr(start));
         auto error_message = fmt::format("Simulated Error, message: operation {}, error code {}",
                                          operation_to_string(operation), error_code);
+        log::storage().warn("{}", error_message);
     } catch (std::exception&) {
         return;
     }

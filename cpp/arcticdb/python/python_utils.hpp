@@ -91,8 +91,31 @@ class ARCTICDB_VISIBILITY_HIDDEN PyRowRef : public py::tuple {
     }
 
     RowRef row_ref_;
-
 };
+
+enum IncrementRefCount {
+    ON,
+    OFF
+};
+
+inline void prefill_with_none(
+    PyObject** ptr_dest,
+    size_t num_rows,
+    size_t sparse_count,
+    SpinLock& spin_lock,
+    IncrementRefCount inc_ref_count = IncrementRefCount::ON) {
+    std::lock_guard lock(spin_lock);
+    auto none = py::none();
+    for (auto i = 0U; i < num_rows; ++i)
+        *ptr_dest++ = none.ptr();
+
+    if(inc_ref_count == IncrementRefCount::ON) {
+        auto none_count = num_rows - sparse_count;
+        for (auto j = 0U; j < none_count; ++j)
+            none.inc_ref();
+    }
+    spin_lock.unlock();
+}
 
 template<typename Msg>
 py::object pb_to_python(const Msg & out){
@@ -232,7 +255,7 @@ inline py::list adapt_read_dfs(std::vector<std::variant<ReadResult, DataError>>&
 // 1: key is the column name to aggregate, value is the aggregation operator. Output column name will be the same as input column name
 // 2: key is the column name to output, value is a pair where the first element is the input column name, and the second element is the aggregation operator
 // These 2 styles can be mixed and matched
-inline std::vector<NamedAggregator> named_aggregators_from_dict(const std::unordered_map<std::string, std::variant<std::string, std::pair<std::string, std::string>>> aggregations) {
+inline std::vector<NamedAggregator> named_aggregators_from_dict(const std::unordered_map<std::string, std::variant<std::string, std::pair<std::string, std::string>>>& aggregations) {
     std::vector<NamedAggregator> named_aggregators;
     for (const auto& [output_column_name, var_agg_named_agg]: aggregations) {
         util::variant_match(
