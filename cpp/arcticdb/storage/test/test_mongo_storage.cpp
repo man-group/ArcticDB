@@ -42,7 +42,7 @@ TEST(MongoStorage, ClientSession) {
     as::KeySegmentPair res;
 
     storage.read(k, [&](auto &&k, auto &&seg) {
-        res.atom_key() = std::get<as::AtomKey>(k);
+        res.set_key(k);
         res.segment() = std::move(seg);
         res.segment().force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
     }, as::ReadKeyOpts{});
@@ -70,7 +70,7 @@ TEST(MongoStorage, ClientSession) {
     as::KeySegmentPair update_res;
 
     storage.read(k, [&](auto &&k, auto &&seg) {
-        update_res.atom_key() = std::get<as::AtomKey>(k);
+        update_res.set_key(k);
         update_res.segment() = std::move(seg);
         update_res.segment().force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
     }, as::ReadKeyOpts{});
@@ -93,7 +93,7 @@ TEST(MongoStorage, ClientSession) {
     as::KeySegmentPair numeric_res;
 
     storage.read(numeric_k, [&](auto &&k, auto &&seg) {
-        numeric_res.atom_key() = std::get<as::AtomKey>(k);
+        numeric_res.set_key(k);
         numeric_res.segment() = std::move(seg);
         numeric_res.segment().force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
     }, as::ReadKeyOpts{});

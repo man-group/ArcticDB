@@ -57,7 +57,7 @@ TimeseriesDescriptor LibraryTool::read_timeseries_descriptor(const VariantKey& k
 
 void LibraryTool::write(VariantKey key, Segment& segment) {
     storage::KeySegmentPair kv{std::move(key), std::move(segment)};
-    store_->write_compressed_sync(std::move(kv));
+    store_->write_compressed_sync(kv);
 }
 
 void LibraryTool::remove(VariantKey key) {

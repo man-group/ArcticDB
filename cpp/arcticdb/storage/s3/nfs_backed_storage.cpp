@@ -10,6 +10,7 @@
 #include <arcticdb/util/simple_string_hash.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/storage/s3/s3_real_client.hpp>
+#include <arcticdb/storage/s3/s3_mock_client.hpp>
 #include <arcticdb/storage/s3/s3_client_wrapper.hpp>
 
 namespace arcticdb::storage::nfs_backed {
@@ -124,14 +125,14 @@ std::string NfsBackedStorage::name() const {
 
 void NfsBackedStorage::do_write(Composite<KeySegmentPair>&& kvs) {
     auto enc = kvs.transform([] (auto&& key_seg) {
-        return KeySegmentPair{encode_object_id(key_seg.variant_key()), std::move(key_seg.segment())};
+        return KeySegmentPair{encode_object_id(key_seg.variant_key()), key_seg.segment_ptr()};
     });
     s3::detail::do_write_impl(std::move(enc), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
 }
 
 void NfsBackedStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts) {
     auto enc = kvs.transform([] (auto&& key_seg) {
-        return KeySegmentPair{encode_object_id(key_seg.variant_key()), std::move(key_seg.segment())};
+        return KeySegmentPair{encode_object_id(key_seg.variant_key()), key_seg.segment_ptr()};
     });
     s3::detail::do_update_impl(std::move(enc), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
 }
@@ -183,11 +184,16 @@ bool NfsBackedStorage::do_key_exists(const VariantKey& key) {
 
 NfsBackedStorage::NfsBackedStorage(const LibraryPath &library_path, OpenMode mode, const Config &conf) :
     Storage(library_path, mode),
-    s3_api_(s3::S3ApiInstance::instance()),
     root_folder_(object_store_utils::get_root_folder(library_path)),
     bucket_name_(conf.bucket_name()),
     region_(conf.region()) {
-    s3_client_ = std::make_unique<s3::RealS3Client>(s3::get_aws_credentials(conf), s3::get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, false);
+
+    if (conf.use_mock_storage_for_testing()) {
+        log::storage().warn("Using Mock S3 storage for NfsBackedStorage");
+        s3_client_ = std::make_unique<s3::MockS3Client>();
+    } else {
+        s3_client_ = std::make_unique<s3::RealS3Client>(s3::get_aws_credentials(conf), s3::get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, false);
+    }
     if (!conf.prefix().empty()) {
         ARCTICDB_DEBUG(log::version(), "prefix found, using: {}", conf.prefix());
         auto prefix_path = LibraryPath::from_delim_path(conf.prefix(), '.');
@@ -201,7 +207,6 @@ NfsBackedStorage::NfsBackedStorage(const LibraryPath &library_path, OpenMode mod
     std::locale locale{ std::locale::classic(), new std::num_put<char>()};
     (void)std::locale::global(locale);
     ARCTICDB_DEBUG(log::storage(), "Opened NFS backed storage at {}", root_folder_);
-    s3_api_.reset();
 }
 
 } //namespace arcticdb::storage::nfs_backed

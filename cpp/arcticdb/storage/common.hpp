@@ -27,6 +27,12 @@ using StorageName = util::StringWrappingValue<StorageNameTag>;
 struct InstanceUriTag{};
 using InstanceUri = util::StringWrappingValue<InstanceUriTag>;
 
+template<class T>
+requires std::is_same_v<T, EnvironmentName> || std::is_same_v<T, StorageName>
+bool operator==(const T &l, const T &r) {
+  return l.value == r.value;
+}
+
 /*
  * Placeholder class for now
  */

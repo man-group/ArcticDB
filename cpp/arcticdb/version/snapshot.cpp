@@ -78,7 +78,7 @@ void tombstone_snapshot(
     }
     // Append a timestamp to the ID so that other snapshot(s) can reuse the same snapshot name before the cleanup job:
     std::string new_key = fmt::format("{}@{:x}", key_segment_pair.ref_key(), util::SysClock::coarse_nanos_since_epoch() / 1'000'000);
-    key_segment_pair.ref_key() = RefKey(new_key, KeyType::SNAPSHOT_TOMBSTONE);
+    key_segment_pair.set_key(RefKey(std::move(new_key), KeyType::SNAPSHOT_TOMBSTONE));
     store->write_compressed(std::move(key_segment_pair)).get();
 }
 

@@ -108,7 +108,7 @@ TEST_P(SimpleTestSuite, Example) {
 
     as::KeySegmentPair res;
     storage->read(k, [&](auto &&k, auto &&seg) {
-        res.atom_key() = std::get<AtomKey>(k);
+        res.set_key(k);
         res.segment() = std::move(seg);
         res.segment().force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
     }, storage::ReadKeyOpts{});
@@ -132,7 +132,7 @@ TEST_P(SimpleTestSuite, Example) {
 
     as::KeySegmentPair update_res;
     storage->read(k, [&](auto &&k, auto &&seg) {
-        update_res.atom_key() = std::get<AtomKey>(k);
+        update_res.set_key(k);
         update_res.segment() = std::move(seg);
         update_res.segment().force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
     }, as::ReadKeyOpts{});
@@ -188,7 +188,7 @@ TEST_P(SimpleTestSuite, Strings) {
 
     as::KeySegmentPair res;
     storage->read(save_k, [&](auto &&k, auto &&seg) {
-        res.atom_key() = std::get<AtomKey>(k);
+        res.set_key(k);
         res.segment() = std::move(seg);
         res.segment().force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
     }, as::ReadKeyOpts{});

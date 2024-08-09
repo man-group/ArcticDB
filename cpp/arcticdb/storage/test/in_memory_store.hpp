@@ -222,11 +222,11 @@ namespace arcticdb {
             return folly::makeFutureWith([&](){ return read_sync(key, opts); });
         }
 
-        folly::Future<folly::Unit> write_compressed(storage::KeySegmentPair&&) override {
+        folly::Future<folly::Unit> write_compressed(storage::KeySegmentPair) override {
             util::raise_rte("Not implemented");
         }
 
-        void write_compressed_sync(storage::KeySegmentPair&&) override {
+        void write_compressed_sync(storage::KeySegmentPair) override {
             util::raise_rte("Not implemented");
         }
 

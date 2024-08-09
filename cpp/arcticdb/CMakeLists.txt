@@ -180,6 +180,7 @@ set(arcticdb_srcs
         # header files
         async/async_store.hpp
         async/batch_read_args.hpp
+        async/bit_rate_stats.hpp
         async/task_scheduler.hpp
         async/tasks.hpp
         codec/codec.hpp
@@ -389,6 +390,7 @@ set(arcticdb_srcs
         version/version_utils.hpp
         # CPP files
         async/async_store.cpp
+        async/bit_rate_stats.cpp
         async/task_scheduler.cpp
         async/tasks.cpp
         codec/codec.cpp
