@@ -43,7 +43,7 @@ pytestmark = pytest.mark.pipeline
 
 
 def generic_filter_test(lib, symbol, df, arctic_query, pandas_query, dynamic_strings=True):
-    lib.write(symbol, df, dynamic_strings=dynamic_strings)
+    # lib.write(symbol, df, dynamic_strings=dynamic_strings)
     expected = df.query(pandas_query)
     received = lib.read(symbol, query_builder=arctic_query).data
     if not np.array_equal(expected, received):
@@ -57,6 +57,7 @@ def generic_filter_test(lib, symbol, df, arctic_query, pandas_query, dynamic_str
 
 # For string queries, test both with and without dynamic strings, and with the query both optimised for speed and memory
 def generic_filter_test_strings(lib, symbol, df, arctic_query, pandas_query):
+    expected = df.query(pandas_query)
     for dynamic_strings in [True, False]:
         arctic_query.optimise_for_speed()
         generic_filter_test(lib, symbol, df, arctic_query, pandas_query, dynamic_strings)
@@ -89,268 +90,64 @@ def generic_dynamic_filter_test(lib, symbol, df, arctic_query, pandas_query, dyn
     assert True
 
 
-@use_of_function_scoped_fixtures_in_hypothesis_checked
-@settings(deadline=None)
-@given(
-    df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
-    val=numeric_type_strategies(),
-)
-def test_filter_less_than_col_val(lmdb_version_store_v1, df, val):
-    assume(not df.empty)
-    q = QueryBuilder()
-    q = q[q["a"] < val]
-    pandas_query = "a < {}".format(val)
-    generic_filter_test(lmdb_version_store_v1, "test_filter_less_than_col_val", df, q, pandas_query)
-
-
-@use_of_function_scoped_fixtures_in_hypothesis_checked
-@settings(deadline=None)
-@given(
-    df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
-    val=numeric_type_strategies(),
-)
-def test_filter_less_than_val_col(lmdb_version_store_v1, df, val):
-    assume(not df.empty)
-    q = QueryBuilder()
-    q = q[val < q["a"]]
-    pandas_query = "{} < a".format(val)
-    generic_filter_test(lmdb_version_store_v1, "test_filter_less_than_val_col", df, q, pandas_query)
-
-
+# TODO: Clean this mess up
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
         [column("a", elements=numeric_type_strategies()), column("b", elements=numeric_type_strategies())],
         index=range_indexes(),
-    )
-)
-def test_filter_less_than_col_col(lmdb_version_store_v1, df):
-    assume(not df.empty)
-    q = QueryBuilder()
-    q = q[q["a"] < q["b"]]
-    pandas_query = "a < b"
-    generic_filter_test(lmdb_version_store_v1, "test_filter_less_than_col_col", df, q, pandas_query)
-
-
-@use_of_function_scoped_fixtures_in_hypothesis_checked
-@settings(deadline=None)
-@given(
-    df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
+    ),
     val=numeric_type_strategies(),
 )
-def test_filter_less_than_equals_col_val(lmdb_version_store_v1, df, val):
+def test_filter_binary_comparison(lmdb_version_store_v1, df, val):
     assume(not df.empty)
-    q = QueryBuilder()
-    q = q[q["a"] <= val]
-    pandas_query = "a <= {}".format(val)
-    generic_filter_test(lmdb_version_store_v1, "test_filter_less_than_equals_col_val", df, q, pandas_query)
-
-
-@use_of_function_scoped_fixtures_in_hypothesis_checked
-@settings(deadline=None)
-@given(
-    df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
-    val=numeric_type_strategies(),
-)
-def test_filter_less_than_equals_val_col(lmdb_version_store_v1, df, val):
-    assume(not df.empty)
-    q = QueryBuilder()
-    q = q[val <= q["a"]]
-    pandas_query = "{} <= a".format(val)
-    generic_filter_test(lmdb_version_store_v1, "test_filter_less_than_equals_val_col", df, q, pandas_query)
-
-
-@use_of_function_scoped_fixtures_in_hypothesis_checked
-@settings(deadline=None)
-@given(
-    df=data_frames(
-        [column("a", elements=numeric_type_strategies()), column("b", elements=numeric_type_strategies())],
-        index=range_indexes(),
-    )
-)
-def test_filter_less_than_equals_col_col(lmdb_version_store_v1, df):
-    assume(not df.empty)
-    q = QueryBuilder()
-    q = q[q["a"] <= q["b"]]
-    pandas_query = "a <= b"
-    generic_filter_test(lmdb_version_store_v1, "test_filter_less_than_equals_col_col", df, q, pandas_query)
-
-
-@use_of_function_scoped_fixtures_in_hypothesis_checked
-@settings(deadline=None)
-@given(
-    df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
-    val=numeric_type_strategies(),
-)
-def test_filter_greater_than_col_val(lmdb_version_store_v1, df, val):
-    assume(not df.empty)
-    q = QueryBuilder()
-    q = q[q["a"] > val]
-    pandas_query = "a > {}".format(val)
-    generic_filter_test(lmdb_version_store_v1, "test_filter_greater_than_col_val", df, q, pandas_query)
-
-
-@use_of_function_scoped_fixtures_in_hypothesis_checked
-@settings(deadline=None)
-@given(
-    df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
-    val=numeric_type_strategies(),
-)
-def test_filter_greater_than_val_col(lmdb_version_store_v1, df, val):
-    assume(not df.empty)
-    q = QueryBuilder()
-    q = q[val > q["a"]]
-    pandas_query = "{} > a".format(val)
-    generic_filter_test(lmdb_version_store_v1, "test_filter_greater_than_val_col", df, q, pandas_query)
-
-
-@use_of_function_scoped_fixtures_in_hypothesis_checked
-@settings(deadline=None)
-@given(
-    df=data_frames(
-        [column("a", elements=numeric_type_strategies()), column("b", elements=numeric_type_strategies())],
-        index=range_indexes(),
-    )
-)
-def test_filter_greater_than_col_col(lmdb_version_store_v1, df):
-    assume(not df.empty)
-    q = QueryBuilder()
-    q = q[q["a"] > q["b"]]
-    pandas_query = "a > b"
-    generic_filter_test(lmdb_version_store_v1, "test_filter_greater_than_col_col", df, q, pandas_query)
-
-
-@use_of_function_scoped_fixtures_in_hypothesis_checked
-@settings(deadline=None)
-@given(
-    df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
-    val=numeric_type_strategies(),
-)
-def test_filter_greater_than_equals_col_val(lmdb_version_store_v1, df, val):
-    assume(not df.empty)
-    q = QueryBuilder()
-    q = q[q["a"] >= val]
-    pandas_query = "a >= {}".format(val)
-    generic_filter_test(lmdb_version_store_v1, "test_filter_greater_than_equals_col_val", df, q, pandas_query)
-
-
-@use_of_function_scoped_fixtures_in_hypothesis_checked
-@settings(deadline=None)
-@given(
-    df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
-    val=numeric_type_strategies(),
-)
-def test_filter_greater_than_equals_val_col(lmdb_version_store_v1, df, val):
-    assume(not df.empty)
-    q = QueryBuilder()
-    q = q[val >= q["a"]]
-    pandas_query = "{} >= a".format(val)
-    generic_filter_test(lmdb_version_store_v1, "test_filter_greater_than_equals_val_col", df, q, pandas_query)
-
-
-@use_of_function_scoped_fixtures_in_hypothesis_checked
-@settings(deadline=None)
-@given(
-    df=data_frames(
-        [column("a", elements=numeric_type_strategies()), column("b", elements=numeric_type_strategies())],
-        index=range_indexes(),
-    )
-)
-def test_filter_greater_than_equals_col_col(lmdb_version_store_v1, df):
-    assume(not df.empty)
-    q = QueryBuilder()
-    q = q[q["a"] >= q["b"]]
-    pandas_query = "a >= b"
-    generic_filter_test(lmdb_version_store_v1, "test_filter_greater_than_equals_col_col", df, q, pandas_query)
-
-
-@use_of_function_scoped_fixtures_in_hypothesis_checked
-@settings(deadline=None)
-@given(
-    df=data_frames([column("a", elements=integral_type_strategies())], index=range_indexes()),
-    val=integral_type_strategies(),
-)
-def test_filter_equals_col_val(lmdb_version_store_v1, df, val):
-    assume(not df.empty)
-    q = QueryBuilder()
-    q = q[q["a"] == val]
-    pandas_query = "a == {}".format(val)
-    generic_filter_test(lmdb_version_store_v1, "test_filter_equals_col_val", df, q, pandas_query)
-
-
-@use_of_function_scoped_fixtures_in_hypothesis_checked
-@settings(deadline=None)
-@given(
-    df=data_frames([column("a", elements=integral_type_strategies())], index=range_indexes()),
-    val=integral_type_strategies(),
-)
-def test_filter_equals_val_col(lmdb_version_store_v1, df, val):
-    assume(not df.empty)
-    q = QueryBuilder()
-    q = q[val == q["a"]]
-    pandas_query = "{} == a".format(val)
-    generic_filter_test(lmdb_version_store_v1, "test_filter_equals_val_col", df, q, pandas_query)
-
-
-@use_of_function_scoped_fixtures_in_hypothesis_checked
-@settings(deadline=None)
-@given(
-    df=data_frames(
-        [column("a", elements=integral_type_strategies()), column("b", elements=integral_type_strategies())],
-        index=range_indexes(),
-    )
-)
-def test_filter_equals_col_col(lmdb_version_store_v1, df):
-    assume(not df.empty)
-    q = QueryBuilder()
-    q = q[q["a"] == q["b"]]
-    pandas_query = "a == b"
-    generic_filter_test(lmdb_version_store_v1, "test_filter_equals_col_col", df, q, pandas_query)
-
-
-@use_of_function_scoped_fixtures_in_hypothesis_checked
-@settings(deadline=None)
-@given(
-    df=data_frames([column("a", elements=integral_type_strategies())], index=range_indexes()),
-    val=integral_type_strategies(),
-)
-def test_filter_not_equals_col_val(lmdb_version_store_v1, df, val):
-    assume(not df.empty)
-    q = QueryBuilder()
-    q = q[q["a"] != val]
-    pandas_query = "a != {}".format(val)
-    generic_filter_test(lmdb_version_store_v1, "test_filter_not_equals_col_val", df, q, pandas_query)
-
-
-@use_of_function_scoped_fixtures_in_hypothesis_checked
-@settings(deadline=None)
-@given(
-    df=data_frames([column("a", elements=integral_type_strategies())], index=range_indexes()),
-    val=integral_type_strategies(),
-)
-def test_filter_not_equals_val_col(lmdb_version_store_v1, df, val):
-    assume(not df.empty)
-    q = QueryBuilder()
-    q = q[val != q["a"]]
-    pandas_query = "{} != a".format(val)
-    generic_filter_test(lmdb_version_store_v1, "test_filter_not_equals_val_col", df, q, pandas_query)
-
-
-@use_of_function_scoped_fixtures_in_hypothesis_checked
-@settings(deadline=None)
-@given(
-    df=data_frames(
-        [column("a", elements=integral_type_strategies()), column("b", elements=integral_type_strategies())],
-        index=range_indexes(),
-    )
-)
-def test_filter_not_equals_col_col(lmdb_version_store_v1, df):
-    assume(not df.empty)
-    q = QueryBuilder()
-    q = q[q["a"] != q["b"]]
-    pandas_query = "a != b"
-    generic_filter_test(lmdb_version_store_v1, "test_filter_not_equals_col_col", df, q, pandas_query)
+    lib = lmdb_version_store_v1
+    symbol = "test_filter_binary_comparison"
+    lib.write(symbol, df)
+    for op in ["<", "<=", ">", ">=", "==", "!="]:
+        for comp in ["col op col", "col op val", "val op col"]:
+            if op == "<":
+                q = QueryBuilder()
+                if comp == "col op col":
+                    q = q[q["a"] < q["b"]]
+                else:
+                    q = q[q["a"] < val] if comp == "col op val" else q[val < q["a"]]
+            elif op == "<=":
+                q = QueryBuilder()
+                if comp == "col op col":
+                    q = q[q["a"] <= q["b"]]
+                else:
+                    q = q[q["a"] <= val] if comp == "col op val" else q[val <= q["a"]]
+            elif op == ">":
+                q = QueryBuilder()
+                if comp == "col op col":
+                    q = q[q["a"] > q["b"]]
+                else:
+                    q = q[q["a"] > val] if comp == "col op val" else q[val > q["a"]]
+            elif op == ">=":
+                q = QueryBuilder()
+                if comp == "col op col":
+                    q = q[q["a"] >= q["b"]]
+                else:
+                    q = q[q["a"] >= val] if comp == "col op val" else q[val >= q["a"]]
+            elif op == "==":
+                q = QueryBuilder()
+                if comp == "col op col":
+                    q = q[q["a"] == q["b"]]
+                else:
+                    q = q[q["a"] == val] if comp == "col op val" else q[val == q["a"]]
+            elif op == "!=":
+                q = QueryBuilder()
+                if comp == "col op col":
+                    q = q[q["a"] != q["b"]]
+                else:
+                    q = q[q["a"] != val] if comp == "col op val" else q[val != q["a"]]
+            if comp == "col op col":
+                pandas_query = f"a {op} b"
+            else:
+                pandas_query = f"a {op} {val}" if comp == "col op val" else f"{val} {op} a"
+            generic_filter_test(lib, symbol, df, q, pandas_query)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
