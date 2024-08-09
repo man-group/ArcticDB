@@ -3,6 +3,7 @@ import numpy as np
 from pandas.testing import assert_frame_equal
 import pytest
 from arcticdb.version_store.library import StagedDataFinalizeMethod
+from arcticdb.exceptions import UserInputException
 
 def test_merge_single_column(lmdb_library):
     lib = lmdb_library
@@ -182,9 +183,19 @@ class TestMergeSortAppend:
         lib.write("sym", initial_df)
         df1 = pd.DataFrame({"col": [2]}, index=pd.DatetimeIndex([np.datetime64('2023-01-02')], dtype="datetime64[ns]"))
         lib.write("sym", df1, staged=True)
-        with pytest.raises(Exception) as exception_info:
+        with pytest.raises(UserInputException) as exception_info:
             lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
         assert "append" in str(exception_info.value)
+
+    def test_appended_df_start_same_as_df_end(self, lmdb_library):
+        lib = lmdb_library
+        df = pd.DataFrame({"col": [1]}, index=pd.DatetimeIndex([np.datetime64('2023-01-01')]))
+        lib.write("sym", df)
+        lib.write("sym", df, staged=True)
+        lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+        res = lib.read("sym").data
+        expected_df = pd.DataFrame({"col": [1, 1]}, index=pd.DatetimeIndex([np.datetime64('2023-01-01'), np.datetime64('2023-01-01')]))
+        assert_frame_equal(lib.read("sym").data, expected_df)
 
 
 def test_prune_previous(lmdb_library):
