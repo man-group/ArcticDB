@@ -63,10 +63,10 @@ inline void merge_string_columns(const SegmentInMemory& segment, const std::shar
 
 inline bool dedup_rows_from_last_committed_segment(
     SegmentInMemory& last_committed_segment,
-    std::vector<SegmentInMemory>& history,
+    SegmentInMemory& history,
     std::vector<size_t>& segments_final_sizes
 ) {
-    auto last_committed_filter_bitset = last_committed_segment.get_duplicates_bitset(*history.rbegin());
+    auto last_committed_filter_bitset = last_committed_segment.get_duplicates_bitset(history);
     auto set_rows = last_committed_filter_bitset.count();
     ARCTICDB_DEBUG(log::version(), "filter_bitset.count() with last_committed is {} ", set_rows);
     if (set_rows > 0) {
@@ -74,9 +74,9 @@ inline bool dedup_rows_from_last_committed_segment(
         // segment, thus no more segments after this will match since segments are sorted
         // by time
         log::version().info("Non zero rows found - stopping dedup with last_committed_segment now");
-        if (set_rows != history.rbegin()->row_count()) {
+        if (set_rows != history.row_count()) {
             // filter segment in case it's needed
-            history.emplace_back(filter_segment(*history.rbegin(), std::move(last_committed_filter_bitset)));
+            history = filter_segment(history, std::move(last_committed_filter_bitset));
         }
         return false;
     } else {
@@ -87,21 +87,21 @@ inline bool dedup_rows_from_last_committed_segment(
 
 inline bool dedup_rows_from_segment(
     SegmentInMemory& merged,
-    std::vector<SegmentInMemory>& history,
+    SegmentInMemory& history,
     std::vector<size_t>& segments_final_sizes
     ) {
     // TODO: Currently, the original segment will be copied twice - once while filtering and once when
     // TODO: appending to merged. Combine the append and filter functionality.
-    auto filter_bitset = merged.get_duplicates_bitset(*history.rbegin());
+    auto filter_bitset = merged.get_duplicates_bitset(history);
     auto set_rows = filter_bitset.count();
     ARCTICDB_DEBUG(log::version(), "filter_bitset.count() is {} ", set_rows);
     if (set_rows == 0) {
         segments_final_sizes.push_back(0);
         return true;
     }
-    else if (set_rows < history.rbegin()->row_count()) {
+    else if (set_rows < history.row_count()) {
         ARCTICDB_DEBUG(log::version(), "Some rows are dup-ed, removing them");
-        history.emplace_back(filter_segment(*history.rbegin(), std::move(filter_bitset)));
+        history = filter_segment(history, std::move(filter_bitset));
     }
     return false;
 }
@@ -118,7 +118,7 @@ inline void merge_segments(
     timestamp max_idx = std::numeric_limits<timestamp>::min();
     bool dedup_with_last_committed = true;
     for (auto &segment : segments) {
-        std::vector<SegmentInMemory> history{(segment)}; //TODO - a single SegmentInMemory suffices
+        SegmentInMemory history = segment; //TODO - a single SegmentInMemory suffices
         if (dedup_rows){        
             if (dedup_with_last_committed && last_committed_segment) {
                 if (dedup_rows_from_last_committed_segment(*last_committed_segment, history, segments_final_sizes)) {
@@ -132,8 +132,8 @@ inline void merge_segments(
                 continue;
             }
         }
-        ARCTICDB_DEBUG(log::version(), "Appending segment with {} rows", history.rbegin()->row_count());
-        for(const auto& field : history.rbegin()->descriptor().fields()) {
+        ARCTICDB_DEBUG(log::version(), "Appending segment with {} rows", history.row_count());
+        for(const auto& field : history.descriptor().fields()) {
             if(!merged.column_index(field.name())){//TODO: Bottleneck for wide segments
                 auto pos = merged.add_column(field, 0, false);
                 if (!is_sparse){
@@ -142,24 +142,24 @@ inline void merge_segments(
             }
         }
 
-        if (history.rbegin()->row_count() && history.rbegin()->descriptor().index().type() == IndexDescriptorImpl::Type::TIMESTAMP) {
-            min_idx = std::min(min_idx, history.rbegin()->begin()->begin()->value<timestamp>());
-            max_idx = std::max(max_idx, (history.rbegin()->end() - 1)->begin()->value<timestamp>());
+        if (history.row_count() && history.descriptor().index().type() == IndexDescriptorImpl::Type::TIMESTAMP) {
+            min_idx = std::min(min_idx, history.begin()->begin()->value<timestamp>());
+            max_idx = std::max(max_idx, (history.end() - 1)->begin()->value<timestamp>());
 
             if (dedup_rows && merged.row_count()) {
-                util::check(history.rbegin()->begin()->begin()->value<timestamp>() >= (merged.end() - 1)->begin()->value<timestamp>(),
+                util::check(history.begin()->begin()->value<timestamp>() >= (merged.end() - 1)->begin()->value<timestamp>(),
                             "Timestamp in segment_agg merge is decreasing with merged");
             }
             if (dedup_rows && last_committed_segment && last_committed_segment->row_count()) {
-                util::check(history.rbegin()->begin()->begin()->value<timestamp>() >= (last_committed_segment->end() - 1)->begin()->value<timestamp>(),
+                util::check(history.begin()->begin()->value<timestamp>() >= (last_committed_segment->end() - 1)->begin()->value<timestamp>(),
                             "Timestamp in segment_agg merge is decreasing with last_segment_dedup");
             }
         }
 
-        merge_string_columns(*history.rbegin(), merged.string_pool_ptr(), false);
-        merged.append(*history.rbegin());
+        merge_string_columns(history, merged.string_pool_ptr(), false);
+        merged.append(history);
         merged.set_compacted(true);
-        segments_final_sizes.push_back(history.rbegin()->row_count());
+        segments_final_sizes.push_back(history.row_count());
         util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
     }
 }

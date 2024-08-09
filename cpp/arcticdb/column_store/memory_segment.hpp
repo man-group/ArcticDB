@@ -14,7 +14,6 @@
 #include <arcticdb/column_store/memory_segment_impl.hpp>
 
 namespace arcticdb {
-
 /*
  * Primary class used to interact with in-memory data. Note that a segment is not guaranteed to contain all
  * columns for a row as Arctic tiles across both the rows and the columns.

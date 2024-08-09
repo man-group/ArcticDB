@@ -538,17 +538,16 @@ bool SegmentInMemoryImpl::is_row_duplicate(
 
 util::BitSet SegmentInMemoryImpl::get_duplicates_bitset(SegmentInMemoryImpl& other) {
     util::BitSet duplicates (other.row_count());
-    if (other.row_count() == 0)
+    if (other.row_count() == 0) {
         return duplicates;
-    rows_hasher_.reset_iterator(begin());
-    for(auto row: other) {
-        if (!is_row_duplicate(row)) {
-            duplicates.set(row.row_id_, true);
-        } else {
-            ARCTICDB_DEBUG(log::version(), "Discarding row with index {} due to duplication",
-                util::format_timestamp(row.index<stream::TimeseriesIndex>()));
+    }
+    SegmentHasherForDedupRows this_hasher(*this), other_hasher(other);
+    for (size_t i = 0; i < other_hasher.row_hash_.size(); ++i) {
+        if (this_hasher.unique_row_hash_.count(other_hasher.row_hash_[i])) {
+            duplicates.set(i, true);
         }
     }
+    duplicates.merge(other_hasher.segment_dedup_result_);
     return duplicates;
 }
 

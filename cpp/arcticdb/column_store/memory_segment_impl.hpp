@@ -402,7 +402,7 @@ public:
 
     using iterator = SegmentIterator<Row>;
     using const_iterator = SegmentIterator<const Row>;
-
+    
     struct RowsHasher {
         std::optional<SegmentInMemoryImpl::iterator> last_iterator_;
         std::unordered_multimap<timestamp, SegmentInMemoryImpl::Row> incoming_hashed_rows_;
@@ -923,6 +923,30 @@ private:
     util::MagicNum<'M', 'S', 'e', 'g'> magic_;
     std::optional<TimeseriesDescriptor> tsd_;
     RowsHasher rows_hasher_;
+};
+
+class SegmentHasherForDedupRows {
+public:
+    SegmentHasherForDedupRows(const SegmentInMemoryImpl &segment) :
+        segment_dedup_result_(segment.row_count()),
+        row_hash_(segment.row_count()) {
+        for (const auto& row : segment) {
+            auto hash = row.get_hash();
+            row_hash_[row.row_pos()] = hash;
+            auto insert_result = unique_row_hash_.insert(hash);
+            if (!insert_result.second) {
+                segment_dedup_result_.set(row.row_pos());
+            }
+        }
+    }
+ 
+    void merge_unique_row_hash(const SegmentHasherForDedupRows &other) {
+        unique_row_hash_.insert(other.unique_row_hash_.begin(), other.unique_row_hash_.end());
+    }
+
+    util::BitSet segment_dedup_result_;
+    std::vector<size_t> row_hash_;
+    ankerl::unordered_dense::set<size_t> unique_row_hash_;
 };
 
 namespace {
