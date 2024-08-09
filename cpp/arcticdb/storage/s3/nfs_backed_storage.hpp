@@ -60,7 +60,6 @@ private:
     const std::string& root_folder() const { return root_folder_; }
     const std::string& region() const { return region_; }
 
-    std::shared_ptr<storage::s3::S3ApiInstance> s3_api_;
     std::unique_ptr<storage::s3::S3ClientWrapper> s3_client_;
     std::string root_folder_;
     std::string bucket_name_;

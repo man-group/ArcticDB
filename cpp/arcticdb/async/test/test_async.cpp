@@ -13,6 +13,7 @@
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/util/test/config_common.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
+#include <arcticdb/stream/test/stream_test_common.hpp>
 #include <arcticdb/util/random.h>
 
 #include <fmt/format.h>
@@ -20,7 +21,7 @@
 #include <string>
 #include <vector>
 
-namespace ac = arcticdb;
+using namespace arcticdb;
 namespace aa = arcticdb::async;
 namespace as = arcticdb::storage;
 namespace asl = arcticdb::storage::lmdb;
@@ -41,18 +42,18 @@ TEST(Async, SinkBasic) {
     auto codec_opt = std::make_shared<arcticdb::proto::encoding::VariantCodec>();
     aa::TaskScheduler sched{1};
 
-    auto seg = ac::SegmentInMemory();
+    auto seg = SegmentInMemory();
     aa::EncodeAtomTask enc{
-        ac::entity::KeyType::GENERATION, ac::entity::VersionId{6}, ac::NumericId{123}, ac::NumericId{456}, ac::timestamp{457}, ac::entity::NumericIndex{999}, std::move(seg), codec_opt, ac::EncodingVersion::V2
+        entity::KeyType::GENERATION, entity::VersionId{6}, NumericId{123}, NumericId{456}, timestamp{457}, entity::NumericIndex{999}, std::move(seg), codec_opt, EncodingVersion::V2
     };
 
     auto v = sched.submit_cpu_task(std::move(enc)).via(&aa::io_executor()).thenValue(aa::WriteSegmentTask{lib}).get();
 
-    ac::HashAccum h;
+    HashAccum h;
     auto default_content_hash = h.digest();
 
-    ASSERT_EQ(ac::entity::atom_key_builder().gen_id(6).start_index(456).end_index(457).creation_ts(999)
-        .content_hash(default_content_hash).build(ac::NumericId{123}, ac::entity::KeyType::GENERATION),
+    ASSERT_EQ(entity::atom_key_builder().gen_id(6).start_index(456).end_index(457).creation_ts(999)
+        .content_hash(default_content_hash).build(NumericId{123}, entity::KeyType::GENERATION),
               to_atom(v)
     );
 }
@@ -70,30 +71,30 @@ TEST(Async, DeDupTest) {
     as::UserAuth au{"abc"};
     auto lib = library_index.get_library(library_path, as::OpenMode::WRITE, au);
     auto codec_opt = std::make_shared<arcticdb::proto::encoding::VariantCodec>();
-    aa::AsyncStore store(lib, *codec_opt, ac::EncodingVersion::V2);
-    auto seg = ac::SegmentInMemory();
+    aa::AsyncStore store(lib, *codec_opt, EncodingVersion::V2);
+    auto seg = SegmentInMemory();
 
-    std::vector<std::pair<ast::StreamSink::PartialKey, ac::SegmentInMemory>> key_segments;
+    std::vector<std::pair<ast::StreamSink::PartialKey, SegmentInMemory>> key_segments;
 
-    key_segments.emplace_back(ast::StreamSink::PartialKey{ ac::entity::KeyType::TABLE_DATA, 1, "", ac::entity::NumericIndex{0}, ac::entity::NumericIndex{1} }, seg);
-    key_segments.emplace_back(ast::StreamSink::PartialKey{ ac::entity::KeyType::TABLE_DATA, 2, "", ac::entity::NumericIndex{1}, ac::entity::NumericIndex{2} }, seg);
+    key_segments.emplace_back(ast::StreamSink::PartialKey{ entity::KeyType::TABLE_DATA, 1, "", entity::NumericIndex{0}, entity::NumericIndex{1} }, seg);
+    key_segments.emplace_back(ast::StreamSink::PartialKey{ entity::KeyType::TABLE_DATA, 2, "", entity::NumericIndex{1}, entity::NumericIndex{2} }, seg);
 
-    ac::HashAccum h;
+    HashAccum h;
     auto default_content_hash = h.digest();
 
-    auto de_dup_map = std::make_shared<ac::DeDupMap>();
-    auto k = ac::entity::atom_key_builder().gen_id(3).start_index(0).end_index(1).creation_ts(999)
-            .content_hash(default_content_hash).build("", ac::entity::KeyType::TABLE_DATA);
+    auto de_dup_map = std::make_shared<DeDupMap>();
+    auto k = entity::atom_key_builder().gen_id(3).start_index(0).end_index(1).creation_ts(999)
+            .content_hash(default_content_hash).build("", entity::KeyType::TABLE_DATA);
     de_dup_map->insert_key(k);
 
     std::vector<folly::Future<arcticdb::pipelines::SliceAndKey>> slice_key_futures;
     for(auto& [key, segment] : key_segments) {
-        auto input = std::make_tuple<ast::StreamSink::PartialKey, ac::SegmentInMemory, ap::FrameSlice>(std::move(key), std::move(segment), {});
+        auto input = std::make_tuple<ast::StreamSink::PartialKey, SegmentInMemory, ap::FrameSlice>(std::move(key), std::move(segment), {});
         auto fut = folly::makeFuture(std::move(input));
         slice_key_futures.emplace_back(store.async_write(std::move(fut), de_dup_map));
     }
     auto slice_keys = folly::collect(slice_key_futures).get();
-    std::vector<ac::AtomKey> keys;
+    std::vector<AtomKey> keys;
     for(const auto& slice_key : slice_keys)
         keys.emplace_back(slice_key.key());
 
@@ -290,4 +291,72 @@ TEST(Async, NumCoresCgroupV2) {
 
         ASSERT_THROW(arcticdb::async::get_default_num_cpus(test_path), std::invalid_argument);
     #endif
+}
+
+std::shared_ptr<arcticdb::Store> create_store(const storage::LibraryPath &library_path,
+                  as::LibraryIndex &library_index,
+                  const storage::UserAuth &user_auth,
+                  std::shared_ptr<proto::encoding::VariantCodec> &codec_opt) {
+    auto lib = library_index.get_library(library_path, as::OpenMode::WRITE, user_auth);
+    auto store = aa::AsyncStore(lib, *codec_opt, EncodingVersion::V1);
+    return std::make_shared<aa::AsyncStore<>>(std::move(store));
+}
+
+TEST(Async, CopyCompressedInterStore) {
+    using namespace arcticdb::async;
+
+    // Given
+    as::EnvironmentName environment_name{"research"};
+    as::StorageName storage_name("storage_name");
+    as::LibraryPath library_path{"a", "b"};
+    namespace ap = arcticdb::pipelines;
+
+    auto config = proto::nfs_backed_storage::Config();
+    config.set_use_mock_storage_for_testing(true);
+
+    auto env_config = arcticdb::get_test_environment_config(
+        library_path, storage_name, environment_name, std::make_optional(config));
+    auto config_resolver = as::create_in_memory_resolver(env_config);
+    as::LibraryIndex library_index{environment_name, config_resolver};
+
+    as::UserAuth user_auth{"abc"};
+    auto codec_opt = std::make_shared<arcticdb::proto::encoding::VariantCodec>();
+
+    auto source_store = create_store(library_path, library_index, user_auth, codec_opt);
+
+    // When - we write a key to the source and copy it
+    const arcticdb::entity::RefKey& key = arcticdb::entity::RefKey{"abc", KeyType::VERSION_REF};
+    auto segment_in_memory = get_test_frame<arcticdb::stream::TimeseriesIndex>("symbol", {}, 10, 0).segment_;
+    auto row_count = segment_in_memory.row_count();
+    ASSERT_GT(row_count, 0);
+    auto segment = encode_dispatch(std::move(segment_in_memory), *codec_opt, arcticdb::EncodingVersion::V1);
+    (void)segment.calculate_size();
+    source_store->write_compressed_sync(as::KeySegmentPair{key, std::move(segment)});
+
+    auto targets = std::vector<std::shared_ptr<arcticdb::Store>>{
+        create_store(library_path, library_index, user_auth, codec_opt),
+        create_store(library_path, library_index, user_auth, codec_opt),
+        create_store(library_path, library_index, user_auth, codec_opt)
+    };
+
+    CopyCompressedInterStoreTask task{
+        key,
+        std::nullopt,
+        false,
+        false,
+        source_store,
+        targets,
+        std::shared_ptr<BitRateStats>()
+    };
+
+    arcticdb::async::TaskScheduler sched{1};
+    auto res = sched.submit_io_task(std::move(task)).get();
+
+    // Then
+    ASSERT_TRUE(std::holds_alternative<CopyCompressedInterStoreTask::AllOk>(res));
+    for (const auto& target_store : targets) {
+        auto read_result = target_store->read_sync(key);
+        ASSERT_EQ(std::get<RefKey>(read_result.first), key);
+        ASSERT_EQ(read_result.second.row_count(), row_count);
+    }
 }
