@@ -84,7 +84,6 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
     ERROR_CODE(5020, E_UNEXPECTED_S3_ERROR) \
     ERROR_CODE(5021, E_S3_RETRYABLE) \
     ERROR_CODE(5030, E_UNEXPECTED_AZURE_ERROR) \
-    ERROR_CODE(5040, E_UNEXPECTED_ROCKSDB_ERROR) \
     ERROR_CODE(5050, E_MONGO_BULK_OP_NO_REPLY) \
     ERROR_CODE(5051, E_UNEXPECTED_MONGO_ERROR) \
     ERROR_CODE(6000, E_UNSORTED_DATA) \
@@ -166,7 +165,6 @@ using UnexpectedLMDBErrorException = ArcticSpecificException<ErrorCode::E_UNEXPE
 using UnexpectedS3ErrorException = ArcticSpecificException<ErrorCode::E_UNEXPECTED_S3_ERROR>;
 using S3RetryableException = ArcticSpecificException<ErrorCode::E_S3_RETRYABLE>;
 using UnexpectedAzureException = ArcticSpecificException<ErrorCode::E_UNEXPECTED_AZURE_ERROR>;
-using UnexpectedRocksDBErrorException = ArcticSpecificException<ErrorCode::E_UNEXPECTED_ROCKSDB_ERROR>;
 using MongoOperationNoReplyException = ArcticSpecificException<ErrorCode::E_MONGO_BULK_OP_NO_REPLY>;
 using UnexpectedMongoException = ArcticSpecificException<ErrorCode::E_UNEXPECTED_MONGO_ERROR>;
 using SortingException = ArcticCategorizedException<ErrorCategory::SORTING>;
@@ -208,11 +206,6 @@ template<>
 template<>
 [[noreturn]] inline void throw_error<ErrorCode::E_UNEXPECTED_AZURE_ERROR>(const std::string& msg) {
     throw ArcticSpecificException<ErrorCode::E_UNEXPECTED_AZURE_ERROR>(msg);
-}
-
-template<>
-[[noreturn]] inline void throw_error<ErrorCode::E_UNEXPECTED_ROCKSDB_ERROR>(const std::string& msg) {
-    throw ArcticSpecificException<ErrorCode::E_UNEXPECTED_ROCKSDB_ERROR>(msg);
 }
 
 template<>

@@ -36,7 +36,7 @@ find_package_handle_standard_args(LZ4
 
 if (LZ4_FOUND)
   # `lz4_FOUND` needs to be defined because:
-  #  - Other dependencies (such as RocksDB) also resolve LZ4 using `find_package(lz4 ...)`
+  #  - Other dependencies also resolve LZ4 using `find_package(lz4 ...)`
   #  - CMake's syntax is case-sensitive
   #
   # See:

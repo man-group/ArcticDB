@@ -50,10 +50,6 @@ if(NOT ${ARCTICDB_USING_CONDA})
     find_package(Libevent CONFIG REQUIRED)
     set(ARCTICDB_MONGO_LIBS $<IF:$<TARGET_EXISTS:mongo::mongocxx_static>,mongo::mongocxx_static,mongo::mongocxx_shared>)
     set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
-
-    if(NOT DEFINED ARCTICDB_INCLUDE_ROCKSDB)
-        set(ARCTICDB_INCLUDE_ROCKSDB 1)
-    endif()
 else()
 
     # ARCTICDB_USING_CONDA is used in header of the files including vendored
@@ -94,13 +90,6 @@ endif()
 add_library(xxHash STATIC IMPORTED)
 set_target_properties(xxHash PROPERTIES IMPORTED_LOCATION ${xxHash_LIBRARY})
 set_target_properties(xxHash PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${xxHash_INCLUDE_DIR})
-
-# RocksDB can be manually excluded with set(ARCTICDB_INCLUDE_ROCKSDB 0)
-# Default is to include on PyPI builds and exclude on conda builds
-if(${ARCTICDB_INCLUDE_ROCKSDB})
-    add_compile_definitions(ARCTICDB_INCLUDE_ROCKSDB)
-    find_package(RocksDB CONFIG REQUIRED)
-endif()
 
 # Libraries baked into the internal and external Linux images are found by searching various paths
 # On Windows, vcpkg will provide a "Config" which takes precedence
@@ -509,13 +498,6 @@ set(arcticdb_srcs
         storage/lmdb/lmdb.hpp
         )
 
-if(${ARCTICDB_INCLUDE_ROCKSDB})
-    list (APPEND arcticdb_srcs
-        storage/rocksdb/rocksdb_storage.hpp
-        storage/rocksdb/rocksdb_storage.cpp
-    )
-endif()
-
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
 if (WIN32)
@@ -601,10 +583,6 @@ else ()
             ${Sasl2_LIBRARY}
             )
 endif ()
-
-if (${ARCTICDB_INCLUDE_ROCKSDB})
-    list (APPEND arcticdb_core_libraries RocksDB::rocksdb)
-endif()
 
 list (APPEND arcticdb_core_libraries Threads::Threads) # comes last for weakreference resolution pthread_atexit in folly
 

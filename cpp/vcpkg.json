@@ -64,7 +64,6 @@
     "azure-core-cpp",
     "azure-identity-cpp",
     "azure-storage-blobs-cpp",
-    "rocksdb",
     "benchmark"
   ],
   "overrides": [
