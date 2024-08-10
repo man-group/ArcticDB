@@ -134,7 +134,7 @@ std::shared_ptr<Library> LibraryManager::get_library(const LibraryPath& path,
                                                      const StorageOverride& storage_override,
                                                      const bool ignore_cache) {
     if (!ignore_cache) {
-        // Check global cache first, important for LMDB and RocksDB to only open once from a given process
+        // Check global cache first, important for LMDB to only open once from a given process
         std::lock_guard<std::mutex> lock{open_libraries_mutex_};
         if (auto cached = open_libraries_.find(path); cached != open_libraries_.end()) {
             return cached -> second;

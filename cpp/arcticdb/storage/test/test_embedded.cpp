@@ -13,10 +13,6 @@
 #include <arcticdb/storage/memory/memory_storage.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
 
-#ifdef ARCTICDB_INCLUDE_ROCKSDB
-#include <arcticdb/storage/rocksdb/rocksdb_storage.hpp>
-#endif
-
 #include <filesystem>
 #include <stdexcept>
 #include <arcticdb/entity/atom_key.hpp>
@@ -52,18 +48,9 @@ public:
 
             as::LibraryPath library_path{"a", "b"};
             return std::make_unique<as::memory::MemoryStorage>(library_path, as::OpenMode::WRITE, cfg);
+        } else {
+          throw std::runtime_error("Unknown backend generator type.");
         }
-#ifdef ARCTICDB_INCLUDE_ROCKSDB
-        else if (backend_ == "rocksdb") {
-            arcticdb::proto::rocksdb_storage::Config cfg;
-            fs::path db_name = "test_rocksdb";
-            cfg.set_path((TEST_DATABASES_PATH / db_name).generic_string());
-
-            as::LibraryPath library_path{"a", "b"};
-            return std::make_unique<as::rocksdb::RocksDBStorage>(library_path, as::OpenMode::WRITE, cfg);
-        }
-#endif
-        throw std::runtime_error("Unknown backend generator type.");
     }
 
     void delete_any_test_databases() const {
@@ -89,7 +76,6 @@ class SimpleTestSuite : public testing::TestWithParam<BackendGenerator> {
 };
 
 TEST_P(SimpleTestSuite, ConstructDestruct) {
-    // The rocksdb destructor was hard to get working, so this is useful
     std::unique_ptr<as::Storage> storage = GetParam().new_backend();
 }
 
@@ -203,11 +189,7 @@ TEST_P(SimpleTestSuite, Strings) {
 using namespace std::string_literals;
 
 std::vector<BackendGenerator> get_backend_generators() {
-    std::vector<BackendGenerator> backend_generators{"lmdb"s, "mem"s};
-#ifdef ARCTICDB_INCLUDE_ROCKSDB
-    backend_generators.emplace_back("rocksdb"s);
-#endif
-    return backend_generators;
+    return {"lmdb"s, "mem"s};
 }
 auto backend_generators = get_backend_generators();
 
