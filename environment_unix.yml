@@ -37,8 +37,6 @@ dependencies:
   - azure-core-cpp
   - azure-identity-cpp
   - azure-storage-blobs-cpp
-  # RocksDB is not supported on the conda build at the moment
-  #  - rocksdb
   - fmt
   - folly==2023.09.25.00
   - unordered_dense
