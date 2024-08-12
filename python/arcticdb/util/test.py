@@ -17,13 +17,15 @@ import time
 import attr
 from functools import wraps
 
-from arcticdb.config import Defaults
-from arcticdb.log import configure, logger_by_name
+try:
+    from pandas.errors import UndefinedVariableError
+except ImportError:
+    from pandas.core.computation.ops import UndefinedVariableError
+
 from arcticdb.util._versions import PANDAS_VERSION, CHECK_FREQ_VERSION
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._custom_normalizers import CustomNormalizer
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata
-from arcticc.pb2.logger_pb2 import LoggerConfig, LoggersConfig
 from arcticc.pb2.storage_pb2 import LibraryDescriptor, VersionStoreConfig
 from arcticdb.version_store.helper import ArcticFileConfig
 from arcticdb.config import _DEFAULT_ENVS_PATH
@@ -475,3 +477,76 @@ def random_seed_context():
         yield
     finally:
         random.setstate(state)
+
+
+DYNAMIC_STRINGS_SUFFIX = "dynamic_strings"
+FIXED_STRINGS_SUFFIX = "fixed_strings"
+
+
+def generic_filter_test(lib, symbol, df, arctic_query, pandas_query):
+    expected = df.query(pandas_query)
+    received = lib.read(symbol, query_builder=arctic_query).data
+    if not np.array_equal(expected, received):
+        print(f"\nOriginal dataframe:\n{df}\ndtypes:\n{df.dtypes}")
+        print(f"\nPandas query: {pandas_query}")
+        print(f"\nPandas returns:\n{expected}")
+        print(f"\nQueryBuilder returns:\n{received}")
+        assert False
+    assert True
+
+
+# For string queries, test both with and without dynamic strings, and with the query both optimised for speed and memory
+def generic_filter_test_strings(lib, base_symbol, df, arctic_query, pandas_query):
+    for symbol in [f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", f"{base_symbol}_{FIXED_STRINGS_SUFFIX}"]:
+        arctic_query.optimise_for_speed()
+        generic_filter_test(lib, symbol, df, arctic_query, pandas_query)
+        arctic_query.optimise_for_memory()
+        generic_filter_test(lib, symbol, df, arctic_query, pandas_query)
+
+
+def generic_filter_test_dynamic(lib, symbol, slices, arctic_query, pandas_query):
+    queried_slices = []
+    for slice in slices:
+        try:
+            queried_slices.append(slice.query(pandas_query))
+        except UndefinedVariableError:
+            # Might have edited out the query columns entirely
+            pass
+    expected = pd.concat(queried_slices).query(pandas_query)
+    received = lib.read(symbol, query_builder=arctic_query).data
+    if not len(expected) == 0 and len(received) == 0:
+        if not np.array_equal(expected, received):
+            print("Original dataframe\n{}".format(pd.concat(slices)))
+            print("Pandas query\n{}".format(pandas_query))
+            print("Expected\n{}".format(expected))
+            print("Received\n{}".format(received))
+            assert False
+    assert True
+
+
+# For string queries, test both with and without dynamic strings, and with the query both optimised for speed and memory
+def generic_filter_test_strings_dynamic(lib, base_symbol, slices, arctic_query, pandas_query):
+    for symbol in [f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", f"{base_symbol}_{FIXED_STRINGS_SUFFIX}"]:
+        arctic_query.optimise_for_speed()
+        generic_filter_test_dynamic(lib, symbol, slices, arctic_query, pandas_query)
+        arctic_query.optimise_for_memory()
+        generic_filter_test_dynamic(lib, symbol, slices, arctic_query, pandas_query)
+
+
+# TODO: Replace with np.array_equal with equal_nan argument (added in 1.19.0)
+def generic_filter_test_nans(lib, symbol, df, arctic_query, pandas_query):
+    lib.write(symbol, df, dynamic_strings=True)
+    expected = df.query(pandas_query)
+    received = lib.read(symbol, query_builder=arctic_query).data
+    assert expected.shape == received.shape
+    for col in expected.columns:
+        expected_col = expected.loc[:, col]
+        received_col = received.loc[:, col]
+        for idx, expected_val in expected_col.items():
+            received_val = received_col[idx]
+            if isinstance(expected_val, str):
+                assert isinstance(received_val, str) and expected_val == received_val
+            elif expected_val is None:
+                assert received_val is None
+            elif np.isnan(expected_val):
+                assert np.isnan(received_val)

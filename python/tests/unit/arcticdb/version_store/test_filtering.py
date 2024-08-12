@@ -17,86 +17,27 @@ import random
 import string
 import sys
 
-try:
-    from pandas.errors import UndefinedVariableError
-except ImportError:
-    from pandas.core.computation.ops import UndefinedVariableError
-
 from arcticdb.exceptions import ArcticNativeException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.exceptions import InternalException, StorageException, UserInputException
-from arcticdb.util.test import assert_frame_equal, get_wide_dataframe, make_dynamic, regularize_dataframe
+from arcticdb.util.test import (
+    assert_frame_equal,
+    get_wide_dataframe,
+    make_dynamic,
+    regularize_dataframe,
+    DYNAMIC_STRINGS_SUFFIX,
+    FIXED_STRINGS_SUFFIX,
+    generic_filter_test,
+    generic_filter_test_strings,
+    generic_filter_test_dynamic,
+    generic_filter_test_strings_dynamic,
+    generic_filter_test_nans,
+)
 from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION
 from arcticdb_ext import set_config_int
 
 pytestmark = pytest.mark.pipeline
-
-
-def generic_filter_test(lib, symbol, df, arctic_query, pandas_query, dynamic_strings=True):
-    lib.write(symbol, df, dynamic_strings=dynamic_strings)
-    expected = df.query(pandas_query)
-    received = lib.read(symbol, query_builder=arctic_query).data
-    if not np.array_equal(expected, received):
-        print(f"\nOriginal dataframe:\n{df}\ndtypes:\n{df.dtypes}")
-        print(f"\nPandas query: {pandas_query}")
-        print(f"\nPandas returns:\n{expected}")
-        print(f"\nQueryBuilder returns:\n{received}")
-        assert False
-    assert True
-
-
-# For string queries, test both with and without dynamic strings, and with the query both optimised for speed and memory
-def generic_filter_test_strings(lib, symbol, df, arctic_query, pandas_query):
-    for dynamic_strings in [True, False]:
-        arctic_query.optimise_for_speed()
-        generic_filter_test(lib, symbol, df, arctic_query, pandas_query, dynamic_strings)
-        arctic_query.optimise_for_memory()
-        generic_filter_test(lib, symbol, df, arctic_query, pandas_query, dynamic_strings)
-
-
-# TODO: Replace with np.array_equal with equal_nan argument (added in 1.19.0)
-def generic_filter_test_nans(lib, symbol, df, arctic_query, pandas_query):
-    lib.write(symbol, df, dynamic_strings=True)
-    expected = df.query(pandas_query)
-    received = lib.read(symbol, query_builder=arctic_query).data
-    assert expected.shape == received.shape
-    for col in expected.columns:
-        expected_col = expected.loc[:, col]
-        received_col = received.loc[:, col]
-        for idx, expected_val in expected_col.items():
-            received_val = received_col[idx]
-            if isinstance(expected_val, str):
-                assert isinstance(received_val, str) and expected_val == received_val
-            elif expected_val is None:
-                assert received_val is None
-            elif np.isnan(expected_val):
-                assert np.isnan(received_val)
-
-
-def generic_dynamic_filter_test(version_store, symbol, df, arctic_query, pandas_query, dynamic_strings=True):
-    version_store.delete(symbol)
-    expected, slices = make_dynamic(df)
-    for df_slice in slices:
-        version_store.append(symbol, df_slice, write_if_missing=True)
-
-    try:
-        expected = expected.query(pandas_query)
-        received = version_store.read(symbol, query_builder=arctic_query).data
-        expected = regularize_dataframe(expected)
-        received = regularize_dataframe(received)
-        if not len(expected) == 0 and len(received) == 0:
-            if not np.array_equal(expected, received):
-                print("Original dataframe\n{}".format(expected))
-                print("Pandas query\n{}".format(pandas_query))
-                print("Expected\n{}".format(expected))
-                print("Received\n{}".format(received))
-                assert False
-    except UndefinedVariableError:
-        # Might have edited out the query columns entirely
-        pass
-
-    assert True
 
 
 @pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
@@ -125,11 +66,13 @@ def test_filter_column_not_present_static(lmdb_version_store_v1):
 @pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
 def test_filter_column_attribute_syntax(request, lib_type):
     lib = request.getfixturevalue(lib_type)
+    symbol = "test_filter_column_attribute_syntax"
     df = pd.DataFrame({"a": [np.uint8(1), np.uint8(0)]})
+    lib.write(symbol, df)
     q = QueryBuilder()
     q = q[q.a < np.uint8(1)]
     pandas_query = "a < 1"
-    generic_filter_test(lib, "test_filter_column_attribute_syntax", df, q, pandas_query)
+    generic_filter_test(lib, symbol, df, q, pandas_query)
 
 
 @pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
@@ -197,11 +140,15 @@ def test_filter_date_range_row_indexed(lmdb_version_store_tiny_segment):
 
 
 def test_filter_clashing_values(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    base_symbol = "test_filter_clashing_values"
     df = pd.DataFrame({"a": [10, 11, 12], "b": ["11", "12", "13"]}, index=np.arange(3))
+    lib.write(f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", df, dynamic_strings=True)
+    lib.write(f"{base_symbol}_{FIXED_STRINGS_SUFFIX}", df, dynamic_strings=False)
     q = QueryBuilder()
     q = q[(q.a == 11) | (q.b == "11")]
     pandas_query = "(a == 11) | (b == '11')"
-    generic_filter_test_strings(lmdb_version_store_v1, "test_filter_clashing_values", df, q, pandas_query)
+    generic_filter_test_strings(lib, base_symbol, df, q, pandas_query)
 
 
 def test_filter_bool_nonbool_comparison(lmdb_version_store_v1):
@@ -243,31 +190,43 @@ def test_filter_bool_nonbool_comparison(lmdb_version_store_v1):
 
 
 def test_filter_bool_column(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    symbol = "test_filter_bool_column"
     df = pd.DataFrame({"a": [True, False]}, index=np.arange(2))
+    lib.write(symbol, df)
     q = QueryBuilder()
     q = q[q["a"]]
     pandas_query = "a"
-    generic_filter_test(lmdb_version_store_v1, "test_filter_bool_column", df, q, pandas_query)
+    generic_filter_test(lib, symbol, df, q, pandas_query)
 
 
 def test_filter_bool_column_not(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    symbol = "test_filter_bool_column_not"
     df = pd.DataFrame({"a": [True, False]}, index=np.arange(2))
+    lib.write(symbol, df)
     q = QueryBuilder()
     q = q[~q["a"]]
     pandas_query = "~a"
-    generic_filter_test(lmdb_version_store_v1, "test_filter_bool_column_not", df, q, pandas_query)
+    generic_filter_test(lib, symbol, df, q, pandas_query)
 
 
 def test_filter_bool_column_binary_boolean(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    symbol = "test_filter_bool_column_binary_boolean"
     df = pd.DataFrame({"a": [True, True, False, False], "b": [True, False, True, False]}, index=np.arange(4))
+    lib.write(symbol, df)
     q = QueryBuilder()
     q = q[q["a"] & q["b"]]
     pandas_query = "a & b"
-    generic_filter_test(lmdb_version_store_v1, "test_filter_bool_column_binary_boolean", df, q, pandas_query)
+    generic_filter_test(lib, symbol, df, q, pandas_query)
 
 
 def test_filter_bool_column_comparison(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    symbol = "test_filter_bool_column_comparison"
     df = pd.DataFrame({"a": [True, False]}, index=np.arange(2))
+    lib.write(symbol, df)
     comparators = ["==", "!=", "<", "<=", ">", ">="]
     for comparator in comparators:
         for bool_value in [True, False]:
@@ -285,7 +244,7 @@ def test_filter_bool_column_comparison(lmdb_version_store_v1):
                 q = q[q["a"] > bool_value]
             elif comparator == ">=":
                 q = q[q["a"] >= bool_value]
-            generic_filter_test(lmdb_version_store_v1, "test_filter_bool_column_comparison", df, q, pandas_query)
+            generic_filter_test(lib, symbol, df, q, pandas_query)
 
 
 def test_filter_datetime_naive(lmdb_version_store_v1):
@@ -470,9 +429,12 @@ def test_filter_datetime_nanoseconds(lmdb_version_store_v1):
 
 
 def test_filter_isin_clashing_sets(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    symbol = "test_filter_isin_clashing_sets"
     a_unique_val = 100000
     b_unique_val = 200000
     df = pd.DataFrame({"a": [-1, a_unique_val, -1], "b": [-1, -1, b_unique_val]}, index=np.arange(3))
+    lib.write(symbol, df)
     q = QueryBuilder()
     vals1 = np.arange(10000, dtype=np.uint64)
     np.put(vals1, 5000, a_unique_val)
@@ -481,7 +443,7 @@ def test_filter_isin_clashing_sets(lmdb_version_store_v1):
     assert str(vals1) == str(vals2)
     q = q[(q["a"].isin(vals1)) | (q["b"].isin(vals2))]
     pandas_query = "(a in {}) | (b in {})".format([a_unique_val], [b_unique_val])
-    generic_filter_test(lmdb_version_store_v1, "test_filter_isin_clashing_sets", df, q, pandas_query)
+    generic_filter_test(lib, symbol, df, q, pandas_query)
 
 
 @pytest.mark.parametrize(
@@ -546,16 +508,19 @@ _uint64_max = np.iinfo(np.uint64).max
 @pytest.mark.parametrize("signed_type", (np.int8, np.int16, np.int32, np.int64))
 @pytest.mark.parametrize("uint64_in", ("df", "vals") if PANDAS_VERSION >= Version("1.2") else ("vals",))
 def test_filter_numeric_membership_mixing_int64_and_uint64(lmdb_version_store_v1, op, signed_type, uint64_in):
+    lib = lmdb_version_store_v1
+    symbol = "test_filter_numeric_membership_mixing_int64_and_uint64"
     signed = signed_type(-1)
     if uint64_in == "df":
         df, vals = pd.DataFrame({"a": [_uint64_max]}), [signed]
     else:
         df, vals = pd.DataFrame({"a": [signed]}), [_uint64_max]
+    lib.write(symbol, df)
 
     q = QueryBuilder()
     q = q[q["a"].isin(vals) if op == "in" else q["a"].isnotin(vals)]
     pandas_query = f"a {op} {vals}"
-    generic_filter_test(lmdb_version_store_v1, "test_filter_numeric_mixing", df, q, pandas_query)
+    generic_filter_test(lib, symbol, df, q, pandas_query)
 
 
 def test_filter_nones_and_nans_retained_in_string_column(lmdb_version_store_v1):
@@ -576,14 +541,15 @@ def test_filter_nones_and_nans_retained_in_string_column(lmdb_version_store_v1):
 
 # Tests that false matches aren't generated when list members truncate to column values
 def test_filter_fixed_width_string_isin_truncation(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    symbol = "test_filter_fixed_width_string_isin_truncation"
     df = pd.DataFrame({"a": ["1"]}, index=np.arange(1))
+    lib.write(symbol, df, dynamic_strings=False)
     vals = ["12"]
     q = QueryBuilder()
     q = q[q["a"].isin(vals)]
     pandas_query = "a in {}".format(list(vals))
-    generic_filter_test(
-        lmdb_version_store_v1, "test_filter_fixed_width_string_isin_truncation", df, q, pandas_query, dynamic_strings=False
-    )
+    generic_filter_test(lib, symbol, df, q, pandas_query)
 
 
 def test_filter_stringpool_shrinking_basic(lmdb_version_store_tiny_segment):
@@ -594,6 +560,8 @@ def test_filter_stringpool_shrinking_basic(lmdb_version_store_tiny_segment):
     # - at least one segment will need all of the strings in it's pool after filtering
     # - at least one segment will need none of the strings in it's pool after filtering
     # - at least one segment will need some, but not all of the strings in it's pool after filtering
+    lib = lmdb_version_store_tiny_segment
+    base_symbol = "test_filter_stringpool_shrinking_basic"
     df = pd.DataFrame(
         {
             "a": ["a1", "a2", "a3", "a4", "a5"],
@@ -602,28 +570,30 @@ def test_filter_stringpool_shrinking_basic(lmdb_version_store_tiny_segment):
             "d": ["d11", "d2", "d3", "d4", "d5"],
         }
     )
+    lib.write(f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", df, dynamic_strings=True)
+    lib.write(f"{base_symbol}_{FIXED_STRINGS_SUFFIX}", df, dynamic_strings=False)
     q = QueryBuilder()
     q = q[q["a"] != "a1"]
     q.optimise_for_memory()
     pandas_query = "a != 'a1'"
-    generic_filter_test_strings(
-        lmdb_version_store_tiny_segment, "test_filter_stringpool_shrinking_1", df, q, pandas_query
-    )
+    generic_filter_test_strings(lib, base_symbol, df, q, pandas_query)
 
 
 def test_filter_stringpool_shrinking_block_alignment(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    base_symbol = "test_filter_stringpool_shrinking_block_alignment"
     # Create a dataframe with more than one block (3968 bytes) worth of strings for the stringpool
     string_length = 10
     num_rows = 1000
     data = ["".join(random.choice(string.ascii_uppercase) for _ in range(string_length)) for unused in range(num_rows)]
     df = pd.DataFrame({"a": data})
+    lib.write(f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", df, dynamic_strings=True)
+    lib.write(f"{base_symbol}_{FIXED_STRINGS_SUFFIX}", df, dynamic_strings=False)
     q = QueryBuilder()
     string_to_find = data[3]
     q = q[q["a"] == string_to_find]
     pandas_query = f"a == '{string_to_find}'"
-    generic_filter_test_strings(
-        lmdb_version_store_v1, "test_filter_stringpool_shrinking_block_alignment", df, q, pandas_query
-    )
+    generic_filter_test_strings(lib, base_symbol, df, q, pandas_query)
 
 
 def test_filter_explicit_type_promotion(lmdb_version_store_v1):
@@ -738,6 +708,8 @@ def test_filter_column_slicing_different_segments(lmdb_version_store_tiny_segmen
 
 
 def test_filter_with_multi_index(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    symbol = "test_filter_with_multi_index"
     dt1 = datetime(2019, 4, 8, 10, 5, 2, 1)
     dt2 = datetime(2019, 4, 9, 10, 5, 2, 1)
     arr1 = [dt1, dt1, dt2, dt2]
@@ -745,13 +717,16 @@ def test_filter_with_multi_index(lmdb_version_store_v1):
     df = pd.DataFrame(
         data={"a": np.arange(10, 14)}, index=pd.MultiIndex.from_arrays([arr1, arr2], names=["datetime", "level"])
     )
+    lib.write(symbol, df)
     q = QueryBuilder()
     q = q[(q["a"] == 11) | (q["a"] == 13)]
     pandas_query = "(a == 11) | (a == 13)"
-    generic_filter_test(lmdb_version_store_v1, "test_filter_with_multi_index", df, q, pandas_query)
+    generic_filter_test(lib, symbol, df, q, pandas_query)
 
 
 def test_filter_on_multi_index(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    symbol = "test_filter_on_multi_index"
     dt1 = datetime(2019, 4, 8, 10, 5, 2, 1)
     dt2 = datetime(2019, 4, 9, 10, 5, 2, 1)
     arr1 = [dt1, dt1, dt2, dt2]
@@ -759,13 +734,16 @@ def test_filter_on_multi_index(lmdb_version_store_v1):
     df = pd.DataFrame(
         data={"a": np.arange(10, 14)}, index=pd.MultiIndex.from_arrays([arr1, arr2], names=["datetime", "level"])
     )
+    lib.write(symbol, df)
     q = QueryBuilder()
     q = q[(q["level"] == 1)]
     pandas_query = "level == 1"
-    generic_filter_test(lmdb_version_store_v1, "test_filter_on_multi_index", df, q, pandas_query)
+    generic_filter_test(lib, symbol, df, q, pandas_query)
 
 
 def test_filter_complex_expression(lmdb_version_store_tiny_segment):
+    lib = lmdb_version_store_tiny_segment
+    symbol = "test_filter_complex_expression"
     df = pd.DataFrame(
         {
             "a": np.arange(0, 10, dtype=np.float64),
@@ -774,10 +752,11 @@ def test_filter_complex_expression(lmdb_version_store_tiny_segment):
         },
         index=np.arange(10),
     )
+    lib.write(symbol, df)
     q = QueryBuilder()
     q = q[(((q["a"] * q["b"]) / 5) < (0.7 * q["c"])) & (q["b"] != 12)]
     pandas_query = "(((a * b) / 5) < (0.7 * c)) & (b != 12)"
-    generic_filter_test(lmdb_version_store_tiny_segment, "test_filter_complex_expression", df, q, pandas_query)
+    generic_filter_test(lib, symbol, df, q, pandas_query)
 
 
 def test_filter_string_backslash(lmdb_version_store_v1):
@@ -805,39 +784,55 @@ def test_filter_string_single_quote(lmdb_version_store_v1):
 
 
 def test_filter_string_less_than(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    base_symbol = "test_filter_string_less_than"
     df = pd.DataFrame({"a": ["row1", "row2"]}, index=np.arange(2))
+    lib.write(f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", df, dynamic_strings=True)
+    lib.write(f"{base_symbol}_{FIXED_STRINGS_SUFFIX}", df, dynamic_strings=False)
     q = QueryBuilder()
     q = q[q["a"] < "row2"]
     pandas_query = "a < 'row2'"
     with pytest.raises(InternalException):
-        generic_filter_test(lmdb_version_store_v1, "test_filter_string_less_than", df, q, pandas_query)
+        generic_filter_test_strings(lib, base_symbol, df, q, pandas_query)
 
 
 def test_filter_string_less_than_equal(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    base_symbol = "test_filter_string_less_than_equal"
     df = pd.DataFrame({"a": ["row1", "row2"]}, index=np.arange(2))
+    lib.write(f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", df, dynamic_strings=True)
+    lib.write(f"{base_symbol}_{FIXED_STRINGS_SUFFIX}", df, dynamic_strings=False)
     q = QueryBuilder()
     q = q[q["a"] <= "row2"]
     pandas_query = "a <= 'row2'"
     with pytest.raises(InternalException):
-        generic_filter_test(lmdb_version_store_v1, "test_filter_string_less_than_equal", df, q, pandas_query)
+        generic_filter_test_strings(lib, base_symbol, df, q, pandas_query)
 
 
 def test_filter_string_greater_than(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    base_symbol = "test_filter_string_greater_than"
     df = pd.DataFrame({"a": ["row1", "row2"]}, index=np.arange(2))
+    lib.write(f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", df, dynamic_strings=True)
+    lib.write(f"{base_symbol}_{FIXED_STRINGS_SUFFIX}", df, dynamic_strings=False)
     q = QueryBuilder()
     q = q[q["a"] > "row2"]
     pandas_query = "a > 'row2'"
     with pytest.raises(InternalException):
-        generic_filter_test(lmdb_version_store_v1, "test_filter_string_greater_than", df, q, pandas_query)
+        generic_filter_test_strings(lib, base_symbol, df, q, pandas_query)
 
 
 def test_filter_string_greater_than_equal(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    base_symbol = "test_filter_string_greater_than_equal"
     df = pd.DataFrame({"a": ["row1", "row2"]}, index=np.arange(2))
+    lib.write(f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", df, dynamic_strings=True)
+    lib.write(f"{base_symbol}_{FIXED_STRINGS_SUFFIX}", df, dynamic_strings=False)
     q = QueryBuilder()
     q = q[q["a"] >= "row2"]
     pandas_query = "a >= 'row2'"
     with pytest.raises(InternalException):
-        generic_filter_test(lmdb_version_store_v1, "test_filter_string_greater_than_equal", df, q, pandas_query)
+        generic_filter_test_strings(lib, base_symbol, df, q, pandas_query)
 
 
 def test_filter_string_nans_col_val(lmdb_version_store_v1):
