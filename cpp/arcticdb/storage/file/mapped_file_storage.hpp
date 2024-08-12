@@ -36,11 +36,11 @@ class MappedFileStorage final : public SingleFileStorage {
 
     void do_write(Composite<KeySegmentPair>&& kvs) override;
 
-    [[noreturn]] void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) override;
+    void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) override;
 
     void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, storage::ReadKeyOpts opts) override;
 
-    [[noreturn]] void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) override;
+    void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) override;
 
     bool do_supports_prefix_matching() const override {
         return false;
@@ -50,7 +50,7 @@ class MappedFileStorage final : public SingleFileStorage {
 
     bool do_fast_delete() override;
 
-    [[noreturn]] void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix) override;
+    bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string &prefix) override;
 
     bool do_key_exists(const VariantKey & key) override;
 

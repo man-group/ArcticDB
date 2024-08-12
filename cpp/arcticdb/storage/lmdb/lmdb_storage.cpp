@@ -260,7 +260,7 @@ bool LmdbStorage::do_fast_delete() {
     return true;
 }
 
-void LmdbStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix) {
+bool LmdbStorage::do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string &prefix) {
     ARCTICDB_SAMPLE(LmdbStorageItType, 0);
     auto txn = ::lmdb::txn::begin(env(), nullptr, MDB_RDONLY); // scoped abort on
     std::string type_db = fmt::format("{}", key_type);
@@ -270,11 +270,14 @@ void LmdbStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& vi
         auto keys = lmdb_client_->list(type_db, prefix, txn, dbi, key_type);
         for (auto &k: keys) {
             ARCTICDB_SUBSAMPLE(LmdbStorageVisitKey, 0)
-            visitor(std::move(k));
+            if(visitor(std::move(k))) {
+              return true;
+            }
         }
     } catch (const ::lmdb::error& ex) {
         raise_lmdb_exception(ex, type_db);
     }
+    return false;
 }
 
 bool LmdbStorage::do_is_path_valid(const std::string_view pathString ARCTICDB_UNUSED) const {

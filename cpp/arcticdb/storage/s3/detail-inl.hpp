@@ -270,9 +270,9 @@ namespace s3 {
             };
         }
 
-        template<class Visitor, class KeyBucketizer, class PrefixHandler>
-        void do_iterate_type_impl(KeyType key_type,
-                                  Visitor &&visitor,
+        template<class KeyBucketizer, class PrefixHandler>
+        bool do_iterate_type_impl(KeyType key_type,
+                                  const IterateTypePredicate& visitor,
                                   const std::string &root_folder,
                                   const std::string &bucket_name,
                                   const S3ClientWrapper &s3_client,
@@ -320,7 +320,9 @@ namespace s3 {
                         ARCTICDB_DEBUG(log::storage(), "Iterating key {}: {}", variant_key_type(k),
                                        variant_key_view(k));
                         ARCTICDB_SUBSAMPLE(S3StorageVisitKey, 0)
-                        visitor(std::move(k));
+                        if (visitor(std::move(k))) {
+                          return true;
+                        }
                         ARCTICDB_SUBSAMPLE(S3StorageCursorNext, 0)
                     }
 
@@ -334,9 +336,10 @@ namespace s3 {
                     // We don't raise on expected errors like NoSuchKey because we want to return an empty list
                     // instead of raising.
                     raise_if_unexpected_error(error, key_prefix);
-                    return;
+                    return false;
                 }
             } while (continuation_token.has_value());
+            return false;
         }
 
         template<class KeyBucketizer>
