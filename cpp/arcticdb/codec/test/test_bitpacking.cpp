@@ -122,8 +122,6 @@ TEST(BitPack, Roundtrip8to3) {
     std::vector<uint8_t> local_unpacked8(1024);
     bitunpack<uint8_t, 3>(local_packed8.data(), local_unpacked8.data());
     for(auto i = 0U; i < 1024; ++i) {
-        if(rand_arr_3_b3_w8_arr[i] != local_unpacked8[i])
-            log::version().info("poops");
         ASSERT_EQ(rand_arr_3_b3_w8_arr[i], local_unpacked8[i]);
     }
 }
@@ -137,8 +135,6 @@ TEST(BitPack, Roundtrip64to11) {
     std::vector<uint64_t> local_unpacked64(1024);
     bitunpack<uint64_t, 11>(local_packed64.data(), local_unpacked64.data());
     for(auto i = 0U; i < 1024; ++i) {
-        if(rand_arr_70_b11_w64_arr[i] != local_unpacked64[i])
-            log::version().info("poops");
         ASSERT_EQ(rand_arr_70_b11_w64_arr[i], local_unpacked64[i]);
     }
 }
