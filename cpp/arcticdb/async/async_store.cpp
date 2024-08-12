@@ -20,8 +20,7 @@ std::pair<entity::VariantKey, std::optional<Segment>> lookup_match_in_dedup_map(
         ARCTICDB_DEBUG(log::version(),
                        "No existing key with same contents: writing new object {}",
                        key_seg.atom_key());
-        return std::make_pair(std::move(key_seg.atom_key()), std::make_optional(std::move(key_seg.segment())));
-
+        return std::make_pair(key_seg.atom_key(), std::make_optional(std::move(*key_seg.release_segment())));
     } else {
         ARCTICDB_DEBUG(log::version(),
                        "Found existing key with same contents: using existing object {}",
