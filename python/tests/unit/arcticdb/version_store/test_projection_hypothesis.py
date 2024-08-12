@@ -15,6 +15,7 @@ from arcticdb.util.test import assert_frame_equal
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
     numeric_type_strategies,
+    non_zero_numeric_type_strategies,
     string_strategy,
 )
 
@@ -23,453 +24,149 @@ import pytest
 pytestmark = pytest.mark.pipeline
 
 
-def test_project(local_object_version_store):
-    lib = local_object_version_store
-    df = pd.DataFrame(
-        {
-            "VWAP": np.arange(0, 10, dtype=np.float64),
-            "ASK": np.arange(10, 20, dtype=np.uint16),
-            "ACVOL": np.arange(20, 30, dtype=np.int32),
-        },
-        index=np.arange(10),
-    )
-
-    lib.write("expression", df)
-    df["ADJUSTED"] = df["ASK"] * df["ACVOL"] + 7
-    df["ADJUSTED"] = df["ADJUSTED"].astype("int64")
-    q = QueryBuilder()
-    q = q.apply("ADJUSTED", q["ASK"] * q["ACVOL"] + 7)
-    vit = lib.read("expression", query_builder=q)
-    assert_frame_equal(df, vit.data)
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=data_frames(
+        [column("a", elements=numeric_type_strategies()), column("b", elements=non_zero_numeric_type_strategies())],
+        index=range_indexes(),
+    ),
+    val=non_zero_numeric_type_strategies(),
+)
+def test_project_numeric_binary_operation(lmdb_version_store_v1, df, val):
+    assume(not df.empty)
+    lib = lmdb_version_store_v1
+    symbol = "test_project_numeric_binary_operation"
+    lib.write(symbol, df)
+    # Would be cleaner to use pytest.parametrize, but the expensive bit is generating/writing the df, so make sure we
+    # only do these operations once to save time
+    for op in ["+", "-", "*", "/"]:
+        for comp in ["col op col", "col op val", "val op col"]:
+            q = QueryBuilder()
+            qb_lhs = q["a"] if comp.startswith("col") else val
+            qb_rhs = q["b"] if comp.endswith("col") else val
+            pandas_lhs = df["a"] if comp.startswith("col") else val
+            pandas_rhs = df["b"] if comp.endswith("col") else val
+            if op == "+":
+                q = q.apply("c", qb_lhs + qb_rhs)
+                df["c"] = pandas_lhs + pandas_rhs
+            elif op == "-":
+                q = q.apply("c", qb_lhs - qb_rhs)
+                df["c"] = pandas_lhs - pandas_rhs
+            elif op == "*":
+                q = q.apply("c", qb_lhs * qb_rhs)
+                df["c"] = pandas_lhs * pandas_rhs
+            elif op == "/":
+                q = q.apply("c", qb_lhs / qb_rhs)
+                df["c"] = pandas_lhs / pandas_rhs
+            received = lib.read(symbol, query_builder=q).data
+            assert_frame_equal(df, received)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
-        [
-            column("a", elements=numeric_type_strategies()),
-            column("b", elements=numeric_type_strategies()),
-            column("c", elements=numeric_type_strategies()),
-            column("d", elements=string_strategy),
-        ],
+        [column("a", elements=numeric_type_strategies())],
         index=range_indexes(),
-    )
+    ),
 )
-def test_project_add_col_col(lmdb_version_store, df):
+def test_project_numeric_unary_operation(lmdb_version_store_v1, df):
     assume(not df.empty)
-    symbol = "test_project_add_col_col"
+    lib = lmdb_version_store_v1
+    symbol = "test_project_numeric_unary_operation"
+    lib.write(symbol, df)
     q = QueryBuilder()
-    lmdb_version_store.write(symbol, df)
-
+    q = q.apply("b", abs(q["a"]))
+    df["b"] = abs(df["a"])
+    received = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(df, received)
     q = QueryBuilder()
-    q = q.apply("x", q["a"] + q["b"])
-    vit = lmdb_version_store.read(symbol, query_builder=q)
+    q = q.apply("b", -q["a"])
+    df["b"] = -df["a"]
+    received = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(df, received)
 
-    df["x"] = df["a"] + df["b"]
-    df["x"] = df["x"].astype(vit.data["x"].dtypes)
-    assert_frame_equal(df, vit.data)
+
+##################################
+# DYNAMIC SCHEMA TESTS FROM HERE #
+##################################
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
-        [
-            column("a", elements=numeric_type_strategies()),
-            column("b", elements=numeric_type_strategies()),
-            column("c", elements=numeric_type_strategies()),
-            column("d", elements=string_strategy),
-        ],
+        [column("a", elements=numeric_type_strategies()), column("b", elements=non_zero_numeric_type_strategies())],
         index=range_indexes(),
-    )
+    ),
+    val=non_zero_numeric_type_strategies(),
 )
-def test_project_multiply_col_val(lmdb_version_store, df):
-    assume(not df.empty)
-    symbol = "test_project_add_col_col"
-    q = QueryBuilder()
-    lmdb_version_store.write(symbol, df)
-
-    q = QueryBuilder()
-    q = q.apply("x", q["a"] * 7)
-    vit = lmdb_version_store.read(symbol, query_builder=q)
-
-    df["x"] = df["a"] * 7
-    df["x"] = df["x"].astype(vit.data["x"].dtypes)
-    assert_frame_equal(df, vit.data)
+def test_project_numeric_binary_operation_dynamic(lmdb_version_store_dynamic_schema_v1, df, val):
+    assume(len(df) >= 3)
+    lib = lmdb_version_store_dynamic_schema_v1
+    symbol = "test_project_numeric_binary_operation_dynamic"
+    lib.delete(symbol)
+    slices = [
+        df[:len(df) // 3],
+        df[len(df) // 3: 2 * len(df) // 3].drop(columns=["a"]),
+        df[2 * len(df) // 3:].drop(columns=["b"]),
+    ]
+    for slice in slices:
+        lib.append(symbol, slice)
+    df = pd.concat(slices)
+    # Would be cleaner to use pytest.parametrize, but the expensive bit is generating/writing the df, so make sure we
+    # only do these operations once to save time
+    for op in ["+", "-", "*", "/"]:
+        for comp in ["col op col", "col op val", "val op col"]:
+            q = QueryBuilder()
+            qb_lhs = q["a"] if comp.startswith("col") else val
+            qb_rhs = q["b"] if comp.endswith("col") else val
+            pandas_lhs = df["a"] if comp.startswith("col") else val
+            pandas_rhs = df["b"] if comp.endswith("col") else val
+            if op == "+":
+                q = q.apply("c", qb_lhs + qb_rhs)
+                df["c"] = pandas_lhs + pandas_rhs
+            elif op == "-":
+                q = q.apply("c", qb_lhs - qb_rhs)
+                df["c"] = pandas_lhs - pandas_rhs
+            elif op == "*":
+                q = q.apply("c", qb_lhs * qb_rhs)
+                df["c"] = pandas_lhs * pandas_rhs
+            elif op == "/":
+                q = q.apply("c", qb_lhs / qb_rhs)
+                df["c"] = pandas_lhs / pandas_rhs
+            received = lib.read(symbol, query_builder=q).data
+            assert_frame_equal(df, received)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
-        [
-            column("a", elements=numeric_type_strategies()),
-            column("b", elements=numeric_type_strategies()),
-            column("c", elements=numeric_type_strategies()),
-            column("d", elements=string_strategy),
-        ],
+        [column("a", elements=numeric_type_strategies())],
         index=range_indexes(),
-    )
+    ),
 )
-def test_project_divide_val_col(lmdb_version_store, df):
-    assume(not df.empty)
-    symbol = "test_project_add_col_col"
+def test_project_numeric_unary_operation_dynamic(lmdb_version_store_dynamic_schema_v1, df):
+    assume(len(df) >= 2)
+    lib = lmdb_version_store_dynamic_schema_v1
+    symbol = "test_project_numeric_unary_operation_dynamic"
+    lib.delete(symbol)
+    slices = [
+        df[:len(df) // 2],
+        df[len(df) // 2:],
+    ]
+    for slice in slices:
+        lib.append(symbol, slice)
+    df = pd.concat(slices)
     q = QueryBuilder()
-    lmdb_version_store.write(symbol, df)
-
+    q = q.apply("b", abs(q["a"]))
+    df["b"] = abs(df["a"])
+    received = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(df, received)
     q = QueryBuilder()
-    q = q.apply("x", 1000 / q["c"])
-    vit = lmdb_version_store.read(symbol, query_builder=q)
-
-    df["x"] = 1000 / df["c"]
-    df["x"] = df["x"].astype(vit.data["x"].dtypes)
-    assert_frame_equal(df, vit.data)
-
-
-# @use_of_function_scoped_fixtures_in_hypothesis_checked
-# @settings(deadline=None)
-# @given(
-#     df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
-#     val=numeric_type_strategies(),
-# )
-# def test_filter_add_col_val(lmdb_version_store_v1, df, val):
-#     assume(not df.empty)
-#     q = QueryBuilder()
-#     q = q[(q["a"] + val) < 10]
-#     pandas_query = "(a + {}) < 10".format(val)
-#     generic_filter_test(lmdb_version_store_v1, "test_filter_add_col_val", df, q, pandas_query)
-#
-#
-# @use_of_function_scoped_fixtures_in_hypothesis_checked
-# @settings(deadline=None)
-# @given(
-#     df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
-#     val=numeric_type_strategies(),
-# )
-# def test_filter_add_val_col(lmdb_version_store_v1, df, val):
-#     assume(not df.empty)
-#     q = QueryBuilder()
-#     q = q[(val + q["a"]) < 10]
-#     pandas_query = "({} + a) < 10".format(val)
-#     generic_filter_test(lmdb_version_store_v1, "test_filter_add_val_col", df, q, pandas_query)
-#
-#
-# @use_of_function_scoped_fixtures_in_hypothesis_checked
-# @settings(deadline=None)
-# @given(
-#     df=data_frames(
-#         [column("a", elements=numeric_type_strategies()), column("b", elements=numeric_type_strategies())],
-#         index=range_indexes(),
-#     )
-# )
-# def test_filter_add_col_col(lmdb_version_store_v1, df):
-#     assume(not df.empty)
-#     q = QueryBuilder()
-#     q = q[(q["a"] + q["b"]) < 10]
-#     pandas_query = "(a + b) < 10"
-#     generic_filter_test(lmdb_version_store_v1, "test_filter_add_col_col", df, q, pandas_query)
-#
-#
-# @use_of_function_scoped_fixtures_in_hypothesis_checked
-# @settings(deadline=None)
-# @given(
-#     df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
-#     val=numeric_type_strategies(),
-# )
-# def test_filter_sub_col_val(lmdb_version_store_v1, df, val):
-#     assume(not df.empty)
-#     q = QueryBuilder()
-#     q = q[(q["a"] - val) < 10]
-#     pandas_query = "(a - {}) < 10".format(val)
-#     generic_filter_test(lmdb_version_store_v1, "test_filter_sub_col_val", df, q, pandas_query)
-#
-#
-# @use_of_function_scoped_fixtures_in_hypothesis_checked
-# @settings(deadline=None)
-# @given(
-#     df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
-#     val=numeric_type_strategies(),
-# )
-# def test_filter_sub_val_col(lmdb_version_store_v1, df, val):
-#     assume(not df.empty)
-#     q = QueryBuilder()
-#     q = q[(val - q["a"]) < 10]
-#     pandas_query = "({} - a) < 10".format(val)
-#     generic_filter_test(lmdb_version_store_v1, "test_filter_sub_val_col", df, q, pandas_query)
-#
-#
-# @use_of_function_scoped_fixtures_in_hypothesis_checked
-# @settings(deadline=None)
-# @given(
-#     df=data_frames(
-#         [column("a", elements=numeric_type_strategies()), column("b", elements=numeric_type_strategies())],
-#         index=range_indexes(),
-#     )
-# )
-# def test_filter_sub_col_col(lmdb_version_store_v1, df):
-#     assume(not df.empty)
-#     q = QueryBuilder()
-#     q = q[(q["a"] - q["b"]) < 10]
-#     pandas_query = "(a - b) < 10"
-#     generic_filter_test(lmdb_version_store_v1, "test_filter_sub_col_col", df, q, pandas_query)
-#
-#
-# @use_of_function_scoped_fixtures_in_hypothesis_checked
-# @settings(deadline=None)
-# @given(
-#     df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
-#     val=numeric_type_strategies(),
-# )
-# def test_filter_times_col_val(lmdb_version_store_v1, df, val):
-#     assume(not df.empty)
-#     q = QueryBuilder()
-#     q = q[(q["a"] * val) < 10]
-#     pandas_query = "(a * {}) < 10".format(val)
-#     generic_filter_test(lmdb_version_store_v1, "test_filter_times_col_val", df, q, pandas_query)
-#
-#
-# @use_of_function_scoped_fixtures_in_hypothesis_checked
-# @settings(deadline=None)
-# @given(
-#     df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
-#     val=numeric_type_strategies(),
-# )
-# def test_filter_times_val_col(lmdb_version_store_v1, df, val):
-#     assume(not df.empty)
-#     q = QueryBuilder()
-#     q = q[(val * q["a"]) < 10]
-#     pandas_query = "({} * a) < 10".format(val)
-#     generic_filter_test(lmdb_version_store_v1, "test_filter_times_val_col", df, q, pandas_query)
-#
-#
-# @use_of_function_scoped_fixtures_in_hypothesis_checked
-# @settings(deadline=None)
-# @given(
-#     df=data_frames(
-#         [column("a", elements=numeric_type_strategies()), column("b", elements=numeric_type_strategies())],
-#         index=range_indexes(),
-#     )
-# )
-# def test_filter_times_col_col(lmdb_version_store_v1, df):
-#     assume(not df.empty)
-#     q = QueryBuilder()
-#     q = q[(q["a"] * q["b"]) < 10]
-#     pandas_query = "(a * b) < 10"
-#     generic_filter_test(lmdb_version_store_v1, "test_filter_times_col_col", df, q, pandas_query)
-#
-#
-# @use_of_function_scoped_fixtures_in_hypothesis_checked
-# @settings(deadline=None)
-# @given(
-#     df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
-#     val=non_zero_numeric_type_strategies(),
-# )
-# def test_filter_divide_col_val(lmdb_version_store_v1, df, val):
-#     assume(not df.empty)
-#     q = QueryBuilder()
-#     q = q[(q["a"] / val) < 10]
-#     pandas_query = "(a / {}) < 10".format(val)
-#     generic_filter_test(lmdb_version_store_v1, "test_filter_divide_col_val", df, q, pandas_query)
-#
-#
-# @use_of_function_scoped_fixtures_in_hypothesis_checked
-# @settings(deadline=None)
-# @given(
-#     df=data_frames([column("a", elements=non_zero_numeric_type_strategies())], index=range_indexes()),
-#     val=numeric_type_strategies(),
-# )
-# def test_filter_divide_val_col(lmdb_version_store_v1, df, val):
-#     assume(not df.empty)
-#     q = QueryBuilder()
-#     q = q[(val / q["a"]) < 10]
-#     pandas_query = "({} / a) < 10".format(val)
-#     generic_filter_test(lmdb_version_store_v1, "test_filter_divide_val_col", df, q, pandas_query)
-#
-#
-# @use_of_function_scoped_fixtures_in_hypothesis_checked
-# @settings(deadline=None)
-# @given(
-#     df=data_frames(
-#         [column("a", elements=numeric_type_strategies()), column("b", elements=non_zero_numeric_type_strategies())],
-#         index=range_indexes(),
-#     )
-# )
-# def test_filter_divide_col_col(lmdb_version_store_v1, df):
-#     assume(not df.empty)
-#     q = QueryBuilder()
-#     q = q[(q["a"] / q["b"]) < 10]
-#     pandas_query = "(a / b) < 10"
-#     generic_filter_test(lmdb_version_store_v1, "test_filter_divide_col_col", df, q, pandas_query)
-#
-#
-# @use_of_function_scoped_fixtures_in_hypothesis_checked
-# @settings(deadline=None)
-# @given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()), val=numeric_type_strategies())
-# def test_filter_arithmetic_string_number_col_val(lmdb_version_store_v1, df, val):
-#     lib = lmdb_version_store_v1
-#     assume(not df.empty)
-#     q = QueryBuilder()
-#     q = q[(q["a"] + val) < 10]
-#     symbol = "test_filter_arithmetic_string_number_col_val"
-#     lib.write(symbol, df, dynamic_strings=True)
-#     with pytest.raises(UserInputException) as e_info:
-#         lib.read(symbol, query_builder=q)
-#     q = QueryBuilder()
-#     q = q[(val + q["a"]) < 10]
-#     with pytest.raises(UserInputException) as e_info:
-#         lib.read(symbol, query_builder=q)
-#
-#
-# @use_of_function_scoped_fixtures_in_hypothesis_checked
-# @settings(deadline=None)
-# @given(df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()), val=string_strategy)
-# def test_filter_arithmetic_string_number_val_col(lmdb_version_store_v1, df, val):
-#     lib = lmdb_version_store_v1
-#     assume(not df.empty)
-#     q = QueryBuilder()
-#     q = q[(q["a"] + val) < 10]
-#     symbol = "test_filter_arithmetic_string_number_val_col"
-#     lib.write(symbol, df)
-#     with pytest.raises(UserInputException) as e_info:
-#         lib.read(symbol, query_builder=q)
-#     q = QueryBuilder()
-#     q = q[(val + q["a"]) < 10]
-#     with pytest.raises(UserInputException) as e_info:
-#         lib.read(symbol, query_builder=q)
-#
-#
-# @use_of_function_scoped_fixtures_in_hypothesis_checked
-# @settings(deadline=None)
-# @given(
-#     df=data_frames(
-#         [column("a", elements=string_strategy), column("b", elements=numeric_type_strategies())], index=range_indexes()
-#     )
-# )
-# def test_filter_arithmetic_string_number_col_col(lmdb_version_store_v1, df):
-#     lib = lmdb_version_store_v1
-#     assume(not df.empty)
-#     q = QueryBuilder()
-#     q = q[(q["a"] + q["b"]) < 10]
-#     symbol = "test_filter_arithmetic_string_number_val_col"
-#     lib.write(symbol, df, dynamic_strings=True)
-#     with pytest.raises(UserInputException) as e_info:
-#         lib.read(symbol, query_builder=q)
-#     q = QueryBuilder()
-#     q = q[(q["b"] + q["a"]) < 10]
-#     with pytest.raises(UserInputException) as e_info:
-#         lib.read(symbol, query_builder=q)
-#
-#
-# @use_of_function_scoped_fixtures_in_hypothesis_checked
-# @settings(deadline=None)
-# @given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()), val=string_strategy)
-# def test_filter_arithmetic_string_string_col_val(lmdb_version_store_v1, df, val):
-#     lib = lmdb_version_store_v1
-#     assume(not df.empty)
-#     q = QueryBuilder()
-#     q = q[(q["a"] + val) < 10]
-#     symbol = "test_filter_arithmetic_string_string_col_val"
-#     lib.write(symbol, df, dynamic_strings=True)
-#     with pytest.raises(UserInputException) as e_info:
-#         lib.read(symbol, query_builder=q)
-#     q = QueryBuilder()
-#     q = q[(val + q["a"]) < 10]
-#     with pytest.raises(UserInputException) as e_info:
-#         lib.read(symbol, query_builder=q)
-#
-#
-# @use_of_function_scoped_fixtures_in_hypothesis_checked
-# @settings(deadline=None)
-# @given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()), val=string_strategy)
-# def test_filter_arithmetic_string_string_val_col(lmdb_version_store_v1, df, val):
-#     lib = lmdb_version_store_v1
-#     assume(not df.empty)
-#     q = QueryBuilder()
-#     q = q[(q["a"] + val) < 10]
-#     symbol = "test_filter_arithmetic_string_string_val_col"
-#     lib.write(symbol, df, dynamic_strings=True)
-#     with pytest.raises(UserInputException) as e_info:
-#         lib.read(symbol, query_builder=q)
-#     q = QueryBuilder()
-#     q = q[(val + q["a"]) < 10]
-#     with pytest.raises(UserInputException) as e_info:
-#         lib.read(symbol, query_builder=q)
-#
-#
-# @use_of_function_scoped_fixtures_in_hypothesis_checked
-# @settings(deadline=None)
-# @given(
-#     df=data_frames(
-#         [column("a", elements=string_strategy), column("b", elements=string_strategy)], index=range_indexes()
-#     )
-# )
-# def test_filter_arithmetic_string_string_col_col(lmdb_version_store_v1, df):
-#     lib = lmdb_version_store_v1
-#     assume(not df.empty)
-#     q = QueryBuilder()
-#     q = q[(q["a"] + q["b"]) < 10]
-#     symbol = "test_filter_arithmetic_string_string_col_col"
-#     lib.write(symbol, df, dynamic_strings=True)
-#     with pytest.raises(UserInputException) as e_info:
-#         lib.read(symbol, query_builder=q)
-#     q = QueryBuilder()
-#     q = q[(q["b"] + q["a"]) < 10]
-#     with pytest.raises(UserInputException) as e_info:
-#         lib.read(symbol, query_builder=q)
-#
-#
-# @use_of_function_scoped_fixtures_in_hypothesis_checked
-# @settings(deadline=None)
-# @given(
-#     df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
-#     val=numeric_type_strategies(),
-# )
-# def test_filter_abs(lmdb_version_store_v1, df, val):
-#     assume(not df.empty)
-#     q = QueryBuilder()
-#     q = q[abs(q["a"]) < val]
-#     pandas_query = "abs(a) < {}".format(val)
-#     generic_filter_test(lmdb_version_store_v1, "test_filter_abs", df, q, pandas_query)
-#
-#
-# @use_of_function_scoped_fixtures_in_hypothesis_checked
-# @settings(deadline=None)
-# @given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()), val=string_strategy)
-# def test_filter_abs_string(lmdb_version_store_v1, df, val):
-#     lib = lmdb_version_store_v1
-#     assume(not df.empty)
-#     q = QueryBuilder()
-#     q = q[abs(q["a"]) < val]
-#     symbol = "test_filter_abs_string"
-#     lib.write(symbol, df, dynamic_strings=True)
-#     with pytest.raises(UserInputException) as e_info:
-#         lib.read(symbol, query_builder=q)
-#
-#
-# @use_of_function_scoped_fixtures_in_hypothesis_checked
-# @settings(deadline=None)
-# @given(
-#     df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
-#     val=numeric_type_strategies(),
-# )
-# def test_filter_neg(lmdb_version_store_v1, df, val):
-#     assume(not df.empty)
-#     q = QueryBuilder()
-#     q = q[-q["a"] < val]
-#     pandas_query = "-a < {}".format(val)
-#     generic_filter_test(lmdb_version_store_v1, "test_filter_neg", df, q, pandas_query)
-#
-#
-# @use_of_function_scoped_fixtures_in_hypothesis_checked
-# @settings(deadline=None)
-# @given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()), val=string_strategy)
-# def test_filter_neg_string(lmdb_version_store_v1, df, val):
-#     lib = lmdb_version_store_v1
-#     assume(not df.empty)
-#     q = QueryBuilder()
-#     q = q[-q["a"] < val]
-#     symbol = "test_filter_neg_string"
-#     lib.write(symbol, df, dynamic_strings=True)
-#     with pytest.raises(UserInputException) as e_info:
-#         lib.read(symbol, query_builder=q)
+    q = q.apply("b", -q["a"])
+    df["b"] = -df["a"]
+    received = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(df, received)
