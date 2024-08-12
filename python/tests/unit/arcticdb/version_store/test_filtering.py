@@ -1218,6 +1218,50 @@ def test_filter_bool_short_circuiting():
     assert not errors
 
 
+def test_filter_string_number_comparison(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    symbol = "test_filter_string_number_comparison"
+    lib.write(symbol, pd.DataFrame({"a": [0], "b": ["hello"]}))
+    q = QueryBuilder()
+    q = q[q["a"] == "0"]
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+    q = QueryBuilder()
+    q = q[q["b"] == 0]
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+    q = QueryBuilder()
+    q = q[q["a"] == q["b"]]
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+    q = QueryBuilder()
+    q = q["0" == q["a"]]
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+    q = QueryBuilder()
+    q = q[0 == q["b"]]
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+    q = QueryBuilder()
+    q = q[q["b"] == q["a"]]
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+
+
+def test_filter_string_number_set_membership(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    symbol = "test_filter_string_number_set_membership"
+    lib.write(symbol, pd.DataFrame({"a": [0], "b": ["hello"]}))
+    q = QueryBuilder()
+    q = q[q["a"].isin(["0"])]
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+    q = QueryBuilder()
+    q = q[q["b"].isin([0])]
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+
+
 ##################################
 # DYNAMIC SCHEMA TESTS FROM HERE #
 ##################################
