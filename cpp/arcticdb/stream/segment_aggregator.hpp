@@ -107,7 +107,7 @@ public:
         }
         else {
             AggregatorType::segment().init_column_map();
-            merge_segments(segments_, AggregatorType::segment(), dedup_rows_, last_committed_segment_, segments_final_sizes, DensityPolicy::allow_sparse);
+            merge_segments(std::move(segments_), AggregatorType::segment(), dedup_rows_, last_committed_segment_, segments_final_sizes, DensityPolicy::allow_sparse);
         }
 
         if (AggregatorType::segment().row_count() > 0) {

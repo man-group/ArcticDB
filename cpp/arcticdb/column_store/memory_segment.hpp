@@ -204,11 +204,7 @@ public:
     void concatenate(SegmentInMemory&& other, bool unique_column_names=true) {
         impl_->concatenate(std::move(*other.impl_), unique_column_names);
     }
-
-    util::BitSet get_duplicates_bitset(SegmentInMemory& other) {
-        return impl_->get_duplicates_bitset(*other.impl_);
-    }
-
+    
     void drop_column(std::string_view name) {
         impl_->drop_column(name);
     }
@@ -481,6 +477,63 @@ private:
             impl_(std::move(impl)) {}
 
     std::shared_ptr<SegmentInMemoryImpl> impl_;
+};
+
+class SegmentHasherForDedupRows {
+public:
+    SegmentHasherForDedupRows(const SegmentInMemory &segment) :
+        segment_dedup_result_(segment.row_count()),
+        row_hash_(segment.row_count()) {
+        if (!segment.empty()) {
+            for (const auto& row : segment) {
+                auto hash = get_hash(row); // Can be optimized by using pipeline
+                row_hash_[row.row_pos()] = hash;
+                auto insert_result = unique_row_hash_.insert(hash);
+                if (insert_result.second) {
+                    segment_dedup_result_.set(row.row_pos(), true);
+                }
+            }
+        }
+    }
+ 
+    void merge_unique_row_hash(const SegmentHasherForDedupRows &other) {
+        unique_row_hash_.insert(other.unique_row_hash_.begin(), other.unique_row_hash_.end());
+    }
+
+    util::BitSet segment_dedup_result_;
+    std::vector<size_t> row_hash_;
+    ankerl::unordered_dense::set<size_t> unique_row_hash_;
+
+private:
+    size_t get_hash(const SegmentInMemoryImpl::Row &const_row) {
+        auto iter = const_row.begin();
+        size_t ans = 0;
+        std::stringstream visited_values;
+        while (iter != const_row.end()) {
+            auto dt = iter->get_field().type().data_type();
+            auto col_name = iter->get_field().name();
+            if (iter->has_value()) {
+                if (is_sequence_type(dt)) {
+                    iter->visit_string([&ans, &visited_values, &dt, &col_name](std::optional<std::string_view> val) {
+                        if (static_cast<bool>(val)) {
+                            ans = folly::hash::commutative_hash_combine_generic(ans, folly::Hash{}, val.value(), col_name);
+                            visited_values << "|" << ans << ":" << datatype_to_str(dt) << ":" << col_name << ":" << val.value();
+                        }
+                    });
+                } else {
+                    iter->visit([&ans, &visited_values, &dt, &col_name](auto val) {
+                        if (static_cast<bool>(val) && (!is_floating_point_type(dt) || !std::isnan(static_cast<float>(val.value())))) {
+                            ans = folly::hash::commutative_hash_combine_generic(ans, folly::Hash{}, val.value(), col_name);
+                            visited_values << "|" << ans << ":" << datatype_to_str(dt) << ":" << col_name << ":" << val.value();
+                        }
+                    });
+                }
+            }
+            iter++;
+        }
+        ARCTICDB_DEBUG(log::version(), "Hash is {}, visited values are {}", ans, visited_values.str());
+        return ans;
+    }
 };
 
 } //namespace arcticdb

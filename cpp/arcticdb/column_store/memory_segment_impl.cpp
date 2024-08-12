@@ -514,43 +514,6 @@ void SegmentInMemoryImpl::concatenate(SegmentInMemoryImpl&& other, bool unique_c
     }
 }
 
-bool SegmentInMemoryImpl::is_row_duplicate(
-    const SegmentInMemoryImpl::Row& row
-) {
-    // Assumption: We continue scanning from last_iterator because incoming rows are assumed to be sorted
-    // We use last_iterator to tell us where we left off the previous time (since rows are sorted by index)
-    if (rows_hasher_.match_row_with_previous_incoming_rows(row))
-        return true;
-
-    auto index_desc = row.descriptor().index();
-    util::check(index_desc == descriptor().index(),
-        "Index mismatch in is_row_duplicate {} vs {}", index_desc.type(), descriptor().index().type());
-
-    // No rows present in master segment
-    if (row_count() == 0)
-        return false;
-
-    if (rows_hasher_.match_row_with_self_rows(row, begin(), end()))
-        return true;
-
-    return false;
-}
-
-util::BitSet SegmentInMemoryImpl::get_duplicates_bitset(SegmentInMemoryImpl& other) {
-    util::BitSet duplicates (other.row_count());
-    if (other.row_count() == 0) {
-        return duplicates;
-    }
-    SegmentHasherForDedupRows this_hasher(*this), other_hasher(other);
-    for (size_t i = 0; i < other_hasher.row_hash_.size(); ++i) {
-        if (this_hasher.unique_row_hash_.count(other_hasher.row_hash_[i])) {
-            duplicates.set(i, true);
-        }
-    }
-    duplicates.merge(other_hasher.segment_dedup_result_);
-    return duplicates;
-}
-
 position_t SegmentInMemoryImpl::add_column(FieldRef field, size_t num_rows, bool presize) {
     util::check_arg(!field.name().empty(), "Empty name in field: {}", field);
     if(!column_map_)
