@@ -5,12 +5,14 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 from arcticdb.util.test import assert_frame_equal, sample_dataframe, get_wide_dataframe, get_pickle, random_integers
 
 import pandas as pd
 import random
 import numpy as np
 from datetime import datetime
+from arcticdb import log
 
 LARGE_DF_SIZE = 100000
 SLEEP = 1
@@ -19,30 +21,37 @@ MAX_MEM_USAGE = 1000000
 
 # These tasks without asserts are designed to be used to check syncing, where the check will be inter-lib
 def write_small_df(lib, symbol):
-    lib.write(symbol, sample_dataframe(size=3, seed=None))
+    return lib.write(symbol, sample_dataframe(size=3, seed=None))
 
 
 def write_small_df_and_prune_previous(lib, symbol):
-    lib.write(symbol, sample_dataframe(size=3, seed=None), prune_previous=True)
+    return lib.write(symbol, sample_dataframe(size=3, seed=None), prune_previous=True)
 
 
 def append_small_df(lib, symbol):
-    lib.append(symbol, sample_dataframe(size=3, seed=None), write_if_missing=True)
+    return lib.append(symbol, sample_dataframe(size=3, seed=None), write_if_missing=True)
 
 
 def append_small_df_and_prune_previous(lib, symbol):
-    lib.append(symbol, sample_dataframe(size=3, seed=None), write_if_missing=True, prune_previous=True)
+    return lib.append(symbol, sample_dataframe(size=3, seed=None), write_if_missing=True, prune_previous=True)
 
 
-def delete_symbol(lib, _):
+def delete_symbol(lib, symbol=None):
+    if symbol is not None:
+        lib.delete(symbol)
+        return f"Deleted symbol {symbol}"
+
     symbols = lib.list_symbols()
     if len(symbols) > 0:
         symbol = random.choice(symbols)
         lib.delete(symbol)
+        return f"Deleted symbol {symbol}"
+
+    return "No symbols to delete"
 
 
-def delete_specific_version(lib, _):
-    versions = lib.list_versions()
+def delete_specific_version(lib, symbol=None):
+    versions = lib.list_versions(symbol)
     # Generate a dict from symbols to lists of undeleted versions
     undeleted_versions = dict()
     for version_info in versions:
@@ -55,11 +64,18 @@ def delete_specific_version(lib, _):
         symbol = random.choice(list(undeleted_versions.keys()))
         version = random.choice(undeleted_versions[symbol])
         lib.delete_version(symbol, version)
+        return f"Deleted version {version} of symbol {symbol}"
+
+    return "No versions to delete"
 
 
 def snapshot_new_name(lib, _):
+    if len(lib.list_symbols()) == 0:
+        return "No symbols to snapshot"
     snapshot_name = "snapshot-{}".format(datetime.utcnow().isoformat())
     lib.snapshot(snapshot_name)
+    syms = lib.list_symbols()
+    return f"Created snapshot {snapshot_name} with symbols {syms}"
 
 
 def snapshot_existing_name(lib, _):
@@ -68,6 +84,10 @@ def snapshot_existing_name(lib, _):
         snapshot_name = random.choice(existing_snapshots)
         lib.delete_snapshot(snapshot_name)
         lib.snapshot(snapshot_name)
+        syms = lib.list_symbols()
+        return f"Resnapshotted snapshot {snapshot_name} with symbols {syms}"
+
+    return "No snapshots to rename"
 
 
 def delete_snapshot(lib, _):
@@ -75,6 +95,10 @@ def delete_snapshot(lib, _):
     if len(existing_snapshots) > 0:
         snapshot_name = random.choice(existing_snapshots)
         lib.delete_snapshot(snapshot_name)
+        syms = lib.list_symbols()
+        return f"Deleted snapshot {snapshot_name} with symbols {syms}"
+
+    return "No snapshots to delete"
 
 
 def read_write_sample(lib, symbol):
@@ -168,8 +192,10 @@ def run_scenario(func, lib, with_snapshots, verbose):
     try:
         symbol = get_symbol(func, lib)
         if verbose:
-            print("Running function {} symbol {}".format(func.__name__, symbol))
-        func(lib, symbol)
+            log.storage.info("Running function {} symbol {}".format(func.__name__, symbol))
+        res = func(lib, symbol)
+        if verbose:
+            log.storage.info("Function {} symbol {} returned {}".format(func.__name__, symbol, res))
         if with_snapshots and lib.list_symbols():
             lib.snapshot("snapshot" + datetime.utcnow().isoformat())
             # clean up old snapshots - more than 3 hours old
@@ -178,5 +204,5 @@ def run_scenario(func, lib, with_snapshots, verbose):
                 if (datetime.utcnow() - t).seconds > 60 * 60 * 3:
                     lib.delete_snapshot(s)
     except Exception as e:
-        print("Running", func.__name__, "failed due to: ", e)
+        log.storage.error("Running", func.__name__, "failed due to: ", e)
         raise e
