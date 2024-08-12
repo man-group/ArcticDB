@@ -205,7 +205,6 @@ set(arcticdb_srcs
         entity/frame_and_descriptor.hpp
         entity/index_range.hpp
         entity/key.hpp
-        entity/metrics.hpp
         entity/data_error.hpp
         entity/descriptors.hpp
         entity/native_tensor.hpp
@@ -404,7 +403,6 @@ set(arcticdb_srcs
         entity/field_collection_proto.cpp
         entity/key.cpp
         entity/merge_descriptors.cpp
-        entity/metrics.cpp
         entity/performance_tracing.cpp
         entity/types.cpp
         entity/type_utils.cpp
@@ -490,7 +488,9 @@ set(arcticdb_srcs
         version/version_map_batch_methods.cpp
         storage/s3/ec2_utils.cpp
         storage/lmdb/lmdb.hpp
-)
+        codec/third_party/fastlanes/fallback_scalar_aav_1024_uf1_unpack_src.cpp
+        codec/third_party/fastlanes/fallback_scalar_av_1024_uf1_pack_src.cpp
+        codec/third_party/fastlanes/unpack.hpp codec/third_party/fastlanes/macros.hpp codec/third_party/fastlanes/pack.hpp codec/bitpacking.hpp)
 
 if(${ARCTICDB_INCLUDE_ROCKSDB})
     list (APPEND arcticdb_srcs
@@ -517,8 +517,9 @@ set (arcticdb_core_libraries
         pybind11::module # Transitively includes Python::Module or Python::Python as appropriate
         arcticdb_proto
         xxHash::xxHash
-        prometheus-cpp::push
-        prometheus-cpp::pull
+        #prometheus-cpp::push
+        #prometheus-cpp::pull
+        atomic
         unordered_dense::unordered_dense
         ${standard_libraries}
         fmt::fmt
@@ -808,7 +809,7 @@ if(${TEST})
             version/test/test_sorting_info_state_machine.cpp
             version/test/version_map_model.hpp
             storage/test/common.hpp
-    )
+            codec/test/test_fastlanes.cpp processing/test/test_stress_max.cpp processing/test/test_generated_fastlanes.cpp codec/test/test_bitpacking.cpp)
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 

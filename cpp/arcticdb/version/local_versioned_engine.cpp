@@ -15,7 +15,6 @@
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/storage_lock.hpp>
-#include <arcticdb/entity/metrics.hpp>
 #include <arcticdb/version/version_tasks.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/version/version_map_batch_methods.hpp>
@@ -339,6 +338,8 @@ ReadVersionOutput LocalVersionedEngine::read_dataframe_version_internal(
     const VersionQuery& version_query,
     ReadQuery& read_query,
     const ReadOptions& read_options) {
+
+
     auto version = get_version_to_read(stream_id, version_query);
     std::variant<VersionedItem, StreamId> identifier;
     if(!version) {

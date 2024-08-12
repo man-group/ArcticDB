@@ -26,7 +26,6 @@
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/stream/schema.hpp>
 #include <arcticdb/pipeline/index_writer.hpp>
-#include <arcticdb/entity/metrics.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/util/composite.hpp>
 #include <arcticdb/pipeline/column_mapping.hpp>

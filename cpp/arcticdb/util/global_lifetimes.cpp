@@ -11,7 +11,6 @@
 #include <arcticdb/storage/s3/s3_api.hpp>
 #include <arcticdb/storage/mongo/mongo_instance.hpp>
 #include <arcticdb/log/log.hpp>
-#include <arcticdb/entity/metrics.hpp>
 #include <arcticdb/util/buffer_pool.hpp>
 
 #if defined(_MSC_VER) && defined(_DEBUG)
@@ -25,7 +24,6 @@ ModuleData::~ModuleData() {
     BufferPool::destroy_instance();
     TracingData::destroy_instance();
     Allocator::destroy_instance();
-    PrometheusInstance::destroy_instance();
 #if defined(USE_REMOTERY)
     RemoteryInstance::destroy_instance();
 #endif

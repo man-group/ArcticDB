@@ -58,14 +58,6 @@ SegmentInMemory MinMaxAggregatorData::finalize(const std::vector<ColumnName>& ou
 
 namespace
 {
-    inline util::BitMagic::enumerator::value_type deref(util::BitMagic::enumerator iter) {
-        return *iter;
-    }
-
-    inline std::size_t deref(std::size_t index) {
-        return index;
-    }
-
     template<typename T, typename T2=void>
     struct OutputType;
 

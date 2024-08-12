@@ -490,9 +490,9 @@ void decode_into_frame_dynamic(
             // decode_or_expand will invoke the empty type handler which will do backfilling with the default value depending on the
             // destination type.
             if (!trivially_compatible_types(m.source_type_desc_, m.dest_type_desc_) && !source_is_empty) {
-                m.dest_type_desc_.visit_tag([&buffer, &m, &data, encoded_field, buffers, encdoing_version] (auto dest_desc_tag) {
+                m.dest_type_desc_.visit_tag([&buffer, &m, buffers] (auto dest_desc_tag) {
                     using DestinationType =  typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
-                    m.source_type_desc_.visit_tag([&buffer, &m, &data, &encoded_field, &buffers, encdoing_version] (auto src_desc_tag ) {
+                    m.source_type_desc_.visit_tag([&buffer, &m] (auto src_desc_tag ) {
                         using SourceType =  typename decltype(src_desc_tag)::DataTypeTag::raw_type;
                         if constexpr(std::is_arithmetic_v<SourceType> && std::is_arithmetic_v<DestinationType>) {
                             // If the source and destination types are different, then sizeof(destination type) >= sizeof(source type)
