@@ -389,10 +389,10 @@ public:
         impl_->set_string_pool(string_pool);
     }
 
-    SegmentInMemory filter(util::BitSet filter_bitset,
+    SegmentInMemory filter(util::BitSet&& filter_bitset,
                            bool filter_down_stringpool=false,
                            bool validate=false) const{
-        return SegmentInMemory(impl_->filter(filter_bitset, filter_down_stringpool, validate));
+        return SegmentInMemory(impl_->filter(std::move(filter_bitset), filter_down_stringpool, validate));
     }
 
     /// @see SegmentInMemoryImpl::truncate

@@ -762,7 +762,7 @@ public:
 
     std::shared_ptr<SegmentInMemoryImpl> get_output_segment(size_t num_values, bool pre_allocate=true) const;
 
-    std::shared_ptr<SegmentInMemoryImpl> filter(util::BitSet filter_bitset,
+    std::shared_ptr<SegmentInMemoryImpl> filter(util::BitSet&& filter_bitset,
                                                 bool filter_down_stringpool=false,
                                                 bool validate=false) const;
 

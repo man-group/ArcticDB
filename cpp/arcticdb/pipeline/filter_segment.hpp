@@ -16,7 +16,7 @@ inline SegmentInMemory filter_segment(const SegmentInMemory& input,
                                       util::BitSet filter_bitset,
                                       bool filter_down_stringpool=false,
                                       bool validate=false) {
-    return input.filter(filter_bitset, filter_down_stringpool, validate);
+    return input.filter(std::move(filter_bitset), filter_down_stringpool, validate);
 }
 
 inline std::vector<SegmentInMemory> partition_segment(const SegmentInMemory& input,

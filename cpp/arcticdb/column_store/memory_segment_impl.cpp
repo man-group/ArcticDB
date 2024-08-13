@@ -172,9 +172,9 @@ void SegmentInMemoryImpl::drop_column(std::string_view name) {
     column_map_->erase(name);
 }
 
-std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::filter(util::BitSet filter_bitset,
-                                                   bool filter_down_stringpool,
-                                                   bool validate) const {
+std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::filter(util::BitSet&& filter_bitset,
+                                                                 bool filter_down_stringpool,
+                                                                 bool validate) const {
     filter_bitset.resize(row_count());
     bool is_input_sparse = is_sparse();
     auto num_values = filter_bitset.count();
