@@ -33,7 +33,6 @@ from arcticdb.util.test import (
     generic_filter_test_nans,
 )
 from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION
-from arcticdb_ext import set_config_int
 
 pytestmark = pytest.mark.pipeline
 
