@@ -22,6 +22,7 @@ try:
 except ImportError:
     from pandas.core.computation.ops import UndefinedVariableError
 
+from arcticdb import QueryBuilder
 from arcticdb.util._versions import PANDAS_VERSION, CHECK_FREQ_VERSION
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._custom_normalizers import CustomNormalizer
@@ -550,3 +551,13 @@ def generic_filter_test_nans(lib, symbol, df, arctic_query, pandas_query):
                 assert received_val is None
             elif np.isnan(expected_val):
                 assert np.isnan(received_val)
+
+
+def generic_aggregation_test(lib, symbol, df, grouping_column, aggs_dict):
+    expected = df.groupby(grouping_column).agg(aggs_dict)
+    expected = expected.reindex(columns=sorted(expected.columns))
+    q = QueryBuilder().groupby(grouping_column).agg(aggs_dict)
+    received = lib.read(symbol, query_builder=q).data
+    received = received.reindex(columns=sorted(received.columns))
+    received.sort_index(inplace=True)
+    assert_frame_equal(expected, received, check_dtype=False)

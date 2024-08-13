@@ -12,24 +12,37 @@ from pandas import DataFrame
 
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.exceptions import InternalException, SchemaException
-from arcticdb.util.test import assert_frame_equal, generic_aggregation_test
+from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.hypothesis import (
+    use_of_function_scoped_fixtures_in_hypothesis_checked,
+    numeric_type_strategies,
+    string_strategy,
+)
+
+from hypothesis import assume, given, settings
+from hypothesis.extra.pandas import column, data_frames, range_indexes
 
 
 pytestmark = pytest.mark.pipeline
 
 
-def test_group_on_float_column_with_nans(lmdb_version_store_v1):
-    lib = lmdb_version_store_v1
-    symbol = "test_group_on_float_column_with_nans"
+def test_group_on_float_column_with_nans(lmdb_version_store):
+    lib = lmdb_version_store
+    sym = "test_group_on_float_column_with_nans"
     df = pd.DataFrame({"grouping_column": [1.0, 2.0, np.nan, 1.0, 2.0, 2.0], "agg_column": [1, 2, 3, 4, 5, 6]})
-    lib.write(symbol, df)
-    generic_aggregation_test(lib, symbol, df, "grouping_column", {"agg_column": "sum"})
+    lib.write(sym, df)
+    expected = df.groupby("grouping_column").agg({"agg_column": "sum"})
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"agg_column": "sum"})
+    received = lib.read(sym, query_builder=q).data
+    received.sort_index(inplace=True)
+    assert_frame_equal(expected, received)
 
 
 # TODO: Add first and last once un-feature flagged
 @pytest.mark.parametrize("aggregator", ("sum", "min", "max", "mean", "count"))
-def test_aggregate_float_columns_with_nans(lmdb_version_store_v1, aggregator):
-    lib = lmdb_version_store_v1
+def test_aggregate_float_columns_with_nans(lmdb_version_store, aggregator):
+    lib = lmdb_version_store
     sym = "test_aggregate_float_columns_with_nans"
     df = pd.DataFrame(
         {
@@ -49,8 +62,165 @@ def test_aggregate_float_columns_with_nans(lmdb_version_store_v1, aggregator):
     assert_frame_equal(expected, received)
 
 
-def test_count_aggregation(lmdb_version_store_v1):
-    lib = lmdb_version_store_v1
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=numeric_type_strategies()),
+        ],
+        index=range_indexes(),
+    )
+)
+def test_hypothesis_mean_agg(lmdb_version_store, df):
+    lib = lmdb_version_store
+    assume(not df.empty)
+
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"a": "mean"})
+    expected_df = df.groupby("grouping_column").agg({"a": "mean"})
+
+    symbol = "mean_agg"
+    lib.write(symbol, df)
+    received_df = lib.read(symbol, query_builder=q).data
+    received_df.sort_index(inplace=True)
+
+    # Older versions of Pandas treat values which exceeds limits as `np.inf` or `-np.inf`.
+    # ArcticDB adopted this behaviour.
+    #
+    # Yet, new version of Pandas treats values which exceeds limits as `np.nan` instead.
+    # To be able to compare the results, we need to replace `np.inf` and `-np.inf` with `np.nan`.
+    received_df.replace(-np.inf, np.nan, inplace=True)
+    received_df.replace(np.inf, np.nan, inplace=True)
+
+    expected_df.replace(-np.inf, np.nan, inplace=True)
+    expected_df.replace(np.inf, np.nan, inplace=True)
+
+    assert_frame_equal(expected_df, received_df)
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=numeric_type_strategies()),
+        ],
+        index=range_indexes(),
+    )
+)
+@pytest.mark.xfail(reason="Needs to be fixed by issue #496")
+def test_hypothesis_sum_agg(lmdb_version_store, df):
+    lib = lmdb_version_store
+    assume(not df.empty)
+
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"a": "sum"})
+    expected_df = df.groupby("grouping_column").agg({"a": "sum"})
+
+    symbol = "sum_agg"
+    lib.write(symbol, df)
+    received_df = lib.read(symbol, query_builder=q).data
+    received_df.sort_index(inplace=True)
+
+    # Older versions of Pandas treat values which exceeds limits as `np.inf` or `-np.inf`.
+    # ArcticDB adopted this behaviour.
+    #
+    # Yet, new version of Pandas treats values which exceeds limits as `np.nan` instead.
+    # To be able to compare the results, we need to replace `np.inf` and `-np.inf` with `np.nan`.
+    received_df.replace(-np.inf, np.nan, inplace=True)
+    received_df.replace(np.inf, np.nan, inplace=True)
+
+    expected_df.replace(-np.inf, np.nan, inplace=True)
+    expected_df.replace(np.inf, np.nan, inplace=True)
+
+    assert_frame_equal(expected_df, received_df)
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=numeric_type_strategies()),
+            column("b", elements=numeric_type_strategies()),
+        ],
+        index=range_indexes(),
+    )
+)
+def test_hypothesis_max_min_agg(lmdb_version_store, df):
+    lib = lmdb_version_store
+    assume(not df.empty)
+
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"a": "max", "b": "min"})
+    expected = df.groupby("grouping_column").agg({"a": "max", "b": "min"})
+
+    symbol = "max_min_agg"
+    lib.write(symbol, df)
+    vit = lib.read(symbol, query_builder=q)
+    vit.data.sort_index(inplace=True)
+    if not np.array_equal(expected, vit.data):
+        print("Original dataframe\n{}".format(df))
+        print("Expected\n{}".format(expected))
+        print("Received\n{}".format(vit.data))
+    assert_frame_equal(expected, vit.data)
+
+
+def count_aggregation(lmdb_version_store, df):
+    lib = lmdb_version_store
+    assume(not df.empty)
+
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"a": "count"})
+    expected = df.groupby("grouping_column").agg({"a": "count"})
+    expected.replace(
+        np.nan, np.inf, inplace=True
+    )  # New version of pandas treats values which exceeds limits as np.nan rather than np.inf, as in old version and arcticdb
+    expected = expected.astype(np.uint64)
+
+    symbol = "count_agg"
+    lib.write(symbol, df)
+    vit = lib.read(symbol, query_builder=q)
+    vit.data.sort_index(inplace=True)
+
+    assert_frame_equal(expected, vit.data)
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=numeric_type_strategies()),
+        ],
+        index=range_indexes(),
+    )
+)
+def test_hypothesis_count_agg_numeric(lmdb_version_store, df):
+    count_aggregation(lmdb_version_store, df)
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=string_strategy),
+        ],
+        index=range_indexes(),
+    )
+)
+def test_hypothesis_count_agg_strings(lmdb_version_store, df):
+    count_aggregation(lmdb_version_store, df)
+
+
+def test_count_aggregation(local_object_version_store):
     df = DataFrame(
         {
             "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2", "group_3"],
@@ -61,9 +231,9 @@ def test_count_aggregation(lmdb_version_store_v1):
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"to_count": "count"})
     symbol = "test_count_aggregation"
-    lib.write(symbol, df)
+    local_object_version_store.write(symbol, df)
 
-    res = lib.read(symbol, query_builder=q)
+    res = local_object_version_store.read(symbol, query_builder=q)
     res.data.sort_index(inplace=True)
 
     df = pd.DataFrame({"to_count": [3, 2, 0]}, index=["group_1", "group_2", "group_3"], dtype=np.uint64)
@@ -73,9 +243,39 @@ def test_count_aggregation(lmdb_version_store_v1):
     assert_frame_equal(res.data, df)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=numeric_type_strategies()),
+        ],
+        index=range_indexes(),
+    )
+)
 @pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
-def test_first_aggregation(lmdb_version_store_v1):
-    lib = lmdb_version_store_v1
+def test_hypothesis_first_agg_numeric(lmdb_version_store, df):
+    lib = lmdb_version_store
+    assume(not df.empty)
+
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"a": "first"})
+    expected = df.groupby("grouping_column").agg({"a": "first"})
+    expected.replace(
+        np.nan, np.inf, inplace=True
+    )  # New version of pandas treats values which exceeds limits as np.nan rather than np.inf, as in old version and arcticdb
+
+    symbol = "first_agg"
+    lib.write(symbol, df)
+    vit = lib.read(symbol, query_builder=q)
+    vit.data.sort_index(inplace=True)
+
+    assert_frame_equal(expected, vit.data)
+
+
+@pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
+def test_first_aggregation(local_object_version_store):
     df = DataFrame(
         {
             "grouping_column": ["group_1", "group_2", "group_4", "group_2", "group_1", "group_3", "group_1"],
@@ -86,9 +286,9 @@ def test_first_aggregation(lmdb_version_store_v1):
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"get_first": "first"})
     symbol = "test_first_aggregation"
-    lib.write(symbol, df)
+    local_object_version_store.write(symbol, df)
 
-    res = lib.read(symbol, query_builder=q)
+    res = local_object_version_store.read(symbol, query_builder=q)
     res.data.sort_index(inplace=True)
 
     df = pd.DataFrame({"get_first": [100.0, 2.7, 5.8, np.nan]}, index=["group_1", "group_2", "group_3", "group_4"])
@@ -98,8 +298,8 @@ def test_first_aggregation(lmdb_version_store_v1):
 
 
 @pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
-def test_first_agg_with_append(lmdb_version_store_v1):
-    lib = lmdb_version_store_v1
+def test_first_agg_with_append(local_object_version_store):
+    lib = local_object_version_store
 
     symbol = "first_agg"
     lib.write(symbol, pd.DataFrame({"grouping_column": [0], "get_first": [10.0]}))
@@ -116,9 +316,39 @@ def test_first_agg_with_append(lmdb_version_store_v1):
     assert_frame_equal(vit.data, df)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=numeric_type_strategies()),
+        ],
+        index=range_indexes(),
+    )
+)
 @pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
-def test_last_aggregation(lmdb_version_store_v1):
-    lib = lmdb_version_store_v1
+def test_hypothesis_last_agg_numeric(lmdb_version_store, df):
+    lib = lmdb_version_store
+    assume(not df.empty)
+
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"a": "last"})
+    expected = df.groupby("grouping_column").agg({"a": "last"})
+    expected.replace(
+        np.nan, np.inf, inplace=True
+    )  # New version of pandas treats values which exceeds limits as np.nan rather than np.inf, as in old version and arcticdb
+
+    symbol = "last_agg"
+    lib.write(symbol, df)
+    vit = lib.read(symbol, query_builder=q)
+    vit.data.sort_index(inplace=True)
+
+    assert_frame_equal(expected, vit.data)
+
+
+@pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
+def test_last_aggregation(local_object_version_store):
     df = DataFrame(
         {
             "grouping_column": ["group_1", "group_2", "group_4", "group_5", "group_2", "group_1", "group_3", "group_1", "group_5"],
@@ -129,9 +359,9 @@ def test_last_aggregation(lmdb_version_store_v1):
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"get_last": "last"})
     symbol = "test_last_aggregation"
-    lib.write(symbol, df)
+    local_object_version_store.write(symbol, df)
 
-    res = lib.read(symbol, query_builder=q)
+    res = local_object_version_store.read(symbol, query_builder=q)
     res.data.sort_index(inplace=True)
 
     df = pd.DataFrame({"get_last": [3.45, 2.7, 5.8, np.nan, 6.9]}, index=["group_1", "group_2", "group_3", "group_4", "group_5"])
@@ -141,8 +371,8 @@ def test_last_aggregation(lmdb_version_store_v1):
 
 
 @pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
-def test_last_agg_with_append(lmdb_version_store_v1):
-    lib = lmdb_version_store_v1
+def test_last_agg_with_append(local_object_version_store):
+    lib = local_object_version_store
 
     symbol = "last_agg"
     lib.write(symbol, pd.DataFrame({"grouping_column": [0], "get_last": [10.0]}))
@@ -159,8 +389,7 @@ def test_last_agg_with_append(lmdb_version_store_v1):
     assert_frame_equal(vit.data, df)
 
 
-def test_sum_aggregation(lmdb_version_store_v1):
-    lib = lmdb_version_store_v1
+def test_sum_aggregation(local_object_version_store):
     df = DataFrame(
         {"grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"], "to_sum": [1, 1, 2, 2, 2]},
         index=np.arange(5),
@@ -168,9 +397,9 @@ def test_sum_aggregation(lmdb_version_store_v1):
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"to_sum": "sum"})
     symbol = "test_sum_aggregation"
-    lib.write(symbol, df)
+    local_object_version_store.write(symbol, df)
 
-    res = lib.read(symbol, query_builder=q)
+    res = local_object_version_store.read(symbol, query_builder=q)
     res.data.sort_index(inplace=True)
 
     df = pd.DataFrame({"to_sum": [4, 4]}, index=["group_1", "group_2"])
@@ -179,8 +408,7 @@ def test_sum_aggregation(lmdb_version_store_v1):
     assert_frame_equal(res.data, df)
 
 
-def test_mean_aggregation(lmdb_version_store_v1):
-    lib = lmdb_version_store_v1
+def test_mean_aggregation(local_object_version_store):
     df = DataFrame(
         {"grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"], "to_mean": [1, 1, 2, 2, 2]},
         index=np.arange(5),
@@ -188,9 +416,9 @@ def test_mean_aggregation(lmdb_version_store_v1):
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"to_mean": "mean"})
     symbol = "test_aggregation"
-    lib.write(symbol, df)
+    local_object_version_store.write(symbol, df)
 
-    res = lib.read(symbol, query_builder=q)
+    res = local_object_version_store.read(symbol, query_builder=q)
     res.data.sort_index(inplace=True)
 
     df = pd.DataFrame({"to_mean": [4 / 3, 2]}, index=["group_1", "group_2"])
@@ -200,8 +428,7 @@ def test_mean_aggregation(lmdb_version_store_v1):
     assert_frame_equal(res.data, df)
 
 
-def test_mean_aggregation_float(lmdb_version_store_v1):
-    lib = lmdb_version_store_v1
+def test_mean_aggregation_float(local_object_version_store):
     df = DataFrame(
         {
             "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"],
@@ -212,9 +439,9 @@ def test_mean_aggregation_float(lmdb_version_store_v1):
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"to_mean": "mean"})
     symbol = "test_aggregation"
-    lib.write(symbol, df)
+    local_object_version_store.write(symbol, df)
 
-    res = lib.read(symbol, query_builder=q)
+    res = local_object_version_store.read(symbol, query_builder=q)
     res.data.sort_index(inplace=True)
 
     df = pd.DataFrame({"to_mean": [(1.1 + 1.4 + 2.5) / 3, 2.2]}, index=["group_1", "group_2"])
@@ -254,9 +481,9 @@ def test_named_agg(lmdb_version_store_tiny_segment):
     assert_frame_equal(expected, received)
 
 
-def test_max_minus_one(lmdb_version_store_v1):
+def test_max_minus_one(lmdb_version_store):
     symbol = "minus_one"
-    lib = lmdb_version_store_v1
+    lib = lmdb_version_store
     df = pd.DataFrame({"grouping_column": ["thing"], "a": [-1]})
     lib.write(symbol, df)
     q = QueryBuilder()
@@ -273,39 +500,36 @@ def test_max_minus_one(lmdb_version_store_v1):
     assert_frame_equal(expected, vit.data)
 
 
-def test_group_empty_dataframe(lmdb_version_store_v1):
-    lib = lmdb_version_store_v1
+def test_group_empty_dataframe(lmdb_version_store):
     df = DataFrame({"grouping_column": [], "to_mean": []})
     q = QueryBuilder()
 
     q = q.groupby("grouping_column").agg({"to_mean": "mean"})
 
     symbol = "test_group_empty_dataframe"
-    lib.write(symbol, df)
+    lmdb_version_store.write(symbol, df)
     with pytest.raises(SchemaException):
-        _ = lib.read(symbol, query_builder=q)
+        _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
-def test_group_pickled_symbol(lmdb_version_store_v1):
-    lib = lmdb_version_store_v1
+def test_group_pickled_symbol(lmdb_version_store):
     symbol = "test_group_pickled_symbol"
-    lib.write(symbol, np.arange(100).tolist())
-    assert lib.is_symbol_pickled(symbol)
+    lmdb_version_store.write(symbol, np.arange(100).tolist())
+    assert lmdb_version_store.is_symbol_pickled(symbol)
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"to_mean": "mean"})
     with pytest.raises(InternalException):
-        _ = lib.read(symbol, query_builder=q)
+        _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
-def test_group_column_not_present(lmdb_version_store_v1):
-    lib = lmdb_version_store_v1
+def test_group_column_not_present(lmdb_version_store):
     df = DataFrame({"a": np.arange(2)}, index=np.arange(2))
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"to_mean": "mean"})
     symbol = "test_group_column_not_present"
-    lib.write(symbol, df)
+    lmdb_version_store.write(symbol, df)
     with pytest.raises(SchemaException) as e_info:
-        _ = lib.read(symbol, query_builder=q)
+        _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
 def test_group_column_splitting(lmdb_version_store_tiny_segment):
@@ -396,8 +620,8 @@ def test_aggregation_with_nones_and_nans_in_string_grouping_column(version_store
     assert_frame_equal(res.data, expected)
 
 
-def test_docstring_example_query_builder_apply(lmdb_version_store_v1):
-    lib = lmdb_version_store_v1
+def test_docstring_example_query_builder_apply(lmdb_version_store):
+    lib = lmdb_version_store
     df = pd.DataFrame(
         {
             "VWAP": np.arange(0, 10, dtype=np.float64),
@@ -417,21 +641,19 @@ def test_docstring_example_query_builder_apply(lmdb_version_store_v1):
     assert_frame_equal(df.astype({"ADJUSTED": "int64"}), data)
 
 
-def test_doctring_example_query_builder_groupby_max(lmdb_version_store_v1):
-    lib = lmdb_version_store_v1
+def test_doctring_example_query_builder_groupby_max(lmdb_version_store):
     df = DataFrame({"grouping_column": ["group_1", "group_1", "group_1"], "to_max": [1, 5, 4]}, index=np.arange(3))
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"to_max": "max"})
 
-    lib.write("symbol", df)
-    res = lib.read("symbol", query_builder=q)
+    lmdb_version_store.write("symbol", df)
+    res = lmdb_version_store.read("symbol", query_builder=q)
     df = pd.DataFrame({"to_max": [5]}, index=["group_1"])
     df.index.rename("grouping_column", inplace=True)
     assert_frame_equal(res.data, df)
 
 
-def test_docstring_example_query_builder_groupby_max_and_mean(lmdb_version_store_v1):
-    lib = lmdb_version_store_v1
+def test_docstring_example_query_builder_groupby_max_and_mean(lmdb_version_store):
     df = DataFrame(
         {"grouping_column": ["group_1", "group_1", "group_1"], "to_mean": [1.1, 1.4, 2.5], "to_max": [1.1, 1.4, 2.5]},
         index=np.arange(3),
@@ -439,8 +661,8 @@ def test_docstring_example_query_builder_groupby_max_and_mean(lmdb_version_store
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"to_max": "max", "to_mean": "mean"})
 
-    lib.write("symbol", df)
-    res = lib.read("symbol", query_builder=q)
+    lmdb_version_store.write("symbol", df)
+    res = lmdb_version_store.read("symbol", query_builder=q)
     df = pd.DataFrame({"to_mean": (1.1 + 1.4 + 2.5) / 3, "to_max": [2.5]}, index=["group_1"])
     df.index.rename("grouping_column", inplace=True)
     assert_frame_equal(res.data, df)

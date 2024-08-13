@@ -7,7 +7,6 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 from hypothesis import assume, given, settings
 from hypothesis.extra.pandas import column, data_frames, range_indexes
-import numpy as np
 import pandas as pd
 
 from arcticdb.version_store.processing import QueryBuilder
