@@ -14,7 +14,6 @@ from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.exceptions import InternalException, SchemaException
 from arcticdb.util.test import assert_frame_equal, generic_aggregation_test
 
-
 pytestmark = pytest.mark.pipeline
 
 
@@ -30,27 +29,20 @@ def test_group_on_float_column_with_nans(lmdb_version_store_v1):
 @pytest.mark.parametrize("aggregator", ("sum", "min", "max", "mean", "count"))
 def test_aggregate_float_columns_with_nans(lmdb_version_store_v1, aggregator):
     lib = lmdb_version_store_v1
-    sym = "test_aggregate_float_columns_with_nans"
+    symbol = "test_aggregate_float_columns_with_nans"
     df = pd.DataFrame(
         {
             "grouping_column": 3 * ["some nans", "only nans"],
             "agg_column": [1.0, np.nan, 2.0, np.nan, np.nan, np.nan],
         }
     )
-    lib.write(sym, df)
-    expected = df.groupby("grouping_column").agg({"agg_column": aggregator})
-    # We count in unsigned integers for obvious reasons
-    if aggregator == "count":
-        expected = expected.astype(np.uint64)
-    q = QueryBuilder()
-    q = q.groupby("grouping_column").agg({"agg_column": aggregator})
-    received = lib.read(sym, query_builder=q).data
-    received.sort_index(inplace=True)
-    assert_frame_equal(expected, received)
+    lib.write(symbol, df)
+    generic_aggregation_test(lib, symbol, df, "grouping_column", {"agg_column": aggregator})
 
 
 def test_count_aggregation(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    symbol = "test_count_aggregation"
     df = DataFrame(
         {
             "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2", "group_3"],
@@ -58,150 +50,92 @@ def test_count_aggregation(lmdb_version_store_v1):
         },
         index=np.arange(6),
     )
-    q = QueryBuilder()
-    q = q.groupby("grouping_column").agg({"to_count": "count"})
-    symbol = "test_count_aggregation"
     lib.write(symbol, df)
-
-    res = lib.read(symbol, query_builder=q)
-    res.data.sort_index(inplace=True)
-
-    df = pd.DataFrame({"to_count": [3, 2, 0]}, index=["group_1", "group_2", "group_3"], dtype=np.uint64)
-    df.index.rename("grouping_column", inplace=True)
-    res.data.sort_index(inplace=True)
-
-    assert_frame_equal(res.data, df)
+    generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_count": "count"})
 
 
 @pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
 def test_first_aggregation(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    symbol = "test_first_aggregation"
     df = DataFrame(
         {
             "grouping_column": ["group_1", "group_2", "group_4", "group_2", "group_1", "group_3", "group_1"],
-            "get_first": [100.0, np.nan, np.nan, 2.7, 1.4, 5.8, 3.45],
+            "to_first": [100.0, np.nan, np.nan, 2.7, 1.4, 5.8, 3.45],
         },
         index=np.arange(7),
     )
-    q = QueryBuilder()
-    q = q.groupby("grouping_column").agg({"get_first": "first"})
-    symbol = "test_first_aggregation"
     lib.write(symbol, df)
-
-    res = lib.read(symbol, query_builder=q)
-    res.data.sort_index(inplace=True)
-
-    df = pd.DataFrame({"get_first": [100.0, 2.7, 5.8, np.nan]}, index=["group_1", "group_2", "group_3", "group_4"])
-    df.index.rename("grouping_column", inplace=True)
-
-    assert_frame_equal(res.data, df)
+    generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_first": "first"})
 
 
 @pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
 def test_first_agg_with_append(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
-
-    symbol = "first_agg"
-    lib.write(symbol, pd.DataFrame({"grouping_column": [0], "get_first": [10.0]}))
-    lib.append(symbol, pd.DataFrame({"grouping_column": [1], "get_first": [30.0]}))
-    lib.append(symbol, pd.DataFrame({"grouping_column": [0], "get_first": [20.0]}))
-    q = QueryBuilder().groupby("grouping_column").agg({"get_first": "first"})
-
-    vit = lib.read(symbol, query_builder=q)
-    vit.data.sort_index(inplace=True)
-
-    df = pd.DataFrame({"get_first": [10.0, 30.0]}, index=[0, 1])
-    df.index.rename("grouping_column", inplace=True)
-
-    assert_frame_equal(vit.data, df)
+    symbol = "test_first_agg_with_append"
+    df_0 = pd.DataFrame({"grouping_column": [0], "to_first": [10.0]})
+    df_1 = pd.DataFrame({"grouping_column": [1], "to_first": [30.0]})
+    df_2 = pd.DataFrame({"grouping_column": [0], "to_first": [20.0]})
+    lib.write(symbol, df_0)
+    lib.append(symbol, df_1)
+    lib.append(symbol, df_2)
+    generic_aggregation_test(lib, symbol, pd.concat([df_0, df_1, df_2]), "grouping_column", {"to_first": "first"})
 
 
 @pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
 def test_last_aggregation(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    symbol = "test_last_aggregation"
     df = DataFrame(
         {
-            "grouping_column": ["group_1", "group_2", "group_4", "group_5", "group_2", "group_1", "group_3", "group_1", "group_5"],
-            "get_last": [100.0, 2.7, np.nan, np.nan, np.nan, 1.4, 5.8, 3.45, 6.9],
+            "grouping_column": ["group_1", "group_2", "group_4", "group_5", "group_2", "group_1", "group_3", "group_1",
+                                "group_5"],
+            "to_last": [100.0, 2.7, np.nan, np.nan, np.nan, 1.4, 5.8, 3.45, 6.9],
         },
         index=np.arange(9),
     )
-    q = QueryBuilder()
-    q = q.groupby("grouping_column").agg({"get_last": "last"})
-    symbol = "test_last_aggregation"
     lib.write(symbol, df)
-
-    res = lib.read(symbol, query_builder=q)
-    res.data.sort_index(inplace=True)
-
-    df = pd.DataFrame({"get_last": [3.45, 2.7, 5.8, np.nan, 6.9]}, index=["group_1", "group_2", "group_3", "group_4", "group_5"])
-    df.index.rename("grouping_column", inplace=True)
-
-    assert_frame_equal(res.data, df)
+    generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_last": "last"})
 
 
 @pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
 def test_last_agg_with_append(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
-
-    symbol = "last_agg"
-    lib.write(symbol, pd.DataFrame({"grouping_column": [0], "get_last": [10.0]}))
-    lib.append(symbol, pd.DataFrame({"grouping_column": [1], "get_last": [30.0]}))
-    lib.append(symbol, pd.DataFrame({"grouping_column": [0], "get_last": [20.0]}))
-    q = QueryBuilder().groupby("grouping_column").agg({"get_last": "last"})
-
-    vit = lib.read(symbol, query_builder=q)
-    vit.data.sort_index(inplace=True)
-
-    df = pd.DataFrame({"get_last": [20.0, 30.0]}, index=[0, 1])
-    df.index.rename("grouping_column", inplace=True)
-
-    assert_frame_equal(vit.data, df)
+    symbol = "test_last_agg_with_append"
+    df_0 = pd.DataFrame({"grouping_column": [0], "to_last": [10.0]})
+    df_1 = pd.DataFrame({"grouping_column": [1], "to_last": [30.0]})
+    df_2 = pd.DataFrame({"grouping_column": [0], "to_last": [20.0]})
+    lib.write(symbol, df_0)
+    lib.append(symbol, df_1)
+    lib.append(symbol, df_2)
+    generic_aggregation_test(lib, symbol, pd.concat([df_0, df_1, df_2]), "grouping_column", {"to_last": "last"})
 
 
 def test_sum_aggregation(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    symbol = "test_sum_aggregation"
     df = DataFrame(
         {"grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"], "to_sum": [1, 1, 2, 2, 2]},
         index=np.arange(5),
     )
-    q = QueryBuilder()
-    q = q.groupby("grouping_column").agg({"to_sum": "sum"})
-    symbol = "test_sum_aggregation"
     lib.write(symbol, df)
-
-    res = lib.read(symbol, query_builder=q)
-    res.data.sort_index(inplace=True)
-
-    df = pd.DataFrame({"to_sum": [4, 4]}, index=["group_1", "group_2"])
-    df.index.rename("grouping_column", inplace=True)
-
-    assert_frame_equal(res.data, df)
+    generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_sum": "sum"})
 
 
 def test_mean_aggregation(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    symbol = "test_mean_aggregation"
     df = DataFrame(
         {"grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"], "to_mean": [1, 1, 2, 2, 2]},
         index=np.arange(5),
     )
-    q = QueryBuilder()
-    q = q.groupby("grouping_column").agg({"to_mean": "mean"})
-    symbol = "test_aggregation"
     lib.write(symbol, df)
-
-    res = lib.read(symbol, query_builder=q)
-    res.data.sort_index(inplace=True)
-
-    df = pd.DataFrame({"to_mean": [4 / 3, 2]}, index=["group_1", "group_2"])
-    df.index.rename("grouping_column", inplace=True)
-    res.data.sort_index(inplace=True)
-
-    assert_frame_equal(res.data, df)
+    generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_mean": "mean"})
 
 
 def test_mean_aggregation_float(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    symbol = "test_mean_aggregation_float"
     df = DataFrame(
         {
             "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"],
@@ -209,23 +143,13 @@ def test_mean_aggregation_float(lmdb_version_store_v1):
         },
         index=np.arange(5),
     )
-    q = QueryBuilder()
-    q = q.groupby("grouping_column").agg({"to_mean": "mean"})
-    symbol = "test_aggregation"
     lib.write(symbol, df)
-
-    res = lib.read(symbol, query_builder=q)
-    res.data.sort_index(inplace=True)
-
-    df = pd.DataFrame({"to_mean": [(1.1 + 1.4 + 2.5) / 3, 2.2]}, index=["group_1", "group_2"])
-    df.index.rename("grouping_column", inplace=True)
-
-    assert_frame_equal(res.data, df)
+    generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_mean": "mean"})
 
 
 def test_named_agg(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
-    sym = "test_named_agg"
+    symbol = "test_named_agg"
     gen = np.random.default_rng()
     df = DataFrame(
         {
@@ -233,57 +157,42 @@ def test_named_agg(lmdb_version_store_tiny_segment):
             "agg_column": gen.random(6)
         }
     )
-    lib.write(sym, df)
+    lib.write(symbol, df)
     expected = df.groupby("grouping_column").agg(
         agg_column_sum=pd.NamedAgg("agg_column", "sum"),
         agg_column_mean=pd.NamedAgg("agg_column", "mean"),
         agg_column=pd.NamedAgg("agg_column", "min"),
     )
     expected = expected.reindex(columns=sorted(expected.columns))
-    q = QueryBuilder()
-    q = q.groupby("grouping_column").agg(
+    q = QueryBuilder().groupby("grouping_column").agg(
         {
             "agg_column_sum": ("agg_column", "sum"),
             "agg_column_mean": ("agg_column", "MEAN"),
             "agg_column": "MIN",
         }
     )
-    received = lib.read(sym, query_builder=q).data
-    received.sort_index(inplace=True)
+    received = lib.read(symbol, query_builder=q).data
     received = received.reindex(columns=sorted(received.columns))
-    assert_frame_equal(expected, received)
+    received.sort_index(inplace=True)
+    assert_frame_equal(expected, received, check_dtype=False)
 
 
 def test_max_minus_one(lmdb_version_store_v1):
-    symbol = "minus_one"
     lib = lmdb_version_store_v1
-    df = pd.DataFrame({"grouping_column": ["thing"], "a": [-1]})
+    symbol = "test_max_minus_one"
+    df = pd.DataFrame({"grouping_column": ["thing"], "to_max": [-1]})
     lib.write(symbol, df)
-    q = QueryBuilder()
-    q = q.groupby("grouping_column").agg({"a": "max"})
-    expected = df.groupby("grouping_column").agg({"a": "max"})
-
-    vit = lib.read(symbol, query_builder=q)
-    vit.data.sort_index(inplace=True)
-    print(vit.data)
-    if not np.array_equal(expected, vit.data):
-        print("Original dataframe\n{}".format(df))
-        print("Expected\n{}".format(expected))
-        print("Received\n{}".format(vit.data))
-    assert_frame_equal(expected, vit.data)
+    generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_max": "max"})
 
 
 def test_group_empty_dataframe(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
-    df = DataFrame({"grouping_column": [], "to_mean": []})
-    q = QueryBuilder()
-
-    q = q.groupby("grouping_column").agg({"to_mean": "mean"})
-
     symbol = "test_group_empty_dataframe"
+    df = DataFrame({"grouping_column": [], "to_mean": []})
     lib.write(symbol, df)
+    q = QueryBuilder().groupby("grouping_column").agg({"to_mean": "mean"})
     with pytest.raises(SchemaException):
-        _ = lib.read(symbol, query_builder=q)
+        lib.read(symbol, query_builder=q)
 
 
 def test_group_pickled_symbol(lmdb_version_store_v1):
@@ -291,21 +200,19 @@ def test_group_pickled_symbol(lmdb_version_store_v1):
     symbol = "test_group_pickled_symbol"
     lib.write(symbol, np.arange(100).tolist())
     assert lib.is_symbol_pickled(symbol)
-    q = QueryBuilder()
-    q = q.groupby("grouping_column").agg({"to_mean": "mean"})
+    q = QueryBuilder().groupby("grouping_column").agg({"to_mean": "mean"})
     with pytest.raises(InternalException):
         _ = lib.read(symbol, query_builder=q)
 
 
 def test_group_column_not_present(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
-    df = DataFrame({"a": np.arange(2)}, index=np.arange(2))
-    q = QueryBuilder()
-    q = q.groupby("grouping_column").agg({"to_mean": "mean"})
     symbol = "test_group_column_not_present"
+    df = DataFrame({"a": np.arange(2)}, index=np.arange(2))
     lib.write(symbol, df)
-    with pytest.raises(SchemaException) as e_info:
-        _ = lib.read(symbol, query_builder=q)
+    q = QueryBuilder().groupby("grouping_column").agg({"to_mean": "mean"})
+    with pytest.raises(SchemaException):
+        lib.read(symbol, query_builder=q)
 
 
 def test_group_column_splitting(lmdb_version_store_tiny_segment):
@@ -320,15 +227,14 @@ def test_group_column_splitting(lmdb_version_store_tiny_segment):
             "max2": [2, 3, 4, 5, 2, 3, 4, 5],
         }
     )
-
     lib.write(symbol, df)
-    q = QueryBuilder()
-    q = q.groupby("grouping_column").agg({"sum1": "sum", "max1": "max", "sum2": "sum", "max2": "max"})
-    expected = df.groupby("grouping_column").agg({"sum1": "sum", "max1": "max", "sum2": "sum", "max2": "max"})
-
-    vit = lib.read(symbol, query_builder=q)
-    vit.data.sort_index(inplace=True)
-    assert_frame_equal(expected, vit.data)
+    generic_aggregation_test(
+        lib,
+        symbol,
+        df,
+        "grouping_column",
+        {"sum1": "sum", "max1": "max", "sum2": "sum", "max2": "max"},
+    )
 
 
 def test_group_column_splitting_strings(lmdb_version_store_tiny_segment):
@@ -343,15 +249,14 @@ def test_group_column_splitting_strings(lmdb_version_store_tiny_segment):
             "max2": [2, 3, 4, 5, 2, 3, 4, 5],
         }
     )
-
     lib.write(symbol, df)
-    q = QueryBuilder()
-    q = q.groupby("grouping_column").agg({"sum1": "sum", "max1": "max", "sum2": "sum", "max2": "max"})
-    expected = df.groupby("grouping_column").agg({"sum1": "sum", "max1": "max", "sum2": "sum", "max2": "max"})
-
-    vit = lib.read(symbol, query_builder=q)
-    vit.data.sort_index(inplace=True)
-    assert_frame_equal(expected, vit.data)
+    generic_aggregation_test(
+        lib,
+        symbol,
+        df,
+        "grouping_column",
+        {"sum1": "sum", "max1": "max", "sum2": "sum", "max2": "max"},
+    )
 
 
 def test_aggregation_with_nones_and_nans_in_string_grouping_column(version_store_factory):
@@ -385,36 +290,7 @@ def test_aggregation_with_nones_and_nans_in_string_grouping_column(version_store
         index=np.arange(12),
     )
     lib.write(symbol, df, dynamic_strings=True)
-
-    expected = df.groupby("grouping_column").agg({"to_sum": "sum"})
-
-    q = QueryBuilder()
-    q = q.groupby("grouping_column").agg({"to_sum": "sum"})
-    res = lib.read(symbol, query_builder=q)
-    res.data.sort_index(inplace=True)
-    expected.index.rename("grouping_column", inplace=True)
-    assert_frame_equal(res.data, expected)
-
-
-def test_docstring_example_query_builder_apply(lmdb_version_store_v1):
-    lib = lmdb_version_store_v1
-    df = pd.DataFrame(
-        {
-            "VWAP": np.arange(0, 10, dtype=np.float64),
-            "ASK": np.arange(10, 20, dtype=np.uint16),
-            "VOL_ACC": np.arange(20, 30, dtype=np.int32),
-        },
-        index=np.arange(10),
-    )
-
-    lib.write("expression", df)
-
-    q = QueryBuilder()
-    q = q.apply("ADJUSTED", q["ASK"] * q["VOL_ACC"] + 7)
-    data = lib.read("expression", query_builder=q).data
-
-    df["ADJUSTED"] = df["ASK"] * df["VOL_ACC"] + 7
-    assert_frame_equal(df.astype({"ADJUSTED": "int64"}), data)
+    generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_sum": "sum"})
 
 
 def test_doctring_example_query_builder_groupby_max(lmdb_version_store_v1):

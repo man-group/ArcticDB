@@ -40,26 +40,6 @@ def test_project_column_not_present_static(lmdb_version_store_v1):
         _ = lib.read(symbol, query_builder=q)
 
 
-def test_project(lmdb_version_store_v1):
-    lib = lmdb_version_store_v1
-    df = pd.DataFrame(
-        {
-            "VWAP": np.arange(0, 10, dtype=np.float64),
-            "ASK": np.arange(10, 20, dtype=np.uint16),
-            "ACVOL": np.arange(20, 30, dtype=np.int32),
-        },
-        index=np.arange(10),
-    )
-
-    lib.write("expression", df)
-    df["ADJUSTED"] = df["ASK"] * df["ACVOL"] + 7
-    df["ADJUSTED"] = df["ADJUSTED"].astype("int64")
-    q = QueryBuilder()
-    q = q.apply("ADJUSTED", q["ASK"] * q["ACVOL"] + 7)
-    vit = lib.read("expression", query_builder=q)
-    assert_frame_equal(df, vit.data)
-
-
 def test_project_string_binary_arithmetic(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     symbol = "test_project_string_arithmetic"
@@ -88,6 +68,27 @@ def test_project_string_unary_arithmetic(lmdb_version_store_v1):
     q = q.apply("b", -q["a"])
     with pytest.raises(UserInputException):
         lib.read(symbol, query_builder=q)
+
+
+def test_docstring_example_query_builder_apply(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame(
+        {
+            "VWAP": np.arange(0, 10, dtype=np.float64),
+            "ASK": np.arange(10, 20, dtype=np.uint16),
+            "VOL_ACC": np.arange(20, 30, dtype=np.int32),
+        },
+        index=np.arange(10),
+    )
+
+    lib.write("expression", df)
+
+    q = QueryBuilder()
+    q = q.apply("ADJUSTED", q["ASK"] * q["VOL_ACC"] + 7)
+    data = lib.read("expression", query_builder=q).data
+
+    df["ADJUSTED"] = df["ASK"] * df["VOL_ACC"] + 7
+    assert_frame_equal(df.astype({"ADJUSTED": "int64"}), data)
 
 
 ##################################
