@@ -12,7 +12,7 @@ from pandas import DataFrame
 
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.exceptions import InternalException, SchemaException
-from arcticdb.util.test import assert_frame_equal, generic_aggregation_test
+from arcticdb.util.test import assert_frame_equal, generic_aggregation_test, make_dynamic, regularize_dataframe
 
 pytestmark = pytest.mark.pipeline
 
@@ -320,3 +320,168 @@ def test_docstring_example_query_builder_groupby_max_and_mean(lmdb_version_store
     df = pd.DataFrame({"to_mean": (1.1 + 1.4 + 2.5) / 3, "to_max": [2.5]}, index=["group_1"])
     df.index.rename("grouping_column", inplace=True)
     assert_frame_equal(res.data, df)
+
+
+##################################
+# DYNAMIC SCHEMA TESTS FROM HERE #
+##################################
+
+
+def test_count_aggregation_dynamic(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    symbol = "test_count_aggregation_dynamic"
+    df = DataFrame(
+        {
+            "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2", "group_3"],
+            "to_count": [100, 1, 3, 2, 2, np.nan],
+        },
+        index=np.arange(6),
+    )
+    df, slices = make_dynamic(df)
+    for df_slice in slices:
+        lib.append(symbol, df_slice)
+    generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_count": "count"})
+
+
+@pytest.mark.xfail(reason="Not supported yet")
+def test_first_aggregation_dynamic(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    symbol = "test_first_aggregation_dynamic"
+    df = DataFrame(
+        {
+            "grouping_column": ["group_1", "group_2", "group_4", "group_2", "group_1", "group_3", "group_1"],
+            "to_first": [100.0, np.nan, np.nan, 2.7, 1.4, 5.8, 3.45],
+        },
+        index=np.arange(7),
+    )
+    df, slices = make_dynamic(df)
+    for df_slice in slices:
+        lib.append(symbol, df_slice)
+    generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_first": "first"})
+
+
+@pytest.mark.xfail(reason="Not supported yet")
+def test_last_aggregation_dynamic(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    symbol = "test_last_aggregation_dynamic"
+    df = DataFrame(
+        {
+            "grouping_column": ["group_1", "group_2", "group_4", "group_5", "group_2", "group_1", "group_3", "group_1", "group_5"],
+            "to_last": [100.0, 2.7, np.nan, np.nan, np.nan, 1.4, 5.8, 3.45, 6.9],
+        },
+        index=np.arange(9),
+    )
+    df, slices = make_dynamic(df)
+    for df_slice in slices:
+        lib.append(symbol, df_slice)
+    generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_last": "last"})
+
+
+def test_sum_aggregation_dynamic(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    symbol = "test_sum_aggregation_dynamic"
+    df = DataFrame(
+        {"grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"], "to_sum": [1, 1, 2, 2, 2]},
+        index=np.arange(5),
+    )
+    df, slices = make_dynamic(df)
+    for df_slice in slices:
+        lib.append(symbol, df_slice, write_if_missing=True)
+    generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_sum": "sum"})
+
+
+def test_sum_aggregation_with_range_index_dynamic(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    symbol = "test_sum_aggregation_with_range_index_dynamic"
+    df = DataFrame(
+        {"grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"], "to_sum": [1, 1, 2, 2, 2]}
+    )
+    df, slices = make_dynamic(df)
+    for df_slice in slices:
+        lib.append(symbol, df_slice)
+    generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_sum": "sum"})
+
+
+def test_group_empty_dataframe_dynamic(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    symbol = "test_group_empty_dataframe_dynamic"
+    df = DataFrame({"grouping_column": [], "to_mean": []})
+    lib.write(symbol, df)
+    q = QueryBuilder().groupby("grouping_column").agg({"to_mean": "mean"})
+    with pytest.raises(SchemaException):
+        lib.read(symbol, query_builder=q)
+
+
+def test_group_pickled_symbol_dynamic(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    symbol = "test_group_pickled_symbol_dynamic"
+    lib.write(symbol, np.arange(100).tolist())
+    assert lib.is_symbol_pickled(symbol)
+    q = QueryBuilder().groupby("grouping_column").agg({"to_mean": "mean"})
+    with pytest.raises(InternalException):
+        lib.read(symbol, query_builder=q)
+
+
+def test_group_column_not_present_dynamic(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    symbol = "test_group_column_not_present_dynamic"
+    df = DataFrame({"a": np.arange(2)}, index=np.arange(2))
+    lib.write(symbol, df)
+    q = QueryBuilder().groupby("grouping_column").agg({"to_mean": "mean"})
+    with pytest.raises(SchemaException):
+        lib.read(symbol, query_builder=q)
+
+
+@pytest.mark.parametrize("agg", ("max", "min", "mean", "sum"))
+def test_segment_without_aggregation_column(lmdb_version_store_dynamic_schema_v1, agg):
+    lib = lmdb_version_store_dynamic_schema_v1
+    symbol = "test_segment_without_aggregation_column"
+    write_df = pd.DataFrame({"grouping_column": ["group_0"], "aggregation_column": [10330.0]})
+    lib.write(symbol, write_df)
+    append_df = pd.DataFrame({"grouping_column": ["group_1"]})
+    lib.append(symbol, append_df)
+    generic_aggregation_test(lib, symbol, pd.concat([write_df, append_df]), "grouping_column", {"aggregation_column": agg})
+
+
+def test_minimal_repro_type_change(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    symbol = "test_minimal_repro_type_change"
+    write_df = pd.DataFrame({"grouping_column": ["group_1"], "to_sum": [np.uint8(1)]})
+    lib.write(symbol, write_df)
+    append_df = pd.DataFrame({"grouping_column": ["group_1"], "to_sum": [1.5]})
+    lib.append(symbol, append_df)
+    generic_aggregation_test(lib, symbol, pd.concat([write_df, append_df]), "grouping_column", {"to_sum": "sum"})
+
+
+def test_minimal_repro_type_change_max(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    symbol = "test_minimal_repro_type_change_max"
+    write_df = pd.DataFrame({"grouping_column": ["group_1"], "to_max": [np.uint8(1)]})
+    lib.write(symbol, write_df)
+    append_df = pd.DataFrame({"grouping_column": ["group_1"], "to_max": [0.5]})
+    lib.append(symbol, append_df)
+    generic_aggregation_test(lib, symbol, pd.concat([write_df, append_df]), "grouping_column", {"to_max": "max"})
+
+
+def test_minimal_repro_type_sum_similar_string_group_values(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    symbol = "test_minimal_repro_type_sum_similar_string_group_values"
+    df = pd.DataFrame({"grouping_column": ["0", "000"], "to_sum": [1.0, 1.0]})
+    lib.write(symbol, df)
+    generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_sum": "sum"})
+
+
+def test_aggregation_grouping_column_missing_from_row_group(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    symbol = "test_aggregation_grouping_column_missing_from_row_group"
+    write_df = DataFrame(
+        {"to_sum": [1, 2], "grouping_column": ["group_1", "group_2"]},
+        index=np.arange(2),
+    )
+    lib.write(symbol, write_df)
+    append_df = DataFrame(
+        {"to_sum": [3, 4]},
+        index=np.arange(2, 4),
+    )
+    lib.append(symbol, append_df)
+    generic_aggregation_test(lib, symbol, pd.concat([write_df, append_df]), "grouping_column", {"to_sum": "sum"})
