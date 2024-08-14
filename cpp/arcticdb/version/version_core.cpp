@@ -789,22 +789,22 @@ void read_incompletes_to_pipeline(
     if(incomplete_segments.empty())
         return;
 
+    const auto& seg = incomplete_segments.back().segment(store);
     // Mark the start point of the incompletes, so we know that there is no column slicing after this point
     pipeline_context->incompletes_after_ = pipeline_context->slice_and_keys_.size();
 
     // If there are only incompletes we need to add the index here
     if(pipeline_context->slice_and_keys_.empty()) {
-        add_index_columns_to_query(read_query, incomplete_segments.begin()->segment(store).index_descriptor());
+        add_index_columns_to_query(read_query, seg.index_descriptor());
     }
 
-    auto first_seg = incomplete_segments.begin()->segment(store);
+
     if (!pipeline_context->desc_)
-        pipeline_context->desc_ = first_seg.descriptor();
+        pipeline_context->desc_ = seg.descriptor();
 
     if (!pipeline_context->norm_meta_) {
         pipeline_context->norm_meta_ = std::make_unique<arcticdb::proto::descriptors::NormalizationMetadata>();
-        auto segment_tsd = first_seg.index_descriptor();
-        pipeline_context->norm_meta_->CopyFrom(segment_tsd.proto().normalization());
+        pipeline_context->norm_meta_->CopyFrom(seg.index_descriptor().proto().normalization());
         ensure_timeseries_norm_meta(*pipeline_context->norm_meta_, pipeline_context->stream_id_, sparsify);
     }
 

@@ -100,6 +100,9 @@ size_t adjust_slice_rowcounts(std::vector<pipelines::SliceAndKey> & slice_and_ke
 }
 
 size_t get_slice_rowcounts(std::vector<pipelines::SliceAndKey> & slice_and_keys) {
+    if (slice_and_keys.empty()) {
+        return 0;
+    }
     auto current_col = slice_and_keys[0].slice_.col_range.first;
     size_t rowcount = 0u;
     for (auto& slice_and_key : slice_and_keys) {

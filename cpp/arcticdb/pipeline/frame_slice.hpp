@@ -83,7 +83,6 @@ struct FrameSlice {
             hash_bucket_(hash),
             num_buckets_(num_buckets),
             indices_(std::move(indices)) {
-        util::check(col_range.diff() > 0 || row_range.diff() > 0, "Expected non-zero column or row range");
     }
 
     FrameSlice(const ColRange& col_range, const RowRange& row_range,
@@ -93,7 +92,6 @@ struct FrameSlice {
         row_range(row_range),
         hash_bucket_(hash_bucket),
         num_buckets_(num_buckets) {
-        util::check(col_range.diff() > 0 || row_range.diff() > 0, "Expected non-zero column or row range");
     }
 
     explicit FrameSlice(const SegmentInMemory& seg);

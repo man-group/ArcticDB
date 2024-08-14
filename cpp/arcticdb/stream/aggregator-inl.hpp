@@ -35,14 +35,14 @@ inline void Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy>::commit_i
 
 template<class Index, class Schema, class SegmentingPolicy, class DensityPolicy>
 inline void Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy>::commit() {
-    if (ARCTICDB_LIKELY(segment_.row_count() > 0 || segment_.metadata()) || segment_.has_index_descriptor()) {
+    if (ARCTICDB_LIKELY(segment_.row_count() >= 0 || segment_.metadata()) || segment_.has_index_descriptor()) {
         commit_impl(false);
     }
 }
 
 template<class Index, class Schema, class SegmentingPolicy, class DensityPolicy>
 inline void Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy>::finalize() {
-    if (ARCTICDB_LIKELY(segment_.row_count() > 0 || segment_.metadata()) || segment_.has_index_descriptor()) {
+    if (ARCTICDB_LIKELY(segment_.row_count() >= 0 || segment_.metadata()) || segment_.has_index_descriptor()) {
         commit_impl(true);
     }
 }

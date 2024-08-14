@@ -241,7 +241,6 @@ std::vector<SliceAndKey> get_incomplete(
     bool load_data) {
     using namespace arcticdb::pipelines;
 
-    std::unique_ptr<TimeseriesDescriptor> unused;
     auto entries = get_incomplete_append_slices_for_stream_id(store, stream_id, via_iteration, load_data);
 
     util::variant_match(range,

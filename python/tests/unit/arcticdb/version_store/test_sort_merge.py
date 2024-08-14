@@ -217,14 +217,26 @@ def test_prune_previous(lmdb_library):
     assert len(lib.list_versions("sym")) == 1
 
 class TestEmptySegments:
-    @pytest.mark.xfail(reason="Bug. Throws: `E_ASSERTION_FAILURE Descriptor id mismatch in atom key sym != 0")
-    def test_empty_df_in_staged_segment(self, lmdb_library):
+    def test_staged_segment_is_only_empty_dfs(self, lmdb_library):
         lib = lmdb_library
         lib.write("sym", pd.DataFrame([]), staged=True)
+        lib.write("sym", pd.DataFrame([]), staged=True)
         lib.sort_and_finalize_staged_data("sym")
-        assert_frame_equal(lib.read("sym").data, pd.DataFrame([]))
+        assert_frame_equal(lib.read("sym").data, pd.DataFrame([], index=pd.DatetimeIndex([])))
 
-    @pytest.mark.xfail(reason="Bug. Throws: E_ASSERTION_FAILURE Allocate data called with zero size")
+    def test_staged_segment_has_empty_df(self, lmdb_library):
+        lib = lmdb_library
+        index = pd.DatetimeIndex([pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 3), pd.Timestamp(2024, 1, 4)])
+        df1 = pd.DataFrame({"col": [1, 2, 3]}, index=index)
+        df2 = pd.DataFrame({})
+        df3 = pd.DataFrame({"col": [5]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
+        lib.write("sym", df1, staged=True)
+        lib.write("sym", df2, staged=True)
+        lib.write("sym", df3, staged=True)
+        lib.sort_and_finalize_staged_data("sym")
+        assert_frame_equal(lib.read("sym").data, pd.concat([df1, df2, df3]).sort_index())
+
+
     def test_df_without_rows(self, lmdb_library):
         lib = lmdb_library
         df = pd.DataFrame({"col": []}, index=pd.DatetimeIndex([]))
