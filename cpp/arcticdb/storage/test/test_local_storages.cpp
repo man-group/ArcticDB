@@ -9,8 +9,6 @@
 
 #include <arcticdb/codec/codec.hpp>
 #include <arcticdb/storage/storage.hpp>
-#include <arcticdb/storage/lmdb/lmdb_storage.hpp>
-#include <arcticdb/storage/memory/memory_storage.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
 
 #include <filesystem>
@@ -21,51 +19,12 @@
 #include <arcticdb/util/random.h>
 #include <arcticdb/stream/row_builder.hpp>
 
-namespace test_embedded {
+namespace {
 
 namespace ac = arcticdb;
 namespace as = arcticdb::storage;
 
-class BackendGenerator {
- public:
-  BackendGenerator(std::string backend) : backend_(std::move(backend)) {}
-
-  std::unique_ptr<as::Storage> new_backend() const {
-    if (!fs::exists(TEST_DATABASES_PATH)) {
-      fs::create_directories(TEST_DATABASES_PATH);
-    }
-    if (backend_ == "lmdb") {
-      arcticdb::proto::lmdb_storage::Config cfg;
-      fs::path db_name = "test_lmdb";
-      cfg.set_path((TEST_DATABASES_PATH / db_name).generic_string());
-      cfg.set_map_size(128ULL * (1ULL << 20));
-      cfg.set_recreate_if_exists(true);
-
-      as::LibraryPath library_path{"a", "b"};
-      return std::make_unique<as::lmdb::LmdbStorage>(library_path, as::OpenMode::WRITE, cfg);
-    } else if (backend_ == "mem") {
-      arcticdb::proto::memory_storage::Config cfg;
-
-      as::LibraryPath library_path{"a", "b"};
-      return std::make_unique<as::memory::MemoryStorage>(library_path, as::OpenMode::WRITE, cfg);
-    } else {
-      throw std::runtime_error("Unknown backend generator type.");
-    }
-  }
-
-  void delete_any_test_databases() const {
-    if (fs::exists(TEST_DATABASES_PATH)) {
-      fs::remove_all(TEST_DATABASES_PATH);
-    }
-  }
-
-  std::string get_name() const { return backend_; }
- private:
-  const std::string backend_;
-  inline static const fs::path TEST_DATABASES_PATH = "./test_databases";
-};
-
-class SimpleTestSuite : public testing::TestWithParam<BackendGenerator> {
+class LocalStorageTestSuite : public testing::TestWithParam<StorageGenerator> {
   void SetUp() override {
     GetParam().delete_any_test_databases();
   }
@@ -75,12 +34,12 @@ class SimpleTestSuite : public testing::TestWithParam<BackendGenerator> {
   }
 };
 
-TEST_P(SimpleTestSuite, ConstructDestruct) {
-  std::unique_ptr<as::Storage> storage = GetParam().new_backend();
+TEST_P(LocalStorageTestSuite, ConstructDestruct) {
+  std::unique_ptr<as::Storage> storage = GetParam().new_storage();
 }
 
-TEST_P(SimpleTestSuite, Example) {
-  std::unique_ptr<as::Storage> storage = GetParam().new_backend();
+TEST_P(LocalStorageTestSuite, CoreFunctions) {
+  std::unique_ptr<as::Storage> storage = GetParam().new_storage();
   ac::entity::AtomKey
       k = ac::entity::atom_key_builder().gen_id(1).build<ac::entity::KeyType::TABLE_DATA>(NumericId{999});
 
@@ -135,7 +94,7 @@ TEST_P(SimpleTestSuite, Example) {
   ASSERT_TRUE(executed);
 }
 
-TEST_P(SimpleTestSuite, Strings) {
+TEST_P(LocalStorageTestSuite, Strings) {
   auto tsd = create_tsd<DataTypeTag<DataType::ASCII_DYNAMIC64>, Dimension::Dim0>();
   SegmentInMemory s{StreamDescriptor{std::move(tsd)}};
   s.set_scalar(0, timestamp(123));
@@ -166,7 +125,7 @@ TEST_P(SimpleTestSuite, Strings) {
   auto environment_name = as::EnvironmentName{"res"};
   auto storage_name = as::StorageName{"lmdb_01"};
 
-  std::unique_ptr<as::Storage> storage = GetParam().new_backend();
+  std::unique_ptr<as::Storage> storage = GetParam().new_storage();
 
   ac::entity::AtomKey
       k = ac::entity::atom_key_builder().gen_id(1).build<ac::entity::KeyType::TABLE_DATA>(NumericId{999});
@@ -190,11 +149,14 @@ TEST_P(SimpleTestSuite, Strings) {
 
 using namespace std::string_literals;
 
-std::vector<BackendGenerator> get_backend_generators() {
+std::vector<StorageGenerator> get_storage_generators() {
   return {"lmdb"s, "mem"s};
 }
 
-INSTANTIATE_TEST_SUITE_P(TestEmbedded, SimpleTestSuite, testing::ValuesIn(get_backend_generators()),
-                         [](const testing::TestParamInfo<SimpleTestSuite::ParamType> &info) { return info.param.get_name(); });
+INSTANTIATE_TEST_SUITE_P(
+    TestLocalStorages,
+    LocalStorageTestSuite,
+    testing::ValuesIn(get_storage_generators()),
+    [](const testing::TestParamInfo<LocalStorageTestSuite::ParamType> &info) { return info.param.get_name(); });
 
 }

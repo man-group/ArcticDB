@@ -158,7 +158,7 @@ public:
         return do_key_exists(key);
     }
 
-    bool key_exists(KeyType key_type, const IterateTypePredicate& predicate) {
+    bool scan_for_matching_key(KeyType key_type, const IterateTypePredicate& predicate) {
       return do_iterate_type_until_match(key_type, predicate, std::string());
     }
 

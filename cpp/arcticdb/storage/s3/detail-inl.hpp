@@ -270,16 +270,16 @@ namespace s3 {
             };
         }
 
-        template<class KeyBucketizer, class PrefixHandler>
-        bool do_iterate_type_impl(KeyType key_type,
-                                  const IterateTypePredicate& visitor,
-                                  const std::string &root_folder,
-                                  const std::string &bucket_name,
-                                  const S3ClientWrapper &s3_client,
-                                  KeyBucketizer &&bucketizer,
-                                  PrefixHandler &&prefix_handler = default_prefix_handler(),
-                                  const std::string &prefix = std::string{}
-        ) {
+      template<class KeyBucketizer, class PrefixHandler>
+      bool do_iterate_type_impl(
+        KeyType key_type,
+        const IterateTypePredicate &visitor,
+        const std::string &root_folder,
+        const std::string &bucket_name,
+        const S3ClientWrapper &s3_client,
+        KeyBucketizer &&bucketizer,
+        PrefixHandler &&prefix_handler = default_prefix_handler(),
+        const std::string &prefix = std::string{}) {
             ARCTICDB_SAMPLE(S3StorageIterateType, 0)
             auto key_type_dir = key_type_folder(root_folder, key_type);
             const auto path_to_key_size = key_type_dir.size() + 1 + bucketizer.bucketize_length(key_type);

@@ -764,7 +764,7 @@ if(${TEST})
             processing/test/test_set_membership.cpp
             processing/test/test_signed_unsigned_comparison.cpp
             processing/test/test_type_comparison.cpp
-            storage/test/test_embedded.cpp
+            storage/test/test_local_storages.cpp
             storage/test/test_memory_storage.cpp
             storage/test/test_s3_storage.cpp
             storage/test/test_storage_factory.cpp

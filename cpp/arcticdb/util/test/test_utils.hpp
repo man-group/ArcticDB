@@ -16,6 +16,14 @@
 #include <vector>
 #include <numeric>
 #include <random>
+#include <filesystem>
+#include <arcticdb/storage/storage.hpp>
+#include <arcticdb/storage/library_path.hpp>
+#include <arcticdb/storage/lmdb/lmdb_storage.hpp>
+#include <arcticdb/storage/memory/memory_storage.hpp>
+#include <arcticdb/storage/azure/azure_storage.hpp>
+#include <arcticdb/storage/s3/s3_storage.hpp>
+#include <arcticdb/storage/mongo/mongo_storage.hpp>
 
 using namespace arcticdb;
 
@@ -161,4 +169,56 @@ struct TestRow {
     std::vector<raw_type> starts_;
     mutable util::BitSet bitset_;
     std::vector<TestValue<TDT>> values_;
+};
+
+class StorageGenerator {
+ public:
+  StorageGenerator(std::string storage) : storage_(std::move(storage)) {}
+
+  [[nodiscard]] std::unique_ptr<storage::Storage> new_storage() const {
+    storage::LibraryPath library_path{"a", "b"};
+    if (storage_ == "lmdb") {
+      if (!fs::exists(TEST_DATABASES_PATH)) {
+        fs::create_directories(TEST_DATABASES_PATH);
+      }
+      arcticdb::proto::lmdb_storage::Config cfg;
+      fs::path db_name = "test_lmdb";
+      cfg.set_path((TEST_DATABASES_PATH / db_name).generic_string());
+      cfg.set_map_size(128ULL * (1ULL << 20) );
+      cfg.set_recreate_if_exists(true);
+
+      return std::make_unique<storage::lmdb::LmdbStorage>(library_path, storage::OpenMode::WRITE, cfg);
+    } else if (storage_ == "mem") {
+      arcticdb::proto::memory_storage::Config cfg;
+      return std::make_unique<storage::memory::MemoryStorage>(library_path, storage::OpenMode::WRITE, cfg);
+    } else if (storage_ == "azure") {
+      arcticdb::proto::azure_storage::Config cfg;
+      cfg.set_use_mock_storage_for_testing(true);
+      return std::make_unique<storage::azure::AzureStorage>(library_path, storage::OpenMode::WRITE, cfg);
+    } else if (storage_ == "s3") {
+      arcticdb::proto::s3_storage::Config cfg;
+      cfg.set_use_mock_storage_for_testing(true);
+      return std::make_unique<storage::s3::S3Storage>(library_path, storage::OpenMode::WRITE, cfg);
+    } else if (storage_ == "mongo") {
+      arcticdb::proto::mongo_storage::Config cfg;
+      cfg.set_use_mock_storage_for_testing(true);
+      return std::make_unique<storage::mongo::MongoStorage>(library_path, storage::OpenMode::WRITE, cfg);
+    } else {
+      throw std::runtime_error(fmt::format("Unknown backend generator type {}.", storage_));
+    }
+  }
+
+  void delete_any_test_databases() const {
+    if (fs::exists(TEST_DATABASES_PATH)) {
+      fs::remove_all(TEST_DATABASES_PATH);
+    }
+  }
+
+  [[nodiscard]] std::string get_name() const {
+    return storage_;
+  }
+
+ private:
+  const std::string storage_;
+  inline static const fs::path TEST_DATABASES_PATH = "./test_databases";
 };
