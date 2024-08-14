@@ -602,6 +602,8 @@ if(${ARCTICDB_USE_PCH})
                 <folly/Poly.h>
                 <folly/ScopeGuard.h>
                 <folly/portability/Time.h>
+                <folly/gen/Base.h>
+
 
                 # FMT
                 <fmt/core.h>
@@ -620,6 +622,7 @@ if(${ARCTICDB_USE_PCH})
                 <ankerl/unordered_dense.h>
                 <third_party/recycle/src/recycle/shared_pool.hpp>
                 <xxhash.h>
+                <pcre.h>
     )
 endif()
 
@@ -1111,8 +1114,122 @@ if(${TEST})
         target_precompile_headers(
             test_unit_arcticdb
             PRIVATE
+                # GTest
                 <gtest/gtest.h>
                 <gtest/gtest_prod.h>
+
+                # STL
+                <cstdint>
+                <memory>
+                <unordered_map>
+                <vector>
+                <stdexcept>
+                <variant>
+                <optional>
+                <array>
+                <string>
+                <cstddef>
+                <type_traits>
+                <climits>
+                <mutex>
+                <string_view>
+                <chrono>
+                <atomic>
+                <time.h>
+                <algorithm>
+                <limits>
+                <cstdlib>
+                <utility>
+                <unordered_set>
+                <ctime>
+                <numeric>
+                <iomanip>
+                <map>
+                <sstream>
+                <concepts>
+                <cstdio>
+                <iostream>
+                <functional>
+                <typeinfo>
+                <list>
+                <random>
+                <cassert>
+                <fstream>
+                <any>
+                <filesystem>
+                <thread>
+                <queue>
+                <pcre.h>
+                <exception>
+                <deque>
+                <shared_mutex>
+                <ranges>
+                <set>
+
+                # SPDLog
+                <spdlog/spdlog.h>
+
+                # FMT
+                <fmt/format.h>
+                <fmt/std.h>
+                <fmt/compile.h>
+                <fmt/core.h>
+
+                # Proto
+                <google/protobuf/any.pb.h>
+                <google/protobuf/io/zero_copy_stream_impl.h>
+                <google/protobuf/util/message_differencer.h>
+                <google/protobuf/arena.h>
+                <google/protobuf/text_format.h>
+                <google/protobuf/any.h>
+
+                # Python
+                <pybind11/numpy.h>
+                <Python.h>
+                <pybind11/pybind11.h>
+                <pybind11/stl.h>
+
+                # Proto generated
+                <encoding.pb.h>
+                <storage.pb.h>
+                <in_memory_storage.pb.h>
+                <azure_storage.pb.h>
+                <s3_storage.pb.h>
+                <utils.pb.h>
+                <nfs_backed_storage.pb.h>
+                <lmdb_storage.pb.h>
+                <config.pb.h>
+                <mapped_file_storage.pb.h>
+                <mongo_storage.pb.h>
+                <descriptors.pb.h>
+
+                # Boost
+                <boost/algorithm/string.hpp>
+                <boost/container/small_vector.hpp>
+                <boost/iterator/iterator_facade.hpp>
+                <boost/core/noncopyable.hpp>
+                <boost/iterator_adaptors.hpp>
+                <boost/circular_buffer.hpp>
+                <boost/noncopyable.hpp>
+
+                # Folly
+                <folly/portability/Time.h>
+                <folly/Range.h>
+                <folly/container/Enumerate.h>
+                <folly/Poly.h>
+                <folly/ScopeGuard.h>
+                <folly/gen/Base.h>
+                <folly/hash/Hash.h>
+                <folly/Function.h>
+
+                # Misc
+                <xxhash.h>
+                <ankerl/unordered_dense.h>
+                <third_party/recycle/src/recycle/shared_pool.hpp>
+
+                # Bitmagic
+                <bitmagic/bm.h>
+                <bitmagic/bmserial.h>
         )
         message(STATUS "Using precompiled headers for target target_precompile_headers")
         target_precompile_headers(
