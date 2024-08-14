@@ -485,7 +485,7 @@ FIXED_STRINGS_SUFFIX = "fixed_strings"
 
 
 def generic_filter_test(lib, symbol, df, arctic_query, pandas_query):
-    expected = df.query(pandas_query)
+    expected = df.query(pandas_query, level=1) if isinstance(pandas_query, str) else pandas_query
     received = lib.read(symbol, query_builder=arctic_query).data
     if not np.array_equal(expected, received):
         print(f"\nOriginal dataframe:\n{df}\ndtypes:\n{df.dtypes}")

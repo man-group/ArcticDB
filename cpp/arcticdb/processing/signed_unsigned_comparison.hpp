@@ -21,6 +21,22 @@ namespace arcticdb::comparison {
         return static_cast<int64_t>(val);
     }
 
+    inline bool equals(uint64_t left, int64_t right) {
+        return !msb_set(left) && to_signed(left) == right;
+    }
+
+    inline bool equals(int64_t left, uint64_t right) {
+        return !msb_set(right) && left == to_signed(right);
+    }
+
+    inline bool not_equals(uint64_t left, int64_t right) {
+        return msb_set(left) || to_signed(left) != right;
+    }
+
+    inline bool not_equals(int64_t left, uint64_t right) {
+        return msb_set(right) || left != to_signed(right);
+    }
+
     inline bool less_than(uint64_t left, int64_t right) {
         return !msb_set(left) && to_signed(left) < right;
     }

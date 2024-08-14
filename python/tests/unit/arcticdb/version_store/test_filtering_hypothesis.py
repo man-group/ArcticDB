@@ -41,6 +41,17 @@ from arcticdb.util.hypothesis import (
 pytestmark = pytest.mark.pipeline
 
 
+def test_failing(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    symbol = "test_failing"
+    df = pd.DataFrame({"a": [np.uint8(0)], "b": [np.uint64(0)]}, index=np.arange(1))
+    val = np.uint8(0)
+    lib.write(symbol, df)
+    q = QueryBuilder()
+    q = q[val < q["b"]]
+    generic_filter_test(lib, symbol, df, q, df[val < df["b"]])
+
+
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
@@ -52,7 +63,6 @@ pytestmark = pytest.mark.pipeline
 def test_filter_numeric_binary_comparison(lmdb_version_store_v1, df, val):
     assume(not df.empty)
     lib = lmdb_version_store_v1
-    print(df.dtypes)
     symbol = "test_filter_numeric_binary_comparison"
     lib.write(symbol, df)
     # Would be cleaner to use pytest.parametrize, but the expensive bit is generating/writing the df, so make sure we
@@ -62,22 +72,27 @@ def test_filter_numeric_binary_comparison(lmdb_version_store_v1, df, val):
             q = QueryBuilder()
             qb_lhs = q["a"] if comp.startswith("col") else val
             qb_rhs = q["b"] if comp.endswith("col") else val
+            pandas_lhs = df["a"] if comp.startswith("col") else val
+            pandas_rhs = df["b"] if comp.endswith("col") else val
             if op == "<":
                 q = q[qb_lhs < qb_rhs]
+                expected = df[pandas_lhs < pandas_rhs]
             elif op == "<=":
                 q = q[qb_lhs <= qb_rhs]
+                expected = df[pandas_lhs <= pandas_rhs]
             elif op == ">":
                 q = q[qb_lhs > qb_rhs]
+                expected = df[pandas_lhs > pandas_rhs]
             elif op == ">=":
                 q = q[qb_lhs >= qb_rhs]
+                expected = df[pandas_lhs >= pandas_rhs]
             elif op == "==":
                 q = q[qb_lhs == qb_rhs]
+                expected = df[pandas_lhs == pandas_rhs]
             elif op == "!=":
                 q = q[qb_lhs != qb_rhs]
-            pandas_lhs = "a" if comp.startswith("col") else val
-            pandas_rhs = "b" if comp.endswith("col") else val
-            pandas_query = f"{pandas_lhs} {op} {pandas_rhs}"
-            generic_filter_test(lib, symbol, df, q, pandas_query)
+                expected = df[pandas_lhs != pandas_rhs]
+            generic_filter_test(lib, symbol, df, q, expected)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked

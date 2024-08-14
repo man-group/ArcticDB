@@ -283,7 +283,7 @@ V apply(T t, U u) {
 struct EqualsOperator {
 template<typename T, typename U>
 bool operator()(T t, U u) const {
-    return t == T(u);
+    return t == u;
 }
 template<typename T>
 bool operator()(T t, std::optional<T> u) const {
@@ -306,12 +306,18 @@ bool operator()(std::optional<T> t, std::optional<T> u) const {
     else
         return false;
 }
+bool operator()(uint64_t t, int64_t u) const {
+    return comparison::equals(t, u);
+}
+bool operator()(int64_t t, uint64_t u) const {
+    return comparison::equals(t, u);
+}
 };
 
 struct NotEqualsOperator {
 template<typename T, typename U>
 bool operator()(T t, U u) const {
-    return t != T(u);
+    return t != u;
 }
 template<typename T>
 bool operator()(T t, std::optional<T> u) const {
@@ -334,12 +340,18 @@ bool operator()(std::optional<T> t, std::optional<T> u) const {
     else
         return true;
 }
+bool operator()(uint64_t t, int64_t u) const {
+    return comparison::not_equals(t, u);
+}
+bool operator()(int64_t t, uint64_t u) const {
+    return comparison::not_equals(t, u);
+}
 };
 
 struct LessThanOperator {
 template<typename T, typename U>
 bool operator()(T t, U u) const {
-    return t < T(u);
+    return t < u;
 }
 template<typename T>
 bool operator()([[maybe_unused]] std::optional<T> t, [[maybe_unused]] T u) const {
@@ -360,7 +372,7 @@ bool operator()(int64_t t, uint64_t u) const {
 struct LessThanEqualsOperator {
 template<typename T, typename U>
 bool operator()(T t, U u) const {
-    return t <= T(u);
+    return t <= u;
 }
 template<typename T>
 bool operator()([[maybe_unused]] std::optional<T> t, [[maybe_unused]] T u) const {
@@ -381,7 +393,7 @@ bool operator()(int64_t t, uint64_t u) const {
 struct GreaterThanOperator {
 template<typename T, typename U>
 bool operator()(T t, U u) const {
-    return t > T(u);
+    return t > u;
 }
 template<typename T>
 bool operator()([[maybe_unused]] std::optional<T> t, [[maybe_unused]] T u) const {
@@ -402,7 +414,7 @@ bool operator()(int64_t t, uint64_t u) const {
 struct GreaterThanEqualsOperator {
 template<typename T, typename U>
 bool operator()(T t, U u) const {
-    return t >= T(u);
+    return t >= u;
 }
 template<typename T>
 bool operator()([[maybe_unused]] std::optional<T> t, [[maybe_unused]] T u) const {
