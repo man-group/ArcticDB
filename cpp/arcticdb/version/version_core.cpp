@@ -1278,6 +1278,10 @@ VersionedItem sort_merge_impl(
                                  options.convert_int_to_float_,
                                  options.via_iteration_,
                                  options.sparsify_);
+    user_input::check<ErrorCode::E_NO_STAGED_SEGMENTS>(
+        pipeline_context->slice_and_keys_.size() > 0,
+        "Finalizing staged data is not allowed with empty staging area"
+    );
 
     std::vector<entity::VariantKey> delete_keys;
     for(auto sk = pipeline_context->incompletes_begin(); sk != pipeline_context->end(); ++sk) {
