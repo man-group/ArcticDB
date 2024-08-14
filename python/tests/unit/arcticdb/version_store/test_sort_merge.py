@@ -80,6 +80,7 @@ def test_merge_dynamic(lmdb_library):
     assert_frame_equal(lib.read(sym1).data, expected_df)
 
 
+
 def test_merge_strings(lmdb_library):
     lib = lmdb_library
 
@@ -245,11 +246,10 @@ class TestEmptySegments:
         assert_frame_equal(lib.read("sym").data, df)
 
 
-@pytest.mark.xfail(reason="Throws: E_ASSERTION_FAILURE Stream descriptor not found in pipeline context")
 def test_finalize_without_adding_segments(lmdb_library):
     lib = lmdb_library
-    lib.write("sym", pd.DataFrame({"col": [1]}, index=pd.DatetimeIndex([np.datetime64('2023-01-01')])))
-    lib.sort_and_finalize_staged_data("sym")
+    with pytest.raises(UserInputException) as exception_info:
+        lib.sort_and_finalize_staged_data("sym")
 
 def test_type_mismatch_throws(lmdb_library):
     lib = lmdb_library
