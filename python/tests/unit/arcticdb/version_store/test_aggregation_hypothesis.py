@@ -13,7 +13,12 @@ from arcticdb.util.test import generic_named_aggregation_test
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
     numeric_type_strategies,
+    non_zero_numeric_type_strategies,
     string_strategy,
+    supported_numeric_dtypes,
+    dataframe_strategy,
+    column_strategy,
+    supported_string_dtypes,
 )
 
 import pytest
@@ -23,13 +28,12 @@ pytestmark = pytest.mark.pipeline
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
-    df=data_frames(
+    df=dataframe_strategy(
         [
-            column("grouping_column", elements=string_strategy),
-            column("agg_column", elements=numeric_type_strategies()),
+            column_strategy("grouping_column", supported_string_dtypes()),
+            column_strategy("agg_column", supported_numeric_dtypes()),
         ],
-        index=range_indexes(),
-    )
+    ),
 )
 def test_aggregation_numeric(lmdb_version_store_v1, df):
     assume(not df.empty)
@@ -58,13 +62,12 @@ def test_aggregation_numeric(lmdb_version_store_v1, df):
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
-    df=data_frames(
+    df=dataframe_strategy(
         [
-            column("grouping_column", elements=string_strategy),
-            column("agg_column", elements=string_strategy),
+            column_strategy("grouping_column", supported_string_dtypes()),
+            column_strategy("agg_column", supported_string_dtypes()),
         ],
-        index=range_indexes(),
-    )
+    ),
 )
 def test_aggregation_strings(lmdb_version_store_v1, df):
     assume(not df.empty)
@@ -94,13 +97,12 @@ def test_aggregation_strings(lmdb_version_store_v1, df):
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
-    df=data_frames(
+    df=dataframe_strategy(
         [
-            column("grouping_column", elements=string_strategy),
-            column("agg_column", elements=numeric_type_strategies()),
+            column_strategy("grouping_column", supported_string_dtypes()),
+            column_strategy("agg_column", supported_numeric_dtypes()),
         ],
-        index=range_indexes(),
-    )
+    ),
 )
 def test_aggregation_numeric_dynamic(lmdb_version_store_dynamic_schema_v1, df):
     assume(len(df) >= 3)
@@ -136,13 +138,12 @@ def test_aggregation_numeric_dynamic(lmdb_version_store_dynamic_schema_v1, df):
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
-    df=data_frames(
+    df=dataframe_strategy(
         [
-            column("grouping_column", elements=string_strategy),
-            column("agg_column", elements=string_strategy),
+            column_strategy("grouping_column", supported_string_dtypes()),
+            column_strategy("agg_column", supported_string_dtypes()),
         ],
-        index=range_indexes(),
-    )
+    ),
 )
 def test_aggregation_strings_dynamic(lmdb_version_store_dynamic_schema_v1, df):
     assume(len(df) >= 3)

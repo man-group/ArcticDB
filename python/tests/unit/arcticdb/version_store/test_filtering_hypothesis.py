@@ -7,7 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 from datetime import datetime
 from hypothesis import assume, given, settings
-from hypothesis.extra.pandas import column, data_frames, range_indexes
+from hypothesis.extra.pandas import columns, data_frames, range_indexes
 from hypothesis.extra.pytz import timezones as timezone_st
 import hypothesis.strategies as st
 import numpy as np
@@ -26,13 +26,15 @@ from arcticdb.util.test import (
 )
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
-    integral_type_strategies,
     unsigned_integral_type_strategies,
     signed_integral_type_strategies,
     numeric_type_strategies,
-    non_zero_numeric_type_strategies,
     string_strategy,
-    dataframes_with_names_and_dtypes,
+    supported_numeric_dtypes,
+    supported_integer_dtypes,
+    supported_string_dtypes,
+    dataframe_strategy,
+    column_strategy,
 )
 
 
@@ -42,15 +44,15 @@ pytestmark = pytest.mark.pipeline
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
-    df=data_frames(
-        [column("a", elements=numeric_type_strategies()), column("b", elements=numeric_type_strategies())],
-        index=range_indexes(),
+    df=dataframe_strategy(
+        [column_strategy("a", supported_numeric_dtypes()), column_strategy("b", supported_numeric_dtypes())]
     ),
     val=numeric_type_strategies(),
 )
 def test_filter_numeric_binary_comparison(lmdb_version_store_v1, df, val):
     assume(not df.empty)
     lib = lmdb_version_store_v1
+    print(df.dtypes)
     symbol = "test_filter_numeric_binary_comparison"
     lib.write(symbol, df)
     # Would be cleaner to use pytest.parametrize, but the expensive bit is generating/writing the df, so make sure we
@@ -81,8 +83,8 @@ def test_filter_numeric_binary_comparison(lmdb_version_store_v1, df, val):
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
-    df=data_frames(
-        [column("a", elements=string_strategy), column("b", elements=string_strategy)], index=range_indexes()
+    df=dataframe_strategy(
+        [column_strategy("a", supported_string_dtypes()), column_strategy("b", supported_string_dtypes())]
     ),
     val=string_strategy,
 )
@@ -109,7 +111,9 @@ def test_filter_string_binary_comparison(lmdb_version_store_v1, df, val):
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
-    df=dataframes_with_names_and_dtypes(["a"], integral_type_strategies()),
+    df=dataframe_strategy(
+        [column_strategy("a", supported_integer_dtypes(), restrict_range=False)]
+    ),
     signed_vals=st.frozensets(signed_integral_type_strategies(), min_size=1),
     unsigned_vals=st.frozensets(unsigned_integral_type_strategies(), min_size=1),
 )
@@ -131,7 +135,9 @@ def test_filter_numeric_set_membership(lmdb_version_store_v1, df, signed_vals, u
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
-    df=data_frames([column("a", elements=string_strategy)], index=range_indexes()),
+    df=dataframe_strategy(
+        [column_strategy("a", supported_string_dtypes())]
+    ),
     vals=st.frozensets(string_strategy, min_size=1),
 )
 def test_filter_string_set_membership(lmdb_version_store_v1, df, vals):
@@ -151,9 +157,7 @@ def test_filter_string_set_membership(lmdb_version_store_v1, df, vals):
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
-@given(
-    df=dataframes_with_names_and_dtypes(["a"], integral_type_strategies()),
-)
+@given(df=dataframe_strategy([column_strategy("a", supported_integer_dtypes(), restrict_range=False)]))
 def test_filter_numeric_empty_set_membership(lmdb_version_store_v1, df):
     assume(not df.empty)
     lib = lmdb_version_store_v1
@@ -170,7 +174,7 @@ def test_filter_numeric_empty_set_membership(lmdb_version_store_v1, df):
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
-@given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()))
+@given(df=dataframe_strategy([column_strategy("a", supported_string_dtypes())]))
 def test_filter_string_empty_set_membership(lmdb_version_store_v1, df):
     assume(not df.empty)
     lib = lmdb_version_store_v1
@@ -219,9 +223,8 @@ def test_filter_datetime_timezone_aware_hypothesis(lmdb_version_store_v1, df_dt,
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
-    df=data_frames(
-        [column("a", elements=numeric_type_strategies()), column("b", elements=numeric_type_strategies())],
-        index=range_indexes(),
+    df=dataframe_strategy(
+        [column_strategy("a", supported_numeric_dtypes()), column_strategy("b", supported_numeric_dtypes())]
     )
 )
 def test_filter_binary_boolean(lmdb_version_store_v1, df):
@@ -251,7 +254,7 @@ def test_filter_binary_boolean(lmdb_version_store_v1, df):
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
-    df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
+    df=dataframe_strategy([column_strategy("a", supported_numeric_dtypes())]),
     val=numeric_type_strategies(),
 )
 def test_filter_not(lmdb_version_store_v1, df, val):
@@ -268,14 +271,13 @@ def test_filter_not(lmdb_version_store_v1, df, val):
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
-    df=data_frames(
+    df=dataframe_strategy(
         [
-            column("a", elements=numeric_type_strategies()),
-            column("b", elements=numeric_type_strategies()),
-            column("c", elements=numeric_type_strategies()),
-        ],
-        index=range_indexes(),
-    )
+            column_strategy("a", supported_numeric_dtypes()),
+            column_strategy("b", supported_numeric_dtypes()),
+            column_strategy("c", supported_numeric_dtypes()),
+        ]
+    ),
 )
 def test_filter_more_columns_than_fit_in_one_segment(lmdb_version_store_tiny_segment, df):
     assume(not df.empty)
@@ -291,14 +293,13 @@ def test_filter_more_columns_than_fit_in_one_segment(lmdb_version_store_tiny_seg
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
-    df=data_frames(
+    df=dataframe_strategy(
         [
-            column("a", elements=numeric_type_strategies()),
-            column("b", elements=numeric_type_strategies()),
-            column("c", elements=numeric_type_strategies()),
-        ],
-        index=range_indexes(),
-    )
+            column_strategy("a", supported_numeric_dtypes()),
+            column_strategy("b", supported_numeric_dtypes()),
+            column_strategy("c", supported_numeric_dtypes()),
+        ]
+    ),
 )
 def test_filter_with_column_slicing(lmdb_version_store_tiny_segment, df):
     assume(not df.empty)
@@ -321,9 +322,8 @@ def test_filter_with_column_slicing(lmdb_version_store_tiny_segment, df):
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
-    df=data_frames(
-        [column("a", elements=numeric_type_strategies()), column("b", elements=numeric_type_strategies())],
-        index=range_indexes(),
+    df=dataframe_strategy(
+        [column_strategy("a", supported_numeric_dtypes()), column_strategy("b", supported_numeric_dtypes())]
     ),
     val=numeric_type_strategies(),
 )
@@ -363,8 +363,8 @@ def test_filter_numeric_binary_comparison_dynamic(lmdb_version_store_dynamic_sch
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
-    df=data_frames(
-        [column("a", elements=string_strategy), column("b", elements=string_strategy)], index=range_indexes()
+    df=dataframe_strategy(
+        [column_strategy("a", supported_string_dtypes()), column_strategy("b", supported_string_dtypes())]
     ),
     val=string_strategy,
 )
@@ -402,7 +402,7 @@ def test_filter_string_binary_comparison_dynamic(lmdb_version_store_dynamic_sche
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
-    df=dataframes_with_names_and_dtypes(["a"], integral_type_strategies()),
+    df=dataframe_strategy([column_strategy("a", supported_numeric_dtypes(), restrict_range=False)]),
     signed_vals=st.frozensets(signed_integral_type_strategies(), min_size=1),
     unsigned_vals=st.frozensets(unsigned_integral_type_strategies(), min_size=1),
 )
@@ -430,7 +430,7 @@ def test_filter_numeric_set_membership_dynamic(lmdb_version_store_dynamic_schema
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
-    df=data_frames([column("a", elements=string_strategy)], index=range_indexes()),
+    df=dataframe_strategy([column_strategy("a", supported_string_dtypes())]),
     vals=st.frozensets(string_strategy, min_size=1),
 )
 def test_filter_string_set_membership_dynamic(lmdb_version_store_dynamic_schema_v1, df, vals):

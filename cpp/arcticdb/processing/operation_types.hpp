@@ -187,8 +187,8 @@ struct type_arithmetic_promoted_type {
                             std::conditional_t<std::is_same_v<LHS, uint64_t> || std::is_same_v<RHS, uint64_t>,
                                 // If so, there's no common type that can completely hold both arguments. We trigger operation-specific handling
                                 std::conditional_t<std::is_base_of_v<MembershipOperator, Func>,
-                                    RHS, // Retains ValueSetBaseType in binary_membership()
-                                    int64_t>, // Retain the broken behaviour for Divide for now (https://github.com/man-group/ArcticDB/issues/594)
+                                    RHS, // Retains ValueSetBaseType in binary_membership(), which handles mixed int64/uint64 operations gracefully
+                                    int64_t>, // Use the widest signed type we support, and accept that there may be overflow to keep iterations if-statement free
                                 // There should be a signed type wider than the unsigned type, so both can be exactly represented
                                 typename arithmetic_promoted_type::details::signed_width_t<2 * max_width>
                             >

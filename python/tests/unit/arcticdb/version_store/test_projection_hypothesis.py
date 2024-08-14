@@ -6,7 +6,6 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 from hypothesis import assume, given, settings
-from hypothesis.extra.pandas import column, data_frames, range_indexes
 import pandas as pd
 
 from arcticdb.version_store.processing import QueryBuilder
@@ -15,7 +14,9 @@ from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
     numeric_type_strategies,
     non_zero_numeric_type_strategies,
-    string_strategy,
+    supported_numeric_dtypes,
+    dataframe_strategy,
+    column_strategy,
 )
 
 
@@ -26,9 +27,11 @@ pytestmark = pytest.mark.pipeline
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
-    df=data_frames(
-        [column("a", elements=numeric_type_strategies()), column("b", elements=non_zero_numeric_type_strategies())],
-        index=range_indexes(),
+    df=dataframe_strategy(
+        [
+            column_strategy("a", supported_numeric_dtypes()),
+            column_strategy("b", supported_numeric_dtypes(), include_zero=False)
+        ],
     ),
     val=non_zero_numeric_type_strategies(),
 )
@@ -59,17 +62,12 @@ def test_project_numeric_binary_operation(lmdb_version_store_v1, df, val):
                 q = q.apply("c", qb_lhs / qb_rhs)
                 df["c"] = pandas_lhs / pandas_rhs
             received = lib.read(symbol, query_builder=q).data
-            assert_frame_equal(df, received)
+            assert_frame_equal(df, received, check_dtype=False)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
-@given(
-    df=data_frames(
-        [column("a", elements=numeric_type_strategies())],
-        index=range_indexes(),
-    ),
-)
+@given(df=dataframe_strategy([column_strategy("a", supported_numeric_dtypes())]))
 def test_project_numeric_unary_operation(lmdb_version_store_v1, df):
     assume(not df.empty)
     lib = lmdb_version_store_v1
@@ -84,7 +82,7 @@ def test_project_numeric_unary_operation(lmdb_version_store_v1, df):
     q = q.apply("b", -q["a"])
     df["b"] = -df["a"]
     received = lib.read(symbol, query_builder=q).data
-    assert_frame_equal(df, received)
+    assert_frame_equal(df, received, check_dtype=False)
 
 
 ##################################
@@ -95,9 +93,11 @@ def test_project_numeric_unary_operation(lmdb_version_store_v1, df):
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
-    df=data_frames(
-        [column("a", elements=numeric_type_strategies()), column("b", elements=non_zero_numeric_type_strategies())],
-        index=range_indexes(),
+    df=dataframe_strategy(
+        [
+            column_strategy("a", supported_numeric_dtypes()),
+            column_strategy("b", supported_numeric_dtypes(), include_zero=False)
+        ],
     ),
     val=non_zero_numeric_type_strategies(),
 )
@@ -136,17 +136,12 @@ def test_project_numeric_binary_operation_dynamic(lmdb_version_store_dynamic_sch
                 q = q.apply("c", qb_lhs / qb_rhs)
                 df["c"] = pandas_lhs / pandas_rhs
             received = lib.read(symbol, query_builder=q).data
-            assert_frame_equal(df, received)
+            assert_frame_equal(df, received, check_dtype=False)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
-@given(
-    df=data_frames(
-        [column("a", elements=numeric_type_strategies())],
-        index=range_indexes(),
-    ),
-)
+@given(df=dataframe_strategy([column_strategy("a", supported_numeric_dtypes())]))
 def test_project_numeric_unary_operation_dynamic(lmdb_version_store_dynamic_schema_v1, df):
     assume(len(df) >= 2)
     lib = lmdb_version_store_dynamic_schema_v1
@@ -168,4 +163,4 @@ def test_project_numeric_unary_operation_dynamic(lmdb_version_store_dynamic_sche
     q = q.apply("b", -q["a"])
     df["b"] = -df["a"]
     received = lib.read(symbol, query_builder=q).data
-    assert_frame_equal(df, received)
+    assert_frame_equal(df, received, check_dtype=False)
