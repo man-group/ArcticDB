@@ -147,10 +147,9 @@ SegmentInMemory incomplete_segment_from_frame(
     auto index_tensor = std::move(frame->index_tensor);
     const bool has_index = frame->has_index();
     const auto index = std::move(frame->index);
-    SegmentInMemory output;
-    auto field_tensors = std::move(frame->field_tensors);
 
-    std::visit([&](const auto& idx) {
+    auto field_tensors = std::move(frame->field_tensors);
+    auto output = std::visit([&](const auto& idx) {
         using IdxType = std::decay_t<decltype(idx)>;
         using SingleSegmentAggregator = Aggregator<IdxType, FixedSchema, NeverSegmentPolicy>;
         auto copy_prev_key = prev_key;
@@ -158,6 +157,14 @@ SegmentInMemory incomplete_segment_from_frame(
         util::check(!timeseries_desc.fields().empty(), "Expected fields not to be empty in incomplete segment");
         auto norm_meta = timeseries_desc.proto().normalization();
         auto descriptor = timeseries_desc.as_stream_descriptor();
+
+        SegmentInMemory output;
+        if (num_rows == 0) {
+            output = SegmentInMemory(FixedSchema{descriptor, index}.default_descriptor(), 0, false, false);
+            output.set_timeseries_descriptor(pack_timeseries_descriptor(descriptor, existing_rows + num_rows, std::move(copy_prev_key), std::move(norm_meta)));
+            return output;
+        }
+
         SingleSegmentAggregator agg{FixedSchema{descriptor, index}, [&](auto&& segment) {
             auto tsd = pack_timeseries_descriptor(descriptor, existing_rows + num_rows, std::move(copy_prev_key), std::move(norm_meta));
             segment.set_timeseries_descriptor(tsd);
@@ -194,7 +201,8 @@ SegmentInMemory incomplete_segment_from_frame(
 
         agg.end_block_write(num_rows);
         agg.commit();
-        }, index);
+        return output;
+    }, index);
 
     ARCTICDB_DEBUG(log::version(), "Constructed segment from frame of {} rows and {} columns at offset {}", output.row_count(), output.num_columns(), output.offset());
     return output;
