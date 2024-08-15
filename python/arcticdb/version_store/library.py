@@ -25,6 +25,7 @@ from arcticdb_ext.version_store import DataError
 import pandas as pd
 import numpy as np
 import logging
+from arcticdb.version_store._normalization import normalize_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -943,7 +944,8 @@ class Library:
         symbol: str,
         mode: Optional[StagedDataFinalizeMethod] = StagedDataFinalizeMethod.WRITE,
         prune_previous_versions: bool = False,
-    ):
+        metadata: Any = None
+    ) -> VersionedItem:
         """
         sort_merge will sort and finalize staged data. This differs from `finalize_staged_data` in that it
         can support staged segments with interleaved time periods - the end result will be ordered. This requires
@@ -961,18 +963,27 @@ class Library:
         prune_previous_versions : bool, default=False
             Removes previous (non-snapshotted) versions from the database.
 
+        metadata : Any, default=None
+            Optional metadata to persist along with the symbol.
+
+        Returns
+        -------
+        VersionedItem
+            Structure containing metadata and version number of the written symbol in the store.
+            The data member will be None.
+
         See Also
         --------
         write
             Documentation on the ``staged`` parameter explains the concept of staged data in more detail.
         """
-
-        self._nvs.version_store.sort_merge(
+        vit = self._nvs.version_store.sort_merge(
             symbol,
-            None,
+            normalize_metadata(metadata),
             mode == StagedDataFinalizeMethod.APPEND,
             prune_previous_versions=prune_previous_versions,
         )
+        return self._nvs._convert_thin_cxx_item_to_python(vit, metadata)
 
     def get_staged_symbols(self) -> List[str]:
         """

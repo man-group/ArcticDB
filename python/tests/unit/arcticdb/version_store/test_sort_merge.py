@@ -20,7 +20,8 @@ def test_merge_single_column(lmdb_library):
     sym1 = "symbol_1"
     lib.write(sym1, df1, staged=True)
     lib.write(sym1, df2, staged=True)
-    lib.sort_and_finalize_staged_data(sym1)
+    metadata = {"meta": ["data"]}
+    sort_and_finalize_res = lib.sort_and_finalize_staged_data(sym1, metadata=metadata)
 
     expected_dates = [np.datetime64('2023-01-01'), np.datetime64('2023-01-02'), np.datetime64('2023-01-03'),
                       np.datetime64('2023-01-04'), np.datetime64('2023-01-05'), np.datetime64('2023-01-06')]
@@ -28,7 +29,10 @@ def test_merge_single_column(lmdb_library):
     expected_values = {"x": [1, 2, 3, 4, 5, 6]}
     expected_df = pd.DataFrame(expected_values, index=expected_dates)
     assert_frame_equal(lib.read(sym1).data, expected_df)
-
+    assert sort_and_finalize_res.metadata == {"meta": ["data"]}
+    assert sort_and_finalize_res.symbol == sym1
+    assert sort_and_finalize_res.library == lib.name
+    assert lib.read(sym1).metadata == metadata
 
 def test_merge_two_column(lmdb_library):
     lib = lmdb_library
