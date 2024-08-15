@@ -117,10 +117,16 @@ ankerl::unordered_dense::set<AtomKey> recurse_segment(const std::shared_ptr<stre
 inline ankerl::unordered_dense::set<AtomKey> recurse_index_key(const std::shared_ptr<stream::StreamSource>& store,
                                                      const IndexTypeKey& index_key,
                                                      const std::optional<VersionId>& version_id=std::nullopt) {
-    auto segment = store->read_sync(index_key).second;
-    auto res = recurse_segment(store, segment, version_id);
-    res.emplace(index_key);
-    return res;
+    ankerl::unordered_dense::set<AtomKey> res;
+    try {
+        auto segment = store->read_sync(index_key).second;
+        res = recurse_segment(store, segment, version_id);
+        res.emplace(index_key);
+        return res;
+    } catch (const storage::KeyNotFoundException& e) {
+        log::storage().debug("Key {} not found in store", index_key);
+        return res;
+    }
 }
 
 inline ankerl::unordered_dense::set<AtomKey> recurse_segment(const std::shared_ptr<stream::StreamSource>& store,
