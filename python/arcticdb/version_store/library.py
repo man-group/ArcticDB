@@ -903,7 +903,7 @@ class Library:
         prune_previous_versions: bool = False,
         metadata: Any = None,
         validate_index=True,
-    ):
+    ) -> VersionedItem:
         """
         Finalizes staged data, making it available for reads.
 
@@ -925,12 +925,18 @@ class Library:
             are non-overlapping with each other, and, in the case of `StagedDataFinalizeMethod.APPEND`, fall after the
             last index value in the previous version.
 
+        Returns
+        -------
+        VersionedItem
+            Structure containing metadata and version number of the written symbol in the store.
+            The data member will be None.
+
         See Also
         --------
         write
             Documentation on the ``staged`` parameter explains the concept of staged data in more detail.
         """
-        self._nvs.compact_incomplete(
+        return self._nvs.compact_incomplete(
             symbol,
             append=mode == StagedDataFinalizeMethod.APPEND,
             convert_int_to_float=False,

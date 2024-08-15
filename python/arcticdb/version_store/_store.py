@@ -1951,7 +1951,7 @@ class NativeVersionStore:
         metadata: Optional[Any] = None,
         prune_previous_version: Optional[bool] = None,
         validate_index: bool = False,
-    ):
+    ) -> VersionedItem:
         """
         Compact previously written un-indexed chunks of data, produced by a tick collector or parallel
         writes/appends.
@@ -1988,9 +1988,10 @@ class NativeVersionStore:
             "prune_previous_version", self._write_options(), global_default=False, existing_value=prune_previous_version
         )
         udm = normalize_metadata(metadata) if metadata is not None else None
-        return self.version_store.compact_incomplete(
+        vit = self.version_store.compact_incomplete(
             symbol, append, convert_int_to_float, via_iteration, sparsify, udm, prune_previous_version, validate_index
         )
+        return self._convert_thin_cxx_item_to_python(vit, metadata)
 
     @staticmethod
     def _get_index_columns_from_descriptor(descriptor):
