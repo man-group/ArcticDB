@@ -3,7 +3,7 @@ import numpy as np
 from pandas.testing import assert_frame_equal
 import pytest
 from arcticdb.version_store.library import StagedDataFinalizeMethod
-from arcticdb.exceptions import UserInputException
+from arcticdb.exceptions import UserInputException, SortingException
 
 def test_merge_single_column(lmdb_library):
     lib = lmdb_library
@@ -184,7 +184,7 @@ class TestMergeSortAppend:
         lib.write("sym", initial_df)
         df1 = pd.DataFrame({"col": [2]}, index=pd.DatetimeIndex([np.datetime64('2023-01-02')], dtype="datetime64[ns]"))
         lib.write("sym", df1, staged=True)
-        with pytest.raises(UserInputException) as exception_info:
+        with pytest.raises(SortingException) as exception_info:
             lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
         assert "append" in str(exception_info.value)
 
@@ -236,7 +236,6 @@ class TestEmptySegments:
         lib.write("sym", df3, staged=True)
         lib.sort_and_finalize_staged_data("sym")
         assert_frame_equal(lib.read("sym").data, pd.concat([df1, df2, df3]).sort_index())
-
 
     def test_df_without_rows(self, lmdb_library):
         lib = lmdb_library

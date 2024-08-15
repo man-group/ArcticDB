@@ -853,11 +853,15 @@ void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<PipelineC
         // Use ordered set so we only need to compare adjacent elements
         std::set<TimestampRange> unique_timestamp_ranges;
         for (auto it = pipeline_context->incompletes_begin(); it!= pipeline_context->end(); it++) {
+            if (it->slice_and_key().slice().rows().diff() == 0) {
+                continue;
+            }
             sorting::check<ErrorCode::E_UNSORTED_DATA>(
                     !last_existing_index_value.has_value() || it->slice_and_key().key().start_time() >= *last_existing_index_value,
                     "Cannot append staged segments to existing data as incomplete segment contains index value < existing data (in UTC): {} <= {}",
                     date_and_time(it->slice_and_key().key().start_time()),
-                    date_and_time(*last_existing_index_value));
+                    last_existing_index_value ? date_and_time(*last_existing_index_value) : "NaT"
+            );
             auto [_, inserted] = unique_timestamp_ranges.insert({it->slice_and_key().key().start_time(), it->slice_and_key().key().end_time()});
             // This is correct because incomplete segments aren't column sliced
             sorting::check<ErrorCode::E_UNSORTED_DATA>(
@@ -1311,10 +1315,10 @@ VersionedItem sort_merge_impl(
             if (options.append_ && update_info.previous_index_key_.has_value() &&
                 update_info.previous_index_key_->end_time() - 1 > std::get<timestamp>(TimeseriesIndex::start_value_for_segment(segments[0].segment_.value()))) {
                 store->remove_keys(delete_keys).get();
-                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                    "Cannot append index starting at {} to data frame with index ending at {}",
-                    std::get<timestamp>(TimeseriesIndex::start_value_for_segment(segments[0].segment_.value())),
-                    update_info.previous_index_key_->end_time() - 1
+                sorting::raise<ErrorCode::E_UNSORTED_DATA>(
+                    "Cannot append staged segments to existing data as incomplete segment contains index value < existing data (in UTC): {} <= {}",
+                    date_and_time(update_info.previous_index_key_->end_time() - 1),
+                    date_and_time(std::get<timestamp>(TimeseriesIndex::start_value_for_segment(segments[0].segment_.value())))
                 );
             }
             pipeline_context->total_rows_ = num_versioned_rows + get_slice_rowcounts(segments);
@@ -1393,9 +1397,10 @@ VersionedItem compact_incomplete_impl(
                                  options.convert_int_to_float_,
                                  options.via_iteration_,
                                  options.sparsify_);
-    if (pipeline_context->slice_and_keys_.size() == prev_size) {
-        util::raise_rte("No incomplete segments found for {}", stream_id);
-    }
+    user_input::check<ErrorCode::E_NO_STAGED_SEGMENTS>(
+        pipeline_context->slice_and_keys_.size() != prev_size,
+        "Finalizing staged data is not allowed with empty staging area"
+    );
     if (options.validate_index_) {
         check_incompletes_index_ranges_dont_overlap(pipeline_context, previous_sorted_value);
     }

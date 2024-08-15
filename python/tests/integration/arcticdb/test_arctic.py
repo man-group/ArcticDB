@@ -285,6 +285,67 @@ def test_parallel_writes_and_appends_index_validation(arctic_library, finalize_m
         expected = pd.concat([df_0, df_1, df_2]) if finalize_method == StagedDataFinalizeMethod.APPEND else pd.concat([df_1, df_2])
         assert_frame_equal(received, expected)
 
+@pytest.mark.parametrize("finalize_method", (StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE))
+class TestFinalizeWithEmptySegments:
+    def test_staged_segment_is_only_empty_dfs(self, lmdb_library, finalize_method):
+        lib = lmdb_library
+        lib.write("sym", pd.DataFrame([]), staged=True)
+        lib.write("sym", pd.DataFrame([]), staged=True)
+        lib.finalize_staged_data("sym", mode=finalize_method)
+        assert_frame_equal(lib.read("sym").data, pd.DataFrame([], index=pd.DatetimeIndex([])))
+
+    def test_staged_segment_has_empty_df(self, lmdb_library, finalize_method):
+        lib = lmdb_library
+        index = pd.DatetimeIndex([pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 3), pd.Timestamp(2024, 1, 4)])
+        df1 = pd.DataFrame({"col": [1, 2, 3]}, index=index)
+        df2 = pd.DataFrame({})
+        df3 = pd.DataFrame({"col": [4]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 5)]))
+        lib.write("sym", df1, staged=True)
+        lib.write("sym", df2, staged=True)
+        lib.write("sym", df3, staged=True)
+        lib.finalize_staged_data("sym", mode=finalize_method)
+        assert_frame_equal(lib.read("sym").data, pd.concat([df1, df2, df3]).sort_index())
+
+    def test_df_without_rows(self, lmdb_library, finalize_method):
+        lib = lmdb_library
+        df = pd.DataFrame({"col": []}, index=pd.DatetimeIndex([]))
+        lib.write("sym", df, staged=True)
+        lib.finalize_staged_data("sym", mode=finalize_method)
+        assert_frame_equal(lib.read("sym").data, df)
+
+@pytest.mark.parametrize("finalize_method", (StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE))
+def test_finalize_without_adding_segments(lmdb_library, finalize_method):
+    lib = lmdb_library
+    with pytest.raises(UserInputException) as exception_info:
+        lib.finalize_staged_data("sym", mode=finalize_method)
+
+class TestAppendStagedData:
+    def test_appended_df_interleaves_with_storage(self, lmdb_library):
+        lib = lmdb_library
+        initial_df = pd.DataFrame({"col": [1, 3]}, index=pd.DatetimeIndex([np.datetime64('2023-01-01'), np.datetime64('2023-01-03')], dtype="datetime64[ns]"))
+        lib.write("sym", initial_df)
+        df1 = pd.DataFrame({"col": [2]}, index=pd.DatetimeIndex([np.datetime64('2023-01-02')], dtype="datetime64[ns]"))
+        lib.write("sym", df1, staged=True)
+        with pytest.raises(SortingException) as exception_info:
+            lib.finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+        assert "append" in str(exception_info.value)
+
+    def test_appended_df_start_same_as_df_end(self, lmdb_library):
+        lib = lmdb_library
+        df = pd.DataFrame(
+            {"col": [1, 2, 3]},
+            index=pd.DatetimeIndex([np.datetime64('2023-01-01'), np.datetime64('2023-01-02'), np.datetime64('2023-01-03')], dtype="datetime64[ns]")
+        )
+        lib.write("sym", df)
+        df_to_append = pd.DataFrame(
+            {"col": [4, 5, 6]},
+            index=pd.DatetimeIndex([np.datetime64('2023-01-03'), np.datetime64('2023-01-04'), np.datetime64('2023-01-05')], dtype="datetime64[ns]")
+        )
+        lib.write("sym", df_to_append, staged=True)
+        lib.finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+        res = lib.read("sym").data
+        expected_df = pd.concat([df, df_to_append])
+        assert_frame_equal(lib.read("sym").data, expected_df)
 
 def test_snapshots_and_deletes(arctic_library):
     lib = arctic_library
