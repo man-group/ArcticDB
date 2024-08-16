@@ -156,4 +156,4 @@ def get_ca_cert_for_testing(working_dir):
         cwd=working_dir,
         shell=True,
     )
-    return ca, key_file, cert_file, client_cert_file # Need to keep ca alive to authenticate the cert
+    return ca, key_file, cert_file, client_cert_file  # Need to keep ca alive to authenticate the cert

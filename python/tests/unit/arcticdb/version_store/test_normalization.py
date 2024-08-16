@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import datetime
 from collections import namedtuple
 from unittest.mock import patch
@@ -71,9 +72,12 @@ def test_msg_pack_legacy_1():
     # serialised data created with Python 3.6, msgpack 0.6.2, pandas 0.25.3
     # this was before string and bytes types were seperated in msgpack
     norm = test_msgpack_normalizer
-    packed = b'\x82\xa1a\xc7\x0b \x92\xcf\x15\t\x05:\xdfT\xc8\x00\xc0\xa1b\xc7\x1b \x92\xcf\x14\x9e\xc2\x84+~ \x00\xb0America/New_York'
+    packed = b"\x82\xa1a\xc7\x0b \x92\xcf\x15\t\x05:\xdfT\xc8\x00\xc0\xa1b\xc7\x1b \x92\xcf\x14\x9e\xc2\x84+~ \x00\xb0America/New_York"
     data = norm._msgpack_unpackb(packed)
-    assert data == {'a': pd.Timestamp('2018-01-12 09:15:00'), 'b': pd.Timestamp('2017-01-31 00:00:00-0500', tz='America/New_York')}
+    assert data == {
+        "a": pd.Timestamp("2018-01-12 09:15:00"),
+        "b": pd.Timestamp("2017-01-31 00:00:00-0500", tz="America/New_York"),
+    }
 
 
 def test_msg_pack_legacy_2():
@@ -81,7 +85,7 @@ def test_msg_pack_legacy_2():
     # serialised data created with Python 3.6, msgpack 0.6.2, pandas 0.25.3
     # this was before string and bytes types were seperated in msgpack
     norm = test_msgpack_normalizer
-    packed = b'\xc7\x1b!\x92\xcf\x15\x93w\xb1\xd2\xa6\x8f\xe8\xb0America/New_York'
+    packed = b"\xc7\x1b!\x92\xcf\x15\x93w\xb1\xd2\xa6\x8f\xe8\xb0America/New_York"
     dt = datetime.datetime(2019, 4, 8, 10, 5, 2, 1)
     nytz = pytz.timezone("America/New_York")
     loc_dt = nytz.localize(dt)
@@ -604,9 +608,11 @@ def test_norm_failure_error_message(lmdb_version_store_v1):
     with pytest.raises(ArcticDbNotYetImplemented) as update_exception:
         lib.update(sym, df)
 
-    assert all(col_name in str(e.value) for e in
-               [write_exception, batch_write_exception, append_exception, batch_append_exception, update_exception])
-    assert all("pickle_on_failure" in str(e.value) for e in
-               [write_exception, batch_write_exception])
-    assert all("pickle_on_failure" not in str(e.value) for e in
-               [append_exception, batch_append_exception, update_exception])
+    assert all(
+        col_name in str(e.value)
+        for e in [write_exception, batch_write_exception, append_exception, batch_append_exception, update_exception]
+    )
+    assert all("pickle_on_failure" in str(e.value) for e in [write_exception, batch_write_exception])
+    assert all(
+        "pickle_on_failure" not in str(e.value) for e in [append_exception, batch_append_exception, update_exception]
+    )

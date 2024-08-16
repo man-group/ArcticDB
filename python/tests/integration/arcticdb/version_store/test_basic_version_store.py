@@ -244,7 +244,7 @@ def test_empty_symbol_name_2(object_version_store):
 
 
 @pytest.mark.parametrize(
-    "method", ("write", "append", "update", "write_metadata" ,"batch_write", "batch_append", "batch_write_metadata")
+    "method", ("write", "append", "update", "write_metadata", "batch_write", "batch_append", "batch_write_metadata")
 )
 def test_empty_symbol_name(lmdb_version_store_v1, method):
     first_arg = [""] if method.startswith("batch_") else ""
@@ -2270,7 +2270,7 @@ def test_batch_read_row_range(lmdb_version_store_v1, use_row_range_clause):
     for idx, sym in enumerate(result_dict.keys()):
         df = result_dict[sym].data
         row_range = row_ranges[idx]
-        assert_frame_equal(df, dfs[idx].iloc[row_range[0]:row_range[1]])
+        assert_frame_equal(df, dfs[idx].iloc[row_range[0] : row_range[1]])
 
 
 def test_batch_read_columns(basic_store_tombstone_and_sync_passive):

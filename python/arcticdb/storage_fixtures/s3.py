@@ -22,7 +22,13 @@ import requests
 from typing import NamedTuple, Optional, Any, Type
 
 from .api import *
-from .utils import get_ephemeral_port, GracefulProcessUtils, wait_for_server_to_come_up, safer_rmtree, get_ca_cert_for_testing
+from .utils import (
+    get_ephemeral_port,
+    GracefulProcessUtils,
+    wait_for_server_to_come_up,
+    safer_rmtree,
+    get_ca_cert_for_testing,
+)
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 from arcticdb.version_store.helper import add_s3_library_to_env
 
@@ -96,8 +102,8 @@ class S3Bucket(StorageFixture):
             use_mock_storage_for_testing=self.factory.use_mock_storage_for_testing,
             ssl=self.factory.ssl,
             ca_cert_path=self.factory.client_cert_file,
-            is_nfs_layout=False
-        )# client_cert_dir is skipped on purpose; It will be tested manually in other tests
+            is_nfs_layout=False,
+        )  # client_cert_dir is skipped on purpose; It will be tested manually in other tests
         return cfg
 
     def set_permission(self, *, read: bool, write: bool):
@@ -152,8 +158,8 @@ class NfsS3Bucket(S3Bucket):
             use_mock_storage_for_testing=self.factory.use_mock_storage_for_testing,
             ssl=self.factory.ssl,
             ca_cert_path=self.factory.client_cert_file,
-            is_nfs_layout=True
-        )# client_cert_dir is skipped on purpose; It will be tested manually in other tests
+            is_nfs_layout=True,
+        )  # client_cert_dir is skipped on purpose; It will be tested manually in other tests
         return cfg
 
 
@@ -319,7 +325,9 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         self.working_dir = mkdtemp(suffix="MotoS3StorageFixtureFactory")
         self._iam_endpoint = f"{self.http_protocol}://localhost:{port}"
 
-        self.ssl = self.http_protocol == "https" # In real world, using https protocol doesn't necessarily mean ssl will be verified
+        self.ssl = (
+            self.http_protocol == "https"
+        )  # In real world, using https protocol doesn't necessarily mean ssl will be verified
         if self.ssl_test_support:
             self.ca, self.key_file, self.cert_file, self.client_cert_file = get_ca_cert_for_testing(self.working_dir)
         else:
@@ -328,7 +336,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
             self.cert_file = ""
             self.client_cert_file = ""
         self.client_cert_dir = self.working_dir
-        
+
         self._p = multiprocessing.Process(
             target=self.run_server,
             args=(
@@ -400,12 +408,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         self._s3_admin.create_bucket(Bucket=bucket)
         self._bucket_id += 1
         if self.bucket_versioning:
-            self._s3_admin.put_bucket_versioning(
-                Bucket=bucket,
-                VersioningConfiguration={
-                    'Status': 'Enabled'
-                }
-            )
+            self._s3_admin.put_bucket_versioning(Bucket=bucket, VersioningConfiguration={"Status": "Enabled"})
 
         out = S3Bucket(self, bucket)
         self._live_buckets.append(out)

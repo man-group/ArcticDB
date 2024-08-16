@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import numpy as np
 import pandas as pd
 import pickle
@@ -73,6 +74,7 @@ def test_querybuilder_date_range_then_filter(lmdb_version_store_tiny_segment, ba
 def test_querybuilder_filter_datetime_with_timezone(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     symbol = "symbol"
+
     def can_read_back(write_with_time, filter_with_time):
         df = pd.DataFrame({"col": [write_with_time]})
         lib.delete(symbol)
@@ -87,7 +89,7 @@ def test_querybuilder_filter_datetime_with_timezone(lmdb_version_store_tiny_segm
     notz_winter_time = datetime.datetime(2024, 1, 1)
     notz_summer_time = datetime.datetime(2024, 6, 1)
     utc_time = datetime.datetime(2024, 6, 1, tzinfo=dateutil.tz.tzutc())
-    us_time = datetime.datetime(2024, 6, 1, tzinfo=dateutil.tz.gettz('America/New_York'))
+    us_time = datetime.datetime(2024, 6, 1, tzinfo=dateutil.tz.gettz("America/New_York"))
 
     # Reading back the same time should always succeed
     assert can_read_back(notz_winter_time, notz_winter_time)
@@ -513,7 +515,8 @@ def test_querybuilder_resample_then_groupby(lmdb_version_store_tiny_segment):
             "grouping_col": [0, 0, 10, -9, 20, -19, 30, -30],
             "agg_col": np.arange(8),
         },
-        index=idx)
+        index=idx,
+    )
     lib.write(symbol, df)
 
     q = QueryBuilder()

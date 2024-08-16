@@ -1,8 +1,10 @@
 /* Copyright 2023 Man Group Operations Limited
  *
- * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
+ * Use of this software is governed by the Business Source License 1.1 included in the
+ * file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source
+ * License, use of this software will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -11,7 +13,7 @@
 #include <optional>
 
 namespace arcticdb::pipelines {
-    struct PipelineContextRow;
+struct PipelineContextRow;
 }
 
 namespace arcticdb {
@@ -19,47 +21,48 @@ namespace arcticdb {
 class SegmentInMemory;
 
 struct ColumnMapping {
-    const entity::TypeDescriptor source_type_desc_;
-    const entity::TypeDescriptor dest_type_desc_;
-    const entity::Field& frame_field_descriptor_;
-    const size_t dest_size_;
-    const size_t num_rows_;
-    const size_t first_row_;
-    const size_t offset_bytes_;
-    const size_t dest_bytes_;
+  const entity::TypeDescriptor source_type_desc_;
+  const entity::TypeDescriptor dest_type_desc_;
+  const entity::Field& frame_field_descriptor_;
+  const size_t dest_size_;
+  const size_t num_rows_;
+  const size_t first_row_;
+  const size_t offset_bytes_;
+  const size_t dest_bytes_;
 
-    ColumnMapping(SegmentInMemory& frame, size_t dst_col, size_t field_col, pipelines::PipelineContextRow& context);
+  ColumnMapping(SegmentInMemory& frame, size_t dst_col, size_t field_col,
+                pipelines::PipelineContextRow& context);
 };
 
 struct StaticColumnMappingIterator {
-    const size_t index_fieldcount_;
-    const size_t field_count_;
-    const size_t first_slice_col_offset_;
-    const size_t last_slice_col_offset_;
-    ssize_t prev_col_offset_ = 0;
-    size_t source_col_ = 0;
-    size_t source_field_pos_ = 0;
-    size_t dst_col_ = 0;
-    bool invalid_ = false;
-    const std::optional<util::BitSet>& bit_set_;
+  const size_t index_fieldcount_;
+  const size_t field_count_;
+  const size_t first_slice_col_offset_;
+  const size_t last_slice_col_offset_;
+  ssize_t prev_col_offset_ = 0;
+  size_t source_col_ = 0;
+  size_t source_field_pos_ = 0;
+  size_t dst_col_ = 0;
+  bool invalid_ = false;
+  const std::optional<util::BitSet>& bit_set_;
 
-    StaticColumnMappingIterator(pipelines::PipelineContextRow& context, size_t index_fieldcount);
+  StaticColumnMappingIterator(pipelines::PipelineContextRow& context,
+                              size_t index_fieldcount);
 
-    void advance();
-    [[nodiscard]] std::optional<size_t> get_next_source_col() const;
-    [[nodiscard]] bool invalid() const;
-    [[nodiscard]] bool has_next() const;
-    [[nodiscard]] bool at_end_of_selected() const;
-    [[nodiscard]] size_t remaining_fields() const;
-    [[nodiscard]] size_t prev_col_offset() const;
-    [[nodiscard]] size_t source_field_pos() const;
-    [[nodiscard]] size_t source_col() const;
-    [[nodiscard]] size_t first_slice_col_offset() const;
-    [[nodiscard]] size_t last_slice_col_offset() const;
-    [[nodiscard]] size_t dest_col() const;
-    [[nodiscard]] size_t field_count() const;
-    [[nodiscard]] size_t index_fieldcount() const;
+  void advance();
+  [[nodiscard]] std::optional<size_t> get_next_source_col() const;
+  [[nodiscard]] bool invalid() const;
+  [[nodiscard]] bool has_next() const;
+  [[nodiscard]] bool at_end_of_selected() const;
+  [[nodiscard]] size_t remaining_fields() const;
+  [[nodiscard]] size_t prev_col_offset() const;
+  [[nodiscard]] size_t source_field_pos() const;
+  [[nodiscard]] size_t source_col() const;
+  [[nodiscard]] size_t first_slice_col_offset() const;
+  [[nodiscard]] size_t last_slice_col_offset() const;
+  [[nodiscard]] size_t dest_col() const;
+  [[nodiscard]] size_t field_count() const;
+  [[nodiscard]] size_t index_fieldcount() const;
 };
-
 
 } // namespace arcticdb

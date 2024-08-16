@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import pytest
 import pandas as pd
 
@@ -98,8 +99,9 @@ def test_create_library_enterprise_options_defaults(lmdb_storage):
 
 def test_create_library_enterprise_options_set(lmdb_storage):
     ac = lmdb_storage.create_arctic()
-    lib = ac.create_library("lib", enterprise_library_options=EnterpriseLibraryOptions(replication=True,
-                                                                                       background_deletion=True))
+    lib = ac.create_library(
+        "lib", enterprise_library_options=EnterpriseLibraryOptions(replication=True, background_deletion=True)
+    )
 
     enterprise_options = lib.enterprise_options()
     assert enterprise_options.replication
@@ -250,7 +252,7 @@ def test_create_library_with_invalid_name(arctic_client):
         ac.create_library(lib_name)
 
     # These should fail because the names are invalid
-    invalid_names = [chr(0), "lib>", "lib<", "lib*", "/lib", "lib...lib", "lib"*1000]
+    invalid_names = [chr(0), "lib>", "lib<", "lib*", "/lib", "lib...lib", "lib" * 1000]
     for lib_name in invalid_names:
         with pytest.raises(UserInputException):
             ac.create_library(lib_name)
@@ -264,7 +266,7 @@ def test_create_library_with_invalid_name(arctic_client):
 @pytest.mark.parametrize("suffix", ["", "suffix"])
 def test_create_library_with_all_chars(arctic_client_no_lmdb, prefix, suffix):
     # Create library names with each character (except '\' because Azure replaces it with '/' in some cases)
-    names = [f"{prefix}{chr(i)}{suffix}" for i in range(256) if chr(i) != '\\']
+    names = [f"{prefix}{chr(i)}{suffix}" for i in range(256) if chr(i) != "\\"]
 
     ac = arctic_client_no_lmdb
 
@@ -357,7 +359,9 @@ def test_separation_between_libraries(arctic_client):
 
 def add_path_prefix(storage_fixture, prefix):
     if "path_prefix".casefold() in storage_fixture.arctic_uri.casefold():
-        return storage_fixture.replace_uri_field(storage_fixture.arctic_uri, ArcticUriFields.PATH_PREFIX, prefix, start=3, end=2)
+        return storage_fixture.replace_uri_field(
+            storage_fixture.arctic_uri, ArcticUriFields.PATH_PREFIX, prefix, start=3, end=2
+        )
 
     if "azure" in storage_fixture.arctic_uri:  # azure connection string has a different format
         return f"{storage_fixture.arctic_uri};Path_prefix={prefix}"

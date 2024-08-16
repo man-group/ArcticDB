@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import pytz
 from arcticdb_ext.exceptions import ErrorCode, ErrorCategory
 
@@ -1285,6 +1286,7 @@ def test_get_description_batch_multiple_versions(arctic_library):
         assert info.last_update_time > original_info.last_update_time
         assert original_info.sorted == "ASCENDING"
         assert info.sorted == "ASCENDING"
+
 
 def test_read_description_batch_high_amount(arctic_library):
     lib = arctic_library

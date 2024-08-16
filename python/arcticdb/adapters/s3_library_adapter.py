@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import re
 import time
 from typing import Optional
@@ -27,8 +28,8 @@ USE_AWS_CRED_PROVIDERS_TOKEN = "_RBAC_"
 
 
 def strtobool(value: str) -> bool:
-  value = value.lower()
-  return value in ("y", "yes", "on", "1", "true", "t")
+    value = value.lower()
+    return value in ("y", "yes", "on", "1", "true", "t")
 
 
 @dataclass
@@ -49,8 +50,8 @@ class ParsedQuery:
 
     # winhttp is used as s3 backend support on Windows by default; winhttp itself maintains ca cert.
     # The options has no effect on Windows
-    CA_cert_path: Optional[str] = "" # CURLOPT_CAINFO in curl
-    CA_cert_dir: Optional[str] = "" # CURLOPT_CAPATH in curl
+    CA_cert_path: Optional[str] = ""  # CURLOPT_CAINFO in curl
+    CA_cert_dir: Optional[str] = ""  # CURLOPT_CAPATH in curl
 
     ssl: Optional[bool] = False
 
@@ -83,8 +84,10 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
         self._https = uri.startswith("s3s")
         self._encoding_version = encoding_version
         if platform.system() != "Linux" and (self._query_params.CA_cert_path or self._query_params.CA_cert_dir):
-            raise ValueError("You have provided `ca_cert_path` or `ca_cert_dir` in the URI which is only supported on Linux. " \
-                             "Remove the setting in the connection URI and use your operating system defaults.")
+            raise ValueError(
+                "You have provided `ca_cert_path` or `ca_cert_dir` in the URI which is only supported on Linux. "
+                "Remove the setting in the connection URI and use your operating system defaults."
+            )
         self._ca_cert_path = self._query_params.CA_cert_path
         self._ca_cert_dir = self._query_params.CA_cert_dir
         if not self._ca_cert_path and not self._ca_cert_dir and platform.system() == "Linux":

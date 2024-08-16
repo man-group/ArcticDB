@@ -28,8 +28,7 @@ logger = logging.getLogger("Mongo Storage Fixture")
 log_level = os.getenv("ARCTICDB_mongo_test_fixture_loglevel")
 if log_level:
     log_level = log_level.upper()
-    assert log_level in {"DEBUG", "INFO", "WARN", "ERROR"}, \
-        "Log level must be one of DEBUG, INFO, WARN, ERROR"
+    assert log_level in {"DEBUG", "INFO", "WARN", "ERROR"}, "Log level must be one of DEBUG, INFO, WARN, ERROR"
     logger.setLevel(getattr(logging, log_level))
 
 
@@ -142,6 +141,7 @@ class ManagedMongoDBServer(StorageFixtureFactory):
 
 def is_mongo_host_running(host):
     import requests
+
     try:
         res = requests.get(f"http://{host}")
     except requests.exceptions.ConnectionError:

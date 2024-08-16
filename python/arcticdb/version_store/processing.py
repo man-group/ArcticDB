@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 from collections import namedtuple
 from dataclasses import dataclass
 import datetime
@@ -304,6 +305,7 @@ class PythonRowRangeClause(NamedTuple):
     start: int = None
     end: int = None
 
+
 # Would be cleaner if all Python*Clause classes were dataclasses, but this is used for pickling, so hard to change now
 @dataclass
 class PythonResampleClause:
@@ -339,7 +341,7 @@ class QueryBuilder:
         ```
         q = q[q["col"].isna()]
         ```
-    
+
     * Binary comparisons: <, <=, >, >=, ==, !=
     * Unary NOT: ~
     * Binary combinators: &, |, ^
@@ -478,7 +480,7 @@ class QueryBuilder:
         >>> q = q.groupby("grouping_column").agg({"to_mean": "mean"})
         >>> lib.write("symbol", df)
         >>> lib.read("symbol", query_builder=q).data
-        
+
                        to_mean
              group_1  1.666667
              group_2       2.2
@@ -496,7 +498,7 @@ class QueryBuilder:
         >>> q = q.groupby("grouping_column").agg({"to_max": "max"})
         >>> lib.write("symbol", df)
         >>> lib.read("symbol", query_builder=q).data
-        
+
                      to_max
             group_1  5
 
@@ -514,7 +516,7 @@ class QueryBuilder:
         >>> q = q.groupby("grouping_column").agg({"to_max": "max", "to_mean": "mean"})
         >>> lib.write("symbol", df)
         >>> lib.read("symbol", query_builder=q).data
-        
+
                      to_max   to_mean
             group_1     2.5  1.666667
 
@@ -550,17 +552,21 @@ class QueryBuilder:
     def agg(self, aggregations: Dict[str, Union[str, Tuple[str, str]]]):
         # Only makes sense if previous stage is a group-by or resample
         check(
-            len(self.clauses) and isinstance(self.clauses[-1], (_GroupByClause, _ResampleClauseLeftClosed, _ResampleClauseRightClosed)),
+            len(self.clauses)
+            and isinstance(self.clauses[-1], (_GroupByClause, _ResampleClauseLeftClosed, _ResampleClauseRightClosed)),
             f"Aggregation only makes sense after groupby or resample",
         )
         for k, v in aggregations.items():
-            check(isinstance(v, (str, tuple)), f"Values in agg dict expected to be strings or tuples, received {v} of type {type(v)}")
+            check(
+                isinstance(v, (str, tuple)),
+                f"Values in agg dict expected to be strings or tuples, received {v} of type {type(v)}",
+            )
             if isinstance(v, str):
                 aggregations[k] = v.lower()
             elif isinstance(v, tuple):
                 check(
                     len(v) == 2 and (isinstance(v[0], str) and isinstance(v[1], str)),
-                    f"Tuple values in agg dict expected to have 2 string elements, received {v}"
+                    f"Tuple values in agg dict expected to have 2 string elements, received {v}",
                 )
                 aggregations[k] = (v[0], v[1].lower())
 
@@ -572,13 +578,12 @@ class QueryBuilder:
             self._python_clauses[-1].aggregations = aggregations
         return self
 
-
     def resample(
-            self,
-            rule: Union[str, pd.DateOffset],
-            closed: Optional[str] = None,
-            label: Optional[str] = None,
-            offset: Optional[Union[str, pd.Timedelta]] = None
+        self,
+        rule: Union[str, pd.DateOffset],
+        closed: Optional[str] = None,
+        label: Optional[str] = None,
+        offset: Optional[Union[str, pd.Timedelta]] = None,
     ):
         """
         Resample a symbol on the index. The symbol must be datetime indexed. Resample operations must be followed by
@@ -672,7 +677,7 @@ class QueryBuilder:
         >>> q = adb.QueryBuilder()
         >>> q = q.resample("h", closed="right", label="right").agg({"to_sum": "sum"})
         >>> lib.read("symbol", query_builder=q).data
-        
+
                                  to_sum
             2024-01-01 00:00:00       0
             2024-01-01 01:00:00    1830
@@ -720,14 +725,18 @@ class QueryBuilder:
         try:
             pd.Timestamp(0).floor(rule)
         except ValueError:
-            raise ArcticDbNotYetImplemented(f"Frequency string '{rule}' not yet supported. Valid frequency strings "
-                                            f"are ns, us, ms, s, min, h, D, and multiples/combinations thereof such "
-                                            f"as 1h30min")
+            raise ArcticDbNotYetImplemented(
+                f"Frequency string '{rule}' not yet supported. Valid frequency strings "
+                f"are ns, us, ms, s, min, h, D, and multiples/combinations thereof such "
+                f"as 1h30min"
+            )
         if offset:
             try:
                 offset_ns = to_offset(offset).nanos
             except ValueError:
-                raise UserInputException(f'Argument offset must be pd.Timedelta or pd.Timedelta covertible string. Got "{offset}" instead.')
+                raise UserInputException(
+                    f'Argument offset must be pd.Timedelta or pd.Timedelta covertible string. Got "{offset}" instead.'
+                )
         else:
             offset_ns = 0
 
@@ -739,25 +748,34 @@ class QueryBuilder:
         boundary_map = {
             "left": _ResampleBoundary.LEFT,
             "right": _ResampleBoundary.RIGHT,
-            None: _ResampleBoundary.RIGHT if rule in end_types else _ResampleBoundary.LEFT
+            None: _ResampleBoundary.RIGHT if rule in end_types else _ResampleBoundary.LEFT,
         }
-        check(closed in boundary_map.keys(), f"closed kwarg to resample must be `left`, 'right', or None, but received '{closed}'")
-        check(label in boundary_map.keys(), f"label kwarg to resample must be `left`, 'right', or None, but received '{closed}'")
+        check(
+            closed in boundary_map.keys(),
+            f"closed kwarg to resample must be `left`, 'right', or None, but received '{closed}'",
+        )
+        check(
+            label in boundary_map.keys(),
+            f"label kwarg to resample must be `left`, 'right', or None, but received '{closed}'",
+        )
         if boundary_map[closed] == _ResampleBoundary.LEFT:
             self.clauses.append(_ResampleClauseLeftClosed(rule, boundary_map[label], offset_ns))
         else:
             self.clauses.append(_ResampleClauseRightClosed(rule, boundary_map[label], offset_ns))
-        self._python_clauses.append(PythonResampleClause(rule=rule, closed=boundary_map[closed], label=boundary_map[label], offset=offset_ns))
+        self._python_clauses.append(
+            PythonResampleClause(rule=rule, closed=boundary_map[closed], label=boundary_map[label], offset=offset_ns)
+        )
         return self
 
     def is_resample(self):
-        return len(self.clauses) and isinstance(self.clauses[0], (_ResampleClauseLeftClosed, _ResampleClauseRightClosed))
+        return len(self.clauses) and isinstance(
+            self.clauses[0], (_ResampleClauseLeftClosed, _ResampleClauseRightClosed)
+        )
 
-    def set_date_range(self, date_range:Optional[DateRangeInput]):
+    def set_date_range(self, date_range: Optional[DateRangeInput]):
         if self.is_resample() and date_range is not None:
             start, end = normalize_dt_range_to_ts(date_range)
             self.clauses[0].set_date_range(start.value, end.value)
-
 
     # TODO: specify type of other must be QueryBuilder with from __future__ import annotations once only Python 3.7+
     # supported
@@ -776,7 +794,10 @@ class QueryBuilder:
             Modified QueryBuilder object.
         """
         check(
-            not len(other.clauses) or not isinstance(other.clauses[0], (_DateRangeClause, _ResampleClauseLeftClosed, _ResampleClauseRightClosed)),
+            not len(other.clauses)
+            or not isinstance(
+                other.clauses[0], (_DateRangeClause, _ResampleClauseLeftClosed, _ResampleClauseRightClosed)
+            ),
             "In QueryBuilder.then: Date range and Resample only supported as first clauses in the pipeline",
         )
         self.clauses.extend(other.clauses)
@@ -800,9 +821,12 @@ class QueryBuilder:
             Modified QueryBuilder object.
         """
         check(
-            not len(self.clauses) or not isinstance(self.clauses[0], (_DateRangeClause, _ResampleClauseLeftClosed, _ResampleClauseRightClosed)),
+            not len(self.clauses)
+            or not isinstance(
+                self.clauses[0], (_DateRangeClause, _ResampleClauseLeftClosed, _ResampleClauseRightClosed)
+            ),
             "In QueryBuilder.prepend: Date range and Resample only supported as first clauses in the pipeline",
-            )
+        )
         self.clauses = other.clauses + self.clauses
         self._python_clauses = other._python_clauses + self._python_clauses
         return self
@@ -901,9 +925,13 @@ class QueryBuilder:
                 self.clauses.append(_AggregationClause(self.clauses[-1].grouping_column, python_clause.aggregations))
             elif isinstance(python_clause, PythonResampleClause):
                 if python_clause.closed == _ResampleBoundary.LEFT:
-                    self.clauses.append(_ResampleClauseLeftClosed(python_clause.rule, python_clause.label, python_clause.offset))
+                    self.clauses.append(
+                        _ResampleClauseLeftClosed(python_clause.rule, python_clause.label, python_clause.offset)
+                    )
                 else:
-                    self.clauses.append(_ResampleClauseRightClosed(python_clause.rule, python_clause.label, python_clause.offset))
+                    self.clauses.append(
+                        _ResampleClauseRightClosed(python_clause.rule, python_clause.label, python_clause.offset)
+                    )
                 if python_clause.aggregations is not None:
                     self.clauses[-1].set_aggregations(python_clause.aggregations)
             elif isinstance(python_clause, PythonRowRangeClause):

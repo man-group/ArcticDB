@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import logging
 from typing import List, Optional, Any, Union
 
@@ -163,10 +164,12 @@ class Arctic:
             else:
                 raise e
 
-    def create_library(self,
-                       name: str,
-                       library_options: Optional[LibraryOptions] = None,
-                       enterprise_library_options: Optional[EnterpriseLibraryOptions] = None) -> Library:
+    def create_library(
+        self,
+        name: str,
+        library_options: Optional[LibraryOptions] = None,
+        enterprise_library_options: Optional[EnterpriseLibraryOptions] = None,
+    ) -> Library:
         """
         Creates the library named ``name``.
 
@@ -287,10 +290,12 @@ class Arctic:
         """
         return self._uri
 
-    def modify_library_option(self,
-                              library: Library,
-                              option: Union[ModifiableLibraryOption, ModifiableEnterpriseLibraryOption],
-                              option_value: Any):
+    def modify_library_option(
+        self,
+        library: Library,
+        option: Union[ModifiableLibraryOption, ModifiableEnterpriseLibraryOption],
+        option_value: Any,
+    ):
         """
         Modify an option for a library.
 
@@ -310,15 +315,19 @@ class Arctic:
         option_value
             The new setting for the library option.
         """
+
         def check_bool():
             if not isinstance(option_value, bool):
-                raise UnsupportedLibraryOptionValue(f"{option} only supports bool values but received {option_value}. "
-                                                    f"Not changing library option.")
+                raise UnsupportedLibraryOptionValue(
+                    f"{option} only supports bool values but received {option_value}. " f"Not changing library option."
+                )
 
         def check_postive_int():
             if not isinstance(option_value, int):
-                raise UnsupportedLibraryOptionValue(f"{option} only supports positive integer values but received "
-                                                    f"{option_value}. Not changing library option.")
+                raise UnsupportedLibraryOptionValue(
+                    f"{option} only supports positive integer values but received "
+                    f"{option_value}. Not changing library option."
+                )
 
         cfg = library._nvs.lib_cfg()
         write_options = cfg.lib_desc.version.write_options
@@ -347,8 +356,10 @@ class Arctic:
 
         # Unknown
         else:
-            raise UnknownLibraryOption(f"Unknown library option {option} cannot be modified. This is a bug "
-                                       f"in ArcticDB. Please raise an issue on github.com/ArcticDB")
+            raise UnknownLibraryOption(
+                f"Unknown library option {option} cannot be modified. This is a bug "
+                f"in ArcticDB. Please raise an issue on github.com/ArcticDB"
+            )
 
         self._library_manager.write_library_config(cfg, library.name, self._library_adapter.get_masking_override())
 
@@ -359,7 +370,7 @@ class Arctic:
             library._nvs.env,
             cfg,
             library._nvs._custom_normalizer,
-            library._nvs._open_mode
+            library._nvs._open_mode,
         )
 
         logger.info(f"Set option=[{option}] to value=[{option_value}] for Arctic=[{self}] Library=[{library}]")
