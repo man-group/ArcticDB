@@ -30,6 +30,28 @@ on:
     - "**/*.md"
 
 jobs:
+
+  run_linting_checks:
+    name: Linting checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3.3.0
+
+      - name: Install linters
+        run: |
+          python3 build_tooling/format.py --install-tools
+
+      - name: Lint Python
+        if: always()
+        run: |
+          python3 build_tooling/format.py --check --type python
+
+      - name: Lint C++
+        if: always()
+        run: |
+          python3 build_tooling/format.py --check --type cpp
+
   get_commits_to_benchmark:
     name: Get tag commits  
     runs-on: ubuntu-22.04
