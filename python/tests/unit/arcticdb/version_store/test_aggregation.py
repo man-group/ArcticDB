@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import pytest
 import numpy as np
 import pandas as pd
@@ -348,7 +349,17 @@ def test_hypothesis_last_agg_numeric(lmdb_version_store, df):
 def test_last_aggregation(local_object_version_store):
     df = DataFrame(
         {
-            "grouping_column": ["group_1", "group_2", "group_4", "group_5", "group_2", "group_1", "group_3", "group_1", "group_5"],
+            "grouping_column": [
+                "group_1",
+                "group_2",
+                "group_4",
+                "group_5",
+                "group_2",
+                "group_1",
+                "group_3",
+                "group_1",
+                "group_5",
+            ],
             "get_last": [100.0, 2.7, np.nan, np.nan, np.nan, 1.4, 5.8, 3.45, 6.9],
         },
         index=np.arange(9),
@@ -361,7 +372,9 @@ def test_last_aggregation(local_object_version_store):
     res = local_object_version_store.read(symbol, query_builder=q)
     res.data.sort_index(inplace=True)
 
-    df = pd.DataFrame({"get_last": [3.45, 2.7, 5.8, np.nan, 6.9]}, index=["group_1", "group_2", "group_3", "group_4", "group_5"])
+    df = pd.DataFrame(
+        {"get_last": [3.45, 2.7, 5.8, np.nan, 6.9]}, index=["group_1", "group_2", "group_3", "group_4", "group_5"]
+    )
     df.index.rename("grouping_column", inplace=True)
 
     assert_frame_equal(res.data, df)
@@ -451,12 +464,7 @@ def test_named_agg(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     sym = "test_named_agg"
     gen = np.random.default_rng()
-    df = DataFrame(
-        {
-            "grouping_column": [1, 1, 1, 2, 3, 4],
-            "agg_column": gen.random(6)
-        }
-    )
+    df = DataFrame({"grouping_column": [1, 1, 1, 2, 3, 4], "agg_column": gen.random(6)})
     lib.write(sym, df)
     expected = df.groupby("grouping_column").agg(
         agg_column_sum=pd.NamedAgg("agg_column", "sum"),
