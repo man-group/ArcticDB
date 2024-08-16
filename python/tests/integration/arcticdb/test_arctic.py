@@ -304,7 +304,7 @@ class TestFinalizeWithEmptySegments:
         lib.write("sym", df2, staged=True)
         lib.write("sym", df3, staged=True)
         lib.finalize_staged_data("sym", mode=finalize_method)
-        assert_frame_equal(lib.read("sym").data, pd.concat([df1, df2, df3]).sort_index())
+        assert_frame_equal(lib.read("sym").data, pd.concat([df1, df2, df3]))
 
     def test_df_without_rows(self, lmdb_library, finalize_method):
         lib = lmdb_library

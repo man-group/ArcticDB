@@ -1317,8 +1317,8 @@ VersionedItem sort_merge_impl(
                 store->remove_keys(delete_keys).get();
                 sorting::raise<ErrorCode::E_UNSORTED_DATA>(
                     "Cannot append staged segments to existing data as incomplete segment contains index value < existing data (in UTC): {} <= {}",
-                    date_and_time(update_info.previous_index_key_->end_time() - 1),
-                    date_and_time(std::get<timestamp>(TimeseriesIndex::start_value_for_segment(segments[0].segment_.value())))
+                    date_and_time(std::get<timestamp>(TimeseriesIndex::start_value_for_segment(segments[0].segment_.value()))),
+                    date_and_time(update_info.previous_index_key_->end_time() - 1)
                 );
             }
             pipeline_context->total_rows_ = num_versioned_rows + get_slice_rowcounts(segments);
