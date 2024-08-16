@@ -144,7 +144,7 @@ uint8_t* MappedFileStorage::do_read_raw(size_t offset, size_t bytes) {
     return file_.data() + offset;
 }
 
-void MappedFileStorage::do_iterate_type(KeyType, const IterateTypeVisitor&, const std::string&) {
+bool MappedFileStorage::do_iterate_type_until_match(KeyType, const IterateTypePredicate&, const std::string&) {
    util::raise_rte("Iterate type not implemented for file storage");
 }
 

@@ -43,7 +43,7 @@ namespace arcticdb::storage::memory {
 
         inline bool do_fast_delete() final;
 
-        void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string & prefix) final;
+        bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string & prefix) final;
 
         std::string do_key_path(const VariantKey&) const final { return {}; };
 

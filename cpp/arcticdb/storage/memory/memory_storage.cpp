@@ -142,7 +142,7 @@ void add_serialization_fields(KeySegmentPair& kv) {
         return true;
     }
 
-    void MemoryStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string& prefix) {
+    bool MemoryStorage::do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix) {
         ARCTICDB_SAMPLE(MemoryStorageItType, 0)
         auto& key_vec = data_[key_type];
         auto prefix_matcher = stream_id_prefix_matcher(prefix);
@@ -151,9 +151,12 @@ void add_serialization_fields(KeySegmentPair& kv) {
             auto key = key_value.first;
 
             if (prefix_matcher(variant_key_id(key))) {
-                visitor(std::move(key));
+                if (visitor(std::move(key))) {
+                  return true;
+                }
             }
         }
+        return false;
     }
 
     MemoryStorage::MemoryStorage(const LibraryPath &library_path, OpenMode mode, const Config&) :

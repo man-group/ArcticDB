@@ -81,12 +81,12 @@ void S3Storage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
     detail::do_remove_impl(std::move(ks), root_folder_, bucket_name_, *s3_client_, FlatBucketizer{});
 }
 
-void S3Storage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string& prefix) {
+bool S3Storage::do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix) {
     auto prefix_handler = [] (const std::string& prefix, const std::string& key_type_dir, const KeyDescriptor& key_descriptor, KeyType) {
         return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
     };
 
-    detail::do_iterate_type_impl(key_type, visitor, root_folder_, bucket_name_, *s3_client_, FlatBucketizer{}, std::move(prefix_handler), prefix);
+    return detail::do_iterate_type_impl(key_type, visitor, root_folder_, bucket_name_, *s3_client_, FlatBucketizer{}, std::move(prefix_handler), prefix);
 }
 
 bool S3Storage::do_key_exists(const VariantKey& key) {
