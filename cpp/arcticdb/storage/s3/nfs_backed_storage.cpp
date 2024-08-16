@@ -156,11 +156,14 @@ void NfsBackedStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
     s3::detail::do_remove_impl(std::move(enc), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
 }
 
-void NfsBackedStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string& prefix) {
-    auto func = [&v = visitor, prefix=prefix] (VariantKey&& k) mutable {
+bool NfsBackedStorage::do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix) {
+    const IterateTypePredicate func = [&v = visitor, prefix=prefix] (VariantKey&& k) {
         auto key = unencode_object_id(k);
-        if(prefix.empty() || variant_key_id(key) == StreamId{prefix})
-            v(std::move(key));
+        if(prefix.empty() || variant_key_id(key) == StreamId{prefix}) {
+          return v(std::move(key));
+        } else {
+          return false;
+        }
     };
 
     auto prefix_handler = [] (const std::string& prefix, const std::string& key_type_dir, const KeyDescriptor&, KeyType key_type) {
@@ -173,7 +176,7 @@ void NfsBackedStorage::do_iterate_type(KeyType key_type, const IterateTypeVisito
         return !prefix.empty() ? fmt::format("{}/{}", key_type_dir, new_prefix) : key_type_dir;
     };
 
-    s3::detail::do_iterate_type_impl(key_type, std::move(func), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{}, prefix_handler, prefix);
+    return s3::detail::do_iterate_type_impl(key_type, func, root_folder_, bucket_name_, *s3_client_, NfsBucketizer{}, prefix_handler, prefix);
 }
 
 bool NfsBackedStorage::do_key_exists(const VariantKey& key) {

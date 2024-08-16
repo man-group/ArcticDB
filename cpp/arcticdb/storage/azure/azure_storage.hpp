@@ -43,7 +43,7 @@ class AzureStorage final : public Storage {
 
     void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) final;
 
-    void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix) final;
+    bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string &prefix) final;
 
     bool do_key_exists(const VariantKey& key) final;
 

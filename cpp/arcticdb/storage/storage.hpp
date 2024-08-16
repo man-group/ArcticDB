@@ -158,8 +158,16 @@ public:
         return do_key_exists(key);
     }
 
+    bool scan_for_matching_key(KeyType key_type, const IterateTypePredicate& predicate) {
+      return do_iterate_type_until_match(key_type, predicate, std::string());
+    }
+
     void iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix = std::string()) {
-        do_iterate_type(key_type, visitor, prefix);
+        const IterateTypePredicate predicate_visitor = [&visitor](VariantKey&& k) {
+          visitor(std::move(k));
+          return false; // keep applying the visitor no matter what
+        };
+      do_iterate_type_until_match(key_type, predicate_visitor, prefix);
     }
 
     std::string key_path(const VariantKey& key) const {
@@ -190,7 +198,9 @@ private:
 
     virtual bool do_fast_delete() = 0;
 
-    virtual void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string & prefix) = 0;
+    // Stop iteration and return true upon the first key k for which visitor(k) is true, return false if no key matches
+    // the predicate.
+    virtual bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string & prefix) = 0;
 
     virtual std::string do_key_path(const VariantKey& key) const = 0;
 
