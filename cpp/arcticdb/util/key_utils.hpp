@@ -124,7 +124,7 @@ inline ankerl::unordered_dense::set<AtomKey> recurse_index_key(const std::shared
         res.emplace(index_key);
         return res;
     } catch (const storage::KeyNotFoundException& e) {
-        log::storage().debug("Key {} not found in store", index_key);
+        log::storage().debug("Key {} not found in store: {}", index_key, e.what());
         return res;
     }
 }
