@@ -61,7 +61,7 @@ def lint_cpp(in_place: bool):
     print(f"Running {args} over {len(files)} files")
     args += files
 
-    return subprocess.run(args)
+    return subprocess.run(args).returncode
 
 
 def main(type: str, in_place: bool):
