@@ -14,7 +14,7 @@
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/frame_and_descriptor.hpp>
-#include <arcticdb/pipeline //python_output_frame.hpp>
+#include <arcticdb/pipeline/python_output_frame.hpp>
 #include <arcticdb/util/memory_tracing.hpp>
 
 #include <vector>
