@@ -32,6 +32,7 @@ def test_merge_single_column(lmdb_library):
     assert sort_and_finalize_res.metadata == {"meta": ["data"]}
     assert sort_and_finalize_res.symbol == sym1
     assert sort_and_finalize_res.library == lib.name
+    assert sort_and_finalize_res.version == 0
     assert lib.read(sym1).metadata == metadata
 
 def test_merge_two_column(lmdb_library):

@@ -250,6 +250,7 @@ def test_staged_data(arctic_library, finalize_method):
     assert finalize_result_meta.metadata == metadata
     assert finalize_result_meta.symbol == sym_with_metadata
     assert finalize_result_meta.library == lib.name
+    assert finalize_result_meta.version == (1 if finalize_method == StagedDataFinalizeMethod.APPEND else 0)
 
     lib.finalize_staged_data(sym_without_metadata, finalize_method)
 

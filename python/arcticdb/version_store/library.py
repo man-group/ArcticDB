@@ -985,7 +985,7 @@ class Library:
         """
         vit = self._nvs.version_store.sort_merge(
             symbol,
-            normalize_metadata(metadata),
+            normalize_metadata(metadata) if metadata is not None else None,
             mode == StagedDataFinalizeMethod.APPEND,
             prune_previous_versions=prune_previous_versions,
         )
