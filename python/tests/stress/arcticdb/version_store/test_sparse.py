@@ -51,6 +51,6 @@ def test_sparse_segmented(version_store_factory, sym):
     df = get_interleaved_dataframe(100)
     lib.write(sym, df, allow_sparse=True)
     dd = lib.read(sym, allow_sparse=True).data
-    
+
     assert dd["float"][2] == df["float"][2]
     assert np.isnan(dd["float"][1])

@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -13,7 +14,6 @@ from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticdb_ext.storage import KeyType
 from arcticdb.util.test import assert_frame_equal
 from arcticdb_ext.types import DataType
-
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
@@ -41,7 +41,9 @@ def test_changing_numeric_type(version_store_factory, dynamic_schema):
         received_append = lib.read(sym_append).data
         assert_frame_equal(expected_append, received_append)
 
-        expected_update = pd.DataFrame({"col": np.array([0, 0, 2], dtype=np.int64)}, index=pd.date_range("2024-01-01", periods=3))
+        expected_update = pd.DataFrame(
+            {"col": np.array([0, 0, 2], dtype=np.int64)}, index=pd.date_range("2024-01-01", periods=3)
+        )
         received_update = lib.read(sym_update).data
         assert_frame_equal(expected_update, received_update)
 
@@ -78,8 +80,12 @@ def test_changing_fixed_string_width(version_store_factory, dynamic_schema, wide
     sym_append = "test_changing_fixed_string_width_append"
     sym_update = "test_changing_fixed_string_width_update"
     df_write = pd.DataFrame({"col": ["aa", "bb", "cc"]}, index=pd.date_range("2024-01-01", periods=3))
-    df_append = pd.DataFrame({"col": ["d" * (1 if wider_strings_first else 3)]}, index=pd.date_range("2024-01-04", periods=1))
-    df_update = pd.DataFrame({"col": ["d" * (1 if wider_strings_first else 3)]}, index=pd.date_range("2024-01-02", periods=1))
+    df_append = pd.DataFrame(
+        {"col": ["d" * (1 if wider_strings_first else 3)]}, index=pd.date_range("2024-01-04", periods=1)
+    )
+    df_update = pd.DataFrame(
+        {"col": ["d" * (1 if wider_strings_first else 3)]}, index=pd.date_range("2024-01-02", periods=1)
+    )
 
     lib.write(sym_append, df_write)
     lib.write(sym_update, df_write)
@@ -91,7 +97,9 @@ def test_changing_fixed_string_width(version_store_factory, dynamic_schema, wide
     received_append = lib.read(sym_append).data
     assert_frame_equal(expected_append, received_append)
 
-    expected_update = pd.DataFrame({"col": ["aa", "d" * (1 if wider_strings_first else 3), "cc"]}, index=pd.date_range("2024-01-01", periods=3))
+    expected_update = pd.DataFrame(
+        {"col": ["aa", "d" * (1 if wider_strings_first else 3), "cc"]}, index=pd.date_range("2024-01-01", periods=3)
+    )
     received_update = lib.read(sym_update).data
     assert_frame_equal(expected_update, received_update)
 

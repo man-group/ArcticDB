@@ -1,6 +1,7 @@
 from pathlib import Path
 import subprocess
 
+
 # Assuming arcticdb wheel has been pre-installed, which is the case in the pipeline
 def test_fixture_import(monkeypatch):
     script = """

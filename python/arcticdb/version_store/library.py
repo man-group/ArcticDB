@@ -13,8 +13,12 @@ from enum import Enum, auto
 from typing import Optional, Any, Tuple, Dict, Union, List, Iterable, NamedTuple
 from numpy import datetime64
 
-from arcticdb.options import \
-    LibraryOptions, EnterpriseLibraryOptions, ModifiableLibraryOption, ModifiableEnterpriseLibraryOption
+from arcticdb.options import (
+    LibraryOptions,
+    EnterpriseLibraryOptions,
+    ModifiableLibraryOption,
+    ModifiableEnterpriseLibraryOption,
+)
 from arcticdb.supported_types import Timestamp
 from arcticdb.util._versions import IS_PANDAS_TWO
 
@@ -151,8 +155,13 @@ class SymbolDescription(NamedTuple):
 
     def __eq__(self, other):
         # Needed as NaT != NaT
-        date_range_fields_equal = (self.date_range[0] == other.date_range[0] or (np.isnat(self.date_range[0]) and np.isnat(other.date_range[0]))) and \
-                                  (self.date_range[1] == other.date_range[1] or (np.isnat(self.date_range[1]) and np.isnat(other.date_range[1])))
+        date_range_fields_equal = (
+            self.date_range[0] == other.date_range[0]
+            or (np.isnat(self.date_range[0]) and np.isnat(other.date_range[0]))
+        ) and (
+            self.date_range[1] == other.date_range[1]
+            or (np.isnat(self.date_range[1]) and np.isnat(other.date_range[1]))
+        )
         if date_range_fields_equal:
             non_date_range_fields = [field for field in self._fields if field != "date_range"]
             return all(getattr(self, field) == getattr(other, field) for field in non_date_range_fields)
@@ -292,12 +301,14 @@ class StagedDataFinalizeMethod(Enum):
     WRITE = auto()
     APPEND = auto()
 
+
 class DevTools:
     def __init__(self, nvs):
         self._nvs = nvs
 
     def library_tool(self):
         return self._nvs.library_tool()
+
 
 class Library:
     """
@@ -358,8 +369,7 @@ class Library:
         """Enterprise library options set on this library. See also `options` for non-enterprise options."""
         write_options = self._nvs.lib_cfg().lib_desc.version.write_options
         return EnterpriseLibraryOptions(
-            replication=write_options.sync_passive.enabled,
-            background_deletion=write_options.delayed_deletes
+            replication=write_options.sync_passive.enabled, background_deletion=write_options.delayed_deletes
         )
 
     def write(
@@ -468,7 +478,7 @@ class Library:
             parallel=staged,
             validate_index=validate_index,
             norm_failure_options_msg="Using write_pickle will allow the object to be written. However, many operations "
-                                     "(such as date_range filtering and column selection) will not work on pickled data.",
+            "(such as date_range filtering and column selection) will not work on pickled data.",
         )
 
     def write_pickle(
@@ -616,8 +626,8 @@ class Library:
             validate_index=validate_index,
             throw_on_error=throw_on_error,
             norm_failure_options_msg="Using write_pickle_batch will allow the object to be written. However, many "
-                                     "operations (such as date_range filtering and column selection) will not work on "
-                                     "pickled data.",
+            "operations (such as date_range filtering and column selection) will not work on "
+            "pickled data.",
         )
 
     def write_pickle_batch(
@@ -1074,7 +1084,7 @@ class Library:
             row_range=row_range,
             columns=columns,
             query_builder=query_builder,
-            implement_read_index=True
+            implement_read_index=True,
         )
 
     def read_batch(
@@ -1174,7 +1184,14 @@ class Library:
                 )
         throw_on_error = False
         return self._nvs._batch_read_to_versioned_items(
-            symbol_strings, as_ofs, date_ranges, row_ranges, columns, query_builder or query_builders, throw_on_error, implement_read_index=True
+            symbol_strings,
+            as_ofs,
+            date_ranges,
+            row_ranges,
+            columns,
+            query_builder or query_builders,
+            throw_on_error,
+            implement_read_index=True,
         )
 
     def read_metadata(self, symbol: str, as_of: Optional[AsOf] = None) -> VersionedItem:
@@ -1227,10 +1244,10 @@ class Library:
         return self._nvs._batch_read_metadata_to_versioned_items(symbol_strings, as_ofs, include_errors_and_none_meta)
 
     def write_metadata(
-            self,
-            symbol: str,
-            metadata: Any,
-            prune_previous_versions: bool = False,
+        self,
+        symbol: str,
+        metadata: Any,
+        prune_previous_versions: bool = False,
     ) -> VersionedItem:
         """
         Write metadata under the specified symbol name to this library. The data will remain unchanged.
@@ -1259,7 +1276,9 @@ class Library:
         return self._nvs.write_metadata(symbol, metadata, prune_previous_version=prune_previous_versions)
 
     def write_metadata_batch(
-        self, write_metadata_payloads: List[WriteMetadataPayload], prune_previous_versions: bool = False,
+        self,
+        write_metadata_payloads: List[WriteMetadataPayload],
+        prune_previous_versions: bool = False,
     ) -> List[Union[VersionedItem, DataError]]:
         """
         Write metadata to multiple symbols in a batch fashion. This is more efficient than making multiple `write_metadata` calls
@@ -1399,10 +1418,10 @@ class Library:
         self._nvs.prune_previous_versions(symbol)
 
     def delete_data_in_range(
-            self,
-            symbol: str,
-            date_range: Tuple[Optional[Timestamp], Optional[Timestamp]],
-            prune_previous_versions: bool = False,
+        self,
+        symbol: str,
+        date_range: Tuple[Optional[Timestamp], Optional[Timestamp]],
+        prune_previous_versions: bool = False,
     ):
         """Delete data within the given date range, creating a new version of ``symbol``.
 
@@ -1784,10 +1803,10 @@ class Library:
         return self._nvs.is_symbol_fragmented(symbol, segment_size)
 
     def defragment_symbol_data(
-            self,
-            symbol: str,
-            segment_size: Optional[int] = None,
-            prune_previous_versions: bool = False,
+        self,
+        symbol: str,
+        segment_size: Optional[int] = None,
+        prune_previous_versions: bool = False,
     ) -> VersionedItem:
         """
         Compacts fragmented segments by merging row-sliced segments (https://docs.arcticdb.io/technical/on_disk_storage/#data-layer).

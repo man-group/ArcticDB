@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 # Use this import when upgraded to ASV 0.6.0 or later
 # from asv_runner.benchmarks.mark import SkipNotImplemented
 import numpy as np
@@ -13,6 +14,7 @@ import pandas as pd
 from arcticdb import Arctic
 from arcticdb import QueryBuilder
 from arcticdb.util.test import random_strings_of_length
+
 
 class Resample:
     number = 5
@@ -48,7 +50,9 @@ class Resample:
             sym = col_type
             num_segments = rows // self.ROWS_PER_SEGMENT
             for idx in range(num_segments):
-                index = pd.date_range(pd.Timestamp(idx * self.ROWS_PER_SEGMENT, unit="us"), freq="us", periods=self.ROWS_PER_SEGMENT)
+                index = pd.date_range(
+                    pd.Timestamp(idx * self.ROWS_PER_SEGMENT, unit="us"), freq="us", periods=self.ROWS_PER_SEGMENT
+                )
                 if col_type == "int":
                     col_data = rng.integers(0, 100_000, self.ROWS_PER_SEGMENT)
                 elif col_type == "bool":
@@ -75,7 +79,12 @@ class Resample:
         self.query_builder = QueryBuilder().resample(f"{downsampling_factor}us").agg({"col": aggregation})
 
     def time_resample(self, num_rows, downsampling_factor, col_type, aggregation):
-        if col_type == "datetime" and aggregation == "sum" or col_type == "str" and aggregation in ["sum", "mean", "min", "max"]:
+        if (
+            col_type == "datetime"
+            and aggregation == "sum"
+            or col_type == "str"
+            and aggregation in ["sum", "mean", "min", "max"]
+        ):
             pass
             # Use this when upgrading to ASV 0.6.0 or later
             # raise SkipNotImplemented(f"{aggregation} not supported on columns of type {col_type}")
@@ -83,7 +92,12 @@ class Resample:
             self.lib.read(col_type, date_range=self.date_range, query_builder=self.query_builder)
 
     def peakmem_resample(self, num_rows, downsampling_factor, col_type, aggregation):
-        if col_type == "datetime" and aggregation == "sum" or col_type == "str" and aggregation in ["sum", "mean", "min", "max"]:
+        if (
+            col_type == "datetime"
+            and aggregation == "sum"
+            or col_type == "str"
+            and aggregation in ["sum", "mean", "min", "max"]
+        ):
             pass
             # Use this when upgrading to ASV 0.6.0 or later
             # raise SkipNotImplemented(f"{aggregation} not supported on columns of type {col_type}")

@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 from arcticdb.config import Defaults
 from arcticdb.version_store.helper import add_lmdb_library_to_env, save_envs_config, get_arctic_native_lib
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
