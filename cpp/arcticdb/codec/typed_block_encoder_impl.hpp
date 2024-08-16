@@ -12,7 +12,7 @@ namespace arcticdb {
 /// @todo Split this class. This class does too much. Supports encoding via V1 and V2
 /// but in a clunky way. The
 ///	interface for encoding is different (V2 requires EncodedBlock to be passed, thus
-///encode_values and
+/// encode_values and
 /// encode_shapes were added).
 template <template <typename> class TypedBlock, class TD,
           EncodingVersion encoder_version>

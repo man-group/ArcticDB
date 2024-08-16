@@ -31,13 +31,13 @@ struct KeyData {
 KeyData get_key_data(KeyType key_type) {
 #define NUMERIC_KEY(kt, name, c)                                                       \
   case kt:                                                                             \
-    return KeyData{#name, c, VariantType::NUMERIC_TYPE, KeyClass::ATOM_KEY, #kt};
+    return KeyData { #name, c, VariantType::NUMERIC_TYPE, KeyClass::ATOM_KEY, #kt };
 #define STRING_KEY(kt, name, c)                                                        \
   case kt:                                                                             \
-    return KeyData{#name, c, VariantType::STRING_TYPE, KeyClass::ATOM_KEY, #kt};
+    return KeyData { #name, c, VariantType::STRING_TYPE, KeyClass::ATOM_KEY, #kt };
 #define STRING_REF(kt, name, c)                                                        \
   case kt:                                                                             \
-    return KeyData{#name, c, VariantType::STRING_TYPE, KeyClass::REF_KEY, #kt};
+    return KeyData { #name, c, VariantType::STRING_TYPE, KeyClass::REF_KEY, #kt };
 
   switch (key_type) {
     // Important ones
