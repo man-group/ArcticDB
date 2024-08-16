@@ -7,7 +7,6 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 from datetime import datetime
 from hypothesis import assume, given, settings
-from hypothesis.extra.pandas import columns, data_frames, range_indexes
 from hypothesis.extra.pytz import timezones as timezone_st
 import hypothesis.strategies as st
 import numpy as np
@@ -39,17 +38,6 @@ from arcticdb.util.hypothesis import (
 
 
 pytestmark = pytest.mark.pipeline
-
-
-def test_failing(lmdb_version_store_v1):
-    lib = lmdb_version_store_v1
-    symbol = "test_failing"
-    df = pd.DataFrame({"a": [np.uint8(0)], "b": [np.uint64(0)]}, index=np.arange(1))
-    val = np.uint8(0)
-    lib.write(symbol, df)
-    q = QueryBuilder()
-    q = q[val < q["b"]]
-    generic_filter_test(lib, symbol, df, q, df[val < df["b"]])
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -92,7 +80,7 @@ def test_filter_numeric_binary_comparison(lmdb_version_store_v1, df, val):
             elif op == "!=":
                 q = q[qb_lhs != qb_rhs]
                 expected = df[pandas_lhs != pandas_rhs]
-            generic_filter_test(lib, symbol, df, q, expected)
+            generic_filter_test(lib, symbol, q, expected)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -120,7 +108,7 @@ def test_filter_string_binary_comparison(lmdb_version_store_v1, df, val):
             pandas_lhs = "a" if comp.startswith("col") else f"'{val}'"
             pandas_rhs = "b" if comp.endswith("col") else f"'{val}'"
             pandas_query = f"{pandas_lhs} {op} {pandas_rhs}"
-            generic_filter_test_strings(lib, base_symbol, df, q, pandas_query)
+            generic_filter_test_strings(lib, base_symbol, q, df.query(pandas_query))
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -143,8 +131,8 @@ def test_filter_numeric_set_membership(lmdb_version_store_v1, df, signed_vals, u
         for vals in [signed_vals, unsigned_vals]:
             q = QueryBuilder()
             q = q[getattr(q["a"], op)(vals)]
-            pandas_query = f"a {'not ' if op == 'isnotin' else ''}in {list(vals)}"
-            generic_filter_test(lib, symbol, df, q, pandas_query)
+            expected = df[df["a"].isin(vals)] if op == "isin" else df[~df["a"].isin(vals)]
+            generic_filter_test(lib, symbol, q, expected)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -166,8 +154,8 @@ def test_filter_string_set_membership(lmdb_version_store_v1, df, vals):
     for op in ["isin", "isnotin"]:
         q = QueryBuilder()
         q = q[getattr(q["a"], op)(vals)]
-        pandas_query = f"a {'not ' if op == 'isnotin' else ''}in {list(vals)}"
-        generic_filter_test_strings(lib, base_symbol, df, q, pandas_query)
+        pandas_query = f"a {'in' if op == 'isin' else 'not in'} {list(vals)}"
+        generic_filter_test_strings(lib, base_symbol, q, df.query(pandas_query))
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -183,8 +171,8 @@ def test_filter_numeric_empty_set_membership(lmdb_version_store_v1, df):
     for op in ["isin", "isnotin"]:
         q = QueryBuilder()
         q = q[getattr(q["a"], op)([])]
-        pandas_query = f"a {'not ' if op == 'isnotin' else ''}in {[]}"
-        generic_filter_test(lib, symbol, df, q, pandas_query)
+        expected = df[df["a"].isin([])] if op == "isin" else df[~df["a"].isin([])]
+        generic_filter_test(lib, symbol, q, expected)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -201,8 +189,8 @@ def test_filter_string_empty_set_membership(lmdb_version_store_v1, df):
     for op in ["isin", "isnotin"]:
         q = QueryBuilder()
         q = q[getattr(q["a"], op)([])]
-        pandas_query = f"a {'not ' if op == 'isnotin' else ''}in {list([])}"
-        generic_filter_test_strings(lib, base_symbol, df, q, pandas_query)
+        pandas_query = f"a {'in' if op == 'isin' else 'not in'} {[]}"
+        generic_filter_test_strings(lib, base_symbol, q, df.query(pandas_query))
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -253,17 +241,15 @@ def test_filter_binary_boolean(lmdb_version_store_v1, df):
         q = QueryBuilder()
         if op == "&":
             q = q[(q["a"] < 5) & (q["b"] > 10)]
-            pandas_query = "(a < 5) & (b > 10)"
-            generic_filter_test(lib, symbol, df, q, pandas_query)
+            expected = df[(df["a"] < 5) & (df["b"] > 10)]
         elif op == "|":
             q = q[(q["a"] < 5) | (q["b"] > 10)]
-            pandas_query = "(a < 5) | (b > 10)"
-            generic_filter_test(lib, symbol, df, q, pandas_query)
+            expected = df[(df["a"] < 5) | (df["b"] > 10)]
         elif op == "^":
             q = q[(q["a"] < 5) ^ (q["b"] > 10)]
             # Pandas doesn't support '^' for xor
-            pandas_query = "((a < 5) & ~(b > 10)) | (~(a < 5) & (b > 10))"
-            generic_filter_test(lib, symbol, df, q, pandas_query)
+            expected = df[(df["a"] < 5) ^ (df["b"] > 10)]
+        generic_filter_test(lib, symbol, q, expected)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -279,8 +265,8 @@ def test_filter_not(lmdb_version_store_v1, df, val):
     lib.write(symbol, df)
     q = QueryBuilder()
     q = q[~(q["a"] < val)]
-    pandas_query = "~(a < {})".format(val)
-    generic_filter_test(lib, symbol, df, q, pandas_query)
+    expected = df[~(df["a"] < val)]
+    generic_filter_test(lib, symbol, q, expected)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -301,8 +287,8 @@ def test_filter_more_columns_than_fit_in_one_segment(lmdb_version_store_tiny_seg
     lib.write(symbol, df)
     q = QueryBuilder()
     q = q[(q["a"] < q["c"]) | (q["a"] < q["b"]) | (q["b"] < q["c"])]
-    pandas_query = "(a < c) | (a < b) | (b < c)"
-    generic_filter_test(lib, symbol, df, q, pandas_query)
+    expected = df[(df["a"] < df["c"]) | (df["a"] < df["b"]) | (df["b"] < df["c"])]
+    generic_filter_test(lib, symbol, q, expected)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -320,13 +306,17 @@ def test_filter_with_column_slicing(lmdb_version_store_tiny_segment, df):
     assume(not df.empty)
     lib = lmdb_version_store_tiny_segment
     symbol = "test_filter_with_column_filtering"
+    lib.write(symbol, df)
     q = QueryBuilder()
     q = q[(q["a"] < q["c"]) | (q["a"] < q["b"]) | (q["b"] < q["c"])]
-    pandas_query = "(a < c) | (a < b) | (b < c)"
-    lib.write(symbol, df)
-    expected = df.query(pandas_query).loc[:, ["a", "c"]]
+    expected = df[(df["a"] < df["c"]) | (df["a"] < df["b"]) | (df["b"] < df["c"])].drop(columns=["b"])
     received = lib.read(symbol, columns=["a", "c"], query_builder=q).data
-    assert np.array_equal(expected, received)
+    if not np.array_equal(expected, received):
+        print(f"\nOriginal dataframe:\n{df}\ndtypes:\n{df.dtypes}")
+        print(f"\nPandas returns:\n{expected}")
+        print(f"\nQueryBuilder returns:\n{received}")
+        assert False
+    assert True
 
 
 ##################################
@@ -363,16 +353,71 @@ def test_filter_numeric_binary_comparison_dynamic(lmdb_version_store_dynamic_sch
             qb_rhs = q["b"] if comp.endswith("col") else val
             if op == "<":
                 q = q[qb_lhs < qb_rhs]
+                queried_slices = []
+                for slice in slices:
+                    try:
+                        queried_slices.append(
+                            slice[(slice["a"] if comp.startswith("col") else val) < (slice["b"] if comp.endswith("col") else val)]
+                        )
+                    except KeyError:
+                        # Might have edited out the query columns entirely
+                        pass
             elif op == "<=":
                 q = q[qb_lhs <= qb_rhs]
+                queried_slices = []
+                for slice in slices:
+                    try:
+                        queried_slices.append(
+                            slice[(slice["a"] if comp.startswith("col") else val) <= (slice["b"] if comp.endswith("col") else val)]
+                        )
+                    except KeyError:
+                        # Might have edited out the query columns entirely
+                        pass
             elif op == ">":
                 q = q[qb_lhs > qb_rhs]
+                queried_slices = []
+                for slice in slices:
+                    try:
+                        queried_slices.append(
+                            slice[(slice["a"] if comp.startswith("col") else val) > (slice["b"] if comp.endswith("col") else val)]
+                        )
+                    except KeyError:
+                        # Might have edited out the query columns entirely
+                        pass
             elif op == ">=":
                 q = q[qb_lhs >= qb_rhs]
-            pandas_lhs = "a" if comp.startswith("col") else val
-            pandas_rhs = "b" if comp.endswith("col") else val
-            pandas_query = f"{pandas_lhs} {op} {pandas_rhs}"
-            generic_filter_test_dynamic(lib, symbol, slices, q, pandas_query)
+                queried_slices = []
+                for slice in slices:
+                    try:
+                        queried_slices.append(
+                            slice[(slice["a"] if comp.startswith("col") else val) >= (slice["b"] if comp.endswith("col") else val)]
+                        )
+                    except KeyError:
+                        # Might have edited out the query columns entirely
+                        pass
+            elif op == "==":
+                q = q[qb_lhs == qb_rhs]
+                queried_slices = []
+                for slice in slices:
+                    try:
+                        queried_slices.append(
+                            slice[(slice["a"] if comp.startswith("col") else val) == (slice["b"] if comp.endswith("col") else val)]
+                        )
+                    except KeyError:
+                        # Might have edited out the query columns entirely
+                        pass
+            elif op == "!=":
+                q = q[qb_lhs != qb_rhs]
+                queried_slices = []
+                for slice in slices:
+                    try:
+                        queried_slices.append(
+                            slice[(slice["a"] if comp.startswith("col") else val) != (slice["b"] if comp.endswith("col") else val)]
+                        )
+                    except KeyError:
+                        # Might have edited out the query columns entirely
+                        pass
+            generic_filter_test_dynamic(lib, symbol, q, queried_slices)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -428,7 +473,7 @@ def test_filter_numeric_set_membership_dynamic(lmdb_version_store_dynamic_schema
     lib.delete(symbol)
     slices = [
         df[:len(df) // 2],
-        df[len(df) // 2:].drop(columns=["a"]),
+        df[len(df) // 2:].rename(columns={"a": "b"}),
     ]
     for slice in slices:
         lib.append(symbol, slice)
@@ -438,8 +483,16 @@ def test_filter_numeric_set_membership_dynamic(lmdb_version_store_dynamic_schema
         for vals in [signed_vals, unsigned_vals]:
             q = QueryBuilder()
             q = q[getattr(q["a"], op)(vals)]
-            pandas_query = f"a {'not ' if op == 'isnotin' else ''}in {list(vals)}"
-            generic_filter_test_dynamic(lib, symbol, slices, q, pandas_query)
+            queried_slices = []
+            for slice in slices:
+                try:
+                    queried_slices.append(
+                        slice[slice["a"].isin(vals)] if op == "isin" else slice[~slice["a"].isin(vals)]
+                    )
+                except KeyError:
+                    # Might have edited out the query columns entirely
+                    pass
+            generic_filter_test_dynamic(lib, symbol, q, queried_slices)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -454,7 +507,7 @@ def test_filter_string_set_membership_dynamic(lmdb_version_store_dynamic_schema_
     base_symbol = "test_filter_string_set_membership_dynamic"
     slices = [
         df[:len(df) // 2],
-        df[len(df) // 2:].drop(columns=["a"]),
+        df[len(df) // 2:].rename(columns={"a": "b"}),
     ]
 
     for dynamic_strings in [True, False]:

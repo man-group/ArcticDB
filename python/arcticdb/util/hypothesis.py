@@ -94,12 +94,16 @@ def supported_integer_dtypes(draw):
 
 @st.composite
 def supported_floating_dtypes(draw):
-    return draw(st.one_of(floating_dtypes(endianness="=", sizes=[32, 64])))
+    # Pandas comparison of float32 series to float64 values is buggy.
+    # Change float_dtypes sizes to include 32 if this is fixed https://github.com/pandas-dev/pandas/issues/59524
+    return draw(st.one_of(floating_dtypes(endianness="=", sizes=[64])))
 
 
 @st.composite
 def supported_numeric_dtypes(draw):
-    return draw(st.one_of(unsigned_integer_dtypes(endianness="="), integer_dtypes(endianness="="), floating_dtypes(endianness="=", sizes=[32, 64])))
+    # Pandas comparison of float32 series to float64 values is buggy.
+    # Change float_dtypes sizes to include 32 if this is fixed https://github.com/pandas-dev/pandas/issues/59524
+    return draw(st.one_of(unsigned_integer_dtypes(endianness="="), integer_dtypes(endianness="="), floating_dtypes(endianness="=", sizes=[64])))
 
 
 @st.composite
