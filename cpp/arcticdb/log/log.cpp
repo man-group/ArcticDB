@@ -67,7 +67,7 @@ struct Loggers::Impl {
 };
 
 constexpr auto get_default_log_level() {
-    return spdlog::level::info;
+    return spdlog::level::debug;
 }
 
 spdlog::logger &storage() {

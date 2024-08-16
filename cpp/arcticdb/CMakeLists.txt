@@ -495,8 +495,7 @@ set(arcticdb_srcs
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
         storage/s3/ec2_utils.cpp
-        storage/lmdb/lmdb.hpp
-        )
+        storage/lmdb/lmdb.hpp datasource/csv_reader.hpp)
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
@@ -806,7 +805,8 @@ if(${TEST})
             version/test/test_sorting_info_state_machine.cpp
             version/test/version_map_model.hpp
             storage/test/common.hpp
-            version/test/test_sort_index.cpp)
+            version/test/test_sort_index.cpp
+            datasource/test/test_read_csv.cpp)
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 

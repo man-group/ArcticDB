@@ -160,7 +160,7 @@ public:
         util::check(required_bytes >= EncodedFieldImpl::Size, "Unexpectedly small allocation size: {}", required_bytes);
         data_.ensure(offset_ + required_bytes);
         auto* field = new (data_.ptr_cast<uint8_t>(offset_, required_bytes)) EncodedFieldImpl;
-        ARCTICDB_DEBUG(log::codec(), "Adding encoded field with {} blocks at position {}, {} bytes required", num_blocks, offset_, required_bytes);
+        ARCTICDB_TRACE(log::codec(), "Adding encoded field with {} blocks at position {}, {} bytes required", num_blocks, offset_, required_bytes);
         ++count_;
         offset_ += required_bytes;
         return field;
