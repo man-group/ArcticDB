@@ -9,6 +9,11 @@ python build_tooling/format.py --install-tools
 Then see the help section for how to run the linters:
 
 python build_tooling/format.py --help
+
+Or just run them on everything:
+
+python build_tooling/format.py --in-place --type all
+
 """
 import argparse
 import pathlib

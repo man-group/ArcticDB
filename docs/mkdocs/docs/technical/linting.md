@@ -29,6 +29,9 @@ To reformat your working copy, run:
 ```
 python build_tooling/format.py --in-place --type python
 python build_tooling/format.py --in-place --type cpp
+
+# Or just do everything at once,
+python build_tooling/format.py --in-place --type all
 ```
 
 #### CLion Integration
