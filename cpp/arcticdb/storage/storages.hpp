@@ -104,6 +104,17 @@ class Storages {
         }
     }
 
+    bool scan_for_matching_key(KeyType key_type, const IterateTypePredicate& predicate, bool primary_only=true) {
+        if (primary_only) {
+            return primary().scan_for_matching_key(key_type, predicate);
+        }
+
+        return std::any_of(std::begin(storages_), std::end(storages_),
+            [key_type, &predicate](const auto& storage) {
+               return storage->scan_for_matching_key(key_type, predicate);
+            });
+    }
+
     /** Calls Storage::do_key_path on the primary storage. Remember to check the open mode. */
     std::string key_path(const VariantKey& key) const {
         return primary().key_path(key);
