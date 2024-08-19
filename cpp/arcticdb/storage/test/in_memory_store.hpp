@@ -277,6 +277,11 @@ namespace arcticdb {
             }
         }
 
+        bool scan_for_matching_key(
+            KeyType, const IterateTypePredicate&) override {
+            util::raise_rte("scan_for_matching_key Not implemented for InMemoryStore");
+        }
+
         folly::Future<pipelines::SliceAndKey> async_write(
             folly::Future<std::tuple<PartialKey, SegmentInMemory, pipelines::FrameSlice>> &&input_fut,
             const std::shared_ptr<DeDupMap> &) override {
