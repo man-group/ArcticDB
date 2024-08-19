@@ -1101,6 +1101,54 @@ def test_filter_string_number_set_membership(lmdb_version_store_v1):
         lib.read(symbol, query_builder=q)
 
 
+# float32 comparisons are excluded from the hypothesis tests due to a bug in Pandas, so cover these here instead
+# https://github.com/pandas-dev/pandas/issues/59524
+def test_float32_binary_comparison(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    symbol = "test_float32_binary_comparison"
+    df = pd.DataFrame(
+        {
+            "uint8": np.arange(1000, dtype=np.uint8),
+            "uint16": np.arange(1000, dtype=np.uint16),
+            "uint32": np.arange(1000, dtype=np.uint32),
+            "uint64": np.arange(1000, dtype=np.uint64),
+            "int8": np.arange(1000, dtype=np.int8),
+            "int16": np.arange(1000, dtype=np.int16),
+            "int32": np.arange(1000, dtype=np.int32),
+            "int64": np.arange(1000, dtype=np.int64),
+            "float32": np.arange(1000, dtype=np.float32),
+            "float64": np.arange(1000, dtype=np.float64),
+        }
+    )
+    lib.write(symbol, df)
+    for op in ["<", "<=", ">", ">=", "==", "!="]:
+        for other_col in ["uint8", "uint16", "uint32", "uint64", "int8", "int16", "int32", "int64", "float32", "float64"]:
+            q = QueryBuilder()
+            qb_lhs = q["float32"]
+            qb_rhs = q[other_col]
+            pandas_lhs = df["float32"]
+            pandas_rhs = df[other_col]
+            if op == "<":
+                q = q[qb_lhs < qb_rhs]
+                expected = df[pandas_lhs < pandas_rhs]
+            elif op == "<=":
+                q = q[qb_lhs <= qb_rhs]
+                expected = df[pandas_lhs <= pandas_rhs]
+            elif op == ">":
+                q = q[qb_lhs > qb_rhs]
+                expected = df[pandas_lhs > pandas_rhs]
+            elif op == ">=":
+                q = q[qb_lhs >= qb_rhs]
+                expected = df[pandas_lhs >= pandas_rhs]
+            elif op == "==":
+                q = q[qb_lhs == qb_rhs]
+                expected = df[pandas_lhs == pandas_rhs]
+            elif op == "!=":
+                q = q[qb_lhs != qb_rhs]
+                expected = df[pandas_lhs != pandas_rhs]
+            generic_filter_test(lib, symbol, q, expected)
+
+
 ##################################
 # DYNAMIC SCHEMA TESTS FROM HERE #
 ##################################
