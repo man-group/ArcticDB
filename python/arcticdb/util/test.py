@@ -486,7 +486,13 @@ FIXED_STRINGS_SUFFIX = "fixed_strings"
 
 def generic_filter_test(lib, symbol, arctic_query, expected):
     received = lib.read(symbol, query_builder=arctic_query).data
-    assert np.array_equal(expected, received)
+    if not np.array_equal(expected, received):
+        original_df = lib.read(symbol).data
+        print(
+            f"""Original df:\n{original_df}\nwith dtypes:\n{original_df.dtypes}\nquery:\n{arctic_query}"""
+            f"""\nPandas result:\n{expected}\nArcticDB result:\n{received}"""
+        )
+        assert False
 
 
 # For string queries, test both with and without dynamic strings, and with the query both optimised for speed and memory
@@ -502,10 +508,19 @@ def generic_filter_test_dynamic(lib, symbol, arctic_query, queried_slices):
     received = lib.read(symbol, query_builder=arctic_query).data
     assert len(received) == sum([len(queried_slice) for queried_slice in queried_slices])
     start_row = 0
+    arrays_equal = True
     for queried_slice in queried_slices:
         for col_name in queried_slice.columns:
-            assert np.array_equal(queried_slice[col_name], received[col_name].iloc[start_row: start_row + len(queried_slice)])
+            if not np.array_equal(queried_slice[col_name], received[col_name].iloc[start_row: start_row + len(queried_slice)]):
+                arrays_equal = False
         start_row += len(queried_slice)
+    if not arrays_equal:
+        original_df = lib.read(symbol).data
+        print(
+            f"""Original df (in ArcticDB, backfilled):\n{original_df}\nwith dtypes:\n{original_df.dtypes}\nquery:\n{arctic_query}"""
+            f"""\nPandas result:\n{queried_slices}\nArcticDB result:\n{received}"""
+        )
+        assert False
 
 
 # For string queries, test both with and without dynamic strings, and with the query both optimised for speed and memory
