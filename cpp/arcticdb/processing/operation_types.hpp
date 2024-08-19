@@ -115,11 +115,11 @@ template <class VAL, class Func>
 struct unary_arithmetic_promoted_type {
     static constexpr size_t val_width = arithmetic_promoted_type::details::width_v<VAL>;
     using type = typename
-        /* All types promote to themselves with the AbsOperator
-         * Floating point and signed integer types promote to themselves with the NegOperator as well */
-        std::conditional_t<std::is_same_v<Func, AbsOperator> || std::is_signed_v<VAL>,
+        /* Unsigned ints promote to themselves for the abs operator, and to a signed int of double the width with the neg operator
+         * Floating point types promote to themselves with both operators
+         * Signed ints promote to a signed int of double the width for both operators, as their range is not symmetric about zero */
+        std::conditional_t<std::is_floating_point_v<VAL> || (std::is_same_v<Func, AbsOperator> && std::is_unsigned_v<VAL>),
             VAL,
-            // Unsigned integer types promote to a signed type of double the width with the NegOperator
             typename arithmetic_promoted_type::details::signed_width_t<2 * val_width>
         >;
 };

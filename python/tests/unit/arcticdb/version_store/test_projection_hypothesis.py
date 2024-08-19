@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 from hypothesis import assume, given, settings
+import numpy as np
 import pandas as pd
 
 from arcticdb.version_store.processing import QueryBuilder
@@ -29,8 +30,8 @@ pytestmark = pytest.mark.pipeline
 @given(
     df=dataframe_strategy(
         [
-            column_strategy("a", supported_numeric_dtypes()),
-            column_strategy("b", supported_numeric_dtypes(), include_zero=False)
+            column_strategy("a", supported_numeric_dtypes(), restrict_range=True),
+            column_strategy("b", supported_numeric_dtypes(), include_zero=False, restrict_range=True),
         ],
     ),
     val=non_zero_numeric_type_strategies(),
@@ -42,13 +43,16 @@ def test_project_numeric_binary_operation(lmdb_version_store_v1, df, val):
     lib.write(symbol, df)
     # Would be cleaner to use pytest.parametrize, but the expensive bit is generating/writing the df, so make sure we
     # only do these operations once to save time
-    for op in ["+", "-", "*", "/"]:
+    # Have to cast all Pandas values to doubles before computing, otherwise it gets the types wrong and over/underflows
+    # a lot: https://github.com/pandas-dev/pandas/issues/59524
+    # This doesn't work in general for division as we perform integer division, so test this separately
+    for op in ["+", "-", "*"]:
         for comp in ["col op col", "col op val", "val op col"]:
             q = QueryBuilder()
             qb_lhs = q["a"] if comp.startswith("col") else val
             qb_rhs = q["b"] if comp.endswith("col") else val
-            pandas_lhs = df["a"] if comp.startswith("col") else val
-            pandas_rhs = df["b"] if comp.endswith("col") else val
+            pandas_lhs = df["a"].astype(np.float64) if comp.startswith("col") else np.float64(val)
+            pandas_rhs = df["b"].astype(np.float64) if comp.endswith("col") else np.float64(val)
             if op == "+":
                 q = q.apply("c", qb_lhs + qb_rhs)
                 df["c"] = pandas_lhs + pandas_rhs
@@ -58,16 +62,21 @@ def test_project_numeric_binary_operation(lmdb_version_store_v1, df, val):
             elif op == "*":
                 q = q.apply("c", qb_lhs * qb_rhs)
                 df["c"] = pandas_lhs * pandas_rhs
-            elif op == "/":
-                q = q.apply("c", qb_lhs / qb_rhs)
-                df["c"] = pandas_lhs / pandas_rhs
             received = lib.read(symbol, query_builder=q).data
-            assert_frame_equal(df, received, check_dtype=False)
+            try:
+                assert_frame_equal(df, received, check_dtype=False)
+            except AssertionError as e:
+                original_df = lib.read(symbol).data
+                print(
+                    f"""Original df:\n{original_df}\nwith dtypes:\n{original_df.dtypes}\nval:\n{val}\nwith dtype:\n{val.dtype}\nquery:\n{q}"""
+                    f"""\nPandas result:\n{df}\n"ArcticDB result:\n{received}"""
+                )
+                raise e
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
-@given(df=dataframe_strategy([column_strategy("a", supported_numeric_dtypes())]))
+@given(df=dataframe_strategy([column_strategy("a", supported_numeric_dtypes(), restrict_range=True)]))
 def test_project_numeric_unary_operation(lmdb_version_store_v1, df):
     assume(not df.empty)
     lib = lmdb_version_store_v1
@@ -75,12 +84,12 @@ def test_project_numeric_unary_operation(lmdb_version_store_v1, df):
     lib.write(symbol, df)
     q = QueryBuilder()
     q = q.apply("b", abs(q["a"]))
-    df["b"] = abs(df["a"])
+    df["b"] = abs(df["a"].astype(np.float64))
     received = lib.read(symbol, query_builder=q).data
-    assert_frame_equal(df, received)
+    assert_frame_equal(df, received, check_dtype=False)
     q = QueryBuilder()
     q = q.apply("b", -q["a"])
-    df["b"] = -df["a"]
+    df["b"] = -(df["a"].astype(np.float64))
     received = lib.read(symbol, query_builder=q).data
     assert_frame_equal(df, received, check_dtype=False)
 

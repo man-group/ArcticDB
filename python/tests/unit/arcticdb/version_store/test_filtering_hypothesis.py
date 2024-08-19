@@ -114,9 +114,7 @@ def test_filter_string_binary_comparison(lmdb_version_store_v1, df, val):
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
-    df=dataframe_strategy(
-        [column_strategy("a", supported_integer_dtypes(), restrict_range=False)]
-    ),
+    df=dataframe_strategy([column_strategy("a", supported_integer_dtypes())]),
     signed_vals=st.frozensets(signed_integral_type_strategies(), min_size=1),
     unsigned_vals=st.frozensets(unsigned_integral_type_strategies(), min_size=1),
 )
@@ -160,7 +158,7 @@ def test_filter_string_set_membership(lmdb_version_store_v1, df, vals):
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
-@given(df=dataframe_strategy([column_strategy("a", supported_integer_dtypes(), restrict_range=False)]))
+@given(df=dataframe_strategy([column_strategy("a", supported_integer_dtypes())]))
 def test_filter_numeric_empty_set_membership(lmdb_version_store_v1, df):
     assume(not df.empty)
     lib = lmdb_version_store_v1
@@ -462,7 +460,7 @@ def test_filter_string_binary_comparison_dynamic(lmdb_version_store_dynamic_sche
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
-    df=dataframe_strategy([column_strategy("a", supported_numeric_dtypes(), restrict_range=False)]),
+    df=dataframe_strategy([column_strategy("a", supported_numeric_dtypes())]),
     signed_vals=st.frozensets(signed_integral_type_strategies(), min_size=1),
     unsigned_vals=st.frozensets(unsigned_integral_type_strategies(), min_size=1),
 )
