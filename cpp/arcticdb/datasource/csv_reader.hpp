@@ -91,16 +91,21 @@ ARCTICDB_FORCE_INLINE uint64_t cmp_mask_against_input(InputBlock in, uint8_t m) 
 
 uint64_t find_quote_mask(InputBlock in, uint64_t& prev_iter_inside_quote) {
     uint64_t quote_bits = cmp_mask_against_input(in, '"');
+#ifdef __AVX2__
+    uint64_t quote_mask = _mm_cvtsi128_si64(_mm_clmulepi64_si128(
+      _mm_set_epi64x(0ULL, quote_bits), _mm_set1_epi8(0xFF), 0));
+#elif defined(__ARM_NEON)
+    uint64_t quote_mask = vmull_p64( -1ULL, quote_bits);
+#else
     uint64_t quote_mask = 0;
-
     for (int i = 0; i < 64; ++i) {
         if (quote_bits & (1ULL << i)) {
             quote_mask ^= ~0ULL << i;
         }
     }
-
+#endif
     quote_mask ^= prev_iter_inside_quote;
-    prev_iter_inside_quote = (quote_mask >> 63);
+    prev_iter_inside_quote = static_cast<uint64_t>(static_cast<int64_t>(quote_mask) >> 63);
     return quote_mask;
 }
 
@@ -109,7 +114,7 @@ struct CsvIndexes {
     uint32_t *indexes;
 };
 
-#define CRLF
+//#define CRLF
 
 ARCTICDB_FORCE_INLINE void flatten_bits(
         uint32_t *base_ptr,
