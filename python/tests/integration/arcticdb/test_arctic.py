@@ -246,7 +246,12 @@ def test_staged_data(arctic_library, finalize_method):
     lib.write(sym_unfinalized, df_2, staged=True)
 
     metadata = {"hello": "world"}
-    lib.finalize_staged_data(sym_with_metadata, finalize_method, metadata=metadata)
+    finalize_result_meta = lib.finalize_staged_data(sym_with_metadata, finalize_method, metadata=metadata)
+    assert finalize_result_meta.metadata == metadata
+    assert finalize_result_meta.symbol == sym_with_metadata
+    assert finalize_result_meta.library == lib.name
+    assert finalize_result_meta.version == (1 if finalize_method == StagedDataFinalizeMethod.APPEND else 0)
+
     lib.finalize_staged_data(sym_without_metadata, finalize_method)
 
     assert set(lib.list_symbols()) == {sym_with_metadata, sym_without_metadata}
