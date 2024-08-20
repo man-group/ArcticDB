@@ -507,123 +507,122 @@ add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
 if(${ARCTICDB_USE_PCH})
     message(STATUS "Using precompiled headers for target arcticdb_core_object")
-    target_precompile_headers(
-            arcticdb_core_object
-            PRIVATE
-                # STL
-                <memory>
-                <cstdint>
-                <unordered_map>
-                <vector>
-                <stdexcept>
-                <string>
-                <array>
-                <variant>
-                <optional>
-                <type_traits>
-                <cstddef>
-                <climits>
-                <mutex>
-                <string_view>
-                <chrono>
-                <atomic>
-                <limits>
-                <cstdlib>
-                <utility>
-                <iomanip>
-                <sstream>
-                <ctime>
-                <map>
-                <unordered_set>
-                <iostream>
-                <cassert>
-                <functional>
-                <list>
-                <random>
-                <fstream>
-                <any>
-                <cstdio>
-                <algorithm>
-                <queue>
-                <exception>
-                <deque>
-                <ranges>
-                <shared_mutex>
-                <set>
-                <thread>
-                <filesystem>
-                <typeinfo>
-                <concepts>
-                <numeric>
+    set(BASE_PCH
+        # STL
+        <memory>
+        <cstdint>
+        <unordered_map>
+        <vector>
+        <stdexcept>
+        <string>
+        <array>
+        <variant>
+        <optional>
+        <type_traits>
+        <cstddef>
+        <climits>
+        <mutex>
+        <string_view>
+        <chrono>
+        <atomic>
+        <limits>
+        <cstdlib>
+        <utility>
+        <iomanip>
+        <sstream>
+        <ctime>
+        <map>
+        <unordered_set>
+        <iostream>
+        <cassert>
+        <functional>
+        <list>
+        <random>
+        <fstream>
+        <any>
+        <cstdio>
+        <algorithm>
+        <queue>
+        <exception>
+        <deque>
+        <ranges>
+        <shared_mutex>
+        <set>
+        <thread>
+        <filesystem>
+        <typeinfo>
+        <concepts>
+        <numeric>
 
-                # Boost
-                <boost/iterator_adaptors.hpp>
-                <boost/circular_buffer.hpp>
-                <boost/core/noncopyable.hpp>
-                <boost/algorithm/string.hpp>
-                <boost/container/small_vector.hpp>
-                <boost/iterator/iterator_facade.hpp>
-                <boost/noncopyable.hpp>
+        # Boost
+        <boost/iterator_adaptors.hpp>
+        <boost/circular_buffer.hpp>
+        <boost/core/noncopyable.hpp>
+        <boost/algorithm/string.hpp>
+        <boost/container/small_vector.hpp>
+        <boost/iterator/iterator_facade.hpp>
+        <boost/noncopyable.hpp>
 
-                # Python
-                # TODO: Won't be needed when we move all python conde to handlers outside of the core
-                <Python.h>
-                <pybind11/stl.h>
-                <pybind11/pybind11.h>
-                <pybind11/numpy.h>
+        # Python
+        # TODO: Won't be needed when we move all python conde to handlers outside of the core
+        <Python.h>
+        <pybind11/stl.h>
+        <pybind11/pybind11.h>
+        <pybind11/numpy.h>
 
-                # Proto
-                <google/protobuf/io/zero_copy_stream_impl.h>
-                <google/protobuf/text_format.h>
-                <google/protobuf/any.pb.h>
-                <google/protobuf/any.h>
-                <google/protobuf/util/message_differencer.h>
-                <google/protobuf/arena.h>
+        # Proto
+        <google/protobuf/io/zero_copy_stream_impl.h>
+        <google/protobuf/text_format.h>
+        <google/protobuf/any.pb.h>
+        <google/protobuf/any.h>
+        <google/protobuf/util/message_differencer.h>
+        <google/protobuf/arena.h>
 
-                # Proto generated
-                <descriptors.pb.h>
-                <storage.pb.h>
-                <lmdb_storage.pb.h>
-                <mapped_file_storage.pb.h>
-                <encoding.pb.h>
-                <in_memory_storage.pb.h>
-                <mongo_storage.pb.h>
-                <s3_storage.pb.h>
-                <utils.pb.h>
-                <config.pb.h>
-                <azure_storage.pb.h>
-                <nfs_backed_storage.pb.h>
+        # Proto generated
+        <descriptors.pb.h>
+        <storage.pb.h>
+        <lmdb_storage.pb.h>
+        <mapped_file_storage.pb.h>
+        <encoding.pb.h>
+        <in_memory_storage.pb.h>
+        <mongo_storage.pb.h>
+        <s3_storage.pb.h>
+        <utils.pb.h>
+        <config.pb.h>
+        <azure_storage.pb.h>
+        <nfs_backed_storage.pb.h>
 
-                # Folly
-                <folly/Function.h>
-                <folly/hash/Hash.h>
-                <folly/Range.h>
-                <folly/container/Enumerate.h>
-                <folly/Poly.h>
-                <folly/ScopeGuard.h>
-                <folly/portability/Time.h>
-                <folly/gen/Base.h>
+        # Folly
+        <folly/Function.h>
+        <folly/hash/Hash.h>
+        <folly/Range.h>
+        <folly/container/Enumerate.h>
+        <folly/Poly.h>
+        <folly/ScopeGuard.h>
+        <folly/portability/Time.h>
+        <folly/gen/Base.h>
 
 
-                # FMT
-                <fmt/core.h>
-                <fmt/format.h>
-                <fmt/compile.h>
-                <fmt/std.h>
+        # FMT
+        <fmt/core.h>
+        <fmt/format.h>
+        <fmt/compile.h>
+        <fmt/std.h>
 
-                # SPD Log
-                <spdlog/spdlog.h>
+        # SPD Log
+        <spdlog/spdlog.h>
 
-                # Bit Magic
-                <bitmagic/bm.h>
-                <bitmagic/bmserial.h>
+        # Bit Magic
+        <bitmagic/bm.h>
+        <bitmagic/bmserial.h>
 
-                # Misc
-                <ankerl/unordered_dense.h>
-                <third_party/recycle/src/recycle/shared_pool.hpp>
-                <xxhash.h>
-                <pcre.h>
+        # Misc
+        <ankerl/unordered_dense.h>
+        <third_party/recycle/src/recycle/shared_pool.hpp>
+        <xxhash.h>
+        <pcre.h>
     )
+    target_precompile_headers(arcticdb_core_object PRIVATE ${BASE_PCH})
 endif()
 
 if (WIN32)
@@ -1117,119 +1116,7 @@ if(${TEST})
                 # GTest
                 <gtest/gtest.h>
                 <gtest/gtest_prod.h>
-
-                # STL
-                <cstdint>
-                <memory>
-                <unordered_map>
-                <vector>
-                <stdexcept>
-                <variant>
-                <optional>
-                <array>
-                <string>
-                <cstddef>
-                <type_traits>
-                <climits>
-                <mutex>
-                <string_view>
-                <chrono>
-                <atomic>
-                <time.h>
-                <algorithm>
-                <limits>
-                <cstdlib>
-                <utility>
-                <unordered_set>
-                <ctime>
-                <numeric>
-                <iomanip>
-                <map>
-                <sstream>
-                <concepts>
-                <cstdio>
-                <iostream>
-                <functional>
-                <typeinfo>
-                <list>
-                <random>
-                <cassert>
-                <fstream>
-                <any>
-                <filesystem>
-                <thread>
-                <queue>
-                <pcre.h>
-                <exception>
-                <deque>
-                <shared_mutex>
-                <ranges>
-                <set>
-
-                # SPDLog
-                <spdlog/spdlog.h>
-
-                # FMT
-                <fmt/format.h>
-                <fmt/std.h>
-                <fmt/compile.h>
-                <fmt/core.h>
-
-                # Proto
-                <google/protobuf/any.pb.h>
-                <google/protobuf/io/zero_copy_stream_impl.h>
-                <google/protobuf/util/message_differencer.h>
-                <google/protobuf/arena.h>
-                <google/protobuf/text_format.h>
-                <google/protobuf/any.h>
-
-                # Python
-                <pybind11/numpy.h>
-                <Python.h>
-                <pybind11/pybind11.h>
-                <pybind11/stl.h>
-
-                # Proto generated
-                <encoding.pb.h>
-                <storage.pb.h>
-                <in_memory_storage.pb.h>
-                <azure_storage.pb.h>
-                <s3_storage.pb.h>
-                <utils.pb.h>
-                <nfs_backed_storage.pb.h>
-                <lmdb_storage.pb.h>
-                <config.pb.h>
-                <mapped_file_storage.pb.h>
-                <mongo_storage.pb.h>
-                <descriptors.pb.h>
-
-                # Boost
-                <boost/algorithm/string.hpp>
-                <boost/container/small_vector.hpp>
-                <boost/iterator/iterator_facade.hpp>
-                <boost/core/noncopyable.hpp>
-                <boost/iterator_adaptors.hpp>
-                <boost/circular_buffer.hpp>
-                <boost/noncopyable.hpp>
-
-                # Folly
-                <folly/portability/Time.h>
-                <folly/Range.h>
-                <folly/container/Enumerate.h>
-                <folly/Poly.h>
-                <folly/ScopeGuard.h>
-                <folly/gen/Base.h>
-                <folly/hash/Hash.h>
-                <folly/Function.h>
-
-                # Misc
-                <xxhash.h>
-                <ankerl/unordered_dense.h>
-                <third_party/recycle/src/recycle/shared_pool.hpp>
-
-                # Bitmagic
-                <bitmagic/bm.h>
-                <bitmagic/bmserial.h>
+                ${BASE_PCH}
         )
         message(STATUS "Using precompiled headers for target target_precompile_headers")
         target_precompile_headers(
@@ -1237,6 +1124,7 @@ if(${TEST})
             PRIVATE
                 <rapidcheck/state.h>
                 <rapidcheck.h>
+                ${BASE_PCH}
         )
     endif()
 endif()
