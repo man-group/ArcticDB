@@ -16,6 +16,7 @@ from arcticdb.util.hypothesis import (
     numeric_type_strategies,
     non_zero_numeric_type_strategies,
     supported_numeric_dtypes,
+    supported_floating_dtypes,
     dataframe_strategy,
     column_strategy,
 )
@@ -91,7 +92,15 @@ def test_project_numeric_unary_operation(lmdb_version_store_v1, df):
     q = q.apply("b", -q["a"])
     df["b"] = -(df["a"].astype(np.float64))
     received = lib.read(symbol, query_builder=q).data
-    assert_frame_equal(df, received, check_dtype=False)
+    try:
+        assert_frame_equal(df, received, check_dtype=False)
+    except AssertionError as e:
+        original_df = lib.read(symbol).data
+        print(
+            f"""Original df:\n{original_df}\nwith dtypes:\n{original_df.dtypes}\nquery:\n{q}"""
+            f"""\nPandas result:\n{df}\n"ArcticDB result:\n{received}"""
+        )
+        raise e
 
 
 ##################################
@@ -99,13 +108,14 @@ def test_project_numeric_unary_operation(lmdb_version_store_v1, df):
 ##################################
 
 
+# It is very complex to mimic our behaviour for backfilling missing columns in Pandas with integral columns, so use floats
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=dataframe_strategy(
         [
-            column_strategy("a", supported_numeric_dtypes()),
-            column_strategy("b", supported_numeric_dtypes(), include_zero=False)
+            column_strategy("a", supported_floating_dtypes()),
+            column_strategy("b", supported_floating_dtypes(), include_zero=False)
         ],
     ),
     val=non_zero_numeric_type_strategies(),
@@ -145,12 +155,21 @@ def test_project_numeric_binary_operation_dynamic(lmdb_version_store_dynamic_sch
                 q = q.apply("c", qb_lhs / qb_rhs)
                 df["c"] = pandas_lhs / pandas_rhs
             received = lib.read(symbol, query_builder=q).data
-            assert_frame_equal(df, received, check_dtype=False)
+            try:
+                assert_frame_equal(df, received, check_dtype=False)
+            except AssertionError as e:
+                original_df = lib.read(symbol).data
+                print(
+                    f"""Original df:\n{original_df}\nwith dtypes:\n{original_df.dtypes}\nval:\n{val}\nwith dtype:\n{val.dtype}\nquery:\n{q}"""
+                    f"""\nPandas result:\n{df}\n"ArcticDB result:\n{received}"""
+                )
+                raise e
 
 
+# It is very complex to mimic our behaviour for backfilling missing columns in Pandas with integral columns, so use floats
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
-@given(df=dataframe_strategy([column_strategy("a", supported_numeric_dtypes())]))
+@given(df=dataframe_strategy([column_strategy("a", supported_floating_dtypes(), restrict_range=True)]))
 def test_project_numeric_unary_operation_dynamic(lmdb_version_store_dynamic_schema_v1, df):
     assume(len(df) >= 2)
     lib = lmdb_version_store_dynamic_schema_v1
@@ -158,18 +177,18 @@ def test_project_numeric_unary_operation_dynamic(lmdb_version_store_dynamic_sche
     lib.delete(symbol)
     slices = [
         df[:len(df) // 2],
-        df[len(df) // 2:],
+        df[len(df) // 2:].rename(columns={"a": "b"}),
     ]
     for slice in slices:
         lib.append(symbol, slice)
-    df = pd.concat(slices)
+    df = pd.concat(slices).astype(np.float64)
     q = QueryBuilder()
-    q = q.apply("b", abs(q["a"]))
-    df["b"] = abs(df["a"])
+    q = q.apply("c", abs(q["a"]))
+    df["c"] = abs(df["a"])
     received = lib.read(symbol, query_builder=q).data
-    assert_frame_equal(df, received)
+    assert_frame_equal(df, received, check_dtype=False)
     q = QueryBuilder()
-    q = q.apply("b", -q["a"])
-    df["b"] = -df["a"]
+    q = q.apply("c", -q["a"])
+    df["c"] = -df["a"]
     received = lib.read(symbol, query_builder=q).data
     assert_frame_equal(df, received, check_dtype=False)
