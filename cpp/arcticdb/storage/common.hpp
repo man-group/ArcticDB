@@ -13,6 +13,7 @@
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
+#include <arcticdb/storage/s3/s3_settings.hpp>
 #include <sstream>
 
 namespace arcticdb::storage {
@@ -91,5 +92,17 @@ struct is_key_type<entity::VariantKey> : std::true_type {};
 template <typename T>
 inline constexpr bool is_key_type_v = is_key_type<T>::value;
 
+class NativeVariantStorage {
+public:
+    using VariantStorageConfig = std::variant<std::monostate, s3::S3Settings>;
+    explicit NativeVariantStorage(VariantStorageConfig config = std::monostate()) : config_(std::move(config)) {};
+    const VariantStorageConfig& variant() const {
+        return config_;
+    }
+    void update(const s3::S3Settings& config) {
+        config_ = config;
+    }
+private:
+    VariantStorageConfig config_;
+};
 }  //namespace arcticdb::storage
-

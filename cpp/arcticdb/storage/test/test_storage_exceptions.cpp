@@ -95,7 +95,7 @@ public:
         cfg.set_use_mock_storage_for_testing(true);
         arcticdb::storage::LibraryPath library_path("lib", '.');
 
-        return std::make_unique<arcticdb::storage::s3::S3Storage>(library_path, arcticdb::storage::OpenMode::DELETE, cfg);
+        return std::make_unique<arcticdb::storage::s3::S3Storage>(library_path, arcticdb::storage::OpenMode::DELETE, arcticdb::storage::s3::S3Settings(cfg));
     }
 };
 

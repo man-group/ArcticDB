@@ -9,7 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 from abc import ABC, abstractmethod
 from typing import Iterable, List
 
-from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap, LibraryConfig
+from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap, LibraryConfig, LibraryDescriptor
 from arcticdb.config import _DEFAULT_ENV
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.options import DEFAULT_ENCODING_VERSION, LibraryOptions, EnterpriseLibraryOptions
@@ -49,7 +49,7 @@ def set_library_options(lib_desc: "LibraryConfig", options: LibraryOptions,
 class ArcticLibraryAdapter(ABC):
     @abstractmethod
     def __init__(self, uri: str, encoding_version: EncodingVersion):
-        pass
+        self._native_cfg = None
 
     @abstractmethod
     def __repr__(self):
@@ -80,7 +80,7 @@ class ArcticLibraryAdapter(ABC):
         return NativeVersionStore.create_library_config(
             env_cfg, _DEFAULT_ENV, name, encoding_version=library_options.encoding_version
         )
-
+    
     @abstractmethod
     def add_library_to_env(self, env_cfg: EnvironmentConfigsMap, name: str):
         raise NotImplementedError

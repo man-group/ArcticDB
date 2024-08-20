@@ -41,20 +41,10 @@ class ConfigCache {
         return descriptor_map_.find(path) != descriptor_map_.end();
     }
 
-    void add_library_config(const LibraryPath &path, const arcticdb::proto::storage::LibraryConfig lib_cfg) {
-        add_library(path, decode_library_descriptor(lib_cfg.lib_desc()));
-        for(const auto& storage: lib_cfg.storage_by_id())
-            add_storage(StorageName{storage.first}, storage.second);
-    }
-
     void add_library(const LibraryPath &path, const LibraryDescriptor &desc) {
         config_resolver_->add_library(environment_name_, encode_library_descriptor(desc));
         std::lock_guard<std::mutex> lock{mutex_};
         descriptor_map_.emplace(path, desc);
-    }
-
-    void add_storage(const StorageName& storage_name, const arcticdb::proto::storage::VariantStorage& storage) {
-        config_resolver_->add_storage(environment_name_, storage_name, storage);
     }
 
     std::vector<LibraryPath> list_libraries(std::string_view prefix) {
@@ -70,7 +60,7 @@ class ConfigCache {
         return res;
     }
 
-    std::shared_ptr<Storages> create_storages(const LibraryPath &path, OpenMode mode) {
+    std::shared_ptr<Storages> create_storages(const LibraryPath &path, OpenMode mode, const NativeVariantStorage& native_storage_config) {
         auto maybe_descriptor = get_descriptor(path);
         if (!maybe_descriptor.has_value())
             throw std::runtime_error(fmt::format("Library {} not found", path));
@@ -92,7 +82,17 @@ class ConfigCache {
             if(storage_conf_pos != storage_configs_.end())
                 storage_conf = storage_conf_pos->second;
 
-            storages.emplace_back(create_storage(path, mode, storage_conf));
+            util::variant_match(native_storage_config.variant(),
+                [&storage_conf, &storages, &path, mode] (const s3::S3Settings& settings) {
+                    util::check(storage_conf.config().Is<arcticdb::proto::s3_storage::Config>(), "Only support S3 native settings");
+                    arcticdb::proto::s3_storage::Config s3_storage;
+                    storage_conf.config().UnpackTo(&s3_storage);
+                    storages.emplace_back(create_storage(path, mode, s3::S3Settings(settings).update(s3_storage)));
+                },
+                [&storage_conf, &storages, &path, mode](const auto &) {
+                    storages.emplace_back(create_storage(path, mode, storage_conf));
+                }
+            );
         }
         return std::make_shared<Storages>(std::move(storages), mode);
     }
@@ -110,13 +110,6 @@ class ConfigCache {
         auto storages = config_resolver_->get_storages(environment_name_);
         for(auto& [storage_name, config] : storages) {
             storage_configs_.try_emplace(StorageName(storage_name), config);
-        }
-        auto default_storages = config_resolver_->get_default_storages(environment_name_);
-        for(auto& [storage_name, config] : default_storages) {
-            if (storage_configs_.find(storage_name) == storage_configs_.end()) {
-                config_resolver_->add_storage(environment_name_, storage_name, config);
-                storage_configs_.try_emplace(StorageName(storage_name), config);
-            }
         }
     }
 

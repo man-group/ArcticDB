@@ -206,7 +206,8 @@ void LibraryManager::remove_library_config(const LibraryPath& path) const {
 
 std::shared_ptr<Library> LibraryManager::get_library(const LibraryPath& path,
                                                      const StorageOverride& storage_override,
-                                                     const bool ignore_cache) {
+                                                     const bool ignore_cache,
+                                                     const NativeVariantStorage& native_storage_config) {
     if (!ignore_cache) {
         // Check global cache first, important for LMDB to only open once from a given process
         std::lock_guard<std::mutex> lock{open_libraries_mutex_};
@@ -216,13 +217,7 @@ std::shared_ptr<Library> LibraryManager::get_library(const LibraryPath& path,
     }
 
     arcticdb::proto::storage::LibraryConfig config = get_config_internal(path, {storage_override});
-
-    std::vector<arcticdb::proto::storage::VariantStorage> storage_configs;
-    for(const auto& storage: config.storage_by_id()){
-        storage_configs.emplace_back(storage.second);
-    }
-
-    auto storages = create_storages(path, OpenMode::DELETE, storage_configs);
+    auto storages = create_storages(path, OpenMode::DELETE, config.storage_by_id(), native_storage_config);
     auto lib = std::make_shared<Library>(path, std::move(storages), config.lib_desc().version());
     open_libraries_.put(path, lib);
 

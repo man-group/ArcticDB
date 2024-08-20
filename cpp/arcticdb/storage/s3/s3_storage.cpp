@@ -9,6 +9,8 @@
 
 #include <locale>
 
+#include <aws/identity-management/auth/STSProfileCredentialsProvider.h>
+
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/storage/s3/s3_api.hpp>
 #include <arcticdb/util/buffer_pool.hpp>
@@ -80,18 +82,26 @@ bool S3Storage::do_key_exists(const VariantKey& key) {
 
 namespace arcticdb::storage::s3 {
 
-S3Storage::S3Storage(const LibraryPath &library_path, OpenMode mode, const Config &conf) :
+S3Storage::S3Storage(const LibraryPath &library_path, OpenMode mode, const S3Settings &conf) :
     Storage(library_path, mode),
     s3_api_(S3ApiInstance::instance()),  // make sure we have an initialized AWS SDK
     root_folder_(object_store_utils::get_root_folder(library_path)),
     bucket_name_(conf.bucket_name()),
     region_(conf.region()) {
-
     auto creds = get_aws_credentials(conf);
 
     if (conf.use_mock_storage_for_testing()){
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using Mock S3 storage");
         s3_client_ = std::make_unique<MockS3Client>();
+    }
+    else if (conf.aws_auth() == AWSAuthMethod::STS_PROFILE_CREDENTIALS_PROVIDER){
+        Aws::Config::ReloadCachedConfigFile(); // config files loaded in Aws::InitAPI; It runs once at first S3Storage object construct; reload to get latest
+        auto cred_provider = Aws::MakeShared<Aws::Auth::STSProfileCredentialsProvider>(
+                                "DefaultAWSCredentialsProviderChain", 
+                                conf.aws_profile(), 
+                                std::chrono::minutes(static_cast<size_t>(ConfigsMap::instance()->get_int("S3Storage.STSTokenExpiryMin", 60)))
+                            );
+        s3_client_ = std::make_unique<RealS3Client>(cred_provider, get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, conf.use_virtual_addressing());
     }
     else if (creds.GetAWSAccessKeyId() == USE_AWS_CRED_PROVIDERS_TOKEN && creds.GetAWSSecretKey() == USE_AWS_CRED_PROVIDERS_TOKEN){
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using AWS auth mechanisms");

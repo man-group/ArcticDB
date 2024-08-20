@@ -29,16 +29,6 @@ import random
 import string
 from tests.util.mark import MACOS_CONDA_BUILD
 
-
-@pytest.fixture(autouse=True)
-def make_lock_wait_less():
-    set_config_int("StorageLock.WaitMs", 1)
-    try:
-        yield
-    finally:
-        unset_config_int("StorageLock.WaitMs")
-
-
 @pytest.fixture
 def small_max_delta():
     set_config_int("SymbolList.MaxDelta", 2)
@@ -457,10 +447,18 @@ def test_force_compact_symbol_list_lock_held(lmdb_version_store_v1):
     assert lib.compact_symbol_list() == 0
 
 
-@pytest.mark.skipif(MACOS_CONDA_BUILD, reason="Failing for unclear reasons")
-def test_force_compact_symbol_list_lock_held_past_ttl(lmdb_version_store_v1):
-    # Set TTL to 5 seconds. Compact symbol list will retry for 10 seconds, so should always work
+@pytest.fixture()
+def make_lock_ttl_less():
     set_config_int("StorageLock.TTL", 5_000_000_000)
+    try:
+        yield
+    finally:
+        unset_config_int("StorageLock.TTL")
+
+
+@pytest.mark.skipif(MACOS_CONDA_BUILD, reason="Failing for unclear reasons")
+def test_force_compact_symbol_list_lock_held_past_ttl(lmdb_version_store_v1, make_lock_ttl_less):
+    # Set TTL to 5 seconds. Compact symbol list will retry for 10 seconds, so should always work
     lib = lmdb_version_store_v1
     lock = lib.version_store.get_storage_lock(CompactionLockName)
     lock.lock()
