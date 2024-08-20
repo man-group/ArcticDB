@@ -573,4 +573,11 @@ def generic_named_aggregation_test(lib, symbol, df, grouping_column, aggs_dict):
     received = lib.read(symbol, query_builder=q).data
     received = received.reindex(columns=sorted(received.columns))
     received.sort_index(inplace=True)
-    assert_frame_equal(expected, received, check_dtype=False)
+    try:
+        assert_frame_equal(expected, received, check_dtype=False)
+    except AssertionError as e:
+        print(
+            f"""Original df:\n{df}\nwith dtypes:\n{df.dtypes}\naggs dict:\n{aggs_dict}"""
+            f"""\nPandas result:\n{expected}\n"ArcticDB result:\n{received}"""
+        )
+        raise e
