@@ -79,3 +79,39 @@ s3.get_object(Bucket=bucket, Key='_arctic_check/check.txt')
 s3.delete_object(Bucket=bucket, Key='_arctic_check/check.txt')
 ```
 The check object written in that script should not interfere with normal ArcticDB operation on the bucket.
+
+# AWS Security Token Service (STS) setup
+
+STS allows users to assume specfic roles in order to gain temporary access to AWS resources. Please refer to [the offical website](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp.html) for more details.
+To use it with ArcticDB, please setup the credential in the AWS shared **config** file.
+
+File location:
+
+| Platform              | Location                                                                                                                                                        |
+|-----------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Linux and macOS       | `~/.aws/config`                                                                                                                                                 |
+| Windows               | `%USERPROFILE%\.aws\config`                                                                                                                                     |
+
+Content:
+
+```
+[profile PROFILE]
+role_arn = ROLE_ARN_TO_BE_ASSUMED
+source_profile = BASE_PROFILE
+
+[profile BASE_PROFILE]
+aws_access_key_id = ID
+aws_secret_access_key = KEY
+```
+
+Use the configuration in ArcticDB:
+```
+>>> import arcticdb as adb
+>>> arctic = adb.Arctic('s3://s3.REGION.amazonaws.com:BUCKET?aws_auth=sts&aws_profile=PROFILE')
+```
+
+Due to limitations in the AWS C++ SDK, if ArcticDB fails to obtain the temporary token by assuming a role, an assertion error similar to the one below will occur:
+```
+virtual void Aws::Auth::STSProfileCredentialsProvider::Reload(): Assertion `!profileIt->second.GetCredentials().IsEmpty()' failed.
+```
+This is usually due to an incorrect IAM account setup or an incorrect configuration file.

@@ -32,14 +32,15 @@ from arcticdb.config import _expand_path
 from arcticdb.exceptions import ArcticNativeException, LibraryNotFound, UserInputException
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.authorization.permissions import OpenMode
+from arcticdb_ext.storage import S3Settings as NativeS3Settings, AWSAuthMethod
 
 
 def create_lib_from_config(cfg, env=Defaults.ENV, lib_name=Defaults.LIB):
     return NativeVersionStore.create_lib_from_config(cfg, env, lib_name)
 
 
-def create_lib_from_lib_config(lib_config, env=Defaults.ENV, open_mode=OpenMode.DELETE):
-    return NativeVersionStore.create_lib_from_lib_config(lib_config, env, open_mode)
+def create_lib_from_lib_config(lib_config, env=Defaults.ENV, open_mode=OpenMode.DELETE, native_cfg=None):
+    return NativeVersionStore.create_lib_from_lib_config(lib_config, env, open_mode, native_cfg)
 
 
 def extract_lib_config(env_cfg, lib_path):
@@ -105,15 +106,16 @@ class ArcticFileConfig(ArcticConfig):
 
 
 class ArcticMemoryConfig(ArcticConfig):
-    def __init__(self, cfg, env):
+    def __init__(self, cfg, env, native_cfg=None):
         # type: (EnvironmentConfigsMap, Optional[EnvName])->None
         self._cfg = cfg
         self._env = env
+        self._native_cfg = native_cfg
 
     def __getitem__(self, lib_path):
         # type: (LibName)->NativeVersionStore
         lib_cfg = extract_lib_config(self._cfg.env_by_id[self._env], lib_path)
-        return NativeVersionStore.create_store_from_lib_config(lib_cfg, self._env, OpenMode.DELETE)
+        return NativeVersionStore.create_store_from_config((self._cfg, self._native_cfg), self._env, lib_cfg.lib_desc.name, OpenMode.DELETE, lib_cfg.lib_desc.version.encoding_version)
 
     @property
     def cfg(self):
@@ -233,6 +235,9 @@ def get_s3_proto(
     ssl,
     is_nfs_layout,
     use_raw_prefix,
+    aws_auth,
+    aws_profile,
+    native_cfg,
 ):
     env = cfg.env_by_id[env_name]
     if is_nfs_layout:
@@ -272,10 +277,17 @@ def get_s3_proto(
         s3.ca_cert_dir = ca_cert_dir
     if ssl is not None:
         s3.ssl = ssl
+    
+    if aws_auth == AWSAuthMethod.STS_PROFILE_CREDENTIALS_PROVIDER or aws_profile:
+        if is_nfs_layout:
+            raise UserInputException("aws_auth and aws_profile can only be set for S3")
+        if aws_auth != AWSAuthMethod.STS_PROFILE_CREDENTIALS_PROVIDER or not aws_profile:
+            raise UserInputException("STS credential provider and aws_profile must be set together")
+        native_cfg.update(NativeS3Settings(aws_auth, aws_profile))
 
     sid, storage = get_storage_for_lib_name(s3.prefix, env)
     storage.config.Pack(s3, type_url_prefix="cxx.arctic.org")
-    return sid, storage
+    return sid
 
 
 def add_s3_library_to_env(
@@ -297,6 +309,9 @@ def add_s3_library_to_env(
     ssl=False,
     is_nfs_layout=False,
     use_raw_prefix=False,
+    aws_auth=AWSAuthMethod.DISABLED,
+    aws_profile=None,
+    native_cfg=None,
 ):
     env = cfg.env_by_id[env_name]
     if with_prefix and isinstance(with_prefix, str) and (with_prefix.endswith("/") or "//" in with_prefix):
@@ -305,7 +320,7 @@ def add_s3_library_to_env(
             f" [{with_prefix}]"
         )
 
-    sid, _ = get_s3_proto(
+    sid = get_s3_proto(
         cfg=cfg,
         lib_name=lib_name,
         env_name=env_name,
@@ -323,6 +338,9 @@ def add_s3_library_to_env(
         ssl=ssl,
         is_nfs_layout=is_nfs_layout,
         use_raw_prefix=use_raw_prefix,
+        aws_auth=aws_auth,
+        aws_profile=aws_profile,
+        native_cfg=native_cfg,
     )
 
     _add_lib_desc_to_env(env, lib_name, sid, description)

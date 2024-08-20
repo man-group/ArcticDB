@@ -198,7 +198,7 @@ class StorageGenerator {
     } else if (storage_ == "s3") {
       arcticdb::proto::s3_storage::Config cfg;
       cfg.set_use_mock_storage_for_testing(true);
-      return std::make_unique<storage::s3::S3Storage>(library_path, storage::OpenMode::WRITE, cfg);
+      return std::make_unique<storage::s3::S3Storage>(library_path, storage::OpenMode::WRITE, storage::s3::S3Settings(cfg));
     } else if (storage_ == "mongo") {
       arcticdb::proto::mongo_storage::Config cfg;
       cfg.set_use_mock_storage_for_testing(true);

@@ -14,7 +14,7 @@ cmake_policy(PUSH)
     if (EXISTS "/usr/local/lib64/aws-c-cal/cmake/modules/FindLibCrypto.cmake") # Workaround old AWS SDK bug
         cmake_policy(SET CMP0045 OLD)
     endif()
-    find_package(AWSSDK REQUIRED COMPONENTS s3)
+    find_package(AWSSDK REQUIRED COMPONENTS s3 identity-management)
 cmake_policy(POP)
 
 find_package(Boost REQUIRED)
@@ -300,6 +300,7 @@ set(arcticdb_srcs
         storage/s3/nfs_backed_storage.hpp
         storage/s3/s3_client_wrapper.hpp
         storage/s3/s3_storage_tool.hpp
+        storage/s3/s3_settings.hpp
         storage/storage_factory.hpp
         storage/storage_options.hpp
         storage/storage.hpp
