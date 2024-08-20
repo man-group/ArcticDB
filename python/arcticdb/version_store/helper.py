@@ -233,6 +233,8 @@ def get_s3_proto(
     ssl,
     is_nfs_layout,
     use_raw_prefix,
+    aws_auth,
+    aws_profile,
 ):
     env = cfg.env_by_id[env_name]
     if is_nfs_layout:
@@ -272,6 +274,10 @@ def get_s3_proto(
         s3.ca_cert_dir = ca_cert_dir
     if ssl is not None:
         s3.ssl = ssl
+    if aws_auth is not None:
+        s3.aws_auth = aws_auth
+    if aws_profile is not None:
+        s3.aws_profile = aws_profile
 
     sid, storage = get_storage_for_lib_name(s3.prefix, env)
     storage.config.Pack(s3, type_url_prefix="cxx.arctic.org")
@@ -297,6 +303,8 @@ def add_s3_library_to_env(
     ssl=False,
     is_nfs_layout=False,
     use_raw_prefix=False,
+    aws_auth=False,
+    aws_profile=None,
 ):
     env = cfg.env_by_id[env_name]
     if with_prefix and isinstance(with_prefix, str) and (with_prefix.endswith("/") or "//" in with_prefix):
@@ -323,6 +331,8 @@ def add_s3_library_to_env(
         ssl=ssl,
         is_nfs_layout=is_nfs_layout,
         use_raw_prefix=use_raw_prefix,
+        aws_auth=aws_auth,
+        aws_profile=aws_profile,
     )
 
     _add_lib_desc_to_env(env, lib_name, sid, description)
