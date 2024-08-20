@@ -28,6 +28,9 @@ from arcticdb.storage_fixtures.s3 import (
     MotoNfsBackedS3StorageFixtureFactory,
     real_s3_from_environment_variables,
     mock_s3_with_error_simulation,
+    real_s3_sts_from_environment_variables,
+    real_s3_sts_resources_ready,
+    real_s3_sts_clean_up,
 )
 from arcticdb.storage_fixtures.mongo import auto_detect_server
 from arcticdb.storage_fixtures.in_memory import InMemoryStorageFixture
@@ -36,6 +39,7 @@ from arcticdb.util.test import create_df
 from .util.mark import (
     AZURE_TESTS_MARK,
     MONGO_TESTS_MARK,
+    REAL_S3_TESTS,
     REAL_S3_TESTS_MARK,
     SSL_TEST_SUPPORTED,
 )
@@ -220,6 +224,34 @@ def real_s3_storage(real_s3_storage_factory):
     with real_s3_storage_factory.create_fixture() as f:
         yield f
 
+
+@pytest.fixture(scope="session", autouse=REAL_S3_TESTS) # Config loaded at the first ArcticDB binary import, so we need to set it up before any tests
+def real_s3_sts_test_setup():
+    username = f"gh_sts_test_user_{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
+    role_name = f"gh_sts_test_role_{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
+    policy_name = f"gh_sts_test_policy_name_{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
+    profile_name = "sts_test_profile"
+    try:
+        f = real_s3_sts_from_environment_variables(username, role_name, policy_name, profile_name)
+        yield f
+    finally:
+        real_s3_sts_clean_up(f, role_name, policy_name, username)
+
+
+@pytest.fixture(scope="session")
+def real_s3_sts_storage_factory(real_s3_sts_test_setup):
+    f = real_s3_sts_test_setup
+    # check is made here as the temp token generated during assume role, not during config loading
+    real_s3_sts_resources_ready(f) # resources created in iam may not be ready immediately in s3; Could take 10+ seconds
+    yield f
+
+
+@pytest.fixture
+def real_s3_sts_storage(real_s3_sts_storage_factory):
+    with real_s3_sts_storage_factory.create_fixture() as f:
+        yield f
+
+
 # ssl cannot be ON by default due to azurite performance constraints https://github.com/man-group/ArcticDB/issues/1539
 @pytest.fixture(scope="session")
 def azurite_storage_factory():
@@ -366,6 +398,11 @@ def real_s3_store_factory(lib_name, real_s3_storage):
 
 
 @pytest.fixture
+def real_s3_sts_store_factory(lib_name, real_s3_sts_storage):
+    return real_s3_sts_storage.create_version_store_factory(lib_name)
+
+
+@pytest.fixture
 def azure_store_factory(lib_name, azurite_storage):
     return azurite_storage.create_version_store_factory(lib_name)
 
@@ -382,14 +419,19 @@ def in_memory_store_factory(mem_storage, lib_name):
 
 # endregion
 # region ================================ `NativeVersionStore` Fixtures =================================
-@pytest.fixture(scope="function")
+@pytest.fixture
 def real_s3_version_store(real_s3_store_factory):
     return real_s3_store_factory()
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def real_s3_version_store_dynamic_schema(real_s3_store_factory):
     return real_s3_store_factory(dynamic_strings=True, dynamic_schema=True)
+
+
+@pytest.fixture
+def real_s3_sts_version_store(real_s3_sts_store_factory):
+    return real_s3_sts_store_factory()
 
 
 @pytest.fixture

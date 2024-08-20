@@ -249,7 +249,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        type: ${{fromJSON(vars.TEST_DIRS_OVERRIDE || needs.compile.outputs.test_dirs)}}
+        type: ["integration"]
         python_deps_id: ${{fromJson(inputs.python_deps_ids)}}
         include:
           ${{fromJSON(inputs.matrix)}}

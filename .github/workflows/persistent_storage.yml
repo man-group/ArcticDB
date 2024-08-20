@@ -5,7 +5,7 @@ on:
       job_type:          {required: true, type: string, description: Selects the steps to enable}
       matrix:            {type: string, description: JSON string to feed into the matrix}
       python_deps_ids:   {default: '[""]', type: string, description: Follower test matrix parameter. JSON string.}
-      python3:           {default: -1, type: number, description: Python 3 minor version}
+      python3:           {default: 10, type: number, description: Python 3 minor version}
       arcticdb_version:  {default: "", type: string, description: The version of ArcticDB that will be installed and used for seed/verify }
       # TODO: Maybe we should add these as GitHub variables
       bucket:            {default: 'arcticdb-ci-test-bucket-02', type: string, description: The name of the S3 bucket that we will test against}
@@ -33,22 +33,17 @@ jobs:
             - ${{fromJSON(inputs.matrix)[0]}} # The items after 0 are for tests only
     runs-on: ${{matrix.distro}}
     env:
-      python_impl_name: ${{inputs.python3 > 0 && format('cp3{0}', inputs.python3) || 'default'}}
+      python_impl_name: ${{format('cp3{0}', inputs.python3)}}
     defaults:
       run: {shell: bash}
     steps:
       - name: Checkout
         uses: actions/checkout@v3.3.0
 
-      - name: Select Python (Linux)
-        if: matrix.os == 'linux'
-        run: echo /opt/python/${{env.python_impl_name}}*/bin >> $GITHUB_PATH
-
-      - name: Select Python (Windows)
-        if: matrix.os == 'windows'
+      - name: Select Python
         uses: actions/setup-python@v4.7.1
         with:
-          python-version: "3.${{inputs.python3}}"
+          python-version: ${{format('3.{0}', inputs.python3)}}
 
       - name: Install latest release
         if: inputs.arcticdb_version == 'latest'
@@ -91,8 +86,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3.3.0
 
-      - name: Select Python (Linux)
-        run: echo /opt/python/${{env.python_impl_name}}*/bin >> $GITHUB_PATH
+      - name: Select Python
+        uses: actions/setup-python@v4.7.1
+        with:
+          python-version: ${{inputs.python3 > 0 && format('3.{0}', inputs.python3) || '3.10'}}
+
 
       - name: Install latest release
         run: |

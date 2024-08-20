@@ -9,6 +9,8 @@ syntax = "proto3";
 
 package arcticc.pb2.nfs_backed_storage_pb2;
 
+import "arcticc/pb2/storage.proto";
+
 message Config {
     string bucket_name = 1;
     string credential_name = 2;
@@ -27,4 +29,6 @@ message Config {
     bool use_mock_storage_for_testing = 15;
     // Whether to leave the prefix unchanged, or to translate the periods in it.
     bool use_raw_prefix = 16;
+    arcticc.pb2.storage_pb2.AWSAuthMethod aws_auth = 17; //default to be 0, DISABLED
+    string aws_profile = 18;
 }

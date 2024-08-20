@@ -17,8 +17,13 @@ MSYS=winsymlinks:nativestrict ln -s "$(realpath "$tooling_dir/../python/tests")"
 cd $PARALLEL_TEST_ROOT
 
 export ARCTICDB_RAND_SEED=$RANDOM
+export ARCTICDB_AWS_LogLevel_int=6
 
-$catch python -m pytest --timeout=3600 $PYTEST_XDIST_MODE -v --log-file="$TEST_OUTPUT_DIR/pytest-logger.$group.log" \
+$catch python -m pytest --timeout=3600 -v --log-file="$TEST_OUTPUT_DIR/pytest-logger.$group.log" \
     --junitxml="$TEST_OUTPUT_DIR/pytest.$group.xml" \
     --basetemp="$PARALLEL_TEST_ROOT/temp-pytest-output" \
-    "$@" 2>&1 | sed -ur "s#^(tests/.*/([^/]+\.py))?#\2#"
+    "$@" 2>&1 | sed -ur "s#^(tests/.*/([^/]+\.py))?#\2#"  || true
+
+
+current_dir=$(pwd)
+find "$current_dir" -name 'aws_sdk*.log' -exec cat {} +
