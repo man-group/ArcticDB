@@ -449,7 +449,7 @@ SegmentInMemory CountAggregatorData::finalize(const ColumnName& output_column_na
     SegmentInMemory res;
     if(!aggregated_.empty()) {
         aggregated_.resize(unique_values);
-        auto pos = res.add_column(scalar_field(DataType::UINT64, output_column_name.value), unique_values, AllocationType::DYNAMIC);
+        auto pos = res.add_column(scalar_field(DataType::UINT64, output_column_name.value), unique_values, AllocationType::PRESIZED);
         auto& column = res.column(pos);
         auto ptr = reinterpret_cast<uint64_t*>(column.ptr());
         column.set_row_data(unique_values - 1);
@@ -573,7 +573,5 @@ SegmentInMemory LastAggregatorData::finalize(const ColumnName& output_column_nam
     }
     return res;
 }
-
-
 
 } //namespace arcticdb
