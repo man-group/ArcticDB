@@ -28,7 +28,7 @@ inline void Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy>::commit_i
     if(final)
         return;
 
-    segment_ = SegmentInMemory(schema_policy_.default_descriptor(), segmenting_policy_.expected_row_size(), false, SparsePolicy::allow_sparse);
+    segment_ = SegmentInMemory(schema_policy_.default_descriptor(), segmenting_policy_.expected_row_size(), AllocationType::DYNAMIC, SparsePolicy::allow_sparse);
     segment_.init_column_map();
     stats_.reset();
 }

@@ -86,7 +86,7 @@ public:
         if(segments_.size() == 1) {
             // One segment, and it could be huge, so don't duplicate it
             AggregatorType::segment() = segments_[0];
-            if(!DensityPolicy::allow_sparse){ //static schema must have all columns as column slicing is removed
+            if(DensityPolicy::allow_sparse != Sparsity::PERMITTED){ //static schema must have all columns as column slicing is removed
                 auto descriptor = AggregatorType::default_descriptor();
                 for(const auto& field : AggregatorType::segment().fields()) {//segment's index is not set up here
                     if(!descriptor.find_field(field.name())){//TODO: Bottleneck for wide segments

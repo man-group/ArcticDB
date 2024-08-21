@@ -127,7 +127,7 @@ class BufferPairDataSink {
 
     void advance_data(std::size_t) {}
 
-    void set_allow_sparse(bool) {}
+    void set_allow_sparse(Sparsity) {}
 
     std::shared_ptr<Buffer> values() {
         return values_;

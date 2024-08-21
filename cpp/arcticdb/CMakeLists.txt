@@ -65,6 +65,7 @@ else()
     find_package(PCRE REQUIRED)
     find_package(Libevent  REQUIRED)
     find_package(semimap REQUIRED)
+    find_package(sparrow REQUIRED)
 
     find_package(recycle REQUIRED)
     find_package(msgpack-c REQUIRED)
@@ -501,7 +502,7 @@ set(arcticdb_srcs
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
         storage/s3/ec2_utils.cpp
-        util/buffer_holder.cpp util/native_handler.hpp)
+        util/buffer_holder.cpp util/native_handler.hpp arrow/arrow_output_frame.hpp arrow/arrow_output_frame.cpp arrow/arrow_output_frame.cpp arrow/arrow_output_frame.cpp entity/output_type.hpp entity/output_type.hpp entity/output_type.hpp arrow/arrow_output_frame.cpp arrow/arrow_utils.hpp arrow/arrow_utils.hpp arrow/arrow_utils.hpp arrow/test/test_arrow.cpp)
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 

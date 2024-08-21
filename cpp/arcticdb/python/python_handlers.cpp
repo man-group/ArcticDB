@@ -134,7 +134,7 @@ void BoolHandler::handle_type(
     ARCTICDB_DEBUG(log::version(), "Bool handler got encoded field: {}", field.DebugString());
     const auto &ndarray = field.ndarray();
     const auto bytes = encoding_sizes::data_uncompressed_size(ndarray);
-    Column decoded_data = Column(m.source_type_desc_, bytes / get_type_size(m.source_type_desc_.data_type()));
+    Column decoded_data = Column(m.source_type_desc_, bytes / get_type_size(m.source_type_desc_.data_type()), AllocationType::DYNAMIC, Sparsity::PERMITTED);
     data += decode_field(m.source_type_desc_, field, data, decoded_data, decoded_data.opt_sparse_map(), encoding_version);
 
     convert_type(
@@ -210,9 +210,9 @@ void StringHandler::handle_type(
 
     auto decoded_data = [&m, &ndarray, bytes, &dest_buffer]() {
         if(ndarray.sparse_map_bytes() > 0) {
-            return Column(m.source_type_desc_, bytes / get_type_size(m.source_type_desc_.data_type()));
+            return Column(m.source_type_desc_, bytes / get_type_size(m.source_type_desc_.data_type()), AllocationType::DYNAMIC, Sparsity::PERMITTED);
         } else {
-            Column column(m.source_type_desc_, false);
+            Column column(m.source_type_desc_, Sparsity::NOT_PERMITTED);
             column.buffer().add_external_block(&dest_buffer[m.offset_bytes_], bytes, 0UL);
             return column;
         }
@@ -279,7 +279,7 @@ void ArrayHandler::handle_type(
 ) {
     ARCTICDB_SAMPLE(HandleArray, 0)
     util::check(field.has_ndarray(), "Expected ndarray in array object handler");
-    std::shared_ptr<Column> column = shared_data.buffers()->get_buffer(m.source_type_desc_, true);
+    std::shared_ptr<Column> column = shared_data.buffers()->get_buffer(m.source_type_desc_, Sparsity::PERMITTED);
     column->check_magic();
     ARCTICDB_DEBUG(log::version(), "Column got buffer at {}", uintptr_t(column.get()));
     data += decode_field(m.source_type_desc_, field, data, *column, column->opt_sparse_map(), encoding_version);

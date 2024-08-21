@@ -356,7 +356,7 @@ VariantData binary_operator(const ColumnWithStrings& left, const ColumnWithStrin
             }
             using TargetType = typename type_arithmetic_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType, std::remove_reference_t<decltype(func)>>::type;
             constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
-            output_column = std::make_unique<Column>(make_scalar_type(output_data_type), true);
+            output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
             Column::transform<typename left_type_info::TDT, typename right_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
                     *(left.column_),
                     *(right.column_),
@@ -398,7 +398,7 @@ VariantData binary_operator(const ColumnWithStrings& col, const Value& val, Func
             if constexpr(arguments_reversed) {
                 column_name = binary_operation_column_name(fmt::format("{}", raw_value), func, col.column_name_);
                 constexpr auto output_data_type = data_type_from_raw_type<ReversedTargetType>();
-                output_column = std::make_unique<Column>(make_scalar_type(output_data_type), true);
+                output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
                 Column::transform<typename col_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
                         *(col.column_),
                         *output_column,
@@ -408,7 +408,7 @@ VariantData binary_operator(const ColumnWithStrings& col, const Value& val, Func
             } else {
                 column_name = binary_operation_column_name(col.column_name_, func, fmt::format("{}", raw_value));
                 constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
-                output_column = std::make_unique<Column>(make_scalar_type(output_data_type), true);
+                output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
                 Column::transform<typename col_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
                         *(col.column_),
                         *output_column,

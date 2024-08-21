@@ -228,9 +228,9 @@ TEST(Resample, ProcessOneSegment) {
     resample.set_aggregations({{"sum", "sum_column", "sum_column"}});
 
     using index_TDT = TypeDescriptorTag<DataTypeTag<DataType::NANOSECONDS_UTC64>, DimensionTag<Dimension ::Dim0>>;
-    auto index_column = std::make_shared<Column>(static_cast<TypeDescriptor>(index_TDT{}), 0, false, true);
+    auto index_column = std::make_shared<Column>(static_cast<TypeDescriptor>(index_TDT{}), 0,  AllocationType::DYNAMIC, Sparsity::PERMITTED);
     using col_TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension ::Dim0>>;
-    auto sum_column = std::make_shared<Column>(static_cast<TypeDescriptor>(col_TDT{}), 0, false, true);
+    auto sum_column = std::make_shared<Column>(static_cast<TypeDescriptor>(col_TDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
     size_t num_rows{5};
     for(size_t idx = 0; idx < num_rows; ++idx) {
         index_column->set_scalar<int64_t>(static_cast<ssize_t>(idx), static_cast<int64_t>(idx));
@@ -290,8 +290,8 @@ TEST(Resample, ProcessMultipleSegments) {
     using index_TDT = TypeDescriptorTag<DataTypeTag<DataType::NANOSECONDS_UTC64>, DimensionTag<Dimension ::Dim0>>;
     using col_TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension ::Dim0>>;
 
-    auto index_column = std::make_shared<Column>(static_cast<TypeDescriptor>(index_TDT{}), 0, false, true);
-    auto sum_column = std::make_shared<Column>(static_cast<TypeDescriptor>(col_TDT{}), 0, false, true);
+    auto index_column = std::make_shared<Column>(static_cast<TypeDescriptor>(index_TDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
+    auto sum_column = std::make_shared<Column>(static_cast<TypeDescriptor>(col_TDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
     index_column->set_scalar<int64_t>(0, 0);
     index_column->set_scalar<int64_t>(1, 10);
     sum_column->set_scalar<int64_t>(0, 0);
@@ -303,8 +303,8 @@ TEST(Resample, ProcessMultipleSegments) {
     auto row_range_0 = std::make_shared<RowRange>(0, 2);
     auto col_range_0 = std::make_shared<ColRange>(1, 2);
 
-    index_column = std::make_shared<Column>(static_cast<TypeDescriptor>(index_TDT{}), 0, false, true);
-    sum_column = std::make_shared<Column>(static_cast<TypeDescriptor>(col_TDT{}), 0, false, true);
+    index_column = std::make_shared<Column>(static_cast<TypeDescriptor>(index_TDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
+    sum_column = std::make_shared<Column>(static_cast<TypeDescriptor>(col_TDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
     index_column->set_scalar<int64_t>(0, 20);
     index_column->set_scalar<int64_t>(1, 30);
     index_column->set_scalar<int64_t>(2, 40);
@@ -318,8 +318,8 @@ TEST(Resample, ProcessMultipleSegments) {
     auto row_range_1 = std::make_shared<RowRange>(2, 5);
     auto col_range_1 = std::make_shared<ColRange>(1, 2);
 
-    index_column = std::make_shared<Column>(static_cast<TypeDescriptor>(index_TDT{}), 0, false, true);
-    sum_column = std::make_shared<Column>(static_cast<TypeDescriptor>(col_TDT{}), 0, false, true);
+    index_column = std::make_shared<Column>(static_cast<TypeDescriptor>(index_TDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
+    sum_column = std::make_shared<Column>(static_cast<TypeDescriptor>(col_TDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
     index_column->set_scalar<int64_t>(0, 50);
     sum_column->set_scalar<int64_t>(0, 50);
     auto seg_2 = std::make_shared<SegmentInMemory>();

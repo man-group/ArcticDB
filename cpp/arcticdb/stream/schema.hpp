@@ -104,7 +104,7 @@ public:
         if (!opt_col) {
             const size_t init_size = expected_size > existing_size ? expected_size - existing_size : 0;
             FieldWrapper new_field(desc, col_name);
-            position_t pos = seg.add_column(new_field.field(), init_size, false);
+            position_t pos = seg.add_column(new_field.field(), init_size, AllocationType::DYNAMIC);
             ARCTICDB_TRACE(log::version(), "Added column {} to position: {}", col_name, pos);
             return pos;
         } else {

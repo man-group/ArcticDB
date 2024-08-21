@@ -147,7 +147,7 @@ public:
         return add_field(field.type(), field.name());
     }
 
-    void set_allow_sparse(bool) {
+    void set_allow_sparse(Sparsity) {
         // Not used
     }
 
