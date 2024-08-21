@@ -427,6 +427,73 @@ TEST(VersionStore, TestReadTimestampAtInequality) {
   ASSERT_EQ(key.value().content_hash(), 3);
 }
 
+TEST(VersionStore, AppendRefKeyOptimisation) {
+    using namespace arcticdb;
+    using namespace arcticdb::storage;
+    using namespace arcticdb::stream;
+    using namespace arcticdb::pipelines;
+
+    ScopedConfig reload_interval("VersionMap.ReloadInterval", 0);
+
+    PilotedClock::reset();
+    StreamId symbol("append_test");
+    auto version_store = get_test_engine<version_store::PythonVersionStore>();
+    auto version_map = version_store._test_get_version_map();
+    auto store = version_store._test_get_store();
+    size_t num_rows{5};
+    size_t start_val{0};
+
+    std::vector<FieldRef> fields{
+        scalar_field(DataType::UINT8, "thing1"),
+        scalar_field(DataType::UINT8, "thing2"),
+        scalar_field(DataType::UINT16, "thing3"),
+        scalar_field(DataType::UINT16, "thing4")
+    };
+
+    // Append v0
+    auto test_frame_0 = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
+    version_store.append_internal(symbol, std::move(test_frame_0.frame_), true, false, false);
+
+    // Append v1
+    start_val += num_rows;
+    auto test_frame_1 = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
+    version_store.append_internal(symbol, std::move(test_frame_1.frame_), false, false, false);
+
+    // Snapshot and delete
+    std::cout << "Snap" << std::endl;
+    std::map<StreamId, VersionId> vers;
+    py::object user_meta;
+    std::vector<StreamId> syms;
+    version_store.snapshot("blah", py::none(), syms, vers, false);
+    version_store.delete_version(symbol, 1);
+
+
+    // Append v2
+    start_val += num_rows;
+    auto test_frame_2 = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
+    version_store.append_internal(symbol, std::move(test_frame_2.frame_), false, false, false);
+
+
+    uint64_t version_id = 1;
+    // Test that v1 is visible when deleted versions are included
+    auto entry_deleted = std::make_shared<VersionMapEntry>();
+    version_map->load_via_ref_key(store, symbol, LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(version_id)}, entry_deleted);
+    
+    auto all_index_keys = entry_deleted->get_indexes(true);
+    auto it = std::find_if(std::begin(all_index_keys), std::end(all_index_keys),
+                        [&](const auto &k) { return k.version_id() == version_id; });
+    ASSERT_TRUE(it != std::end(all_index_keys));
+
+    // Test that v1 is not visible when only undeleted versions are queried
+    auto entry_undeleted = std::make_shared<VersionMapEntry>();
+    version_map->load_via_ref_key(store, symbol, LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(version_id)}, entry_undeleted);
+
+    all_index_keys = entry_undeleted->get_indexes(true);
+    it = std::find_if(std::begin(all_index_keys), std::end(all_index_keys),
+                        [&](const auto &k) { return k.version_id() == version_id; });
+    ASSERT_TRUE(it == std::end(all_index_keys));
+}
+
 TEST(VersionStore, UpdateWithin) {
     using namespace arcticdb;
     using namespace arcticdb::storage;
