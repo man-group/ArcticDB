@@ -404,7 +404,7 @@ TEST(Async, CopyCompressedInterStoreNoSuchKeyOnWrite) {
     auto targets = std::vector<std::shared_ptr<arcticdb::Store>>{
         create_store(library_path, library_index, user_auth, codec_opt),
         create_store(library_path, failed_library_index, user_auth, codec_opt),
-        create_store(library_path, failed_library_index, user_auth, codec_opt)
+        create_store(library_path, library_index, user_auth, codec_opt)
     };
 
     // When - we write a key to the source
@@ -434,7 +434,11 @@ TEST(Async, CopyCompressedInterStoreNoSuchKeyOnWrite) {
     ASSERT_TRUE(std::holds_alternative<CopyCompressedInterStoreTask::FailedTargets>(res));
     
     // But it should still write the key to the non-failing target
-    auto read_result = targets[0]->read_sync(key);
-    ASSERT_EQ(std::get<RefKey>(read_result.first), key);
-    ASSERT_EQ(read_result.second.row_count(), row_count);
+    auto read_result_0 = targets[0]->read_sync(key);
+    ASSERT_EQ(std::get<RefKey>(read_result_0.first), key);
+    ASSERT_EQ(read_result_0.second.row_count(), row_count);
+
+    auto read_result_2 = targets[2]->read_sync(key);
+    ASSERT_EQ(std::get<RefKey>(read_result_2.first), key);
+    ASSERT_EQ(read_result_2.second.row_count(), row_count);
 }
