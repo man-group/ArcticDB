@@ -3,7 +3,7 @@ import numpy as np
 from pandas.testing import assert_frame_equal
 import pytest
 from arcticdb.version_store.library import StagedDataFinalizeMethod
-from arcticdb.exceptions import UserInputException
+from arcticdb.exceptions import UserInputException, SortingException
 
 def test_merge_single_column(lmdb_library):
     lib = lmdb_library
@@ -20,7 +20,8 @@ def test_merge_single_column(lmdb_library):
     sym1 = "symbol_1"
     lib.write(sym1, df1, staged=True)
     lib.write(sym1, df2, staged=True)
-    lib.sort_and_finalize_staged_data(sym1)
+    metadata = {"meta": ["data"]}
+    sort_and_finalize_res = lib.sort_and_finalize_staged_data(sym1, metadata=metadata)
 
     expected_dates = [np.datetime64('2023-01-01'), np.datetime64('2023-01-02'), np.datetime64('2023-01-03'),
                       np.datetime64('2023-01-04'), np.datetime64('2023-01-05'), np.datetime64('2023-01-06')]
@@ -28,7 +29,11 @@ def test_merge_single_column(lmdb_library):
     expected_values = {"x": [1, 2, 3, 4, 5, 6]}
     expected_df = pd.DataFrame(expected_values, index=expected_dates)
     assert_frame_equal(lib.read(sym1).data, expected_df)
-
+    assert sort_and_finalize_res.metadata == {"meta": ["data"]}
+    assert sort_and_finalize_res.symbol == sym1
+    assert sort_and_finalize_res.library == lib.name
+    assert sort_and_finalize_res.version == 0
+    assert lib.read(sym1).metadata == metadata
 
 def test_merge_two_column(lmdb_library):
     lib = lmdb_library
@@ -78,6 +83,7 @@ def test_merge_dynamic(lmdb_library):
     expected_values = {"x": [1, 0, 3, 0, 5, 0], "y": [0, 2, 0, 4, 0, 6]}
     expected_df = pd.DataFrame(expected_values, index=expected_dates)
     assert_frame_equal(lib.read(sym1).data, expected_df)
+
 
 
 def test_merge_strings(lmdb_library):
@@ -183,7 +189,7 @@ class TestMergeSortAppend:
         lib.write("sym", initial_df)
         df1 = pd.DataFrame({"col": [2]}, index=pd.DatetimeIndex([np.datetime64('2023-01-02')], dtype="datetime64[ns]"))
         lib.write("sym", df1, staged=True)
-        with pytest.raises(UserInputException) as exception_info:
+        with pytest.raises(SortingException) as exception_info:
             lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
         assert "append" in str(exception_info.value)
 
@@ -217,14 +223,25 @@ def test_prune_previous(lmdb_library):
     assert len(lib.list_versions("sym")) == 1
 
 class TestEmptySegments:
-    @pytest.mark.xfail(reason="Bug. Throws: `E_ASSERTION_FAILURE Descriptor id mismatch in atom key sym != 0")
-    def test_empty_df_in_staged_segment(self, lmdb_library):
+    def test_staged_segment_is_only_empty_dfs(self, lmdb_library):
         lib = lmdb_library
         lib.write("sym", pd.DataFrame([]), staged=True)
+        lib.write("sym", pd.DataFrame([]), staged=True)
         lib.sort_and_finalize_staged_data("sym")
-        assert_frame_equal(lib.read("sym").data, pd.DataFrame([]))
+        assert_frame_equal(lib.read("sym").data, pd.DataFrame([], index=pd.DatetimeIndex([])))
 
-    @pytest.mark.xfail(reason="Bug. Throws: E_ASSERTION_FAILURE Allocate data called with zero size")
+    def test_staged_segment_has_empty_df(self, lmdb_library):
+        lib = lmdb_library
+        index = pd.DatetimeIndex([pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 3), pd.Timestamp(2024, 1, 4)])
+        df1 = pd.DataFrame({"col": [1, 2, 3]}, index=index)
+        df2 = pd.DataFrame({})
+        df3 = pd.DataFrame({"col": [5]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
+        lib.write("sym", df1, staged=True)
+        lib.write("sym", df2, staged=True)
+        lib.write("sym", df3, staged=True)
+        lib.sort_and_finalize_staged_data("sym")
+        assert_frame_equal(lib.read("sym").data, pd.concat([df1, df2, df3]).sort_index())
+
     def test_df_without_rows(self, lmdb_library):
         lib = lmdb_library
         df = pd.DataFrame({"col": []}, index=pd.DatetimeIndex([]))
@@ -233,11 +250,10 @@ class TestEmptySegments:
         assert_frame_equal(lib.read("sym").data, df)
 
 
-@pytest.mark.xfail(reason="Throws: E_ASSERTION_FAILURE Stream descriptor not found in pipeline context")
 def test_finalize_without_adding_segments(lmdb_library):
     lib = lmdb_library
-    lib.write("sym", pd.DataFrame({"col": [1]}, index=pd.DatetimeIndex([np.datetime64('2023-01-01')])))
-    lib.sort_and_finalize_staged_data("sym")
+    with pytest.raises(UserInputException) as exception_info:
+        lib.sort_and_finalize_staged_data("sym")
 
 def test_type_mismatch_throws(lmdb_library):
     lib = lmdb_library
