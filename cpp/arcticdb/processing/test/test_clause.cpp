@@ -381,7 +381,7 @@ TEST(Clause, Merge) {
 
     std::vector<SegmentInMemory> segs;
     for(auto x = 0u; x < num_segs; ++x) {
-        segs.emplace_back(SegmentInMemory{seg.descriptor().clone(), num_rows / num_segs, false});
+        segs.emplace_back(SegmentInMemory{seg.descriptor().clone(), num_rows / num_segs, AllocationType::DYNAMIC});
     }
 
     for(auto i = 0u; i < num_rows; ++i) {

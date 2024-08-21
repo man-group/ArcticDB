@@ -25,7 +25,7 @@ inline void apply_type_handlers(SegmentInMemory seg, std::any& handler_data) {
     for(auto i = 0U; i < seg.num_columns(); ++i) {
         auto& column = seg.column(i);
         if(auto handler = TypeHandlerRegistry::instance()->get_handler(column.type()); handler) {
-            auto buffer = ChunkedBuffer::presized(seg.row_count() * data_type_size(column.type(), DataTypeMode::EXTERNAL));
+            auto buffer = ChunkedBuffer::presized(seg.row_count() * data_type_size(column.type(), DataTypeMode::EXTERNAL), AllocationType::PRESIZED);
             handler->convert_type(column, buffer, seg.row_count(), 0, column.type(), column.type(), shared_data, handler_data, seg.string_pool_ptr());
             std::swap(column.buffer(), buffer);
         }

@@ -95,6 +95,14 @@ class ChunkedBufferImpl {
         reserve(size);
     }
 
+    ChunkedBufferImpl(size_t size, entity::AllocationType allocation_type) {
+        if(allocation_type == entity::AllocationType::DETACHABLE) {
+            add_detachable_block(size);
+        } else {
+            reserve(size);
+        }
+    }
+
     void reserve(size_t size) {
         if(size > 0) {
             if (size > DefaultBlockSize) {
@@ -111,7 +119,7 @@ class ChunkedBufferImpl {
         return *this;
     }
 
-    ChunkedBufferImpl clone() const {
+    [[nodiscard]] ChunkedBufferImpl clone() const {
         ChunkedBufferImpl output;
         output.bytes_ = bytes_;
         output.regular_sized_until_ = regular_sized_until_;
@@ -134,8 +142,8 @@ class ChunkedBufferImpl {
         *this = std::move(other);
     }
 
-    static auto presized(size_t size) {
-        ChunkedBufferImpl output(size);
+    static auto presized(size_t size, entity::AllocationType allocation_type) {
+        ChunkedBufferImpl output(size, allocation_type);
         output.ensure(size);
         return output;
     }
@@ -165,13 +173,13 @@ class ChunkedBufferImpl {
         swap(left.block_offsets_, right.block_offsets_);
     }
 
-    const auto &blocks() const { return blocks_; }
+    [[nodiscard]] const auto &blocks() const { return blocks_; }
 
     // If the extra space required does not fit in the current last block, and is <=DefaultBlockSize, then if aligned is
     // set to true, the current last block will be padded with zeros, and a new default sized block added. This allows
     // the buffer to stay regular sized for as long as possible, which greatly improves random access performance, and
     // will also be beneficial with the slab allocator.
-    uint8_t* ensure(size_t requested_size, bool aligned=false) {
+    uint8_t* ensure(size_t requested_size, bool aligned = false) {
         if (requested_size != 0 && requested_size <= bytes_)
             return last_block().end();
 
@@ -250,7 +258,7 @@ class ChunkedBufferImpl {
         }
     };
 
-    BlockAndOffset block_and_offset(size_t pos_bytes) const {
+    [[nodiscard]] BlockAndOffset block_and_offset(size_t pos_bytes) const {
         if(blocks_.size() == 1u)
             return BlockAndOffset(blocks_[0], pos_bytes, 0);
 
@@ -368,7 +376,18 @@ class ChunkedBufferImpl {
             free_last_block();
 
         auto [ptr, ts] = Allocator::aligned_alloc(sizeof(MemBlock));
-        new(ptr) MemBlock(data, size, offset, ts);
+        new(ptr) MemBlock(data, size, offset, ts, false);
+        blocks_.emplace_back(reinterpret_cast<BlockType*>(ptr));
+        bytes_ += size;
+    }
+
+    void add_detachable_block(size_t size) {
+        if (!no_blocks() && last_block().empty())
+            free_last_block();
+
+        auto [ptr, ts] = Allocator::aligned_alloc(sizeof(MemBlock));
+        auto* data = reinterpret_cast<uint8_t*>(malloc(size));
+        new(ptr) MemBlock(data, size, 0UL, ts, true);
         blocks_.emplace_back(reinterpret_cast<BlockType*>(ptr));
         bytes_ += size;
     }
@@ -384,9 +403,9 @@ class ChunkedBufferImpl {
         block_offsets_.clear();
     }
 
-    bool is_regular_sized() const { return block_offsets_.empty(); }
+    [[nodiscard]] bool is_regular_sized() const { return block_offsets_.empty(); }
 
-    size_t bytes() const { return bytes_; }
+    [[nodiscard]] size_t bytes() const { return bytes_; }
 
     friend struct BufferView;
 
@@ -411,7 +430,7 @@ class ChunkedBufferImpl {
     void free_block(BlockType* block) const {
         ARCTICDB_TRACE(log::storage(), "Freeing block at address {:x}", uintptr_t(block));
         block->magic_.check();
-        Allocator::free(std::make_pair(reinterpret_cast<uint8_t *>(block), block->ts_));
+        Allocator::free(std::make_pair(reinterpret_cast<uint8_t *>(block), block->timestamp_));
     }
 
     void free_last_block() {
@@ -442,7 +461,7 @@ class ChunkedBufferImpl {
         }
     }
 
-    const BlockType &last_block() const {
+    [[nodiscard]] const BlockType &last_block() const {
         util::check(!blocks_.empty(), "There should never be no blocks");
         return **blocks_.rbegin();
     }

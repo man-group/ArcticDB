@@ -27,7 +27,7 @@ protected:
 
 // Note that dense and sparse single block accessors are tested in rapidcheck_column_data_random_accessor.cpp
 TEST_F(ColumnDataRandomAccessorTest, DenseRegularBlocks) {
-    Column column(type_descriptor, false);
+    Column column(type_descriptor, Sparsity::NOT_PERMITTED);
     for (auto& val: input_data) {
         column.push_back<int64_t>(val);
     }
@@ -43,7 +43,7 @@ TEST_F(ColumnDataRandomAccessorTest, DenseRegularBlocks) {
 }
 
 TEST_F(ColumnDataRandomAccessorTest, SparseRegularBlocks) {
-    Column column(type_descriptor, true);
+    Column column(type_descriptor, Sparsity::PERMITTED);
     // Set every third value
     for (size_t idx = 0; idx < n; ++idx) {
         column.set_scalar<int64_t>(3 * idx, input_data[idx]);
@@ -62,7 +62,7 @@ TEST_F(ColumnDataRandomAccessorTest, SparseRegularBlocks) {
 
 TEST_F(ColumnDataRandomAccessorTest, DenseIrregularBlocks) {
     // Presize to 500 values forces irregular blocks
-    Column column(type_descriptor, n / 2, true, false);
+    Column column(type_descriptor, n / 2, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
     ASSERT_EQ(column.num_blocks(), 1);
     memcpy(column.ptr(), input_data.data(), (n / 2) * sizeof(int64_t));
     column.set_row_data((n / 2) - 1);
@@ -82,7 +82,7 @@ TEST_F(ColumnDataRandomAccessorTest, DenseIrregularBlocks) {
 
 TEST_F(ColumnDataRandomAccessorTest, SparseIrregularBlocks) {
     // Presize to 500 values forces irregular blocks
-    Column column(type_descriptor, n / 2, true, true);
+    Column column(type_descriptor, n / 2, AllocationType::PRESIZED, Sparsity::PERMITTED);
     ASSERT_EQ(column.num_blocks(), 1);
     memcpy(column.ptr(), input_data.data(), (n / 2) * sizeof(int64_t));
     column.set_row_data((n / 2) - 1);

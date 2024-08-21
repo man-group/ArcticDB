@@ -18,7 +18,7 @@
 TEST(Column, Empty) {
     using namespace arcticdb;
 
-    Column c(TypeDescriptor(DataType::UINT16, Dimension(2)), 0, false, false);
+    Column c(TypeDescriptor(DataType::UINT16, Dimension(2)), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
     ASSERT_EQ(c.row_count(), 0);
 }
 
@@ -31,7 +31,7 @@ void test_column_type(size_t num_values = 20, size_t num_tests = 50) {
     const Dimension dimensions = TDT::DimensionTag::value;
 
     TypeDescriptorTag typeDescriptorTag;
-    Column column{TypeDescriptor(typeDescriptorTag), 0, false, false};
+    Column column{TypeDescriptor(typeDescriptorTag), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED};
     ASSERT_EQ(TypeDescriptor(typeDescriptorTag), column.type());
     for (size_t i = 0; i < num_tests; ++i) {
         raw_type start = std::numeric_limits<raw_type>::min() + raw_type(i);
@@ -110,7 +110,7 @@ TEST(Column, TensorTypes) {
 
 TEST(Column, IterateData) {
     using TDT = TypeDescriptorTag<DataTypeTag<DataType::UINT16>, DimensionTag<Dimension ::Dim0>>;
-    Column column(static_cast<TypeDescriptor>(TDT{}), 0, false, false);
+    Column column(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
     for(auto i= 0; i < 10; ++i) {
         column.set_scalar<uint16_t>(i, i);
     }
@@ -131,7 +131,7 @@ TEST(Column, IterateData) {
 
 TEST(Column, ChangeType) {
     using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension ::Dim0>>;
-    Column column(static_cast<TypeDescriptor>(TDT{}), 0, false, false);
+    Column column(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
     for(auto i= 0; i < 10; ++i) {
         column.set_scalar<int64_t>(i, i);
     }
@@ -148,7 +148,7 @@ TEST(Column, ChangeType) {
 
 std::unique_ptr<Column> get_sparse_column(size_t offset = 0, size_t start = 0, size_t num_rows = 10) {
     using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension ::Dim0>>;
-    auto column = std::make_unique<Column>(static_cast<TypeDescriptor>(TDT{}), 0, false, true);
+    auto column = std::make_unique<Column>(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
     for(auto i = start; i < start + num_rows; i += 2) {
         column->set_scalar<int64_t>(i, i + offset);
     }
@@ -157,7 +157,7 @@ std::unique_ptr<Column> get_sparse_column(size_t offset = 0, size_t start = 0, s
 
 std::unique_ptr<Column> get_dense_column(size_t offset = 0, size_t start = 0, size_t num_rows = 10) {
     using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension ::Dim0>>;
-    auto column = std::make_unique<Column>(static_cast<TypeDescriptor>(TDT{}), 0, false, true);
+    auto column = std::make_unique<Column>(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
     for(auto i = start; i < start + num_rows; ++i) {
         column->set_scalar<int64_t>(i, i + offset);
     }
@@ -260,7 +260,7 @@ TEST(ColumnData, Iterator) {
     using namespace arcticdb;
 
     using TDT = TypeDescriptorTag<DataTypeTag<DataType::UINT16>, DimensionTag<Dimension ::Dim0>>;
-    Column column(static_cast<TypeDescriptor>(TDT{}), 0, false, false);
+    Column column(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
     for(auto i= 0; i < 10; ++i) {
         column.set_scalar<uint16_t>(i, i);
     }
@@ -275,7 +275,7 @@ TEST(ColumnData, LowerBound) {
     using namespace arcticdb;
 
     using TDT = TypeDescriptorTag<DataTypeTag<DataType::UINT16>, DimensionTag<Dimension ::Dim0>>;
-    Column column(static_cast<TypeDescriptor>(TDT{}), 0, false, false);
+    Column column(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
     for(auto i= 0; i < 10; ++i) {
         column.set_scalar<uint16_t>(i, i * 2);
     }

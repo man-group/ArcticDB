@@ -15,10 +15,10 @@ using namespace arcticdb::pipelines::index;
 
 struct TestSegment {
     TestSegment() :
-        start_(TypeDescriptor{DataType::UINT64, Dimension::Dim0}, false),
-        end_(TypeDescriptor{DataType::UINT64, Dimension::Dim0}, false) {
-
+        start_(TypeDescriptor{DataType::UINT64, Dimension::Dim0}, Sparsity::NOT_PERMITTED),
+        end_(TypeDescriptor{DataType::UINT64, Dimension::Dim0}, Sparsity::NOT_PERMITTED) {
     }
+
     Column start_;
     Column end_;
     position_t row_ = 0;

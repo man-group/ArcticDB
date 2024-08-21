@@ -48,8 +48,8 @@ SegmentInMemory get_shuffled_segment(const StreamId& id, size_t num_rows, size_t
     auto segment = SegmentInMemory{
         get_test_descriptor<stream::TimeseriesIndex>(id, field_refs),
         num_rows,
-        false,
-        sparsity_percentage.has_value()
+        AllocationType::DYNAMIC,
+        sparsity_percentage.has_value() ? Sparsity::PERMITTED : Sparsity::NOT_PERMITTED
     };
 
     for (auto i=0u; i<=num_columns; ++i){
