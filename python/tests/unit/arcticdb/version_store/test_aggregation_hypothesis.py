@@ -5,16 +5,12 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
-import numpy as np
 import pandas as pd
 from hypothesis import assume, given, settings
 
 from arcticdb.util.test import generic_named_aggregation_test
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
-    numeric_type_strategies,
-    non_zero_numeric_type_strategies,
-    string_strategy,
     supported_numeric_dtypes,
     dataframe_strategy,
     column_strategy,

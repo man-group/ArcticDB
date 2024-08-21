@@ -13,7 +13,6 @@ from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.util.test import assert_frame_equal
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
-    numeric_type_strategies,
     non_zero_numeric_type_strategies,
     supported_numeric_dtypes,
     supported_floating_dtypes,

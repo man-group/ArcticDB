@@ -71,11 +71,6 @@ def non_zero(x):
 
 
 @st.composite
-def integral_type_strategies(draw):
-    return draw(from_dtype(draw(st.one_of([unsigned_integer_dtypes(), integer_dtypes()]))))
-
-
-@st.composite
 def signed_integral_type_strategies(draw):
     return draw(from_dtype(draw(st.one_of([integer_dtypes()]))))
 
