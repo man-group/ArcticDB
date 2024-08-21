@@ -34,7 +34,7 @@ std::vector<std::vector<size_t>> structure_by_row_slice(
     ranges_and_keys.erase(ranges_and_keys.begin(), ranges_and_keys.begin() + start_from);
 
     std::vector<std::vector<size_t>> res;
-    RowRange previous_row_range;
+    RowRange previous_row_range{-1, -1};
     for (const auto& [idx, ranges_and_key]: folly::enumerate(ranges_and_keys)) {
         RowRange current_row_range{ranges_and_key.row_range_};
         if (current_row_range != previous_row_range) {
@@ -941,6 +941,11 @@ std::optional<std::vector<std::vector<EntityId>>> MergeClause::repartition(std::
     auto compare =
             [](const std::unique_ptr<SegmentWrapper> &left,
                const std::unique_ptr<SegmentWrapper> &right) {
+                if (left->seg_.row_count() == 0) {
+                    return false;
+                } else if (right->seg_.row_count() == 0) {
+                    return true;
+                }
                 const auto left_index = index::index_value_from_row(left->row(), IndexDescriptorImpl::Type::TIMESTAMP, 0);
                 const auto right_index = index::index_value_from_row(right->row(), IndexDescriptorImpl::Type::TIMESTAMP, 0);
                 return left_index > right_index;

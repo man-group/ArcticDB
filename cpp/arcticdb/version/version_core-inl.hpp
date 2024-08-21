@@ -127,12 +127,15 @@ void do_compact(
         };
 
         for(auto it = target_start; it != target_end; ++it) {
-            decltype(auto) sk = [&it](){
+            auto sk = [&it](){
                 if constexpr(std::is_same_v<IteratorType, pipelines::PipelineContext::iterator>)
                     return it->slice_and_key();
                 else
                     return *it;
             }();
+            if (sk.slice().rows().diff() == 0) {
+                continue;
+            }
             aggregator.add_segment(
                 std::move(sk.segment(store)),
                 sk.slice(),
