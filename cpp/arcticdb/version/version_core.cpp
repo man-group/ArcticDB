@@ -419,7 +419,7 @@ std::vector<EntityId> process_clauses(
         std::shared_ptr<ComponentManager> component_manager,
         std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures,
         std::vector<std::vector<size_t>>&& processing_unit_indexes,
-        std::vector<std::shared_ptr<Clause>> clauses ) { // pass by copy deliberately as we don't want to modify read_query
+        std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses) {
     std::vector<folly::FutureSplitter<pipelines::SegmentAndSlice>> segment_and_slice_future_splitters;
     segment_and_slice_future_splitters.reserve(segment_and_slice_futures.size());
     for (auto&& future: segment_and_slice_futures) {
@@ -448,8 +448,8 @@ std::vector<EntityId> process_clauses(
     std::vector<folly::Future<std::vector<EntityId>>> futures;
     bool first_clause{true};
     // Reverse the order of clauses and iterate through them backwards so that the erase is efficient
-    std::reverse(clauses.begin(), clauses.end());
-    while (!clauses.empty()) {
+    std::reverse(clauses->begin(), clauses->end());
+    while (!clauses->empty()) {
         for (auto&& entity_ids: entity_ids_vec) {
             if (first_clause) {
                 std::vector<folly::Future<pipelines::SegmentAndSlice>> local_futs;
@@ -464,7 +464,7 @@ std::vector<EntityId> process_clauses(
                                     segment_proc_unit_counts,
                                     entity_added_mtx,
                                     entity_added,
-                                    &clauses,
+                                    clauses,
                                     entity_ids = std::move(entity_ids)](std::vector<pipelines::SegmentAndSlice>&& segment_and_slices) mutable {
                             for (auto&& [idx, segment_and_slice]: folly::enumerate(segment_and_slices)) {
                                 auto entity_id = entity_ids[idx];
@@ -485,12 +485,12 @@ std::vector<EntityId> process_clauses(
                                     (*entity_added)[entity_id] = true;
                                 }
                             }
-                            return async::MemSegmentProcessingTask(clauses, std::move(entity_ids))();
+                            return async::MemSegmentProcessingTask(*clauses, std::move(entity_ids))();
                         }));
             } else {
                 futures.emplace_back(
                         async::submit_cpu_task(
-                                async::MemSegmentProcessingTask(clauses,
+                                async::MemSegmentProcessingTask(*clauses,
                                                                 std::move(entity_ids))
                         )
                 );
@@ -499,12 +499,12 @@ std::vector<EntityId> process_clauses(
         first_clause = false;
         entity_ids_vec = folly::collect(futures).get();
         futures.clear();
-        while (clauses.size() > 0 && !clauses.back()->clause_info().requires_repartition_) {
-            clauses.erase(clauses.end() - 1);
+        while (clauses->size() > 0 && !clauses->back()->clause_info().requires_repartition_) {
+            clauses->erase(clauses->end() - 1);
         }
-        if (clauses.size() > 0 && clauses.back()->clause_info().requires_repartition_) {
-            entity_ids_vec = clauses.back()->repartition(std::move(entity_ids_vec)).value();
-            clauses.erase(clauses.end() - 1);
+        if (clauses->size() > 0 && clauses->back()->clause_info().requires_repartition_) {
+            entity_ids_vec = clauses->back()->repartition(std::move(entity_ids_vec)).value();
+            clauses->erase(clauses->end() - 1);
         }
     }
     return flatten_entities(std::move(entity_ids_vec));
@@ -646,7 +646,7 @@ std::vector<SliceAndKey> read_and_process(
     auto processed_entity_ids = process_clauses(component_manager,
                                                 std::move(segment_and_slice_futures),
                                                 std::move(processing_unit_indexes),
-                                                read_query.clauses_);
+                                                std::make_shared<std::vector<std::shared_ptr<Clause>>>(read_query.clauses_));
     auto proc = gather_entities(component_manager, std::move(processed_entity_ids));
 
     if (std::any_of(read_query.clauses_.begin(), read_query.clauses_.end(), [](const std::shared_ptr<Clause>& clause) {
