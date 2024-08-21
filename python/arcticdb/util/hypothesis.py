@@ -70,33 +70,37 @@ def non_zero(x):
     return x != 0
 
 
+# Use the platform endianness everywhere
+ENDIANNESS = "="
+
+
 @st.composite
 def signed_integral_type_strategies(draw):
-    return draw(from_dtype(draw(st.one_of([integer_dtypes()]))))
+    return draw(from_dtype(draw(st.one_of([integer_dtypes(endianness=ENDIANNESS)]))))
 
 
 @st.composite
 def unsigned_integral_type_strategies(draw):
-    return draw(from_dtype(draw(st.one_of([unsigned_integer_dtypes()]))))
+    return draw(from_dtype(draw(st.one_of([unsigned_integer_dtypes(endianness=ENDIANNESS)]))))
 
 
 @st.composite
 def supported_integer_dtypes(draw):
-    return draw(st.one_of(unsigned_integer_dtypes(endianness="="), integer_dtypes(endianness="=")))
+    return draw(st.one_of(unsigned_integer_dtypes(endianness=ENDIANNESS), integer_dtypes(endianness=ENDIANNESS)))
 
 
 @st.composite
 def supported_floating_dtypes(draw):
     # Pandas comparison of float32 series to float64 values is buggy.
     # Change float_dtypes sizes to include 32 if this is fixed https://github.com/pandas-dev/pandas/issues/59524
-    return draw(st.one_of(floating_dtypes(endianness="=", sizes=[64])))
+    return draw(st.one_of(floating_dtypes(endianness=ENDIANNESS, sizes=[64])))
 
 
 @st.composite
 def supported_numeric_dtypes(draw):
     # Pandas comparison of float32 series to float64 values is buggy.
     # Change float_dtypes sizes to include 32 if this is fixed https://github.com/pandas-dev/pandas/issues/59524
-    return draw(st.one_of(unsigned_integer_dtypes(endianness="="), integer_dtypes(endianness="="), floating_dtypes(endianness="=", sizes=[64])))
+    return draw(st.one_of(unsigned_integer_dtypes(endianness=ENDIANNESS), integer_dtypes(endianness=ENDIANNESS), floating_dtypes(endianness=ENDIANNESS, sizes=[64])))
 
 
 @st.composite
