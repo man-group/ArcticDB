@@ -108,7 +108,8 @@ void do_compact(
     std::vector<pipelines::FrameSlice>& slices,
     const std::shared_ptr<Store>& store,
     bool convert_int_to_float,
-    std::optional<size_t> segment_size){
+    std::optional<size_t> segment_size,
+    bool check_index_sorted){
         auto index = stream::index_type_from_descriptor(pipeline_context->descriptor());
         stream::SegmentAggregator<IndexType, SchemaType, SegmentationPolicy, DensityPolicy>
         aggregator{
@@ -136,6 +137,11 @@ void do_compact(
             if (sk.slice().rows().diff() == 0) {
                 continue;
             }
+            const auto& segment = sk.segment(store);
+            sorting::check<ErrorCode::E_UNSORTED_DATA>(
+                !check_index_sorted || segment.descriptor().sorted() == SortedValue::ASCENDING,
+                "Cannot compact unordered segment. Try using sort_and_finalize_staged_data."
+            );
             aggregator.add_segment(
                 std::move(sk.segment(store)),
                 sk.slice(),

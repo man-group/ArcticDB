@@ -961,9 +961,8 @@ std::set<StreamId> LocalVersionedEngine::get_active_incomplete_refs() {
 
 void LocalVersionedEngine::append_incomplete_frame(
     const StreamId& stream_id,
-    const std::shared_ptr<InputTensorFrame>& frame,
-    bool validate_index) const {
-    arcticdb::append_incomplete(store_, stream_id, frame, validate_index);
+    const std::shared_ptr<InputTensorFrame>& frame) const {
+    arcticdb::append_incomplete(store_, stream_id, frame);
 }
 
 void LocalVersionedEngine::append_incomplete_segment(
@@ -974,9 +973,8 @@ void LocalVersionedEngine::append_incomplete_segment(
 
 void LocalVersionedEngine::write_parallel_frame(
     const StreamId& stream_id,
-    const std::shared_ptr<InputTensorFrame>& frame,
-    bool validate_index) const {
-    write_parallel(store_, stream_id, frame, validate_index);
+    const std::shared_ptr<InputTensorFrame>& frame) const {
+    write_parallel(store_, stream_id, frame);
 }
 
 VersionedItem LocalVersionedEngine::compact_incomplete_dynamic(

@@ -646,8 +646,7 @@ void PythonVersionStore::append_incomplete(
     const StreamId& stream_id,
     const py::tuple &item,
     const py::object &norm,
-    const py::object & user_meta,
-    bool validate_index) const {
+    const py::object & user_meta) const {
 
     using namespace arcticdb::entity;
     using namespace arcticdb::stream;
@@ -655,7 +654,7 @@ void PythonVersionStore::append_incomplete(
 
     // Turn the input into a standardised frame object
     auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta, cfg().write_options().empty_types());
-    append_incomplete_frame(stream_id, frame, validate_index);
+    append_incomplete_frame(stream_id, frame);
 }
 
 VersionedItem PythonVersionStore::write_metadata(
@@ -751,14 +750,13 @@ void PythonVersionStore::write_parallel(
     const StreamId& stream_id,
     const py::tuple &item,
     const py::object &norm,
-    const py::object & user_meta,
-    bool validate_index) const {
+    const py::object & user_meta) const {
     using namespace arcticdb::entity;
     using namespace arcticdb::stream;
     using namespace arcticdb::pipelines;
 
     auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta, cfg().write_options().empty_types());
-    write_parallel_frame(stream_id, frame, validate_index);
+    write_parallel_frame(stream_id, frame);
 }
 
 std::unordered_map<VersionId, bool> PythonVersionStore::get_all_tombstoned_versions(const StreamId &stream_id) {

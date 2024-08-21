@@ -53,8 +53,7 @@ void remove_incomplete_segments(
 void write_parallel(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
-    const std::shared_ptr<pipelines::InputTensorFrame>& frame,
-    bool validate_index);
+    const std::shared_ptr<pipelines::InputTensorFrame>& frame);
 
 void write_head(
     const std::shared_ptr<Store>& store,
@@ -69,8 +68,7 @@ void append_incomplete_segment(
 void append_incomplete(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
-    const std::shared_ptr<pipelines::InputTensorFrame>& frame,
-    bool validate_index);
+    const std::shared_ptr<pipelines::InputTensorFrame>& frame);
 
 std::optional<int64_t> latest_incomplete_timestamp(
     const std::shared_ptr<Store>& store,

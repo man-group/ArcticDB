@@ -1440,7 +1440,8 @@ VersionedItem compact_incomplete_impl(
                 slices,
                 store,
                 options.convert_int_to_float_,
-                write_options.segment_row_size);
+                write_options.segment_row_size,
+                true);
         if constexpr(std::is_same_v<IndexType, TimeseriesIndex>) {
             pipeline_context->desc_->set_sorted(deduce_sorted(previous_sorted_value.value_or(SortedValue::ASCENDING), SortedValue::ASCENDING));
         }
@@ -1544,7 +1545,8 @@ VersionedItem defragment_symbol_data_impl(
             slices,
             store,
             false,
-            segment_size);
+            segment_size,
+            false);
     });
 
     auto keys = folly::collect(fut_vec).get();

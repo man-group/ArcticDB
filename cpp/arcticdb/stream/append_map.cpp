@@ -212,13 +212,8 @@ folly::Future<arcticdb::entity::VariantKey> write_incomplete_frame(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
     const std::shared_ptr<InputTensorFrame>& frame,
-    bool validate_index,
     std::optional<AtomKey>&& next_key)  {
     using namespace arcticdb::pipelines;
-
-    sorting::check<ErrorCode::E_UNSORTED_DATA>(
-            !validate_index || index_is_not_timeseries_or_is_sorted_ascending(*frame),
-            "When writing/appending staged data in parallel, input data must be sorted.");
 
     auto index_range = frame->index_range;
     auto segment = incomplete_segment_from_frame(frame, 0, std::move(next_key), false);
@@ -234,10 +229,9 @@ folly::Future<arcticdb::entity::VariantKey> write_incomplete_frame(
 void write_parallel(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
-    const std::shared_ptr<InputTensorFrame>& frame,
-    bool validate_index) {
+    const std::shared_ptr<InputTensorFrame>& frame) {
     // TODO: dynamic bucketize doesn't work with incompletes
-    (void)write_incomplete_frame(store, stream_id, frame, validate_index, std::nullopt).get();
+    (void)write_incomplete_frame(store, stream_id, frame, std::nullopt).get();
 }
 
 std::vector<SliceAndKey> get_incomplete(
@@ -376,8 +370,7 @@ AppendMapEntry entry_from_key(const std::shared_ptr<StreamSource>& store, const 
 void append_incomplete(
         const std::shared_ptr<Store>& store,
         const StreamId& stream_id,
-        const std::shared_ptr<InputTensorFrame>& frame,
-        bool validate_index) {
+        const std::shared_ptr<InputTensorFrame>& frame) {
     using namespace arcticdb::proto::descriptors;
     using namespace arcticdb::stream;
     ARCTICDB_SAMPLE_DEFAULT(AppendIncomplete)
@@ -387,7 +380,7 @@ void append_incomplete(
     const auto num_rows = frame->num_rows;
     total_rows += num_rows;
     auto desc = frame->desc.clone();
-    auto new_key = write_incomplete_frame(store, stream_id, frame, validate_index, std::move(next_key)).get();
+    auto new_key = write_incomplete_frame(store, stream_id, frame, std::move(next_key)).get();
 
 
     ARCTICDB_DEBUG(log::version(), "Wrote incomplete frame for stream {}, {} rows, total rows {}", stream_id, num_rows, total_rows);

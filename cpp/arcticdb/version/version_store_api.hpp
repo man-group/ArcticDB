@@ -119,8 +119,7 @@ class PythonVersionStore : public LocalVersionedEngine {
         const StreamId& stream_id,
         const py::tuple &item,
         const py::object &norm,
-        const py::object & user_meta,
-        bool validate_index) const;
+        const py::object & user_meta) const;
 
     VersionedItem compact_incomplete(
             const StreamId& stream_id,
@@ -136,8 +135,7 @@ class PythonVersionStore : public LocalVersionedEngine {
         const StreamId& stream_id,
         const py::tuple &item,
         const py::object &norm,
-        const py::object & user_meta,
-        bool validate_index) const;
+        const py::object & user_meta) const;
 
     VersionedItem write_metadata(
         const StreamId& stream_id,
