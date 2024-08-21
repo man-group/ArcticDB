@@ -333,6 +333,11 @@ inline bool penultimate_key_contains_required_version_id(const AtomKey& key, con
 }
 
 inline bool key_exists_in_ref_entry(const LoadStrategy& load_strategy, const VersionMapEntry& ref_entry, std::optional<AtomKey>& cached_penultimate_key) {
+    // The 3 item ref key bypass can be used only when we are loading undeleted versions
+    // because otherwise it might skip versions that are deleted but part of snapshots
+    if(load_strategy.load_objective_ != LoadObjective::UNDELETED_ONLY)
+        return false;
+
     if (load_strategy.load_type_ == LoadType::LATEST && is_index_key_type(ref_entry.keys_[0].type()))
         return true;
 
