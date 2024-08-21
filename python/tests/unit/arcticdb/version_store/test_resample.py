@@ -17,6 +17,8 @@ from arcticdb.util.test import assert_frame_equal
 from packaging.version import Version
 from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION
 
+pytestmark = pytest.mark.pipeline
+
 ALL_AGGREGATIONS = ["sum", "mean", "min", "max", "first", "last", "count"]
 
 # Pandas recommended way to resample and exclude buckets with no index values, which is our behaviour
