@@ -810,6 +810,30 @@ def test_get_info_unsorted_timestamp_index_date_range(basic_store):
     assert np.isnat(info["date_range"][1])
 
 
+def test_get_info_pickled(basic_store):
+    lib = basic_store
+    sym = "test_get_info_pickled"
+    lib.write(sym, 1)
+    info = lib.get_info(sym)
+    assert info["col_names"]["columns"] == ["bytes"]
+    assert info["input_type"] == "msg_pack_frame"
+    assert np.isnat(info["date_range"][0]) and np.isnat(info["date_range"][1])
+    assert info["sorted"] == "UNKNOWN"
+    assert info["rows"] is None
+
+
+def test_batch_get_info_pickled(basic_store):
+    lib = basic_store
+    sym = "test_get_info_pickled"
+    lib.write(sym, 1)
+    info = lib.batch_get_info([sym])[0]
+    assert info["col_names"]["columns"] == ["bytes"]
+    assert info["input_type"] == "msg_pack_frame"
+    assert np.isnat(info["date_range"][0]) and np.isnat(info["date_range"][1])
+    assert info["sorted"] == "UNKNOWN"
+    assert info["rows"] is None
+
+
 def test_update_times(basic_store):
     # given
     df = pd.DataFrame(data={"col1": np.arange(10)}, index=pd.date_range(pd.Timestamp(0), periods=10))
