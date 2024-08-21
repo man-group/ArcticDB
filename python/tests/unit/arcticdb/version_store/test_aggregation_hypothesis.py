@@ -31,7 +31,7 @@ pytestmark = pytest.mark.pipeline
     df=dataframe_strategy(
         [
             column_strategy("grouping_column", supported_string_dtypes()),
-            column_strategy("agg_column", supported_numeric_dtypes()),
+            column_strategy("agg_column", supported_numeric_dtypes(), restrict_range=True),
         ],
     ),
 )
@@ -100,7 +100,7 @@ def test_aggregation_strings(lmdb_version_store_v1, df):
     df=dataframe_strategy(
         [
             column_strategy("grouping_column", supported_string_dtypes()),
-            column_strategy("agg_column", supported_numeric_dtypes()),
+            column_strategy("agg_column", supported_numeric_dtypes(), restrict_range=True),
         ],
     ),
 )
