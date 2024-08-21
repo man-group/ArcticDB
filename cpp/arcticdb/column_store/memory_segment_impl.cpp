@@ -226,7 +226,7 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::filter(util::BitSet&& 
                 } else {
                     bitset_including_sparse.resize((*column)->row_count());
                 }
-                output_col_idx = output->add_column(field(column.index), bitset_including_sparse.count(), AllocationType::DYNAMIC);
+                output_col_idx = output->add_column(field(column.index), bitset_including_sparse.count(), AllocationType::PRESIZED);
                 final_bitset = &bitset_including_sparse;
             } else {
                 final_bitset = &filter_bitset;
@@ -402,7 +402,7 @@ std::vector<std::shared_ptr<SegmentInMemoryImpl>> SegmentInMemoryImpl::partition
                 for (const auto& segment: folly::enumerate(output)) {
                     if (static_cast<bool>(*segment)) {
                         if (is_sparse()) {
-                            (*segment)->add_column(field(column.index), segment_counts[segment.index], AllocationType::DYNAMIC);
+                            (*segment)->add_column(field(column.index), segment_counts[segment.index], AllocationType::PRESIZED);
                         }
                         output_ptrs.at(segment.index) = reinterpret_cast<typename type_info::RawType*>((*segment)->column(static_cast<position_t>(column.index)).ptr());
                     }
