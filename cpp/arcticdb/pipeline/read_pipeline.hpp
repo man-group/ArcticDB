@@ -173,7 +173,7 @@ inline std::optional<util::BitSet> overall_column_bitset(
 
 inline void generate_filtered_field_descriptors(PipelineContext& context, const std::optional<std::vector<std::string>>& columns) {
     if (columns.has_value()) {
-        std::unordered_set<std::string_view> column_set{std::begin(*columns), std::end(*columns)};
+        const ankerl::unordered_dense::set<std::string_view> column_set{std::begin(*columns), std::end(*columns)};
         
         context.filter_columns_ = std::make_shared<FieldCollection>();
         const auto& desc = context.descriptor();

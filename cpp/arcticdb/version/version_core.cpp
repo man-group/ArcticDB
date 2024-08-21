@@ -789,22 +789,32 @@ void read_incompletes_to_pipeline(
     if(incomplete_segments.empty())
         return;
 
+    // In order to have the right normalization metadata and descriptor we need to find the first non-empty segment.
+    // Picking an empty segment when there are non-empty ones will impact the index type and column namings.
+    // If all segments are empty we will procede as if were appending/writing and empty dataframe.
+    debug::check<ErrorCode::E_ASSERTION_FAILURE>(!incomplete_segments.empty(), "Incomplete segments must be non-empty");
+    const auto* seg = &incomplete_segments.front().segment(store);
+    for (auto& slice : incomplete_segments) {
+        if (slice.segment(store).row_count() > 0) {
+            seg = &slice.segment_.value();
+            break;
+        }
+    }
     // Mark the start point of the incompletes, so we know that there is no column slicing after this point
     pipeline_context->incompletes_after_ = pipeline_context->slice_and_keys_.size();
 
     // If there are only incompletes we need to add the index here
     if(pipeline_context->slice_and_keys_.empty()) {
-        add_index_columns_to_query(read_query, incomplete_segments.begin()->segment(store).index_descriptor());
+        add_index_columns_to_query(read_query, seg->index_descriptor());
     }
 
-    auto first_seg = incomplete_segments.begin()->segment(store);
+
     if (!pipeline_context->desc_)
-        pipeline_context->desc_ = first_seg.descriptor();
+        pipeline_context->desc_ = seg->descriptor();
 
     if (!pipeline_context->norm_meta_) {
         pipeline_context->norm_meta_ = std::make_unique<arcticdb::proto::descriptors::NormalizationMetadata>();
-        auto segment_tsd = first_seg.index_descriptor();
-        pipeline_context->norm_meta_->CopyFrom(segment_tsd.proto().normalization());
+        pipeline_context->norm_meta_->CopyFrom(seg->index_descriptor().proto().normalization());
         ensure_timeseries_norm_meta(*pipeline_context->norm_meta_, pipeline_context->stream_id_, sparsify);
     }
 
@@ -847,11 +857,16 @@ void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<PipelineC
         // Use ordered set so we only need to compare adjacent elements
         std::set<TimestampRange> unique_timestamp_ranges;
         for (auto it = pipeline_context->incompletes_begin(); it!= pipeline_context->end(); it++) {
+            if (it->slice_and_key().slice().rows().diff() == 0) {
+                continue;
+            }
             sorting::check<ErrorCode::E_UNSORTED_DATA>(
                     !last_existing_index_value.has_value() || it->slice_and_key().key().start_time() >= *last_existing_index_value,
                     "Cannot append staged segments to existing data as incomplete segment contains index value < existing data (in UTC): {} <= {}",
                     date_and_time(it->slice_and_key().key().start_time()),
-                    date_and_time(*last_existing_index_value));
+                    // Should never reach "" but the standard mandates that all function arguments are evaluated
+                    last_existing_index_value ? date_and_time(*last_existing_index_value) : ""
+            );
             auto [_, inserted] = unique_timestamp_ranges.insert({it->slice_and_key().key().start_time(), it->slice_and_key().key().end_time()});
             // This is correct because incomplete segments aren't column sliced
             sorting::check<ErrorCode::E_UNSORTED_DATA>(
@@ -1278,6 +1293,10 @@ VersionedItem sort_merge_impl(
                                  options.convert_int_to_float_,
                                  options.via_iteration_,
                                  options.sparsify_);
+    user_input::check<ErrorCode::E_NO_STAGED_SEGMENTS>(
+        pipeline_context->slice_and_keys_.size() > 0,
+        "Finalizing staged data is not allowed with empty staging area"
+    );
 
     std::vector<entity::VariantKey> delete_keys;
     for(auto sk = pipeline_context->incompletes_begin(); sk != pipeline_context->end(); ++sk) {
@@ -1299,6 +1318,15 @@ VersionedItem sort_merge_impl(
 
             read_query.clauses_.emplace_back(std::make_shared<Clause>(MergeClause{timeseries_index, SparseColumnPolicy{}, stream_id, pipeline_context->descriptor()}));
             auto segments = read_and_process(store, pipeline_context, read_query, ReadOptions{}, pipeline_context->incompletes_after());
+            if (options.append_ && update_info.previous_index_key_.has_value() &&
+                update_info.previous_index_key_->end_time() - 1 > std::get<timestamp>(TimeseriesIndex::start_value_for_segment(segments[0].segment_.value()))) {
+                store->remove_keys(delete_keys).get();
+                sorting::raise<ErrorCode::E_UNSORTED_DATA>(
+                    "Cannot append staged segments to existing data as incomplete segment contains index value < existing data (in UTC): {} <= {}",
+                    date_and_time(std::get<timestamp>(TimeseriesIndex::start_value_for_segment(segments[0].segment_.value()))),
+                    date_and_time(update_info.previous_index_key_->end_time() - 1)
+                );
+            }
             pipeline_context->total_rows_ = num_versioned_rows + get_slice_rowcounts(segments);
 
             auto index = index_type_from_descriptor(pipeline_context->descriptor());
@@ -1375,9 +1403,10 @@ VersionedItem compact_incomplete_impl(
                                  options.convert_int_to_float_,
                                  options.via_iteration_,
                                  options.sparsify_);
-    if (pipeline_context->slice_and_keys_.size() == prev_size) {
-        util::raise_rte("No incomplete segments found for {}", stream_id);
-    }
+    user_input::check<ErrorCode::E_NO_STAGED_SEGMENTS>(
+        pipeline_context->slice_and_keys_.size() != prev_size,
+        "Finalizing staged data is not allowed with empty staging area"
+    );
     if (options.validate_index_) {
         check_incompletes_index_ranges_dont_overlap(pipeline_context, previous_sorted_value);
     }
