@@ -2621,7 +2621,7 @@ class NativeVersionStore:
     def name(self):
         return self._lib_cfg.lib_desc.name
 
-    def get_num_rows(self, symbol: str, as_of: Optional[VersionQueryInput] = None, **kwargs) -> int:
+    def get_num_rows(self, symbol: str, as_of: Optional[VersionQueryInput] = None, **kwargs) -> Optional[int]:
         """
         Query the number of rows in the specified revision of the symbol.
 
@@ -2634,12 +2634,12 @@ class NativeVersionStore:
 
         Returns
         -------
-        `int`
-            The number of rows in the specified revision of the symbol.
+        `Optional[int]`
+            The number of rows in the specified revision of the symbol, or `None` if the symbol is pickled.
         """
         version_query = self._get_version_query(as_of)
         dit = self.version_store.read_descriptor(symbol, version_query)
-        return dit.timeseries_descriptor.total_rows
+        return None if self.is_pickled_descriptor(dit.timeseries_descriptor) else dit.timeseries_descriptor.total_rows
 
     def lib_cfg(self):
         return self._lib_cfg
@@ -2700,7 +2700,7 @@ class NativeVersionStore:
         return {
             "col_names": {"columns": columns, "index": index, "index_dtype": index_dtype},
             "dtype": dtypes,
-            "rows": timeseries_descriptor.total_rows,
+            "rows": None if self.is_pickled_descriptor(timeseries_descriptor) else timeseries_descriptor.total_rows,
             "last_update": last_update,
             "input_type": input_type,
             "index_type": index_type,
@@ -2728,7 +2728,7 @@ class NativeVersionStore:
 
             - col_names, `Dict`
             - dtype, `List`
-            - rows, `int`
+            - rows, `Optional[int]`
             - last_update, `datetime`
             - input_type, `str`
             - index_type, `index_type`
@@ -2763,7 +2763,7 @@ class NativeVersionStore:
 
             - col_names, `Dict`
             - dtype, `List`
-            - rows, `int`
+            - rows, `Optional[int]`
             - last_update, `datetime`
             - input_type, `str`
             - index_type, `index_type`
