@@ -21,14 +21,13 @@ private:
 public:
     CursoredBuffer() = default;
 
-    CursoredBuffer(size_t size, bool presize) :
-        cursor_(presize ? static_cast<int64_t>(size) : 0),
-        buffer_(presize ? BufferType::presized(size) : BufferType{size}) { }
+    CursoredBuffer(size_t size, AllocationType allocation_type) :
+        cursor_(allocation_type == AllocationType::PRESIZED ? static_cast<int64_t>(size) : 0),
+        buffer_(allocation_type == AllocationType::DYNAMIC ? BufferType{size} : BufferType::presized(size, allocation_type)) { }
 
     explicit CursoredBuffer(BufferType&& buffer) :
         cursor_(0),
         buffer_(std::move(buffer)) {}
-
 
     ARCTICDB_MOVE_ONLY_DEFAULT(CursoredBuffer)
 
@@ -99,7 +98,7 @@ public:
         if(buffer_.blocks().size() <=1)
             return;
 
-        CursoredBuffer tmp{buffer_.bytes(), false};
+        CursoredBuffer tmp{buffer_.bytes(), entity::AllocationType::DYNAMIC};
         for(const auto& block : buffer_.blocks()) {
             tmp.ensure_bytes(block->bytes());
             memcpy(tmp.cursor(), block->data(), block->bytes());
@@ -145,7 +144,6 @@ public:
         buffer_.clear();
         cursor_.reset();
     }
-
 };
 
 } //namespace arcticdb

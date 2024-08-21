@@ -153,8 +153,7 @@ class StringPool {
     // Neither used nor defined
     void advance_shapes(size_t);
 
-    // Neither used nor defined
-    void set_allow_sparse(bool);
+    void set_allow_sparse(Sparsity);
 
     OffsetString get(std::string_view s, bool deduplicate = true);
     OffsetString get(const char *data, size_t size, bool deduplicate = true);
@@ -180,7 +179,7 @@ class StringPool {
   private:
     MapType map_;
     mutable StringBlock block_;
-    mutable CursoredBuffer<Buffer> shapes_;  //TODO MemBlock::MinSize
+    mutable CursoredBuffer<Buffer> shapes_;
 };
 
 } //namespace arcticdb

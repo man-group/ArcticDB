@@ -33,8 +33,8 @@ public:
     explicit SegmentInMemory(
         const StreamDescriptor &tsd,
         size_t expected_column_size = 0,
-        bool presize = false,
-        bool allow_sparse = false,
+        AllocationType presize = AllocationType::DYNAMIC,
+        Sparsity allow_sparse = Sparsity::NOT_PERMITTED,
         DataTypeMode mode = DataTypeMode::INTERNAL) :
             impl_(std::make_shared<SegmentInMemoryImpl>(tsd, expected_column_size, presize, allow_sparse, mode)){
     }
@@ -42,8 +42,8 @@ public:
     explicit SegmentInMemory(
         StreamDescriptor&& tsd,
         size_t expected_column_size = 0,
-        bool presize = false,
-        bool allow_sparse = false,
+        AllocationType presize = AllocationType::DYNAMIC,
+        Sparsity allow_sparse = Sparsity::NOT_PERMITTED,
         DataTypeMode mode = DataTypeMode::INTERNAL) :
         impl_(std::make_shared<SegmentInMemoryImpl>(std::move(tsd), expected_column_size, presize, allow_sparse, mode)){
     }
@@ -54,19 +54,19 @@ public:
 
     ARCTICDB_MOVE_COPY_DEFAULT(SegmentInMemory)
 
-    auto begin() { return impl_->begin(); }
+    [[nodiscard]] auto begin() { return impl_->begin(); }
 
-    auto end() { return impl_->end(); }
+    [[nodiscard]] auto end() { return impl_->end(); }
 
-    auto begin() const { return impl_->begin(); }
+    [[nodiscard]] auto begin() const { return impl_->begin(); }
 
-    auto end() const { return impl_->end(); }
+    [[nodiscard]] auto end() const { return impl_->end(); }
 
     void push_back(const Row& row) {
         impl_->push_back(row);
     }
 
-    auto& column_descriptor(size_t col) const {
+    [[nodiscard]] auto& column_descriptor(size_t col) const {
         return impl_->column_descriptor(col);
     }
 
@@ -89,19 +89,19 @@ public:
     }
 
 
-    const auto& fields() const {
+    [[nodiscard]] const auto& fields() const {
         return impl_->fields();
     }
 
-    const auto& field(size_t index) const {
+    [[nodiscard]] const auto& field(size_t index) const {
         return impl_->field(index);
     }
 
-    std::optional<std::size_t> column_index(std::string_view name) const {
+    [[nodiscard]] std::optional<std::size_t> column_index(std::string_view name) const {
         return impl_->column_index(name);
     }
 
-    const TimeseriesDescriptor& index_descriptor() const {
+    [[nodiscard]] const TimeseriesDescriptor& index_descriptor() const {
         return impl_->index_descriptor();
     }
 
@@ -109,12 +109,8 @@ public:
         return impl_->mutable_index_descriptor();
     }
 
-    bool has_index_descriptor() const {
+    [[nodiscard]] bool has_index_descriptor() const {
         return impl_->has_index_descriptor();
-    }
-
-    TimeseriesDescriptor&& detach_index_descriptor() {
-        return impl_->detach_index_descriptor();
     }
 
     void init_column_map() const  {
@@ -168,7 +164,7 @@ public:
         return impl_->column(idx);
     }
 
-    const Column &column(position_t idx) const {
+    [[nodiscard]] const Column &column(position_t idx) const {
         return impl_->column(idx);
     }
 
@@ -176,11 +172,11 @@ public:
         return impl_->columns();
     }
 
-    const std::vector<std::shared_ptr<Column>>& columns() const {
+    [[nodiscard]] const std::vector<std::shared_ptr<Column>>& columns() const {
         return impl_->columns();
     }
 
-    position_t add_column(const Field &field, size_t num_rows, bool presize) {
+    position_t add_column(const Field &field, size_t num_rows, AllocationType presize) {
         return impl_->add_column(field, num_rows, presize);
     }
 
@@ -192,11 +188,11 @@ public:
         return impl_->add_column(field_ref, column);
     }
 
-    position_t add_column(FieldRef field_ref, size_t num_rows, bool presize) {
+    position_t add_column(FieldRef field_ref, size_t num_rows, AllocationType presize) {
         return impl_->add_column(field_ref, num_rows, presize);
     }
 
-    size_t num_blocks() const {
+    [[nodiscard]] size_t num_blocks() const {
         return impl_->num_blocks();
     }
 
@@ -206,10 +202,6 @@ public:
 
     void concatenate(SegmentInMemory&& other, bool unique_column_names=true) {
         impl_->concatenate(std::move(*other.impl_), unique_column_names);
-    }
-
-    util::BitSet get_duplicates_bitset(SegmentInMemory& other) {
-        return impl_->get_duplicates_bitset(*other.impl_);
     }
 
     void drop_column(std::string_view name) {
@@ -226,7 +218,7 @@ public:
         return impl_->tensor_at<T>(row, col);
     }
 
-    std::optional<std::string_view> string_at(position_t row, position_t col) const {
+    [[nodiscard]] std::optional<std::string_view> string_at(position_t row, position_t col) const {
         return impl_->string_at(row, col);
     }
 
@@ -243,21 +235,19 @@ public:
         impl_->reset_timeseries_descriptor();
     }
 
-    size_t num_columns() const { return impl_->num_columns(); }
+    [[nodiscard]] size_t num_columns() const { return impl_->num_columns(); }
 
-    size_t num_fields() const { return impl_->num_fields(); }
-
-    size_t row_count() const { return impl_->row_count(); }
+    [[nodiscard]] size_t row_count() const { return impl_->row_count(); }
 
     void unsparsify() {
         impl_->unsparsify();
     }
 
-    bool has_user_metadata() const {
+    [[nodiscard]] bool has_user_metadata() const {
         return impl_->has_user_metadata();
     }
 
-    const arcticdb::proto::descriptors::UserDefinedMetadata& user_metadata() const {
+    [[nodiscard]] const arcticdb::proto::descriptors::UserDefinedMetadata& user_metadata() const {
         return impl_->user_metadata();
     }
 
@@ -287,7 +277,7 @@ public:
         impl_->set_offset(offset);
     }
 
-    ssize_t offset() const {
+    [[nodiscard]] ssize_t offset() const {
         return impl_->offset();
     }
 
@@ -295,23 +285,23 @@ public:
         impl_->clear();
     }
 
-    void end_block_write(size_t size) {
+    void end_block_write(ssize_t size) {
         impl_->end_block_write(size);
     }
 
-    size_t string_pool_size() const { return impl_->string_pool_size(); }
+    [[nodiscard]] size_t string_pool_size() const { return impl_->string_pool_size(); }
 
-    bool has_string_pool() const { return impl_->has_string_pool(); }
+    [[nodiscard]] bool has_string_pool() const { return impl_->has_string_pool(); }
 
-    ColumnData string_pool_data() const {
+    [[nodiscard]] ColumnData string_pool_data() const {
         return impl_->string_pool_data();
     }
 
-    ColumnData column_data(size_t col) const {
+    [[nodiscard]] ColumnData column_data(size_t col) const {
         return impl_->column_data(col);
     }
 
-    const StreamDescriptor &descriptor() const {
+    [[nodiscard]] const StreamDescriptor &descriptor() const {
         return impl_->descriptor();
     }
 
@@ -319,7 +309,7 @@ public:
         return impl_->descriptor();
     }
 
-    const std::shared_ptr<StreamDescriptor>& descriptor_ptr() const {
+    [[nodiscard]] const std::shared_ptr<StreamDescriptor>& descriptor_ptr() const {
         return impl_->descriptor_ptr();
     }
 
@@ -331,15 +321,11 @@ public:
         return impl_->string_pool();
     }
 
-    void string_pool_assign(const SegmentInMemory& other) {
-        impl_->string_pool_assign(*other.impl_);
-    }
-
-    const StringPool &const_string_pool() const {
+    [[nodiscard]] const StringPool &const_string_pool() const {
         return impl_->string_pool();
     }
 
-    const std::shared_ptr<StringPool>& string_pool_ptr() const {
+    [[nodiscard]] const std::shared_ptr<StringPool>& string_pool_ptr() const {
         return impl_->string_pool_ptr();
     }
 
@@ -355,10 +341,6 @@ public:
         return impl_->has_metadata();
     }
 
-    ssize_t get_row_id() {
-        return impl_->get_row_id();
-    }
-
     void set_row_id(ssize_t rid) {
         impl_->set_row_id(rid);
     }
@@ -367,11 +349,11 @@ public:
         impl_->set_row_data(rid);
     }
 
-    const google::protobuf::Any *metadata() const {
+    [[nodiscard]] const google::protobuf::Any *metadata() const {
         return impl_->metadata();
     }
 
-    bool is_index_sorted() const {
+    [[nodiscard]] bool is_index_sorted() const {
         return impl_->is_index_sorted();
     }
 
@@ -383,7 +365,7 @@ public:
         impl_->sort(column);
     }
 
-    SegmentInMemory clone() const {
+    [[nodiscard]] SegmentInMemory clone() const {
         return SegmentInMemory(std::make_shared<SegmentInMemoryImpl>(impl_->clone()));
     }
 
@@ -398,33 +380,34 @@ public:
     }
 
     /// @see SegmentInMemoryImpl::truncate
-    SegmentInMemory truncate(size_t start_row, size_t end_row, bool reconstruct_string_pool) const{
+    [[nodiscard]] SegmentInMemory truncate(size_t start_row, size_t end_row, bool reconstruct_string_pool) const{
         return SegmentInMemory(impl_->truncate(start_row, end_row, reconstruct_string_pool));
     }
 
-    std::vector<SegmentInMemory> partition(const std::vector<uint8_t>& row_to_segment,
+    [[nodiscard]] std::vector<SegmentInMemory> partition(const std::vector<uint8_t>& row_to_segment,
                            const std::vector<uint64_t>& segment_counts) const{
         std::vector<SegmentInMemory> res;
         auto impls = impl_->partition(row_to_segment, segment_counts);
+        res.reserve(impls.size());
         for (auto&& impl: impls) {
             res.emplace_back(SegmentInMemory(std::move(impl)));
         }
         return res;
     }
 
-    bool empty() const {
+    [[nodiscard]] bool empty() const {
         return is_null() || impl_->empty();
     }
 
-    bool is_null() const {
+    [[nodiscard]] bool is_null() const {
         return !static_cast<bool>(impl_);
     }
 
-    size_t num_bytes() const {
+    [[nodiscard]] size_t num_bytes() const {
         return impl_->num_bytes();
     }
 
-    bool compacted() const  {
+    [[nodiscard]] bool compacted() const  {
         return impl_->compacted();
     }
 
@@ -444,6 +427,7 @@ public:
         impl_->check_magic();
     }
 
+    // Not currently used but might be useful in the future
     void compact_blocks() {
         impl_->compact_blocks();
     }
@@ -461,18 +445,19 @@ public:
         }
     }
 
-    bool allow_sparse() const {
+    [[nodiscard]] bool allow_sparse() const {
         return impl_->allow_sparse();
     }
 
 
-    bool is_sparse() const {
+    [[nodiscard]] bool is_sparse() const {
         return impl_->is_sparse();
     }
 
     [[nodiscard]] std::vector<SegmentInMemory> split(size_t rows) const {
         std::vector<SegmentInMemory> output;
         auto new_impls = impl_->split(rows);
+        output.reserve(new_impls.size());
         for(const auto& impl : new_impls)
             output.emplace_back(SegmentInMemory{impl});
 
