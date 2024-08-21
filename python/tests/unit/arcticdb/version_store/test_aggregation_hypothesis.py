@@ -1,5 +1,5 @@
 """
-Copyright 2023 Man Group Operations Limited
+Copyright 2024 Man Group Operations Limited
 
 Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
 
@@ -16,9 +16,6 @@ from arcticdb.util.hypothesis import (
     column_strategy,
     supported_string_dtypes,
 )
-
-import pytest
-pytestmark = pytest.mark.pipeline
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked

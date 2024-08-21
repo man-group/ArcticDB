@@ -1,5 +1,5 @@
 """
-Copyright 2023 Man Group Operations Limited
+Copyright 2024 Man Group Operations Limited
 
 Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
 
@@ -34,35 +34,20 @@ from arcticdb.util.test import (
 )
 from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION
 
-pytestmark = pytest.mark.pipeline
 
-
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
-def test_filter_empty_dataframe(request, lib_type):
-    lib = request.getfixturevalue(lib_type)
-    df = pd.DataFrame({"a": []})
-    q = QueryBuilder()
-    q = q[q["a"] < 5]
-    symbol = "test_filter_empty_dataframe"
-    lib.write(symbol, df)
-    vit = lib.read(symbol, query_builder=q)
-    assert vit.data.empty
-
-
-def test_filter_column_not_present_static(lmdb_version_store_v1):
+def test_filter_column_not_present(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     df = pd.DataFrame({"a": np.arange(2)}, index=np.arange(2))
     q = QueryBuilder()
     q = q[q["b"] < 5]
-    symbol = "test_filter_column_not_present_static"
+    symbol = "test_filter_column_not_present"
     lib.write(symbol, df)
     with pytest.raises(InternalException):
         _ = lib.read(symbol, query_builder=q)
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
-def test_filter_column_attribute_syntax(request, lib_type):
-    lib = request.getfixturevalue(lib_type)
+def test_filter_column_attribute_syntax(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
     symbol = "test_filter_column_attribute_syntax"
     df = pd.DataFrame({"a": [np.uint8(1), np.uint8(0)]})
     lib.write(symbol, df)
@@ -72,27 +57,14 @@ def test_filter_column_attribute_syntax(request, lib_type):
     generic_filter_test(lib, symbol, q, expected)
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
-def test_filter_explicit_index(request, lib_type):
-    lib = request.getfixturevalue(lib_type)
-    df = pd.DataFrame({"a": [np.uint8(1), np.uint8(0)]}, index=np.arange(2))
-    q = QueryBuilder()
-    q = q[q["a"] < np.uint8(1)]
-    pandas_query = "a < 1"
-    symbol = "test_filter_explicit_index"
-    lib.write(symbol, df)
-    assert_frame_equal(df.query(pandas_query), lib.read(symbol, query_builder=q).data)
-
-
 def test_filter_infinite_value():
     q = QueryBuilder()
     with pytest.raises(ArcticNativeException):
         q = q[q["a"] < math.inf]
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
-def test_filter_categorical(request, lib_type):
-    lib = request.getfixturevalue(lib_type)
+def test_filter_categorical(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
     df = pd.DataFrame({"a": ["hello", "hi", "hello"]}, index=np.arange(3))
     df.a = df.a.astype("category")
     q = QueryBuilder()
@@ -103,30 +75,6 @@ def test_filter_categorical(request, lib_type):
         _ = lib.read(symbol, query_builder=q)
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
-def test_filter_pickled_symbol(request, lib_type):
-    lib = request.getfixturevalue(lib_type)
-    symbol = "test_filter_pickled_symbol"
-    lib.write(symbol, np.arange(100).tolist())
-    assert lib.is_symbol_pickled(symbol)
-    q = QueryBuilder()
-    q = q[q.a == 0]
-    with pytest.raises(InternalException):
-        _ = lib.read(symbol, query_builder=q)
-
-
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
-def test_filter_date_range_pickled_symbol(request, lib_type):
-    lib = request.getfixturevalue(lib_type)
-    symbol = "test_filter_date_range_pickled_symbol"
-    idx = pd.date_range("2000-01-01", periods=4)
-    df = pd.DataFrame({"a": [[1, 2], [3, 4], [5, 6], [7, 8]]}, index=idx)
-    lib.write(symbol, df, pickle_on_failure=True)
-    assert lib.is_symbol_pickled(symbol)
-    with pytest.raises(InternalException):
-        lib.read(symbol, date_range=(idx[1], idx[2]))
-
-
 def test_filter_date_range_row_indexed(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     symbol = "test_filter_date_range_row_indexed"
@@ -134,6 +82,17 @@ def test_filter_date_range_row_indexed(lmdb_version_store_tiny_segment):
     lib.write(symbol, df)
     with pytest.raises(InternalException):
         lib.read(symbol, date_range=(pd.Timestamp("2000-01-01"), pd.Timestamp("2000-01-02")))
+
+
+def test_filter_explicit_index(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame({"a": [np.uint8(1), np.uint8(0)]}, index=np.arange(2))
+    q = QueryBuilder()
+    q = q[q["a"] < np.uint8(1)]
+    pandas_query = "a < 1"
+    symbol = "test_filter_explicit_index"
+    lib.write(symbol, df)
+    assert_frame_equal(df.query(pandas_query), lib.read(symbol, query_builder=q).data)
 
 
 def test_filter_clashing_values(lmdb_version_store_v1):
@@ -1147,6 +1106,47 @@ def test_float32_binary_comparison(lmdb_version_store_v1):
                 q = q[qb_lhs != qb_rhs]
                 expected = df[pandas_lhs != pandas_rhs]
             generic_filter_test(lib, symbol, q, expected)
+
+
+################################
+# MIXED SCHEMA TESTS FROM HERE #
+################################
+
+
+@pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
+def test_filter_empty_dataframe(request, lib_type):
+    lib = request.getfixturevalue(lib_type)
+    df = pd.DataFrame({"a": []})
+    q = QueryBuilder()
+    q = q[q["a"] < 5]
+    symbol = "test_filter_empty_dataframe"
+    lib.write(symbol, df)
+    vit = lib.read(symbol, query_builder=q)
+    assert vit.data.empty
+
+
+@pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
+def test_filter_pickled_symbol(request, lib_type):
+    lib = request.getfixturevalue(lib_type)
+    symbol = "test_filter_pickled_symbol"
+    lib.write(symbol, np.arange(100).tolist())
+    assert lib.is_symbol_pickled(symbol)
+    q = QueryBuilder()
+    q = q[q.a == 0]
+    with pytest.raises(InternalException):
+        _ = lib.read(symbol, query_builder=q)
+
+
+@pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
+def test_filter_date_range_pickled_symbol(request, lib_type):
+    lib = request.getfixturevalue(lib_type)
+    symbol = "test_filter_date_range_pickled_symbol"
+    idx = pd.date_range("2000-01-01", periods=4)
+    df = pd.DataFrame({"a": [[1, 2], [3, 4], [5, 6], [7, 8]]}, index=idx)
+    lib.write(symbol, df, pickle_on_failure=True)
+    assert lib.is_symbol_pickled(symbol)
+    with pytest.raises(InternalException):
+        lib.read(symbol, date_range=(idx[1], idx[2]))
 
 
 ##################################

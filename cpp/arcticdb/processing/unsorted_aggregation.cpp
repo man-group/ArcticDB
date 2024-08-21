@@ -145,9 +145,9 @@ void SumAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_
     if (!data_type_.has_value() || *data_type_ == DataType::EMPTYVAL) {
         data_type_ = DataType::FLOAT64;
     }
-    // On the first call to this method, data_type_ will be a type capable of representing all of the values in all of the input columns
+    // On the first call to this method, data_type_ will be a type capable of representing all the values in all the input columns
     // This may be too small to hold the result, as summing 2 values of the same type cannot necessarily be represented by that type
-    // For safety, use the widest type available for the 3 numeric slavours (unsigned int, signed int, float) to have the best chance of avoiding overflow
+    // For safety, use the widest type available for the 3 numeric flavours (unsigned int, signed int, float) to have the best chance of avoiding overflow
     if (is_unsigned_type(*data_type_)) {
         data_type_ = DataType::UINT64;
     } else if (is_signed_type(*data_type_)) {

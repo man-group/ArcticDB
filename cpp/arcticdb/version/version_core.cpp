@@ -420,6 +420,17 @@ std::vector<EntityId> process_clauses(
         std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures,
         std::vector<std::vector<size_t>>&& processing_unit_indexes,
         std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses) {
+    // There are some odd looking choices in this method:
+    // - clauses being shared_ptr<vector<shared_ptr>>
+    // - segment_proc_unit_counts, entity_added_mtx, and entity_added created as shared pointers rather than just on the
+    //   stack
+    // Both are for the same reason. folly::collect short-circuits and throws an exception the first time a task
+    // finishes due to an exception rather than cleanly exiting. However, other tasks that have already been enqueued
+    // continue executing, and so any variables from this scope that they depend on must be kept alive by the tasks
+    // themselves.
+    // It was considered to make the type of ReadQuery::clauses_ std::shared_ptr<std::vector<Clause>>. However, this
+    // makes all the other uses of clauses_ much less clean, so the compromise is an odd function signature here.
+
     std::vector<folly::FutureSplitter<pipelines::SegmentAndSlice>> segment_and_slice_future_splitters;
     segment_and_slice_future_splitters.reserve(segment_and_slice_futures.size());
     for (auto&& future: segment_and_slice_futures) {

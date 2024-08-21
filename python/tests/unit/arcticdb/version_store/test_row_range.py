@@ -1,5 +1,5 @@
 """
-Copyright 2023 Man Group Operations Limited
+Copyright 2024 Man Group Operations Limited
 
 Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
 
@@ -10,9 +10,6 @@ import pytest
 
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.exceptions import InternalException
-
-
-pytestmark = pytest.mark.pipeline
 
 
 def generic_row_range_test(version_store, symbol, df, start_row, end_row):

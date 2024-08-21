@@ -1,5 +1,12 @@
+"""
+Copyright 2024 Man Group Operations Limited
+
+Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
+
+As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+"""
 from hypothesis import assume, given, settings, strategies
-from hypothesis.extra.pandas import columns, data_frames, range_indexes
+from hypothesis.extra.pandas import columns, data_frames
 import numpy as np
 import pandas as pd
 import pytest
@@ -7,9 +14,6 @@ import pytest
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.util.test import assert_frame_equal
 from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
-
-
-pytestmark = pytest.mark.pipeline
 
 
 class TestQueryBuilderSparse:

@@ -1,5 +1,5 @@
 """
-Copyright 2023 Man Group Operations Limited
+Copyright 2024 Man Group Operations Limited
 
 Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
 
@@ -11,7 +11,6 @@ from hypothesis.extra.pytz import timezones as timezone_st
 import hypothesis.strategies as st
 import numpy as np
 import pandas as pd
-import pytest
 from pytz import timezone
 
 from arcticdb.version_store.processing import QueryBuilder
@@ -35,9 +34,6 @@ from arcticdb.util.hypothesis import (
     dataframe_strategy,
     column_strategy,
 )
-
-
-pytestmark = pytest.mark.pipeline
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -245,7 +241,6 @@ def test_filter_binary_boolean(lmdb_version_store_v1, df):
             expected = df[(df["a"] < 5) | (df["b"] > 10)]
         elif op == "^":
             q = q[(q["a"] < 5) ^ (q["b"] > 10)]
-            # Pandas doesn't support '^' for xor
             expected = df[(df["a"] < 5) ^ (df["b"] > 10)]
         generic_filter_test(lib, symbol, q, expected)
 
@@ -349,9 +344,9 @@ def test_filter_numeric_binary_comparison_dynamic(lmdb_version_store_dynamic_sch
             q = QueryBuilder()
             qb_lhs = q["a"] if comp.startswith("col") else val
             qb_rhs = q["b"] if comp.endswith("col") else val
+            queried_slices = []
             if op == "<":
                 q = q[qb_lhs < qb_rhs]
-                queried_slices = []
                 for slice in slices:
                     try:
                         queried_slices.append(
@@ -362,7 +357,6 @@ def test_filter_numeric_binary_comparison_dynamic(lmdb_version_store_dynamic_sch
                         pass
             elif op == "<=":
                 q = q[qb_lhs <= qb_rhs]
-                queried_slices = []
                 for slice in slices:
                     try:
                         queried_slices.append(
@@ -373,7 +367,6 @@ def test_filter_numeric_binary_comparison_dynamic(lmdb_version_store_dynamic_sch
                         pass
             elif op == ">":
                 q = q[qb_lhs > qb_rhs]
-                queried_slices = []
                 for slice in slices:
                     try:
                         queried_slices.append(
@@ -384,7 +377,6 @@ def test_filter_numeric_binary_comparison_dynamic(lmdb_version_store_dynamic_sch
                         pass
             elif op == ">=":
                 q = q[qb_lhs >= qb_rhs]
-                queried_slices = []
                 for slice in slices:
                     try:
                         queried_slices.append(
@@ -395,7 +387,6 @@ def test_filter_numeric_binary_comparison_dynamic(lmdb_version_store_dynamic_sch
                         pass
             elif op == "==":
                 q = q[qb_lhs == qb_rhs]
-                queried_slices = []
                 for slice in slices:
                     try:
                         queried_slices.append(
@@ -406,7 +397,6 @@ def test_filter_numeric_binary_comparison_dynamic(lmdb_version_store_dynamic_sch
                         pass
             elif op == "!=":
                 q = q[qb_lhs != qb_rhs]
-                queried_slices = []
                 for slice in slices:
                     try:
                         queried_slices.append(

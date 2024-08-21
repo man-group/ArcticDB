@@ -1,5 +1,5 @@
 """
-Copyright 2023 Man Group Operations Limited
+Copyright 2024 Man Group Operations Limited
 
 Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
 
@@ -13,8 +13,6 @@ from arcticdb.exceptions import ArcticNativeException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.exceptions import InternalException, StorageException, UserInputException
-
-pytestmark = pytest.mark.pipeline
 
 
 def test_filter_batch_one_query(lmdb_version_store_v1):

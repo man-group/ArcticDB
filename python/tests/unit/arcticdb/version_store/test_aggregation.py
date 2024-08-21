@@ -1,5 +1,5 @@
 """
-Copyright 2023 Man Group Operations Limited
+Copyright 2024 Man Group Operations Limited
 
 Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
 
@@ -13,8 +13,6 @@ from pandas import DataFrame
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.exceptions import InternalException, SchemaException
 from arcticdb.util.test import assert_frame_equal, generic_aggregation_test, make_dynamic
-
-pytestmark = pytest.mark.pipeline
 
 
 def test_group_on_float_column_with_nans(lmdb_version_store_v1):

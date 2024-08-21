@@ -8,8 +8,8 @@ As of the Change Date specified in that file, in accordance with the Business So
 from functools import partial
 import numpy as np
 import pandas as pd
-import pytest
 import datetime as dt
+import pytest
 
 from arcticdb import QueryBuilder
 from arcticdb.exceptions import ArcticDbNotYetImplemented, SchemaException
@@ -17,7 +17,6 @@ from arcticdb.util.test import assert_frame_equal
 from packaging.version import Version
 from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION
 
-pytestmark = pytest.mark.pipeline
 
 ALL_AGGREGATIONS = ["sum", "mean", "min", "max", "first", "last", "count"]
 

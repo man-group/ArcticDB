@@ -1,5 +1,5 @@
 """
-Copyright 2023 Man Group Operations Limited
+Copyright 2024 Man Group Operations Limited
 
 Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
 
@@ -7,14 +7,11 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import numpy as np
 import pandas as pd
+import pytest
 
 from arcticdb_ext.exceptions import InternalException, UserInputException
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.util.test import assert_frame_equal, make_dynamic, regularize_dataframe
-
-
-import pytest
-pytestmark = pytest.mark.pipeline
 
 
 @pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
@@ -29,12 +26,12 @@ def test_project_empty_dataframe(request, lib_type):
     assert vit.data.empty
 
 
-def test_project_column_not_present_static(lmdb_version_store_v1):
+def test_project_column_not_present(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     df = pd.DataFrame({"a": np.arange(2)}, index=np.arange(2))
     q = QueryBuilder()
     q = q.apply("new", q["b"] + 1)
-    symbol = "test_project_column_not_present_static"
+    symbol = "test_project_column_not_present"
     lib.write(symbol, df)
     with pytest.raises(InternalException):
         _ = lib.read(symbol, query_builder=q)
