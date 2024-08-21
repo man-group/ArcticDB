@@ -70,7 +70,7 @@ public:
     }
 
     void initalize(StreamId id, size_t num_rows) {
-        segment_ = SegmentInMemory{multi_segment_descriptor(std::move(id)), num_rows, false};
+        segment_ = SegmentInMemory{multi_segment_descriptor(std::move(id)), num_rows, AllocationType::DYNAMIC};
     }
 
     void add_key_and_offset(const AtomKey &key, uint64_t offset, uint64_t size) {

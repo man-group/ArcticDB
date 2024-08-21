@@ -55,7 +55,7 @@ inline void merge_string_columns(const SegmentInMemory& segment, const std::shar
             continue;
 
         auto &src = segment.column(static_cast<position_t>(c)).data().buffer();
-        CursoredBuffer<ChunkedBuffer> cursor{src.bytes(), false};
+        CursoredBuffer<ChunkedBuffer> cursor{src.bytes(), AllocationType::DYNAMIC};
         merge_string_column(src, segment.string_pool_ptr(), merged_pool, cursor, verify);
         std::swap(src, cursor.buffer());
     }
@@ -64,7 +64,7 @@ inline void merge_string_columns(const SegmentInMemory& segment, const std::shar
 inline void merge_segments(
     std::vector<SegmentInMemory>& segments,
     SegmentInMemory& merged,
-    bool is_sparse) {
+    Sparsity is_sparse) {
     ARCTICDB_DEBUG(log::version(), "Appending {} segments", segments.size());
     timestamp min_idx = std::numeric_limits<timestamp>::max();
     timestamp max_idx = std::numeric_limits<timestamp>::min();
@@ -72,8 +72,8 @@ inline void merge_segments(
         ARCTICDB_DEBUG(log::version(), "Appending segment with {} rows", segment.row_count());
         for(const auto& field : segment.descriptor().fields()) {
             if(!merged.column_index(field.name())){//TODO: Bottleneck for wide segments
-                auto pos = merged.add_column(field, 0, false);
-                if (!is_sparse){
+                auto pos = merged.add_column(field, 0, AllocationType::DYNAMIC);
+                if (is_sparse == Sparsity::NOT_PERMITTED){
                     merged.column(pos).mark_absent_rows(merged.row_count());
                 }
             }

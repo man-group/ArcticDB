@@ -12,12 +12,10 @@
 
 #include <cstdint>
 
-
 namespace arcticdb {
 
 struct MemBlock {
     static const size_t Align = 128;
-    static const size_t DataAlignment = 64;
     static const size_t MinSize = 64;
     using magic_t = arcticdb::util::MagicNum<'M', 'e', 'm', 'b'>;
     magic_t magic_;
@@ -30,22 +28,42 @@ struct MemBlock {
             capacity_(capacity),
             external_data_(nullptr),
             offset_(offset),
-            ts_(ts) {
+            timestamp_(ts) {
 #ifdef DEBUG_BUILD
         memset(data_, 'c', capacity_); // For identifying unwritten-to block portions
 #endif
     }
 
-    MemBlock(const uint8_t *data, size_t size, size_t offset, entity::timestamp ts) :
+    MemBlock(const uint8_t *data, size_t size, size_t offset, entity::timestamp ts, bool owning) :
             bytes_(size),
             capacity_(size),
-            external_data_(data),
+            external_data_(const_cast<uint8_t*>(data)),
             offset_(offset),
-            ts_(ts) {
+            timestamp_(ts),
+            owns_external_data_(owning) {
     }
 
-    bool is_external() const {
+    MemBlock(uint8_t *data, size_t size, size_t offset, entity::timestamp ts, bool owning) :
+        bytes_(size),
+        capacity_(size),
+        external_data_(data),
+        offset_(offset),
+        timestamp_(ts),
+        owns_external_data_(owning) {
+    }
+
+    [[nodiscard]] bool is_external() const {
         return external_data_ != nullptr;
+    }
+
+    ~MemBlock() {
+        if(owns_external_data_) {
+            util::check(is_external(), "Cannot free inline allocated block");
+            if(external_data_ != nullptr) {
+                log::version().warn("Unexpected release of detachable block memory");
+                free(reinterpret_cast<void *>(external_data_));
+            }
+        }
     }
 
     static constexpr size_t alloc_size(size_t requested_size) noexcept {
@@ -62,23 +80,23 @@ struct MemBlock {
         bytes_ = size;
     }
 
-    size_t bytes() const {
+    [[nodiscard]] size_t bytes() const {
         return bytes_;
     }
 
-    size_t capacity() const {
+    [[nodiscard]] size_t capacity() const {
         return capacity_;
     }
 
-    const uint8_t& operator[](size_t pos) const {
+    [[nodiscard]] const uint8_t& operator[](size_t pos) const {
         return data()[pos];
     }
 
-    const uint8_t* internal_ptr(size_t pos) const {
+    [[nodiscard]] const uint8_t* internal_ptr(size_t pos) const {
         return &data_[pos];
     }
 
-    void copy_to(uint8_t *target) {
+    void copy_to(uint8_t *target) const {
         memcpy(target, data(), bytes_);
     }
 
@@ -92,22 +110,30 @@ struct MemBlock {
         return const_cast<uint8_t *>(data())[pos];
     }
 
-    bool empty() { return bytes_ == 0; }
+    [[nodiscard]] bool empty() const { return bytes_ == 0; }
 
-    const uint8_t *data() const { return is_external() ? external_data_ : data_; }
+    [[nodiscard]] const uint8_t *data() const { return is_external() ? external_data_ : data_; }
 
-    uint8_t *end() const { return const_cast<uint8_t*>(&data()[bytes_]); }
+    [[nodiscard]] const uint8_t* release() {
+        util::check(is_external() && owns_external_data_, "Cannot release inlined or external data pointer");
+        auto* tmp = external_data_;
+        external_data_ = nullptr;
+        return tmp;
+    }
 
-    size_t free_space() const {
+    [[nodiscard]] uint8_t *end() const { return const_cast<uint8_t*>(&data()[bytes_]); }
+
+    [[nodiscard]] size_t free_space() const {
         arcticdb::util::check(bytes_ <= capacity_, "Block overflow: {} > {}", bytes_, capacity_);
         return capacity_ - bytes_;
     }
 
-    size_t bytes_;
-    size_t capacity_;
-    const uint8_t *external_data_ = nullptr;
-    size_t offset_;
-    entity::timestamp ts_;
+    size_t bytes_ = 0UL;
+    size_t capacity_= 0UL;
+    uint8_t *external_data_ = nullptr;
+    size_t offset_ = 0UL;
+    entity::timestamp timestamp_ = 0L;
+    bool owns_external_data_ = false;
 
     static const size_t HeaderDataSize =
             sizeof(magic_) +   // 8 bytes
@@ -115,7 +141,8 @@ struct MemBlock {
             sizeof(capacity_) +   // 8 bytes
             sizeof(external_data_) +
             sizeof(offset_) +
-            sizeof(ts_);      // 8 bytes
+            sizeof(timestamp_) + 
+            sizeof(owns_external_data_);
 
     uint8_t pad[Align - HeaderDataSize];
     static const size_t HeaderSize = HeaderDataSize + sizeof(pad);

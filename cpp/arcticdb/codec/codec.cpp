@@ -73,7 +73,7 @@ class MetaBuffer {
         // Not used
     }
 
-    void set_allow_sparse(bool) const {
+    void set_allow_sparse(Sparsity) const {
         // Not used
     }
 
@@ -148,7 +148,7 @@ EncodedFieldCollection decode_encoded_fields(
     std::optional<util::BitMagic> bv;
     const auto uncompressed_size = encoding_sizes::uncompressed_size(hdr.column_fields());
     constexpr auto type_desc = encoded_fields_type_desc();
-    Column encoded_column(type_desc, uncompressed_size, false, false);
+    Column encoded_column(type_desc, uncompressed_size, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
     decode_ndarray(type_desc, hdr.column_fields().ndarray(), data, encoded_column, bv, hdr.encoding_version());
 
     ARCTICDB_TRACE(log::codec(), "Decoded encoded fields at position {}", data-begin);

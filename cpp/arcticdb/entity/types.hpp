@@ -107,6 +107,17 @@ enum class DataTypeMode : uint8_t {
     EXTERNAL = 1
 };
 
+enum class AllocationType : uint8_t {
+    DYNAMIC = 0,
+    PRESIZED = 1,
+    DETACHABLE = 2
+};
+
+enum class Sparsity : uint8_t {
+    NOT_PERMITTED = 0,
+    PERMITTED = 1
+};
+
 // Sequence types are composed of more than one element
 constexpr bool is_sequence_type(ValueType v) {
     return uint8_t(v) >= uint8_t(ValueType::ASCII_FIXED) &&

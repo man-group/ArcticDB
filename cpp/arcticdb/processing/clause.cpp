@@ -470,7 +470,7 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
         row_slices.erase(std::next(it).base());
     }
     SegmentInMemory seg;
-    auto index_col = std::make_shared<Column>(make_scalar_type(grouping_data_type), grouping_map.size(), true, false);
+    auto index_col = std::make_shared<Column>(make_scalar_type(grouping_data_type), grouping_map.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
 
     seg.add_column(scalar_field(grouping_data_type, grouping_column_), index_col);
     seg.descriptor().set_index(IndexDescriptorImpl(0, IndexDescriptorImpl::Type::ROWCOUNT));
@@ -769,7 +769,7 @@ std::shared_ptr<Column> ResampleClause<closed_boundary>::generate_output_index_c
 
     const auto max_index_column_bytes = (bucket_boundaries.size() - 1) * get_type_size(data_type);
     auto output_index_column = std::make_shared<Column>(TypeDescriptor(data_type, Dimension::Dim0),
-                                                        false,
+                                                        Sparsity::NOT_PERMITTED,
                                                         ChunkedBuffer::presized_in_blocks(max_index_column_bytes));
     auto output_index_column_data = output_index_column->data();
     auto output_index_column_it = output_index_column_data.template begin<IndexTDT>();
@@ -1034,8 +1034,8 @@ std::vector<EntityId> ColumnStatsGenerationClause::process(std::vector<EntityId>
             std::holds_alternative<NumericIndex>(start_index) && std::holds_alternative<NumericIndex>(end_index),
             "Cannot build column stats over string-indexed symbol"
     );
-    auto start_index_col = std::make_shared<Column>(make_scalar_type(DataType::NANOSECONDS_UTC64), true);
-    auto end_index_col = std::make_shared<Column>(make_scalar_type(DataType::NANOSECONDS_UTC64), true);
+    auto start_index_col = std::make_shared<Column>(make_scalar_type(DataType::NANOSECONDS_UTC64), Sparsity::PERMITTED);
+    auto end_index_col = std::make_shared<Column>(make_scalar_type(DataType::NANOSECONDS_UTC64), Sparsity::PERMITTED);
     start_index_col->template push_back<NumericIndex>(std::get<NumericIndex>(start_index));
     end_index_col->template push_back<NumericIndex>(std::get<NumericIndex>(end_index));
     start_index_col->set_row_data(0);

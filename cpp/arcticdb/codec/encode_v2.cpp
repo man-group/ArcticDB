@@ -306,7 +306,7 @@ static void encode_encoded_fields(
 
     segment_header.set_footer_offset(pos);
     write_magic<EncodedMagic>(out_buffer, pos);
-    Column encoded_fields_column(encoded_fields_type_desc(), false, encoded_fields.release_data());
+    Column encoded_fields_column(encoded_fields_type_desc(), Sparsity::NOT_PERMITTED, encoded_fields.release_data());
     auto data = encoded_fields_column.data();
     auto& encoded_field = segment_header.mutable_column_fields(calc_num_blocks<EncodingPolicyV2>(data));
     ColumnEncoderV2::encode(codec_opts, data, encoded_field, out_buffer, pos);

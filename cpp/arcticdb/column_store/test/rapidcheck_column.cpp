@@ -89,7 +89,7 @@ struct ColumnRead : rc::state::Command<ColumnModel, arcticdb::Column> {
 
 RC_GTEST_PROP(Column, Rapidcheck, ()) {
     ColumnModel initial_state;
-    arcticdb::Column sut(TypeDescriptor(DataType::UINT64, Dimension::Dim0), 0, false, false);
+    arcticdb::Column sut(TypeDescriptor(DataType::UINT64, Dimension::Dim0), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
     rc::state::check(initial_state,
                      sut,
                      &rc::state::gen::execOneOf<ColumnAppend, ColumnRead, ColumnLowerBound, ColumnUpperBound>);
@@ -102,7 +102,7 @@ RC_GTEST_PROP(Column, TruncateDense, (const std::vector<int64_t> &input)) {
     const auto start_row = *rc::gen::inRange(size_t(0), n - 1);
     const auto end_row = *rc::gen::inRange(start_row + 1, n);
     using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension ::Dim0>>;
-    auto column = std::make_shared<Column>(static_cast<TypeDescriptor>(TDT{}), 0, false, false);
+    auto column = std::make_shared<Column>(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
     for(size_t idx = 0; idx < n; ++idx) {
         column->set_scalar<int64_t>(idx, input[idx]);
     }
@@ -126,7 +126,7 @@ RC_GTEST_PROP(Column, TruncateSparse, (const std::vector<int64_t> &input)) {
     // The last value in the bitset will always be true in a sparse column
     mask[n - 1] = true;
     using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension ::Dim0>>;
-    auto column = std::make_shared<Column>(static_cast<TypeDescriptor>(TDT{}), 0, false, true);
+    auto column = std::make_shared<Column>(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
     for(size_t idx = 0; idx < n; ++idx) {
         if (mask[idx]) {
             column->set_scalar<int64_t>(idx, input[idx]);
@@ -156,7 +156,7 @@ RC_GTEST_PROP(Column, SearchSorted, (const std::vector<int64_t>& input, int64_t 
     auto smallest_value = sorted_input[0];
     auto largest_value = sorted_input[n - 1];
     using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension::Dim0>>;
-    Column column(static_cast<TypeDescriptor>(TDT{}), 0, false, false);
+    Column column(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
     for (size_t idx = 0; idx < n; ++idx) {
         column.set_scalar<int64_t>(idx, sorted_input[idx]);
     }

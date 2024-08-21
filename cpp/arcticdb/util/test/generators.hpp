@@ -82,7 +82,7 @@ using SparseSinkWrapper = SinkWrapperImpl<TestSparseAggregator>;
 // Generates an int64_t Column where the value in each row is equal to the row index
 inline Column generate_int_column(size_t num_rows) {
     using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension ::Dim0>>;
-    Column column(static_cast<TypeDescriptor>(TDT{}), 0, false, false);
+    Column column(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
     for(size_t idx = 0; idx < num_rows; ++idx) {
         column.set_scalar<int64_t>(static_cast<ssize_t>(idx), static_cast<int64_t>(idx));
     }
@@ -92,7 +92,7 @@ inline Column generate_int_column(size_t num_rows) {
 // Generates an int64_t Column where the value in one row out of two is equal to the row index
 inline Column generate_int_sparse_column(size_t num_rows) {
     using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension ::Dim0>>;
-    Column column(static_cast<TypeDescriptor>(TDT{}), 0, false, true);
+    Column column(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
     for(size_t idx = 0; idx < num_rows; ++idx) {
         if (idx%2 == 0)
         {
@@ -105,7 +105,7 @@ inline Column generate_int_sparse_column(size_t num_rows) {
 // Generates an int64_t Column where the value in each row is equal to the row index modulo the number of unique values
 inline Column generate_int_column_repeated_values(size_t num_rows, size_t unique_values) {
     using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension ::Dim0>>;
-    Column column(static_cast<TypeDescriptor>(TDT{}), 0, false, false);
+    Column column(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
     for(size_t idx = 0; idx < num_rows; ++idx) {
         column.set_scalar<int64_t>(static_cast<ssize_t>(idx), static_cast<int64_t>(idx % unique_values));
     }
@@ -115,7 +115,7 @@ inline Column generate_int_column_repeated_values(size_t num_rows, size_t unique
 // Similar to generate_int_column_repeated_values, but with missing values where index % (unique_values + 1) == 0
 inline Column generate_int_column_sparse_repeated_values(size_t num_rows, size_t unique_values) {
     using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension ::Dim0>>;
-    Column column(static_cast<TypeDescriptor>(TDT{}), 0, false, true);
+    Column column(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
     for(size_t idx = 0; idx < num_rows; ++idx) {
         if (idx % (unique_values + 1) != 0) {
             column.set_scalar<int64_t>(static_cast<ssize_t>(idx), static_cast<int64_t>(idx % unique_values));
@@ -127,7 +127,7 @@ inline Column generate_int_column_sparse_repeated_values(size_t num_rows, size_t
 // Generates a Column of empty type
 inline Column generate_empty_column() {
     using TDT = TypeDescriptorTag<DataTypeTag<DataType::EMPTYVAL>, DimensionTag<Dimension ::Dim0>>;
-    Column column(static_cast<TypeDescriptor>(TDT{}), 0, false, false);
+    Column column(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
     return column;
 }
 
@@ -145,11 +145,11 @@ inline SegmentInMemory generate_filter_and_project_testing_sparse_segment() {
     SegmentInMemory seg;
     using FTDT = ScalarTagType<DataTypeTag<DataType::FLOAT64>>;
     using BTDT = ScalarTagType<DataTypeTag<DataType::BOOL8>>;
-    auto sparse_floats_1 = std::make_shared<Column>(static_cast<TypeDescriptor>(FTDT{}), 0, false, true);
-    auto sparse_floats_2 = std::make_shared<Column>(static_cast<TypeDescriptor>(FTDT{}), 0, false, true);
-    auto dense_floats_1 = std::make_shared<Column>(static_cast<TypeDescriptor>(FTDT{}), 0, false, false);
-    auto dense_floats_2 = std::make_shared<Column>(static_cast<TypeDescriptor>(FTDT{}), 0, false, false);
-    auto sparse_bools = std::make_shared<Column>(static_cast<TypeDescriptor>(BTDT{}), 0, false, true);
+    auto sparse_floats_1 = std::make_shared<Column>(static_cast<TypeDescriptor>(FTDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
+    auto sparse_floats_2 = std::make_shared<Column>(static_cast<TypeDescriptor>(FTDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
+    auto dense_floats_1 = std::make_shared<Column>(static_cast<TypeDescriptor>(FTDT{}), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
+    auto dense_floats_2 = std::make_shared<Column>(static_cast<TypeDescriptor>(FTDT{}), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
+    auto sparse_bools = std::make_shared<Column>(static_cast<TypeDescriptor>(BTDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
 
     constexpr auto nan = std::numeric_limits<double>::quiet_NaN();
 

@@ -9,11 +9,13 @@
 
 #include <arcticdb/util/spinlock.hpp>
 #include <arcticdb/util/constructors.hpp>
+#include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/lazy.hpp>
 
 #include <vector>
 #include <folly/concurrency/ConcurrentHashMap.h>
 #include <boost/container/small_vector.hpp>
+
 #include <Python.h>
 
 namespace arcticdb {
@@ -27,7 +29,7 @@ struct BufferHolder {
     boost::container::small_vector<std::shared_ptr<Column>, 1> columns_;
     std::mutex mutex_;
 
-    std::shared_ptr<Column> get_buffer(const entity::TypeDescriptor& td, bool allow_sparse);
+    std::shared_ptr<Column> get_buffer(const entity::TypeDescriptor& td, entity::Sparsity allow_sparse);
 };
 
 using UniqueStringMapType = folly::ConcurrentHashMap<std::string_view, PyObject*>;
