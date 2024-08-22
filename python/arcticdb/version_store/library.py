@@ -622,8 +622,8 @@ class Library:
         )
 
     def write_pickle_batch(
-        self, payloads: List[WritePayload], prune_previous_versions: bool = False, staged=False
-    ) -> List[VersionedItem]:
+        self, payloads: List[WritePayload], prune_previous_versions: bool = False
+    ) -> List[Union[VersionedItem, DataError]]:
         """
         Write a batch of multiple symbols, pickling their data if necessary.
 
@@ -633,14 +633,13 @@ class Library:
             Symbols and their corresponding data. There must not be any duplicate symbols in `payload`.
         prune_previous_versions: `bool`, default=False
             Removes previous (non-snapshotted) versions from the database.
-        staged: `bool`, default=False
-            See documentation on `write`.
 
         Returns
         -------
-        List[VersionedItem]
+        List[Union[VersionedItem, DataError]]
             Structures containing metadata and version number of the written symbols in the store, in the
-            same order as `payload`.
+            same order as `payload`. If a key error or any other internal exception is raised, a DataError object is
+            returned, with symbol, error_code, error_category, and exception_string properties.
 
         Raises
         ------
@@ -654,13 +653,14 @@ class Library:
         """
         self._raise_if_duplicate_symbols_in_batch(payloads)
 
-        return self._nvs.batch_write(
+        return self._nvs._batch_write_internal(
             [p.symbol for p in payloads],
             [p.data for p in payloads],
             [p.metadata for p in payloads],
             prune_previous_version=prune_previous_versions,
             pickle_on_failure=True,
-            parallel=staged,
+            validate_index=False,
+            throw_on_error=False,
         )
 
     def append(
