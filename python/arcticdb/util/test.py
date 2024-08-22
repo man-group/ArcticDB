@@ -17,13 +17,16 @@ import time
 import attr
 from functools import wraps
 
-from arcticdb.config import Defaults
-from arcticdb.log import configure, logger_by_name
+try:
+    from pandas.errors import UndefinedVariableError
+except ImportError:
+    from pandas.core.computation.ops import UndefinedVariableError
+
+from arcticdb import QueryBuilder
 from arcticdb.util._versions import PANDAS_VERSION, CHECK_FREQ_VERSION
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._custom_normalizers import CustomNormalizer
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata
-from arcticc.pb2.logger_pb2 import LoggerConfig, LoggersConfig
 from arcticc.pb2.storage_pb2 import LibraryDescriptor, VersionStoreConfig
 from arcticdb.version_store.helper import ArcticFileConfig
 from arcticdb.config import _DEFAULT_ENVS_PATH
@@ -477,3 +480,106 @@ def random_seed_context():
         yield
     finally:
         random.setstate(state)
+
+
+DYNAMIC_STRINGS_SUFFIX = "dynamic_strings"
+FIXED_STRINGS_SUFFIX = "fixed_strings"
+
+
+def generic_filter_test(lib, symbol, arctic_query, expected):
+    received = lib.read(symbol, query_builder=arctic_query).data
+    if not np.array_equal(expected, received):
+        original_df = lib.read(symbol).data
+        print(
+            f"""Original df:\n{original_df}\nwith dtypes:\n{original_df.dtypes}\nquery:\n{arctic_query}"""
+            f"""\nPandas result:\n{expected}\nArcticDB result:\n{received}"""
+        )
+        assert False
+
+
+# For string queries, test both with and without dynamic strings, and with the query both optimised for speed and memory
+def generic_filter_test_strings(lib, base_symbol, arctic_query, expected):
+    for symbol in [f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", f"{base_symbol}_{FIXED_STRINGS_SUFFIX}"]:
+        arctic_query.optimise_for_speed()
+        generic_filter_test(lib, symbol, arctic_query, expected)
+        arctic_query.optimise_for_memory()
+        generic_filter_test(lib, symbol, arctic_query, expected)
+
+
+def generic_filter_test_dynamic(lib, symbol, arctic_query, queried_slices):
+    received = lib.read(symbol, query_builder=arctic_query).data
+    assert len(received) == sum([len(queried_slice) for queried_slice in queried_slices])
+    start_row = 0
+    arrays_equal = True
+    for queried_slice in queried_slices:
+        for col_name in queried_slice.columns:
+            if not np.array_equal(queried_slice[col_name], received[col_name].iloc[start_row: start_row + len(queried_slice)]):
+                arrays_equal = False
+        start_row += len(queried_slice)
+    if not arrays_equal:
+        original_df = lib.read(symbol).data
+        print(
+            f"""Original df (in ArcticDB, backfilled):\n{original_df}\nwith dtypes:\n{original_df.dtypes}\nquery:\n{arctic_query}"""
+            f"""\nPandas result:\n{queried_slices}\nArcticDB result:\n{received}"""
+        )
+        assert False
+
+
+# For string queries, test both with and without dynamic strings, and with the query both optimised for speed and memory
+def generic_filter_test_strings_dynamic(lib, base_symbol, slices, arctic_query, pandas_query):
+    queried_slices = []
+    for slice in slices:
+        try:
+            queried_slices.append(slice.query(pandas_query))
+        except UndefinedVariableError:
+            # Might have edited out the query columns entirely
+            pass
+    for symbol in [f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", f"{base_symbol}_{FIXED_STRINGS_SUFFIX}"]:
+        arctic_query.optimise_for_speed()
+        generic_filter_test_dynamic(lib, symbol, arctic_query, queried_slices)
+        arctic_query.optimise_for_memory()
+        generic_filter_test_dynamic(lib, symbol, arctic_query, queried_slices)
+
+
+# TODO: Replace with np.array_equal with equal_nan argument (added in 1.19.0)
+def generic_filter_test_nans(lib, symbol, arctic_query, expected):
+    received = lib.read(symbol, query_builder=arctic_query).data
+    assert expected.shape == received.shape
+    for col in expected.columns:
+        expected_col = expected.loc[:, col]
+        received_col = received.loc[:, col]
+        for idx, expected_val in expected_col.items():
+            received_val = received_col[idx]
+            if isinstance(expected_val, str):
+                assert isinstance(received_val, str) and expected_val == received_val
+            elif expected_val is None:
+                assert received_val is None
+            elif np.isnan(expected_val):
+                assert np.isnan(received_val)
+
+
+def generic_aggregation_test(lib, symbol, df, grouping_column, aggs_dict):
+    expected = df.groupby(grouping_column).agg(aggs_dict)
+    expected = expected.reindex(columns=sorted(expected.columns))
+    q = QueryBuilder().groupby(grouping_column).agg(aggs_dict)
+    received = lib.read(symbol, query_builder=q).data
+    received = received.reindex(columns=sorted(received.columns))
+    received.sort_index(inplace=True)
+    assert_frame_equal(expected, received, check_dtype=False)
+
+
+def generic_named_aggregation_test(lib, symbol, df, grouping_column, aggs_dict):
+    expected = df.groupby(grouping_column).agg(None, **aggs_dict)
+    expected = expected.reindex(columns=sorted(expected.columns))
+    q = QueryBuilder().groupby(grouping_column).agg(aggs_dict)
+    received = lib.read(symbol, query_builder=q).data
+    received = received.reindex(columns=sorted(received.columns))
+    received.sort_index(inplace=True)
+    try:
+        assert_frame_equal(expected, received, check_dtype=False)
+    except AssertionError as e:
+        print(
+            f"""Original df:\n{df}\nwith dtypes:\n{df.dtypes}\naggs dict:\n{aggs_dict}"""
+            f"""\nPandas result:\n{expected}\n"ArcticDB result:\n{received}"""
+        )
+        raise e
