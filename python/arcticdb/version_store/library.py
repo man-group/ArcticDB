@@ -679,6 +679,10 @@ class Library:
         Appends containing differing column sets to the existing data are only possible if the library has been
         configured to support dynamic schemas.
 
+        If `append` is called on a symbol that does not exist, it will create it. This is convenient when setting up
+        a new symbol, but be careful - it will not work for creating a new version of an existing symbol. Use `write`
+        in that case.
+
         Note that `append` is not designed for multiple concurrent writers over a single symbol.
 
         Parameters
