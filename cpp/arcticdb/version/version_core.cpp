@@ -1352,6 +1352,7 @@ std::optional<SegmentInMemory> get_last_indexed_seg(
         curr--;
     } while (curr >= 0 && first == last);
     // using segment aggregator to merge the last segments together against we do dedup
+    // no dedup necessary here since our invariance is that committed segments are always correct
     stream::SegmentAggregator<stream::TimeseriesIndex, DynamicSchema, RowCountSegmentPolicy, SparseColumnPolicy>
     aggregator{
         [](const FrameSlice&) {
@@ -1363,8 +1364,6 @@ std::optional<SegmentInMemory> get_last_indexed_seg(
         },
         RowCountSegmentPolicy{}
     };
-    // no dedup necessary here since our invariance is that committed segments are always correct
-    aggregator.set_dedup_rows(false);
     for(auto sk: slice_and_keys_to_read) {
         aggregator.add_segment(
                 std::move(sk.segment(store)),
@@ -1397,13 +1396,9 @@ VersionedItem compact_incomplete_impl(
 
     std::optional<SegmentInMemory> last_indexed;
     std::optional<SortedValue> previous_sorted_value;
-    bool dedup_rows = write_options.compact_incomplete_dedup_rows;
-    if((dedup_rows || append) && update_info.previous_index_key_.has_value()) {
+    if(append && update_info.previous_index_key_.has_value()) {
         read_indexed_keys_to_pipeline(store, pipeline_context, *(update_info.previous_index_key_), read_query, read_options);
         previous_sorted_value.emplace(pipeline_context->desc_->sorted());
-        if (dedup_rows) {
-            last_indexed = get_last_indexed_seg(store, pipeline_context, convert_int_to_float);
-        }
     }
 
     auto prev_size = pipeline_context->slice_and_keys_.size();
@@ -1431,7 +1426,7 @@ VersionedItem compact_incomplete_impl(
         );
 
     util::variant_match(std::move(policies), [
-        &fut_vec, &slices, pipeline_context=pipeline_context, &store, convert_int_to_float, &previous_sorted_value, &write_options, &dedup_rows, &last_indexed] (auto &&idx, auto &&schema, auto &&column_policy) {
+        &fut_vec, &slices, pipeline_context=pipeline_context, &store, convert_int_to_float, &previous_sorted_value, &write_options] (auto &&idx, auto &&schema, auto &&column_policy) {
         using IndexType = std::remove_reference_t<decltype(idx)>;
         using SchemaType = std::remove_reference_t<decltype(schema)>;
         using ColumnPolicyType = std::remove_reference_t<decltype(column_policy)>;
@@ -1443,8 +1438,6 @@ VersionedItem compact_incomplete_impl(
                 slices,
                 store,
                 convert_int_to_float,
-                dedup_rows,
-                std::move(last_indexed),
                 write_options.segment_row_size); //TODO too many parameters; To make PR review easier by keeping things similar to arcticc
         if constexpr(std::is_same_v<IndexType, TimeseriesIndex>) {
             pipeline_context->desc_->set_sorted(deduce_sorted(previous_sorted_value.value_or(SortedValue::ASCENDING), SortedValue::ASCENDING));
@@ -1549,8 +1542,6 @@ VersionedItem defragment_symbol_data_impl(
             slices,
             store,
             false,
-            false,
-            std::nullopt,
             segment_size);
     });
 

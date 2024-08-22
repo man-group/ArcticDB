@@ -43,13 +43,9 @@ public:
         SliceCallBack&& slice_callback,
         Schema &&schema,
         typename AggregatorType::Callback &&c,
-        SegmentingPolicy &&segmenting_policy = SegmentingPolicy{},
-        std::optional<SegmentInMemory>&& last_committed_segment = std::nullopt) :
+        SegmentingPolicy &&segmenting_policy = SegmentingPolicy{}):
         AggregatorType(std::move(schema), std::move(c), std::move(segmenting_policy)),
-        slice_callback_(std::move(slice_callback)),
-        dedup_rows_(false),
-        last_committed_segment_(std::move(last_committed_segment)),
-        previous_reduction_in_size_(0) {
+        slice_callback_(std::move(slice_callback)){
     }
 
     void add_segment(SegmentInMemory&& seg, const pipelines::FrameSlice& slice, bool convert_int_to_float) {
@@ -82,17 +78,12 @@ public:
         commit();
     }
 
-    void set_dedup_rows(bool dedup_rows) {
-        dedup_rows_ = dedup_rows;
-    }
-
     void commit() override {
         if(segments_.empty())
             return;
 
         util::check(segments_.size() == slices_.size(), "Segment and slice size mismatch, {} != {}", segments_.size(), slices_.size());
-        std::vector<std::size_t> segments_final_sizes;
-        if(segments_.size() == 1 && !dedup_rows_) {
+        if(segments_.size() == 1) {
             // One segment, and it could be huge, so don't duplicate it
             AggregatorType::segment() = segments_[0];
             if(!DensityPolicy::allow_sparse){ //static schema must have all columns as column slicing is removed
@@ -107,13 +98,11 @@ public:
         }
         else {
             AggregatorType::segment().init_column_map();
-            merge_segments(std::move(segments_), AggregatorType::segment(), dedup_rows_, last_committed_segment_, segments_final_sizes, DensityPolicy::allow_sparse);
+            merge_segments(segments_, AggregatorType::segment(), DensityPolicy::allow_sparse);
         }
 
         if (AggregatorType::segment().row_count() > 0) {
-            auto [slice, new_reduction_in_size] = merge_slices(slices_, AggregatorType::segment().descriptor(), dedup_rows_, segments_final_sizes, previous_reduction_in_size_);
-            previous_reduction_in_size_ = new_reduction_in_size;
-            last_committed_segment_ = AggregatorType::segment().clone();
+            auto slice = merge_slices(slices_, AggregatorType::segment().descriptor());
             AggregatorType::commit_impl(false);
             slice_callback_(std::move(slice));
         }
@@ -125,10 +114,37 @@ private:
     std::vector<SegmentInMemory> segments_;
     std::vector<pipelines::FrameSlice> slices_;
     SliceCallBack slice_callback_;
-    bool dedup_rows_;
-    std::optional<SegmentInMemory> last_committed_segment_;
     std::optional<StreamDescriptor> stream_descriptor_;
-    ssize_t previous_reduction_in_size_;
+
+    virtual void merge_segments(
+        std::vector<SegmentInMemory>& segments,
+        SegmentInMemory& merged,
+        bool is_sparse) {
+        ARCTICDB_DEBUG(log::version(), "Appending {} segments", segments.size());
+        timestamp min_idx = std::numeric_limits<timestamp>::max();
+        timestamp max_idx = std::numeric_limits<timestamp>::min();
+        for (auto &segment : segments) {
+            ARCTICDB_DEBUG(log::version(), "Appending segment with {} rows", segment.row_count());
+            for(const auto& field : segment.descriptor().fields()) {
+                if(!merged.column_index(field.name())){//TODO: Bottleneck for wide segments
+                    auto pos = merged.add_column(field, 0, false);
+                    if (!is_sparse){
+                        merged.column(pos).mark_absent_rows(merged.row_count());
+                    }
+                }
+            }
+
+            if (segment.row_count() && segment.descriptor().index().type() == IndexDescriptorImpl::Type::TIMESTAMP) {
+                min_idx = std::min(min_idx, segment.begin()->begin()->value<timestamp>());
+                max_idx = std::max(max_idx, (segment.end() - 1)->begin()->value<timestamp>());
+            }
+
+            merge_string_columns(segment, merged.string_pool_ptr(), false);
+            merged.append(segment);
+            merged.set_compacted(true);
+            util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
+        }
+    }
 };
 
 } // namespace arcticdb

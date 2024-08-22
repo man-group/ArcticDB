@@ -108,10 +108,7 @@ void do_compact(
     std::vector<pipelines::FrameSlice>& slices,
     const std::shared_ptr<Store>& store,
     bool convert_int_to_float,
-    bool dedup_rows,
-    std::optional<SegmentInMemory>&& previous_segment,
     std::optional<size_t> segment_size){
-        ARCTICDB_DEBUG(log::version(), "Previous segment has {} rows", previous_segment ? previous_segment->row_count() : 1000000);
 
         auto index = stream::index_type_from_descriptor(pipeline_context->descriptor());
         stream::SegmentAggregator<IndexType, SchemaType, SegmentationPolicy, DensityPolicy>
@@ -127,11 +124,9 @@ void do_compact(
                 pk{KeyType::TABLE_DATA, pipeline_context->version_id_, pipeline_context->stream_id_, local_index_start, local_index_end};
                 fut_vec.emplace_back(store->write(pk, std::move(segment)));
             },
-            segment_size.has_value() ? SegmentationPolicy{*segment_size} : SegmentationPolicy{},
-            std::move(previous_segment)
+            segment_size.has_value() ? SegmentationPolicy{*segment_size} : SegmentationPolicy{}
         };
 
-        aggregator.set_dedup_rows(dedup_rows);
 
         for(auto it = target_start; it != target_end; ++it) {
             decltype(auto) sk = [&it](){
