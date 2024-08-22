@@ -12,8 +12,10 @@
 
 namespace arcticdb {
 
+// filter_bitset is passed by copy deliberately, as the same bitset is used for multiple segments, and is modified by
+// the segment filtering implementation
 inline SegmentInMemory filter_segment(const SegmentInMemory& input,
-                                      util::BitSet&& filter_bitset,
+                                      util::BitSet filter_bitset,
                                       bool filter_down_stringpool=false,
                                       bool validate=false) {
     return input.filter(std::move(filter_bitset), filter_down_stringpool, validate);

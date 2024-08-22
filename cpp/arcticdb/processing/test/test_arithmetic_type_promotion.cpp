@@ -10,29 +10,35 @@
 
 TEST(ArithmeticTypePromotion, Abs) {
     using namespace arcticdb;
-    // All types should promote to themselves
+    // Floating point and unsigned integer types should promote to themselves
     static_assert(std::is_same_v<unary_arithmetic_promoted_type<float,     AbsOperator>::type, float>);
     static_assert(std::is_same_v<unary_arithmetic_promoted_type<double,    AbsOperator>::type, double>);
     static_assert(std::is_same_v<unary_arithmetic_promoted_type<uint8_t,   AbsOperator>::type, uint8_t>);
     static_assert(std::is_same_v<unary_arithmetic_promoted_type<uint16_t,  AbsOperator>::type, uint16_t>);
     static_assert(std::is_same_v<unary_arithmetic_promoted_type<uint32_t,  AbsOperator>::type, uint32_t>);
     static_assert(std::is_same_v<unary_arithmetic_promoted_type<uint64_t,  AbsOperator>::type, uint64_t>);
-    static_assert(std::is_same_v<unary_arithmetic_promoted_type<int8_t,    AbsOperator>::type, int8_t>);
-    static_assert(std::is_same_v<unary_arithmetic_promoted_type<int16_t,   AbsOperator>::type, int16_t>);
-    static_assert(std::is_same_v<unary_arithmetic_promoted_type<int32_t,   AbsOperator>::type, int32_t>);
+    // Signed integer types should promote to a signed type of double the width, capped at int64_t
+    // This is because std::abs(std::numeric_limits<intn_t>::min()) == std::numeric_limits<intn_t>::max() + 1
+    // for n in {8, 16, 32, 64}. We accept that there will be overflow for int64_t for a single value.
+    static_assert(std::is_same_v<unary_arithmetic_promoted_type<int8_t,    AbsOperator>::type, int16_t>);
+    static_assert(std::is_same_v<unary_arithmetic_promoted_type<int16_t,   AbsOperator>::type, int32_t>);
+    static_assert(std::is_same_v<unary_arithmetic_promoted_type<int32_t,   AbsOperator>::type, int64_t>);
     static_assert(std::is_same_v<unary_arithmetic_promoted_type<int64_t,   AbsOperator>::type, int64_t>);
 }
 
 TEST(ArithmeticTypePromotion, Neg) {
     using namespace arcticdb;
-    // Floating point and signed integer types should promote to themselves
+    // Floating point types should promote to themselves
     static_assert(std::is_same_v<unary_arithmetic_promoted_type<float,     NegOperator>::type, float>);
     static_assert(std::is_same_v<unary_arithmetic_promoted_type<double,    NegOperator>::type, double>);
-    static_assert(std::is_same_v<unary_arithmetic_promoted_type<int8_t,    NegOperator>::type, int8_t>);
-    static_assert(std::is_same_v<unary_arithmetic_promoted_type<int16_t,   NegOperator>::type, int16_t>);
-    static_assert(std::is_same_v<unary_arithmetic_promoted_type<int32_t,   NegOperator>::type, int32_t>);
+    // Integer types should promote to a signed type of double the width, capped at int64_t. For signed integers,
+    // this is because -std::numeric_limits<intn_t>::min() == std::numeric_limits<intn_t>::max() + 1
+    // for n in {8, 16, 32, 64}. We accept that there will be overflow for int64_t for a single value, and for uint64_t
+    // values greater than std::numeric_limits<int64_t>::max()
+    static_assert(std::is_same_v<unary_arithmetic_promoted_type<int8_t,    NegOperator>::type, int16_t>);
+    static_assert(std::is_same_v<unary_arithmetic_promoted_type<int16_t,   NegOperator>::type, int32_t>);
+    static_assert(std::is_same_v<unary_arithmetic_promoted_type<int32_t,   NegOperator>::type, int64_t>);
     static_assert(std::is_same_v<unary_arithmetic_promoted_type<int64_t,   NegOperator>::type, int64_t>);
-    // Unsigned integer types should promote to a signed type of double the width, capped at int64_t
     static_assert(std::is_same_v<unary_arithmetic_promoted_type<uint8_t,   NegOperator>::type, int16_t>);
     static_assert(std::is_same_v<unary_arithmetic_promoted_type<uint16_t,  NegOperator>::type, int32_t>);
     static_assert(std::is_same_v<unary_arithmetic_promoted_type<uint32_t,  NegOperator>::type, int64_t>);

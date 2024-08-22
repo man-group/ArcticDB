@@ -38,7 +38,7 @@ public:
 
     void insert(std::string_view name, size_t index) {
         auto off_str = pool_.get(name);
-        column_offsets_.insert(std::make_pair<std::string_view, size_t>(pool_.get_view(off_str.offset()), std::forward<size_t>(index)));
+        column_offsets_.insert({pool_.get_view(off_str.offset()), index});
         column_offsets_[pool_.get_view(off_str.offset())] = index;
     }
 

@@ -115,11 +115,11 @@ template <class VAL, class Func>
 struct unary_arithmetic_promoted_type {
     static constexpr size_t val_width = arithmetic_promoted_type::details::width_v<VAL>;
     using type = typename
-        /* All types promote to themselves with the AbsOperator
-         * Floating point and signed integer types promote to themselves with the NegOperator as well */
-        std::conditional_t<std::is_same_v<Func, AbsOperator> || std::is_signed_v<VAL>,
+        /* Unsigned ints promote to themselves for the abs operator, and to a signed int of double the width with the neg operator
+         * Floating point types promote to themselves with both operators
+         * Signed ints promote to a signed int of double the width for both operators, as their range is not symmetric about zero */
+        std::conditional_t<std::is_floating_point_v<VAL> || (std::is_same_v<Func, AbsOperator> && std::is_unsigned_v<VAL>),
             VAL,
-            // Unsigned integer types promote to a signed type of double the width with the NegOperator
             typename arithmetic_promoted_type::details::signed_width_t<2 * val_width>
         >;
 };
@@ -187,8 +187,8 @@ struct type_arithmetic_promoted_type {
                             std::conditional_t<std::is_same_v<LHS, uint64_t> || std::is_same_v<RHS, uint64_t>,
                                 // If so, there's no common type that can completely hold both arguments. We trigger operation-specific handling
                                 std::conditional_t<std::is_base_of_v<MembershipOperator, Func>,
-                                    RHS, // Retains ValueSetBaseType in binary_membership()
-                                    int64_t>, // Retain the broken behaviour for Divide for now (https://github.com/man-group/ArcticDB/issues/594)
+                                    RHS, // Retains ValueSetBaseType in binary_membership(), which handles mixed int64/uint64 operations gracefully
+                                    int64_t>, // Use the widest signed type we support, and accept that there may be overflow to keep iterations if-statement free
                                 // There should be a signed type wider than the unsigned type, so both can be exactly represented
                                 typename arithmetic_promoted_type::details::signed_width_t<2 * max_width>
                             >
@@ -283,7 +283,7 @@ V apply(T t, U u) {
 struct EqualsOperator {
 template<typename T, typename U>
 bool operator()(T t, U u) const {
-    return t == T(u);
+    return t == u;
 }
 template<typename T>
 bool operator()(T t, std::optional<T> u) const {
@@ -306,12 +306,18 @@ bool operator()(std::optional<T> t, std::optional<T> u) const {
     else
         return false;
 }
+bool operator()(uint64_t t, int64_t u) const {
+    return comparison::equals(t, u);
+}
+bool operator()(int64_t t, uint64_t u) const {
+    return comparison::equals(t, u);
+}
 };
 
 struct NotEqualsOperator {
 template<typename T, typename U>
 bool operator()(T t, U u) const {
-    return t != T(u);
+    return t != u;
 }
 template<typename T>
 bool operator()(T t, std::optional<T> u) const {
@@ -334,12 +340,18 @@ bool operator()(std::optional<T> t, std::optional<T> u) const {
     else
         return true;
 }
+bool operator()(uint64_t t, int64_t u) const {
+    return comparison::not_equals(t, u);
+}
+bool operator()(int64_t t, uint64_t u) const {
+    return comparison::not_equals(t, u);
+}
 };
 
 struct LessThanOperator {
 template<typename T, typename U>
 bool operator()(T t, U u) const {
-    return t < T(u);
+    return t < u;
 }
 template<typename T>
 bool operator()([[maybe_unused]] std::optional<T> t, [[maybe_unused]] T u) const {
@@ -360,7 +372,7 @@ bool operator()(int64_t t, uint64_t u) const {
 struct LessThanEqualsOperator {
 template<typename T, typename U>
 bool operator()(T t, U u) const {
-    return t <= T(u);
+    return t <= u;
 }
 template<typename T>
 bool operator()([[maybe_unused]] std::optional<T> t, [[maybe_unused]] T u) const {
@@ -381,7 +393,7 @@ bool operator()(int64_t t, uint64_t u) const {
 struct GreaterThanOperator {
 template<typename T, typename U>
 bool operator()(T t, U u) const {
-    return t > T(u);
+    return t > u;
 }
 template<typename T>
 bool operator()([[maybe_unused]] std::optional<T> t, [[maybe_unused]] T u) const {
@@ -402,7 +414,7 @@ bool operator()(int64_t t, uint64_t u) const {
 struct GreaterThanEqualsOperator {
 template<typename T, typename U>
 bool operator()(T t, U u) const {
-    return t >= T(u);
+    return t >= u;
 }
 template<typename T>
 bool operator()([[maybe_unused]] std::optional<T> t, [[maybe_unused]] T u) const {
