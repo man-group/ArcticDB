@@ -142,48 +142,48 @@ public:
      * As a result this is probably not what you want unless you *know* that it is what you want.
      */
     template<class ValueType>
-    class RowIterator
-        : public boost::iterator_facade<RowIterator<ValueType>, ValueType, boost::random_access_traversal_tag> {
-    public:
-        RowIterator(SegmentInMemoryImpl *parent,
-                    ssize_t row_id_,
-                    size_t column_id) :
-                    location_(parent, row_id_, column_id) {
-        }
+        class RowIterator
+            : public boost::iterator_facade<RowIterator<ValueType>, ValueType, boost::random_access_traversal_tag> {
+        public:
+            RowIterator(SegmentInMemoryImpl *parent,
+                        ssize_t row_id_,
+                        size_t column_id) :
+                        location_(parent, row_id_, column_id) {
+            }
 
-        RowIterator(SegmentInMemoryImpl *parent,
-                    ssize_t row_id_) :
-                    location_(parent, row_id_, 0) {
-        }
+            RowIterator(SegmentInMemoryImpl *parent,
+                        ssize_t row_id_) :
+                        location_(parent, row_id_, 0) {
+            }
 
-        template<class OtherValue>
-            explicit RowIterator(const RowIterator<OtherValue> &other)
-            : location_(other.location_) {}
+            template<class OtherValue>
+                explicit RowIterator(const RowIterator<OtherValue> &other)
+                : location_(other.location_) {}
 
 
-    private:
-        friend class boost::iterator_core_access;
+        private:
+            friend class boost::iterator_core_access;
 
-        template<class> friend
-            class SegmentIterator;
+            template<class> friend
+                class SegmentIterator;
 
-        template<class OtherValue>
-        bool equal(const RowIterator<OtherValue> &other) const {
-            return location_ == other.location_;
-        }
+            template<class OtherValue>
+            bool equal(const RowIterator<OtherValue> &other) const {
+                return location_ == other.location_;
+            }
 
-        void increment() { ++location_.column_id_; }
+            void increment() { ++location_.column_id_; }
 
-        void decrement() { --location_.column_id_; }
+            void decrement() { --location_.column_id_; }
 
-        void advance(ptrdiff_t n) { location_.column_id_ += n; }
+            void advance(ptrdiff_t n) { location_.column_id_ += n; }
 
-        ValueType &dereference() const {
-            return location_;
-        }
+            ValueType &dereference() const {
+                return location_;
+            }
 
-        mutable Location location_;
-    };
+            mutable Location location_;
+        };
 
     struct Row {
         Row() = default;
@@ -367,6 +367,7 @@ public:
 
     using iterator = SegmentIterator<Row>;
     using const_iterator = SegmentIterator<const Row>;
+    
     
 
     SegmentInMemoryImpl();

@@ -760,24 +760,6 @@ struct formatter<FieldWrapper> {
     }
 };
 
-template <>
-struct formatter<arcticdb::IndexDescriptor::Type> : formatter<std::string> {
-    // Use the format method of the base class to format a string
-    template <typename FormatContext>
-    auto format(arcticdb::IndexDescriptor::Type c, FormatContext& ctx) {
-        std::string name = "Unknown";
-        switch (c) {
-            case arcticdb::IndexDescriptor::Type::UNKNOWN: name = "UNKNOWN"; break;
-            case arcticdb::IndexDescriptor::Type::EMPTY: name = "EMPTY"; break;
-            case arcticdb::IndexDescriptor::Type::ROWCOUNT: name = "ROWCOUNT"; break;
-            case arcticdb::IndexDescriptor::Type::STRING: name = "STRING"; break;
-            case arcticdb::IndexDescriptor::Type::TIMESTAMP: name = "TIMESTAMP"; break;
-            default: break;
-        }
-        return fmt::formatter<std::string>::format(name, ctx);
-    }
-};
-
 } //namespace fmt
 
 #define ARCTICDB_TYPES_H_
