@@ -234,7 +234,7 @@ namespace arcticdb {
         }
         else {
             ARCTICDB_TRACE(log::codec(), "Doing normal realloc of address {} and size {}", uintptr_t(p), size);
-            if (use_slab_allocator && size == page_size) {
+            if (use_slab_allocator() && size == page_size) {
                 std::free(p);
                 ret = reinterpret_cast<uint8_t*>(page_size_slab_allocator_->allocate());
             }
