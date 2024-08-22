@@ -44,11 +44,11 @@ public:
         Schema &&schema,
         typename AggregatorType::Callback &&c,
         SegmentingPolicy &&segmenting_policy = SegmentingPolicy{},
-        std::optional<SegmentInMemory>&& last_committed_segment_ = std::nullopt) :
+        std::optional<SegmentInMemory>&& last_committed_segment = std::nullopt) :
         AggregatorType(std::move(schema), std::move(c), std::move(segmenting_policy)),
         slice_callback_(std::move(slice_callback)),
         dedup_rows_(false),
-        last_committed_segment_(std::move(last_committed_segment_)),
+        last_committed_segment_(std::move(last_committed_segment)),
         previous_reduction_in_size_(0) {
     }
 

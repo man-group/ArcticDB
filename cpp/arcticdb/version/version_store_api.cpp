@@ -375,7 +375,7 @@ void PythonVersionStore::add_to_snapshot(
 
     std::sort(std::begin(retained_keys), std::end(retained_keys));
     if(is_delete_keys_immediately) {
-        delete_trees_responsibly(store(), version_map(), deleted_keys, get_master_snapshots_map(store()), snap_name).get();
+        delete_obsolete_data_with_index_keys(store(), version_map(), deleted_keys, get_master_snapshots_map(store()), snap_name).get();
         if (version_map()->log_changes()) {
             log_delete_snapshot(store(), snap_name);
         }
@@ -417,7 +417,7 @@ void PythonVersionStore::remove_from_snapshot(
     }
 
     if(is_delete_keys_immediately) {
-        delete_trees_responsibly(store(), version_map(), deleted_keys, get_master_snapshots_map(store()), snap_name).get();
+        delete_obsolete_data_with_index_keys(store(), version_map(), deleted_keys, get_master_snapshots_map(store()), snap_name).get();
         if (version_map()->log_changes()) {
             log_delete_snapshot(store(), snap_name);
         }
@@ -863,7 +863,7 @@ void PythonVersionStore::delete_snapshot_sync(const SnapshotId& snap_name, const
     store()->remove_key(snap_key).get();
 
     try {
-        delete_trees_responsibly(
+        delete_obsolete_data_with_index_keys(
             store(),
             version_map(),
             index_keys_in_current_snapshot,

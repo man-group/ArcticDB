@@ -61,17 +61,107 @@ inline void merge_string_columns(const SegmentInMemory& segment, const std::shar
     }
 }
 
-inline util::BitSet get_duplicates_bitset(SegmentHasherForDedupRows &merged_hasher, SegmentHasherForDedupRows& to_be_merged_hasher) {
-    util::BitSet duplicates (to_be_merged_hasher.row_hash_.size());
-    if (duplicates.size() == 0) {
-        return duplicates;
-    }
-    for (size_t i = 0; i < to_be_merged_hasher.row_hash_.size(); ++i) {
-        if (merged_hasher.unique_row_hash_.count(to_be_merged_hasher.row_hash_[i]) == 0) {
-            duplicates.set(i, true);
+inline bool is_row_identical(const SegmentInMemoryImpl::Row& row1, const SegmentInMemoryImpl::Row& row2) {
+    for (auto row1_it = row1.begin(), row2_it = row2.begin(); row1_it != row1.end() && row2_it != row2.end(); row1_it++, row2_it++) {
+        auto row1_dt = row1_it->get_field().type().data_type(), row2_dt = row2_it->get_field().type().data_type();
+        if (row1_dt != row2_dt) {
+            return false;
+        }
+        if (row1_it->get_field().name() != row2_it->get_field().name()) {
+            return false;
+        }
+        if (row1_it->has_value() != row2_it->has_value()) {
+            return false;
+        }
+        if (row1_it->has_value() && row2_it->has_value()) {
+            if (is_sequence_type(row1_dt)) {
+                std::optional<std::string_view> row1_val, row2_val;
+                row1_it->visit_string([&row1_val](std::optional<std::string_view> val) {
+                    if (static_cast<bool>(val)) {
+                        row1_val = val.value();
+                    }
+                });
+                row2_it->visit_string([&row2_val](std::optional<std::string_view> val) {
+                    if (static_cast<bool>(val)) {
+                        row2_val = val.value();
+                    }
+                });
+                if (row1_val && row2_val) {
+                    if (row1_val.value() != row2_val.value()) {
+                        return false;
+                    }
+                }
+                else if (row1_val != row2_val) {
+                    return false;
+                }
+            } else {
+                bool row1_it_has_value = true;
+                bool ans = false;
+                row1_it->visit([&row1_it_has_value, &row1_dt](auto val) {
+                    row1_it_has_value = static_cast<bool>(val) && (!is_floating_point_type(row1_dt) || !std::isnan(static_cast<float>(val.value())));
+                });
+                row2_it->visit([&row1_it, &ans, &row1_it_has_value, &row2_dt](auto val) {
+                    bool row2_it_has_value = static_cast<bool>(val) && (!is_floating_point_type(row2_dt) || !std::isnan(static_cast<float>(val.value())));
+                    if (row1_it_has_value != row2_it_has_value) {
+                        ans = false;
+                    }
+                    else if (row1_it_has_value && row2_it_has_value) {
+                        using ValType = std::decay_t<decltype(val.value())>;
+                        if (val.value() == row1_it->value<ValType>()) {
+                            ans = true;
+                        }
+                    }
+                });
+                if (!ans) {
+                    return false;
+                }
+            }
         }
     }
-    duplicates &= to_be_merged_hasher.segment_dedup_result_;
+    return true;
+}
+
+inline util::BitSet get_duplicates_bitset(const SegmentInMemoryImpl &merged, const SegmentInMemoryImpl& to_be_merged) {
+    util::BitSet duplicates(to_be_merged.row_count());
+    if (duplicates.size() == 0 || merged.row_count() == 0) {
+        duplicates.set();
+        return duplicates;
+    }
+    auto prev_row_it = to_be_merged.begin();
+    duplicates.set(prev_row_it->row_id_, true);
+    for (auto row_it = prev_row_it + 1; row_it != to_be_merged.end(); row_it++, prev_row_it++) {
+        if (!is_row_identical(*row_it, *prev_row_it)) {
+            duplicates.set(row_it->row_id_, true);
+        }
+    }
+    auto to_be_merged_row_it = to_be_merged.begin();
+    
+    auto t = to_be_merged_row_it->template index<stream::TimeseriesIndex>();
+    log::version().info("to_be_merged_row_it {}", t);
+    auto merged_it = std::lower_bound(merged.begin(), merged.end(), *to_be_merged_row_it,
+        [](const auto& lhs, const auto& rhs) {
+            auto ltime = lhs.template index<stream::TimeseriesIndex>(), rtime = rhs.template index<stream::TimeseriesIndex>();
+            log::version().info("lhs {} rhs {}", ltime, rtime);
+            return lhs.template index<stream::TimeseriesIndex>() < rhs.template index<stream::TimeseriesIndex>();
+        }
+    ); // find last matching row with the same index
+
+    while (merged_it != merged.end() && to_be_merged_row_it != to_be_merged.end()) {
+        if (!duplicates[to_be_merged_row_it->row_id_]) {
+            to_be_merged_row_it++;
+        }
+        else if (is_row_identical(*merged_it, *to_be_merged_row_it)) {
+            duplicates.set(to_be_merged_row_it->row_id_, false);
+            merged_it++;
+            to_be_merged_row_it++;
+        }
+        else if (merged_it->template index<stream::TimeseriesIndex>() <= to_be_merged_row_it->template index<stream::TimeseriesIndex>()) {
+            merged_it++;
+        }
+        else {
+            break;
+        }        
+    }
     return duplicates;
 }
 
@@ -80,8 +170,7 @@ inline bool dedup_rows_from_last_committed_segment(
     SegmentInMemory& to_be_merged_segment,
     std::vector<size_t>& segments_final_sizes
 ) {
-    SegmentHasherForDedupRows last_committed_hasher(last_committed_segment), to_be_merged_hasher(to_be_merged_segment);
-    auto last_committed_filter_bitset = get_duplicates_bitset(last_committed_hasher, to_be_merged_hasher);
+    auto last_committed_filter_bitset = get_duplicates_bitset(*last_committed_segment.impl(), *to_be_merged_segment.impl());
     auto set_rows = last_committed_filter_bitset.count();
     ARCTICDB_DEBUG(log::version(), "filter_bitset.count() with last_committed is {} ", set_rows);
     if (set_rows > 0) {
@@ -100,26 +189,25 @@ inline bool dedup_rows_from_last_committed_segment(
     }
 }
 
-inline std::optional<SegmentHasherForDedupRows> dedup_rows_from_segment(
-    SegmentHasherForDedupRows& merged_hasher,
+inline bool dedup_rows_from_segment(
+    SegmentInMemory& merged,
     SegmentInMemory& to_be_merged_segment,
     std::vector<size_t>& segments_final_sizes
     ) {
     // TODO: Currently, the original segment will be copied twice - once while filtering and once when
     // TODO: appending to merged. Combine the append and filter functionality.
-    SegmentHasherForDedupRows to_be_merged_hasher(to_be_merged_segment);
-    auto filter_bitset = get_duplicates_bitset(merged_hasher, to_be_merged_hasher);
+    auto filter_bitset = get_duplicates_bitset(*merged.impl(), *to_be_merged_segment.impl());
     auto set_rows = filter_bitset.count();
     ARCTICDB_DEBUG(log::version(), "filter_bitset.count() is {} ", set_rows);
     if (set_rows == 0) {
         segments_final_sizes.push_back(0);
-        return std::nullopt;
+        return true;
     }
     if (set_rows < to_be_merged_segment.row_count()) {
         ARCTICDB_DEBUG(log::version(), "Some rows are dup-ed, removing them");
         to_be_merged_segment = filter_segment(to_be_merged_segment, std::move(filter_bitset));
     }
-    return to_be_merged_hasher;
+    return false;
 }
 
 inline void merge_segments(
@@ -133,10 +221,8 @@ inline void merge_segments(
     timestamp min_idx = std::numeric_limits<timestamp>::max();
     timestamp max_idx = std::numeric_limits<timestamp>::min();
     bool dedup_with_last_committed = true;
-    SegmentHasherForDedupRows merged_hasher(merged);
     for (auto &&segment : segments) {
         SegmentInMemory& to_be_merged_segment = segment;
-        std::optional<SegmentHasherForDedupRows> to_be_merged_hasher;
         if (dedup_rows){
             if (dedup_with_last_committed && last_committed_segment) {
                 if (dedup_rows_from_last_committed_segment(*last_committed_segment, to_be_merged_segment, segments_final_sizes)) {
@@ -146,7 +232,7 @@ inline void merge_segments(
                     dedup_with_last_committed = false;
                 }
             }
-            if (to_be_merged_hasher = dedup_rows_from_segment(merged_hasher, to_be_merged_segment, segments_final_sizes); !to_be_merged_hasher) {
+            if (dedup_rows_from_segment(merged, to_be_merged_segment, segments_final_sizes)) {
                 continue;
             }
         }
@@ -177,7 +263,6 @@ inline void merge_segments(
         merge_string_columns(to_be_merged_segment, merged.string_pool_ptr(), false);
         segments_final_sizes.push_back(to_be_merged_segment.row_count());
         merged.append(std::move(to_be_merged_segment));
-        merged_hasher.unique_row_hash_.insert(to_be_merged_hasher->unique_row_hash_.begin(), to_be_merged_hasher->unique_row_hash_.end());
         merged.set_compacted(true);
         util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
     }

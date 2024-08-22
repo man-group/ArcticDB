@@ -66,7 +66,7 @@ folly::Future<folly::Unit> LocalVersionedEngine::delete_unreferenced_pruned_inde
                     pruned_indexes);
             in_snaps.insert(key_to_keep);
             PreDeleteChecks checks{false, false, false, false, std::move(in_snaps)};
-            return delete_trees_responsibly(store(), version_map(), not_in_snaps, {}, {}, checks)
+            return delete_obsolete_data_with_index_keys(store(), version_map(), not_in_snaps, {}, {}, checks)
                     .thenError(folly::tag_t<std::exception>{}, [](auto const& ex) {
                         log::version().warn("Failed to clean up pruned previous versions due to: {}", ex.what());
                     });
@@ -761,7 +761,7 @@ VersionedItem LocalVersionedEngine::write_individual_segment(
     return versioned_item;
 }
 
-// Steps of delete_trees_responsibly:
+// Steps of delete_obsolete_data_with_index_keys:
 void copy_versions_nearest_to_target(
         const MasterSnapshotMap::value_type::second_type& keys_map,
         const IndexTypeKey& target_key,
@@ -809,7 +809,7 @@ std::unordered_map<StreamId, VersionId> min_versions_for_each_stream(const std::
     return out;
 }
 
-folly::Future<folly::Unit> delete_trees_responsibly(
+folly::Future<folly::Unit> delete_obsolete_data_with_index_keys(
         std::shared_ptr<Store> store,
         std::shared_ptr<VersionMap> &version_map,
         const std::vector<IndexTypeKey>& orig_keys_to_delete,

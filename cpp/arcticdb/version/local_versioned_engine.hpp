@@ -57,7 +57,7 @@ struct SortMergeOptions {
     bool prune_previous_versions_;
 };
 
-folly::Future<folly::Unit> delete_trees_responsibly(
+folly::Future<folly::Unit> delete_obsolete_data_with_index_keys(
     std::shared_ptr<Store> store,
     std::shared_ptr<VersionMap> &version_map,
     const std::vector<IndexTypeKey>& orig_keys_to_delete,
@@ -170,7 +170,7 @@ public:
         const PreDeleteChecks& checks = default_pre_delete_checks
     ) override {
         auto snapshot_map = get_master_snapshots_map(store());
-        delete_trees_responsibly(store(), version_map(), idx_to_be_deleted, snapshot_map, std::nullopt, checks).get();
+        delete_obsolete_data_with_index_keys(store(), version_map(), idx_to_be_deleted, snapshot_map, std::nullopt, checks).get();
     };
 
     std::set<StreamId> list_streams_internal(

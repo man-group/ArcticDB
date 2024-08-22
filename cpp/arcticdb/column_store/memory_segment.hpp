@@ -12,6 +12,7 @@
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/column_store/memory_segment_impl.hpp>
+#include <arcticdb/column_store/column_data_random_accessor.hpp>
 
 namespace arcticdb {
 /*
@@ -534,6 +535,15 @@ private:
         ARCTICDB_DEBUG(log::version(), "Hash is {}, visited values are {}", ans, visited_values.str());
         return ans;
     }
+
+    // size_t get_hash(const SegmentInMemoryImpl &segment/*, size_t row_id*/) {
+    //     // size_t ans = 0;
+    //     for (size_t col_id = 0; col_id < segment.num_columns(); col_id++) {
+    //         auto column_data = segment.column_data(col_id);
+    //         auto it = random_accessor(&column_data);
+    //     }
+    //     return 0;
+    // }
 };
 
 } //namespace arcticdb

@@ -121,6 +121,19 @@ FrameAndDescriptor read_index_impl(
     const std::shared_ptr<Store>& store,
     const VersionedItem& version);
 
+VersionedItem collate_and_write(
+    const std::shared_ptr<Store>& store,
+    const std::shared_ptr<PipelineContext>& pipeline_context,
+    const std::vector<FrameSlice>& slices,
+    std::vector<VariantKey> keys,
+    size_t append_after,
+    const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta);
+
+std::optional<SegmentInMemory> get_last_indexed_seg(
+    const std::shared_ptr<Store>& store,
+    const std::shared_ptr<PipelineContext>& pipeline_context,
+    bool convert_int_to_float);
+
 VersionedItem compact_incomplete_impl(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
@@ -181,6 +194,19 @@ VersionedItem sort_merge_impl(
 void modify_descriptor(
     const std::shared_ptr<pipelines::PipelineContext>& pipeline_context,
     const ReadOptions& read_options);
+
+void read_incompletes_to_pipeline(
+    const std::shared_ptr<Store>& store,
+    std::shared_ptr<PipelineContext>& pipeline_context,
+    const ReadQuery& read_query,
+    const ReadOptions& read_options,
+    bool convert_int_to_float,
+    bool via_iteration,
+    bool sparsify);
+
+void check_incompletes_index_ranges_dont_overlap(
+    const std::shared_ptr<PipelineContext>& pipeline_context,
+    const std::optional<SortedValue>& previous_sorted_value);
 
 void read_indexed_keys_to_pipeline(
     const std::shared_ptr<Store>& store,
