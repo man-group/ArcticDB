@@ -126,8 +126,7 @@ class SymbolDescription(NamedTuple):
     last_update_time : datetime.datetime
         The time of the last update to the symbol, in UTC.
     date_range : Tuple[Union[pandas.Timestamp], Union[pandas.Timestamp]]
-        The value of the index column in the first row of this symbol, and one nanosecond after the value of the index
-        column in the last row of this symbol. Both values will be NaT if:
+        The values of the index column in the first and last row of this symbol. Both values will be NaT if:
         - the symbol is not timestamp indexed
         - the symbol is timestamp indexed, but the sorted field of this class is UNSORTED (see below)
     sorted : str

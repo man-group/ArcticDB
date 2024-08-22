@@ -978,7 +978,7 @@ def test_get_description_batch_missing_keys(arctic_library):
     assert batch[1].error_category == ErrorCategory.STORAGE
 
     assert not isinstance(batch[2], DataError)
-    assert batch[2].date_range == (pd.Timestamp(year=2018, month=1, day=1), pd.Timestamp(year=2018, month=1, day=3, nanosecond=1))
+    assert batch[2].date_range == (pd.Timestamp(year=2018, month=1, day=1), pd.Timestamp(year=2018, month=1, day=3))
     assert [c[0] for c in batch[2].columns] == ["a"]
     assert batch[2].index[0] == ["named_index"]
     assert batch[2].index_type == "index"
@@ -999,7 +999,7 @@ def test_get_description_batch_symbol_doesnt_exist(arctic_library):
 
     # Then
     assert not isinstance(batch[0], DataError)
-    assert batch[0].date_range == (pd.Timestamp(year=2018, month=1, day=1), pd.Timestamp(year=2018, month=1, day=4, nanosecond=1))
+    assert batch[0].date_range == (pd.Timestamp(year=2018, month=1, day=1), pd.Timestamp(year=2018, month=1, day=4))
     assert [c[0] for c in batch[0].columns] == ["a"]
     assert batch[0].index[0] == ["named_index"]
     assert batch[0].index_type == "index"
@@ -1031,7 +1031,7 @@ def test_get_description_batch_version_doesnt_exist(arctic_library):
 
     # Then
     assert not isinstance(batch[0], DataError)
-    assert batch[0].date_range == (pd.Timestamp(year=2018, month=1, day=1), pd.Timestamp(year=2018, month=1, day=4, nanosecond=1))
+    assert batch[0].date_range == (pd.Timestamp(year=2018, month=1, day=1), pd.Timestamp(year=2018, month=1, day=4))
     assert [c[0] for c in batch[0].columns] == ["a"]
     assert batch[0].index[0] == ["named_index"]
     assert batch[0].index_type == "index"
@@ -1131,13 +1131,13 @@ def test_get_description_batch(arctic_library):
         [ReadInfoRequest("symbol1", as_of=0), ReadInfoRequest("symbol2", as_of=0), ReadInfoRequest("symbol3", as_of=0)]
     )
 
-    assert infos[0].date_range == (pd.Timestamp(year=2018, month=1, day=1), pd.Timestamp(year=2018, month=1, day=6, nanosecond=1))
-    assert infos[1].date_range == (pd.Timestamp(year=2019, month=1, day=1), pd.Timestamp(year=2019, month=1, day=6, nanosecond=1))
-    assert infos[2].date_range == (pd.Timestamp(year=2020, month=1, day=1), pd.Timestamp(year=2020, month=1, day=6, nanosecond=1))
+    assert infos[0].date_range == (pd.Timestamp(year=2018, month=1, day=1), pd.Timestamp(year=2018, month=1, day=6))
+    assert infos[1].date_range == (pd.Timestamp(year=2019, month=1, day=1), pd.Timestamp(year=2019, month=1, day=6))
+    assert infos[2].date_range == (pd.Timestamp(year=2020, month=1, day=1), pd.Timestamp(year=2020, month=1, day=6))
 
-    assert original_infos[0].date_range == (pd.Timestamp(year=2018, month=1, day=1), pd.Timestamp(year=2018, month=1, day=4, nanosecond=1))
-    assert original_infos[1].date_range == (pd.Timestamp(year=2019, month=1, day=1), pd.Timestamp(year=2019, month=1, day=4, nanosecond=1))
-    assert original_infos[2].date_range == (pd.Timestamp(year=2020, month=1, day=1), pd.Timestamp(year=2020, month=1, day=4, nanosecond=1))
+    assert original_infos[0].date_range == (pd.Timestamp(year=2018, month=1, day=1), pd.Timestamp(year=2018, month=1, day=4))
+    assert original_infos[1].date_range == (pd.Timestamp(year=2019, month=1, day=1), pd.Timestamp(year=2019, month=1, day=4))
+    assert original_infos[2].date_range == (pd.Timestamp(year=2020, month=1, day=1), pd.Timestamp(year=2020, month=1, day=4))
 
     list_infos = list(zip(infos, original_infos))
     # then
@@ -1191,13 +1191,13 @@ def test_get_description_batch_multiple_versions(arctic_library):
     infos = infos_multiple_version[3:6]
     original_infos = infos_multiple_version[0:3]
 
-    assert infos[0].date_range == (pd.Timestamp("1/1/2018"), pd.Timestamp("1/6/2018") + pd.Timedelta(1, unit="ns"))
-    assert infos[1].date_range == (pd.Timestamp("1/1/2019"), pd.Timestamp("1/6/2019") + pd.Timedelta(1, unit="ns"))
-    assert infos[2].date_range == (pd.Timestamp("1/1/2020"), pd.Timestamp("1/6/2020") + pd.Timedelta(1, unit="ns"))
+    assert infos[0].date_range == (pd.Timestamp("1/1/2018"), pd.Timestamp("1/6/2018"))
+    assert infos[1].date_range == (pd.Timestamp("1/1/2019"), pd.Timestamp("1/6/2019"))
+    assert infos[2].date_range == (pd.Timestamp("1/1/2020"), pd.Timestamp("1/6/2020"))
 
-    assert original_infos[0].date_range == (pd.Timestamp("1/1/2018"), pd.Timestamp("1/4/2018") + pd.Timedelta(1, unit="ns"))
-    assert original_infos[1].date_range == (pd.Timestamp("1/1/2019"), pd.Timestamp("1/4/2019") + pd.Timedelta(1, unit="ns"))
-    assert original_infos[2].date_range == (pd.Timestamp("1/1/2020"), pd.Timestamp("1/4/2020") + pd.Timedelta(1, unit="ns"))
+    assert original_infos[0].date_range == (pd.Timestamp("1/1/2018"), pd.Timestamp("1/4/2018"))
+    assert original_infos[1].date_range == (pd.Timestamp("1/1/2019"), pd.Timestamp("1/4/2019"))
+    assert original_infos[2].date_range == (pd.Timestamp("1/1/2020"), pd.Timestamp("1/4/2020"))
 
     list_infos = list(zip(infos, original_infos))
     # then
@@ -1237,7 +1237,7 @@ def test_read_description_batch_high_amount(arctic_library):
             idx = sym * num_versions + version
             date_range_comp = (
                 pd.Timestamp(year=start_year + sym, month=1, day=start_day + version),
-                pd.Timestamp(year=start_year + sym, month=1, day=start_day + version + 3, nanosecond=1),
+                pd.Timestamp(year=start_year + sym, month=1, day=start_day + version + 3),
             )
             assert results_list[idx].date_range == date_range_comp
             if version > 0:

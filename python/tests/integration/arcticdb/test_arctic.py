@@ -941,7 +941,7 @@ def test_get_description(arctic_library):
     original_info = lib.get_description("symbol", as_of=0)
     # then
     assert [c[0] for c in info.columns] == ["column"]
-    assert info.date_range == (pd.Timestamp(year=2018, month=1, day=1), pd.Timestamp(year=2018, month=1, day=6, nanosecond=1))
+    assert info.date_range == (pd.Timestamp(year=2018, month=1, day=1), pd.Timestamp(year=2018, month=1, day=6))
     assert info.index[0] == ["named_index"]
     assert info.index_type == "index"
     assert info.row_count == 6
@@ -966,7 +966,7 @@ def test_get_description_date_range_tz(arctic_library, tz):
     assert isinstance(start_ts, pd.Timestamp)
     assert isinstance(end_ts, pd.Timestamp)
     assert start_ts == index[0]
-    assert end_ts == index[-1] + pd.Timedelta(1, unit="ns")
+    assert end_ts == index[-1]
 
 
 def test_tail(arctic_library):
