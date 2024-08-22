@@ -147,7 +147,6 @@ def test_write_tz(lmdb_version_store, sym, tz):
     assert isinstance(start_ts, datetime.datetime)
     assert isinstance(end_ts, datetime.datetime)
     assert start_ts == index[0]
-    # datetime.datetime is microsecond precision, so don't need a +1ns in this assertion
     assert end_ts == index[-1]
 
 
