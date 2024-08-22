@@ -76,7 +76,7 @@ public:
 
   private:
     std::string name_;
-    timestamp ts_ = 0;
+    timestamp ts_ = std::numeric_limits<timestamp>::min();
 };
 
 class TableIndex : public BaseIndex<TableIndex> {

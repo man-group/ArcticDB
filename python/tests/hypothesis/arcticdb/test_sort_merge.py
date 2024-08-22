@@ -8,63 +8,118 @@ from hypothesis.stateful import RuleBasedStateMachine, rule, initialize, run_sta
 from collections import namedtuple
 from pandas.testing import assert_frame_equal
 from arcticdb.version_store.library import StagedDataFinalizeMethod
+from arcticdb.exceptions import UserInputException, StreamDescriptorMismatch, UnsortedDataException
 
 ColumnInfo = namedtuple('ColumnInfo', ['name', 'dtype'])
 
 COLUMN_DESCRIPTIONS = [ColumnInfo("a", "float"), ColumnInfo("b", "int64"), ColumnInfo("c", "str"), ColumnInfo("d", "datetime64[ns]")]
+SYMBOL = "sym"
 
 @st.composite
 def df(draw, column_list):
-    column_infos = draw(st.lists(st.sampled_from(column_list), unique=True))
+    column_infos = draw(st.lists(st.sampled_from(column_list), unique=True, min_size=1))
     columns = [hs_pd.column(name=ci.name, dtype=ci.dtype) for ci in column_infos]
-    return draw(hs_pd.data_frames(columns, index=hs_pd.indexes(dtype="datetime64[ns]")))
+    index = hs_pd.indexes(dtype="datetime64[ns]")
+    return draw(hs_pd.data_frames(columns, index=index))
 
 class StagedWrite(RuleBasedStateMachine):
 
     lib = None
+    staged_segments_count = 0
  
     @initialize()
     def init(self):
-        self.df = pd.DataFrame([])
+        self.staged = pd.DataFrame([])
+        self.staged_segments_count = 0
 
     @rule(df=df(COLUMN_DESCRIPTIONS))
     def stage(self, df):
-        self.df = pd.concat([self.df, df])
-        self.lib.write("sym", df, staged=True)
+        self.staged = pd.concat([self.staged, df])
+        self.lib.write(SYMBOL, df, staged=True)
+        self.staged_segments_count += 1
 
     @rule()
     def finalize_write(self):
-        self.df.sort_index(inplace=True)
-        self.lib.sort_and_finalize_staged_data("sym")
-        arctic_df = self.lib.read("sym").data
-        assert arctic_df.index.equals(self.df.index)
-        assert_frame_equal(arctic_df, self.df, check_like=True)
-        self.df = pd.DataFrame([])
-        
+        has_staged_segments = self.staged_segments_count > 0
+        self.staged.sort_index(inplace=True)
+        if not has_staged_segments:
+            self.assert_cannot_finalize_without_staged_data(StagedDataFinalizeMethod.WRITE)
+        elif pd.NaT in self.staged.index:
+            self.assert_nat_is_not_supported(StagedDataFinalizeMethod.WRITE)
+        else:
+            write_empty = len(self.staged) == 0
+            if write_empty:
+                self.fix_dtypes_for_zero_row_staged_data()
+            self.lib.sort_and_finalize_staged_data(SYMBOL)
+            arctic_df = self.lib.read(SYMBOL).data
+            assert arctic_df.index.equals(self.staged.index)
+            assert_frame_equal(arctic_df, self.staged, check_like=True)
+        self.staged = pd.DataFrame([])
+        self.staged_segments_count = 0
+
     @rule()
     def finalize_append(self):
-        self.df.sort_index(inplace=True)
-        pre_append_arctic = self.lib.read("sym").data if "sym" in self.lib.list_symbols() else pd.DataFrame([])
-
-        if len(pre_append_arctic) > 0 and len(self.df) > 0 and pre_append_arctic.index[-1] > self.df.index[0]:
-            # Make sure appends keep the index ordered
-            with pytest.raises(Exception) as exception_info:
-                self.lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
-            assert "append" in str(exception_info.value)
+        self.staged.sort_index(inplace=True)
+        symbol_exists = SYMBOL in self.lib.list_symbols()
+        dataframe_in_storage = self.lib.read(SYMBOL).data if symbol_exists else pd.DataFrame([])
+        symbol_is_not_empty = len(dataframe_in_storage) > 0
+        has_staged_segments = self.staged_segments_count > 0
+        has_non_empty_staged_segments = len(self.staged) > 0
+        if has_staged_segments and symbol_is_not_empty and dataframe_in_storage.index[-1] > self.staged.index[0]:
+            self.assert_appended_data_does_not_overlap_with_storage()
+        elif not has_staged_segments:
+            assert_frame_equal(self.staged, pd.DataFrame([]))
+            self.assert_cannot_finalize_without_staged_data(StagedDataFinalizeMethod.APPEND)
+        elif symbol_exists and set(self.staged.columns) != set(dataframe_in_storage.columns):
+            self.assert_append_throws_with_mismatched_columns()
+        elif pd.NaT in self.staged.index:
+            self.assert_nat_is_not_supported(StagedDataFinalizeMethod.APPEND)
         else:
-            self.lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
-            post_append_arctic = self.lib.read("sym").data
-            appended_arctic = post_append_arctic[len(pre_append_arctic):]
-            assert appended_arctic.index.equals(self.df.index)
-            assert_frame_equal(appended_arctic, self.df, check_like=True)
-        self.df = pd.DataFrame([])
+            if not has_non_empty_staged_segments:
+                self.fix_dtypes_for_zero_row_staged_data()
+            self.lib.sort_and_finalize_staged_data(SYMBOL, mode=StagedDataFinalizeMethod.APPEND)
+            post_append_arctic = self.lib.read(SYMBOL).data
+            appended_arctic = post_append_arctic[len(dataframe_in_storage):]
+            assert appended_arctic.index.equals(self.staged.sort_index().index)
+            assert_frame_equal(appended_arctic, self.staged, check_like=True)
+        self.staged = pd.DataFrame([])
+        self.staged_segments_count = 0
+
+    def assert_appended_data_does_not_overlap_with_storage(self):
+        with pytest.raises(Exception) as exception_info:
+            self.lib.sort_and_finalize_staged_data(SYMBOL, mode=StagedDataFinalizeMethod.APPEND)
+        assert "append" in str(exception_info.value)
+
+    def assert_cannot_finalize_without_staged_data(self, mode):
+        with pytest.raises(UserInputException) as exception_info:
+            self.lib.sort_and_finalize_staged_data(SYMBOL, mode=mode)
+        assert "E_NO_STAGED_SEGMENTS" in str(exception_info.value)
+
+    def assert_append_throws_with_mismatched_columns(self):
+        with pytest.raises(StreamDescriptorMismatch) as exception_info:
+            self.lib.sort_and_finalize_staged_data(SYMBOL, mode=StagedDataFinalizeMethod.APPEND)
+        assert "APPEND" in str(exception_info.value)
+
+    def assert_nat_is_not_supported(self, mode):
+        with pytest.raises(UnsortedDataException) as exception_info:
+            self.lib.sort_and_finalize_staged_data(SYMBOL, mode=mode)
+        # TODO: Better exception must be raised
+        assert "E_UNSORTED_DATA" in str(exception_info.value)
+
+    # This is needed because when hypothesis generates an empty column it changes its dtype to float64
+    # regardless of what was requested in the stragety
+    def fix_dtypes_for_zero_row_staged_data(self):
+        for ci in COLUMN_DESCRIPTIONS:
+            if ci.name in self.staged.columns:
+                self.staged.astype({ci.name: ci.dtype})
 
     def teardown(self):
-        self.df = pd.DataFrame([])
-        for sym in self.lib.list_symbols():
-            self.lib.delete(sym)
+        self.staged = pd.DataFrame([])
+        self.staged_segments_count = 0
+        self.lib.delete_staged_data(SYMBOL)
+        self.lib.delete(SYMBOL)
 
-@pytest.mark.skip(reason="Needs to resolve the issues found in unit tests.")
+
 def test_sort_and_finalize_staged_data(lmdb_storage, lib_name):
     ac = lmdb_storage.create_arctic()
     StagedWrite.lib = ac.create_library(lib_name)

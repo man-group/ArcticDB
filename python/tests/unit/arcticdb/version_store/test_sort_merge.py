@@ -3,7 +3,7 @@ import numpy as np
 from pandas.testing import assert_frame_equal
 import pytest
 from arcticdb.version_store.library import StagedDataFinalizeMethod
-from arcticdb.exceptions import UserInputException, SortingException
+from arcticdb.exceptions import UserInputException, SortingException, StreamDescriptorMismatch, InternalException
 
 def test_merge_single_column(lmdb_library):
     lib = lmdb_library
@@ -135,15 +135,13 @@ def test_merge_strings_dynamic(lmdb_library):
     expected_df = pd.DataFrame(expected_values, index=expected_dates)
     assert_frame_equal(lib.read(sym1).data, expected_df)
 
-
-@pytest.mark.xfail(reason="Unsorted segments are not implemented")
 def test_unordered_segment(lmdb_library):
     lib = lmdb_library
     dates = [np.datetime64('2023-01-03'), np.datetime64('2023-01-01'), np.datetime64('2023-01-05')]
     df = pd.DataFrame({"col": [2, 1, 3]}, index=dates)
     lib.write("sym", df, staged=True)
     lib.sort_and_finalize_staged_data("sym")
-    assert_frame_equal(lib.read('sym'), pd.DataFrame({"col": [1, 2, 3]}, index=[np.datetime64('2023-01-01'), np.datetime64('2023-01-03'), np.datetime64('2023-01-05')]))
+    assert_frame_equal(lib.read('sym').data, pd.DataFrame({"col": [1, 2, 3]}, index=[np.datetime64('2023-01-01'), np.datetime64('2023-01-03'), np.datetime64('2023-01-05')]))
 
 def test_repeating_index_values(lmdb_library):
     lib = lmdb_library
@@ -269,3 +267,55 @@ def test_append_to_missing_symbol(lmdb_library):
     lib.write("sym", df, staged=True)
     lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
     assert_frame_equal(lib.read("sym").data, df)
+
+def test_finalize_fails_sort_and_finalize_succeeeds(lmdb_library):
+    lib = lmdb_library
+
+    dates1 = [np.datetime64('2023-01-01'), np.datetime64('2023-01-02'), np.datetime64('2023-01-03')]
+    df1 = pd.DataFrame({"col": [1, 2, 3]}, index=pd.DatetimeIndex(dates1))
+    lib.write("sym", df1, staged=True)
+
+    dates2 = [np.datetime64('2023-01-08'), np.datetime64('2023-01-05'), np.datetime64('2023-01-10')]
+    df2 = pd.DataFrame({"col": [5, 4, 6]}, index=pd.DatetimeIndex(dates2))
+    lib.write("sym", df2, staged=True)
+
+    with pytest.raises(SortingException) as exception_info:
+        lib.finalize_staged_data("sym")
+    assert "unordered segment" in str(exception_info.value)
+
+    lib.sort_and_finalize_staged_data("sym")
+    assert_frame_equal(lib.read("sym").data, pd.concat([df1, df2]).sort_index())
+
+def test_pre_epoch(lmdb_library):
+    lib = lmdb_library
+
+    df = pd.DataFrame({"col": [1]}, pd.DatetimeIndex([pd.Timestamp(1969, 12, 31)]))
+    lib.write("sym", df, staged=True)
+    lib.sort_and_finalize_staged_data("sym")
+
+    assert_frame_equal(lib.read("sym").data, df)
+
+def test_append_throws_with_missmatched_column_set(lmdb_library):
+    lib = lmdb_library
+
+    initial_df = pd.DataFrame({"col_0": [1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
+    lib.write("sym", initial_df)
+
+    appended_df = pd.DataFrame({"col_1": [1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
+    lib.write("sym", appended_df, staged=True)
+    with pytest.raises(StreamDescriptorMismatch) as exception_info:
+        lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+    assert "APPEND" in str(exception_info.value)
+    assert "col_1" in str(exception_info.value)
+
+def test_append_incompatible_dtype(lmdb_library):
+    lib = lmdb_library
+
+    initial_df = pd.DataFrame({"col_0": [1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
+    lib.write("sym", initial_df)
+
+    appended_df = pd.DataFrame({"col_0": ["asd"]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
+    lib.write("sym", appended_df, staged=True)
+    with pytest.raises(InternalException) as exception_info:
+        lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+    assert "common type" in str(exception_info.value)

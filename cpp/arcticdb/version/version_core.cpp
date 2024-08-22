@@ -769,7 +769,7 @@ void read_indexed_keys_to_pipeline(
     pipeline_context->bucketize_dynamic_ = bucketize_dynamic;
 }
 
-void read_incompletes_to_pipeline(
+bool read_incompletes_to_pipeline(
     const std::shared_ptr<Store>& store,
     std::shared_ptr<PipelineContext>& pipeline_context,
     const ReadQuery& read_query,
@@ -787,7 +787,7 @@ void read_incompletes_to_pipeline(
         false);
 
     if(incomplete_segments.empty())
-        return;
+        return false;
 
     // In order to have the right normalization metadata and descriptor we need to find the first non-empty segment.
     // Picking an empty segment when there are non-empty ones will impact the index type and column namings.
@@ -825,8 +825,13 @@ void read_incompletes_to_pipeline(
     }
 
     generate_filtered_field_descriptors(pipeline_context, read_query.columns);
-    pipeline_context->slice_and_keys_.insert(std::end(pipeline_context->slice_and_keys_), std::begin(incomplete_segments),  std::end(incomplete_segments));
+    pipeline_context->slice_and_keys_.insert(
+        std::end(pipeline_context->slice_and_keys_),
+        std::make_move_iterator(incomplete_segments.begin()),
+        std::make_move_iterator(incomplete_segments.end())
+    );
     pipeline_context->total_rows_ = pipeline_context->calc_rows();
+    return true;
 }
 
 void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<PipelineContext>& pipeline_context,
@@ -1267,12 +1272,32 @@ VersionedItem collate_and_write(
     });
 }
 
+class IncompleteKeysRAII {
+public:
+    IncompleteKeysRAII(PipelineContext* pipeline_context, Store& store) : store_(store) {
+        for(auto sk = pipeline_context->incompletes_begin(); sk != pipeline_context->end(); ++sk) {
+            const auto& slice_and_key = sk->slice_and_key();
+            util::check(slice_and_key.key().type() == KeyType::APPEND_DATA, "Deleting incorrect key type {}", slice_and_key.key().type());
+            delete_keys_.emplace_back(slice_and_key.key());
+        }
+    }
+
+    ~IncompleteKeysRAII(){
+        store_.remove_keys(delete_keys_).get();
+    }
+
+private:
+    std::vector<entity::VariantKey> delete_keys_;
+    Store& store_;
+};
+
 VersionedItem sort_merge_impl(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& norm_meta,
     const UpdateInfo& update_info,
-    const CompactIncompleteOptions& options) {
+    const CompactIncompleteOptions& options,
+    const WriteOptions& write_options) {
     auto pipeline_context = std::make_shared<PipelineContext>();
     pipeline_context->stream_id_ = stream_id;
     pipeline_context->version_id_ = update_info.next_version_id_;
@@ -1284,25 +1309,36 @@ VersionedItem sort_merge_impl(
         previous_sorted_value.emplace(pipeline_context->desc_->sorted());
     }
 
-    auto num_versioned_rows = pipeline_context->total_rows_;
+    const auto num_versioned_rows = pipeline_context->total_rows_;
 
-    read_incompletes_to_pipeline(store,
-                                 pipeline_context,
-                                 read_query,
-                                 ReadOptions{},
-                                 options.convert_int_to_float_,
-                                 options.via_iteration_,
-                                 options.sparsify_);
     user_input::check<ErrorCode::E_NO_STAGED_SEGMENTS>(
-        pipeline_context->slice_and_keys_.size() > 0,
+        read_incompletes_to_pipeline(
+            store,
+            pipeline_context,
+            read_query,
+            ReadOptions{},
+            options.convert_int_to_float_,
+            options.via_iteration_,
+            options.sparsify_
+        ),
         "Finalizing staged data is not allowed with empty staging area"
     );
 
-    std::vector<entity::VariantKey> delete_keys;
-    for(auto sk = pipeline_context->incompletes_begin(); sk != pipeline_context->end(); ++sk) {
-        const auto& slice_and_key = sk->slice_and_key();
-        util::check(slice_and_key.key().type() == KeyType::APPEND_DATA, "Deleting incorrect key type {}", slice_and_key.key().type());
-        delete_keys.emplace_back(slice_and_key.key());
+    IncompleteKeysRAII incompleteKeys(pipeline_context.get(), *store);
+
+    const bool verify_descriptors_match =
+        options.append_ && update_info.previous_index_key_.has_value() && !write_options.dynamic_schema;
+    if (verify_descriptors_match) {
+        const auto& index_segment_reader = index::get_index_reader(*(update_info.previous_index_key_), store);
+        const auto& original_descriptor = index_segment_reader.tsd().as_stream_descriptor();
+        if (!columns_match(original_descriptor, *pipeline_context->desc_)) {
+            throw StreamDescriptorMismatch(
+                "The columns (names and types) in the argument are not identical to that of the existing version",
+                original_descriptor,
+                *pipeline_context->desc_,
+                NormalizationOperation::APPEND
+            );
+        }
     }
 
     std::vector<FrameSlice> slices;
@@ -1317,15 +1353,15 @@ VersionedItem sort_merge_impl(
 
             read_query.clauses_.emplace_back(std::make_shared<Clause>(MergeClause{timeseries_index, SparseColumnPolicy{}, stream_id, pipeline_context->descriptor()}));
             auto segments = read_and_process(store, pipeline_context, read_query, ReadOptions{}, pipeline_context->incompletes_after());
-            if (options.append_ && update_info.previous_index_key_.has_value() &&
+            if (options.append_ && update_info.previous_index_key_ && !segments.empty() &&
                 update_info.previous_index_key_->end_time() - 1 > std::get<timestamp>(TimeseriesIndex::start_value_for_segment(segments[0].segment_.value()))) {
-                store->remove_keys(delete_keys).get();
                 sorting::raise<ErrorCode::E_UNSORTED_DATA>(
                     "Cannot append staged segments to existing data as incomplete segment contains index value < existing data (in UTC): {} <= {}",
-                    date_and_time(std::get<timestamp>(TimeseriesIndex::start_value_for_segment(segments[0].segment_.value()))),
-                    date_and_time(update_info.previous_index_key_->end_time() - 1)
+                    std::get<timestamp>(TimeseriesIndex::start_value_for_segment(segments[0].segment_.value())),
+                    update_info.previous_index_key_->end_time() - 1
                 );
             }
+
             pipeline_context->total_rows_ = num_versioned_rows + get_slice_rowcounts(segments);
 
             auto index = index_type_from_descriptor(pipeline_context->descriptor());
@@ -1345,7 +1381,7 @@ VersionedItem sort_merge_impl(
 
             for(auto sk = segments.begin(); sk != segments.end(); ++sk) {
                 aggregator.add_segment(
-                    std::move(sk->segment(store)),
+                    sk->release_segment(store),
                     sk->slice(),
                     options.convert_int_to_float_);
 
@@ -1368,7 +1404,6 @@ VersionedItem sort_merge_impl(
         pipeline_context->incompletes_after(),
         norm_meta);
 
-    store->remove_keys(delete_keys).get();
     return vit;
 }
 
@@ -1394,7 +1429,11 @@ VersionedItem compact_incomplete_impl(
         previous_sorted_value.emplace(pipeline_context->desc_->sorted());
     }
 
+    
+
     auto prev_size = pipeline_context->slice_and_keys_.size();
+    [[maybe_unused]] const bool verify_descriptors_match =
+        options.append_ && update_info.previous_index_key_.has_value() && !write_options.dynamic_schema;
     read_incompletes_to_pipeline(store,
                                  pipeline_context,
                                  ReadQuery{},

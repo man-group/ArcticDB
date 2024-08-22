@@ -1074,7 +1074,7 @@ struct ReduceColumnTask : async::BaseTask {
                 EmptyDynamicStringReducer reducer(column, frame_, frame_field, sizeof(entity::position_t), lock_);
                 reducer.reduce(frame_.row_count());
             }
-        } else {
+        } else if (column_data != slice_map_->columns_.end()) {
             if(dynamic_schema_) {
                 NullValueReducer null_reducer{column, context_, frame_};
                 for (const auto &row : column_data->second) {
