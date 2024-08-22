@@ -60,20 +60,4 @@ inline void merge_string_columns(const SegmentInMemory& segment, const std::shar
         std::swap(src, cursor.buffer());
     }
 }
-
-inline pipelines::FrameSlice merge_slices(
-    std::vector<pipelines::FrameSlice>& slices,
-    const StreamDescriptor& desc) {
-    util::check(!slices.empty(), "Expected to merge non-empty slices_vector");
-
-    pipelines::FrameSlice output{slices[0]};
-    for(const auto& slice : slices) {
-        output.row_range.first = std::min(output.row_range.first, slice.row_range.first);
-        output.row_range.second = std::max(output.row_range.second, slice.row_range.second);
-    }
-
-    output.col_range.first = desc.index().field_count();
-    output.col_range.second = desc.field_count();
-    return output;
-}
 }

@@ -78,7 +78,7 @@ public:
         commit();
     }
 
-    void commit() override {
+    virtual void commit() override {
         if(segments_.empty())
             return;
 
@@ -110,10 +110,12 @@ public:
         slices_.clear();
     }
 
-private:
+protected:
     std::vector<SegmentInMemory> segments_;
     std::vector<pipelines::FrameSlice> slices_;
     SliceCallBack slice_callback_;
+
+private:
     std::optional<StreamDescriptor> stream_descriptor_;
 
     virtual void merge_segments(
@@ -144,6 +146,21 @@ private:
             merged.set_compacted(true);
             util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
         }
+    }
+    virtual pipelines::FrameSlice merge_slices(
+        std::vector<pipelines::FrameSlice>& slices,
+        const StreamDescriptor& desc) {
+        util::check(!slices.empty(), "Expected to merge non-empty slices_vector");
+
+        pipelines::FrameSlice output{slices[0]};
+        for(const auto& slice : slices) {
+            output.row_range.first = std::min(output.row_range.first, slice.row_range.first);
+            output.row_range.second = std::max(output.row_range.second, slice.row_range.second);
+        }
+
+        output.col_range.first = desc.index().field_count();
+        output.col_range.second = desc.field_count();
+        return output;
     }
 };
 
