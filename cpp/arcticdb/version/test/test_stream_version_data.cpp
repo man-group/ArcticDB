@@ -7,9 +7,9 @@ TEST(StreamVersionData, SpecificVersion) {
     using namespace arcticdb::pipelines;
 
     StreamVersionData stream_version_data;
-    VersionQuery query_1{SpecificVersionQuery{VersionId(12)}};
+    VersionQuery query_1{SpecificVersionQuery{VersionId(12), false}};
     stream_version_data.react(query_1);
-    VersionQuery query_2{SpecificVersionQuery{VersionId(4)}};
+    VersionQuery query_2{SpecificVersionQuery{VersionId(4), false}};
     stream_version_data.react(query_2);
     ASSERT_EQ(stream_version_data.count_, 2);
     ASSERT_EQ(stream_version_data.load_strategy_.load_type_, LoadType::DOWNTO);
@@ -21,8 +21,8 @@ TEST(StreamVersionData, SpecificVersionReversed) {
     using namespace arcticdb;
     using namespace arcticdb::pipelines;
 
-    StreamVersionData stream_version_data(VersionQuery{SpecificVersionQuery{VersionId(4)}});
-    VersionQuery query_2{SpecificVersionQuery{VersionId(12)}};
+    StreamVersionData stream_version_data(VersionQuery{SpecificVersionQuery{VersionId(4), false}});
+    VersionQuery query_2{SpecificVersionQuery{VersionId(12), false}};
     stream_version_data.react(query_2);
     ASSERT_EQ(stream_version_data.count_, 2);
     ASSERT_EQ(stream_version_data.load_strategy_.load_type_, LoadType::DOWNTO);
@@ -35,9 +35,9 @@ TEST(StreamVersionData, Timestamp) {
     using namespace arcticdb::pipelines;
 
     StreamVersionData stream_version_data;
-    VersionQuery query_1{TimestampVersionQuery{timestamp(12)}};
+    VersionQuery query_1{TimestampVersionQuery{timestamp(12), false}};
     stream_version_data.react(query_1);
-    VersionQuery query_2{TimestampVersionQuery{timestamp(4)}};
+    VersionQuery query_2{TimestampVersionQuery{timestamp(4), false}};
     stream_version_data.react(query_2);
     ASSERT_EQ(stream_version_data.count_, 2);
     ASSERT_EQ(stream_version_data.load_strategy_.load_type_, LoadType::FROM_TIME);
@@ -50,11 +50,11 @@ TEST(StreamVersionData, TimestampUnordered) {
     using namespace arcticdb::pipelines;
 
     StreamVersionData stream_version_data;
-    VersionQuery query_1{TimestampVersionQuery{timestamp(3)}};
+    VersionQuery query_1{TimestampVersionQuery{timestamp(3), false}};
     stream_version_data.react(query_1);
-    VersionQuery query_2{TimestampVersionQuery{timestamp(7)}};
+    VersionQuery query_2{TimestampVersionQuery{timestamp(7), false}};
     stream_version_data.react(query_2);
-    VersionQuery query_3{TimestampVersionQuery{timestamp(4)}};
+    VersionQuery query_3{TimestampVersionQuery{timestamp(4), false}};
     stream_version_data.react(query_3);
     ASSERT_EQ(stream_version_data.count_, 3);
     ASSERT_EQ(stream_version_data.load_strategy_.load_type_, LoadType::FROM_TIME);
@@ -80,9 +80,9 @@ TEST(StreamVersionData, SpecificToTimestamp) {
     using namespace arcticdb::pipelines;
 
     StreamVersionData stream_version_data;
-    VersionQuery query_1{SpecificVersionQuery{VersionId(12)}};
+    VersionQuery query_1{SpecificVersionQuery{VersionId(12), false}};
     stream_version_data.react(query_1);
-    VersionQuery query_2{TimestampVersionQuery{timestamp(3)}};
+    VersionQuery query_2{TimestampVersionQuery{timestamp(3), false}};
     stream_version_data.react(query_2);
     ASSERT_EQ(stream_version_data.count_, 2);
     ASSERT_EQ(stream_version_data.load_strategy_.load_type_, LoadType::ALL);
@@ -96,9 +96,9 @@ TEST(StreamVersionData, TimestampToSpecific) {
     using namespace arcticdb::pipelines;
 
     StreamVersionData stream_version_data;
-    VersionQuery query_1{TimestampVersionQuery{timestamp(3)}};
+    VersionQuery query_1{TimestampVersionQuery{timestamp(3), false}};
     stream_version_data.react(query_1);
-    VersionQuery query_2{SpecificVersionQuery{VersionId(12)}};
+    VersionQuery query_2{SpecificVersionQuery{VersionId(12), false}};
     stream_version_data.react(query_2);
     ASSERT_EQ(stream_version_data.count_, 2);
     ASSERT_EQ(stream_version_data.load_strategy_.load_type_, LoadType::ALL);

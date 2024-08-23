@@ -992,7 +992,7 @@ class NativeVersionStore:
             columns=columns,
             query_builder=query_builder,
             throw_on_error=throw_on_error,
-            kwargs=kwargs,
+            **kwargs,
         )
         check(
             all(v is not None for v in versioned_items),
@@ -1497,13 +1497,14 @@ class NativeVersionStore:
 
     def _get_version_query(self, as_of: VersionQueryInput, **kwargs):
         version_query = _PythonVersionStoreVersionQuery()
+        iterate_snapshots_if_tombstoned = _assume_true("iterate_snapshots_if_tombstoned", kwargs)
 
         if isinstance(as_of, str):
             version_query.set_snap_name(as_of)
         elif isinstance(as_of, int):
-            version_query.set_version(as_of)
+            version_query.set_version(as_of, iterate_snapshots_if_tombstoned)
         elif isinstance(as_of, (datetime, Timestamp)):
-            version_query.set_timestamp(Timestamp(as_of).value)
+            version_query.set_timestamp(Timestamp(as_of).value, iterate_snapshots_if_tombstoned)
         elif as_of is not None:
             raise ArcticNativeException("Unexpected combination of read parameters")
 
@@ -2761,7 +2762,7 @@ class NativeVersionStore:
             - sorted, `str`
         """
         date_range_ns_precision = kwargs.get("date_range_ns_precision", False)
-        version_query = self._get_version_query(version)
+        version_query = self._get_version_query(version, **kwargs)
         dit = self.version_store.read_descriptor(symbol, version_query)
         return self._process_info(symbol, dit, version, date_range_ns_precision)
 
