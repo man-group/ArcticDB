@@ -13,11 +13,11 @@ from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.util.test import assert_frame_equal
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
-    non_zero_numeric_type_strategies,
     supported_numeric_dtypes,
     supported_floating_dtypes,
     dataframe_strategy,
     column_strategy,
+    numeric_type_strategies,
 )
 
 
@@ -27,10 +27,10 @@ from arcticdb.util.hypothesis import (
     df=dataframe_strategy(
         [
             column_strategy("a", supported_numeric_dtypes(), restrict_range=True),
-            column_strategy("b", supported_numeric_dtypes(), include_zero=False, restrict_range=True),
+            column_strategy("b", supported_numeric_dtypes(), restrict_range=True),
         ],
     ),
-    val=non_zero_numeric_type_strategies(),
+    val=numeric_type_strategies(),
 )
 def test_project_numeric_binary_operation(lmdb_version_store_v1, df, val):
     assume(not df.empty)
@@ -41,8 +41,7 @@ def test_project_numeric_binary_operation(lmdb_version_store_v1, df, val):
     # only do these operations once to save time
     # Have to cast all Pandas values to doubles before computing, otherwise it gets the types wrong and over/underflows
     # a lot: https://github.com/pandas-dev/pandas/issues/59524
-    # This doesn't work in general for division as we perform integer division, so test this separately
-    for op in ["+", "-", "*"]:
+    for op in ["+", "-", "*", "/"]:
         for comp in ["col op col", "col op val", "val op col"]:
             q = QueryBuilder()
             qb_lhs = q["a"] if comp.startswith("col") else val
@@ -58,6 +57,9 @@ def test_project_numeric_binary_operation(lmdb_version_store_v1, df, val):
             elif op == "*":
                 q = q.apply("c", qb_lhs * qb_rhs)
                 df["c"] = pandas_lhs * pandas_rhs
+            elif op == "/":
+                q = q.apply("c", qb_lhs / qb_rhs)
+                df["c"] = pandas_lhs / pandas_rhs
             received = lib.read(symbol, query_builder=q).data
             try:
                 assert_frame_equal(df, received, check_dtype=False)
@@ -68,53 +70,6 @@ def test_project_numeric_binary_operation(lmdb_version_store_v1, df, val):
                     f"""\nPandas result:\n{df}\n"ArcticDB result:\n{received}"""
                 )
                 raise e
-
-
-@use_of_function_scoped_fixtures_in_hypothesis_checked
-@settings(deadline=None)
-@given(
-    df=dataframe_strategy(
-        [
-            column_strategy("a", supported_numeric_dtypes(), restrict_range=True),
-            column_strategy("b", supported_numeric_dtypes(), include_zero=False, restrict_range=True),
-        ],
-    ),
-    val=non_zero_numeric_type_strategies(),
-)
-def test_project_division(lmdb_version_store_v1, df, val):
-    assume(not df.empty)
-    lib = lmdb_version_store_v1
-    symbol = "test_project_division"
-    lib.write(symbol, df)
-    for comp in ["col op col", "col op val", "val op col"]:
-        q = QueryBuilder()
-        q = q.apply("c", (q["a"] if comp.startswith("col") else val) / (q["b"] if comp.endswith("col") else val))
-        lhs_dtype = df["a"].dtype if comp.startswith("col") else val.dtype
-        rhs_dtype = df["b"].dtype if comp.endswith("col") else val.dtype
-        if np.issubdtype(lhs_dtype, np.floating) or np.issubdtype(rhs_dtype, np.floating):
-            # If either operands is a float, cast both to float 64 and use regular division
-            pandas_lhs = df["a"].astype(np.float64) if comp.startswith("col") else np.float64(val)
-            pandas_rhs = df["b"].astype(np.float64) if comp.endswith("col") else np.float64(val)
-            df["c"] = pandas_lhs / pandas_rhs
-        else:
-            # Both are integers, cast to int64 to avoid Pandas overflow bugs
-            pandas_lhs = df["a"].astype(np.int64) if comp.startswith("col") else np.int64(val)
-            pandas_rhs = df["b"].astype(np.int64) if comp.endswith("col") else np.int64(val)
-            # Pandas integer division rounds down, but C++ rounds towards zero
-            df["c"] = pandas_lhs // pandas_rhs
-            mod = pandas_lhs % pandas_rhs
-            for idx, value in df["c"].items():
-                df["c"][idx] = value if (value >= 0 or mod[idx] == 0) else value + 1
-        received = lib.read(symbol, query_builder=q).data
-        try:
-            assert_frame_equal(df, received, check_dtype=False)
-        except AssertionError as e:
-            original_df = lib.read(symbol).data
-            print(
-                f"""Original df:\n{original_df}\nwith dtypes:\n{original_df.dtypes}\nval:\n{val}\nwith dtype:\n{val.dtype}\nquery:\n{q}"""
-                f"""\nPandas result:\n{df}\n"ArcticDB result:\n{received}"""
-            )
-            raise e
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -156,11 +111,11 @@ def test_project_numeric_unary_operation(lmdb_version_store_v1, df):
 @given(
     df=dataframe_strategy(
         [
-            column_strategy("a", supported_floating_dtypes()),
-            column_strategy("b", supported_floating_dtypes(), include_zero=False)
+            column_strategy("a", supported_floating_dtypes(), restrict_range=True),
+            column_strategy("b", supported_floating_dtypes(), restrict_range=True)
         ],
     ),
-    val=non_zero_numeric_type_strategies(),
+    val=numeric_type_strategies(),
 )
 def test_project_numeric_binary_operation_dynamic(lmdb_version_store_dynamic_schema_v1, df, val):
     assume(len(df) >= 3)

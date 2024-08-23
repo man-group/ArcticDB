@@ -434,111 +434,111 @@ TEST(ArithmeticTypePromotion, Times) {
 
 TEST(ArithmeticTypePromotion, Divide) {
     using namespace arcticdb;
-    // Floating point types should promote to the larger type width
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<float,  float,  DivideOperator>::type, float>);
+    // Everything promotes to double
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<float,  float,  DivideOperator>::type, double>);
     static_assert(std::is_same_v<type_arithmetic_promoted_type<float,  double, DivideOperator>::type, double>);
     static_assert(std::is_same_v<type_arithmetic_promoted_type<double, float,  DivideOperator>::type, double>);
     static_assert(std::is_same_v<type_arithmetic_promoted_type<double, double, DivideOperator>::type, double>);
-    // Unsigned types should promote to the larger type width
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint8_t,  uint8_t,  DivideOperator>::type, uint8_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint8_t,  uint16_t, DivideOperator>::type, uint16_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint8_t,  uint32_t, DivideOperator>::type, uint32_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint8_t,  uint64_t, DivideOperator>::type, uint64_t>);
 
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint16_t, uint8_t,  DivideOperator>::type, uint16_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint16_t, uint16_t, DivideOperator>::type, uint16_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint16_t, uint32_t, DivideOperator>::type, uint32_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint16_t, uint64_t, DivideOperator>::type, uint64_t>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint8_t,  uint8_t,  DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint8_t,  uint16_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint8_t,  uint32_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint8_t,  uint64_t, DivideOperator>::type, double>);
 
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint32_t, uint8_t,  DivideOperator>::type, uint32_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint32_t, uint16_t, DivideOperator>::type, uint32_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint32_t, uint32_t, DivideOperator>::type, uint32_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint32_t, uint64_t, DivideOperator>::type, uint64_t>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint16_t, uint8_t,  DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint16_t, uint16_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint16_t, uint32_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint16_t, uint64_t, DivideOperator>::type, double>);
 
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint64_t, uint8_t,  DivideOperator>::type, uint64_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint64_t, uint16_t, DivideOperator>::type, uint64_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint64_t, uint32_t, DivideOperator>::type, uint64_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint64_t, uint64_t, DivideOperator>::type, uint64_t>);
-    // Signed types should promote to the larger type width
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int8_t,  int8_t,  DivideOperator>::type, int8_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int8_t,  int16_t, DivideOperator>::type, int16_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int8_t,  int32_t, DivideOperator>::type, int32_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int8_t,  int64_t, DivideOperator>::type, int64_t>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint32_t, uint8_t,  DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint32_t, uint16_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint32_t, uint32_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint32_t, uint64_t, DivideOperator>::type, double>);
 
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int16_t, int8_t,  DivideOperator>::type, int16_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int16_t, int16_t, DivideOperator>::type, int16_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int16_t, int32_t, DivideOperator>::type, int32_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int16_t, int64_t, DivideOperator>::type, int64_t>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint64_t, uint8_t,  DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint64_t, uint16_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint64_t, uint32_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint64_t, uint64_t, DivideOperator>::type, double>);
 
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int32_t, int8_t,  DivideOperator>::type, int32_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int32_t, int16_t, DivideOperator>::type, int32_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int32_t, int32_t, DivideOperator>::type, int32_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int32_t, int64_t, DivideOperator>::type, int64_t>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int8_t,  int8_t,  DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int8_t,  int16_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int8_t,  int32_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int8_t,  int64_t, DivideOperator>::type, double>);
 
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int64_t, int8_t,  DivideOperator>::type, int64_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int64_t, int16_t, DivideOperator>::type, int64_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int64_t, int32_t, DivideOperator>::type, int64_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int64_t, int64_t, DivideOperator>::type, int64_t>);
-    // Mixed signed and unsigned types should promote to a signed type capable of exactly representing both types, capped at int64_t
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint8_t,  int8_t,  DivideOperator>::type, int16_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint8_t,  int16_t, DivideOperator>::type, int16_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint8_t,  int32_t, DivideOperator>::type, int32_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint8_t,  int64_t, DivideOperator>::type, int64_t>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int16_t, int8_t,  DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int16_t, int16_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int16_t, int32_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int16_t, int64_t, DivideOperator>::type, double>);
 
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint16_t, int8_t,  DivideOperator>::type, int32_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint16_t, int16_t, DivideOperator>::type, int32_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint16_t, int32_t, DivideOperator>::type, int32_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint16_t, int64_t, DivideOperator>::type, int64_t>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int32_t, int8_t,  DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int32_t, int16_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int32_t, int32_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int32_t, int64_t, DivideOperator>::type, double>);
 
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint32_t, int8_t,  DivideOperator>::type, int64_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint32_t, int16_t, DivideOperator>::type, int64_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint32_t, int32_t, DivideOperator>::type, int64_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint32_t, int64_t, DivideOperator>::type, int64_t>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int64_t, int8_t,  DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int64_t, int16_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int64_t, int32_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int64_t, int64_t, DivideOperator>::type, double>);
 
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint64_t, int8_t,  DivideOperator>::type, int64_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint64_t, int16_t, DivideOperator>::type, int64_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint64_t, int32_t, DivideOperator>::type, int64_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint64_t, int64_t, DivideOperator>::type, int64_t>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint8_t,  int8_t,  DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint8_t,  int16_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint8_t,  int32_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint8_t,  int64_t, DivideOperator>::type, double>);
 
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int8_t,  uint8_t,  DivideOperator>::type, int16_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int8_t,  uint16_t, DivideOperator>::type, int32_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int8_t,  uint32_t, DivideOperator>::type, int64_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int8_t,  uint64_t, DivideOperator>::type, int64_t>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint16_t, int8_t,  DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint16_t, int16_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint16_t, int32_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint16_t, int64_t, DivideOperator>::type, double>);
 
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int16_t, uint8_t,  DivideOperator>::type, int16_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int16_t, uint16_t, DivideOperator>::type, int32_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int16_t, uint32_t, DivideOperator>::type, int64_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int16_t, uint64_t, DivideOperator>::type, int64_t>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint32_t, int8_t,  DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint32_t, int16_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint32_t, int32_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint32_t, int64_t, DivideOperator>::type, double>);
 
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int32_t, uint8_t,  DivideOperator>::type, int32_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int32_t, uint16_t, DivideOperator>::type, int32_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int32_t, uint32_t, DivideOperator>::type, int64_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int32_t, uint64_t, DivideOperator>::type, int64_t>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint64_t, int8_t,  DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint64_t, int16_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint64_t, int32_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint64_t, int64_t, DivideOperator>::type, double>);
 
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int64_t, uint8_t,  DivideOperator>::type, int64_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int64_t, uint16_t, DivideOperator>::type, int64_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int64_t, uint32_t, DivideOperator>::type, int64_t>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int64_t, uint64_t, DivideOperator>::type, int64_t>);
-    // Mixed integral and floating point types should promote to the floating point type
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint8_t,  float, DivideOperator>::type, float>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint16_t, float, DivideOperator>::type, float>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint32_t, float, DivideOperator>::type, float>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint64_t, float, DivideOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int8_t,  uint8_t,  DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int8_t,  uint16_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int8_t,  uint32_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int8_t,  uint64_t, DivideOperator>::type, double>);
 
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, uint8_t,  DivideOperator>::type, float>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, uint16_t, DivideOperator>::type, float>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, uint32_t, DivideOperator>::type, float>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, uint64_t, DivideOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int16_t, uint8_t,  DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int16_t, uint16_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int16_t, uint32_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int16_t, uint64_t, DivideOperator>::type, double>);
 
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int8_t,  float, DivideOperator>::type, float>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int16_t, float, DivideOperator>::type, float>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int32_t, float, DivideOperator>::type, float>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<int64_t, float, DivideOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int32_t, uint8_t,  DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int32_t, uint16_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int32_t, uint32_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int32_t, uint64_t, DivideOperator>::type, double>);
 
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, int8_t,  DivideOperator>::type, float>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, int16_t, DivideOperator>::type, float>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, int32_t, DivideOperator>::type, float>);
-    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, int64_t, DivideOperator>::type, float>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int64_t, uint8_t,  DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int64_t, uint16_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int64_t, uint32_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int64_t, uint64_t, DivideOperator>::type, double>);
+
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint8_t,  float, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint16_t, float, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint32_t, float, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<uint64_t, float, DivideOperator>::type, double>);
+
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, uint8_t,  DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, uint16_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, uint32_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, uint64_t, DivideOperator>::type, double>);
+
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int8_t,  float, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int16_t, float, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int32_t, float, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<int64_t, float, DivideOperator>::type, double>);
+
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, int8_t,  DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, int16_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, int32_t, DivideOperator>::type, double>);
+    static_assert(std::is_same_v<type_arithmetic_promoted_type<float, int64_t, DivideOperator>::type, double>);
 
     static_assert(std::is_same_v<type_arithmetic_promoted_type<uint8_t,  double, DivideOperator>::type, double>);
     static_assert(std::is_same_v<type_arithmetic_promoted_type<uint16_t, double, DivideOperator>::type, double>);
