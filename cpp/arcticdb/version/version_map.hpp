@@ -254,13 +254,19 @@ public:
     std::pair<VersionId, std::vector<AtomKey>> tombstone_from_key_or_all(
             std::shared_ptr<Store> store,
             const StreamId& stream_id,
-            std::optional<AtomKey> first_key_to_tombstone = std::nullopt
+            std::optional<AtomKey> first_key_to_tombstone = std::nullopt,
+            std::optional<std::shared_ptr<VersionMapEntry>> cached_entry = std::nullopt
             ) {
-        auto entry = check_reload(
-            store,
-            stream_id,
-            LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY},
-            __FUNCTION__);
+        std::shared_ptr<VersionMapEntry> entry;
+        if (cached_entry)
+            entry = cached_entry.value();
+        else
+            entry = check_reload(
+                    store,
+                    stream_id,
+                    LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY},
+                    __FUNCTION__);
+
         auto output = tombstone_from_key_or_all_internal(store, stream_id, first_key_to_tombstone, entry);
 
         if (validate_)
