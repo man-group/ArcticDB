@@ -145,7 +145,7 @@ class AzuriteStorageFixtureFactory(StorageFixtureFactory):
 
     def _safe_enter(self):
         # skipApiVersionCheck to avoid the annoying error due to version mismatch between azurite and azure python sdk
-        args = f"{shutil.which('azurite')} --blobPort {self.port} --blobHost {self.host} --queuePort 0 --tablePort 0 --skipApiVersionCheck"
+        args = f"{shutil.which('azurite')} --blobPort {self.port} --blobHost {self.host} --queuePort 0 --tablePort 0"
         if self.ssl_test_support:
             self.client_cert_dir = self.working_dir
             self.ca, self.key_file, self.cert_file, self.client_cert_file = get_ca_cert_for_testing(self.client_cert_dir)
