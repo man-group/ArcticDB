@@ -1013,12 +1013,7 @@ def test_get_description_batch_missing_keys(arctic_library):
     assert batch[1].error_category == ErrorCategory.STORAGE
 
     assert not isinstance(batch[2], DataError)
-    assert batch[2].date_range == tuple(
-        map(
-            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
-            (datetime(2018, 1, 1), datetime(2018, 1, 3)),
-        )
-    )
+    assert batch[2].date_range == (pd.Timestamp(year=2018, month=1, day=1), pd.Timestamp(year=2018, month=1, day=3))
     assert [c[0] for c in batch[2].columns] == ["a"]
     assert batch[2].index[0] == ["named_index"]
     assert batch[2].index_type == "index"
@@ -1039,12 +1034,7 @@ def test_get_description_batch_symbol_doesnt_exist(arctic_library):
 
     # Then
     assert not isinstance(batch[0], DataError)
-    assert batch[0].date_range == tuple(
-        map(
-            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
-            (datetime(2018, 1, 1), datetime(2018, 1, 4)),
-        )
-    )
+    assert batch[0].date_range == (pd.Timestamp(year=2018, month=1, day=1), pd.Timestamp(year=2018, month=1, day=4))
     assert [c[0] for c in batch[0].columns] == ["a"]
     assert batch[0].index[0] == ["named_index"]
     assert batch[0].index_type == "index"
@@ -1076,12 +1066,7 @@ def test_get_description_batch_version_doesnt_exist(arctic_library):
 
     # Then
     assert not isinstance(batch[0], DataError)
-    assert batch[0].date_range == tuple(
-        map(
-            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
-            (datetime(2018, 1, 1), datetime(2018, 1, 4)),
-        )
-    )
+    assert batch[0].date_range == (pd.Timestamp(year=2018, month=1, day=1), pd.Timestamp(year=2018, month=1, day=4))
     assert [c[0] for c in batch[0].columns] == ["a"]
     assert batch[0].index[0] == ["named_index"]
     assert batch[0].index_type == "index"
@@ -1181,43 +1166,13 @@ def test_get_description_batch(arctic_library):
         [ReadInfoRequest("symbol1", as_of=0), ReadInfoRequest("symbol2", as_of=0), ReadInfoRequest("symbol3", as_of=0)]
     )
 
-    assert infos[0].date_range == tuple(
-        map(
-            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
-            (datetime(2018, 1, 1), datetime(2018, 1, 6)),
-        )
-    )
-    assert infos[1].date_range == tuple(
-        map(
-            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
-            (datetime(2019, 1, 1), datetime(2019, 1, 6)),
-        )
-    )
-    assert infos[2].date_range == tuple(
-        map(
-            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
-            (datetime(2020, 1, 1), datetime(2020, 1, 6)),
-        )
-    )
+    assert infos[0].date_range == (pd.Timestamp(year=2018, month=1, day=1), pd.Timestamp(year=2018, month=1, day=6))
+    assert infos[1].date_range == (pd.Timestamp(year=2019, month=1, day=1), pd.Timestamp(year=2019, month=1, day=6))
+    assert infos[2].date_range == (pd.Timestamp(year=2020, month=1, day=1), pd.Timestamp(year=2020, month=1, day=6))
 
-    assert original_infos[0].date_range == tuple(
-        map(
-            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
-            (datetime(2018, 1, 1), datetime(2018, 1, 4)),
-        )
-    )
-    assert original_infos[1].date_range == tuple(
-        map(
-            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
-            (datetime(2019, 1, 1), datetime(2019, 1, 4)),
-        )
-    )
-    assert original_infos[2].date_range == tuple(
-        map(
-            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
-            (datetime(2020, 1, 1), datetime(2020, 1, 4)),
-        )
-    )
+    assert original_infos[0].date_range == (pd.Timestamp(year=2018, month=1, day=1), pd.Timestamp(year=2018, month=1, day=4))
+    assert original_infos[1].date_range == (pd.Timestamp(year=2019, month=1, day=1), pd.Timestamp(year=2019, month=1, day=4))
+    assert original_infos[2].date_range == (pd.Timestamp(year=2020, month=1, day=1), pd.Timestamp(year=2020, month=1, day=4))
 
     list_infos = list(zip(infos, original_infos))
     # then
@@ -1271,43 +1226,13 @@ def test_get_description_batch_multiple_versions(arctic_library):
     infos = infos_multiple_version[3:6]
     original_infos = infos_multiple_version[0:3]
 
-    assert infos[0].date_range == tuple(
-        map(
-            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
-            (datetime(2018, 1, 1), datetime(2018, 1, 6)),
-        )
-    )
-    assert infos[1].date_range == tuple(
-        map(
-            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
-            (datetime(2019, 1, 1), datetime(2019, 1, 6)),
-        )
-    )
-    assert infos[2].date_range == tuple(
-        map(
-            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
-            (datetime(2020, 1, 1), datetime(2020, 1, 6)),
-        )
-    )
+    assert infos[0].date_range == (pd.Timestamp("1/1/2018"), pd.Timestamp("1/6/2018"))
+    assert infos[1].date_range == (pd.Timestamp("1/1/2019"), pd.Timestamp("1/6/2019"))
+    assert infos[2].date_range == (pd.Timestamp("1/1/2020"), pd.Timestamp("1/6/2020"))
 
-    assert original_infos[0].date_range == tuple(
-        map(
-            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
-            (datetime(2018, 1, 1), datetime(2018, 1, 4)),
-        )
-    )
-    assert original_infos[1].date_range == tuple(
-        map(
-            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
-            (datetime(2019, 1, 1), datetime(2019, 1, 4)),
-        )
-    )
-    assert original_infos[2].date_range == tuple(
-        map(
-            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
-            (datetime(2020, 1, 1), datetime(2020, 1, 4)),
-        )
-    )
+    assert original_infos[0].date_range == (pd.Timestamp("1/1/2018"), pd.Timestamp("1/4/2018"))
+    assert original_infos[1].date_range == (pd.Timestamp("1/1/2019"), pd.Timestamp("1/4/2019"))
+    assert original_infos[2].date_range == (pd.Timestamp("1/1/2020"), pd.Timestamp("1/4/2020"))
 
     list_infos = list(zip(infos, original_infos))
     # then
@@ -1345,14 +1270,11 @@ def test_read_description_batch_high_amount(arctic_library):
     for sym in range(num_symbols):
         for version in range(num_versions):
             idx = sym * num_versions + version
-            date_ramge_comp = (
-                datetime(start_year + sym, 1, start_day + version),
-                datetime(start_year + sym, 1, start_day + version + 3),
+            date_range_comp = (
+                pd.Timestamp(year=start_year + sym, month=1, day=start_day + version),
+                pd.Timestamp(year=start_year + sym, month=1, day=start_day + version + 3),
             )
-            date_range_comp_with_utc = tuple(
-                map(lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x, date_ramge_comp)
-            )
-            assert results_list[idx].date_range == date_range_comp_with_utc
+            assert results_list[idx].date_range == date_range_comp
             if version > 0:
                 assert results_list[idx].last_update_time > results_list[idx - 1].last_update_time
 
