@@ -1109,7 +1109,7 @@ class Library:
         mode: Optional[StagedDataFinalizeMethod] = StagedDataFinalizeMethod.WRITE,
         prune_previous_versions: bool = False,
         metadata: Any = None,
-        validate_index=True,
+        validate_index = True,
     ) -> VersionedItem:
         """
         Finalizes staged data, making it available for reads.
@@ -1157,7 +1157,7 @@ class Library:
         symbol: str,
         mode: Optional[StagedDataFinalizeMethod] = StagedDataFinalizeMethod.WRITE,
         prune_previous_versions: bool = False,
-        metadata: Any = None
+        metadata: Any = None,
     ) -> VersionedItem:
         """
         sort_merge will sort and finalize staged data. This differs from `finalize_staged_data` in that it
