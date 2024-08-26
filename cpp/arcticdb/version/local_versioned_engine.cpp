@@ -983,6 +983,17 @@ void LocalVersionedEngine::write_parallel_frame(
     write_parallel(store_, stream_id, frame, validate_index);
 }
 
+void LocalVersionedEngine::add_to_symbol_list_on_compaction(
+        const StreamId& stream_id,
+        const CompactIncompleteOptions& options,
+        const UpdateInfo& update_info) {
+    if(cfg_.symbol_list()) {
+        if (!options.append_ || !update_info.previous_index_key_.has_value()) {
+            symbol_list().add_symbol(store_, stream_id, update_info.next_version_id_);
+        }
+    }
+}
+
 VersionedItem LocalVersionedEngine::compact_incomplete_dynamic(
     const StreamId& stream_id,
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
@@ -990,12 +1001,10 @@ VersionedItem LocalVersionedEngine::compact_incomplete_dynamic(
     log::version().debug("Compacting incomplete symbol {}", stream_id);
 
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
-    auto versioned_item =  compact_incomplete_impl(store_, stream_id, user_meta, update_info, options, get_write_options());
+    auto versioned_item = compact_incomplete_impl(store_, stream_id, user_meta, update_info, options, get_write_options());
 
     write_version_and_prune_previous(options.prune_previous_versions_, versioned_item.key_, update_info.previous_index_key_);
-
-    if(cfg_.symbol_list())
-        symbol_list().add_symbol(store_, stream_id, update_info.next_version_id_);
+    add_to_symbol_list_on_compaction(stream_id, options, update_info);
 
     return versioned_item;
 }
@@ -1677,6 +1686,7 @@ VersionedItem LocalVersionedEngine::sort_merge_internal(
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
     auto versioned_item = sort_merge_impl(store_, stream_id, user_meta, update_info, options);
     write_version_and_prune_previous(options.prune_previous_versions_, versioned_item.key_, update_info.previous_index_key_);
+    add_to_symbol_list_on_compaction(stream_id, options, update_info);
     return versioned_item;
 }
 
