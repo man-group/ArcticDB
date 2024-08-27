@@ -240,18 +240,18 @@ inline std::pair<std::vector<SliceAndKey>, std::vector<SliceAndKey>> intersectin
 
 VersionedItem delete_range_impl(
     const std::shared_ptr<Store>& store,
-    const AtomKey& prev,
+    const StreamId& stream_id,
+    const UpdateInfo& update_info,
     const UpdateQuery& query,
     const WriteOptions&& ,
     bool dynamic_schema) {
 
-    const StreamId& stream_id = prev.id();
-    auto version_id = get_next_version_from_key(prev);
+    util::check(update_info.previous_index_key_.has_value(), "Cannot delete from non-existent symbol {}", stream_id);
     util::check(std::holds_alternative<IndexRange>(query.row_filter), "Delete range requires index range argument");
     const auto& index_range = std::get<IndexRange>(query.row_filter);
-    ARCTICDB_DEBUG(log::version(), "Delete range in versioned dataframe for stream_id: {} , version_id = {}", stream_id, version_id);
+    ARCTICDB_DEBUG(log::version(), "Delete range in versioned dataframe for stream_id: {} , version_id = {}", stream_id, update_info.next_version_id_);
 
-    auto index_segment_reader = index::get_index_reader(prev, store);
+    auto index_segment_reader = index::get_index_reader(update_info.previous_index_key_.value(), store);
     util::check_rte(!index_segment_reader.is_pickled(), "Cannot delete date range of pickled data");
 
     auto index = index_type_from_descriptor(index_segment_reader.tsd().as_stream_descriptor());
@@ -268,7 +268,7 @@ VersionedItem delete_range_impl(
                         std::end(affected_keys),
                         std::back_inserter(unaffected_keys));
 
-    auto [intersect_before, intersect_after] = intersecting_segments(affected_keys, index_range, index_range, version_id, store);
+    auto [intersect_before, intersect_after] = intersecting_segments(affected_keys, index_range, index_range, update_info.next_version_id_, store);
 
     auto orig_filter_range = std::holds_alternative<std::monostate>(query.row_filter) ? get_query_index_range(index, index_range) : query.row_filter;
 
@@ -281,13 +281,13 @@ VersionedItem delete_range_impl(
     auto flattened_slice_and_keys = flatten_and_fix_rows(groups, row_count);
 
     std::sort(std::begin(flattened_slice_and_keys), std::end(flattened_slice_and_keys));
-    auto version_key_fut = util::variant_match(index, [&index_segment_reader, &flattened_slice_and_keys, &stream_id, &version_id, &store] (auto idx) {
+    auto version_key_fut = util::variant_match(index, [&index_segment_reader, &flattened_slice_and_keys, &stream_id, &update_info, &store] (auto idx) {
         using IndexType = decltype(idx);
-        return pipelines::index::write_index<IndexType>(index_segment_reader.tsd(), std::move(flattened_slice_and_keys), IndexPartialKey{stream_id, version_id}, store);
+        return pipelines::index::write_index<IndexType>(index_segment_reader.tsd(), std::move(flattened_slice_and_keys), IndexPartialKey{stream_id, update_info.next_version_id_}, store);
     });
     auto version_key = std::move(version_key_fut).get();
     auto versioned_item = VersionedItem(to_atom(std::move(version_key)));
-    ARCTICDB_DEBUG(log::version(), "updated stream_id: {} , version_id: {}", stream_id, version_id);
+    ARCTICDB_DEBUG(log::version(), "updated stream_id: {} , version_id: {}", stream_id, update_info.next_version_id_);
     return versioned_item;
 }
 

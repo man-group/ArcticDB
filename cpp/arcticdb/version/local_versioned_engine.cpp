@@ -502,10 +502,9 @@ std::shared_ptr<DeDupMap> LocalVersionedEngine::get_de_dup_map(
 }
 
 VersionedItem LocalVersionedEngine::sort_index(const StreamId& stream_id, bool dynamic_schema, bool prune_previous_versions) {
-    auto maybe_prev = get_latest_undeleted_version(store(), version_map(), stream_id);
-    util::check(maybe_prev.has_value(), "Cannot delete from non-existent symbol {}", stream_id);
-    auto version_id = get_next_version_from_key(*maybe_prev);
-    auto [index_segment_reader, slice_and_keys] = index::read_index_to_vector(store(), *maybe_prev);
+    auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
+    util::check(update_info.previous_index_key_.has_value(), "Cannot sort_index a non-existent symbol {}", stream_id);
+    auto [index_segment_reader, slice_and_keys] = index::read_index_to_vector(store(), *update_info.previous_index_key_);
     if(dynamic_schema) {
         std::sort(std::begin(slice_and_keys), std::end(slice_and_keys), [](const auto &left, const auto &right) {
             return left.key().start_index() < right.key().start_index();
@@ -532,9 +531,9 @@ VersionedItem LocalVersionedEngine::sort_index(const StreamId& stream_id, bool d
         std::nullopt,
         bucketize_dynamic);
 
-    auto versioned_item = pipelines::index::index_and_version(index, store(), time_series, std::move(slice_and_keys), stream_id, version_id).get();
-    write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, maybe_prev);
-    ARCTICDB_DEBUG(log::version(), "sorted index of stream_id: {} , version_id: {}", stream_id, version_id);
+    auto versioned_item = pipelines::index::index_and_version(index, store(), time_series, std::move(slice_and_keys), stream_id, update_info.next_version_id_).get();
+    write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, update_info.previous_index_key_);
+    ARCTICDB_DEBUG(log::version(), "sorted index of stream_id: {} , version_id: {}", stream_id, update_info.next_version_id_);
     return versioned_item;
 }
 
@@ -542,14 +541,14 @@ VersionedItem LocalVersionedEngine::delete_range_internal(
     const StreamId& stream_id,
     const UpdateQuery & query,
     const DeleteRangeOptions& option) {
-    auto maybe_prev = get_latest_undeleted_version(store(), version_map(), stream_id);
-    util::check(maybe_prev.has_value(), "Cannot delete from non-existent symbol {}", stream_id);
+    auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
     auto versioned_item = delete_range_impl(store(),
-                                            *maybe_prev,
+                                            stream_id,
+                                            update_info,
                                             query,
                                             get_write_options(),
                                             option.dynamic_schema_);
-    write_version_and_prune_previous(option.prune_previous_versions_, versioned_item.key_, maybe_prev);
+    write_version_and_prune_previous(option.prune_previous_versions_, versioned_item.key_, update_info.previous_index_key_);
     return versioned_item;
 }
 
