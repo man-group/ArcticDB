@@ -97,7 +97,8 @@ VersionedItem update_impl(
 
 VersionedItem delete_range_impl(
     const std::shared_ptr<Store>& store,
-    const AtomKey& prev,
+    const StreamId& stream_id,
+    const UpdateInfo& update_info,
     const UpdateQuery& query,
     const WriteOptions&& options,
     bool dynamic_schema);
