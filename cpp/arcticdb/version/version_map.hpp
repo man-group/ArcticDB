@@ -501,6 +501,9 @@ public:
         if (validate_)
             entry->validate();
 
+        util::check(key.type() != KeyType::TABLE_INDEX || !entry->head_.has_value() || key.version_id() > entry->head_->version_id(),
+                    "Trying to write a non-increasing TABLE_INDEX key. New version: {}, Last version: {}",
+                    key.version_id(), entry->head_->version_id());
         auto journal_key = to_atom(std::move(journal_single_key(store, key, entry->head_)));
         write_to_entry(entry, key, journal_key);
         auto previous_index = entry->get_second_undeleted_index();
