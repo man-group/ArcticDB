@@ -258,15 +258,15 @@ public:
             std::optional<std::shared_ptr<VersionMapEntry>> cached_entry = std::nullopt
             ) {
         std::shared_ptr<VersionMapEntry> entry;
-        if (cached_entry)
+        if (cached_entry) {
             entry = cached_entry.value();
-        else
+        } else {
             entry = check_reload(
                     store,
                     stream_id,
                     LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY},
                     __FUNCTION__);
-
+        }
         auto output = tombstone_from_key_or_all_internal(store, stream_id, first_key_to_tombstone, entry);
 
         if (validate_)
