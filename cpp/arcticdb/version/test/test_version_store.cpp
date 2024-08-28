@@ -36,6 +36,7 @@ auto write_version_frame(
     bool update_version_map = false,
     size_t start_val = 0,
     const std::optional<arcticdb::entity::AtomKey>& previous_key = std::nullopt,
+    bool prune_previous = false,
     const std::shared_ptr<arcticdb::DeDupMap>& de_dup_map = std::make_shared<arcticdb::DeDupMap>()
 ) {
     using namespace arcticdb;
@@ -51,7 +52,7 @@ auto write_version_frame(
     auto var_key = write_frame(std::move(pk), frame, slicing, store, de_dup_map).get();
     auto key = to_atom(var_key); // Moves
     if (update_version_map) {
-        pvs._test_get_version_map()->write_version(store, key, previous_key);
+        pvs.write_version_and_prune_previous(prune_previous, key, previous_key);
     }
 
     return key;
@@ -94,8 +95,8 @@ TEST(PythonVersionStore, WriteWithPruneVersions) {
 
     auto [version_store, mock_store] = python_version_store_in_memory();
 
-    auto key = write_version_frame({"test_versioned_engine_delete"}, 0, version_store, 30, true);
-    version_store._test_get_version_map()->write_and_prune_previous(mock_store, key, std::nullopt);
+    write_version_frame({"test_versioned_engine_delete"}, 0, version_store, 30, true);
+    write_version_frame({"test_versioned_engine_delete"}, 1, version_store, 30, true, 0, std::nullopt, true);
     // Should have pruned the previous version and have just one version
     ASSERT_EQ(mock_store->num_atom_keys_of_type(KeyType::TABLE_INDEX), 1);
 }
