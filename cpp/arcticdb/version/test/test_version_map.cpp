@@ -945,6 +945,45 @@ TEST(VersionMap, CompactionUpdateCache) {
     assert_keys_in_entry_and_store(entry, 2, 20, 3);
 }
 
+TEST(VersionMap, TombstoneAllFromEntry) {
+    using namespace arcticdb;
+    StreamId id{"test"};
+    auto store = std::make_shared<InMemoryStore>();
+    auto version_map = std::make_shared<VersionMap>();
+    auto entry = std::make_shared<VersionMapEntry>();
+
+    auto key1 = atom_key_with_version(id, 0, 0);
+    version_map->do_write(store, key1, entry);
+
+    auto key2 = atom_key_with_version(id, 1, 1);
+    version_map->do_write(store, key2, entry);
+
+    auto dummy_key = atom_key_builder()
+        .version_id(1)
+        .build(id, KeyType::VERSION);
+
+    // without cached entry
+    // Tombstone all should fail to delete anything since the ref key is not set
+    version_map->tombstone_from_key_or_all(store, id, dummy_key);
+
+    auto [maybe_prev, deleted] = get_latest_version(store, version_map, id);
+    ASSERT_FALSE(maybe_prev.has_value());
+    ASSERT_FALSE(deleted);
+    auto version_id = get_next_version_from_key(maybe_prev);
+    ASSERT_EQ(version_id, 0);
+
+
+    // With cached entry from the write ops  
+    // Tombstone all should succeed as we are not relying on the ref key      
+    version_map->tombstone_from_key_or_all(store, id, dummy_key, entry);
+
+    auto [maybe_prev_cached_entry, deleted_cached_entry] = get_latest_version(store, version_map, id);
+    ASSERT_TRUE(maybe_prev_cached_entry.has_value());
+    ASSERT_TRUE(deleted_cached_entry);
+    version_id = get_next_version_from_key(maybe_prev_cached_entry);
+    ASSERT_EQ(version_id, 2);
+}
+
 #define GTEST_COUT std::cerr << "[          ] [ INFO ]"
 
 TEST_F(VersionMapStore, StressTestWrite) {
