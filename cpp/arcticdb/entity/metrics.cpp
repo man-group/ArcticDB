@@ -149,6 +149,19 @@ void PrometheusInstance::incrementCounter(const std::string& name, double value,
         arcticdb::log::version().warn("Unregistered counter metric {}", name);
     }
 }
+
+void PrometheusInstance::incrementCounter(const std::string& name, const std::map<std::string, std::string>& labels) {
+    if (registry_.use_count() == 0)
+        return;
+
+    if (map_counter_.count(name) != 0) {
+        // Add returns Counter&
+        map_counter_[name]->Add(labels).Increment();
+    } else {
+        arcticdb::log::version().warn("Unregistered counter metric {}", name);
+    }
+}
+
 void PrometheusInstance::setGauge(const std::string& name, double value, const std::map<std::string, std::string>& labels) {
     if (registry_.use_count() == 0)
         return;
