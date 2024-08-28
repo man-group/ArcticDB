@@ -628,7 +628,14 @@ target_include_directories(arcticdb_core_static PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
         )
 
-target_link_libraries(arcticdb_core_static PUBLIC ${arcticdb_core_libraries})
+set (arcticdb_core_static_libraries)
+if(DEFINED ENV{USE_SLAB_ALLOCATOR} AND NOT APPLE)
+    list(APPEND arcticdb_core_static_libraries
+        atomic
+    )
+endif()
+
+target_link_libraries(arcticdb_core_static PUBLIC ${arcticdb_core_libraries} ${arcticdb_core_static_libraries})
 
 add_library(arcticdb_core SHARED $<TARGET_OBJECTS:arcticdb_core_object>)
 
