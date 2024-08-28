@@ -106,6 +106,9 @@ public:
 
     void configure(const MetricsConfig& config, const bool reconfigure = false);
 
+    // Intended for testing.
+    std::vector<prometheus::MetricFamily> get_metrics();
+
     MetricsConfig cfg_;
     
     private:
