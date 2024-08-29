@@ -8,6 +8,7 @@
 #pragma once
 
 #include <arcticdb/pipeline/index_utils.hpp>
+#include <arcticdb/util/constants.hpp>
 
 namespace arcticdb::stream {
 template<typename IndexType, typename AggregatorType, typename QueueType>
@@ -23,7 +24,7 @@ void do_merge(
     // NaT is definied as std::numeric_limits<int64_t>::min(), if there are any NaT values they will be on the top of the queue
     if (!input_streams.empty()) {
         const auto& next = input_streams.top();
-        const auto& index_value =
+        const auto index_value =
             std::get<timestamp>(*pipelines::index::index_value_from_row(next->row(), IndexDescriptorImpl::Type::TIMESTAMP, 0));
         sorting::check<ErrorCode::E_UNSORTED_DATA>(index_value != NaT, "NaT values are not allowed in the index");
     }

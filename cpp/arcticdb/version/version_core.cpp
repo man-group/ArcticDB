@@ -955,7 +955,6 @@ void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<PipelineC
                 last_existing_index_value ? date_and_time(*last_existing_index_value) : ""
             );
             auto [_, inserted] = unique_timestamp_ranges.insert({key.start_time(), key.end_time()});
-
             // This is correct because incomplete segments aren't column sliced
             sorting::check<ErrorCode::E_UNSORTED_DATA>(
                 inserted,
@@ -1458,7 +1457,6 @@ VersionedItem sort_merge_impl(
                     date_and_time(update_info.previous_index_key_->end_time() - 1)
                 );
             }
-
             pipeline_context->total_rows_ = num_versioned_rows + get_slice_rowcounts(segments);
 
             auto index = index_type_from_descriptor(pipeline_context->descriptor());
