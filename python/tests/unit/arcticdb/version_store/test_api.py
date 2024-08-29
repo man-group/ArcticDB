@@ -83,3 +83,9 @@ def test_get_num_rows(lmdb_version_store, two_col_df):
     rows = lmdb_version_store.get_num_rows(symbol)
 
     assert rows == df.shape[0]
+
+
+def test_get_num_rows_pickled(lmdb_version_store):
+    symbol = "test_get_num_rows_pickled"
+    lmdb_version_store.write(symbol, 1)
+    assert lmdb_version_store.get_num_rows(symbol) is None

@@ -14,6 +14,8 @@
 #include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
+#include <arcticdb/python/python_handlers.hpp>
+#include <arcticdb/util/native_handler.hpp>
 
 struct SparseTestStore : arcticdb::TestStore {
 protected:
@@ -84,7 +86,9 @@ TEST_F(SparseTestStore, SimpleRoundtrip) {
     read_options.set_incompletes(true);
     pipelines::ReadQuery read_query;
     read_query.row_filter = universal_range();
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options);
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
     const auto& frame =read_result.frame_data.frame();;
 
     ASSERT_EQ(frame.row_count(), 2);
@@ -174,7 +178,9 @@ TEST_F(SparseTestStore, SimpleRoundtripBackwardsCompat) {
     read_options.set_incompletes(true);
     pipelines::ReadQuery read_query;
     read_query.row_filter = universal_range();
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options);
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
     const auto& frame =read_result.frame_data.frame();;
 
     ASSERT_EQ(frame.row_count(), 2);
@@ -223,7 +229,9 @@ TEST_F(SparseTestStore, DenseToSparse) {
     read_options.set_incompletes(true);
     pipelines::ReadQuery read_query;
     read_query.row_filter = universal_range();
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options);
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
     const auto& frame =read_result.frame_data.frame();;
 
 
@@ -241,6 +249,9 @@ TEST_F(SparseTestStore, DenseToSparse) {
 TEST_F(SparseTestStore, SimpleRoundtripStrings) {
     using namespace arcticdb;
     using namespace arcticdb::stream;
+    std::optional<ScopedGILLock> scoped_gil_lock;
+    register_string_types();
+    register_python_handler_data_factory();
     using DynamicAggregator =  Aggregator<TimeseriesIndex, DynamicSchema, stream::NeverSegmentPolicy, stream::SparseColumnPolicy>;
     using DynamicSinkWrapper = SinkWrapperImpl<DynamicAggregator>;
 
@@ -267,12 +278,12 @@ TEST_F(SparseTestStore, SimpleRoundtripStrings) {
     read_options.set_incompletes(true);
     pipelines::ReadQuery read_query;
     read_query.row_filter = universal_range();
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options);
+    auto handler_data = get_type_handler_data();
+    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
     const auto& frame = read_result.frame_data.frame();;
 
     ASSERT_EQ(frame.row_count(), 2);
     auto val1 = frame.scalar_at<PyObject*>(0, 1);
-    std::optional<ScopedGILLock> scoped_gil_lock;
     auto str_wrapper = convert::py_unicode_to_buffer(val1.value(), scoped_gil_lock);
     ASSERT_TRUE(std::holds_alternative<convert::PyStringWrapper>(str_wrapper));
     ASSERT_EQ(strcmp(std::get<convert::PyStringWrapper>(str_wrapper).buffer_, "five"), 0);
@@ -321,7 +332,9 @@ TEST_F(SparseTestStore, Multiblock) {
     read_options.set_incompletes(true);
     pipelines::ReadQuery read_query;
     read_query.row_filter = universal_range();
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options);
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
     const auto& frame =read_result.frame_data.frame();;
 
     for(size_t i = 0; i < num_rows; i += 2) {
@@ -372,7 +385,9 @@ TEST_F(SparseTestStore, Segment) {
     read_options.set_incompletes(true);
     pipelines::ReadQuery read_query;
     read_query.row_filter = universal_range();
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options);
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
     const auto& frame =read_result.frame_data.frame();;
 
     for(size_t i = 0; i < num_rows; i += 2) {
@@ -430,7 +445,9 @@ TEST_F(SparseTestStore, SegmentWithExistingIndex) {
     read_options.set_incompletes(true);
     pipelines::ReadQuery read_query;
     read_query.row_filter = universal_range();
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options);
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
     const auto& frame =read_result.frame_data.frame();;
 
     ASSERT_EQ(frame.row_count(), num_rows);
@@ -489,7 +506,9 @@ TEST_F(SparseTestStore, SegmentAndFilterColumn) {
     pipelines::ReadQuery read_query;
     read_query.columns = {"time", "first"};
     read_query.row_filter = universal_range();
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options);
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
     const auto& frame =read_result.frame_data.frame();;
     ASSERT_EQ(frame.row_count(), num_rows);
     ASSERT_EQ(frame.descriptor().field_count(), 2);
@@ -543,7 +562,9 @@ TEST_F(SparseTestStore, SegmentWithRangeFilter) {
     read_options.set_incompletes(true);
     pipelines::ReadQuery read_query;
     read_query.row_filter = IndexRange(timestamp{3000}, timestamp{6999});
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options);
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
     const auto& frame =read_result.frame_data.frame();;
 
     ASSERT_EQ(frame.row_count(), 4000);
@@ -593,7 +614,9 @@ TEST_F(SparseTestStore, Compact) {
     read_options.set_dynamic_schema(true);
     pipelines::ReadQuery read_query;
     read_query.row_filter = universal_range();
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options);
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
     const auto& frame = read_result.frame_data.frame();
 
     ASSERT_EQ(frame.row_count(), num_rows);
@@ -614,6 +637,8 @@ TEST_F(SparseTestStore, CompactWithStrings) {
     using namespace arcticdb::stream;
     using DynamicAggregator =  Aggregator<TimeseriesIndex, DynamicSchema, stream::RowCountSegmentPolicy, stream::SparseColumnPolicy>;
 
+    register_string_types();
+    register_python_handler_data_factory();
     const std::string stream_id("test_sparse");
 
     const auto index = TimeseriesIndex::default_index();
@@ -646,7 +671,8 @@ TEST_F(SparseTestStore, CompactWithStrings) {
     read_options.set_dynamic_schema(true);
     pipelines::ReadQuery read_query;
     read_query.row_filter = universal_range();
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options);
+    auto handler_data = get_type_handler_data();
+    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
     const auto& frame = read_result.frame_data.frame();
     ASSERT_EQ(frame.row_count(), num_rows);
 

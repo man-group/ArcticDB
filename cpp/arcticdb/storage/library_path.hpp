@@ -147,7 +147,11 @@ class LibraryPathImpl {
         return accum.digest();
     }
 
+#ifndef DEBUG_BUILD
     boost::container::small_vector<StringViewable, NUM_LIBRARY_PARTS> parts_;
+#else
+    std::vector<StringViewable> parts_;
+#endif
     HashedValue hash_;
 };
 

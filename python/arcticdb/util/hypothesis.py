@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+from dataclasses import dataclass
 from typing import NamedTuple, Callable, Any, Optional
 from enum import Enum
 
@@ -15,14 +16,20 @@ import pandas as pd
 from arcticc.pb2.descriptors_pb2 import IndexDescriptor
 from arcticdb.version_store._common import TimeFrame
 
-from math import inf
-
 from hypothesis import settings, HealthCheck, strategies as st
 from hypothesis.extra.numpy import unsigned_integer_dtypes, integer_dtypes, floating_dtypes, from_dtype
-import hypothesis.extra.pandas as hs_pd
+from hypothesis.extra.pandas import column, data_frames, range_indexes
 
 
 _function_scoped_fixture = getattr(HealthCheck, "function_scoped_fixture", None)
+
+
+@dataclass
+class column_strategy:
+    name: str
+    dtype_strategy: Any = None
+    include_zero: bool = True
+    restrict_range: bool = False
 
 
 def use_of_function_scoped_fixtures_in_hypothesis_checked(fun):
@@ -52,56 +59,106 @@ def use_of_function_scoped_fixtures_in_hypothesis_checked(fun):
     return fun
 
 
-def non_infinite(x):
-    return -inf < x < inf
+def restricted_numeric_range(dtype):
+    # Stick within the size of an int32 so that multiplication still fits inside an int64
+    min_value = max(np.finfo(dtype).min if np.issubdtype(dtype, np.floating) else np.iinfo(dtype).min, -2**31)
+    max_value = min(np.finfo(dtype).max if np.issubdtype(dtype, np.floating) else np.iinfo(dtype).max, 2**31)
+    return min_value, max_value
 
 
-def non_zero_and_non_infinite(x):
-    return non_infinite(x) and x != 0
+def non_zero(x):
+    return x != 0
 
 
-@st.composite
-def integral_type_strategies(draw):
-    return draw(from_dtype(draw(st.one_of([unsigned_integer_dtypes(), integer_dtypes()]))).filter(non_infinite))
+# Use the platform endianness everywhere
+ENDIANNESS = "="
 
 
 @st.composite
 def signed_integral_type_strategies(draw):
-    return draw(from_dtype(draw(st.one_of([integer_dtypes()]))).filter(non_infinite))
+    return draw(from_dtype(draw(st.one_of([integer_dtypes(endianness=ENDIANNESS)]))))
 
 
 @st.composite
 def unsigned_integral_type_strategies(draw):
-    return draw(from_dtype(draw(st.one_of([unsigned_integer_dtypes()]))).filter(non_infinite))
+    return draw(from_dtype(draw(st.one_of([unsigned_integer_dtypes(endianness=ENDIANNESS)]))))
 
 
 @st.composite
-def dataframes_with_names_and_dtypes(draw, names, dtype_strategy):
-    cols = [hs_pd.column(name, dtype=draw(dtype_strategy)) for name in names]
-    return draw(hs_pd.data_frames(cols, index=hs_pd.range_indexes()))
+def supported_integer_dtypes(draw):
+    return draw(st.one_of(unsigned_integer_dtypes(endianness=ENDIANNESS), integer_dtypes(endianness=ENDIANNESS)))
+
+
+@st.composite
+def supported_floating_dtypes(draw):
+    # Pandas comparison of float32 series to float64 values is buggy.
+    # Change float_dtypes sizes to include 32 if this is fixed https://github.com/pandas-dev/pandas/issues/59524
+    return draw(st.one_of(floating_dtypes(endianness=ENDIANNESS, sizes=[64])))
+
+
+@st.composite
+def supported_numeric_dtypes(draw):
+    # Pandas comparison of float32 series to float64 values is buggy.
+    # Change float_dtypes sizes to include 32 if this is fixed https://github.com/pandas-dev/pandas/issues/59524
+    return draw(st.one_of(unsigned_integer_dtypes(endianness=ENDIANNESS), integer_dtypes(endianness=ENDIANNESS), floating_dtypes(endianness=ENDIANNESS, sizes=[64])))
+
+
+@st.composite
+def supported_string_dtypes(draw):
+    return draw(st.just("object"))
+
+
+string_strategy = st.text(
+    min_size=1, alphabet=st.characters(blacklist_characters="'\\", min_codepoint=32, max_codepoint=126)
+)
+
+
+@st.composite
+def dataframe_strategy(draw, column_strategies):
+    cols = []
+    for column_strat in column_strategies:
+        dtype = draw(column_strat.dtype_strategy)
+        if dtype == "object":
+            elements = string_strategy
+        else:
+            min_value, max_value = restricted_numeric_range(dtype) if column_strat.restrict_range else (None, None)
+            elements = from_dtype(
+                dtype,
+                allow_nan=False,
+                allow_infinity=False,
+                min_value=min_value,
+                max_value=max_value,
+            )
+            if not column_strat.include_zero:
+                elements = elements.filter(non_zero)
+        cols.append(column(column_strat.name, dtype=dtype, elements=elements))
+    return draw(data_frames(cols, index=range_indexes()))
 
 
 @st.composite
 def numeric_type_strategies(draw):
     return draw(
-        from_dtype(draw(st.one_of([unsigned_integer_dtypes(), integer_dtypes(), floating_dtypes()]))).filter(
-            non_infinite
+        from_dtype(
+            draw(supported_numeric_dtypes()),
+            allow_nan=False,
+            allow_infinity=False,
         )
     )
 
 
 @st.composite
 def non_zero_numeric_type_strategies(draw):
+    dtype = draw(supported_numeric_dtypes())
+    min_value, max_value = restricted_numeric_range(dtype)
     return draw(
-        from_dtype(draw(st.one_of([unsigned_integer_dtypes(), integer_dtypes(), floating_dtypes()]))).filter(
-            non_zero_and_non_infinite
-        )
+        from_dtype(
+            dtype,
+            allow_nan=False,
+            allow_infinity=False,
+            min_value=min_value,
+            max_value=max_value,
+        ).filter(non_zero)
     )
-
-
-string_strategy = st.text(
-    min_size=1, alphabet=st.characters(blacklist_characters="'\\", min_codepoint=32, max_codepoint=126)
-)
 
 
 class FactoryReturn(NamedTuple):

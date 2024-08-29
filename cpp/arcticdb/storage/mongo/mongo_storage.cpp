@@ -134,7 +134,7 @@ void MongoStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visito
                     keys_not_found.push_back(k);
                 }
                 else {
-                    visitor(k, std::move(kv.value().segment()));
+                    visitor(k, std::move(kv->segment()));
                 }
 
             } catch (const mongocxx::operation_exception& ex) {
@@ -196,9 +196,8 @@ void MongoStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) {
     }
 }
 
-void MongoStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix) {
+bool MongoStorage::do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string &prefix) {
     auto collection = collection_name(key_type);
-    auto func = folly::Function<void(entity::VariantKey&&)>(visitor);
     ARCTICDB_SAMPLE(MongoStorageItType, 0)
     std::vector<VariantKey> keys;
     try {
@@ -212,8 +211,11 @@ void MongoStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& v
                             ex.what());
     }
     for (auto &key : keys) {
-        func(std::move(key));
+        if (visitor(std::move(key))) {
+          return true;
+        }
     }
+    return false;
 }
 
 bool MongoStorage::do_key_exists(const VariantKey& key) {

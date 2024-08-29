@@ -92,7 +92,7 @@ template <typename T>
 inline void serialize_string(const std::string &str, CursoredBuffer<T> &output) {
     util::check_arg(str.size() < max_string_size(), "String too long for serialization type");
     output.ensure_bytes(str.size() + sizeof(uint8_t));
-    auto data = output.ptr();
+    auto data = output.cursor();
     *data++ = static_cast<uint8_t>(str.size());
     memcpy(data, str.data(), str.size());
     output.commit();
@@ -223,7 +223,7 @@ namespace arcticdb::entity {
 inline std::string to_serialized_key(const AtomKey &key) {
     CursoredBuffer<Buffer> output;
     output.ensure<KeyDescriptor>();
-    (void) new(output.ptr()) KeyDescriptor(key, FormatType::OPAQUE);
+    (void) new(output.cursor()) KeyDescriptor(key, FormatType::OPAQUE);
     output.commit();
 
     serialize_variant_type(key.id(), output);
@@ -238,7 +238,7 @@ inline std::string to_serialized_key(const AtomKey &key) {
 inline std::string to_serialized_key(const RefKey &key) {
     CursoredBuffer<Buffer> output;
     output.ensure<KeyDescriptor>();
-    (void) new(output.ptr()) KeyDescriptor(key, FormatType::OPAQUE);
+    (void) new(output.cursor()) KeyDescriptor(key, FormatType::OPAQUE);
     output.commit();
 
     serialize_variant_type(key.id(), output);

@@ -21,7 +21,7 @@ std::vector<ChunkedBufferImpl<BlockSize>> split(const ChunkedBufferImpl<BlockSiz
     auto remaining_total_bytes = input.bytes();
     ARCTICDB_DEBUG(log::version(), "Remaining total: {} Remaining current: {}", remaining_total_bytes, remaining_current_bytes);
     std::optional<ChunkedBufferImpl<BlockSize>> current_buf = ChunkedBufferImpl<BlockSize>::presized_in_blocks(std::min(nbytes, remaining_current_bytes));
-    auto target_block = current_buf.value().blocks().begin();
+    auto target_block = current_buf->blocks().begin();
     auto target_pos = 0u;
     auto block_num ARCTICDB_UNUSED = 0u;
     for(const auto block : input.blocks()) {

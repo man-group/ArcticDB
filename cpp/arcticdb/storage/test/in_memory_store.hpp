@@ -60,8 +60,8 @@ namespace arcticdb {
             stream::KeyType key_type,
             VersionId gen_id,
             const StreamId& stream_id,
-            IndexValue start_index,
-            IndexValue end_index,
+            const IndexValue& start_index,
+            const IndexValue& end_index,
             std::optional<timestamp> creation_ts = std::nullopt
         ) {
             return atom_key_builder().gen_id(gen_id).content_hash(content_hash_).creation_ts(creation_ts.value_or(PilotedClock::nanos_since_epoch()))
@@ -275,6 +275,11 @@ namespace arcticdb {
                     func(VariantKey{key});
                 }
             }
+        }
+
+        bool scan_for_matching_key(
+            KeyType, const IterateTypePredicate&) override {
+            util::raise_rte("scan_for_matching_key Not implemented for InMemoryStore");
         }
 
         folly::Future<pipelines::SliceAndKey> async_write(

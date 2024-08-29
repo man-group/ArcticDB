@@ -669,8 +669,8 @@ struct RowRangeClause {
 
     // User provided values, which are used to calculate start and end.
     // Both can be provided with negative values to wrap indices.
-    int64_t user_provided_start_;
-    int64_t user_provided_end_;
+    int64_t user_provided_start_{0};
+    int64_t user_provided_end_{0};
 
     // Row range to keep. Zero-indexed, inclusive of start, exclusive of end.
     // If the RowRangeType is `HEAD` or `TAIL`, this is calculated from `n` and

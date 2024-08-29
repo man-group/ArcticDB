@@ -254,13 +254,19 @@ public:
     std::pair<VersionId, std::vector<AtomKey>> tombstone_from_key_or_all(
             std::shared_ptr<Store> store,
             const StreamId& stream_id,
-            std::optional<AtomKey> first_key_to_tombstone = std::nullopt
+            std::optional<AtomKey> first_key_to_tombstone = std::nullopt,
+            std::optional<std::shared_ptr<VersionMapEntry>> cached_entry = std::nullopt
             ) {
-        auto entry = check_reload(
-            store,
-            stream_id,
-            LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY},
-            __FUNCTION__);
+        std::shared_ptr<VersionMapEntry> entry;
+        if (cached_entry) {
+            entry = cached_entry.value();
+        } else {
+            entry = check_reload(
+                    store,
+                    stream_id,
+                    LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY},
+                    __FUNCTION__);
+        }
         auto output = tombstone_from_key_or_all_internal(store, stream_id, first_key_to_tombstone, entry);
 
         if (validate_)
@@ -347,10 +353,10 @@ public:
                     if (!store->key_exists(key).get())
                         ARCTICDB_DEBUG(log::version(), "Removing deleted key {}", key);
                     else {
-                        if(tombstone.value().type() == KeyType::TOMBSTONE_ALL)
-                            new_entry->try_set_tombstone_all(tombstone.value());
+                        if(tombstone->type() == KeyType::TOMBSTONE_ALL)
+                            new_entry->try_set_tombstone_all(*tombstone);
                         else
-                            new_entry->tombstones_.insert(std::make_pair(key.version_id(), tombstone.value()));
+                            new_entry->tombstones_.insert(std::make_pair(key.version_id(), *tombstone));
 
                         new_entry->keys_.push_back(key);
                     }
@@ -501,6 +507,9 @@ public:
         if (validate_)
             entry->validate();
 
+        util::check(key.type() != KeyType::TABLE_INDEX || !entry->head_.has_value() || key.version_id() > entry->head_->version_id(),
+                    "Trying to write a non-increasing TABLE_INDEX key. New version: {}, Last version: {}",
+                    key.version_id(), entry->head_->version_id());
         auto journal_key = to_atom(std::move(journal_single_key(store, key, entry->head_)));
         write_to_entry(entry, key, journal_key);
         auto previous_index = entry->get_second_undeleted_index();

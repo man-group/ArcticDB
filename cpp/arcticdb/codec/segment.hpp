@@ -246,7 +246,7 @@ class Segment {
         desc_(std::move(data), std::move(fields), std::move(stream_id)) {
     }
 
-    Segment(SegmentHeader&& header, VariantBuffer&& buffer, StreamDescriptor&& desc, const std::optional<size_t> size) :
+    Segment(SegmentHeader&& header, VariantBuffer&& buffer, StreamDescriptor&& desc, const std::optional<size_t>& size) :
         header_(std::move(header)),
         buffer_(std::move(buffer)),
         desc_(std::move(desc)),

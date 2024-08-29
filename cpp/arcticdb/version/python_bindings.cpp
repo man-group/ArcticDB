@@ -203,7 +203,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             return self.frame().offset(); })
         .def_property_readonly("names", &PythonOutputFrame::names, py::return_value_policy::reference)
         .def_property_readonly("index_columns", &PythonOutputFrame::index_columns, py::return_value_policy::reference)
-        .def_property_readonly("row_count", [](PythonOutputFrame& self) { return self.frame().row_count(); });
+        .def_property_readonly("row_count", [](PythonOutputFrame& self) {
+            return self.frame().row_count();
+        });
 
     py::enum_<VersionRequestType>(version, "VersionRequestType", R"pbdoc(
         Enum of possible version request types passed to as_of.
@@ -622,19 +624,15 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             &PythonVersionStore::write_dataframe_specific_version,
              py::call_guard<SingleThreadMutexHolder>(), "Write a specific  version of this dataframe to the store")
         .def("read_dataframe_version",
-             [&](PythonVersionStore& v,  StreamId sid, const VersionQuery& version_query, ReadQuery& read_query, const ReadOptions& read_options){
-                return adapt_read_df(v.read_dataframe_version(sid, version_query, read_query, read_options));
+             [&](PythonVersionStore& v,  StreamId sid, const VersionQuery& version_query, ReadQuery& read_query, const ReadOptions& read_options) {
+                auto handler_data = TypeHandlerRegistry::instance()->get_handler_data();
+                return adapt_read_df(v.read_dataframe_version(sid, version_query, read_query, read_options, handler_data));
               },
              py::call_guard<SingleThreadMutexHolder>(),
              "Read the specified version of the dataframe from the store")
         .def("read_index",
              [&](PythonVersionStore& v,  StreamId sid, const VersionQuery& version_query){
                  return adapt_read_df(v.read_index(sid, version_query));
-             },
-             py::call_guard<SingleThreadMutexHolder>(), "Read the most recent dataframe from the store")
-        .def("read_latest_dataframe_merged",
-             [&](PythonVersionStore& v, StreamId target_id, std::vector<StreamId> &sids, ReadQuery &query, const ReadOptions read_options){
-                 return adapt_read_df(v.read_dataframe_merged(target_id, sids, VersionQuery{}, query, read_options));
              },
              py::call_guard<SingleThreadMutexHolder>(), "Read the most recent dataframe from the store")
          .def("get_update_time",
@@ -708,7 +706,6 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("reload_symbol_list",
              &PythonVersionStore::reload_symbol_list,
             py::call_guard<SingleThreadMutexHolder>(),  "Regenerate symbol list for library.")
-
         .def("write_partitioned_dataframe",
              &PythonVersionStore::write_partitioned_dataframe,
              py::call_guard<SingleThreadMutexHolder>(), "Write a dataframe and partition it into sub symbols using partition key")
@@ -812,10 +809,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
          ;
 
     py::class_<LocalVersionedEngine>(version, "VersionedEngine")
-      .def(py::init<std::shared_ptr<storage::Library>>())
-      .def("read_versioned_dataframe",
-           &LocalVersionedEngine::read_dataframe_version_internal,
-           py::call_guard<SingleThreadMutexHolder>(), "Read a dataframe from the store");
+      .def(py::init<std::shared_ptr<storage::Library>>());
 
     version.def("sorted_value_name", [] (SortedValue sorted_value) {
         switch(sorted_value) {

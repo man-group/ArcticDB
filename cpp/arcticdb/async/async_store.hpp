@@ -202,6 +202,11 @@ void iterate_type(
     library_->iterate_type(type, func, prefix);
 }
 
+bool scan_for_matching_key(
+    KeyType key_type, const IterateTypePredicate& predicate) override {
+    return library_->scan_for_matching_key(key_type, predicate);
+}
+
 folly::Future<std::pair<entity::VariantKey, SegmentInMemory>> read(
         const entity::VariantKey &key,
         storage::ReadKeyOpts opts) override {

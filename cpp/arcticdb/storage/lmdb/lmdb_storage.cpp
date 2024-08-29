@@ -125,10 +125,8 @@ void LmdbStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) {
 
 void LmdbStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, storage::ReadKeyOpts) {
     ARCTICDB_SAMPLE(LmdbStorageRead, 0)
-    auto txn = std::make_shared<::lmdb::txn>(::lmdb::txn::begin(env(), nullptr, MDB_RDONLY));
 
     auto fmt_db = [](auto &&k) { return variant_key_type(k); };
-    ARCTICDB_SUBSAMPLE(LmdbStorageInTransaction, 0)
     std::vector<VariantKey> failed_reads;
 
     (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
@@ -138,14 +136,16 @@ void LmdbStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor
         for (auto &k : group.values()) {
             auto stored_key = to_serialized_key(k);
             try {
+                auto txn = std::make_shared<::lmdb::txn>(::lmdb::txn::begin(env(), nullptr, MDB_RDONLY));
+                ARCTICDB_SUBSAMPLE(LmdbStorageInTransaction, 0)
                 auto segment = lmdb_client_->read(db_name, stored_key, *txn, dbi);
 
                 if (segment.has_value()) {
                     ARCTICDB_SUBSAMPLE(LmdbStorageVisitSegment, 0)
                     std::any keepalive;
-                    segment.value().set_keepalive(std::any(std::move(txn)));
-                    ARCTICDB_DEBUG(log::storage(), "Read key {}: {}, with {} bytes of data", variant_key_type(k), variant_key_view(k), segment.value().size());
-                    visitor(k, std::move(segment.value()));
+                    segment->set_keepalive(std::any(std::move(txn)));
+                    ARCTICDB_DEBUG(log::storage(), "Read key {}: {}, with {} bytes of data", variant_key_type(k), variant_key_view(k), segment->size());
+                    visitor(k, std::move(*segment));
                 } else {
                     ARCTICDB_DEBUG(log::storage(), "Failed to find segment for key {}", variant_key_view(k));
                     failed_reads.push_back(k);
@@ -247,7 +247,7 @@ bool LmdbStorage::do_fast_delete() {
         }
         auto db_name = fmt::format("{}", key_type);
         ARCTICDB_SUBSAMPLE(LmdbStorageOpenDb, 0)
-        ARCTICDB_DEBUG(log::storage(), "dropping {}", db_name);
+        ARCTICDB_TRACE(log::storage(), "LMDB storage dropping keytype {}", db_name);
         ::lmdb::dbi& dbi = *dbi_by_key_type_.at(db_name);
         try {
             ::lmdb::dbi_drop(dtxn, dbi);
@@ -260,7 +260,7 @@ bool LmdbStorage::do_fast_delete() {
     return true;
 }
 
-void LmdbStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix) {
+bool LmdbStorage::do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string &prefix) {
     ARCTICDB_SAMPLE(LmdbStorageItType, 0);
     auto txn = ::lmdb::txn::begin(env(), nullptr, MDB_RDONLY); // scoped abort on
     std::string type_db = fmt::format("{}", key_type);
@@ -270,11 +270,14 @@ void LmdbStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& vi
         auto keys = lmdb_client_->list(type_db, prefix, txn, dbi, key_type);
         for (auto &k: keys) {
             ARCTICDB_SUBSAMPLE(LmdbStorageVisitKey, 0)
-            visitor(std::move(k));
+            if(visitor(std::move(k))) {
+              return true;
+            }
         }
     } catch (const ::lmdb::error& ex) {
         raise_lmdb_exception(ex, type_db);
     }
+    return false;
 }
 
 bool LmdbStorage::do_is_path_valid(const std::string_view pathString ARCTICDB_UNUSED) const {
@@ -296,7 +299,7 @@ bool LmdbStorage::do_is_path_valid(const std::string_view pathString ARCTICDB_UN
 }
 
 void remove_db_files(const fs::path& lib_path) {
-    std::vector<std::string> files = {"lock.mdb", "data.mdb"};
+    std::array<std::string, 2> files = {"lock.mdb", "data.mdb"};
 
     for (const auto& file : files) {
         fs::path file_path = lib_path / file;
@@ -399,7 +402,7 @@ LmdbStorage::LmdbStorage(const LibraryPath &library_path, OpenMode mode, const C
         arcticdb::entity::foreach_key_type([&txn, this](KeyType &&key_type) {
             std::string db_name = fmt::format("{}", key_type);
             ::lmdb::dbi dbi = ::lmdb::dbi::open(txn, db_name.data(), MDB_CREATE);
-            dbi_by_key_type_.insert(std::make_pair(std::move(db_name), std::make_unique<::lmdb::dbi>(std::move(dbi))));
+            dbi_by_key_type_.emplace(std::move(db_name), std::make_unique<::lmdb::dbi>(std::move(dbi)));
         });
     } catch (const ::lmdb::error& ex) {
         raise_lmdb_exception(ex, "dbi creation");

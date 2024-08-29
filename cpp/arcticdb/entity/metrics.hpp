@@ -158,7 +158,7 @@ struct fmt::formatter<arcticdb::MetricsConfig> {
     constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
 
     template<typename FormatContext>
-    auto format(const arcticdb::MetricsConfig k, FormatContext &ctx) const {
+    auto format(const arcticdb::MetricsConfig& k, FormatContext &ctx) const {
         return  fmt::format_to(ctx.out(), "MetricsConfig: host={}, port={}, job_name={}, instance={}, prometheus_env={}, model={}",
                                k.host, k.port, k.job_name, k.instance, k.prometheus_env, static_cast<int>(k.model_));
     }

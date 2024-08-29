@@ -114,22 +114,24 @@ ankerl::unordered_dense::set<AtomKey> recurse_segment(const std::shared_ptr<stre
  * multi-index, index, and data keys referenced by this [multi-]index key.
  * If the version_id argument is provided, the returned set will only contain keys matching that version_id.
  * Note that this differs from recurse_index_keys, which does not inclide the passed in keys in the returned set. */
-inline ankerl::unordered_dense::set<AtomKey> recurse_index_key(const std::shared_ptr<stream::StreamSource>& store,
-                                                     const IndexTypeKey& index_key,
-                                                     const std::optional<VersionId>& version_id=std::nullopt) {
+inline ankerl::unordered_dense::set<AtomKey> recurse_index_key(
+    const std::shared_ptr<stream::StreamSource>& store,
+    const IndexTypeKey& index_key,
+    const std::optional<VersionId>& version_id=std::nullopt) {
     auto segment = store->read_sync(index_key).second;
     auto res = recurse_segment(store, segment, version_id);
     res.emplace(index_key);
     return res;
 }
 
-inline ankerl::unordered_dense::set<AtomKey> recurse_segment(const std::shared_ptr<stream::StreamSource>& store,
-                                                   SegmentInMemory segment,
-                                                   const std::optional<VersionId>& version_id) {
+inline ankerl::unordered_dense::set<AtomKey> recurse_segment(
+        const std::shared_ptr<stream::StreamSource>& store,
+        SegmentInMemory segment,
+        const std::optional<VersionId>& version_id) {
     ankerl::unordered_dense::set<AtomKey> res;
     for (size_t idx = 0; idx < segment.row_count(); idx++) {
         auto key = stream::read_key_row(segment, idx);
-        if ((version_id && key.version_id() == *version_id) || !version_id) {
+        if (!version_id || key.version_id() == *version_id) {
             switch (key.type()) {
                 case KeyType::TABLE_DATA:
                     res.emplace(std::move(key));

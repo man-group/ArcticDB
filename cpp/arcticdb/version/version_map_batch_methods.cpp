@@ -71,7 +71,7 @@ std::optional<AtomKey> get_version_map_entry_by_timestamp(
     auto version_key = get_index_key_from_time(timestamp_version.timestamp_,
                                                version_map_entry->get_indexes(false));
     if (version_key.has_value()) {
-        auto version_id = version_key.value().version_id();
+        auto version_id = version_key->version_id();
         return find_index_key_for_version_id(version_id, version_map_entry, false);
     } else {
         return std::nullopt;
@@ -104,7 +104,7 @@ struct SnapshotCountMap {
             for (const auto &snapshot : info.snapshots_) {
                 const auto it = snapshot_counts_.find(snapshot);
                 if(it == std::end(snapshot_counts_))
-                    snapshot_counts_.emplace(snapshot, 1);
+                    snapshot_counts_.try_emplace(snapshot, 1);
                 else
                     ++it->second;
             }
@@ -283,7 +283,7 @@ std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions_async(
                             sid);
 
                         return opt_id
-                               ? std::make_optional<AtomKey>(read_key_row(snap_segment, static_cast<ssize_t>(opt_id.value())))
+                               ? std::make_optional<AtomKey>(read_key_row(snap_segment, static_cast<ssize_t>(*opt_id)))
                                : std::nullopt;
                     });
              }));

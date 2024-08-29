@@ -164,7 +164,8 @@ class PythonVersionStore : public LocalVersionedEngine {
         const StreamId &stream_id,
         const VersionQuery& version_query,
         ReadQuery& read_query,
-        const ReadOptions& read_options);
+        const ReadOptions& read_options,
+        std::any& handler_data);
 
     VersionedItem sort_merge(
             const StreamId& stream_id,
@@ -174,13 +175,6 @@ class PythonVersionStore : public LocalVersionedEngine {
             bool via_iteration,
             bool sparsify,
             bool prune_previous_versions);
-
-    ReadResult read_dataframe_merged(
-        const StreamId& target_id,
-        const std::vector<StreamId> &stream_ids,
-        const VersionQuery& version_query,
-        const ReadQuery &query,
-        const ReadOptions& read_options);
 
     std::pair<VersionedItem, py::object> read_metadata(
         const StreamId& stream_id,
@@ -233,7 +227,7 @@ class PythonVersionStore : public LocalVersionedEngine {
         return version_map()->check_ref_key(store(), std::move(stream_id));
     }
 
-    inline bool indexes_sorted(StreamId stream_id) {
+    inline bool indexes_sorted(const StreamId& stream_id) {
         return version_map()->indexes_sorted(store(), stream_id);
     }
 

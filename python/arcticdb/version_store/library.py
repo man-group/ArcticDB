@@ -121,12 +121,12 @@ class SymbolDescription(NamedTuple):
         Index of the symbol.
     index_type : str {"NA", "index", "multi_index"}
         Whether the index is a simple index or a multi_index. ``NA`` indicates that the stored data does not have an index.
-    row_count : int
-        Number of rows.
+    row_count : Optional[int]
+        Number of rows, or None if the symbol is pickled.
     last_update_time : datetime.datetime
         The time of the last update to the symbol, in UTC.
-    date_range : Tuple[Union[datetime.datetime, numpy.datetime64], Union[datetime.datetime, numpy.datetime64]]
-        The values of the index column in the first and last rows of this symbol in UTC. Both values will be NaT if:
+    date_range : Tuple[Union[pandas.Timestamp], Union[pandas.Timestamp]]
+        The values of the index column in the first and last row of this symbol. Both values will be NaT if:
         - the symbol is not timestamp indexed
         - the symbol is timestamp indexed, but the sorted field of this class is UNSORTED (see below)
     sorted : str
@@ -622,8 +622,8 @@ class Library:
         )
 
     def write_pickle_batch(
-        self, payloads: List[WritePayload], prune_previous_versions: bool = False, staged=False
-    ) -> List[VersionedItem]:
+        self, payloads: List[WritePayload], prune_previous_versions: bool = False
+    ) -> List[Union[VersionedItem, DataError]]:
         """
         Write a batch of multiple symbols, pickling their data if necessary.
 
@@ -633,14 +633,13 @@ class Library:
             Symbols and their corresponding data. There must not be any duplicate symbols in `payload`.
         prune_previous_versions: `bool`, default=False
             Removes previous (non-snapshotted) versions from the database.
-        staged: `bool`, default=False
-            See documentation on `write`.
 
         Returns
         -------
-        List[VersionedItem]
+        List[Union[VersionedItem, DataError]]
             Structures containing metadata and version number of the written symbols in the store, in the
-            same order as `payload`.
+            same order as `payload`. If a key error or any other internal exception is raised, a DataError object is
+            returned, with symbol, error_code, error_category, and exception_string properties.
 
         Raises
         ------
@@ -654,13 +653,14 @@ class Library:
         """
         self._raise_if_duplicate_symbols_in_batch(payloads)
 
-        return self._nvs.batch_write(
+        return self._nvs._batch_write_internal(
             [p.symbol for p in payloads],
             [p.data for p in payloads],
             [p.metadata for p in payloads],
             prune_previous_version=prune_previous_versions,
             pickle_on_failure=True,
-            parallel=staged,
+            validate_index=False,
+            throw_on_error=False,
         )
 
     def append(
@@ -678,6 +678,10 @@ class Library:
 
         Appends containing differing column sets to the existing data are only possible if the library has been
         configured to support dynamic schemas.
+
+        If `append` is called on a symbol that does not exist, it will create it. This is convenient when setting up
+        a new symbol, but be careful - it will not work for creating a new version of an existing symbol. Use `write`
+        in that case.
 
         Note that `append` is not designed for multiple concurrent writers over a single symbol.
 
@@ -1091,7 +1095,8 @@ class Library:
             row_range=row_range,
             columns=columns,
             query_builder=query_builder,
-            implement_read_index=True
+            implement_read_index=True,
+            iterate_snapshots_if_tombstoned=False,
         )
 
     def read_batch(
@@ -1191,7 +1196,15 @@ class Library:
                 )
         throw_on_error = False
         return self._nvs._batch_read_to_versioned_items(
-            symbol_strings, as_ofs, date_ranges, row_ranges, columns, query_builder or query_builders, throw_on_error, implement_read_index=True
+            symbol_strings,
+            as_ofs,
+            date_ranges,
+            row_ranges,
+            columns,
+            query_builder or query_builders,
+            throw_on_error,
+            implement_read_index=True,
+            iterate_snapshots_if_tombstoned=False,
         )
 
     def read_metadata(self, symbol: str, as_of: Optional[AsOf] = None) -> VersionedItem:
@@ -1213,7 +1226,7 @@ class Library:
             Structure containing metadata and version number of the affected symbol in the store. The data attribute
             will be None.
         """
-        return self._nvs.read_metadata(symbol, as_of)
+        return self._nvs.read_metadata(symbol, as_of, iterate_snapshots_if_tombstoned=False)
 
     def read_metadata_batch(self, symbols: List[Union[str, ReadInfoRequest]]) -> List[Union[VersionedItem, DataError]]:
         """
@@ -1612,7 +1625,14 @@ class Library:
         -------
         VersionedItem object that contains a .data and .metadata element.
         """
-        return self._nvs.head(symbol=symbol, n=n, as_of=as_of, columns=columns, implement_read_index=True)
+        return self._nvs.head(
+            symbol=symbol,
+            n=n,
+            as_of=as_of,
+            columns=columns,
+            implement_read_index=True,
+            iterate_snapshots_if_tombstoned=False,
+        )
 
     def tail(
         self, symbol: str, n: int = 5, as_of: Optional[Union[int, str]] = None, columns: List[str] = None
@@ -1635,7 +1655,14 @@ class Library:
         -------
         VersionedItem object that contains a .data and .metadata element.
         """
-        return self._nvs.tail(symbol=symbol, n=n, as_of=as_of, columns=columns, implement_read_index=True)
+        return self._nvs.tail(
+            symbol=symbol,
+            n=n,
+            as_of=as_of,
+            columns=columns,
+            implement_read_index=True,
+            iterate_snapshots_if_tombstoned=False,
+        )
 
     @staticmethod
     def _info_to_desc(info: Dict[str, Any]) -> SymbolDescription:
@@ -1647,19 +1674,13 @@ class Library:
             last_update_time = last_update_time.replace(tzinfo=pytz.UTC)
         columns = tuple(NameWithDType(n, t) for n, t in zip(info["col_names"]["columns"], info["dtype"]))
         index = NameWithDType(info["col_names"]["index"], info["col_names"]["index_dtype"])
-        date_range = tuple(
-            map(
-                lambda x: x.replace(tzinfo=datetime.timezone.utc) if not np.isnat(np.datetime64(x)) else x,
-                info["date_range"],
-            )
-        )
         return SymbolDescription(
             columns=columns,
             index=index,
             row_count=info["rows"],
             last_update_time=last_update_time,
             index_type=info["index_type"],
-            date_range=date_range,
+            date_range=info["date_range"],
             sorted=info["sorted"],
         )
 
@@ -1684,7 +1705,12 @@ class Library:
         SymbolDescription
             For documentation on each field.
         """
-        info = self._nvs.get_info(symbol, as_of)
+        info = self._nvs.get_info(
+            symbol,
+            as_of,
+            date_range_ns_precision=True,
+            iterate_snapshots_if_tombstoned=False,
+        )
         return self._info_to_desc(info)
 
     @staticmethod
@@ -1740,7 +1766,8 @@ class Library:
         symbol_strings, as_ofs = self.parse_list_of_symbols(symbols)
 
         throw_on_error = False
-        descriptions = self._nvs._batch_read_descriptor(symbol_strings, as_ofs, throw_on_error)
+        date_range_ns_precision = True
+        descriptions = self._nvs._batch_read_descriptor(symbol_strings, as_ofs, throw_on_error, date_range_ns_precision)
 
         description_results = [
             description if isinstance(description, DataError) else self._info_to_desc(description)

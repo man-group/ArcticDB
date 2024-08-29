@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import datetime
+import sys
 from collections import namedtuple
 from unittest.mock import patch
 import numpy as np
@@ -127,17 +128,26 @@ def test_empty_df():
     assert_frame_equal(d, D)
 
 
+# See test_get_description_date_range_tz in test_arctic.py for the V2 API equivalent
 @pytest.mark.parametrize(
     "tz", ["UTC", "Europe/Amsterdam", pytz.UTC, pytz.timezone("Europe/Amsterdam"), du.tz.gettz("UTC")]
 )
 def test_write_tz(lmdb_version_store, sym, tz):
     assert tz is not None
-    df = pd.DataFrame(data={"col1": np.arange(10)}, index=pd.date_range(pd.Timestamp(0), periods=10, tz=tz))
+    index = index=pd.date_range(pd.Timestamp(0), periods=10, tz=tz)
+    df = pd.DataFrame(data={"col1": np.arange(10)}, index=index)
     lmdb_version_store.write(sym, df)
     result = lmdb_version_store.read(sym).data
     assert_frame_equal(df, result)
     df_tz = df.index.tzinfo
     assert str(df_tz) == str(tz)
+    if tz == du.tz.gettz("UTC") and sys.version_info < (3, 7):
+        pytest.skip("Timezone files don't seem to have ever worked properly on Python 3.6")
+    start_ts, end_ts = lmdb_version_store.get_timerange_for_symbol(sym)
+    assert isinstance(start_ts, datetime.datetime)
+    assert isinstance(end_ts, datetime.datetime)
+    assert start_ts == index[0]
+    assert end_ts == index[-1]
 
 
 def get_multiindex_df_with_tz(tz):

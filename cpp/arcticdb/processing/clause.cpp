@@ -481,7 +481,7 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
         auto hashes = grouping_map.get<typename col_type_info::RawType>();
         std::vector<std::pair<typename col_type_info::RawType, size_t>> elements;
         for (const auto &hash : *hashes)
-            elements.push_back(std::make_pair(hash.first, hash.second));
+            elements.emplace_back(std::make_pair(hash.first, hash.second));
 
         std::sort(std::begin(elements),
                   std::end(elements),
@@ -667,12 +667,13 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
     // If the expected get calls for the segments in the first row slice are 2, the first bucket overlapping this row
     // slice is being computed by the call to process dealing with the row slices above these. Otherwise, this call
     // should do it
-    bool responsible_for_first_overlapping_bucket = row_slices.front().segment_initial_expected_get_calls_->at(0) == 1;
+    const auto& front_slice = row_slices.front();
+    bool responsible_for_first_overlapping_bucket = front_slice.segment_initial_expected_get_calls_->at(0) == 1;
     // Find the iterators into bucket_boundaries_ of the start of the first and the end of the last bucket this call to process is
     // responsible for calculating
     // All segments in a given row slice contain the same index column, so just grab info from the first one
-    const auto& index_column_name = row_slices.front().segments_->at(0)->field(0).name();
-    const auto& first_row_slice_index_col = row_slices.front().segments_->at(0)->column(0);
+    const auto& index_column_name = front_slice.segments_->at(0)->field(0).name();
+    const auto& first_row_slice_index_col = front_slice.segments_->at(0)->column(0);
     // Resampling only makes sense for timestamp indexes
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(is_time_type(first_row_slice_index_col.type().data_type()),
                                                     "Cannot resample data with index column of non-timestamp type");

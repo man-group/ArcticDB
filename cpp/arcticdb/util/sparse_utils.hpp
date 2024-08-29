@@ -10,15 +10,17 @@
 #include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/util/preprocess.hpp>
 #include <arcticdb/util/type_handler.hpp>
-
 #include <arcticdb/util/bitset.hpp>
 #include <arcticdb/util/constants.hpp>
+#include <arcticdb/util/buffer_holder.hpp>
+#include <arcticdb/column_store/column_data.hpp>
 
 #include <arcticdb/column_store/chunked_buffer.hpp>
 
 #include <bitmagic/bmserial.h>
 
 #include <cstdint>
+
 
 namespace arcticdb::util {
 
@@ -81,12 +83,31 @@ inline void default_initialize(uint8_t* data, size_t bytes) {
         std::fill_n(type_ptr, num_rows, NaT);
     } else if constexpr (is_integer_type(data_type) || is_bool_type(data_type)) {
         std::memset(data, 0, bytes);
+    }
+}
+
+template <typename TagType>
+inline void default_initialize(ChunkedBuffer& buffer, size_t offset, size_t bytes, DecodePathData shared_data, std::any& handler_data) {
+    using RawType = typename TagType::DataTypeTag::raw_type;
+    const auto num_rows ARCTICDB_UNUSED = bytes / sizeof(RawType);
+    constexpr auto type = static_cast<TypeDescriptor>(TagType{});
+    constexpr auto data_type = type.data_type();
+    ColumnData column_data{&buffer, type};
+    auto pos = column_data.begin<TagType, IteratorType::REGULAR, IteratorDensity::DENSE, false>();
+    std::advance(pos, offset);
+    //auto end = column_data.begin<TagType, IteratorType::REGULAR, IteratorDensity::DENSE, false>();
+    if constexpr (is_sequence_type(data_type)) {
+        std::fill_n(pos, num_rows, not_a_string());
+    } else if constexpr (is_floating_point_type(data_type)) {
+        std::fill_n(pos, num_rows, std::numeric_limits<RawType>::quiet_NaN());
+    } else if constexpr (is_time_type(data_type)) {
+        std::fill_n(pos, num_rows, NaT);
+    } else if constexpr (is_integer_type(data_type) || is_bool_type(data_type)) {
+        buffer.memset_buffer(offset, bytes, 0);
     } else {
-        constexpr TypeDescriptor type_descriptor = TagType::type_descriptor();
-        const std::shared_ptr<TypeHandler>& handler =
-            arcticdb::TypeHandlerRegistry::instance()->get_handler(type_descriptor);
-        if (handler) {
-            handler->default_initialize(data, bytes);
+        constexpr auto type_descriptor = TagType::type_descriptor();
+        if (const std::shared_ptr<TypeHandler>& handler = arcticdb::TypeHandlerRegistry::instance()->get_handler(type_descriptor);handler) {
+            handler->default_initialize(buffer, offset, bytes, shared_data, handler_data);
         } else {
             internal::raise<ErrorCode::E_INVALID_ARGUMENT>(
                 "Default initialization for {} is not implemented.",

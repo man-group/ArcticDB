@@ -24,18 +24,6 @@ namespace arcticdb::version_store {
 using namespace arcticdb::entity;
 using namespace arcticdb::pipelines;
 
-struct ReadVersionOutput {
-    ReadVersionOutput() = delete;
-    ReadVersionOutput(VersionedItem&& versioned_item, FrameAndDescriptor&& frame_and_descriptor):
-            versioned_item_(std::move(versioned_item)),
-            frame_and_descriptor_(std::move(frame_and_descriptor)) {}
-
-    ARCTICDB_MOVE_ONLY_DEFAULT(ReadVersionOutput)
-
-    VersionedItem versioned_item_;
-    FrameAndDescriptor frame_and_descriptor_;
-};
-
 struct DeleteRangeOptions {
     bool dynamic_schema_;
     bool prune_previous_versions_;
@@ -106,16 +94,12 @@ public:
         const VersionQuery& version_query
         ) = 0;
 
-    virtual FrameAndDescriptor read_dataframe_internal(
-        const std::variant<VersionedItem, StreamId>& identifier,
-        ReadQuery& read_query,
-        const ReadOptions& read_options) = 0;
-
     virtual ReadVersionOutput read_dataframe_version_internal(
         const StreamId &stream_id,
         const VersionQuery& version_query,
         ReadQuery& read_query,
-        const ReadOptions& read_options) = 0;
+        const ReadOptions& read_options,
+        std::any& handler_data) = 0;
 
     virtual VersionedItem write_versioned_dataframe_internal(
         const StreamId& stream_id,
@@ -125,7 +109,6 @@ public:
         bool validate_index
     ) = 0;
 
-    /** Test-specific cut-down version of write_versioned_dataframe_internal */
     virtual VersionedItem write_individual_segment(
         const StreamId& stream_id,
         SegmentInMemory&& segment,

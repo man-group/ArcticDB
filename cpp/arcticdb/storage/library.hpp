@@ -70,6 +70,17 @@ class Library {
         storages_->iterate_type(key_type, visitor, prefix);
     }
 
+    /**
+     * Scan through every key of the given type until one matches the predicate.
+     *
+     * @return true immediately after finding a match, or false if no match was
+     * found at all
+     */
+    bool scan_for_matching_key(
+        KeyType key_type, const IterateTypePredicate& predicate) {
+        return storages_->scan_for_matching_key(key_type, predicate);
+    }
+
     void write(Composite<KeySegmentPair>&& kvs) {
         ARCTICDB_SAMPLE(LibraryWrite, 0)
         if (open_mode() < OpenMode::WRITE) {

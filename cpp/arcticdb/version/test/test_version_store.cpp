@@ -16,6 +16,8 @@
 #include <arcticdb/util/allocator.hpp>
 #include <arcticdb/codec/default_codecs.hpp>
 #include <arcticdb/version/version_functions.hpp>
+#include <arcticdb/version/local_versioned_engine.hpp>
+#include <arcticdb/util/native_handler.hpp>
 
 #include <filesystem>
 #include <chrono>
@@ -36,6 +38,7 @@ auto write_version_frame(
     bool update_version_map = false,
     size_t start_val = 0,
     const std::optional<arcticdb::entity::AtomKey>& previous_key = std::nullopt,
+    bool prune_previous = false,
     const std::shared_ptr<arcticdb::DeDupMap>& de_dup_map = std::make_shared<arcticdb::DeDupMap>()
 ) {
     using namespace arcticdb;
@@ -51,7 +54,7 @@ auto write_version_frame(
     auto var_key = write_frame(std::move(pk), frame, slicing, store, de_dup_map).get();
     auto key = to_atom(var_key); // Moves
     if (update_version_map) {
-        pvs._test_get_version_map()->write_version(store, key, previous_key);
+        pvs.write_version_and_prune_previous(prune_previous, key, previous_key);
     }
 
     return key;
@@ -94,8 +97,8 @@ TEST(PythonVersionStore, WriteWithPruneVersions) {
 
     auto [version_store, mock_store] = python_version_store_in_memory();
 
-    auto key = write_version_frame({"test_versioned_engine_delete"}, 0, version_store, 30, true);
-    version_store._test_get_version_map()->write_and_prune_previous(mock_store, key, std::nullopt);
+    write_version_frame({"test_versioned_engine_delete"}, 0, version_store, 30, true);
+    write_version_frame({"test_versioned_engine_delete"}, 1, version_store, 30, true, 0, std::nullopt, true);
     // Should have pruned the previous version and have just one version
     ASSERT_EQ(mock_store->num_atom_keys_of_type(KeyType::TABLE_INDEX), 1);
 }
@@ -252,7 +255,9 @@ TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {
 
     auto vit = test_store_->compact_incomplete(symbol, false, false, true, false);
     ReadQuery read_query;
-    auto read_result = test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, ReadOptions{});
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    auto read_result = test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
     const auto& seg = read_result.frame_data.frame();
 
     count = 0;
@@ -358,6 +363,7 @@ TEST_F(VersionStoreTest, StressBatchReadUncompressed) {
 
     std::vector<std::shared_ptr<ReadQuery>> read_queries;
     ReadOptions read_options;
+    register_native_handler_data_factory();
     read_options.set_batch_throw_on_error(true);
     auto latest_versions = test_store_->batch_read(symbols, std::vector<VersionQuery>(10), read_queries, read_options);
     for(auto&& [idx, version] : folly::enumerate(latest_versions)) {
@@ -427,6 +433,73 @@ TEST(VersionStore, TestReadTimestampAtInequality) {
   ASSERT_EQ(key.value().content_hash(), 3);
 }
 
+TEST(VersionStore, AppendRefKeyOptimisation) {
+    using namespace arcticdb;
+    using namespace arcticdb::storage;
+    using namespace arcticdb::stream;
+    using namespace arcticdb::pipelines;
+
+    ScopedConfig reload_interval("VersionMap.ReloadInterval", 0);
+
+    PilotedClock::reset();
+    StreamId symbol("append_test");
+    auto version_store = get_test_engine<version_store::PythonVersionStore>();
+    auto version_map = version_store._test_get_version_map();
+    auto store = version_store._test_get_store();
+    size_t num_rows{5};
+    size_t start_val{0};
+
+    std::vector<FieldRef> fields{
+        scalar_field(DataType::UINT8, "thing1"),
+        scalar_field(DataType::UINT8, "thing2"),
+        scalar_field(DataType::UINT16, "thing3"),
+        scalar_field(DataType::UINT16, "thing4")
+    };
+
+    // Append v0
+    auto test_frame_0 = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
+    version_store.append_internal(symbol, std::move(test_frame_0.frame_), true, false, false);
+
+    // Append v1
+    start_val += num_rows;
+    auto test_frame_1 = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
+    version_store.append_internal(symbol, std::move(test_frame_1.frame_), false, false, false);
+
+    // Snapshot and delete
+    std::cout << "Snap" << std::endl;
+    std::map<StreamId, VersionId> vers;
+    py::object user_meta;
+    std::vector<StreamId> syms;
+    version_store.snapshot("blah", py::none(), syms, vers, false);
+    version_store.delete_version(symbol, 1);
+
+
+    // Append v2
+    start_val += num_rows;
+    auto test_frame_2 = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
+    version_store.append_internal(symbol, std::move(test_frame_2.frame_), false, false, false);
+
+
+    uint64_t version_id = 1;
+    // Test that v1 is visible when deleted versions are included
+    auto entry_deleted = std::make_shared<VersionMapEntry>();
+    version_map->load_via_ref_key(store, symbol, LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(version_id)}, entry_deleted);
+    
+    auto all_index_keys = entry_deleted->get_indexes(true);
+    auto it = std::find_if(std::begin(all_index_keys), std::end(all_index_keys),
+                        [&](const auto &k) { return k.version_id() == version_id; });
+    ASSERT_TRUE(it != std::end(all_index_keys));
+
+    // Test that v1 is not visible when only undeleted versions are queried
+    auto entry_undeleted = std::make_shared<VersionMapEntry>();
+    version_map->load_via_ref_key(store, symbol, LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(version_id)}, entry_undeleted);
+
+    all_index_keys = entry_undeleted->get_indexes(true);
+    it = std::find_if(std::begin(all_index_keys), std::end(all_index_keys),
+                        [&](const auto &k) { return k.version_id() == version_id; });
+    ASSERT_TRUE(it == std::end(all_index_keys));
+}
+
 TEST(VersionStore, UpdateWithin) {
     using namespace arcticdb;
     using namespace arcticdb::storage;
@@ -457,7 +530,9 @@ TEST(VersionStore, UpdateWithin) {
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
 
     ReadQuery read_query;
-    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
     const auto& seg = read_result.frame_and_descriptor_.frame_;
 
     for(auto i = 0u; i < num_rows; ++i) {
@@ -465,7 +540,7 @@ TEST(VersionStore, UpdateWithin) {
         if(update_range.contains(i))
             expected += update_val;
 
-        auto val1 = seg.scalar_at<uint8_t >(i, 1);
+        auto val1 = seg.scalar_at<uint8_t>(i, 1);
         ASSERT_EQ(val1.value(), expected);
     }
 }
@@ -498,7 +573,9 @@ TEST(VersionStore, UpdateBefore) {
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
 
     ReadQuery read_query;
-    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
     const auto& seg = read_result.frame_and_descriptor_.frame_;
 
     for(auto i = 0u; i < num_rows + update_range.diff(); ++i) {
@@ -539,7 +616,9 @@ TEST(VersionStore, UpdateAfter) {
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
 
     ReadQuery read_query;
-    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
     const auto& seg = read_result.frame_and_descriptor_.frame_;
 
     for(auto i = 0u; i < num_rows + update_range.diff(); ++i) {
@@ -581,7 +660,9 @@ TEST(VersionStore, UpdateIntersectBefore) {
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
 
     ReadQuery read_query;
-    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
     const auto &seg = read_result.frame_and_descriptor_.frame_;
 
     for (auto i = 0u; i < num_rows + 5; ++i) {
@@ -623,7 +704,9 @@ TEST(VersionStore, UpdateIntersectAfter) {
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
 
     ReadQuery read_query;
-    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
     const auto &seg = read_result.frame_and_descriptor_.frame_;
 
     for (auto i = 0u; i < num_rows + 5; ++i) {
@@ -675,7 +758,9 @@ TEST(VersionStore, UpdateWithinSchemaChange) {
     ReadOptions read_options;
     read_options.set_dynamic_schema(true);
     ReadQuery read_query;
-    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options);
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options, handler_data);
     const auto &seg = read_result.frame_and_descriptor_.frame_;
 
     for (auto i = 0u;i < num_rows; ++i) {
@@ -736,7 +821,9 @@ TEST(VersionStore, UpdateWithinTypeAndSchemaChange) {
     ReadOptions read_options;
     read_options.set_dynamic_schema(true);
     ReadQuery read_query;
-    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options);
+    register_native_handler_data_factory();
+    auto handler_data = get_type_handler_data();
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options, handler_data);
     const auto &seg = read_result.frame_and_descriptor_.frame_;
 
     for (auto i = 0u;i < num_rows; ++i) {

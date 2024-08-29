@@ -137,11 +137,13 @@ void do_compact(
             if (sk.slice().rows().diff() == 0) {
                 continue;
             }
+
             const auto& segment = sk.segment(store);
             sorting::check<ErrorCode::E_UNSORTED_DATA>(
                 !check_index_sorted || segment.descriptor().sorted() == SortedValue::ASCENDING,
-                "Cannot compact unordered segment. Try using sort_and_finalize_staged_data."
+                "Cannot compact unordered segment."
             );
+
             aggregator.add_segment(
                 std::move(sk.segment(store)),
                 sk.slice(),

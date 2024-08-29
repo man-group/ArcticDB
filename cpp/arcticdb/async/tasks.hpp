@@ -375,8 +375,6 @@ private:
                     target_store->write_compressed_sync(key_segment_pair);
                 } catch (const storage::DuplicateKeyException& e) {
                     log::storage().debug("Key {} already exists on the target: {}", variant_key_view(key_to_read_), e.what());
-                } catch (const storage::KeyNotFoundException& e) {
-                    log::storage().debug("Key {} not found on the source: {}", variant_key_view(key_to_read_), e.what());
                 } catch (const std::exception& e) {
                     auto name = target_store->name();
                     log::storage().error("Failed to write key {} to store {}: {}", variant_key_view(key_to_read_), name, e.what());

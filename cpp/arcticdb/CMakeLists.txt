@@ -50,10 +50,6 @@ if(NOT ${ARCTICDB_USING_CONDA})
     find_package(Libevent CONFIG REQUIRED)
     set(ARCTICDB_MONGO_LIBS $<IF:$<TARGET_EXISTS:mongo::mongocxx_static>,mongo::mongocxx_static,mongo::mongocxx_shared>)
     set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
-
-    if(NOT DEFINED ARCTICDB_INCLUDE_ROCKSDB)
-        set(ARCTICDB_INCLUDE_ROCKSDB 1)
-    endif()
 else()
 
     # ARCTICDB_USING_CONDA is used in header of the files including vendored
@@ -94,13 +90,6 @@ endif()
 add_library(xxHash STATIC IMPORTED)
 set_target_properties(xxHash PROPERTIES IMPORTED_LOCATION ${xxHash_LIBRARY})
 set_target_properties(xxHash PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${xxHash_INCLUDE_DIR})
-
-# RocksDB can be manually excluded with set(ARCTICDB_INCLUDE_ROCKSDB 0)
-# Default is to include on PyPI builds and exclude on conda builds
-if(${ARCTICDB_INCLUDE_ROCKSDB})
-    add_compile_definitions(ARCTICDB_INCLUDE_ROCKSDB)
-    find_package(RocksDB CONFIG REQUIRED)
-endif()
 
 # Libraries baked into the internal and external Linux images are found by searching various paths
 # On Windows, vcpkg will provide a "Config" which takes precedence
@@ -255,6 +244,9 @@ set(arcticdb_srcs
         pipeline/value_set.hpp
         pipeline/write_frame.hpp
         pipeline/write_options.hpp
+        python/python_strings.hpp
+        python/python_handler_data.hpp
+        pipeline/string_reducers.hpp
         processing/aggregation_utils.hpp
         processing/component_manager.hpp
         processing/operation_dispatch.hpp
@@ -346,6 +338,7 @@ set(arcticdb_srcs
         util/format_bytes.hpp
         util/format_date.hpp
         util/hash.hpp
+        util/spinlock.hpp
         util/key_utils.hpp
         util/lock_table.hpp
         util/magic_num.hpp
@@ -369,6 +362,7 @@ set(arcticdb_srcs
         util/timeouts.hpp
         util/timer.hpp
         util/trace.hpp
+        util/lazy.hpp
         util/type_traits.hpp
         util/variant.hpp
         version/de_dup_map.hpp
@@ -434,6 +428,7 @@ set(arcticdb_srcs
         pipeline/value_set.cpp
         pipeline/write_frame.cpp
         python/normalization_checks.cpp
+        python/python_strings.cpp
         processing/processing_unit.cpp
         processing/aggregation_utils.cpp
         processing/clause.cpp
@@ -506,15 +501,7 @@ set(arcticdb_srcs
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
         storage/s3/ec2_utils.cpp
-        storage/lmdb/lmdb.hpp
-        )
-
-if(${ARCTICDB_INCLUDE_ROCKSDB})
-    list (APPEND arcticdb_srcs
-        storage/rocksdb/rocksdb_storage.hpp
-        storage/rocksdb/rocksdb_storage.cpp
-    )
-endif()
+        util/buffer_holder.cpp util/native_handler.hpp)
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
@@ -602,10 +589,6 @@ else ()
             )
 endif ()
 
-if (${ARCTICDB_INCLUDE_ROCKSDB})
-    list (APPEND arcticdb_core_libraries RocksDB::rocksdb)
-endif()
-
 list (APPEND arcticdb_core_libraries Threads::Threads) # comes last for weakreference resolution pthread_atexit in folly
 
 set(arcticdb_core_includes
@@ -657,7 +640,11 @@ set(arcticdb_python_srcs
         storage/python_bindings.cpp
         stream/python_bindings.cpp
         toolbox/python_bindings.cpp
-        version/python_bindings.cpp)
+        version/python_bindings.cpp
+        python/reader.hpp
+        python/adapt_read_dataframe.hpp
+        python/python_handlers.hpp
+        python/python_handlers.cpp)
 
 add_library(arcticdb_python STATIC ${arcticdb_python_srcs})
 
@@ -690,10 +677,6 @@ pybind11_add_module(arcticdb_ext MODULE
         python/python_module.cpp
         python/arctic_version.cpp
         python/arctic_version.hpp
-        python/reader.hpp
-        python/adapt_read_dataframe.hpp
-        python/python_handlers.hpp
-        python/python_handlers.cpp
         )
 
 set (additional_link_flags "")
@@ -786,13 +769,13 @@ if(${TEST})
             processing/test/test_set_membership.cpp
             processing/test/test_signed_unsigned_comparison.cpp
             processing/test/test_type_comparison.cpp
-            storage/test/test_embedded.cpp
+            storage/test/test_local_storages.cpp
             storage/test/test_memory_storage.cpp
-            storage/test/test_mongo_storage.cpp
             storage/test/test_s3_storage.cpp
             storage/test/test_storage_factory.cpp
             storage/test/test_storage_exceptions.cpp
             storage/test/test_azure_storage.cpp
+            storage/test/test_storage_operations.cpp
             stream/test/stream_test_common.cpp
             stream/test/test_aggregator.cpp
             stream/test/test_append_map.cpp
@@ -818,7 +801,6 @@ if(${TEST})
             util/test/test_string_utils.cpp
             util/test/test_tracing_allocator.cpp
             version/test/test_append.cpp
-            version/test/test_merge.cpp
             version/test/test_sparse.cpp
             version/test/test_stream_version_data.cpp
             version/test/test_symbol_list.cpp
@@ -827,8 +809,10 @@ if(${TEST})
             version/test/test_version_store.cpp
             version/test/test_sorting_info_state_machine.cpp
             version/test/version_map_model.hpp
+            python/python_handlers.cpp
             storage/test/common.hpp
-            version/test/test_sort_index.cpp)
+            version/test/test_sort_index.cpp
+    )
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 
