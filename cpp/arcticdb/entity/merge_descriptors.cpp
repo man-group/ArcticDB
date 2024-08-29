@@ -34,6 +34,7 @@ StreamDescriptor merge_descriptors(
                 merged_fields.emplace_back(idx.name());
                 merged_fields_map.try_emplace(idx.name(), TypeDescriptor{typename IndexType::TypeDescTag{}});
             });
+            index = default_index_type_from_descriptor(*default_index);
         } else {
             util::raise_rte("Descriptor has uninitialized index and no default supplied");
         }

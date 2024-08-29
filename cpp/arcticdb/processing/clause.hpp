@@ -21,7 +21,6 @@
 #include <arcticdb/processing/grouper.hpp>
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/util/movable_priority_queue.hpp>
-#include <arcticdb/stream/merge.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
 
 #include <folly/Poly.h>

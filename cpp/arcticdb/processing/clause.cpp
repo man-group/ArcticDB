@@ -13,6 +13,7 @@
 #include <arcticdb/processing/processing_unit.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/util/offset_string.hpp>
+#include <arcticdb/stream/merge.hpp>
 
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
@@ -887,13 +888,12 @@ std::vector<EntityId> SortClause::process(std::vector<EntityId>&& entity_ids) co
     return push_entities(component_manager_, std::move(proc));
 }
 
-template<typename IndexType, typename DensityPolicy, typename QueueType, typename Comparator, typename StreamId>
+template<typename IndexType, typename DensityPolicy, typename QueueType>
 void merge_impl(
         std::shared_ptr<ComponentManager> component_manager,
         std::vector<std::vector<EntityId>>& ret,
         QueueType &input_streams,
         bool add_symbol_column,
-        StreamId stream_id,
         const RowRange& row_range,
         const ColRange& col_range,
         IndexType index,
@@ -907,19 +907,16 @@ void merge_impl(
     };
 
     using AggregatorType = stream::Aggregator<IndexType, stream::DynamicSchema, SegmentationPolicy, DensityPolicy>;
-    const auto& fields = stream_descriptor.fields();
-    FieldCollection new_fields{};
-    (void)new_fields.add(fields[0].ref());
-
-    auto index_desc = index_descriptor_from_range(stream_id, index, new_fields);
-    auto desc = StreamDescriptor{index_desc};
 
     AggregatorType agg{
-            stream::DynamicSchema{desc, index},
-            std::move(func), std::move(segmentation_policy), desc, std::nullopt
+        stream::DynamicSchema{stream_descriptor, index},
+        std::move(func),
+        std::move(segmentation_policy),
+        stream_descriptor,
+        std::nullopt
     };
 
-    stream::do_merge<IndexType, SegmentWrapper, AggregatorType, decltype(input_streams)>(
+    stream::do_merge<IndexType, AggregatorType, decltype(input_streams)>(
         input_streams, agg, add_symbol_column);
 }
 
@@ -976,15 +973,14 @@ std::optional<std::vector<std::vector<EntityId>>> MergeClause::repartition(std::
     std::vector<std::vector<EntityId>> ret;
     std::visit(
             [this, &ret, &input_streams, &comp=compare, stream_id=stream_id_, &row_range, &col_range](auto idx, auto density) {
-                merge_impl<decltype(idx), decltype(density), decltype(input_streams), decltype(comp), decltype(stream_id)>(component_manager_,
-                                                                                                      ret,
-                                                                                                      input_streams,
-                                                                                                      add_symbol_column_,
-                                                                                                      stream_id,
-                                                                                                      row_range,
-                                                                                                      col_range,
-                                                                                                      idx,
-                                                                                                      stream_descriptor_);
+                merge_impl<decltype(idx), decltype(density), decltype(input_streams)>(component_manager_,
+                                                                                      ret,
+                                                                                      input_streams,
+                                                                                      add_symbol_column_,
+                                                                                      row_range,
+                                                                                      col_range,
+                                                                                      idx,
+                                                                                      stream_descriptor_);
             }, index_, density_policy_);
     return ret;
 }

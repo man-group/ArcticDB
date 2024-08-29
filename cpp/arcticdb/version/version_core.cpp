@@ -808,17 +808,13 @@ bool read_incompletes_to_pipeline(
         add_index_columns_to_query(read_query, seg->index_descriptor());
     }
 
-
-    if (!pipeline_context->desc_)
-        pipeline_context->desc_ = seg->descriptor();
-
     if (!pipeline_context->norm_meta_) {
         pipeline_context->norm_meta_ = std::make_unique<arcticdb::proto::descriptors::NormalizationMetadata>();
         pipeline_context->norm_meta_->CopyFrom(seg->index_descriptor().proto().normalization());
         ensure_timeseries_norm_meta(*pipeline_context->norm_meta_, pipeline_context->stream_id_, sparsify);
     }
 
-    pipeline_context->desc_ = merge_descriptors(pipeline_context->descriptor(), incomplete_segments, read_query.columns);
+    pipeline_context->desc_ = merge_descriptors(seg->descriptor(), incomplete_segments, read_query.columns);
     modify_descriptor(pipeline_context, read_options);
     if (convert_int_to_float) {
         stream::convert_descriptor_types(*pipeline_context->desc_);
@@ -1372,8 +1368,13 @@ VersionedItem sort_merge_impl(
                 },
                 DynamicSchema{pipeline_context->descriptor(), index},
                 [pipeline_context=pipeline_context, &fut_vec, &store](SegmentInMemory &&segment) {
-                    auto local_index_start = TimeseriesIndex::start_value_for_segment(segment);
-                    auto local_index_end = TimeseriesIndex::end_value_for_segment(segment);
+                    const auto local_index_start = TimeseriesIndex::start_value_for_segment(segment);
+                    const auto local_index_end = TimeseriesIndex::end_value_for_segment(segment);
+                    for (const std::shared_ptr<Column>& col : segment.columns()) {
+                        if (col->row_count() == 0) {
+                            col->default_initialize_rows(0, segment.row_count(), true);
+                        }
+                    }
                     stream::StreamSink::PartialKey
                     pk{KeyType::TABLE_DATA, pipeline_context->version_id_, pipeline_context->stream_id_, local_index_start, local_index_end};
                     fut_vec.emplace_back(store->write(pk, std::move(segment)));

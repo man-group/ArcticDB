@@ -8,19 +8,31 @@ from hypothesis.stateful import RuleBasedStateMachine, rule, initialize, run_sta
 from collections import namedtuple
 from pandas.testing import assert_frame_equal
 from arcticdb.version_store.library import StagedDataFinalizeMethod
-from arcticdb.exceptions import UserInputException, StreamDescriptorMismatch, UnsortedDataException
+from arcticdb.exceptions import UserInputException, StreamDescriptorMismatch, UnsortedDataException, NoSuchVersionException
+import numpy as np
+import string
+
 
 ColumnInfo = namedtuple('ColumnInfo', ['name', 'dtype'])
 
-COLUMN_DESCRIPTIONS = [ColumnInfo("a", "float"), ColumnInfo("b", "int64"), ColumnInfo("c", "str"), ColumnInfo("d", "datetime64[ns]")]
+COLUMN_DESCRIPTIONS = [ColumnInfo("a", "float"), ColumnInfo("b", "int32"), ColumnInfo("c", "object"), ColumnInfo("d", "datetime64[ns]")]
 SYMBOL = "sym"
+
+def string_column_strategy(name):
+    ascii_alphabet = string.ascii_letters + string.digits + string.punctuation + string.whitespace
+    return hs_pd.column(name=name, elements=st.text(alphabet=ascii_alphabet))
 
 @st.composite
 def df(draw, column_list):
     column_infos = draw(st.lists(st.sampled_from(column_list), unique=True, min_size=1))
-    columns = [hs_pd.column(name=ci.name, dtype=ci.dtype) for ci in column_infos]
+    columns = [hs_pd.column(name=ci.name, dtype=ci.dtype) if ci.dtype != 'object' else string_column_strategy(ci.name) for ci in column_infos]
     index = hs_pd.indexes(dtype="datetime64[ns]")
     return draw(hs_pd.data_frames(columns, index=index))
+
+def fix_dtypes(df):
+    if 'b' in list(df.columns):
+        df['b'] = df['b'].replace(np.NaN, 0)
+    return df
 
 class StagedWrite(RuleBasedStateMachine):
 
@@ -34,7 +46,9 @@ class StagedWrite(RuleBasedStateMachine):
 
     @rule(df=df(COLUMN_DESCRIPTIONS))
     def stage(self, df):
-        self.staged = pd.concat([self.staged, df])
+        # pd.concat promotes dtypes. If there are missing values in the int typed column
+        # it will become float column and the missing values will be NaN.
+        self.staged = fix_dtypes(pd.concat([self.staged, df]))
         self.lib.write(SYMBOL, df, staged=True)
         self.staged_segments_count += 1
 
@@ -48,40 +62,37 @@ class StagedWrite(RuleBasedStateMachine):
             self.assert_nat_is_not_supported(StagedDataFinalizeMethod.WRITE)
         else:
             write_empty = len(self.staged) == 0
-            if write_empty:
-                self.fix_dtypes_for_zero_row_staged_data()
             self.lib.sort_and_finalize_staged_data(SYMBOL)
             arctic_df = self.lib.read(SYMBOL).data
             assert arctic_df.index.equals(self.staged.index)
-            assert_frame_equal(arctic_df, self.staged, check_like=True)
+            assert_frame_equal(arctic_df, self.staged, check_dtype=False, check_like=True)
         self.staged = pd.DataFrame([])
         self.staged_segments_count = 0
 
     @rule()
     def finalize_append(self):
         self.staged.sort_index(inplace=True)
-        symbol_exists = SYMBOL in self.lib.list_symbols()
-        dataframe_in_storage = self.lib.read(SYMBOL).data if symbol_exists else pd.DataFrame([])
-        symbol_is_not_empty = len(dataframe_in_storage) > 0
+        pre_append_storage, symbol_exists = self.data_from_storage()
+        symbol_is_not_empty = len(pre_append_storage) > 0
         has_staged_segments = self.staged_segments_count > 0
-        has_non_empty_staged_segments = len(self.staged) > 0
-        if has_staged_segments and symbol_is_not_empty and dataframe_in_storage.index[-1] > self.staged.index[0]:
-            self.assert_appended_data_does_not_overlap_with_storage()
-        elif not has_staged_segments:
-            assert_frame_equal(self.staged, pd.DataFrame([]))
+        stage_is_not_empty = len(self.staged) > 0
+        if not has_staged_segments:
             self.assert_cannot_finalize_without_staged_data(StagedDataFinalizeMethod.APPEND)
-        elif symbol_exists and set(self.staged.columns) != set(dataframe_in_storage.columns):
+        elif symbol_exists and list(self.staged.columns) != list(pre_append_storage.columns):
             self.assert_append_throws_with_mismatched_columns()
+        elif symbol_is_not_empty and stage_is_not_empty and pre_append_storage.index[-1] > self.staged.index[0]:
+            self.assert_appended_data_does_not_overlap_with_storage()
         elif pd.NaT in self.staged.index:
             self.assert_nat_is_not_supported(StagedDataFinalizeMethod.APPEND)
         else:
-            if not has_non_empty_staged_segments:
-                self.fix_dtypes_for_zero_row_staged_data()
             self.lib.sort_and_finalize_staged_data(SYMBOL, mode=StagedDataFinalizeMethod.APPEND)
-            post_append_arctic = self.lib.read(SYMBOL).data
-            appended_arctic = post_append_arctic[len(dataframe_in_storage):]
-            assert appended_arctic.index.equals(self.staged.sort_index().index)
-            assert_frame_equal(appended_arctic, self.staged, check_like=True)
+            post_append_storage = self.lib.read(SYMBOL).data
+            if len(post_append_storage) > 0:
+                appended_arctic = self.lib.tail(SYMBOL, n=len(self.staged)).data
+                assert appended_arctic.index.equals(self.staged.sort_index().index)
+                assert_frame_equal(appended_arctic, self.staged, check_dtype=False, check_like=True)
+            else:
+                assert_frame_equal(post_append_storage, self.staged, check_dtype=False, check_like=True)
         self.staged = pd.DataFrame([])
         self.staged_segments_count = 0
 
@@ -106,12 +117,11 @@ class StagedWrite(RuleBasedStateMachine):
         # TODO: Better exception must be raised
         assert "E_UNSORTED_DATA" in str(exception_info.value)
 
-    # This is needed because when hypothesis generates an empty column it changes its dtype to float64
-    # regardless of what was requested in the stragety
-    def fix_dtypes_for_zero_row_staged_data(self):
-        for ci in COLUMN_DESCRIPTIONS:
-            if ci.name in self.staged.columns:
-                self.staged.astype({ci.name: ci.dtype})
+    def data_from_storage(self):
+        try:
+            return self.lib.read(SYMBOL).data, True
+        except NoSuchVersionException:
+            return pd.DataFrame(), False
 
     def teardown(self):
         self.staged = pd.DataFrame([])

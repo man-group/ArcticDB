@@ -151,13 +151,9 @@ def test_repeating_index_values(lmdb_library):
     lib.write("sym", df1, staged=True)
     lib.write("sym", df2, staged=True)
     lib.sort_and_finalize_staged_data("sym")
-    expected_index = pd.DatetimeIndex([np.datetime64('2023-01-01'), np.datetime64('2023-01-01'), np.datetime64('2023-01-03'),
-                                       np.datetime64('2023-01-03'), np.datetime64('2023-01-05'), np.datetime64('2023-01-05')],
-                                      dtype="datetime64[ns]")
     data = lib.read("sym").data
-    assert data.index.equals(expected_index)
-    for i in range(0, len(data["col"])):
-        assert data["col"][i] == df1["col"][i // 2] or data["col"][i] == df2["col"][i // 2]
+    expected = pd.concat([df1, df2]).sort_index()
+    assert data.index.equals(expected.index)
 
 class TestMergeSortAppend:
     def test_appended_values_are_after(self, lmdb_library):
@@ -220,15 +216,16 @@ def test_prune_previous(lmdb_library):
     assert_frame_equal(df, lib.read("sym").data)
     assert len(lib.list_versions("sym")) == 1
 
+@pytest.mark.parametrize("mode", [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE])
 class TestEmptySegments:
-    def test_staged_segment_is_only_empty_dfs(self, lmdb_library):
+    def test_staged_segment_is_only_empty_dfs(self, lmdb_library, mode):
         lib = lmdb_library
         lib.write("sym", pd.DataFrame([]), staged=True)
         lib.write("sym", pd.DataFrame([]), staged=True)
-        lib.sort_and_finalize_staged_data("sym")
+        lib.sort_and_finalize_staged_data("sym", mode=mode)
         assert_frame_equal(lib.read("sym").data, pd.DataFrame([], index=pd.DatetimeIndex([])))
 
-    def test_staged_segment_has_empty_df(self, lmdb_library):
+    def test_staged_segment_has_empty_df(self, lmdb_library, mode):
         lib = lmdb_library
         index = pd.DatetimeIndex([pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 3), pd.Timestamp(2024, 1, 4)])
         df1 = pd.DataFrame({"col": [1, 2, 3]}, index=index)
@@ -237,29 +234,32 @@ class TestEmptySegments:
         lib.write("sym", df1, staged=True)
         lib.write("sym", df2, staged=True)
         lib.write("sym", df3, staged=True)
-        lib.sort_and_finalize_staged_data("sym")
+        lib.sort_and_finalize_staged_data("sym", mode=mode)
         assert_frame_equal(lib.read("sym").data, pd.concat([df1, df2, df3]).sort_index())
 
-    def test_df_without_rows(self, lmdb_library):
+    def test_df_without_rows(self, lmdb_library, mode):
         lib = lmdb_library
         df = pd.DataFrame({"col": []}, index=pd.DatetimeIndex([]))
         lib.write("sym", df, staged=True)
-        lib.sort_and_finalize_staged_data("sym")
+        lib.sort_and_finalize_staged_data("sym", mode=mode)
         assert_frame_equal(lib.read("sym").data, df)
 
+    def test_finalize_without_adding_segments(self, lmdb_library, mode):
+        lib = lmdb_library
+        with pytest.raises(UserInputException) as exception_info:
+            lib.sort_and_finalize_staged_data("sym", mode=mode)
+        assert "E_NO_STAGED_SEGMENTS" in str(exception_info.value)
 
-def test_finalize_without_adding_segments(lmdb_library):
-    lib = lmdb_library
-    with pytest.raises(UserInputException) as exception_info:
-        lib.sort_and_finalize_staged_data("sym")
+    def test_mixing_empty_and_non_empty_columns(self, lmdb_library, mode):
+        lib = lmdb_library
 
-def test_type_mismatch_throws(lmdb_library):
-    lib = lmdb_library
-    lib.write("sym", pd.DataFrame({"col": [1]}, index=pd.DatetimeIndex([np.datetime64('2023-01-01')])), staged=True)
-    lib.write("sym", pd.DataFrame({"col": ["a"]}, index=pd.DatetimeIndex([np.datetime64('2023-01-02')])), staged=True)
-    with pytest.raises(Exception) as exception_info:
-        lib.sort_and_finalize_staged_data("sym")
-    assert all(x in str(exception_info.value) for x in ["INT64", "type"])
+        df = pd.DataFrame({"a": [1]},index=pd.DatetimeIndex([pd.Timestamp("1970-01-01")]))
+        df2 = pd.DataFrame({"b": np.array([], dtype="float"), "c": np.array([], dtype="int64"), "d": np.array([], dtype="object")},index=pd.DatetimeIndex([]))
+        lib.write("sym", df, staged=True)
+        lib.write("sym", df2, staged=True)
+        lib.sort_and_finalize_staged_data("sym", mode=mode)
+        expected = pd.DataFrame({"a": [1], "b": np.array([np.nan], dtype="float"), "c": np.array([0], dtype="int64"), "d": np.array([None], dtype="object")}, index=[pd.Timestamp("1970-01-01")])
+        assert_frame_equal(lib.read("sym").data, expected)
 
 def test_append_to_missing_symbol(lmdb_library):
     lib = lmdb_library
@@ -295,27 +295,127 @@ def test_pre_epoch(lmdb_library):
 
     assert_frame_equal(lib.read("sym").data, df)
 
-def test_append_throws_with_missmatched_column_set(lmdb_library):
+class TestSchemaMismatch:
+    def test_append_throws_with_missmatched_column_set(self, lmdb_library):
+        lib = lmdb_library
+
+        initial_df = pd.DataFrame({"col_0": [1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
+        lib.write("sym", initial_df)
+
+        appended_df = pd.DataFrame({"col_1": [1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
+        lib.write("sym", appended_df, staged=True)
+        with pytest.raises(StreamDescriptorMismatch) as exception_info:
+            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+        assert "APPEND" in str(exception_info.value)
+        assert "col_1" in str(exception_info.value)
+
+    def test_append_throws_column_subset(self, lmdb_library):
+        lib = lmdb_library
+
+        df1 = pd.DataFrame(
+            {
+                "a": np.array([1.1], dtype="float"),
+                "b": np.array([2], dtype="int64")
+            },
+            index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])
+        )
+        lib.write("sym", df1)
+        df2 = pd.DataFrame({"b": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-02")]))
+        lib.write("sym", df2, staged=True)
+        with pytest.raises(StreamDescriptorMismatch) as exception_info: 
+            lib.sort_and_finalize_staged_data("sym", StagedDataFinalizeMethod.APPEND)
+        assert "APPEND" in str(exception_info.value)
+        assert "a" in str(exception_info.value)
+        assert "b" in str(exception_info.value)
+
+    def test_append_throws_on_incompatible_dtype(self, lmdb_library):
+        lib = lmdb_library
+
+        initial_df = pd.DataFrame({"col_0": np.array([1], dtype="int64")}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
+        lib.write("sym", initial_df)
+
+        appended_df = pd.DataFrame({"col_0": ["asd"]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
+        lib.write("sym", appended_df, staged=True)
+        with pytest.raises(StreamDescriptorMismatch) as exception_info:
+            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+        assert "APPEND" in str(exception_info.value)
+        assert "col_0" in str(exception_info.value)
+        assert "INT64" in str(exception_info.value)
+
+    def test_type_mismatch_in_staged_segments_throws(self, lmdb_library):
+        lib = lmdb_library
+        lib.write("sym", pd.DataFrame({"col": [1]}, index=pd.DatetimeIndex([np.datetime64('2023-01-01')])), staged=True)
+        lib.write("sym", pd.DataFrame({"col": ["a"]}, index=pd.DatetimeIndex([np.datetime64('2023-01-02')])), staged=True)
+        with pytest.raises(Exception) as exception_info:
+            lib.sort_and_finalize_staged_data("sym")
+        assert all(x in str(exception_info.value) for x in ["INT64", "type"])
+
+    def test_types_cant_be_promoted(self, lmdb_library):
+        lib = lmdb_library
+        lib.write("sym", pd.DataFrame({"col": np.array([1], dtype="int64")}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)])))
+
+        lib.write("sym", pd.DataFrame({"col": np.array([1], dtype="int32")}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)])), staged=True)
+        with pytest.raises(StreamDescriptorMismatch) as exception_info:
+            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+        assert "APPEND" in str(exception_info.value)
+        assert "INT32" in str(exception_info.value)
+        assert "INT64" in str(exception_info.value)
+
+    def test_appending_reordered_column_set_throws(self, lmdb_library):
+        lib = lmdb_library
+
+        lib.write("sym", pd.DataFrame({"col_0": [1], "col_1": ["test"], "col_2": [1.2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)])))
+
+        lib.write("sym", pd.DataFrame({"col_1": ["asd"], "col_2": [2.5], "col_1": [2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)])), staged=True)
+        with pytest.raises(StreamDescriptorMismatch) as exception_info:
+            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+        assert "APPEND" in str(exception_info.value)
+        assert "col_0" in str(exception_info.value)
+        assert "col_1" in str(exception_info.value)
+        assert "col_2" in str(exception_info.value)
+
+    @pytest.mark.parametrize("mode", [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE])
+    def staged_segments_can_be_reordered(self, lmdb_library, mode):
+        lib = lmdb_library
+        df1 = pd.DataFrame({"col_0": [1], "col_1": ["test"], "col_2": [1.2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
+        df2 = pd.DataFrame({"col_1": ["asd"], "col_2": [2.5], "col_1": [2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
+        lib.write("sym", df1, staged=True)
+        lib.write("sym", df2, staged=True)
+        expected = pd.concat([df1, df2]).sort_index()
+        assert_frame_equal(lib.sort_and_finalize_staged_data("sym", mode=mode), check_like=True)
+
+# This was a added as a bug repro for GH issue #1795.
+def test_two_columns_with_different_dtypes(lmdb_library):
     lib = lmdb_library
 
-    initial_df = pd.DataFrame({"col_0": [1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
-    lib.write("sym", initial_df)
+    idx1 = pd.DatetimeIndex([
+        pd.Timestamp("2024-01-02")
+    ])
+    df1 = pd.DataFrame({
+         "a": np.array([1], dtype="float"),
+         "b": np.array([22250], dtype="int64")
+    }, index=idx1)
+    
+    b = np.array([-53979, -53973], dtype="int64")
 
-    appended_df = pd.DataFrame({"col_1": [1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
-    lib.write("sym", appended_df, staged=True)
-    with pytest.raises(StreamDescriptorMismatch) as exception_info:
-        lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
-    assert "APPEND" in str(exception_info.value)
-    assert "col_1" in str(exception_info.value)
+    idx = pd.DatetimeIndex([
+        pd.Timestamp("2024-01-03"),
+        pd.Timestamp("2024-01-01")
+    ])
 
-def test_append_incompatible_dtype(lmdb_library):
+    df2 = pd.DataFrame({"b": b}, index=idx)
+    
+    lib.write("sym", df1, staged=True)
+    lib.write("sym", df2, staged=True)
+    lib.sort_and_finalize_staged_data("sym")
+    lib.read("sym")
+
+@pytest.mark.parametrize("mode", [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE])
+def test_nat_is_not_allowed_in_index(lmdb_library, mode):
     lib = lmdb_library
 
-    initial_df = pd.DataFrame({"col_0": [1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
-    lib.write("sym", initial_df)
-
-    appended_df = pd.DataFrame({"col_0": ["asd"]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
-    lib.write("sym", appended_df, staged=True)
-    with pytest.raises(InternalException) as exception_info:
-        lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
-    assert "common type" in str(exception_info.value)
+    df1 = pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.NaT]))
+    lib.write("sym", df1, staged=True)
+    with pytest.raises(SortingException) as exception_info:
+        lib.sort_and_finalize_staged_data("sym", mode=mode)
+    assert "NaT" in str(exception_info.value)
