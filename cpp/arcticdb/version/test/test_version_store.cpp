@@ -195,7 +195,7 @@ TEST_F(VersionStoreTest, SortMerge) {
     std::shuffle(data.begin(), data.end(), mt);
 
     for(auto&& frame : data) {
-        test_store_->append_incomplete_frame(symbol, std::move(frame.input_frame_), true);
+        test_store_->append_incomplete_frame(symbol, std::move(frame.input_frame_));
     }
 
     CompactIncompleteOptions options{
@@ -250,7 +250,7 @@ TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {
     std::shuffle(data.begin(), data.end(), mt);
 
     for(auto& frame : data) {
-        test_store_->write_parallel_frame(symbol, std::move(frame.input_frame_), true);
+        test_store_->write_parallel_frame(symbol, std::move(frame.input_frame_));
     }
 
     auto vit = test_store_->compact_incomplete(symbol, false, false, true, false);
@@ -297,17 +297,17 @@ TEST_F(VersionStoreTest, GetIncompleteSymbols) {
     std::string stream_id1{"thing1"};
     auto wrapper1 = get_test_simple_frame(stream_id1, 15, 2);
     auto& frame1 = wrapper1.frame_;
-    test_store_->append_incomplete_frame(stream_id1, std::move(frame1), true);
+    test_store_->append_incomplete_frame(stream_id1, std::move(frame1));
 
     std::string stream_id2{"thing2"};
     auto wrapper2 = get_test_simple_frame(stream_id2, 15, 2);
     auto& frame2 = wrapper2.frame_;
-    test_store_->append_incomplete_frame(stream_id2, std::move(frame2), true);
+    test_store_->append_incomplete_frame(stream_id2, std::move(frame2));
 
     std::string stream_id3{"thing3"};
     auto wrapper3 = get_test_simple_frame(stream_id3, 15, 2);
     auto& frame3 = wrapper3.frame_;
-    test_store_->append_incomplete_frame(stream_id3, std::move(frame3), true);
+    test_store_->append_incomplete_frame(stream_id3, std::move(frame3));
 
     std::set<StreamId> expected{ stream_id1, stream_id2, stream_id3};
     auto result = test_store_->get_incomplete_symbols();
