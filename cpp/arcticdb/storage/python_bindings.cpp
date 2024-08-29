@@ -103,6 +103,9 @@ void register_bindings(py::module& storage) {
                                             return none.cast<py::object>();
                                        });
         })
+        .def_property_readonly("name", [](const Library &library){
+                                            return library.name();
+                                        })
         ;
 
     py::class_<S3Override>(storage, "S3Override")

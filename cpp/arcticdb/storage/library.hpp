@@ -154,7 +154,7 @@ class Library {
        StorageFailureSimulator::instance()->configure(cfg);
     }
 
-    std::string name() {
+    std::string name() const {
         auto lib_name = storages_->name();
         return lib_name;
     }
