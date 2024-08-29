@@ -559,17 +559,16 @@ def test_non_existent_list_versions_latest_only(arctic_library):
 
 def test_delete_version_with_snapshot(arctic_library):
     lib = arctic_library
-    df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
-    lib.write("symbol", df, metadata={"very": "interesting"})
-    lib.write("symbol", df, metadata={"muy": "interesante"}, prune_previous_versions=False)
-    lib.snapshot("my_snap")
-    lib.delete("symbol", versions=1)
-    assert lib["symbol"].version == 0
-    assert lib["symbol"].metadata == {"very": "interesting"}
-    assert lib.read("symbol", as_of=1).version == 1
-    assert lib.read("symbol", as_of=1).metadata == {"muy": "interesante"}
-    assert lib.read("symbol", as_of="my_snap").version == 1
-    assert lib.read("symbol", as_of="my_snap").metadata == {"muy": "interesante"}
+    sym = "test_delete_version_with_snapshot"
+    df = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-01", periods=10))
+    lib.write(sym, df)
+    lib.snapshot("snap")
+    lib.delete(sym)
+
+    for method in ["read", "head", "tail", "read_metadata", "get_description"]:
+        for as_of in [0, pd.Timestamp("2200-01-01")]:
+            with pytest.raises(NoDataFoundException):
+                getattr(lib, method)(sym, as_of=as_of)
 
 
 def test_list_versions_with_snapshot(arctic_library):
@@ -1030,7 +1029,7 @@ def test_get_description(arctic_library):
     original_info = lib.get_description("symbol", as_of=0)
     # then
     assert [c[0] for c in info.columns] == ["column"]
-    assert info.date_range == (datetime(2018, 1, 1, tzinfo=timezone.utc), datetime(2018, 1, 6, tzinfo=timezone.utc))
+    assert info.date_range == (pd.Timestamp(year=2018, month=1, day=1), pd.Timestamp(year=2018, month=1, day=6))
     assert info.index[0] == ["named_index"]
     assert info.index_type == "index"
     assert info.row_count == 6
@@ -1039,6 +1038,23 @@ def test_get_description(arctic_library):
     assert info.last_update_time.tz == pytz.UTC
     assert original_info.sorted == "ASCENDING"
     assert info.sorted == "ASCENDING"
+
+
+# See test_write_tz in test_normalization.py for the V1 API equivalent
+@pytest.mark.parametrize(
+    "tz", ["UTC", "Europe/Amsterdam"]
+)
+def test_get_description_date_range_tz(arctic_library, tz):
+    lib = arctic_library
+    sym = "test_get_description_date_range_tz"
+    index = index=pd.date_range(pd.Timestamp(0), periods=10, tz=tz)
+    df = pd.DataFrame(data={"col1": np.arange(10)}, index=index)
+    lib.write(sym, df)
+    start_ts, end_ts = lib.get_description(sym).date_range
+    assert isinstance(start_ts, pd.Timestamp)
+    assert isinstance(end_ts, pd.Timestamp)
+    assert start_ts == index[0]
+    assert end_ts == index[-1]
 
 
 def test_tail(arctic_library):
