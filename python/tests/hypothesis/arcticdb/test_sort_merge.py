@@ -86,7 +86,7 @@ class StagedWrite(RuleBasedStateMachine):
             self.assert_nat_is_not_supported(StagedDataFinalizeMethod.APPEND)
         else:
             self.lib.sort_and_finalize_staged_data(SYMBOL, mode=StagedDataFinalizeMethod.APPEND)
-            post_append_storage = self.lib.read(SYMBOL).data
+            post_append_storage = self.lib.tail(SYMBOL).data
             if len(post_append_storage) > 0:
                 appended_arctic = self.lib.tail(SYMBOL, n=len(self.staged)).data
                 assert appended_arctic.index.equals(self.staged.sort_index().index)

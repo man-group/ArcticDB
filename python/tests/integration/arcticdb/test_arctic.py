@@ -19,7 +19,7 @@ from enum import Enum
 from arcticdb_ext.exceptions import InternalException, SortingException, UserInputException
 from arcticdb_ext.storage import NoDataFoundException
 from arcticdb_ext.version_store import SortedValue
-from arcticdb.exceptions import ArcticDbNotYetImplemented, LibraryNotFound, MismatchingLibraryOptions
+from arcticdb.exceptions import ArcticDbNotYetImplemented, LibraryNotFound, MismatchingLibraryOptions, StreamDescriptorMismatch
 from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
 from arcticdb.arctic import Arctic
 from arcticdb.options import LibraryOptions, EnterpriseLibraryOptions
@@ -292,15 +292,15 @@ def test_parallel_writes_and_appends_index_validation(arctic_library, finalize_m
 
 @pytest.mark.parametrize("finalize_method", (StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE))
 class TestFinalizeWithEmptySegments:
-    def test_staged_segment_is_only_empty_dfs(self, lmdb_library, finalize_method):
-        lib = lmdb_library
+    def test_staged_segment_is_only_empty_dfs(self, arctic_library, finalize_method):
+        lib = arctic_library
         lib.write("sym", pd.DataFrame([]), staged=True)
         lib.write("sym", pd.DataFrame([]), staged=True)
         lib.finalize_staged_data("sym", mode=finalize_method)
         assert_frame_equal(lib.read("sym").data, pd.DataFrame([], index=pd.DatetimeIndex([])))
 
-    def test_staged_segment_has_empty_df(self, lmdb_library, finalize_method):
-        lib = lmdb_library
+    def test_staged_segment_has_empty_df(self, arctic_library, finalize_method):
+        lib = arctic_library
         index = pd.DatetimeIndex([pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 3), pd.Timestamp(2024, 1, 4)])
         df1 = pd.DataFrame({"col": [1, 2, 3]}, index=index)
         df2 = pd.DataFrame({})
@@ -311,22 +311,111 @@ class TestFinalizeWithEmptySegments:
         lib.finalize_staged_data("sym", mode=finalize_method)
         assert_frame_equal(lib.read("sym").data, pd.concat([df1, df2, df3]))
 
-    def test_df_without_rows(self, lmdb_library, finalize_method):
-        lib = lmdb_library
+    def test_df_without_rows(self, arctic_library, finalize_method):
+        lib = arctic_library
         df = pd.DataFrame({"col": []}, index=pd.DatetimeIndex([]))
         lib.write("sym", df, staged=True)
         lib.finalize_staged_data("sym", mode=finalize_method)
         assert_frame_equal(lib.read("sym").data, df)
 
 @pytest.mark.parametrize("finalize_method", (StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE))
-def test_finalize_without_adding_segments(lmdb_library, finalize_method):
-    lib = lmdb_library
+def test_finalize_without_adding_segments(arctic_library, finalize_method):
+    lib = arctic_library
     with pytest.raises(UserInputException) as exception_info:
         lib.finalize_staged_data("sym", mode=finalize_method)
 
+class TestFinalizeStagedDataSchemaMismatch:
+    def test_append_throws_with_missmatched_column_set(self, arctic_library):
+        lib = arctic_library
+
+        initial_df = pd.DataFrame({"col_0": [1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
+        lib.write("sym", initial_df)
+
+        appended_df = pd.DataFrame({"col_1": [1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
+        lib.write("sym", appended_df, staged=True)
+        with pytest.raises(StreamDescriptorMismatch) as exception_info:
+            lib.finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+        assert "APPEND" in str(exception_info.value)
+        assert "col_1" in str(exception_info.value)
+
+    def test_append_throws_column_subset(self, arctic_library):
+        lib = arctic_library
+
+        df1 = pd.DataFrame(
+            {
+                "a": np.array([1.1], dtype="float"),
+                "b": np.array([2], dtype="int64")
+            },
+            index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])
+        )
+        lib.write("sym", df1)
+        df2 = pd.DataFrame({"b": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-02")]))
+        lib.write("sym", df2, staged=True)
+        with pytest.raises(StreamDescriptorMismatch) as exception_info: 
+            lib.finalize_staged_data("sym", StagedDataFinalizeMethod.APPEND)
+        assert "APPEND" in str(exception_info.value)
+        assert "a" in str(exception_info.value)
+        assert "b" in str(exception_info.value)
+
+    def test_append_throws_on_incompatible_dtype(self, arctic_library):
+        lib = arctic_library
+
+        initial_df = pd.DataFrame({"col_0": np.array([1], dtype="int64")}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
+        lib.write("sym", initial_df)
+
+        appended_df = pd.DataFrame({"col_0": ["asd"]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
+        lib.write("sym", appended_df, staged=True)
+        with pytest.raises(StreamDescriptorMismatch) as exception_info:
+            lib.finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+        assert "APPEND" in str(exception_info.value)
+        assert "col_0" in str(exception_info.value)
+        assert "INT64" in str(exception_info.value)
+
+    def test_type_mismatch_in_staged_segments_throws(self, arctic_library):
+        lib = arctic_library
+        lib.write("sym", pd.DataFrame({"col": [1]}, index=pd.DatetimeIndex([np.datetime64('2023-01-01')])), staged=True)
+        lib.write("sym", pd.DataFrame({"col": ["a"]}, index=pd.DatetimeIndex([np.datetime64('2023-01-02')])), staged=True)
+        with pytest.raises(Exception) as exception_info:
+            lib.finalize_staged_data("sym")
+        assert all(x in str(exception_info.value) for x in ["INT64", "type"])
+
+    def test_types_cant_be_promoted(self, arctic_library):
+        lib = arctic_library
+        lib.write("sym", pd.DataFrame({"col": np.array([1], dtype="int64")}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)])))
+
+        lib.write("sym", pd.DataFrame({"col": np.array([1], dtype="int32")}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)])), staged=True)
+        with pytest.raises(StreamDescriptorMismatch) as exception_info:
+            lib.finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+        assert "APPEND" in str(exception_info.value)
+        assert "INT32" in str(exception_info.value)
+        assert "INT64" in str(exception_info.value)
+
+    def test_appending_reordered_column_set_throws(self, arctic_library):
+        lib = arctic_library
+
+        lib.write("sym", pd.DataFrame({"col_0": [1], "col_1": ["test"], "col_2": [1.2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)])))
+
+        lib.write("sym", pd.DataFrame({"col_1": ["asd"], "col_2": [2.5], "col_1": [2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)])), staged=True)
+        with pytest.raises(StreamDescriptorMismatch) as exception_info:
+            lib.finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+        assert "APPEND" in str(exception_info.value)
+        assert "col_0" in str(exception_info.value)
+        assert "col_1" in str(exception_info.value)
+        assert "col_2" in str(exception_info.value)
+
+    @pytest.mark.parametrize("mode", [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE])
+    def staged_segments_can_be_reordered(self, arctic_library, mode):
+        lib = arctic_library
+        df1 = pd.DataFrame({"col_0": [1], "col_1": ["test"], "col_2": [1.2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
+        df2 = pd.DataFrame({"col_1": ["asd"], "col_2": [2.5], "col_1": [2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
+        lib.write("sym", df1, staged=True)
+        lib.write("sym", df2, staged=True)
+        expected = pd.concat([df1, df2]).sort_index()
+        assert_frame_equal(lib.sort_and_finalize_staged_data("sym", mode=mode), check_like=True)
+
 class TestAppendStagedData:
-    def test_appended_df_interleaves_with_storage(self, lmdb_library):
-        lib = lmdb_library
+    def test_appended_df_interleaves_with_storage(self, arctic_library):
+        lib = arctic_library
         initial_df = pd.DataFrame({"col": [1, 3]}, index=pd.DatetimeIndex([np.datetime64('2023-01-01'), np.datetime64('2023-01-03')], dtype="datetime64[ns]"))
         lib.write("sym", initial_df)
         df1 = pd.DataFrame({"col": [2]}, index=pd.DatetimeIndex([np.datetime64('2023-01-02')], dtype="datetime64[ns]"))

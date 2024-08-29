@@ -1287,6 +1287,29 @@ private:
     Store& store_;
 };
 
+void check_incomplete_descriptor_match(
+    const CompactIncompleteOptions& options,
+    const UpdateInfo& update_info,
+    const WriteOptions& write_options,
+    const std::shared_ptr<PipelineContext>& pipeline_context,
+    const std::shared_ptr<Store>& store
+) {
+    const bool verify_descriptors_match =
+        options.append_ && update_info.previous_index_key_.has_value() && !write_options.dynamic_schema;
+    if (verify_descriptors_match) {
+        const auto& index_segment_reader = index::get_index_reader(*(update_info.previous_index_key_), store);
+        const auto& original_descriptor = index_segment_reader.tsd().as_stream_descriptor();
+        if (!columns_match(original_descriptor, *pipeline_context->desc_)) {
+            throw StreamDescriptorMismatch(
+                "The columns (names and types) in the argument are not identical to that of the existing version",
+                original_descriptor,
+                *pipeline_context->desc_,
+                NormalizationOperation::APPEND
+            );
+        }
+    }
+}
+
 VersionedItem sort_merge_impl(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
@@ -1322,20 +1345,7 @@ VersionedItem sort_merge_impl(
 
     IncompleteKeysRAII incompleteKeys(pipeline_context.get(), *store);
 
-    const bool verify_descriptors_match =
-        options.append_ && update_info.previous_index_key_.has_value() && !write_options.dynamic_schema;
-    if (verify_descriptors_match) {
-        const auto& index_segment_reader = index::get_index_reader(*(update_info.previous_index_key_), store);
-        const auto& original_descriptor = index_segment_reader.tsd().as_stream_descriptor();
-        if (!columns_match(original_descriptor, *pipeline_context->desc_)) {
-            throw StreamDescriptorMismatch(
-                "The columns (names and types) in the argument are not identical to that of the existing version",
-                original_descriptor,
-                *pipeline_context->desc_,
-                NormalizationOperation::APPEND
-            );
-        }
-    }
+    check_incomplete_descriptor_match(options, update_info, write_options, pipeline_context, store);
 
     std::vector<FrameSlice> slices;
     std::vector<folly::Future<VariantKey>> fut_vec;
@@ -1430,20 +1440,16 @@ VersionedItem compact_incomplete_impl(
         previous_sorted_value.emplace(pipeline_context->desc_->sorted());
     }
 
-    
-
-    auto prev_size = pipeline_context->slice_and_keys_.size();
-    [[maybe_unused]] const bool verify_descriptors_match =
-        options.append_ && update_info.previous_index_key_.has_value() && !write_options.dynamic_schema;
-    read_incompletes_to_pipeline(store,
-                                 pipeline_context,
-                                 ReadQuery{},
-                                 ReadOptions{},
-                                 options.convert_int_to_float_,
-                                 options.via_iteration_,
-                                 options.sparsify_);
     user_input::check<ErrorCode::E_NO_STAGED_SEGMENTS>(
-        pipeline_context->slice_and_keys_.size() != prev_size,
+        read_incompletes_to_pipeline(
+            store,
+            pipeline_context,
+            ReadQuery{},
+            ReadOptions{},
+            options.convert_int_to_float_,
+            options.via_iteration_,
+            options.sparsify_
+        ),
         "Finalizing staged data is not allowed with empty staging area"
     );
     if (options.validate_index_) {
@@ -1451,11 +1457,9 @@ VersionedItem compact_incomplete_impl(
     }
     const auto& first_seg = pipeline_context->slice_and_keys_.begin()->segment(store);
 
-    std::vector<entity::VariantKey> delete_keys;
-    for(auto sk = pipeline_context->incompletes_begin(); sk != pipeline_context->end(); ++sk) {
-        util::check(sk->slice_and_key().key().type() == KeyType::APPEND_DATA, "Deleting incorrect key type {}", sk->slice_and_key().key().type());
-        delete_keys.emplace_back(sk->slice_and_key().key());
-    }
+    IncompleteKeysRAII incompleteKeys(pipeline_context.get(), *store);
+
+    check_incomplete_descriptor_match(options, update_info, write_options, pipeline_context, store);
 
     std::vector<folly::Future<VariantKey>> fut_vec;
     std::vector<FrameSlice> slices;
@@ -1496,7 +1500,6 @@ VersionedItem compact_incomplete_impl(
         pipeline_context->incompletes_after(),
         user_meta);
 
-    store->remove_keys(delete_keys).get();
     return vit;
 }
 

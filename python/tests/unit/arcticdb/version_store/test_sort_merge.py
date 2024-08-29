@@ -268,24 +268,6 @@ def test_append_to_missing_symbol(lmdb_library):
     lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
     assert_frame_equal(lib.read("sym").data, df)
 
-def test_finalize_fails_sort_and_finalize_succeeeds(lmdb_library):
-    lib = lmdb_library
-
-    dates1 = [np.datetime64('2023-01-01'), np.datetime64('2023-01-02'), np.datetime64('2023-01-03')]
-    df1 = pd.DataFrame({"col": [1, 2, 3]}, index=pd.DatetimeIndex(dates1))
-    lib.write("sym", df1, staged=True)
-
-    dates2 = [np.datetime64('2023-01-08'), np.datetime64('2023-01-05'), np.datetime64('2023-01-10')]
-    df2 = pd.DataFrame({"col": [5, 4, 6]}, index=pd.DatetimeIndex(dates2))
-    lib.write("sym", df2, staged=True)
-
-    with pytest.raises(SortingException) as exception_info:
-        lib.finalize_staged_data("sym")
-    assert "unordered segment" in str(exception_info.value)
-
-    lib.sort_and_finalize_staged_data("sym")
-    assert_frame_equal(lib.read("sym").data, pd.concat([df1, df2]).sort_index())
-
 def test_pre_epoch(lmdb_library):
     lib = lmdb_library
 
