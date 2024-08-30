@@ -7,6 +7,7 @@
 
 #pragma once
 #include <array>
+#include <string>
 #include <string_view>
 #include <cstdint>
 #include <arcticdb/util/constructors.hpp>
