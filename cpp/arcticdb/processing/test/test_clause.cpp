@@ -373,6 +373,7 @@ TEST(Clause, Merge) {
 
     auto stream_id = StreamId("Merge");
     StreamDescriptor descriptor{};
+    descriptor.set_index(static_cast<IndexDescriptorImpl>(TimeseriesIndex::default_index()));
     descriptor.add_field(FieldRef{make_scalar_type(DataType::NANOSECONDS_UTC64),"time"});
     MergeClause merge_clause{TimeseriesIndex{"time"}, SparseColumnPolicy{}, stream_id, descriptor};
     merge_clause.set_component_manager(component_manager);
