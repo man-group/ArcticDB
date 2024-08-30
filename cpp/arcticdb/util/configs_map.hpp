@@ -56,39 +56,12 @@ public:
     HANDLE_TYPE(double, double)
 #undef HANDLE_TYPE
 
-    RuntimeConfig to_proto() {
-        RuntimeConfig output{};
-        output.mutable_int_values()->insert(std::cbegin(map_of_int), std::cend(map_of_int));
-        output.mutable_string_values()->insert(std::cbegin(map_of_string), std::cend(map_of_string));
-        output.mutable_double_values()->insert(std::cbegin(map_of_double), std::cend(map_of_double));
-        return output;
-    }
-
-    void read_proto(const RuntimeConfig& config) {
-        for(auto& val : config.int_values())
-            map_of_int.try_emplace(boost::to_upper_copy<std::string>(val.first), val.second);
-
-        for(auto& val : config.string_values())
-            map_of_string.try_emplace(boost::to_upper_copy<std::string>(val.first), val.second);
-
-        for(auto& val : config.double_values())
-            map_of_double.try_emplace(boost::to_upper_copy<std::string>(val.first), val.second);
-    }
-
-     static ConfigsMap from_proto(const RuntimeConfig& config) {
-        ConfigsMap output{};
-        output.read_proto(config);
-        return output;
-    }
-
 private:
     std::unordered_map<std::string, uint64_t> map_of_int;
     std::unordered_map<std::string, std::string> map_of_string;
     std::unordered_map<std::string, double> map_of_double;
     std::unique_ptr<std::mutex> mutex_;
 };
-
-void read_runtime_config(const RuntimeConfig& config);
 
 struct ScopedConfig {
     std::string name_;

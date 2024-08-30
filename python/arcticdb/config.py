@@ -18,7 +18,6 @@ except ImportError:
     from yaml import Loader
 
 from arcticc.pb2.logger_pb2 import LoggersConfig, LoggerConfig
-from arcticc.pb2.config_pb2 import RuntimeConfig
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap, EnvironmentConfig, LibraryConfig, LibraryDescriptor
 from google.protobuf.json_format import MessageToJson, Parse as JsonToMessage
 from google.protobuf.message import Message
@@ -161,17 +160,6 @@ def save_loggers_config(config=None, path=Defaults.LOG_CONF_FILE_PATH):
     _save_config(config, path, LoggersConfig)
 
 
-def load_runtime_config(path=Defaults.RUNTIME_CONF_FILE_PATH):
-    # type: (Optional[FilePath])->RuntimeConfig
-    return _load_config(path, RuntimeConfig)
-
-
-def save_runtime_config(config=None, path=Defaults.RUNTIME_CONF_FILE_PATH):
-    # type: (Optional[RuntimeConfig], Optional[FilePath])->None
-    config = config if config is not None else default_runtime_config()
-    _save_config(config, path, RuntimeConfig)
-
-
 def make_loggers_config(
     default_level=Defaults.DEFAULT_LOG_LEVEL,
     specific_log_levels: Optional[Dict[str, str]] = None,
@@ -242,10 +230,3 @@ def set_log_level(
 
 def default_loggers_config():
     return make_loggers_config("INFO")
-
-
-def default_runtime_config():
-    # type: ()->RuntimeConfig
-    runtime_cfg = RuntimeConfig()
-    runtime_cfg.int_values["Store.NumThreads"] = 16
-    return runtime_cfg
