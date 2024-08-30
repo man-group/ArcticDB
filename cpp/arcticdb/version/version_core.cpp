@@ -860,7 +860,8 @@ bool read_incompletes_to_pipeline(
     const ReadOptions& read_options,
     bool convert_int_to_float,
     bool via_iteration,
-    bool sparsify) {
+    bool sparsify,
+    bool dynamic_schema) {
 
     auto incomplete_segments = get_incomplete(
         store,
@@ -898,7 +899,11 @@ bool read_incompletes_to_pipeline(
         ensure_timeseries_norm_meta(*pipeline_context->norm_meta_, pipeline_context->stream_id_, sparsify);
     }
 
-    pipeline_context->desc_ = merge_descriptors(seg->descriptor(), incomplete_segments, read_query.columns);
+    if (!dynamic_schema || !pipeline_context->desc_) {
+        pipeline_context->desc_ = merge_descriptors(seg->descriptor(), incomplete_segments, read_query.columns);
+    } else {
+        pipeline_context->desc_ = merge_descriptors(*pipeline_context->desc_, incomplete_segments, read_query.columns);
+    }
     modify_descriptor(pipeline_context, read_options);
     if (convert_int_to_float) {
         stream::convert_descriptor_types(*pipeline_context->desc_);
@@ -1428,7 +1433,8 @@ VersionedItem sort_merge_impl(
             ReadOptions{},
             options.convert_int_to_float_,
             options.via_iteration_,
-            options.sparsify_
+            options.sparsify_,
+            write_options.dynamic_schema
         ),
         "Finalizing staged data is not allowed with empty staging area"
     );
@@ -1537,7 +1543,8 @@ VersionedItem compact_incomplete_impl(
             ReadOptions{},
             options.convert_int_to_float_,
             options.via_iteration_,
-            options.sparsify_
+            options.sparsify_,
+            write_options.dynamic_schema
         ),
         "Finalizing staged data is not allowed with empty staging area"
     );
@@ -1565,6 +1572,7 @@ VersionedItem compact_incomplete_impl(
         using IndexType = std::remove_reference_t<decltype(idx)>;
         using SchemaType = std::remove_reference_t<decltype(schema)>;
         using ColumnPolicyType = std::remove_reference_t<decltype(column_policy)>;
+        constexpr bool validate_index_sorted = IndexType::type() == IndexDescriptorImpl::Type::TIMESTAMP;
         do_compact<IndexType, SchemaType, RowCountSegmentPolicy, ColumnPolicyType>(
                 pipeline_context->incompletes_begin(),
                 pipeline_context->end(),
@@ -1574,7 +1582,7 @@ VersionedItem compact_incomplete_impl(
                 store,
                 options.convert_int_to_float_,
                 write_options.segment_row_size,
-                true);
+                validate_index_sorted);
         if constexpr(std::is_same_v<IndexType, TimeseriesIndex>) {
             pipeline_context->desc_->set_sorted(deduce_sorted(previous_sorted_value.value_or(SortedValue::ASCENDING), SortedValue::ASCENDING));
         }
@@ -1732,7 +1740,7 @@ FrameAndDescriptor read_frame_for_version(
         const auto& query_range = std::get<IndexRange>(read_query.row_filter);
         const auto existing_range = pipeline_context->index_range();
         if(!existing_range.specified_ || query_range.end_ > existing_range.end_)
-            read_incompletes_to_pipeline(store, pipeline_context, read_query, read_options, false, false, false);
+            read_incompletes_to_pipeline(store, pipeline_context, read_query, read_options, false, false, false,  opt_false(read_options.dynamic_schema_));
     }
 
     if(std::holds_alternative<StreamId>(version_info) && !pipeline_context->incompletes_after_) {

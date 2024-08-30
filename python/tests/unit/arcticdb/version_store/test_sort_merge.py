@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from pandas.testing import assert_frame_equal
+from arcticdb.util.test import assert_frame_equal
 import pytest
 from arcticdb.version_store.library import StagedDataFinalizeMethod
 from arcticdb.exceptions import UserInputException, SortingException, StreamDescriptorMismatch, InternalException
@@ -401,3 +401,33 @@ def test_nat_is_not_allowed_in_index(lmdb_library, mode):
     with pytest.raises(SortingException) as exception_info:
         lib.sort_and_finalize_staged_data("sym", mode=mode)
     assert "NaT" in str(exception_info.value)
+
+class TestSortMergeDynamicSchema:
+
+    def test_appended_columns_are_subset(self, lmdb_library_dynamic_schema):
+        lib = lmdb_library_dynamic_schema
+
+        lib.write("sym", pd.DataFrame({"a": [1], "b": [1.2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)])))
+
+        lib.write("sym", pd.DataFrame({"a": [2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)])), staged=True)
+        lib.write("sym", pd.DataFrame({"b": [5.3]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 3)])), staged=True)
+        lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+
+        expected = pd.DataFrame({"a": [1, 2, 0], "b": [1.2, np.nan, 5.3]}, index=pd.date_range("2024-01-01", "2024-01-03"))
+        stored = lib.read("sym").data
+
+        assert_frame_equal(expected, stored)
+
+    def test_can_append_new_columns(self, lmdb_library_dynamic_schema):
+        lib = lmdb_library_dynamic_schema
+
+        lib.write("sym", pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)])))
+
+        lib.write("sym", pd.DataFrame({"b": [1.5]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)])), staged=True)
+        lib.write("sym", pd.DataFrame({"c": ["c"]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 3)])), staged=True)
+        lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+
+        expected = pd.DataFrame({"a": [1, 0, 0], "b": [np.nan, 1.5, np.nan], "c": [None, None, "c"]}, index=pd.date_range("2024-01-01", "2024-01-03"))
+        stored = lib.read("sym").data
+
+        assert_frame_equal(expected, stored)

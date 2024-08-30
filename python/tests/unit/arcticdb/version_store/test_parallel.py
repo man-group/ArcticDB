@@ -312,8 +312,10 @@ def test_parallel_sortedness_checks_unsorted_data(lmdb_version_store, append, va
         with pytest.raises(SortingException):
             if append:
                 lib.append(sym, df_1, incomplete=True, validate_index=True)
+                lib.compact_incomplete(sym, True, False)
             else:
                 lib.write(sym, df_1, parallel=True, validate_index=True)
+                lib.compact_incomplete(sym, True, False)
     else:
         if validate_index is None:
             # Test default behaviour when arg isn't provided

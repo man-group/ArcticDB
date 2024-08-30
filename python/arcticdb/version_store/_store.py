@@ -713,7 +713,7 @@ class NativeVersionStore:
         if isinstance(item, NPDDataFrame):
             with _diff_long_stream_descriptor_mismatch(self):
                 if incomplete:
-                    self.version_store.append_incomplete(symbol, item, norm_meta, udm, validate_index)
+                    self.version_store.append_incomplete(symbol, item, norm_meta, udm)
                 else:
                     vit = self.version_store.append(
                         symbol, item, norm_meta, udm, write_if_missing, prune_previous_version, validate_index
