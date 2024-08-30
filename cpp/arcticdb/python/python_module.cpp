@@ -338,11 +338,6 @@ PYBIND11_MODULE(arcticdb_ext, m) {
     arcticdb::toolbox::apy::register_bindings(m);
 
     m.def("get_version_string", &arcticdb::get_arcticdb_version_string);
-    m.def("read_runtime_config", [](const py::object object) {
-        auto config = arcticc::pb2::config_pb2::RuntimeConfig{};
-        arcticdb::python_util::pb_from_python(object, config);
-        arcticdb::read_runtime_config(config);
-    });
 
     auto version_submodule = m.def_submodule("version_store", "Versioned storage implementation apis");
     arcticdb::version_store::register_bindings(version_submodule, base_exception);
