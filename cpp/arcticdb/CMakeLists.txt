@@ -794,7 +794,6 @@ if(${TEST})
             util/test/test_hash.cpp
             util/test/test_id_transformation.cpp
             util/test/test_ranges_from_future.cpp
-            util/test/test_runtime_config.cpp
             util/test/test_slab_allocator.cpp
             util/test/test_storage_lock.cpp
             util/test/test_string_pool.cpp
