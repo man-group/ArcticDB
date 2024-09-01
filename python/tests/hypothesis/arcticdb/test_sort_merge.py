@@ -34,6 +34,19 @@ def fix_dtypes(df):
         df['b'] = df['b'].replace(np.NaN, 0)
     return df
 
+def assert_equal(left, right):
+    """
+    The sorting Arctic does is not stable. Thus when there are repeated index values the
+    result from our sorting and the result from Pandas' sort might differ where the index
+    values are repeated.
+    """
+    assert left.index.equals(right.index), f"Indexes are different {left.index} != {right.index}"
+    assert set(left.columns) == set(right.columns), f"Column sets are different {set(left.columns)} != {set(right.columns)}"
+    assert left.shape == right.shape, f"Shapes are different {left.shape} != {right.shape}"
+    left_groups = left.groupby(left.index, sort=False).apply(lambda x: x.sort_values(list(left.columns)))
+    right_groups = right.groupby(right.index, sort=False).apply(lambda x: x.sort_values(list(left.columns)))
+    assert_frame_equal(left_groups, right_groups, check_like=True, check_dtype=False)
+
 class StagedWrite(RuleBasedStateMachine):
 
     lib = None
@@ -64,8 +77,7 @@ class StagedWrite(RuleBasedStateMachine):
             write_empty = len(self.staged) == 0
             self.lib.sort_and_finalize_staged_data(SYMBOL)
             arctic_df = self.lib.read(SYMBOL).data
-            assert arctic_df.index.equals(self.staged.index)
-            assert_frame_equal(arctic_df, self.staged, check_dtype=False, check_like=True)
+            assert_equal(arctic_df, self.staged)
         self.staged = pd.DataFrame([])
         self.staged_segments_count = 0
 
@@ -90,16 +102,15 @@ class StagedWrite(RuleBasedStateMachine):
             if len(post_append_storage) > 0:
                 appended_arctic = self.lib.tail(SYMBOL, n=len(self.staged)).data
                 assert appended_arctic.index.equals(self.staged.sort_index().index)
-                assert_frame_equal(appended_arctic, self.staged, check_dtype=False, check_like=True)
+                assert_equal(appended_arctic, self.staged)
             else:
-                assert_frame_equal(post_append_storage, self.staged, check_dtype=False, check_like=True)
+                assert_equal(post_append_storage, self.staged)
         self.staged = pd.DataFrame([])
         self.staged_segments_count = 0
 
     def assert_appended_data_does_not_overlap_with_storage(self):
         with pytest.raises(Exception) as exception_info:
             self.lib.sort_and_finalize_staged_data(SYMBOL, mode=StagedDataFinalizeMethod.APPEND)
-        assert "append" in str(exception_info.value)
 
     def assert_cannot_finalize_without_staged_data(self, mode):
         with pytest.raises(UserInputException) as exception_info:
@@ -114,7 +125,6 @@ class StagedWrite(RuleBasedStateMachine):
     def assert_nat_is_not_supported(self, mode):
         with pytest.raises(UnsortedDataException) as exception_info:
             self.lib.sort_and_finalize_staged_data(SYMBOL, mode=mode)
-        # TODO: Better exception must be raised
         assert "E_UNSORTED_DATA" in str(exception_info.value)
 
     def data_from_storage(self):

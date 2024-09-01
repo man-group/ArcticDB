@@ -4,6 +4,7 @@ from arcticdb.util.test import assert_frame_equal
 import pytest
 from arcticdb.version_store.library import StagedDataFinalizeMethod
 from arcticdb.exceptions import UserInputException, SortingException, StreamDescriptorMismatch, InternalException
+from arcticdb.util._versions import IS_PANDAS_TWO
 
 def test_merge_single_column(lmdb_library):
     lib = lmdb_library
@@ -258,7 +259,10 @@ class TestEmptySegments:
         lib.write("sym", df, staged=True)
         lib.write("sym", df2, staged=True)
         lib.sort_and_finalize_staged_data("sym", mode=mode)
-        expected = pd.DataFrame({"a": [1], "b": np.array([np.nan], dtype="float"), "c": np.array([0], dtype="int64"), "d": np.array([None], dtype="object")}, index=[pd.Timestamp("1970-01-01")])
+        if IS_PANDAS_TWO:
+            expected = pd.DataFrame({"a": [1], "b": np.array([np.nan], dtype="float"), "c": np.array([0], dtype="int64"), "d": np.array([None], dtype="object")}, index=[pd.Timestamp("1970-01-01")])
+        else:
+            expected = pd.DataFrame({"a": [1], "b": np.array([np.nan], dtype="object"), "c": np.array([0], dtype="int64"), "d": np.array([None], dtype="object")}, index=[pd.Timestamp("1970-01-01")])
         assert_frame_equal(lib.read("sym").data, expected)
 
 def test_append_to_missing_symbol(lmdb_library):
