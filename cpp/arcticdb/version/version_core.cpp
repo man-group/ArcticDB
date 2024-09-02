@@ -941,6 +941,10 @@ void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<PipelineC
         // Use ordered set so we only need to compare adjacent elements
         std::set<TimestampRange> unique_timestamp_ranges;
         for (auto it = pipeline_context->incompletes_begin(); it!= pipeline_context->end(); it++) {
+            if (it->slice_and_key().slice().rows().diff() == 0) {
+                continue;
+            }
+
             const auto& key = it->slice_and_key().key();
             sorting::check<ErrorCode::E_UNSORTED_DATA>(
                     !last_existing_index_value.has_value() || key.start_time() >= *last_existing_index_value,

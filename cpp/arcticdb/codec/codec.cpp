@@ -120,10 +120,10 @@ void decode_metadata(
     SegmentInMemory& res) {
     auto maybe_any = decode_metadata(hdr, data, begin);
     if(maybe_any) {
-        ARCTICDB_DEBUG(log::version(), "Found metadata on segment");
+        ARCTICDB_TRACE(log::version(), "Found metadata on segment");
         res.set_metadata(std::move(*maybe_any));
     } else {
-        ARCTICDB_DEBUG(log::version(), "No metadata on segment");
+        ARCTICDB_TRACE(log::version(), "No metadata on segment");
     }
 }
 
@@ -533,10 +533,10 @@ void decode_v1(const Segment& segment,
                     hdr.encoding_version()
                 );
                 seg_row_count = std::max(seg_row_count, calculate_last_row(col));
-                ARCTICDB_DEBUG(log::codec(), "Decoded column {} to position {}", i, data - begin);
+                ARCTICDB_TRACE(log::codec(), "Decoded column {} to position {}", i, data - begin);
             } else {
                 data += encoding_sizes::field_compressed_size(field);
-                ARCTICDB_DEBUG(log::codec(), "Skipped column {}, at position {}", i, data - begin);
+                ARCTICDB_TRACE(log::codec(), "Skipped column {}, at position {}", i, data - begin);
             }
         }
         decode_string_pool(hdr, data, begin, end, res);

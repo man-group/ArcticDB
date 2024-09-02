@@ -157,7 +157,7 @@ std::unique_ptr<Column> get_sparse_column(size_t offset = 0, size_t start = 0, s
 
 std::unique_ptr<Column> get_dense_column(size_t offset = 0, size_t start = 0, size_t num_rows = 10) {
     using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension ::Dim0>>;
-    auto column = std::make_unique<Column>(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
+    auto column = std::make_unique<Column>(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
     for(auto i = start; i < start + num_rows; ++i) {
         column->set_scalar<int64_t>(i, i + offset);
     }
