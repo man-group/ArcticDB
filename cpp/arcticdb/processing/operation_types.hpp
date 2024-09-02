@@ -128,6 +128,9 @@ template <class LHS, class RHS, class Func>
 struct type_arithmetic_promoted_type {
     static constexpr size_t max_width = arithmetic_promoted_type::details::max_width_v<LHS, RHS>;
     using type = typename
+    std::conditional_t<std::is_same_v<Func, DivideOperator>,
+        // Always use doubles for division operations
+        double,
         std::conditional_t<std::is_floating_point_v<LHS> || std::is_floating_point_v<RHS>,
             // At least one of the types is floating point
             std::conditional_t<std::is_floating_point_v<LHS> && std::is_floating_point_v<RHS>,
@@ -154,15 +157,7 @@ struct type_arithmetic_promoted_type {
                          * Can also underflow if using max_width, so promote to a wider signed type
                          * e.g. 0 - 255 (both uint8_t's) = -255, requiring int16_t to hold the result */
                         typename arithmetic_promoted_type::details::signed_width_t<2 * max_width>,
-                        /* The result of integer division with two unsigned types COULD always be represented by an
-                         * unsigned type of the width of the numerator (as the result is <= the numerator)
-                         * However, this would require extra logic in the DivideOperator::apply method, which we would
-                         * like to avoid.
-                         * e.g. uint8_t(200) / uint16_t(300) = 0, representable by uint8_t
-                         * e.g. uint8_t(200) / uint16_t(2) = 100, representable by uint8_t
-                         * We cannot safely static_cast the uint16_t to uint8_t without a runtime check if it is >255
-                         * We could also static_cast to the larger type, perform the division, and then static_cast back
-                         * To avoid all this complexity, we just promote to the type of the widest input */
+                        // IsIn/IsNotIn operators, just use the type of the widest input
                         typename arithmetic_promoted_type::details::unsigned_width_t<max_width>
                     >
                 >,
@@ -172,23 +167,21 @@ struct type_arithmetic_promoted_type {
                         /* Plus, Minus, and Times operators can overflow if using max_width, so promote to a wider signed type
                         * e.g. -100*100 (both int8_t's) = -10000, requiring int16_t to hold the result */
                         typename arithmetic_promoted_type::details::signed_width_t<2 * max_width>,
-                        // See above comment on division of two unsigned types
+                        // IsIn/IsNotIn operators, just use the type of the widest input
                         typename arithmetic_promoted_type::details::signed_width_t<max_width>
                     >,
                     // We have one signed and one unsigned type
                     std::conditional_t<std::is_same_v<Func, PlusOperator> || std::is_same_v<Func, MinusOperator> || std::is_same_v<Func, TimesOperator>,
                         // Plus, Minus, and Times operators can overflow if using max_width, so promote to a wider signed type
                         typename arithmetic_promoted_type::details::signed_width_t<2 * max_width>,
-                        // Divide/IsIn/IsNotIn Operator
+                        // IsIn/IsNotIn Operator
                         std::conditional_t<(std::is_signed_v<LHS> && sizeof(LHS) > sizeof(RHS)) || (std::is_signed_v<RHS> && sizeof(RHS) > sizeof(LHS)),
                             // If the signed type is strictly larger than the unsigned type, then promote to the signed type
                             typename arithmetic_promoted_type::details::signed_width_t<max_width>,
                             // Otherwise, check if the unsigned one is the widest type we support
                             std::conditional_t<std::is_same_v<LHS, uint64_t> || std::is_same_v<RHS, uint64_t>,
-                                // If so, there's no common type that can completely hold both arguments. We trigger operation-specific handling
-                                std::conditional_t<std::is_base_of_v<MembershipOperator, Func>,
-                                    RHS, // Retains ValueSetBaseType in binary_membership(), which handles mixed int64/uint64 operations gracefully
-                                    int64_t>, // Use the widest signed type we support, and accept that there may be overflow to keep iterations if-statement free
+                                // Retains ValueSetBaseType in binary_membership(), which handles mixed int64/uint64 operations gracefully
+                                RHS,
                                 // There should be a signed type wider than the unsigned type, so both can be exactly represented
                                 typename arithmetic_promoted_type::details::signed_width_t<2 * max_width>
                             >
@@ -196,7 +189,8 @@ struct type_arithmetic_promoted_type {
                     >
                 >
             >
-        >;
+        >
+    >;
 };
 
 struct AbsOperator {
