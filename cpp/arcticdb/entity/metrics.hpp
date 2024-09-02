@@ -20,8 +20,7 @@
 #include <unistd.h>
 #endif
 
-#include <arcticdb/entity/protobufs.hpp>
-#include <arcticdb/log/log.hpp>
+#include <arcticdb/util/hash.hpp>
 #include <arcticdb/util/timer.hpp>
 #include <map>
 #include <unordered_map>
@@ -74,6 +73,8 @@ public:
 
 class PrometheusInstance {
 public:
+    using Labels = std::map<std::string, std::string>;
+
     static std::shared_ptr<PrometheusInstance> instance();
 
     PrometheusInstance();
@@ -83,24 +84,68 @@ public:
 
     static void init() {
         instance_ = std::make_shared<PrometheusInstance>();
-
     }
 
     static void destroy_instance() { instance_.reset(); };
 
-    // register a metric with optional static labels
-    void registerMetric( prometheus::MetricType type, const std::string& name, const std::string& help, const std::map<std::string, std::string>& staticLabels = {}, const std::vector<double>& buckets_list = {});
+    void registerMetric( prometheus::MetricType type, const std::string& name, const std::string& help, const Labels& labels = {}, const std::vector<double>& buckets_list = {});
+
+    // Remove the given metric from the registry, so that subsequent pulls or pushes will not include it.
+    template<typename T>
+    void removeMetric(const std::string& name, const Labels& labels) {
+        std::scoped_lock lock{metrics_mutex_};
+        static_assert(
+            T::metric_type == prometheus::MetricType::Counter
+            || T::metric_type == prometheus::MetricType::Histogram
+            || T::metric_type == prometheus::MetricType::Gauge
+            || T::metric_type == prometheus::MetricType::Summary,
+            "Unimplemented metric type"
+            );
+
+        MetricFamilyMap<T> metrics_family;
+        MetricMap<T> metrics;
+        if constexpr(T::metric_type == prometheus::MetricType::Counter) {
+            metrics_family = map_counter_;
+            metrics = all_counters_;
+        } else if constexpr(T::metric_type == prometheus::MetricType::Histogram) {
+            for (const auto& [name, value] : map_histogram_) {
+                metrics_family[name] = value.histogram;
+            }
+            metrics = all_histograms_;
+        } else if constexpr(T::metric_type == prometheus::MetricType::Gauge) {
+            metrics_family = map_gauge_;
+            metrics = all_gauges_;
+        } else if constexpr (T::metric_type == prometheus::MetricType::Summary) {
+            metrics_family = map_summary_;
+            metrics = all_summaries_;
+        }
+
+        const auto it = metrics_family.find(name);
+        if (it == metrics_family.end()) {
+            return;
+        }
+
+        prometheus::Family<T>* family = it->second;
+
+        const auto metric_to_remove = metrics.find({name, labels});
+        if (metric_to_remove == metrics.end()) {
+            return;
+        }
+
+        metrics.erase({name, labels});
+        metrics_family.erase(it);
+        family->Remove(metric_to_remove->second);
+    }
+
     // update pre-registered metrics with optional instance labels.  Each unique set of labels generates a new metric instance
-    void incrementCounter(const std::string& name, const std::map<std::string, std::string>& labels = {});
-    void incrementCounter(const std::string &name, double value, const std::map<std::string, std::string>& labels = {});
-    void setGauge(const std::string &name, double value, const std::map<std::string, std::string>& labels = {});
-    void setGaugeCurrentTime(const std::string &name, const std::map<std::string, std::string>& labels = {});
+    void incrementCounter(const std::string& name, const Labels& labels = {});
+    void incrementCounter(const std::string &name, double value, const Labels& labels = {});
+    void setGauge(const std::string &name, double value, const Labels& labels = {});
+    void setGaugeCurrentTime(const std::string &name, const Labels& labels = {});
     // set new value for histogram with optional labels
-    void observeHistogram(const std::string &name, double value, const std::map<std::string, std::string>& labels = {});
-    // Delete current histogram with optional labels
-    void DeleteHistogram(const std::string &name, const std::map<std::string, std::string>& labels = {});
+    void observeHistogram(const std::string &name, double value, const Labels& labels = {});
     // set new value for summary with optional labels
-    void observeSummary(const std::string &name, double value, const std::map<std::string, std::string>& labels = {});
+    void observeSummary(const std::string &name, double value, const Labels& labels = {});
 
     int push();
 
@@ -118,22 +163,51 @@ public:
             prometheus::Histogram::BucketBoundaries buckets_list;
         };
 
+        template<typename T>
+        using MetricFamilyMap = std::unordered_map<std::string, prometheus::Family<T>*>;
+
+        struct MetricKey {
+            std::string name;
+            Labels labels;
+
+            bool operator==(const MetricKey &) const = default;
+        };
+
+        struct MetricKeyHash {
+            std::size_t operator()(const MetricKey& key) const noexcept {
+                auto hash = std::hash<std::string>()(key.name);
+                for (const auto& [name, value] : key.labels) {
+                    hash = folly::hash::commutative_hash_combine(hash, name, value);
+                }
+                return hash;
+            }
+        };
+
+        template<typename T>
+        using MetricMap = std::unordered_map<MetricKey, T*, MetricKeyHash>;
+
         static std::string getHostName();
 
         std::shared_ptr<prometheus::Registry> registry_;
         std::shared_ptr<prometheus::Exposer> exposer_;
-        // cannot use ref type, so use pointer
-        std::unordered_map<std::string, prometheus::Family<prometheus::Counter>*> map_counter_;
-        std::unordered_map<std::string, prometheus::Family<prometheus::Gauge>*> map_gauge_;
-        std::unordered_map<std::string, HistogramInfo> map_histogram_;
-        prometheus::Histogram::BucketBoundaries buckets_list_;
 
-        std::unordered_map<std::string, prometheus::Family<prometheus::Summary>*> map_summary_;
-        // push gateway
+        MetricFamilyMap<prometheus::Counter> map_counter_;
+        MetricMap<prometheus::Counter> all_counters_;
+
+        MetricFamilyMap<prometheus::Gauge> map_gauge_;
+        MetricMap<prometheus::Gauge> all_gauges_;
+
+        std::unordered_map<std::string, HistogramInfo> map_histogram_;
+        MetricMap<prometheus::Histogram> all_histograms_;
+
+        MetricFamilyMap<prometheus::Summary> map_summary_;
+        MetricMap<prometheus::Summary> all_summaries_;
+
         std::string mongo_instance_;
         std::shared_ptr<prometheus::Gateway> gateway_;
         bool configured_;
 
+        std::mutex metrics_mutex_;
 };
 
 inline void log_prometheus_gauge(const std::string& metric_name, const std::string& metric_desc, size_t val) {
