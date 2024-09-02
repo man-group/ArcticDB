@@ -160,7 +160,7 @@ SegmentInMemory incomplete_segment_from_frame(
 
         SegmentInMemory output;
         if (num_rows == 0) {
-            output = SegmentInMemory(FixedSchema{descriptor, index}.default_descriptor(), 0, false, false);
+            output = SegmentInMemory(FixedSchema{descriptor, index}.default_descriptor(), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
             output.set_timeseries_descriptor(pack_timeseries_descriptor(descriptor, existing_rows, std::move(copy_prev_key), std::move(norm_meta)));
             return output;
         }
