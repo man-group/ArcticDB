@@ -394,15 +394,14 @@ VariantData binary_operator(const ColumnWithStrings& col, const Value& val, Func
             }
             auto raw_value = *reinterpret_cast<const typename val_type_info::RawType*>(val.data_);
             using TargetType = typename type_arithmetic_promoted_type<typename col_type_info::RawType, typename val_type_info::RawType, std::remove_reference_t<decltype(func)>>::type;
-            using ReversedTargetType = typename type_arithmetic_promoted_type<typename val_type_info::RawType, typename col_type_info::RawType, std::remove_reference_t<decltype(func)>>::type;
             if constexpr(arguments_reversed) {
                 column_name = binary_operation_column_name(fmt::format("{}", raw_value), func, col.column_name_);
-                constexpr auto output_data_type = data_type_from_raw_type<ReversedTargetType>();
+                constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
                 output_column = std::make_unique<Column>(make_scalar_type(output_data_type), true);
                 Column::transform<typename col_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
                         *(col.column_),
                         *output_column,
-                        [&func, raw_value](auto input_value) -> ReversedTargetType {
+                        [&func, raw_value](auto input_value) -> TargetType {
                             return func.apply(raw_value, input_value);
                 });
             } else {
