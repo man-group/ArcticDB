@@ -892,6 +892,7 @@ bool read_incompletes_to_pipeline(
     if(pipeline_context->slice_and_keys_.empty()) {
         add_index_columns_to_query(read_query, seg->index_descriptor());
     }
+    pipeline_context->slice_and_keys_.insert(std::end(pipeline_context->slice_and_keys_), incomplete_segments.begin(), incomplete_segments.end());
 
     if (!pipeline_context->norm_meta_) {
         pipeline_context->norm_meta_ = std::make_unique<arcticdb::proto::descriptors::NormalizationMetadata>();
@@ -910,11 +911,6 @@ bool read_incompletes_to_pipeline(
     }
 
     generate_filtered_field_descriptors(pipeline_context, read_query.columns);
-    pipeline_context->slice_and_keys_.insert(
-        std::end(pipeline_context->slice_and_keys_),
-        std::make_move_iterator(incomplete_segments.begin()),
-        std::make_move_iterator(incomplete_segments.end())
-    );
     pipeline_context->total_rows_ = pipeline_context->calc_rows();
     return true;
 }
@@ -1422,24 +1418,32 @@ VersionedItem sort_merge_impl(
         read_indexed_keys_to_pipeline(store, pipeline_context, *(update_info.previous_index_key_), read_query, ReadOptions{});
         previous_sorted_value.emplace(pipeline_context->desc_->sorted());
     }
+    pipeline_context->incompletes_after_ = pipeline_context->slice_and_keys_.size();
 
     const auto num_versioned_rows = pipeline_context->total_rows_;
 
+    const bool has_incomplete_segments = [&]() {
+        try {
+            return read_incompletes_to_pipeline(
+                store,
+                pipeline_context,
+                read_query,
+                ReadOptions{},
+                options.convert_int_to_float_,
+                options.via_iteration_,
+                options.sparsify_,
+                write_options.dynamic_schema
+            );
+        } catch (const SchemaException&) {
+            IncompleteKeysRAII incomplete_keys(pipeline_context.get(), *store);
+            throw;
+        }
+    }();
     user_input::check<ErrorCode::E_NO_STAGED_SEGMENTS>(
-        read_incompletes_to_pipeline(
-            store,
-            pipeline_context,
-            read_query,
-            ReadOptions{},
-            options.convert_int_to_float_,
-            options.via_iteration_,
-            options.sparsify_,
-            write_options.dynamic_schema
-        ),
+        has_incomplete_segments,
         "Finalizing staged data is not allowed with empty staging area"
     );
-
-    IncompleteKeysRAII incompleteKeys(pipeline_context.get(), *store);
+    IncompleteKeysRAII incomplete_keys(pipeline_context.get(), *store);
 
     check_incomplete_descriptor_match(options, update_info, write_options, pipeline_context, store);
 
@@ -1535,17 +1539,26 @@ VersionedItem compact_incomplete_impl(
         previous_sorted_value.emplace(pipeline_context->desc_->sorted());
     }
 
+    const bool has_incomplete_segments = [&]() {
+        try {
+            return read_incompletes_to_pipeline(
+                store,
+                pipeline_context,
+                read_query,
+                ReadOptions{},
+                options.convert_int_to_float_,
+                options.via_iteration_,
+                options.sparsify_,
+                write_options.dynamic_schema
+            );
+        } catch (const SchemaException&) {
+            IncompleteKeysRAII incomplete_keys(pipeline_context.get(), *store);
+            throw;
+        }
+    }();
+
     user_input::check<ErrorCode::E_NO_STAGED_SEGMENTS>(
-        read_incompletes_to_pipeline(
-            store,
-            pipeline_context,
-            ReadQuery{},
-            ReadOptions{},
-            options.convert_int_to_float_,
-            options.via_iteration_,
-            options.sparsify_,
-            write_options.dynamic_schema
-        ),
+        has_incomplete_segments,
         "Finalizing staged data is not allowed with empty staging area"
     );
     if (options.validate_index_) {
@@ -1553,7 +1566,7 @@ VersionedItem compact_incomplete_impl(
     }
     const auto& first_seg = pipeline_context->slice_and_keys_.begin()->segment(store);
 
-    IncompleteKeysRAII incompleteKeys(pipeline_context.get(), *store);
+    IncompleteKeysRAII incomplete_keys(pipeline_context.get(), *store);
 
     check_incomplete_descriptor_match(options, update_info, write_options, pipeline_context, store);
 

@@ -7,8 +7,10 @@
 
 #pragma once
 
+#include <type_traits>
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/util/constants.hpp>
+#include <arcticdb/entity/type_utils.hpp>
 
 namespace arcticdb::stream {
 template<typename IndexType, typename AggregatorType, typename QueueType>
@@ -41,8 +43,34 @@ void do_merge(
             std::advance(val, IndexType::field_count());
             for(; val != next->row().end(); ++val) {
                 val->visit_field([&rb] (const auto& opt_v, std::string_view name, const TypeDescriptor& type_desc) {
-                    if(opt_v)
-                        rb.set_scalar_by_name(name, opt_v.value(), type_desc.data_type());
+                    if (opt_v) {
+                        const StreamDescriptor& descriptor = rb.descriptor();
+                        const size_t field_idx = *descriptor.find_field(name);
+                        const Field& field = descriptor.field(field_idx);
+                        if (type_desc == field.type()) {
+                            rb.set_scalar_by_name(name, *opt_v, type_desc.data_type());
+                        } else {
+                            const auto common_type = has_valid_common_type(type_desc, field.type());
+                            schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                                common_type,
+                                "No valid common type between staged segments for column {}. Mismatched types are {} "
+                                "and {}",
+                                name,
+                                type_desc,
+                                field.type()
+                            );
+                            common_type->visit_tag([&](auto type_desc_tag) {
+                                using RawType = decltype(type_desc_tag)::DataTypeTag::raw_type;
+                                if constexpr (std::is_convertible_v<RawType, std::decay_t<decltype(*opt_v)>>) {
+                                    using RawType = decltype(type_desc_tag)::DataTypeTag::raw_type;
+                                    const auto cast_value = static_cast<RawType>(*opt_v);
+                                    rb.set_scalar_by_name(name, cast_value, type_desc.data_type());
+                                } else {
+                                    rb.set_scalar_by_name(name, *opt_v, type_desc.data_type());
+                                }
+                            });
+                        }
+                    }
                 });
             }
         });

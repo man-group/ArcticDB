@@ -72,7 +72,12 @@ StreamDescriptor merge_descriptors(
                         if(new_descriptor) {
                             merged_fields_map[field.name()] = *new_descriptor;
                         } else {
-                            util::raise_rte("No valid common type between {} and {} for column {}", existing_type_desc, type_desc, field.name());
+                            schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                                "No valid common type between {} and {} for column {}",
+                                existing_type_desc,
+                                type_desc,
+                                field.name()
+                            );
                         }
                     }
                 } else {

@@ -11,6 +11,7 @@ from arcticdb.version_store.library import StagedDataFinalizeMethod
 from arcticdb.exceptions import UserInputException, StreamDescriptorMismatch, UnsortedDataException, NoSuchVersionException
 import numpy as np
 import string
+from arcticdb.util._versions import IS_PANDAS_TWO
 
 
 ColumnInfo = namedtuple('ColumnInfo', ['name', 'dtype'])
@@ -26,12 +27,21 @@ def string_column_strategy(name):
 def df(draw, column_list):
     column_infos = draw(st.lists(st.sampled_from(column_list), unique=True, min_size=1))
     columns = [hs_pd.column(name=ci.name, dtype=ci.dtype) if ci.dtype != 'object' else string_column_strategy(ci.name) for ci in column_infos]
-    index = hs_pd.indexes(dtype="datetime64[ns]")
+    if not IS_PANDAS_TWO:
+        # Due to https://github.com/man-group/ArcticDB/blob/7479c0b0caa8121bc2ca71a73e29769bbc41c66a/python/arcticdb/version_store/_normalization.py#L184
+        # we change the dtype of empty float columns. This makes hypothesis tests extremely hard to write as we must
+        # keep addional state about is there a mix of empty/non-empty float columns in the staging area, did we write
+        # empty float column (if so it's type would be object). These edge cases are covered in the unit tests.
+        index = hs_pd.indexes(dtype="datetime64[ns]", min_size=1)
+    else:
+        index = hs_pd.indexes(dtype="datetime64[ns]")
     return draw(hs_pd.data_frames(columns, index=index))
 
 def fix_dtypes(df):
-    if 'b' in list(df.columns):
-        df['b'] = df['b'].replace(np.NaN, 0)
+    all_int_columns = {col.name for col in COLUMN_DESCRIPTIONS if "int" in col.dtype}
+    int_columns_in_df = all_int_columns.intersection(set(df.columns))
+    for col in int_columns_in_df:
+        df[col] = df[col].replace(np.NaN, 0)
     return df
 
 def assert_equal(left, right):
@@ -40,12 +50,15 @@ def assert_equal(left, right):
     result from our sorting and the result from Pandas' sort might differ where the index
     values are repeated.
     """
-    assert left.index.equals(right.index), f"Indexes are different {left.index} != {right.index}"
-    assert set(left.columns) == set(right.columns), f"Column sets are different {set(left.columns)} != {set(right.columns)}"
-    assert left.shape == right.shape, f"Shapes are different {left.shape} != {right.shape}"
-    left_groups = left.groupby(left.index, sort=False).apply(lambda x: x.sort_values(list(left.columns)))
-    right_groups = right.groupby(right.index, sort=False).apply(lambda x: x.sort_values(list(left.columns)))
-    assert_frame_equal(left_groups, right_groups, check_like=True, check_dtype=False)
+    if any(left.index.duplicated()):
+        assert left.index.equals(right.index), f"Indexes are different {left.index} != {right.index}"
+        assert set(left.columns) == set(right.columns), f"Column sets are different {set(left.columns)} != {set(right.columns)}"
+        assert left.shape == right.shape, f"Shapes are different {left.shape} != {right.shape}"
+        left_groups = left.groupby(left.index, sort=False).apply(lambda x: x.sort_values(list(left.columns)))
+        right_groups = right.groupby(right.index, sort=False).apply(lambda x: x.sort_values(list(left.columns)))
+        assert_frame_equal(left_groups, right_groups, check_like=True, check_dtype=False)
+    else:
+        assert_frame_equal(left, right, check_like=True, check_dtype=False)
 
 class StagedWrite(RuleBasedStateMachine):
 
@@ -98,13 +111,10 @@ class StagedWrite(RuleBasedStateMachine):
             self.assert_nat_is_not_supported(StagedDataFinalizeMethod.APPEND)
         else:
             self.lib.sort_and_finalize_staged_data(SYMBOL, mode=StagedDataFinalizeMethod.APPEND)
-            post_append_storage = self.lib.tail(SYMBOL).data
-            if len(post_append_storage) > 0:
-                appended_arctic = self.lib.tail(SYMBOL, n=len(self.staged)).data
-                assert appended_arctic.index.equals(self.staged.sort_index().index)
-                assert_equal(appended_arctic, self.staged)
+            if len(self.staged) > 0:
+                assert_equal(self.lib.tail(SYMBOL, n=len(self.staged)).data, self.staged)
             else:
-                assert_equal(post_append_storage, self.staged)
+                assert_equal(self.lib.read(SYMBOL).data, self.staged)
         self.staged = pd.DataFrame([])
         self.staged_segments_count = 0
 

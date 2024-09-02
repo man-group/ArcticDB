@@ -3,7 +3,7 @@ import numpy as np
 from arcticdb.util.test import assert_frame_equal
 import pytest
 from arcticdb.version_store.library import StagedDataFinalizeMethod
-from arcticdb.exceptions import UserInputException, SortingException, StreamDescriptorMismatch, InternalException
+from arcticdb.exceptions import UserInputException, SortingException, StreamDescriptorMismatch, InternalException, SchemaException
 from arcticdb.util._versions import IS_PANDAS_TWO
 
 def test_merge_single_column(lmdb_library):
@@ -328,13 +328,26 @@ class TestSchemaMismatch:
         assert "col_0" in str(exception_info.value)
         assert "INT64" in str(exception_info.value)
 
-    def test_type_mismatch_in_staged_segments_throws(self, lmdb_library):
+    @pytest.mark.parametrize("mode", [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE])
+    def test_type_mismatch_in_staged_segments_works_with_promotable_types(self, lmdb_library, mode):
         lib = lmdb_library
-        lib.write("sym", pd.DataFrame({"col": [1]}, index=pd.DatetimeIndex([np.datetime64('2023-01-01')])), staged=True)
-        lib.write("sym", pd.DataFrame({"col": ["a"]}, index=pd.DatetimeIndex([np.datetime64('2023-01-02')])), staged=True)
-        with pytest.raises(Exception) as exception_info:
-            lib.sort_and_finalize_staged_data("sym")
-        assert all(x in str(exception_info.value) for x in ["INT64", "type"])
+        lib.write("sym", pd.DataFrame({"col": np.array([1], dtype="float")}, index=pd.DatetimeIndex([np.datetime64('2023-01-01')])), staged=True)
+        lib.write("sym", pd.DataFrame({"col": np.array([1], dtype="int")}, index=pd.DatetimeIndex([np.datetime64('2023-01-02')])), staged=True)
+        lib.sort_and_finalize_staged_data("sym", mode=mode)
+
+    @pytest.mark.parametrize("mode", [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE])
+    def test_type_mismatch_in_staged_segments_throws_with_promotoable_types(self, lmdb_library, mode):
+        lib = lmdb_library
+        lib.write("sym", pd.DataFrame({"col": np.array([1], dtype="int64")}, index=pd.DatetimeIndex([np.datetime64('2023-01-01')])), staged=True)
+        lib.write("sym", pd.DataFrame({"col": ["test"]}, index=pd.DatetimeIndex([np.datetime64('2023-01-02')])), staged=True)
+        with pytest.raises(SchemaException) as exception_info:
+            lib.sort_and_finalize_staged_data("sym", mode=mode)
+        assert "INT64" in str(exception_info.value)
+        assert "UTF_DYNAMIC" in str(exception_info.value)
+        with pytest.raises(UserInputException) as exception_info:
+            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+        assert "E_NO_STAGED_SEGMENTS" in str(exception_info.value)
+
 
     def test_types_cant_be_promoted(self, lmdb_library):
         lib = lmdb_library

@@ -74,13 +74,15 @@ public:
         impl_->end_row();
     }
 
-    template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
+    template<typename T>
+    requires std::integral<T> || std::floating_point<T>
     void set_scalar(position_t idx, T val) {
         impl_->set_scalar(idx, val);
     }
 
-    template<class T, std::enable_if_t<std::is_same_v<std::decay_t<T>, std::string>, int> = 0>
-    void set_scalar(position_t idx, T val) {
+    template<typename T>
+    requires std::same_as<std::decay_t<T>, std::string>
+    void set_scalar(position_t idx, const T& val) {
         impl_->set_string(idx, val);
     }
 
