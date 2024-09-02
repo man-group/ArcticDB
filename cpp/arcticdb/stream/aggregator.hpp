@@ -238,10 +238,6 @@ class Aggregator {
         segment_.set_string_at(col, row, val, size);
     }
 
-    void set_no_string_at(position_t col, position_t row, position_t placeholder) {
-        segment_.set_no_string_at(col, row, placeholder);
-    }
-
     void set_offset(ssize_t offset) {
         segment_.set_offset(offset);
     }

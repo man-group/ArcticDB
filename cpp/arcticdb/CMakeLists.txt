@@ -204,6 +204,7 @@ set(arcticdb_srcs
         entity/data_error.hpp
         entity/descriptors.hpp
         entity/native_tensor.hpp
+        entity/output_type.hpp
         entity/performance_tracing.hpp
         entity/protobuf_mappings.hpp
         entity/read_result.hpp
@@ -346,6 +347,7 @@ set(arcticdb_srcs
         util/movable_priority_queue.hpp
         util/memory_mapped_file.hpp
         util/name_validation.hpp
+        util/native_handler.hpp
         util/offset_string.hpp
         util/optional_defaults.hpp
         util/pb_util.hpp
@@ -501,10 +503,7 @@ set(arcticdb_srcs
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
         storage/s3/ec2_utils.cpp
-        util/buffer_holder.cpp
-        util/native_handler.hpp entity/output_type.hpp
-        entity/output_type.hpp
-        entity/output_type.hpp)
+        util/buffer_holder.cpp)
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 

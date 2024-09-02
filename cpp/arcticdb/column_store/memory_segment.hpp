@@ -139,10 +139,6 @@ public:
         impl_->set_string_at(col, row, str, size);
     }
 
-    void set_no_string_at(position_t col, position_t row, position_t placeholder) {
-        impl_->set_no_string_at(col, row, placeholder);
-    }
-
     void set_string_array(position_t idx, size_t string_size, size_t num_strings, char *data) {
         impl_->set_string_array(idx, string_size, num_strings, data);
     }
