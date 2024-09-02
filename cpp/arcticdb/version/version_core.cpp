@@ -947,10 +947,12 @@ void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<PipelineC
 
             const auto& key = it->slice_and_key().key();
             sorting::check<ErrorCode::E_UNSORTED_DATA>(
-                    !last_existing_index_value.has_value() || key.start_time() >= *last_existing_index_value,
-                    "Cannot append staged segments to existing data as incomplete segment contains index value < existing data (in UTC): {} <= {}",
-                    date_and_time(it->slice_and_key().key().start_time()),
-                    date_and_time(*last_existing_index_value));
+                !last_existing_index_value.has_value() || key.start_time() >= *last_existing_index_value,
+                "Cannot append staged segments to existing data as incomplete segment contains index value < existing data (in UTC): {} <= {}",
+                date_and_time(key.start_time()),
+                // Should never reach "" but the standard mandates that all function arguments are evaluated
+                last_existing_index_value ? date_and_time(*last_existing_index_value) : ""
+            );
             auto [_, inserted] = unique_timestamp_ranges.emplace(key.start_time(), key.end_time());
             // This is correct because incomplete segments aren't column sliced
             sorting::check<ErrorCode::E_UNSORTED_DATA>(

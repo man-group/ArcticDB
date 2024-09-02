@@ -512,10 +512,6 @@ public:
         column_unchecked(col).set_scalar(row, ofstr.offset());
     }
 
-    void set_no_string_at(position_t col, position_t row, position_t placeholder) {
-        column_unchecked(col).set_scalar(row, placeholder);
-    }
-
     void set_string_array(position_t idx, size_t string_size, size_t num_strings, char *data) {
         check_column_index(idx);
         column_unchecked(idx).set_string_array(row_id_ + 1, string_size, num_strings, data, string_pool());
