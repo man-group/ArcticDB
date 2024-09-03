@@ -620,3 +620,17 @@ def test_norm_failure_error_message(lmdb_version_store_v1):
                [write_exception, batch_write_exception])
     assert all("pickle_on_failure" not in str(e.value) for e in
                [append_exception, batch_append_exception, update_exception])
+
+def test_bools_are_pickled(lmdb_version_store_allows_pickling):
+    lib = lmdb_version_store_allows_pickling
+    sym = "test_bools_are_pickled"
+
+    df = pd.DataFrame({"a": [True, False]})
+    lib.write(sym, df)
+    lib.get_info(sym)['type'] == 'pickled'
+    assert_frame_equal(df, lib.read(sym).data)
+
+    df = pd.DataFrame({"a": [True, False, np.nan]})
+    lib.write(sym, df)
+    lib.get_info(sym)['type'] == 'pickled'
+    assert_frame_equal(df, lib.read(sym).data)
