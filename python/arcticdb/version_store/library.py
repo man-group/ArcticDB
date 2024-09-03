@@ -312,7 +312,7 @@ class ReadInfoRequest(NamedTuple):
 class LazyDataFrame(QueryBuilder):
     """
     Lazy dataframe implementation, allowing chains of queries to be added before the read is actually executed.
-    Returned by `Library.read` calls when `lazy=True`.
+    Returned by `Library.read`, `Library.head`, and `Library.tail` calls when `lazy=True`.
 
     See Also
     --------
@@ -346,7 +346,7 @@ class LazyDataFrame(QueryBuilder):
 
     def to_read_request(self) -> ReadRequest:
         """
-        Convert this object back into a ReadRequest, including any queries applied to this object since the read call.
+        Convert this object into a ReadRequest, including any queries applied to this object since the read call.
 
         Returns
         -------
@@ -387,7 +387,7 @@ class LazyDataFrame(QueryBuilder):
 class LazyDataFrameCollection(QueryBuilder):
     """
     Lazy dataframe implementation for batch operations. Allows the application of chains of queries to be added before
-    the actual reads are performed. Queries applied to this object will be applied to all of the symbols being read.
+    the actual reads are performed. Queries applied to this object will be applied to all  the symbols being read.
     If per-symbol queries are required, split can be used to break this class into a list of LazyDataFrame objects.
     Returned by `Library.read_batch` calls when `lazy=True`.
 
