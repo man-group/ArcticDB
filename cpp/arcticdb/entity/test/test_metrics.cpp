@@ -73,6 +73,21 @@ TEST(Metrics, RemoveCounter) {
     ASSERT_EQ(metric.at(0).counter.value, 1.0);
 }
 
+TEST(Metrics, RemoveCounterLabelsOutOfOrder) {
+    // given
+    PrometheusInstance instance{};
+    instance.configure(MetricsConfig{"host", "port", "job", "instance", "local", MetricsConfig::Model::PUSH});
+    instance.registerMetric(prometheus::MetricType::Counter, "name", "help");
+
+    // when
+    instance.incrementCounter("name", {{"a", "bcd"}, {"e", "fgh"}});
+    instance.removeMetric<prometheus::Counter>("name", {{"e", "fgh"}, {"a", "bcd"}});
+
+    // then
+    auto res = instance.get_metrics();
+    ASSERT_TRUE(res.empty());
+}
+
 TEST(Metrics, RemoveCounterSpecific) {
     // given
     PrometheusInstance instance{};
