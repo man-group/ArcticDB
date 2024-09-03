@@ -108,35 +108,35 @@ namespace arcticdb {
         }
 
         std::scoped_lock lock{metrics_mutex_};
+        bool inserted{false};
         if (type == prometheus::MetricType::Counter) {
-            // Counter is actually a unique_ptr object which has a life of registry
-            map_counter_[name] = &prometheus::BuildCounter()
+            inserted = map_counter_.insert({name, &prometheus::BuildCounter()
                     .Name(name)
                     .Help(help)
                     .Labels(labels)
-                    .Register(*registry_);
+                    .Register(*registry_)}).second;
         } else if (type == prometheus::MetricType::Gauge) {
-            map_gauge_[name] = &prometheus::BuildGauge()
+            inserted = map_gauge_.insert({name, &prometheus::BuildGauge()
                     .Name(name)
                     .Help(help)
                     .Labels(labels)
-                    .Register(*registry_);
+                    .Register(*registry_)}).second;
         } else if (type == prometheus::MetricType::Histogram) {
-            map_histogram_[name].histogram = &prometheus::BuildHistogram()
+            inserted = map_histogram_.insert({name, HistogramInfo{&prometheus::BuildHistogram()
                     .Name(name)
                     .Help(help)
                     .Labels(labels)
-                    .Register(*registry_);
-            map_histogram_[name].buckets_list = buckets_list;
+                    .Register(*registry_), buckets_list}}).second;
         } else if (type == prometheus::MetricType::Summary) {
-            map_summary_[name] = &prometheus::BuildSummary()
+            inserted = map_summary_.insert({name, &prometheus::BuildSummary()
                     .Name(name)
                     .Help(help)
                     .Labels(labels)
-                    .Register(*registry_);
+                    .Register(*registry_)}).second;
         } else {
-            arcticdb::log::version().warn("Unsupported metric type");
+            util::raise_rte("Unsupported metric type");
         }
+        util::check(inserted, "Expected to register metric {} but was already present", name);
 }
 
 void PrometheusInstance::incrementCounter(const std::string& name, double value, const Labels& labels) {
@@ -201,7 +201,7 @@ void PrometheusInstance::observeHistogram(const std::string& name, double value,
 
     std::scoped_lock lock{metrics_mutex_};
     if (const auto it=map_histogram_.find(name); it != map_histogram_.end()) {
-        Histogram* histogram = &it->second.histogram->Add(labels, it->second.buckets_list);
+        Histogram* histogram = &it->second.histogram_->Add(labels, it->second.buckets_list_);
         all_histograms_.insert({{name, labels}, histogram});
         histogram->Observe(value);
     } else {

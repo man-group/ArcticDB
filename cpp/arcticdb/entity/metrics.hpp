@@ -25,6 +25,7 @@
 #include <map>
 #include <unordered_map>
 #include <memory>
+#include <utility>
 #include <fmt/format.h>
 
 namespace arcticdb {
@@ -109,7 +110,7 @@ public:
             metrics = all_counters_;
         } else if constexpr(T::metric_type == prometheus::MetricType::Histogram) {
             for (const auto& [histogram_name, value] : map_histogram_) {
-                metrics_family[histogram_name] = value.histogram;
+                metrics_family[histogram_name] = value.histogram_;
             }
             metrics = all_histograms_;
         } else if constexpr(T::metric_type == prometheus::MetricType::Gauge) {
@@ -159,8 +160,14 @@ public:
     private:
 
         struct HistogramInfo {
-            prometheus::Family<prometheus::Histogram>* histogram;
-            prometheus::Histogram::BucketBoundaries buckets_list;
+            HistogramInfo(prometheus::Family<prometheus::Histogram>* histogram,
+                          prometheus::Histogram::BucketBoundaries buckets_list) : histogram_(histogram),
+                          buckets_list_(std::move(buckets_list)) {
+
+            }
+
+            prometheus::Family<prometheus::Histogram>* histogram_;
+            prometheus::Histogram::BucketBoundaries buckets_list_;
         };
 
         template<typename T>

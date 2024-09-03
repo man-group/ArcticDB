@@ -30,6 +30,23 @@ TEST(Metrics, IncrementCounterDefault) {
     ASSERT_EQ(metric.at(0).counter.value, 3.0);
 }
 
+TEST(Metrics, OverwriteFamilyLabelsNotPossible) {
+    PrometheusInstance instance{};
+    instance.configure(MetricsConfig{"host", "port", "job", "instance", "local", MetricsConfig::Model::PUSH});
+    instance.registerMetric(prometheus::MetricType::Counter, "name", "help", {{"env", "dev"}});
+    ASSERT_THROW(instance.incrementCounter("name", {{"env", "pre"}}), std::invalid_argument);
+    ASSERT_THROW(instance.incrementCounter("name", {{"env", "pre"}, {"another", "label"}}), std::invalid_argument);
+    instance.incrementCounter("name", {{"a", "bcd"}});
+}
+
+TEST(Metrics, RegisterTwice) {
+    // given
+    PrometheusInstance instance{};
+    instance.configure(MetricsConfig{"host", "port", "job", "instance", "local", MetricsConfig::Model::PUSH});
+    instance.registerMetric(prometheus::MetricType::Counter, "name", "help");
+    ASSERT_THROW(instance.registerMetric(prometheus::MetricType::Counter, "name", "help"), ArcticException);
+}
+
 TEST(Metrics, IncrementCounterSpecific) {
     // given
     PrometheusInstance instance{};
