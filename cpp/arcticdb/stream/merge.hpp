@@ -45,19 +45,18 @@ void do_merge(
                 val->visit_field([&rb] (const auto& opt_v, std::string_view name, const TypeDescriptor& type_desc) {
                     if (opt_v) {
                         const StreamDescriptor& descriptor = rb.descriptor();
-                        const size_t field_idx = *descriptor.find_field(name);
-                        const Field& field = descriptor.field(field_idx);
-                        if (type_desc == field.type()) {
+                        const std::optional<size_t> field_idx = descriptor.find_field(name);
+                        if (!field_idx || type_desc == descriptor.field(*field_idx).type()) {
                             rb.set_scalar_by_name(name, *opt_v, type_desc.data_type());
                         } else {
-                            const auto common_type = has_valid_common_type(type_desc, field.type());
+                            const auto common_type = has_valid_common_type(type_desc, descriptor.field(*field_idx).type());
                             schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
                                 common_type,
                                 "No valid common type between staged segments for column {}. Mismatched types are {} "
                                 "and {}",
                                 name,
                                 type_desc,
-                                field.type()
+                                descriptor.field(*field_idx).type()
                             );
                             common_type->visit_tag([&](auto type_desc_tag) {
                                 using RawType = decltype(type_desc_tag)::DataTypeTag::raw_type;
