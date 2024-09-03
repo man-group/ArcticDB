@@ -108,8 +108,8 @@ public:
             metrics_family = map_counter_;
             metrics = all_counters_;
         } else if constexpr(T::metric_type == prometheus::MetricType::Histogram) {
-            for (const auto& [name, value] : map_histogram_) {
-                metrics_family[name] = value.histogram;
+            for (const auto& [histogram_name, value] : map_histogram_) {
+                metrics_family[histogram_name] = value.histogram;
             }
             metrics = all_histograms_;
         } else if constexpr(T::metric_type == prometheus::MetricType::Gauge) {
