@@ -1459,12 +1459,15 @@ VersionedItem sort_merge_impl(
 
             read_query.clauses_.emplace_back(std::make_shared<Clause>(MergeClause{timeseries_index, SparseColumnPolicy{}, stream_id, pipeline_context->descriptor()}));
             auto segments = read_and_process(store, pipeline_context, read_query, ReadOptions{}, pipeline_context->incompletes_after());
-            if (options.append_ && update_info.previous_index_key_ && !segments.empty() &&
-                update_info.previous_index_key_->end_time() - 1 > std::get<timestamp>(TimeseriesIndex::start_value_for_segment(segments[0].segment_.value()))) {
-                sorting::raise<ErrorCode::E_UNSORTED_DATA>(
-                    "Cannot append staged segments to existing data as incomplete segment contains index value < existing data (in UTC): {} <= {}",
-                    date_and_time(std::get<timestamp>(TimeseriesIndex::start_value_for_segment(segments[0].segment_.value()))),
-                    date_and_time(update_info.previous_index_key_->end_time() - 1)
+            if (options.append_ && update_info.previous_index_key_ && !segments.empty()) {
+                const timestamp last_index_on_disc = update_info.previous_index_key_->end_time();
+                const timestamp incomplete_start =
+                    std::get<timestamp>(TimeseriesIndex::start_value_for_segment(segments[0].segment(store)));
+                sorting::check<ErrorCode::E_UNSORTED_DATA>(
+                    last_index_on_disc <= incomplete_start,
+                    "Cannot append staged segments to existing data as incomplete segment contains index value {} < existing data {}",
+                    incomplete_start,
+                    last_index_on_disc
                 );
             }
             pipeline_context->total_rows_ = num_versioned_rows + get_slice_rowcounts(segments);

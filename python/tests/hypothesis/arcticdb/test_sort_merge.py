@@ -67,8 +67,7 @@ class StagedWrite(RuleBasedStateMachine):
  
     @initialize()
     def init(self):
-        self.staged = pd.DataFrame([])
-        self.staged_segments_count = 0
+        self.reset_state()
 
     @rule(df=df(COLUMN_DESCRIPTIONS))
     def stage(self, df):
@@ -78,32 +77,42 @@ class StagedWrite(RuleBasedStateMachine):
         self.lib.write(SYMBOL, df, staged=True)
         self.staged_segments_count += 1
 
+    @precondition(lambda self: self.staged_segments_count == 0)
+    @rule()
+    def finalize_write_no_staged_segments(self):
+        self.assert_cannot_finalize_without_staged_data(StagedDataFinalizeMethod.WRITE)
+        self.reset_state()
+
+    @precondition(lambda self: self.staged_segments_count > 0 and pd.NaT in self.staged.index)
+    @rule()
+    def finalize_write_with_nat_in_index(self):
+        self.assert_nat_is_not_supported(StagedDataFinalizeMethod.WRITE)
+        self.reset_state()
+
+    @precondition(lambda self: self.staged_segments_count > 0 and not pd.NaT in self.staged.index)
     @rule()
     def finalize_write(self):
-        has_staged_segments = self.staged_segments_count > 0
         self.staged.sort_index(inplace=True)
-        if not has_staged_segments:
-            self.assert_cannot_finalize_without_staged_data(StagedDataFinalizeMethod.WRITE)
-        elif pd.NaT in self.staged.index:
-            self.assert_nat_is_not_supported(StagedDataFinalizeMethod.WRITE)
-        else:
-            write_empty = len(self.staged) == 0
-            self.lib.sort_and_finalize_staged_data(SYMBOL)
-            arctic_df = self.lib.read(SYMBOL).data
-            assert_equal(arctic_df, self.staged)
-        self.staged = pd.DataFrame([])
-        self.staged_segments_count = 0
+        self.lib.sort_and_finalize_staged_data(SYMBOL)
+        arctic_data = self.lib.read(SYMBOL).data
+        assert_equal(arctic_data, self.staged)
+        self.reset_state()
 
+    @precondition(lambda self: self.staged_segments_count == 0)
+    @rule()
+    def finalize_append_no_staged_segments(self):
+        self.assert_cannot_finalize_without_staged_data(StagedDataFinalizeMethod.APPEND)
+        self.reset_state()
+
+    @precondition(lambda self: self.staged_segments_count > 0)
     @rule()
     def finalize_append(self):
         self.staged.sort_index(inplace=True)
         pre_append_storage, symbol_exists = self.data_from_storage()
+        assert pre_append_storage.index.is_monotonic_increasing
         symbol_is_not_empty = len(pre_append_storage) > 0
-        has_staged_segments = self.staged_segments_count > 0
         stage_is_not_empty = len(self.staged) > 0
-        if not has_staged_segments:
-            self.assert_cannot_finalize_without_staged_data(StagedDataFinalizeMethod.APPEND)
-        elif symbol_exists and list(self.staged.columns) != list(pre_append_storage.columns):
+        if symbol_exists and list(self.staged.columns) != list(pre_append_storage.columns):
             self.assert_append_throws_with_mismatched_columns()
         elif symbol_is_not_empty and stage_is_not_empty and pre_append_storage.index[-1] > self.staged.index[0]:
             self.assert_appended_data_does_not_overlap_with_storage()
@@ -111,15 +120,17 @@ class StagedWrite(RuleBasedStateMachine):
             self.assert_nat_is_not_supported(StagedDataFinalizeMethod.APPEND)
         else:
             self.lib.sort_and_finalize_staged_data(SYMBOL, mode=StagedDataFinalizeMethod.APPEND)
-            if len(self.staged) > 0:
-                assert_equal(self.lib.tail(SYMBOL, n=len(self.staged)).data, self.staged)
-            else:
-                assert_equal(self.lib.read(SYMBOL).data, self.staged)
+            arctic_data = self.lib.read(SYMBOL).data
+            assert arctic_data.index.is_monotonic_increasing
+            assert_equal(arctic_data.iloc[len(pre_append_storage):], self.staged)
+        self.reset_state()
+
+    def reset_state(self):
         self.staged = pd.DataFrame([])
         self.staged_segments_count = 0
 
     def assert_appended_data_does_not_overlap_with_storage(self):
-        with pytest.raises(Exception) as exception_info:
+        with pytest.raises(UnsortedDataException) as exception_info:
             self.lib.sort_and_finalize_staged_data(SYMBOL, mode=StagedDataFinalizeMethod.APPEND)
 
     def assert_cannot_finalize_without_staged_data(self, mode):
@@ -144,8 +155,7 @@ class StagedWrite(RuleBasedStateMachine):
             return pd.DataFrame(), False
 
     def teardown(self):
-        self.staged = pd.DataFrame([])
-        self.staged_segments_count = 0
+        self.reset_state()
         self.lib.delete_staged_data(SYMBOL)
         self.lib.delete(SYMBOL)
 

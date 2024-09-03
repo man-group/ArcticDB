@@ -19,7 +19,7 @@ void do_merge(
     AggregatorType& agg,
     bool add_symbol_column
     ) {
-    while (!input_streams.empty() && input_streams.top()->row().parent_->row_count() == 0) {
+    while (!input_streams.empty() && input_streams.top()->seg_.row_count() == 0) {
         input_streams.pop_top();
     }
 
@@ -33,8 +33,9 @@ void do_merge(
 
     while (!input_streams.empty()) {
         auto next = input_streams.pop_top();
-
-        debug::check<ErrorCode::E_ASSERTION_FAILURE>(next->row().parent_->row_count() > 0, "Empty segments are not allowed here");
+        if (next->seg_.row_count() == 0) {
+            continue;
+        }
         agg.start_row(pipelines::index::index_value_from_row(next->row(), IndexDescriptorImpl::Type::TIMESTAMP, 0).value()) ([&next, add_symbol_column](auto &rb) {
             if(add_symbol_column)
                 rb.set_scalar_by_name("symbol", std::string_view(std::get<StringId>(next->id())), DataType::UTF_DYNAMIC64);
