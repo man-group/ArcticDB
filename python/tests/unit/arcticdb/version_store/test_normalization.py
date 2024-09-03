@@ -634,3 +634,17 @@ def test_bools_are_pickled(lmdb_version_store_allows_pickling):
     lib.write(sym, df)
     lib.get_info(sym)['type'] == 'pickled'
     assert_frame_equal(df, lib.read(sym).data)
+
+def test_arrays_are_pickled(lmdb_version_store_allows_pickling):
+    lib = lmdb_version_store_allows_pickling
+    sym = "test_arrays_are_pickled"
+
+    df = pd.DataFrame({"a": [np.array([1, 2])]})
+    lib.write(sym, df)
+    lib.get_info(sym)['type'] == 'pickled'
+    assert_frame_equal(df, lib.read(sym).data)
+
+    df = pd.DataFrame({"a": [[1, 2]]})
+    lib.write(sym, df)
+    lib.get_info(sym)['type'] == 'pickled'
+    assert_frame_equal(df, lib.read(sym).data)
