@@ -1,30 +1,15 @@
 #include <cstdint>
 #include <cstddef>
-#include <limits>
-#include <utility>
+
+
+#include <arcticdb/codec/fastlanes_common.hpp>
 
 namespace arcticdb {
 
-namespace detail {
-template<class T, T... inds, class F>
-constexpr void loop(std::integer_sequence<T, inds...>, F &&f) {
-    (f(std::integral_constant<T, inds>{}), ...);
-}
-}
-
-template<class T, T count, class F>
-constexpr void loop(F &&f) {
-    detail::loop(std::make_integer_sequence<T, count>{}, std::forward<F>(f));
-}
-
-template<typename T>
-constexpr size_t t_bits() {
-    return sizeof(T) * std::numeric_limits<uint8_t>::digits;
-}
 
 template<typename T, size_t bit_width>
 constexpr T make_mask() {
-    if constexpr (bit_width == t_bits<T>())
+    if constexpr (bit_width == type_bits<T>())
         return T(-1);
     else
         return (T(1) << bit_width) - 1;
@@ -33,12 +18,12 @@ constexpr T make_mask() {
 template<typename T, size_t width>
 struct BitPack {
     static constexpr size_t bit_width = width;
-    static constexpr size_t register_width = 1024;
-    static constexpr size_t num_bits = t_bits<T>();
+    static constexpr size_t register_width = Helper<T>::register_width;
+    static constexpr size_t num_bits = Helper<T>::num_bits;
+    static constexpr size_t num_lanes = Helper<T>::num_lanes;
     static_assert(bit_width <= num_bits);
 
     static constexpr T mask = make_mask<T, bit_width>();
-    static constexpr size_t num_lanes = register_width / num_bits;
 
     static constexpr size_t bit_pos(size_t row) {
         return (row * bit_width) % num_bits;
@@ -65,10 +50,8 @@ struct BitPack {
     }
 };
 
-static_assert(BitPack<uint64_t, 5>::num_lanes == 16);
-static_assert(BitPack<uint8_t, 6>::num_lanes == 128);
-static_assert(BitPack<uint16_t, 7>::num_bits == 16);
-static_assert(BitPack<uint8_t, 3>::mask == 7);static_assert(BitPack<uint8_t, 3>::bit_pos(5) == 7);
+static_assert(BitPack<uint8_t, 3>::mask == 7);
+static_assert(BitPack<uint8_t, 3>::bit_pos(5) == 7);
 
 static_assert(BitPack<uint8_t, 3>::unused_bits(2) == 2);
 

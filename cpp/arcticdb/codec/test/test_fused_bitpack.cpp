@@ -1,17 +1,7 @@
 #include <gtest/gtest.h>
-
-#include <arcticdb/codec/third_party/fastlanes/pack.hpp>
-#include <arcticdb/codec/third_party/fastlanes/unpack.hpp>
 #include <arcticdb/codec/bitpack_fused.hpp>
-#include <arcticdb/codec/bitpacking.hpp>
-#include <arcticdb/util/timer.hpp>
-#include <numeric>
-#include <lz4.h>
-#include <random>
 
-namespace helper {
-
-uint64_t rand_arr_70_b11_w64_arr[1024] =
+static uint64_t rand_arr_70_b11_w64_arr[1024] =
     {403UL, 1272UL, 863UL, 2026UL, 1646UL, 1274UL, 1737UL, 1105UL, 939UL, 311UL, 292UL, 183UL, 938UL, 1939UL, 1185UL,
      1228UL, 1714UL, 1908UL, 1155UL, 219UL, 1642UL, 1067UL, 1333UL, 70UL, 306UL, 470UL, 843UL, 1328UL, 97UL, 1135UL,
      1920UL, 800UL, 502UL, 1619UL, 190UL, 1270UL, 222UL, 1367UL, 1431UL, 632UL, 182UL, 245UL, 995UL, 1964UL, 1790UL,
@@ -80,215 +70,26 @@ uint64_t rand_arr_70_b11_w64_arr[1024] =
      872UL, 1332UL, 1966UL, 1443UL, 2001UL, 642UL, 1762UL, 561UL, 1305UL, 495UL, 412UL, 1334UL, 1834UL, 154UL, 479UL,
      1297UL, 1482UL, 1047UL, 469UL, 743UL, 1819UL, 942UL, 631UL, 670UL, 2042UL, 728UL, 1279UL, 325UL, 1997UL, 1281UL,
      2018UL, 1476UL, 866UL, 1210UL, 1358UL, 851UL, 826UL, 632UL, 1573UL, 1401UL, 1891UL, 297UL, 1015UL, 1743UL,};
-}
 
-#ifdef FASTLANES_DATA
-std::vector<uint64_t> get_test_vector() {
-    std::vector<uint64_t> output(1024 * 100);
-    for(auto i = 0; i < 100; ++i)
-        memcpy(output.data() + 1024 * i, helper::rand_arr_70_b11_w64_arr, 1024 * sizeof(uint64_t));
 
-    return output;
-}
-#else
-template<typename T>
-std::vector<T> random_vector(
-    size_t size,
-    T min = std::numeric_limits<T>::min(),
-    T max = std::numeric_limits<T>::max()) {
-    const unsigned int seed = 12345;
-    std::mt19937 generator(seed);
-    std::uniform_int_distribution<T> distribution(min, max);
-
-    std::vector<T> output(size);
-    std::generate(output.begin(), output.end(), [&]() {
-        return distribution(generator);
-    });
-
-    return output;
-}
-
-std::vector<uint64_t> get_test_vector() {
-    return random_vector<uint64_t>(1024 * 100, 21UL, 1UL << 10);
-}
-
-#endif
-
-TEST(FastlanesDisplay, PackUnpack64) {
-    auto *base64 = new uint64_t[1]();
-    *base64 = 0;
-    auto data = get_test_vector();
-    auto packed64 = new uint64_t[1024 * 100]();
-    auto unpacked64 = new uint64_t[1024 * 100]();
-    *(base64) = 0;
-
-    for(auto i = 0; i < 100; ++i) {
-        generated::pack::fallback::scalar::pack(data.data() + 1024 * i, const_cast<uint64_t *>(packed64 + 176 * i), 11);
-        generated::unpack::fallback::scalar::unpack(packed64 + 176 * i, const_cast<uint64_t *>(unpacked64 + 1024 * i), 11);
-    }
-
-    for(auto k = 0; k < 1024 * 100; ++k)
-    {
-        ASSERT_EQ(data[k], unpacked64[k]);
-    }
-}
-
-TEST(FastlanesDisplay, PackSeeOrdering64) {
-    using namespace arcticdb;
-    auto *base64 = new uint64_t[1]();
-    *base64 = 0;
-    auto packed64 = new uint64_t[1024]();
-    auto unpacked64 = new uint64_t[1024]();
-    *(base64) = 0;
-    std::vector<uint64_t> vec(1024);
-    std::iota(vec.begin(), vec.end(), 0);
-
-    generated::pack::fallback::scalar::pack(vec.data(), const_cast<uint64_t*>(packed64), 64);
-    generated::unpack::fallback::scalar::unpack(packed64, const_cast<uint64_t*>(unpacked64), 64);
-    for(auto k = 0; k < 1024; ++k) {
-        log::version().info("{}", packed64[k]);
-    }
-}
-
-TEST(FastlanesDisplay, PackSeeOrdering8) {
+TEST(BitPackFused, Roundtrip64to11) {
     using namespace arcticdb;
     auto *base64 = new uint8_t[1]();
     *base64 = 0;
-    auto packed64 = new uint8_t[1024]();
-    auto unpacked64 = new uint8_t[1024]();
-    *(base64) = 0;
-    std::vector<uint8_t> vec(1024);
-    std::iota(vec.begin(), vec.end(), 0);
-
-    generated::pack::fallback::scalar::pack(vec.data(), const_cast<uint8_t*>(packed64), 8);
-    generated::unpack::fallback::scalar::unpack(packed64, const_cast<uint8_t*>(unpacked64), 8);
-    for(auto k = 0; k < 1024; ++k) {
-        log::version().info("{}", packed64[k]);
-    }
-}
-
-TEST(FastlanesStress, PackUnpackStress) {
-    using namespace arcticdb;
-    auto num_runs = 1000000;
-
-    auto packed64 = new uint64_t[1024 * 100]();
-    auto unpacked64 = new uint64_t[1024 * 100]();
-
-    auto *base64 = new uint64_t[1]();
-    *base64 = 0;
-    *(base64) = 0;
-    auto data = get_test_vector();
-    interval_timer timer;
-    timer.start_timer("pack");
-    for(auto k = 0; k < num_runs; ++k)
-    {
-        for(auto i = 0; i < 100; ++i) {
-            generated::pack::fallback::scalar::pack(data.data() + 1024 * i, const_cast<uint64_t *>(packed64 + 176 * i), 11);
-        }
-    }
-    timer.stop_timer("pack");
-    timer.start_timer("unpack");
-    for(auto k = 0; k < num_runs; ++k)
-    {
-        for(auto i = 0; i < 100; ++i) {
-            generated::unpack::fallback::scalar::unpack(packed64 + 176 * i, const_cast<uint64_t *>(unpacked64 + 1024 * i), 11);
-        }
-    }
-    timer.stop_timer("unpack");
-    log::version().info("\n{}", timer.display_all());
-}
-
-TEST(FastlanesStress, PackUnpackFusedStress) {
-    using namespace arcticdb;
-    auto num_runs = 1000000;
+    std::vector<uint64_t> local_packed64(1024);
     struct CompressIdentity{
         uint64_t operator()(const uint64_t* t, size_t index) { return t[index]; }
     };
 
-    auto data = get_test_vector();
-    std::vector<uint64_t> local_packed64(1024 * 100);
-    std::vector<uint64_t> local_unpacked64(1024 * 100);
+    BitPackFused<uint64_t, 11>::go(rand_arr_70_b11_w64_arr, local_packed64.data(), CompressIdentity{});
+    std::vector<uint64_t> local_unpacked64(1024);
 
     struct UncompressIdentity{
         void operator()(uint64_t* t, size_t index, uint64_t value) { t[index] = value; }
     };
 
-    interval_timer timer;
-    timer.start_timer("pack");
-    for(auto k = 0; k < num_runs; ++k)
-    {
-        for(auto i = 0; i < 100; ++i)
-            BitPackFused<uint64_t, 11>::go(data.data() + 1024 * i, local_packed64.data() + 176 * i, CompressIdentity{});
+    BitUnpackFused<uint64_t, 11>::go(local_packed64.data(), local_unpacked64.data(), UncompressIdentity{});
+    for(auto i = 0U; i < 1024; ++i) {
+        ASSERT_EQ(rand_arr_70_b11_w64_arr[i], local_unpacked64[i]);
     }
-    timer.stop_timer("pack");
-    timer.start_timer("unpack");
-    for(auto k = 0; k < num_runs; ++k)
-    {
-        for(auto i = 0; i < 100; ++i)
-            BitUnpackFused<uint64_t, 11>::go(local_packed64.data() + 176 * i, local_unpacked64.data() + 1024 * i, UncompressIdentity{});
-    }
-    timer.stop_timer("unpack");
-    log::version().info("\n{}", timer.display_all());
-}
-
-TEST(FastlanesStress, PackUnpackGeneratedStress) {
-    using namespace arcticdb;
-    auto num_runs = 1000000;
-    auto data = get_test_vector();
-    std::vector<uint64_t> local_packed64(1024 * 100);
-    std::vector<uint64_t> local_unpacked64(1024 * 100);
-
-    interval_timer timer;
-    timer.start_timer("pack");
-    for(auto k = 0; k < num_runs; ++k)
-    {
-        for(auto i = 0; i < 100; ++i)
-            bitpack<uint64_t, 11>(local_packed64.data() + 176 * i, local_unpacked64.data() + 1024 * i);
-    }
-    timer.stop_timer("pack");
-    timer.start_timer("unpack");
-    for(auto k = 0; k < num_runs; ++k)
-    {
-        for(auto i = 0; i < 100; ++i)
-            bitunpack<uint64_t, 11>(local_packed64.data() + 176 * i, local_unpacked64.data() + 1024 * i);
-    }
-    timer.stop_timer("unpack");
-    log::version().info("\n{}", timer.display_all());
-}
-
-
-TEST(FastlanesStress, Lz4Stress) {
-    using namespace arcticdb;
-    auto num_runs = 1000000;
-    auto *base64 = new uint64_t[1]();
-    *base64 = 0;
-    *(base64) = 0;
-    std::vector<uint64_t> local_packed64(1024 * 100);
-    std::vector<uint64_t> local_unpacked64(1024 * 100);
-
-    auto data = get_test_vector();
-    interval_timer timer;
-    timer.start_timer("pack");
-    int compressed_bytes;
-
-    for(auto k = 0; k < num_runs; ++k)
-    {
-        compressed_bytes = LZ4_compress_default(
-            reinterpret_cast<const char *>(data.data()),
-            reinterpret_cast<char *>(local_packed64.data()),
-            int(1024 * 8 * 100),
-            int(1024 * 8 * 100));
-    }
-    timer.stop_timer("pack");
-    timer.start_timer("unpack");
-    for(auto k = 0; k < num_runs; ++k)
-    {
-        LZ4_decompress_safe(
-            reinterpret_cast<const char*>(local_packed64.data()),
-            reinterpret_cast<char*>(local_unpacked64.data()),
-            compressed_bytes,
-            int(1024 * 8 * 100));
-    }
-    timer.stop_timer("unpack");
-    log::version().info("\n{}", timer.display_all());
 }
