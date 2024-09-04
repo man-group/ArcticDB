@@ -240,8 +240,6 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
             casted_arr = coerce_string_column_to_fixed_length_array(arr, type(sample), string_max_len)
     elif dynamic_strings and sample is None:  # arr is entirely empty
         return arr
-    elif isinstance(sample, bool) or isinstance(sample, np.ndarray):
-        return arr
     else:
         raise ArcticDbNotYetImplemented(
             f"Failed to normalize column '{arr_name}' with dtype '{arr.dtype}'. Found first non-null value of type "
