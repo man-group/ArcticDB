@@ -344,7 +344,7 @@ class LazyDataFrame(QueryBuilder):
         self.lib = lib
         self.read_request = read_request._replace(query_builder=None)
 
-    def to_read_request(self) -> ReadRequest:
+    def _to_read_request(self) -> ReadRequest:
         """
         Convert this object into a ReadRequest, including any queries applied to this object since the read call.
 
@@ -373,11 +373,11 @@ class LazyDataFrame(QueryBuilder):
         VersionedItem
             Object that contains a .data and .metadata element.
         """
-        return self.lib.read(**self.to_read_request()._asdict())
+        return self.lib.read(**self._to_read_request()._asdict())
 
     def __str__(self) -> str:
         query_builder_repr = super().__str__()
-        return "LazyDataFrame(" + self.read_request.__repr__() + (" | " if len(query_builder_repr) else "") + query_builder_repr + ")"
+        return f"LazyDataFrame({self.read_request.__repr__()}{' | ' if query_builder_repr else ''}{query_builder_repr})"
 
     # Needs to be explicitly defined for lists of these objects in LazyDataFrameCollection to render correctly
     def __repr__(self) -> str:
@@ -416,10 +416,10 @@ class LazyDataFrameCollection(QueryBuilder):
             self,
             lazy_dataframes: List[LazyDataFrame],
     ):
-        lib_set = set([lazy_dataframe.lib for lazy_dataframe in lazy_dataframes])
+        lib_set = {lazy_dataframe.lib for lazy_dataframe in lazy_dataframes}
         check(
             len(lib_set) in [0, 1],
-            f"LazyDataFrameCollection init requires all provided lazy dataframes to be referring to the same library, but received:\n{[lib for lib in lib_set]}"
+            f"LazyDataFrameCollection init requires all provided lazy dataframes to be referring to the same library, but received: {[lib for lib in lib_set]}"
         )
         super().__init__()
         self._lazy_dataframes = lazy_dataframes
@@ -445,14 +445,14 @@ class LazyDataFrameCollection(QueryBuilder):
         List[Union[VersionedItem, DataError]]
             See documentation on `Library.read_batch`.
         """
-        if self._lib is None:
+        if not len(self._lazy_dataframes):
             return []
         return self._lib.read_batch(self._read_requests())
 
     def _read_requests(self) -> List[ReadRequest]:
         # Combines queries for individual LazyDataFrames with the global query associated with this
         # LazyDataFrameCollection and returns a list of corresponding read requests
-        read_requests = [lazy_dataframe.to_read_request() for lazy_dataframe in self._lazy_dataframes]
+        read_requests = [lazy_dataframe._to_read_request() for lazy_dataframe in self._lazy_dataframes]
         if len(self.clauses):
             for read_request in read_requests:
                 if read_request.query_builder is None:

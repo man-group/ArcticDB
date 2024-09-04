@@ -8,7 +8,6 @@ As of the Change Date specified in that file, in accordance with the Business So
 import numpy as np
 import pandas as pd
 import pickle
-import pytest
 
 from arcticdb import col, LazyDataFrame, LazyDataFrameCollection, QueryBuilder, ReadRequest
 from arcticdb.util.test import assert_frame_equal
@@ -56,6 +55,7 @@ def test_lazy_filter(lmdb_library):
     lib.write(sym, df)
 
     lazy_df = lib.read(sym, lazy=True)
+    lazy_df_2 = lazy_df
     lazy_df = lazy_df[lazy_df["col1"].isin(0, 3, 6, 9)]
     received = lazy_df.collect().data
     expected = df.query("col1 in [0, 3, 6, 9]")

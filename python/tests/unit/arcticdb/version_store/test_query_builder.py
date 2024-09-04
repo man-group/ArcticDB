@@ -133,6 +133,10 @@ def test_reuse_querybuilder_date_range(lmdb_version_store_tiny_segment):
     received_2 = lib.read(symbol, query_builder=q).data
     assert_frame_equal(expected_2, received_2)
 
+    expected_3 = df.query("col1 in [7]")
+    received_3 = lib.read(symbol, date_range=(pd.Timestamp("2000-01-06"), pd.Timestamp("2000-01-08")), query_builder=q).data
+    assert_frame_equal(expected_3, received_3)
+
 
 def test_reuse_querybuilder_date_range_batch(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
