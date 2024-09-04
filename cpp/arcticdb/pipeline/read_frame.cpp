@@ -71,7 +71,7 @@ SegmentInMemory allocate_frame(const std::shared_ptr<PipelineContext>& context) 
     ARCTICDB_SAMPLE_DEFAULT(AllocFrame)
     auto [offset, row_count] = offset_and_row_count(context);
     ARCTICDB_DEBUG(log::version(), "Allocated frame with offset {} and row count {}", offset, row_count);
-    SegmentInMemory output{get_filtered_descriptor(context),  row_count, true, false, DataTypeMode::EXTERNAL};
+    SegmentInMemory output{get_filtered_descriptor(context),  row_count, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED, DataTypeMode::EXTERNAL};
     output.set_offset(static_cast<position_t>(offset));
     output.set_row_data(static_cast<ssize_t>(row_count - 1));
     output.init_column_map();

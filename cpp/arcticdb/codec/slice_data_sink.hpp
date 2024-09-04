@@ -33,7 +33,7 @@ struct SliceDataSink {
 
     void advance_shapes(std::size_t) ARCTICDB_UNUSED {}
 
-    void set_allow_sparse(bool) ARCTICDB_UNUSED {}
+    void set_allow_sparse(Sparsity) ARCTICDB_UNUSED {}
 
 private:
     uint8_t *data_;

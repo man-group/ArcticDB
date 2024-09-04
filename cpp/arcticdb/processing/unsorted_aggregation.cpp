@@ -42,10 +42,10 @@ SegmentInMemory MinMaxAggregatorData::finalize(const std::vector<ColumnName>& ou
     if (min_.has_value()) {
         details::visit_type(min_->data_type_, [&output_column_names, &seg, that = this](auto col_tag) {
             using RawType = typename ScalarTypeInfo<decltype(col_tag)>::RawType;
-            auto min_col = std::make_shared<Column>(make_scalar_type(that->min_->data_type_), true);
+            auto min_col = std::make_shared<Column>(make_scalar_type(that->min_->data_type_), Sparsity::PERMITTED);
             min_col->template push_back<RawType>(that->min_->get<RawType>());
 
-            auto max_col = std::make_shared<Column>(make_scalar_type(that->max_->data_type_), true);
+            auto max_col = std::make_shared<Column>(make_scalar_type(that->max_->data_type_), Sparsity::PERMITTED);
             max_col->template push_back<RawType>(that->max_->get<RawType>());
 
             seg.add_column(scalar_field(min_col->type().data_type(), output_column_names[0].value), min_col);
@@ -192,7 +192,7 @@ SegmentInMemory SumAggregatorData::finalize(const ColumnName& output_column_name
         details::visit_type(*data_type_, [that=this, &res, &output_column_name, unique_values] (auto col_tag) {
             using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
             that->aggregated_.resize(sizeof(typename col_type_info::RawType)* unique_values);
-            auto col = std::make_shared<Column>(make_scalar_type(that->data_type_.value()), unique_values, true, false);
+            auto col = std::make_shared<Column>(make_scalar_type(that->data_type_.value()), unique_values, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
             memcpy(col->ptr(), that->aggregated_.data(), that->aggregated_.size());
             res.add_column(scalar_field(that->data_type_.value(), output_column_name.value), col);
             col->set_row_data(unique_values - 1);
@@ -296,7 +296,7 @@ namespace
         if(!aggregated_.empty()) {
             constexpr auto dynamic_schema_data_type = DataType::FLOAT64;
             using DynamicSchemaTDT = ScalarTagType<DataTypeTag<dynamic_schema_data_type>>;
-            auto col = std::make_shared<Column>(make_scalar_type(dynamic_schema ? dynamic_schema_data_type: data_type_.value()), unique_values, true, false);
+            auto col = std::make_shared<Column>(make_scalar_type(dynamic_schema ? dynamic_schema_data_type: data_type_.value()), unique_values, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
             auto column_data = col->data();
             col->set_row_data(unique_values - 1);
             res.add_column(scalar_field(dynamic_schema ? dynamic_schema_data_type : data_type_.value(), output_column_name.value), col);
@@ -405,7 +405,7 @@ SegmentInMemory MeanAggregatorData::finalize(const ColumnName& output_column_nam
     SegmentInMemory res;
     if(!fractions_.empty()) {
         fractions_.resize(unique_values);
-        auto col = std::make_shared<Column>(make_scalar_type(DataType::FLOAT64), fractions_.size(), true, false);
+        auto col = std::make_shared<Column>(make_scalar_type(DataType::FLOAT64), fractions_.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
         auto column_data = col->data();
         std::transform(fractions_.cbegin(), fractions_.cend(), column_data.begin<ScalarTagType<DataTypeTag<DataType::FLOAT64>>>(), [](auto fraction) {
             return fraction.to_double();
@@ -449,7 +449,7 @@ SegmentInMemory CountAggregatorData::finalize(const ColumnName& output_column_na
     SegmentInMemory res;
     if(!aggregated_.empty()) {
         aggregated_.resize(unique_values);
-        auto pos = res.add_column(scalar_field(DataType::UINT64, output_column_name.value), unique_values, true);
+        auto pos = res.add_column(scalar_field(DataType::UINT64, output_column_name.value), unique_values, AllocationType::PRESIZED);
         auto& column = res.column(pos);
         auto ptr = reinterpret_cast<uint64_t*>(column.ptr());
         column.set_row_data(unique_values - 1);
@@ -508,7 +508,7 @@ SegmentInMemory FirstAggregatorData::finalize(const ColumnName& output_column_na
         details::visit_type(*data_type_, [that=this, &res, &output_column_name, unique_values] (auto col_tag) {
             using RawType = typename decltype(col_tag)::DataTypeTag::raw_type;
             that->aggregated_.resize(sizeof(RawType)* unique_values);
-            auto col = std::make_shared<Column>(make_scalar_type(that->data_type_.value()), unique_values, true, false);
+            auto col = std::make_shared<Column>(make_scalar_type(that->data_type_.value()), unique_values, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
             memcpy(col->ptr(), that->aggregated_.data(), that->aggregated_.size());
             res.add_column(scalar_field(that->data_type_.value(), output_column_name.value), col);
             col->set_row_data(unique_values - 1);
@@ -565,7 +565,7 @@ SegmentInMemory LastAggregatorData::finalize(const ColumnName& output_column_nam
         details::visit_type(*data_type_, [that=this, &res, &output_column_name, unique_values] (auto col_tag) {
             using RawType = typename decltype(col_tag)::DataTypeTag::raw_type;
             that->aggregated_.resize(sizeof(RawType)* unique_values);
-            auto col = std::make_shared<Column>(make_scalar_type(that->data_type_.value()), unique_values, true, false);
+            auto col = std::make_shared<Column>(make_scalar_type(that->data_type_.value()), unique_values, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
             memcpy(col->ptr(), that->aggregated_.data(), that->aggregated_.size());
             res.add_column(scalar_field(that->data_type_.value(), output_column_name.value), col);
             col->set_row_data(unique_values - 1);
@@ -573,7 +573,5 @@ SegmentInMemory LastAggregatorData::finalize(const ColumnName& output_column_nam
     }
     return res;
 }
-
-
 
 } //namespace arcticdb

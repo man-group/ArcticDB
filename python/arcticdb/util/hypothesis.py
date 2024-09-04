@@ -28,7 +28,6 @@ _function_scoped_fixture = getattr(HealthCheck, "function_scoped_fixture", None)
 class column_strategy:
     name: str
     dtype_strategy: Any = None
-    include_zero: bool = True
     restrict_range: bool = False
 
 
@@ -64,10 +63,6 @@ def restricted_numeric_range(dtype):
     min_value = max(np.finfo(dtype).min if np.issubdtype(dtype, np.floating) else np.iinfo(dtype).min, -2**31)
     max_value = min(np.finfo(dtype).max if np.issubdtype(dtype, np.floating) else np.iinfo(dtype).max, 2**31)
     return min_value, max_value
-
-
-def non_zero(x):
-    return x != 0
 
 
 # Use the platform endianness everywhere
@@ -129,25 +124,12 @@ def dataframe_strategy(draw, column_strategies):
                 min_value=min_value,
                 max_value=max_value,
             )
-            if not column_strat.include_zero:
-                elements = elements.filter(non_zero)
         cols.append(column(column_strat.name, dtype=dtype, elements=elements))
     return draw(data_frames(cols, index=range_indexes()))
 
 
 @st.composite
 def numeric_type_strategies(draw):
-    return draw(
-        from_dtype(
-            draw(supported_numeric_dtypes()),
-            allow_nan=False,
-            allow_infinity=False,
-        )
-    )
-
-
-@st.composite
-def non_zero_numeric_type_strategies(draw):
     dtype = draw(supported_numeric_dtypes())
     min_value, max_value = restricted_numeric_range(dtype)
     return draw(
@@ -157,7 +139,7 @@ def non_zero_numeric_type_strategies(draw):
             allow_infinity=False,
             min_value=min_value,
             max_value=max_value,
-        ).filter(non_zero)
+        )
     )
 
 

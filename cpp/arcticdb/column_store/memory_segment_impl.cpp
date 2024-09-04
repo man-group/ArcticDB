@@ -20,8 +20,8 @@ namespace arcticdb {
     SegmentInMemoryImpl::SegmentInMemoryImpl(
         const StreamDescriptor& desc,
         size_t expected_column_size,
-        bool presize,
-        bool allow_sparse,
+        AllocationType presize,
+        Sparsity allow_sparse,
         DataTypeMode mode) :
             descriptor_(std::make_shared<StreamDescriptor>(StreamDescriptor{ desc.id(), desc.index() })),
             allow_sparse_(allow_sparse) {
@@ -51,7 +51,7 @@ void SegmentInMemoryImpl::append(const SegmentInMemoryImpl& other) {
         if(other_col_index.has_value()) {
             ARCTICDB_DEBUG(log::version(), "Appending column {} at index {}", col_name, *other_col_index);
             auto this_type = column_unchecked(col).type();
-            auto other_type =  other.column_unchecked(*other_col_index).type();
+            auto other_type =  other.column_unchecked(static_cast<position_t>(*other_col_index)).type();
             auto opt_common_type = has_valid_common_type(this_type, other_type);
             internal::check<ErrorCode::E_INVALID_ARGUMENT>(
                     opt_common_type.has_value(),
@@ -63,18 +63,18 @@ void SegmentInMemoryImpl::append(const SegmentInMemoryImpl& other) {
                 descriptor_->mutable_field(col).mutable_type().data_type_ = opt_common_type->data_type_;
             }
             if (other_type != *opt_common_type) {
-                auto type_promoted_col = other.column_unchecked(*other_col_index).clone();
+                auto type_promoted_col = other.column_unchecked(static_cast<position_t>(*other_col_index)).clone();
                 type_promoted_col.change_type(opt_common_type->data_type_);
                 column_unchecked(col).append(type_promoted_col, row_id_ + 1);
             } else {
-                column_unchecked(col).append(other.column(*other_col_index), row_id_ + 1);
+                column_unchecked(col).append(other.column(static_cast<position_t>(*other_col_index)), row_id_ + 1);
             }
         } else {
             ARCTICDB_DEBUG(log::version(), "Marking {} absent rows for column {}", other.row_count(), col_name);
             column_unchecked(col).mark_absent_rows(other.row_count());
         }
     }
-    set_row_id(row_id_ + other.row_count());
+    set_row_id(ssize_t(row_id_ + other.row_count()));
 }
 
 void SegmentInMemoryImpl::generate_column_map() const {
@@ -87,8 +87,8 @@ void SegmentInMemoryImpl::generate_column_map() const {
 void SegmentInMemoryImpl::create_columns(
         size_t old_size,
         size_t expected_column_size,
-        bool presize,
-        bool allow_sparse,
+        AllocationType presize,
+        Sparsity allow_sparse,
         DataTypeMode mode) {
     columns_.reserve(descriptor_->field_count());
     for (size_t i = old_size; i < size_t(descriptor_->field_count()); ++i) {
@@ -128,8 +128,8 @@ bool SegmentInMemoryImpl::is_index_sorted() const {
 size_t SegmentInMemoryImpl::on_descriptor_change(
         const StreamDescriptor &descriptor,
         size_t expected_column_size,
-        bool presize,
-        bool allow_sparse,
+        AllocationType presize,
+        Sparsity allow_sparse,
         DataTypeMode mode) {
     ARCTICDB_TRACE(log::storage(), "Entering descriptor change: descriptor is currently {}, incoming descriptor '{}'",
                    *descriptor_, descriptor);
@@ -179,7 +179,7 @@ void SegmentInMemoryImpl::drop_column(std::string_view name) {
     auto it = std::begin(columns_);
     std::advance(it, *opt_column_index);
     columns_.erase(it);
-    descriptor_->erase_field(*opt_column_index);
+    descriptor_->erase_field(static_cast<position_t>(*opt_column_index));
     column_map_->erase(name);
 }
 
@@ -226,7 +226,7 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::filter(util::BitSet&& 
                 } else {
                     bitset_including_sparse.resize((*column)->row_count());
                 }
-                output_col_idx = output->add_column(field(column.index), bitset_including_sparse.count(), true);
+                output_col_idx = output->add_column(field(column.index), bitset_including_sparse.count(), AllocationType::PRESIZED);
                 final_bitset = &bitset_including_sparse;
             } else {
                 final_bitset = &filter_bitset;
@@ -383,8 +383,8 @@ std::vector<std::shared_ptr<SegmentInMemoryImpl>> SegmentInMemoryImpl::partition
                 std::vector<std::shared_ptr<Column>> output_columns(output.size());
                 for (const auto& segment: folly::enumerate(output)) {
                     if (static_cast<bool>(*segment)) {
-                        (*segment)->add_column(field(column.index), 0, false);
-                        output_columns.at(segment.index) = (*segment)->column_ptr(column.index);
+                        (*segment)->add_column(field(column.index), 0, AllocationType::DYNAMIC);
+                        output_columns.at(segment.index) = (*segment)->column_ptr(static_cast<position_t>(column.index));
                     }
                 }
                 for (const auto& segment_idx: folly::enumerate(row_to_segment)) {
@@ -402,9 +402,9 @@ std::vector<std::shared_ptr<SegmentInMemoryImpl>> SegmentInMemoryImpl::partition
                 for (const auto& segment: folly::enumerate(output)) {
                     if (static_cast<bool>(*segment)) {
                         if (is_sparse()) {
-                            (*segment)->add_column(field(column.index), segment_counts[segment.index], true);
+                            (*segment)->add_column(field(column.index), segment_counts[segment.index], AllocationType::PRESIZED);
                         }
-                        output_ptrs.at(segment.index) = reinterpret_cast<typename type_info::RawType*>((*segment)->column(column.index).ptr());
+                        output_ptrs.at(segment.index) = reinterpret_cast<typename type_info::RawType*>((*segment)->column(static_cast<position_t>(column.index)).ptr());
                     }
                 }
                 auto row_to_segment_it = row_to_segment.cbegin();
@@ -420,7 +420,7 @@ std::vector<std::shared_ptr<SegmentInMemoryImpl>> SegmentInMemoryImpl::partition
     for (const auto& segment_count: folly::enumerate(segment_counts)) {
         if (*segment_count > 0) {
             auto& seg = output.at(segment_count.index);
-            seg->set_row_data(*segment_count - 1);
+            seg->set_row_data(ssize_t(*segment_count - 1));
         }
     }
     return output;
@@ -474,7 +474,7 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::truncate(
 
     auto output = std::make_shared<SegmentInMemoryImpl>();
 
-    output->set_row_data(num_values - 1);
+    output->set_row_data(ssize_t(num_values - 1));
     output->set_compacted(compacted_);
     if (!reconstruct_string_pool) {
         output->set_string_pool(string_pool_);
@@ -504,7 +504,7 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::truncate(
                 );
             }
         });
-        output->add_column(field, std::move(truncated_column));
+        output->add_column(field, truncated_column);
     }
     output->attach_descriptor(descriptor_);
     return output;
@@ -519,12 +519,12 @@ void SegmentInMemoryImpl::concatenate(SegmentInMemoryImpl&& other, bool unique_c
                 row_count(), other.row_count());
     for (const auto& field: folly::enumerate(other.fields())) {
         if (!unique_column_names || !column_index(field->name()).has_value()) {
-            add_column(*field, other.column_ptr(field.index));
+            add_column(*field, other.column_ptr(static_cast<position_t>(field.index)));
         }
     }
 }
 
-position_t SegmentInMemoryImpl::add_column(FieldRef field, size_t num_rows, bool presize) {
+position_t SegmentInMemoryImpl::add_column(FieldRef field, size_t num_rows, AllocationType presize) {
     util::check_arg(!field.name().empty(), "Empty name in field: {}", field);
     if(!column_map_)
         init_column_map();
@@ -534,10 +534,10 @@ position_t SegmentInMemoryImpl::add_column(FieldRef field, size_t num_rows, bool
 
     std::lock_guard<std::mutex> lock{*column_map_mutex_};
     column_map_->insert(new_field_name, descriptor_->field_count() - 1);
-    return columns_.size() - 1;
+    return static_cast<position_t>(columns_.size() - 1);
 }
 
-position_t SegmentInMemoryImpl::add_column(const Field& field, size_t num_rows, bool presize) {
+position_t SegmentInMemoryImpl::add_column(const Field& field, size_t num_rows, AllocationType presize) {
     return add_column(FieldRef{field.type(), field.name()}, num_rows, presize);
 }
 
@@ -550,7 +550,7 @@ position_t SegmentInMemoryImpl::add_column(FieldRef field_ref, const std::shared
 
     std::lock_guard<std::mutex> lock{*column_map_mutex_};
     column_map_->insert(new_field_name, descriptor_->field_count() - 1);
-    return columns_.size() - 1;
+    return static_cast<position_t>(columns_.size() - 1);
 }
 
 position_t SegmentInMemoryImpl::add_column(const Field& field, const std::shared_ptr<Column>& column) {
@@ -566,14 +566,14 @@ void SegmentInMemoryImpl::change_schema(StreamDescriptor descriptor) {
         auto col_index = column_index(col_name);
         const auto& other_type = descriptor.field(col).type();
         if(col_index) {
-            auto this_type = column_unchecked(*col_index).type();
+            auto this_type = column_unchecked(static_cast<position_t>(*col_index)).type();
             schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
                     this_type == other_type,
                     "Could not convert type {} to type {} for column {}, this index {}, other index {}",
                     other_type, this_type, col_name, *col_index, col);
             new_columns[col] = std::move(columns_[*col_index]);
         } else {
-            auto new_column = std::make_shared<Column>(other_type, row_count(), false, allow_sparse_);
+            auto new_column = std::make_shared<Column>(other_type, row_count(), AllocationType::DYNAMIC, allow_sparse_);
             new_column->default_initialize_rows(size_t{0}, row_count(), true);
             new_columns[col] = std::move(new_column);
         }
@@ -640,7 +640,7 @@ void SegmentInMemoryImpl::sort(const std::string& column_name) {
     init_column_map();
     auto idx = column_index(std::string_view(column_name));
     util::check(static_cast<bool>(idx), "Column {} not found in sort", column_name);
-    sort(idx.value());
+    sort(static_cast<position_t>(idx.value()));
 }
 
 void SegmentInMemoryImpl::sort(position_t idx) {

@@ -18,7 +18,7 @@ RC_GTEST_PROP(ColumnDataRandomAccessor, DenseSingleBlock, (const std::vector<int
     RC_PRE(input.size() > 0u);
     auto n = input.size();
     using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension ::Dim0>>;
-    Column column(static_cast<TypeDescriptor>(TDT{}), n, true, false);
+    Column column(static_cast<TypeDescriptor>(TDT{}), n, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
     RC_ASSERT(column.num_blocks() == 1);
     memcpy(column.ptr(), input.data(), n * sizeof(int64_t));
 
@@ -45,7 +45,7 @@ RC_GTEST_PROP(ColumnDataRandomAccessor, SparseSingleBlock, (const std::vector<in
     }
 
     using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension ::Dim0>>;
-    Column column(static_cast<TypeDescriptor>(TDT{}), on_bits, true, true);
+    Column column(static_cast<TypeDescriptor>(TDT{}), on_bits, AllocationType::PRESIZED, Sparsity::PERMITTED);
     RC_ASSERT(column.num_blocks() == 1);
     memcpy(column.ptr(), input.data(), on_bits * sizeof(int64_t));
     column.set_sparse_map(std::move(sparse_map));

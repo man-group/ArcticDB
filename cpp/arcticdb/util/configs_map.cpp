@@ -21,8 +21,4 @@ void ConfigsMap::init() {
 std::shared_ptr<ConfigsMap> ConfigsMap::instance_;
 std::once_flag ConfigsMap::init_flag_;
 
-void read_runtime_config(const RuntimeConfig& config) {
-    ConfigsMap::instance()->read_proto(config);
-}
-
 } //namespace arcticdb

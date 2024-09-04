@@ -290,6 +290,7 @@ def test_parallel_writes_and_appends_index_validation(arctic_library, finalize_m
         expected = pd.concat([df_0, df_1, df_2]) if finalize_method == StagedDataFinalizeMethod.APPEND else pd.concat([df_1, df_2])
         assert_frame_equal(received, expected)
 
+
 @pytest.mark.parametrize("finalize_method", (StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE))
 class TestFinalizeWithEmptySegments:
     def test_staged_segment_is_only_empty_dfs(self, arctic_library, finalize_method):

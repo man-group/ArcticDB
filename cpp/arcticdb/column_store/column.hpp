@@ -205,17 +205,21 @@ public:
 
     Column() : type_(null_type_descriptor()) {}
 
-    Column(TypeDescriptor type, bool allow_sparse) :
-        Column(type, 0, false, allow_sparse) {
+    Column(TypeDescriptor type) :
+        Column(type, 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED) {
     }
 
-    Column(TypeDescriptor type, bool allow_sparse, ChunkedBuffer&& buffer) :
+    Column(TypeDescriptor type, Sparsity allow_sparse) :
+        Column(type, 0, AllocationType::DYNAMIC, allow_sparse) {
+    }
+
+    Column(TypeDescriptor type, Sparsity allow_sparse, ChunkedBuffer&& buffer) :
         data_(std::move(buffer)),
         type_(type),
         allow_sparse_(allow_sparse) {
     }
 
-    Column(TypeDescriptor type, bool allow_sparse, ChunkedBuffer&& buffer, Buffer&& shapes) :
+    Column(TypeDescriptor type, Sparsity allow_sparse, ChunkedBuffer&& buffer, Buffer&& shapes) :
         data_(std::move(buffer)),
         shapes_(std::move(shapes)),
         type_(type),
@@ -225,8 +229,8 @@ public:
     Column(
         TypeDescriptor type,
         size_t expected_rows,
-        bool presize,
-        bool allow_sparse,
+        AllocationType presize,
+        Sparsity allow_sparse,
         DataTypeMode mode = DataTypeMode::INTERNAL) :
             data_(expected_rows * entity::data_type_size(type, mode), presize),
             type_(type),
@@ -431,10 +435,9 @@ public:
 
     bool has_value_at(position_t row) const;
 
-    void set_allow_sparse(bool value);
+    void set_allow_sparse(Sparsity value);
 
     void set_shapes_buffer(size_t row_count);
-
 
     // The following two methods inflate (reduplicate) numpy string arrays that are potentially multi-dimensional,
     // i.e where the value is not a string but an array of strings
@@ -925,7 +928,7 @@ private:
     ssize_t last_physical_row_ = -1;
 
     bool inflated_ = false;
-    bool allow_sparse_ = false;
+    Sparsity allow_sparse_ = Sparsity::NOT_PERMITTED;
 
     std::optional<util::BitMagic> sparse_map_;
     util::MagicNum<'D', 'C', 'o', 'l'> magic_;

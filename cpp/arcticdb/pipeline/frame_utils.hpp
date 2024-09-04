@@ -84,7 +84,7 @@ RawType* flatten_tensor(
         size_t slice_num,
         size_t regular_slice_size
         ) {
-    flattened_buffer = ChunkedBuffer::presized(rows_to_write * sizeof(RawType));
+    flattened_buffer = ChunkedBuffer::presized(rows_to_write * sizeof(RawType), entity::AllocationType::PRESIZED);
     TypedTensor<RawType> t(tensor, slice_num, regular_slice_size, rows_to_write);
     util::FlattenHelper flattener{t};
     auto dst = reinterpret_cast<RawType*>(flattened_buffer->data());
@@ -208,7 +208,7 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
             util::BitSet bitset = util::scan_object_type_to_sparse(ptr_data, rows_to_write);
 
             const auto num_values = bitset.count();
-            auto bool_buffer = ChunkedBuffer::presized(num_values * sizeof(uint8_t));
+            auto bool_buffer = ChunkedBuffer::presized(num_values * sizeof(uint8_t), entity::AllocationType::PRESIZED);
             auto bool_ptr = bool_buffer.ptr_cast<uint8_t>(0u, num_values);
             for (auto it = bitset.first(); it < bitset.end(); ++it) {
                 *bool_ptr = static_cast<uint8_t>(PyObject_IsTrue(ptr_data[*it]));
@@ -232,7 +232,7 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
                 // In that case we need to save the bitset so that we can distinguish empty array from None during the
                 // read.
                 if(values_bitset.size() == values_bitset.count()) {
-                    Column arr_col{TypeDescriptor{DataType::EMPTYVAL, Dimension::Dim2}, true};
+                    Column arr_col{TypeDescriptor{DataType::EMPTYVAL, Dimension::Dim2}, Sparsity::PERMITTED};
                     agg.set_sparse_block(col, arr_col.release_buffer(), arr_col.release_shapes(), std::move(values_bitset));
                     return std::optional<convert::StringEncodingError>();
                 }
@@ -241,7 +241,7 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
             ssize_t last_logical_row{0};
             const auto column_type_descriptor = TypeDescriptor{tensor.data_type(), Dimension::Dim2};
             TypeDescriptor secondary_type = type_desc;
-            Column arr_col{column_type_descriptor, true};
+            Column arr_col{column_type_descriptor, Sparsity::PERMITTED};
             for (auto en = values_bitset.first(); en < values_bitset.end(); ++en) {
                 const auto arr_pos = *en;
                 const auto row_tensor = convert::obj_to_tensor(ptr_data[arr_pos], false);

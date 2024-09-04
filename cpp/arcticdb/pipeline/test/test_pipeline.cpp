@@ -97,7 +97,7 @@ struct TestProjection {
         auto desc = segment.descriptor();
         auto fd = scalar_field(TDT::DataTypeTag::data_type, field_name_);
         desc.add_field(fd);
-        auto col_index = segment.add_column(fd, 0, false);
+        auto col_index = segment.add_column(fd, 0, AllocationType::DYNAMIC);
         auto& column = segment.column(col_index);
         for(auto&& row : folly::enumerate(segment)) {
             column.set_scalar(row.index, projection_func_(*row));

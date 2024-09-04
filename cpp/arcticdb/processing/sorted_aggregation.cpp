@@ -19,7 +19,7 @@ Column SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const 
                                                                           StringPool& string_pool) const {
     using IndexTDT = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
     auto common_input_type = generate_common_input_type(input_agg_columns);
-    Column res(TypeDescriptor(generate_output_data_type(common_input_type), Dimension::Dim0), output_index_column.row_count(), true, false);
+    Column res(TypeDescriptor(generate_output_data_type(common_input_type), Dimension::Dim0), output_index_column.row_count(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
     details::visit_type(
         res.type().data_type(),
         [this,

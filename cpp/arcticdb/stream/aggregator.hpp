@@ -131,12 +131,12 @@ private:
 
 class DenseColumnPolicy {
 public:
-    static constexpr bool allow_sparse = false;
+    static constexpr Sparsity allow_sparse = Sparsity::NOT_PERMITTED;
 };
 
 class SparseColumnPolicy {
 public:
-    static constexpr bool allow_sparse = true;
+    static constexpr Sparsity allow_sparse = Sparsity::PERMITTED;
 };
 
 using VariantColumnPolicy = std::variant<DenseColumnPolicy, SparseColumnPolicy>;
@@ -168,7 +168,7 @@ class Aggregator {
         //TODO presizing with expected rowsize  (using a rowcount segmenting policy) means that buffer sizes are always irregular, unless
         // the expected rowsize matches the column size, or some more clever logic is done so that if the row-count subdivides the buffer
         // size then you get default buffer sizes.
-        segment_(desc.value_or(schema_policy_.default_descriptor()), row_count.value_or(segmenting_policy_.expected_row_size()), false, SparsePolicy::allow_sparse) {
+        segment_(desc.value_or(schema_policy_.default_descriptor()), row_count.value_or(segmenting_policy_.expected_row_size()), AllocationType::DYNAMIC, SparsePolicy::allow_sparse) {
             segment_.init_column_map();
             if constexpr (!(std::is_same_v<Index, EmptyIndex> || std::is_same_v<Index, RowCountIndex>)) {
                 index().check(segment_.descriptor().fields());
@@ -236,10 +236,6 @@ class Aggregator {
 
     void set_string_at(position_t col, position_t row, const char* val, size_t size) {
         segment_.set_string_at(col, row, val, size);
-    }
-
-    void set_no_string_at(position_t col, position_t row, position_t placeholder) {
-        segment_.set_no_string_at(col, row, placeholder);
     }
 
     void set_offset(ssize_t offset) {

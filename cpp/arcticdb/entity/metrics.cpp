@@ -8,6 +8,7 @@
 #include <arcticdb/entity/metrics.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/util/pb_util.hpp>
+#include <folly/gen/Base.h>
 
 #ifdef _WIN32
 #    include <Winsock.h> // for gethostname
@@ -95,110 +96,136 @@ namespace arcticdb {
         configured_ = true;
     }
 
-    // new mechanism, labels at runtime
     void PrometheusInstance::registerMetric(
             prometheus::MetricType type,
             const std::string& name,
             const std::string& help,
-            const std::map<std::string, std::string>& staticLabels,
+            const Labels& labels,
             const std::vector<double>& buckets_list
     ) {
         if (registry_.use_count() == 0) {
             return;
         }
 
+        std::scoped_lock lock{metrics_mutex_};
+        bool inserted{false};
         if (type == prometheus::MetricType::Counter) {
-            // Counter is actually a unique_ptr object which has a life of registry
-            map_counter_[name] = &prometheus::BuildCounter()
+            inserted = map_counter_.insert({name, &prometheus::BuildCounter()
                     .Name(name)
                     .Help(help)
-                    .Labels(staticLabels)
-                    .Register(*registry_);
+                    .Labels(labels)
+                    .Register(*registry_)}).second;
         } else if (type == prometheus::MetricType::Gauge) {
-            map_gauge_[name] = &prometheus::BuildGauge()
+            inserted = map_gauge_.insert({name, &prometheus::BuildGauge()
                     .Name(name)
                     .Help(help)
-                    .Labels(staticLabels)
-                    .Register(*registry_);
+                    .Labels(labels)
+                    .Register(*registry_)}).second;
         } else if (type == prometheus::MetricType::Histogram) {
-            map_histogram_[name].histogram = &prometheus::BuildHistogram()
+            inserted = map_histogram_.insert({name, HistogramInfo{&prometheus::BuildHistogram()
                     .Name(name)
                     .Help(help)
-                    .Labels(staticLabels)
-                    .Register(*registry_);
-            map_histogram_[name].buckets_list = buckets_list;
+                    .Labels(labels)
+                    .Register(*registry_), buckets_list}}).second;
         } else if (type == prometheus::MetricType::Summary) {
-            map_summary_[name] = &prometheus::BuildSummary()
+            inserted = map_summary_.insert({name, &prometheus::BuildSummary()
                     .Name(name)
                     .Help(help)
-                    .Labels(staticLabels)
-                    .Register(*registry_);
+                    .Labels(labels)
+                    .Register(*registry_)}).second;
         } else {
-            arcticdb::log::version().warn("Unsupported metric type");
+            util::raise_rte("Unsupported metric type");
         }
+        util::check(inserted, "Expected to register metric {} but was already present", name);
 }
 
-void PrometheusInstance::incrementCounter(const std::string& name, double value, const std::map<std::string, std::string>& labels) {
+void PrometheusInstance::incrementCounter(const std::string& name, double value, const Labels& labels) {
     if (registry_.use_count() == 0)
         return;
 
-    if (map_counter_.count(name) != 0) {
-        // Add returns Counter&
-        map_counter_[name]->Add(labels).Increment(value);
+    std::scoped_lock lock{metrics_mutex_};
+    if (const auto it = map_counter_.find(name); it != map_counter_.end()) {
+        Counter* counter = &it->second->Add(labels);
+        all_counters_.insert({{name, labels}, counter});
+        counter->Increment(value);
     } else {
         arcticdb::log::version().warn("Unregistered counter metric {}", name);
     }
 }
-void PrometheusInstance::setGauge(const std::string& name, double value, const std::map<std::string, std::string>& labels) {
+
+void PrometheusInstance::incrementCounter(const std::string& name, const Labels& labels) {
     if (registry_.use_count() == 0)
         return;
 
-    if (map_gauge_.count(name) != 0) {
-        map_gauge_[name]->Add(labels).Set(value);
+    std::scoped_lock lock{metrics_mutex_};
+    if (const auto it = map_counter_.find(name); it != map_counter_.end()) {
+        Counter* counter = &it->second->Add(labels);
+        all_counters_.insert({{name, labels}, counter});
+        counter->Increment();
+    } else {
+        arcticdb::log::version().warn("Unregistered counter metric {}", name);
+    }
+}
+
+void PrometheusInstance::setGauge(const std::string& name, double value, const Labels& labels) {
+    if (registry_.use_count() == 0)
+        return;
+
+    std::scoped_lock lock{metrics_mutex_};
+    if (const auto it = map_gauge_.find(name); it != map_gauge_.end()) {
+        Gauge* gauge = &it->second->Add(labels);
+        all_gauges_.insert({{name, labels}, gauge});
+        gauge->Set(value);
     } else {
         arcticdb::log::version().warn("Unregistered gauge metric {}", name);
     }
 }
-void PrometheusInstance::setGaugeCurrentTime(const std::string& name, const std::map<std::string, std::string>& labels) {
+
+void PrometheusInstance::setGaugeCurrentTime(const std::string& name, const Labels& labels) {
     if (registry_.use_count() == 0)
         return;
 
-    if (map_gauge_.count(name) != 0) {
-        map_gauge_[name]->Add(labels).SetToCurrentTime();
+    std::scoped_lock lock{metrics_mutex_};
+    if (const auto it = map_gauge_.find(name); it != map_gauge_.end()) {
+        Gauge* gauge = &it->second->Add(labels);
+        all_gauges_.insert({{name, labels}, gauge});
+        gauge->SetToCurrentTime();
     } else {
         arcticdb::log::version().warn("Unregistered gauge metric {}", name);
     }
 }
-void PrometheusInstance::observeHistogram(const std::string& name, double value, const std::map<std::string, std::string>& labels) {
+
+void PrometheusInstance::observeHistogram(const std::string& name, double value, const Labels& labels) {
     if (registry_.use_count() == 0)
         return;
-    if (auto it=map_histogram_.find(name); it != map_histogram_.end()) {
-        it->second.histogram->Add(labels, it->second.buckets_list).Observe(value);
+
+    std::scoped_lock lock{metrics_mutex_};
+    if (const auto it=map_histogram_.find(name); it != map_histogram_.end()) {
+        Histogram* histogram = &it->second.histogram_->Add(labels, it->second.buckets_list_);
+        all_histograms_.insert({{name, labels}, histogram});
+        histogram->Observe(value);
     } else {
         arcticdb::log::version().warn("Unregistered Histogram metric {}", name);
     }
 }
-void PrometheusInstance::DeleteHistogram(const std::string& name, const std::map<std::string, std::string>& labels) {
+
+void PrometheusInstance::observeSummary(const std::string& name, double value, const Labels& labels) {
     if (registry_.use_count() == 0)
         return;
 
-    if (auto it=map_histogram_.find(name); it != map_histogram_.end()) {
-        it->second.histogram->Remove(&it->second.histogram->Add(labels, it->second.buckets_list));
-    } else {
-        arcticdb::log::version().warn("Unregistered Histogram metric {}", name);
-    }
-}
-void PrometheusInstance::observeSummary(const std::string& name, double value, const std::map<std::string, std::string>& labels) {
-    if (registry_.use_count() == 0)
-        return;
-
-    if (map_summary_.count(name) != 0) {
-        //TODO DMK quantiles
-        map_summary_[name]->Add(labels,Summary::Quantiles{ {0.1, 0.05}, {0.2, 0.05}, {0.3, 0.05}, {0.4, 0.05}, {0.5, 0.05}, {0.6, 0.05}, {0.7, 0.05}, {0.8, 0.05}, {0.9, 0.05}, {0.9, 0.05}, {1.0, 0.05}}, std::chrono::seconds{SUMMARY_MAX_AGE}, SUMMARY_AGE_BUCKETS).Observe(value);
+    std::scoped_lock lock{metrics_mutex_};
+    if (const auto it = map_summary_.find(name); it != map_summary_.end()) {
+        Summary* summary = &it->second->Add(
+            labels,
+            Summary::Quantiles{ {0.1, 0.05}, {0.2, 0.05}, {0.3, 0.05}, {0.4, 0.05}, {0.5, 0.05}, {0.6, 0.05}, {0.7, 0.05}, {0.8, 0.05}, {0.9, 0.05}, {0.9, 0.05}, {1.0, 0.05}},
+            std::chrono::seconds{SUMMARY_MAX_AGE}, SUMMARY_AGE_BUCKETS);
+        all_summaries_.insert({{name, labels}, summary});
+        summary->Observe(value);
     } else {
         arcticdb::log::version().warn("Unregistered summary metric {}", name);
     }
 }
+
 std::string PrometheusInstance::getHostName() {
     char hostname[1024];
     if (::gethostname(hostname, sizeof(hostname))) {
@@ -215,5 +242,9 @@ int PrometheusInstance::push() {
     }
 }
 
-} // Namespace arcticdb
+std::vector<prometheus::MetricFamily> PrometheusInstance::get_metrics() {
+    util::check(registry_, "registry_ not set");
+    return registry_->Collect();
+}
 
+} // Namespace arcticdb

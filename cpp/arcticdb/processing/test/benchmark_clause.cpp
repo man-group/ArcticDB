@@ -115,7 +115,7 @@ void BM_hash_grouping_int(benchmark::State& state) {
     }
 
     constexpr auto data_type = data_type_from_raw_type<integer>();
-    Column column(make_scalar_type(data_type), num_rows, true, false);
+    Column column(make_scalar_type(data_type), num_rows, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
     memcpy(column.ptr(), data.data(), num_rows * sizeof(integer));
     column.set_row_data(num_rows - 1);
     ColumnWithStrings col_with_strings(std::move(column), {}, "random_ints");
@@ -151,7 +151,7 @@ void BM_hash_grouping_string(benchmark::State& state) {
 
     std::uniform_int_distribution<size_t> unique_values_dis(0, num_unique_values - 1);
 
-    Column column(make_scalar_type(DataType::UTF_DYNAMIC64), false);
+    Column column(make_scalar_type(DataType::UTF_DYNAMIC64), Sparsity::NOT_PERMITTED);
     auto string_pool = std::make_shared<StringPool>();
     for (auto idx = 0; idx < num_rows; ++idx) {
         std::string_view str{unique_values[unique_values_dis(gen)]};

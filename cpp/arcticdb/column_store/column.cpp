@@ -144,7 +144,7 @@ bool Column::is_sparse() const {
 }
 
 bool Column::sparse_permitted() const {
-    return allow_sparse_;
+    return allow_sparse_ == Sparsity::PERMITTED;
 }
 
 ssize_t Column::last_row() const {
@@ -163,7 +163,7 @@ void Column::unsparsify(size_t num_rows) {
         using TagType = decltype(tdt);
         using RawType = typename TagType::DataTypeTag::raw_type;
         const auto dest_bytes = num_rows * sizeof(RawType);
-        auto dest = ChunkedBuffer::presized(dest_bytes);
+        auto dest = ChunkedBuffer::presized(dest_bytes, entity::AllocationType::PRESIZED);
         util::default_initialize<TagType>(dest.data(), dest_bytes);
         util::expand_dense_buffer_using_bitmap<RawType>(sparse_map_.value(), data_.buffer().data(), dest.data());
         std::swap(dest, data_.buffer());
@@ -446,7 +446,7 @@ bool Column::has_value_at(position_t row) const {
     return !is_sparse() || sparse_map().get_bit(bv_size(row));
 }
 
-void Column::set_allow_sparse(bool value) {
+void Column::set_allow_sparse(Sparsity value) {
     allow_sparse_ = value;
 }
 

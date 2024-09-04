@@ -131,7 +131,7 @@ void StringPool::advance_shapes(size_t) {
     // Not used
 }
 
-void StringPool::set_allow_sparse(bool) {
+void StringPool::set_allow_sparse(Sparsity) {
     // Not used
 }
 

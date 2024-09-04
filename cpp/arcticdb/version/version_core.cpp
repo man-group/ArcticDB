@@ -291,7 +291,7 @@ VersionedItem delete_range_impl(
     return versioned_item;
 }
 
-void sorted_data_check_update(InputTensorFrame& frame, const index::IndexSegmentReader& index_segment_reader){
+void check_update_data_is_sorted(InputTensorFrame& frame, const index::IndexSegmentReader& index_segment_reader){
     bool is_time_series = std::holds_alternative<stream::TimeseriesIndex>(frame.index);
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
         is_time_series,
@@ -327,7 +327,7 @@ VersionedItem update_impl(
         index_desc.type() == IndexDescriptor::Type::TIMESTAMP || index_desc.type() == IndexDescriptor::Type::EMPTY,
         "Update not supported for non-timeseries indexes"
     );
-    sorted_data_check_update(*frame, index_segment_reader);
+    check_update_data_is_sorted(*frame, index_segment_reader);
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
     (void)check_and_mark_slices(index_segment_reader, dynamic_schema, false, std::nullopt, bucketize_dynamic);
     fix_descriptor_mismatch_or_throw(UPDATE, dynamic_schema, index_segment_reader, *frame, empty_types);
@@ -972,12 +972,12 @@ void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<PipelineC
                 // Should never reach "" but the standard mandates that all function arguments are evaluated
                 last_existing_index_value ? date_and_time(*last_existing_index_value) : ""
             );
-            auto [_, inserted] = unique_timestamp_ranges.insert({key.start_time(), key.end_time()});
+            auto [_, inserted] = unique_timestamp_ranges.emplace(key.start_time(), key.end_time());
             // This is correct because incomplete segments aren't column sliced
             sorting::check<ErrorCode::E_UNSORTED_DATA>(
-                inserted,
-                "Cannot finalize staged data as 2 or more incomplete segments cover identical index values (in UTC): ({}, {})",
-                date_and_time(key.start_time()), date_and_time(key.end_time()));
+                    inserted,
+                    "Cannot finalize staged data as 2 or more incomplete segments cover identical index values (in UTC): ({}, {})",
+                    date_and_time(key.start_time()), date_and_time(key.end_time()));
         };
         for (auto it = unique_timestamp_ranges.begin(); it != unique_timestamp_ranges.end(); it++) {
             auto next_it = std::next(it);

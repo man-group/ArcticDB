@@ -76,7 +76,7 @@ VariantData unary_operator(const ColumnWithStrings& col, Func&& func) {
         if constexpr (is_numeric_type(type_info::data_type)) {
             using TargetType = typename unary_arithmetic_promoted_type<typename type_info::RawType, std::remove_reference_t<Func>>::type;
             constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
-            output_column = std::make_unique<Column>(make_scalar_type(output_data_type), true);
+            output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
             Column::transform<typename type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(*(col.column_),
                                                                                                      *output_column,
                                                                                                      [&func](auto input_value) -> TargetType {

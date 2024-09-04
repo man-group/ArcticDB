@@ -139,7 +139,7 @@ std::size_t decode_ndarray(
             const auto bitmap_size = field.sparse_map_bytes() - util::combined_bit_magic_delimiters_size();
             bv = util::deserialize_bytes_to_bitmap(data_in, bitmap_size);
             util::check_magic<util::BitMagicEnd>(data_in);
-            data_sink.set_allow_sparse(true);
+            data_sink.set_allow_sparse(Sparsity::PERMITTED);
         }
 
         read_bytes = encoding_sizes::ndarray_field_compressed_size(field);

@@ -121,10 +121,6 @@ public:
             return parent_->reference_at<RawType>(row_id_, column_id_);
         }
 
-        [[nodiscard]] auto& get_field() const {
-            return parent_->descriptor().field(column_id_);
-        }
-
         bool operator==(const Location &other) const {
             return row_id_ == other.row_id_ && column_id_ == other.column_id_;
         }
@@ -209,8 +205,6 @@ public:
             });
         }
 
-        [[nodiscard]] size_t col_count() const { return parent_->num_columns(); }
-
         [[nodiscard]] size_t row_pos() const { return row_id_; }
 
         template<class IndexType>
@@ -260,10 +254,6 @@ public:
 
         bool operator==(const Row &other) const {
             return row_id_ == other.row_id_ && parent_ == other.parent_;
-        }
-
-        void assert_same_parent(const Row &other) const {
-            util::check(parent_ == other.parent_, "Invalid iterator comparison, different parents");
         }
 
         void swap_parent(const Row &other) {
@@ -374,8 +364,8 @@ public:
     explicit SegmentInMemoryImpl(
         const StreamDescriptor& desc,
         size_t expected_column_size,
-        bool presize,
-        bool allow_sparse,
+        AllocationType presize,
+        Sparsity allow_sparse,
         DataTypeMode mode = DataTypeMode::INTERNAL);
 
     ~SegmentInMemoryImpl();
@@ -403,15 +393,15 @@ public:
     void create_columns(
         size_t old_size,
         size_t expected_column_size,
-        bool presize,
-        bool allow_sparse,
+        AllocationType presize,
+        Sparsity allow_sparse,
         DataTypeMode mode);
 
     size_t on_descriptor_change(
         const StreamDescriptor &descriptor,
         size_t expected_column_size,
-        bool presize,
-        bool allow_sparse,
+        AllocationType presize,
+        Sparsity allow_sparse,
         DataTypeMode mode
         );
 
@@ -522,10 +512,6 @@ public:
         column_unchecked(col).set_scalar(row, ofstr.offset());
     }
 
-    void set_no_string_at(position_t col, position_t row, position_t placeholder) {
-        column_unchecked(col).set_scalar(row, placeholder);
-    }
-
     void set_string_array(position_t idx, size_t string_size, size_t num_strings, char *data) {
         check_column_index(idx);
         column_unchecked(idx).set_string_array(row_id_ + 1, string_size, num_strings, data, string_pool());
@@ -589,17 +575,14 @@ public:
 
     void concatenate(SegmentInMemoryImpl&& other, bool unique_column_names);
 
-    util::BitSet get_duplicates_bitset(SegmentInMemoryImpl& other);
-    bool is_row_duplicate(const SegmentInMemoryImpl::Row& row);
-
     void sort(const std::string& column);
     void sort(position_t idx);
 
     position_t add_column(const Field &field, const std::shared_ptr<Column>& column);
 
-    position_t add_column(const Field &field, size_t num_rows, bool presize);
+    position_t add_column(const Field &field, size_t num_rows, AllocationType presize);
 
-    position_t add_column(FieldRef field, size_t num_rows, bool presize);
+    position_t add_column(FieldRef field, size_t num_rows, AllocationType presize);
 
     position_t add_column(FieldRef field_ref, const std::shared_ptr<Column>& column);
 
@@ -711,18 +694,10 @@ public:
         row_id_ = rid;
     }
 
-    ssize_t get_row_id() const {
-        return row_id_;
-    }
-
     void set_row_data(ssize_t rid) {
         set_row_id(rid);
         for(const auto& column : columns())
             column->set_row_data(row_id_);
-    }
-
-    void string_pool_assign(const SegmentInMemoryImpl& other) {
-        string_pool_ = other.string_pool_;
     }
 
     StringPool &string_pool() { return *string_pool_; } //TODO protected
@@ -752,7 +727,7 @@ public:
     friend bool operator==(const SegmentInMemoryImpl& left, const SegmentInMemoryImpl& right);
 
     bool allow_sparse() const{
-        return allow_sparse_;
+        return allow_sparse_ == Sparsity::PERMITTED;
     }
 
     // TODO: Very slow, fix this by storing it in protobuf
@@ -776,11 +751,6 @@ public:
 
     bool has_index_descriptor() const {
         return tsd_.has_value();
-    }
-
-    TimeseriesDescriptor&& detach_index_descriptor() {
-        util::check(tsd_.has_value(), "No index descriptor on segment");
-        return std::move(*tsd_);
     }
 
     void set_timeseries_descriptor(const TimeseriesDescriptor& tsd);
@@ -826,7 +796,7 @@ private:
     std::unique_ptr<google::protobuf::Any> metadata_;
     mutable std::shared_ptr<ColumnMap> column_map_;
     mutable std::unique_ptr<std::mutex> column_map_mutex_ = std::make_unique<std::mutex>();
-    bool allow_sparse_ = false;
+    Sparsity allow_sparse_ = Sparsity::NOT_PERMITTED;
     bool compacted_ = false;
     util::MagicNum<'M', 'S', 'e', 'g'> magic_;
     std::optional<TimeseriesDescriptor> tsd_;
@@ -834,11 +804,11 @@ private:
 
 namespace {
 inline std::shared_ptr<SegmentInMemoryImpl> allocate_sparse_segment(const StreamId& id, const IndexDescriptorImpl& index) {
-    return std::make_shared<SegmentInMemoryImpl>(StreamDescriptor{id, index}, 0, false, true);
+    return std::make_shared<SegmentInMemoryImpl>(StreamDescriptor{id, index}, 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
 }
 
 inline std::shared_ptr<SegmentInMemoryImpl> allocate_dense_segment(const StreamDescriptor& descriptor, size_t row_count) {
-    return std::make_shared<SegmentInMemoryImpl>(descriptor, row_count, true, false);
+    return std::make_shared<SegmentInMemoryImpl>(descriptor, row_count, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
 }
 } // namespace anon
 
