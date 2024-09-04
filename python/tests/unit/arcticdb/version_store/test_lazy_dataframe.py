@@ -286,10 +286,8 @@ def test_lazy_batch_separate_queries_collect_together(lmdb_library):
     for sym in syms:
         lib.write(sym, df)
     lazy_dfs = lib.read_batch(syms, lazy=True).split()
-    lazy_df_0 = lazy_dfs[0]
-    lazy_df_2 = lazy_dfs[2]
-    lazy_df_0 = lazy_df_0[lazy_df_0["col1"].isin(0, 3, 6, 9)]
-    lazy_df_2 = lazy_df_2[lazy_df_2["col1"].isin(2, 4, 8)]
+    lazy_dfs[0] = lazy_dfs[0][lazy_dfs[0]["col1"].isin(0, 3, 6, 9)]
+    lazy_dfs[2] = lazy_dfs[2][lazy_dfs[2]["col1"].isin(2, 4, 8)]
     expected_0 = df.query("col1 in [0, 3, 6, 9]")
     expected_1 = df
     expected_2 = df.query("col1 in [2, 4, 8]")

@@ -390,6 +390,11 @@ class QueryBuilder:
     """
 
     def __init__(self):
+        # Note that these lists will be modified using + rather than append so that operations like this work:
+        # q = QueryBuilder()
+        # q_copy = q
+        # q = q[q["col"] == 0]
+        # without modifying q_copy
         self.clauses = []
         # This is hacky, but the alternative is implementing pickle for the C++ classes of all the clauses, and the tree
         # of classes these depend on, which is A LOT
@@ -442,8 +447,8 @@ class QueryBuilder:
             Modified QueryBuilder object.
         """
         input_columns, expression_context = visit_expression(expr)
-        self.clauses.append(_ProjectClause(input_columns, name, expression_context))
-        self._python_clauses.append(PythonProjectionClause(name, expr))
+        self.clauses = self.clauses + [_ProjectClause(input_columns, name, expression_context)]
+        self._python_clauses = self._python_clauses + [PythonProjectionClause(name, expr)]
         return self
 
     def groupby(self, name: str):
@@ -544,8 +549,8 @@ class QueryBuilder:
         QueryBuilder
             Modified QueryBuilder object.
         """
-        self.clauses.append(_GroupByClause(name))
-        self._python_clauses.append(PythonGroupByClause(name))
+        self.clauses = self.clauses + [_GroupByClause(name)]
+        self._python_clauses = self._python_clauses + [PythonGroupByClause(name)]
         return self
 
     def agg(self, aggregations: Dict[str, Union[str, Tuple[str, str]]]):
@@ -566,8 +571,8 @@ class QueryBuilder:
                 aggregations[k] = (v[0], v[1].lower())
 
         if isinstance(self.clauses[-1], _GroupByClause):
-            self.clauses.append(_AggregationClause(self.clauses[-1].grouping_column, aggregations))
-            self._python_clauses.append(PythonAggregationClause(aggregations))
+            self.clauses = self.clauses + [_AggregationClause(self.clauses[-1].grouping_column, aggregations)]
+            self._python_clauses = self._python_clauses + [PythonAggregationClause(aggregations)]
         else:
             self.clauses[-1].set_aggregations(aggregations)
             self._python_clauses[-1].aggregations = aggregations
@@ -745,10 +750,10 @@ class QueryBuilder:
         check(closed in boundary_map.keys(), f"closed kwarg to resample must be `left`, 'right', or None, but received '{closed}'")
         check(label in boundary_map.keys(), f"label kwarg to resample must be `left`, 'right', or None, but received '{closed}'")
         if boundary_map[closed] == _ResampleBoundary.LEFT:
-            self.clauses.append(_ResampleClauseLeftClosed(rule, boundary_map[label], offset_ns))
+            self.clauses = self.clauses + [_ResampleClauseLeftClosed(rule, boundary_map[label], offset_ns)]
         else:
-            self.clauses.append(_ResampleClauseRightClosed(rule, boundary_map[label], offset_ns))
-        self._python_clauses.append(PythonResampleClause(rule=rule, closed=boundary_map[closed], label=boundary_map[label], offset=offset_ns))
+            self.clauses = self.clauses + [_ResampleClauseRightClosed(rule, boundary_map[label], offset_ns)]
+        self._python_clauses = self._python_clauses + [PythonResampleClause(rule=rule, closed=boundary_map[closed], label=boundary_map[label], offset=offset_ns)]
         return self
 
     def is_resample(self):
@@ -780,8 +785,8 @@ class QueryBuilder:
             not len(other.clauses) or not isinstance(other.clauses[0], (_DateRangeClause, _ResampleClauseLeftClosed, _ResampleClauseRightClosed)),
             "In QueryBuilder.then: Date range and Resample only supported as first clauses in the pipeline",
         )
-        self.clauses.extend(other.clauses)
-        self._python_clauses.extend(other._python_clauses)
+        self.clauses = self.clauses + other.clauses
+        self._python_clauses = self._python_clauses + other._python_clauses
         return self
 
     # TODO: specify type of other must be QueryBuilder with from __future__ import annotations once only Python 3.7+
@@ -810,14 +815,14 @@ class QueryBuilder:
 
     def _head(self, n: int):
         check(not len(self.clauses), "Head only supported as first clause in the pipeline")
-        self.clauses.append(_RowRangeClause(_RowRangeType.HEAD, n))
-        self._python_clauses.append(PythonRowRangeClause(row_range_type=_RowRangeType.HEAD, n=n))
+        self.clauses = self.clauses + [_RowRangeClause(_RowRangeType.HEAD, n)]
+        self._python_clauses = self._python_clauses + [PythonRowRangeClause(row_range_type=_RowRangeType.HEAD, n=n)]
         return self
 
     def _tail(self, n: int):
         check(not len(self.clauses), "Tail only supported as first clause in the pipeline")
-        self.clauses.append(_RowRangeClause(_RowRangeType.TAIL, n))
-        self._python_clauses.append(PythonRowRangeClause(row_range_type=_RowRangeType.TAIL, n=n))
+        self.clauses = self.clauses + [_RowRangeClause(_RowRangeType.TAIL, n)]
+        self._python_clauses = self._python_clauses + [PythonRowRangeClause(row_range_type=_RowRangeType.TAIL, n=n)]
         return self
 
     def _row_range(self, row_range):
@@ -825,8 +830,8 @@ class QueryBuilder:
         start = row_range[0]
         end = row_range[1]
 
-        self.clauses.append(_RowRangeClause(start, end))
-        self._python_clauses.append(PythonRowRangeClause(start=start, end=end))
+        self.clauses = self.clauses + [_RowRangeClause(start, end)]
+        self._python_clauses = self._python_clauses + [PythonRowRangeClause(start=start, end=end)]
         return self
 
     def date_range(self, date_range: DateRangeInput):
@@ -853,8 +858,8 @@ class QueryBuilder:
         """
         check(not len(self.clauses), "Date range only supported as first clause in the pipeline")
         start, end = normalize_dt_range_to_ts(date_range)
-        self.clauses.append(_DateRangeClause(start.value, end.value))
-        self._python_clauses.append(PythonDateRangeClause(start.value, end.value))
+        self.clauses = self.clauses + [_DateRangeClause(start.value, end.value)]
+        self._python_clauses = self._python_clauses + [PythonDateRangeClause(start.value, end.value)]
         return self
 
     def __eq__(self, right):
@@ -875,8 +880,8 @@ class QueryBuilder:
                 item = ExpressionNode.compose(item, _OperationType.IDENTITY, None)
             input_columns, expression_context = visit_expression(item)
             self_copy = copy.deepcopy(self)
-            self_copy.clauses.append(_FilterClause(input_columns, expression_context, self_copy._optimisation))
-            self_copy._python_clauses.append(PythonFilterClause(item))
+            self_copy.clauses = self.clauses + [_FilterClause(input_columns, expression_context, self_copy._optimisation)]
+            self_copy._python_clauses = self_copy._python_clauses + [PythonFilterClause(item)]
             return self_copy
 
     def __setitem__(self, key, item):
@@ -896,28 +901,28 @@ class QueryBuilder:
         for python_clause in self._python_clauses:
             if isinstance(python_clause, PythonFilterClause):
                 input_columns, expression_context = visit_expression(python_clause.expr)
-                self.clauses.append(_FilterClause(input_columns, expression_context, self._optimisation))
+                self.clauses = self.clauses + [_FilterClause(input_columns, expression_context, self._optimisation)]
             elif isinstance(python_clause, PythonProjectionClause):
                 input_columns, expression_context = visit_expression(python_clause.expr)
-                self.clauses.append(_ProjectClause(input_columns, python_clause.name, expression_context))
+                self.clauses = self.clauses + [_ProjectClause(input_columns, python_clause.name, expression_context)]
             elif isinstance(python_clause, PythonGroupByClause):
-                self.clauses.append(_GroupByClause(python_clause.name))
+                self.clauses = self.clauses + [_GroupByClause(python_clause.name)]
             elif isinstance(python_clause, PythonAggregationClause):
-                self.clauses.append(_AggregationClause(self.clauses[-1].grouping_column, python_clause.aggregations))
+                self.clauses = self.clauses + [_AggregationClause(self.clauses[-1].grouping_column, python_clause.aggregations)]
             elif isinstance(python_clause, PythonResampleClause):
                 if python_clause.closed == _ResampleBoundary.LEFT:
-                    self.clauses.append(_ResampleClauseLeftClosed(python_clause.rule, python_clause.label, python_clause.offset))
+                    self.clauses = self.clauses + [_ResampleClauseLeftClosed(python_clause.rule, python_clause.label, python_clause.offset)]
                 else:
-                    self.clauses.append(_ResampleClauseRightClosed(python_clause.rule, python_clause.label, python_clause.offset))
+                    self.clauses = self.clauses + [_ResampleClauseRightClosed(python_clause.rule, python_clause.label, python_clause.offset)]
                 if python_clause.aggregations is not None:
                     self.clauses[-1].set_aggregations(python_clause.aggregations)
             elif isinstance(python_clause, PythonRowRangeClause):
                 if python_clause.start is not None and python_clause.end is not None:
-                    self.clauses.append(_RowRangeClause(python_clause.start, python_clause.end))
+                    self.clauses = self.clauses + [_RowRangeClause(python_clause.start, python_clause.end)]
                 else:
-                    self.clauses.append(_RowRangeClause(python_clause.row_range_type, python_clause.n))
+                    self.clauses = self.clauses + [_RowRangeClause(python_clause.row_range_type, python_clause.n)]
             elif isinstance(python_clause, PythonDateRangeClause):
-                self.clauses.append(_DateRangeClause(python_clause.start, python_clause.end))
+                self.clauses = self.clauses + [_DateRangeClause(python_clause.start, python_clause.end)]
             else:
                 raise ArcticNativeException(
                     f"Unrecognised clause type {type(python_clause)} when unpickling QueryBuilder"

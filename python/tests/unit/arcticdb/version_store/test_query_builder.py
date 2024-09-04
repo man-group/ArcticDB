@@ -17,6 +17,21 @@ from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.util.test import assert_frame_equal
 
 
+def test_querybuilder_getitem_idempotency(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_querybuilder_getitem_idempotency"
+    df = pd.DataFrame({"a": [0, 1]}, index=np.arange(2))
+    lib.write(sym, df)
+    q = QueryBuilder()
+    q_copy = q
+    q = q[q["a"] == 1]
+    q_copy = q_copy[q_copy["a"] == 0]
+    expected = df[df["a"] == 1]
+    expected_copy = df[df["a"] == 0]
+    assert_frame_equal(expected, lib.read(sym, query_builder=q).data)
+    assert_frame_equal(expected_copy, lib.read(sym, query_builder=q_copy).data)
+
+
 def test_querybuilder_shallow_copy(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     sym = "test_querybuilder_shallow_copy"
