@@ -16,6 +16,7 @@ enable_testing()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(ARCTICDB_MSVC_OMIT_RUNTIME_CHECKS OFF CACHE BOOL "")
+set(ARCTICDB_USE_PCH OFF CACHE BOOL "Whether to use precompiled headers")
 option(
     ARCTICDB_USING_CONDA
     "Whether ArcticDB's build system relies on conda for resolving its dependencies."

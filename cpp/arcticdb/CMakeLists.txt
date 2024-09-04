@@ -507,6 +507,126 @@ set(arcticdb_srcs
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
+if(${ARCTICDB_USE_PCH})
+    message(STATUS "Using precompiled headers for target arcticdb_core_object")
+    set(BASE_PCH
+        # STL
+        <memory>
+        <cstdint>
+        <unordered_map>
+        <vector>
+        <stdexcept>
+        <string>
+        <array>
+        <variant>
+        <optional>
+        <type_traits>
+        <cstddef>
+        <climits>
+        <mutex>
+        <string_view>
+        <chrono>
+        <atomic>
+        <limits>
+        <cstdlib>
+        <utility>
+        <iomanip>
+        <sstream>
+        <ctime>
+        <map>
+        <unordered_set>
+        <iostream>
+        <cassert>
+        <functional>
+        <list>
+        <random>
+        <fstream>
+        <any>
+        <cstdio>
+        <algorithm>
+        <queue>
+        <exception>
+        <deque>
+        <ranges>
+        <shared_mutex>
+        <set>
+        <thread>
+        <filesystem>
+        <typeinfo>
+        <concepts>
+        <numeric>
+
+        # Boost
+        <boost/iterator_adaptors.hpp>
+        <boost/circular_buffer.hpp>
+        <boost/core/noncopyable.hpp>
+        <boost/algorithm/string.hpp>
+        <boost/container/small_vector.hpp>
+        <boost/iterator/iterator_facade.hpp>
+        <boost/noncopyable.hpp>
+
+        # Python
+        # TODO: Won't be needed when we move all python conde to handlers outside of the core
+        <Python.h>
+        <pybind11/stl.h>
+        <pybind11/pybind11.h>
+        <pybind11/numpy.h>
+
+        # Proto
+        <google/protobuf/io/zero_copy_stream_impl.h>
+        <google/protobuf/text_format.h>
+        <google/protobuf/any.pb.h>
+        <google/protobuf/any.h>
+        <google/protobuf/util/message_differencer.h>
+        <google/protobuf/arena.h>
+
+        # Proto generated
+        <descriptors.pb.h>
+        <storage.pb.h>
+        <lmdb_storage.pb.h>
+        <mapped_file_storage.pb.h>
+        <encoding.pb.h>
+        <in_memory_storage.pb.h>
+        <mongo_storage.pb.h>
+        <s3_storage.pb.h>
+        <utils.pb.h>
+        <config.pb.h>
+        <azure_storage.pb.h>
+        <nfs_backed_storage.pb.h>
+
+        # Folly
+        <folly/Function.h>
+        <folly/hash/Hash.h>
+        <folly/Range.h>
+        <folly/container/Enumerate.h>
+        <folly/Poly.h>
+        <folly/ScopeGuard.h>
+        <folly/portability/Time.h>
+        <folly/gen/Base.h>
+
+
+        # FMT
+        <fmt/core.h>
+        <fmt/format.h>
+        <fmt/compile.h>
+        <fmt/std.h>
+
+        # SPD Log
+        <spdlog/spdlog.h>
+
+        # Bit Magic
+        <bitmagic/bm.h>
+        <bitmagic/bmserial.h>
+
+        # Misc
+        <ankerl/unordered_dense.h>
+        <third_party/recycle/src/recycle/shared_pool.hpp>
+        <xxhash.h>
+        <pcre.h>
+    )
+    target_precompile_headers(arcticdb_core_object PRIVATE ${BASE_PCH})
+endif()
+
 if (WIN32)
     target_compile_options(
         arcticdb_core_object
@@ -649,6 +769,18 @@ set(arcticdb_python_srcs
         python/python_handlers.cpp)
 
 add_library(arcticdb_python STATIC ${arcticdb_python_srcs})
+
+if(${ARCTICDB_USE_PCH})
+    message(STATUS "Using precompiled headers for target arcticdb_python")
+    target_precompile_headers(
+        arcticdb_python
+        PRIVATE
+            <Python.h>
+            <pybind11/stl.h>
+            <pybind11/pybind11.h>
+            <pybind11/numpy.h>
+    )
+endif()
 
 target_link_libraries(arcticdb_python
         PUBLIC
@@ -977,4 +1109,24 @@ if(${TEST})
     endif()
 
     gtest_discover_tests(arcticdb_rapidcheck_tests PROPERTIES DISCOVERY_TIMEOUT 60)
+
+    if(${ARCTICDB_USE_PCH})
+        message(STATUS "Using precompiled headers for target test_unit_arcticdb")
+        target_precompile_headers(
+            test_unit_arcticdb
+            PRIVATE
+                # GTest
+                <gtest/gtest.h>
+                <gtest/gtest_prod.h>
+                ${BASE_PCH}
+        )
+        message(STATUS "Using precompiled headers for target target_precompile_headers")
+        target_precompile_headers(
+            arcticdb_rapidcheck_tests
+            PRIVATE
+                <rapidcheck/state.h>
+                <rapidcheck.h>
+                ${BASE_PCH}
+        )
+    endif()
 endif()
