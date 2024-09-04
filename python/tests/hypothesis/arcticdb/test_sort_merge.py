@@ -11,15 +11,21 @@ from arcticdb.exceptions import UserInputException, StreamDescriptorMismatch, Un
 import numpy as np
 import string
 from arcticdb.util._versions import IS_PANDAS_TWO
-from pandas.api.types import is_integer_dtype
+from pandas.api.types import is_numeric_dtype, is_integer_dtype, is_float_dtype
 
 
 ColumnInfo = namedtuple('ColumnInfo', ['name', 'dtype'])
 
-SYMBOL = "sym"
 COLUMNS = [f"col_{i}" for i in range(0, 5)]
 DTYPES = ["int16", "int64", "float", "object", "datetime64[ns]"]
 COLUMN_DESCRIPTIONS = [ColumnInfo(name, dtype) for name in COLUMNS for dtype in DTYPES]
+
+def are_dtypes_compatible(left, right):
+    if left == right:
+        return True
+    if is_numeric_dtype(left) and is_numeric_dtype(right):
+        return True
+    return False
 
 def string_column_strategy(name):
     return hs_pd.column(name=name, elements=st.text(alphabet=string.ascii_letters))
@@ -38,16 +44,7 @@ def df(draw, column_list):
         index = hs_pd.indexes(dtype="datetime64[ns]")
     return draw(hs_pd.data_frames(columns, index=index))
 
-def fix_dtypes(df, int_columns_in_df):
-    """
-    pd.concat promotes dtypes. If there are missing values in the int typed column
-    it will become float column and the missing values will be NaN.
-    """
-    for col in int_columns_in_df:
-        df[col] = df[col].replace(np.NaN, 0)
-    return df
-
-def assert_equal(left, right):
+def assert_equal(left, right, dynamic=False):
     """
     The sorting Arctic does is not stable. Thus when there are repeated index values the
     result from our sorting and the result from Pandas' sort might differ where the index
@@ -63,8 +60,63 @@ def assert_equal(left, right):
     else:
         assert_frame_equal(left, right, check_like=True, check_dtype=False)
 
-class StagedWriteStaticSchema(RuleBasedStateMachine):
+def assert_cannot_finalize_without_staged_data(lib, symbol, mode):
+    with pytest.raises(UserInputException) as exception_info:
+        lib.sort_and_finalize_staged_data(symbol, mode=mode)
+    assert "E_NO_STAGED_SEGMENTS" in str(exception_info.value)
+  
+def assert_nat_is_not_supported(lib, symbol, mode):
+    with pytest.raises(UnsortedDataException) as exception_info:
+        lib.sort_and_finalize_staged_data(symbol, mode=mode)
+    assert "E_UNSORTED_DATA" in str(exception_info.value)
 
+def assert_staged_columns_are_compatible(lib, symbol, mode):
+    with pytest.raises(SchemaException):
+        lib.sort_and_finalize_staged_data(symbol, mode)
+
+def has_nat_in_index(segment_list):
+    return any(pd.NaT in segment.index for segment in segment_list)
+
+def merge_and_sort_segment_list(segment_list):
+    combined_columns_types = {}
+    for segment in segment_list:
+        for column in segment.columns:
+            current_column_dtype = segment.dtypes[column]
+            if column not in combined_columns_types:
+                combined_columns_types[column] = current_column_dtype
+            elif is_integer_dtype(combined_columns_types[column]) and is_float_dtype(current_column_dtype):
+                combined_columns_types[column] = current_column_dtype
+
+    int_columns_in_df = [key for key, val in combined_columns_types.items() if is_integer_dtype(val)]
+
+    merged = pd.concat(segment_list)
+    # pd.concat promotes dtypes. If there are missing values in an int typed column
+    # it will become float column and the missing values will be NaN.    
+    for col in int_columns_in_df:
+        merged[col] = merged[col].replace(np.NaN, 0)
+    merged.sort_index(inplace=True)
+    return merged
+
+def assert_staged_write_is_successful(lib, symbol, expected):
+    lib.sort_and_finalize_staged_data(symbol)
+    arctic_data = lib.read(symbol).data
+    assert_equal(arctic_data, expected)
+
+def get_symbol(lib, symbol):
+    # When https://github.com/man-group/ArcticDB/pull/1798 this should used the symbol list as it
+    # will allow to add more preconditions and split the append case even more
+    try:
+        return lib.read(symbol).data, True
+    except NoSuchVersionException:
+        return pd.DataFrame(), False
+
+def assert_appended_data_does_not_overlap_with_storage(lib, symbol):
+    with pytest.raises(UnsortedDataException) as exception_info:
+        lib.sort_and_finalize_staged_data(symbol, mode=StagedDataFinalizeMethod.APPEND)
+
+class StagedWriteStaticSchema(RuleBasedStateMachine):
+    
+    SYMBOL = "sym_static"
     lib = None
 
     @initialize()
@@ -74,96 +126,82 @@ class StagedWriteStaticSchema(RuleBasedStateMachine):
     @rule(df=df(COLUMN_DESCRIPTIONS))
     def stage(self, df):
         self.staged.append(df)
-        self.lib.write(SYMBOL, df, staged=True)
+        self.lib.write(self.SYMBOL, df, staged=True)
 
     @precondition(lambda self: not self.has_staged_segments())
     @rule()
     def finalize_write_no_staged_segments(self):
-        self.assert_cannot_finalize_without_staged_data(StagedDataFinalizeMethod.WRITE)
-        self.reset_state()
+        assert_cannot_finalize_without_staged_data(self.lib, self.SYMBOL, StagedDataFinalizeMethod.WRITE)
+        self.reset_staged()
 
-    @precondition(lambda self: self.has_staged_segments() and self.has_nat_in_index() and self.staged_segments_have_same_schema())
+    @precondition(lambda self: self.has_staged_segments() and has_nat_in_index(self.staged) and self.staged_segments_have_same_schema())
     @rule()
     def finalize_write_with_nat_in_index(self):
-        self.assert_nat_is_not_supported(StagedDataFinalizeMethod.WRITE)
-        self.reset_state()
+        assert_nat_is_not_supported(self.lib, self.SYMBOL, StagedDataFinalizeMethod.WRITE)
+        self.reset_staged()
 
     @precondition(lambda self: not self.staged_segments_have_same_schema() and self.has_staged_segments())
     @rule()
     def finalize_write_with_mismatched_staged_columns(self):
-        with pytest.raises(SchemaException):
-            self.lib.sort_and_finalize_staged_data(SYMBOL)
-        self.reset_state()
+        assert_staged_columns_are_compatible(self.lib, self.SYMBOL, StagedDataFinalizeMethod.WRITE)
+        self.reset_staged()
 
-    @precondition(lambda self: self.has_staged_segments() and not self.has_nat_in_index() and self.staged_segments_have_same_schema())
+    @precondition(lambda self: self.has_staged_segments() and not has_nat_in_index(self.staged) and self.staged_segments_have_same_schema())
     @rule()
     def finalize_write(self):
-        staged = self.merge_staged()
-        self.lib.sort_and_finalize_staged_data(SYMBOL)
-        arctic_data = self.lib.read(SYMBOL).data
-        assert_equal(arctic_data, staged)
-        self.reset_state()
+        assert_staged_write_is_successful(self.lib, self.SYMBOL, merge_and_sort_segment_list(self.staged))
+        self.stored = self.staged
+        self.reset_staged()
 
     @precondition(lambda self: not self.has_staged_segments())
     @rule()
     def finalize_append_no_staged_segments(self):
-        self.assert_cannot_finalize_without_staged_data(StagedDataFinalizeMethod.APPEND)
-        self.reset_state()
+        assert_cannot_finalize_without_staged_data(self.lib, self.SYMBOL, StagedDataFinalizeMethod.APPEND)
+        self.reset_staged()
     
     @precondition(lambda self: self.has_staged_segments() and not self.staged_segments_have_same_schema())
     @rule()
     def finalize_append_with_mismatched_staged_columns(self):
         with pytest.raises(SchemaException):
-            self.lib.sort_and_finalize_staged_data(SYMBOL)
-        self.reset_state()
+            self.lib.sort_and_finalize_staged_data(self.SYMBOL)
+        self.reset_staged()
 
     @precondition(lambda self: self.has_staged_segments() and self.staged_segments_have_same_schema())
     @rule()
     def finalize_append(self):
-        staged = self.merge_staged()
-        pre_append_storage, symbol_exists = self.data_from_storage()
+        staged = merge_and_sort_segment_list(self.staged)
+        pre_append_storage, symbol_exists = get_symbol(self.lib, self.SYMBOL)
         assert pre_append_storage.index.is_monotonic_increasing
         symbol_has_rows = len(pre_append_storage) > 0
         staging_has_rows = len(staged) > 0
         if symbol_exists and not staged.dtypes.equals(pre_append_storage.dtypes):
             self.assert_append_throws_with_mismatched_columns()
         elif symbol_has_rows and staging_has_rows and pre_append_storage.index[-1] > staged.index[0]:
-            self.assert_appended_data_does_not_overlap_with_storage()
+            assert_appended_data_does_not_overlap_with_storage(self.lib, self.SYMBOL)
         elif pd.NaT in staged.index:
-            self.assert_nat_is_not_supported(StagedDataFinalizeMethod.APPEND)
+            assert_nat_is_not_supported(self.lib, self.symbol, StagedDataFinalizeMethod.APPEND)
         else:
-            self.lib.sort_and_finalize_staged_data(SYMBOL, mode=StagedDataFinalizeMethod.APPEND)
-            arctic_data = self.lib.read(SYMBOL).data
+            self.lib.sort_and_finalize_staged_data(self.SYMBOL, mode=StagedDataFinalizeMethod.APPEND)
+            arctic_data = self.lib.read(self.SYMBOL).data
             assert arctic_data.index.is_monotonic_increasing
             assert_equal(arctic_data.iloc[len(pre_append_storage):], staged)
-        self.reset_state()
+            self.stored += self.staged
+            assert_equal(arctic_data, merge_and_sort_segment_list(self.stored))
+        self.reset_staged()
 
-    def reset_state(self):
+    def reset_staged(self):
         self.staged = []
 
-    def assert_appended_data_does_not_overlap_with_storage(self):
-        with pytest.raises(UnsortedDataException) as exception_info:
-            self.lib.sort_and_finalize_staged_data(SYMBOL, mode=StagedDataFinalizeMethod.APPEND)
+    def reset_stored(self):
+        self.stored = []
 
-    def assert_cannot_finalize_without_staged_data(self, mode):
-        with pytest.raises(UserInputException) as exception_info:
-            self.lib.sort_and_finalize_staged_data(SYMBOL, mode=mode)
-        assert "E_NO_STAGED_SEGMENTS" in str(exception_info.value)
+    def reset_state(self):
+        self.reset_staged()
+        self.reset_stored()
 
     def assert_append_throws_with_mismatched_columns(self):
         with pytest.raises(SchemaException) as exception_info:
-            self.lib.sort_and_finalize_staged_data(SYMBOL, mode=StagedDataFinalizeMethod.APPEND)
-
-    def assert_nat_is_not_supported(self, mode):
-        with pytest.raises(UnsortedDataException) as exception_info:
-            self.lib.sort_and_finalize_staged_data(SYMBOL, mode=mode)
-        assert "E_UNSORTED_DATA" in str(exception_info.value)
-
-    def data_from_storage(self):
-        try:
-            return self.lib.read(SYMBOL).data, True
-        except NoSuchVersionException:
-            return pd.DataFrame(), False
+            self.lib.sort_and_finalize_staged_data(self.SYMBOL, mode=StagedDataFinalizeMethod.APPEND)
 
     def staged_segments_have_same_schema(self):
         if len(self.staged) == 0:
@@ -171,27 +209,121 @@ class StagedWriteStaticSchema(RuleBasedStateMachine):
         schema = self.staged[0].dtypes
         return all(schema.equals(segment.dtypes) for segment in self.staged)
 
-    def has_nat_in_index(self):
-        return any(pd.NaT in segment.index for segment in self.staged)
-
     def has_staged_segments(self):
         return len(self.staged)
 
-    def merge_staged(self):
-        int_columns_in_df = set()
-        for segment in self.staged:
-            int_columns_in_df |= set([col for col in segment.columns if is_integer_dtype(segment.dtypes[col])])
-        merged = fix_dtypes(pd.concat(self.staged), int_columns_in_df)
-        merged.sort_index(inplace=True)
-        return merged
+    def teardown(self):
+        self.reset_state()
+        self.lib.delete_staged_data(self.SYMBOL)
+        self.lib.delete(self.SYMBOL)
+
+
+class StagedWriteDynamicSchema(RuleBasedStateMachine):
+
+    SYMBOL = "sym_dynamic"
+    lib = None
+
+    @initialize()
+    def init(self):
+        self.reset_state()
+
+    @rule(df=df(COLUMN_DESCRIPTIONS))
+    def stage(self, df):
+        self.staged.append(df)
+        self.lib.write(self.SYMBOL, df, staged=True)
+
+    @precondition(lambda self: not self.has_staged_segments())
+    @rule()
+    def finalize_write_no_staged_segments(self):
+        assert_cannot_finalize_without_staged_data(self.lib, self.SYMBOL, StagedDataFinalizeMethod.WRITE)
+        self.reset_staged()
+
+    @precondition(lambda self: self.has_staged_segments() and has_nat_in_index(self.staged) and self.segments_have_compatible_schema(self.staged))
+    @rule()
+    def finalize_write_with_nat_in_index(self):
+        assert_nat_is_not_supported(self.lib, self.SYMBOL, StagedDataFinalizeMethod.WRITE)
+        self.reset_staged()
+
+    @precondition(lambda self: not self.segments_have_compatible_schema(self.staged) and self.has_staged_segments())
+    @rule()
+    def finalize_write_with_mismatched_staged_columns(self):
+        assert_staged_columns_are_compatible(self.lib, self.SYMBOL, StagedDataFinalizeMethod.WRITE)
+        self.reset_staged()
+
+    @precondition(lambda self: self.has_staged_segments() and not has_nat_in_index(self.staged) and self.segments_have_compatible_schema(self.staged))
+    @rule()
+    def finalize_write(self):
+        assert_staged_write_is_successful(self.lib, self.SYMBOL, merge_and_sort_segment_list(self.staged))
+        self.stored = self.staged
+        self.reset_staged()
+
+    @precondition(lambda self: not self.has_staged_segments())
+    @rule()
+    def finalize_append_no_staged_segments(self):
+        assert_cannot_finalize_without_staged_data(self.lib, self.SYMBOL, StagedDataFinalizeMethod.APPEND)
+        self.reset_staged()
+    
+    @precondition(lambda self: self.has_staged_segments() and not self.segments_have_compatible_schema(self.staged))
+    @rule()
+    def finalize_append_with_mismatched_staged_columns(self):
+        assert_staged_columns_are_compatible(self.lib, self.SYMBOL, StagedDataFinalizeMethod.APPEND)
+        self.reset_staged()
+
+    @precondition(lambda self: self.has_staged_segments() and self.segments_have_compatible_schema(self.staged))
+    @rule()
+    def finalize_append(self):
+        staged = merge_and_sort_segment_list(self.staged)
+        pre_append_storage, symbol_exists = get_symbol(self.lib, self.SYMBOL)
+        assert pre_append_storage.index.is_monotonic_increasing
+        symbol_has_rows = len(pre_append_storage) > 0
+        staging_has_rows = len(staged) > 0
+        if symbol_exists and not self.segments_have_compatible_schema([pre_append_storage, staged]):
+            assert_staged_columns_are_compatible(self.lib, self.SYMBOL, StagedDataFinalizeMethod.APPEND)
+        elif symbol_has_rows and staging_has_rows and pre_append_storage.index[-1] > staged.index[0]:
+            assert_appended_data_does_not_overlap_with_storage(self.lib, self.SYMBOL)
+        elif pd.NaT in staged.index:
+            assert_nat_is_not_supported(self.lib, self.SYMBOL, StagedDataFinalizeMethod.APPEND)
+        else:
+            self.lib.sort_and_finalize_staged_data(self.SYMBOL, mode=StagedDataFinalizeMethod.APPEND)
+            arctic_data = self.lib.read(self.SYMBOL).data
+            assert arctic_data.index.is_monotonic_increasing
+            self.stored += self.staged
+            assert_equal(arctic_data, merge_and_sort_segment_list(self.stored))
+        self.reset_staged()
+
+    def reset_staged(self):
+        self.staged = []
+
+    def reset_stored(self):
+        self.stored = []
+
+    def reset_state(self):
+        self.reset_staged()
+        self.reset_stored()
+
+    def has_staged_segments(self):
+        return len(self.staged) > 0
+
+    @classmethod
+    def segments_have_compatible_schema(cls, segment_list):
+        dtypes = {}
+        for segment in segment_list:
+            for col in segment:
+                if col not in dtypes:
+                    dtypes[col] = segment.dtypes[col]
+                elif not are_dtypes_compatible(dtypes[col], segment.dtypes[col]):
+                    return False
+        return True
 
     def teardown(self):
         self.reset_state()
-        self.lib.delete_staged_data(SYMBOL)
-        self.lib.delete(SYMBOL)
+        self.lib.delete_staged_data(self.SYMBOL)
+        self.lib.delete(self.SYMBOL)
 
-
-def test_sort_and_finalize_staged_data_static_schema(lmdb_storage, lib_name):
-    ac = lmdb_storage.create_arctic()
-    StagedWriteStaticSchema.lib = ac.create_library(lib_name)
+def test_sort_and_finalize_staged_data_static_schema(lmdb_library):
+    StagedWriteStaticSchema.lib = lmdb_library
     run_state_machine_as_test(StagedWriteStaticSchema)
+
+def test_sort_and_finalize_staged_data_dynamic_schema(lmdb_library_dynamic_schema):
+    StagedWriteDynamicSchema.lib = lmdb_library_dynamic_schema
+    run_state_machine_as_test(StagedWriteDynamicSchema)
