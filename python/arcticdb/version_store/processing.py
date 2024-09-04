@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 from collections import namedtuple
+import copy
 from dataclasses import dataclass
 import datetime
 from math import inf
@@ -873,9 +874,10 @@ class QueryBuilder:
             if isinstance(item, ExpressionNode) and item.operator == COLUMN:
                 item = ExpressionNode.compose(item, _OperationType.IDENTITY, None)
             input_columns, expression_context = visit_expression(item)
-            self.clauses.append(_FilterClause(input_columns, expression_context, self._optimisation))
-            self._python_clauses.append(PythonFilterClause(item))
-            return self
+            self_copy = copy.deepcopy(self)
+            self_copy.clauses.append(_FilterClause(input_columns, expression_context, self_copy._optimisation))
+            self_copy._python_clauses.append(PythonFilterClause(item))
+            return self_copy
 
     def __setitem__(self, key, item):
         return self.apply(key, item)

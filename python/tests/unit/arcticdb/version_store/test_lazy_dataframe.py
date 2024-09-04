@@ -55,7 +55,6 @@ def test_lazy_filter(lmdb_library):
     lib.write(sym, df)
 
     lazy_df = lib.read(sym, lazy=True)
-    lazy_df_2 = lazy_df
     lazy_df = lazy_df[lazy_df["col1"].isin(0, 3, 6, 9)]
     received = lazy_df.collect().data
     expected = df.query("col1 in [0, 3, 6, 9]")
