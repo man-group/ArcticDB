@@ -74,7 +74,7 @@ public:
 
 class PrometheusInstance {
 public:
-    using Labels = std::map<std::string, std::string>;
+    using Labels = prometheus::Labels;
 
     static std::shared_ptr<PrometheusInstance> instance();
 
@@ -182,11 +182,9 @@ public:
 
         struct MetricKeyHash {
             std::size_t operator()(const MetricKey& key) const noexcept {
-                auto hash = std::hash<std::string>()(key.name);
-                for (const auto& [name, value] : key.labels) {
-                    hash = folly::hash::commutative_hash_combine(hash, name, value);
-                }
-                return hash;
+                auto labels_hash = folly::hash::commutative_hash_combine_range(
+                    key.labels.begin(), key.labels.end());
+                return folly::hash::commutative_hash_combine(labels_hash, key.name);
             }
         };
 
