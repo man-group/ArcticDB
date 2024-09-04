@@ -179,7 +179,7 @@ class StagedWriteStaticSchema(RuleBasedStateMachine):
         elif symbol_has_rows and staging_has_rows and pre_append_storage.index[-1] > staged.index[0]:
             assert_appended_data_does_not_overlap_with_storage(self.lib, self.SYMBOL)
         elif pd.NaT in staged.index:
-            assert_nat_is_not_supported(self.lib, self.symbol, StagedDataFinalizeMethod.APPEND)
+            assert_nat_is_not_supported(self.lib, self.SYMBOL, StagedDataFinalizeMethod.APPEND)
         else:
             self.lib.sort_and_finalize_staged_data(self.SYMBOL, mode=StagedDataFinalizeMethod.APPEND)
             arctic_data = self.lib.read(self.SYMBOL).data

@@ -142,8 +142,8 @@ def test_write_parallel_sort_merge(basic_arctic_library, prune_previous_versions
     dataframes = []
     df = pd.DataFrame()
 
+    cols = random.sample(columns, 4)
     for _ in range(num_days):
-        cols = random.sample(columns, 4)
         index = pd.Index([dt + datetime.timedelta(seconds=s) for s in range(num_rows_per_day)])
         vals = {c: random_floats(num_rows_per_day) for c in cols}
         new_df = pd.DataFrame(data=vals, index=index)
