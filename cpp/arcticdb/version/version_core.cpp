@@ -900,11 +900,28 @@ bool read_incompletes_to_pipeline(
         ensure_timeseries_norm_meta(*pipeline_context->norm_meta_, pipeline_context->stream_id_, sparsify);
     }
 
-    if (!dynamic_schema || !pipeline_context->desc_) {
-        pipeline_context->desc_ = merge_descriptors(seg->descriptor(), incomplete_segments, read_query.columns);
+    if (!dynamic_schema) {
+        const StreamDescriptor& field_descriptor = incomplete_segments[0].segment(store).descriptor();
+        for (size_t i = 1; i < incomplete_segments.size(); ++i) {
+            const StreamDescriptor& current_descriptor = incomplete_segments[i].segment(store).descriptor();
+            schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                columns_match(field_descriptor, incomplete_segments[i].segment(store).descriptor()),
+                "When static schema is used all staged segments must have the same column and column types."
+                "{} is different than {}",
+                field_descriptor,
+                current_descriptor
+            );
+        }
+        pipeline_context->desc_ = field_descriptor;
     } else {
-        pipeline_context->desc_ = merge_descriptors(*pipeline_context->desc_, incomplete_segments, read_query.columns);
+        if (pipeline_context->desc_) {
+            pipeline_context->desc_ =
+                merge_descriptors(*pipeline_context->desc_, incomplete_segments, read_query.columns);
+        } else {
+            pipeline_context->desc_ = merge_descriptors(seg->descriptor(), incomplete_segments, read_query.columns);
+        }
     }
+
     modify_descriptor(pipeline_context, read_options);
     if (convert_int_to_float) {
         stream::convert_descriptor_types(*pipeline_context->desc_);
@@ -1390,14 +1407,13 @@ void check_incomplete_descriptor_match(
     if (verify_descriptors_match) {
         const auto& index_segment_reader = index::get_index_reader(*(update_info.previous_index_key_), store);
         const auto& original_descriptor = index_segment_reader.tsd().as_stream_descriptor();
-        if (!columns_match(original_descriptor, *pipeline_context->desc_)) {
-            throw StreamDescriptorMismatch(
-                "The columns (names and types) in the argument are not identical to that of the existing version",
-                original_descriptor,
-                *pipeline_context->desc_,
-                NormalizationOperation::APPEND
-            );
-        }
+        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+            columns_match(original_descriptor, *pipeline_context->desc_),
+            "When static schema is used all staged segments must have the same column and column types."
+            "{} is different than {}",
+            original_descriptor,
+            *pipeline_context->desc_
+        );
     }
 }
 
@@ -1464,7 +1480,7 @@ VersionedItem sort_merge_impl(
                 const timestamp incomplete_start =
                     std::get<timestamp>(TimeseriesIndex::start_value_for_segment(segments[0].segment(store)));
                 sorting::check<ErrorCode::E_UNSORTED_DATA>(
-                    last_index_on_disc <= incomplete_start,
+                    last_index_on_disc - 1 <= incomplete_start,
                     "Cannot append staged segments to existing data as incomplete segment contains index value {} < existing data {}",
                     incomplete_start,
                     last_index_on_disc
