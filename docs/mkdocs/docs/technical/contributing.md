@@ -437,13 +437,13 @@ In these cases, methods for reading data will almost never be called without som
 * The stand-alone methods `head` and `tail`*
 * `columns` - select only a subset of the columns
 * `date_range` and `row_range` - select a contiguous range of rows
-* `query_builder` - see section on processing pipeline
+* More advanced filtering - see section on processing pipeline
 
 ## Processing pipeline
 
 Reading data using only `columns`, `date_range`, and `row_range` arguments is heavily optimised to avoid copying data in memory unnecessarily.
- Any read-like method provided with the `query_builder` optional argument takes quite a different code path, as we do not know the shape of the output data a priori.
- While it is not necessary to exhaustively test all new features against every possible `query_builder` argument, it is generally worth having a test using a simple filter that excludes some of the data that would otherwise be returned to the user.
+ Any read-like method provided with the `query_builder` optional argument, or equivalently, lazy reads with further processing applied, takes quite a different code path, as we do not know the shape of the output data a priori.
+ While it is not necessary to exhaustively test all new features against every possible analytics operations, it is generally worth having a test using a simple filter that excludes some of the data that would otherwise be returned to the user.
 
 ## Sparse columns
 

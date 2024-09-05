@@ -13,3 +13,8 @@
 ::: arcticdb.version_store.library.VersionInfo
 
 ::: arcticdb.WritePayload
+
+[//]: # (::: arcticdb.LazyDataFrame)
+
+[//]: # ()
+[//]: # (::: arcticdb.LazyDataFrameCollection)

@@ -226,7 +226,7 @@ Many of the housekeeping and maintenance procedures recommended in this guide ar
 We are always improving and adding new features to ArcticDB. Below are a few relevant new features that are in our plans
 
 * **Multi-Index:** support for more flexible data updates for multi-index symbols.
-* **Resampling:** a planned [QueryBuilder](../api/query_builder) extension that will allow fast on-the-fly resampling of data as part of the read.
+* **Arrow:** support for Arrow-backed Pandas and Polars DataFrames.
 
 If you have a suggestion for a new feature, please raise an issue on our [github](https://github.com/man-group/ArcticDB). Please include as much detail as possible.
 
