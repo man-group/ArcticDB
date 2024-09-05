@@ -14,7 +14,10 @@
 
 ::: arcticdb.WritePayload
 
-[//]: # (::: arcticdb.LazyDataFrame)
+::: arcticdb.LazyDataFrame
+    options:
+      inherited_members: false
 
-[//]: # ()
-[//]: # (::: arcticdb.LazyDataFrameCollection)
+::: arcticdb.LazyDataFrameCollection
+    options:
+      inherited_members: false
