@@ -150,7 +150,7 @@ public:
 
     int push();
 
-    void configure(const MetricsConfig& config, const bool reconfigure = false);
+    void configure(const MetricsConfig& config);
 
     // Intended for testing.
     std::vector<prometheus::MetricFamily> get_metrics();
@@ -160,13 +160,15 @@ public:
     private:
 
         struct HistogramInfo {
+            HistogramInfo() = default;
+
             HistogramInfo(prometheus::Family<prometheus::Histogram>* histogram,
                           prometheus::Histogram::BucketBoundaries buckets_list) : histogram_(histogram),
                           buckets_list_(std::move(buckets_list)) {
 
             }
 
-            prometheus::Family<prometheus::Histogram>* histogram_;
+            prometheus::Family<prometheus::Histogram>* histogram_ = nullptr;
             prometheus::Histogram::BucketBoundaries buckets_list_;
         };
 

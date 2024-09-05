@@ -30,8 +30,8 @@ namespace arcticdb {
         arcticdb::log::version().debug("PrometheusInstance created");
     }
 
-    void PrometheusInstance::configure(const MetricsConfig& config, const bool reconfigure) {
-        if (configured_ && !reconfigure) {
+    void PrometheusInstance::configure(const MetricsConfig& config) {
+        if (configured_) {
             arcticdb::log::version().warn("Prometheus already configured; Existing setting will be used");
             if (config.host != cfg_.host) {
                 arcticdb::log::version().warn("New Prometheus host is different from the existing: {} vs {}", config.host, cfg_.host);
@@ -108,35 +108,34 @@ namespace arcticdb {
         }
 
         std::scoped_lock lock{metrics_mutex_};
-        bool inserted{false};
         if (type == prometheus::MetricType::Counter) {
-            inserted = map_counter_.insert({name, &prometheus::BuildCounter()
+            map_counter_[name] = &prometheus::BuildCounter()
                     .Name(name)
                     .Help(help)
                     .Labels(labels)
-                    .Register(*registry_)}).second;
+                    .Register(*registry_);
         } else if (type == prometheus::MetricType::Gauge) {
-            inserted = map_gauge_.insert({name, &prometheus::BuildGauge()
+            map_gauge_[name] = &prometheus::BuildGauge()
                     .Name(name)
                     .Help(help)
                     .Labels(labels)
-                    .Register(*registry_)}).second;
+                    .Register(*registry_);
         } else if (type == prometheus::MetricType::Histogram) {
-            inserted = map_histogram_.insert({name, HistogramInfo{&prometheus::BuildHistogram()
-                    .Name(name)
-                    .Help(help)
-                    .Labels(labels)
-                    .Register(*registry_), buckets_list}}).second;
+            prometheus::Family<prometheus::Histogram>* histogram = &prometheus::BuildHistogram()
+                .Name(name)
+                .Help(help)
+                .Labels(labels)
+                .Register(*registry_);
+            map_histogram_[name] = HistogramInfo(histogram, buckets_list);
         } else if (type == prometheus::MetricType::Summary) {
-            inserted = map_summary_.insert({name, &prometheus::BuildSummary()
+            map_summary_[name] = &prometheus::BuildSummary()
                     .Name(name)
                     .Help(help)
                     .Labels(labels)
-                    .Register(*registry_)}).second;
+                    .Register(*registry_);
         } else {
             util::raise_rte("Unsupported metric type");
         }
-        util::check(inserted, "Expected to register metric {} but was already present", name);
 }
 
 void PrometheusInstance::incrementCounter(const std::string& name, double value, const Labels& labels) {
