@@ -19,7 +19,7 @@ from enum import Enum
 from arcticdb_ext.exceptions import InternalException, SortingException, UserInputException
 from arcticdb_ext.storage import NoDataFoundException
 from arcticdb_ext.version_store import SortedValue
-from arcticdb.exceptions import ArcticDbNotYetImplemented, LibraryNotFound, MismatchingLibraryOptions, StreamDescriptorMismatch
+from arcticdb.exceptions import ArcticDbNotYetImplemented, LibraryNotFound, MismatchingLibraryOptions, StreamDescriptorMismatch, SchemaException
 from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
 from arcticdb.arctic import Arctic
 from arcticdb.options import LibraryOptions, EnterpriseLibraryOptions
@@ -309,8 +309,8 @@ class TestFinalizeWithEmptySegments:
         lib.write("sym", df1, staged=True)
         lib.write("sym", df2, staged=True)
         lib.write("sym", df3, staged=True)
-        lib.finalize_staged_data("sym", mode=finalize_method)
-        assert_frame_equal(lib.read("sym").data, pd.concat([df1, df2, df3]))
+        with pytest.raises(SchemaException):
+            lib.finalize_staged_data("sym", mode=finalize_method)
 
     def test_df_without_rows(self, arctic_library, finalize_method):
         lib = arctic_library
@@ -334,9 +334,8 @@ class TestFinalizeStagedDataSchemaMismatch:
 
         appended_df = pd.DataFrame({"col_1": [1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
         lib.write("sym", appended_df, staged=True)
-        with pytest.raises(StreamDescriptorMismatch) as exception_info:
+        with pytest.raises(SchemaException) as exception_info:
             lib.finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
-        assert "APPEND" in str(exception_info.value)
         assert "col_1" in str(exception_info.value)
 
     def test_append_throws_column_subset(self, arctic_library):
@@ -352,9 +351,8 @@ class TestFinalizeStagedDataSchemaMismatch:
         lib.write("sym", df1)
         df2 = pd.DataFrame({"b": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-02")]))
         lib.write("sym", df2, staged=True)
-        with pytest.raises(StreamDescriptorMismatch) as exception_info: 
+        with pytest.raises(SchemaException) as exception_info: 
             lib.finalize_staged_data("sym", StagedDataFinalizeMethod.APPEND)
-        assert "APPEND" in str(exception_info.value)
         assert "a" in str(exception_info.value)
         assert "b" in str(exception_info.value)
 
@@ -366,9 +364,8 @@ class TestFinalizeStagedDataSchemaMismatch:
 
         appended_df = pd.DataFrame({"col_0": ["asd"]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
         lib.write("sym", appended_df, staged=True)
-        with pytest.raises(StreamDescriptorMismatch) as exception_info:
+        with pytest.raises(SchemaException) as exception_info:
             lib.finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
-        assert "APPEND" in str(exception_info.value)
         assert "col_0" in str(exception_info.value)
         assert "INT64" in str(exception_info.value)
 
@@ -385,9 +382,8 @@ class TestFinalizeStagedDataSchemaMismatch:
         lib.write("sym", pd.DataFrame({"col": np.array([1], dtype="int64")}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)])))
 
         lib.write("sym", pd.DataFrame({"col": np.array([1], dtype="int32")}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)])), staged=True)
-        with pytest.raises(StreamDescriptorMismatch) as exception_info:
+        with pytest.raises(SchemaException) as exception_info:
             lib.finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
-        assert "APPEND" in str(exception_info.value)
         assert "INT32" in str(exception_info.value)
         assert "INT64" in str(exception_info.value)
 
@@ -397,9 +393,8 @@ class TestFinalizeStagedDataSchemaMismatch:
         lib.write("sym", pd.DataFrame({"col_0": [1], "col_1": ["test"], "col_2": [1.2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)])))
 
         lib.write("sym", pd.DataFrame({"col_1": ["asd"], "col_2": [2.5], "col_1": [2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)])), staged=True)
-        with pytest.raises(StreamDescriptorMismatch) as exception_info:
+        with pytest.raises(SchemaException) as exception_info:
             lib.finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
-        assert "APPEND" in str(exception_info.value)
         assert "col_0" in str(exception_info.value)
         assert "col_1" in str(exception_info.value)
         assert "col_2" in str(exception_info.value)
@@ -425,8 +420,8 @@ class TestAppendStagedData:
             lib.finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
         assert "append" in str(exception_info.value)
 
-    def test_appended_df_start_same_as_df_end(self, lmdb_library):
-        lib = lmdb_library
+    def test_appended_df_start_same_as_df_end(self, arctic_library):
+        lib = arctic_library
         df = pd.DataFrame(
             {"col": [1, 2, 3]},
             index=pd.DatetimeIndex([np.datetime64('2023-01-01'), np.datetime64('2023-01-02'), np.datetime64('2023-01-03')], dtype="datetime64[ns]")
