@@ -117,5 +117,5 @@ nav:
   - Arctic URI: 'api/arctic_uri.md'
   - Library: 'api/library.md'
   - Library related objects: 'api/library_types.md'
-  - Query Builder: 'api/query_builder.md'
+  - DataFrame Processing Operations API: 'api/processing.md'
   - Exceptions: 'api/exceptions.md'

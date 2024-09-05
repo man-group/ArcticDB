@@ -105,7 +105,7 @@ Note that this is a library configuration option that is off by default, see [`h
 
 ArcticDB is primarily focused on filtering and transfering data from storage through to memory - at which point Pandas, NumPy, or other standard analytical packages can be utilised for analytics.
 
-That said, ArcticDB does offer a limited set of analytical functions that are executed inside the C++ storage engine offering significant performance benefits over Pandas. For more information, see the documentation for the [`LazyDataFrame`](api/library_types#arcticdb.LazyDataFrame), [`LazyDataFrameCollection`](api/library_types#arcticdb.LazyDataFrameCollection), and [`QueryBuilder`](api/query_builder) classes.
+That said, ArcticDB does offer a limited set of analytical functions that are executed inside the C++ storage engine offering significant performance benefits over Pandas. For more information, see the [documentation](api/processing.md) for the `LazyDataFrame`, `LazyDataFrameCollection`, and `QueryBuilder` classes.
 
 ### *What does Pickling mean?*
 

@@ -13,11 +13,3 @@
 ::: arcticdb.version_store.library.VersionInfo
 
 ::: arcticdb.WritePayload
-
-::: arcticdb.LazyDataFrame
-    options:
-      inherited_members: false
-
-::: arcticdb.LazyDataFrameCollection
-    options:
-      inherited_members: false

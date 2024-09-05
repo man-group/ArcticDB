@@ -215,9 +215,9 @@ _output (the rows in the date range and columns requested)_
 
 #### Filtering and Analytics
 
-ArcticDB supports many common DataFrame analytics operations, including filtering, projections, group-bys, aggregations, and resampling. The most intuitive way to access these operations is via the [`LazyDataFrame`](api/library_types#arcticdb.LazyDataFrame) API, which should feel familiar to experienced users of Pandas or Polars.
+ArcticDB supports many common DataFrame analytics operations, including filtering, projections, group-bys, aggregations, and resampling. The most intuitive way to access these operations is via the [`LazyDataFrame`](api/processing.md#arcticdb.LazyDataFrame) API, which should feel familiar to experienced users of Pandas or Polars.
 
-The legacy [`QueryBuilder`](api/query_builder) class can also be created directly and passed into `read` calls with the same effect.
+The legacy [`QueryBuilder`](api/processing.md#arcticdb.QueryBuilder) class can also be created directly and passed into `read` calls with the same effect.
 
 !!! info "ArcticDB Analytics Philosphy"
 
