@@ -17,6 +17,21 @@ from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.util.test import assert_frame_equal
 
 
+def test_querybuilder_getitem_idempotency(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_querybuilder_getitem_idempotency"
+    df = pd.DataFrame({"a": [0, 1]}, index=np.arange(2))
+    lib.write(sym, df)
+    q = QueryBuilder()
+    q_copy = q
+    q = q[q["a"] == 1]
+    q_copy = q_copy[q_copy["a"] == 0]
+    expected = df[df["a"] == 1]
+    expected_copy = df[df["a"] == 0]
+    assert_frame_equal(expected, lib.read(sym, query_builder=q).data)
+    assert_frame_equal(expected_copy, lib.read(sym, query_builder=q_copy).data)
+
+
 def test_querybuilder_shallow_copy(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     sym = "test_querybuilder_shallow_copy"
@@ -109,6 +124,56 @@ def test_reuse_querybuilder(lmdb_version_store_tiny_segment):
 
     expected["new_col"] = (expected["col1"] * expected["col2"]) + 13
     assert_frame_equal(expected, received)
+
+
+def test_reuse_querybuilder_date_range(lmdb_version_store_tiny_segment):
+    lib = lmdb_version_store_tiny_segment
+    symbol = "test_reuse_querybuilder_date_range"
+    df = pd.DataFrame(
+        {"col1": np.arange(1, 11, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
+    )
+    lib.write(symbol, df)
+
+    q = QueryBuilder()
+    q = q[q["col1"].isin(2, 3, 7)]
+
+    expected_0 = df.query("col1 in [2, 3]")
+    received_0 = lib.read(symbol, date_range=(None, pd.Timestamp("2000-01-06")), query_builder=q).data
+    assert_frame_equal(expected_0, received_0)
+
+    received_1 = lib.read(symbol, date_range=(None, pd.Timestamp("2000-01-06")), query_builder=q).data
+    assert_frame_equal(expected_0, received_1)
+
+    expected_2 = df.query("col1 in [2, 3, 7]")
+    received_2 = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(expected_2, received_2)
+
+    expected_3 = df.query("col1 in [7]")
+    received_3 = lib.read(symbol, date_range=(pd.Timestamp("2000-01-06"), pd.Timestamp("2000-01-08")), query_builder=q).data
+    assert_frame_equal(expected_3, received_3)
+
+
+def test_reuse_querybuilder_date_range_batch(lmdb_version_store_tiny_segment):
+    lib = lmdb_version_store_tiny_segment
+    symbol = "test_reuse_querybuilder_date_range_batch"
+    df = pd.DataFrame(
+        {"col1": np.arange(1, 11, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
+    )
+    lib.write(symbol, df)
+
+    q = QueryBuilder()
+    q = q[q["col1"].isin(2, 3, 7)]
+
+    expected_0 = df.query("col1 in [2, 3]")
+    received_0 = lib.batch_read([symbol], date_ranges=[(None, pd.Timestamp("2000-01-06"))], query_builder=q)[symbol].data
+    assert_frame_equal(expected_0, received_0)
+
+    received_1 = lib.batch_read([symbol], date_ranges=[(None, pd.Timestamp("2000-01-06"))], query_builder=[q])[symbol].data
+    assert_frame_equal(expected_0, received_1)
+
+    expected_2 = df.query("col1 in [2, 3, 7]")
+    received_2 = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(expected_2, received_2)
 
 
 @pytest.mark.parametrize("batch", [True, False])
