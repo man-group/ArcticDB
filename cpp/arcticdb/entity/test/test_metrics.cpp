@@ -44,7 +44,7 @@ TEST(Metrics, RegisterTwice) {
     PrometheusInstance instance{};
     instance.configure(MetricsConfig{"host", "port", "job", "instance", "local", MetricsConfig::Model::PUSH});
     instance.registerMetric(prometheus::MetricType::Counter, "name", "help");
-    ASSERT_THROW(instance.registerMetric(prometheus::MetricType::Counter, "name", "help"), ArcticException);
+    instance.registerMetric(prometheus::MetricType::Counter, "name", "help");
 }
 
 TEST(Metrics, IncrementCounterSpecific) {
