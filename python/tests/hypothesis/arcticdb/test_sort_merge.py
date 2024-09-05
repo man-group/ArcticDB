@@ -77,29 +77,21 @@ def assert_staged_columns_are_compatible(lib, symbol, mode):
 def has_nat_in_index(segment_list):
     return any(pd.NaT in segment.index for segment in segment_list)
 
-def merge_and_sort_segment_list(segment_list):
-    combined_columns_types = {}
-    for segment in segment_list:
-        for column in segment.columns:
-            current_column_dtype = segment.dtypes[column]
-            if column not in combined_columns_types:
-                combined_columns_types[column] = current_column_dtype
-            elif is_integer_dtype(combined_columns_types[column]) and is_float_dtype(current_column_dtype):
-                combined_columns_types[column] = current_column_dtype
-
-    int_columns_in_df = [key for key, val in combined_columns_types.items() if is_integer_dtype(val)]
-
+def merge_and_sort_segment_list(segment_list, int_columns_in_df=None):
     merged = pd.concat(segment_list)
     # pd.concat promotes dtypes. If there are missing values in an int typed column
-    # it will become float column and the missing values will be NaN.    
+    # it will become float column and the missing values will be NaN.
+    int_columns_in_df = int_columns_in_df if int_columns_in_df else []
     for col in int_columns_in_df:
         merged[col] = merged[col].replace(np.NaN, 0)
     merged.sort_index(inplace=True)
     return merged
 
-def assert_staged_write_is_successful(lib, symbol, expected):
+def assert_staged_write_is_successful(lib, symbol, expected_segments_list):
     lib.sort_and_finalize_staged_data(symbol)
     arctic_data = lib.read(symbol).data
+    int_columns_in_df = [col_name for col_name in arctic_data if is_integer_dtype(arctic_data.dtypes[col_name])]
+    expected = merge_and_sort_segment_list(expected_segments_list, int_columns_in_df=int_columns_in_df)
     assert_equal(arctic_data, expected)
 
 def get_symbol(lib, symbol):
@@ -149,7 +141,7 @@ class StagedWriteStaticSchema(RuleBasedStateMachine):
     @precondition(lambda self: self.has_staged_segments() and not has_nat_in_index(self.staged) and self.staged_segments_have_same_schema())
     @rule()
     def finalize_write(self):
-        assert_staged_write_is_successful(self.lib, self.SYMBOL, merge_and_sort_segment_list(self.staged))
+        assert_staged_write_is_successful(self.lib, self.SYMBOL, self.staged)
         self.stored = self.staged
         self.reset_staged()
 
@@ -253,7 +245,7 @@ class StagedWriteDynamicSchema(RuleBasedStateMachine):
     @precondition(lambda self: self.has_staged_segments() and not has_nat_in_index(self.staged) and self.segments_have_compatible_schema(self.staged))
     @rule()
     def finalize_write(self):
-        assert_staged_write_is_successful(self.lib, self.SYMBOL, merge_and_sort_segment_list(self.staged))
+        assert_staged_write_is_successful(self.lib, self.SYMBOL, self.staged)
         self.stored = self.staged
         self.reset_staged()
 
@@ -288,7 +280,8 @@ class StagedWriteDynamicSchema(RuleBasedStateMachine):
             arctic_data = self.lib.read(self.SYMBOL).data
             assert arctic_data.index.is_monotonic_increasing
             self.stored += self.staged
-            assert_equal(arctic_data, merge_and_sort_segment_list(self.stored))
+            int_columns_in_df = [col_name for col_name in arctic_data if is_integer_dtype(arctic_data.dtypes[col_name])]
+            assert_equal(arctic_data, merge_and_sort_segment_list(self.stored, int_columns_in_df=int_columns_in_df))
         self.reset_staged()
 
     def reset_staged(self):
