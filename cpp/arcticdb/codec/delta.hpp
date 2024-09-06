@@ -26,4 +26,5 @@ void rsum(const uint8_t *__restrict a_in_p, uint8_t* __restrict a_out_p, const u
 
 
 
+
 } // namespace arcticdb

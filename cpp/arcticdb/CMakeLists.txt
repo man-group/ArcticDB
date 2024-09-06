@@ -490,7 +490,7 @@ set(arcticdb_srcs
         storage/lmdb/lmdb.hpp
         codec/third_party/fastlanes/fallback_scalar_aav_1024_uf1_unpack_src.cpp
         codec/third_party/fastlanes/fallback_scalar_av_1024_uf1_pack_src.cpp
-        codec/third_party/fastlanes/unpack.hpp codec/third_party/fastlanes/macros.hpp codec/third_party/fastlanes/pack.hpp codec/bitpacking.hpp codec/transpose.hpp codec/fastlanes_common.hpp codec/ffor.hpp codec/delta.hpp codec/bitpack_fused.hpp)
+        codec/third_party/fastlanes/unpack.hpp codec/third_party/fastlanes/macros.hpp codec/third_party/fastlanes/pack.hpp codec/bitpacking.hpp codec/transpose.hpp codec/fastlanes_common.hpp codec/ffor.hpp codec/delta.hpp codec/bitpack_fused.hpp codec/scan.hpp codec/zigzag.hpp codec/pseudodecimal.hpp)
 
 if(${ARCTICDB_INCLUDE_ROCKSDB})
     list (APPEND arcticdb_srcs
@@ -809,7 +809,7 @@ if(${TEST})
             version/test/test_sorting_info_state_machine.cpp
             version/test/version_map_model.hpp
             storage/test/common.hpp
-            codec/test/test_fastlanes.cpp processing/test/test_stress_max.cpp processing/test/test_generated_fastlanes.cpp codec/test/test_bitpacking.cpp codec/test/test_transpose.cpp codec/test/test_ffor.cpp codec/test/test_fused_bitpack.cpp)
+            codec/test/test_fastlanes.cpp processing/test/test_stress_max.cpp processing/test/test_generated_fastlanes.cpp codec/test/test_bitpacking.cpp codec/test/test_transpose.cpp codec/test/test_ffor.cpp codec/test/test_fused_bitpack.cpp codec/test/test_scan.cpp)
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 

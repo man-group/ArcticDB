@@ -17,7 +17,7 @@ void transpose(const std::array<T, 1024>& input, std::array<T, 1024>& output) {
 }
 
 template <typename T>
-void untranspose(const std::array<T, 1024>& input, std::array<T, 1024>& output) {
+void untranspose(const T*  input, T* output) {
     for (std::size_t i = 0; i < 1024; ++i) {
         output[transposed_index(i)] = input[i];
     }
