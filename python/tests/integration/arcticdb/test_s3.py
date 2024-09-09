@@ -71,7 +71,7 @@ def test_nfs_backed_s3_storage(lib_name, nfs_backed_s3_storage):
         assert re.match(bucketized_pattern, o.key), f"Object {o.key} does not match pattern {bucketized_pattern}"
 
 
-@pytest.fixture(scope="session", params=[MotoNfsBackedS3StorageFixtureFactory, MotoS3StorageFixtureFactory])
+@pytest.fixture(scope="function", params=[MotoNfsBackedS3StorageFixtureFactory, MotoS3StorageFixtureFactory])
 def s3_storage_dots_in_path(request):
     prefix = "some_path/.thing_with_a_dot/even.more.dots/end"
 
