@@ -1396,25 +1396,31 @@ VersionedItem collate_and_write(
 
 class IncompleteKeysRAII {
 public:
-    IncompleteKeysRAII(PipelineContext* pipeline_context, Store& store) : store_(store) {
-        for(auto sk = pipeline_context->incompletes_begin(); sk != pipeline_context->end(); ++sk) {
+    IncompleteKeysRAII(std::shared_ptr<PipelineContext> pipeline_context, std::shared_ptr<Store> store)
+            : context_(pipeline_context),
+              store_(store) {
+    }
+
+    ~IncompleteKeysRAII(){
+        std::vector<entity::VariantKey> keys_to_delete;
+        if (context_->incompletes_begin() == context_->end()) {
+            log::version().warn("Using finalize call without any staged segments.");
+        }
+        for (auto sk = context_->incompletes_begin(); sk != context_->end(); ++sk) {
             const auto& slice_and_key = sk->slice_and_key();
             internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                 slice_and_key.key().type() == KeyType::APPEND_DATA,
                 "Deleting incorrect key type {}",
                 slice_and_key.key().type()
             );
-            delete_keys_.emplace_back(slice_and_key.key());
+            keys_to_delete.emplace_back(slice_and_key.key());
         }
-    }
-
-    ~IncompleteKeysRAII(){
-        store_.remove_keys(delete_keys_).get();
+        store_->remove_keys(keys_to_delete).get();
     }
 
 private:
-    std::vector<entity::VariantKey> delete_keys_;
-    Store& store_;
+    std::shared_ptr<PipelineContext> context_;
+    std::shared_ptr<Store> store_;
 };
 
 VersionedItem sort_merge_impl(
@@ -1435,31 +1441,23 @@ VersionedItem sort_merge_impl(
         previous_sorted_value.emplace(pipeline_context->desc_->sorted());
     }
     pipeline_context->incompletes_after_ = pipeline_context->slice_and_keys_.size();
-
+    IncompleteKeysRAII incomplete_keys(pipeline_context, store);
     const auto num_versioned_rows = pipeline_context->total_rows_;
 
-    const bool has_incomplete_segments = [&]() {
-        try {
-            return read_incompletes_to_pipeline(
-                store,
-                pipeline_context,
-                read_query,
-                ReadOptions{},
-                options.convert_int_to_float_,
-                options.via_iteration_,
-                options.sparsify_,
-                write_options.dynamic_schema
-            );
-        } catch (const SchemaException&) {
-            IncompleteKeysRAII incomplete_keys(pipeline_context.get(), *store);
-            throw;
-        }
-    }();
+    const bool has_incomplete_segments = read_incompletes_to_pipeline(
+        store,
+        pipeline_context,
+        read_query,
+        ReadOptions{},
+        options.convert_int_to_float_,
+        options.via_iteration_,
+        options.sparsify_,
+        write_options.dynamic_schema
+    );
     user_input::check<ErrorCode::E_NO_STAGED_SEGMENTS>(
         has_incomplete_segments,
         "Finalizing staged data is not allowed with empty staging area"
     );
-    IncompleteKeysRAII incomplete_keys(pipeline_context.get(), *store);
 
     std::vector<FrameSlice> slices;
     std::vector<folly::Future<VariantKey>> fut_vec;
@@ -1555,24 +1553,18 @@ VersionedItem compact_incomplete_impl(
         read_indexed_keys_to_pipeline(store, pipeline_context, *(update_info.previous_index_key_), read_query, read_options);
         previous_sorted_value.emplace(pipeline_context->desc_->sorted());
     }
+    IncompleteKeysRAII incomplete_keys(pipeline_context, store);
 
-    const bool has_incomplete_segments = [&]() {
-        try {
-            return read_incompletes_to_pipeline(
-                store,
-                pipeline_context,
-                read_query,
-                ReadOptions{},
-                options.convert_int_to_float_,
-                options.via_iteration_,
-                options.sparsify_,
-                write_options.dynamic_schema
-            );
-        } catch (const SchemaException&) {
-            IncompleteKeysRAII incomplete_keys(pipeline_context.get(), *store);
-            throw;
-        }
-    }();
+    const bool has_incomplete_segments = read_incompletes_to_pipeline(
+        store,
+        pipeline_context,
+        read_query,
+        ReadOptions{},
+        options.convert_int_to_float_,
+        options.via_iteration_,
+        options.sparsify_,
+        write_options.dynamic_schema
+    );
 
     user_input::check<ErrorCode::E_NO_STAGED_SEGMENTS>(
         has_incomplete_segments,
@@ -1582,8 +1574,6 @@ VersionedItem compact_incomplete_impl(
         check_incompletes_index_ranges_dont_overlap(pipeline_context, previous_sorted_value);
     }
     const auto& first_seg = pipeline_context->slice_and_keys_.begin()->segment(store);
-
-    IncompleteKeysRAII incomplete_keys(pipeline_context.get(), *store);
 
     std::vector<folly::Future<VariantKey>> fut_vec;
     std::vector<FrameSlice> slices;
