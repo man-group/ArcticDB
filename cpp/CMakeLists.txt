@@ -14,6 +14,8 @@ project(arcticdb VERSION 0.0.1)
 
 enable_testing()
 
+#set(CMAKE_EXE_LINKER_FLAGS "-fuse-ld=lld")
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(
@@ -80,8 +82,8 @@ else()
     if(DEFINED ENV{ARCTICDB_CODE_COVERAGE_BUILD})
         set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} --coverage -g -O0")
     endif()
-    set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
-    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -ggdb")
+    set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -falign-loops")
+    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -ggdb -falign-loops")
 endif()
 
 if(DEFINED ENV{CMAKE_BUILD_TYPE})
