@@ -17,6 +17,18 @@ from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.util.test import assert_frame_equal
 
 
+def test_query_builder_equality_checks():
+    q1 = QueryBuilder()
+    q2 = QueryBuilder()
+    q1 = q1[q1["date"] >= pd.Timestamp("2020-01-01")]
+    q2 = q2[q2["date"] >= pd.Timestamp("2020-01-01")]
+    assert q1 == q2
+
+    q2 = QueryBuilder()
+    q2 = q2[q2["date"] >= pd.Timestamp("2021-01-01")]
+    assert q1 != q2
+
+
 def test_querybuilder_getitem_idempotency(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     sym = "test_querybuilder_getitem_idempotency"
