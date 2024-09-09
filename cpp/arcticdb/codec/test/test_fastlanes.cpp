@@ -212,13 +212,13 @@ TEST(FastlanesStress, PackUnpackFusedStress) {
     using namespace arcticdb;
     auto num_runs = 1000000;
     struct CompressIdentity{
-        uint64_t operator()(const uint64_t* t, size_t index) { return t[index]; }
+        uint64_t operator()(const uint64_t t) { return t; }
     };
 
     auto data = get_test_vector();
 
     struct UncompressIdentity{
-        void operator()(uint64_t* t, size_t index, uint64_t value) { t[index] = value; }
+        uint64_t operator()(uint64_t value) { return value; }
     };
 
     interval_timer timer;
@@ -253,13 +253,13 @@ TEST(FastlanesStress, PackUnpackFusedStressArithmetic) {
     using namespace arcticdb;
     auto num_runs = 1000000;
     struct CompressIdentity{
-        uint64_t operator()(const uint64_t* t, size_t index) { return t[index] * 2; }
+        uint64_t operator()(uint64_t t) { return t * 2; }
     };
 
     auto data = get_test_vector();
 
     struct UncompressIdentity{
-        void operator()(uint64_t* t, size_t index, uint64_t value) { t[index] = value / 2; }
+        uint64_t operator()(uint64_t value) { return value / 2; }
     };
 
     interval_timer timer;

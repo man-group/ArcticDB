@@ -78,14 +78,14 @@ TEST(BitPackFused, Roundtrip64to11) {
     *base64 = 0;
     std::vector<uint64_t> local_packed64(1024);
     struct CompressIdentity{
-        uint64_t operator()(const uint64_t* t, size_t index) { return *(t + index); }
+        uint64_t operator()(const uint64_t t) { return t; }
     };
 
     BitPackFused<uint64_t, 11>::go(rand_arr_70_b11_w64_arr, local_packed64.data(), CompressIdentity{});
     std::vector<uint64_t> local_unpacked64(1024);
 
     struct UncompressIdentity{
-        void operator()(uint64_t* t, size_t index, uint64_t value) { *(t + index) = value; }
+        uint64_t operator()(uint64_t value) { return value; }
     };
 
     BitUnpackFused<uint64_t, 11>::go(local_packed64.data(), local_unpacked64.data(), UncompressIdentity{});

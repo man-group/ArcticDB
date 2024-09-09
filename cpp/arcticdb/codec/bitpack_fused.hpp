@@ -68,7 +68,7 @@ void bitpack_lane(
     loop<T, num_bits>([lane, in, out, &tmp, &kernel](auto r) {
         constexpr size_t row =   r;
         size_t idx = index(row, lane);
-        T src = kernel(in, idx);
+        T src = kernel(in[idx]);
         src &= mask;
 
         if constexpr(row == 0) {
@@ -130,7 +130,7 @@ void bitunpack_lane(
         }
 
         size_t idx = index(row, lane);
-        kernel(out, idx, tmp);
+        out[idx] = kernel(tmp);
     });
 }
 

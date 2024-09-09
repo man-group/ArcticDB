@@ -3,6 +3,7 @@
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/codec/bitpack_fused.hpp>
 #include <arcticdb/util/timer.hpp>
+#include <arcticdb/codec/scan.hpp>
 
 #include <random>
 #include <algorithm>
@@ -26,8 +27,8 @@ struct FForCompress {
         reference_(reference) {
     }
     
-    ARCTICDB_ALWAYS_INLINE T operator()(const T* t, size_t index) {
-        return t[index] - reference_; 
+    ARCTICDB_ALWAYS_INLINE T operator()(const T t) {
+        return t - reference_;
     }
 };
 
@@ -39,8 +40,8 @@ struct FForUncompress {
         reference_(reference) {
     }
 
-    ARCTICDB_ALWAYS_INLINE void operator()(T* t, size_t index, T value) {
-        t[index] = value + reference_;
+    ARCTICDB_ALWAYS_INLINE T operator()(T value) {
+        return value + reference_;
     }
 };
 
@@ -67,7 +68,7 @@ TEST(FFor, SimpleRoundtrip) {
     using namespace arcticdb;
     auto data = random_vector<uint64_t>(1024, 21UL, 1UL << 10);
     auto compressed = std::vector<uint64_t>(1024);
-    BitPackFused<uint64_t, 11>::go(data.data(), compressed.data(), FForCompress<uint64_t>{20UL});
+    BitPackFused<uint64_t, 11>::go(data.data(), compressed.data(), [] (auto t) { return t + 20; });
 
     std::vector<uint64_t> uncompressed(1024);
     
@@ -87,14 +88,48 @@ TEST(FForStress, fused) {
     timer.start_timer("pack");
     for(auto k = 0UL; k < num_runs; ++k) {
         for (auto i = 0; i < 100; ++i)
-            BitPackFused<uint64_t, 11>::go(data.data() + 1024 * i, compressed.data() + 176 * i, FForCompress<uint64_t>{20UL});
+            //BitPackFused<uint64_t, 11>::go(data.data() + 1024 * i, compressed.data() + 176 * i, FForCompress<uint64_t>{20UL});
+            BitPackFused<uint64_t, 11>::go(data.data() + 1024 * i, compressed.data() + 176 * i, [] (auto t) { return t + 20; });
     }
     timer.stop_timer("pack");
     std::vector<uint64_t> uncompressed(1024 * 100);
     timer.start_timer("unpack");
     for(auto k = 0UL; k < num_runs; ++k) {
         for (auto i = 0; i < 100; ++i)
-            BitUnpackFused<uint64_t, 11>::go(compressed.data() + 176 * i, uncompressed.data() + 1024 * i, FForUncompress<uint64_t>{20UL});
+            BitUnpackFused<uint64_t, 11>::go(compressed.data() + 176 * i, uncompressed.data() + 1024 * i, [] (auto t) { return t - 20; });
+    }
+
+    timer.stop_timer("unpack");
+    log::version().info("\n{}", timer.display_all());
+    for(auto i = 0; i < 100 * 1024; ++i) {
+        ASSERT_EQ(data[i], uncompressed[i]);
+    }
+}
+
+TEST(FForStress, FusedWithScan) {
+    using namespace arcticdb;
+    auto data = random_vector<uint64_t>(1024 * 100, 21UL, 1UL << 10);
+    auto compressed = std::vector<uint64_t>(1024 * 100);
+
+    auto result = std::pair<uint64_t, uint64_t>(0, 0);
+    for (auto i = 0; i < 100; ++i) {
+        result = min_max_pair(result, min_max(data.data() + i * 1024));
+    }
+    const auto min = result.first;
+    size_t num_runs = 1000000;
+    interval_timer timer;
+    timer.start_timer("pack");
+    for(auto k = 0UL; k < num_runs; ++k) {
+        for (auto i = 0; i < 100; ++i)
+            //BitPackFused<uint64_t, 11>::go(data.data() + 1024 * i, compressed.data() + 176 * i, FForCompress<uint64_t>{20UL});
+            BitPackFused<uint64_t, 11>::go(data.data() + 1024 * i, compressed.data() + 176 * i, [min] (auto t) { return t + min; });
+    }
+    timer.stop_timer("pack");
+    std::vector<uint64_t> uncompressed(1024 * 100);
+    timer.start_timer("unpack");
+    for(auto k = 0UL; k < num_runs; ++k) {
+        for (auto i = 0; i < 100; ++i)
+            BitUnpackFused<uint64_t, 11>::go(compressed.data() + 176 * i, uncompressed.data() + 1024 * i, [min] (auto t) { return t - min; });
     }
 
     timer.stop_timer("unpack");
