@@ -25,4 +25,6 @@ message Config {
     string ca_cert_path = 13;
     string ca_cert_dir = 14;
     bool use_mock_storage_for_testing = 15;
+    // Whether to leave the prefix unchanged, or to translate the periods in it.
+    bool use_raw_prefix = 16;
 }
