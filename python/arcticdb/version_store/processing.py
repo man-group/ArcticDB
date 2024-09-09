@@ -865,7 +865,7 @@ class QueryBuilder:
     def __eq__(self, right):
         if not isinstance(right, QueryBuilder):
             return False
-        return self._optimisation == right._optimisation and self._python_clauses == right._python_clauses
+        return self._optimisation == right._optimisation and str(self) == str(right)
 
     def __str__(self):
         return " | ".join(str(clause) for clause in self.clauses)
