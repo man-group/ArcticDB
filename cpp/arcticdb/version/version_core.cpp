@@ -899,19 +899,26 @@ bool read_incompletes_to_pipeline(
     }
 
     if (!dynamic_schema) {
-        const StreamDescriptor& field_descriptor = incomplete_segments[0].segment(store).descriptor();
-        for (size_t i = 1; i < incomplete_segments.size(); ++i) {
-            const StreamDescriptor& current_descriptor = incomplete_segments[i].segment(store).descriptor();
-            schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                columns_match(field_descriptor, incomplete_segments[i].segment(store).descriptor()),
+        const auto first_different_seg = std::adjacent_find(
+            incomplete_segments.begin(),
+            incomplete_segments.end(),
+            [&](const SliceAndKey& left, const SliceAndKey& right) {
+                const StreamDescriptor& left_desc = left.segment(store).descriptor();
+                const StreamDescriptor& right_desc = right.segment(store).descriptor();
+                return !columns_match(left_desc, right_desc);
+            }
+        );
+        if (first_different_seg != incomplete_segments.end()) {
+            schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>(
                 "When static schema is used all staged segments must have the same column and column types."
                 "{} is different than {}",
-                field_descriptor,
-                current_descriptor
+                first_different_seg->segment(store).descriptor(),
+                (first_different_seg + 1)->segment(store).descriptor()
             );
         }
-        pipeline_context->staged_descriptor_ = field_descriptor;
-        pipeline_context->desc_ = field_descriptor;
+        const StreamDescriptor& desc = incomplete_segments[0].segment(store).descriptor();
+        pipeline_context->staged_descriptor_ = desc;
+        pipeline_context->desc_ = desc;
     } else {
         pipeline_context->staged_descriptor_ =
             merge_descriptors(seg.descriptor(), incomplete_segments, read_query.columns);
