@@ -1399,7 +1399,11 @@ public:
     IncompleteKeysRAII(PipelineContext* pipeline_context, Store& store) : store_(store) {
         for(auto sk = pipeline_context->incompletes_begin(); sk != pipeline_context->end(); ++sk) {
             const auto& slice_and_key = sk->slice_and_key();
-            util::check(slice_and_key.key().type() == KeyType::APPEND_DATA, "Deleting incorrect key type {}", slice_and_key.key().type());
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                slice_and_key.key().type() == KeyType::APPEND_DATA,
+                "Deleting incorrect key type {}",
+                slice_and_key.key().type()
+            );
             delete_keys_.emplace_back(slice_and_key.key());
         }
     }
