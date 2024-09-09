@@ -242,9 +242,9 @@ TEST(Resample, ProcessOneSegment) {
     seg.set_row_id(num_rows - 1);
 
     auto proc_unit = ProcessingUnit{std::move(seg)};
-    auto entity_ids = push_entities(component_manager, std::move(proc_unit));
+    auto entity_ids = push_entities(*component_manager, std::move(proc_unit));
 
-    auto resampled = gather_entities(component_manager, resample.process(std::move(entity_ids)));
+    auto resampled = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager, resample.process(std::move(entity_ids)));
     ASSERT_TRUE(resampled.segments_.has_value());
     auto segments = resampled.segments_.value();
     ASSERT_EQ(1, segments.size());
@@ -329,22 +329,16 @@ TEST(Resample, ProcessMultipleSegments) {
     auto row_range_2 = std::make_shared<RowRange>(5, 6);
     auto col_range_2 = std::make_shared<ColRange>(1, 2);
 
-    auto id_0 = component_manager->add(seg_0, std::nullopt, 1);
-    component_manager->add(row_range_0, id_0);
-    component_manager->add(col_range_0, id_0);
-    auto id_1 = component_manager->add(seg_1, std::nullopt, 2);
-    component_manager->add(row_range_1, id_1);
-    component_manager->add(col_range_1, id_1);
-    auto id_2 = component_manager->add(seg_2, std::nullopt, 1);
-    component_manager->add(row_range_2, id_2);
-    component_manager->add(col_range_2, id_2);
+    auto ids = component_manager->get_new_entity_ids(3);
+    component_manager->add_entity(ids[0], seg_0, row_range_0, col_range_0, EntityFetchCount(1));
+    component_manager->add_entity(ids[1], seg_1, row_range_1, col_range_1, EntityFetchCount(2));
+    component_manager->add_entity(ids[2], seg_2, row_range_2, col_range_2, EntityFetchCount(1));
 
+    std::vector<EntityId> ids_0{ids[0], ids[1]};
+    std::vector<EntityId> ids_1{ids[1]};
+    std::vector<EntityId> ids_2{ids[2]};
 
-    std::vector<EntityId> ids_0{id_0, id_1};
-    std::vector<EntityId> ids_1{id_1};
-    std::vector<EntityId> ids_2{id_2};
-
-    auto resampled_0 = gather_entities(component_manager, resample.process(std::move(ids_0)));
+    auto resampled_0 = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager, resample.process(std::move(ids_0)));
     auto resampled_seg_0 = *resampled_0.segments_.value()[0];
     auto& resampled_index_column_0 = resampled_seg_0.column(0);
     auto& resampled_sum_column_0 = resampled_seg_0.column(1);
@@ -353,7 +347,7 @@ TEST(Resample, ProcessMultipleSegments) {
     ASSERT_EQ(0, resampled_sum_column_0.scalar_at<int64_t>(0));
     ASSERT_EQ(30, resampled_sum_column_0.scalar_at<int64_t>(1));
 
-    auto resampled_1 = gather_entities(component_manager, resample.process(std::move(ids_1)));
+    auto resampled_1 = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager, resample.process(std::move(ids_1)));
     auto resampled_seg_1 = *resampled_1.segments_.value()[0];
     auto& resampled_index_column_1 = resampled_seg_1.column(0);
     auto& resampled_sum_column_1 = resampled_seg_1.column(1);
@@ -362,7 +356,7 @@ TEST(Resample, ProcessMultipleSegments) {
     ASSERT_EQ(30, resampled_sum_column_1.scalar_at<int64_t>(0));
     ASSERT_EQ(40, resampled_sum_column_1.scalar_at<int64_t>(1));
 
-    auto resampled_2 = gather_entities(component_manager, resample.process(std::move(ids_2)));
+    auto resampled_2 = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager, resample.process(std::move(ids_2)));
     auto resampled_seg_2 = *resampled_2.segments_.value()[0];
     auto& resampled_index_column_2 = resampled_seg_2.column(0);
     auto& resampled_sum_column_2 = resampled_seg_2.column(1);
