@@ -171,30 +171,40 @@ TEST(FastlanesStress, PackUnpackStress) {
     using namespace arcticdb;
     auto num_runs = 1000000;
 
-    auto packed64 = new uint64_t[1024 * 100]();
-    auto unpacked64 = new uint64_t[1024 * 100]();
 
     auto *base64 = new uint64_t[1]();
     *base64 = 0;
     *(base64) = 0;
     auto data = get_test_vector();
     interval_timer timer;
-    timer.start_timer("pack");
+
     for(auto k = 0; k < num_runs; ++k)
     {
+        auto packed64 = new uint64_t[1024 * 100]();
+        timer.start_timer("pack");
         for(auto i = 0; i < 100; ++i) {
             generated::pack::fallback::scalar::pack(data.data() + 1024 * i, const_cast<uint64_t *>(packed64 + 176 * i), 11);
         }
+        timer.stop_timer("pack");
+        delete[] packed64;
     }
-    timer.stop_timer("pack");
-    timer.start_timer("unpack");
+
+    auto packed64 = new uint64_t[1024 * 100]();
+    for(auto i = 0; i < 100; ++i)
+        generated::pack::fallback::scalar::pack(data.data() + 1024 * i, const_cast<uint64_t *>(packed64 + 176 * i), 11);
+
+
     for(auto k = 0; k < num_runs; ++k)
     {
+        auto unpacked64 = new uint64_t[1024 * 100]();
+        timer.start_timer("unpack");
         for(auto i = 0; i < 100; ++i) {
             generated::unpack::fallback::scalar::unpack(packed64 + 176 * i, const_cast<uint64_t *>(unpacked64 + 1024 * i), 11);
         }
+        timer.stop_timer("unpack");
+        delete[] unpacked64;
     }
-    timer.stop_timer("unpack");
+
     log::version().info("\n{}", timer.display_all());
 }
 
@@ -206,28 +216,76 @@ TEST(FastlanesStress, PackUnpackFusedStress) {
     };
 
     auto data = get_test_vector();
-    std::vector<uint64_t> local_packed64(1024 * 100);
-    std::vector<uint64_t> local_unpacked64(1024 * 100);
 
     struct UncompressIdentity{
         void operator()(uint64_t* t, size_t index, uint64_t value) { t[index] = value; }
     };
 
     interval_timer timer;
-    timer.start_timer("pack");
+
     for(auto k = 0; k < num_runs; ++k)
     {
+        std::vector<uint64_t> local_packed64(1024 * 100);
+        timer.start_timer("pack");
         for(auto i = 0; i < 100; ++i)
             BitPackFused<uint64_t, 11>::go(data.data() + 1024 * i, local_packed64.data() + 176 * i, CompressIdentity{});
+        timer.stop_timer("pack");
     }
-    timer.stop_timer("pack");
-    timer.start_timer("unpack");
+
+    std::vector<uint64_t> local_packed64(1024 * 100);
+    for(auto i = 0; i < 100; ++i)
+        BitPackFused<uint64_t, 11>::go(data.data() + 1024 * i, local_packed64.data() + 176 * i, CompressIdentity{});
+
+
     for(auto k = 0; k < num_runs; ++k)
     {
+        std::vector<uint64_t> local_unpacked64(1024 * 100);
+        timer.start_timer("unpack");
         for(auto i = 0; i < 100; ++i)
             BitUnpackFused<uint64_t, 11>::go(local_packed64.data() + 176 * i, local_unpacked64.data() + 1024 * i, UncompressIdentity{});
+        timer.stop_timer("unpack");
     }
-    timer.stop_timer("unpack");
+
+    log::version().info("\n{}", timer.display_all());
+}
+
+TEST(FastlanesStress, PackUnpackFusedStressArithmetic) {
+    using namespace arcticdb;
+    auto num_runs = 1000000;
+    struct CompressIdentity{
+        uint64_t operator()(const uint64_t* t, size_t index) { return t[index] * 2; }
+    };
+
+    auto data = get_test_vector();
+
+    struct UncompressIdentity{
+        void operator()(uint64_t* t, size_t index, uint64_t value) { t[index] = value / 2; }
+    };
+
+    interval_timer timer;
+
+    for(auto k = 0; k < num_runs; ++k) {
+        timer.start_timer("pack");
+        std::vector<uint64_t> local_packed64(1024 * 100);
+        for(auto i = 0; i < 100; ++i)
+            BitPackFused<uint64_t, 11>::go(data.data() + 1024 * i, local_packed64.data() + 176 * i, CompressIdentity{});
+
+        timer.stop_timer("pack");
+    }
+
+    std::vector<uint64_t> local_packed64(1024 * 100);
+    for(auto i = 0; i < 100; ++i)
+        BitPackFused<uint64_t, 11>::go(data.data() + 1024 * i, local_packed64.data() + 176 * i, CompressIdentity{});
+
+    for(auto k = 0; k < num_runs; ++k) {
+        std::vector<uint64_t> local_unpacked64(1024 * 100);
+        timer.start_timer("unpack");
+        for(auto i = 0; i < 100; ++i)
+            BitUnpackFused<uint64_t, 11>::go(local_packed64.data() + 176 * i, local_unpacked64.data() + 1024 * i, UncompressIdentity{});
+
+        timer.stop_timer("unpack");
+    }
+
     log::version().info("\n{}", timer.display_all());
 }
 
