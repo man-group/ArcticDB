@@ -853,6 +853,7 @@ void read_indexed_keys_to_pipeline(
     pipeline_context->bucketize_dynamic_ = bucketize_dynamic;
 }
 
+// Returns true if there are staged segments
 bool read_incompletes_to_pipeline(
     const std::shared_ptr<Store>& store,
     std::shared_ptr<PipelineContext>& pipeline_context,
