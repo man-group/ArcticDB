@@ -215,6 +215,7 @@ def add_mongo_library_to_env(cfg, lib_name, env_name, uri=None, description=None
 
 
 def get_s3_proto(
+    *,
     cfg,
     lib_name,
     env_name,
@@ -222,15 +223,16 @@ def get_s3_proto(
     credential_key,
     bucket_name,
     endpoint,
-    with_prefix=True,
-    is_https=False,
-    region=None,
-    use_virtual_addressing=False,
-    use_mock_storage_for_testing=None,
-    ca_cert_path=None,
-    ca_cert_dir=None,
-    ssl=False,
-    is_nfs_layout=False,
+    with_prefix,
+    is_https,
+    region,
+    use_virtual_addressing,
+    use_mock_storage_for_testing,
+    ca_cert_path,
+    ca_cert_dir,
+    ssl,
+    is_nfs_layout,
+    use_raw_prefix,
 ):
     env = cfg.env_by_id[env_name]
     if is_nfs_layout:
@@ -259,6 +261,8 @@ def get_s3_proto(
             s3.prefix = f"{lib_name}{time.time() * 1e9:.0f}"
     else:
         s3.prefix = lib_name
+
+    s3.use_raw_prefix = use_raw_prefix
 
     if region:
         s3.region = region
@@ -291,7 +295,8 @@ def add_s3_library_to_env(
     ca_cert_path=None,
     ca_cert_dir=None,
     ssl=False,
-    is_nfs_layout=False
+    is_nfs_layout=False,
+    use_raw_prefix=False,
 ):
     env = cfg.env_by_id[env_name]
     if with_prefix and isinstance(with_prefix, str) and (with_prefix.endswith("/") or "//" in with_prefix):
@@ -316,7 +321,8 @@ def add_s3_library_to_env(
         ca_cert_path=ca_cert_path,
         ca_cert_dir=ca_cert_dir,
         ssl=ssl,
-        is_nfs_layout=is_nfs_layout
+        is_nfs_layout=is_nfs_layout,
+        use_raw_prefix=use_raw_prefix,
     )
 
     _add_lib_desc_to_env(env, lib_name, sid, description)
