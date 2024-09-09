@@ -105,7 +105,7 @@ Note that this is a library configuration option that is off by default, see [`h
 
 ArcticDB is primarily focused on filtering and transfering data from storage through to memory - at which point Pandas, NumPy, or other standard analytical packages can be utilised for analytics.
 
-That said, ArcticDB does offer a limited set of analytical functions that are executed inside the C++ storage engine offering significant performance benefits over Pandas. For more information, see the documentation for the *QueryBuilder* class.
+That said, ArcticDB does offer a limited set of analytical functions that are executed inside the C++ storage engine offering significant performance benefits over Pandas. For more information, see the [documentation](api/processing.md) for the `LazyDataFrame`, `LazyDataFrameCollection`, and `QueryBuilder` classes.
 
 ### *What does Pickling mean?*
 
@@ -172,7 +172,9 @@ Please see the [Runtime Configuration](runtime_config.md#versionstorenumcputhrea
 
 ### Does ArcticDB support categorical data?
 
-ArcticDB currently offers extremely limited support for categorical data. Series and DataFrames with categorical columns can be provided to the `write` and `write_batch` methods, and will then behave as expected on `read`. However, `append` and `update` are not yet supported with categorical data, and will raise an exception if attempted. The `QueryBuilder` is also not supported with categorical data, and will either raise an exception, or give incorrect results, depending on the exact operations requested.
+ArcticDB currently offers extremely limited support for categorical data. Series and DataFrames with categorical columns can be provided to the `write` and `write_batch` methods, and will then behave as expected on `read`.
+However, `append` and `update` are not yet supported with categorical data, and will raise an exception if attempted.
+Analytics such as filtering using the `LazyDataFrame` or `QueryBuilder` classes is also not supported with categorical data, and will either raise an exception, or give incorrect results, depending on the exact operations requested.
 
 ### How does ArcticDB handle `NaN`?
 
