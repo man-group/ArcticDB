@@ -140,7 +140,7 @@ def test_unordered_segment(lmdb_library_static_dynamic):
     lib = lmdb_library_static_dynamic
     dates = [np.datetime64('2023-01-03'), np.datetime64('2023-01-01'), np.datetime64('2023-01-05')]
     df = pd.DataFrame({"col": [2, 1, 3]}, index=dates)
-    lib.write("sym", df, staged=True)
+    lib.write("sym", df, staged=True, validate_index=False)
     lib.sort_and_finalize_staged_data("sym")
     assert_frame_equal(lib.read('sym').data, pd.DataFrame({"col": [1, 2, 3]}, index=[np.datetime64('2023-01-01'), np.datetime64('2023-01-03'), np.datetime64('2023-01-05')]))
 
@@ -461,10 +461,10 @@ def test_two_columns_with_different_dtypes(lmdb_library_dynamic_schema):
     ])
     df1 = pd.DataFrame({
          "a": np.array([1], dtype="float"),
-         "b": np.array([22250], dtype="int64")
+         "b": np.array([2], dtype="int64")
     }, index=idx1)
     
-    b = np.array([-53979, -53973], dtype="int64")
+    b = np.array([3, 4], dtype="int64")
 
     idx = pd.DatetimeIndex([
         pd.Timestamp("2024-01-03"),
@@ -473,8 +473,8 @@ def test_two_columns_with_different_dtypes(lmdb_library_dynamic_schema):
 
     df2 = pd.DataFrame({"b": b}, index=idx)
     
-    lib.write("sym", df1, staged=True)
-    lib.write("sym", df2, staged=True)
+    lib.write("sym", df1, staged=True, validate_index=False)
+    lib.write("sym", df2, staged=True, validate_index=False)
     lib.sort_and_finalize_staged_data("sym")
     lib.read("sym")
 
@@ -483,7 +483,7 @@ def test_nat_is_not_allowed_in_index(lmdb_library_static_dynamic, mode):
     lib = lmdb_library_static_dynamic
 
     df1 = pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.NaT]))
-    lib.write("sym", df1, staged=True)
+    lib.write("sym", df1, staged=True, validate_index=False)
     with pytest.raises(SortingException) as exception_info:
         lib.sort_and_finalize_staged_data("sym", mode=mode)
     assert "NaT" in str(exception_info.value)

@@ -118,7 +118,7 @@ class StagedWriteStaticSchema(RuleBasedStateMachine):
     @rule(df=df(COLUMN_DESCRIPTIONS))
     def stage(self, df):
         self.staged.append(df)
-        self.lib.write(self.SYMBOL, df, staged=True)
+        self.lib.write(self.SYMBOL, df, staged=True, validate_index=False)
 
     @precondition(lambda self: not self.has_staged_segments())
     @rule()
@@ -222,7 +222,7 @@ class StagedWriteDynamicSchema(RuleBasedStateMachine):
     @rule(df=df(COLUMN_DESCRIPTIONS))
     def stage(self, df):
         self.staged.append(df)
-        self.lib.write(self.SYMBOL, df, staged=True)
+        self.lib.write(self.SYMBOL, df, staged=True, validate_index=False)
 
     @precondition(lambda self: not self.has_staged_segments())
     @rule()

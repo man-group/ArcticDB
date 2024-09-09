@@ -23,7 +23,7 @@ TEST(Append, Simple) {
     auto wrapper = get_test_simple_frame(stream_id, 10, 0);
     auto& frame = wrapper.frame_;
     auto desc = frame->desc.clone();
-    append_incomplete(store, stream_id, frame);
+    append_incomplete(store, stream_id, frame, true);
     pipelines::FilterRange range;
     auto pipeline_context = std::make_shared<PipelineContext>(desc);
     pipeline_context->selected_columns_ = util::BitSet(2);

@@ -109,7 +109,7 @@ void do_compact(
     const std::shared_ptr<Store>& store,
     bool convert_int_to_float,
     std::optional<size_t> segment_size,
-    bool check_index_sorted){
+    bool validate_index){
         auto index = stream::index_type_from_descriptor(pipeline_context->descriptor());
         stream::SegmentAggregator<IndexType, SchemaType, SegmentationPolicy, DensityPolicy>
         aggregator{
@@ -140,7 +140,7 @@ void do_compact(
 
             const auto& segment = sk.segment(store);
             sorting::check<ErrorCode::E_UNSORTED_DATA>(
-                !check_index_sorted || segment.descriptor().sorted() == SortedValue::ASCENDING,
+                !validate_index || segment.descriptor().sorted() == SortedValue::ASCENDING,
                 "Cannot compact unordered segment."
             );
 
