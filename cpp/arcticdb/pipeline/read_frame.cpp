@@ -623,6 +623,8 @@ struct ReduceColumnTask : async::BaseTask {
 
                 column.set_inflated(frame_.row_count());
             }
+        } else if (!dynamic_schema_ && column_data == slice_map_->columns_.end() && is_sequence_type(column.type().data_type())) {
+            internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Column with index {} is not in static schema slice map.", column_index_);
         }
         return folly::Unit{};
     }
