@@ -916,9 +916,17 @@ bool read_incompletes_to_pipeline(
                 (first_different_seg + 1)->segment(store).descriptor()
             );
         }
-        const StreamDescriptor& desc = incomplete_segments[0].segment(store).descriptor();
-        pipeline_context->staged_descriptor_ = desc;
-        pipeline_context->desc_ = desc;
+        const StreamDescriptor& staged_desc = incomplete_segments[0].segment(store).descriptor();
+        if (pipeline_context->desc_) {
+            schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                columns_match(staged_desc, *pipeline_context->desc_),
+                "When static schema is used the staged stream descriptor {} must equal the stream descriptor on storage {}",
+                staged_desc,
+                *pipeline_context->desc_
+            );
+        }
+        pipeline_context->staged_descriptor_ = staged_desc;
+        pipeline_context->desc_ = staged_desc;
     } else {
         pipeline_context->staged_descriptor_ =
             merge_descriptors(seg.descriptor(), incomplete_segments, read_query.columns);
