@@ -14,7 +14,7 @@
 #include <arcticdb/column_store/memory_segment.hpp>
 
 namespace arcticdb {
-/*
+
 sparrow::arrow_array_unique_ptr arrow_data_from_column(const Column& column) {
     return column.type().visit_tag([&](auto && impl) -> sparrow::arrow_array_unique_ptr {
         using TagType = std::decay_t<decltype(impl)>;
@@ -40,7 +40,7 @@ sparrow::arrow_array_unique_ptr arrow_data_from_column(const Column& column) {
         }
     });
 };
-
+/*
 std::vector<sparrow::arrow_array_unique_ptr> segment_to_arrow_arrays(SegmentInMemory& segment) {
     std::vector<sparrow::arrow_array_unique_ptr> output;
     for(auto& column : segment.column()) {

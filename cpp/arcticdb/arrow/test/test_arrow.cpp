@@ -7,10 +7,10 @@
 
 #include <gtest/gtest.h>
 
-//#include <arcticdb/arrow/arrow_utils.hpp>
+#include <arcticdb/arrow/arrow_utils.hpp>
 
 TEST(Arrow, ConvertColumn) {
-  //  using namespace arcticdb;
-  //  Column column;
-  //  auto data = arrow_data_from_column(column);
+    using namespace arcticdb;
+    Column column;
+    auto data = arrow_data_from_column(column);
 }
