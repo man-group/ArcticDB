@@ -321,6 +321,7 @@ class LazyDataFrame(QueryBuilder):
     Examples
     --------
 
+    >>>
     # Specify that we want version 0 of "test" symbol, and to only return the "new_column" column in the output
     >>> lazy_df = lib.read("test", as_of=0, columns=["new_column"], lazy=True)
     # Perform a filtering operation
@@ -388,7 +389,7 @@ class LazyDataFrameCollection(QueryBuilder):
     """
     Lazy dataframe implementation for batch operations. Allows the application of chains of queries to be added before
     the actual reads are performed. Queries applied to this object will be applied to all  the symbols being read.
-    If per-symbol queries are required, split can be used to break this class into a list of LazyDataFrame objects.
+    If per-symbol queries are required, split can be used to break this class into a list of `LazyDataFrame` objects.
     Returned by `Library.read_batch` calls when `lazy=True`.
 
     See Also
@@ -398,6 +399,7 @@ class LazyDataFrameCollection(QueryBuilder):
     Examples
     --------
 
+    >>>
     # Specify that we want the latest version of "test_0" symbol, and version 0 of "test_1" symbol
     >>> lazy_dfs = lib.read_batch(["test_0", ReadRequest("test_1", as_of=0)], lazy=True)
     # Perform a filtering operation on both the "test_0" and "test_1" symbols
@@ -416,6 +418,14 @@ class LazyDataFrameCollection(QueryBuilder):
             self,
             lazy_dataframes: List[LazyDataFrame],
     ):
+        """
+        Gather a list of `LazyDataFrame`s into a single object that can be collected together.
+
+        Parameters
+        ----------
+        lazy_dataframes : List[LazyDataFrame]
+            Collection of `LazyDataFrames`s to gather together.
+        """
         lib_set = {lazy_dataframe.lib for lazy_dataframe in lazy_dataframes}
         check(
             len(lib_set) in [0, 1],

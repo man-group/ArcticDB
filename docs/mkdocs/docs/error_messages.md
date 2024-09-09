@@ -43,10 +43,10 @@ For legacy reasons, the terms `symbol`, `stream`, and `stream ID` are used inter
 | Error Code | Cause                                                      | Resolution                                                                                                                                                                                                                                                                             |
 |------------|------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | 4000       | The number, type, or name of the columns has been changed. | Ensure that the type and order of the columns has not changed when appending or updating the previous version. This restriction only applies when `Dynamic Schema` is disabled - if you require the columns sets to change, please enable the `Dynamic Schema` option on your library. |
-| 4001       | The specified column does not exist. | Please specify a valid column - use the `get_description` method to see all of the columns associated with a given symbol. |
-| 4002       | The requested operation is not supported with the type of column provided. | Certain operations are not supported over all column types e.g. arithmetic with the `QueryBuilder` over string columns - use the `get_description` method to see all of the columns associated with a given symbol, along with their types. |
-| 4003       | The requested operation is not supported with the index type of the symbol provided. | Certain operations are not supported over all index types e.g. column statistics generation with a string index - use the `get_description` method to see the index(es) associated with a given symbol, along with their types. |
-| 4004       | The requested operation is not supported with pickled data. | Certain operations are not supported with pickled data e.g. `date_range` filtering. If such operations are required, you must ensure that the data is of a normalizable type, such that it can be written using the `write` method, and does not require the `write_pickle` method. |
+| 4001       | The specified column does not exist. | Please specify a valid column - use the `get_description` method to see all of the columns associated with a given symbol.                                                                                                                                                             |
+| 4002       | The requested operation is not supported with the type of column provided. | Certain operations are not supported over all column types e.g. arithmetic in the processing pipeline over string columns - use the `get_description` method to see all of the columns associated with a given symbol, along with their types.                                         |
+| 4003       | The requested operation is not supported with the index type of the symbol provided. | Certain operations are not supported over all index types e.g. column statistics generation with a string index - use the `get_description` method to see the index(es) associated with a given symbol, along with their types.                                                        |
+| 4004       | The requested operation is not supported with pickled data. | Certain operations are not supported with pickled data e.g. `date_range` filtering. If such operations are required, you must ensure that the data is of a normalizable type, such that it can be written using the `write` method, and does not require the `write_pickle` method.    |
 
 
 ### Storage Errors
@@ -92,7 +92,7 @@ For legacy reasons, the terms `symbol`, `stream`, and `stream ID` are used inter
 
 These errors relate to data being pickled, which limits the operations available. Internally, pickled symbols are stored as opaque, serialised binary blobs in the [data layer](technical/on_disk_storage.md#data-layer). No index or column information is maintained in this serialised object which is in contrast to non-pickled data, where this information is stored in the [index layer](technical/on_disk_storage.md#index-layer).
 
-Furthermore, it is not possible to partially read/update/append the data using the ArcticDB API or use the QueryBuilder with pickled symbols. 
+Furthermore, it is not possible to partially read/update/append the data using the ArcticDB API or use the processing pipeline with pickled symbols. 
 
 All of these errors are of type `arcticdb.exceptions.ArcticException`.
 
@@ -135,20 +135,20 @@ All of these errors are of type `arcticdb.exceptions.ArcticException`.
 | Non-contiguous rows, range search on unsorted data?... | `read` method called with the optional `date_range` argument specified, and the symbol has a timestamp index, but it is not sorted. | To use the `date_range` argument to `read`, the user must ensure the data is sorted on the index at write time. |
 | Delete in range will not work as expected with a non-timeseries index | `delete_data_in_range` method called, but the symbol does not have a timestamp index. | None, the `delete_data_in_range` method does not make sense without a timestamp index. |
 
-### QueryBuilder errors
+### Processing pipeline errors
 
-Due to the client-only nature of ArcticDB, it is not possible to know if a `QueryBuilder` provided to `read` makes sense for the given symbol without interacting with the storage. In particular, we do not know:
+Due to the client-only nature of ArcticDB, it is not possible to know if a processing operation applied to a `LazyDataFrame`, or provided to `read` with a `QueryBuilder` object, makes sense for the given symbol without interacting with the storage. In particular, we do not know:
 
 * Whether a specified column exists
 * What the type of the data held in a specified column is if it does exist
 
 All of these errors are of type `arcticdb.exceptions.ArcticException`.
 
-| Error messages | Cause | Resolution |
-|:--------------|:-------|:-----------|
-| Unexpected column name | A column name was specified with the `QueryBuilder` that does not exist for this symbol, and the library has dynamic schema disabled. | None of the supported `QueryBuilder` operations (filtering, projections, group-bys and aggregations) make sense with non-existent columns. |
-| Non-numeric type provided to binary operation: <typename\> | Error messages like this imply that an operation that ArcticDB does not support was provided in the `QueryBuilder` argument e.g. adding two string columns together. | The `get_description` method can be used to inspect the types of the columns. A full list of supported operations are provided in the `QueryBuilder` [API documentation](api/query_builder.md). |
-| Cannot compare <typename 1\> to <typename 2\> (possible categorical?) | If `get_description` indicates that a column is of categorical type, and this categorical is being used to store string values, then comparisons to other strings will fail with an error message like this one. | Categorical support in ArcticDB is [extremely limited](faq.md#does-arcticdb-support-categorical-data), but may be added in the future. |
+| Error messages | Cause                                                                                                                                                                                                            | Resolution                                                                                                                                                                                   |
+|:--------------|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Unexpected column name | A column name was specified for a processing operation that does not exist for this symbol, and the library has dynamic schema disabled.                                                                         | Use `get_description` to ensure that column names provided in processing operations exist for the symbol.                                                                                    |
+| Non-numeric type provided to binary operation: <typename\> | Error messages like this imply that an operation that ArcticDB does not support was provided in a processing operation e.g. adding two string columns together.                                                  | The `get_description` method can be used to inspect the types of the columns. A full list of supported operations are provided in the `QueryBuilder` [API documentation](api/processing.md). |
+| Cannot compare <typename 1\> to <typename 2\> (possible categorical?) | If `get_description` indicates that a column is of categorical type, and this categorical is being used to store string values, then comparisons to other strings will fail with an error message like this one. | Categorical support in ArcticDB is [extremely limited](faq.md#does-arcticdb-support-categorical-data), but may be added in the future.                                                       |
 
 ### Encoding errors
 
