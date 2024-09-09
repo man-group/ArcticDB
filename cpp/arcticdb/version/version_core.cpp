@@ -1413,28 +1413,6 @@ private:
     Store& store_;
 };
 
-void check_incomplete_descriptor_match(
-    const CompactIncompleteOptions& options,
-    const UpdateInfo& update_info,
-    const WriteOptions& write_options,
-    const std::shared_ptr<PipelineContext>& pipeline_context,
-    const std::shared_ptr<Store>& store
-) {
-    const bool verify_descriptors_match =
-        options.append_ && update_info.previous_index_key_.has_value() && !write_options.dynamic_schema;
-    if (verify_descriptors_match) {
-        const auto& index_segment_reader = index::get_index_reader(*(update_info.previous_index_key_), store);
-        const auto& original_descriptor = index_segment_reader.tsd().as_stream_descriptor();
-        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-            columns_match(original_descriptor, *pipeline_context->desc_),
-            "When static schema is used all staged segments must have the same column and column types."
-            "{} is different than {}",
-            original_descriptor,
-            *pipeline_context->desc_
-        );
-    }
-}
-
 VersionedItem sort_merge_impl(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
@@ -1478,8 +1456,6 @@ VersionedItem sort_merge_impl(
         "Finalizing staged data is not allowed with empty staging area"
     );
     IncompleteKeysRAII incomplete_keys(pipeline_context.get(), *store);
-
-    check_incomplete_descriptor_match(options, update_info, write_options, pipeline_context, store);
 
     std::vector<FrameSlice> slices;
     std::vector<folly::Future<VariantKey>> fut_vec;
@@ -1604,8 +1580,6 @@ VersionedItem compact_incomplete_impl(
     const auto& first_seg = pipeline_context->slice_and_keys_.begin()->segment(store);
 
     IncompleteKeysRAII incomplete_keys(pipeline_context.get(), *store);
-
-    check_incomplete_descriptor_match(options, update_info, write_options, pipeline_context, store);
 
     std::vector<folly::Future<VariantKey>> fut_vec;
     std::vector<FrameSlice> slices;
