@@ -516,4 +516,4 @@ class TestSortMergeDynamicSchema:
         expected = pd.DataFrame({"a": [1, 0, 0], "b": [np.nan, 1.5, np.nan], "c": [None, None, "c"]}, index=pd.date_range("2024-01-01", "2024-01-03"))
         stored = lib.read("sym").data
 
-        assert_frame_equal(expected, stored)
+        assert_frame_equal(expected, stored, check_like=True)

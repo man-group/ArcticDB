@@ -13,7 +13,7 @@
 namespace arcticdb {
 StreamDescriptor merge_descriptors(
     const StreamDescriptor &original,
-    const std::vector<std::shared_ptr<FieldCollection>> &entries,
+    std::span<const std::shared_ptr<FieldCollection>> entries,
     const std::unordered_set<std::string_view> &filtered_set,
     const std::optional<IndexDescriptorImpl>& default_index) {
     using namespace arcticdb::stream;
@@ -98,6 +98,17 @@ StreamDescriptor merge_descriptors(
     const StreamDescriptor &original,
     const std::vector<std::shared_ptr<FieldCollection>> &entries,
     const std::optional<std::vector<std::string>> &filtered_columns,
+    const std::optional<IndexDescriptorImpl>& default_index) {
+    std::unordered_set<std::string_view> filtered_set = filtered_columns.has_value()
+        ? std::unordered_set<std::string_view>(filtered_columns->begin(), filtered_columns->end())
+        : std::unordered_set<std::string_view>{};
+    return merge_descriptors(original, entries, filtered_set, default_index);
+}
+
+StreamDescriptor merge_descriptors(
+    const StreamDescriptor& original,
+    std::span<const std::shared_ptr<FieldCollection>> entries,
+    const std::optional<std::vector<std::string>>& filtered_columns,
     const std::optional<IndexDescriptorImpl>& default_index) {
     std::unordered_set<std::string_view> filtered_set = filtered_columns.has_value()
         ? std::unordered_set<std::string_view>(filtered_columns->begin(), filtered_columns->end())

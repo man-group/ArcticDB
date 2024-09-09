@@ -878,25 +878,23 @@ bool read_incompletes_to_pipeline(
     // Picking an empty segment when there are non-empty ones will impact the index type and column namings.
     // If all segments are empty we will procede as if were appending/writing and empty dataframe.
     debug::check<ErrorCode::E_ASSERTION_FAILURE>(!incomplete_segments.empty(), "Incomplete segments must be non-empty");
-    const auto* seg = &incomplete_segments.front().segment(store);
-    for (auto& slice : incomplete_segments) {
-        if (slice.segment(store).row_count() > 0) {
-            seg = &slice.segment_.value();
-            break;
-        }
-    }
+    const auto first_non_empty_seg = std::find_if(incomplete_segments.begin(), incomplete_segments.end(), [&](auto& slice){
+        return slice.segment(store).row_count() > 0;
+    });
+    const auto& seg =
+        first_non_empty_seg != incomplete_segments.end() ? first_non_empty_seg->segment(store) : incomplete_segments.begin()->segment(store);
     // Mark the start point of the incompletes, so we know that there is no column slicing after this point
     pipeline_context->incompletes_after_ = pipeline_context->slice_and_keys_.size();
 
     // If there are only incompletes we need to add the index here
     if(pipeline_context->slice_and_keys_.empty()) {
-        add_index_columns_to_query(read_query, seg->index_descriptor());
+        add_index_columns_to_query(read_query, seg.index_descriptor());
     }
     pipeline_context->slice_and_keys_.insert(std::end(pipeline_context->slice_and_keys_), incomplete_segments.begin(), incomplete_segments.end());
 
     if (!pipeline_context->norm_meta_) {
         pipeline_context->norm_meta_ = std::make_unique<arcticdb::proto::descriptors::NormalizationMetadata>();
-        pipeline_context->norm_meta_->CopyFrom(seg->index_descriptor().proto().normalization());
+        pipeline_context->norm_meta_->CopyFrom(seg.index_descriptor().proto().normalization());
         ensure_timeseries_norm_meta(*pipeline_context->norm_meta_, pipeline_context->stream_id_, sparsify);
     }
 
@@ -912,19 +910,23 @@ bool read_incompletes_to_pipeline(
                 current_descriptor
             );
         }
+        pipeline_context->staged_descriptor_ = field_descriptor;
         pipeline_context->desc_ = field_descriptor;
     } else {
+        pipeline_context->staged_descriptor_ =
+            merge_descriptors(seg.descriptor(), incomplete_segments, read_query.columns);
         if (pipeline_context->desc_) {
+            const std::array fields_ptr = {pipeline_context->desc_->fields_ptr()};
             pipeline_context->desc_ =
-                merge_descriptors(*pipeline_context->desc_, incomplete_segments, read_query.columns);
+                merge_descriptors(*pipeline_context->staged_descriptor_, fields_ptr, read_query.columns);
         } else {
-            pipeline_context->desc_ = merge_descriptors(seg->descriptor(), incomplete_segments, read_query.columns);
+            pipeline_context->desc_ = pipeline_context->staged_descriptor_;
         }
     }
 
     modify_descriptor(pipeline_context, read_options);
     if (convert_int_to_float) {
-        stream::convert_descriptor_types(*pipeline_context->desc_);
+        stream::convert_descriptor_types(*pipeline_context->staged_descriptor_);
     }
 
     generate_filtered_field_descriptors(pipeline_context, read_query.columns);
@@ -1494,7 +1496,7 @@ VersionedItem sort_merge_impl(
                 [&slices](FrameSlice &&slice) {
                     slices.emplace_back(std::move(slice));
                 },
-                DynamicSchema{pipeline_context->descriptor(), index},
+                DynamicSchema{*pipeline_context->staged_descriptor_, index},
                 [pipeline_context=pipeline_context, &fut_vec, &store](SegmentInMemory &&segment) {
                     const auto local_index_start = TimeseriesIndex::start_value_for_segment(segment);
                     const auto local_index_end = TimeseriesIndex::end_value_for_segment(segment);
