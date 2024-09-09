@@ -14,6 +14,106 @@ from arcticdb.util.test import assert_frame_equal
 from arcticdb_ext.exceptions import SchemaException
 
 
+def test_query_builder_equality_checks():
+    q1 = QueryBuilder()
+    q2 = QueryBuilder()
+    q1 = q1[q1["date"] >= pd.Timestamp("2020-01-01")]
+    q2 = q2[q2["date"] >= pd.Timestamp("2020-01-01")]
+    assert q1 == q2
+
+    q2 = QueryBuilder()
+    q2 = q2[q2["date"] >= pd.Timestamp("2021-01-01")]
+    assert q1 != q2
+
+
+def test_querybuilder_getitem_idempotency(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_querybuilder_getitem_idempotency"
+    df = pd.DataFrame({"a": [0, 1]}, index=np.arange(2))
+    lib.write(sym, df)
+    q = QueryBuilder()
+    q_copy = q
+    q = q[q["a"] == 1]
+    q_copy = q_copy[q_copy["a"] == 0]
+    expected = df[df["a"] == 1]
+    expected_copy = df[df["a"] == 0]
+    assert_frame_equal(expected, lib.read(sym, query_builder=q).data)
+    assert_frame_equal(expected_copy, lib.read(sym, query_builder=q_copy).data)
+
+
+def test_querybuilder_shallow_copy(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_querybuilder_shallow_copy"
+    df = pd.DataFrame({"a": [0, 1]}, index=np.arange(2))
+    lib.write(sym, df)
+    q = QueryBuilder()
+    q = q[q["a"] == 1]
+    q_copy = copy.copy(q)
+    expected = df[df["a"] == 1]
+    assert_frame_equal(expected, lib.read(sym, query_builder=q).data)
+    assert_frame_equal(expected, lib.read(sym, query_builder=q_copy).data)
+
+
+def test_querybuilder_deepcopy(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_querybuilder_deepcopy"
+    df = pd.DataFrame({"a": [0, 1]}, index=np.arange(2))
+    lib.write(sym, df)
+    q = QueryBuilder()
+    q = q[q["a"] == 1]
+    q_copy = copy.deepcopy(q)
+    expected = df[df["a"] == 1]
+    assert_frame_equal(expected, lib.read(sym, query_builder=q).data)
+    assert_frame_equal(expected, lib.read(sym, query_builder=q_copy).data)
+
+
+def test_querybuilder_pickle(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_querybuilder_pickle"
+    df = pd.DataFrame({"a": [0, 1]}, index=np.arange(2))
+    lib.write(sym, df)
+    q = QueryBuilder()
+    q = q[q["a"] == 1]
+    q_pickled = pickle.dumps(q)
+    expected = df[df["a"] == 1]
+    assert_frame_equal(expected, lib.read(sym, query_builder=q).data)
+    del q
+    q_unpickled = pickle.loads(q_pickled)
+    assert_frame_equal(expected, lib.read(sym, query_builder=q_unpickled).data)
+
+
+def test_querybuilder_pickling_all_clauses():
+    """QueryBuilder must be pickleable with all possible clauses."""
+    q = QueryBuilder()
+    # PythonDateRangeClause
+    q = q.date_range((pd.Timestamp("2000-01-04"), pd.Timestamp("2000-01-07")))
+
+    # PythonFilterClause
+    q = q[q["col1"].isin(2, 3, 7)]
+
+    # PythonProjectionClause
+    q = q.apply("new_col", (q["col1"] * q["col2"]) + 13)
+
+    # PythonGroupByClause
+    q = q.groupby("col1")
+
+    # PythonAggregationClause
+    q = q.agg({"col2": "sum", "new_col": ("col2", "mean")})
+
+    assert pickle.loads(pickle.dumps(q)) == q
+
+    # PythonResampleClause
+    q = QueryBuilder()
+    q = q.resample("T", "right", "left")
+
+    assert pickle.loads(pickle.dumps(q)) == q
+
+    q = q.agg({"col2": "sum", "new_col": ("col2", "sum")})
+
+    assert pickle.loads(pickle.dumps(q)) == q
+>>>>>>> 07fcc094 (Bugfix 1818: Fix QueryBuilder equality checks (#1819))
+
+
 def test_reuse_querybuilder(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     symbol = "test_reuse_querybuilder"
