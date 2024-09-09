@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+import copy
 import datetime
 import os
 import sys
@@ -1007,6 +1008,8 @@ class NativeVersionStore:
         if columns:
             columns = [self._resolve_empty_columns(c, implement_read_index) for c in columns]
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
+        # Take a copy as _get_read_queries can modify the input argument, which makes reusing the input counter-intuitive
+        query_builder = copy.deepcopy(query_builder)
         read_queries = self._get_read_queries(len(symbols), date_ranges, row_ranges, columns, query_builder)
         read_options = self._get_read_options(**kwargs)
         read_options.set_batch_throw_on_error(throw_on_error)
@@ -1629,7 +1632,7 @@ class NativeVersionStore:
         read_options.set_incompletes(self.resolve_defaults("incomplete", proto_cfg, global_default=False, **kwargs))
         return read_options
 
-    def _get_queries(self, symbol, as_of, date_range, row_range, columns=None, query_builder=None, **kwargs):
+    def _get_queries(self, as_of, date_range, row_range, columns=None, query_builder=None, **kwargs):
         version_query = self._get_version_query(as_of, **kwargs)
         read_options = self._get_read_options(**kwargs)
         read_query = self._get_read_query(
@@ -1714,8 +1717,9 @@ class NativeVersionStore:
         """
         implement_read_index = kwargs.get("implement_read_index", False)
         columns = self._resolve_empty_columns(columns, implement_read_index)
+        # Take a copy as _get_queries can modify the input argument, which makes reusing the input counter-intuitive
+        query_builder = copy.deepcopy(query_builder)
         version_query, read_options, read_query = self._get_queries(
-            symbol=symbol,
             as_of=as_of,
             date_range=date_range,
             row_range=row_range,
@@ -1758,7 +1762,7 @@ class NativeVersionStore:
         q = QueryBuilder()
         q = q._head(n)
         version_query, read_options, read_query = self._get_queries(
-            symbol=symbol, as_of=as_of, date_range=None, row_range=None, columns=columns, query_builder=q, **kwargs
+            as_of=as_of, date_range=None, row_range=None, columns=columns, query_builder=q, **kwargs
         )
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
         return self._post_process_dataframe(read_result, read_query, implement_read_index, head=n)
@@ -1791,7 +1795,7 @@ class NativeVersionStore:
         q = QueryBuilder()
         q = q._tail(n)
         version_query, read_options, read_query = self._get_queries(
-            symbol=symbol, as_of=as_of, date_range=None, row_range=None, columns=columns, query_builder=q, **kwargs
+            as_of=as_of, date_range=None, row_range=None, columns=columns, query_builder=q, **kwargs
         )
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
         return self._post_process_dataframe(read_result, read_query, implement_read_index, tail=n)

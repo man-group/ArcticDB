@@ -213,18 +213,25 @@ _output (the rows in the date range and columns requested)_
 2000-01-01 13:00:00      18       8
 ```
 
-#### Filtering
+#### Filtering and Analytics
 
-ArcticDB uses a Pandas-_like_ syntax to describe how to filter data. For more details including the limitations, please view the docstring ([`help(QueryBuilder)`](api/query_builder)).
+ArcticDB supports many common DataFrame analytics operations, including filtering, projections, group-bys, aggregations, and resampling. The most intuitive way to access these operations is via the [`LazyDataFrame`](api/processing.md#arcticdb.LazyDataFrame) API, which should feel familiar to experienced users of Pandas or Polars.
 
-!!! info "ArcticDB Filtering Philosphy & Restrictions"
+The legacy [`QueryBuilder`](api/processing.md#arcticdb.QueryBuilder) class can also be created directly and passed into `read` calls with the same effect.
+
+!!! info "ArcticDB Analytics Philosphy"
 
     In most cases this is more memory efficient and performant than the equivalent Pandas operation as the processing is within the C++ storage engine and parallelized over multiple threads of execution. 
 
 ```python
+import arcticdb as adb
 _range = (df.index[5], df.index[8])
 _cols = ['COL_30', 'COL_31']
-import arcticdb as adb
+# Using lazy evaluation
+lazy_df = library.read('test_frame', date_range=_range, columns=_cols, lazy=True)
+lazy_df = lazy_df[(lazy_df["COL_30"] > 10) & (lazy_df["COL_31"] < 40)]
+df = lazy_df.collect().data
+# Using the legacy QueryBuilder class gives the same result
 q = adb.QueryBuilder()
 q = q[(q["COL_30"] > 10) & (q["COL_31"] < 40)]
 library.read('test_frame', date_range=_range, columns=_cols, query_builder=q).data

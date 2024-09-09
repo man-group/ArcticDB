@@ -103,6 +103,7 @@ nav:
     - Error Messages: 'error_messages.md'
 - Notebooks:
   - Intro Notebook: 'notebooks/ArcticDB_demo_lmdb.ipynb'
+  - LazyDataFrame Notebook: 'notebooks/ArcticDB_demo_lazydataframe.ipynb'
   - Querybuilder Notebook: 'notebooks/ArcticDB_demo_querybuilder.ipynb'
   - Resample Notebook: 'notebooks/ArcticDB_demo_resample.ipynb'
   - AWS Blockchain Notebook: 'notebooks/ArcticDB_aws_public_blockchain.ipynb'
@@ -116,5 +117,5 @@ nav:
   - Arctic URI: 'api/arctic_uri.md'
   - Library: 'api/library.md'
   - Library related objects: 'api/library_types.md'
-  - Query Builder: 'api/query_builder.md'
+  - DataFrame Processing Operations API: 'api/processing.md'
   - Exceptions: 'api/exceptions.md'

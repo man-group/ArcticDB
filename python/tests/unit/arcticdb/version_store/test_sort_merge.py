@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from arcticdb.util.test import assert_frame_equal
 import pytest
+from arcticdb_ext.storage import KeyType
 from arcticdb.version_store.library import StagedDataFinalizeMethod
 from arcticdb.exceptions import UserInputException, SortingException, StreamDescriptorMismatch, InternalException, SchemaException
 from arcticdb.util._versions import IS_PANDAS_TWO
@@ -517,3 +518,34 @@ class TestSortMergeDynamicSchema:
         stored = lib.read("sym").data
 
         assert_frame_equal(expected, stored, check_like=True)
+
+def test_update_symbol_list(lmdb_library):
+    lib = lmdb_library
+    lib_tool = lmdb_library._nvs.library_tool()
+    sym = "sym"
+    sym_2 = "sym_2"
+    df = pd.DataFrame({"col": [1]}, index=pd.DatetimeIndex([np.datetime64('2023-01-01')], dtype="datetime64[ns]"))
+
+    # We always add to the symbol list on write
+    lib.write(sym, df, staged=True)
+    lib.sort_and_finalize_staged_data(sym, mode=StagedDataFinalizeMethod.WRITE)
+    assert lib_tool.count_keys(KeyType.SYMBOL_LIST) == 1
+    assert lib.list_symbols() == [sym]
+
+    # We don't add to the symbol on append when there is an existing version
+    lib.write(sym, df, staged=True)
+    lib.sort_and_finalize_staged_data(sym, mode=StagedDataFinalizeMethod.APPEND)
+    assert lib_tool.count_keys(KeyType.SYMBOL_LIST) == 1
+    assert lib.list_symbols() == [sym]
+
+    # We always add to the symbol list on write, even when there is an existing version
+    lib.write(sym, df, staged=True)
+    lib.sort_and_finalize_staged_data(sym, mode=StagedDataFinalizeMethod.WRITE)
+    assert lib_tool.count_keys(KeyType.SYMBOL_LIST) == 2
+    assert lib.list_symbols() == [sym]
+
+    # We add to the symbol list on append when there is no previous version
+    lib.write(sym_2, df, staged=True)
+    lib.sort_and_finalize_staged_data(sym_2, mode=StagedDataFinalizeMethod.APPEND)
+    assert lib_tool.count_keys(KeyType.SYMBOL_LIST) == 3
+    assert set(lib.list_symbols()) == set([sym, sym_2])

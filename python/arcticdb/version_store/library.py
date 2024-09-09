@@ -5,7 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
-
+import copy
 import datetime
 
 import pytz
@@ -15,10 +15,11 @@ from numpy import datetime64
 
 from arcticdb.options import \
     LibraryOptions, EnterpriseLibraryOptions, ModifiableLibraryOption, ModifiableEnterpriseLibraryOption
+from arcticdb.preconditions import check
 from arcticdb.supported_types import Timestamp
 from arcticdb.util._versions import IS_PANDAS_TWO
 
-from arcticdb.version_store.processing import QueryBuilder
+from arcticdb.version_store.processing import ExpressionNode, QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionQueryInput
 from arcticdb_ext.exceptions import ArcticException
 from arcticdb_ext.version_store import DataError
@@ -194,7 +195,10 @@ class WritePayload:
         self.metadata = metadata
 
     def __repr__(self):
-        return f"WritePayload(symbol={self.symbol}, data_id={id(self.data)}, metadata={self.metadata})"
+        res = f"WritePayload(symbol={self.symbol}, data_id={id(self.data)}"
+        res += f", metadata={self.metadata}" if self.metadata is not None else ""
+        res += ")"
+        return res
 
     def __iter__(self):
         yield self.symbol
@@ -267,6 +271,16 @@ class ReadRequest(NamedTuple):
     columns: Optional[List[str]] = None
     query_builder: Optional[QueryBuilder] = None
 
+    def __repr__(self):
+        res = f"ReadRequest(symbol={self.symbol}"
+        res += f", as_of={self.as_of}" if self.as_of is not None else ""
+        res += f", date_range={self.date_range}" if self.date_range is not None else ""
+        res += f", row_range={self.row_range}" if self.row_range is not None else ""
+        res += f", columns={self.columns}" if self.columns is not None else ""
+        res += f", query_builder={self.query_builder}" if self.query_builder is not None else ""
+        res += ")"
+        return res
+
 
 class ReadInfoRequest(NamedTuple):
     """ReadInfoRequest is useful for batch methods like read_metadata_batch and get_description_batch, where we
@@ -287,6 +301,205 @@ class ReadInfoRequest(NamedTuple):
 
     symbol: str
     as_of: Optional[AsOf] = None
+
+    def __repr__(self):
+        res = f"ReadInfoRequest(symbol={self.symbol}"
+        res += f", as_of={self.as_of}" if self.as_of is not None else ""
+        res += ")"
+        return res
+
+
+class LazyDataFrame(QueryBuilder):
+    """
+    Lazy dataframe implementation, allowing chains of queries to be added before the read is actually executed.
+    Returned by `Library.read`, `Library.head`, and `Library.tail` calls when `lazy=True`.
+
+    See Also
+    --------
+    QueryBuilder for supported querying operations.
+
+    Examples
+    --------
+
+    >>>
+    # Specify that we want version 0 of "test" symbol, and to only return the "new_column" column in the output
+    >>> lazy_df = lib.read("test", as_of=0, columns=["new_column"], lazy=True)
+    # Perform a filtering operation
+    >>> lazy_df = lazy_df[lazy_df["col1"].isin(0, 3, 6, 9)]
+    # Create a new column through a projection operation
+    >>> lazy_df["new_col"] = lazy_df["col1"] + lazy_df["col2"]
+    # Actual read and processing happens here
+    >>> df = lazy_df.collect().data
+    """
+    def __init__(
+            self,
+            lib: "Library",
+            read_request: ReadRequest,
+    ):
+        if read_request.query_builder is None:
+            super().__init__()
+        else:
+            self.clauses = read_request.query_builder.clauses
+            self._python_clauses = read_request.query_builder._python_clauses
+            self._optimisation = read_request.query_builder._optimisation
+        self.lib = lib
+        self.read_request = read_request._replace(query_builder=None)
+
+    def _to_read_request(self) -> ReadRequest:
+        """
+        Convert this object into a ReadRequest, including any queries applied to this object since the read call.
+
+        Returns
+        -------
+        ReadRequest
+            Object with all the parameters necessary to completely specify the data to be read.
+        """
+        q = QueryBuilder().prepend(self)
+        q._optimisation = self._optimisation
+        return ReadRequest(
+            symbol=self.read_request.symbol,
+            as_of=self.read_request.as_of,
+            date_range=self.read_request.date_range,
+            row_range=self.read_request.row_range,
+            columns=self.read_request.columns,
+            query_builder=q,
+        )
+
+    def collect(self) -> VersionedItem:
+        """
+        Read the data and execute any queries applied to this object since the read call.
+
+        Returns
+        -------
+        VersionedItem
+            Object that contains a .data and .metadata element.
+        """
+        return self.lib.read(**self._to_read_request()._asdict())
+
+    def __str__(self) -> str:
+        query_builder_repr = super().__str__()
+        return f"LazyDataFrame({self.read_request.__repr__()}{' | ' if query_builder_repr else ''}{query_builder_repr})"
+
+    # Needs to be explicitly defined for lists of these objects in LazyDataFrameCollection to render correctly
+    def __repr__(self) -> str:
+        return self.__str__()
+
+
+class LazyDataFrameCollection(QueryBuilder):
+    """
+    Lazy dataframe implementation for batch operations. Allows the application of chains of queries to be added before
+    the actual reads are performed. Queries applied to this object will be applied to all  the symbols being read.
+    If per-symbol queries are required, split can be used to break this class into a list of `LazyDataFrame` objects.
+    Returned by `Library.read_batch` calls when `lazy=True`.
+
+    See Also
+    --------
+    QueryBuilder for supported querying operations.
+
+    Examples
+    --------
+
+    >>>
+    # Specify that we want the latest version of "test_0" symbol, and version 0 of "test_1" symbol
+    >>> lazy_dfs = lib.read_batch(["test_0", ReadRequest("test_1", as_of=0)], lazy=True)
+    # Perform a filtering operation on both the "test_0" and "test_1" symbols
+    >>> lazy_dfs = lazy_dfs[lazy_dfs["col1"].isin(0, 3, 6, 9)]
+    # Perform a different projection operation on each symbol
+    >>> lazy_dfs = lazy_dfs.split()
+    >>> lazy_dfs[0].apply("new_col", lazy_dfs[0]["col1"] + 1)
+    >>> lazy_dfs[1].apply("new_col", lazy_dfs[1]["col1"] + 2)
+    # Bring together again and perform the same filter on both symbols
+    >>> lazy_dfs = LazyDataFrameCollection(lazy_dfs)
+    >>> lazy_dfs = lazy_dfs[lazy_dfs["new_col"] > 0]
+    # Actual read and processing happens here
+    >>> res = lazy_dfs.collect()
+    """
+    def __init__(
+            self,
+            lazy_dataframes: List[LazyDataFrame],
+    ):
+        """
+        Gather a list of `LazyDataFrame`s into a single object that can be collected together.
+
+        Parameters
+        ----------
+        lazy_dataframes : List[LazyDataFrame]
+            Collection of `LazyDataFrames`s to gather together.
+        """
+        lib_set = {lazy_dataframe.lib for lazy_dataframe in lazy_dataframes}
+        check(
+            len(lib_set) in [0, 1],
+            f"LazyDataFrameCollection init requires all provided lazy dataframes to be referring to the same library, but received: {[lib for lib in lib_set]}"
+        )
+        super().__init__()
+        self._lazy_dataframes = lazy_dataframes
+        if len(self._lazy_dataframes):
+            self._lib = self._lazy_dataframes[0].lib
+
+    def split(self) -> List[LazyDataFrame]:
+        """
+        Separate the collection into a list of LazyDataFrames, including any queries already applied to this object.
+
+        Returns
+        -------
+        List[LazyDataFrame]
+        """
+        return [LazyDataFrame(self._lib, read_request) for read_request in self._read_requests()]
+
+    def collect(self) -> List[Union[VersionedItem, DataError]]:
+        """
+        Read the data and execute any queries applied to this object since the read_batch call.
+
+        Returns
+        -------
+        List[Union[VersionedItem, DataError]]
+            See documentation on `Library.read_batch`.
+        """
+        if not len(self._lazy_dataframes):
+            return []
+        return self._lib.read_batch(self._read_requests())
+
+    def _read_requests(self) -> List[ReadRequest]:
+        # Combines queries for individual LazyDataFrames with the global query associated with this
+        # LazyDataFrameCollection and returns a list of corresponding read requests
+        read_requests = [lazy_dataframe._to_read_request() for lazy_dataframe in self._lazy_dataframes]
+        if len(self.clauses):
+            for read_request in read_requests:
+                if read_request.query_builder is None:
+                    read_request.query_builder = QueryBuilder()
+                read_request.query_builder.then(self)
+        return read_requests
+
+    def __str__(self) -> str:
+        query_builder_repr = super().__str__()
+        return "LazyDataFrameCollection(" + str(self._lazy_dataframes) + (" | " if len(query_builder_repr) else "") + query_builder_repr + ")"
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
+
+def col(name: str) -> ExpressionNode:
+    """
+    Placeholder for referencing columns by name in lazy dataframe operations before the underlying object has been
+    initialised.
+
+    Parameters
+    ----------
+    name : str
+        Column name.
+
+    Returns
+    -------
+    ExpressionNode
+        Reference to named column for use in querying operations.
+
+    Examples
+    --------
+
+    >>> lazy_df = lib.read("test", lazy=True).apply("new_col", col("col1") + col("col2"))
+    >>> df = lazy_df.collect().data
+    """
+    return ExpressionNode.column_ref(name)
 
 
 class StagedDataFinalizeMethod(Enum):
@@ -906,7 +1119,7 @@ class Library:
         mode: Optional[StagedDataFinalizeMethod] = StagedDataFinalizeMethod.WRITE,
         prune_previous_versions: bool = False,
         metadata: Any = None,
-        validate_index=True,
+        validate_index = True,
     ) -> VersionedItem:
         """
         Finalizes staged data, making it available for reads.
@@ -954,7 +1167,7 @@ class Library:
         symbol: str,
         mode: Optional[StagedDataFinalizeMethod] = StagedDataFinalizeMethod.WRITE,
         prune_previous_versions: bool = False,
-        metadata: Any = None
+        metadata: Any = None,
     ) -> VersionedItem:
         """
         sort_merge will sort and finalize staged data. This differs from `finalize_staged_data` in that it
@@ -1019,7 +1232,8 @@ class Library:
         row_range: Optional[Tuple[int, int]] = None,
         columns: Optional[List[str]] = None,
         query_builder: Optional[QueryBuilder] = None,
-    ) -> VersionedItem:
+        lazy: bool = False,
+    ) -> Union[VersionedItem, LazyDataFrame]:
         """
         Read data for the named symbol.  Returns a VersionedItem object with a data and metadata element (as passed into
         write).
@@ -1065,9 +1279,15 @@ class Library:
             A QueryBuilder object to apply to the dataframe before it is returned. For more information see the
             documentation for the QueryBuilder class (``from arcticdb import QueryBuilder; help(QueryBuilder)``).
 
+        lazy: bool, default=False:
+            Defer query execution until `collect` is called on the returned `LazyDataFrame` object. See documentation
+            on `LazyDataFrame` for more details.
+
         Returns
         -------
-        VersionedItem object that contains a .data and .metadata element
+        Union[VersionedItem, LazyDataFrame]
+            If lazy is False, VersionedItem object that contains a .data and .metadata element.
+            If lazy is True, a LazyDataFrame object on which further querying can be performed prior to collect.
 
         Examples
         --------
@@ -1088,20 +1308,36 @@ class Library:
         1       6
         2       7
         """
-        return self._nvs.read(
-            symbol=symbol,
-            as_of=as_of,
-            date_range=date_range,
-            row_range=row_range,
-            columns=columns,
-            query_builder=query_builder,
-            implement_read_index=True,
-            iterate_snapshots_if_tombstoned=False,
-        )
+        if lazy:
+            return LazyDataFrame(
+                self,
+                ReadRequest(
+                    symbol=symbol,
+                    as_of=as_of,
+                    date_range=date_range,
+                    row_range=row_range,
+                    columns=columns,
+                    query_builder=query_builder,
+                ),
+            )
+        else:
+            return self._nvs.read(
+                symbol=symbol,
+                as_of=as_of,
+                date_range=date_range,
+                row_range=row_range,
+                columns=columns,
+                query_builder=query_builder,
+                implement_read_index=True,
+                iterate_snapshots_if_tombstoned=False,
+            )
 
     def read_batch(
-        self, symbols: List[Union[str, ReadRequest]], query_builder: Optional[QueryBuilder] = None
-    ) -> List[Union[VersionedItem, DataError]]:
+        self,
+        symbols: List[Union[str, ReadRequest]],
+        query_builder: Optional[QueryBuilder] = None,
+        lazy: bool = False,
+    ) -> Union[List[Union[VersionedItem, DataError]], LazyDataFrameCollection]:
         """
         Reads multiple symbols.
 
@@ -1114,13 +1350,20 @@ class Library:
             A single QueryBuilder to apply to all the dataframes before they are returned. If this argument is passed
             then none of the ``symbols`` may have their own query_builder specified in their request.
 
+        lazy: bool, default=False:
+            Defer query execution until `collect` is called on the returned `LazyDataFrameCollection` object. See
+            documentation on `LazyDataFrameCollection` for more details.
+
         Returns
         -------
-        List[Union[VersionedItem, DataError]]
+        Union[List[Union[VersionedItem, DataError]], LazyDataFrameCollection]
+            If lazy is False:
             A list of the read results, whose i-th element corresponds to the i-th element of the ``symbols`` parameter.
             If the specified version does not exist, a DataError object is returned, with symbol, version_request_type,
             version_request_data properties, error_code, error_category, and exception_string properties. If a key error or
             any other internal exception occurs, the same DataError object is also returned.
+            If lazy is True:
+            A LazyDataFrameCollection object on which further querying can be performed prior to collection.
 
         Raises
         ------
@@ -1195,17 +1438,38 @@ class Library:
                     " [ReadRequest] are supported."
                 )
         throw_on_error = False
-        return self._nvs._batch_read_to_versioned_items(
-            symbol_strings,
-            as_ofs,
-            date_ranges,
-            row_ranges,
-            columns,
-            query_builder or query_builders,
-            throw_on_error,
-            implement_read_index=True,
-            iterate_snapshots_if_tombstoned=False,
-        )
+        if lazy:
+            lazy_dataframes = []
+            for idx in range(len(symbol_strings)):
+                q = copy.deepcopy(query_builder)
+                if q is None and len(query_builders):
+                    q = copy.deepcopy(query_builders[idx])
+                lazy_dataframes.append(
+                    LazyDataFrame(
+                        self,
+                        ReadRequest(
+                            symbol=symbol_strings[idx],
+                            as_of=as_ofs[idx],
+                            date_range=date_ranges[idx],
+                            row_range=row_ranges[idx],
+                            columns=columns[idx],
+                            query_builder=q,
+                        )
+                    )
+                )
+            return LazyDataFrameCollection(lazy_dataframes)
+        else:
+            return self._nvs._batch_read_to_versioned_items(
+                symbol_strings,
+                as_ofs,
+                date_ranges,
+                row_ranges,
+                columns,
+                query_builder or query_builders,
+                throw_on_error,
+                implement_read_index=True,
+                iterate_snapshots_if_tombstoned=False,
+            )
 
     def read_metadata(self, symbol: str, as_of: Optional[AsOf] = None) -> VersionedItem:
         """
@@ -1606,7 +1870,14 @@ class Library:
             for v in versions
         }
 
-    def head(self, symbol: str, n: int = 5, as_of: Optional[AsOf] = None, columns: List[str] = None) -> VersionedItem:
+    def head(
+            self,
+            symbol: str,
+            n: int = 5,
+            as_of: Optional[AsOf] = None,
+            columns: List[str] = None,
+            lazy: bool = False,
+    ) -> Union[VersionedItem, LazyDataFrame]:
         """
         Read the first n rows of data for the named symbol. If n is negative, return all rows except the last n rows.
 
@@ -1620,23 +1891,44 @@ class Library:
             See documentation on `read`.
         columns
             See documentation on `read`.
+        lazy : bool, default=False
+            See documentation on `read`.
 
         Returns
         -------
-        VersionedItem object that contains a .data and .metadata element.
+        Union[VersionedItem, LazyDataFrame]
+            If lazy is False, VersionedItem object that contains a .data and .metadata element.
+            If lazy is True, a LazyDataFrame object on which further querying can be performed prior to collect.
         """
-        return self._nvs.head(
-            symbol=symbol,
-            n=n,
-            as_of=as_of,
-            columns=columns,
-            implement_read_index=True,
-            iterate_snapshots_if_tombstoned=False,
-        )
+        if lazy:
+            q = QueryBuilder()._head(n)
+            return LazyDataFrame(
+                self,
+                ReadRequest(
+                    symbol=symbol,
+                    as_of=as_of,
+                    columns=columns,
+                    query_builder=q,
+                ),
+            )
+        else:
+            return self._nvs.head(
+                symbol=symbol,
+                n=n,
+                as_of=as_of,
+                columns=columns,
+                implement_read_index=True,
+                iterate_snapshots_if_tombstoned=False,
+            )
 
     def tail(
-        self, symbol: str, n: int = 5, as_of: Optional[Union[int, str]] = None, columns: List[str] = None
-    ) -> VersionedItem:
+        self,
+            symbol: str,
+            n: int = 5,
+            as_of: Optional[Union[int, str]] = None,
+            columns: List[str] = None,
+            lazy: bool = False,
+    ) -> Union[VersionedItem, LazyDataFrame]:
         """
         Read the last n rows of data for the named symbol. If n is negative, return all rows except the first n rows.
 
@@ -1650,19 +1942,35 @@ class Library:
             See documentation on `read`.
         columns
             See documentation on `read`.
+        lazy : bool, default=False
+            See documentation on `read`.
 
         Returns
         -------
-        VersionedItem object that contains a .data and .metadata element.
+        Union[VersionedItem, LazyDataFrame]
+            If lazy is False, VersionedItem object that contains a .data and .metadata element.
+            If lazy is True, a LazyDataFrame object on which further querying can be performed prior to collect.
         """
-        return self._nvs.tail(
-            symbol=symbol,
-            n=n,
-            as_of=as_of,
-            columns=columns,
-            implement_read_index=True,
-            iterate_snapshots_if_tombstoned=False,
-        )
+        if lazy:
+            q = QueryBuilder()._tail(n)
+            return LazyDataFrame(
+                self,
+                ReadRequest(
+                    symbol=symbol,
+                    as_of=as_of,
+                    columns=columns,
+                    query_builder=q,
+                ),
+            )
+        else:
+            return self._nvs.tail(
+                symbol=symbol,
+                n=n,
+                as_of=as_of,
+                columns=columns,
+                implement_read_index=True,
+                iterate_snapshots_if_tombstoned=False,
+            )
 
     @staticmethod
     def _info_to_desc(info: Dict[str, Any]) -> SymbolDescription:
