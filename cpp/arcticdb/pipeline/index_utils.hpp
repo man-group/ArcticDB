@@ -1,8 +1,10 @@
 /* Copyright 2023 Man Group Operations Limited
  *
- * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
+ * Use of this software is governed by the Business Source License 1.1 included in the
+ * file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source
+ * License, use of this software will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -24,122 +26,120 @@ struct StreamSink;
 namespace pipelines {
 struct InputTensorFrame;
 }
-}
+} // namespace arcticdb
 
 namespace arcticdb::pipelines::index {
-inline std::vector<SliceAndKey> unfiltered_index(const index::IndexSegmentReader &index_segment_reader) {
-    ARCTICDB_SAMPLE_DEFAULT(FilterIndex)
-    std::vector<SliceAndKey> output;
-    std::copy(std::cbegin(index_segment_reader), std::cend(index_segment_reader), std::back_inserter(output));
-    return output;
+inline std::vector<SliceAndKey>
+unfiltered_index(const index::IndexSegmentReader& index_segment_reader) {
+  ARCTICDB_SAMPLE_DEFAULT(FilterIndex)
+  std::vector<SliceAndKey> output;
+  std::copy(std::cbegin(index_segment_reader), std::cend(index_segment_reader),
+            std::back_inserter(output));
+  return output;
 }
 
-template<typename RowType>
-std::optional<IndexValue> index_value_from_row(const RowType &row, IndexDescriptorImpl::Type index_type, int field_num) {
-    std::optional<IndexValue> index_value;
-    switch (index_type) {
-    case IndexDescriptorImpl::Type::TIMESTAMP:
-        case IndexDescriptorImpl::Type::ROWCOUNT:
-            index_value = row.template scalar_at<timestamp>(field_num);
-            break;
-            case IndexDescriptorImpl::Type::STRING: {
-                auto opt = row.string_at(field_num);
-                index_value = opt ? std::make_optional<IndexValue>(std::string(opt.value())) : std::nullopt;
-                break;
-            }
-            default:
-                util::raise_rte("Unknown index type {} for column {}", int(index_type), field_num);
-    }
-    return index_value;
+template <typename RowType>
+std::optional<IndexValue> index_value_from_row(const RowType& row,
+                                               IndexDescriptorImpl::Type index_type,
+                                               int field_num) {
+  std::optional<IndexValue> index_value;
+  switch (index_type) {
+  case IndexDescriptorImpl::Type::TIMESTAMP:
+  case IndexDescriptorImpl::Type::ROWCOUNT:
+    index_value = row.template scalar_at<timestamp>(field_num);
+    break;
+  case IndexDescriptorImpl::Type::STRING: {
+    auto opt = row.string_at(field_num);
+    index_value =
+        opt ? std::make_optional<IndexValue>(std::string(opt.value())) : std::nullopt;
+    break;
+  }
+  default:
+    util::raise_rte("Unknown index type {} for column {}", int(index_type), field_num);
+  }
+  return index_value;
 }
 
-template<typename RowType>
-std::optional<IndexValue> index_start_from_row(const RowType &row, IndexDescriptorImpl::Type index_type) {
-    return index_value_from_row(row, index_type, 0);
+template <typename RowType>
+std::optional<IndexValue> index_start_from_row(const RowType& row,
+                                               IndexDescriptorImpl::Type index_type) {
+  return index_value_from_row(row, index_type, 0);
 }
 
-template<typename SegmentType, typename FieldType=pipelines::index::Fields>
-IndexValue index_value_from_segment(const SegmentType &seg, size_t row_id, FieldType field) {
-    auto index_type = seg.template scalar_at<uint8_t>(row_id, int(FieldType::index_type));
-    IndexValue index_value;
-    auto type = IndexDescriptor::Type(index_type.value());
-    switch (type) {
-    case IndexDescriptorImpl::Type::TIMESTAMP:
-        case IndexDescriptorImpl::Type::ROWCOUNT:
-        index_value = seg.template scalar_at<timestamp>(row_id, int(field)).value();
-        break;
-    case IndexDescriptorImpl::Type::STRING:
-        index_value = std::string(seg.string_at(row_id, int(field)).value());
-        break;
-    default:
-        util::raise_rte("Unknown index type {} for column {} and row {}", uint32_t(index_type.value()), uint32_t(field), row_id);
-    }
-    return index_value;
+template <typename SegmentType, typename FieldType = pipelines::index::Fields>
+IndexValue index_value_from_segment(const SegmentType& seg, size_t row_id,
+                                    FieldType field) {
+  auto index_type = seg.template scalar_at<uint8_t>(row_id, int(FieldType::index_type));
+  IndexValue index_value;
+  auto type = IndexDescriptor::Type(index_type.value());
+  switch (type) {
+  case IndexDescriptorImpl::Type::TIMESTAMP:
+  case IndexDescriptorImpl::Type::ROWCOUNT:
+    index_value = seg.template scalar_at<timestamp>(row_id, int(field)).value();
+    break;
+  case IndexDescriptorImpl::Type::STRING:
+    index_value = std::string(seg.string_at(row_id, int(field)).value());
+    break;
+  default:
+    util::raise_rte("Unknown index type {} for column {} and row {}",
+                    uint32_t(index_type.value()), uint32_t(field), row_id);
+  }
+  return index_value;
 }
 
-template<typename SegmentType, typename FieldType>
-IndexValue index_start_from_segment(const SegmentType &seg, size_t row_id) {
-    return index_value_from_segment(seg, row_id, FieldType::start_index);
+template <typename SegmentType, typename FieldType>
+IndexValue index_start_from_segment(const SegmentType& seg, size_t row_id) {
+  return index_value_from_segment(seg, row_id, FieldType::start_index);
 }
 
-template<typename SegmentType, typename FieldType>
-IndexValue index_end_from_segment(const SegmentType &seg, size_t row_id) {
-    return index_value_from_segment(seg, row_id, FieldType::end_index);
+template <typename SegmentType, typename FieldType>
+IndexValue index_end_from_segment(const SegmentType& seg, size_t row_id) {
+  return index_value_from_segment(seg, row_id, FieldType::end_index);
 }
 
-template<class IndexType>
-folly::Future<entity::AtomKey> write_index(
-    const TimeseriesDescriptor& metadata,
-    std::vector<SliceAndKey>&& slice_and_keys,
-    const IndexPartialKey& partial_key,
-    const std::shared_ptr<stream::StreamSink>& sink);
+template <class IndexType>
+folly::Future<entity::AtomKey>
+write_index(const TimeseriesDescriptor& metadata,
+            std::vector<SliceAndKey>&& slice_and_keys,
+            const IndexPartialKey& partial_key,
+            const std::shared_ptr<stream::StreamSink>& sink);
 
-folly::Future<entity::AtomKey> write_index(
-    const stream::Index& index,
-    const TimeseriesDescriptor& metadata,
-    std::vector<SliceAndKey> &&sk,
-    const IndexPartialKey &partial_key,
-    const std::shared_ptr<stream::StreamSink> &sink);
+folly::Future<entity::AtomKey>
+write_index(const stream::Index& index, const TimeseriesDescriptor& metadata,
+            std::vector<SliceAndKey>&& sk, const IndexPartialKey& partial_key,
+            const std::shared_ptr<stream::StreamSink>& sink);
 
-folly::Future<entity::AtomKey> write_index(
-    const std::shared_ptr<InputTensorFrame>& frame,
-    std::vector<folly::Future<SliceAndKey>> &&slice_and_keys,
-    const IndexPartialKey &partial_key,
-    const std::shared_ptr<stream::StreamSink> &sink);
+folly::Future<entity::AtomKey>
+write_index(const std::shared_ptr<InputTensorFrame>& frame,
+            std::vector<folly::Future<SliceAndKey>>&& slice_and_keys,
+            const IndexPartialKey& partial_key,
+            const std::shared_ptr<stream::StreamSink>& sink);
 
-folly::Future<entity::AtomKey> write_index(
-    const std::shared_ptr<InputTensorFrame>& frame,
-    std::vector<SliceAndKey> &&slice_and_keys,
-    const IndexPartialKey &partial_key,
-    const std::shared_ptr<stream::StreamSink> &sink);
+folly::Future<entity::AtomKey>
+write_index(const std::shared_ptr<InputTensorFrame>& frame,
+            std::vector<SliceAndKey>&& slice_and_keys,
+            const IndexPartialKey& partial_key,
+            const std::shared_ptr<stream::StreamSink>& sink);
 
 inline folly::Future<VersionedItem> index_and_version(
-        const stream::Index& index,
-        const std::shared_ptr<stream::StreamSink>& store,
-        TimeseriesDescriptor time_series,
-        std::vector<SliceAndKey> slice_and_keys,
-        const StreamId& stream_id,
-        VersionId version_id) {
-    return write_index(
-        index,
-        std::move(time_series),
-        std::move(slice_and_keys),
-        IndexPartialKey{stream_id, version_id},
-        store).thenValue([] (auto&& version_key) {
-            return VersionedItem(to_atom(std::move(version_key)));
-        });
+    const stream::Index& index, const std::shared_ptr<stream::StreamSink>& store,
+    TimeseriesDescriptor time_series, std::vector<SliceAndKey> slice_and_keys,
+    const StreamId& stream_id, VersionId version_id) {
+  return write_index(index, std::move(time_series), std::move(slice_and_keys),
+                     IndexPartialKey{stream_id, version_id}, store)
+      .thenValue([](auto&& version_key) {
+        return VersionedItem(to_atom(std::move(version_key)));
+      });
 }
 
-std::pair<index::IndexSegmentReader, std::vector<SliceAndKey>> read_index_to_vector(
-    const std::shared_ptr<Store>& store,
-    const AtomKey& index_key);
+std::pair<index::IndexSegmentReader, std::vector<SliceAndKey>>
+read_index_to_vector(const std::shared_ptr<Store>& store, const AtomKey& index_key);
 
 // Combines the stream descriptors of an existing index key and a new frame.
 // Can be used to get the metadata for [write_index] when updating or appending.
-TimeseriesDescriptor get_merged_tsd(
-    size_t row_count,
-    bool dynamic_schema,
-    const TimeseriesDescriptor& existing_tsd,
-    const std::shared_ptr<pipelines::InputTensorFrame>& new_frame);
+TimeseriesDescriptor
+get_merged_tsd(size_t row_count, bool dynamic_schema,
+               const TimeseriesDescriptor& existing_tsd,
+               const std::shared_ptr<pipelines::InputTensorFrame>& new_frame);
 
-} //namespace arcticdb::pipelines::index
+} // namespace arcticdb::pipelines::index

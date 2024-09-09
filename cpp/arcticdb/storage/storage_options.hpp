@@ -1,8 +1,10 @@
 /* Copyright 2023 Man Group Operations Limited
  *
- * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
+ * Use of this software is governed by the Business Source License 1.1 included in the
+ * file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source
+ * License, use of this software will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -16,24 +18,24 @@ namespace arcticdb::storage {
  * - RemoveTask & RemoveBatchTask (passes value to worker threads)
  */
 struct RemoveOpts {
-    bool ignores_missing_key_ = false;
+  bool ignores_missing_key_ = false;
 };
 
 /**
  * ReadCompressedTask passes this to workers.
  */
 struct ReadKeyOpts {
-    /**
-     * Applies to:
-     * - generate_segments_from_keys (e.g. used by StreamReader)
-     */
-    bool ignores_missing_key_ = false;
+  /**
+   * Applies to:
+   * - generate_segments_from_keys (e.g. used by StreamReader)
+   */
+  bool ignores_missing_key_ = false;
 
-    /**
-     * Applies to:
-     * - s3_storage-inl.cpp:do_read_impl()
-     */
-    bool dont_warn_about_missing_key = false;
+  /**
+   * Applies to:
+   * - s3_storage-inl.cpp:do_read_impl()
+   */
+  bool dont_warn_about_missing_key = false;
 };
 
 /**
@@ -43,7 +45,7 @@ struct ReadKeyOpts {
  * - MemoryStorage::do_update
  */
 struct UpdateOpts {
-    bool upsert_ = false;
+  bool upsert_ = false;
 };
 
-}
+} // namespace arcticdb::storage

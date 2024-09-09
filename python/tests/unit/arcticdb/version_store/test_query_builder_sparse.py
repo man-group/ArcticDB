@@ -21,14 +21,14 @@ class TestQueryBuilderSparse:
                 "sparse1": [1.0, np.nan, 2.0, np.nan],
                 "sparse2": [np.nan, 1.0, 2.0, np.nan],
             },
-            index=pd.date_range("2024-01-01", periods=4, tz="UTC")
+            index=pd.date_range("2024-01-01", periods=4, tz="UTC"),
         )
         df_1 = pd.DataFrame(
             {
                 "sparse1": [1.0, np.nan, 2.0, np.nan],
                 "sparse2": [np.nan, 1.0, 2.0, np.nan],
             },
-            index=pd.date_range("2024-01-05", periods=4, tz="UTC")
+            index=pd.date_range("2024-01-05", periods=4, tz="UTC"),
         )
         # Use parallel write to generate 2 segments as append does not have the sparsify_floats kwarg
         lib.write(self.sym, df_0, parallel=True, sparsify_floats=True)
@@ -143,7 +143,7 @@ def test_query_builder_sparse_dynamic_schema_type_change(lmdb_version_store_dyna
             "sparse2": [np.nan, 1.0, 2.0, np.nan],
         },
         dtype=np.float64,
-        index=pd.date_range("2024-01-01", periods=4, tz="UTC")
+        index=pd.date_range("2024-01-01", periods=4, tz="UTC"),
     )
     df_1 = pd.DataFrame(
         {
@@ -151,7 +151,7 @@ def test_query_builder_sparse_dynamic_schema_type_change(lmdb_version_store_dyna
             "sparse2": [np.nan, 1.0, 2.0, np.nan],
         },
         dtype=np.float32,
-        index=pd.date_range("2024-01-05", periods=4, tz="UTC")
+        index=pd.date_range("2024-01-05", periods=4, tz="UTC"),
     )
     lib.write(sym, df_0, parallel=True, sparsify_floats=True)
     lib.write(sym, df_1, parallel=True, sparsify_floats=True)
@@ -172,7 +172,7 @@ def test_query_builder_sparse_dynamic_schema_type_change(lmdb_version_store_dyna
         columns(
             ["sparse1", "sparse2"],
             elements=strategies.floats(min_value=0, max_value=1000, allow_nan=False, allow_subnormal=False),
-            fill=strategies.just(np.nan)
+            fill=strategies.just(np.nan),
         ),
     ),
 )
@@ -206,5 +206,3 @@ def test_query_builder_sparse_hypothesis(lmdb_version_store, df):
     received = lib.read(sym, query_builder=q).data
     received.sort_index(inplace=True)
     assert_frame_equal(expected, received)
-
-

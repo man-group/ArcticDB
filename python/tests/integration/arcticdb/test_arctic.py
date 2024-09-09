@@ -38,18 +38,26 @@ from arcticdb.version_store.library import (
 
 from ...util.mark import AZURE_TESTS_MARK, MONGO_TESTS_MARK, REAL_S3_TESTS_MARK, SSL_TESTS_MARK, SSL_TEST_SUPPORTED
 
+
 class ParameterDisplayStatus(Enum):
     NOT_SHOW = 1
     DISABLE = 2
     ENABLE = 3
 
-parameter_display_status = [ParameterDisplayStatus.NOT_SHOW, ParameterDisplayStatus.DISABLE, ParameterDisplayStatus.ENABLE]
+
+parameter_display_status = [
+    ParameterDisplayStatus.NOT_SHOW,
+    ParameterDisplayStatus.DISABLE,
+    ParameterDisplayStatus.ENABLE,
+]
 no_ssl_parameter_display_status = [ParameterDisplayStatus.NOT_SHOW, ParameterDisplayStatus.DISABLE]
+
 
 class DefaultSetting:
     def __init__(self, factory):
         self.cafile = factory.client_cert_file
         self.capath = factory.client_cert_dir
+
 
 def edit_connection_string(uri, delimiter, storage, ssl_setting, client_cert_file, client_cert_dir):
     # Clear default setting in the uri
@@ -74,10 +82,17 @@ def edit_connection_string(uri, delimiter, storage, ssl_setting, client_cert_fil
         uri += f"{delimiter}CA_cert_dir={storage.factory.client_cert_dir}"
     return uri
 
+
 # s3_storage will become non-ssl if SSL_TEST_SUPPORTED is False
-@pytest.mark.parametrize('client_cert_file', parameter_display_status if SSL_TEST_SUPPORTED else no_ssl_parameter_display_status)
-@pytest.mark.parametrize('client_cert_dir', parameter_display_status if SSL_TEST_SUPPORTED else no_ssl_parameter_display_status)
-@pytest.mark.parametrize('ssl_setting', parameter_display_status if SSL_TEST_SUPPORTED else no_ssl_parameter_display_status)
+@pytest.mark.parametrize(
+    "client_cert_file", parameter_display_status if SSL_TEST_SUPPORTED else no_ssl_parameter_display_status
+)
+@pytest.mark.parametrize(
+    "client_cert_dir", parameter_display_status if SSL_TEST_SUPPORTED else no_ssl_parameter_display_status
+)
+@pytest.mark.parametrize(
+    "ssl_setting", parameter_display_status if SSL_TEST_SUPPORTED else no_ssl_parameter_display_status
+)
 def test_s3_verification(monkeypatch, s3_storage, client_cert_file, client_cert_dir, ssl_setting):
     storage = s3_storage
     # Leaving ca file and ca dir unset will fallback to using os default setting,
@@ -91,10 +106,10 @@ def test_s3_verification(monkeypatch, s3_storage, client_cert_file, client_cert_
 
 
 @SSL_TESTS_MARK
-@pytest.mark.parametrize('client_cert_file', no_ssl_parameter_display_status)
-@pytest.mark.parametrize('client_cert_dir', no_ssl_parameter_display_status)
-@pytest.mark.parametrize('ssl_setting', no_ssl_parameter_display_status)
-def test_s3_no_ssl_verification(monkeypatch, s3_no_ssl_storage, client_cert_file, client_cert_dir, ssl_setting):        
+@pytest.mark.parametrize("client_cert_file", no_ssl_parameter_display_status)
+@pytest.mark.parametrize("client_cert_dir", no_ssl_parameter_display_status)
+@pytest.mark.parametrize("ssl_setting", no_ssl_parameter_display_status)
+def test_s3_no_ssl_verification(monkeypatch, s3_no_ssl_storage, client_cert_file, client_cert_dir, ssl_setting):
     storage = s3_no_ssl_storage
     # Leaving ca file and ca dir unset will fallback to using os default setting,
     # which is different from the test environment
@@ -107,8 +122,8 @@ def test_s3_no_ssl_verification(monkeypatch, s3_no_ssl_storage, client_cert_file
 
 
 @AZURE_TESTS_MARK
-@pytest.mark.parametrize('client_cert_file', no_ssl_parameter_display_status)
-@pytest.mark.parametrize('client_cert_dir', no_ssl_parameter_display_status)
+@pytest.mark.parametrize("client_cert_file", no_ssl_parameter_display_status)
+@pytest.mark.parametrize("client_cert_dir", no_ssl_parameter_display_status)
 def test_azurite_no_ssl_verification(monkeypatch, azurite_storage, client_cert_file, client_cert_dir):
     storage = azurite_storage
     # Leaving ca file and ca dir unset will fallback to using os default setting,
@@ -123,8 +138,8 @@ def test_azurite_no_ssl_verification(monkeypatch, azurite_storage, client_cert_f
 
 @AZURE_TESTS_MARK
 @SSL_TESTS_MARK
-@pytest.mark.parametrize('client_cert_file', parameter_display_status)
-@pytest.mark.parametrize('client_cert_dir', parameter_display_status)
+@pytest.mark.parametrize("client_cert_file", parameter_display_status)
+@pytest.mark.parametrize("client_cert_dir", parameter_display_status)
 def test_azurite_ssl_verification(azurite_ssl_storage, monkeypatch, client_cert_file, client_cert_dir):
     storage = azurite_ssl_storage
     # Leaving ca file and ca dir unset will fallback to using os default setting,
@@ -140,7 +155,7 @@ def test_azurite_ssl_verification(azurite_ssl_storage, monkeypatch, client_cert_
 def test_basic_metadata(lmdb_version_store):
     lib = lmdb_version_store
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
-    metadata = {"fluffy" : "muppets"}
+    metadata = {"fluffy": "muppets"}
     lib.write("my_symbol", df, metadata=metadata)
     vit = lib.read_metadata("my_symbol")
     assert vit.metadata == metadata
@@ -153,7 +168,7 @@ def test_sorted_roundtrip(arctic_library):
     df = pd.DataFrame({"column": [1, 2, 3, 4]}, index=pd.date_range(start="1/1/2018", end="1/4/2018"))
     lib.write(symbol, df)
     desc = lib.get_description(symbol)
-    assert desc.sorted == 'ASCENDING'
+    assert desc.sorted == "ASCENDING"
 
 
 def test_basic_write_read_update_and_append(arctic_library):
@@ -282,7 +297,11 @@ def test_parallel_writes_and_appends_index_validation(arctic_library, finalize_m
     else:
         lib.finalize_staged_data(sym, finalize_method, validate_index=False)
         received = lib.read(sym).data
-        expected = pd.concat([df_0, df_1, df_2]) if finalize_method == StagedDataFinalizeMethod.APPEND else pd.concat([df_1, df_2])
+        expected = (
+            pd.concat([df_0, df_1, df_2])
+            if finalize_method == StagedDataFinalizeMethod.APPEND
+            else pd.concat([df_1, df_2])
+        )
         assert_frame_equal(received, expected)
 
 
@@ -307,6 +326,7 @@ def test_snapshots_and_deletes(arctic_library):
     assert lib.list_snapshots() == {"snap_after_delete": None}
     assert lib.list_symbols() == ["my_symbol2"]
 
+
 def test_list_snapshots_no_metadata(arctic_library):
     lib = arctic_library
     df = pd.DataFrame({"a": [1, 2, 3]})
@@ -325,6 +345,7 @@ def test_list_snapshots_no_metadata(arctic_library):
     snaps_list = lib.list_snapshots(False)
     assert isinstance(snaps_list, List)
     assert set(snaps_list) == {snap1, snap2}
+
 
 def test_delete_non_existent_snapshot(arctic_library):
     lib = arctic_library
@@ -1017,6 +1038,7 @@ def test_azure_sas_token(azurite_storage_factory: StorageFixtureFactory):
             ac = f.create_arctic()
             ac.create_library("x")
 
+
 def test_lib_has_lib_tools_read_index(lmdb_library):
     lib = lmdb_library
     sym = "my_symbol"
@@ -1060,9 +1082,12 @@ def test_norm_failure_error_message(arctic_library):
     with pytest.raises(ArcticDbNotYetImplemented) as update_exception:
         lib.update(sym, df)
 
-    assert all(col_name in str(e.value) for e in
-               [write_exception, write_batch_exception, append_exception, append_batch_exception, update_exception])
+    assert all(
+        col_name in str(e.value)
+        for e in [write_exception, write_batch_exception, append_exception, append_batch_exception, update_exception]
+    )
     assert "write_pickle" in str(write_exception.value) and "pickle_on_failure" not in str(write_exception.value)
-    assert "write_pickle_batch" in str(write_batch_exception.value) and "pickle_on_failure" not in str(write_batch_exception.value)
-    assert all("write_pickle" not in str(e.value) for e in
-               [append_exception, append_batch_exception, update_exception])
+    assert "write_pickle_batch" in str(write_batch_exception.value) and "pickle_on_failure" not in str(
+        write_batch_exception.value
+    )
+    assert all("write_pickle" not in str(e.value) for e in [append_exception, append_batch_exception, update_exception])

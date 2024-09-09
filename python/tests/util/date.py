@@ -137,9 +137,7 @@ class DateRange(GeneralSlice):
                 else (
                     other.startopen
                     if self.start < other.start
-                    else self.startopen
-                    if self.start > other.start
-                    else (self.startopen or other.startopen)
+                    else self.startopen if self.start > other.start else (self.startopen or other.startopen)
                 )
             )
         )
@@ -152,9 +150,7 @@ class DateRange(GeneralSlice):
                 else (
                     other.endopen
                     if self.end > other.end
-                    else self.endopen
-                    if self.end < other.end
-                    else (self.endopen or other.endopen)
+                    else self.endopen if self.end < other.end else (self.endopen or other.endopen)
                 )
             )
         )

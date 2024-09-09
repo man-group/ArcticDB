@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import numpy as np
 import pandas as pd
 import random
@@ -221,7 +222,7 @@ def test_sort_merge_append(basic_store_dynamic_schema, prune_previous_versions):
         for version in range(int(half_way)):
             result = lib.read(symbol, as_of=version).data
             result.sort_index(axis=1, inplace=True)
-            df = pd.concat(old_dataframes[0 : version+1])
+            df = pd.concat(old_dataframes[0 : version + 1])
             df.sort_index(axis=1, inplace=True)
             assert_frame_equal(result, df)
 
@@ -511,7 +512,7 @@ def test_parallel_append_existing_data_unsorted(lmdb_version_store, sortedness, 
     last_index_date = "2024-01-01" if sortedness == "DESCENDING" else "2024-01-03"
     df_0 = pd.DataFrame(
         {"col": [1, 2, 3]},
-        index=[pd.Timestamp("2024-01-04"), pd.Timestamp("2024-01-02"), pd.Timestamp(last_index_date)]
+        index=[pd.Timestamp("2024-01-04"), pd.Timestamp("2024-01-02"), pd.Timestamp(last_index_date)],
     )
     lib.write(sym, df_0)
     assert lib.get_info(sym)["sorted"] == sortedness
@@ -549,8 +550,14 @@ def test_parallel_write_static_schema_type_changing(lmdb_version_store_tiny_segm
     lib = lmdb_version_store_tiny_segment
     sym = "test_parallel_write_static_schema_type_changing"
     lib_tool = lib.library_tool()
-    df_0 = pd.DataFrame({"col": np.arange(rows_per_incomplete, dtype=np.uint8)}, index=pd.date_range("2024-01-01", periods=rows_per_incomplete))
-    df_1 = pd.DataFrame({"col": np.arange(rows_per_incomplete, 2 * rows_per_incomplete, dtype=np.uint16)}, index=pd.date_range("2024-01-03", periods=rows_per_incomplete))
+    df_0 = pd.DataFrame(
+        {"col": np.arange(rows_per_incomplete, dtype=np.uint8)},
+        index=pd.date_range("2024-01-01", periods=rows_per_incomplete),
+    )
+    df_1 = pd.DataFrame(
+        {"col": np.arange(rows_per_incomplete, 2 * rows_per_incomplete, dtype=np.uint16)},
+        index=pd.date_range("2024-01-03", periods=rows_per_incomplete),
+    )
     lib.write(sym, df_0, parallel=True)
     lib.write(sym, df_1, parallel=True)
     with pytest.raises(SchemaException):
@@ -561,8 +568,14 @@ def test_parallel_write_static_schema_type_changing(lmdb_version_store_tiny_segm
 def test_parallel_write_dynamic_schema_type_changing(lmdb_version_store_tiny_segment_dynamic, rows_per_incomplete):
     lib = lmdb_version_store_tiny_segment_dynamic
     sym = "test_parallel_write_dynamic_schema_type_changing"
-    df_0 = pd.DataFrame({"col": np.arange(rows_per_incomplete, dtype=np.uint8)}, index=pd.date_range("2024-01-01", periods=rows_per_incomplete))
-    df_1 = pd.DataFrame({"col": np.arange(rows_per_incomplete, 2 * rows_per_incomplete, dtype=np.uint16)}, index=pd.date_range("2024-01-02", periods=rows_per_incomplete))
+    df_0 = pd.DataFrame(
+        {"col": np.arange(rows_per_incomplete, dtype=np.uint8)},
+        index=pd.date_range("2024-01-01", periods=rows_per_incomplete),
+    )
+    df_1 = pd.DataFrame(
+        {"col": np.arange(rows_per_incomplete, 2 * rows_per_incomplete, dtype=np.uint16)},
+        index=pd.date_range("2024-01-02", periods=rows_per_incomplete),
+    )
     lib.write(sym, df_0, parallel=True)
     lib.write(sym, df_1, parallel=True)
     lib.compact_incomplete(sym, False, False)
@@ -630,5 +643,3 @@ def test_parallel_append_dynamic_schema_missing_column(lmdb_version_store_tiny_s
     expected = pd.concat([df_0, df_1])
     received = lib.read(sym).data
     assert_frame_equal(expected, received)
-
-

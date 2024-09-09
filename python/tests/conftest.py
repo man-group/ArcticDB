@@ -105,6 +105,7 @@ def lmdb_storage(tmp_path):
     with LmdbStorageFixture(tmp_path) as f:
         yield f
 
+
 @pytest.fixture
 def lmdb_library(lmdb_storage, lib_name):
     return lmdb_storage.create_arctic().create_library(lib_name)
@@ -113,7 +114,9 @@ def lmdb_library(lmdb_storage, lib_name):
 # ssl is enabled by default to maximize test coverage as ssl is enabled most of the times in real world
 @pytest.fixture(scope="session")
 def s3_storage_factory():
-    with MotoS3StorageFixtureFactory(use_ssl=SSL_TEST_SUPPORTED, ssl_test_support=SSL_TEST_SUPPORTED, bucket_versioning=False) as f:
+    with MotoS3StorageFixtureFactory(
+        use_ssl=SSL_TEST_SUPPORTED, ssl_test_support=SSL_TEST_SUPPORTED, bucket_versioning=False
+    ) as f:
         yield f
 
 
@@ -193,6 +196,7 @@ def real_s3_storage_without_clean_up(real_s3_shared_path_storage_factory):
 def real_s3_storage(real_s3_storage_factory):
     with real_s3_storage_factory.create_fixture() as f:
         yield f
+
 
 # ssl cannot be ON by default due to azurite performance constraints https://github.com/man-group/ArcticDB/issues/1539
 @pytest.fixture(scope="session")
@@ -556,6 +560,7 @@ def lmdb_version_store_big_map(version_store_factory):
 @pytest.fixture
 def lmdb_version_store_very_big_map(version_store_factory):
     return version_store_factory(lmdb_config={"map_size": 2**35})
+
 
 @pytest.fixture
 def lmdb_version_store_column_buckets(version_store_factory):

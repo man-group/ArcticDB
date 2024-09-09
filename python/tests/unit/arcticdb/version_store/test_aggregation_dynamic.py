@@ -342,7 +342,17 @@ def test_last_aggregation_dynamic(s3_version_store_dynamic_schema_v2):
     lib = s3_version_store_dynamic_schema_v2
     df = DataFrame(
         {
-            "grouping_column": ["group_1", "group_2", "group_4", "group_5", "group_2", "group_1", "group_3", "group_1", "group_5"],
+            "grouping_column": [
+                "group_1",
+                "group_2",
+                "group_4",
+                "group_5",
+                "group_2",
+                "group_1",
+                "group_3",
+                "group_1",
+                "group_5",
+            ],
             "get_last": [100.0, 2.7, np.nan, np.nan, np.nan, 1.4, 5.8, 3.45, 6.9],
         },
         index=np.arange(9),

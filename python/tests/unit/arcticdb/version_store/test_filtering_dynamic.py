@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import sys
 
 from hypothesis import assume, given, settings
@@ -292,7 +293,9 @@ def test_filter_string_isnotin(in_memory_version_store_dynamic_schema, df, vals)
     q = QueryBuilder()
     q = q[q["a"].isnotin(vals)]
     pandas_query = "a not in {}".format(list(vals))
-    generic_dynamic_filter_test(in_memory_version_store_dynamic_schema, "test_filter_string_isnotin", df, q, pandas_query)
+    generic_dynamic_filter_test(
+        in_memory_version_store_dynamic_schema, "test_filter_string_isnotin", df, q, pandas_query
+    )
 
 
 def test_numeric_filter_dynamic_schema(lmdb_version_store_tiny_segment_dynamic):
@@ -387,9 +390,11 @@ def test_filter_null_filtering_dynamic(lmdb_version_store_dynamic_schema, method
         data = np.arange(num_rows, dtype=dtype)
         null_values = cycle([np.nan])
     elif dtype is np.datetime64:
-        data = np.arange(np.datetime64("2024-01-01"), np.datetime64(f"2024-01-0{num_rows + 1}"), np.timedelta64(1, "D")).astype("datetime64[ns]")
+        data = np.arange(
+            np.datetime64("2024-01-01"), np.datetime64(f"2024-01-0{num_rows + 1}"), np.timedelta64(1, "D")
+        ).astype("datetime64[ns]")
         null_values = cycle([np.datetime64("nat")])
-    else: # str
+    else:  # str
         data = [str(idx) for idx in range(num_rows)]
         null_values = cycle([None, np.nan])
     for idx in range(num_rows):

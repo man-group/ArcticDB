@@ -163,10 +163,10 @@ class EnterpriseLibraryOptions:
     """
 
     def __init__(
-            self,
-            *,
-            replication: bool = False,
-            background_deletion: bool = False,
+        self,
+        *,
+        replication: bool = False,
+        background_deletion: bool = False,
     ):
         """
         Parameters
@@ -198,10 +198,7 @@ class EnterpriseLibraryOptions:
         self.background_deletion = background_deletion
 
     def __eq__(self, right):
-        return (
-                self.replication == right.replication
-                and self.background_deletion == right.background_deletion
-        )
+        return self.replication == right.replication and self.background_deletion == right.background_deletion
 
     def __repr__(self):
         return (
@@ -216,6 +213,7 @@ class ModifiableLibraryOption(Enum):
 
     See `LibraryOptions` for a description of each option.
     """
+
     DEDUP = 1
     ROWS_PER_SEGMENT = 2
     COLUMNS_PER_SEGMENT = 3
@@ -228,5 +226,6 @@ class ModifiableEnterpriseLibraryOption(Enum):
 
     See `EnterpriseLibraryOptions` for a description of each option.
     """
+
     REPLICATION = 1
     BACKGROUND_DELETION = 2

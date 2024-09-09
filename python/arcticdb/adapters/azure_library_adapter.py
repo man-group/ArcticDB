@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import re
 import time
 from typing import Optional
@@ -29,8 +30,8 @@ class ParsedQuery:
     Path_prefix: Optional[str] = None
     # winhttp is used as Azure backend support on Windows by default; winhttp itself maintains ca cert.
     # The options should be left empty else libcurl will be used on Windows
-    CA_cert_path: Optional[str] = "" # CURLOPT_CAINFO in curl
-    CA_cert_dir: Optional[str] = "" # CURLOPT_CAPATH in curl
+    CA_cert_path: Optional[str] = ""  # CURLOPT_CAINFO in curl
+    CA_cert_dir: Optional[str] = ""  # CURLOPT_CAPATH in curl
     Container: Optional[str] = None
 
 
@@ -59,8 +60,10 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
         )
         self._container = self._query_params.Container
         if platform.system() != "Linux" and (self._query_params.CA_cert_path or self._query_params.CA_cert_dir):
-            raise ValueError("You have provided `ca_cert_path` or `ca_cert_dir` in the URI which is only supported on Linux. " \
-                             "Remove the setting in the connection URI and use your operating system defaults.")
+            raise ValueError(
+                "You have provided `ca_cert_path` or `ca_cert_dir` in the URI which is only supported on Linux. "
+                "Remove the setting in the connection URI and use your operating system defaults."
+            )
         self._ca_cert_path = self._query_params.CA_cert_path
         self._ca_cert_dir = self._query_params.CA_cert_dir
         if not self._ca_cert_path and not self._ca_cert_dir and platform.system() == "Linux":

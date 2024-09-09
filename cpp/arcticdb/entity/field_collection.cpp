@@ -1,8 +1,10 @@
 /* Copyright 2023 Man Group Operations Limited
  *
- * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
+ * Use of this software is governed by the Business Source License 1.1 included in the
+ * file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source
+ * License, use of this software will be governed by the Apache License, version 2.0.
  */
 
 #include <arcticdb/util/cursored_buffer.hpp>
@@ -10,7 +12,8 @@
 
 namespace arcticdb {
 
-std::string_view FieldCollection::add_field(const TypeDescriptor& type, std::string_view name) {
+std::string_view FieldCollection::add_field(const TypeDescriptor& type,
+                                            std::string_view name) {
   const auto total_size = Field::calc_size(name);
   buffer_.ensure_bytes(total_size);
   auto field = reinterpret_cast<Field*>(buffer_.ptr());
@@ -22,12 +25,13 @@ std::string_view FieldCollection::add_field(const TypeDescriptor& type, std::str
   shapes_.ensure<shape_t>();
   *reinterpret_cast<shape_t*>(shapes_.ptr()) = total_size;
   shapes_.commit();
-  util::check(field->name() == name, "Name mismatch in field: {} != {}", field->name(), name);
+  util::check(field->name() == name, "Name mismatch in field: {} != {}", field->name(),
+              name);
   return field->name();
 }
 
 void FieldCollection::regenerate_offsets() {
-  if(!offsets_.empty() || shapes_.empty())
+  if (!offsets_.empty() || shapes_.empty())
     return;
 
   offsets_.ensure_bytes(shapes_.bytes());
@@ -44,17 +48,17 @@ void FieldCollection::regenerate_offsets() {
 }
 
 bool operator==(const FieldCollection& left, const FieldCollection& right) {
-  if(left.size() != right.size())
+  if (left.size() != right.size())
     return false;
 
   auto l = left.begin();
   auto r = right.begin();
   for (; l != left.end(); ++l, ++r) {
-    if(*l != *r)
+    if (*l != *r)
       return false;
   }
 
   return true;
 }
 
-}
+} // namespace arcticdb

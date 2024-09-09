@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import pytest
 import numpy as np
 import re
@@ -431,8 +432,8 @@ def test_snapshot_not_accept_tombstoned_key(basic_store_delayed_deletes_v1, sym)
     lib = basic_store_delayed_deletes_v1
     ver = lib.write(sym, 1).version
     lib.write(sym, 2)
-    with pytest.raises(NoSuchVersionException, match=re.escape(f"{sym}:{ver}")): # sym contains square bracket...
-        lib.snapshot("s", versions={sym:ver})
+    with pytest.raises(NoSuchVersionException, match=re.escape(f"{sym}:{ver}")):  # sym contains square bracket...
+        lib.snapshot("s", versions={sym: ver})
 
 
 def test_snapshot_partially_valid_version_map(basic_store_delayed_deletes_v1):
@@ -443,7 +444,7 @@ def test_snapshot_partially_valid_version_map(basic_store_delayed_deletes_v1):
     symA_ver1 = lib.write(symA, 1).version
     lib.delete(symA)
     symB_ver1 = lib.write(symB, 3).version
-    partial_valid_versions = {symA:symA_ver1, symB:symB_ver1}
+    partial_valid_versions = {symA: symA_ver1, symB: symB_ver1}
     with pytest.raises(NoSuchVersionException):
         lib.snapshot("s", versions=partial_valid_versions)
     assert len(lib.list_snapshots()) == 0
@@ -464,7 +465,7 @@ def test_snapshot_tombstoned_but_referenced_in_other_snapshot_version(basic_stor
     lib.snapshot("s")
     lib.delete(symA)
     lib.delete(symB)
-    lib.snapshot("s2", versions={symA:symA_ver, symB:symB_ver})
+    lib.snapshot("s2", versions={symA: symA_ver, symB: symB_ver})
     assert lib.read(symA, as_of="s2").data == 1
     assert lib.read(symB, as_of="s2").data == 1
 
@@ -484,7 +485,7 @@ def test_add_to_snapshot_atomicity(s3_bucket_versioning_storage, lib_name):
         # It's overly simplified; May not be bullet proof for other tests
         prefix = get_s3_storage_config(lib.lib_cfg()).prefix.replace(".", "/")
         response = s3_admin.list_object_versions(Bucket=bucket, Prefix=prefix)
-        tref_delete_markers = [marker for marker in response.get('DeleteMarkers', []) if "/tref/" in marker['Key']]
+        tref_delete_markers = [marker for marker in response.get("DeleteMarkers", []) if "/tref/" in marker["Key"]]
         assert len(tref_delete_markers) == 0
 
     lib.add_to_snapshot("snap", ["s2"])

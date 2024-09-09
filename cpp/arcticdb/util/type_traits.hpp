@@ -1,8 +1,10 @@
 /* Copyright 2023 Man Group Operations Limited
  *
- * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
+ * Use of this software is governed by the Business Source License 1.1 included in the
+ * file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source
+ * License, use of this software will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -11,13 +13,13 @@
 
 namespace arcticdb::util {
 
-template<template<typename...> class TT, typename T>
+template <template <typename...> class TT, typename T>
 struct is_instantiation_of : std::false_type {};
 
-template<template<typename...> class TT, typename... Ts>
+template <template <typename...> class TT, typename... Ts>
 struct is_instantiation_of<TT, TT<Ts...>> : std::true_type {};
 
-template<typename T, template<typename...> class TT>
+template <typename T, template <typename...> class TT>
 inline constexpr bool is_instantiation_of_v = is_instantiation_of<TT, T>::value;
 
 } // namespace arcticdb::util
