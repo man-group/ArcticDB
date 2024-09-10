@@ -18,6 +18,7 @@
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/util/simple_string_hash.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
+#include <arcticdb/pipeline/read_query.hpp>
 
 #include <algorithm>
 #include <vector>
@@ -28,54 +29,6 @@
 
 namespace arcticdb::pipelines {
 
-namespace ranges = std::ranges;
-
-using FilterRange = std::variant<std::monostate, IndexRange, RowRange>;
-
-/*
- * A structure which is used to store the potentially negative values for indices of a row range
- */
-struct SignedRowRange {
-    int64_t start_;
-    int64_t end_;
-};
-
-struct ReadQuery {
-    // std::nullopt -> all columns
-    // empty vector -> only the index
-    mutable std::optional<std::vector<std::string>> columns;
-    std::optional<SignedRowRange> row_range;
-    FilterRange row_filter; // no filter by default
-    std::vector<std::shared_ptr<Clause>> clauses_;
-    bool needs_post_processing{true};
-
-    ReadQuery() = default;
-
-    explicit ReadQuery(std::vector<std::shared_ptr<Clause>>&& clauses):
-            clauses_(std::move(clauses)) {
-    }
-
-    void add_clauses(std::vector<std::shared_ptr<Clause>>& clauses) {
-        clauses_ = clauses;
-    }
-
-    /*
-     * This is used to set the row filter to a row range not to perform a query of the index key
-     * to get the total number of rows in the index, preventing the cost of performing an extra request.
-     */
-     void calculate_row_filter(int64_t total_rows) {
-        if (row_range.has_value()) {
-            size_t start = row_range->start_ >= 0 ?
-                           std::min(row_range->start_, total_rows) :
-                           std::max(total_rows + row_range->start_,
-                                    static_cast<int64_t>(0));
-            size_t end = row_range->end_ >= 0 ?
-                         std::min(row_range->end_, total_rows) :
-                         std::max(total_rows + row_range->end_, static_cast<int64_t>(0));
-            row_filter = RowRange(start, end);
-        }
-    }
-};
 
 struct SnapshotVersionQuery {
     SnapshotId name_;
@@ -95,8 +48,7 @@ using VersionQueryType = std::variant<
         std::monostate, // Represents "latest"
         SnapshotVersionQuery,
         TimestampVersionQuery,
-        SpecificVersionQuery
-        >;
+        SpecificVersionQuery>;
 
 struct VersionQuery {
     VersionQueryType content_;
@@ -408,12 +360,12 @@ inline std::vector<SliceAndKey> strictly_before(const FilterRange &range, std::s
     std::vector<SliceAndKey> output;
     util::variant_match(range,
                         [&](const RowRange &row_range) {
-                            ranges::copy_if(input, std::back_inserter(output), [&](const auto &sk) {
+                            std::ranges::copy_if(input, std::back_inserter(output), [&](const auto &sk) {
                                 return sk.slice_.row_range.second < row_range.first;
                             });
                         },
                         [&](const IndexRange &index_range) {
-                            ranges::copy_if(input, std::back_inserter(output), [&](const auto &sk) {
+                            std::ranges::copy_if(input, std::back_inserter(output), [&](const auto &sk) {
                                 return sk.key().index_range().end_ < index_range.start_;
                             });
                         },
@@ -427,12 +379,12 @@ inline std::vector<SliceAndKey> strictly_after(const FilterRange &range, std::sp
     std::vector<SliceAndKey> output;
     util::variant_match(range,
                         [&input, &output](const RowRange &row_range) {
-                            ranges::copy_if(input, std::back_inserter(output), [&](const auto &sk) {
+                            std::ranges::copy_if(input, std::back_inserter(output), [&](const auto &sk) {
                                 return sk.slice_.row_range.first > row_range.second;
                             });
                         },
                         [&input, &output](const IndexRange &index_range) {
-                            ranges::copy_if(input, std::back_inserter(output), [&](const auto &sk) {
+                            std::ranges::copy_if(input, std::back_inserter(output), [&](const auto &sk) {
                                 return sk.key().index_range().start_ > index_range.end_;
                             });
                         },

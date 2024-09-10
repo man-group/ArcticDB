@@ -63,7 +63,7 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
         auto key = partial_key_gen_(slice_);
         SingleSegmentAggregator agg{FixedSchema{*slice_.desc(), frame_->index}, [key=std::move(key), slice=slice_, &output](auto&& segment) {
             output = std::make_tuple(key, std::forward<SegmentInMemory>(segment), slice);
-        }};
+        }, NeverSegmentPolicy{}, *slice_.desc()};
 
         auto regular_slice_size = util::variant_match(slicing_,
             [&](const NoSlicing&) {
