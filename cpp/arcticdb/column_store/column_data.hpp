@@ -98,8 +98,8 @@ struct TypedBlockData {
         return nbytes_;
     }
 
-    [[nodiscard]] const raw_type* release() {
-        return reinterpret_cast<const raw_type*>(const_cast<MemBlock*>(block_)->release());
+    [[nodiscard]] raw_type* release() {
+        return reinterpret_cast<raw_type*>(const_cast<MemBlock*>(block_)->release());
     }
 
     [[nodiscard]] std::size_t row_count() const {

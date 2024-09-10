@@ -25,6 +25,14 @@
 #include <arcticdb/version/local_versioned_engine.hpp>
 #include <arcticdb/entity/read_result.hpp>
 
+namespace arcticdb {
+struct ArrowReadResult;
+}
+
+namespace arcticdb {
+struct ArrowReadResult;
+}
+
 namespace arcticdb::version_store {
 
 using namespace arcticdb::entity;
@@ -154,6 +162,13 @@ class PythonVersionStore : public LocalVersionedEngine {
         const VersionQuery& version_query);
 
     ReadResult read_dataframe_version(
+        const StreamId &stream_id,
+        const VersionQuery& version_query,
+        const std::shared_ptr<ReadQuery>& read_query,
+        const ReadOptions& read_options,
+        std::any& handler_data);
+
+    ArrowReadResult read_dataframe_version_arrow(
         const StreamId &stream_id,
         const VersionQuery& version_query,
         const std::shared_ptr<ReadQuery>& read_query,
