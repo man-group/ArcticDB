@@ -24,8 +24,7 @@ namespace arcticdb::pipelines {
 
 SegmentInMemory allocate_frame(
     const std::shared_ptr<PipelineContext>& context,
-    OutputFormat output_format,
-    AllocationType allocation_type);
+    OutputFormat output_format);
 
 template <typename KeySliceContainer>
 std::optional<util::BitSet> check_and_mark_slices(

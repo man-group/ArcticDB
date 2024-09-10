@@ -609,7 +609,7 @@ void Column::truncate_last_block(size_t row) {
 }
 
 void Column::truncate_single_block(size_t start_row, size_t end_row) {
-    if(!is_sparse()) {
+    if(!is_sparse()) { // TODO: We need to also do truncation on sparse data
         const auto type_size = data_type_size(type_, OutputFormat::NATIVE, DataTypeMode::INTERNAL);
         auto start_offset = type_size * start_row;
         auto end_offset = type_size * end_row;

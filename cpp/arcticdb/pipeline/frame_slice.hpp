@@ -60,10 +60,10 @@ struct RowRange : AxisRange {
 };
 
 inline bool contains(const RowRange& range, size_t row) {
-    return row >= range.first && row < range.second;
+    return row >= range.first && row <= range.second;
 }
 
-/*
+ /*
  * This class is mostly (exclusively?) used in SliceAndKey objects, where the duplication of the StreamDescriptor
  * with the SegmentInMemory is confusing and error-prone. Where possible do not add more uses of this class and
  * SliceAndKey, prefer RangesAndKey or SegmentAndSlice depending on requirements.
