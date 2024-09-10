@@ -266,6 +266,15 @@ void handle_truncation(
     handle_truncation(dest_column, mapping.truncate_);
 }
 
+void create_dense_bitmap(size_t offset, const util::BitSet& sparse_map, Column& dest_column, AllocationType allocation_type) {
+    auto& sparse_buffer = dest_column.create_extra_buffer(
+        offset,
+        ExtraBufferType::BITMAP,
+        bitset_unpacked_size(sparse_map.count() * sizeof(uint64_t)),
+        allocation_type);
+
+    bitset_to_packed_bits(sparse_map, reinterpret_cast<uint64_t*>(sparse_buffer.data()));
+}
 void decode_or_expand(
     const uint8_t*& data,
     Column& dest_column,
@@ -298,6 +307,10 @@ void decode_or_expand(
                 util::default_initialize<TagType>(dest, dest_bytes);
                 util::expand_dense_buffer_using_bitmap<RawType>(bv.value(), sparse.data(), dest);
             });
+
+            //TODO possibly register sparse handler on the TypeHandlerRegistry
+            if(output_format == OutputFormat::ARROW)
+                create_dense_bitmap(mapping.offset_bytes_, *bv, dest_column, AllocationType::DETACHABLE);
         } else {
             SliceDataSink sink(dest, dest_bytes);
             const auto &ndarray = encoded_field_info.ndarray();
@@ -485,14 +498,15 @@ void check_data_left_for_subsequent_fields(
                 "Reached end of input block with {} fields to decode", it.remaining_fields());
 }
 
+
 void decode_into_frame_static(
-    SegmentInMemory &frame,
-    PipelineContextRow &context,
-    const Segment& seg,
-    const DecodePathData& shared_data,
-    std::any& handler_data,
-    const ReadQuery& read_query,
-    const ReadOptions& read_options) {
+        SegmentInMemory &frame,
+        PipelineContextRow &context,
+        const Segment& seg,
+        const DecodePathData& shared_data,
+        std::any& handler_data,
+        const ReadQuery& read_query,
+        const ReadOptions& read_options) {
     ARCTICDB_SAMPLE_DEFAULT(DecodeIntoFrame)
     const uint8_t *data = seg.buffer().data();
     const uint8_t *begin = data;
@@ -885,9 +899,9 @@ folly::Future<SegmentInMemory> fetch_data(
             [row=row, frame=frame, dynamic_schema=dynamic_schema, shared_data, &handler_data, read_query, read_options](auto &&ks) mutable {
                 auto key_seg = std::forward<storage::KeySegmentPair>(ks);
                 if(dynamic_schema) {
-                    decode_into_frame_dynamic(frame, row, key_seg.segment(), shared_data, handler_data, read_query, read_options);
+                    decode_into_frame_dynamic(frame, row, std::move(key_seg.segment()), shared_data, handler_data, read_query, read_options);
                 } else {
-                    decode_into_frame_static(frame, row, key_seg.segment(), shared_data, handler_data, read_query, read_options);
+                    decode_into_frame_static(frame, row, std::move(key_seg.segment()), shared_data, handler_data, read_query, read_options);
                 }
 
                 return key_seg.variant_key();

@@ -19,3 +19,9 @@
 [submodule "cpp/third_party/entt"]
 	path = cpp/third_party/entt
 	url = https://github.com/skypjack/entt.git
+[submodule "cpp/third_party/sparrow"]
+	path = cpp/third_party/sparrow
+	url = https://github.com/man-group/sparrow.git
+[submodule "cpp/third_party/date"]
+	path = cpp/third_party/date
+	url = https://github.com/HowardHinnant/date.git
