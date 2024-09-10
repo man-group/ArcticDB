@@ -117,12 +117,19 @@ struct MemBlock {
 
     [[nodiscard]] uint8_t *data() { return is_external() ? external_data_ : data_; }
 
-    [[nodiscard]] const uint8_t* release() {
+    [[nodiscard]] uint8_t* release() {
         util::check(is_external() && owns_external_data_, "Cannot release inlined or external data pointer");
         auto* tmp = external_data_;
         external_data_ = nullptr;
         owns_external_data_ = false;
         return tmp;
+    }
+
+    void abandon() {
+        util::check(is_external() && owns_external_data_, "Cannot release inlined or external data pointer");
+        delete[] external_data_;
+        external_data_ = nullptr;
+        owns_external_data_ = false;
     }
 
     [[nodiscard]] uint8_t *end() const { return const_cast<uint8_t*>(&data()[bytes_]); }
