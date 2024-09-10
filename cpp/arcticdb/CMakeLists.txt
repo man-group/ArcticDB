@@ -19,6 +19,7 @@ cmake_policy(POP)
 
 find_package(Boost REQUIRED)
 find_package(fmt REQUIRED)
+find_package(sparrow CONFIG REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(Folly REQUIRED)
 find_package(Gflags REQUIRED)
@@ -243,7 +244,6 @@ set(arcticdb_srcs
         pipeline/read_options.hpp
         pipeline/read_options.hpp
         pipeline/read_pipeline.hpp
-        pipeline/read_query.hpp
         pipeline/slicing.hpp
         pipeline/string_pool_utils.hpp
         pipeline/value.hpp
@@ -444,9 +444,6 @@ set(arcticdb_srcs
         pipeline/pipeline_context.cpp
         pipeline/python_output_frame.cpp
         pipeline/query.cpp
-        pipeline/read_query.cpp
-        pipeline/read_query.cpp
-        pipeline/read_pipeline.cpp
         pipeline/read_frame.cpp
         pipeline/slicing.cpp
         pipeline/string_pool_utils.cpp
@@ -538,7 +535,20 @@ set(arcticdb_srcs
         version/version_utils.cpp
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
-        storage/s3/ec2_utils.cpp)
+        storage/s3/ec2_utils.cpp
+        arrow/arrow_utils.hpp
+        arrow/arrow_output_frame.hpp
+        arrow/arrow_data.hpp
+        arrow/arrow_utils.cpp
+        arrow/arrow_output_frame.cpp
+        arrow/arrow_handlers.hpp
+        arrow/arrow_handlers.cpp
+        pipeline/read_query.hpp
+        pipeline/read_query.cpp
+        pipeline/read_query.cpp
+        pipeline/read_pipeline.cpp
+        arrow/include_sparrow.hpp
+        arrow/array_from_block.hpp)
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
@@ -692,6 +702,8 @@ set (arcticdb_core_libraries
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
         Azure::azure-identity
         Azure::azure-storage-blobs
+        sparrow::sparrow
+        CURL::libcurl
 )
 
 if(${ARCTICDB_COUNT_ALLOCATIONS})
@@ -765,8 +777,8 @@ if (SSL_LINK)
     find_package(OpenSSL REQUIRED)
     list(APPEND arcticdb_core_libraries OpenSSL::SSL)
     if (NOT WIN32)
-        list(APPEND arcticdb_core_libraries ${KERBEROS_LIBRARY})
-        list(APPEND arcticdb_core_includes  ${KERBEROS_INCLUDE_DIR})
+        #list(APPEND arcticdb_core_libraries ${KERBEROS_LIBRARY})
+        #list(APPEND arcticdb_core_includes  ${KERBEROS_INCLUDE_DIR})
     endif()
 endif ()
 target_link_libraries(arcticdb_core_object PUBLIC ${arcticdb_core_libraries})
@@ -915,6 +927,7 @@ if(${TEST})
     python_utils_dump_vars_if_enabled("Python for test compilation")
 
     set(unit_test_srcs
+            arrow/test/test_arrow.cpp
             async/test/test_async.cpp
             codec/test/test_codec.cpp
             codec/test/test_encode_field_collection.cpp

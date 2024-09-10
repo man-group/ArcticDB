@@ -341,7 +341,7 @@ void PythonArrayHandler::convert_type(
             }
         });
     }
-    dest_column.set_extra_buffer(mapping.offset_bytes_, std::move(source_column.data().buffer()));
+    dest_column.set_extra_buffer(mapping.offset_bytes_, ExtraBufferType::ARRAY, std::move(source_column.data().buffer()));
 }
 
 TypeDescriptor PythonArrayHandler::output_type(const TypeDescriptor& input_type) const {
