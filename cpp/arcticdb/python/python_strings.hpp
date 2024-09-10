@@ -11,7 +11,7 @@
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/util/spinlock.hpp>
 #include <arcticdb/pipeline/string_pool_utils.hpp>
-#include <arcticdb/util/buffer_holder.hpp>
+#include <arcticdb/util/decode_path_data.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/python/gil_lock.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>

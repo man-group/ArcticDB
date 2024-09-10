@@ -45,7 +45,8 @@ ReadResult LibraryTool::read(const VariantKey& key) {
             // We construct a dummy atom key in case of a RefKey to be able to build the read_result
             [](const RefKey& key){return AtomKeyBuilder().build<KeyType::VERSION_REF>(key.id());},
             [](const auto&){});
-    return pipelines::read_result_from_single_frame(frame_and_descriptor, atom_key);
+
+    return pipelines::read_result_from_single_frame(frame_and_descriptor, atom_key, OutputFormat::PANDAS);
 }
 
 Segment LibraryTool::read_to_segment(const VariantKey& key) {

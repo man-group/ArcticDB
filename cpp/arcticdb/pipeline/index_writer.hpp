@@ -10,6 +10,7 @@
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/stream/stream_utils.hpp>
 #include <arcticdb/stream/schema.hpp>
+#include <arcticdb/stream/stream_utils.hpp>
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/pipeline/index_fields.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
@@ -31,11 +32,13 @@ public:
     IndexWriter(std::shared_ptr<stream::StreamSink> sink, IndexPartialKey partial_key, const TimeseriesDescriptor &tsd, const std::optional<KeyType>& key_type = std::nullopt) :
             bucketize_columns_(tsd.column_groups()),
             partial_key_(std::move(partial_key)),
-            agg_(Desc::schema(partial_key_.id, bucketize_columns_),
-            [&](auto &&segment) {
-            on_segment(std::forward<SegmentInMemory>(segment));
-            },
-            stream::NeverSegmentPolicy{}),
+            slice_descriptor_(partial_key_.id, bucketize_columns_),
+            agg_(Desc::schema(slice_descriptor_),
+                [&](auto &&segment) {
+                on_segment(std::forward<SegmentInMemory>(segment));
+                },
+                stream::NeverSegmentPolicy{},
+                slice_descriptor_),
             sink_(std::move(sink)),
             key_being_committed_(folly::Future<AtomKey>::makeEmpty()),
             key_type_(key_type) {
@@ -127,6 +130,7 @@ private:
 
     bool bucketize_columns_ = false;
     IndexPartialKey partial_key_;
+    stream::IndexSliceDescriptor<AggregatorIndexType> slice_descriptor_;
     SliceAggregator agg_;
     std::shared_ptr<stream::StreamSink> sink_;
     folly::Future<arcticdb::entity::AtomKey> key_being_committed_;

@@ -52,6 +52,7 @@ from arcticdb_ext.version_store import ColumnStats as _ColumnStats
 from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticdb_ext.version_store import DataError
 from arcticdb_ext.version_store import sorted_value_name
+from arcticdb_ext.version_store import OutputFormat
 from arcticdb.authorization.permissions import OpenMode
 from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticNativeException
 from arcticdb.flattener import Flattener
@@ -1568,7 +1569,8 @@ class NativeVersionStore:
         """
         _check_batch_kwargs(NativeVersionStore.batch_restore_version, NativeVersionStore.restore_version, kwargs)
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
-        raw_results = self.version_store.batch_restore_version(symbols, version_queries)
+        read_options = self._get_read_options(**kwargs)
+        raw_results = self.version_store.batch_restore_version(symbols, version_queries, read_options)
         read_results = [ReadResult(*r) for r in raw_results]
         metadatas = [denormalize_user_metadata(read_result.udm, self._normalizer) for read_result in read_results]
 
@@ -1818,8 +1820,24 @@ class NativeVersionStore:
             query_builder=query_builder,
             **kwargs,
         )
-        read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
-        return self._post_process_dataframe(read_result, read_query, implement_read_index)
+
+        if read_options.output_format == OutputFormat.ARROW:
+            vit, frame, meta = self.version_store.read_dataframe_version_arrow(symbol, version_query, read_query, read_options)
+            import pyarrow as pa
+            record_batches = []
+            for i in range(frame.num_blocks):
+                arrays = []
+                for arr, schema in zip(frame.arrays, frame.schemas):
+                    print("Arr: {} Schema: {}".format(arr, schema));
+                    arrays.append(pa.Array._import_from_c(arr[i], schema[i]))
+
+                record_batches.append(pa.RecordBatch.from_arrays(arrays, names=frame.names))
+
+            return pa.Table.from_batches(record_batches)
+
+        else:
+            read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
+            return self._post_process_dataframe(read_result, read_query, implement_read_index)
 
     def head(
         self,
@@ -2002,7 +2020,8 @@ class NativeVersionStore:
             Includes the version number that was just written.
         """
         version_query = self._get_version_query(as_of, **kwargs)
-        read_result = ReadResult(*self.version_store.restore_version(symbol, version_query))
+        read_options = self._get_read_options(**kwargs)
+        read_result = ReadResult(*self.version_store.restore_version(symbol, version_query, read_options))
         meta = denormalize_user_metadata(read_result.udm, self._normalizer)
 
         return VersionedItem(

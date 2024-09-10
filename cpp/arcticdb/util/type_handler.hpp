@@ -11,6 +11,7 @@
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/codec/segment_header.hpp>
 #include <arcticdb/util/lazy.hpp>
+#include <arcticdb/entity/output_format.hpp>
 #include <arcticdb/util/spinlock.hpp>
 
 #include <folly/Poly.h>
@@ -36,7 +37,7 @@ struct ITypeHandler {
         /// @param[in] dest_bytes Size of dest in bytes
         void handle_type(
             const uint8_t*& source,
-            ChunkedBuffer& dest_buffer,
+            Column& dest_column,
             const EncodedFieldImpl& encoded_field_info,
             const ColumnMapping& mapping,
             const DecodePathData& shared_data,
@@ -47,7 +48,7 @@ struct ITypeHandler {
             folly::poly_call<0>(
                 *this,
                 source,
-                dest_buffer,
+                dest_column,
                 encoded_field_info,
                 mapping,
                 shared_data,
@@ -57,30 +58,35 @@ struct ITypeHandler {
             );
         }
 
+        void convert_type(
+            const Column& source_column,
+            Column& dest_column,
+            const ColumnMapping& mapping,
+            const DecodePathData& shared_data,
+            std::any& handler_data,
+            const std::shared_ptr<StringPool>& string_pool) const {
+            folly::poly_call<1>(*this, source_column, dest_column, mapping, shared_data, handler_data, string_pool);
+        }
+
         [[nodiscard]] int type_size() const {
             return folly::poly_call<2>(*this);
         }
 
-        void convert_type(
-            const Column& source_column,
-            ChunkedBuffer& dest_buffer,
-            size_t num_rows,
-            size_t offset_bytes,
-            TypeDescriptor source_type_desc,
-            TypeDescriptor dest_type_desc,
-            const DecodePathData& shared_data,
-            std::any& handler_data,
-            const std::shared_ptr<StringPool>& string_pool) {
-            folly::poly_call<1>(*this, source_column, dest_buffer, num_rows, offset_bytes, source_type_desc, dest_type_desc, shared_data, handler_data, string_pool);
+        [[nodiscard]] size_t extra_rows() const {
+            return folly::poly_call<3>(*this);
+        }
+
+        TypeDescriptor output_type(const TypeDescriptor& input_type) const {
+            return folly::poly_call<4>(*this, input_type);
         }
 
         void default_initialize(ChunkedBuffer& buffer, size_t offset, size_t byte_size, const DecodePathData& shared_data, std::any& handler_data) const {
-            folly::poly_call<3>(*this, buffer, offset, byte_size, shared_data, handler_data);
+            folly::poly_call<5>(*this, buffer, offset, byte_size, shared_data, handler_data);
         }
     };
 
     template<class T>
-    using Members = folly::PolyMembers<&T::handle_type, &T::convert_type, &T::type_size, &T::default_initialize>;
+    using Members = folly::PolyMembers<&T::handle_type, &T::convert_type, &T::type_size, &T::extra_rows, &T::output_type, &T::default_initialize>;
 };
 
 using TypeHandler = folly::Poly<ITypeHandler>;
@@ -102,38 +108,54 @@ public:
     static std::shared_ptr<TypeHandlerRegistry> instance();
     static void destroy_instance();
 
-    std::shared_ptr<TypeHandler> get_handler(const entity::TypeDescriptor& type_descriptor) const;
-    void register_handler(const entity::TypeDescriptor& type_descriptor, TypeHandler&& handler);
+    std::shared_ptr<TypeHandler> get_handler(OutputFormat output_format, const entity::TypeDescriptor& type_descriptor) const;
+    void register_handler(OutputFormat output_format, const entity::TypeDescriptor& type_descriptor, TypeHandler&& handler);
 
-    void set_handler_data(std::unique_ptr<TypeHandlerDataFactory>&& data) {
-        handler_data_factory_ = std::move(data);
+    void set_handler_data(OutputFormat output_format, std::unique_ptr<TypeHandlerDataFactory>&& data) {
+        handler_data_factories_[static_cast<uint8_t>(output_format)] = std::move(data);
     }
 
-    std::any get_handler_data() {
-        util::check(static_cast<bool>(handler_data_factory_), "No type handler set");
-        return handler_data_factory_->get_data();
+    std::any get_handler_data(OutputFormat output_format) {
+        util::check(static_cast<bool>(handler_data_factories_[static_cast<uint8_t>(output_format)]), "No type handler set");
+        return handler_data_factories_[static_cast<uint8_t>(output_format)]->get_data();
     }
 
 private:
-    std::unique_ptr<TypeHandlerDataFactory> handler_data_factory_;
+    std::array<std::unique_ptr<TypeHandlerDataFactory>, static_cast<size_t>(OutputFormat::COUNT)> handler_data_factories_;
 
     struct Hasher {
         size_t operator()(entity::TypeDescriptor val) const;
     };
-    std::unordered_map<entity::TypeDescriptor, std::shared_ptr<TypeHandler>, Hasher> handlers_;
+
+    using TypeHandlerMap = std::unordered_map<entity::TypeDescriptor, std::shared_ptr<TypeHandler>, Hasher>;
+
+    TypeHandlerMap& handler_map(OutputFormat output_format) {
+        return handlers_[static_cast<int>(output_format)];
+    }
+
+    const TypeHandlerMap& handler_map(OutputFormat output_format) const {
+        const auto pos = static_cast<int>(output_format);
+        util::check(size_t(pos) < handlers_.size(), "No handler map found for output format {}", pos);
+        return handlers_[static_cast<int>(output_format)];
+    }
+
+    std::array<TypeHandlerMap, static_cast<size_t>(OutputFormat::COUNT)> handlers_;
 };
 
+inline std::shared_ptr<TypeHandler> get_type_handler(OutputFormat output_format, TypeDescriptor source) {
+    return TypeHandlerRegistry::instance()->get_handler(output_format, source);
+}
 
-inline std::shared_ptr<TypeHandler> get_type_handler(TypeDescriptor source, TypeDescriptor target) {
-    auto handler = TypeHandlerRegistry::instance()->get_handler(source);
+inline std::shared_ptr<TypeHandler> get_type_handler(OutputFormat output_format, TypeDescriptor source, TypeDescriptor target) {
+    auto handler = TypeHandlerRegistry::instance()->get_handler(output_format, source);
     if(handler)
         return handler;
 
-    return TypeHandlerRegistry::instance()->get_handler(target);
+    return TypeHandlerRegistry::instance()->get_handler(output_format, target);
 }
 
-inline std::any get_type_handler_data() {
-    return TypeHandlerRegistry::instance()->get_handler_data();
+inline std::any get_type_handler_data(OutputFormat output_format) {
+    return TypeHandlerRegistry::instance()->get_handler_data(output_format);
 }
 
 
