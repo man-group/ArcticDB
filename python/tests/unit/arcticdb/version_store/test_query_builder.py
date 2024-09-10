@@ -14,6 +14,18 @@ from arcticdb.util.test import assert_frame_equal
 from arcticdb_ext.exceptions import SchemaException
 
 
+def test_query_builder_equality_checks():
+    q1 = QueryBuilder()
+    q2 = QueryBuilder()
+    q1 = q1[q1["date"] >= pd.Timestamp("2020-01-01")]
+    q2 = q2[q2["date"] >= pd.Timestamp("2020-01-01")]
+    assert q1 == q2
+
+    q2 = QueryBuilder()
+    q2 = q2[q2["date"] >= pd.Timestamp("2021-01-01")]
+    assert q1 != q2
+
+
 def test_reuse_querybuilder(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     symbol = "test_reuse_querybuilder"
