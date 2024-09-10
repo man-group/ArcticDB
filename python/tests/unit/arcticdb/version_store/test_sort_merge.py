@@ -368,7 +368,7 @@ class TestDescriptorMismatchBetweenStagedSegments:
         assert "INT" in str(exception_info.value)
 
     @pytest.mark.parametrize("mode", [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE])
-    def test_type_mismatch_in_staged_segments_throws_with_promotoable_types(self, lmdb_library, mode):
+    def test_type_mismatch_in_staged_segments_throws_with_non_promotoable_types(self, lmdb_library, mode):
         lib = lmdb_library
 
         df1 = pd.DataFrame({"col": np.array([1], dtype="int64")}, index=pd.DatetimeIndex([np.datetime64('2023-01-01')]))
