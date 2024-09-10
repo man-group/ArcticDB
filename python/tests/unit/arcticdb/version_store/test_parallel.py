@@ -631,3 +631,87 @@ def test_parallel_append_dynamic_schema_missing_column(lmdb_version_store_tiny_s
     assert_frame_equal(expected, received)
 
 
+class TestFinalizeStagedDataStaticSchemaMismatch:
+    def test_append_throws_with_missmatched_column_set(self, lmdb_version_store_v1):
+        lib = lmdb_version_store_v1
+
+        initial_df = pd.DataFrame({"col_0": [1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
+        lib.write("sym", initial_df)
+
+        appended_df = pd.DataFrame({"col_1": [1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
+        lib.write("sym", appended_df, parallel=True)
+        with pytest.raises(SchemaException) as exception_info:
+            lib.compact_incomplete("sym", True, False)
+        assert "col_1" in str(exception_info.value)
+
+    def test_append_throws_column_subset(self, lmdb_version_store_v1):
+        lib = lmdb_version_store_v1
+
+        df1 = pd.DataFrame(
+            {"a": np.array([1.1], dtype="float"), "b": np.array([2], dtype="int64")},
+            index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])
+        )
+        lib.write("sym", df1)
+        df2 = pd.DataFrame({"b": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-02")]))
+        lib.write("sym", df2, parallel=True)
+        with pytest.raises(SchemaException) as exception_info: 
+            lib.compact_incomplete("sym", True, False)
+        assert "a" in str(exception_info.value)
+        assert "b" in str(exception_info.value)
+
+    def test_append_throws_on_incompatible_dtype(self, lmdb_version_store_v1):
+        lib = lmdb_version_store_v1
+
+        initial_df = pd.DataFrame({"col_0": np.array([1], dtype="int64")}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
+        lib.write("sym", initial_df)
+
+        appended_df = pd.DataFrame({"col_0": ["asd"]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
+        lib.write("sym", appended_df, parallel=True)
+        with pytest.raises(SchemaException) as exception_info:
+            lib.compact_incomplete("sym", True, False)
+        assert "col_0" in str(exception_info.value)
+        assert "INT64" in str(exception_info.value)
+
+    def test_type_mismatch_in_staged_segments_throws(self, lmdb_version_store_v1):
+        lib = lmdb_version_store_v1
+        lib.write("sym", pd.DataFrame({"col": [1]}, index=pd.DatetimeIndex([np.datetime64('2023-01-01')])), parallel=True)
+        lib.write("sym", pd.DataFrame({"col": ["a"]}, index=pd.DatetimeIndex([np.datetime64('2023-01-02')])), parallel=True)
+        with pytest.raises(Exception) as exception_info:
+            lib.compact_incomplete("sym", False, False)
+        assert all(x in str(exception_info.value) for x in ["INT64", "type"])
+
+    def test_types_cant_be_promoted(self, lmdb_version_store_v1):
+        lib = lmdb_version_store_v1
+        lib.write("sym", pd.DataFrame({"col": np.array([1], dtype="int64")}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)])))
+
+        lib.write("sym", pd.DataFrame({"col": np.array([1], dtype="int32")}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)])), parallel=True)
+        with pytest.raises(SchemaException) as exception_info:
+            lib.compact_incomplete("sym", True, False)
+        assert "INT32" in str(exception_info.value)
+        assert "INT64" in str(exception_info.value)
+
+    def test_appending_reordered_column_set_throws(self, lmdb_version_store_v1):
+        lib = lmdb_version_store_v1
+
+        lib.write("sym", pd.DataFrame({"col_0": [1], "col_1": ["test"], "col_2": [1.2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)])))
+
+        lib.write("sym", pd.DataFrame({"col_1": ["asd"], "col_2": [2.5], "col_0": [2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)])), parallel=True)
+        with pytest.raises(SchemaException) as exception_info:
+            lib.compact_incomplete("sym", True, False)
+        assert "col_0" in str(exception_info.value)
+        assert "col_1" in str(exception_info.value)
+        assert "col_2" in str(exception_info.value)
+
+    @pytest.mark.parametrize("mode", [True, False])
+    def test_staged_segments_can_be_reordered(self, lmdb_version_store_v1, mode):
+        lib = lmdb_version_store_v1
+        df1 = pd.DataFrame({"col_0": [1], "col_1": ["test"], "col_2": [1.2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
+        df2 = pd.DataFrame({"col_1": ["asd"], "col_2": [2.5], "col_0": [2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
+        lib.write("sym", df1, parallel=True)
+        lib.write("sym", df2, parallel=True)
+        expected = pd.concat([df1, df2]).sort_index()
+        with pytest.raises(SchemaException) as exception_info:
+            lib.compact_incomplete("sym", mode, False)
+        assert "col_0" in str(exception_info.value)
+        assert "col_1" in str(exception_info.value)
+        assert "col_2" in str(exception_info.value)
