@@ -38,6 +38,7 @@ constexpr auto visit_dim(DataType dt, Callable &&c) {
         DT_CASE(ASCII_DYNAMIC64)
         DT_CASE(UTF_FIXED64)
         DT_CASE(UTF_DYNAMIC64)
+        DT_CASE(UTF_DYNAMIC32)
         DT_CASE(EMPTYVAL)
         DT_CASE(BOOL_OBJECT8)
 #undef DT_CASE
@@ -66,6 +67,7 @@ auto visit_type(DataType dt, Callable &&c) {
         DT_CASE(ASCII_DYNAMIC64)
         DT_CASE(UTF_FIXED64)
         DT_CASE(UTF_DYNAMIC64)
+        DT_CASE(UTF_DYNAMIC32)
         DT_CASE(EMPTYVAL)
         DT_CASE(BOOL_OBJECT8)
 #undef DT_CASE

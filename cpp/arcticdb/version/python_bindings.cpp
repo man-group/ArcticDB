@@ -23,6 +23,7 @@
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
 #include <arcticdb/python/python_handler_data.hpp>
+#include <boost/date_time/posix_time/posix_time.hpp>
 
 
 namespace arcticdb::version_store {
@@ -214,7 +215,8 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
 
     py::enum_<OutputFormat>(version, "OutputFormat")
         .value("PANDAS", OutputFormat::PANDAS)
-        .value("ARROW", OutputFormat::ARROW);
+        .value("ARROW", OutputFormat::ARROW)
+        .value("PARQUET", OutputFormat::PARQUET);
 
     py::class_<ReadOptions>(version, "PythonVersionStoreReadOptions")
         .def(py::init())
@@ -244,6 +246,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
 
     using PythonOutputFrame = arcticdb::pipelines::PythonOutputFrame;
     py::class_<PythonOutputFrame>(version, "PythonOutputFrame")
+        //.def(py::init<const SegmentInMemory&, OutputFormat output_format, std::shared_ptr<BufferHolder>>())
         .def(py::init<>([](const SegmentInMemory& segment_in_memory, OutputFormat output_format) {
             return PythonOutputFrame(segment_in_memory, output_format);
         }))
@@ -258,6 +261,16 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def_property_readonly("row_count", [](PythonOutputFrame& self) {
             return self.frame().row_count();
         });
+
+        py::class_<ArrowOutputFrame>(version, "ArrowOutputFrame")
+        .def_property_readonly("record_batches", &ArrowOutputFrame::record_batches)
+        .def_property_readonly("names", &ArrowOutputFrame::names)
+        ;
+
+        py::class_<RecordBatchData>(version, "RecordBatchData")
+            .def("array", &RecordBatchData::array)
+            .def("schema", &RecordBatchData::schema)
+        ;
 
     py::enum_<VersionRequestType>(version, "VersionRequestType", R"pbdoc(
         Enum of possible version request types passed to as_of.
@@ -306,8 +319,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def_property_readonly("error_code", &DataError::error_code)
             .def_property_readonly("error_category", &DataError::error_category)
             .def_property_readonly("exception_string", &DataError::exception_string)
-            .def("__str__", &DataError::to_string)
-            .def("__repr__", &DataError::to_string);
+            .def("__str__", &DataError::to_string);
 
     // TODO: add repr.
     py::class_<VersionedItem>(version, "VersionedItem")
@@ -691,7 +703,14 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
               },
              py::call_guard<SingleThreadMutexHolder>(),
              "Read the specified version of the dataframe from the store")
-         .def("read_index",
+            .def("read_dataframe_version_arrow",
+            [&](PythonVersionStore& v,  StreamId sid, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options) {
+                auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format());
+                return adapt_arrow_df(v.read_dataframe_version_arrow(sid, version_query, read_query, read_options, handler_data));
+            },
+            py::call_guard<SingleThreadMutexHolder>(),
+            "Read the specified version of the dataframe from the store")
+        .def("read_index",
              [&](PythonVersionStore& v, StreamId sid, const VersionQuery& version_query){
                  constexpr OutputFormat output_format = OutputFormat::PANDAS;
                  auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(output_format);
@@ -815,9 +834,6 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("batch_append",
              &PythonVersionStore::batch_append,
              py::call_guard<SingleThreadMutexHolder>(), "Batch append to a list of symbols")
-        .def("batch_update",
-             &PythonVersionStore::batch_update,
-             py::call_guard<SingleThreadMutexHolder>(), "Batch update a list of symbols")
         .def("batch_restore_version",
              [&](PythonVersionStore& v, const std::vector<StreamId>& ids, const std::vector<VersionQuery>& version_queries, const ReadOptions& read_options){
                  auto results = v.batch_restore_version(ids, version_queries);

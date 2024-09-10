@@ -5,7 +5,6 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
@@ -17,13 +16,11 @@
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
-#include <arcticdb/stream/incompletes.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/util/format_date.hpp>
 #include <vector>
 #include <array>
 #include <ranges>
-
 
 namespace arcticdb::pipelines {
 
@@ -137,7 +134,7 @@ std::vector<std::pair<FrameSlice, size_t>> get_slice_and_rowcount(const std::vec
 }
 
 int64_t write_window_size() {
-    return ConfigsMap::instance()->get_int("VersionStore.BatchWriteWindow", 2 * async::TaskScheduler::instance()->io_thread_count());
+    return ConfigsMap::instance()->get_int("VersionStore.BatchWriteWindow", int64_t(2 * async::TaskScheduler::instance()->io_thread_count()));
 }
 
 folly::Future<std::vector<SliceAndKey>> write_slices(
@@ -181,7 +178,7 @@ folly::Future<std::vector<SliceAndKey>> slice_and_write(
         return folly::makeFuture(std::vector<SliceAndKey>{});
 
     ARCTICDB_SUBSAMPLE_DEFAULT(SliceAndWrite)
-    TypedStreamVersion tsv{std::move(key.id), std::move(key.version_id), KeyType::TABLE_DATA};
+    TypedStreamVersion tsv{std::move(key.id), key.version_id, KeyType::TABLE_DATA};
     return write_slices(frame, std::move(slices), slicing, std::move(tsv), sink, de_dup_map, sparsify_floats);
 }
 
@@ -282,10 +279,10 @@ folly::Future<std::optional<SliceAndKey>> async_rewrite_partial_segment(
         const auto& key = existing.key();
         const SegmentInMemory& segment = key_segment.second;
         const RowRange affected_row_range = partial_rewrite_row_range(segment, index_range, affected_part);
-        const int64_t num_rows = affected_row_range.end() - affected_row_range.start();
-        if (num_rows <= 0) {
+        const auto num_rows = int64_t(affected_row_range.end() - affected_row_range.start());
+        if (num_rows <= 0)
             return std::nullopt;
-        }
+
         SegmentInMemory output = segment.truncate(affected_row_range.start(), affected_row_range.end(), true);
         const IndexValue start_ts = TimeseriesIndex::start_value_for_segment(output);
         // +1 as in the key we store one nanosecond greater than the last index value in the segment
@@ -304,7 +301,7 @@ folly::Future<std::optional<SliceAndKey>> async_rewrite_partial_segment(
              end_ts,
              std::move(output)
        ).thenValueInline([new_slice=std::move(new_slice)](VariantKey&& k) {
-          return std::make_optional<SliceAndKey>(std::move(new_slice), std::get<AtomKey>(std::move(k)));
+          return std::make_optional<SliceAndKey>(new_slice, std::get<AtomKey>(std::move(k)));
        });
     });
 }

@@ -1713,6 +1713,7 @@ class NativeVersionStore:
         read_options = _PythonVersionStoreReadOptions()
         read_options.set_force_strings_to_object(_assume_false("force_string_to_object", kwargs))
         read_options.set_optimise_string_memory(_assume_false("optimise_string_memory", kwargs))
+        read_options.set_output_format(kwargs.get("output_format") or OutputFormat.PANDAS)
         read_options.set_dynamic_schema(
             resolve_defaults("dynamic_schema", proto_cfg, global_default=False, **kwargs)
         )
@@ -1826,13 +1827,8 @@ class NativeVersionStore:
             vit, frame, meta = self.version_store.read_dataframe_version_arrow(symbol, version_query, read_query, read_options)
             import pyarrow as pa
             record_batches = []
-            for i in range(frame.num_blocks):
-                arrays = []
-                for arr, schema in zip(frame.arrays, frame.schemas):
-                    print("Arr: {} Schema: {}".format(arr, schema));
-                    arrays.append(pa.Array._import_from_c(arr[i], schema[i]))
-
-                record_batches.append(pa.RecordBatch.from_arrays(arrays, names=frame.names))
+            for record_batch in frame.record_batches:
+                record_batches.append(pa.RecordBatch._import_from_c(record_batch.array(), record_batch.schema()))
 
             return pa.Table.from_batches(record_batches)
 
