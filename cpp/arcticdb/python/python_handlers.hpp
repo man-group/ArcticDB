@@ -18,11 +18,10 @@ namespace arcticdb {
 struct ColumnMapping;
 class Column;
 
-
-struct EmptyHandler {
+struct PythonEmptyHandler {
     void handle_type(
         const uint8_t *&data,
-        ChunkedBuffer& dest_buffer,
+        Column& dest_column,
         const EncodedFieldImpl &field,
         const ColumnMapping& m,
         const DecodePathData& shared_data,
@@ -35,15 +34,13 @@ struct EmptyHandler {
 
     void convert_type(
         const Column& source_column,
-        ChunkedBuffer& dest_buffer,
-        size_t num_rows,
-        size_t offset_bytes,
-        TypeDescriptor source_type_desc,
-        TypeDescriptor dest_type_desc,
+        Column& dest_column,
+        const ColumnMapping& mapping,
         const DecodePathData& shared_data,
         std::any& handler_data,
-        const std::shared_ptr<StringPool>& string_pool
-    );
+        const std::shared_ptr<StringPool>& string_pool) const;
+
+    [[nodiscard]] TypeDescriptor output_type(const TypeDescriptor& input_type) const;
 
     void default_initialize(
         ChunkedBuffer& buffer,
@@ -51,12 +48,16 @@ struct EmptyHandler {
         size_t byte_size,
         const DecodePathData& shared_data,
         std::any& handler_data) const;
+
+    size_t extra_rows() const {
+        return 0;
+    }
 };
 
-struct StringHandler {
+struct PythonStringHandler {
     void handle_type(
         const uint8_t *&data,
-        ChunkedBuffer& dest_buffer,
+        Column& dest_column,
         const EncodedFieldImpl &field,
         const ColumnMapping& m,
         const DecodePathData& shared_data,
@@ -66,17 +67,16 @@ struct StringHandler {
     );
 
     [[nodiscard]] int type_size() const;
+
+    [[nodiscard]] TypeDescriptor output_type(const TypeDescriptor& input_type) const;
     
     void convert_type(
         const Column& source_column,
-        ChunkedBuffer& dest_buffer,
-        size_t num_rows,
-        size_t offset_bytes,
-        TypeDescriptor source_type_desc,
-        TypeDescriptor dest_type_desc,
+        Column& dest_column,
+        const ColumnMapping& mapping,
         const DecodePathData& shared_data,
         std::any& handler_data,
-        const std::shared_ptr<StringPool>& string_pool);
+        const std::shared_ptr<StringPool>& string_pool) const;
 
     void default_initialize(
         ChunkedBuffer& buffer,
@@ -84,12 +84,16 @@ struct StringHandler {
         size_t byte_size,
         const DecodePathData& shared_data,
         std::any& handler_data) const;
+
+    size_t extra_rows() const {
+        return 0;
+    }
 };
 
-struct BoolHandler {
+struct PythonBoolHandler {
     void handle_type(
         const uint8_t *&data,
-        ChunkedBuffer& dest_buffer,
+        Column& dest_column,
         const EncodedFieldImpl &field,
         const ColumnMapping& m,
         const DecodePathData& shared_data,
@@ -102,15 +106,13 @@ struct BoolHandler {
 
     void convert_type(
         const Column& source_column,
-        ChunkedBuffer& dest_buffer,
-        size_t num_rows,
-        size_t offset_bytes,
-        TypeDescriptor source_type_desc,
-        TypeDescriptor dest_type_desc,
+        Column& dest_column,
+        const ColumnMapping& mapping,
         const DecodePathData& shared_data,
         std::any& handler_data,
-        const std::shared_ptr<StringPool>& string_pool
-    );
+        const std::shared_ptr<StringPool>& string_pool) const;
+
+    [[nodiscard]] TypeDescriptor output_type(const TypeDescriptor& input_type) const;
 
     void default_initialize(
         ChunkedBuffer& buffer,
@@ -118,12 +120,16 @@ struct BoolHandler {
         size_t byte_size,
         const DecodePathData& shared_data,
         std::any& handler_data) const;
+
+    size_t extra_rows() const {
+        return 0;
+    }
 };
 
-struct ArrayHandler {
+struct PythonArrayHandler {
     void handle_type(
         const uint8_t *&data,
-        ChunkedBuffer& dest_buffer,
+        Column& dest_column,
         const EncodedFieldImpl &field,
         const ColumnMapping& m,
         const DecodePathData& shared_data,
@@ -134,6 +140,8 @@ struct ArrayHandler {
 
     [[nodiscard]] int type_size() const;
 
+    [[nodiscard]] TypeDescriptor output_type(const TypeDescriptor& input_type) const;
+
     void default_initialize(
         ChunkedBuffer& buffer,
         size_t offset,
@@ -143,37 +151,38 @@ struct ArrayHandler {
 
     void convert_type(
         const Column& source_column,
-        ChunkedBuffer& dest_buffer,
-        size_t num_rows,
-        size_t offset_bytes,
-        TypeDescriptor source_type_desc,
-        TypeDescriptor dest_type_desc,
+        Column& dest_column,
+        const ColumnMapping& mapping,
         const DecodePathData& shared_data,
         std::any& handler_data,
-        const std::shared_ptr<StringPool>& string_pool);
+        const std::shared_ptr<StringPool>& string_pool) const;
+
+    size_t extra_rows() const {
+        return 0;
+    }
 };
 
-inline void register_array_types() {
+inline void register_python_array_types() {
     using namespace arcticdb;
     constexpr std::array<DataType, 5> array_data_types = {
         DataType::INT64, DataType::FLOAT64, DataType::EMPTYVAL, DataType::FLOAT32, DataType::INT32};
 
     for (auto data_type : array_data_types) {
-        TypeHandlerRegistry::instance()->register_handler(make_array_type(data_type), arcticdb::ArrayHandler());
+        TypeHandlerRegistry::instance()->register_handler(OutputFormat::PANDAS, make_array_type(data_type), arcticdb::PythonArrayHandler());
     }
 }
 
-inline void register_string_types() {
+inline void register_python_string_types() {
     using namespace arcticdb;
     constexpr std::array<DataType, 5> string_data_types = {
         DataType::ASCII_DYNAMIC64, DataType::UTF_DYNAMIC64};
 
     for (auto data_type :string_data_types) {
-        TypeHandlerRegistry::instance()->register_handler(make_scalar_type(data_type), arcticdb::StringHandler());
+        TypeHandlerRegistry::instance()->register_handler(OutputFormat::PANDAS, make_scalar_type(data_type), arcticdb::PythonStringHandler());
     }
 }
 
 inline void register_python_handler_data_factory() {
-    TypeHandlerRegistry::instance()->set_handler_data(std::make_unique<PythonHandlerDataFactory>());
+    TypeHandlerRegistry::instance()->set_handler_data(OutputFormat::PANDAS, std::make_unique<PythonHandlerDataFactory>());
 }
 } //namespace arcticdb

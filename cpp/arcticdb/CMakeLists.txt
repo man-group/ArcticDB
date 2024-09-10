@@ -208,7 +208,7 @@ set(arcticdb_srcs
         entity/data_error.hpp
         entity/descriptors.hpp
         entity/native_tensor.hpp
-        entity/output_type.hpp
+        entity/output_format.hpp
         entity/performance_tracing.hpp
         entity/protobuf_mappings.hpp
         entity/read_result.hpp
@@ -243,6 +243,7 @@ set(arcticdb_srcs
         pipeline/read_options.hpp
         pipeline/read_options.hpp
         pipeline/read_pipeline.hpp
+        pipeline/read_query.hpp
         pipeline/slicing.hpp
         pipeline/string_pool_utils.hpp
         pipeline/value.hpp
@@ -440,6 +441,9 @@ set(arcticdb_srcs
         pipeline/pipeline_context.cpp
         pipeline/python_output_frame.cpp
         pipeline/query.cpp
+        pipeline/read_query.cpp
+        pipeline/read_query.cpp
+        pipeline/read_pipeline.cpp
         pipeline/read_frame.cpp
         pipeline/slicing.cpp
         pipeline/string_pool_utils.cpp
@@ -500,7 +504,6 @@ set(arcticdb_srcs
         stream/protobuf_mappings.cpp
         toolbox/library_tool.cpp
         util/allocator.cpp
-        util/buffer_holder.cpp
         util/allocation_tracing.cpp
         util/buffer_pool.cpp
         util/configs_map.cpp
@@ -526,7 +529,9 @@ set(arcticdb_srcs
         version/version_core.cpp
         version/version_store_api.cpp
         version/version_utils.cpp
-        version/version_map_batch_methods.cpp)
+        version/symbol_list.cpp
+        version/version_map_batch_methods.cpp
+        storage/s3/ec2_utils.cpp)
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
@@ -759,7 +764,6 @@ if (SSL_LINK)
 endif ()
 target_link_libraries(arcticdb_core_object PUBLIC ${arcticdb_core_libraries})
 
-
 target_include_directories(arcticdb_core_object
         PRIVATE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
@@ -924,6 +928,7 @@ if(${TEST})
             pipeline/test/test_container.hpp
             pipeline/test/test_pipeline.cpp
             pipeline/test/test_query.cpp
+            pipeline/test/test_frame_allocation.cpp
             util/test/test_regex.cpp
             processing/test/test_arithmetic_type_promotion.cpp
             processing/test/test_clause.cpp
@@ -941,6 +946,7 @@ if(${TEST})
             storage/test/test_memory_storage.cpp
             storage/test/test_s3_storage.cpp
             storage/test/test_storage_factory.cpp
+            storage/test/common.hpp
             storage/test/test_storage_exceptions.cpp
             storage/test/test_azure_storage.cpp
             storage/test/common.hpp
@@ -983,7 +989,8 @@ if(${TEST})
             version/test/test_version_map_batch.cpp
             version/test/test_version_store.cpp
             version/test/version_map_model.hpp
-            python/python_handlers.cpp)
+            python/python_handlers.cpp
+)
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 

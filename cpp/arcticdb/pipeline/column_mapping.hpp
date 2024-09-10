@@ -18,6 +18,22 @@ namespace arcticdb {
 
 class SegmentInMemory;
 
+struct ColumnTruncation {
+    ColumnTruncation(std::optional<size_t> start, std::optional<size_t> end) :
+        start_(start),
+        end_(end) {
+    }
+
+    ColumnTruncation() = default;
+
+    bool requires_truncation() const {
+        return start_ || end_;
+    }
+
+    std::optional<size_t> start_;
+    std::optional<size_t> end_;
+};
+
 struct ColumnMapping {
     const entity::TypeDescriptor source_type_desc_;
     const entity::TypeDescriptor dest_type_desc_;
@@ -27,8 +43,34 @@ struct ColumnMapping {
     const size_t first_row_;
     const size_t offset_bytes_;
     const size_t dest_bytes_;
+    const size_t dest_col_;
+    ColumnTruncation truncate_;
 
-    ColumnMapping(SegmentInMemory& frame, size_t dst_col, size_t field_col, pipelines::PipelineContextRow& context);
+    ColumnMapping(
+        SegmentInMemory& frame,
+        size_t dst_col,
+        size_t field_col,
+        pipelines::PipelineContextRow& context,
+        OutputFormat output_format);
+
+    ColumnMapping(
+        const entity::TypeDescriptor source_type_desc,
+        const entity::TypeDescriptor dest_type_desc,
+        const entity::Field& frame_field_descriptor,
+        const size_t dest_size,
+        const size_t num_rows,
+        const size_t first_row,
+        const size_t offset_bytes,
+        const size_t dest_bytes,
+        const size_t dest_col);
+
+    void set_truncate(ColumnTruncation truncate) {
+        truncate_ = std::move(truncate);
+    }
+
+    bool requires_truncation() const {
+        return truncate_.requires_truncation();
+    }
 };
 
 struct StaticColumnMappingIterator {

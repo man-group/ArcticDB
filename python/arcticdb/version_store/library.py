@@ -22,7 +22,7 @@ from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.version_store.processing import ExpressionNode, QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionQueryInput
 from arcticdb_ext.exceptions import ArcticException
-from arcticdb_ext.version_store import DataError
+from arcticdb_ext.version_store import DataError, OutputFormat
 import pandas as pd
 import numpy as np
 import logging
@@ -1501,7 +1501,7 @@ class Library:
         row_range: Optional[Tuple[int, int]] = None,
         columns: Optional[List[str]] = None,
         query_builder: Optional[QueryBuilder] = None,
-        lazy: bool = False,
+        lazy: bool = False
     ) -> Union[VersionedItem, LazyDataFrame]:
         """
         Read data for the named symbol.  Returns a VersionedItem object with a data and metadata element (as passed into
@@ -1552,6 +1552,9 @@ class Library:
             Defer query execution until `collect` is called on the returned `LazyDataFrame` object. See documentation
             on `LazyDataFrame` for more details.
 
+        output_format: OutputFormat, default=OutputFormat.PANDAS:
+            What format to return the output in. One of PANDAS or ARROW.
+
         Returns
         -------
         Union[VersionedItem, LazyDataFrame]
@@ -1598,7 +1601,7 @@ class Library:
                 columns=columns,
                 query_builder=query_builder,
                 implement_read_index=True,
-                iterate_snapshots_if_tombstoned=False,
+                iterate_snapshots_if_tombstoned=False
             )
 
     def read_batch(
