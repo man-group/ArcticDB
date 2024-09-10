@@ -1002,7 +1002,6 @@ private:
     std::optional<util::BitMagic> sparse_map_;
     FieldStatsImpl stats_;
 
-
     std::unique_ptr<std::once_flag> init_buffer_ = std::make_unique<std::once_flag>();
     struct ExtraBufferContainer {
         std::mutex mutex_;
@@ -1029,6 +1028,7 @@ private:
     };
 
     std::unique_ptr<ExtraBufferContainer> extra_buffers_;
+>>>>>>> f7d3f2fe9 (Read arrow data)
     util::MagicNum<'D', 'C', 'o', 'l'> magic_;
 };
 

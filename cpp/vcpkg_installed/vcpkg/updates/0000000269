@@ -1,0 +1,7 @@
+Package: mongo-c-driver
+Feature: openssl
+Depends: openssl
+Architecture: x64-linux
+Multi-Arch: same
+Description: Use OpenSSL (even on Windows or Apple systems)
+Status: install ok half-installed

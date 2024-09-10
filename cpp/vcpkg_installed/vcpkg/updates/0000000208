@@ -1,0 +1,6 @@
+Package: azure-core-cpp
+Feature: http
+Architecture: x64-linux
+Multi-Arch: same
+Description: All HTTP transport implementations available on the platform
+Status: install ok half-installed

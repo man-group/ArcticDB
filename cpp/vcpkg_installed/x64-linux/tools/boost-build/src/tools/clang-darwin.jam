@@ -1,0 +1,72 @@
+# Copyright Vladimir Prus 2004.
+# Copyright Noel Belcourt 2007.
+# Copyright Nikita Kniazev 2020-2021.
+# Distributed under the Boost Software License, Version 1.0.
+# (See accompanying file LICENSE.txt
+# or copy at https://www.bfgroup.xyz/b2/LICENSE.txt)
+
+import clang ;
+import feature : feature ;
+import os ;
+import toolset ;
+import toolset : flags ;
+import common ;
+import errors ;
+import generators ;
+
+feature.extend-subfeature toolset clang : platform : darwin ;
+# FIXME: import order affects default value for 'platform' subfeature
+import clang-linux ;
+
+toolset.inherit-generators clang-darwin
+  <toolset>clang <toolset-clang:platform>darwin
+  : clang-linux
+  ;
+
+toolset.inherit-rules clang-darwin : clang-linux ;
+toolset.inherit-flags clang-darwin : clang-linux
+        :
+          <architecture>x86/<address-model>32
+          <architecture>x86/<address-model>64
+        ;
+
+if [ MATCH (--debug-configuration) : [ modules.peek : ARGV ] ]
+{
+    .debug-configuration = true ;
+}
+
+# Initializes the clang-darwin toolset
+#   version in optional
+#   name (default clang++) is used to invoke the specified clang compiler
+#   compile and link options allow you to specify addition command line options for each version
+rule init ( version ? :  command * : options * )
+{
+    command = [ common.find-compiler clang-darwin : clang++ : $(version) : $(command)
+                : /usr/bin /usr/local/bin ] ;
+    local command-string = [ common.make-command-string $(command) ] ;
+    if ! $(version) { # ?= operator does not short-circuit
+    version ?= [ get-short-version $(command-string) ] ;
+    }
+
+    local condition = [ common.check-init-parameters clang
+        : version $(version) ] ;
+
+    common.handle-options clang-darwin : $(condition) : $(command) : $(options) ;
+    clang.init-flags clang-darwin : $(condition) : $(version) ;
+
+    # - Archive builder.
+    local archiver = [ feature.get-values <archiver> : $(options) ] ;
+    toolset.flags clang-darwin.archive .AR $(condition) : $(archiver[1]) ;
+}
+
+rule get-full-version ( command-string )
+{
+    import clang-linux ;
+    return [ clang-linux.get-full-version $(command-string) ] ;
+}
+
+rule get-short-version ( command-string )
+{
+    import clang-linux ;
+    return [ clang-linux.get-short-version $(command-string) ] ;
+}

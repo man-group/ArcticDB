@@ -1,0 +1,52 @@
+# Copyright 2023 Nikita Kniazev
+# Distributed under the Boost Software License, Version 1.0.
+# (See accompanying file LICENSE.txt or copy at
+# https://www.bfgroup.xyz/b2/LICENSE.txt)
+
+# Preprocess a source file with C preprocessor
+
+# TODO: Is it possible to not run preprocessor when no directives detected?
+
+import "class" : new ;
+import generators ;
+
+class C-preprocessing-generator : generator
+{
+    rule __init__ ( id : source-type : target-type : requirements * )
+    {
+        # Non-composing, single type enforces single input source requirement
+        generator.__init__ $(id) : $(source-type)
+            : $(target-type) : $(requirements) ;
+    }
+
+    rule action ( source : property-set : project name )
+    {
+        # Pretend it's a C source
+        local source-as-C = [ $(source).clone-with-different-type C ] ;
+        # GCC defines __ASSEMBLER__ during asm preprocessing
+        property-set = [ $(property-set).add-raw <define>__ASSEMBLER__ ] ;
+        # TODO: provide a generic way to do such things?
+        if $(self.target-types-and-names) = ASM
+        {
+            # TODO: detect assemblers that support linemarkers like armasm
+            property-set = [ $(property-set).refine
+                    [ property-set.create <linemarkers>off ] ] ;
+        }
+        # Find a C preprocessor
+        local preprocessor = [ generators.construct $(project) $(name)
+                : PREPROCESSED_C : $(property-set) : $(source-as-C) ] ;
+        if ! $(preprocessor)
+        {
+            return ;
+        }
+        # Clone preprocessor action with our source and target
+        local preproc-action = [ $(preprocessor[2]).action ] ;
+        local action-class = [ modules.peek $(preproc-action) : __class__ ] ;
+        local rule-name = [ $(preproc-action).action-name ] ;
+        return [ class.new $(action-class) $(source)
+                : $(rule-name) : $(property-set) ] ;
+    }
+}
+
+generators.register
+    [ new C-preprocessing-generator builtin.preprocess-asm : ASM_CPP : ASM ] ;

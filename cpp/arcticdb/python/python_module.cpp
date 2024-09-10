@@ -302,8 +302,6 @@ void register_type_handlers() {
 
     register_arrow_string_types();
 
-    register_python_array_types();
-    register_python_string_types();
     register_python_handler_data_factory();
     register_arrow_handler_data_factory();
 }

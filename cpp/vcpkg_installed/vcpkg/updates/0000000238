@@ -1,0 +1,8 @@
+Package: double-conversion
+Version: 3.2.1
+Depends: vcpkg-cmake, vcpkg-cmake-config
+Architecture: x64-linux
+Multi-Arch: same
+Abi: f0182c426a77e93de9ca3d2ba27a01de8cf2cc98b3fc70681fb3a715e55a07c7
+Description: Efficient binary-decimal and decimal-binary conversion routines for IEEE doubles.
+Status: install ok half-installed

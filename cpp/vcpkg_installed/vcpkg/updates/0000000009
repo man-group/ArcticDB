@@ -1,0 +1,8 @@
+Package: xsimd
+Version: 11.1.0
+Depends: vcpkg-cmake, vcpkg-cmake-config
+Architecture: x64-linux
+Multi-Arch: same
+Abi: b5cbb151b1a57a466f2fb1de6652d5c8aad043b599ea713dfec5f8a92a2da5cd
+Description: Modern, portable C++ wrappers for SIMD intrinsics
+Status: install ok installed

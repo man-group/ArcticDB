@@ -1,0 +1,8 @@
+Package: boost-random
+Version: 1.84.0
+Depends: boost-array, boost-assert, boost-build, boost-config, boost-core, boost-dynamic-bitset, boost-integer, boost-io, boost-modular-build-helper, boost-range, boost-static-assert, boost-system, boost-throw-exception, boost-type-traits, boost-utility, boost-vcpkg-helpers, vcpkg-cmake
+Architecture: x64-linux
+Multi-Arch: same
+Abi: 9a7a616ba0467b5382b8c1f42c0bd9d51c7feab3639e6dc8cc7767ac0fc581cc
+Description: Boost random module
+Status: install ok installed

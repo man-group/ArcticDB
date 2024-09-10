@@ -421,8 +421,8 @@ void advance_skipped_cols(
         const StaticColumnMappingIterator& it,
         const EncodedFieldCollection& fields,
         const SegmentHeader& hdr) {
-    const auto next_col = prev_col_offset + 1;
-    auto skipped_cols = source_col - next_col;
+    const auto next_col = it.prev_col_offset() + 1;
+    auto skipped_cols = it.source_col() - next_col;
     if(skipped_cols) {
         const auto bytes_to_skip = get_field_range_compressed_size((next_col -  it.first_slice_col_offset()) + it.index_fieldcount(), skipped_cols, hdr, fields);
         data += bytes_to_skip;
@@ -490,7 +490,9 @@ void decode_into_frame_static(
     PipelineContextRow &context,
     const Segment& seg,
     const DecodePathData& shared_data,
-    std::any& handler_data) {
+    std::any& handler_data,
+    const ReadQuery& read_query,
+    const ReadOptions& read_options) {
     auto seg = std::move(s);
     ARCTICDB_SAMPLE_DEFAULT(DecodeIntoFrame)
     const uint8_t *data = seg.buffer().data();
@@ -682,30 +684,8 @@ void decode_into_frame_dynamic(
                 read_options.output_format()
             );
 
-            if (!trivially_compatible_types(m.source_type_desc_, m.dest_type_desc_) && !source_is_empty) {
-                m.dest_type_desc_.visit_tag([&buffer, &m, shared_data] (auto dest_desc_tag) {
-                    using DestinationType =  typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
-                    m.source_type_desc_.visit_tag([&buffer, &m] (auto src_desc_tag ) {
-                        using SourceType =  typename decltype(src_desc_tag)::DataTypeTag::raw_type;
-                        if constexpr(std::is_arithmetic_v<SourceType> && std::is_arithmetic_v<DestinationType>) {
-                            // If the source and destination types are different, then sizeof(destination type) >= sizeof(source type)
-                            // We have decoded the column of source type directly onto the output buffer above
-                            // We therefore need to iterate backwards through the source values, static casting them to the destination
-                            // type to avoid overriding values we haven't cast yet.
-                            const auto src_ptr_offset = data_type_size(m.source_type_desc_, DataTypeMode::INTERNAL) * (m.num_rows_ - 1);
-                            const auto dest_ptr_offset = data_type_size(m.dest_type_desc_, DataTypeMode::INTERNAL) * (m.num_rows_ - 1);
-                            auto src_ptr = reinterpret_cast<SourceType *>(buffer.data() + m.offset_bytes_ + src_ptr_offset);
-                            auto dest_ptr = reinterpret_cast<DestinationType *>(buffer.data() + m.offset_bytes_ + dest_ptr_offset);
-                            for (auto i = 0u; i < m.num_rows_; ++i) {
-                                *dest_ptr-- = static_cast<DestinationType>(*src_ptr--);
-                            }
-                        } else {
-                            util::raise_rte("Can't promote type {} to type {} in field {}", m.source_type_desc_, m.dest_type_desc_, m.frame_field_descriptor_.name());
-                        }
-                    });
-                });
-            }
-            ARCTICDB_TRACE(log::codec(), "Decoded column {} to position {}", frame.field(dst_col).name(), data - begin);
+            handle_type_promotion(mapping, shared_data, read_options, column);
+            ARCTICDB_TRACE(log::codec(), "Decoded or expanded dynamic column {} to position {}", frame.field(dst_col).name(), data - begin);
         }
     } else {
         ARCTICDB_DEBUG(log::version(), "Empty segment");
@@ -811,6 +791,7 @@ struct ReduceColumnTask : async::BaseTask {
         const auto &frame_field = frame_.field(column_index_);
         const auto field_type = frame_field.type().data_type();
         auto &column = frame_.column(static_cast<position_t>(column_index_));
+        const auto dynamic_schema = read_options_.dynamic_schema().value_or(false);
 
         const auto column_data = slice_map_->columns_.find(frame_field.name());
         if(dynamic_schema && column_data == slice_map_->columns_.end()) {
@@ -876,8 +857,8 @@ folly::Future<folly::Unit> reduce_and_fix_columns(
     static const auto batch_size = ConfigsMap::instance()->get_int("ReduceColumns.BatchSize", 100);
     return folly::collect(
             folly::window(std::move(fields_to_reduce),
-                          [context, frame, slice_map, shared_data, dynamic_schema, &handler_data] (size_t field) mutable {
-                              return async::submit_cpu_task(ReduceColumnTask(frame, field, slice_map, context, shared_data, handler_data, dynamic_schema));
+                          [context, frame, slice_map, shared_data, read_options, &handler_data] (size_t field) mutable {
+                              return async::submit_cpu_task(ReduceColumnTask(frame, field, slice_map, context, shared_data, handler_data, read_options));
                           }, batch_size)).via(&async::io_executor()).unit();
 }
 
@@ -899,14 +880,15 @@ folly::Future<SegmentInMemory> fetch_data(
     context->ensure_vectors();
     {
         ARCTICDB_SUBSAMPLE_DEFAULT(QueueReadContinuations)
+        const auto dynamic_schema = read_options.dynamic_schema().value_or(false);
         for ( auto& row : *context) {
             keys_and_continuations.emplace_back(row.slice_and_key().key(),
-            [row=row, frame=frame, dynamic_schema=dynamic_schema, shared_data, &handler_data](auto &&ks) mutable {
+            [row=row, frame=frame, dynamic_schema=dynamic_schema, shared_data, &handler_data, read_query, read_options](auto &&ks) mutable {
                 auto key_seg = std::forward<storage::KeySegmentPair>(ks);
                 if(dynamic_schema) {
-                    decode_into_frame_dynamic(frame, row, std::move(key_seg.segment()), shared_data, handler_data);
+                    decode_into_frame_dynamic(frame, row, std::move(key_seg.segment()), shared_data, handler_data, read_query, read_options);
                 } else {
-                    decode_into_frame_static(frame, row, std::move(key_seg.segment()), shared_data, handler_data);
+                    decode_into_frame_static(frame, row, std::move(key_seg.segment()), shared_data, handler_data, read_query, read_options);
                 }
 
                 return key_seg.variant_key();

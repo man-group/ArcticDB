@@ -1,0 +1,7 @@
+Package: libxml2
+Feature: iconv
+Depends: libiconv
+Architecture: x64-linux
+Multi-Arch: same
+Description: Add ICONV support
+Status: install ok half-installed

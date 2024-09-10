@@ -1,0 +1,6 @@
+Package: curl
+Feature: ssl
+Architecture: x64-linux
+Multi-Arch: same
+Description: Default SSL backend
+Status: install ok installed

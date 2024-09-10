@@ -244,7 +244,6 @@ set(arcticdb_srcs
         pipeline/read_options.hpp
         pipeline/read_options.hpp
         pipeline/read_pipeline.hpp
-        pipeline/read_query.hpp
         pipeline/slicing.hpp
         pipeline/string_pool_utils.hpp
         pipeline/value.hpp
@@ -442,9 +441,6 @@ set(arcticdb_srcs
         pipeline/pipeline_context.cpp
         pipeline/python_output_frame.cpp
         pipeline/query.cpp
-        pipeline/read_query.cpp
-        pipeline/read_query.cpp
-        pipeline/read_pipeline.cpp
         pipeline/read_frame.cpp
         pipeline/slicing.cpp
         pipeline/string_pool_utils.cpp
@@ -532,7 +528,7 @@ set(arcticdb_srcs
         version/version_utils.cpp
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
-        storage/s3/ec2_utils.cpp)
+        storage/s3/ec2_utils.cpp
         util/decode_path_data.cpp
         arrow/arrow_utils.hpp
         arrow/arrow_output_frame.hpp
@@ -777,6 +773,8 @@ if (SSL_LINK)
 endif ()
 target_link_libraries(arcticdb_core_object PUBLIC ${arcticdb_core_libraries})
 
+message(STATUS "Main SPARROW_INCLUDE_DIR: ${SPARROW_INCLUDE_DIR}")
+
 target_include_directories(arcticdb_core_object
         PRIVATE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
@@ -1008,9 +1006,7 @@ if(${TEST})
             version/test/test_version_store.cpp
             version/test/version_map_model.hpp
             python/python_handlers.cpp
-            storage/test/common.hpp
-            version/test/test_sort_index.cpp
-            pipeline/test/test_frame_allocation.cpp)
+)
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 
@@ -1087,8 +1083,7 @@ if(${TEST})
     set(benchmark_srcs
             stream/test/stream_test_common.cpp
             column_store/test/benchmark_memory_segment.cpp
-            processing/test/benchmark_clause.cpp
-            version/test/benchmark_write.cpp)
+            processing/test/benchmark_clause.cpp)
 
     add_executable(benchmarks ${benchmark_srcs})
 

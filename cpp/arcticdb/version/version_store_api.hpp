@@ -30,6 +30,10 @@ namespace arcticdb {
 struct ArrowReadResult;
 }
 
+namespace arcticdb {
+struct ArrowReadResult;
+}
+
 namespace arcticdb::version_store {
 
 using namespace arcticdb::entity;

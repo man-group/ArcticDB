@@ -1,0 +1,8 @@
+Package: boost-tokenizer
+Version: 1.84.0
+Depends: boost-assert, boost-config, boost-core, boost-iterator, boost-throw-exception, boost-type-traits, boost-vcpkg-helpers
+Architecture: x64-linux
+Multi-Arch: same
+Abi: af466f0c5839b9d11a4dabddc118b4f596e98a439cf27522070c18f49ea8d2db
+Description: Boost tokenizer module
+Status: install ok installed

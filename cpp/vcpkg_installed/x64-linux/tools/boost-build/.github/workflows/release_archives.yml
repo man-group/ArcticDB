@@ -1,0 +1,84 @@
+# Copyright 2023 René Ferdinand Rivera Morell
+# Use, modification, and distribution are subject to the
+# Boost Software License, Version 1.0. (See accompanying file LICENSE.txt)
+
+name: "Release: Archives"
+
+on:
+  # Allow manual runs.
+  workflow_dispatch:
+  # Run on publishing of releases.
+  release: { types: [published] }
+  # And run on pushes, for main and release branches.
+  push:
+    branches: ["main", "release", "version/*"]
+    paths-ignore:
+      [
+        ".circleci/**",
+        ".cirrus.yml",
+        ".drone.star",
+        ".semaphore/**",
+        ".travis.yml",
+        "appveyor.yml",
+        "azure-pipelines.yml",
+        ".ci/azp-*.yml",
+      ]
+
+jobs:
+  archive:
+    strategy:
+      matrix:
+        include:
+          - { name: "Zip", format: "zip", command: "zip -r -9" }
+          - {
+              name: "7z",
+              format: "7z",
+              command: "7za a -t7z -m0=lzma -mx=9 -mfb=64 -md=32m -ms=on",
+            }
+          - { name: "BZip2", format: "tar.bz2", command: "tar -cv -j -f" }
+          # - { name: "Zstd", format: "tar.zstd", command: "tar -cv --zstd -f" }
+    runs-on: ubuntu-latest
+    name: ${{ matrix.name }}
+    steps:
+      - name: "Checkout"
+        uses: actions/checkout@master
+        with: { path: "b2" }
+
+      - name: "Snapshot"
+        run: |
+          cd "${{github.workspace}}/b2"
+          version=`basename ${{github.ref_name}}`
+          git archive --format=tar --output="${{github.workspace}}/b2-${version}.tar" "${{github.ref_name}}"
+          cd "${{github.workspace}}"
+          mkdir "b2-${version}"
+          cd "b2-${version}"
+          tar -xvf "${{github.workspace}}/b2-${version}.tar"
+          rm -rf "${{github.workspace}}/b2-${version}.tar"
+          cd "${{github.workspace}}"
+          ls -laF
+
+      - name: "Archive"
+        run: |
+          cd "${{github.workspace}}"
+          version=`basename ${{github.ref_name}}`
+          archive="${{github.workspace}}/b2-${version}.${{matrix.format}}"
+          ${{matrix.command}} "${archive}" "b2-${version}"
+          sha256sum -b "${archive}" > "${archive}.sha256sum.txt"
+
+      - name: "Cleanup"
+        run: |
+          cd "${{github.workspace}}"
+          version=`basename ${{github.ref_name}}`
+          rm -rf "${{github.workspace}}/b2-${version}"
+
+      - name: "Upload"
+        uses: actions/upload-artifact@v3
+        with:
+          name: archives-${{github.run_id}}
+          path: "${{github.workspace}}/b2-*"
+
+      - name: "Publish"
+        uses: softprops/action-gh-release@v1
+        if: ${{ github.event_name == 'release' && github.event.action == 'published' }}
+        with:
+          files: "${{github.workspace}}/b2-*"
