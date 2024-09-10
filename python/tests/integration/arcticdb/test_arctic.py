@@ -292,34 +292,6 @@ def test_parallel_writes_and_appends_index_validation(arctic_library, finalize_m
 
 
 @pytest.mark.parametrize("finalize_method", (StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE))
-class TestFinalizeWithEmptySegments:
-    def test_staged_segment_is_only_empty_dfs(self, arctic_library, finalize_method):
-        lib = arctic_library
-        lib.write("sym", pd.DataFrame([]), staged=True)
-        lib.write("sym", pd.DataFrame([]), staged=True)
-        lib.finalize_staged_data("sym", mode=finalize_method)
-        assert_frame_equal(lib.read("sym").data, pd.DataFrame([], index=pd.DatetimeIndex([])))
-
-    def test_staged_segment_has_empty_df(self, arctic_library, finalize_method):
-        lib = arctic_library
-        index = pd.DatetimeIndex([pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 3), pd.Timestamp(2024, 1, 4)])
-        df1 = pd.DataFrame({"col": [1, 2, 3]}, index=index)
-        df2 = pd.DataFrame({})
-        df3 = pd.DataFrame({"col": [4]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 5)]))
-        lib.write("sym", df1, staged=True)
-        lib.write("sym", df2, staged=True)
-        lib.write("sym", df3, staged=True)
-        with pytest.raises(SchemaException):
-            lib.finalize_staged_data("sym", mode=finalize_method)
-
-    def test_df_without_rows(self, arctic_library, finalize_method):
-        lib = arctic_library
-        df = pd.DataFrame({"col": []}, index=pd.DatetimeIndex([]))
-        lib.write("sym", df, staged=True)
-        lib.finalize_staged_data("sym", mode=finalize_method)
-        assert_frame_equal(lib.read("sym").data, df)
-
-@pytest.mark.parametrize("finalize_method", (StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE))
 def test_finalize_without_adding_segments(arctic_library, finalize_method):
     lib = arctic_library
     with pytest.raises(UserInputException) as exception_info:

@@ -715,3 +715,32 @@ class TestFinalizeStagedDataStaticSchemaMismatch:
         assert "col_0" in str(exception_info.value)
         assert "col_1" in str(exception_info.value)
         assert "col_2" in str(exception_info.value)
+
+# finalize_method True -> append, finalize_method False -> write
+@pytest.mark.parametrize("finalize_method", (True, False))
+class TestFinalizeWithEmptySegments:
+    def test_staged_segment_is_only_empty_dfs(self, lmdb_version_store_v1, finalize_method):
+        lib = lmdb_version_store_v1
+        lib.write("sym", pd.DataFrame([]), parallel=True)
+        lib.write("sym", pd.DataFrame([]), parallel=True)
+        lib.compact_incomplete("sym", finalize_method, False)
+        assert_frame_equal(lib.read("sym").data, pd.DataFrame([], index=pd.DatetimeIndex([])))
+
+    def test_staged_segment_has_empty_df(self, lmdb_version_store_v1, finalize_method):
+        lib = lmdb_version_store_v1
+        index = pd.DatetimeIndex([pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 3), pd.Timestamp(2024, 1, 4)])
+        df1 = pd.DataFrame({"col": [1, 2, 3]}, index=index)
+        df2 = pd.DataFrame({})
+        df3 = pd.DataFrame({"col": [4]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 5)]))
+        lib.write("sym", df1, parallel=True)
+        lib.write("sym", df2, parallel=True)
+        lib.write("sym", df3, parallel=True)
+        with pytest.raises(SchemaException):
+            lib.compact_incomplete("sym", finalize_method, False)
+
+    def test_df_without_rows(self, lmdb_version_store_v1, finalize_method):
+        lib = lmdb_version_store_v1
+        df = pd.DataFrame({"col": []}, index=pd.DatetimeIndex([]))
+        lib.write("sym", df, parallel=True)
+        lib.compact_incomplete("sym", finalize_method, False)
+        assert_frame_equal(lib.read("sym").data, df)
