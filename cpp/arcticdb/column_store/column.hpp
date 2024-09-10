@@ -1002,6 +1002,7 @@ private:
     std::optional<util::BitMagic> sparse_map_;
     FieldStatsImpl stats_;
 
+
     std::unique_ptr<std::once_flag> init_buffer_ = std::make_unique<std::once_flag>();
     struct ExtraBufferContainer {
         std::mutex mutex_;

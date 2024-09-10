@@ -558,6 +558,7 @@ class ChunkedBufferImpl {
 #else
     std::vector<BlockType*> blocks_;
     std::vector<size_t> block_offsets_;
+    entity::AllocationType allocation_type_ = entity::AllocationType::DYNAMIC;
 #endif
     entity::AllocationType allocation_type_ = entity::AllocationType::DYNAMIC;
 };

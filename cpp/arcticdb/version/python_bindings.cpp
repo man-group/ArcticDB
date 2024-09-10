@@ -255,6 +255,13 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             return self.frame().row_count();
         });
 
+        py::class_<ArrowOutputFrame>(version, "ArrowOutputFrame")
+        .def_property_readonly("arrays", &ArrowOutputFrame::arrays)
+        .def_property_readonly("schemas", &ArrowOutputFrame::schemas)
+        .def_property_readonly("names", &ArrowOutputFrame::names)
+        .def_property_readonly("num_blocks", &ArrowOutputFrame::num_blocks)
+        ;
+
     py::enum_<VersionRequestType>(version, "VersionRequestType", R"pbdoc(
         Enum of possible version request types passed to as_of.
     )pbdoc")
@@ -672,7 +679,14 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
               },
              py::call_guard<SingleThreadMutexHolder>(),
              "Read the specified version of the dataframe from the store")
-         .def("read_index",
+            .def("read_dataframe_version_arrow",
+            [&](PythonVersionStore& v,  StreamId sid, const VersionQuery& version_query, ReadQuery& read_query, const ReadOptions& read_options) {
+                auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format());
+                return adapt_arrow_df(v.read_dataframe_version_arrow(sid, version_query, read_query, read_options, handler_data));
+            },
+            py::call_guard<SingleThreadMutexHolder>(),
+            "Read the specified version of the dataframe from the store")
+        .def("read_index",
              [&](PythonVersionStore& v, StreamId sid, const VersionQuery& version_query){
                  return adapt_read_df(v.read_index(sid, version_query));
              },
