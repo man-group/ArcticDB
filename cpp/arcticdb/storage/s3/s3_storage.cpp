@@ -82,7 +82,7 @@ namespace arcticdb::storage::s3 {
 
 S3Storage::S3Storage(const LibraryPath &library_path, OpenMode mode, const Config &conf) :
     Storage(library_path, mode),
-    s3_api_(S3ApiInstance::instance()),
+    s3_api_(S3ApiInstance::instance()),  // make sure we have an initialized AWS SDK
     root_folder_(object_store_utils::get_root_folder(library_path)),
     bucket_name_(conf.bucket_name()),
     region_(conf.region()) {
@@ -117,7 +117,6 @@ S3Storage::S3Storage(const LibraryPath &library_path, OpenMode mode, const Confi
     // facet here
     std::locale locale{ std::locale::classic(), new std::num_put<char>()};
     (void)std::locale::global(locale);
-    s3_api_.reset();
     ARCTICDB_DEBUG(log::storage(), "Opened S3 backed storage at {}", root_folder_);
 }
 
