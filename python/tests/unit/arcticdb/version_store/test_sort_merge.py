@@ -156,6 +156,11 @@ def test_repeating_index_values(lmdb_library_static_dynamic):
     data = lib.read("sym").data
     expected = pd.concat([df1, df2]).sort_index()
     assert data.index.equals(expected.index)
+    for i in range(0, len(df1)):
+        row = 2 * i
+        assert data["col"][row] == df1["col"][i] or data["col"][row] == df2["col"][i]
+        assert (data["col"][row + 1] == df1["col"][i] or data["col"][row + 1] == df2["col"][i]) and data["col"][row] != data["col"][row + 1]
+
 
 class TestMergeSortAppend:
     def test_appended_values_are_after(self, lmdb_library_static_dynamic):
