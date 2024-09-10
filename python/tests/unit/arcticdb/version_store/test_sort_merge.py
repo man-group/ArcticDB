@@ -539,6 +539,50 @@ class TestSortMergeDynamicSchema:
 
         assert_frame_equal(expected, stored, check_like=True)
 
+    def test_staged_segments_are_promoted(self, lmdb_library_dynamic_schema):
+        lib = lmdb_library_dynamic_schema
+        df1 =pd.DataFrame(
+            {"col_0": np.array([1], dtype="int16"), "col_1": np.array([2], dtype="int64"), "col_3": np.array([3], dtype="int32")},
+            index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)])
+        )
+        lib.write("sym", df1, staged=True)
+
+        df2 = pd.DataFrame(
+            {"col_0": np.array([10], dtype="int32"), "col_1": np.array([20], dtype="int16"), "col_3": np.array([30], dtype="float32")},
+            index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)])
+        )
+        lib.write("sym", df2, staged=True)
+
+        lib.sort_and_finalize_staged_data("sym")
+
+        expected = pd.DataFrame(
+            {"col_0": np.array([1, 10], dtype="int32"), "col_1": np.array([2, 20], dtype="int64"), "col_3": np.array([3, 30], dtype="float32")},
+            index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 2)])
+        )
+        assert_frame_equal(lib.read("sym").data, expected, check_dtype=True)
+
+    def test_finalize_append_promotes_types(self, lmdb_library_dynamic_schema):
+        lib = lmdb_library_dynamic_schema
+        df1 =pd.DataFrame(
+            {"col_0": np.array([1], dtype="int16"), "col_1": np.array([2], dtype="int64"), "col_3": np.array([3], dtype="int32")},
+            index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)])
+        )
+        lib.write("sym", df1)
+
+        df2 = pd.DataFrame(
+            {"col_0": np.array([10], dtype="int32"), "col_1": np.array([20], dtype="int16"), "col_3": np.array([30], dtype="float32")},
+            index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)])
+        )
+        lib.write("sym", df2, staged=True)
+
+        lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+
+        expected = pd.DataFrame(
+            {"col_0": np.array([1, 10], dtype="int32"), "col_1": np.array([2, 20], dtype="int64"), "col_3": np.array([3, 30], dtype="float32")},
+            index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 2)])
+        )
+        assert_frame_equal(lib.read("sym").data, expected, check_dtype=True)
+
 def test_update_symbol_list(lmdb_library):
     lib = lmdb_library
     lib_tool = lmdb_library._nvs.library_tool()
