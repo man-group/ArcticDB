@@ -12,7 +12,7 @@
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/frame_and_descriptor.hpp>
-#include <arcticdb/pipeline//python_output_frame.hpp>
+#include <arcticdb/pipeline/python_output_frame.hpp>
 #include <arcticdb/util/memory_tracing.hpp>
 
 #include <vector>
@@ -47,8 +47,10 @@ struct ARCTICDB_VISIBILITY_HIDDEN ReadResult {
 
 inline ReadResult create_python_read_result(
     const VersionedItem& version,
+    OutputFormat output_format,
     FrameAndDescriptor&& fd) {
     auto result = std::move(fd);
+
     // Very old (pre Nov-2020) PandasIndex protobuf messages had no "start" or "step" fields. If is_physically_stored
     // (renamed from is_not_range_index) was false, the index was always RangeIndex(num_rows, 1)
     // This used to be handled in the Python layer by passing None to the DataFrame index parameter, which would then
@@ -69,11 +71,13 @@ inline ReadResult create_python_read_result(
             }
         }
     }
-    auto python_frame = pipelines::PythonOutputFrame{result.frame_, result.buffers_};
+
+    auto python_frame = pipelines::PythonOutputFrame{result.frame_, output_format};
     util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
 
     const auto& desc_proto = result.desc_.proto();
     return {version, std::move(python_frame), desc_proto.normalization(),
             desc_proto.user_meta(), desc_proto.multi_key_meta(), std::move(result.keys_)};
 }
+
 } //namespace arcticdb

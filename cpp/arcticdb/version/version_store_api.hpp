@@ -36,6 +36,10 @@
 #include <type_traits>
 #include <iostream>
 
+namespace arcticdb {
+struct ArrowReadResult;
+}
+
 namespace arcticdb::version_store {
 
 using namespace arcticdb::entity;
@@ -170,6 +174,13 @@ class PythonVersionStore : public LocalVersionedEngine {
         const ReadOptions& read_options,
         std::any& handler_data);
 
+    ArrowReadResult read_dataframe_version_arrow(
+        const StreamId &stream_id,
+        const VersionQuery& version_query,
+        const std::shared_ptr<ReadQuery>& read_query,
+        const ReadOptions& read_options,
+        std::any& handler_data);
+
     VersionedItem sort_merge(
             const StreamId& stream_id,
             const py::object& user_meta,
@@ -296,8 +307,7 @@ class PythonVersionStore : public LocalVersionedEngine {
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries,
         std::vector<std::shared_ptr<ReadQuery>>& read_queries,
-        const ReadOptions& read_options,
-        std::any& handler_data);
+        const ReadOptions& read_options);
 
     std::vector<std::variant<std::pair<VersionedItem, py::object>, DataError>> batch_read_metadata(
         const std::vector<StreamId>& stream_ids,
@@ -350,7 +360,7 @@ ReadResult read_dataframe_from_file(
     const StreamId &stream_id,
     const std::string& path,
     const std::shared_ptr<ReadQuery>& read_query,
-    std::any& handler_data);
+    const ReadOptions& read_options);
 
 struct ManualClockVersionStore : PythonVersionStore {
     ManualClockVersionStore(const std::shared_ptr<storage::Library>& library) :
@@ -361,7 +371,7 @@ inline std::vector<std::variant<ReadResult, DataError>> frame_to_read_result(std
     std::vector<std::variant<ReadResult, DataError>> read_results;
     read_results.reserve(keys_frame_and_descriptors.size());
     for (auto& read_version_output : keys_frame_and_descriptors) {
-        read_results.emplace_back(create_python_read_result(read_version_output.versioned_item_, std::move(read_version_output.frame_and_descriptor_)));
+        read_results.emplace_back(create_python_read_result(read_version_output.versioned_item_, OutputFormat::PANDAS, std::move(read_version_output.frame_and_descriptor_)));
     }
     return read_results;
 }

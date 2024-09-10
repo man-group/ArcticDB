@@ -40,7 +40,7 @@ struct PipelineContextRow {
     [[nodiscard]] const SliceAndKey& slice_and_key() const;
     SliceAndKey& slice_and_key();
     [[nodiscard]] const std::optional<util::BitSet>& get_selected_columns() const;
-    bool fetch_index();
+    bool fetch_index() const;
     [[nodiscard]] const StreamDescriptor& descriptor() const;
     void set_descriptor(StreamDescriptor&& desc);
     void set_descriptor(const StreamDescriptor& desc);
