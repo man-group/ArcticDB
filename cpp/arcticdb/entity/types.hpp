@@ -147,6 +147,7 @@ constexpr bool is_fixed_string_type(ValueType v) {
 constexpr bool is_dynamic_string_type(ValueType v) {
     return is_sequence_type(v) && !is_fixed_string_type(v);
 }
+
 constexpr bool is_utf_type(ValueType v) {
     return v == ValueType::UTF8_FIXED || v == ValueType::UTF_DYNAMIC;
 }
@@ -297,6 +298,10 @@ constexpr bool is_dynamic_string_type(DataType v) {
     return is_dynamic_string_type(slice_value_type(v));
 }
 
+constexpr bool is_output_only_type(DataType d) {
+    return d == DataType::UTF_DYNAMIC32;
+}
+
 constexpr bool is_utf_type(DataType v) {
     return is_utf_type(slice_value_type(v));
 }
@@ -391,6 +396,7 @@ DATA_TYPE_TAG(ASCII_FIXED64, std::uint64_t)
 DATA_TYPE_TAG(ASCII_DYNAMIC64, std::uint64_t)
 DATA_TYPE_TAG(UTF_FIXED64, std::uint64_t)
 DATA_TYPE_TAG(UTF_DYNAMIC64, std::uint64_t)
+DATA_TYPE_TAG(UTF_DYNAMIC32, std::uint32_t)
 DATA_TYPE_TAG(EMPTYVAL, std::uint64_t)
 DATA_TYPE_TAG(BOOL_OBJECT8, uint8_t)
 #undef DATA_TYPE_TAG
