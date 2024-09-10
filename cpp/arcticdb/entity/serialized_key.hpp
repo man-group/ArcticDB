@@ -251,7 +251,7 @@ inline std::string to_serialized_key(const entity::VariantKey &key) {
 
 inline AtomKey from_serialized_atom_key(const uint8_t* data, KeyType key_type) {
     const auto *descr = reinterpret_cast<const KeyDescriptor *>(data);
-    util::check(descr->identifier == SerializedKeyIdentifier, "Read invalid serialized key");
+    util::check(descr->identifier == SerializedKeyIdentifier, "Read invalid serialized key {} in from_serialized_atom_key", descr->identifier);
     data += sizeof(KeyDescriptor);
     VariantId stream_id = unserialize_variant_type(descr->id_type, data);
     auto variant_type = variant_type_from_index_type(from_type_char(descr->index_type));
@@ -266,7 +266,7 @@ inline AtomKey from_serialized_atom_key(const uint8_t* data, KeyType key_type) {
 
 inline RefKey from_serialized_ref_key(const uint8_t *data, KeyType key_type) {
     const auto *descr = reinterpret_cast<const KeyDescriptor *>(data);
-    util::check(descr->identifier == SerializedKeyIdentifier, "Read invalid serialized key");
+    util::check(descr->identifier == SerializedKeyIdentifier, "Read invalid serialized key {} in from_serialized_ref_key", descr->identifier);
     data += sizeof(KeyDescriptor);
     VariantId stream_id = unserialize_variant_type(descr->id_type, data);
     return RefKey{stream_id, key_type};
@@ -297,7 +297,7 @@ inline std::string to_tokenized_key(const entity::VariantKey &key) {
 
 inline AtomKey from_tokenized_atom_key(const uint8_t *data, size_t size, KeyType key_type) {
     const auto *descr = reinterpret_cast<const KeyDescriptor *>(data);
-    util::check(descr->identifier == SerializedKeyIdentifier, "Read invalid serialized key");
+    util::check(descr->identifier == SerializedKeyIdentifier, "Read invalid tokenized key {} in from_tokenized_atom_key", descr->identifier);
     std::string_view cursor(reinterpret_cast<const char *>(data) + sizeof(KeyDescriptor), size - sizeof(KeyDescriptor));
     auto tokens = std::count(std::begin(cursor), std::end(cursor), NewKeyDelimiter);
     auto index_variant_type = variant_type_from_index_type(from_type_char(descr->index_type));
@@ -332,7 +332,7 @@ inline AtomKey from_tokenized_atom_key(const uint8_t *data, size_t size, KeyType
 
 inline RefKey from_tokenized_ref_key(const uint8_t *data, size_t size, KeyType key_type) {
     const auto *descr = reinterpret_cast<const KeyDescriptor *>(data);
-    util::check(descr->identifier == SerializedKeyIdentifier, "Read invalid serialized key");
+    util::check(descr->identifier == SerializedKeyIdentifier, "Read invalid tokenized key {} in from_tokenized_ref_key", descr->identifier);
     // data looks like: "*sUt*snapshot" and the descr for ref key is "*"
     auto prefix = sizeof(KeyDescriptor) + 1;
     std::string_view cursor(reinterpret_cast<const char *>(data) + prefix, size - prefix);

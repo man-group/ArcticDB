@@ -42,6 +42,7 @@ find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypasses our cpp/CMake/FindZstd.c
 
 find_package(azure-identity-cpp CONFIG REQUIRED)
 find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
+#find_package(sparrow REQUIRED)
 
 if(${BUILD_WITH_REMOTERY})
     add_compile_definitions(USE_REMOTERY)
@@ -208,7 +209,7 @@ set(arcticdb_srcs
         entity/data_error.hpp
         entity/descriptors.hpp
         entity/native_tensor.hpp
-        entity/output_type.hpp
+        entity/output_format.hpp
         entity/performance_tracing.hpp
         entity/protobuf_mappings.hpp
         entity/read_result.hpp
@@ -525,7 +526,21 @@ set(arcticdb_srcs
         version/version_core.cpp
         version/version_store_api.cpp
         version/version_utils.cpp
-        version/version_map_batch_methods.cpp)
+        version/symbol_list.cpp
+        version/version_map_batch_methods.cpp
+        storage/s3/ec2_utils.cpp
+        util/decode_path_data.cpp
+        arrow/arrow_utils.hpp
+        arrow/arrow_output_frame.hpp
+        arrow/arrow_data.hpp
+        arrow/arrow_utils.cpp
+        arrow/arrow_output_frame.cpp
+        arrow/arrow_handlers.hpp
+        arrow/arrow_handlers.cpp
+        pipeline/read_query.hpp
+        pipeline/read_query.cpp
+        pipeline/read_query.cpp
+        pipeline/read_pipeline.cpp)
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
@@ -758,12 +773,14 @@ if (SSL_LINK)
 endif ()
 target_link_libraries(arcticdb_core_object PUBLIC ${arcticdb_core_libraries})
 
+message(STATUS "Main SPARROW_INCLUDE_DIR: ${SPARROW_INCLUDE_DIR}")
 
 target_include_directories(arcticdb_core_object
         PRIVATE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
         ${arcticdb_core_includes}
+        ${SPARROW_INCLUDE_DIR}
         )
 
 add_library(arcticdb_core_static STATIC $<TARGET_OBJECTS:arcticdb_core_object>)
@@ -771,6 +788,7 @@ add_library(arcticdb_core_static STATIC $<TARGET_OBJECTS:arcticdb_core_object>)
 target_include_directories(arcticdb_core_static PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+        ${SPARROW_INCLUDE_DIR}
         )
 
 target_link_libraries(arcticdb_core_static PUBLIC ${arcticdb_core_libraries})
@@ -823,6 +841,7 @@ target_include_directories(arcticdb_python PRIVATE
         ${LIBBSONCXX_STATIC_INCLUDE_DIRS}
         ${BITMAGIC_INCLUDE_DIRS}
         ${LMDB_LIBRARIES}
+        ${SPARROW_INCLUDE_DIR}
         )
 
 
@@ -872,6 +891,7 @@ target_include_directories(arcticdb_ext
         ${BITMAGIC_INCLUDE_DIRS}
         ${PYTHON_NUMPY_INCLUDE_DIR}
         ${AWSSDK_INCLUDE_DIRS}
+        ${SPARROW_INCLUDE_DIR}
         )
 
 install(TARGETS arcticdb_ext
@@ -903,6 +923,7 @@ if(${TEST})
     python_utils_dump_vars_if_enabled("Python for test compilation")
 
     set(unit_test_srcs
+            arrow/test/test_arrow.cpp
             async/test/test_async.cpp
             codec/test/test_codec.cpp
             codec/test/test_encode_field_collection.cpp
@@ -980,7 +1001,9 @@ if(${TEST})
             version/test/test_version_store.cpp
             version/test/version_map_model.hpp
             python/python_handlers.cpp
-            storage/test/common.hpp)
+            storage/test/common.hpp
+            version/test/test_sort_index.cpp
+            pipeline/test/test_frame_allocation.cpp)
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 
@@ -1048,6 +1071,7 @@ if(${TEST})
                 ${LIBMONGOCXX_STATIC_INCLUDE_DIRS}
                 ${LIBBSONCXX_STATIC_INCLUDE_DIRS}
                 ${BITMAGIC_INCLUDE_DIRS}
+                ${SPARROW_INCLUDE_DIR}
                 )
     endif()
 

@@ -12,6 +12,7 @@
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/column_store/memory_segment_impl.hpp>
+#include <arcticdb/entity/output_format.hpp>
 
 namespace arcticdb {
 
@@ -35,8 +36,9 @@ public:
         size_t expected_column_size = 0,
         AllocationType presize = AllocationType::DYNAMIC,
         Sparsity allow_sparse = Sparsity::NOT_PERMITTED,
+        OutputFormat output_format = OutputFormat::NATIVE,
         DataTypeMode mode = DataTypeMode::INTERNAL) :
-            impl_(std::make_shared<SegmentInMemoryImpl>(tsd, expected_column_size, presize, allow_sparse, mode)){
+            impl_(std::make_shared<SegmentInMemoryImpl>(tsd, expected_column_size, presize, allow_sparse, output_format, mode)){
     }
 
     explicit SegmentInMemory(
@@ -44,8 +46,9 @@ public:
         size_t expected_column_size = 0,
         AllocationType presize = AllocationType::DYNAMIC,
         Sparsity allow_sparse = Sparsity::NOT_PERMITTED,
+        OutputFormat output_format = OutputFormat::NATIVE,
         DataTypeMode mode = DataTypeMode::INTERNAL) :
-        impl_(std::make_shared<SegmentInMemoryImpl>(std::move(tsd), expected_column_size, presize, allow_sparse, mode)){
+            impl_(std::make_shared<SegmentInMemoryImpl>(std::move(tsd), expected_column_size, presize, allow_sparse, output_format, mode)){
     }
 
     friend void swap(SegmentInMemory& left, SegmentInMemory& right) {

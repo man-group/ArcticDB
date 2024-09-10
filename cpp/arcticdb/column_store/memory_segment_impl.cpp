@@ -22,10 +22,11 @@ namespace arcticdb {
         size_t expected_column_size,
         AllocationType presize,
         Sparsity allow_sparse,
+        OutputFormat output_format,
         DataTypeMode mode) :
             descriptor_(std::make_shared<StreamDescriptor>(StreamDescriptor{ desc.id(), desc.index() })),
             allow_sparse_(allow_sparse) {
-        on_descriptor_change(desc, expected_column_size, presize, allow_sparse, mode);
+        on_descriptor_change(desc, expected_column_size, presize, allow_sparse, output_format, mode);
     }
 
     SegmentInMemoryImpl::~SegmentInMemoryImpl() {
@@ -89,13 +90,14 @@ void SegmentInMemoryImpl::create_columns(
         size_t expected_column_size,
         AllocationType presize,
         Sparsity allow_sparse,
+        OutputFormat output_format,
         DataTypeMode mode) {
     columns_.reserve(descriptor_->field_count());
     for (size_t i = old_size; i < size_t(descriptor_->field_count()); ++i) {
         auto type = descriptor_->fields(i).type();
         util::check(type.data_type() != DataType::UNKNOWN, "Can't create column in create_columns with unknown data type");
         columns_.emplace_back(
-                std::make_shared<Column>(descriptor_->fields(i).type(), expected_column_size, presize, allow_sparse, mode));
+                std::make_shared<Column>(descriptor_->fields(i).type(), expected_column_size, presize, allow_sparse, output_format, mode));
     }
     generate_column_map();
 }
@@ -130,13 +132,14 @@ size_t SegmentInMemoryImpl::on_descriptor_change(
         size_t expected_column_size,
         AllocationType presize,
         Sparsity allow_sparse,
+        OutputFormat output_format,
         DataTypeMode mode) {
     ARCTICDB_TRACE(log::storage(), "Entering descriptor change: descriptor is currently {}, incoming descriptor '{}'",
                    *descriptor_, descriptor);
 
     std::size_t old_size = descriptor_->fields().size();
     *descriptor_ = descriptor;
-    create_columns(old_size, expected_column_size, presize, allow_sparse, mode);
+    create_columns(old_size, expected_column_size, presize, allow_sparse, output_format, mode);
     ARCTICDB_TRACE(log::storage(), "Descriptor change: descriptor is now {}", *descriptor_);
     return old_size;
 }

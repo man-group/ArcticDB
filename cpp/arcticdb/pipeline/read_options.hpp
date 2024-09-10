@@ -8,7 +8,7 @@
 #pragma once
 
 #include <arcticdb/entity/protobufs.hpp>
-#include <arcticdb/entity/output_type.hpp>
+#include <arcticdb/entity/output_format.hpp>
 #include <arcticdb/util/optional_defaults.hpp>
 
 namespace arcticdb {
@@ -22,7 +22,7 @@ struct ReadOptions {
     std::optional<bool> set_tz_;
     std::optional<bool> optimise_string_memory_;
     std::optional<bool> batch_throw_on_error_;
-    OutputType output_type_ = OutputType::PANDAS;
+    OutputFormat output_format_ = OutputFormat::PANDAS;
 
     void set_force_strings_to_fixed(const std::optional<bool>& force_strings_to_fixed) {
         force_strings_to_fixed_ = force_strings_to_fixed;
@@ -60,8 +60,12 @@ struct ReadOptions {
         batch_throw_on_error_ = batch_throw_on_error;
     }
 
-    void set_output_type(OutputType output_type) {
-        output_type_ = output_type;
+    void set_output_format(OutputFormat output_format) {
+        output_format_ = output_format;
+    }
+
+    OutputFormat output_format() const {
+        return output_format_;
     }
 };
 } //namespace arcticdb

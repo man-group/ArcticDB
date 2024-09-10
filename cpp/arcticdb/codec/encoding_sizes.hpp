@@ -73,6 +73,15 @@ switch (field.encoding_case()) {
 }
 }
 
+inline std::size_t field_uncompressed_size(const EncodedFieldImpl &field) {
+    switch (field.encoding_case()) {
+    case EncodedFieldType::NDARRAY:
+        return uncompressed_size(field.ndarray());
+    default:
+        util::raise_rte("Unsupported encoding {}", field.DebugString());
+    }
+}
+
 template <typename FieldCollectionType>
 std::size_t segment_compressed_size(const FieldCollectionType &fields) {
     std::size_t total = 0;

@@ -1061,7 +1061,7 @@ VersionedItem LocalVersionedEngine::defragment_symbol_data(const StreamId& strea
 }
 
 std::vector<ReadVersionOutput> LocalVersionedEngine::batch_read_keys(const std::vector<AtomKey> &keys) {
-    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data();
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::PANDAS);
     py::gil_scoped_release release_gil;
     std::vector<folly::Future<ReadVersionOutput>> res;
     res.reserve(keys.size());

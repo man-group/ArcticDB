@@ -14,10 +14,10 @@
 
 namespace arcticdb::detail {
 
-inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py::object &anchor) {
+inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, OutputFormat output_format, py::object &anchor) {
     ARCTICDB_SAMPLE_DEFAULT(PythonOutputFrameArrayAt)
     if (frame.empty()) {
-        return visit_field(frame.field(col_pos), [] (auto tag) {
+        return visit_field(frame.field(col_pos), [output_format] (auto tag) {
             using TypeTag = std::decay_t<decltype(tag)>;
             constexpr auto data_type = TypeTag::DataTypeTag::data_type;
             std::string dtype;
@@ -52,7 +52,7 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
                 // (numpy) array, thus the size of the element is not the size of the raw type, but the size of a pointer.
                 // This also affects how we allocate columns. Check cpp/arcticdb/column_store/column.hpp::Column and
                 // cpp/arcticdb/pipeline/column_mapping.hpp::external_datatype_size
-                esize = data_type_size(TypeDescriptor{tag}, DataTypeMode::EXTERNAL);
+                esize = data_type_size(TypeDescriptor{tag}, output_format, DataTypeMode::EXTERNAL);
             } else if constexpr(tag.dimension() == Dimension::Dim2) {
                 util::raise_rte("Read resulted in two dimensional type. This is not supported.");
             } else {
@@ -61,7 +61,7 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
             return py::array{py::dtype{dtype}, py::array::ShapeContainer{0}, py::array::StridesContainer{esize}};
         });
     }
-    return visit_field(frame.field(col_pos), [&, frame=frame, col_pos=col_pos] (auto tag) {
+    return visit_field(frame.field(col_pos), [&, frame=frame, col_pos=col_pos, output_format] (auto tag) {
         using TypeTag = std::decay_t<decltype(tag)>;
         constexpr auto data_type = TypeTag::DataTypeTag::data_type;
         auto column_data = frame.column(col_pos).data();
@@ -103,7 +103,7 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
             // (numpy) array, thus the size of the element is not the size of the raw type, but the size of a pointer.
             // This also affects how we allocate columns. Check cpp/arcticdb/column_store/column.hpp::Column and
             // cpp/arcticdb/pipeline/column_mapping.hpp::datatype_size
-            esize = data_type_size(TypeDescriptor{tag}, DataTypeMode::EXTERNAL);
+            esize = data_type_size(TypeDescriptor{tag}, output_format, DataTypeMode::EXTERNAL);
         } else if constexpr (is_array_type(TypeDescriptor(tag))) {
             dtype= "O";
             // The python representation of multidimensional columns differs from the in-memory/on-storage. In memory,
@@ -124,7 +124,7 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
 
                 it.next();
             }
-            esize = data_type_size(TypeDescriptor{tag}, DataTypeMode::EXTERNAL);
+            esize = data_type_size(TypeDescriptor{tag}, output_format, DataTypeMode::EXTERNAL);
     } else if constexpr(tag.dimension() == Dimension::Dim2) {
             util::raise_rte("Read resulted in two dimensional type. This is not supported.");
         } else {
@@ -137,13 +137,16 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
     });
 }
 
-inline std::shared_ptr<pipelines::FrameDataWrapper> initialize_array(const SegmentInMemory& frame, py::object &ref) {
+inline std::shared_ptr<pipelines::FrameDataWrapper> initialize_array(
+        const SegmentInMemory& frame,
+        OutputFormat output_format,
+        py::object &ref) {
     auto output = std::make_shared<pipelines::FrameDataWrapper>(frame.fields().size());
     ARCTICDB_SAMPLE(InitializeArrays, 0);
     ARCTICDB_DEBUG(log::memory(), "Initializing arrays");
     util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
     for (std::size_t c = 0; c < static_cast<size_t>(frame.fields().size()); ++c) {
-        output->data_[c] = array_at(frame, c, ref);
+        output->data_[c] = array_at(frame, c, output_format, ref);
     }
     util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
     return output;

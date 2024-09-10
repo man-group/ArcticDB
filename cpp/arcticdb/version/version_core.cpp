@@ -489,7 +489,65 @@ VersionedItem update_impl(
     return versioned_item;
 }
 
-folly::Future<ReadVersionOutput> read_multi_key(
+void set_row_id_for_empty_columns_set(
+        const ReadQuery& read_query,
+        const PipelineContext& pipeline_context,
+        SegmentInMemory& frame,
+        size_t row_id) {
+    if (read_query.columns && read_query.columns->empty() &&
+        pipeline_context.descriptor().index().type() == IndexDescriptor::Type::ROWCOUNT) {
+        frame.set_row_id(row_id);
+    }
+}
+
+// This is a parallelizable direct read (no processing pipeline) that is used
+// for things that need to get multiple objects in their entirety, as with
+// recursive normalizers. Outside those specific situtations it's probably
+// not what you want
+folly::Future<version_store::ReadVersionOutput> async_read_direct_impl(
+    const std::shared_ptr<Store>& store,
+    const VariantKey& index_key,
+    SegmentInMemory&& index_segment,
+    const std::shared_ptr<ReadQuery>& read_query,
+    DecodePathData shared_data,
+    std::any& handler_data,
+    const ReadOptions& read_options) {
+    auto index_segment_reader = std::make_shared<index::IndexSegmentReader>(std::move(index_segment));
+    const auto& tsd = index_segment_reader->tsd();
+    check_column_and_date_range_filterable(*index_segment_reader, *read_query);
+    add_index_columns_to_query(*read_query, tsd);
+    read_query->convert_to_positive_row_filter(static_cast<int64_t>(tsd.total_rows()));
+
+    auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor{tsd.as_stream_descriptor()});
+    pipeline_context->set_selected_columns(read_query->columns);
+
+    const bool dynamic_schema = opt_false(read_options.dynamic_schema_);
+    const bool bucketize_dynamic = index_segment_reader->bucketize_dynamic();
+
+    auto queries = get_column_bitset_and_query_functions<index::IndexSegmentReader>(
+        *read_query,
+        pipeline_context,
+        dynamic_schema,
+        bucketize_dynamic);
+
+    pipeline_context->slice_and_keys_ = filter_index(*index_segment_reader, combine_filter_functions(queries));
+
+    generate_filtered_field_descriptors(pipeline_context, read_query->columns);
+    mark_index_slices(pipeline_context, dynamic_schema, bucketize_dynamic);
+    auto frame = allocate_frame(pipeline_context, read_options.output_format(), AllocationType::PRESIZED);
+
+    return fetch_data(frame, pipeline_context, store, *read_query, read_options, shared_data, handler_data).thenValue(
+        [pipeline_context, frame, read_options, &handler_data](auto &&) mutable {
+            reduce_and_fix_columns(pipeline_context, frame, read_options, handler_data);
+        }).thenValue(
+        [index_segment_reader, frame, index_key, shared_data, read_query, pipeline_context](auto &&) mutable {
+            set_row_id_for_empty_columns_set(*read_query, *pipeline_context, frame, index_segment_reader->tsd().total_rows() - 1);
+            return ReadVersionOutput{VersionedItem{to_atom(index_key)},
+                                     FrameAndDescriptor{frame, std::move(index_segment_reader->mutable_tsd()), {}}};
+        });
+}
+
+FrameAndDescriptor read_multi_key(
     const std::shared_ptr<Store>& store,
     const SegmentInMemory& index_key_seg,
     std::any& handler_data) {
@@ -501,6 +559,7 @@ folly::Future<ReadVersionOutput> read_multi_key(
     AtomKey dup{keys[0]};
     VersionedItem versioned_item{std::move(dup)};
     TimeseriesDescriptor multi_key_desc{index_key_seg.index_descriptor()};
+
     return read_frame_for_version(store, versioned_item, std::make_shared<ReadQuery>(), ReadOptions{}, handler_data)
     .thenValue([multi_key_desc=std::move(multi_key_desc), keys=std::move(keys)](ReadVersionOutput&& read_version_output) mutable {
         multi_key_desc.mutable_proto().mutable_normalization()->CopyFrom(read_version_output.frame_and_descriptor_.desc_.proto().normalization());
@@ -913,13 +972,30 @@ folly::Future<std::vector<SliceAndKey>> read_and_process(
     .thenValue([component_manager, read_query, pipeline_context](std::vector<EntityId>&& processed_entity_ids) {
         auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager, std::move(processed_entity_ids));
 
-        if (std::any_of(read_query->clauses_.begin(), read_query->clauses_.end(), [](const std::shared_ptr<Clause>& clause) {
-            return clause->clause_info().modifies_output_descriptor_;
-        })) {
-            set_output_descriptors(proc, read_query->clauses_, pipeline_context);
-        }
-        return collect_segments(std::move(proc));
-    });
+    if (std::any_of(read_query->clauses_.begin(), read_query->clauses_.end(), [](const std::shared_ptr<Clause>& clause) {
+        return clause->clause_info().modifies_output_descriptor_;
+    })) {
+        set_output_descriptors(proc, read_query->clauses_, pipeline_context);
+    }
+    return collect_segments(std::move(proc));
+}
+
+SegmentInMemory read_direct(const std::shared_ptr<Store>& store,
+                            const std::shared_ptr<PipelineContext>& pipeline_context,
+                            DecodePathData shared_data,
+                            const ReadQuery& read_query,
+                            const ReadOptions& read_options,
+                            std::any& handler_data) {
+    ARCTICDB_DEBUG(log::version(), "Allocating frame");
+    ARCTICDB_SAMPLE_DEFAULT(ReadDirect)
+    const auto allocation_type = read_options.output_format() == OutputFormat::ARROW ? AllocationType::DETACHABLE : AllocationType::PRESIZED;
+    auto frame = allocate_frame(pipeline_context, read_options.output_format(), allocation_type);
+    util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
+
+    ARCTICDB_DEBUG(log::version(), "Fetching frame data");
+    fetch_data(frame, pipeline_context, store, read_query, read_options, shared_data, handler_data).get();
+    util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
+    return frame;
 }
 
 void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDescriptor& desc) {
@@ -1013,7 +1089,7 @@ void read_indexed_keys_to_pipeline(
     add_index_columns_to_query(read_query, index_segment_reader.tsd());
 
     const auto& tsd = index_segment_reader.tsd();
-    read_query.calculate_row_filter(static_cast<int64_t>(tsd.total_rows()));
+    read_query.convert_to_positive_row_filter(static_cast<int64_t>(tsd.total_rows()));
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
     pipeline_context->desc_ = tsd.as_stream_descriptor();
 
@@ -1189,32 +1265,34 @@ void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<PipelineC
 }
 
 void copy_frame_data_to_buffer(
-        const SegmentInMemory& destination,
+        SegmentInMemory& destination,
         size_t target_index,
         SegmentInMemory& source,
         size_t source_index,
         const RowRange& row_range,
-        const DecodePathData& shared_data,
-        std::any& handler_data) {
+        DecodePathData shared_data,
+        std::any& handler_data,
+        OutputFormat output_format) {
     const auto num_rows = row_range.diff();
     if (num_rows == 0) {
         return;
     }
     auto& src_column = source.column(static_cast<position_t>(source_index));
     auto& dst_column = destination.column(static_cast<position_t>(target_index));
-    auto& buffer = dst_column.data().buffer();
-    auto dst_rawtype_size = data_type_size(dst_column.type(), DataTypeMode::EXTERNAL);
+    auto dst_rawtype_size = data_type_size(dst_column.type(), output_format, DataTypeMode::EXTERNAL);
     auto offset = dst_rawtype_size * (row_range.first - destination.offset());
     auto total_size = dst_rawtype_size * num_rows;
-    buffer.assert_size(offset + total_size);
+    dst_column.assert_size(offset + total_size);
 
     auto src_data = src_column.data();
-    auto dst_ptr = buffer.data() + offset;
+    auto dst_ptr = dst_column.bytes_at(offset, total_size);
 
     auto type_promotion_error_msg = fmt::format("Can't promote type {} to type {} in field {}",
                                                 src_column.type(), dst_column.type(), destination.field(target_index).name());
-    if(auto handler = get_type_handler(src_column.type(), dst_column.type()); handler) {
-        handler->convert_type(src_column, buffer, num_rows, offset, src_column.type(), dst_column.type(), shared_data, handler_data, source.string_pool_ptr());
+    if(auto handler = get_type_handler(output_format, src_column.type(), dst_column.type()); handler) {
+        const auto type_size = data_type_size(dst_column.type(), output_format, DataTypeMode::EXTERNAL);
+        ColumnMapping mapping{src_column.type(), dst_column.type(), destination.field(target_index), type_size, num_rows, row_range.first, offset, total_size, target_index};
+        handler->convert_type(src_column, dst_column, mapping, shared_data, handler_data, source.string_pool_ptr());
     } else if (is_empty_type(src_column.type().data_type())) {
         dst_column.type().visit_tag([&](auto dst_desc_tag) {
             util::default_initialize<decltype(dst_desc_tag)>(dst_ptr, num_rows * dst_rawtype_size);
@@ -1270,6 +1348,7 @@ struct CopyToBufferTask : async::BaseTask {
     DecodePathData shared_data_;
     std::any& handler_data_;
     bool fetch_index_;
+    OutputFormat output_format_;
 
     CopyToBufferTask(
             SegmentInMemory&& source_segment,
@@ -1277,20 +1356,21 @@ struct CopyToBufferTask : async::BaseTask {
             FrameSlice frame_slice,
             DecodePathData shared_data,
             std::any& handler_data,
-            bool fetch_index) :
+            bool fetch_index,
+            OutputFormat output_format) :
             source_segment_(std::move(source_segment)),
         target_segment_(std::move(target_segment)),
         frame_slice_(std::move(frame_slice)),
         shared_data_(std::move(shared_data)),
         handler_data_(handler_data),
-        fetch_index_(fetch_index) {
-
+        fetch_index_(fetch_index),
+        output_format_(output_format){
     }
 
     folly::Unit operator()() {
         const auto index_field_count = get_index_field_count(target_segment_);
         for (auto idx = 0u; idx < index_field_count && fetch_index_; ++idx) {
-            copy_frame_data_to_buffer(target_segment_, idx, source_segment_, idx, frame_slice_.row_range, shared_data_, handler_data_);
+            copy_frame_data_to_buffer(target_segment_, idx, source_segment_, idx, frame_slice_.row_range, shared_data_, handler_data_, output_format_);
         }
 
         auto field_count = frame_slice_.col_range.diff() + index_field_count;
@@ -1307,7 +1387,7 @@ struct CopyToBufferTask : async::BaseTask {
             if (!frame_loc_opt)
                 continue;
 
-            copy_frame_data_to_buffer(target_segment_, *frame_loc_opt, source_segment_, field_col, frame_slice_.row_range, shared_data_, handler_data_);
+            copy_frame_data_to_buffer(target_segment_, *frame_loc_opt, source_segment_, field_col, frame_slice_.row_range, shared_data_, handler_data_, output_format_);
         }
         return folly::Unit{};
     }
@@ -1317,7 +1397,8 @@ folly::Future<folly::Unit> copy_segments_to_frame(
         const std::shared_ptr<Store>& store,
         const std::shared_ptr<PipelineContext>& pipeline_context,
         SegmentInMemory frame,
-        std::any& handler_data) {
+        std::any& handler_data,
+        OutputFormat output_format) {
     std::vector<folly::Future<folly::Unit>> copy_tasks;
     DecodePathData shared_data;
     for (auto context_row : folly::enumerate(*pipeline_context)) {
@@ -1331,7 +1412,8 @@ folly::Future<folly::Unit> copy_segments_to_frame(
                 context_row->slice_and_key().slice(),
                 shared_data,
                 handler_data,
-                context_row->fetch_index()}));
+                context_row->fetch_index(),
+                output_format}));
     }
     return folly::collect(copy_tasks).via(&async::cpu_executor()).unit();
 }
@@ -1358,7 +1440,8 @@ folly::Future<SegmentInMemory> prepare_output_frame(
         row.set_string_pool(row.slice_and_key().segment(store).string_pool_ptr());
     }
 
-    auto frame = allocate_frame(pipeline_context);
+    const auto allocation_type = read_options.output_format() == OutputFormat::ARROW ? AllocationType::DETACHABLE : AllocationType::PRESIZED;
+    auto frame = allocate_frame(pipeline_context, read_options.output_format(), allocation_type);
     return copy_segments_to_frame(store, pipeline_context, frame, handler_data).thenValue([frame](auto&&){ return frame; });
 }
 
@@ -1491,7 +1574,7 @@ FrameAndDescriptor read_column_stats_impl(
         TimeseriesDescriptor tsd;
         tsd.set_total_rows(segment_in_memory.row_count());
         tsd.set_stream_descriptor(segment_in_memory.descriptor());
-        return {SegmentInMemory(std::move(segment_in_memory)), tsd, {}, {}};
+        return {SegmentInMemory(std::move(segment_in_memory)), tsd, {}};
     } catch (const std::exception& e) {
         storage::raise<ErrorCode::E_KEY_NOT_FOUND>("Failed to read column stats key: {}", e.what());
     }
@@ -1528,10 +1611,7 @@ folly::Future<SegmentInMemory> do_direct_read_or_process(
         ARCTICDB_SAMPLE(MarkAndReadDirect, 0)
         util::check_rte(!(pipeline_context->is_pickled() && std::holds_alternative<RowRange>(read_query->row_filter)), "Cannot use head/tail/row_range with pickled data, use plain read instead");
         mark_index_slices(pipeline_context, opt_false(read_options.dynamic_schema_), pipeline_context->bucketize_dynamic_);
-        auto frame = allocate_frame(pipeline_context);
-        util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
-        ARCTICDB_DEBUG(log::version(), "Fetching frame data");
-        return fetch_data(std::move(frame), pipeline_context, store, opt_false(read_options.dynamic_schema_), shared_data, handler_data);
+        frame = read_direct(store, pipeline_context, shared_data, read_query, read_options, handler_data);
     }
 }
 
