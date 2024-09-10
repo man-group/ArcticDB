@@ -401,14 +401,17 @@ class TestDescriptorMismatchBetweenStagedSegments:
 
 class TestStreamDescriptorMismatchOnFinalizeAppend:
     def init_symbol(self, lib, sym):
-        df = pd.DataFrame({"col_0": np.array([1], "int32"), "col_1": [0.5], "col_2": ["val"]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
+        df = pd.DataFrame(
+            {"col_0": np.array([1], dtype="int32"), "col_1": np.array([0.5], dtype="float64"), "col_2": np.array(["val"], dtype="object")},
+            index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)])
+        )
         lib.write(sym, df)
 
     def test_cannot_append_column_subset(self, lmdb_library):
         lib = lmdb_library
         self.init_symbol(lib, "sym")
         
-        df = pd.DataFrame({"col_0": [1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
+        df = pd.DataFrame({"col_0": np.array([1], dtype="int32")}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
         lib.write("sym", df, staged=True)
         with pytest.raises(SchemaException) as exception_info:
             lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
@@ -419,7 +422,10 @@ class TestStreamDescriptorMismatchOnFinalizeAppend:
         lib = lmdb_library
         self.init_symbol(lib, "sym")
         
-        df = pd.DataFrame({"col_1": [1.4], "col_0": [5], "col_2": ["val"]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
+        df = pd.DataFrame(
+            {"col_1": np.array([1.4], dtype="float64"), "col_0": np.array([5], dtype="int32"), "col_2": np.array(["val"], dtype="object")},
+            index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)])
+        )
         lib.write("sym", df, staged=True)
         with pytest.raises(SchemaException) as exception_info:
             lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
@@ -427,19 +433,29 @@ class TestStreamDescriptorMismatchOnFinalizeAppend:
         assert "col_1" in str(exception_info.value)
         assert "col_2" in str(exception_info.value)
 
-    def test_cannot_promote_type(self, lmdb_library):
+    def test_cannot_promote_stored_type(self, lmdb_library):
         lib = lmdb_library
         self.init_symbol(lib, "sym")
         
-        df = pd.DataFrame({"col_0": np.array([1], dtype="int64"), "col_1": [5], "col_2": ["val"]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
+        df = pd.DataFrame(
+            {"col_0": np.array([1], dtype="int64"), "col_1": np.array([5], dtype="float64"), "col_2": np.array(["val"], dtype="object")},
+            index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)])
+        )
         lib.write("sym", df, staged=True)
         with pytest.raises(SchemaException) as exception_info:
             lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
         assert "col_0" in str(exception_info.value)
         assert "INT32" in str(exception_info.value)
         assert "INT64" in str(exception_info.value)
-
-        df = pd.DataFrame({"col_0": np.array([1], dtype="int16"), "col_1": [5], "col_2": ["val"]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
+ 
+    def cannot_promote_input_type(self, lmdb_library):
+        lib = lmdb_library
+        self.init_symbol(lib, "sym")
+        
+        df = pd.DataFrame(
+            {"col_0": np.array([1], dtype="int16"), "col_1": np.array([5], dtype="float64"), "col_2": np.array(["val"], dtype="object")},
+            index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)])
+        )
         lib.write("sym", df, staged=True)
         with pytest.raises(SchemaException) as exception_info:
             lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
@@ -450,14 +466,22 @@ class TestStreamDescriptorMismatchOnFinalizeAppend:
     def test_cannot_add_new_columns(self, lmdb_library):
         lib = lmdb_library
         self.init_symbol(lib, "sym")
-        
-        df = pd.DataFrame({"col_0": np.array([1], dtype="int32"), "col_1": [5], "col_2": ["val"], "col_3": [1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
+
+        df = pd.DataFrame(
+            {
+                "col_0": np.array([1], dtype="int32"),
+                "col_1": np.array([5], dtype="float64"),
+                "col_2": np.array(["val"], dtype="object"),
+                "col_3": np.array([1], dtype="int32")
+            },
+            index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)])
+        )
         lib.write("sym", df, staged=True)
         with pytest.raises(SchemaException) as exception_info:
             lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
         assert "col_3" in str(exception_info.value)
-        
-        
+
+
 # This was a added as a bug repro for GH issue #1795.
 def test_two_columns_with_different_dtypes(lmdb_library_dynamic_schema):
     lib = lmdb_library_dynamic_schema
