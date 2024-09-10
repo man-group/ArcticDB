@@ -1403,9 +1403,6 @@ public:
 
     ~IncompleteKeysRAII(){
         std::vector<entity::VariantKey> keys_to_delete;
-        if (context_->incompletes_begin() == context_->end()) {
-            log::version().warn("Using finalize call without any staged segments.");
-        }
         for (auto sk = context_->incompletes_begin(); sk != context_->end(); ++sk) {
             const auto& slice_and_key = sk->slice_and_key();
             internal::check<ErrorCode::E_ASSERTION_FAILURE>(
@@ -1471,7 +1468,7 @@ VersionedItem sort_merge_impl(
 
             read_query.clauses_.emplace_back(std::make_shared<Clause>(MergeClause{timeseries_index, SparseColumnPolicy{}, stream_id, pipeline_context->descriptor()}));
             auto segments = read_and_process(store, pipeline_context, read_query, ReadOptions{}, pipeline_context->incompletes_after());
-            if (options.append_ && update_info.previous_index_key_) {
+            if (options.append_ && update_info.previous_index_key_ && !segments.empty()) {
                 const timestamp last_index_on_disc = update_info.previous_index_key_->end_time() - 1;
                 const timestamp incomplete_start =
                     std::get<timestamp>(TimeseriesIndex::start_value_for_segment(segments[0].segment(store)));
