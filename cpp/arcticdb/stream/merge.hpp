@@ -42,10 +42,10 @@ void do_merge(
 
             auto val = next->row().begin();
             std::advance(val, IndexType::field_count());
+            const StreamDescriptor& descriptor = rb.descriptor();
             for(; val != next->row().end(); ++val) {
-                val->visit_field([&rb] (const auto& opt_v, std::string_view name, const TypeDescriptor& type_desc) {
+                val->visit_field([&rb, &descriptor] (const auto& opt_v, std::string_view name, const TypeDescriptor& type_desc) {
                     if (opt_v) {
-                        const StreamDescriptor& descriptor = rb.descriptor();
                         const std::optional<size_t> field_idx = descriptor.find_field(name);
                         if (!field_idx || type_desc == descriptor.field(*field_idx).type()) {
                             rb.set_scalar_by_name(name, *opt_v, type_desc.data_type());
