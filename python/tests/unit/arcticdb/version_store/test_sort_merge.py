@@ -481,16 +481,33 @@ class TestStreamDescriptorMismatchOnFinalizeAppend:
             lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
         assert "col_3" in str(exception_info.value)
 
-
 @pytest.mark.parametrize("mode", [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE])
-def test_nat_is_not_allowed_in_index(lmdb_library_static_dynamic, mode):
-    lib = lmdb_library_static_dynamic
+class TestNatInIndexNotAllowed:
 
-    df1 = pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.NaT]))
-    lib.write("sym", df1, staged=True, validate_index=False)
-    with pytest.raises(SortingException) as exception_info:
-        lib.sort_and_finalize_staged_data("sym", mode=mode)
-    assert "NaT" in str(exception_info.value)
+    @classmethod
+    def assert_nat_not_allowed(cls, lib, symbol, mode):
+        with pytest.raises(SortingException) as exception_info:
+            lib.sort_and_finalize_staged_data(symbol, mode=mode)
+        assert "NaT" in str(exception_info.value)
+
+    def test_index_only_nat(self, lmdb_library_static_dynamic, mode):
+        lib = lmdb_library_static_dynamic
+
+        df1 = pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.NaT, pd.NaT]))
+        lib.write("sym", df1, staged=True, validate_index=False)
+        self.assert_nat_not_allowed(lib, "sym", mode)
+
+    def test_nat_and_valid_date(self, lmdb_library_static_dynamic, mode):
+        lib = lmdb_library_static_dynamic
+
+        df1 = pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.NaT, pd.Timestamp(2024, 1, 1)]))
+        lib.write("sym", df1, staged=True, validate_index=False)
+        self.assert_nat_not_allowed(lib, "sym", mode)
+        lib.delete_staged_data("sym")
+
+        df1 = pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1), pd.NaT]))
+        lib.write("sym", df1, staged=True, validate_index=False)
+        self.assert_nat_not_allowed(lib, "sym", mode)
 
 class TestSortMergeDynamicSchema:
 
