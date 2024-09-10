@@ -1532,7 +1532,7 @@ std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> LocalVersionedEngine
     util::check(stream_ids.size() == version_queries.size(), "Symbol vs version query size mismatch: {} != {}", stream_ids.size(), version_queries.size());
     auto sym_versions = get_sym_versions_from_query(stream_ids, version_queries);
     util::check(sym_versions.size() == version_queries.size(), "Restore versions requires specific version to be supplied");
-    auto previous = batch_get_latest_version(store(), version_map(), stream_ids, false);
+    auto previous = batch_get_latest_version(store(), version_map(), stream_ids, true);
     auto versions_to_restore = batch_get_specific_version(store(), version_map(), sym_versions);
     std::vector<folly::Future<std::pair<VersionedItem, TimeseriesDescriptor>>> fut_vec;
 
