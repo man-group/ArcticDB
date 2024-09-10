@@ -389,7 +389,7 @@ class TestDescriptorMismatchBetweenStagedSegments:
         df1 = pd.DataFrame({"col_0": [1], "col_1": ["test"], "col_2": [1.2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
         lib.write("sym", df1, staged=True)
         
-        df2 = pd.DataFrame({"col_1": ["asd"], "col_2": [2.5], "col_1": [2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
+        df2 = pd.DataFrame({"col_1": ["asd"], "col_2": [2.5], "col_0": [2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
         lib.write("sym", df2, staged=True)
 
         with pytest.raises(SchemaException) as exception_info:
