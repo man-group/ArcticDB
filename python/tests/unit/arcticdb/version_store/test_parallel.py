@@ -134,15 +134,14 @@ def test_write_parallel_sort_merge(basic_arctic_library, prune_previous_versions
 
     num_rows_per_day = 10
     num_days = 10
-    num_columns = 8
+    num_columns = 4
     column_length = 8
     dt = datetime.datetime(2019, 4, 8, 0, 0, 0)
-    columns = random_strings_of_length(num_columns, column_length, True)
+    cols = random_strings_of_length(num_columns, column_length, True)
     symbol = "test_write_parallel_sort_merge"
     dataframes = []
     df = pd.DataFrame()
 
-    cols = random.sample(columns, 4)
     for _ in range(num_days):
         index = pd.Index([dt + datetime.timedelta(seconds=s) for s in range(num_rows_per_day)])
         vals = {c: random_floats(num_rows_per_day) for c in cols}
