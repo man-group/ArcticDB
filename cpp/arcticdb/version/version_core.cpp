@@ -1481,8 +1481,8 @@ VersionedItem sort_merge_impl(
                 sorting::check<ErrorCode::E_UNSORTED_DATA>(
                     last_index_on_disc <= incomplete_start,
                     "Cannot append staged segments to existing data as incomplete segment contains index value {} < existing data {}",
-                    incomplete_start,
-                    last_index_on_disc
+                    date_and_time(incomplete_start),
+                    date_and_time(last_index_on_disc)
                 );
             }
             pipeline_context->total_rows_ = num_versioned_rows + get_slice_rowcounts(segments);

@@ -89,18 +89,24 @@ void do_merge(
                         } else {
                             const TypeDescriptor& final_type = agg.descriptor().field(field_name_to_index.find(name)->second).type();
                             final_type.visit_tag([&](auto final_type_tag) {
+                                constexpr TypeDescriptor final_type_desc = final_type_tag.type_descriptor();
+                                constexpr TypeDescriptor row_type_desc = row_field_descriptor_tag.type_descriptor();
                                 using FinalValueType = std::decay_t<decltype(final_type_tag)>::DataTypeTag::raw_type;
-                                using RowValueType = std::decay_t<decltype(row_field_descriptor_tag)>::DataTypeTag::raw_type;
-                                if constexpr (std::is_same_v<FinalValueType, RowValueType>) {
+                                // At this point it's ensured that all staged descriptors are either the same or are convertible
+                                // to the stream descriptor in the aggregator.
+                                if constexpr (final_type_desc == row_type_desc) {
                                     rb.set_scalar_by_name(name, opt_v.value(), final_type_tag.data_type());
-                                } else if constexpr (!is_sequence_type(final_type_tag.data_type()) && !is_sequence_type(row_field_descriptor_tag.data_type())) {
+                                } else if constexpr (std::is_convertible_v<decltype(*opt_v), FinalValueType>) {
                                     rb.set_scalar_by_name(name, static_cast<FinalValueType>(*opt_v), final_type_tag.data_type());
                                 } else {
-                                    rb.set_scalar_by_name(name, opt_v.value(), final_type_tag.data_type());
+                                    schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                                        "Cannot convert {} to {}",
+                                        row_field_descriptor_tag.type_descriptor(),
+                                        final_type_tag.type_descriptor()
+                                    );
                                 }
                             });
                         }
-
                     }
                 });
             }
