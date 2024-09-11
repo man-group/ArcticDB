@@ -32,16 +32,20 @@ inline void Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy>::commit_i
     stats_.reset();
 }
 
+inline bool has_something_to_write(const SegmentInMemory& segment) {
+    return (segment.row_count() > 0 || segment.metadata()) || segment.has_index_descriptor();
+}
+
 template<class Index, class Schema, class SegmentingPolicy, class DensityPolicy>
 inline void Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy>::commit() {
-    if (ARCTICDB_LIKELY(segment_.row_count() > 0 || segment_.metadata()) || segment_.has_index_descriptor()) {
+    if (ARCTICDB_LIKELY(has_something_to_write(segment_))) {
         commit_impl(false);
     }
 }
 
 template<class Index, class Schema, class SegmentingPolicy, class DensityPolicy>
 inline void Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy>::finalize() {
-    if (ARCTICDB_LIKELY(segment_.row_count() > 0 || segment_.metadata()) || segment_.has_index_descriptor()) {
+    if (ARCTICDB_LIKELY(has_something_to_write(segment_))) {
         commit_impl(true);
     }
 }
