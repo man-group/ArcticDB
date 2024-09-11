@@ -8,9 +8,33 @@
 #pragma once
 
 #include <type_traits>
+#include <string_view>
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/util/constants.hpp>
-#include <arcticdb/entity/type_utils.hpp>
+#include <arcticdb/stream/schema.hpp>
+#include <arcticdb/storage/memory_layout.hpp>
+#include <arcticdb/entity/stream_descriptor.hpp>
+#include <arcticdb/entity/types.hpp>
+#include <arcticdb/util/preconditions.hpp>
+#include <arcticdb/util/error_code.hpp>
+#include <ankerl/unordered_dense.h>
+
+template<typename Aggregator>
+inline consteval bool is_static_schema() {
+    if constexpr (std::is_same_v<typename Aggregator::SchemaPolicy, arcticdb::stream::DynamicSchema>) {
+        return false;
+    } else if constexpr (std::is_same_v<typename Aggregator::SchemaPolicy, arcticdb::stream::FixedSchema>) {
+        return true;
+    } else {
+        static_assert(sizeof(Aggregator) == 0, "Unknown schema type");
+    }
+}
+
+template<typename Aggregator>
+inline consteval bool is_dynamic_schema() {
+    return !is_static_schema<Aggregator>();
+}
+
 
 namespace arcticdb::stream {
 template<typename IndexType, typename AggregatorType, typename QueueType>
@@ -31,45 +55,52 @@ void do_merge(
         sorting::check<ErrorCode::E_UNSORTED_DATA>(index_value != NaT, "NaT values are not allowed in the index");
     }
 
+    [[maybe_unused]] const ankerl::unordered_dense::map<std::string_view, size_t> field_name_to_index = [&](){
+        ankerl::unordered_dense::map<std::string_view, size_t> res;
+        if constexpr (is_dynamic_schema<AggregatorType>()) {
+            const StreamDescriptor& desc = agg.descriptor();
+            for (size_t field_idx = 0; field_idx < desc.field_count(); ++field_idx) {
+                const Field& field = desc.field(field_idx);
+                res[field.name()] = field_idx;
+            }
+        }
+        return res;
+    }();
+
+
     while (!input_streams.empty()) {
         auto next = input_streams.pop_top();
         if (next->seg_.row_count() == 0) {
             continue;
         }
-        agg.start_row(pipelines::index::index_value_from_row(next->row(), IndexDescriptorImpl::Type::TIMESTAMP, 0).value()) ([&next, add_symbol_column](auto &rb) {
+        const auto index_value =
+            *pipelines::index::index_value_from_row(next->row(), IndexDescriptorImpl::Type::TIMESTAMP, 0);
+        agg.start_row(index_value) ([&](auto &rb) {
             if(add_symbol_column)
                 rb.set_scalar_by_name("symbol", std::string_view(std::get<StringId>(next->id())), DataType::UTF_DYNAMIC64);
 
             auto val = next->row().begin();
             std::advance(val, IndexType::field_count());
-            const StreamDescriptor& descriptor = rb.descriptor();
             for(; val != next->row().end(); ++val) {
-                val->visit_field([&rb, &descriptor] (const auto& opt_v, std::string_view name, const TypeDescriptor& type_desc) {
+                val->visit_field([&] (const auto& opt_v, std::string_view name, auto row_field_descriptor_tag) {
                     if (opt_v) {
-                        const std::optional<size_t> field_idx = descriptor.find_field(name);
-                        if (!field_idx || type_desc == descriptor.field(*field_idx).type()) {
-                            rb.set_scalar_by_name(name, *opt_v, type_desc.data_type());
+                        if constexpr (is_static_schema<AggregatorType>()) {
+                            rb.set_scalar_by_name(name, opt_v.value(), row_field_descriptor_tag.data_type());
                         } else {
-                            const auto common_type = has_valid_common_type(type_desc, descriptor.field(*field_idx).type());
-                            schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                                common_type,
-                                "No valid common type between staged segments for column {}. Mismatched types are {} "
-                                "and {}",
-                                name,
-                                type_desc,
-                                descriptor.field(*field_idx).type()
-                            );
-                            common_type->visit_tag([&](auto type_desc_tag) {
-                                using RawType = decltype(type_desc_tag)::DataTypeTag::raw_type;
-                                if constexpr (std::is_convertible_v<RawType, std::decay_t<decltype(*opt_v)>>) {
-                                    using RawType = decltype(type_desc_tag)::DataTypeTag::raw_type;
-                                    const auto cast_value = static_cast<RawType>(*opt_v);
-                                    rb.set_scalar_by_name(name, cast_value, type_desc.data_type());
+                            const TypeDescriptor& final_type = agg.descriptor().field(field_name_to_index.find(name)->second).type();
+                            final_type.visit_tag([&](auto final_type_tag) {
+                                using FinalValueType = std::decay_t<decltype(final_type_tag)>::DataTypeTag::raw_type;
+                                using RowValueType = std::decay_t<decltype(row_field_descriptor_tag)>::DataTypeTag::raw_type;
+                                if constexpr (std::is_same_v<FinalValueType, RowValueType>) {
+                                    rb.set_scalar_by_name(name, opt_v.value(), final_type_tag.data_type());
+                                } else if constexpr (!is_sequence_type(final_type_tag.data_type()) && !is_sequence_type(row_field_descriptor_tag.data_type())) {
+                                    rb.set_scalar_by_name(name, static_cast<FinalValueType>(*opt_v), final_type_tag.data_type());
                                 } else {
-                                    rb.set_scalar_by_name(name, *opt_v, type_desc.data_type());
+                                    rb.set_scalar_by_name(name, opt_v.value(), final_type_tag.data_type());
                                 }
                             });
                         }
+
                     }
                 });
             }

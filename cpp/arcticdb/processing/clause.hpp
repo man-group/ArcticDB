@@ -572,42 +572,32 @@ struct MergeClause {
     stream::Index index_;
     stream::VariantColumnPolicy density_policy_;
     StreamId stream_id_;
-    bool add_symbol_column_ = false;
     StreamId target_id_;
     StreamDescriptor stream_descriptor_;
+    bool add_symbol_column_ = false;
+    bool dynamic_schema_;
 
     MergeClause(
-            stream::Index index,
-            const stream::VariantColumnPolicy &density_policy,
-            const StreamId& stream_id,
-            const StreamDescriptor& stream_descriptor) :
-            index_(std::move(index)),
-            density_policy_(density_policy),
-            stream_id_(stream_id),
-            stream_descriptor_(stream_descriptor) {
-        clause_info_.requires_repartition_ = true;
-    }
+        stream::Index index,
+        const stream::VariantColumnPolicy& density_policy,
+        const StreamId& stream_id,
+        const StreamDescriptor& stream_descriptor,
+        bool dynamic_schema
+    );
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
             std::vector<RangesAndKey>& ranges_and_keys,
-            size_t) {
-        return structure_all_together(ranges_and_keys);
-    }
+            size_t) const;
 
     [[nodiscard]] std::vector<EntityId> process(std::vector<EntityId>&& entity_ids) const;
 
     [[nodiscard]] std::optional<std::vector<std::vector<EntityId>>> repartition(std::vector<std::vector<EntityId>>&& entity_ids_vec) const;
 
-    [[nodiscard]] const ClauseInfo& clause_info() const {
-        return clause_info_;
-    }
+    [[nodiscard]] const ClauseInfo& clause_info() const;
 
-    void set_processing_config(ARCTICDB_UNUSED const ProcessingConfig& processing_config) {
-    }
+    void set_processing_config(const ProcessingConfig& processing_config);
 
-    void set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
-        component_manager_ = component_manager;
-    }
+    void set_component_manager(std::shared_ptr<ComponentManager> component_manager);
 };
 
 struct ColumnStatsGenerationClause {

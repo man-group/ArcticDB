@@ -1466,7 +1466,13 @@ VersionedItem sort_merge_impl(
             //const auto split_size = ConfigsMap::instance()->get_int("Split.RowCount", 10000);
             //read_query.clauses_.emplace_back(std::make_shared<Clause>(SplitClause{static_cast<size_t>(split_size)}));
 
-            read_query.clauses_.emplace_back(std::make_shared<Clause>(MergeClause{timeseries_index, SparseColumnPolicy{}, stream_id, pipeline_context->descriptor()}));
+            read_query.clauses_.emplace_back(std::make_shared<Clause>(MergeClause{
+                timeseries_index,
+                SparseColumnPolicy{},
+                stream_id,
+                pipeline_context->descriptor(),
+                write_options.dynamic_schema
+            }));
             auto segments = read_and_process(store, pipeline_context, read_query, ReadOptions{}, pipeline_context->incompletes_after());
             if (options.append_ && update_info.previous_index_key_ && !segments.empty()) {
                 const timestamp last_index_on_disc = update_info.previous_index_key_->end_time() - 1;

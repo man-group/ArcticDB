@@ -889,7 +889,7 @@ std::vector<EntityId> SortClause::process(std::vector<EntityId>&& entity_ids) co
     return push_entities(component_manager_, std::move(proc));
 }
 
-template<typename IndexType, typename DensityPolicy, typename QueueType>
+template<typename IndexType, typename DensityPolicy, typename QueueType, bool dynamic_schema>
 void merge_impl(
         std::shared_ptr<ComponentManager> component_manager,
         std::vector<std::vector<EntityId>>& ret,
@@ -907,18 +907,48 @@ void merge_impl(
         ret.emplace_back(push_entities(component_manager, ProcessingUnit{std::forward<SegmentInMemory>(segment), row_range, col_range}));
     };
 
-    using AggregatorType = stream::Aggregator<IndexType, stream::DynamicSchema, SegmentationPolicy, DensityPolicy>;
+    using Schema = std::conditional_t<dynamic_schema, stream::DynamicSchema, stream::FixedSchema>;
+    using AggregatorType = stream::Aggregator<IndexType, Schema, SegmentationPolicy, DensityPolicy>;
 
     AggregatorType agg{
-        stream::DynamicSchema{stream_descriptor, index},
+        Schema{stream_descriptor, index},
         std::move(func),
         std::move(segmentation_policy),
         stream_descriptor,
         std::nullopt
     };
 
-    stream::do_merge<IndexType, AggregatorType, decltype(input_streams)>(
-        input_streams, agg, add_symbol_column);
+    stream::do_merge<IndexType, AggregatorType, decltype(input_streams)>(input_streams, agg, add_symbol_column);
+}
+
+MergeClause::MergeClause(
+        stream::Index index,
+        const stream::VariantColumnPolicy &density_policy,
+        const StreamId& stream_id,
+        const StreamDescriptor& stream_descriptor,
+        bool dynamic_schema) :
+        index_(std::move(index)),
+        density_policy_(density_policy),
+        stream_id_(stream_id),
+        stream_descriptor_(stream_descriptor),
+        dynamic_schema_(dynamic_schema) {
+    clause_info_.requires_repartition_ = true;
+}
+
+void MergeClause::set_processing_config(const ProcessingConfig&) {}
+
+void MergeClause::set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
+    component_manager_ = std::move(component_manager);
+}
+
+const ClauseInfo& MergeClause::clause_info() const {
+    return clause_info_;
+}
+
+std::vector<std::vector<size_t>> MergeClause::structure_for_processing(
+    std::vector<RangesAndKey>& ranges_and_keys,
+    size_t) const {
+    return structure_all_together(ranges_and_keys);
 }
 
 // MergeClause receives a list of DataFrames as input and merge them into a single one where all 
@@ -972,17 +1002,31 @@ std::optional<std::vector<std::vector<EntityId>>> MergeClause::repartition(std::
     const RowRange row_range{min_start_row, max_end_row};
     const ColRange col_range{min_start_col, max_end_col};
     std::vector<std::vector<EntityId>> ret;
-    std::visit(
-            [this, &ret, &input_streams, &comp=compare, stream_id=stream_id_, &row_range, &col_range](auto idx, auto density) {
-                merge_impl<decltype(idx), decltype(density), decltype(input_streams)>(component_manager_,
-                                                                                      ret,
-                                                                                      input_streams,
-                                                                                      add_symbol_column_,
-                                                                                      row_range,
-                                                                                      col_range,
-                                                                                      idx,
-                                                                                      stream_descriptor_);
-            }, index_, density_policy_);
+    std::visit([this, &ret, &input_streams, &comp=compare, stream_id=stream_id_, &row_range, &col_range](auto idx, auto density) {
+            if (dynamic_schema_) {
+                merge_impl<decltype(idx), decltype(density), decltype(input_streams), true>(
+                    component_manager_,
+                    ret,
+                    input_streams,
+                    add_symbol_column_,
+                    row_range,
+                    col_range,
+                    idx,
+                    stream_descriptor_
+                );
+            } else {
+                merge_impl<decltype(idx), decltype(density), decltype(input_streams), false>(
+                    component_manager_,
+                    ret,
+                    input_streams,
+                    add_symbol_column_,
+                    row_range,
+                    col_range,
+                    idx,
+                    stream_descriptor_
+                );
+            }
+        }, index_, density_policy_);
     return ret;
 }
 
