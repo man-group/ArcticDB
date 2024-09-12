@@ -13,7 +13,7 @@ from arcticdb_ext.storage import KeyType
 from arcticdb_ext.stream import SegmentInMemory
 from arcticdb_ext.tools import LibraryTool as LibraryToolImpl
 from arcticdb_ext.version_store import AtomKey, PythonOutputFrame, RefKey
-from arcticdb.version_store._normalization import denormalize_dataframe
+from arcticdb.version_store._normalization import denormalize_dataframe, normalize_dataframe
 
 VariantKey = Union[AtomKey, RefKey]
 VersionQueryInput = Union[int, str, ExplicitlySupportedDates, None]
@@ -159,3 +159,22 @@ class LibraryTool(LibraryToolImpl):
         Pandas DataFrame representing the index key in a human-readable format.
         """
         return self._nvs.read_index(symbol, as_of, **kwargs)
+
+    def overwrite_append_data_with_dataframe(self, key : VariantKey, df : pd.DataFrame) -> SegmentInMemory:
+        """
+        Overwrites the variant key with the provided dataframe. Use with extreme caution as it can completely mess up
+        the underlying data structures.
+
+        Returns
+        -------
+        Segment copy of what was stored in the key before it was overwritten. Can be used with lib_tool.write_segment to
+        back out the change caused by this in case data ends up corrupted.
+        """
+        item, norm_meta = normalize_dataframe(df)
+        return self.overwrite_append_data(key, item, norm_meta, None)
+
+    def update_append_data_column_type(self, key : VariantKey, column : str, to_type : type) -> SegmentInMemory:
+        old_df = self.read_to_dataframe(key)
+        assert column in old_df.columns
+        new_df = old_df.astype({column: to_type})
+        return self.overwrite_append_data_with_dataframe(key, new_df)
