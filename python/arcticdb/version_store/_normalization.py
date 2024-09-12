@@ -1331,6 +1331,9 @@ def denormalize_dataframe(ret):
 
     return DataFrameNormalizer().denormalize(frame_data, read_result.norm.df)
 
+def normalize_dataframe(df, **kwargs):
+    return DataFrameNormalizer().normalize(df, **kwargs)
+
 
 T = TypeVar("T", bound=Union[pd.DataFrame, pd.Series])
 
