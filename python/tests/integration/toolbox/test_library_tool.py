@@ -137,3 +137,27 @@ def test_count_keys(object_and_mem_and_lmdb_version_store):
     assert lib_tool.count_keys(KeyType.SNAPSHOT_REF) == 1
     assert lib_tool.count_keys(KeyType.MULTI_KEY) == 1
     assert lib_tool.count_keys(KeyType.SNAPSHOT) == 0
+
+
+@pytest.mark.parametrize("use_time_index", [True, False])
+def test_read_data_key_from_version(lmdb_version_store, use_time_index):
+    lib = lmdb_version_store
+    lib_tool = lib.library_tool()
+    sym = "sym"
+
+    df = pd.DataFrame({"a": [1, 2, 3]})
+    if use_time_index:
+        df = pd.DataFrame(index=pd.date_range(start=pd.Timestamp(0), periods=3), data={"a": [1, 2, 3]})
+    lib.write(sym, df)
+
+    ver_key = lib_tool.find_keys_for_symbol(KeyType.VERSION, sym)[0]
+    index_key = lib_tool.read_to_keys(ver_key)[0]
+    data_key = lib_tool.read_to_keys(index_key)[0]
+    stored_df = lib_tool.read_to_dataframe(data_key)
+
+    # Fix index because reading directly from data key loses that information
+    if use_time_index:
+        stored_df.index.name=None
+    else:
+        stored_df = stored_df.reset_index()
+    assert_frame_equal(stored_df, df)
