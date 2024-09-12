@@ -19,6 +19,7 @@
 #include <arcticdb/stream/stream_reader.hpp>
 #include <arcticdb/stream/stream_writer.hpp>
 #include <arcticdb/entity/protobufs.hpp>
+#include <arcticdb/entity/protobuf_mappings.hpp>
 
 namespace py = pybind11;
 
@@ -66,6 +67,8 @@ void register_types(py::module &m) {
         DATA_TYPE(NANOSECONDS_UTC64)
         DATA_TYPE(ASCII_FIXED64)
         DATA_TYPE(ASCII_DYNAMIC64)
+        DATA_TYPE(UTF_FIXED64)
+        DATA_TYPE(UTF_DYNAMIC64)
 #undef DATA_TYPE
         ;
 
@@ -128,6 +131,11 @@ void register_types(py::module &m) {
             return self.index();
         }).def_property_readonly("total_rows", [](const TimeseriesDescriptor& self) {
             return self.total_rows();
+        }).def_property_readonly("next_key", [](const TimeseriesDescriptor& self) -> std::optional<AtomKey> {
+            if (self.proto().has_next_key()){
+                return key_from_proto(self.proto().next_key());
+            }
+            return std::nullopt;
         });
 
     py::class_<PyTimestampRange>(m, "TimestampRange")
