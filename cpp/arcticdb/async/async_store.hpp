@@ -18,6 +18,10 @@
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
 
+namespace arcticdb::toolbox::apy{
+    class LibraryTool;
+}
+
 namespace arcticdb::async {
 
 std::pair<VariantKey, std::optional<Segment>> lookup_match_in_dedup_map(
@@ -395,6 +399,7 @@ folly::Future<SliceAndKey> async_write(
     }
 
 private:
+    friend class arcticdb::toolbox::apy::LibraryTool;
     std::shared_ptr<storage::Library> library_;
     std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_;
     const EncodingVersion encoding_version_;
