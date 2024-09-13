@@ -99,7 +99,7 @@ def assert_appended_data_does_not_overlap_with_storage(lib, symbol):
 
 def segments_have_compatible_schema(segment_list):
     """
-    Used to check dynamic schemas. Considers all numeric types for compatiple.
+    Used to check dynamic schemas. Considers all numeric types for compatible.
     """
     dtypes = {}
     for segment in segment_list:
