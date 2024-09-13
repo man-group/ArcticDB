@@ -32,7 +32,7 @@ def string_column_strategy(name):
     return hs_pd.column(name=name, elements=st.text(alphabet=string.ascii_letters))
 
 @st.composite
-def generate_dataframe(draw, column_list):
+def generate_single_dataframe(draw, column_list):
     column_infos = draw(st.lists(st.sampled_from(column_list), unique_by=lambda x: x.name, min_size=1))
     columns = [hs_pd.column(name=ci.name, dtype=ci.dtype) if ci.dtype != 'object' else string_column_strategy(ci.name) for ci in column_infos]
     if not IS_PANDAS_TWO:
@@ -47,7 +47,7 @@ def generate_dataframe(draw, column_list):
 
 @st.composite
 def generate_dataframes(draw, column_list):
-    return draw(st.lists(generate_dataframe(COLUMN_DESCRIPTIONS)))
+    return draw(st.lists(generate_single_dataframe(COLUMN_DESCRIPTIONS)))
 
 def assert_equal(left, right, dynamic=False):
     """
@@ -93,26 +93,14 @@ def merge_and_sort_segment_list(segment_list, int_columns_in_df=None):
     merged.sort_index(inplace=True)
     return merged
 
-def assert_staged_write_is_successful(lib, symbol, expected_segments_list):
-    lib.sort_and_finalize_staged_data(symbol)
-    arctic_data = lib.read(symbol).data
-    int_columns_in_df = [col_name for col_name in arctic_data if is_integer_dtype(arctic_data.dtypes[col_name])]
-    expected = merge_and_sort_segment_list(expected_segments_list, int_columns_in_df=int_columns_in_df)
-    assert_equal(arctic_data, expected)
-
-def get_symbol(lib, symbol):
-    # When https://github.com/man-group/ArcticDB/pull/1798 this should used the symbol list as it
-    # will allow to add more preconditions and split the append case even more
-    try:
-        return lib.read(symbol).data, True
-    except NoSuchVersionException:
-        return pd.DataFrame(), False
-
 def assert_appended_data_does_not_overlap_with_storage(lib, symbol):
     with pytest.raises(UnsortedDataException) as exception_info:
         lib.sort_and_finalize_staged_data(symbol, mode=StagedDataFinalizeMethod.APPEND)
 
 def segments_have_compatible_schema(segment_list):
+    """
+    Used to check dynamic schemas. Considers all numeric types for compatiple.
+    """
     dtypes = {}
     for segment in segment_list:
         for col in segment:
@@ -143,7 +131,7 @@ def test_sort_merge_static_schema_write(lmdb_library, df_list):
     assert_equal(expected, data)
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
-@given(df_list=generate_dataframes(COLUMN_DESCRIPTIONS), initial_df=generate_dataframe(COLUMN_DESCRIPTIONS))
+@given(df_list=generate_dataframes(COLUMN_DESCRIPTIONS), initial_df=generate_single_dataframe(COLUMN_DESCRIPTIONS))
 def test_sort_merge_static_schema_append(lmdb_library, df_list, initial_df):
     lib = lmdb_library
     assume(len(initial_df) > 0 and not has_nat_in_index([initial_df]))
@@ -188,4 +176,32 @@ def test_sort_merge_dynamic_schema_write(lmdb_library_dynamic_schema, df_list):
     data = lib.read("sym").data
     int_columns_in_df = [col_name for col_name in data if is_integer_dtype(data.dtypes[col_name])]
     expected = merge_and_sort_segment_list(df_list, int_columns_in_df=int_columns_in_df)
+    assert_equal(expected, data)
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@given(df_list=generate_dataframes(COLUMN_DESCRIPTIONS), initial_df=generate_single_dataframe(COLUMN_DESCRIPTIONS))
+def test_sort_merge_dynamic_schema_append(lmdb_library_dynamic_schema, df_list, initial_df):
+    lib = lmdb_library_dynamic_schema
+    assume(len(initial_df) > 0 and not has_nat_in_index([initial_df]))
+    initial_df.sort_index(inplace=True)
+    lib.write("sym", initial_df)
+    for df in df_list:
+        lib.write("sym", df, staged=True, validate_index=False)
+    if len(df_list) == 0:
+        assert_cannot_finalize_without_staged_data(lib, "sym", StagedDataFinalizeMethod.APPEND)
+        return
+    if not segments_have_compatible_schema([initial_df, *df_list]):
+        assert_staged_columns_are_compatible(lib, "sym", StagedDataFinalizeMethod.APPEND)
+        return
+    if has_nat_in_index(df_list):
+        assert_nat_is_not_supported(lib, "sym", StagedDataFinalizeMethod.APPEND)
+        return
+    merged_staging = merge_and_sort_segment_list(df_list)
+    if initial_df.index[-1] > merged_staging.index[-1]:
+        assert_appended_data_does_not_overlap_with_storage(lib, "sym")
+        return
+    lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+    data = lib.read("sym").data
+    int_columns_in_df = [col_name for col_name in data if is_integer_dtype(data.dtypes[col_name])]
+    expected = merge_and_sort_segment_list([initial_df, *df_list], int_columns_in_df=int_columns_in_df)
     assert_equal(expected, data)
