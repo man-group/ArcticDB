@@ -903,7 +903,7 @@ TEST(VersionMap, CompactionUpdateCache) {
         version_map->write_version(store, key, std::nullopt);
     }
 
-    auto assert_keys_in_entry_and_store = [&store, &id](std::shared_ptr<VersionMapEntry> entry, int expected_version_keys, int expected_index_keys, int expected_tombstone_keys){
+    auto assert_keys_in_entry_and_store = [&store](std::shared_ptr<VersionMapEntry> entry, int expected_version_keys, int expected_index_keys, int expected_tombstone_keys){
         int present_version_keys = 0, present_index_keys = 0, present_tombstone_keys = 0;
         auto all_entry_keys = entry->keys_;
         if (entry->head_) all_entry_keys.push_back(entry->head_.value());
