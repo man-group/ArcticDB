@@ -140,7 +140,8 @@ void do_compact(
 
             const auto& segment = sk.segment(store);
             sorting::check<ErrorCode::E_UNSORTED_DATA>(
-                !validate_index || segment.descriptor().sorted() == SortedValue::ASCENDING,
+                !validate_index || segment.descriptor().sorted() == SortedValue::ASCENDING ||
+                    segment.descriptor().sorted() == SortedValue::UNKNOWN,
                 "Cannot compact unordered segment."
             );
 
