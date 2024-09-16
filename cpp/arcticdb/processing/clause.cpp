@@ -82,6 +82,9 @@ ProcessingUnit gather_entities(std::shared_ptr<ComponentManager> component_manag
                                std::vector<EntityId>&& entity_ids,
                                bool include_atom_keys,
                                bool include_initial_expected_get_calls) {
+    static std::atomic<int64_t> total_us{0};
+    static std::atomic<size_t> count{0};
+    auto start = std::chrono::steady_clock::now();
     ProcessingUnit res;
     res.set_segments(component_manager->get<std::shared_ptr<SegmentInMemory>>(entity_ids));
     res.set_row_ranges(component_manager->get<std::shared_ptr<RowRange>>(entity_ids));
@@ -98,6 +101,16 @@ ProcessingUnit gather_entities(std::shared_ptr<ComponentManager> component_manag
         }
         res.set_segment_initial_expected_get_calls(std::move(segment_initial_expected_get_calls));
     }
+    auto end = std::chrono::steady_clock::now();
+    auto us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+    auto old_total_us = total_us.fetch_add(us);
+    auto old_count = count.fetch_add(1);
+    if (old_count == 10000) {
+        log::schedule().debug("gather_entities average over {} calls: {}us", old_count, double(old_total_us) / double(old_count));
+    }
+    if (old_count == 10064) {
+        log::schedule().debug("gather_entities average over {} calls: {}us", old_count, double(old_total_us) / double(old_count));
+    }
     return res;
 }
 
@@ -109,6 +122,9 @@ ProcessingUnit gather_entities(std::shared_ptr<ComponentManager> component_manag
  * pushed into the component manager with the same ID.
  */
 std::vector<EntityId> push_entities(std::shared_ptr<ComponentManager> component_manager, ProcessingUnit&& proc) {
+    static std::atomic<int64_t> total_us{0};
+    static std::atomic<size_t> count{0};
+    auto start = std::chrono::steady_clock::now();
     std::optional<std::vector<EntityId>> res;
     if (proc.segments_.has_value()) {
         res = std::make_optional<std::vector<EntityId>>(component_manager->add(std::move(*proc.segments_)));
@@ -125,6 +141,16 @@ std::vector<EntityId> push_entities(std::shared_ptr<ComponentManager> component_
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(res.has_value(), "Unexpected empty result in push_entities");
     if (proc.bucket_.has_value()) {
         component_manager->add(std::vector<bucket_id>(res->size(), *proc.bucket_), res);
+    }
+    auto end = std::chrono::steady_clock::now();
+    auto us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+    auto old_total_us = total_us.fetch_add(us);
+    auto old_count = count.fetch_add(1);
+    if (old_count == 640000) {
+        log::schedule().debug("push_entities average over {} calls: {}us", old_count, double(old_total_us) / double(old_count));
+    }
+    if (old_count == 640063) {
+        log::schedule().debug("push_entities average over {} calls: {}us", count.load(), double(total_us.load()) / double(count.load()));
     }
     return *res;
 }

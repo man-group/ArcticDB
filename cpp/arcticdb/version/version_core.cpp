@@ -515,6 +515,7 @@ std::vector<EntityId> process_clauses(
     // Used to make sure each entity is only added into the component manager once
     auto entity_added_mtx = std::make_shared<std::vector<std::mutex>>(segment_and_slice_futures.size());
     auto entity_added = std::make_shared<std::vector<bool>>(segment_and_slice_futures.size(), false);
+    auto entity_adding_time = std::make_shared<std::vector<int64_t>>(segment_and_slice_futures.size(), 0);
     std::vector<folly::Future<std::vector<EntityId>>> futures;
     bool first_clause{true};
     // Reverse the order of clauses and iterate through them backwards so that the erase is efficient
@@ -534,12 +535,14 @@ std::vector<EntityId> process_clauses(
                                     segment_proc_unit_counts,
                                     entity_added_mtx,
                                     entity_added,
+                                    entity_adding_time,
                                     clauses,
                                     entity_ids = std::move(entity_ids)](std::vector<pipelines::SegmentAndSlice>&& segment_and_slices) mutable {
                             for (auto&& [idx, segment_and_slice]: folly::enumerate(segment_and_slices)) {
                                 auto entity_id = entity_ids[idx];
                                 std::lock_guard<std::mutex> lock((*entity_added_mtx)[entity_id]);
                                 if (!(*entity_added)[entity_id]) {
+                                    auto start = std::chrono::steady_clock::now();
                                     component_manager->add(
                                             std::make_shared<SegmentInMemory>(std::move(segment_and_slice.segment_in_memory_)),
                                             entity_id, (*segment_proc_unit_counts)[entity_id]);
@@ -553,6 +556,9 @@ std::vector<EntityId> process_clauses(
                                             std::make_shared<AtomKey>(std::move(segment_and_slice.ranges_and_key_.key_)),
                                             entity_id);
                                     (*entity_added)[entity_id] = true;
+                                    auto end = std::chrono::steady_clock::now();
+                                    auto us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+                                    (*entity_adding_time)[entity_id] = us;
                                 }
                             }
                             return async::MemSegmentProcessingTask(*clauses, std::move(entity_ids))();
@@ -577,6 +583,9 @@ std::vector<EntityId> process_clauses(
             clauses->erase(clauses->end() - 1);
         }
     }
+    auto total_us = std::accumulate(entity_adding_time->begin(), entity_adding_time->end(), 0LL);
+    auto count = entity_adding_time->size();
+    log::schedule().debug("first entity push average over {} calls: {}us", count, double(total_us) / double(count));
     return flatten_entities(std::move(entity_ids_vec));
 }
 
@@ -717,7 +726,11 @@ std::vector<SliceAndKey> read_and_process(
                                                 std::move(segment_and_slice_futures),
                                                 std::move(processing_unit_indexes),
                                                 std::make_shared<std::vector<std::shared_ptr<Clause>>>(read_query.clauses_));
+    auto start = std::chrono::steady_clock::now();
     auto proc = gather_entities(component_manager, std::move(processed_entity_ids));
+    auto end = std::chrono::steady_clock::now();
+    auto us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+    log::schedule().debug("Final gather_entities call: {}us", us);
 
     if (std::any_of(read_query.clauses_.begin(), read_query.clauses_.end(), [](const std::shared_ptr<Clause>& clause) {
         return clause->clause_info().modifies_output_descriptor_;
