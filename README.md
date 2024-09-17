@@ -5,7 +5,9 @@
 ---
 
 <p align="center">
-<img src="https://raw.githubusercontent.com/man-group/ArcticDB/master/static/ArcticDBTerminal.gif" width="100%">
+  <a href="https://www.youtube.com/watch?v=5_AjD7aVEEM">
+    <img src="https://github.com/user-attachments/assets/f3b7afa1-98f3-486c-86b0-c0f413d8cd3a" alt="Options data in ArcticDB" width="66%">
+  </a>
 </p>
 
 ---
