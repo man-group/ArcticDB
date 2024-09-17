@@ -96,7 +96,7 @@ void do_merge(
                                 // stream descriptor in the aggregator.
                                 if constexpr (merged_type_info::data_type == row_type_info::data_type) {
                                     rb.set_scalar_by_name(name, opt_v.value(), merged_type_info::data_type);
-                                } else if constexpr (std::is_convertible_v<decltype(*opt_v), merged_type_info::RawType>) {
+                                } else if constexpr (std::is_convertible_v<decltype(*opt_v), typename merged_type_info::RawType>) {
                                     rb.set_scalar_by_name(name, static_cast<merged_type_info::RawType>(*opt_v), merged_type_info::data_type);
                                 } else {
                                     schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>(
