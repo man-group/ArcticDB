@@ -448,7 +448,7 @@ class TestStreamDescriptorMismatchOnFinalizeAppend:
         assert "INT32" in str(exception_info.value)
         assert "INT64" in str(exception_info.value)
  
-    def cannot_promote_input_type(self, lmdb_library):
+    def test_cannot_promote_input_type(self, lmdb_library):
         lib = lmdb_library
         self.init_symbol(lib, "sym")
         
