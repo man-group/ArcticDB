@@ -88,21 +88,21 @@ void do_merge(
                             rb.set_scalar_by_name(name, opt_v.value(), row_field_descriptor_tag.data_type());
                         } else {
                             const TypeDescriptor& final_type = agg.descriptor().field(field_name_to_index.find(name)->second).type();
-                            final_type.visit_tag([&](auto final_type_tag) {
-                                constexpr TypeDescriptor final_type_desc = final_type_tag.type_descriptor();
-                                constexpr TypeDescriptor row_type_desc = row_field_descriptor_tag.type_descriptor();
-                                using FinalValueType = std::decay_t<decltype(final_type_tag)>::DataTypeTag::raw_type;
-                                // At this point it's ensured that all staged descriptors are either the same or are convertible
-                                // to the stream descriptor in the aggregator.
-                                if constexpr (final_type_desc == row_type_desc) {
-                                    rb.set_scalar_by_name(name, opt_v.value(), final_type_tag.data_type());
-                                } else if constexpr (std::is_convertible_v<decltype(*opt_v), FinalValueType>) {
-                                    rb.set_scalar_by_name(name, static_cast<FinalValueType>(*opt_v), final_type_tag.data_type());
+                            details::visit_type(final_type.data_type(), [&](auto merged_descriptor_type) {
+                                using merged_type_info = ScalarTypeInfo<decltype(merged_descriptor_type)>;
+                                using row_type_info = ScalarTypeInfo<typename decltype(row_field_descriptor_tag)::DataTypeTag>;
+                                // At this point all staged descriptors were merged using merge_descritpros and it
+                                // ensured that all staged descriptors are either the same or are convertible to the
+                                // stream descriptor in the aggregator.
+                                if constexpr (merged_type_info::data_type == row_type_info::data_type) {
+                                    rb.set_scalar_by_name(name, opt_v.value(), merged_type_info::data_type);
+                                } else if constexpr (std::is_convertible_v<decltype(*opt_v), merged_type_info::RawType>) {
+                                    rb.set_scalar_by_name(name, static_cast<merged_type_info::RawType>(*opt_v), merged_type_info::data_type);
                                 } else {
                                     schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>(
                                         "Cannot convert {} to {}",
-                                        row_field_descriptor_tag.type_descriptor(),
-                                        final_type_tag.type_descriptor()
+                                        merged_type_info::TDT::type_descriptor(),
+                                        row_type_info::TDT::type_descriptor()
                                     );
                                 }
                             });
