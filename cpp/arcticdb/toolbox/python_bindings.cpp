@@ -83,7 +83,8 @@ void register_bindings(py::module &m) {
             .def("delete_bucket", &S3StorageTool::delete_bucket)
             .def("write_object", &S3StorageTool::set_object)
             .def("get_object", &S3StorageTool::get_object)
-            .def("get_prefix_info", &S3StorageTool::get_prefix_info)
+            .def("get_prefix_info", &S3StorageTool::get_prefix_info, "", py::arg("prefix") = std::string(), py::arg("key_type") = std::nullopt)
+            .def("get_prefix_detail", &S3StorageTool::get_prefix_detail, "", py::arg("prefix") = std::string(), py::arg("key_type") = std::nullopt, py::arg("bins") = std::nullopt)
             .def("get_object_size", &S3StorageTool::get_file_size)
             .def("delete_object", &S3StorageTool::delete_object);
 

@@ -115,13 +115,24 @@ std::vector<std::string> S3StorageTool::list_bucket(const std::string& prefix) {
     return objects;
 }
 
-std::pair<size_t, size_t> S3StorageTool::get_prefix_info(const std::string& prefix) {
+
+std::pair<size_t, size_t> S3StorageTool::get_prefix_info(const std::string& prefix, std::optional<KeyType> key_type) {
+    py::gil_scoped_release release_gil;
     size_t total_size = 0;
     size_t total_items = 0;
     Aws::S3::Model::ListObjectsV2Request objects_request;
     objects_request.WithBucket(bucket_name_.c_str());
-    if (!prefix.empty())
+
+    if (!prefix.empty() && key_type) {
+        std::string_view sanitized_prefix(prefix);
+        if(auto pos = sanitized_prefix.find_last_not_of('/'); pos != std::string::npos) {
+            sanitized_prefix.remove_suffix(sanitized_prefix.size() - pos - 1);
+        }
+        auto key_type_dir = s3_key_type_folder(sanitized_prefix, *key_type);
+        objects_request.SetPrefix(key_type_dir.c_str());
+    } else if(!prefix.empty()) {
         objects_request.SetPrefix(prefix.c_str());
+    }
 
     bool more;
     do {
@@ -141,14 +152,99 @@ std::pair<size_t, size_t> S3StorageTool::get_prefix_info(const std::string& pref
         else {
             const auto& error = list_objects_outcome.GetError();
             log::storage().error("Failed to iterate bucket to get sizes'{}' {}:{}",
-                                 bucket_name_,
-                                 error.GetExceptionName().c_str(),
-                                 error.GetMessage().c_str());
+                bucket_name_,
+                error.GetExceptionName().c_str(),
+                error.GetMessage().c_str());
             return {0, 0};
         }
     } while (more);
     return {total_size, total_items};
 }
+
+
+
+/**
+ * Return cummulative object-size, histogram of object sizes, and range of `LastModified`
+ * dates from ListObjectsV2 output over entire prefix or by KeyType.
+ * 
+ * @param prefix library path for ListObjectV2
+ * @param key_type ArctiDB KeyType, appended to library path.
+ * @param maybe_bins optional vector of upper-bounds (inclusive) for returned histogram.
+ * @return tuple of
+ *         - cummulative object size in bytes
+ *         - vector of histogram bin upper-bounds (inclusive)
+ *         - vector of object-counts per bin
+ *         - earliest LastModified time seen for an object, milliseconds since epoch
+ *         - last LastModified time seen for an object, milliseconds since epoch
+ */
+std::tuple<size_t, std::vector<size_t>, std::vector<size_t>, int64_t, int64_t> S3StorageTool::get_prefix_detail(
+    const std::string& prefix, std::optional<KeyType> key_type, std::optional<std::vector<size_t>> maybe_bins) {
+    py::gil_scoped_release release_gil;
+    size_t total_size = 0;
+    std::vector<size_t> bins;
+    if(maybe_bins) {
+        bins = *maybe_bins;
+    } else {
+        //      0, 1 KiB, 4 KiB,16 KiB,64 KiB,256KiB, 1 MiB, 4 MiB,16 MiB,64 MiB,256MiB,   1 GiB,    limit
+        bins = {0, 1<<10, 1<<12, 1<<14, 1<<16, 1<<18, 1<<20, 1<<22, 1<<24, 1<<26, 1<<28, 1 << 30, SIZE_MAX};
+    }
+    std::vector<size_t> counts(bins.size());
+    int64_t first_epoch = INT64_MAX;
+    int64_t last_epoch = 0;
+
+    Aws::S3::Model::ListObjectsV2Request objects_request;
+    objects_request.WithBucket(bucket_name_.c_str());
+
+    if (!prefix.empty() && key_type) {
+        std::string_view sanitized_prefix(prefix);
+        if(auto pos = sanitized_prefix.find_last_not_of('/'); pos != std::string::npos) {
+            sanitized_prefix.remove_suffix(sanitized_prefix.size() - pos - 1);
+        }
+        auto key_type_dir = s3_key_type_folder(sanitized_prefix, *key_type);
+        objects_request.SetPrefix(key_type_dir.c_str());
+    } else if(!prefix.empty()) {
+        objects_request.SetPrefix(prefix.c_str());
+    }
+
+    bool more;
+    do {
+        auto list_objects_outcome = s3_client_.ListObjectsV2(objects_request);
+
+        if (list_objects_outcome.IsSuccess()) {
+            const auto& object_list = list_objects_outcome.GetResult().GetContents();
+            for (auto const& s3_object : object_list) {
+                size_t size = s3_object.GetSize();
+                total_size += size;
+                for (size_t i=0; i < bins.size(); i++) {
+                    if (size <= bins[i]) {
+                        ++counts[i];
+                        break;
+                    }
+                }
+                int64_t millis = s3_object.GetLastModified().Millis();
+                if (millis < first_epoch) first_epoch = millis;
+                if (millis > last_epoch) last_epoch = millis;
+            }
+            more = list_objects_outcome.GetResult().GetIsTruncated();
+            if (more)
+                objects_request.SetContinuationToken(list_objects_outcome.GetResult().GetNextContinuationToken());
+
+        }
+        else {
+            const auto& error = list_objects_outcome.GetError();
+            log::storage().error("Failed to iterate bucket to get sizes'{}' {}:{}",
+                bucket_name_,
+                error.GetExceptionName().c_str(),
+                error.GetMessage().c_str());
+            return {0, std::vector<size_t>(), std::vector<size_t>(), 0, 0};
+        }
+    } while (more);
+
+    // if no results then return 0 for first_epoch for consistency
+    if (last_epoch == 0) first_epoch = 0;
+    return {total_size, bins, counts, first_epoch, last_epoch};
+}
+
 
 size_t S3StorageTool::get_file_size(const std::string& key) {
     Aws::S3::Model::HeadObjectRequest head_request;

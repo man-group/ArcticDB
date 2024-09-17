@@ -29,7 +29,11 @@ public:
     std::string get_object(const std::string& key);
 
     size_t get_file_size(const std::string& key);
-    std::pair<size_t, size_t> get_prefix_info(const std::string& prefix = std::string());
+
+    std::pair<size_t, size_t> get_prefix_info(const std::string& prefix = std::string(), std::optional<KeyType> kt = std::nullopt);
+
+    std::tuple<size_t, std::vector<size_t>, std::vector<size_t>, int64_t, int64_t> get_prefix_detail(
+        const std::string& prefix = std::string(),std::optional<KeyType> kt = std::nullopt, std::optional<std::vector<size_t>> maybe_bins = std::nullopt);
 
     void delete_object(const std::string& key);
 

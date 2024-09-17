@@ -19,7 +19,7 @@ import pytest
 import random
 import string
 from collections import namedtuple
-from datetime import datetime
+from datetime import datetime, timedelta
 from numpy.testing import assert_array_equal
 from pytz import timezone
 
@@ -2648,3 +2648,80 @@ def test_missing_first_version_key_batch(basic_store):
     vits = lib.batch_read(symbols, as_ofs=write_times)
     for x in range(num_items):
         assert_frame_equal(vits[symbols[x]].data, expected[x])
+
+
+@pytest.mark.parametrize("store_name", ["s3_version_store"])
+def test_get_prefix_info(store_name, request):
+    store = request.getfixturevalue(store_name)
+    df = get_sample_dataframe()
+    store.write("sym", df)
+    (s3tool, prefix) = store.get_s3_tool_and_prefix()
+    for kt in list(KeyType.__members__.values()):
+        (sz, cnt) = s3tool.get_prefix_info(prefix, kt)
+        assert sz >= 0
+        assert cnt >= 0
+
+
+@pytest.mark.parametrize("store_name", ["s3_version_store"])
+def test_get_prefix_detail(store_name, request):
+    store = request.getfixturevalue(store_name)
+    df = get_sample_dataframe()
+    store.write("sym", df)
+    s3tool, prefix = store.get_s3_tool_and_prefix()
+
+    # single object key types
+    for kt in [KeyType.VERSION_REF, KeyType.VERSION, KeyType.TABLE_INDEX, KeyType.TABLE_DATA, KeyType.SYMBOL_LIST]:
+        sz, bounds, counts, first, last = s3tool.get_prefix_detail(prefix, kt)
+        assert sz > 0
+        assert bounds == [
+            0,
+            1024,
+            4096,
+            16384,
+            65536,
+            262144,
+            1048576,
+            4194304,
+            16777216,
+            67108864,
+            268435456,
+            1073741824,
+            18446744073709551615,
+        ]
+        assert len(bounds) == len(counts)
+        assert sum(counts) == 1
+        assert last == first
+        assert datetime.fromtimestamp(first / 1000) > (datetime.now() - timedelta(minutes=1))
+        assert datetime.fromtimestamp(first / 1000) < (datetime.now() + timedelta(minutes=1))
+
+    # some empty key types
+    for kt in [KeyType.STREAM_GROUP, KeyType.VERSION_JOURNAL, KeyType.GENERATION, KeyType.SNAPSHOT]:
+        sz, bounds, counts, first, last = s3tool.get_prefix_detail(prefix, kt)
+        assert sz == 0
+        assert sum(counts) == 0
+        assert first == 0
+        assert last == 0
+
+    # across all keytypes
+    sz, bounds, counts, first, last = s3tool.get_prefix_detail(prefix)
+    assert sz > 50_000 and sz < 100_000
+    assert sum(counts) == 5
+    assert last >= first
+    assert datetime.fromtimestamp(first / 1000) > (datetime.now() - timedelta(minutes=1))
+    assert datetime.fromtimestamp(first / 1000) < (datetime.now() + timedelta(minutes=1))
+
+
+@pytest.mark.parametrize("store_name", ["s3_version_store"])
+def test_get_prefix_detail_custom_bounds(store_name, request):
+    store = request.getfixturevalue(store_name)
+    df = get_sample_dataframe()
+    store.write("sym", df)
+    s3tool, prefix = store.get_s3_tool_and_prefix()
+
+    sz, bounds, counts, first, last = s3tool.get_prefix_detail(prefix, KeyType.VERSION, [0, 1, 1000, 10_000])
+    assert sz > 0
+    assert bounds == [0, 1, 1000, 10_000]
+    assert counts == [0, 0, 1, 0]
+    assert last == first
+    assert datetime.fromtimestamp(first / 1000) > (datetime.now() - timedelta(minutes=1))
+    assert datetime.fromtimestamp(first / 1000) < (datetime.now() + timedelta(minutes=1))
