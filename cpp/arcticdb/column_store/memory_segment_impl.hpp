@@ -788,6 +788,7 @@ public:
                                                        const std::vector<uint64_t>& segment_counts) const;
 
     std::vector<std::shared_ptr<SegmentInMemoryImpl>> split(size_t rows) const;
+    void drop_empty_columns();
 
 private:
     ssize_t row_id_ = -1;

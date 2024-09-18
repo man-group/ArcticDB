@@ -1494,26 +1494,19 @@ VersionedItem sort_merge_impl(
                     slices.emplace_back(std::move(slice));
                 },
                 DynamicSchema{*pipeline_context->staged_descriptor_, index},
-                [pipeline_context=pipeline_context, &fut_vec, &store](SegmentInMemory &&segment) {
+                [pipeline_context, &fut_vec, &store](SegmentInMemory &&segment) {
+                    StreamDescriptor only_non_empty_cols;
                     const auto local_index_start = TimeseriesIndex::start_value_for_segment(segment);
                     const auto local_index_end = TimeseriesIndex::end_value_for_segment(segment);
-                    for (const std::shared_ptr<Column>& col : segment.columns()) {
-                        if (col->row_count() == 0) {
-                            col->default_initialize_rows(0, segment.row_count(), true);
-                        }
-                    }
                     stream::StreamSink::PartialKey
                     pk{KeyType::TABLE_DATA, pipeline_context->version_id_, pipeline_context->stream_id_, local_index_start, local_index_end};
                     fut_vec.emplace_back(store->write(pk, std::move(segment)));
                 }};
 
             for(auto sk = segments.begin(); sk != segments.end(); ++sk) {
-                aggregator.add_segment(
-                    sk->release_segment(store),
-                    sk->slice(),
-                    options.convert_int_to_float_);
-
-                sk->unset_segment();
+                SegmentInMemory segment = sk->release_segment(store);
+                segment.drop_empty_columns();
+                aggregator.add_segment(std::move(segment), sk->slice(), options.convert_int_to_float_);
             }
             aggregator.commit();
             pipeline_context->desc_->set_sorted(deduce_sorted(previous_sorted_value.value_or(SortedValue::ASCENDING), SortedValue::ASCENDING));

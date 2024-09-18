@@ -119,16 +119,14 @@ public:
         impl_->init_column_map();
     }
 
-    template<class T, template<class> class Tensor, std::enable_if_t<
-            std::is_integral_v<T> || std::is_floating_point_v<T>,
-            int> = 0>
+    template<class T, template<class> class Tensor>
+    requires std::integral<T> || std::floating_point<T>
     void set_array(position_t pos, Tensor<T> &val) {
         impl_->set_array(pos, val);
     }
 
-    template<class T, std::enable_if_t<
-        std::is_integral_v<T> || std::is_floating_point_v<T>,
-        int> = 0>
+    template<class T>
+    requires std::integral<T> || std::floating_point<T>
     void set_array(position_t pos, py::array_t<T>& val) {
         impl_->set_array(pos, val);
     }
@@ -253,12 +251,14 @@ public:
         impl_->sparsify();
     }
 
-    template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
+    template<class T>
+    requires std::integral<T> || std::floating_point<T>
     void set_external_block(position_t idx, T *val, size_t size) {
         impl_->set_external_block(idx, val, size);
     }
 
-    template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
+    template<class T>
+    requires std::integral<T> || std::floating_point<T>
     void set_sparse_block(position_t idx, T *val, size_t rows_to_write) {
         impl_->set_sparse_block(idx, val, rows_to_write);
     }
@@ -460,6 +460,10 @@ public:
             output.emplace_back(SegmentInMemory{impl});
 
         return output;
+    }
+
+    void drop_empty_columns() {
+        impl_->drop_empty_columns();
     }
 
 private:
