@@ -1,14 +1,15 @@
 <p align="center">
-<img src="https://github.com/man-group/ArcticDB/raw/master/static/ArcticDBCropped.png" width="40%">
+<img src="https://github.com/man-group/ArcticDB/raw/master/static/ArcticDBCropped.png" width="33%">
 </p>
 
 ---
 
-<p align="center">
+<div align="center">
+  <p><b>Three minute ArcticDB demo from PyQuantNews</b></p>
   <a href="https://www.youtube.com/watch?v=5_AjD7aVEEM">
-    <img src="https://github.com/user-attachments/assets/f3b7afa1-98f3-486c-86b0-c0f413d8cd3a" alt="Options data in ArcticDB" width="66%">
+    <img src="https://github.com/user-attachments/assets/f3b7afa1-98f3-486c-86b0-c0f413d8cd3a" alt="Options data in ArcticDB" width="33%">
   </a>
-</p>
+</div>
 
 ---
 <p align="center">
