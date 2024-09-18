@@ -39,7 +39,7 @@ inline auto object_path(std::string_view folder, const VariantKey& key) {
     return fmt::format("{}/{}", folder, object_name_from_key(key));
 }
 
-inline auto key_type_folder(const std::string& root_folder, KeyType key_type) {
+inline auto key_type_folder(std::string_view root_folder, KeyType key_type) {
     return fmt::format("{}/{}", root_folder, key_type_long_name(key_type));
 }
 

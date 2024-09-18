@@ -128,7 +128,7 @@ std::pair<size_t, size_t> S3StorageTool::get_prefix_info(const std::string& pref
         if(auto pos = sanitized_prefix.find_last_not_of('/'); pos != std::string::npos) {
             sanitized_prefix.remove_suffix(sanitized_prefix.size() - pos - 1);
         }
-        auto key_type_dir = s3_key_type_folder(sanitized_prefix, *key_type);
+        auto key_type_dir = key_type_folder(sanitized_prefix, *key_type);
         objects_request.SetPrefix(key_type_dir.c_str());
     } else if(!prefix.empty()) {
         objects_request.SetPrefix(prefix.c_str());
@@ -200,7 +200,7 @@ std::tuple<size_t, std::vector<size_t>, std::vector<size_t>, int64_t, int64_t> S
         if(auto pos = sanitized_prefix.find_last_not_of('/'); pos != std::string::npos) {
             sanitized_prefix.remove_suffix(sanitized_prefix.size() - pos - 1);
         }
-        auto key_type_dir = s3_key_type_folder(sanitized_prefix, *key_type);
+        auto key_type_dir = key_type_folder(sanitized_prefix, *key_type);
         objects_request.SetPrefix(key_type_dir.c_str());
     } else if(!prefix.empty()) {
         objects_request.SetPrefix(prefix.c_str());
