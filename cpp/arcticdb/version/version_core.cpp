@@ -1456,6 +1456,14 @@ VersionedItem sort_merge_impl(
         "Finalizing staged data is not allowed with empty staging area"
     );
 
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+        write_options.dynamic_schema || pipeline_context->staged_descriptor_->field_count() < write_options.column_group_size,
+        "Sorting and finalizing staged data is not implemented in the case when column slicing would appear. The "
+        "input DataFrame has {} fields which is more than the column group size ({}) set in the library options",
+        pipeline_context->staged_descriptor_->field_count(),
+        write_options.column_group_size
+    );
+
     std::vector<FrameSlice> slices;
     std::vector<folly::Future<VariantKey>> fut_vec;
     auto index = stream::index_type_from_descriptor(pipeline_context->descriptor());
