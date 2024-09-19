@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.test import assert_frame_equal, config_context
 import pytest
 from arcticdb_ext.storage import KeyType
 from arcticdb.version_store.library import StagedDataFinalizeMethod
@@ -618,26 +618,26 @@ def test_update_symbol_list(lmdb_library):
 
 class TestSlicing:
     def test_long_append_segment(self, lmdb_library):
-        set_config_int('Merge.SegmentSize', 5)
-        lib = lmdb_library
-        df_0 = pd.DataFrame({"col_0": [1, 2, 3]}, index=pd.date_range("2024-01-01", "2024-01-03"))
-        lib.write("sym", df_0)
+        with config_context('Merge.SegmentSize', 5):
+            lib = lmdb_library
+            df_0 = pd.DataFrame({"col_0": [1, 2, 3]}, index=pd.date_range("2024-01-01", "2024-01-03"))
+            lib.write("sym", df_0)
 
-        index = pd.date_range("2024-01-05", "2024-01-15")
-        df_1 = pd.DataFrame({"col_0": range(0, len(index))}, index=index)
-        lib.write("sym", df_1, staged=True)
-        lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+            index = pd.date_range("2024-01-05", "2024-01-15")
+            df_1 = pd.DataFrame({"col_0": range(0, len(index))}, index=index)
+            lib.write("sym", df_1, staged=True)
+            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
     
-        assert_frame_equal(lib.read("sym").data, pd.concat([df_0, df_1]))
+            assert_frame_equal(lib.read("sym").data, pd.concat([df_0, df_1]))
 
     def test_long_write_segment(self, lmdb_library):
-        set_config_int('Merge.SegmentSize', 5)
-        lib = lmdb_library
-        index = pd.date_range("2024-01-05", "2024-01-15")
-        df = pd.DataFrame({"col_0": range(0, len(index))}, index=index)
-        lib.write("sym", df, staged=True)
-        lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.WRITE)
-        assert_frame_equal(lib.read("sym").data, df)
+        with config_context('Merge.SegmentSize', 5):
+            lib = lmdb_library
+            index = pd.date_range("2024-01-05", "2024-01-15")
+            df = pd.DataFrame({"col_0": range(0, len(index))}, index=index)
+            lib.write("sym", df, staged=True)
+            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.WRITE)
+            assert_frame_equal(lib.read("sym").data, df)
 
     @pytest.mark.parametrize("mode", [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE])
     def test_wide_segment(self, lmdb_storage, lib_name, mode):
