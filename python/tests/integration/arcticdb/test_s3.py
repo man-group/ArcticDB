@@ -14,6 +14,9 @@ from arcticdb_ext.exceptions import StorageException
 from arcticdb_ext import set_config_string
 from arcticdb.util.test import create_df
 
+from arcticdb.storage_fixtures.s3 import MotoNfsBackedS3StorageFixtureFactory
+from arcticdb.storage_fixtures.s3 import MotoS3StorageFixtureFactory
+
 
 def test_s3_storage_failures(mock_s3_store_with_error_simulation):
     lib = mock_s3_store_with_error_simulation
@@ -66,3 +69,32 @@ def test_nfs_backed_s3_storage(lib_name, nfs_backed_s3_storage):
 
     for o in objects:
         assert re.match(bucketized_pattern, o.key), f"Object {o.key} does not match pattern {bucketized_pattern}"
+
+
+@pytest.fixture(scope="function", params=[MotoNfsBackedS3StorageFixtureFactory, MotoS3StorageFixtureFactory])
+def s3_storage_dots_in_path(request):
+    prefix = "some_path/.thing_with_a_dot/even.more.dots/end"
+
+    with request.param(
+            use_ssl=False,
+            ssl_test_support=False,
+            bucket_versioning=False,
+            default_prefix=prefix,
+            use_raw_prefix=True
+    ) as f:
+        with f.create_fixture() as g:
+            yield g
+
+
+def test_read_path_with_dot(lib_name, s3_storage_dots_in_path):
+    # Given
+    factory = s3_storage_dots_in_path.create_version_store_factory(lib_name)
+    lib = factory()
+
+    # When
+    expected = create_df()
+    lib.write("s", data=expected)
+
+    # Then - should be readable
+    res = lib.read("s").data
+    pd.testing.assert_frame_equal(res, expected)
