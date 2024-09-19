@@ -115,7 +115,6 @@ public:
             s3_storage.set_use_virtual_addressing(use_virtual_addressing_);
             s3_storage.set_ca_cert_path(ca_cert_path_);
             s3_storage.set_ca_cert_dir(ca_cert_dir_);
-            s3_storage.set_https(https_);
             s3_storage.set_ssl(ssl_);
 
             util::pack_to_any(s3_storage, *storage.mutable_config());
