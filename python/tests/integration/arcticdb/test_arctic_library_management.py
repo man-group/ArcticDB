@@ -302,7 +302,8 @@ def test_do_not_persist_s3_details(s3_storage):
     assert s3_storage.request_timeout == 0
     assert not s3_storage.ssl
     assert s3_storage.prefix.startswith("test")
-    assert not s3_storage.https
+    # HTTS is persisted on purpose to support backwards compatibility
+    # assert not s3_storage.https
     assert s3_storage.region == ""
     assert not s3_storage.use_virtual_addressing
 
