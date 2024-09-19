@@ -82,9 +82,7 @@ def test_get_library(arctic_client):
         dedup=True,
         rows_per_segment=10,
         columns_per_segment=10,
-        encoding_version=EncodingVersion.V1
-        if ac._encoding_version == EncodingVersion.V2
-        else EncodingVersion.V2,
+        encoding_version=EncodingVersion.V1 if ac._encoding_version == EncodingVersion.V2 else EncodingVersion.V2,
     )
     lib = ac.get_library(
         "pytest_test_lib_specified_options",
@@ -103,9 +101,7 @@ def test_get_library(arctic_client):
         )
     # Throws if library_options are provided but create_if_missing is False
     with pytest.raises(ArcticInvalidApiUsageException):
-        _ = ac.get_library(
-            "pytest_test_lib", create_if_missing=False, library_options=library_options
-        )
+        _ = ac.get_library("pytest_test_lib", create_if_missing=False, library_options=library_options)
 
 
 def test_create_library_enterprise_options_defaults(lmdb_storage):
@@ -121,9 +117,7 @@ def test_create_library_enterprise_options_set(lmdb_storage):
     ac = lmdb_storage.create_arctic()
     lib = ac.create_library(
         "lib",
-        enterprise_library_options=EnterpriseLibraryOptions(
-            replication=True, background_deletion=True
-        ),
+        enterprise_library_options=EnterpriseLibraryOptions(replication=True, background_deletion=True),
     )
 
     enterprise_options = lib.enterprise_options()
@@ -137,9 +131,7 @@ def test_create_library_enterprise_options_set(lmdb_storage):
 
 def test_create_library_replication_option_set_writes_logs(lmdb_storage):
     ac = lmdb_storage.create_arctic()
-    lib = ac.create_library(
-        "lib", enterprise_library_options=EnterpriseLibraryOptions(replication=True)
-    )
+    lib = ac.create_library("lib", enterprise_library_options=EnterpriseLibraryOptions(replication=True))
     lt = lib._nvs.library_tool()
     assert not lt.find_keys(KeyType.LOG)
 
@@ -181,9 +173,7 @@ def test_modify_options_affect_persistent_lib_config(lmdb_storage):
     lib = ac.create_library("lib")
 
     ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.REPLICATION, True)
-    ac.modify_library_option(
-        lib, ModifiableEnterpriseLibraryOption.BACKGROUND_DELETION, True
-    )
+    ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.BACKGROUND_DELETION, True)
 
     new_client = Arctic(ac.get_uri())
     new_lib = new_client["lib"]
@@ -265,9 +255,7 @@ def test_modify_options_background_deletion(lmdb_storage):
     lib = ac.create_library("lib")
     lt = lib._nvs.library_tool()
 
-    ac.modify_library_option(
-        lib, ModifiableEnterpriseLibraryOption.BACKGROUND_DELETION, True
-    )
+    ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.BACKGROUND_DELETION, True)
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
     lib.write("abc", df)
     lib.delete("abc")
@@ -404,9 +392,7 @@ def add_path_prefix(storage_fixture, prefix):
             end=2,
         )
 
-    if (
-        "azure" in storage_fixture.arctic_uri
-    ):  # azure connection string has a different format
+    if "azure" in storage_fixture.arctic_uri:  # azure connection string has a different format
         return f"{storage_fixture.arctic_uri};Path_prefix={prefix}"
     else:
         return f"{storage_fixture.arctic_uri}&path_prefix={prefix}"
@@ -453,9 +439,7 @@ def test_separation_between_libraries_with_prefixes(fixture, request):
     ac_mars.delete_library("pytest_test_lib_2")
 
 
-@pytest.mark.parametrize(
-    "fixture", ["s3_storage", pytest.param("azurite_storage", marks=AZURE_TESTS_MARK)]
-)
+@pytest.mark.parametrize("fixture", ["s3_storage", pytest.param("azurite_storage", marks=AZURE_TESTS_MARK)])
 def test_library_management_path_prefix(fixture, request):
     storage_fixture: StorageFixture = request.getfixturevalue(fixture)
     uri = add_path_prefix(storage_fixture, "hello/world")
