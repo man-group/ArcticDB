@@ -6,6 +6,8 @@ from arcticdb_ext.storage import KeyType
 from arcticdb.version_store.library import StagedDataFinalizeMethod
 from arcticdb.exceptions import UserInputException, SortingException, StreamDescriptorMismatch, InternalException, SchemaException
 from arcticdb.util._versions import IS_PANDAS_TWO
+from arcticdb_ext import set_config_int
+from arcticdb.options import LibraryOptions
 
 def test_merge_single_column(lmdb_library_static_dynamic):
     lib = lmdb_library_static_dynamic
@@ -616,11 +618,12 @@ def test_update_symbol_list(lmdb_library):
 
 class TestSlicing:
     def test_long_append_segment(self, lmdb_library):
+        set_config_int('Merge.SegmentSize', 5)
         lib = lmdb_library
         df_0 = pd.DataFrame({"col_0": [1, 2, 3]}, index=pd.date_range("2024-01-01", "2024-01-03"))
         lib.write("sym", df_0)
 
-        index = pd.date_range("2024-01-05", "2024-01-05 00:05:00", freq="ms")
+        index = pd.date_range("2024-01-05", "2024-01-15")
         df_1 = pd.DataFrame({"col_0": range(0, len(index))}, index=index)
         lib.write("sym", df_1, staged=True)
         lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
@@ -628,21 +631,24 @@ class TestSlicing:
         assert_frame_equal(lib.read("sym").data, pd.concat([df_0, df_1]))
 
     def test_long_write_segment(self, lmdb_library):
+        set_config_int('Merge.SegmentSize', 5)
         lib = lmdb_library
-        index = pd.date_range("2024-01-05", "2024-01-05 00:05:00", freq="ms")
+        index = pd.date_range("2024-01-05", "2024-01-15")
         df = pd.DataFrame({"col_0": range(0, len(index))}, index=index)
         lib.write("sym", df, staged=True)
         lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.WRITE)
         assert_frame_equal(lib.read("sym").data, df)
 
     @pytest.mark.parametrize("mode", [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE])
-    def test_wide_segment(self, lmdb_library, mode):
-        lib = lmdb_library
-        df = pd.DataFrame({f"col_{i}": [i] for i in range(0, 250)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
+    def test_wide_segment(self, lmdb_storage, lib_name, mode):
+        columns_per_segment = 5
+        lib = lmdb_storage.create_arctic().create_library(lib_name, library_options=LibraryOptions(columns_per_segment=columns_per_segment))
+        df = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
         lib.write("sym", df, staged=True)
         with pytest.raises(UserInputException) as exception_info:
             lib.sort_and_finalize_staged_data("sym", mode=mode)
         assert "slicing" in str(exception_info.value)
         # Add one to account for the index column
-        assert "251" in str(exception_info.value)
+        assert "11" in str(exception_info.value)
         assert "column" in str(exception_info.value)
+        assert str(columns_per_segment) in str(exception_info.value)
