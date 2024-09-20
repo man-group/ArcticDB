@@ -163,36 +163,44 @@ inline ankerl::unordered_dense::set<AtomKey> recurse_index_keys(
     ankerl::unordered_dense::set<AtomKey> res;
     ankerl::unordered_dense::set<AtomKeyPacked> res_packed;
     for (const auto& index_key: keys) {
-        if (index_key.type() == KeyType::MULTI_KEY) {
-            // recurse_index_key includes the input key in the returned set, remove this here
-            auto sub_keys = recurse_index_key(store, index_key);
-            sub_keys.erase(index_key);
-            for (auto&& key: sub_keys) {
-                res.emplace(std::move(key));
-            }
-        } else if (index_key.type() == KeyType::TABLE_INDEX) {
-            KeySegment key_segment(store->read_sync(index_key, opts).second, SymbolStructure::SAME);
-            auto data_keys = key_segment.materialise();
-            util::variant_match(
+        try {
+            if (index_key.type() == KeyType::MULTI_KEY) {
+                // recurse_index_key includes the input key in the returned set, remove this here
+                auto sub_keys = recurse_index_key(store, index_key);
+                sub_keys.erase(index_key);
+                for (auto &&key : sub_keys) {
+                    res.emplace(std::move(key));
+                }
+            } else if (index_key.type() == KeyType::TABLE_INDEX) {
+                KeySegment key_segment(store->read_sync(index_key, opts).second, SymbolStructure::SAME);
+                auto data_keys = key_segment.materialise();
+                util::variant_match(
                     data_keys,
                     [&res, &keys](std::vector<AtomKey> &atom_keys) {
                         res.reserve(keys.size());
-                        for (auto &&key: atom_keys) {
+                        for (auto &&key : atom_keys) {
                             res.emplace(std::move(key));
                         }
                     },
                     [&res_packed, &keys](std::vector<AtomKeyPacked> &atom_keys_packed) {
                         res_packed.reserve(keys.size());
-                        for (auto &&key_packed: atom_keys_packed) {
+                        for (auto &&key_packed : atom_keys_packed) {
                             res_packed.emplace(std::move(key_packed));
                         }
                     }
-            );
-        } else {
-            internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
+                );
+            } else {
+                internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
                     "recurse_index_keys: expected index or multi-index key, received {}",
                     index_key.type()
-                    );
+                );
+            }
+        } catch (storage::KeyNotFoundException& e) {
+            if (opts.ignores_missing_key_) {
+                log::version().info("Missing key while recursing index key {}", e.keys());
+            } else {
+                throw storage::KeyNotFoundException(std::move(e.keys()));
+            }
         }
     }
     if (!res_packed.empty()) {
