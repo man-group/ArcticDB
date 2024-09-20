@@ -61,10 +61,7 @@
       "name": "windows",
       "hidden": true,
       "generator": "Ninja",
-      "environment": { "cmakepreset_expected_host_system": "Windows" },
-      "cacheVariables": {
-        "ARCTICDB_USE_PCH": "ON"
-      }
+      "environment": { "cmakepreset_expected_host_system": "Windows" }
     },
     {
       "name": "windows-cl-debug",
