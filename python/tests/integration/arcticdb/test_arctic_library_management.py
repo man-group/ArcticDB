@@ -306,6 +306,7 @@ def test_do_not_persist_s3_details(s3_storage):
     """We apply an in-memory overlay for these instead. In particular we should absolutely not persist credentials
     in the storage."""
 
+    assert s3_storage.arctic_uri.startswith("s3s://")
     ac = Arctic(s3_storage.arctic_uri)
     lib = ac.create_library("test")
     lib.write("sym", pd.DataFrame())
@@ -321,10 +322,10 @@ def test_do_not_persist_s3_details(s3_storage):
     assert s3_storage.request_timeout == 0
     assert not s3_storage.ssl
     assert s3_storage.prefix.startswith("test")
-    # HTTS is persisted on purpose to support backwards compatibility
-    # assert not s3_storage.https
     assert s3_storage.region == ""
     assert not s3_storage.use_virtual_addressing
+    # HTTS is persisted on purpose to support backwards compatibility
+    assert s3_storage.https
 
     assert "sym" in ac["test"].list_symbols()
 
