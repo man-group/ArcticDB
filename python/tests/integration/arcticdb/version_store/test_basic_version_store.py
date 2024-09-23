@@ -593,6 +593,7 @@ def test_range_index(basic_store, sym):
     assert_frame_equal(expected, vit.data)
 
 
+@pytest.mark.pipeline
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
 def test_date_range(basic_store, use_date_range_clause):
     initial_timestamp = pd.Timestamp("2019-01-01")
@@ -640,6 +641,7 @@ def test_date_range(basic_store, use_date_range_clause):
     assert data_closed[data_closed.columns[0]][-1] == end_offset
 
 
+@pytest.mark.pipeline
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
 def test_date_range_none(basic_store, use_date_range_clause):
     sym = "date_test2"
@@ -658,6 +660,7 @@ def test_date_range_none(basic_store, use_date_range_clause):
     assert len(data) == rows
 
 
+@pytest.mark.pipeline
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
 def test_date_range_start_equals_end(basic_store, use_date_range_clause):
     sym = "date_test2"
@@ -679,6 +682,7 @@ def test_date_range_start_equals_end(basic_store, use_date_range_clause):
     assert data[data.columns[0]][0] == start_offset
 
 
+@pytest.mark.pipeline
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
 def test_date_range_row_sliced(basic_store_tiny_segment, use_date_range_clause):
     lib = basic_store_tiny_segment
@@ -2222,6 +2226,7 @@ def test_batch_append_with_throw_exception(basic_store, three_col_df):
         )
 
 
+@pytest.mark.pipeline
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
 def test_batch_read_date_range(basic_store_tombstone_and_sync_passive, use_date_range_clause):
     lmdb_version_store = basic_store_tombstone_and_sync_passive
@@ -2286,7 +2291,7 @@ def test_batch_read_row_range(lmdb_version_store_v1, use_row_range_clause):
         qbs = []
         for row_range in row_ranges:
             q = QueryBuilder()
-            q = q._row_range(row_range)
+            q = q.row_range(row_range)
             qbs.append(q)
         result_dict = lib.batch_read(symbols, query_builder=qbs)
     else:

@@ -1535,14 +1535,13 @@ class NativeVersionStore:
         check(date_range is None or row_range is None, "Date range and row range both specified")
         read_query = _PythonVersionStoreReadQuery()
 
-        if date_range is not None and query_builder is not None and not query_builder.is_resample():
+        if date_range is not None and query_builder is not None:
             query_builder.prepend(QueryBuilder().date_range(date_range))
 
         if row_range is not None and query_builder is not None:
-            query_builder.prepend(QueryBuilder()._row_range(row_range))
+            query_builder.prepend(QueryBuilder().row_range(row_range))
 
-        if query_builder:
-            query_builder.set_date_range(date_range)
+        if query_builder is not None:
             read_query.add_clauses(query_builder.clauses)
 
         if row_range is not None:
@@ -1606,7 +1605,7 @@ class NativeVersionStore:
             if columns is not None:
                 these_columns = columns[idx]
             if query_builder is not None:
-                query = query_builder if isinstance(query_builder, QueryBuilder) else query_builder[idx]
+                query = copy.deepcopy(query_builder) if isinstance(query_builder, QueryBuilder) else query_builder[idx]
 
             read_query = self._get_read_query(
                 date_range=date_range,
@@ -1760,7 +1759,7 @@ class NativeVersionStore:
         implement_read_index = kwargs.get("implement_read_index", False)
         columns = self._resolve_empty_columns(columns, implement_read_index)
         q = QueryBuilder()
-        q = q._head(n)
+        q = q.head(n)
         version_query, read_options, read_query = self._get_queries(
             as_of=as_of, date_range=None, row_range=None, columns=columns, query_builder=q, **kwargs
         )
@@ -1793,7 +1792,7 @@ class NativeVersionStore:
         implement_read_index = kwargs.get("implement_read_index", False)
         columns = self._resolve_empty_columns(columns, implement_read_index)
         q = QueryBuilder()
-        q = q._tail(n)
+        q = q.tail(n)
         version_query, read_options, read_query = self._get_queries(
             as_of=as_of, date_range=None, row_range=None, columns=columns, query_builder=q, **kwargs
         )
