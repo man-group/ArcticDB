@@ -258,8 +258,10 @@ set(arcticdb_srcs
         processing/processing_unit.hpp
         processing/bucketizer.hpp
         processing/clause.hpp
+        processing/clause_utils.hpp
         processing/expression_context.hpp
         processing/expression_node.hpp
+        processing/query_planner.hpp
         processing/sorted_aggregation.hpp
         processing/unsorted_aggregation.hpp
         storage/constants.hpp
@@ -434,6 +436,7 @@ set(arcticdb_srcs
         processing/processing_unit.cpp
         processing/aggregation_utils.cpp
         processing/clause.cpp
+        processing/clause_utils.cpp
         processing/component_manager.cpp
         processing/expression_node.cpp
         processing/operation_dispatch.cpp
@@ -449,6 +452,7 @@ set(arcticdb_srcs
         processing/operation_dispatch_binary_operator_minus.cpp
         processing/operation_dispatch_binary_operator_times.cpp
         processing/operation_dispatch_binary_operator_divide.cpp
+        processing/query_planner.cpp
         processing/sorted_aggregation.cpp
         processing/unsorted_aggregation.cpp
         python/python_to_tensor_frame.cpp
@@ -875,33 +879,33 @@ if(${TEST})
     python_utils_dump_vars_if_enabled("Python for test compilation")
 
     set(unit_test_srcs
-#            async/test/test_async.cpp
-#            codec/test/test_codec.cpp
-#            codec/test/test_encode_field_collection.cpp
-#            codec/test/test_segment_header.cpp
-#            codec/test/test_encoded_field.cpp
-#            column_store/test/ingestion_stress_test.cpp
-#            column_store/test/test_column.cpp
-#            column_store/test/test_column_data_random_accessor.cpp
-#            column_store/test/test_index_filtering.cpp
-#            column_store/test/test_memory_segment.cpp
-#            entity/test/test_atom_key.cpp
-#            entity/test/test_key_serialization.cpp
-#            entity/test/test_metrics.cpp
-#            entity/test/test_ref_key.cpp
-#            entity/test/test_tensor.cpp
-#            log/test/test_log.cpp
-#            pipeline/test/test_container.hpp
-#            pipeline/test/test_pipeline.cpp
-#            pipeline/test/test_query.cpp
-#            util/test/test_regex.cpp
-#            processing/test/test_arithmetic_type_promotion.cpp
-#            processing/test/test_clause.cpp
-#            processing/test/test_component_manager.cpp
-#            processing/test/test_expression.cpp
-#            processing/test/test_filter_and_project_sparse.cpp
-#            processing/test/test_has_valid_type_promotion.cpp
-#            processing/test/test_operation_dispatch.cpp
+            async/test/test_async.cpp
+            codec/test/test_codec.cpp
+            codec/test/test_encode_field_collection.cpp
+            codec/test/test_segment_header.cpp
+            codec/test/test_encoded_field.cpp
+            column_store/test/ingestion_stress_test.cpp
+            column_store/test/test_column.cpp
+            column_store/test/test_column_data_random_accessor.cpp
+            column_store/test/test_index_filtering.cpp
+            column_store/test/test_memory_segment.cpp
+            entity/test/test_atom_key.cpp
+            entity/test/test_key_serialization.cpp
+            entity/test/test_metrics.cpp
+            entity/test/test_ref_key.cpp
+            entity/test/test_tensor.cpp
+            log/test/test_log.cpp
+            pipeline/test/test_container.hpp
+            pipeline/test/test_pipeline.cpp
+            pipeline/test/test_query.cpp
+            util/test/test_regex.cpp
+            processing/test/test_arithmetic_type_promotion.cpp
+            processing/test/test_clause.cpp
+            processing/test/test_component_manager.cpp
+            processing/test/test_expression.cpp
+            processing/test/test_filter_and_project_sparse.cpp
+            processing/test/test_has_valid_type_promotion.cpp
+            processing/test/test_operation_dispatch.cpp
             processing/test/test_resample.cpp
             processing/test/test_set_membership.cpp
             processing/test/test_signed_unsigned_comparison.cpp

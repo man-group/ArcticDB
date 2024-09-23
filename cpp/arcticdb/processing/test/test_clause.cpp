@@ -312,7 +312,7 @@ TEST(Clause, Sort) {
     using namespace arcticdb;
     auto component_manager = std::make_shared<ComponentManager>();
 
-    SortClause sort_clause("time");
+    SortClause sort_clause("time", size_t(0));
     sort_clause.set_component_manager(component_manager);
 
     auto seg = get_standard_timeseries_segment("sort");
@@ -410,8 +410,8 @@ TEST(Clause, Merge) {
     std::vector<EntityId> processed_ids = merge_clause.process(std::move(entity_ids));
     std::vector<std::vector<EntityId>> vec;
     vec.emplace_back(std::move(processed_ids));
-    auto repartitioned = merge_clause.repartition(std::move(vec));
-    auto res = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager, std::move(repartitioned->at(0)));
+    auto repartitioned = merge_clause.structure_for_processing(std::move(vec));
+    auto res = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager, std::move(repartitioned.at(0)));
     ASSERT_TRUE(res.segments_.has_value());
     ASSERT_EQ(res.segments_->size(), 1u);
     ASSERT_EQ(*res.segments_->at(0), seg);
