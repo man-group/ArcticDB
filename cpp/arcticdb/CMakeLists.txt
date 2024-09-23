@@ -258,8 +258,10 @@ set(arcticdb_srcs
         processing/processing_unit.hpp
         processing/bucketizer.hpp
         processing/clause.hpp
+        processing/clause_utils.hpp
         processing/expression_context.hpp
         processing/expression_node.hpp
+        processing/query_planner.hpp
         processing/sorted_aggregation.hpp
         processing/unsorted_aggregation.hpp
         storage/constants.hpp
@@ -434,6 +436,7 @@ set(arcticdb_srcs
         processing/processing_unit.cpp
         processing/aggregation_utils.cpp
         processing/clause.cpp
+        processing/clause_utils.cpp
         processing/component_manager.cpp
         processing/expression_node.cpp
         processing/operation_dispatch.cpp
@@ -449,6 +452,7 @@ set(arcticdb_srcs
         processing/operation_dispatch_binary_operator_minus.cpp
         processing/operation_dispatch_binary_operator_times.cpp
         processing/operation_dispatch_binary_operator_divide.cpp
+        processing/query_planner.cpp
         processing/sorted_aggregation.cpp
         processing/unsorted_aggregation.cpp
         python/python_to_tensor_frame.cpp

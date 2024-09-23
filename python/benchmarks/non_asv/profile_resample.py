@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from arcticdb import QueryBuilder, Arctic
+from arcticdb import QueryBuilder, Arctic, LibraryOptions
 from arcticdb.util.test import assert_frame_equal, random_strings_of_length
 
 rows_per_segment = 100_000
@@ -20,7 +20,84 @@ rng = np.random.default_rng()
 
 ac = Arctic("lmdb:///tmp/arcticdb")
 lib = ac.get_library("resample_profiling", create_if_missing=True)
+# lib = ac.get_library("bbg_profiling_big_segment", True, LibraryOptions(rows_per_segment=1_000_000))
 lib = lib._nvs
+bbg_sym = "BBG"
+
+
+def test_write_bbg_style_data():
+    lib.version_store.clear()
+    start_time = pd.Timestamp("2020-01-01T08:00:00")
+    num_days = 250
+    ticks_per_day = 24_000_000
+    half_ticks = ticks_per_day // 2
+    for day in range(num_days):
+        print(f"Day {day+1}/{num_days}: {start_time}")
+        index = pd.date_range(start_time, freq="ms", periods=ticks_per_day)
+        # Generate data that is half BID, then half ASK, then randomly permute for final data
+        tick_type_col = np.concatenate([np.repeat(np.array(["BID"]), half_ticks), np.repeat(np.array(["ASK"]), half_ticks)])
+        bid_col = np.concatenate([rng.random(half_ticks), np.repeat(np.array([np.nan]), half_ticks)])
+        ask_col = np.concatenate([np.repeat(np.array([np.nan]), half_ticks), rng.random(half_ticks)])
+        permutation = rng.permutation(ticks_per_day)
+        tick_type_col = tick_type_col[permutation]
+        bid_col = bid_col[permutation]
+        ask_col = ask_col[permutation]
+        df = pd.DataFrame({"tick type": tick_type_col, "bid": bid_col, "ask": ask_col}, index=index)
+        lib.append(bbg_sym, df)
+        start_time += pd.Timedelta(1, "day")
+
+
+def test_read_bbg_style_data():
+    start_time = pd.Timestamp("2020-01-01")
+    num_days = 125
+    end_time = start_time + pd.Timedelta(num_days, "days")
+    start = time.time()
+    # df = lib.read(bbg_sym, date_range=(start_time, end_time)).data
+    df = lib.read(bbg_sym).data
+    end = time.time()
+    print(f"Reading {len(df)} ticks took {end - start}")
+
+
+def test_filter_bbg_style_data():
+    start_time = pd.Timestamp("2020-01-01")
+    num_days = 125
+    end_time = start_time + pd.Timedelta(num_days, "days")
+    q = QueryBuilder()
+    q = q[q["tick type"] == "BID"]
+    start = time.time()
+    # df = lib.read(bbg_sym, date_range=(start_time, end_time), columns=["bid"], query_builder=q).data
+    df = lib.read(bbg_sym, columns=["bid"], query_builder=q).data
+    end = time.time()
+    print(f"Filtering to {len(df)} ticks took {end - start}")
+
+
+def test_resample_bbg_style_data():
+    start_time = pd.Timestamp("2020-01-01")
+    num_days = 125
+    end_time = start_time + pd.Timedelta(num_days, "days")
+    q = QueryBuilder()
+    freq = "min"
+    q = q.resample(freq).agg({"bid": "max"})
+    start = time.time()
+    # df = lib.read(bbg_sym, date_range=(start_time, end_time), query_builder=q).data
+    df = lib.read(bbg_sym, query_builder=q).data
+    end = time.time()
+    print(f"Resampling to {len(df)} {freq} took {end - start}")
+
+
+def test_filter_then_resample_bbg_style_data():
+    start_time = pd.Timestamp("2020-01-01")
+    num_days = 1
+    end_time = start_time + pd.Timedelta(num_days, "days")
+    q = QueryBuilder()
+    q = q[q["tick type"] == "BID"]
+    freq = "min"
+    q = q.resample(freq).agg({"bid": "max"})
+    start = time.time()
+    # df = lib.read(bbg_sym, date_range=(start_time, end_time), query_builder=q).data
+    df = lib.read(bbg_sym, query_builder=q).data
+    end = time.time()
+    print(f"Filtering then resampling to {len(df)} {freq} took {end - start}")
 
 
 @pytest.mark.parametrize("num_rows", [100_000, 1_000_000, 10_000_000, 100_000_000, 1_000_000_000])

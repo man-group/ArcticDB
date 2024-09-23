@@ -14,6 +14,9 @@ from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb_ext.version_store import NoSuchVersionException
 
 
+pytestmark = pytest.mark.pipeline
+
+
 df0 = pd.DataFrame(
     {"col_0": ["a", "b"], "col_1": [1, 2], "col_2": [6, 5]}, index=pd.date_range("2000-01-01", periods=2)
 )

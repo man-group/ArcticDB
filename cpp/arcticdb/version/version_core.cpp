@@ -531,8 +531,6 @@ std::vector<EntityId> process_clauses(
     auto slice_added = std::make_shared<std::vector<bool>>(segment_and_slice_futures.size(), false);
     std::vector<folly::Future<std::vector<EntityId>>> futures;
     bool first_clause{true};
-    // Reverse the order of clauses and iterate through them backwards so that the erase is efficient
-    std::reverse(clauses->begin(), clauses->end());
     while (!clauses->empty()) {
         for (auto&& entity_ids: entity_ids_vec) {
             if (first_clause) {
@@ -581,12 +579,19 @@ std::vector<EntityId> process_clauses(
         first_clause = false;
         entity_ids_vec = folly::collect(futures).get();
         futures.clear();
-        while (clauses->size() > 0 && !clauses->back()->clause_info().requires_repartition_) {
-            clauses->erase(clauses->end() - 1);
+        // Erase all the clauses we have already called process on
+        auto it = std::next(clauses->cbegin());
+        while (it != clauses->cend()) {
+            auto prev_it = std::prev(it);
+            if ((*prev_it)->clause_info().output_structure_ == (*it)->clause_info().input_structure_) {
+                ++it;
+            } else {
+                break;
+            }
         }
-        if (clauses->size() > 0 && clauses->back()->clause_info().requires_repartition_) {
-            entity_ids_vec = clauses->back()->repartition(std::move(entity_ids_vec)).value();
-            clauses->erase(clauses->end() - 1);
+        clauses->erase(clauses->cbegin(), it);
+        if (!clauses->empty()) {
+            entity_ids_vec = clauses->front()->structure_for_processing(std::move(entity_ids_vec));
         }
     }
     return flatten_entities(std::move(entity_ids_vec));
@@ -703,8 +708,7 @@ std::vector<SliceAndKey> read_and_process(
     const std::shared_ptr<Store>& store,
     const std::shared_ptr<PipelineContext>& pipeline_context,
     const ReadQuery& read_query,
-    const ReadOptions& read_options,
-    size_t start_from
+    const ReadOptions& read_options
     ) {
     auto component_manager = std::make_shared<ComponentManager>();
     ProcessingConfig processing_config{opt_false(read_options.dynamic_schema_), pipeline_context->rows_};
@@ -719,7 +723,7 @@ std::vector<SliceAndKey> read_and_process(
     // Each element of the vector corresponds to one processing unit containing the list of indexes in ranges_and_keys required for that processing unit
     // i.e. if the first processing unit needs ranges_and_keys[0] and ranges_and_keys[1], and the second needs ranges_and_keys[2] and ranges_and_keys[3]
     // then the structure will be {{0, 1}, {2, 3}}
-    std::vector<std::vector<size_t>> processing_unit_indexes = read_query.clauses_[0]->structure_for_processing(ranges_and_keys, start_from);
+    std::vector<std::vector<size_t>> processing_unit_indexes = read_query.clauses_[0]->structure_for_processing(ranges_and_keys);
 
     // Start reading as early as possible
     auto segment_and_slice_futures = store->batch_read_uncompressed(std::move(ranges_and_keys), columns_to_decode(pipeline_context));
@@ -1251,7 +1255,7 @@ void create_column_stats_impl(
             "Cannot create column stats on pickled data"
             );
 
-    auto segs = read_and_process(store, pipeline_context, read_query, read_options, 0u);
+    auto segs = read_and_process(store, pipeline_context, read_query, read_options);
     schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(!segs.empty(), "Cannot create column stats for nonexistent columns");
 
     // Convert SliceAndKey vector into SegmentInMemory vector
@@ -1358,7 +1362,7 @@ SegmentInMemory do_direct_read_or_process(
     if(!read_query.clauses_.empty()) {
         ARCTICDB_SAMPLE(RunPipelineAndOutput, 0)
         util::check_rte(!pipeline_context->is_pickled(),"Cannot filter pickled data");
-        auto segs = read_and_process(store, pipeline_context, read_query, read_options, 0u);
+        auto segs = read_and_process(store, pipeline_context, read_query, read_options);
         frame = prepare_output_frame(std::move(segs), pipeline_context, store, read_options, handler_data);
     } else {
         ARCTICDB_SAMPLE(MarkAndReadDirect, 0)
@@ -1504,7 +1508,7 @@ VersionedItem sort_merge_impl(
     auto index = stream::index_type_from_descriptor(pipeline_context->descriptor());
     util::variant_match(index,
         [&](const stream::TimeseriesIndex &timeseries_index) {
-            read_query.clauses_.emplace_back(std::make_shared<Clause>(SortClause{timeseries_index.name()}));
+            read_query.clauses_.emplace_back(std::make_shared<Clause>(SortClause{timeseries_index.name(), pipeline_context->incompletes_after()}));
             read_query.clauses_.emplace_back(std::make_shared<Clause>(RemoveColumnPartitioningClause{}));
             //const auto split_size = ConfigsMap::instance()->get_int("Split.RowCount", 10000);
             //read_query.clauses_.emplace_back(std::make_shared<Clause>(SplitClause{static_cast<size_t>(split_size)}));
@@ -1516,7 +1520,7 @@ VersionedItem sort_merge_impl(
                 pipeline_context->descriptor(),
                 write_options.dynamic_schema
             }));
-            auto segments = read_and_process(store, pipeline_context, read_query, ReadOptions{}, pipeline_context->incompletes_after());
+            auto segments = read_and_process(store, pipeline_context, read_query, ReadOptions{});
             if (options.append_ && update_info.previous_index_key_ && !segments.empty()) {
                 const timestamp last_index_on_disc = update_info.previous_index_key_->end_time() - 1;
                 const timestamp incomplete_start =
@@ -1746,8 +1750,8 @@ VersionedItem defragment_symbol_data_impl(
 
     util::variant_match(std::move(policies), [
         &fut_vec, &slices, &store, &options, &pre_defragmentation_info, segment_size=segment_size] (auto &&idx, auto &&schema) {
-        pre_defragmentation_info.read_query.clauses_.emplace_back(std::make_shared<Clause>(RemoveColumnPartitioningClause{}));
-        auto segments = read_and_process(store, pre_defragmentation_info.pipeline_context, pre_defragmentation_info.read_query, defragmentation_read_options_generator(options), pre_defragmentation_info.append_after.value());
+        pre_defragmentation_info.read_query.clauses_.emplace_back(std::make_shared<Clause>(RemoveColumnPartitioningClause{pre_defragmentation_info.append_after.value()}));
+        auto segments = read_and_process(store, pre_defragmentation_info.pipeline_context, pre_defragmentation_info.read_query, defragmentation_read_options_generator(options));
         using IndexType = std::remove_reference_t<decltype(idx)>;
         using SchemaType = std::remove_reference_t<decltype(schema)>;
         do_compact<IndexType, SchemaType, RowCountSegmentPolicy, DenseColumnPolicy>(

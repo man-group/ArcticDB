@@ -11,6 +11,7 @@ from hypothesis.extra.pytz import timezones as timezone_st
 import hypothesis.strategies as st
 import numpy as np
 import pandas as pd
+import pytest
 from pytz import timezone
 
 from arcticdb.version_store.processing import QueryBuilder
@@ -34,6 +35,9 @@ from arcticdb.util.hypothesis import (
     dataframe_strategy,
     column_strategy,
 )
+
+
+pytestmark = pytest.mark.pipeline
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked

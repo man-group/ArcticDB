@@ -20,6 +20,7 @@
 #include <arcticdb/processing/operation_types.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/processing/expression_context.hpp>
+#include <arcticdb/processing/query_planner.hpp>
 #include <arcticdb/pipeline/value_set.hpp>
 #include <arcticdb/python/adapt_read_dataframe.hpp>
 #include <arcticdb/version/schema_checks.hpp>
@@ -88,9 +89,6 @@ void declare_resample_clause(py::module& version) {
             .def("set_aggregations", [](ResampleClause<closed_boundary>& self,
                                         const std::unordered_map<std::string, std::variant<std::string, std::pair<std::string, std::string>>> aggregations) {
                 self.set_aggregations(python_util::named_aggregators_from_dict(aggregations));
-            })
-            .def("set_date_range", [](ResampleClause<closed_boundary>& self, timestamp date_range_start, timestamp date_range_end) {
-                self.set_date_range(date_range_start, date_range_end);
             })
             .def("__str__", &ResampleClause<closed_boundary>::to_string);
 }
@@ -318,8 +316,6 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                     ExpressionContext>())
             .def("__str__", &ProjectClause::to_string);
 
-    using GroupByClause = PartitionClause<arcticdb::grouping::HashingGroupers, arcticdb::grouping::ModuloBucketizer>;
-
     py::class_<GroupByClause, std::shared_ptr<GroupByClause>>(version, "GroupByClause")
             .def(py::init<std::string>())
             .def_property_readonly("grouping_column", [](const GroupByClause& self) {
@@ -375,26 +371,12 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                                 std::shared_ptr<ResampleClause<ResampleBoundary::RIGHT>>,
                                 std::shared_ptr<RowRangeClause>,
                                 std::shared_ptr<DateRangeClause>>> clauses) {
+                clauses = plan_query(std::move(clauses));
                 std::vector<std::shared_ptr<Clause>> _clauses;
+                self.needs_post_processing = false;
                 for (auto&& clause: clauses) {
                     util::variant_match(
                         clause,
-                        [&](std::shared_ptr<RowRangeClause> clause) {
-                            self.needs_post_processing = false;
-                            _clauses.emplace_back(std::make_shared<Clause>(*clause));
-                        },
-                        [&](std::shared_ptr<DateRangeClause> clause) {
-                            self.needs_post_processing = false;
-                            _clauses.emplace_back(std::make_shared<Clause>(*clause));
-                        },
-                        [&](std::shared_ptr<ResampleClause<ResampleBoundary::LEFT>> clause) {
-                            self.needs_post_processing = false;
-                            _clauses.emplace_back(std::make_shared<Clause>(*clause));
-                        },
-                        [&](std::shared_ptr<ResampleClause<ResampleBoundary::RIGHT>> clause) {
-                            self.needs_post_processing = false;
-                            _clauses.emplace_back(std::make_shared<Clause>(*clause));
-                        },
                         [&](auto&& clause) {_clauses.emplace_back(std::make_shared<Clause>(*clause));}
                     );
                 }

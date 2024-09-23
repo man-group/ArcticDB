@@ -14,6 +14,7 @@
 #include <arcticdb/processing/expression_context.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/entity/types.hpp>
+#include <arcticdb/processing/clause_utils.hpp>
 #include <arcticdb/processing/unsorted_aggregation.hpp>
 #include <arcticdb/processing/aggregation_interface.hpp>
 #include <arcticdb/processing/processing_unit.hpp>
@@ -38,50 +39,25 @@ namespace arcticdb {
 using RangesAndKey = pipelines::RangesAndKey;
 using SliceAndKey = pipelines::SliceAndKey;
 
-using NormMetaDescriptor = std::shared_ptr<arcticdb::proto::descriptors::NormalizationMetadata>;
-
-// Contains constant data about the clause identifiable at construction time
-struct ClauseInfo {
-    // Whether processing segments need to be split into new processing segments after this clause's process method has finished
-    bool requires_repartition_{false};
-    // Whether it makes sense to combine this clause with specifying which columns to view in a call to read or similar
-    bool can_combine_with_column_selection_{true};
-    // The names of the columns that are needed for this clause to make sense
-    // Could either be on disk, or columns created by earlier clauses in the processing pipeline
-    std::optional<std::unordered_set<std::string>> input_columns_{std::nullopt};
-    // The name of the index after this clause if it has been modified, std::nullopt otherwise
-    std::optional<std::string> new_index_{std::nullopt};
-    // Whether this clause modifies the output descriptor
-    bool modifies_output_descriptor_{false};
-};
-
-// Changes how the clause behaves based on information only available after it is constructed
-struct ProcessingConfig {
-    bool dynamic_schema_{false};
-    uint64_t total_rows_ = 0;
-};
-
 struct IClause {
     template<class Base>
     struct Interface : Base {
         // Reorders ranges_and_keys into the order they should be queued up to be read from storage.
         // Returns a vector where each element is a vector of indexes into ranges_and_keys representing the segments needed
         // for one ProcessingUnit.
-        // TODO #732: Factor out start_from as part of https://github.com/man-group/ArcticDB/issues/732
         [[nodiscard]] std::vector<std::vector<size_t>>
-        structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys,
-                                 size_t start_from) {
-            return folly::poly_call<0>(*this, ranges_and_keys, start_from);
+        structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys) {
+            return std::move(folly::poly_call<0>(*this, ranges_and_keys));
+        }
+
+        [[nodiscard]] std::vector<std::vector<EntityId>> structure_for_processing(
+                std::vector<std::vector<EntityId>>&& entity_ids_vec) {
+            return folly::poly_call<1>(*this, std::move(entity_ids_vec));
         }
 
         [[nodiscard]] std::vector<EntityId>
         process(std::vector<EntityId>&& entity_ids) const {
-            return folly::poly_call<1>(*this, std::move(entity_ids));
-        }
-
-        [[nodiscard]] std::optional<std::vector<std::vector<EntityId>>> repartition(
-                std::vector<std::vector<EntityId>>&& entity_ids_vec) const {
-            return folly::poly_call<2>(*this, std::move(entity_ids_vec));
+            return std::move(folly::poly_call<2>(*this, std::move(entity_ids)));
         }
 
         [[nodiscard]] const ClauseInfo& clause_info() const { return folly::poly_call<3>(*this); };
@@ -97,9 +73,9 @@ struct IClause {
 
     template<class T>
     using Members = folly::PolyMembers<
-            &T::structure_for_processing,
+            folly::sig<std::vector<std::vector<size_t>>(std::vector<RangesAndKey>&)>(&T::structure_for_processing),
+            folly::sig<std::vector<std::vector<EntityId>>(std::vector<std::vector<EntityId>>&&)>(&T::structure_for_processing),
             &T::process,
-            &T::repartition,
             &T::clause_info,
             &T::set_processing_config,
             &T::set_component_manager>;
@@ -107,60 +83,22 @@ struct IClause {
 
 using Clause = folly::Poly<IClause>;
 
-std::vector<std::vector<size_t>> structure_by_row_slice(std::vector<RangesAndKey>& ranges_and_keys, size_t start_from);
-
-std::vector<std::vector<size_t>> structure_by_column_slice(std::vector<RangesAndKey>& ranges_and_keys);
-
-std::vector<std::vector<size_t>> structure_all_together(std::vector<RangesAndKey>& ranges_and_keys);
-
-/*
- * On entry to a clause, construct ProcessingUnits from the input entity IDs. These will either be provided by the
- * structure_for_processing method for the first clause in the pipeline, or by the previous clause for all subsequent
- * clauses.
- */
-template<class... Args>
-ProcessingUnit gather_entities(ComponentManager& component_manager, std::vector<EntityId>&& entity_ids) {
-    ProcessingUnit res;
-    auto components = component_manager.get_entities<Args...>(entity_ids);
-    ([&]{
-        auto component = std::move(std::get<std::vector<Args>>(components));
-        if constexpr (std::is_same_v<Args, std::shared_ptr<SegmentInMemory>>) {
-            res.set_segments(std::move(component));
-        } else if constexpr (std::is_same_v<Args, std::shared_ptr<RowRange>>) {
-            res.set_row_ranges(std::move(component));
-        } else if constexpr (std::is_same_v<Args, std::shared_ptr<ColRange>>) {
-            res.set_col_ranges(std::move(component));
-        } else if constexpr (std::is_same_v<Args, std::shared_ptr<AtomKey>>) {
-            res.set_atom_keys(std::move(component));
-        } else if constexpr (std::is_same_v<Args, EntityFetchCount>) {
-            res.set_entity_fetch_count(std::move(component));
-        } else {
-            static_assert(sizeof(Args) == 0, "Unexpected component type provided in gather_entities");
-        }
-    }(), ...);
-    return res;
-}
-
-std::vector<EntityId> push_entities(ComponentManager& component_manager, ProcessingUnit&& proc, EntityFetchCount entity_fetch_count=1);
-
-std::vector<EntityId> flatten_entities(std::vector<std::vector<EntityId>>&& entity_ids_vec);
-
 struct PassthroughClause {
     ClauseInfo clause_info_;
+
     PassthroughClause() = default;
     ARCTICDB_MOVE_COPY_DEFAULT(PassthroughClause)
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
-            std::vector<RangesAndKey>& ranges_and_keys,
-            size_t start_from) {
-        return structure_by_row_slice(ranges_and_keys, start_from);
+            std::vector<RangesAndKey>& ranges_and_keys) {
+        return structure_by_row_slice(ranges_and_keys); // TODO: No structuring?
+    }
+
+    [[nodiscard]] std::vector<std::vector<EntityId>> structure_for_processing(std::vector<std::vector<EntityId>>&& entity_ids_vec) {
+        return entity_ids_vec; // TODO: structure by row slice?
     }
 
     [[nodiscard]] std::vector<EntityId> process(std::vector<EntityId>&& entity_ids) const;
-
-    [[nodiscard]] std::optional<std::vector<std::vector<EntityId>>> repartition(ARCTICDB_UNUSED std::vector<std::vector<EntityId>>&&) const {
-        return std::nullopt;
-    }
 
     [[nodiscard]] const ClauseInfo& clause_info() const {
         return clause_info_;
@@ -190,16 +128,15 @@ struct FilterClause {
     ARCTICDB_MOVE_COPY_DEFAULT(FilterClause)
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
-            std::vector<RangesAndKey>& ranges_and_keys,
-            size_t start_from) {
-        return structure_by_row_slice(ranges_and_keys, start_from);
+            std::vector<RangesAndKey>& ranges_and_keys) {
+        return structure_by_row_slice(ranges_and_keys);
+    }
+
+    [[nodiscard]] std::vector<std::vector<EntityId>> structure_for_processing(std::vector<std::vector<EntityId>>&& entity_ids_vec) {
+        return structure_by_row_slice(*component_manager_, std::move(entity_ids_vec));
     }
 
     [[nodiscard]] std::vector<EntityId> process(std::vector<EntityId>&& entity_ids) const;
-
-    [[nodiscard]] std::optional<std::vector<std::vector<EntityId>>> repartition(ARCTICDB_UNUSED std::vector<std::vector<EntityId>> &&) const {
-        return std::nullopt;
-    }
 
     [[nodiscard]] const ClauseInfo& clause_info() const {
         return clause_info_;
@@ -240,16 +177,15 @@ struct ProjectClause {
     ARCTICDB_MOVE_COPY_DEFAULT(ProjectClause)
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
-            std::vector<RangesAndKey>& ranges_and_keys,
-            size_t start_from) {
-        return structure_by_row_slice(ranges_and_keys, start_from);
+            std::vector<RangesAndKey>& ranges_and_keys) {
+        return structure_by_row_slice(ranges_and_keys);
+    }
+
+    [[nodiscard]] std::vector<std::vector<EntityId>> structure_for_processing(std::vector<std::vector<EntityId>>&& entity_ids_vec) {
+        return structure_by_row_slice(*component_manager_, std::move(entity_ids_vec));
     }
 
     [[nodiscard]] std::vector<EntityId> process(std::vector<EntityId>&& entity_ids) const;
-
-    [[nodiscard]] std::optional<std::vector<std::vector<EntityId>>> repartition(ARCTICDB_UNUSED std::vector<std::vector<EntityId>>&&) const {
-        return std::nullopt;
-    }
 
     [[nodiscard]] const ClauseInfo& clause_info() const {
         return clause_info_;
@@ -277,7 +213,6 @@ struct PartitionClause {
             processing_config_(),
             grouping_column_(grouping_column) {
         clause_info_.input_columns_ = {grouping_column_};
-        clause_info_.requires_repartition_ = true;
         clause_info_.modifies_output_descriptor_ = true;
     }
     PartitionClause() = delete;
@@ -285,9 +220,12 @@ struct PartitionClause {
     ARCTICDB_MOVE_COPY_DEFAULT(PartitionClause)
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
-            std::vector<RangesAndKey>& ranges_and_keys,
-            size_t start_from) {
-        return structure_by_row_slice(ranges_and_keys, start_from);
+            std::vector<RangesAndKey>& ranges_and_keys) {
+        return structure_by_row_slice(ranges_and_keys);
+    }
+
+    [[nodiscard]] std::vector<std::vector<EntityId>> structure_for_processing(std::vector<std::vector<EntityId>>&& entity_ids_vec) {
+        return structure_by_row_slice(*component_manager_, std::move(entity_ids_vec));
     }
 
     [[nodiscard]] std::vector<EntityId> process(std::vector<EntityId>&& entity_ids) const {
@@ -301,40 +239,10 @@ struct PartitionClause {
                 processing_config_.dynamic_schema_);
         std::vector<EntityId> output;
         for (auto &&partitioned_proc: partitioned_procs) {
-            // EntityFetchCount is 2, once for the repartition, and once for AggregationClause::process
-            std::vector<EntityId> proc_entity_ids = push_entities(*component_manager_, std::move(partitioned_proc), 2);
+            std::vector<EntityId> proc_entity_ids = push_entities(*component_manager_, std::move(partitioned_proc));
             output.insert(output.end(), proc_entity_ids.begin(), proc_entity_ids.end());
         }
         return output;
-    }
-
-    [[nodiscard]] std::optional<std::vector<std::vector<EntityId>>> repartition(std::vector<std::vector<EntityId>>&& entity_ids_vec) const {
-        schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(
-                std::any_of(entity_ids_vec.cbegin(), entity_ids_vec.cend(), [](const std::vector<EntityId>& entity_ids) {
-                    return !entity_ids.empty();
-                }),
-                "Grouping column {} does not exist or is empty", grouping_column_
-        );
-        // Some could be empty, so actual number may be lower
-        auto max_num_buckets = ConfigsMap::instance()->get_int("Partition.NumBuckets",
-                                                           async::TaskScheduler::instance()->cpu_thread_count());
-        max_num_buckets = std::min(max_num_buckets, static_cast<int64_t>(std::numeric_limits<bucket_id>::max()));
-        // Preallocate results with expected sizes, erase later if any are empty
-        std::vector<std::vector<EntityId>> res(max_num_buckets);
-        // With an even distribution, expect each element of res to have entity_ids_vec.size() elements
-        for (auto& res_element: res) {
-            res_element.reserve(entity_ids_vec.size());
-        }
-        // Experimentation shows flattening the entities into a single vector and a single call to
-        // component_manager_->get is faster than not flattening and making multiple calls
-        auto entity_ids = flatten_entities(std::move(entity_ids_vec));
-        auto [buckets] = component_manager_->get_entities<bucket_id>(entity_ids);
-        for (auto [idx, entity_id]: folly::enumerate(entity_ids)) {
-            res[buckets[idx]].emplace_back(entity_id);
-        }
-        // Get rid of any empty buckets
-        std::erase_if(res, [](const std::vector<EntityId>& entity_ids) { return entity_ids.empty(); });
-        return res;
     }
 
     [[nodiscard]] const ClauseInfo& clause_info() const {
@@ -384,19 +292,13 @@ struct AggregationClause {
     AggregationClause(const std::string& grouping_column,
                       const std::vector<NamedAggregator>& aggregations);
 
-    [[noreturn]] std::vector<std::vector<size_t>> structure_for_processing(
-            ARCTICDB_UNUSED const std::vector<RangesAndKey>&,
-            ARCTICDB_UNUSED size_t) {
-        internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
-                "AggregationClause::structure_for_processing should never be called"
-                );
+    [[noreturn]] std::vector<std::vector<size_t>> structure_for_processing(ARCTICDB_UNUSED std::vector<RangesAndKey>&) {
+        internal::raise<ErrorCode::E_ASSERTION_FAILURE>("AggregationClause should never be first in the pipeline");
     }
+
+    [[nodiscard]] std::vector<std::vector<EntityId>> structure_for_processing(std::vector<std::vector<EntityId>>&& entity_ids_vec);
 
     [[nodiscard]] std::vector<EntityId> process(std::vector<EntityId>&& entity_ids) const;
-
-    [[nodiscard]] std::optional<std::vector<std::vector<EntityId>>> repartition(ARCTICDB_UNUSED std::vector<std::vector<EntityId>>&&) const {
-        return std::nullopt;
-    }
 
     [[nodiscard]] const ClauseInfo& clause_info() const {
         return clause_info_;
@@ -441,19 +343,17 @@ struct ResampleClause {
             label_boundary_(label_boundary),
             generate_bucket_boundaries_(std::move(generate_bucket_boundaries)),
             offset_(offset) {
+        clause_info_.input_structure_ = ProcessingStructure::TIME_BUCKETED;
         clause_info_.can_combine_with_column_selection_ = false;
         clause_info_.modifies_output_descriptor_ = true;
     }
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
-            std::vector<RangesAndKey>& ranges_and_keys,
-            size_t start_from);
+            std::vector<RangesAndKey>& ranges_and_keys);
+
+    [[nodiscard]] std::vector<std::vector<EntityId>> structure_for_processing(std::vector<std::vector<EntityId>>&& entity_ids_vec);
 
     [[nodiscard]] std::vector<EntityId> process(std::vector<EntityId>&& entity_ids) const;
-
-    [[nodiscard]] std::optional<std::vector<std::vector<EntityId>>> repartition(ARCTICDB_UNUSED std::vector<std::vector<EntityId>>&&) const {
-        return std::nullopt;
-    }
 
     [[nodiscard]] const ClauseInfo& clause_info() const {
         return clause_info_;
@@ -477,13 +377,6 @@ struct ResampleClause {
         date_range_.emplace(date_range_start, date_range_end);
     }
 
-    bool index_range_outside_bucket_range(timestamp start_index, timestamp end_index) const;
-
-    // Advances the bucket boundary iterator to the end of the last bucket that includes a value from a row slice with the given last index value
-    void advance_boundary_past_value(const std::vector<timestamp>& bucket_boundaries,
-                                     std::vector<timestamp>::const_iterator& bucket_boundaries_it,
-                                     timestamp value) const;
-
     std::vector<timestamp> generate_bucket_boundaries(timestamp first_ts,
                                                       timestamp last_ts,
                                                       bool responsible_for_first_overlapping_bucket) const;
@@ -492,27 +385,35 @@ struct ResampleClause {
                                                          const std::vector<timestamp>& bucket_boundaries) const;
 };
 
+template<typename T>
+struct is_resample: std::false_type{};
+
+template<ResampleBoundary closed_boundary>
+struct is_resample<ResampleClause<closed_boundary>>: std::true_type{};
+
 struct RemoveColumnPartitioningClause {
     ClauseInfo clause_info_;
     std::shared_ptr<ComponentManager> component_manager_;
     mutable bool warning_shown = false; // folly::Poly can't deal with atomic_bool
+    size_t incompletes_after_;
 
-    RemoveColumnPartitioningClause() {
+    RemoveColumnPartitioningClause(size_t incompletes_after=0):
+            incompletes_after_(incompletes_after){
         clause_info_.can_combine_with_column_selection_ = false;
     }
     ARCTICDB_MOVE_COPY_DEFAULT(RemoveColumnPartitioningClause)
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
-            std::vector<RangesAndKey>& ranges_and_keys,
-            size_t start_from) {
-        return structure_by_row_slice(ranges_and_keys, start_from);
+            std::vector<RangesAndKey>& ranges_and_keys) {
+        ranges_and_keys.erase(ranges_and_keys.begin(), ranges_and_keys.begin() + incompletes_after_);
+        return structure_by_row_slice(ranges_and_keys);
+    }
+
+    [[nodiscard]] std::vector<std::vector<EntityId>> structure_for_processing(std::vector<std::vector<EntityId>>&& entity_ids_vec) {
+        return structure_by_row_slice(*component_manager_, std::move(entity_ids_vec));
     }
 
     [[nodiscard]] std::vector<EntityId> process(std::vector<EntityId>&& entity_ids) const;
-
-    [[nodiscard]] std::optional<std::vector<std::vector<EntityId>>> repartition(ARCTICDB_UNUSED std::vector<std::vector<EntityId>>&&) const {
-        return std::nullopt;
-    }
 
     [[nodiscard]] const ClauseInfo& clause_info() const {
         return clause_info_;
@@ -536,16 +437,15 @@ struct SplitClause {
     }
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
-            std::vector<RangesAndKey>& ranges_and_keys,
-            size_t start_from) {
-        return structure_by_row_slice(ranges_and_keys, start_from);
+            std::vector<RangesAndKey>& ranges_and_keys) {
+        return structure_by_row_slice(ranges_and_keys);
+    }
+
+    [[nodiscard]] std::vector<std::vector<EntityId>> structure_for_processing(std::vector<std::vector<EntityId>>&& entity_ids_vec) {
+        return structure_by_row_slice(*component_manager_, std::move(entity_ids_vec));
     }
 
     [[nodiscard]] std::vector<EntityId> process(std::vector<EntityId>&& entity_ids) const;
-
-    [[nodiscard]] std::optional<std::vector<std::vector<EntityId>>> repartition(ARCTICDB_UNUSED std::vector<std::vector<EntityId>>&&) const {
-        return std::nullopt;
-    }
 
     [[nodiscard]] const ClauseInfo& clause_info() const {
         return clause_info_;
@@ -562,22 +462,24 @@ struct SortClause {
     ClauseInfo clause_info_;
     std::shared_ptr<ComponentManager> component_manager_;
     const std::string column_;
+    size_t incompletes_after_;
 
-    explicit SortClause(std::string column) :
-            column_(std::move(column)) {
+    explicit SortClause(std::string column, size_t incompletes_after) :
+            column_(std::move(column)),
+            incompletes_after_(incompletes_after){
     }
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
-            std::vector<RangesAndKey>& ranges_and_keys,
-            size_t start_from) {
-        return structure_by_row_slice(ranges_and_keys, start_from);
+            std::vector<RangesAndKey>& ranges_and_keys) {
+        ranges_and_keys.erase(ranges_and_keys.begin(), ranges_and_keys.begin() + incompletes_after_);
+        return structure_by_row_slice(ranges_and_keys);
+    }
+
+    [[nodiscard]] std::vector<std::vector<EntityId>> structure_for_processing(std::vector<std::vector<EntityId>>&& entity_ids_vec) {
+        return structure_by_row_slice(*component_manager_, std::move(entity_ids_vec));
     }
 
     [[nodiscard]] std::vector<EntityId> process(std::vector<EntityId>&& entity_ids) const;
-
-    [[nodiscard]] std::optional<std::vector<std::vector<EntityId>>> repartition(ARCTICDB_UNUSED std::vector<std::vector<EntityId>>&&) const {
-        return std::nullopt;
-    }
 
     [[nodiscard]] const ClauseInfo& clause_info() const {
         return clause_info_;
@@ -609,13 +511,13 @@ struct MergeClause {
         bool dynamic_schema
     );
 
-    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
-            std::vector<RangesAndKey>& ranges_and_keys,
-            size_t) const;
+    [[noreturn]] std::vector<std::vector<size_t>> structure_for_processing(std::vector<RangesAndKey>&) {
+        internal::raise<ErrorCode::E_ASSERTION_FAILURE>("MergeClause should never be first in the pipeline");
+    }
+
+    [[nodiscard]] std::vector<std::vector<EntityId>> structure_for_processing(std::vector<std::vector<EntityId>>&& entity_ids_vec);
 
     [[nodiscard]] std::vector<EntityId> process(std::vector<EntityId>&& entity_ids) const;
-
-    [[nodiscard]] std::optional<std::vector<std::vector<EntityId>>> repartition(std::vector<std::vector<EntityId>>&& entity_ids_vec) const;
 
     [[nodiscard]] const ClauseInfo& clause_info() const;
 
@@ -643,16 +545,15 @@ struct ColumnStatsGenerationClause {
     ARCTICDB_MOVE_COPY_DEFAULT(ColumnStatsGenerationClause)
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
-            std::vector<RangesAndKey>& ranges_and_keys,
-            size_t start_from) {
-        return structure_by_row_slice(ranges_and_keys, start_from);
+            std::vector<RangesAndKey>& ranges_and_keys) {
+        return structure_by_row_slice(ranges_and_keys);
+    }
+
+    [[nodiscard]] std::vector<std::vector<EntityId>> structure_for_processing(std::vector<std::vector<EntityId>>&& entity_ids_vec) {
+        return structure_by_row_slice(*component_manager_, std::move(entity_ids_vec));
     }
 
     [[nodiscard]] std::vector<EntityId> process(std::vector<EntityId>&& entity_ids) const;
-
-    [[nodiscard]] std::optional<std::vector<std::vector<EntityId>>> repartition(ARCTICDB_UNUSED std::vector<std::vector<EntityId>>&&) const {
-        return std::nullopt;
-    }
 
     [[nodiscard]] const ClauseInfo& clause_info() const {
         return clause_info_;
@@ -697,27 +598,25 @@ struct RowRangeClause {
     explicit RowRangeClause(RowRangeType row_range_type, int64_t n):
             row_range_type_(row_range_type),
             n_(n) {
+        clause_info_.input_structure_ = ProcessingStructure::ALL;
     }
 
     explicit RowRangeClause(int64_t start, int64_t end):
             row_range_type_(RowRangeType::RANGE),
             user_provided_start_(start),
             user_provided_end_(end) {
+        clause_info_.input_structure_ = ProcessingStructure::ALL;
     }
 
     RowRangeClause() = delete;
 
     ARCTICDB_MOVE_COPY_DEFAULT(RowRangeClause)
 
-    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
-            std::vector<RangesAndKey>& ranges_and_keys,
-            ARCTICDB_UNUSED size_t start_from);
+    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys);
+
+    [[nodiscard]] std::vector<std::vector<EntityId>> structure_for_processing(std::vector<std::vector<EntityId>>&& entity_ids_vec);
 
     [[nodiscard]] std::vector<EntityId> process(std::vector<EntityId>&& entity_ids) const;
-
-    [[nodiscard]] std::optional<std::vector<std::vector<EntityId>>> repartition(ARCTICDB_UNUSED std::vector<std::vector<EntityId>>&&) const {
-        return std::nullopt;
-    }
 
     [[nodiscard]] const ClauseInfo& clause_info() const {
         return clause_info_;
@@ -730,6 +629,8 @@ struct RowRangeClause {
     }
 
     [[nodiscard]] std::string to_string() const;
+
+    void calculate_start_and_end(size_t total_rows);
 };
 
 struct DateRangeClause {
@@ -749,15 +650,13 @@ struct DateRangeClause {
 
     ARCTICDB_MOVE_COPY_DEFAULT(DateRangeClause)
 
-    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
-            std::vector<RangesAndKey>& ranges_and_keys,
-            size_t start_from);
+    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys);
+
+    [[nodiscard]] std::vector<std::vector<EntityId>> structure_for_processing(std::vector<std::vector<EntityId>>&& entity_ids_vec) {
+        return structure_by_row_slice(*component_manager_, std::move(entity_ids_vec));
+    }
 
     [[nodiscard]] std::vector<EntityId> process(std::vector<EntityId>&& entity_ids) const;
-
-    [[nodiscard]] std::optional<std::vector<std::vector<EntityId>>> repartition(ARCTICDB_UNUSED std::vector<std::vector<EntityId>>&&) const {
-        return std::nullopt;
-    }
 
     [[nodiscard]] const ClauseInfo& clause_info() const {
         return clause_info_;

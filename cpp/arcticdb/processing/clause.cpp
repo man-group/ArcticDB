@@ -26,91 +26,6 @@ namespace arcticdb {
 
 using namespace pipelines;
 
-std::vector<std::vector<size_t>> structure_by_row_slice(
-        std::vector<RangesAndKey>& ranges_and_keys,
-        size_t start_from) {
-    std::sort(std::begin(ranges_and_keys), std::end(ranges_and_keys), [] (const RangesAndKey& left, const RangesAndKey& right) {
-        return std::tie(left.row_range_.first, left.col_range_.first) < std::tie(right.row_range_.first, right.col_range_.first);
-    });
-    ranges_and_keys.erase(ranges_and_keys.begin(), ranges_and_keys.begin() + start_from);
-
-    std::vector<std::vector<size_t>> res;
-    RowRange previous_row_range{-1, -1};
-    for (const auto& [idx, ranges_and_key]: folly::enumerate(ranges_and_keys)) {
-        RowRange current_row_range{ranges_and_key.row_range_};
-        if (current_row_range != previous_row_range) {
-            res.emplace_back();
-        }
-        res.back().emplace_back(idx);
-        previous_row_range = current_row_range;
-    }
-    return res;
-}
-
-std::vector<std::vector<size_t>> structure_by_column_slice(std::vector<RangesAndKey>& ranges_and_keys) {
-    std::sort(std::begin(ranges_and_keys), std::end(ranges_and_keys), [] (const RangesAndKey& left, const RangesAndKey& right) {
-        return std::tie(left.col_range_.first, left.row_range_.first) < std::tie(right.col_range_.first, right.row_range_.first);
-    });
-    std::vector<std::vector<size_t>> res;
-    ColRange previous_col_range;
-    for (const auto& [idx, ranges_and_key]: folly::enumerate(ranges_and_keys)) {
-        ColRange current_col_range{ranges_and_key.col_range_};
-        if (current_col_range != previous_col_range) {
-            res.emplace_back();
-        }
-        res.back().emplace_back(idx);
-        previous_col_range = current_col_range;
-    }
-    return res;
-}
-
-std::vector<std::vector<size_t>> structure_all_together(std::vector<RangesAndKey>& ranges_and_keys) {
-    std::vector<size_t> res;
-    for (const auto& [idx, ranges_and_key]: folly::enumerate(ranges_and_keys))
-        res.emplace_back(idx);
-
-    return {std::move(res)};
-}
-
-/*
- * On exit from a clause, we need to push the elements of the newly created processing unit's into the component
- * manager. These will either be used by the next clause in the pipeline, or to present the output dataframe back to
- * the user if this is the final clause in the pipeline.
- */
-std::vector<EntityId> push_entities(ComponentManager& component_manager, ProcessingUnit&& proc, EntityFetchCount entity_fetch_count) {
-    std::vector<EntityFetchCount> entity_fetch_counts(proc.segments_->size(), entity_fetch_count);
-    std::vector<EntityId> ids;
-    if (proc.bucket_.has_value()) {
-        std::vector<bucket_id> bucket_ids(proc.segments_->size(), *proc.bucket_);
-        ids = component_manager.add_entities(
-                std::move(*proc.segments_),
-                std::move(*proc.row_ranges_),
-                std::move(*proc.col_ranges_),
-                std::move(entity_fetch_counts),
-                std::move(bucket_ids));
-    } else {
-        ids = component_manager.add_entities(
-                std::move(*proc.segments_),
-                std::move(*proc.row_ranges_),
-                std::move(*proc.col_ranges_),
-                std::move(entity_fetch_counts));
-    }
-    return ids;
-}
-
-std::vector<EntityId> flatten_entities(std::vector<std::vector<EntityId>>&& entity_ids_vec) {
-    size_t res_size = std::accumulate(entity_ids_vec.cbegin(),
-                                      entity_ids_vec.cend(),
-                                      size_t(0),
-                                      [](size_t acc, const std::vector<EntityId>& vec) { return acc + vec.size(); });
-    std::vector<EntityId> res;
-    res.reserve(res_size);
-    for (const auto& entity_ids: entity_ids_vec) {
-        res.insert(res.end(), entity_ids.begin(), entity_ids.end());
-    }
-    return res;
-}
-
 class GroupingMap {
     using NumericMapType = std::variant<
             std::monostate,
@@ -232,7 +147,9 @@ std::vector<EntityId> ProjectClause::process(std::vector<EntityId>&& entity_ids)
                             const std::string_view name = output_column_;
 
                             proc.segments_->back()->add_column(scalar_field(data_type, name), col.column_);
-                            ++proc.col_ranges_->back()->second;
+                            auto new_col_range = std::make_shared<ColRange>(*proc.col_ranges_->back());
+                            ++new_col_range->second;
+                            proc.col_ranges_->back() = std::move(new_col_range);
                             output = push_entities(*component_manager_, std::move(proc));
                         },
                         [&proc, &output, this](const EmptyResult &) {
@@ -254,6 +171,7 @@ std::vector<EntityId> ProjectClause::process(std::vector<EntityId>&& entity_ids)
 AggregationClause::AggregationClause(const std::string& grouping_column,
                                      const std::vector<NamedAggregator>& named_aggregators):
         grouping_column_(grouping_column) {
+    clause_info_.input_structure_ = ProcessingStructure::HASH_BUCKETED;
     clause_info_.can_combine_with_column_selection_ = false;
     clause_info_.new_index_ = grouping_column_;
     clause_info_.input_columns_ = std::make_optional<std::unordered_set<std::string>>({grouping_column_});
@@ -282,6 +200,35 @@ AggregationClause::AggregationClause(const std::string& grouping_column,
         }
     }
     str_.append("}");
+}
+
+std::vector<std::vector<EntityId>> AggregationClause::structure_for_processing(std::vector<std::vector<EntityId>>&& entity_ids_vec) {
+    schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(
+            std::any_of(entity_ids_vec.cbegin(), entity_ids_vec.cend(), [](const std::vector<EntityId>& entity_ids) {
+                return !entity_ids.empty();
+            }),
+            "Grouping column {} does not exist or is empty", grouping_column_
+    );
+    // Some could be empty, so actual number may be lower
+    auto max_num_buckets = ConfigsMap::instance()->get_int("Partition.NumBuckets",
+                                                           async::TaskScheduler::instance()->cpu_thread_count());
+    max_num_buckets = std::min(max_num_buckets, static_cast<int64_t>(std::numeric_limits<bucket_id>::max()));
+    // Preallocate results with expected sizes, erase later if any are empty
+    std::vector<std::vector<EntityId>> res(max_num_buckets);
+    // With an even distribution, expect each element of res to have entity_ids_vec.size() elements
+    for (auto& res_element: res) {
+        res_element.reserve(entity_ids_vec.size());
+    }
+    // Experimentation shows flattening the entities into a single vector and a single call to
+    // component_manager_->get is faster than not flattening and making multiple calls
+    auto entity_ids = flatten_entities(std::move(entity_ids_vec));
+    auto [buckets] = component_manager_->get_entities<bucket_id>(entity_ids, false);
+    for (auto [idx, entity_id]: folly::enumerate(entity_ids)) {
+        res[buckets[idx]].emplace_back(entity_id);
+    }
+    // Get rid of any empty buckets
+    std::erase_if(res, [](const std::vector<EntityId>& entity_ids) { return entity_ids.empty(); });
+    return res;
 }
 
 std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_ids) const {
@@ -517,20 +464,19 @@ void ResampleClause<closed_boundary>::set_processing_config(const ProcessingConf
 
 template<ResampleBoundary closed_boundary>
 std::vector<std::vector<size_t>> ResampleClause<closed_boundary>::structure_for_processing(
-        std::vector<RangesAndKey>& ranges_and_keys,
-        ARCTICDB_UNUSED size_t start_from) {
+        std::vector<RangesAndKey>& ranges_and_keys) {
     if (ranges_and_keys.empty()) {
         return {};
     }
     TimestampRange index_range(
             std::min_element(ranges_and_keys.begin(), ranges_and_keys.end(),
                              [](const RangesAndKey& left, const RangesAndKey& right) {
-                                 return left.key_.start_time() < right.key_.start_time();
-                             })->key_.start_time(),
+                                 return left.start_time() < right.start_time();
+                             })->start_time(),
             std::max_element(ranges_and_keys.begin(), ranges_and_keys.end(),
                              [](const RangesAndKey& left, const RangesAndKey& right) {
-                                 return left.key_.end_time() < right.key_.end_time();
-                             })->key_.end_time() - 1
+                                 return left.end_time() < right.end_time();
+                             })->end_time()
     );
     if (date_range_.has_value()) {
         date_range_->first = std::max(date_range_->first, index_range.first);
@@ -545,84 +491,62 @@ std::vector<std::vector<size_t>> ResampleClause<closed_boundary>::structure_for_
     }
     debug::check<ErrorCode::E_ASSERTION_FAILURE>(std::is_sorted(bucket_boundaries_.begin(), bucket_boundaries_.end()),
                                                  "Resampling expects provided bucket boundaries to be strictly monotonically increasing");
-    std::erase_if(ranges_and_keys, [this](const RangesAndKey &ranges_and_key) {
-        auto [start_index, end_index] = ranges_and_key.key_.time_range();
-        // end_index from the key is 1 nanosecond larger than the index value of the last row in the row-slice
-        end_index--;
-        return index_range_outside_bucket_range(start_index, end_index);
-    });
-    auto res = structure_by_row_slice(ranges_and_keys, 0);
-    // Element i of res also needs the values from element i+1 if there is a bucket which incorporates the last index
-    // value of row-slice i and the first value of row-slice i+1
-    // Element i+1 should be removed if the last bucket involved in element i covers all the index values in element i+1
-    auto bucket_boundaries_it = std::cbegin(bucket_boundaries_);
-    // Exit if res_it == std::prev(res.end()) as this implies the last row slice was not incorporated into an earlier processing unit
-    for (auto res_it = res.begin(); res_it != res.end() && res_it != std::prev(res.end());) {
-        auto last_index_value_in_row_slice = ranges_and_keys[res_it->at(0)].key_.end_time() - 1;
-        advance_boundary_past_value(bucket_boundaries_, bucket_boundaries_it, last_index_value_in_row_slice);
-        // bucket_boundaries_it now contains the end value of the last bucket covering the row-slice in res_it, or an end iterator if the last bucket ends before the end of this row-slice
-        if (bucket_boundaries_it != bucket_boundaries_.end()) {
-            Bucket<closed_boundary> current_bucket{*std::prev(bucket_boundaries_it), *bucket_boundaries_it};
-            auto next_row_slice_it = std::next(res_it);
-            while (next_row_slice_it != res.end()) {
-                // end_index from the key is 1 nanosecond larger than the index value of the last row in the row-slice
-                TimestampRange next_row_slice_timestamp_range{
-                        ranges_and_keys[next_row_slice_it->at(0)].key_.start_time(),
-                        ranges_and_keys[next_row_slice_it->at(0)].key_.end_time() - 1};
-                if (current_bucket.contains(next_row_slice_timestamp_range.first)) {
-                    // The last bucket in the current processing unit overlaps with the first index value in the next row slice, so add segments into current processing unit
-                    res_it->insert(res_it->end(), next_row_slice_it->begin(), next_row_slice_it->end());
-                    if (current_bucket.contains(next_row_slice_timestamp_range.second)) {
-                        // The last bucket in the current processing unit wholly contains the next row slice, so remove it from the result
-                        next_row_slice_it = res.erase(next_row_slice_it);
-                    } else {
-                        break;
-                    }
-                } else {
-                    break;
-                }
-            }
-            // This is the last bucket, and all the required row-slices have been incorporated into the current processing unit, so erase the rest
-            if (bucket_boundaries_it == std::prev(bucket_boundaries_.end())) {
-                res.erase(next_row_slice_it, res.end());
-                break;
-            }
-            res_it = next_row_slice_it;
-        }
-    }
-    return res;
+    return structure_by_time_bucket<closed_boundary>(ranges_and_keys, bucket_boundaries_);
 }
 
 template<ResampleBoundary closed_boundary>
-bool ResampleClause<closed_boundary>::index_range_outside_bucket_range(timestamp start_index, timestamp end_index) const {
-    if constexpr (closed_boundary == ResampleBoundary::LEFT) {
-        return start_index >= bucket_boundaries_.back() || end_index < bucket_boundaries_.front();
-    } else {
-        // closed_boundary == ResampleBoundary::RIGHT
-        return start_index > bucket_boundaries_.back() || end_index <= bucket_boundaries_.front();
+std::vector<std::vector<EntityId>> ResampleClause<closed_boundary>::structure_for_processing(std::vector<std::vector<EntityId>>&& entity_ids_vec) {
+    auto entity_ids = flatten_entities(std::move(entity_ids_vec));
+    if (entity_ids.empty()) {
+        return {};
     }
-}
+    auto [segments, row_ranges, col_ranges] = component_manager_->get_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(entity_ids, false);
+    std::vector<RangesAndEntity> ranges_and_entities;
+    ranges_and_entities.reserve(entity_ids.size());
+    timestamp min_start_ts{std::numeric_limits<timestamp>::max()};
+    timestamp max_end_ts{std::numeric_limits<timestamp>::min()};
+    for (size_t idx=0; idx<entity_ids.size(); ++idx) {
+        auto start_ts = std::get<timestamp>(stream::TimeseriesIndex::start_value_for_segment(*segments[idx]));
+        auto end_ts = std::get<timestamp>(stream::TimeseriesIndex::end_value_for_segment(*segments[idx]));
+        min_start_ts = std::min(min_start_ts, start_ts);
+        max_end_ts = std::max(max_end_ts, end_ts);
+        ranges_and_entities.emplace_back(entity_ids[idx], row_ranges[idx], col_ranges[idx], std::make_optional<TimestampRange>(start_ts, end_ts));
+    }
 
-template<ResampleBoundary closed_boundary>
-void ResampleClause<closed_boundary>::advance_boundary_past_value(const std::vector<timestamp>& bucket_boundaries,
-                                                                  std::vector<timestamp>::const_iterator& bucket_boundaries_it,
-                                                                  timestamp value) const {
-    // These loops are equivalent to bucket_boundaries_it = std::upper_bound(bucket_boundaries_it, bucket_boundaries.end(), value, std::less[_equal]{})
-    // but optimised for the case where most buckets are non-empty.
-    // Mathematically, this will be faster when b / log_2(b) < n, where b is the number of buckets and n is the number of index values
-    // Even if n is only 1000, this corresponds to 7/8 buckets being empty, rising to 19/20 for n=100,000
-    // Experimentally, this implementation is around 10x faster when every bucket contains values, and 3x slower when 99.9% of buckets are empty
-    // If we wanted to speed this up when most buckets are empty, we could make this method adaptive to the number of buckets and rows
-    if constexpr(closed_boundary == ResampleBoundary::LEFT) {
-        while(bucket_boundaries_it != bucket_boundaries.end() && *bucket_boundaries_it <= value) {
-            ++bucket_boundaries_it;
-        }
-    } else {
-        // closed_boundary == ResampleBoundary::RIGHT
-        while(bucket_boundaries_it != bucket_boundaries.end() && *bucket_boundaries_it < value) {
-            ++bucket_boundaries_it;
+    date_range_ = std::make_optional<TimestampRange>(min_start_ts, max_end_ts);
+
+    bucket_boundaries_ = generate_bucket_boundaries_(date_range_->first, date_range_->second, rule_, closed_boundary, offset_);
+    if (bucket_boundaries_.size() < 2) {
+        return {};
+    }
+    debug::check<ErrorCode::E_ASSERTION_FAILURE>(std::is_sorted(bucket_boundaries_.begin(), bucket_boundaries_.end()),
+                                                 "Resampling expects provided bucket boundaries to be strictly monotonically increasing");
+
+    auto new_structure_offsets = structure_by_time_bucket<closed_boundary>(ranges_and_entities, bucket_boundaries_);
+
+    std::vector<EntityFetchCount> expected_fetch_counts(ranges_and_entities.size(), 0);
+    for (const auto& list: new_structure_offsets) {
+        for (auto idx: list) {
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                    idx < expected_fetch_counts.size(),
+                    "Index {} in new_structure_offsets out of bounds >{}", idx, expected_fetch_counts.size() - 1);
+            expected_fetch_counts[idx]++;
         }
     }
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            std::all_of(expected_fetch_counts.begin(), expected_fetch_counts.end(), [](EntityFetchCount fetch_count) {
+                return fetch_count == 1 || fetch_count == 2;
+            }),
+            "ResampleClause::structure_for_processing: invalid expected entity fetch count (should be 1 or 2)"
+            );
+    std::vector<EntityId> entities_to_be_fetched_twice;
+    for (auto&& [idx, ranges_and_entity]: folly::enumerate(ranges_and_entities)) {
+        if (expected_fetch_counts[idx] == 2) {
+            entities_to_be_fetched_twice.emplace_back(ranges_and_entity.id_);
+        }
+    }
+    component_manager_->replace_entities<EntityFetchCount>(entities_to_be_fetched_twice, EntityFetchCount(2));
+    return offsets_to_entity_ids(new_structure_offsets, ranges_and_entities);
 }
 
 template<ResampleBoundary closed_boundary>
@@ -765,7 +689,7 @@ std::shared_ptr<Column> ResampleClause<closed_boundary>::generate_output_index_c
                     current_bucket_added_to_index = true;
                 }
             } else {
-                advance_boundary_past_value(bucket_boundaries, bucket_end_it, *it);
+                advance_boundary_past_value<closed_boundary>(bucket_boundaries, bucket_end_it, *it);
                 if (ARCTICDB_UNLIKELY(bucket_end_it == bucket_boundaries.end())) {
                     break;
                 } else {
@@ -902,7 +826,8 @@ MergeClause::MergeClause(
         stream_id_(stream_id),
         stream_descriptor_(stream_descriptor),
         dynamic_schema_(dynamic_schema) {
-    clause_info_.requires_repartition_ = true;
+    clause_info_.input_structure_ = ProcessingStructure::ALL;
+    clause_info_.output_structure_ = ProcessingStructure::ALL;
 }
 
 void MergeClause::set_processing_config(const ProcessingConfig&) {}
@@ -915,19 +840,7 @@ const ClauseInfo& MergeClause::clause_info() const {
     return clause_info_;
 }
 
-std::vector<std::vector<size_t>> MergeClause::structure_for_processing(
-    std::vector<RangesAndKey>& ranges_and_keys,
-    size_t) const {
-    return structure_all_together(ranges_and_keys);
-}
-
-// MergeClause receives a list of DataFrames as input and merge them into a single one where all 
-// the rows are sorted by time stamp
-std::vector<EntityId> MergeClause::process(std::vector<EntityId>&& entity_ids) const {
-    return std::move(entity_ids);
-}
-
-std::optional<std::vector<std::vector<EntityId>>> MergeClause::repartition(std::vector<std::vector<EntityId>>&& entity_ids_vec) const {
+std::vector<std::vector<EntityId>> MergeClause::structure_for_processing(std::vector<std::vector<EntityId>>&& entity_ids_vec) {
 
     // TODO this is a hack because we don't currently have a way to
     // specify any particular input shape unless a clause is the
@@ -1000,6 +913,12 @@ std::optional<std::vector<std::vector<EntityId>>> MergeClause::repartition(std::
     return ret;
 }
 
+// MergeClause receives a list of DataFrames as input and merge them into a single one where all
+// the rows are sorted by time stamp
+std::vector<EntityId> MergeClause::process(std::vector<EntityId>&& entity_ids) const {
+    return std::move(entity_ids);
+}
+
 
 std::vector<EntityId> ColumnStatsGenerationClause::process(std::vector<EntityId>&& entity_ids) const {
     internal::check<ErrorCode::E_INVALID_ARGUMENT>(
@@ -1063,12 +982,57 @@ std::vector<EntityId> ColumnStatsGenerationClause::process(std::vector<EntityId>
 }
 
 std::vector<std::vector<size_t>> RowRangeClause::structure_for_processing(
-        std::vector<RangesAndKey>& ranges_and_keys,
-        ARCTICDB_UNUSED size_t start_from) {
+        std::vector<RangesAndKey>& ranges_and_keys) {
     ranges_and_keys.erase(std::remove_if(ranges_and_keys.begin(), ranges_and_keys.end(), [this](const RangesAndKey& ranges_and_key) {
         return ranges_and_key.row_range_.start() >= end_ || ranges_and_key.row_range_.end() <= start_;
     }), ranges_and_keys.end());
-    return structure_by_row_slice(ranges_and_keys, start_from);
+    return structure_by_row_slice(ranges_and_keys);
+}
+
+std::vector<std::vector<EntityId>> RowRangeClause::structure_for_processing(std::vector<std::vector<EntityId>>&& entity_ids_vec) {
+    auto entity_ids = flatten_entities(std::move(entity_ids_vec));
+    if (entity_ids.empty()) {
+        return {};
+    }
+    auto [segments, old_row_ranges, col_ranges] = component_manager_->get_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(entity_ids, false);
+
+    // Map from old row ranges to new ones
+    std::map<RowRange, RowRange> row_range_mapping;
+    for (const auto& row_range: old_row_ranges) {
+        // Value is same as key initially
+        row_range_mapping.insert({*row_range, *row_range});
+    }
+    bool first_range{true};
+    size_t prev_range_end{0};
+    for (auto& [old_range, new_range]: row_range_mapping) {
+        if (first_range) {
+            // Make the first row-range start from zero
+            new_range.first = 0;
+            new_range.second = old_range.diff();
+            first_range = false;
+        } else {
+            new_range.first = prev_range_end;
+            new_range.second = new_range.first + old_range.diff();
+        }
+        prev_range_end = new_range.second;
+    }
+
+    calculate_start_and_end(prev_range_end);
+
+    std::vector<std::shared_ptr<RowRange>> new_row_ranges;
+    new_row_ranges.reserve(old_row_ranges.size());
+    std::vector<RangesAndEntity> ranges_and_entities;
+    ranges_and_entities.reserve(entity_ids.size());
+    for (size_t idx=0; idx<entity_ids.size(); ++idx) {
+        auto new_row_range = std::make_shared<RowRange>(row_range_mapping.at(*old_row_ranges[idx]));
+        ranges_and_entities.emplace_back(entity_ids[idx], new_row_range, col_ranges[idx]);
+        new_row_ranges.emplace_back(std::move(new_row_range));
+    }
+
+    component_manager_->replace_entities<std::shared_ptr<RowRange>>(entity_ids, new_row_ranges);
+
+    auto new_structure_offsets = structure_by_row_slice(ranges_and_entities);
+    return offsets_to_entity_ids(new_structure_offsets, ranges_and_entities);
 }
 
 std::vector<EntityId> RowRangeClause::process(std::vector<EntityId>&& entity_ids) const {
@@ -1077,67 +1041,29 @@ std::vector<EntityId> RowRangeClause::process(std::vector<EntityId>&& entity_ids
     }
     auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager_, std::move(entity_ids));
     std::vector<EntityId> output;
-    for (auto&& [idx, row_range]: folly::enumerate(proc.row_ranges_.value())) {
-        if ((start_ > row_range->start() && start_ < row_range->end()) ||
-            (end_ > row_range->start() && end_ < row_range->end())) {
-            // Zero-indexed within this slice
-            size_t start_row{0};
-            size_t end_row{row_range->diff()};
-            if (start_ > row_range->start() && start_ < row_range->end()) {
-                start_row = start_ - row_range->start();
-            }
-            if (end_ > row_range->start() && end_ < row_range->end()) {
-                end_row = end_ - (row_range->start());
-            }
-            auto truncated_segment = proc.segments_->at(idx)->truncate(start_row, end_row, false);
-            auto num_rows = truncated_segment.is_null() ? 0 : truncated_segment.row_count();
-            proc.row_ranges_->at(idx) = std::make_shared<pipelines::RowRange>(proc.row_ranges_->at(idx)->first, proc.row_ranges_->at(idx)->first + num_rows);
-            auto num_cols = truncated_segment.is_null() ? 0 : truncated_segment.descriptor().field_count() - truncated_segment.descriptor().index().field_count();
-            proc.col_ranges_->at(idx) = std::make_shared<pipelines::ColRange>(proc.col_ranges_->at(idx)->first, proc.col_ranges_->at(idx)->first + num_cols);
-            proc.segments_->at(idx) = std::make_shared<SegmentInMemory>(std::move(truncated_segment));
-        } // else all rows in this segment are required, do nothing
-    }
+    // The processing unit represents one row slice by construction, so just look at the first
+    auto row_range = proc.row_ranges_->at(0);
+    if (start_ >= row_range->end() || end_ <= row_range->start()) {
+        // No rows from this processing unit are required
+        return {};
+    } else if ((start_ > row_range->start() && start_ < row_range->end()) ||
+               (end_ > row_range->start() && end_ < row_range->end())) {
+        // Zero-indexed within this slice
+        size_t start_row{0};
+        size_t end_row{row_range->diff()};
+        if (start_ > row_range->start() && start_ < row_range->end()) {
+            start_row = start_ - row_range->start();
+        }
+        if (end_ > row_range->start() && end_ < row_range->end()) {
+            end_row = end_ - (row_range->start());
+        }
+        proc.truncate(start_row, end_row);
+    } // else all rows in this segment are required, do nothing
     return push_entities(*component_manager_, std::move(proc));
 }
 
 void RowRangeClause::set_processing_config(const ProcessingConfig& processing_config) {
-    auto total_rows = static_cast<int64_t>(processing_config.total_rows_);
-    switch(row_range_type_) {
-        case RowRangeType::HEAD:
-            if (n_ >= 0) {
-                start_ = 0;
-                end_ = std::min(n_, total_rows);
-            } else {
-                start_ = 0;
-                end_ = std::max(static_cast<int64_t>(0), total_rows + n_);
-            }
-            break;
-        case RowRangeType::TAIL:
-            if (n_ >= 0) {
-                start_ = std::max(static_cast<int64_t>(0), total_rows - n_);
-                end_ = total_rows;
-            } else {
-                start_ = std::min(-n_, total_rows);
-                end_ = total_rows;
-            }
-            break;
-        case RowRangeType::RANGE:
-            // Wrap around negative indices.
-            start_ = (
-                user_provided_start_ >= 0 ?
-                std::min(user_provided_start_, total_rows) :
-                std::max(total_rows + user_provided_start_, static_cast<int64_t>(0))
-            );
-            end_ = (
-                user_provided_end_ >= 0 ?
-                std::min(user_provided_end_, total_rows) :
-                std::max(total_rows + user_provided_end_, static_cast<int64_t>(0))
-            );
-            break;
-
-        default:
-            internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unrecognised RowRangeType {}", static_cast<uint8_t>(row_range_type_));
-    }
+    calculate_start_and_end(processing_config.total_rows_);
 }
 
 std::string RowRangeClause::to_string() const {
@@ -1148,32 +1074,75 @@ std::string RowRangeClause::to_string() const {
     return fmt::format("ROWRANGE: {}, n={}", row_range_type_ == RowRangeType::HEAD ? "HEAD" : "TAIL", n_);
 }
 
+void RowRangeClause::calculate_start_and_end(size_t total_rows) {
+    auto signed_total_rows = static_cast<int64_t>(total_rows);
+    switch(row_range_type_) {
+        case RowRangeType::HEAD:
+            if (n_ >= 0) {
+                start_ = 0;
+                end_ = std::min(n_, signed_total_rows);
+            } else {
+                start_ = 0;
+                end_ = std::max(static_cast<int64_t>(0), signed_total_rows + n_);
+            }
+            break;
+        case RowRangeType::TAIL:
+            if (n_ >= 0) {
+                start_ = std::max(static_cast<int64_t>(0), signed_total_rows - n_);
+                end_ = signed_total_rows;
+            } else {
+                start_ = std::min(-n_, signed_total_rows);
+                end_ = signed_total_rows;
+            }
+            break;
+        case RowRangeType::RANGE:
+            // Wrap around negative indices.
+            start_ = (
+                    user_provided_start_ >= 0 ?
+                    std::min(user_provided_start_, signed_total_rows) :
+                    std::max(signed_total_rows + user_provided_start_, static_cast<int64_t>(0))
+            );
+            end_ = (
+                    user_provided_end_ >= 0 ?
+                    std::min(user_provided_end_, signed_total_rows) :
+                    std::max(signed_total_rows + user_provided_end_, static_cast<int64_t>(0))
+            );
+            break;
+
+        default:
+            internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unrecognised RowRangeType {}", static_cast<uint8_t>(row_range_type_));
+    }
+}
+
 std::vector<std::vector<size_t>> DateRangeClause::structure_for_processing(
-        std::vector<RangesAndKey>& ranges_and_keys,
-        size_t start_from) {
+        std::vector<RangesAndKey>& ranges_and_keys) {
     ranges_and_keys.erase(std::remove_if(ranges_and_keys.begin(), ranges_and_keys.end(), [this](const RangesAndKey& ranges_and_key) {
         auto [start_index, end_index] = ranges_and_key.key_.time_range();
         return start_index > end_ || end_index <= start_;
     }), ranges_and_keys.end());
-    return structure_by_row_slice(ranges_and_keys, start_from);
+    return structure_by_row_slice(ranges_and_keys);
 }
 
 std::vector<EntityId> DateRangeClause::process(std::vector<EntityId> &&entity_ids) const {
     if (entity_ids.empty()) {
         return {};
     }
-    auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>, std::shared_ptr<AtomKey>>(*component_manager_, std::move(entity_ids));
+    auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager_, std::move(entity_ids));
     std::vector<EntityId> output;
     // We are only interested in the index, which is in every SegmentInMemory in proc.segments_, so just use the first
     auto row_range = proc.row_ranges_->at(0);
-    auto [start_index, end_index] = proc.atom_keys_->at(0)->time_range();
-    if ((start_ > start_index && start_ < end_index) || (end_ >= start_index && end_ < end_index)) {
+    auto start_index = std::get<timestamp>(stream::TimeseriesIndex::start_value_for_segment(*proc.segments_->at(0)));
+    auto end_index = std::get<timestamp>(stream::TimeseriesIndex::end_value_for_segment(*proc.segments_->at(0)));
+    if (start_index > end_ || end_index < start_) {
+        // No rows from this processing unit are required
+        return {};
+    } else if ((start_ > start_index && start_ <= end_index) || (end_ >= start_index && end_ <= end_index)) {
         size_t start_row{0};
         size_t end_row{row_range->diff()};
-        if (start_ > start_index && start_ < end_index) {
+        if (start_ > start_index && start_ <= end_index) {
             start_row = proc.segments_->at(0)->column_ptr(0)->search_sorted<timestamp>(start_);
         }
-        if (end_ >= start_index && end_ < end_index) {
+        if (end_ >= start_index && end_ <= end_index) {
             end_row = proc.segments_->at(0)->column_ptr(0)->search_sorted<timestamp>(end_, true);
         }
         proc.truncate(start_row, end_row);

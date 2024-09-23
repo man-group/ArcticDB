@@ -12,12 +12,15 @@ from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.exceptions import InternalException
 
 
+pytestmark = pytest.mark.pipeline
+
+
 def generic_row_range_test(version_store, symbol, df, start_row, end_row):
     version_store.write(symbol, df)
 
     expected_array = df.iloc[start_row:end_row]
     received_array = version_store.read(symbol, row_range=(start_row, end_row)).data
-    q = QueryBuilder()._row_range((start_row, end_row))
+    q = QueryBuilder().row_range((start_row, end_row))
     received_array_via_querybuilder = version_store.read(symbol, query_builder=q).data
 
     np.testing.assert_array_equal(expected_array, received_array)
@@ -25,7 +28,7 @@ def generic_row_range_test(version_store, symbol, df, start_row, end_row):
 
     expected_array = df.iloc[-end_row:-start_row]
     received_array = version_store.read(symbol, row_range=(-end_row, -start_row)).data
-    q = QueryBuilder()._row_range((-end_row, -start_row))
+    q = QueryBuilder().row_range((-end_row, -start_row))
     received_array_via_querybuilder = version_store.read(symbol, query_builder=q).data
 
     np.testing.assert_array_equal(expected_array, received_array)

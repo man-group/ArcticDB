@@ -18,22 +18,22 @@ namespace arcticdb {
 
 namespace arcticdb::pipelines {
 
-struct AxisRange : std::pair<std::size_t, std::size_t> {
-    using std::pair<std::size_t, std::size_t>::pair;
+struct AxisRange : std::pair<size_t, size_t> {
+    using std::pair<size_t, size_t>::pair;
 
-    [[nodiscard]] std::size_t diff() const {
+    [[nodiscard]] size_t diff() const {
         return first > second ? 0 : second - first;
     }
 
-    [[nodiscard]] bool contains(std::size_t v) const {
+    [[nodiscard]] bool contains(size_t v) const {
         return first <= v && v < second;
     }
 
-    [[nodiscard]] std::size_t start() const {
+    [[nodiscard]] size_t start() const {
         return first;
     }
 
-    [[nodiscard]] std::size_t end() const {
+    [[nodiscard]] size_t end() const {
         return second;
     }
 
@@ -185,6 +185,23 @@ struct RangesAndKey {
     }
     RangesAndKey() = delete;
     ARCTICDB_MOVE_COPY_DEFAULT(RangesAndKey)
+
+    const RowRange& row_range() const {
+        return row_range_;
+    }
+
+    const ColRange& col_range() const {
+        return col_range_;
+    }
+
+    timestamp start_time() const {
+        return key_.start_time();
+    }
+
+    timestamp end_time() const {
+        // end_index from the key is 1 nanosecond larger than the index value of the last row in the row-slice
+        return key_.end_time() - 1;
+    }
 
     friend bool operator==(const RangesAndKey& left, const RangesAndKey& right) {
         return left.row_range_ == right.row_range_ && left.col_range_ == right.col_range_ && left.key_ == right.key_;
