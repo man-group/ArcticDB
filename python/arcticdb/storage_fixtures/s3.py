@@ -96,7 +96,8 @@ class S3Bucket(StorageFixture):
             use_mock_storage_for_testing=self.factory.use_mock_storage_for_testing,
             ssl=self.factory.ssl,
             ca_cert_path=self.factory.client_cert_file,
-            is_nfs_layout=False
+            is_nfs_layout=False,
+            use_raw_prefix=self.factory.use_raw_prefix,
         )# client_cert_dir is skipped on purpose; It will be tested manually in other tests
         return cfg
 
@@ -152,7 +153,8 @@ class NfsS3Bucket(S3Bucket):
             use_mock_storage_for_testing=self.factory.use_mock_storage_for_testing,
             ssl=self.factory.ssl,
             ca_cert_path=self.factory.client_cert_file,
-            is_nfs_layout=True
+            is_nfs_layout=True,
+            use_raw_prefix=self.factory.use_raw_prefix
         )# client_cert_dir is skipped on purpose; It will be tested manually in other tests
         return cfg
 
@@ -165,6 +167,7 @@ class BaseS3StorageFixtureFactory(StorageFixtureFactory):
     default_key: Key
     default_bucket: Optional[str] = None
     default_prefix: Optional[str] = None
+    use_raw_prefix: bool = False
     clean_bucket_on_fixture_exit = True
     use_mock_storage_for_testing = None  # If set to true allows error simulation
 
@@ -245,10 +248,17 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
     _bucket_id = 0
     _live_buckets: List[S3Bucket] = []
 
-    def __init__(self, use_ssl: bool, ssl_test_support: bool, bucket_versioning: bool):
+    def __init__(self,
+                 use_ssl: bool,
+                 ssl_test_support: bool,
+                 bucket_versioning: bool,
+                 default_prefix: str = None,
+                 use_raw_prefix: bool = False):
         self.http_protocol = "https" if use_ssl else "http"
         self.ssl_test_support = ssl_test_support
         self.bucket_versioning = bucket_versioning
+        self.default_prefix = default_prefix
+        self.use_raw_prefix = use_raw_prefix
 
     @staticmethod
     def run_server(port, key_file, cert_file):
@@ -428,7 +438,7 @@ _PermissionCapableFactory = MotoS3StorageFixtureFactory
 
 class MotoNfsBackedS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
 
-    def create_fixture(self) -> NfsS3Bucket:
+    def create_fixture(self, default_prefix=None, use_raw_prefix=False) -> NfsS3Bucket:
         bucket = f"test_bucket_{self._bucket_id}"
         self._s3_admin.create_bucket(Bucket=bucket)
         self._bucket_id += 1

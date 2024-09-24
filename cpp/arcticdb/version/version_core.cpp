@@ -1512,7 +1512,12 @@ VersionedItem sort_merge_impl(
 
             for(auto sk = segments.begin(); sk != segments.end(); ++sk) {
                 SegmentInMemory segment = sk->release_segment(store);
-                segment.drop_empty_columns();
+                // Empty columns can appear only of one staged segment is empty and adds column which
+                // does not appear in any other segment. There can also be empty columns if all segments
+                // are empty in that case this loop won't be reached as segments.size() will be 0
+                if (write_options.dynamic_schema) {
+                    segment.drop_empty_columns();
+                }
                 aggregator.add_segment(std::move(segment), sk->slice(), options.convert_int_to_float_);
             }
             aggregator.commit();
