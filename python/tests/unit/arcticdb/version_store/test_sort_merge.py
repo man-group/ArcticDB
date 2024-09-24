@@ -692,7 +692,7 @@ class TestSlicing:
         assert "append" in str(exception_info.value).lower()
         assert "slicing" in str(exception_info.value).lower()
 
-    def test_writing_wide_segment_over_sliced_data_works(self, lmdb_storage, lib_name):
+    def test_writing_wide_segment_over_sliced_data(self, lmdb_storage, lib_name):
         columns_per_segment = 5
         lib = lmdb_storage.create_arctic().create_library(lib_name, library_options=LibraryOptions(columns_per_segment=columns_per_segment))
         df_0 = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))

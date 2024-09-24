@@ -905,7 +905,7 @@ void merge_impl(
 
     auto func = [&component_manager, &ret, &col_range, start_row = row_range.first](auto&& segment) mutable {
         const size_t end_row = start_row + segment.row_count();
-        ret.emplace_back(push_entities(component_manager, ProcessingUnit{std::forward<SegmentInMemory>(segment), RowRange{start_row, end_row}, col_range}));
+        ret.emplace_back(push_entities(component_manager, ProcessingUnit{std::forward<decltype(segment)>(segment), RowRange{start_row, end_row}, col_range}));
         start_row = end_row;
     };
 

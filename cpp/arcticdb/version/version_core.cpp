@@ -1437,8 +1437,7 @@ VersionedItem sort_merge_impl(
         read_indexed_keys_to_pipeline(store, pipeline_context, *(update_info.previous_index_key_), read_query, ReadOptions{});
         if (!write_options.dynamic_schema) {
             user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                pipeline_context->slice_and_keys_.front().slice().columns() ==
-                pipeline_context->slice_and_keys_.back().slice().columns(),
+                pipeline_context->slice_and_keys_.front().slice().columns() == pipeline_context->slice_and_keys_.back().slice().columns(),
                 "Appending using sort and finalize is not supported when column slicing has been done."
             );
         }
@@ -1559,6 +1558,12 @@ VersionedItem compact_incomplete_impl(
     std::optional<SortedValue> previous_sorted_value;
     if(options.append_ && update_info.previous_index_key_.has_value()) {
         read_indexed_keys_to_pipeline(store, pipeline_context, *(update_info.previous_index_key_), read_query, read_options);
+        if (!write_options.dynamic_schema) {
+            user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                pipeline_context->slice_and_keys_.front().slice().columns() == pipeline_context->slice_and_keys_.back().slice().columns(),
+                "Appending using sort and finalize is not supported when column slicing has been done."
+            );
+        }
         previous_sorted_value.emplace(pipeline_context->desc_->sorted());
     }
     IncompleteKeysRAII incomplete_keys(pipeline_context, store);
