@@ -1435,6 +1435,13 @@ VersionedItem sort_merge_impl(
     std::optional<SortedValue> previous_sorted_value;
     if(options.append_ && update_info.previous_index_key_.has_value()) {
         read_indexed_keys_to_pipeline(store, pipeline_context, *(update_info.previous_index_key_), read_query, ReadOptions{});
+        if (!write_options.dynamic_schema) {
+            user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                pipeline_context->slice_and_keys_.front().slice().columns() ==
+                pipeline_context->slice_and_keys_.back().slice().columns(),
+                "Appending using sort and finalize is not supported when column slicing has been done."
+            );
+        }
         previous_sorted_value.emplace(pipeline_context->desc_->sorted());
     }
     pipeline_context->incompletes_after_ = pipeline_context->slice_and_keys_.size();
@@ -1454,14 +1461,6 @@ VersionedItem sort_merge_impl(
     user_input::check<ErrorCode::E_NO_STAGED_SEGMENTS>(
         has_incomplete_segments,
         "Finalizing staged data is not allowed with empty staging area"
-    );
-
-    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-        write_options.dynamic_schema || pipeline_context->staged_descriptor_->field_count() < write_options.column_group_size,
-        "Sorting and finalizing staged data is not implemented in the case when column slicing would appear. The "
-        "input DataFrame has {} fields which is more than the column group size ({}) set in the library options",
-        pipeline_context->staged_descriptor_->field_count(),
-        write_options.column_group_size
     );
 
     std::vector<FrameSlice> slices;

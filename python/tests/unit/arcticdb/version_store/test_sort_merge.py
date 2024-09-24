@@ -617,7 +617,7 @@ def test_update_symbol_list(lmdb_library):
     assert set(lib.list_symbols()) == set([sym, sym_2])
 
 class TestSlicing:
-    def test_long_append_segment(self, lmdb_library):
+    def test_append_long_segment(self, lmdb_library):
         with config_context('Merge.SegmentSize', 5):
             lib = lmdb_library
             df_0 = pd.DataFrame({"col_0": [1, 2, 3]}, index=pd.date_range("2024-01-01", "2024-01-03"))
@@ -630,7 +630,7 @@ class TestSlicing:
     
             assert_frame_equal(lib.read("sym").data, pd.concat([df_0, df_1]))
 
-    def test_long_write_segment(self, lmdb_library):
+    def test_write_long_segment(self, lmdb_library):
         with config_context('Merge.SegmentSize', 5):
             lib = lmdb_library
             index = pd.date_range("2024-01-05", "2024-01-15")
@@ -639,16 +639,68 @@ class TestSlicing:
             lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.WRITE)
             assert_frame_equal(lib.read("sym").data, df)
 
+    def test_write_several_segments_triggering_slicing(self, lmdb_library):
+        with config_context('Merge.SegmentSize', 5):
+            lib = lmdb_library
+            combined_staged_index = pd.date_range(pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 15))
+            staged_values = range(0, len(combined_staged_index))
+            for (value, date) in zip(staged_values, combined_staged_index):
+                df = pd.DataFrame({"a": [value]}, index=pd.DatetimeIndex([date]))
+                lib.write("sym", df, staged=True)
+            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.WRITE)
+            expected = pd.DataFrame({"a": staged_values}, index=combined_staged_index)
+            assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_append_several_segments_trigger_slicing(self, lmdb_library):
+        with config_context('Merge.SegmentSize', 5):
+            lib = lmdb_library
+            df_0 = pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range(pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 3)))
+            lib.write("sym", df_0)
+            combined_staged_index = pd.date_range(pd.Timestamp(2024, 1, 5), pd.Timestamp(2024, 1, 20))
+            staged_values = range(0, len(combined_staged_index))
+            for (value, date) in zip(staged_values, combined_staged_index):
+                df = pd.DataFrame({"a": [value]}, index=pd.DatetimeIndex([date]))
+                lib.write("sym", df, staged=True)
+            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+            expected = pd.concat([df_0, pd.DataFrame({"a": staged_values}, index=combined_staged_index)])
+            assert_frame_equal(lib.read("sym").data, expected)
+
     @pytest.mark.parametrize("mode", [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE])
-    def test_wide_segment(self, lmdb_storage, lib_name, mode):
+    def test_wide_segment_with_no_prior_slicing(self, lmdb_storage, lib_name, mode):
         columns_per_segment = 5
         lib = lmdb_storage.create_arctic().create_library(lib_name, library_options=LibraryOptions(columns_per_segment=columns_per_segment))
-        df = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
-        lib.write("sym", df, staged=True)
+        df_0 = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
+        lib.write("sym", df_0, staged=True)
+        lib.sort_and_finalize_staged_data("sym", mode=mode)
+        assert_frame_equal(lib.read("sym").data, df_0)
+        
+        df_1 = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
+        lib.append("sym", df_1)
+        assert_frame_equal(lib.read("sym").data, pd.concat([df_0, df_1]))
+
+    def test_appending_wide_segment_throws_with_prior_slicing(self, lmdb_storage, lib_name):
+        columns_per_segment = 5
+        lib = lmdb_storage.create_arctic().create_library(lib_name, library_options=LibraryOptions(columns_per_segment=columns_per_segment))
+        df_0 = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
+        lib.write("sym", df_0)
+        
+        df_1 = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
+        lib.write("sym", df_1, staged=True)
+
         with pytest.raises(UserInputException) as exception_info:
-            lib.sort_and_finalize_staged_data("sym", mode=mode)
-        assert "slicing" in str(exception_info.value)
-        # Add one to account for the index column
-        assert "11" in str(exception_info.value)
-        assert "column" in str(exception_info.value)
-        assert str(columns_per_segment) in str(exception_info.value)
+            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+        assert "append" in str(exception_info.value).lower()
+        assert "slicing" in str(exception_info.value).lower()
+
+    def test_writing_wide_segment_over_sliced_data_works(self, lmdb_storage, lib_name):
+        columns_per_segment = 5
+        lib = lmdb_storage.create_arctic().create_library(lib_name, library_options=LibraryOptions(columns_per_segment=columns_per_segment))
+        df_0 = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
+        lib.write("sym", df_0)
+        
+        df_1 = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
+        lib.write("sym", df_1, staged=True)
+
+        lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.WRITE)
+
+        assert_frame_equal(lib.read("sym").data, df_1)
