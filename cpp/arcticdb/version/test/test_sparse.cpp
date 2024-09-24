@@ -571,6 +571,8 @@ TEST_F(SparseTestStore, Compact) {
     };
 
     DynamicAggregator aggregator(std::move(schema), [&](SegmentInMemory &&segment) {
+        ASSERT_TRUE(segment.is_index_sorted());
+        segment.descriptor().set_sorted(SortedValue::ASCENDING);
         test_store_->append_incomplete_segment(stream_id, std::move(segment));
     }, RowCountSegmentPolicy{10});
 
@@ -622,6 +624,8 @@ TEST_F(SparseTestStore, CompactWithStrings) {
     };
 
     DynamicAggregator aggregator(std::move(schema), [&](SegmentInMemory &&segment) {
+        ASSERT_TRUE(segment.is_index_sorted());
+        segment.descriptor().set_sorted(SortedValue::ASCENDING);
         test_store_->append_incomplete_segment(stream_id, std::move(segment));
     }, RowCountSegmentPolicy{10});
 

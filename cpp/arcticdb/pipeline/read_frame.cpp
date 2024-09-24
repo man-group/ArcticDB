@@ -1074,7 +1074,7 @@ struct ReduceColumnTask : async::BaseTask {
                 EmptyDynamicStringReducer reducer(column, frame_, frame_field, sizeof(entity::position_t), lock_);
                 reducer.reduce(frame_.row_count());
             }
-        } else {
+        } else if (column_data != slice_map_->columns_.end()) {
             if(dynamic_schema_) {
                 NullValueReducer null_reducer{column, context_, frame_};
                 for (const auto &row : column_data->second) {
@@ -1092,6 +1092,8 @@ struct ReduceColumnTask : async::BaseTask {
                 }
                 string_reducer->finalize();
             }
+        } else if (!dynamic_schema_ && column_data == slice_map_->columns_.end() && is_sequence_type(column.type().data_type())) {
+            internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Column with index {} is not in static schema slice map.", column_index_);
         }
         return folly::Unit{};
     }

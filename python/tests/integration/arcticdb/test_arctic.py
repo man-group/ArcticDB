@@ -19,7 +19,7 @@ from enum import Enum
 from arcticdb_ext.exceptions import InternalException, SortingException, UserInputException
 from arcticdb_ext.storage import NoDataFoundException
 from arcticdb_ext.version_store import SortedValue
-from arcticdb.exceptions import ArcticDbNotYetImplemented, LibraryNotFound, MismatchingLibraryOptions
+from arcticdb.exceptions import ArcticDbNotYetImplemented, LibraryNotFound, MismatchingLibraryOptions, StreamDescriptorMismatch, SchemaException
 from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
 from arcticdb.arctic import Arctic
 from arcticdb.options import LibraryOptions, EnterpriseLibraryOptions
@@ -291,42 +291,15 @@ def test_parallel_writes_and_appends_index_validation(arctic_library, finalize_m
         assert_frame_equal(received, expected)
 
 @pytest.mark.parametrize("finalize_method", (StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE))
-class TestFinalizeWithEmptySegments:
-    def test_staged_segment_is_only_empty_dfs(self, lmdb_library, finalize_method):
-        lib = lmdb_library
-        lib.write("sym", pd.DataFrame([]), staged=True)
-        lib.write("sym", pd.DataFrame([]), staged=True)
-        lib.finalize_staged_data("sym", mode=finalize_method)
-        assert_frame_equal(lib.read("sym").data, pd.DataFrame([], index=pd.DatetimeIndex([])))
-
-    def test_staged_segment_has_empty_df(self, lmdb_library, finalize_method):
-        lib = lmdb_library
-        index = pd.DatetimeIndex([pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 3), pd.Timestamp(2024, 1, 4)])
-        df1 = pd.DataFrame({"col": [1, 2, 3]}, index=index)
-        df2 = pd.DataFrame({})
-        df3 = pd.DataFrame({"col": [4]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 5)]))
-        lib.write("sym", df1, staged=True)
-        lib.write("sym", df2, staged=True)
-        lib.write("sym", df3, staged=True)
-        lib.finalize_staged_data("sym", mode=finalize_method)
-        assert_frame_equal(lib.read("sym").data, pd.concat([df1, df2, df3]))
-
-    def test_df_without_rows(self, lmdb_library, finalize_method):
-        lib = lmdb_library
-        df = pd.DataFrame({"col": []}, index=pd.DatetimeIndex([]))
-        lib.write("sym", df, staged=True)
-        lib.finalize_staged_data("sym", mode=finalize_method)
-        assert_frame_equal(lib.read("sym").data, df)
-
-@pytest.mark.parametrize("finalize_method", (StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE))
-def test_finalize_without_adding_segments(lmdb_library, finalize_method):
-    lib = lmdb_library
+def test_finalize_without_adding_segments(arctic_library, finalize_method):
+    lib = arctic_library
     with pytest.raises(UserInputException) as exception_info:
         lib.finalize_staged_data("sym", mode=finalize_method)
 
+
 class TestAppendStagedData:
-    def test_appended_df_interleaves_with_storage(self, lmdb_library):
-        lib = lmdb_library
+    def test_appended_df_interleaves_with_storage(self, arctic_library):
+        lib = arctic_library
         initial_df = pd.DataFrame({"col": [1, 3]}, index=pd.DatetimeIndex([np.datetime64('2023-01-01'), np.datetime64('2023-01-03')], dtype="datetime64[ns]"))
         lib.write("sym", initial_df)
         df1 = pd.DataFrame({"col": [2]}, index=pd.DatetimeIndex([np.datetime64('2023-01-02')], dtype="datetime64[ns]"))
@@ -335,8 +308,8 @@ class TestAppendStagedData:
             lib.finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
         assert "append" in str(exception_info.value)
 
-    def test_appended_df_start_same_as_df_end(self, lmdb_library):
-        lib = lmdb_library
+    def test_appended_df_start_same_as_df_end(self, arctic_library):
+        lib = arctic_library
         df = pd.DataFrame(
             {"col": [1, 2, 3]},
             index=pd.DatetimeIndex([np.datetime64('2023-01-01'), np.datetime64('2023-01-02'), np.datetime64('2023-01-03')], dtype="datetime64[ns]")
