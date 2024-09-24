@@ -69,7 +69,7 @@ void TimeseriesIndex::check(const FieldCollection& fields) const {
 
 IndexValue TimeseriesIndex::start_value_for_segment(const SegmentInMemory& segment) {
     if (segment.row_count() == 0)
-        return {NumericIndex{0}};
+        return {NumericIndex{min_index_value()}};
     auto first_ts = segment.template scalar_at<timestamp>(0, 0).value();
     return {first_ts};
 }
@@ -77,14 +77,14 @@ IndexValue TimeseriesIndex::start_value_for_segment(const SegmentInMemory& segme
 IndexValue TimeseriesIndex::end_value_for_segment(const SegmentInMemory& segment) {
     auto row_count = segment.row_count();
     if (row_count == 0)
-        return {NumericIndex{0}};
+        return {NumericIndex{min_index_value()}};
     auto last_ts = segment.template scalar_at<timestamp>(row_count - 1, 0).value();
     return {last_ts};
 }
 
 IndexValue TimeseriesIndex::start_value_for_keys_segment(const SegmentInMemory& segment) {
     if (segment.row_count() == 0)
-        return {NumericIndex{0}};
+        return {NumericIndex{min_index_value()}};
     auto start_index_id = int(pipelines::index::Fields::start_index);
     auto first_ts = segment.template scalar_at<timestamp>(0, start_index_id).value();
     return {first_ts};
@@ -93,7 +93,7 @@ IndexValue TimeseriesIndex::start_value_for_keys_segment(const SegmentInMemory& 
 IndexValue TimeseriesIndex::end_value_for_keys_segment(const SegmentInMemory& segment) {
     auto row_count = segment.row_count();
     if (row_count == 0)
-        return {NumericIndex{0}};
+        return {NumericIndex{min_index_value()}};
     auto end_index_id = int(pipelines::index::Fields::end_index);
     auto last_ts = segment.template scalar_at<timestamp>(row_count - 1, end_index_id).value();
     return {last_ts};

@@ -13,7 +13,7 @@
 namespace arcticdb {
 StreamDescriptor merge_descriptors(
     const StreamDescriptor &original,
-    const std::vector<std::shared_ptr<FieldCollection>> &entries,
+    std::span<const std::shared_ptr<FieldCollection>> entries,
     const std::unordered_set<std::string_view> &filtered_set,
     const std::optional<IndexDescriptorImpl>& default_index) {
     using namespace arcticdb::stream;
@@ -34,6 +34,7 @@ StreamDescriptor merge_descriptors(
                 merged_fields.emplace_back(idx.name());
                 merged_fields_map.try_emplace(idx.name(), TypeDescriptor{typename IndexType::TypeDescTag{}});
             });
+            index = default_index_type_from_descriptor(*default_index);
         } else {
             util::raise_rte("Descriptor has uninitialized index and no default supplied");
         }
@@ -71,7 +72,12 @@ StreamDescriptor merge_descriptors(
                         if(new_descriptor) {
                             merged_fields_map[field.name()] = *new_descriptor;
                         } else {
-                            util::raise_rte("No valid common type between {} and {} for column {}", existing_type_desc, type_desc, field.name());
+                            schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                                "No valid common type between {} and {} for column {}",
+                                existing_type_desc,
+                                type_desc,
+                                field.name()
+                            );
                         }
                     }
                 } else {
@@ -92,6 +98,17 @@ StreamDescriptor merge_descriptors(
     const StreamDescriptor &original,
     const std::vector<std::shared_ptr<FieldCollection>> &entries,
     const std::optional<std::vector<std::string>> &filtered_columns,
+    const std::optional<IndexDescriptorImpl>& default_index) {
+    std::unordered_set<std::string_view> filtered_set = filtered_columns.has_value()
+        ? std::unordered_set<std::string_view>(filtered_columns->begin(), filtered_columns->end())
+        : std::unordered_set<std::string_view>{};
+    return merge_descriptors(original, entries, filtered_set, default_index);
+}
+
+StreamDescriptor merge_descriptors(
+    const StreamDescriptor& original,
+    std::span<const std::shared_ptr<FieldCollection>> entries,
+    const std::optional<std::vector<std::string>>& filtered_columns,
     const std::optional<IndexDescriptorImpl>& default_index) {
     std::unordered_set<std::string_view> filtered_set = filtered_columns.has_value()
         ? std::unordered_set<std::string_view>(filtered_columns->begin(), filtered_columns->end())
