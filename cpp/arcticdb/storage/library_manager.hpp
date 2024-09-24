@@ -11,7 +11,6 @@
 #include <arcticdb/storage/library.hpp>
 #include <arcticdb/storage/library_path.hpp>
 #include <arcticdb/storage/storage_override.hpp>
-#include <arcticdb/pipeline/index_segment_reader.hpp>
 
 
 namespace arcticdb::storage {

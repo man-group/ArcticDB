@@ -277,10 +277,15 @@ public:
         return TypedColumnIterator<TagType, const RawType>(*this, false);
     }
 
-    template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
+    template<typename T>
+    requires std::integral<T> || std::floating_point<T>
     void set_scalar(ssize_t row_offset, T val) {
-        util::check(sizeof(T) == get_type_size(type_.data_type()), "Type mismatch in set_scalar, expected {}",
-                    get_type_size(type_.data_type()));
+        util::check(
+            sizeof(T) == get_type_size(type_.data_type()),
+            "Type mismatch in set_scalar, expected {} byte scalar got {} byte scalar",
+            get_type_size(type_.data_type()),
+            sizeof(T)
+        );
 
         auto prev_logical_row = last_logical_row_;
         last_logical_row_ = row_offset;

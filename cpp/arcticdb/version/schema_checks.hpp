@@ -127,7 +127,7 @@ inline void fix_descriptor_mismatch_or_throw(
     if (!dynamic_schema && !columns_match(old_sd, new_frame.desc)) {
         throw StreamDescriptorMismatch(
             "The columns (names and types) in the argument are not identical to that of the existing version",
-            StreamDescriptor{old_sd},
+            old_sd,
             new_frame.desc,
             operation);
     }
