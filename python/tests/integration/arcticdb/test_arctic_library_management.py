@@ -33,7 +33,7 @@ from arcticdb.version_store.library import (
     ArcticInvalidApiUsageException,
 )
 
-from tests.util.mark import AZURE_TESTS_MARK, MONGO_TESTS_MARK, REAL_S3_TESTS_MARK
+from tests.util.mark import AZURE_TESTS_MARK, MONGO_TESTS_MARK, REAL_S3_TESTS_MARK, SSL_TEST_SUPPORTED
 from tests.util.storage_test import get_s3_storage_config
 
 from arcticdb.options import ModifiableEnterpriseLibraryOption, ModifiableLibraryOption
@@ -306,6 +306,8 @@ def test_do_not_persist_s3_details(s3_storage):
     """We apply an in-memory overlay for these instead. In particular we should absolutely not persist credentials
     in the storage."""
 
+    if SSL_TEST_SUPPORTED:
+        assert s3_storage.arctic_uri.startswith("s3s://")
     ac = Arctic(s3_storage.arctic_uri)
     lib = ac.create_library("test")
     lib.write("sym", pd.DataFrame())
@@ -321,10 +323,13 @@ def test_do_not_persist_s3_details(s3_storage):
     assert s3_storage.request_timeout == 0
     assert not s3_storage.ssl
     assert s3_storage.prefix.startswith("test")
-    # HTTS is persisted on purpose to support backwards compatibility
-    # assert not s3_storage.https
     assert s3_storage.region == ""
     assert not s3_storage.use_virtual_addressing
+    # HTTS is persisted on purpose to support backwards compatibility
+    if SSL_TEST_SUPPORTED:
+        assert s3_storage.https
+    else:
+        assert not s3_storage.https
 
     assert "sym" in ac["test"].list_symbols()
 

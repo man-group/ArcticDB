@@ -30,21 +30,23 @@ const std::string BAD_CONFIG_IN_ATTEMPTED_WRITE = "Attempting to write forbidden
 template<typename T>
 struct StorageVisitor {
     arcticdb::proto::storage::LibraryConfig& lib_cfg_proto;
+    bool override_https;
 
     void operator()(const T& storage_override) {
         for(auto& storage: *lib_cfg_proto.mutable_storage_by_id()){
-            storage_override.modify_storage_config(storage.second);
+            storage_override.modify_storage_config(storage.second, override_https);
         }
     }
 };
 
 void apply_storage_override(const StorageOverride& storage_override,
-                                   arcticdb::proto::storage::LibraryConfig& lib_cfg_proto) {
+                                   arcticdb::proto::storage::LibraryConfig& lib_cfg_proto,
+                                   bool override_https) {
     util::variant_match(
             storage_override.variant(),
-            StorageVisitor<S3Override>{lib_cfg_proto},
-            StorageVisitor<AzureOverride>{lib_cfg_proto},
-            StorageVisitor<LmdbOverride>{lib_cfg_proto},
+            StorageVisitor<S3Override>{lib_cfg_proto, override_https},
+            StorageVisitor<AzureOverride>{lib_cfg_proto, override_https},
+            StorageVisitor<LmdbOverride>{lib_cfg_proto, override_https},
             [] (const std::monostate&) {});
 }
 
@@ -91,7 +93,7 @@ void LibraryManager::write_library_config(const py::object& lib_cfg, const Libra
     google::protobuf::Any output = {};
     python_util::pb_from_python(lib_cfg, lib_cfg_proto);
 
-    apply_storage_override(storage_override, lib_cfg_proto);
+    apply_storage_override(storage_override, lib_cfg_proto, false);
 
     output.PackFrom(lib_cfg_proto);
 
@@ -191,7 +193,7 @@ arcticdb::proto::storage::LibraryConfig LibraryManager::get_config_internal(cons
     auto any = segment_in_memory.metadata();
     arcticdb::proto::storage::LibraryConfig lib_cfg_proto;
     any->UnpackTo(&lib_cfg_proto);
-    apply_storage_override(storage_override, lib_cfg_proto);
+    apply_storage_override(storage_override, lib_cfg_proto, true);
     return lib_cfg_proto;
 }
 
