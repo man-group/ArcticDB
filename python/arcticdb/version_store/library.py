@@ -2206,3 +2206,194 @@ class Library:
     def name(self):
         """The name of this library."""
         return self._nvs.name()
+
+    def _get_version_rows(self,
+                          symbol: str,
+                          as_of=None
+                          ) -> Tuple[int, int]:
+        """ Returns a version and a row_count for a symbol. Used in the chunking api """
+        version_query = self._nvs._get_version_query(as_of)
+        dit = self._nvs.version_store.read_descriptor(symbol, version_query)
+        return dit.version, dit.timeseries_descriptor.total_rows
+
+    @staticmethod
+    def _row_range_to_positive_bounds(row_range: Optional[Tuple[Optional[int], Optional[int]]],
+                                      row_count: int) -> Optional[Tuple[int, int]]:
+        """ Transforms a row_range by replacing None and negative bounds with positive bounds to make downstream processing simpler """
+        if row_range is None:
+            return 0, row_count
+        row_range_start = row_range[0] if row_range[0] is not None else 0
+        row_range_end = row_range[1] if row_range[1] is not None else row_count
+        if row_range_start < 0:
+            row_range_start += row_count
+        if row_range_end < 0:
+            row_range_end += row_count
+        return row_range_start, row_range_end
+
+    def _read_requests_from_row_segments(self,
+                                         symbol: str,
+                                         as_of: Optional[AsOf] = None,
+                                         date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None,
+                                         row_range: Optional[Tuple[int, int]] = None,
+                                         columns: Optional[List[str]] = None,
+                                         query_builder: Optional[QueryBuilder] = None
+                                         ) -> List[ReadRequest]:
+        """ returns a list of RowRequest one for each row segment of the symbol """
+        if date_range is not None:
+            raise ValueError("date_range is not yet supported for chunking")
+        version, row_count = self._get_version_rows(symbol, as_of)
+        row_range_start, row_range_end = self._row_range_to_positive_bounds(row_range, row_count)
+        idx = self._nvs.read_index(symbol, as_of=version)
+        start_row_col = idx.columns.get_loc('start_row')
+        end_row_col = idx.columns.get_loc('end_row')
+        start_col_col = idx.columns.get_loc('start_col')
+        read_requests = []
+        for i in range(len(idx)):
+            start_col = idx.iloc[i, start_col_col]
+            start_row = int(idx.iloc[i, start_row_col])
+            end_row = int(idx.iloc[i, end_row_col])
+            # skip the segment if not the first column or completely outside the row range
+            if start_col > 1 or end_row < row_range_start or start_row >= row_range_end:
+                continue
+            read_requests.append(ReadRequest(symbol, as_of=version, columns=columns,
+                                             row_range=(max(start_row, row_range_start), min(end_row, row_range_end)),
+                                             query_builder=query_builder
+                                            )
+                                 )
+        return read_requests
+
+    def _read_requests_from_chunks(self,
+                                   symbol: str,
+                                   as_of: Optional[AsOf] = None,
+                                   date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None,
+                                   row_range: Optional[Tuple[int, int]] = None,
+                                   columns: Optional[List[str]] = None,
+                                   query_builder: Optional[QueryBuilder] = None,
+                                   num_chunks: int = None,
+                                   rows_per_chunk: int = None
+                                  ) -> List[ReadRequest]:
+        """ returns a list of RowRequest with chunk size specified by either `num_chunks` or `rows_per_chunk` """
+        if date_range is not None:
+            raise ValueError("date_range is not yet supported for chunking")
+        version, row_count = self._get_version_rows(symbol, as_of)
+        row_range_start, row_range_end = self._row_range_to_positive_bounds(row_range, row_count)
+        row_count_adj = row_range_end - row_range_start
+        if num_chunks is not None:
+            if rows_per_chunk is not None:
+                raise ValueError(f"Only one of the arguments num_chunks ({num_chunks})"
+                                 f" and rows_per_chunk ({rows_per_chunk}) can be set")
+            # make the chunks as balanced as possible (differing in rows by 1 max)
+            base_rows = row_count_adj // num_chunks
+            extra_rows = row_count_adj % num_chunks
+        elif rows_per_chunk is not None:
+            # make the chunks exactly as requested, with the last block picking up the remaining rows
+            exact_chunks = 0 if (row_count_adj % rows_per_chunk)==0 else 1
+            num_chunks = row_count_adj // rows_per_chunk + exact_chunks
+            base_rows = rows_per_chunk
+            extra_rows = 0
+        else:
+            raise ValueError(f"One of the arguments num_chunks or rows_per_chunk must be set")
+        #print(num_chunks, base_rows, extra_rows, row_range_start, row_range_end, row_count_adj)
+        start_row = row_range_start
+        read_requests = []
+        for i in range(num_chunks):
+            end_row = min(start_row + base_rows + (1 if i<extra_rows else 0), row_range_end)
+            read_requests.append(ReadRequest(symbol, as_of=version, columns=columns,
+                                             row_range=(start_row, end_row),
+                                             query_builder=query_builder
+                                             )
+                                 )
+            start_row = end_row
+        return read_requests
+
+    def iter_read_chunks(self,
+                         symbol: str,
+                         as_of: Optional[AsOf] = None,
+                         date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None,
+                         row_range: Optional[Tuple[int, int]] = None,
+                         columns: Optional[List[str]] = None,
+                         query_builder: Optional[QueryBuilder] = None,
+                         lazy: bool = False,
+                         num_chunks: int = None,
+                         rows_per_chunk: int = None
+                         ):
+        """
+        Iterates through the symbol in row chunks. When run in a loop, each chunk is returned as a separate dataframe.
+
+        If `num_chunks` or `rows_per_chunk` are specified, they will be used to set the chunk size. If neither are
+        specified, the chunks will correspond to the row segments in storage. Using the segments makes efficient use
+        of the storage, by reducing the number of objects to read.
+
+        Reading in chunks can be used to control memory usage for large data sets or to process chunks using a compute
+        cluster.
+
+        Parameters
+        ----------
+        symbol : str
+            Symbol name.
+
+        as_of : AsOf, default=None
+            Return the data as it was as of the point in time. ``None`` means that the latest version should be read.
+            See `read()` for more detail.
+
+        date_range: Tuple[Optional[Timestamp], Optional[Timestamp]], default=None
+            Not yet implemented for chunks.
+            DateRange to restrict chunks to. See `read()` for more detail.
+
+        row_range: `Optional[Tuple[int, int]]`, default=None
+            Row range to restrict chunks to. See `read()` for more detail.
+
+        columns: List[str], default=None
+            Determines which columns to return data for. See `read()` for more detail.
+
+        query_builder: Optional[QueryBuilder], default=None
+            A QueryBuilder object to apply to each chunk read. See `read()` for more detail on QueryBuilder.
+            Note that in some cases this will lead to different results from applying the same query_builder to
+            the whole data set for the symbol.
+
+        lazy: bool, default=False
+            If True, return lazy dataframes rather than data. See `read()` for more detail.
+
+        num_chunks: int
+            The number of chunks to divide the data into. Do not use with `rows_per_chunk`.
+
+        rows_per_chunk: int
+            The number of rows in each chunk. Do not use with `num_chunks`.
+
+        Returns
+        -------
+        An iterator for which each iteration will yield the dataframe from a chunk.
+
+        Examples
+        --------
+
+        >>> df = pd.DataFrame({'row_num': np.arange(11)}, index=pd.date_range('20240101', periods=11))
+        >>> lib.write('chunk_test', df)
+        >>> for c in lib.iter_read_chunks('chunk_test', rows_per_chunk=5):
+        >>>     print(c)
+                    row_num
+        2024-01-01        0
+        2024-01-02        1
+        2024-01-03        2
+        2024-01-04        3
+        2024-01-05        4
+                    row_num
+        2024-01-06        5
+        2024-01-07        6
+        2024-01-08        7
+        2024-01-09        8
+        2024-01-10        9
+                    row_num
+        2024-01-11       10
+
+        """
+        if num_chunks is None and rows_per_chunk is None:
+            read_requests = self._read_requests_from_row_segments(symbol, as_of, date_range, row_range, columns,
+                                                                  query_builder)
+        else:
+            read_requests = self._read_requests_from_chunks(symbol, as_of, date_range, row_range, columns,
+                                                            query_builder, num_chunks, rows_per_chunk)
+        for rr in read_requests:
+            rr_dict = rr._asdict()
+            yield self.read(**rr_dict).data if not lazy else self.read(**rr_dict, lazy=True)
+
