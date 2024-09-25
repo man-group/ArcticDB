@@ -1438,7 +1438,7 @@ VersionedItem sort_merge_impl(
         if (!write_options.dynamic_schema) {
             user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                 pipeline_context->slice_and_keys_.front().slice().columns() == pipeline_context->slice_and_keys_.back().slice().columns(),
-                "Appending using sort and finalize is not supported when column slicing has been done."
+                "Appending using sort and finalize is not supported when existing data being appended to is column sliced."
             );
         }
         previous_sorted_value.emplace(pipeline_context->desc_->sorted());
@@ -1561,7 +1561,7 @@ VersionedItem compact_incomplete_impl(
         if (!write_options.dynamic_schema) {
             user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                 pipeline_context->slice_and_keys_.front().slice().columns() == pipeline_context->slice_and_keys_.back().slice().columns(),
-                "Appending using sort and finalize is not supported when column slicing has been done."
+                "Appending using sort and finalize is not supported when existing data being appended to is column sliced."
             );
         }
         previous_sorted_value.emplace(pipeline_context->desc_->sorted());

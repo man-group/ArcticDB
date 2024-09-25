@@ -802,6 +802,15 @@ class TestSlicing:
         lib.append("sym", df_1)
         assert_frame_equal(lib.read("sym").data, pd.concat([df_0, df_1]))
 
+        # Cannot perform another sort and finalize append when column sliced data has been written even though the first
+        # write is done using sort and finalize
+        with pytest.raises(UserInputException) as exception_info:
+            lib.write("sym", pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 3)])), parallel=True)
+            lib.compact_incomplete("sym", True, False)
+        assert "append" in str(exception_info.value).lower()
+        assert "column" in str(exception_info.value).lower()
+        assert "sliced" in str(exception_info.value).lower()
+
     def test_appending_wide_segment_throws_with_prior_slicing(self, lmdb_version_store_tiny_segment, lib_name):
         lib = lmdb_version_store_tiny_segment
         df_0 = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
@@ -812,7 +821,8 @@ class TestSlicing:
         with pytest.raises(UserInputException) as exception_info:
             lib.compact_incomplete("sym", True, True)
         assert "append" in str(exception_info.value).lower()
-        assert "slicing" in str(exception_info.value).lower()
+        assert "column" in str(exception_info.value).lower()
+        assert "sliced" in str(exception_info.value).lower()
 
     def test_writing_wide_segment_over_sliced_data(self, lmdb_version_store_tiny_segment):
         lib = lmdb_version_store_tiny_segment

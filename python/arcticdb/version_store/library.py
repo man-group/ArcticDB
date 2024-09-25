@@ -1156,6 +1156,7 @@ class Library:
             1. Static schema is used.
             2. The width of the DataFrame exceeds the value of `LibraryOptions.columns_per_segment`.
             3. The symbol contains data that was not written by `sort_and_finalize_staged_data`.
+            4. Finalize mode is append
 
         See Also
         --------
@@ -1212,6 +1213,7 @@ class Library:
             1. Static schema is used.
             2. The width of the DataFrame exceeds the value of `LibraryOptions.columns_per_segment`.
             3. The symbol contains data that was not written by `sort_and_finalize_staged_data`.
+            4. Finalize mode is append
 
         See Also
         --------
