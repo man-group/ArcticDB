@@ -6,15 +6,13 @@
  */
 
 #include <arcticdb/stream/append_map.hpp>
-#include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
 #include <arcticdb/stream/stream_source.hpp>
 #include <arcticdb/stream/index.hpp>
-#include <arcticdb/entity/protobufs.hpp>
-#include <pipeline/query.hpp>
 #include <pipeline/frame_slice.hpp>
 #include <util/key_utils.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
+#include <iterator>
 
 namespace arcticdb {
 
@@ -451,6 +449,19 @@ std::vector<AppendMapEntry> get_incomplete_append_slices_for_stream_id(
         }
     }
     return entries;
+}
+
+std::vector<VariantKey> read_incomplete_keys_for_symbol(
+    const std::shared_ptr<Store>& store,
+    const StreamId& stream_id,
+    bool via_iteration
+) {
+    const std::vector<AppendMapEntry> entries =
+        get_incomplete_append_slices_for_stream_id(store, stream_id, via_iteration, false);
+    std::vector<VariantKey> slice_and_key;
+    slice_and_key.reserve(entries.size());
+    std::transform(entries.cbegin(), entries.cend(), std::back_inserter(slice_and_key), [](const AppendMapEntry& entry) { return entry.slice_and_key_.key();});
+    return slice_and_key;
 }
 
 std::optional<int64_t> latest_incomplete_timestamp(

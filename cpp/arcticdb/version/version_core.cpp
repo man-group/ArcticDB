@@ -14,20 +14,15 @@
 #include <arcticdb/pipeline/read_pipeline.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/async/tasks.hpp>
-#include <arcticdb/util/key_utils.hpp>
-#include <arcticdb/util/optional_defaults.hpp>
 #include <arcticdb/util/name_validation.hpp>
 #include <arcticdb/stream/append_map.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
 #include <arcticdb/pipeline/read_frame.hpp>
 #include <arcticdb/pipeline/read_options.hpp>
 #include <arcticdb/stream/stream_sink.hpp>
-#include <arcticdb/stream/stream_writer.hpp>
-#include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/stream/schema.hpp>
 #include <arcticdb/pipeline/index_writer.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
-#include <arcticdb/pipeline/column_mapping.hpp>
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/entity/merge_descriptors.hpp>
@@ -1304,30 +1299,55 @@ VersionedItem collate_and_write(
     });
 }
 
+void delete_incomplete_keys(PipelineContext* pipeline_context, Store* store) {
+    std::vector<entity::VariantKey> keys_to_delete;
+    keys_to_delete.reserve(pipeline_context->slice_and_keys_.size() - pipeline_context->incompletes_after());
+    for (auto sk = pipeline_context->incompletes_begin(); sk != pipeline_context->end(); ++sk) {
+        const auto& slice_and_key = sk->slice_and_key();
+        if (ARCTICDB_LIKELY(slice_and_key.key().type() == KeyType::APPEND_DATA)) {
+            keys_to_delete.emplace_back(slice_and_key.key());
+        } else {
+            log::storage().error(
+                "Delete incomplete keys procedure tries to delete a wrong key type {}. Key type must be {}.",
+                slice_and_key.key(),
+                KeyType::APPEND_DATA
+            );
+        }
+    }
+    store->remove_keys(keys_to_delete).get();
+}
+
 class IncompleteKeysRAII {
 public:
-    IncompleteKeysRAII(std::shared_ptr<PipelineContext> pipeline_context, std::shared_ptr<Store> store)
+    IncompleteKeysRAII() = default;
+    IncompleteKeysRAII(
+        std::shared_ptr<PipelineContext> pipeline_context,
+        std::shared_ptr<Store> store,
+        const CompactIncompleteOptions* options)
             : context_(pipeline_context),
-              store_(store) {
+              store_(store),
+              options_(options) {
     }
+    ARCTICDB_MOVE_ONLY_DEFAULT(IncompleteKeysRAII)
 
-    ~IncompleteKeysRAII(){
-        std::vector<entity::VariantKey> keys_to_delete;
-        for (auto sk = context_->incompletes_begin(); sk != context_->end(); ++sk) {
-            const auto& slice_and_key = sk->slice_and_key();
-            internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                slice_and_key.key().type() == KeyType::APPEND_DATA,
-                "Deleting incorrect key type {}",
-                slice_and_key.key().type()
-            );
-            keys_to_delete.emplace_back(slice_and_key.key());
+    ~IncompleteKeysRAII() {
+        if (context_ && store_) {
+            if (context_->incompletes_after_) {
+                delete_incomplete_keys(context_.get(), store_.get());
+            } else {
+                // If an exception is thrown before read_incompletes_to_pipeline the keys won't be placed inside the
+                // context thus they must be read manually.
+                const std::vector<VariantKey> entries =
+                    read_incomplete_keys_for_symbol(store_, context_->stream_id_, options_->via_iteration_);
+                store_->remove_keys(entries).get();
+            }
         }
-        store_->remove_keys(keys_to_delete).get();
     }
 
 private:
-    std::shared_ptr<PipelineContext> context_;
-    std::shared_ptr<Store> store_;
+    std::shared_ptr<PipelineContext> context_ = nullptr;
+    std::shared_ptr<Store> store_ = nullptr;
+    const CompactIncompleteOptions* options_ = nullptr;
 };
 
 VersionedItem sort_merge_impl(
@@ -1343,6 +1363,9 @@ VersionedItem sort_merge_impl(
     ReadQuery read_query;
 
     std::optional<SortedValue> previous_sorted_value;
+    const IncompleteKeysRAII incomplete_keys_raii = options.delete_staged_data_on_failure_
+        ? IncompleteKeysRAII{pipeline_context, store, &options}
+        : IncompleteKeysRAII{};
     if(options.append_ && update_info.previous_index_key_.has_value()) {
         read_indexed_keys_to_pipeline(store, pipeline_context, *(update_info.previous_index_key_), read_query, ReadOptions{});
         if (!write_options.dynamic_schema) {
@@ -1353,8 +1376,6 @@ VersionedItem sort_merge_impl(
         }
         previous_sorted_value.emplace(pipeline_context->desc_->sorted());
     }
-    pipeline_context->incompletes_after_ = pipeline_context->slice_and_keys_.size();
-    IncompleteKeysRAII incomplete_keys(pipeline_context, store);
     const auto num_versioned_rows = pipeline_context->total_rows_;
 
     const bool has_incomplete_segments = read_incompletes_to_pipeline(
@@ -1446,7 +1467,9 @@ VersionedItem sort_merge_impl(
         keys,
         pipeline_context->incompletes_after(),
         norm_meta);
-
+    if (!options.delete_staged_data_on_failure_) {
+        delete_incomplete_keys(pipeline_context.get(), store.get());
+    }
     return vit;
 }
 
@@ -1467,6 +1490,9 @@ VersionedItem compact_incomplete_impl(
 
     std::optional<SegmentInMemory> last_indexed;
     std::optional<SortedValue> previous_sorted_value;
+    const IncompleteKeysRAII incomplete_keys_raii = options.delete_staged_data_on_failure_
+        ? IncompleteKeysRAII{pipeline_context, store, &options}
+        : IncompleteKeysRAII{};
     if(options.append_ && update_info.previous_index_key_.has_value()) {
         read_indexed_keys_to_pipeline(store, pipeline_context, *(update_info.previous_index_key_), read_query, read_options);
         if (!write_options.dynamic_schema) {
@@ -1477,7 +1503,6 @@ VersionedItem compact_incomplete_impl(
         }
         previous_sorted_value.emplace(pipeline_context->desc_->sorted());
     }
-    IncompleteKeysRAII incomplete_keys(pipeline_context, store);
 
     const bool has_incomplete_segments = read_incompletes_to_pipeline(
         store,
@@ -1489,7 +1514,6 @@ VersionedItem compact_incomplete_impl(
         options.sparsify_,
         write_options.dynamic_schema
     );
-
     user_input::check<ErrorCode::E_NO_STAGED_SEGMENTS>(
         has_incomplete_segments,
         "Finalizing staged data is not allowed with empty staging area"
@@ -1538,7 +1562,9 @@ VersionedItem compact_incomplete_impl(
         keys,
         pipeline_context->incompletes_after(),
         user_meta);
-
+    if (!options.delete_staged_data_on_failure_) {
+        delete_incomplete_keys(pipeline_context.get(), store.get());
+    }
     return vit;
 }
 

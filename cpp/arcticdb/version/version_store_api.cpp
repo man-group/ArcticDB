@@ -706,7 +706,8 @@ VersionedItem PythonVersionStore::compact_incomplete(
         bool sparsify /*= false */,
         const std::optional<py::object>& user_meta /* = std::nullopt */,
         bool prune_previous_versions,
-        bool validate_index) {
+        bool validate_index,
+        bool delete_staged_data_on_failure) {
     std::optional<arcticdb::proto::descriptors::UserDefinedMetadata> meta;
     if (user_meta && !user_meta->is_none()) {
         meta = std::make_optional<arcticdb::proto::descriptors::UserDefinedMetadata>();
@@ -718,7 +719,8 @@ VersionedItem PythonVersionStore::compact_incomplete(
         .convert_int_to_float_=convert_int_to_float,
         .via_iteration_=via_iteration,
         .sparsify_=sparsify,
-        .validate_index_=validate_index
+        .validate_index_=validate_index,
+        .delete_staged_data_on_failure_=delete_staged_data_on_failure
     };
     return compact_incomplete_dynamic(stream_id, meta, options);
 }
@@ -730,8 +732,8 @@ VersionedItem PythonVersionStore::sort_merge(
         bool convert_int_to_float,
         bool via_iteration,
         bool sparsify,
-        bool prune_previous_versions
-) {
+        bool prune_previous_versions,
+        bool delete_staged_data_on_failure) {
     std::optional<arcticdb::proto::descriptors::UserDefinedMetadata> meta;
     if (!user_meta.is_none()) {
         meta = std::make_optional<arcticdb::proto::descriptors::UserDefinedMetadata>();
@@ -742,7 +744,8 @@ VersionedItem PythonVersionStore::sort_merge(
         .append_=append,
         .convert_int_to_float_=convert_int_to_float,
         .via_iteration_=via_iteration,
-        .sparsify_=sparsify
+        .sparsify_=sparsify,
+        .delete_staged_data_on_failure_=delete_staged_data_on_failure
     };
     return sort_merge_internal(stream_id, meta, options);
 }
