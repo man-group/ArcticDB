@@ -8,6 +8,20 @@ from arcticdb.exceptions import UserInputException, SortingException, StreamDesc
 from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb_ext import set_config_int
 from arcticdb.options import LibraryOptions
+import arcticdb.toolbox.library_tool
+
+def get_append_keys(lib, sym):
+    lib_tool = lib._nvs.library_tool()
+    keys = lib_tool.find_keys_for_symbol(arcticdb.toolbox.library_tool.KeyType.APPEND_DATA, sym)
+    return keys
+
+def assert_delete_staged_data_clears_append_keys(lib, sym):
+    """
+    Clear APPEND_DATA keys for a symbol and assert there are no APPEND_DATA keys after that.
+    Note this has a side effect of actually deleting the APPEND_DATA keys.
+    """
+    lib.delete_staged_data(sym)
+    assert len(get_append_keys(lib, sym)) == 0
 
 def test_merge_single_column(lmdb_library_static_dynamic):
     lib = lmdb_library_static_dynamic
@@ -38,6 +52,7 @@ def test_merge_single_column(lmdb_library_static_dynamic):
     assert sort_and_finalize_res.library == lib.name
     assert sort_and_finalize_res.version == 0
     assert lib.read(sym1).metadata == metadata
+    assert len(get_append_keys(lib, sym1)) == 0
 
 def test_merge_two_column(lmdb_library_static_dynamic):
     lib = lmdb_library_static_dynamic
@@ -186,15 +201,19 @@ class TestMergeSortAppend:
         expected_df = pd.DataFrame({"col": range(1, 9)}, index=expected_index)
         assert_frame_equal(lib.read("sym").data, expected_df)
 
-    def test_appended_df_interleaves_with_storage(self, lmdb_library_static_dynamic):
+    @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
+    def test_appended_df_interleaves_with_storage(self, lmdb_library_static_dynamic, delete_staged_data_on_failure):
         lib = lmdb_library_static_dynamic
         initial_df = pd.DataFrame({"col": [1, 3]}, index=pd.DatetimeIndex([np.datetime64('2023-01-01'), np.datetime64('2023-01-03')], dtype="datetime64[ns]"))
         lib.write("sym", initial_df)
         df1 = pd.DataFrame({"col": [2]}, index=pd.DatetimeIndex([np.datetime64('2023-01-02')], dtype="datetime64[ns]"))
         lib.write("sym", df1, staged=True)
         with pytest.raises(SortingException) as exception_info:
-            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND, delete_staged_data_on_failure=delete_staged_data_on_failure)
         assert "append" in str(exception_info.value)
+        expected_key_count = 0 if delete_staged_data_on_failure else 1
+        assert len(get_append_keys(lib, "sym")) == expected_key_count
+        assert_delete_staged_data_clears_append_keys(lib, "sym")
 
     def test_appended_df_start_same_as_df_end(self, lmdb_library_static_dynamic):
         lib = lmdb_library_static_dynamic
@@ -258,6 +277,7 @@ class TestEmptySegments:
         with pytest.raises(UserInputException) as exception_info:
             lib.sort_and_finalize_staged_data("sym", mode=mode)
         assert "E_NO_STAGED_SEGMENTS" in str(exception_info.value)
+        assert len(get_append_keys(lib, "sym")) == 0
 
     def test_mixing_empty_and_non_empty_columns(self, lmdb_library_dynamic_schema, mode):
         lib = lmdb_library_dynamic_schema
@@ -291,7 +311,8 @@ def test_pre_epoch(lmdb_library):
 
 
 class TestDescriptorMismatchBetweenStagedSegments:
-    def test_append_throws_with_missmatched_column_set(self, lmdb_library):
+    @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
+    def test_append_throws_with_missmatched_column_set(self, lmdb_library, delete_staged_data_on_failure):
         lib = lmdb_library
 
         initial_df = pd.DataFrame({"col_0": [1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
@@ -301,10 +322,14 @@ class TestDescriptorMismatchBetweenStagedSegments:
         lib.write("sym", appended_df, staged=True)
 
         with pytest.raises(SchemaException) as exception_info:
-            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND, delete_staged_data_on_failure=delete_staged_data_on_failure)
         assert "col_1" in str(exception_info.value)
+        expected_key_count = 0 if delete_staged_data_on_failure else 2
+        assert len(get_append_keys(lib, "sym")) == expected_key_count
+        assert_delete_staged_data_clears_append_keys(lib, "sym")
 
-    def test_append_throws_column_subset(self, lmdb_library):
+    @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
+    def test_append_throws_column_subset(self, lmdb_library, delete_staged_data_on_failure):
         lib = lmdb_library
 
         df1 = pd.DataFrame(
@@ -320,11 +345,15 @@ class TestDescriptorMismatchBetweenStagedSegments:
         lib.write("sym", df2, staged=True)
 
         with pytest.raises(SchemaException) as exception_info: 
-            lib.sort_and_finalize_staged_data("sym", StagedDataFinalizeMethod.APPEND)
+            lib.sort_and_finalize_staged_data("sym", StagedDataFinalizeMethod.APPEND, delete_staged_data_on_failure=delete_staged_data_on_failure)
         assert "col_0" in str(exception_info.value)
         assert "col_1" in str(exception_info.value)
+        expected_key_count = 0 if delete_staged_data_on_failure else 2
+        assert len(get_append_keys(lib, "sym")) == expected_key_count
+        assert_delete_staged_data_clears_append_keys(lib, "sym")
 
-    def test_appending_reordered_column_set_throws(self, lmdb_library):
+    @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
+    def test_appending_reordered_column_set_throws(self, lmdb_library, delete_staged_data_on_failure):
         lib = lmdb_library
 
         df1 = pd.DataFrame({"col_0": [1], "col_1": ["test"], "col_2": [1.2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
@@ -334,12 +363,16 @@ class TestDescriptorMismatchBetweenStagedSegments:
         lib.write("sym", df2, staged=True)
 
         with pytest.raises(SchemaException) as exception_info:
-            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND, delete_staged_data_on_failure=delete_staged_data_on_failure)
         assert "col_0" in str(exception_info.value)
         assert "col_1" in str(exception_info.value)
         assert "col_2" in str(exception_info.value)
+        expected_key_count = 0 if delete_staged_data_on_failure else 2
+        assert len(get_append_keys(lib, "sym")) == expected_key_count
+        assert_delete_staged_data_clears_append_keys(lib, "sym")
 
-    def test_append_throws_on_incompatible_dtype(self, lmdb_library):
+    @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
+    def test_append_throws_on_incompatible_dtype(self, lmdb_library, delete_staged_data_on_failure):
         lib = lmdb_library
 
         df1 = pd.DataFrame({"col_0": np.array([1], dtype="int64")}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
@@ -349,12 +382,16 @@ class TestDescriptorMismatchBetweenStagedSegments:
         lib.write("sym", df2, staged=True)
 
         with pytest.raises(SchemaException) as exception_info:
-            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND, delete_staged_data_on_failure=delete_staged_data_on_failure)
         assert "col_0" in str(exception_info.value)
         assert "INT64" in str(exception_info.value)
+        expected_key_count = 0 if delete_staged_data_on_failure else 2
+        assert len(get_append_keys(lib, "sym")) == expected_key_count
+        assert_delete_staged_data_clears_append_keys(lib, "sym")
 
+    @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
     @pytest.mark.parametrize("mode", [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE])
-    def test_types_cant_be_promoted(self, lmdb_library, mode):
+    def test_types_cant_be_promoted(self, lmdb_library, mode, delete_staged_data_on_failure):
         lib = lmdb_library
 
         df1 = pd.DataFrame({"col_0": np.array([1], dtype="float")}, index=pd.DatetimeIndex([np.datetime64('2023-01-01')]))
@@ -364,13 +401,17 @@ class TestDescriptorMismatchBetweenStagedSegments:
         lib.write("sym", df2, staged=True)
 
         with pytest.raises(SchemaException) as exception_info:
-            lib.sort_and_finalize_staged_data("sym", mode=mode)
+            lib.sort_and_finalize_staged_data("sym", mode=mode, delete_staged_data_on_failure=delete_staged_data_on_failure)
         assert "col_0" in str(exception_info.value)
         assert "FLOAT" in str(exception_info.value)
         assert "INT" in str(exception_info.value)
+        expected_key_count = 0 if delete_staged_data_on_failure else 2
+        assert len(get_append_keys(lib, "sym")) == expected_key_count
+        assert_delete_staged_data_clears_append_keys(lib, "sym")
 
+    @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
     @pytest.mark.parametrize("mode", [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE])
-    def test_type_mismatch_in_staged_segments_throws_with_non_promotoable_types(self, lmdb_library, mode):
+    def test_type_mismatch_in_staged_segments_throws_with_non_promotoable_types(self, lmdb_library, mode, delete_staged_data_on_failure):
         lib = lmdb_library
 
         df1 = pd.DataFrame({"col": np.array([1], dtype="int64")}, index=pd.DatetimeIndex([np.datetime64('2023-01-01')]))
@@ -380,12 +421,16 @@ class TestDescriptorMismatchBetweenStagedSegments:
         lib.write("sym", df2, staged=True)
 
         with pytest.raises(SchemaException) as exception_info:
-            lib.sort_and_finalize_staged_data("sym", mode=mode)
+            lib.sort_and_finalize_staged_data("sym", mode=mode, delete_staged_data_on_failure=delete_staged_data_on_failure)
         assert "INT" in str(exception_info.value)
         assert "UTF_DYNAMIC" in str(exception_info.value)
+        expected_key_count = 0 if delete_staged_data_on_failure else 2
+        assert len(get_append_keys(lib, "sym")) == expected_key_count
+        assert_delete_staged_data_clears_append_keys(lib, "sym")
 
+    @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
     @pytest.mark.parametrize("mode", [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE])
-    def test_staged_segments_cant_be_reordered(self, lmdb_library, mode):
+    def test_staged_segments_cant_be_reordered(self, lmdb_library, mode, delete_staged_data_on_failure):
         lib = lmdb_library
 
         df1 = pd.DataFrame({"col_0": [1], "col_1": ["test"], "col_2": [1.2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
@@ -395,10 +440,13 @@ class TestDescriptorMismatchBetweenStagedSegments:
         lib.write("sym", df2, staged=True)
 
         with pytest.raises(SchemaException) as exception_info:
-            lib.sort_and_finalize_staged_data("sym", mode=mode)
+            lib.sort_and_finalize_staged_data("sym", mode=mode, delete_staged_data_on_failure=delete_staged_data_on_failure)
         assert "col_0" in str(exception_info.value)
         assert "col_1" in str(exception_info.value)
         assert "col_2" in str(exception_info.value)
+        expected_key_count = 0 if delete_staged_data_on_failure else 2
+        assert len(get_append_keys(lib, "sym")) == expected_key_count
+        assert_delete_staged_data_clears_append_keys(lib, "sym")
 
 
 class TestStreamDescriptorMismatchOnFinalizeAppend:
@@ -409,18 +457,23 @@ class TestStreamDescriptorMismatchOnFinalizeAppend:
         )
         lib.write(sym, df)
 
-    def test_cannot_append_column_subset(self, lmdb_library):
+    @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
+    def test_cannot_append_column_subset(self, lmdb_library, delete_staged_data_on_failure):
         lib = lmdb_library
         self.init_symbol(lib, "sym")
         
         df = pd.DataFrame({"col_0": np.array([1], dtype="int32")}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
         lib.write("sym", df, staged=True)
         with pytest.raises(SchemaException) as exception_info:
-            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND, delete_staged_data_on_failure=delete_staged_data_on_failure)
         assert "col_1" in str(exception_info.value)
         assert "col_2" in str(exception_info.value)
+        expected_key_count = 0 if delete_staged_data_on_failure else 1
+        assert len(get_append_keys(lib, "sym")) == expected_key_count
+        assert_delete_staged_data_clears_append_keys(lib, "sym")
 
-    def test_cannot_append_reordered_columns(self, lmdb_library):
+    @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
+    def test_cannot_append_reordered_columns(self, lmdb_library, delete_staged_data_on_failure):
         lib = lmdb_library
         self.init_symbol(lib, "sym")
         
@@ -430,12 +483,16 @@ class TestStreamDescriptorMismatchOnFinalizeAppend:
         )
         lib.write("sym", df, staged=True)
         with pytest.raises(SchemaException) as exception_info:
-            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND, delete_staged_data_on_failure=delete_staged_data_on_failure)
         assert "col_0" in str(exception_info.value)
         assert "col_1" in str(exception_info.value)
         assert "col_2" in str(exception_info.value)
+        expected_key_count = 0 if delete_staged_data_on_failure else 1
+        assert len(get_append_keys(lib, "sym")) == expected_key_count
+        assert_delete_staged_data_clears_append_keys(lib, "sym")
 
-    def test_cannot_promote_stored_type(self, lmdb_library):
+    @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
+    def test_cannot_promote_stored_type(self, lmdb_library, delete_staged_data_on_failure):
         lib = lmdb_library
         self.init_symbol(lib, "sym")
         
@@ -445,12 +502,16 @@ class TestStreamDescriptorMismatchOnFinalizeAppend:
         )
         lib.write("sym", df, staged=True)
         with pytest.raises(SchemaException) as exception_info:
-            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND, delete_staged_data_on_failure=delete_staged_data_on_failure)
         assert "col_0" in str(exception_info.value)
         assert "INT32" in str(exception_info.value)
         assert "INT64" in str(exception_info.value)
- 
-    def test_cannot_promote_input_type(self, lmdb_library):
+        expected_key_count = 0 if delete_staged_data_on_failure else 1
+        assert len(get_append_keys(lib, "sym")) == expected_key_count
+        assert_delete_staged_data_clears_append_keys(lib, "sym")
+
+    @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
+    def test_cannot_promote_input_type(self, lmdb_library, delete_staged_data_on_failure):
         lib = lmdb_library
         self.init_symbol(lib, "sym")
         
@@ -460,12 +521,16 @@ class TestStreamDescriptorMismatchOnFinalizeAppend:
         )
         lib.write("sym", df, staged=True)
         with pytest.raises(SchemaException) as exception_info:
-            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND, delete_staged_data_on_failure=delete_staged_data_on_failure)
         assert "col_0" in str(exception_info.value)
         assert "INT32" in str(exception_info.value)
         assert "INT16" in str(exception_info.value)
+        expected_key_count = 0 if delete_staged_data_on_failure else 1
+        assert len(get_append_keys(lib, "sym")) == expected_key_count
+        assert_delete_staged_data_clears_append_keys(lib, "sym")
 
-    def test_cannot_add_new_columns(self, lmdb_library):
+    @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
+    def test_cannot_add_new_columns(self, lmdb_library, delete_staged_data_on_failure):
         lib = lmdb_library
         self.init_symbol(lib, "sym")
 
@@ -480,36 +545,49 @@ class TestStreamDescriptorMismatchOnFinalizeAppend:
         )
         lib.write("sym", df, staged=True)
         with pytest.raises(SchemaException) as exception_info:
-            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND, delete_staged_data_on_failure=delete_staged_data_on_failure)
         assert "col_3" in str(exception_info.value)
+        expected_key_count = 0 if delete_staged_data_on_failure else 1
+        assert len(get_append_keys(lib, "sym")) == expected_key_count
+        assert_delete_staged_data_clears_append_keys(lib, "sym")
 
 @pytest.mark.parametrize("mode", [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE])
 class TestNatInIndexNotAllowed:
 
     @classmethod
-    def assert_nat_not_allowed(cls, lib, symbol, mode):
+    def assert_nat_not_allowed(cls, lib, symbol, mode, delete_staged_data_on_failure):
         with pytest.raises(SortingException) as exception_info:
-            lib.sort_and_finalize_staged_data(symbol, mode=mode)
+            lib.sort_and_finalize_staged_data(symbol, mode=mode, delete_staged_data_on_failure=delete_staged_data_on_failure)
         assert "NaT" in str(exception_info.value)
 
-    def test_index_only_nat(self, lmdb_library_static_dynamic, mode):
+    @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
+    def test_index_only_nat(self, lmdb_library_static_dynamic, mode, delete_staged_data_on_failure):
         lib = lmdb_library_static_dynamic
 
         df1 = pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.NaT, pd.NaT]))
         lib.write("sym", df1, staged=True, validate_index=False)
-        self.assert_nat_not_allowed(lib, "sym", mode)
+        self.assert_nat_not_allowed(lib, "sym", mode, delete_staged_data_on_failure)
+        expected_key_count = 0 if delete_staged_data_on_failure else 1
+        assert len(get_append_keys(lib, "sym")) == expected_key_count
+        assert_delete_staged_data_clears_append_keys(lib, "sym")
 
-    def test_nat_and_valid_date(self, lmdb_library_static_dynamic, mode):
+    @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
+    def test_nat_and_valid_date(self, lmdb_library_static_dynamic, mode, delete_staged_data_on_failure):
         lib = lmdb_library_static_dynamic
 
         df1 = pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.NaT, pd.Timestamp(2024, 1, 1)]))
         lib.write("sym", df1, staged=True, validate_index=False)
-        self.assert_nat_not_allowed(lib, "sym", mode)
-        lib.delete_staged_data("sym")
+        self.assert_nat_not_allowed(lib, "sym", mode, delete_staged_data_on_failure)
+        expected_key_count = 0 if delete_staged_data_on_failure else 1
+        assert len(get_append_keys(lib, "sym")) == expected_key_count
+        assert_delete_staged_data_clears_append_keys(lib, "sym")
 
         df1 = pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1), pd.NaT]))
         lib.write("sym", df1, staged=True, validate_index=False)
-        self.assert_nat_not_allowed(lib, "sym", mode)
+        self.assert_nat_not_allowed(lib, "sym", mode, delete_staged_data_on_failure)
+        expected_key_count = 0 if delete_staged_data_on_failure else 1
+        assert len(get_append_keys(lib, "sym")) == expected_key_count
+        assert_delete_staged_data_clears_append_keys(lib, "sym")
 
 class TestSortMergeDynamicSchema:
 
@@ -616,6 +694,37 @@ def test_update_symbol_list(lmdb_library):
     assert lib_tool.count_keys(KeyType.SYMBOL_LIST) == 3
     assert set(lib.list_symbols()) == set([sym, sym_2])
 
+
+def test_delete_staged_data(lmdb_library):
+    lib = lmdb_library
+    start_date = pd.Timestamp(2024, 1, 1)
+    for i in range(0, 10):
+        lmdb_library.write("sym", pd.DataFrame({"col": [i]}, index=pd.DatetimeIndex([start_date + pd.Timedelta(days=1)])), staged=True)
+    assert len(get_append_keys(lib, "sym")) == 10
+    assert_delete_staged_data_clears_append_keys(lib, "sym")
+
+@pytest.mark.parametrize("mode", [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE])
+def test_get_staged_symbols(lmdb_library, mode):
+    lib = lmdb_library
+    df = pd.DataFrame({"col": [1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
+
+    for i in range(0, 3):
+        lib.write(f"sym_{i}", df, staged=True)
+
+    assert set(lib.get_staged_symbols()) == set([f"sym_{i}" for i in range(0, 3)])
+
+    lib.sort_and_finalize_staged_data("sym_0", mode=mode)
+    assert set(lib.get_staged_symbols()) == set([f"sym_{i}" for i in range(1, 3)])
+
+    lib.delete_staged_data("sym_1")
+    assert lib.get_staged_symbols() == ["sym_2"]
+
+    lib.write("sym_2", pd.DataFrame({"not_matching": [2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)])), staged=True)
+    with pytest.raises(SchemaException):
+        lib.sort_and_finalize_staged_data("sym_2", delete_staged_data_on_failure=True)
+    assert lib.get_staged_symbols() == []
+
+
 class TestSlicing:
     def test_append_long_segment(self, lmdb_library):
         with config_context('Merge.SegmentSize', 5):
@@ -665,38 +774,46 @@ class TestSlicing:
             expected = pd.concat([df_0, pd.DataFrame({"a": staged_values}, index=combined_staged_index)])
             assert_frame_equal(lib.read("sym").data, expected)
 
+    @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
     @pytest.mark.parametrize("mode", [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE])
-    def test_wide_segment_with_no_prior_slicing(self, lmdb_storage, lib_name, mode):
+    def test_wide_segment_with_no_prior_slicing(self, lmdb_storage, lib_name, mode, delete_staged_data_on_failure):
         columns_per_segment = 5
         dataframe_columns = 2 * columns_per_segment
         lib = lmdb_storage.create_arctic().create_library(lib_name, library_options=LibraryOptions(columns_per_segment=columns_per_segment))
         df_0 = pd.DataFrame({f"col_{i}": [i] for i in range(0, dataframe_columns)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
+        # Initial staged write of wide dataframe is allowed
         lib.write("sym", df_0, staged=True)
         lib.sort_and_finalize_staged_data("sym", mode=mode)
         assert_frame_equal(lib.read("sym").data, df_0)
 
+        # Appending to unsliced dataframe is allowed
         df_1 = pd.DataFrame({f"col_{i}": [i] for i in range(0, dataframe_columns)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
         lib.append("sym", df_1)
         assert_frame_equal(lib.read("sym").data, pd.concat([df_0, df_1]))
         # Cannot perform another sort and finalize append when column sliced data has been written even though the first
         # write is done using sort and finalize
+        lib.write("sym", pd.DataFrame({f"col_{i}": [i] for i in range(0, dataframe_columns)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 3)])), staged=True)
         with pytest.raises(UserInputException) as exception_info:
-            lib.write("sym", pd.DataFrame({f"col_{i}": [i] for i in range(0, dataframe_columns)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 3)])), staged=True)
-            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND, delete_staged_data_on_failure=delete_staged_data_on_failure)
         assert "append" in str(exception_info.value).lower()
         assert "column" in str(exception_info.value).lower()
         assert "sliced" in str(exception_info.value).lower()
+        expected_key_count = 0 if delete_staged_data_on_failure else 1
+        assert len(get_append_keys(lib, "sym")) == expected_key_count
 
+    @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
     @pytest.mark.parametrize("mode", [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE])
-    def test_update_wide_staged_segment(self, lmdb_storage, lib_name, mode):
+    def test_update_wide_staged_segment(self, lmdb_storage, lib_name, mode, delete_staged_data_on_failure):
         columns_per_segment = 5
         dataframe_columns = 2 * columns_per_segment
         lib = lmdb_storage.create_arctic().create_library(lib_name, library_options=LibraryOptions(columns_per_segment=columns_per_segment))
         df_0 = pd.DataFrame({f"col_{i}": [1, 2, 3] for i in range(0, dataframe_columns)}, index=pd.DatetimeIndex(pd.date_range(pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 3))))
+        # Initial staged write of wide dataframe is allowed
         lib.write("sym", df_0, staged=True)
         lib.sort_and_finalize_staged_data("sym", mode=mode)
         assert_frame_equal(lib.read("sym").data, df_0)
 
+        # Updating unsliced dataframe is allowed
         update_df = pd.DataFrame({f"col_{i}": [4] for i in range(0, dataframe_columns)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
         lib.update("sym", update_df)
 
@@ -707,21 +824,21 @@ class TestSlicing:
         # Cannot append via sort and finalize because slicing has occurred
         with pytest.raises(UserInputException) as exception_info:
             lib.write("sym", df_1, staged=True)
-            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND, delete_staged_data_on_failure=delete_staged_data_on_failure)
         assert "append" in str(exception_info.value).lower()
         assert "column" in str(exception_info.value).lower()
         assert "sliced" in str(exception_info.value).lower()
+        expected_key_count = 0 if delete_staged_data_on_failure else 1
+        assert len(get_append_keys(lib, "sym")) == expected_key_count
         
         # Can perform regular append
         lib.append("sym", df_1)
         
         expected = pd.DataFrame({f"col_{i}": [1, 4, 3, 5, 6, 7] for i in range(0, dataframe_columns)}, index=pd.DatetimeIndex(pd.date_range(pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 6))))
         assert_frame_equal(lib.read("sym").data, expected)
-        
-        
 
-
-    def test_appending_wide_segment_throws_with_prior_slicing(self, lmdb_storage, lib_name):
+    @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
+    def test_appending_wide_segment_throws_with_prior_slicing(self, lmdb_storage, lib_name, delete_staged_data_on_failure):
         columns_per_segment = 5
         lib = lmdb_storage.create_arctic().create_library(lib_name, library_options=LibraryOptions(columns_per_segment=columns_per_segment))
         df_0 = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
@@ -731,10 +848,12 @@ class TestSlicing:
         lib.write("sym", df_1, staged=True)
 
         with pytest.raises(UserInputException) as exception_info:
-            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND, delete_staged_data_on_failure=delete_staged_data_on_failure)
         assert "append" in str(exception_info.value).lower()
         assert "column" in str(exception_info.value).lower()
         assert "sliced" in str(exception_info.value).lower()
+        expected_key_count = 0 if delete_staged_data_on_failure else 1
+        assert len(get_append_keys(lib, "sym")) == expected_key_count
 
     def test_writing_wide_segment_over_sliced_data(self, lmdb_storage, lib_name):
         columns_per_segment = 5

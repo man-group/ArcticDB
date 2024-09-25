@@ -67,20 +67,20 @@ def assert_equal(left, right, dynamic=False):
 
 def assert_cannot_finalize_without_staged_data(lib, symbol, mode):
     with pytest.raises(UserInputException) as exception_info:
-        lib.sort_and_finalize_staged_data(symbol, mode=mode)
+        lib.sort_and_finalize_staged_data(symbol, mode=mode, delete_staged_data_on_failure=True)
     assert "E_NO_STAGED_SEGMENTS" in str(exception_info.value)
     assert len(get_append_keys(lib, symbol)) == 0
   
 def assert_nat_is_not_supported(lib, symbol, mode):
     with pytest.raises(UnsortedDataException) as exception_info:
-        lib.sort_and_finalize_staged_data(symbol, mode=mode)
+        lib.sort_and_finalize_staged_data(symbol, mode=mode, delete_staged_data_on_failure=True)
     assert "E_UNSORTED_DATA" in str(exception_info.value)
     assert len(get_append_keys(lib, symbol)) == 0
 
 
 def assert_staged_columns_are_incompatible(lib, symbol, mode):
     with pytest.raises(SchemaException) as exception_info:
-        lib.sort_and_finalize_staged_data(symbol, mode)
+        lib.sort_and_finalize_staged_data(symbol, mode, delete_staged_data_on_failure=True)
     assert "E_DESCRIPTOR_MISMATCH" in str(exception_info.value)
     assert len(get_append_keys(lib, symbol)) == 0
 
@@ -99,7 +99,7 @@ def merge_and_sort_segment_list(segment_list, int_columns_in_df=None):
 
 def assert_appended_data_does_not_overlap_with_storage(lib, symbol):
     with pytest.raises(UnsortedDataException) as exception_info:
-        lib.sort_and_finalize_staged_data(symbol, mode=StagedDataFinalizeMethod.APPEND)
+        lib.sort_and_finalize_staged_data(symbol, mode=StagedDataFinalizeMethod.APPEND, delete_staged_data_on_failure=True)
     assert "E_UNSORTED_DATA" in str(exception_info.value)
     assert "append" in str(exception_info.value)
     assert len(get_append_keys(lib, symbol)) == 0
