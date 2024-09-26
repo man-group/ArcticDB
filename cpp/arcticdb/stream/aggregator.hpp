@@ -275,12 +275,14 @@ protected:
     void commit_impl(bool final);
 
 private:
-    template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
+    template <typename T>
+    requires std::integral<T> || std::floating_point<T>
     void set_scalar(std::size_t pos, T val) {
         segment_.set_scalar(pos, val);
     }
 
-    template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
+    template<typename T>
+    requires std::integral<T> || std::floating_point<T>
     void set_scalar_by_name(std::string_view name, T val, DataType data_type) {
         position_t pos = schema_policy_.get_column_idx_by_name(segment_, name, make_scalar_type(data_type), segmenting_policy_.expected_row_size(), segment_.row_count());
         set_scalar(pos, val);

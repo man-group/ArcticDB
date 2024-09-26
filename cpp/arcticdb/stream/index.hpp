@@ -52,6 +52,12 @@ public:
     static constexpr IndexDescriptorImpl::Type type() {
         return IndexDescriptorImpl::Type::TIMESTAMP;
     }
+
+    static constexpr timestamp min_index_value() {
+        // std::numeric_limits<timestamp>::min() is reserved for NaT
+        return std::numeric_limits<timestamp>::min() + 1;
+    }
+
     TimeseriesIndex(const std::string& name);
     static TimeseriesIndex default_index();
     void check(const FieldCollection& fields) const;
@@ -76,7 +82,7 @@ public:
 
   private:
     std::string name_;
-    timestamp ts_ = 0;
+    timestamp ts_ = min_index_value();
 };
 
 class TableIndex : public BaseIndex<TableIndex> {

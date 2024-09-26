@@ -67,31 +67,31 @@ public:
 
         template<class Callable>
         auto visit(Callable &&c) const {
-            return entity::visit_field(parent_->descriptor().field(column_id_), [that=this, c=std::forward<Callable>(c)](auto type_desc_tag) {
+            return entity::visit_field(parent_->descriptor().field(column_id_), [this, c=std::forward<Callable>(c)](auto type_desc_tag) {
                 using RawType = typename std::decay_t<decltype(type_desc_tag)>::DataTypeTag::raw_type;
-                return c(that->parent_->scalar_at<RawType>(that->row_id_, that->column_id_));
+                return c(parent_->scalar_at<RawType>(row_id_, column_id_));
             });
         }
 
         template<class Callable>
         auto visit_string(Callable &&c) const {
-            return entity::visit_field(parent_->descriptor().field(column_id_), [that=this, c = std::forward<Callable>(c)](auto type_desc_tag) {
+            return entity::visit_field(parent_->descriptor().field(column_id_), [this, c = std::forward<Callable>(c)](auto type_desc_tag) {
                 using DTT = typename std::decay_t<decltype(type_desc_tag)>::DataTypeTag;
                 if constexpr(is_sequence_type(DTT::data_type))
-                    return c(that->parent_->string_at(that->row_id_, position_t(that->column_id_)));
+                    return c(parent_->string_at(row_id_, position_t(column_id_)));
             });
         }
 
         template<class Callable>
         auto visit_field(Callable &&c) const {
             const auto& field = parent_->descriptor().field(column_id_);
-            return entity::visit_field(parent_->descriptor().field(column_id_), [&field, that=this, c = std::forward<Callable>(c)](auto type_desc_tag) {
+            return entity::visit_field(field, [&field, this, c = std::forward<Callable>(c)](auto type_desc_tag) {
                 using DataTypeTag = typename std::decay_t<decltype(type_desc_tag)>::DataTypeTag;
                 using RawType = typename DataTypeTag::raw_type;
                 if constexpr (is_sequence_type(DataTypeTag::data_type))
-                    return c(that->parent_->string_at(that->row_id_, position_t(that->column_id_)), std::string_view{field.name()}, field.type());
+                    return c(parent_->string_at(row_id_, position_t(column_id_)), std::string_view{field.name()}, type_desc_tag);
                 else if constexpr (is_numeric_type(DataTypeTag::data_type) || is_bool_type(DataTypeTag::data_type))
-                    return c(that->parent_->scalar_at<RawType>(that->row_id_, that->column_id_), std::string_view{field.name()}, field.type());
+                    return c(parent_->scalar_at<RawType>(row_id_, column_id_), std::string_view{field.name()}, type_desc_tag);
                 else if constexpr(is_empty_type(DataTypeTag::data_type))
                     internal::raise<ErrorCode::E_ASSERTION_FAILURE>("visit_field does not support empty-type columns");
                 else
@@ -101,9 +101,9 @@ public:
 
         template<class Callable>
         auto visit(Callable &&c) {
-            return entity::visit_field(parent_->descriptor().field(column_id_), [that=this, c=std::forward<Callable>(c)](auto type_desc_tag) {
+            return entity::visit_field(parent_->descriptor().field(column_id_), [this, c=std::forward<Callable>(c)](auto type_desc_tag) {
                 using RawType = typename std::decay_t<decltype(type_desc_tag)>::DataTypeTag::raw_type;
-                return c(that->parent_->reference_at<RawType>(that->row_id_, that->column_id_));
+                return c(parent_->reference_at<RawType>(row_id_, column_id_));
             });
         }
 
@@ -454,18 +454,21 @@ public:
         });
     }
 
-    template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
-        void set_scalar(position_t idx, T val) {
+    template<class T>
+    requires std::integral<T> || std::floating_point<T>
+    void set_scalar(position_t idx, T val) {
         ARCTICDB_TRACE(log::version(), "Segment setting scalar {} at row {} column {}", val, row_id_ + 1, idx);
         column(idx).set_scalar(row_id_ + 1, val);
     }
 
-    template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
-        void set_external_block(position_t idx, T *val, size_t size) {
+    template<class T>
+    requires std::integral<T> || std::floating_point<T>
+    void set_external_block(position_t idx, T *val, size_t size) {
         column_unchecked(idx).set_external_block(row_id_ + 1, val, size);
     }
 
-    template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
+    template<class T>
+    requires std::integral<T> || std::floating_point<T>
     void set_sparse_block(position_t idx, T *val,  size_t rows_to_write) {
         column_unchecked(idx).set_sparse_block(row_id_ + 1, val, rows_to_write);
     }
@@ -478,23 +481,22 @@ public:
         column_unchecked(idx).set_sparse_block(std::move(buffer), std::move(shapes), std::move(bitset));
     }
 
-    template<class T, std::enable_if_t<std::is_same_v<std::decay_t<T>, std::string>, int> = 0>
-        void set_scalar(position_t idx, T val) {
+    template<class T>
+    requires std::same_as<std::decay_t<T>, std::string>
+    void set_scalar(position_t idx, const T& val) {
         set_string(idx, val);
     }
 
-    template<class T, template<class> class Tensor, std::enable_if_t<
-        std::is_integral_v<T> || std::is_floating_point_v<T>,
-        int> = 0>
-            void set_array(position_t pos, Tensor<T> &val) {
+    template<class T, template<class> class Tensor>
+    requires std::integral<T> || std::floating_point<T>
+    void set_array(position_t pos, Tensor<T> &val) {
         magic_.check();
         ARCTICDB_SAMPLE(MemorySegmentSetArray, 0)
         column_unchecked(pos).set_array(row_id_ + 1, val);
     }
 
-    template<class T, std::enable_if_t<
-        std::is_integral_v<T> || std::is_floating_point_v<T>,
-        int> = 0>
+    template<class T>
+    requires std::integral<T> || std::floating_point<T>
     void set_array(position_t pos, py::array_t<T>& val) {
         magic_.check();
         ARCTICDB_SAMPLE(MemorySegmentSetArray, 0)
@@ -786,6 +788,7 @@ public:
                                                        const std::vector<uint64_t>& segment_counts) const;
 
     std::vector<std::shared_ptr<SegmentInMemoryImpl>> split(size_t rows) const;
+    void drop_empty_columns();
 
 private:
     ssize_t row_id_ = -1;

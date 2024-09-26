@@ -198,7 +198,8 @@ VersionedItem sort_merge_impl(
     const StreamId& stream_id,
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
     const UpdateInfo& update_info,
-    const CompactIncompleteOptions& options);
+    const CompactIncompleteOptions& options,
+    const WriteOptions& write_options);
 
 void modify_descriptor(
     const std::shared_ptr<pipelines::PipelineContext>& pipeline_context,

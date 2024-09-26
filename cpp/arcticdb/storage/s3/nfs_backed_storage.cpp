@@ -119,6 +119,39 @@ VariantKey unencode_object_id(const VariantKey& key) {
                         });
 }
 
+NfsBackedStorage::NfsBackedStorage(const LibraryPath &library_path, OpenMode mode, const Config &conf) :
+        Storage(library_path, mode),
+        s3_api_(s3::S3ApiInstance::instance()),  // make sure we have an initialized AWS SDK
+        root_folder_(object_store_utils::get_root_folder(library_path)),
+        bucket_name_(conf.bucket_name()),
+        region_(conf.region()) {
+
+    if (conf.use_mock_storage_for_testing()) {
+        log::storage().warn("Using Mock S3 storage for NfsBackedStorage");
+        s3_client_ = std::make_unique<s3::MockS3Client>();
+    } else {
+        s3_client_ = std::make_unique<s3::RealS3Client>(s3::get_aws_credentials(conf), s3::get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, false);
+    }
+
+    if (conf.prefix().empty()) {
+        ARCTICDB_DEBUG(log::version(), "prefix not found, will use {}", root_folder_);
+    } else if (conf.use_raw_prefix()) {
+        ARCTICDB_DEBUG(log::version(), "raw prefix found, using: {}", conf.prefix());
+        root_folder_ = conf.prefix();
+    } else {
+        auto prefix_path = LibraryPath::from_delim_path(conf.prefix(), '.');
+        root_folder_ = object_store_utils::get_root_folder(prefix_path);
+        ARCTICDB_DEBUG(log::version(), "parsed prefix found, using: {}", root_folder_);
+    }
+
+    // When linking against libraries built with pre-GCC5 compilers, the num_put facet is not initalized on the classic locale
+    // Rather than change the locale globally, which might cause unexpected behaviour in legacy code, just add the required
+    // facet here
+    std::locale locale{ std::locale::classic(), new std::num_put<char>()};
+    (void)std::locale::global(locale);
+    ARCTICDB_DEBUG(log::storage(), "Opened NFS backed storage at {}", root_folder_);
+}
+
 std::string NfsBackedStorage::name() const {
     return fmt::format("nfs_backed_storage-{}/{}/{}", region_, bucket_name_, root_folder_);
 }
@@ -182,34 +215,6 @@ bool NfsBackedStorage::do_iterate_type_until_match(KeyType key_type, const Itera
 bool NfsBackedStorage::do_key_exists(const VariantKey& key) {
     auto encoded_key = encode_object_id(key);
     return s3::detail::do_key_exists_impl(encoded_key, root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
-}
-
-
-NfsBackedStorage::NfsBackedStorage(const LibraryPath &library_path, OpenMode mode, const Config &conf) :
-    Storage(library_path, mode),
-    root_folder_(object_store_utils::get_root_folder(library_path)),
-    bucket_name_(conf.bucket_name()),
-    region_(conf.region()) {
-
-    if (conf.use_mock_storage_for_testing()) {
-        log::storage().warn("Using Mock S3 storage for NfsBackedStorage");
-        s3_client_ = std::make_unique<s3::MockS3Client>();
-    } else {
-        s3_client_ = std::make_unique<s3::RealS3Client>(s3::get_aws_credentials(conf), s3::get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, false);
-    }
-    if (!conf.prefix().empty()) {
-        ARCTICDB_DEBUG(log::version(), "prefix found, using: {}", conf.prefix());
-        auto prefix_path = LibraryPath::from_delim_path(conf.prefix(), '.');
-        root_folder_ = object_store_utils::get_root_folder(prefix_path);
-    } else {
-        ARCTICDB_DEBUG(log::version(), "prefix not found, will use {}", root_folder_);
-    }
-    // When linking against libraries built with pre-GCC5 compilers, the num_put facet is not initalized on the classic locale
-    // Rather than change the locale globally, which might cause unexpected behaviour in legacy code, just add the required
-    // facet here
-    std::locale locale{ std::locale::classic(), new std::num_put<char>()};
-    (void)std::locale::global(locale);
-    ARCTICDB_DEBUG(log::storage(), "Opened NFS backed storage at {}", root_folder_);
 }
 
 } //namespace arcticdb::storage::nfs_backed

@@ -250,6 +250,8 @@ TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {
     std::shuffle(data.begin(), data.end(), mt);
 
     for(auto& frame : data) {
+        ASSERT_TRUE(frame.segment_.is_index_sorted());
+        frame.segment_.descriptor().set_sorted(SortedValue::ASCENDING);
         test_store_->write_parallel_frame(symbol, std::move(frame.input_frame_), true);
     }
 

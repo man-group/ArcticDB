@@ -19,7 +19,7 @@ from arcticdb_ext.exceptions import (
     SortingException,
 )
 
-@pytest.mark.parametrize("operation", ["update", "append", "sort_index", "delete_range"])
+@pytest.mark.parametrize("operation", ["update", "append", "sort_index", "delete_range", "restore_version", "batch_restore_version"])
 def test_version_chain_increasing(version_store_factory, operation):
     lib = version_store_factory()
     sym = "sym"
@@ -38,6 +38,10 @@ def test_version_chain_increasing(version_store_factory, operation):
             lib.version_store.sort_index(sym, False, False)
         elif operation == "delete_range":
             lib.delete(sym, date_range=(pd.Timestamp(1), pd.Timestamp(1)))
+        elif operation == "restore_version":
+            lib.restore_version(sym, 0)
+        elif operation == "batch_restore_version":
+            lib.batch_restore_version([sym], [0])
         else:
             raise "Unknown operation"
 

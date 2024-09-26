@@ -19,6 +19,7 @@ import requests
 from datetime import datetime
 from functools import partial
 
+from arcticdb import LibraryOptions
 from arcticdb.storage_fixtures.api import StorageFixture
 from arcticdb.storage_fixtures.azure import AzuriteStorageFixtureFactory
 from arcticdb.storage_fixtures.lmdb import LmdbStorageFixture
@@ -109,6 +110,19 @@ def lmdb_storage(tmp_path):
 def lmdb_library(lmdb_storage, lib_name):
     return lmdb_storage.create_arctic().create_library(lib_name)
 
+@pytest.fixture
+def lmdb_library_dynamic_schema(lmdb_storage, lib_name):
+    return lmdb_storage.create_arctic().create_library(lib_name, library_options=LibraryOptions(dynamic_schema=True))
+
+@pytest.fixture(
+    scope="function",
+    params=(
+        "lmdb_library",
+        "lmdb_library_dynamic_schema"
+    ),
+)
+def lmdb_library_static_dynamic(request):
+    yield request.getfixturevalue(request.param)
 
 # ssl is enabled by default to maximize test coverage as ssl is enabled most of the times in real world
 @pytest.fixture(scope="session")

@@ -108,6 +108,9 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
     // written in, desc_ will be modified such that the return matches what's requested, and this'll be set to the
     // original value. It's only set in this edge case.
     std::optional<StreamDescriptor> orig_desc_;
+    // When there are staged segments this holds the combined stream descriptor for all staged segments
+    // This can be different than desc_ in case dynamic schema is used. Otherwise they must be the same.
+    std::optional<StreamDescriptor> staged_descriptor_;
     StreamId stream_id_;
     VersionId version_id_ = 0;
     size_t total_rows_ = 0;
@@ -200,6 +203,7 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
         swap(left.segment_descriptors_, right.segment_descriptors_);
         swap(left.filter_columns_set_, right.filter_columns_set_);
         swap(left.compacted_, right.compacted_);
+        swap(left.staged_descriptor_, right.staged_descriptor_);
     }
 
     using iterator = PipelineContextIterator<PipelineContextRow>;

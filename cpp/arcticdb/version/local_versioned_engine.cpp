@@ -1515,7 +1515,7 @@ std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> LocalVersionedEngine
     util::check(stream_ids.size() == version_queries.size(), "Symbol vs version query size mismatch: {} != {}", stream_ids.size(), version_queries.size());
     auto sym_versions = get_sym_versions_from_query(stream_ids, version_queries);
     util::check(sym_versions.size() == version_queries.size(), "Restore versions requires specific version to be supplied");
-    auto previous = batch_get_latest_version(store(), version_map(), stream_ids, false);
+    auto previous = batch_get_latest_version(store(), version_map(), stream_ids, true);
     auto versions_to_restore = batch_get_specific_version(store(), version_map(), sym_versions);
     std::vector<folly::Future<std::pair<VersionedItem, TimeseriesDescriptor>>> fut_vec;
 
@@ -1661,7 +1661,9 @@ VersionedItem LocalVersionedEngine::sort_merge_internal(
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
     const CompactIncompleteOptions& options) {
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
-    auto versioned_item = sort_merge_impl(store_, stream_id, user_meta, update_info, options);
+    const WriteOptions& write_opts = get_write_options();
+    auto versioned_item =
+        sort_merge_impl(store_, stream_id, user_meta, update_info, options, write_opts);
     write_version_and_prune_previous(options.prune_previous_versions_, versioned_item.key_, update_info.previous_index_key_);
     add_to_symbol_list_on_compaction(stream_id, options, update_info);
     return versioned_item;

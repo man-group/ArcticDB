@@ -92,9 +92,10 @@ TimeseriesDescriptor get_merged_tsd(
     }
     else if (dynamic_schema) {
         // In case of dynamic schema
+        const std::array fields_ptr = {new_frame->desc.fields_ptr()};
         merged_descriptor = merge_descriptors(
                 existing_descriptor,
-                std::vector<std::shared_ptr<FieldCollection>>{new_frame->desc.fields_ptr()},
+                fields_ptr,
                 {}
         );
     } else {
