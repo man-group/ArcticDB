@@ -51,12 +51,15 @@ def calc_row_chunks(lib, df, chunk_args):
         start_row = end_row
     return row_chunks
 
-def pandas_chunk(df, lib, symbol, read_args, chunk_args, row_chunks_override=None):
-    lib.write(symbol, df)
-    if 'lazy' in read_args and read_args['lazy']:
-        df_db = lib.read(symbol, **read_args).collect().data
+def pandas_chunk(df, lib, symbol, read_args, chunk_args, row_chunks_override=None, ignore_db=False):
+    if ignore_db:
+        df_db = df
     else:
-        df_db = lib.read(symbol, **read_args).data
+        lib.write(symbol, df)
+        if 'lazy' in read_args and read_args['lazy']:
+            df_db = lib.read(symbol, **read_args).collect().data
+        else:
+            df_db = lib.read(symbol, **read_args).data
     row_chunks = calc_row_chunks(lib, df_db, chunk_args) if row_chunks_override is None else row_chunks_override
     return dataframe_chunks(df_db, row_chunks)
 
@@ -85,10 +88,10 @@ def create_lib_tiny_segments_dynamic(ac):
     lib_opts = adb.LibraryOptions(rows_per_segment=2, columns_per_segment=2, dynamic_schema=True)
     return ac.get_library('chunk_tests_tiny_dynamic', create_if_missing=True, library_options=lib_opts)
 
-def generic_chunk_test(lib, symbol, df, read_args, chunk_args, df_test=None):
+def generic_chunk_test(lib, symbol, df, read_args, chunk_args, df_test=None, pd_ignore_db=False):
     chunks_db = arctic_chunk(df, lib, symbol, read_args, chunk_args)
     df_pd = df if df_test is None else df_test
-    chunks_pd = pandas_chunk(df_pd, lib, symbol, read_args, chunk_args)
+    chunks_pd = pandas_chunk(df_pd, lib, symbol, read_args, chunk_args, ignore_db=pd_ignore_db)
     assert_chunks_match(chunks_db, chunks_pd)
 
 def test_chunk_simple(arctic_client):
@@ -141,7 +144,8 @@ def test_chunk_columns_tiny(arctic_client):
     sym = 'columns'
     cols = DF_SMALL.columns[[1, 7, 11]]
     for chunk_args in CHUNK_ARGS_ALL:
-        generic_chunk_test(lib, sym, DF_SMALL, dict(columns=cols), chunk_args, DF_SMALL[cols])
+        #generic_chunk_test(lib, sym, DF_SMALL, dict(columns=cols), chunk_args, DF_SMALL[cols])
+        generic_chunk_test(lib, sym, DF_SMALL, dict(columns=cols), chunk_args)
 
 def test_chunk_querybuilder_tiny(arctic_client):
     # behaviour of query_builder with/without chunks can be complicated, so this test is limited to a simple case
@@ -149,5 +153,4 @@ def test_chunk_querybuilder_tiny(arctic_client):
     sym = 'query_builder'
     q = adb.QueryBuilder()[adb.col('int32')>0]
     df_test = DF_SMALL[DF_SMALL['int32']>0]
-    for chunk_args in [dict(num_chunks=2)]:
-        generic_chunk_test(lib, sym, DF_SMALL, dict(query_builder=q), chunk_args, df_test)
+    generic_chunk_test(lib, sym, DF_SMALL, dict(query_builder=q), dict(num_chunks=2), df_test, pd_ignore_db=True)
