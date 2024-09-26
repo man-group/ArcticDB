@@ -20,16 +20,16 @@ dependencies:
   - double-conversion
   - libevent
   # TODO: Fix builds for missing symbols.
-  - libmongocxx<3.9
+  - libmongocxx <3.9
   - zstd
   # TODO: pybind 2.11.X became stricter regarding the handling of reference counts
   # See: https://github.com/pybind/pybind11/issues/4748#issuecomment-1639445403
-  - pybind11<2.11
+  - pybind11 <2.11
   - pcre
   - cyrus-sasl
   - aws-sdk-cpp
   - prometheus-cpp
-  - libprotobuf<4
+  - libprotobuf <4
   - openssl
   - libcurl
   - bitmagic
@@ -65,10 +65,10 @@ dependencies:
   - moto
   - mock
   # msgpack 0.5.0 is required for strict_types argument, needed for correct pickling fallback
-  - msgpack-python>=0.5.0
+  - msgpack-python >=0.5.0
   # Pinned to avoid test disruption (in phase with the pin in setup.cfg)
   # See: https://github.com/man-group/ArcticDB/pull/291
-  - hypothesis<6.73
+  - hypothesis <6.73
   - pytest-sugar
   - pytest-xdist
   - pytest-timeout
