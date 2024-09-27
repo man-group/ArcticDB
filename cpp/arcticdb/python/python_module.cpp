@@ -19,15 +19,14 @@
 #include <arcticdb/util/trace.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/python/arctic_version.hpp>
-#include <arcticdb/python/python_handler_data.hpp>
 #include <arcticdb/entity/metrics.hpp>
-#include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/util/global_lifetimes.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/util/error_code.hpp>
 #include <arcticdb/util/type_handler.hpp>
 #include <arcticdb/python/python_handlers.hpp>
+#include <arcticdb/arrow/arrow_handlers.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
 #include <arcticdb/util/storage_lock.hpp>
 
@@ -294,13 +293,14 @@ void register_metrics(py::module && m){
 /// @see arcticdb::ITypeHandler
 void register_type_handlers() {
     using namespace arcticdb;
-    TypeHandlerRegistry::instance()->register_handler(make_scalar_type(DataType::EMPTYVAL), arcticdb::EmptyHandler());
-    TypeHandlerRegistry::instance()->register_handler(make_scalar_type(DataType::BOOL_OBJECT8),  arcticdb::BoolHandler());
+    TypeHandlerRegistry::instance()->register_handler(OutputFormat::PANDAS, make_scalar_type(DataType::EMPTYVAL), arcticdb::PythonEmptyHandler());
+    TypeHandlerRegistry::instance()->register_handler(OutputFormat::PANDAS, make_scalar_type(DataType::BOOL_OBJECT8),  arcticdb::PythonBoolHandler());
 
     register_array_types();
     register_string_types();
 
     register_python_handler_data_factory();
+    register_arrow_handler_data_factory();
 }
 
 PYBIND11_MODULE(arcticdb_ext, m) {

@@ -16,3 +16,9 @@
 [submodule "cpp/vcpkg"]
 	path = cpp/vcpkg
 	url = https://github.com/microsoft/vcpkg.git
+[submodule "cpp/third_party/sparrow"]
+	path = cpp/third_party/sparrow
+	url = https://github.com/man-group/sparrow.git
+[submodule "cpp/third_party/date"]
+	path = cpp/third_party/date
+	url = https://github.com/HowardHinnant/date.git

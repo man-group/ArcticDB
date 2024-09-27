@@ -42,6 +42,8 @@ if(${ARCTICDB_USING_UB_SANITIZER})
     message(STATUS "Building ArcticDB with UB Sanitizer")
 endif()
 
+add_link_options(-fuse-ld=lld)
+
 if(ARCTICDB_SANITIZER_FLAGS)
     list(APPEND ARCTICDB_SANITIZER_FLAGS "-g;-fno-omit-frame-pointer;-fno-optimize-sibling-calls;")
     if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
@@ -118,6 +120,7 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/proto/arcticc/pb2/proto/)
 # for IDE resolution otherwise it is lost
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/third_party/sparrow/include)
 
 add_subdirectory(arcticdb)
 

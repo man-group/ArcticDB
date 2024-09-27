@@ -22,7 +22,10 @@ namespace arcticdb {
 
 namespace arcticdb::pipelines {
 
-SegmentInMemory allocate_frame(const std::shared_ptr<PipelineContext>& context);
+SegmentInMemory allocate_frame(
+    const std::shared_ptr<PipelineContext>& context,
+    OutputFormat output_format,
+    AllocationType allocation_type);
 
 template <typename KeySliceContainer>
 std::optional<util::BitSet> check_and_mark_slices(
@@ -74,7 +77,7 @@ folly::Future<std::vector<VariantKey>> fetch_data(
     const SegmentInMemory& frame,
     const std::shared_ptr<PipelineContext> &context,
     const std::shared_ptr<stream::StreamSource>& ssource,
-    bool dynamic_schema,
+    const ReadOptions& read_options,
     DecodePathData shared_data,
     std::any& handler_data);
 
@@ -83,14 +86,16 @@ void decode_into_frame_static(
     PipelineContextRow &context,
     Segment &&seg,
     const DecodePathData& shared_data,
-    std::any& handler_data);
+    std::any& handler_data,
+    const ReadOptions& read_options);
 
 void decode_into_frame_dynamic(
     SegmentInMemory &frame,
     PipelineContextRow &context,
     Segment &&seg,
     const DecodePathData& shared_data,
-    std::any& handler_data);
+    std::any& handler_data,
+    const ReadOptions& read_options);
 
 void reduce_and_fix_columns(
     std::shared_ptr<PipelineContext> &context,

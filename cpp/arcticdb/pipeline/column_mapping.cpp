@@ -15,12 +15,12 @@ namespace arcticdb {
         SegmentInMemory& frame,
         size_t dst_col,
         size_t field_col,
-        pipelines::PipelineContextRow& context
-    ) :
+        pipelines::PipelineContextRow& context,
+        OutputFormat output_format) :
             source_type_desc_(context.descriptor().fields(field_col).type()),
             dest_type_desc_(frame.field(dst_col).type()),
             frame_field_descriptor_(frame.field(dst_col)),
-            dest_size_(data_type_size(dest_type_desc_, DataTypeMode::EXTERNAL)),
+            dest_size_(data_type_size(dest_type_desc_, output_format, DataTypeMode::EXTERNAL)),
             num_rows_(context.slice_and_key().slice_.row_range.diff()),
             first_row_(context.slice_and_key().slice_.row_range.first - frame.offset()),
             offset_bytes_(dest_size_ * first_row_),

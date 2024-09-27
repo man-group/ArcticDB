@@ -32,7 +32,7 @@ ReadResult LibraryTool::read(const VariantKey& key) {
     auto segment = read_to_segment(key);
     auto segment_in_memory = decode_segment(std::move(segment));
     auto frame_and_descriptor = frame_and_descriptor_from_segment(std::move(segment_in_memory));
-    return pipelines::read_result_from_single_frame(frame_and_descriptor, to_atom(key));
+    return pipelines::read_result_from_single_frame(frame_and_descriptor, to_atom(key), OutputFormat::PANDAS);
 }
 
 Segment LibraryTool::read_to_segment(const VariantKey& key) {

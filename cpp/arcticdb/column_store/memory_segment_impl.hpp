@@ -361,12 +361,27 @@ public:
 
     SegmentInMemoryImpl();
 
-    explicit SegmentInMemoryImpl(
+    SegmentInMemoryImpl(
+        const StreamDescriptor& desc,
+        size_t expected_column_size,
+        AllocationType presize,
+        Sparsity allow_sparse) :
+            SegmentInMemoryImpl(
+                desc,
+                expected_column_size,
+                presize,
+                allow_sparse,
+                OutputFormat::NATIVE,
+                DataTypeMode::INTERNAL) {
+    }
+
+    SegmentInMemoryImpl(
         const StreamDescriptor& desc,
         size_t expected_column_size,
         AllocationType presize,
         Sparsity allow_sparse,
-        DataTypeMode mode = DataTypeMode::INTERNAL);
+        OutputFormat output_format,
+        DataTypeMode mode);
 
     ~SegmentInMemoryImpl();
 
@@ -395,6 +410,7 @@ public:
         size_t expected_column_size,
         AllocationType presize,
         Sparsity allow_sparse,
+        OutputFormat output_format,
         DataTypeMode mode);
 
     size_t on_descriptor_change(
@@ -402,6 +418,7 @@ public:
         size_t expected_column_size,
         AllocationType presize,
         Sparsity allow_sparse,
+        OutputFormat output_format,
         DataTypeMode mode
         );
 

@@ -28,7 +28,12 @@ struct ColumnMapping {
     const size_t offset_bytes_;
     const size_t dest_bytes_;
 
-    ColumnMapping(SegmentInMemory& frame, size_t dst_col, size_t field_col, pipelines::PipelineContextRow& context);
+    ColumnMapping(
+        SegmentInMemory& frame,
+        size_t dst_col,
+        size_t field_col,
+        pipelines::PipelineContextRow& context,
+        OutputFormat output_format);
 };
 
 struct StaticColumnMappingIterator {

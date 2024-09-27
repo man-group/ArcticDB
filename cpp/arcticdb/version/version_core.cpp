@@ -443,9 +443,9 @@ folly::Future<version_store::ReadVersionOutput> async_read_direct_impl(
 
     generate_filtered_field_descriptors(pipeline_context, read_query->columns);
     mark_index_slices(pipeline_context, dynamic_schema, bucketize_dynamic);
-    auto frame = allocate_frame(pipeline_context);
+    auto frame = allocate_frame(pipeline_context, read_options.output_format(), AllocationType::PRESIZED);
 
-    return fetch_data(frame, pipeline_context, store, dynamic_schema, shared_data, handler_data).thenValue(
+    return fetch_data(frame, pipeline_context, store, read_options, shared_data, handler_data).thenValue(
         [pipeline_context, frame, read_options, &handler_data](auto &&) mutable {
             reduce_and_fix_columns(pipeline_context, frame, read_options, handler_data);
         }).thenValue(
@@ -734,11 +734,12 @@ SegmentInMemory read_direct(const std::shared_ptr<Store>& store,
                             std::any& handler_data) {
     ARCTICDB_DEBUG(log::version(), "Allocating frame");
     ARCTICDB_SAMPLE_DEFAULT(ReadDirect)
-    auto frame = allocate_frame(pipeline_context);
+    const auto allocation_type = read_options.output_format() == OutputFormat::ARROW ? AllocationType::DETACHABLE : AllocationType::PRESIZED;
+    auto frame = allocate_frame(pipeline_context, read_options.output_format(), allocation_type);
     util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
 
     ARCTICDB_DEBUG(log::version(), "Fetching frame data");
-    fetch_data(frame, pipeline_context, store, opt_false(read_options.dynamic_schema_), shared_data, handler_data).get();
+    fetch_data(frame, pipeline_context, store, read_options, shared_data, handler_data).get();
     util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
     return frame;
 }
@@ -1019,7 +1020,8 @@ void copy_frame_data_to_buffer(
         size_t source_index,
         const RowRange& row_range,
         DecodePathData shared_data,
-        std::any& handler_data) {
+        std::any& handler_data,
+        OutputFormat output_format) {
     const auto num_rows = row_range.diff();
     if (num_rows == 0) {
         return;
@@ -1027,7 +1029,7 @@ void copy_frame_data_to_buffer(
     auto& src_column = source.column(static_cast<position_t>(source_index));
     auto& dst_column = destination.column(static_cast<position_t>(target_index));
     auto& buffer = dst_column.data().buffer();
-    auto dst_rawtype_size = data_type_size(dst_column.type(), DataTypeMode::EXTERNAL);
+    auto dst_rawtype_size = data_type_size(dst_column.type(), output_format, DataTypeMode::EXTERNAL);
     auto offset = dst_rawtype_size * (row_range.first - destination.offset());
     auto total_size = dst_rawtype_size * num_rows;
     buffer.assert_size(offset + total_size);
@@ -1037,7 +1039,7 @@ void copy_frame_data_to_buffer(
 
     auto type_promotion_error_msg = fmt::format("Can't promote type {} to type {} in field {}",
                                                 src_column.type(), dst_column.type(), destination.field(target_index).name());
-    if(auto handler = get_type_handler(src_column.type(), dst_column.type()); handler) {
+    if(auto handler = get_type_handler(output_format, src_column.type(), dst_column.type()); handler) {
         handler->convert_type(src_column, buffer, num_rows, offset, src_column.type(), dst_column.type(), shared_data, handler_data, source.string_pool_ptr());
     } else if (is_empty_type(src_column.type().data_type())) {
         dst_column.type().visit_tag([&](auto dst_desc_tag) {
@@ -1094,27 +1096,29 @@ struct CopyToBufferTask : async::BaseTask {
     DecodePathData shared_data_;
     std::any& handler_data_;
     bool fetch_index_;
+    OutputFormat output_format_;
 
     CopyToBufferTask(
-            SegmentInMemory&& source_segment,
-            SegmentInMemory& target_segment,
-            FrameSlice frame_slice,
-            DecodePathData shared_data,
-            std::any& handler_data,
-            bool fetch_index) :
+        SegmentInMemory&& source_segment,
+        SegmentInMemory& target_segment,
+        FrameSlice frame_slice,
+        DecodePathData shared_data,
+        std::any& handler_data,
+        bool fetch_index,
+        OutputFormat output_format) :
             source_segment_(std::move(source_segment)),
-        target_segment_(target_segment),
-        frame_slice_(frame_slice),
-        shared_data_(shared_data),
-        handler_data_(handler_data),
-        fetch_index_(fetch_index) {
-
+            target_segment_(target_segment),
+            frame_slice_(frame_slice),
+            shared_data_(shared_data),
+            handler_data_(handler_data),
+            fetch_index_(fetch_index),
+            output_format_(output_format){
     }
 
     folly::Unit operator()() {
         const auto index_field_count = get_index_field_count(target_segment_);
         for (auto idx = 0u; idx < index_field_count && fetch_index_; ++idx) {
-            copy_frame_data_to_buffer(target_segment_, idx, source_segment_, idx, frame_slice_.row_range, shared_data_, handler_data_);
+            copy_frame_data_to_buffer(target_segment_, idx, source_segment_, idx, frame_slice_.row_range, shared_data_, handler_data_, output_format_);
         }
 
         auto field_count = frame_slice_.col_range.diff() + index_field_count;
@@ -1131,7 +1135,7 @@ struct CopyToBufferTask : async::BaseTask {
             if (!frame_loc_opt)
                 continue;
 
-            copy_frame_data_to_buffer(target_segment_, *frame_loc_opt, source_segment_, field_col, frame_slice_.row_range, shared_data_, handler_data_);
+            copy_frame_data_to_buffer(target_segment_, *frame_loc_opt, source_segment_, field_col, frame_slice_.row_range, shared_data_, handler_data_, output_format_);
         }
         return folly::Unit{};
     }
@@ -1141,7 +1145,8 @@ void copy_segments_to_frame(
         const std::shared_ptr<Store>& store,
         const std::shared_ptr<PipelineContext>& pipeline_context,
         SegmentInMemory& frame,
-        std::any& handler_data) {
+        std::any& handler_data,
+        OutputFormat output_format) {
     std::vector<folly::Future<folly::Unit>> copy_tasks;
     DecodePathData shared_data;
     for (auto context_row : folly::enumerate(*pipeline_context)) {
@@ -1155,7 +1160,8 @@ void copy_segments_to_frame(
                 context_row->slice_and_key().slice(),
                 shared_data,
                 handler_data,
-                context_row->fetch_index()}));
+                context_row->fetch_index(),
+                output_format}));
     }
     folly::collect(copy_tasks).get();
 }
@@ -1182,8 +1188,9 @@ SegmentInMemory prepare_output_frame(
         row.set_string_pool(row.slice_and_key().segment(store).string_pool_ptr());
     }
 
-    auto frame = allocate_frame(pipeline_context);
-    copy_segments_to_frame(store, pipeline_context, frame, handler_data);
+    const auto allocation_type = read_options.output_format() == OutputFormat::ARROW ? AllocationType::DETACHABLE : AllocationType::PRESIZED;
+    auto frame = allocate_frame(pipeline_context, read_options.output_format(), allocation_type);
+    copy_segments_to_frame(store, pipeline_context, frame, handler_data, read_options.output_format());
 
     return frame;
 }

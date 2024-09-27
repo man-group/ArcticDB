@@ -36,6 +36,10 @@
 #include <type_traits>
 #include <iostream>
 
+namespace arcticdb {
+struct ArrowReadResult;
+}
+
 namespace arcticdb::version_store {
 
 using namespace arcticdb::entity;
@@ -163,6 +167,13 @@ class PythonVersionStore : public LocalVersionedEngine {
         const VersionQuery& version_query);
 
     ReadResult read_dataframe_version(
+        const StreamId &stream_id,
+        const VersionQuery& version_query,
+        ReadQuery& read_query,
+        const ReadOptions& read_options,
+        std::any& handler_data);
+
+    ArrowReadResult read_dataframe_version_arrow(
         const StreamId &stream_id,
         const VersionQuery& version_query,
         ReadQuery& read_query,
@@ -342,7 +353,8 @@ void write_dataframe_to_file(
 ReadResult read_dataframe_from_file(
     const StreamId &stream_id,
     const std::string& path,
-    ReadQuery& read_query);
+    ReadQuery& read_query,
+    const ReadOptions& read_options);
 
 struct ManualClockVersionStore : PythonVersionStore {
     ManualClockVersionStore(const std::shared_ptr<storage::Library>& library) :
@@ -356,7 +368,7 @@ inline std::vector<std::variant<ReadResult, DataError>> frame_to_read_result(std
         const auto& desc_proto = read_version_output.frame_and_descriptor_.desc_.proto();
         read_results.emplace_back(ReadResult(
             read_version_output.versioned_item_,
-            PythonOutputFrame{read_version_output.frame_and_descriptor_.frame_, read_version_output.frame_and_descriptor_.buffers_},
+            PythonOutputFrame{read_version_output.frame_and_descriptor_.frame_, OutputFormat::PANDAS, read_version_output.frame_and_descriptor_.buffers_},
             desc_proto.normalization(),
             desc_proto.user_meta(),
             desc_proto.multi_key_meta(),

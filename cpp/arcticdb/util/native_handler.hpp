@@ -14,6 +14,6 @@ struct NativeHandlerDataFactory  : public TypeHandlerDataFactory {
 };
 
 inline void register_native_handler_data_factory() {
-    TypeHandlerRegistry::instance()->set_handler_data(std::make_unique<NativeHandlerDataFactory>());
+    TypeHandlerRegistry::instance()->set_handler_data(OutputFormat::NATIVE, std::make_unique<NativeHandlerDataFactory>());
 }
 }

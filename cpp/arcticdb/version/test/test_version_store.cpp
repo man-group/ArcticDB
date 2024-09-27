@@ -258,7 +258,7 @@ TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {
     auto vit = test_store_->compact_incomplete(symbol, false, false, true, false);
     ReadQuery read_query;
     register_native_handler_data_factory();
-    auto handler_data = get_type_handler_data();
+    auto handler_data = get_type_handler_data(OutputFormat::PANDAS);
     auto read_result = test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
     const auto& seg = read_result.frame_data.frame();
 
@@ -533,7 +533,7 @@ TEST(VersionStore, UpdateWithin) {
 
     ReadQuery read_query;
     register_native_handler_data_factory();
-    auto handler_data = get_type_handler_data();
+    auto handler_data = get_type_handler_data(OutputFormat::PANDAS);
     auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
     const auto& seg = read_result.frame_and_descriptor_.frame_;
 
@@ -576,7 +576,7 @@ TEST(VersionStore, UpdateBefore) {
 
     ReadQuery read_query;
     register_native_handler_data_factory();
-    auto handler_data = get_type_handler_data();
+    auto handler_data = get_type_handler_data(OutputFormat::PANDAS);
     auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
     const auto& seg = read_result.frame_and_descriptor_.frame_;
 
@@ -619,7 +619,7 @@ TEST(VersionStore, UpdateAfter) {
 
     ReadQuery read_query;
     register_native_handler_data_factory();
-    auto handler_data = get_type_handler_data();
+    auto handler_data = get_type_handler_data(OutputFormat::PANDAS);
     auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
     const auto& seg = read_result.frame_and_descriptor_.frame_;
 
@@ -663,7 +663,7 @@ TEST(VersionStore, UpdateIntersectBefore) {
 
     ReadQuery read_query;
     register_native_handler_data_factory();
-    auto handler_data = get_type_handler_data();
+    auto handler_data = get_type_handler_data(OutputFormat::PANDAS);
     auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
     const auto &seg = read_result.frame_and_descriptor_.frame_;
 
@@ -707,7 +707,7 @@ TEST(VersionStore, UpdateIntersectAfter) {
 
     ReadQuery read_query;
     register_native_handler_data_factory();
-    auto handler_data = get_type_handler_data();
+    auto handler_data = get_type_handler_data(OutputFormat::PANDAS);
     auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
     const auto &seg = read_result.frame_and_descriptor_.frame_;
 
@@ -761,7 +761,7 @@ TEST(VersionStore, UpdateWithinSchemaChange) {
     read_options.set_dynamic_schema(true);
     ReadQuery read_query;
     register_native_handler_data_factory();
-    auto handler_data = get_type_handler_data();
+    auto handler_data = get_type_handler_data(OutputFormat::PANDAS);
     auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options, handler_data);
     const auto &seg = read_result.frame_and_descriptor_.frame_;
 
@@ -824,7 +824,7 @@ TEST(VersionStore, UpdateWithinTypeAndSchemaChange) {
     read_options.set_dynamic_schema(true);
     ReadQuery read_query;
     register_native_handler_data_factory();
-    auto handler_data = get_type_handler_data();
+    auto handler_data = get_type_handler_data(OutputFormat::PANDAS);
     auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options, handler_data);
     const auto &seg = read_result.frame_and_descriptor_.frame_;
 

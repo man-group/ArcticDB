@@ -1,4 +1,5 @@
 
+
 /* Copyright 2023 Man Group Operations Limited
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
@@ -22,14 +23,14 @@
 namespace arcticdb {
 
 /*
- * ChunkedBufferImpl is an untyped buffer that is composed of blocks of data that can be either regularly or
+ * ChunkedBuffer is an untyped buffer that is composed of blocks of data that can be either regularly or
  * irregularly sized, with optimizations for the following representations:
  *
  *   - a single block
  *   - multiple blocks that are all regularly sized
  *   - multiple blocks that are regularly sized up until a point, and irregularly sized after that point
  *
- * No optimization is performed when the blocks are all irregularly sized.
+ * Lookup is log(n) where n is the number of blocks when the blocks are all irregularly sized.
  *
  * This class can be wrapped in a cursor for the purposes of linear reads and writes (see CursoredBuffer),
  * and subsequently detached if required.
@@ -95,9 +96,11 @@ class ChunkedBufferImpl {
         reserve(size);
     }
 
-    ChunkedBufferImpl(size_t size, entity::AllocationType allocation_type) {
+    ChunkedBufferImpl(size_t size, entity::AllocationType allocation_type) :
+            allocation_type_(allocation_type) {
         if(allocation_type == entity::AllocationType::DETACHABLE) {
             add_detachable_block(size);
+            bytes_ = size;
         } else {
             reserve(size);
         }
@@ -171,6 +174,7 @@ class ChunkedBufferImpl {
         swap(left.regular_sized_until_, right.regular_sized_until_);
         swap(left.blocks_, right.blocks_);
         swap(left.block_offsets_, right.block_offsets_);
+        swap(left.allocation_type_, right.allocation_type_);
     }
 
     [[nodiscard]] const auto &blocks() const { return blocks_; }
@@ -192,8 +196,9 @@ class ChunkedBufferImpl {
             res = last_block().end();
             last_block().bytes_ += extra_size;
         } else {
-            // Still regular-sized, add a new block
-            if (is_regular_sized()) {
+            if(allocation_type_ == entity::AllocationType::DETACHABLE) {
+                add_detachable_block(extra_size);
+            } else if (is_regular_sized()) {
                 auto space = free_space();
                 if (extra_size <= DefaultBlockSize && (space == 0 || aligned)) {
                     if (aligned && space > 0) {
@@ -381,15 +386,17 @@ class ChunkedBufferImpl {
         bytes_ += size;
     }
 
-    void add_detachable_block(size_t size) {
+    void add_detachable_block(size_t capacity) {
+        if(capacity == 0)
+            return;
+
         if (!no_blocks() && last_block().empty())
             free_last_block();
 
         auto [ptr, ts] = Allocator::aligned_alloc(sizeof(MemBlock));
-        auto* data = reinterpret_cast<uint8_t*>(malloc(size));
-        new(ptr) MemBlock(data, size, 0UL, ts, true);
+        auto* data = reinterpret_cast<uint8_t*>(malloc(capacity));
+        new(ptr) MemBlock(data, capacity, 0UL, ts, true);
         blocks_.emplace_back(reinterpret_cast<BlockType*>(ptr));
-        bytes_ += size;
     }
 
     [[nodiscard]] bool empty() const { return bytes_ == 0; }
@@ -476,6 +483,7 @@ class ChunkedBufferImpl {
 #else
     std::vector<BlockType*> blocks_;
     std::vector<size_t> block_offsets_;
+    entity::AllocationType allocation_type_ = entity::AllocationType::DYNAMIC;
 #endif
 };
 

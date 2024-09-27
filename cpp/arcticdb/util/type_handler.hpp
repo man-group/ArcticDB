@@ -11,6 +11,7 @@
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/codec/segment_header.hpp>
 #include <arcticdb/util/lazy.hpp>
+#include <arcticdb/entity/output_format.hpp>
 #include <arcticdb/util/spinlock.hpp>
 
 #include <folly/Poly.h>
@@ -102,38 +103,52 @@ public:
     static std::shared_ptr<TypeHandlerRegistry> instance();
     static void destroy_instance();
 
-    std::shared_ptr<TypeHandler> get_handler(const entity::TypeDescriptor& type_descriptor) const;
-    void register_handler(const entity::TypeDescriptor& type_descriptor, TypeHandler&& handler);
+    std::shared_ptr<TypeHandler> get_handler(OutputFormat output_format, const entity::TypeDescriptor& type_descriptor) const;
+    void register_handler(OutputFormat output_format, const entity::TypeDescriptor& type_descriptor, TypeHandler&& handler);
 
-    void set_handler_data(std::unique_ptr<TypeHandlerDataFactory>&& data) {
-        handler_data_factory_ = std::move(data);
+    void set_handler_data(OutputFormat output_format, std::unique_ptr<TypeHandlerDataFactory>&& data) {
+        handler_data_factories_[static_cast<uint8_t>(output_format)] = std::move(data);
     }
 
-    std::any get_handler_data() {
-        util::check(static_cast<bool>(handler_data_factory_), "No type handler set");
-        return handler_data_factory_->get_data();
+    std::any get_handler_data(OutputFormat output_format) {
+        util::check(static_cast<bool>(handler_data_factories_[static_cast<uint8_t>(output_format)]), "No type handler set");
+        return handler_data_factories_[static_cast<uint8_t>(output_format)]->get_data();
     }
 
 private:
-    std::unique_ptr<TypeHandlerDataFactory> handler_data_factory_;
+    std::array<std::unique_ptr<TypeHandlerDataFactory>, 4> handler_data_factories_;
 
     struct Hasher {
         size_t operator()(entity::TypeDescriptor val) const;
     };
-    std::unordered_map<entity::TypeDescriptor, std::shared_ptr<TypeHandler>, Hasher> handlers_;
+
+    using TypeHandlerMap = std::unordered_map<entity::TypeDescriptor, std::shared_ptr<TypeHandler>, Hasher>;
+
+    TypeHandlerMap& handler_map(OutputFormat output_format) {
+        return handlers_[static_cast<int>(output_format)];
+    }
+
+    const TypeHandlerMap& handler_map(OutputFormat output_format) const {
+        return handlers_[static_cast<int>(output_format)];
+    }
+
+    std::array<TypeHandlerMap, 4> handlers_;
 };
 
+inline std::shared_ptr<TypeHandler> get_type_handler(OutputFormat output_format, TypeDescriptor source) {
+    return TypeHandlerRegistry::instance()->get_handler(output_format, source);
+}
 
-inline std::shared_ptr<TypeHandler> get_type_handler(TypeDescriptor source, TypeDescriptor target) {
-    auto handler = TypeHandlerRegistry::instance()->get_handler(source);
+inline std::shared_ptr<TypeHandler> get_type_handler(OutputFormat output_format, TypeDescriptor source, TypeDescriptor target) {
+    auto handler = TypeHandlerRegistry::instance()->get_handler(output_format, source);
     if(handler)
         return handler;
 
-    return TypeHandlerRegistry::instance()->get_handler(target);
+    return TypeHandlerRegistry::instance()->get_handler(output_format, target);
 }
 
-inline std::any get_type_handler_data() {
-    return TypeHandlerRegistry::instance()->get_handler_data();
+inline std::any get_type_handler_data(OutputFormat output_format) {
+    return TypeHandlerRegistry::instance()->get_handler_data(output_format);
 }
 
 

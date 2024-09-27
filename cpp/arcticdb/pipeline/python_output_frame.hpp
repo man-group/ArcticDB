@@ -16,7 +16,7 @@ namespace py = pybind11;
 
 struct ARCTICDB_VISIBILITY_HIDDEN PythonOutputFrame {
 
-    PythonOutputFrame(const SegmentInMemory& frame, std::shared_ptr<BufferHolder> buffers);
+    PythonOutputFrame(const SegmentInMemory& frame, OutputFormat output_format, std::shared_ptr<BufferHolder> buffers);
 
     ~PythonOutputFrame();
 
@@ -40,10 +40,7 @@ private:
     std::vector<std::string> index_columns_;
     std::weak_ptr<FrameDataWrapper> arrays_;
     std::shared_ptr<BufferHolder> buffers_;
+    OutputFormat output_format_;
 };
-
-inline PythonOutputFrame output_frame_from_segment(const SegmentInMemory& frame) {
-    return PythonOutputFrame(frame, {});
-}
 
 }

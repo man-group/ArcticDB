@@ -19,7 +19,7 @@ struct ColumnMapping;
 class Column;
 
 
-struct EmptyHandler {
+struct PythonEmptyHandler {
     void handle_type(
         const uint8_t *&data,
         ChunkedBuffer& dest_buffer,
@@ -53,7 +53,7 @@ struct EmptyHandler {
         std::any& handler_data) const;
 };
 
-struct StringHandler {
+struct PythonStringHandler {
     void handle_type(
         const uint8_t *&data,
         ChunkedBuffer& dest_buffer,
@@ -86,7 +86,7 @@ struct StringHandler {
         std::any& handler_data) const;
 };
 
-struct BoolHandler {
+struct PythonBoolHandler {
     void handle_type(
         const uint8_t *&data,
         ChunkedBuffer& dest_buffer,
@@ -120,7 +120,7 @@ struct BoolHandler {
         std::any& handler_data) const;
 };
 
-struct ArrayHandler {
+struct PythonArrayHandler {
     void handle_type(
         const uint8_t *&data,
         ChunkedBuffer& dest_buffer,
@@ -159,7 +159,7 @@ inline void register_array_types() {
         DataType::INT64, DataType::FLOAT64, DataType::EMPTYVAL, DataType::FLOAT32, DataType::INT32};
 
     for (auto data_type : array_data_types) {
-        TypeHandlerRegistry::instance()->register_handler(make_array_type(data_type), arcticdb::ArrayHandler());
+        TypeHandlerRegistry::instance()->register_handler(OutputFormat::PANDAS, make_array_type(data_type), arcticdb::PythonArrayHandler());
     }
 }
 
@@ -169,11 +169,11 @@ inline void register_string_types() {
         DataType::ASCII_DYNAMIC64, DataType::UTF_DYNAMIC64};
 
     for (auto data_type :string_data_types) {
-        TypeHandlerRegistry::instance()->register_handler(make_scalar_type(data_type), arcticdb::StringHandler());
+        TypeHandlerRegistry::instance()->register_handler(OutputFormat::PANDAS, make_scalar_type(data_type), arcticdb::PythonStringHandler());
     }
 }
 
 inline void register_python_handler_data_factory() {
-    TypeHandlerRegistry::instance()->set_handler_data(std::make_unique<PythonHandlerDataFactory>());
+    TypeHandlerRegistry::instance()->set_handler_data(OutputFormat::PANDAS, std::make_unique<PythonHandlerDataFactory>());
 }
 } //namespace arcticdb

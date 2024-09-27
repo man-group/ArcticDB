@@ -1060,7 +1060,7 @@ folly::Future<ReadVersionOutput> async_read_direct(
 }
 
 std::vector<ReadVersionOutput> LocalVersionedEngine::batch_read_keys(const std::vector<AtomKey> &keys) {
-    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data();
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::PANDAS);
     py::gil_scoped_release release_gil;
     std::vector<folly::Future<std::pair<entity::VariantKey, SegmentInMemory>>> index_futures;
     for (auto &index_key: keys) {
@@ -1089,7 +1089,7 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::te
     const std::vector<VersionQuery> &version_queries,
     std::vector<std::shared_ptr<ReadQuery>> &read_queries,
     const ReadOptions &read_options) {
-    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data();
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format());
     py::gil_scoped_release release_gil;
 
     auto versions = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);

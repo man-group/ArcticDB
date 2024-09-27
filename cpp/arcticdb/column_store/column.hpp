@@ -111,8 +111,8 @@ public:
 
     public:
         TypedColumnIterator(const Column& col, bool begin) :
-        parent_(col.data()),
-        block_(begin ? parent_.next<TDT>() : std::nullopt) {
+            parent_(col.data()),
+            block_(begin ? parent_.next<TDT>() : std::nullopt) {
             if(begin)
                 set_block_range();
         }
@@ -120,10 +120,10 @@ public:
 
         template <class OtherValue>
         explicit TypedColumnIterator(const TypedColumnIterator<TDT, OtherValue>& other) :
-        parent_(other.parent_),
-        block_(other.block_),
-        block_pos_(other.block_pos_),
-        block_end_(other.block_end_){ }
+            parent_(other.parent_),
+            block_(other.block_),
+            block_pos_(other.block_pos_),
+            block_end_(other.block_end_){ }
 
         template <class OtherValue>
         bool equal(const TypedColumnIterator<TDT, OtherValue>& other) const{
@@ -230,11 +230,23 @@ public:
         TypeDescriptor type,
         size_t expected_rows,
         AllocationType presize,
-        Sparsity allow_sparse,
-        DataTypeMode mode = DataTypeMode::INTERNAL) :
-            data_(expected_rows * entity::data_type_size(type, mode), presize),
+        Sparsity allow_sparse) :
+            data_(expected_rows * entity::internal_data_type_size(type), presize),
             type_(type),
             allow_sparse_(allow_sparse) {
+        ARCTICDB_TRACE(log::inmem(), "Creating column with descriptor {}", type);
+    }
+
+    Column(
+        TypeDescriptor type,
+        size_t expected_rows,
+        AllocationType presize,
+        Sparsity allow_sparse,
+        OutputFormat output_format,
+        DataTypeMode mode) :
+        data_(expected_rows * entity::data_type_size(type, output_format, mode), presize),
+        type_(type),
+        allow_sparse_(allow_sparse) {
         ARCTICDB_TRACE(log::inmem(), "Creating column with descriptor {}", type);
     }
 
