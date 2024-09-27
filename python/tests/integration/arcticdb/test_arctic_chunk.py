@@ -148,9 +148,10 @@ def test_chunk_columns_tiny(arctic_client):
         generic_chunk_test(lib, sym, DF_SMALL, dict(columns=cols), chunk_args)
 
 def test_chunk_querybuilder_tiny(arctic_client):
-    # behaviour of query_builder with/without chunks can be complicated, so this test is limited to a simple case
+    # behaviour of query_builder with/without chunks can be complicated, because the query is run against each chunk
+    # so this test is limited to a simple case
     lib = create_lib_tiny_segments(arctic_client)
     sym = 'query_builder'
-    q = adb.QueryBuilder()[adb.col('int32')>0]
-    df_test = DF_SMALL[DF_SMALL['int32']>0]
+    q = adb.QueryBuilder()[adb.col('timestamp') > DF_SMALL.index[0]]
+    df_test = DF_SMALL[DF_SMALL.index > DF_SMALL.index[0]]
     generic_chunk_test(lib, sym, DF_SMALL, dict(query_builder=q), dict(num_chunks=2), df_test, pd_ignore_db=True)
