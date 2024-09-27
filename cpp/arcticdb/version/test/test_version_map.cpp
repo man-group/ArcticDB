@@ -385,7 +385,7 @@ TEST(VersionMap, FixRefKey) {
     EXPECT_THROW({
         // We should raise if we try to write a non-increasing index key
         version_map->write_version(store, key4, key3);
-    }, InternalException);
+    }, NonIncreasingIndexVersionException);
 
     store->remove_key_sync(RefKey{id, KeyType::VERSION_REF}, storage::RemoveOpts{});
     ASSERT_FALSE(version_map->check_ref_key(store, id));
@@ -414,15 +414,15 @@ TEST(VersionMap, FixRefKeyTombstones) {
     auto key2 = atom_key_with_version(id, 0, 1696590624387628801);
     EXPECT_THROW({
         version_map->write_version(store, key2, key1);
-    }, InternalException);
+    }, NonIncreasingIndexVersionException);
     auto key3 = atom_key_with_version(id, 0, 1696590624532320286);
     EXPECT_THROW({
         version_map->write_version(store, key3, key2);
-    }, InternalException);
+    }, NonIncreasingIndexVersionException);
     auto key4 = atom_key_with_version(id, 0, 1696590624554476875);
     EXPECT_THROW({
         version_map->write_version(store, key4, key3);
-    }, InternalException);
+    }, NonIncreasingIndexVersionException);
     auto key5 = atom_key_with_version(id, 1, 1696590624590123209);
     version_map->write_version(store, key5, key4);
     auto entry = version_map->check_reload(store, id, LoadStrategy{LoadType::LATEST, LoadObjective::INCLUDE_DELETED}, __FUNCTION__);
