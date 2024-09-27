@@ -903,8 +903,10 @@ void merge_impl(
     using SegmentationPolicy = stream::RowCountSegmentPolicy;
     SegmentationPolicy segmentation_policy{static_cast<size_t>(num_segment_rows)};
 
-    auto func = [&component_manager, &ret, &row_range, &col_range](auto &&segment) {
-        ret.emplace_back(push_entities(component_manager, ProcessingUnit{std::forward<SegmentInMemory>(segment), row_range, col_range}));
+    auto func = [&component_manager, &ret, &col_range, start_row = row_range.first](auto&& segment) mutable {
+        const size_t end_row = start_row + segment.row_count();
+        ret.emplace_back(push_entities(component_manager, ProcessingUnit{std::forward<decltype(segment)>(segment), RowRange{start_row, end_row}, col_range}));
+        start_row = end_row;
     };
 
     using Schema = std::conditional_t<dynamic_schema, stream::DynamicSchema, stream::FixedSchema>;
