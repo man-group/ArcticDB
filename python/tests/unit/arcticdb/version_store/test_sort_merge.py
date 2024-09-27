@@ -1,11 +1,13 @@
 import pandas as pd
 import numpy as np
-from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.test import assert_frame_equal, config_context
 import pytest
 from arcticdb_ext.storage import KeyType
 from arcticdb.version_store.library import StagedDataFinalizeMethod
 from arcticdb.exceptions import UserInputException, SortingException, StreamDescriptorMismatch, InternalException, SchemaException
 from arcticdb.util._versions import IS_PANDAS_TWO
+from arcticdb_ext import set_config_int
+from arcticdb.options import LibraryOptions
 
 
 def test_merge_single_column(lmdb_library_static_dynamic):
@@ -617,3 +619,136 @@ def test_update_symbol_list(lmdb_library):
     lib.sort_and_finalize_staged_data(sym_2, mode=StagedDataFinalizeMethod.APPEND)
     assert lib_tool.count_keys(KeyType.SYMBOL_LIST) == 3
     assert set(lib.list_symbols()) == set([sym, sym_2])
+
+class TestSlicing:
+    def test_append_long_segment(self, lmdb_library):
+        with config_context('Merge.SegmentSize', 5):
+            lib = lmdb_library
+            df_0 = pd.DataFrame({"col_0": [1, 2, 3]}, index=pd.date_range("2024-01-01", "2024-01-03"))
+            lib.write("sym", df_0)
+
+            index = pd.date_range("2024-01-05", "2024-01-15")
+            df_1 = pd.DataFrame({"col_0": range(0, len(index))}, index=index)
+            lib.write("sym", df_1, staged=True)
+            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+    
+            assert_frame_equal(lib.read("sym").data, pd.concat([df_0, df_1]))
+
+    def test_write_long_segment(self, lmdb_library):
+        with config_context('Merge.SegmentSize', 5):
+            lib = lmdb_library
+            index = pd.date_range("2024-01-05", "2024-01-15")
+            df = pd.DataFrame({"col_0": range(0, len(index))}, index=index)
+            lib.write("sym", df, staged=True)
+            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.WRITE)
+            assert_frame_equal(lib.read("sym").data, df)
+
+    def test_write_several_segments_triggering_slicing(self, lmdb_library):
+        with config_context('Merge.SegmentSize', 5):
+            lib = lmdb_library
+            combined_staged_index = pd.date_range(pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 15))
+            staged_values = range(0, len(combined_staged_index))
+            for (value, date) in zip(staged_values, combined_staged_index):
+                df = pd.DataFrame({"a": [value]}, index=pd.DatetimeIndex([date]))
+                lib.write("sym", df, staged=True)
+            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.WRITE)
+            expected = pd.DataFrame({"a": staged_values}, index=combined_staged_index)
+            assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_append_several_segments_trigger_slicing(self, lmdb_library):
+        with config_context('Merge.SegmentSize', 5):
+            lib = lmdb_library
+            df_0 = pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range(pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 3)))
+            lib.write("sym", df_0)
+            combined_staged_index = pd.date_range(pd.Timestamp(2024, 1, 5), pd.Timestamp(2024, 1, 20))
+            staged_values = range(0, len(combined_staged_index))
+            for (value, date) in zip(staged_values, combined_staged_index):
+                df = pd.DataFrame({"a": [value]}, index=pd.DatetimeIndex([date]))
+                lib.write("sym", df, staged=True)
+            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+            expected = pd.concat([df_0, pd.DataFrame({"a": staged_values}, index=combined_staged_index)])
+            assert_frame_equal(lib.read("sym").data, expected)
+
+    @pytest.mark.parametrize("mode", [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE])
+    def test_wide_segment_with_no_prior_slicing(self, lmdb_storage, lib_name, mode):
+        columns_per_segment = 5
+        dataframe_columns = 2 * columns_per_segment
+        lib = lmdb_storage.create_arctic().create_library(lib_name, library_options=LibraryOptions(columns_per_segment=columns_per_segment))
+        df_0 = pd.DataFrame({f"col_{i}": [i] for i in range(0, dataframe_columns)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
+        lib.write("sym", df_0, staged=True)
+        lib.sort_and_finalize_staged_data("sym", mode=mode)
+        assert_frame_equal(lib.read("sym").data, df_0)
+
+        df_1 = pd.DataFrame({f"col_{i}": [i] for i in range(0, dataframe_columns)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
+        lib.append("sym", df_1)
+        assert_frame_equal(lib.read("sym").data, pd.concat([df_0, df_1]))
+        # Cannot perform another sort and finalize append when column sliced data has been written even though the first
+        # write is done using sort and finalize
+        with pytest.raises(UserInputException) as exception_info:
+            lib.write("sym", pd.DataFrame({f"col_{i}": [i] for i in range(0, dataframe_columns)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 3)])), staged=True)
+            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+        assert "append" in str(exception_info.value).lower()
+        assert "column" in str(exception_info.value).lower()
+        assert "sliced" in str(exception_info.value).lower()
+
+    @pytest.mark.parametrize("mode", [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE])
+    def test_update_wide_staged_segment(self, lmdb_storage, lib_name, mode):
+        columns_per_segment = 5
+        dataframe_columns = 2 * columns_per_segment
+        lib = lmdb_storage.create_arctic().create_library(lib_name, library_options=LibraryOptions(columns_per_segment=columns_per_segment))
+        df_0 = pd.DataFrame({f"col_{i}": [1, 2, 3] for i in range(0, dataframe_columns)}, index=pd.DatetimeIndex(pd.date_range(pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 3))))
+        lib.write("sym", df_0, staged=True)
+        lib.sort_and_finalize_staged_data("sym", mode=mode)
+        assert_frame_equal(lib.read("sym").data, df_0)
+
+        update_df = pd.DataFrame({f"col_{i}": [4] for i in range(0, dataframe_columns)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
+        lib.update("sym", update_df)
+
+        expected = pd.DataFrame({f"col_{i}": [1, 4, 3] for i in range(0, dataframe_columns)}, index=pd.DatetimeIndex(pd.date_range(pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 3))))
+        assert_frame_equal(lib.read("sym").data, expected)
+
+        df_1 = pd.DataFrame({f"col_{i}": [5, 6, 7] for i in range(0, dataframe_columns)}, index=pd.DatetimeIndex(pd.date_range(pd.Timestamp(2024, 1, 4), pd.Timestamp(2024, 1, 6))))
+        # Cannot append via sort and finalize because slicing has occurred
+        with pytest.raises(UserInputException) as exception_info:
+            lib.write("sym", df_1, staged=True)
+            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+        assert "append" in str(exception_info.value).lower()
+        assert "column" in str(exception_info.value).lower()
+        assert "sliced" in str(exception_info.value).lower()
+        
+        # Can perform regular append
+        lib.append("sym", df_1)
+        
+        expected = pd.DataFrame({f"col_{i}": [1, 4, 3, 5, 6, 7] for i in range(0, dataframe_columns)}, index=pd.DatetimeIndex(pd.date_range(pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 6))))
+        assert_frame_equal(lib.read("sym").data, expected)
+        
+        
+
+
+    def test_appending_wide_segment_throws_with_prior_slicing(self, lmdb_storage, lib_name):
+        columns_per_segment = 5
+        lib = lmdb_storage.create_arctic().create_library(lib_name, library_options=LibraryOptions(columns_per_segment=columns_per_segment))
+        df_0 = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
+        lib.write("sym", df_0)
+        
+        df_1 = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
+        lib.write("sym", df_1, staged=True)
+
+        with pytest.raises(UserInputException) as exception_info:
+            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+        assert "append" in str(exception_info.value).lower()
+        assert "column" in str(exception_info.value).lower()
+        assert "sliced" in str(exception_info.value).lower()
+
+    def test_writing_wide_segment_over_sliced_data(self, lmdb_storage, lib_name):
+        columns_per_segment = 5
+        lib = lmdb_storage.create_arctic().create_library(lib_name, library_options=LibraryOptions(columns_per_segment=columns_per_segment))
+        df_0 = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
+        lib.write("sym", df_0)
+        
+        df_1 = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
+        lib.write("sym", df_1, staged=True)
+
+        lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.WRITE)
+
+        assert_frame_equal(lib.read("sym").data, df_1)

@@ -931,6 +931,16 @@ class Library:
             Structure containing metadata and version number of the written symbol in the store.
             The data member will be None.
 
+        Raises
+        ------
+        UserInputException
+            If all of the following conditions are met:
+
+            1. Static schema is used.
+            2. The width of the DataFrame exceeds the value of `LibraryOptions.columns_per_segment`.
+            3. The symbol contains data that was not written by `sort_and_finalize_staged_data`.
+            4. Finalize mode is append
+
         See Also
         --------
         write
@@ -977,6 +987,16 @@ class Library:
         VersionedItem
             Structure containing metadata and version number of the written symbol in the store.
             The data member will be None.
+
+        Raises
+        ------
+        UserInputException
+            If all of the following conditions are met:
+    
+            1. Static schema is used.
+            2. The width of the DataFrame exceeds the value of `LibraryOptions.columns_per_segment`.
+            3. The symbol contains data that was not written by `sort_and_finalize_staged_data`.
+            4. Finalize mode is append
 
         See Also
         --------
