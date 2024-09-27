@@ -11,7 +11,7 @@ import random
 import datetime
 import pytest
 
-from arcticdb.exceptions import SortingException, SchemaException
+from arcticdb.exceptions import SortingException, SchemaException, UserInputException
 from arcticdb.util.test import (
     assert_frame_equal,
     random_strings_of_length,
@@ -744,3 +744,94 @@ class TestFinalizeWithEmptySegments:
         lib.write("sym", df, parallel=True)
         lib.compact_incomplete("sym", finalize_method, False)
         assert_frame_equal(lib.read("sym").data, df)
+
+class TestSlicing:
+    def test_append_long_segment(self, lmdb_version_store_tiny_segment):
+        lib = lmdb_version_store_tiny_segment
+        df_0 = pd.DataFrame({"col_0": [1, 2, 3]}, index=pd.date_range("2024-01-01", "2024-01-03"))
+        lib.write("sym", df_0)
+
+        index = pd.date_range("2024-01-05", "2024-01-15")
+        df_1 = pd.DataFrame({"col_0": range(0, len(index))}, index=index)
+        lib.write("sym", df_1, parallel=True)
+        lib.compact_incomplete("sym", True, False)
+    
+        assert_frame_equal(lib.read("sym").data, pd.concat([df_0, df_1]))
+
+    def test_write_long_segment(self, lmdb_version_store_tiny_segment):
+        lib = lmdb_version_store_tiny_segment
+        index = pd.date_range("2024-01-05", "2024-01-15")
+        df = pd.DataFrame({"col_0": range(0, len(index))}, index=index)
+        lib.write("sym", df, parallel=True)
+        lib.compact_incomplete("sym", False, False)
+        assert_frame_equal(lib.read("sym").data, df)
+
+    def test_write_several_segments_triggering_slicing(self, lmdb_version_store_tiny_segment):
+        lib = lmdb_version_store_tiny_segment
+        combined_staged_index = pd.date_range(pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 15))
+        staged_values = range(0, len(combined_staged_index))
+        for (value, date) in zip(staged_values, combined_staged_index):
+            df = pd.DataFrame({"a": [value]}, index=pd.DatetimeIndex([date]))
+            lib.write("sym", df, parallel=True)
+        lib.compact_incomplete("sym", False, False)
+        expected = pd.DataFrame({"a": staged_values}, index=combined_staged_index)
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_append_several_segments_trigger_slicing(self, lmdb_version_store_tiny_segment):
+        lib = lmdb_version_store_tiny_segment
+        df_0 = pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range(pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 3)))
+        lib.write("sym", df_0)
+        combined_staged_index = pd.date_range(pd.Timestamp(2024, 1, 5), pd.Timestamp(2024, 1, 20))
+        staged_values = range(0, len(combined_staged_index))
+        for (value, date) in zip(staged_values, combined_staged_index):
+            df = pd.DataFrame({"a": [value]}, index=pd.DatetimeIndex([date]))
+            lib.write("sym", df, parallel=True)
+        lib.compact_incomplete("sym", True, False)
+        expected = pd.concat([df_0, pd.DataFrame({"a": staged_values}, index=combined_staged_index)])
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    @pytest.mark.parametrize("mode", [True, False])
+    def test_wide_segment_with_no_prior_slicing(self, lmdb_version_store_tiny_segment, mode):
+        lib = lmdb_version_store_tiny_segment
+        df_0 = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
+        lib.write("sym", df_0, parallel=True)
+        lib.compact_incomplete("sym", mode, False)
+        assert_frame_equal(lib.read("sym").data, df_0)
+        
+        df_1 = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
+        lib.append("sym", df_1)
+        assert_frame_equal(lib.read("sym").data, pd.concat([df_0, df_1]))
+
+        # Cannot perform another sort and finalize append when column sliced data has been written even though the first
+        # write is done using sort and finalize
+        with pytest.raises(UserInputException) as exception_info:
+            lib.write("sym", pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 3)])), parallel=True)
+            lib.compact_incomplete("sym", True, False)
+        assert "append" in str(exception_info.value).lower()
+        assert "column" in str(exception_info.value).lower()
+        assert "sliced" in str(exception_info.value).lower()
+
+    def test_appending_wide_segment_throws_with_prior_slicing(self, lmdb_version_store_tiny_segment, lib_name):
+        lib = lmdb_version_store_tiny_segment
+        df_0 = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
+        lib.write("sym", df_0)
+        
+        df_1 = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
+        lib.write("sym", df_1, parallel=True)
+        with pytest.raises(UserInputException) as exception_info:
+            lib.compact_incomplete("sym", True, True)
+        assert "append" in str(exception_info.value).lower()
+        assert "column" in str(exception_info.value).lower()
+        assert "sliced" in str(exception_info.value).lower()
+
+    def test_writing_wide_segment_over_sliced_data(self, lmdb_version_store_tiny_segment):
+        lib = lmdb_version_store_tiny_segment
+        df_0 = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
+        lib.write("sym", df_0)
+        
+        df_1 = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
+        lib.write("sym", df_1, parallel=True)
+
+        lib.compact_incomplete("sym", False, False)
+
+        assert_frame_equal(lib.read("sym").data, df_1)
