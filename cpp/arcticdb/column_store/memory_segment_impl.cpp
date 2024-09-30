@@ -147,6 +147,17 @@ std::optional<std::size_t> SegmentInMemoryImpl::column_index(std::string_view na
     return column_map_->column_index(name);
 }
 
+[[nodiscard]] std::optional<std::size_t> SegmentInMemoryImpl::column_index_with_name_demangling(std::string_view name) const {
+    if (auto index = column_index(name); index)
+        return index;
+
+    std::string multi_index_column_name = fmt::format("__idx__{}", name);
+    if (auto multi_index = column_index(multi_index_column_name); multi_index)
+        return multi_index;
+
+    return std::nullopt;
+}
+
 SegmentInMemoryImpl SegmentInMemoryImpl::clone() const {
     SegmentInMemoryImpl output{};
     output.row_id_ = row_id_;
@@ -639,8 +650,32 @@ size_t SegmentInMemoryImpl::num_bytes() const {
 void SegmentInMemoryImpl::sort(const std::string& column_name) {
     init_column_map();
     auto idx = column_index(std::string_view(column_name));
-    util::check(static_cast<bool>(idx), "Column {} not found in sort", column_name);
+    user_input::check<ErrorCode::E_COLUMN_NOT_FOUND>(static_cast<bool>(idx), "Column {} not found in sort", column_name);
     sort(static_cast<position_t>(idx.value()));
+}
+
+void SegmentInMemoryImpl::sort(const std::vector<std::string>& column_names) {
+    init_column_map();
+    std::vector<position_t> positions;
+    for(const auto& column_name : column_names) {
+        auto idx = column_index(std::string_view(column_name));
+        user_input::check<ErrorCode::E_COLUMN_NOT_FOUND>(static_cast<bool>(idx), "Column {} not found in multi-sort", column_name);
+        positions.emplace_back(static_cast<position_t>(*idx));
+    }
+    sort(positions);
+}
+
+void SegmentInMemoryImpl::sort(const std::vector<position_t>& positions) {
+    std::vector<std::shared_ptr<Column>> columns;
+    columns.reserve(positions.size());
+    for(auto position : positions)
+        columns.emplace_back(columns_[position]);
+
+    auto table = create_jive_table(columns);
+    auto pre_allocated_space = std::vector<uint32_t>(row_count());
+    for (auto field_col = 0u; field_col < descriptor().field_count(); ++field_col) {
+        column(field_col).sort_external(table, pre_allocated_space);
+    }
 }
 
 void SegmentInMemoryImpl::sort(position_t idx) {
@@ -648,8 +683,7 @@ void SegmentInMemoryImpl::sort(position_t idx) {
     util::check(!sort_col.is_sparse(), "Can't sort on sparse column idx {} because it is not supported yet. The user should either fill the column data or filter the empty columns out",idx);
     auto table = sort_col.type().visit_tag([&sort_col] (auto tdt) {
         using TagType = decltype(tdt);
-        using RawType = typename TagType::DataTypeTag::raw_type;
-        return create_jive_table<RawType>(sort_col);
+        return create_jive_table<TagType>(sort_col);
     });
 
     auto pre_allocated_space = std::vector<uint32_t>(sort_col.row_count());
