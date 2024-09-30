@@ -313,7 +313,9 @@ class PythonVersionStore : public LocalVersionedEngine {
     size_t compact_symbol_list();
 
     void clear(const bool continue_on_error = true);
-    bool empty();
+
+    bool is_empty_excluding_key_types(const std::vector<KeyType>& excluded_key_types);
+
     void force_delete_symbol(const StreamId& stream_id);
 
     void _clear_symbol_list_keys();
