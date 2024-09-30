@@ -11,7 +11,6 @@ from ..util.mark import (
     MONGO_TESTS_MARK,
     VENV_COMPAT_TESTS_MARK,
 )
-from packaging.version import Version
 
 logger = logging.getLogger("Compatibility tests")
 
@@ -146,9 +145,7 @@ class VenvLib:
 def old_venv(request):
     version = request.param
     path = os.path.join("venvs", version)
-    # The requirements_file needs to be relative to the [path] we use for the venv.
-    # Absolute paths break some Azure CI runners on conda forge
-    requirements_file = os.path.join("..", "..", "tests", "compat", f"requirements-{version}.txt")
+    requirements_file = os.path.abspath(os.path.join("tests", "compat", f"requirements-{version}.txt"))
     with Venv(path, requirements_file, version) as old_venv:
         yield old_venv
 
@@ -176,10 +173,6 @@ def arctic_uri(request):
 
 @pytest.fixture()
 def old_venv_and_arctic_uri(old_venv, arctic_uri):
-    # TODO: Replace 4.5.0 with 4.5.1 when it is released to re-enable both mongo and lmdb.
-    if Version(old_venv.version) <= Version("4.5.0") and arctic_uri.startswith("mongo"):
-        pytest.skip("Mongo storage backend has a desctruction bug present until 4.5.0, which can cause flaky segfaults.")
-    if Version(old_venv.version) <= Version("4.5.0") and arctic_uri.startswith("lmdb"):
-        pytest.skip("LMDB storage backend has a desctruction bug present until 4.5.0, which can cause flaky segfaults.")
-
+    if old_venv.version == "1.6.2" and arctic_uri.startswith("mongo"):
+        pytest.skip("Mongo storage backend is not supported on 1.6.2")
     return old_venv, arctic_uri

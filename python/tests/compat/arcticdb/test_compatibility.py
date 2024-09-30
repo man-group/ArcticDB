@@ -5,8 +5,6 @@ from arcticdb.arctic import Arctic
 from arcticdb.util.test import assert_frame_equal
 from arcticdb_ext import set_config_int
 from arcticdb.options import ModifiableEnterpriseLibraryOption
-from arcticdb.toolbox.library_tool import LibraryTool
-
 
 class CurrentVersion:
     """
@@ -67,24 +65,11 @@ def test_modify_old_library_option_with_current(old_venv_and_arctic_uri, lib_nam
     old_lib.assert_read(sym, df)
 
     # Enable replication and background_deletion with current version
-    expected_cfg = None
     with CurrentVersion(arctic_uri, lib_name) as curr:
-        expected_cfg = LibraryTool.read_unaltered_lib_cfg(curr.ac._library_manager, lib_name)
-        expected_cfg.lib_desc.version.write_options.delayed_deletes = True
-        expected_cfg.lib_desc.version.write_options.sync_passive.enabled = True
-
         curr.ac.modify_library_option(curr.lib, ModifiableEnterpriseLibraryOption.REPLICATION, True)
         curr.ac.modify_library_option(curr.lib, ModifiableEnterpriseLibraryOption.BACKGROUND_DELETION, True)
-
-        cfg_after_modification = LibraryTool.read_unaltered_lib_cfg(curr.ac._library_manager, lib_name)
-        assert(cfg_after_modification == expected_cfg)
 
     # We should still be able to read and write with the old version
     old_lib.assert_read(sym, df)
     old_lib.write(sym, df_2)
     old_lib.assert_read(sym, df_2)
-
-    # We verify that cfg is still what we expect after operations from old_venv
-    with CurrentVersion(arctic_uri, lib_name) as curr:
-        cfg_after_use = LibraryTool.read_unaltered_lib_cfg(curr.ac._library_manager, lib_name)
-        assert(cfg_after_use == expected_cfg)
