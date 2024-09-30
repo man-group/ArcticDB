@@ -103,6 +103,8 @@ TEST(KeyUtils, RecurseIndexKeyIgnoreMissing) {
     write_version_frame_with_three_segments(first_id, 0, version_store);
     StreamId second_id{"second"};
     write_version_frame_with_three_segments(second_id, 0, version_store);
+    StreamId third_id{"third"};
+    write_version_frame_with_three_segments(third_id, 0, version_store);
 
     std::vector<AtomKeyImpl> index_keys;
     AtomKeyImpl index_for_second;
@@ -113,7 +115,7 @@ TEST(KeyUtils, RecurseIndexKeyIgnoreMissing) {
             index_for_second = ak;
         }
     });
-    ASSERT_EQ(index_keys.size(), 2);
+    ASSERT_EQ(index_keys.size(), 3);
     ASSERT_EQ(index_for_second.id(), second_id);
 
     storage::RemoveOpts remove_opts;
@@ -130,5 +132,16 @@ TEST(KeyUtils, RecurseIndexKeyIgnoreMissing) {
     auto res = recurse_index_keys(mock_store, index_keys, opts);
 
     // Then
-    ASSERT_EQ(res.size(), 3);
+    ASSERT_EQ(res.size(), 6);
+    int count_first = 0;
+    int count_third = 0;
+    for (const auto& r : res) {
+        if (r.id() == first_id) {
+            count_first++;
+        } else if (r.id() == third_id) {
+            count_third++;
+        }
+    }
+    ASSERT_EQ(3, count_first);
+    ASSERT_EQ(3, count_third);
 }
