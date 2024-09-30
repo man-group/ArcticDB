@@ -407,6 +407,8 @@ public:
 
     std::optional<std::size_t> column_index(std::string_view name) const;
 
+    [[nodiscard]] std::optional<std::size_t> column_index_with_name_demangling(std::string_view name) const;
+
     const Field& column_descriptor(size_t col) {
         return (*descriptor_)[col];
     }
@@ -579,6 +581,8 @@ public:
 
     void sort(const std::string& column);
     void sort(position_t idx);
+    void sort(const std::vector<std::string>& column_names);
+    void sort(const std::vector<position_t>& columns);
 
     position_t add_column(const Field &field, const std::shared_ptr<Column>& column);
 

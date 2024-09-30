@@ -134,10 +134,11 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     void write_parallel(
         const StreamId& stream_id,
-        const py::tuple &item,
-        const py::object &norm,
-        const py::object & user_meta,
-        bool validate_index) const;
+        const py::tuple& item,
+        const py::object& norm,
+        bool validate_index,
+        bool sort_on_index,
+        std::optional<std::vector<std::string>> sort_columns) const;
 
     VersionedItem write_metadata(
         const StreamId& stream_id,
