@@ -35,8 +35,8 @@ struct PythonHandlerData {
 };
 
 struct PythonHandlerDataFactory  : public TypeHandlerDataFactory {
-    std::any get_data() const override {
-        return {PythonHandlerData{}};
+    std::shared_ptr<std::any> get_data() const override {
+        return std::make_shared<std::any>(std::make_any<PythonHandlerData>());
     }
 };
 

@@ -22,106 +22,11 @@
 #include <arcticdb/python/adapt_read_dataframe.hpp>
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
+#include <arcticdb/processing/resample_boundaries.hpp>
+#include <boost/date_time/posix_time/posix_time.hpp>
 
 
 namespace arcticdb::version_store {
-
-static consteval timestamp one_day_in_nanoseconds() {
-    return timestamp(24) * 60 * 60 * 1'000'000'000;
-}
-
-template<typename T>
-requires std::integral<T>
-[[nodiscard]] static T python_mod(T a, T b) {
-    return (a % b + b) % b;
-}
-
-/// @param ts in nanoseconds
-[[nodiscard]] static timestamp start_of_day_nanoseconds(timestamp ts) {
-    return ts - python_mod(ts, one_day_in_nanoseconds());
-}
-
-/// @param ts in nanoseconds
-[[nodiscard]] static timestamp end_of_day_nanoseconds(timestamp ts) {
-    const timestamp start_of_day = start_of_day_nanoseconds(ts);
-    const bool is_midnnight = start_of_day == ts;
-    if (is_midnnight) {
-        return ts;
-    }
-    return start_of_day + one_day_in_nanoseconds();
-}
-
-[[nodiscard]] static std::pair<timestamp, timestamp> compute_first_last_dates(
-    timestamp start,
-    timestamp end,
-    timestamp rule,
-    ResampleBoundary closed_boundary_arg,
-    timestamp offset,
-    const ResampleOrigin& origin
-) {
-    // Origin value formula from Pandas:
-    // https://github.com/pandas-dev/pandas/blob/68d9dcab5b543adb3bfe5b83563c61a9b8afae77/pandas/core/resample.py#L2564
-    auto [origin_ns, origin_adjusted_start] = util::variant_match(
-        origin,
-        [start](timestamp o) -> std::pair<timestamp, timestamp> {return {o, start}; },
-        [&](const std::string& o) -> std::pair<timestamp, timestamp> {
-            if (o == "epoch") {
-                return { 0, start };
-            } else if (o == "start") {
-                return { start, start };
-            } else if (o == "start_day") {
-                return { start_of_day_nanoseconds(start), start };
-            } else if (o == "end_day" || o == "end") {
-                const timestamp origin_last = o == "end" ? end: end_of_day_nanoseconds(end);
-                const timestamp bucket_count = (origin_last - start) / rule + (closed_boundary_arg == ResampleBoundary::LEFT);
-                const timestamp origin_ns = origin_last - bucket_count * rule;
-                return { origin_ns, origin_ns };
-            } else {
-                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                    R"(Invalid origin value {}. Supported values are: "start", "start_day", "end", "end_day", "epoch" or timestamp in nanoseconds)",
-                    o);
-            }
-        }
-    );
-    origin_ns += offset;
-
-    const timestamp ns_to_prev_offset_start = python_mod(origin_adjusted_start - origin_ns, rule);
-    const timestamp ns_to_prev_offset_end = python_mod(end - origin_ns, rule);
-
-    if (closed_boundary_arg == ResampleBoundary::RIGHT) {
-        return {
-            ns_to_prev_offset_start > 0 ? origin_adjusted_start - ns_to_prev_offset_start : origin_adjusted_start - rule,
-            ns_to_prev_offset_end > 0 ? end + (rule - ns_to_prev_offset_end) : end
-        };
-    } else {
-        return {
-            ns_to_prev_offset_start > 0 ? origin_adjusted_start - ns_to_prev_offset_start : origin_adjusted_start,
-            ns_to_prev_offset_end > 0 ? end + (rule - ns_to_prev_offset_end) : end + rule
-        };
-    }
-}
-
-std::vector<timestamp> generate_buckets(
-    timestamp start,
-    timestamp end,
-    std::string_view rule,
-    ResampleBoundary closed_boundary_arg,
-    timestamp offset,
-    const ResampleOrigin& origin
-) {
-    const timestamp rule_ns = [](std::string_view rule) {
-        py::gil_scoped_acquire acquire_gil;
-        return python_util::pd_to_offset(rule);
-    }(rule);
-    const auto [start_with_offset, end_with_offset] = compute_first_last_dates(start, end, rule_ns, closed_boundary_arg, offset, origin);
-    const auto bucket_boundary_count = (end_with_offset - start_with_offset) / rule_ns + 1;
-    std::vector<timestamp> res;
-    res.reserve(bucket_boundary_count);
-    for (auto boundary = start_with_offset; boundary <= end_with_offset; boundary += rule_ns) {
-        res.push_back(boundary);
-    }
-    return res;
-}
 
 template<ResampleBoundary closed_boundary>
 void declare_resample_clause(py::module& version) {
@@ -230,8 +135,14 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
 
     version.def("write_dataframe_to_file", &write_dataframe_to_file);
     version.def("read_dataframe_from_file",
+<<<<<<< HEAD
         [] (StreamId sid, const std::string(path), std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options){
             return adapt_read_df(read_dataframe_from_file(sid, path, read_query, read_options));
+=======
+        [] (StreamId sid, const std::string(path), std::shared_ptr<ReadQuery> read_query) {
+            auto handler_data = TypeHandlerRegistry::instance()->get_handler_data();
+            return adapt_read_df(read_dataframe_from_file(sid, path, read_query, *handler_data));
+>>>>>>> e1aceff92 (Read chunks of data in C++)
         });
 
     using FrameDataWrapper = arcticdb::pipelines::FrameDataWrapper;
@@ -253,6 +164,16 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def_property_readonly("index_columns", &PythonOutputFrame::index_columns, py::return_value_policy::reference)
         .def_property_readonly("row_count", [](PythonOutputFrame& self) {
             return self.frame().row_count();
+        });
+
+    py::class_<ChunkIterator>(version, "ChunkIterator")
+        .def("next",
+        [] (ChunkIterator& self) -> std::optional<py::list> {
+            auto result = self.next();
+            if(result)
+                return adapt_read_df(std::move(*result));
+            else
+                return std::nullopt;
         });
 
     py::enum_<VersionRequestType>(version, "VersionRequestType", R"pbdoc(
@@ -544,6 +465,12 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("sort_index",
              &PythonVersionStore::sort_index,
              py::call_guard<SingleThreadMutexHolder>(), "Sort the index of a time series whose segments are internally sorted")
+        .def("read_chunked",
+            [&](PythonVersionStore& v,  StreamId sid, const VersionQuery& version_query, std::shared_ptr<ReadQuery> read_query, const ReadOptions& read_options) {
+                auto handler_data = TypeHandlerRegistry::instance()->get_handler_data();
+                return v.read_dataframe_chunked(sid, version_query, *read_query, read_options, *handler_data);
+            },
+            py::call_guard<SingleThreadMutexHolder>(), "Get an iterator to a dataframe that returns in the chunked order")
         .def("append",
              &PythonVersionStore::append,
              py::call_guard<SingleThreadMutexHolder>(), "Append a dataframe to the most recent version")
@@ -666,9 +593,15 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             &PythonVersionStore::write_dataframe_specific_version,
              py::call_guard<SingleThreadMutexHolder>(), "Write a specific  version of this dataframe to the store")
         .def("read_dataframe_version",
+<<<<<<< HEAD
              [&](PythonVersionStore& v,  StreamId sid, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options) {
                 auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format());
                 return adapt_read_df(v.read_dataframe_version(sid, version_query, read_query, read_options, handler_data));
+=======
+             [&](PythonVersionStore& v,  StreamId sid, const VersionQuery& version_query, std::shared_ptr<ReadQuery> read_query, const ReadOptions& read_options) {
+                auto handler_data = TypeHandlerRegistry::instance()->get_handler_data();
+                return adapt_read_df(v.read_dataframe_version(sid, version_query, read_query, read_options, *handler_data));
+>>>>>>> e1aceff92 (Read chunks of data in C++)
               },
              py::call_guard<SingleThreadMutexHolder>(),
              "Read the specified version of the dataframe from the store")
@@ -765,8 +698,13 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                  const std::vector<VersionQuery>& version_queries,
                  std::vector<std::shared_ptr<ReadQuery>>& read_queries,
                  const ReadOptions& read_options){
+<<<<<<< HEAD
                  auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format());
                  return python_util::adapt_read_dfs(v.batch_read(stream_ids, version_queries, read_queries, read_options));
+=======
+                 auto handler_data = TypeHandlerRegistry::instance()->get_handler_data();
+                 return python_util::adapt_read_dfs(v.batch_read(stream_ids, version_queries, read_queries, read_options, *handler_data));
+>>>>>>> e1aceff92 (Read chunks of data in C++)
              },
              py::call_guard<SingleThreadMutexHolder>(), "Read a dataframe from the store")
         .def("batch_read_keys",

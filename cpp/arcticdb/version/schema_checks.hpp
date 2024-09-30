@@ -1,10 +1,19 @@
 #pragma once
 
+#include <arcticdb/entity/types.hpp>
+#include <arcticdb/entity/variant_key.hpp>
+#include <arcticdb/entity/stream_descriptor.hpp>
+#include <arcticdb/pipeline//error.hpp>
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/python/normalization_checks.hpp>
 #include <arcticdb/entity/type_utils.hpp>
 
 namespace arcticdb {
+
+using CheckOutcome = std::variant<Error, std::monostate>;
+using StaticSchemaCompactionChecks = folly::Function<CheckOutcome(const StreamDescriptor&, const StreamDescriptor&)>;
+using CompactionWrittenKeys = std::vector<VariantKey>;
+using CompactionResult = std::variant<CompactionWrittenKeys, Error>;
 
 enum NormalizationOperation : uint8_t {
     APPEND,

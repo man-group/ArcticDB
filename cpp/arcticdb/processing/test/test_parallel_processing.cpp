@@ -10,6 +10,7 @@
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/processing/component_manager.hpp>
 #include <arcticdb/version/version_core.hpp>
+#include <arcticdb/pipeline/read_frame.hpp>
 
 using namespace arcticdb;
 using namespace arcticdb::pipelines;
