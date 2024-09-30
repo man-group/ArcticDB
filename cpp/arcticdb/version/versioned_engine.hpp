@@ -79,7 +79,9 @@ public:
     virtual void write_parallel_frame(
         const StreamId& stream_id,
         const std::shared_ptr<InputTensorFrame>& frame,
-        bool validate_index) const = 0;
+        bool validate_index,
+        bool sort_on_index,
+        const std::optional<std::vector<std::string>>& sort_columns) const = 0;
 
     /**
      * Delete the given index keys, and their associated data excluding those shared with keys not in the argument.

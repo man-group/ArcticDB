@@ -329,6 +329,7 @@ public:
         auto bytes = sizeof(T) * size;
         const_cast<ChunkedBuffer&>(data_.buffer()).add_external_block(reinterpret_cast<const uint8_t*>(val), bytes, data_.buffer().last_offset());
         last_logical_row_ += static_cast<ssize_t>(size);
+        last_physical_row_ = last_logical_row_;
     }
 
     template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
@@ -936,22 +937,50 @@ private:
 
     std::optional<util::BitMagic> sparse_map_;
     util::MagicNum<'D', 'C', 'o', 'l'> magic_;
-}; //class Column
+};
 
-template <typename T>
-JiveTable create_jive_table(const Column& col) {
-    JiveTable output(col.row_count());
+template <typename TagType>
+JiveTable create_jive_table(const Column& column) {
+    JiveTable output(column.row_count());
     std::iota(std::begin(output.orig_pos_), std::end(output.orig_pos_), 0);
 
     // Calls to scalar_at are expensive, so we precompute them to speed up the sort compare function.
-    auto values = col.template clone_scalars_to_vector<T>();
+    auto column_data = column.data();
+    auto accessor = random_accessor<TagType>(&column_data);
     std::sort(std::begin(output.orig_pos_), std::end(output.orig_pos_),[&](const auto& a, const auto& b) -> bool {
-        return values[a] < values[b];
+        return accessor.at(a) < accessor.at(b);
     });
 
     // Obtain the sorted_pos_ by reversing the orig_pos_ permutation
     for (auto i=0u; i<output.orig_pos_.size(); ++i){
         output.sorted_pos_[output.orig_pos_[i]] = i;
+    }
+
+    return output;
+}
+
+inline JiveTable create_jive_table(const std::vector<std::shared_ptr<Column>>& columns) {
+    JiveTable output(columns[0]->row_count());
+    std::iota(std::begin(output.orig_pos_), std::end(output.orig_pos_), 0);
+
+    // Calls to scalar_at are expensive, so we precompute them to speed up the sort compare function.
+    for(auto it = std::rbegin(columns); it != std::rend(columns); ++it) {
+        auto& column = *it;
+        user_input::check<ErrorCode::E_SORT_ON_SPARSE>(!column->is_sparse(), "Can't sort on sparse column with type {}", column->type());
+        details::visit_type(column->type().data_type(), [&output, &column] (auto type_desc_tag) {
+            using type_info = ScalarTypeInfo<decltype(type_desc_tag)>;
+            auto column_data = column->data();
+            auto accessor = random_accessor<typename type_info::TDT>(&column_data);
+            std::stable_sort(std::begin(output.orig_pos_),
+                      std::end(output.orig_pos_),
+                      [&](const auto &a, const auto &b) -> bool {
+                          return accessor.at(a) < accessor.at(b);
+                      });
+        });
+        // Obtain the sorted_pos_ by reversing the orig_pos_ permutation
+        for (auto i = 0u; i < output.orig_pos_.size(); ++i) {
+            output.sorted_pos_[output.orig_pos_[i]] = i;
+        }
     }
 
     return output;
