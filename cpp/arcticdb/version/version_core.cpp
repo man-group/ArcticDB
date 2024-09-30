@@ -27,6 +27,7 @@
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/entity/merge_descriptors.hpp>
 #include <arcticdb/processing/component_manager.hpp>
+#include <arcticdb/version/read_version_output.hpp>
 
 namespace arcticdb::version_store {
 

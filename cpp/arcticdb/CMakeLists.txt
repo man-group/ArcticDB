@@ -528,6 +528,7 @@ set(arcticdb_srcs
         version/version_utils.cpp
         version/version_map_batch_methods.cpp)
 
+
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
 if(${ARCTICDB_USE_PCH})
