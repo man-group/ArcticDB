@@ -77,6 +77,10 @@ def test_empty_excluding_key_types(lmdb_version_store_v2):
 def test_empty_excluding_key_types_empty_lib(lmdb_version_store_v2):
     version_store = lmdb_version_store_v2
     version_store.write("test", [1, 2, 3])
+
+    assert not version_store.version_store.is_empty_excluding_key_types([])
+    assert not version_store.version_store.empty()
+
     lib_tool = version_store.library_tool()
     to_remove = (KeyType.VERSION, KeyType.VERSION_REF, KeyType.TABLE_INDEX, KeyType.TABLE_DATA, KeyType.SYMBOL_LIST)
     for key_type in to_remove:
@@ -85,6 +89,7 @@ def test_empty_excluding_key_types_empty_lib(lmdb_version_store_v2):
             lib_tool.remove(k)
 
     assert version_store.version_store.is_empty_excluding_key_types([])
+    assert version_store.version_store.empty()
 
 
 def test_write_keys(object_and_mem_and_lmdb_version_store):
