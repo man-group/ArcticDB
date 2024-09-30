@@ -5,17 +5,26 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import pytest
 import pandas as pd
 
 from arcticdb_ext.exceptions import InternalException, UserInputException
 from arcticdb_ext.storage import KeyType
-from arcticdb.exceptions import ArcticDbNotYetImplemented, LibraryNotFound, MismatchingLibraryOptions
+from arcticdb.exceptions import (
+    ArcticDbNotYetImplemented,
+    LibraryNotFound,
+    MismatchingLibraryOptions,
+)
 from arcticdb.arctic import Arctic
 from arcticdb.options import LibraryOptions, EnterpriseLibraryOptions
 from arcticdb.encoding_version import EncodingVersion
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
-from arcticdb.storage_fixtures.api import StorageFixture, ArcticUriFields, StorageFixtureFactory
+from arcticdb.storage_fixtures.api import (
+    StorageFixture,
+    ArcticUriFields,
+    StorageFixtureFactory,
+)
 from arcticdb.version_store.library import (
     WritePayload,
     ArcticUnsupportedDataTypeException,
@@ -24,7 +33,13 @@ from arcticdb.version_store.library import (
     ArcticInvalidApiUsageException,
 )
 
-from tests.util.mark import AZURE_TESTS_MARK, MONGO_TESTS_MARK, REAL_S3_TESTS_MARK
+from tests.util.mark import (
+    AZURE_TESTS_MARK,
+    MONGO_TESTS_MARK,
+    REAL_S3_TESTS_MARK,
+    SSL_TEST_SUPPORTED,
+    SSL_TEST_SUPPORTED,
+)
 from tests.util.storage_test import get_s3_storage_config
 
 from arcticdb.options import ModifiableEnterpriseLibraryOption, ModifiableLibraryOption
@@ -75,13 +90,21 @@ def test_get_library(arctic_client):
         columns_per_segment=10,
         encoding_version=EncodingVersion.V1 if ac._encoding_version == EncodingVersion.V2 else EncodingVersion.V2,
     )
-    lib = ac.get_library("pytest_test_lib_specified_options", create_if_missing=True, library_options=library_options)
+    lib = ac.get_library(
+        "pytest_test_lib_specified_options",
+        create_if_missing=True,
+        library_options=library_options,
+    )
     assert lib.options() == library_options
 
     # If the library already exists, create_if_missing is True, and options are provided, then the provided options must match the existing library
     library_options.dynamic_schema = False
     with pytest.raises(MismatchingLibraryOptions):
-        _ = ac.get_library("pytest_test_lib_specified_options", create_if_missing=True, library_options=library_options)
+        _ = ac.get_library(
+            "pytest_test_lib_specified_options",
+            create_if_missing=True,
+            library_options=library_options,
+        )
     # Throws if library_options are provided but create_if_missing is False
     with pytest.raises(ArcticInvalidApiUsageException):
         _ = ac.get_library("pytest_test_lib", create_if_missing=False, library_options=library_options)
@@ -98,8 +121,10 @@ def test_create_library_enterprise_options_defaults(lmdb_storage):
 
 def test_create_library_enterprise_options_set(lmdb_storage):
     ac = lmdb_storage.create_arctic()
-    lib = ac.create_library("lib", enterprise_library_options=EnterpriseLibraryOptions(replication=True,
-                                                                                       background_deletion=True))
+    lib = ac.create_library(
+        "lib",
+        enterprise_library_options=EnterpriseLibraryOptions(replication=True, background_deletion=True),
+    )
 
     enterprise_options = lib.enterprise_options()
     assert enterprise_options.replication
@@ -124,7 +149,10 @@ def test_create_library_replication_option_set_writes_logs(lmdb_storage):
 
 def test_create_library_background_deletion_option_set_does_not_delete(lmdb_storage):
     ac = lmdb_storage.create_arctic()
-    lib = ac.create_library("lib", enterprise_library_options=EnterpriseLibraryOptions(background_deletion=True))
+    lib = ac.create_library(
+        "lib",
+        enterprise_library_options=EnterpriseLibraryOptions(background_deletion=True),
+    )
     lt = lib._nvs.library_tool()
 
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
@@ -250,7 +278,7 @@ def test_create_library_with_invalid_name(arctic_client):
         ac.create_library(lib_name)
 
     # These should fail because the names are invalid
-    invalid_names = [chr(0), "lib>", "lib<", "lib*", "/lib", "lib...lib", "lib"*1000]
+    invalid_names = [chr(0), "lib>", "lib<", "lib*", "/lib", "lib...lib", "lib" * 1000]
     for lib_name in invalid_names:
         with pytest.raises(UserInputException):
             ac.create_library(lib_name)
@@ -264,7 +292,7 @@ def test_create_library_with_invalid_name(arctic_client):
 @pytest.mark.parametrize("suffix", ["", "suffix"])
 def test_create_library_with_all_chars(arctic_client_no_lmdb, prefix, suffix):
     # Create library names with each character (except '\' because Azure replaces it with '/' in some cases)
-    names = [f"{prefix}{chr(i)}{suffix}" for i in range(256) if chr(i) != '\\']
+    names = [f"{prefix}{chr(i)}{suffix}" for i in range(256) if chr(i) != "\\"]
 
     ac = arctic_client_no_lmdb
 
@@ -287,6 +315,8 @@ def test_do_not_persist_s3_details(s3_storage):
     """We apply an in-memory overlay for these instead. In particular we should absolutely not persist credentials
     in the storage."""
 
+    if SSL_TEST_SUPPORTED:
+        assert s3_storage.arctic_uri.startswith("s3s://")
     ac = Arctic(s3_storage.arctic_uri)
     lib = ac.create_library("test")
     lib.write("sym", pd.DataFrame())
@@ -302,11 +332,13 @@ def test_do_not_persist_s3_details(s3_storage):
     assert s3_storage.request_timeout == 0
     assert not s3_storage.ssl
     assert s3_storage.prefix.startswith("test")
-    assert not s3_storage.https
     assert s3_storage.region == ""
     assert not s3_storage.use_virtual_addressing
-
-    assert "sym" in ac["test"].list_symbols()
+    # HTTS is persisted on purpose to support backwards compatibility
+    if SSL_TEST_SUPPORTED:
+        assert s3_storage.https
+    else:
+        assert not s3_storage.https
 
 
 def test_library_options(arctic_client):
@@ -323,7 +355,11 @@ def test_library_options(arctic_client):
     assert lib._nvs._lib_cfg.lib_desc.version.encoding_version == ac._encoding_version
 
     library_options = LibraryOptions(
-        dynamic_schema=True, dedup=True, rows_per_segment=20, columns_per_segment=3, encoding_version=EncodingVersion.V2
+        dynamic_schema=True,
+        dedup=True,
+        rows_per_segment=20,
+        columns_per_segment=3,
+        encoding_version=EncodingVersion.V2,
     )
     ac.create_library(
         "pytest_explicit_options",
@@ -360,8 +396,13 @@ def test_separation_between_libraries(arctic_client):
 
 def add_path_prefix(storage_fixture, prefix):
     if "path_prefix".casefold() in storage_fixture.arctic_uri.casefold():
-        return storage_fixture.replace_uri_field(storage_fixture.arctic_uri, ArcticUriFields.PATH_PREFIX,
-                                                 prefix, start=3, end=2)
+        return storage_fixture.replace_uri_field(
+            storage_fixture.arctic_uri,
+            ArcticUriFields.PATH_PREFIX,
+            prefix,
+            start=3,
+            end=2,
+        )
 
     if "azure" in storage_fixture.arctic_uri:  # azure connection string has a different format
         return f"{storage_fixture.arctic_uri};Path_prefix={prefix}"

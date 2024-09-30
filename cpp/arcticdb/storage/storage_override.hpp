@@ -102,7 +102,8 @@ public:
         ssl_ = ssl;
     }
 
-    void modify_storage_config(arcticdb::proto::storage::VariantStorage& storage) const {
+    void modify_storage_config(arcticdb::proto::storage::VariantStorage& storage,
+                                bool override_https) const {
         if(storage.config().Is<arcticdb::proto::s3_storage::Config>()) {
             arcticdb::proto::s3_storage::Config s3_storage;
             storage.config().UnpackTo(&s3_storage);
@@ -115,8 +116,11 @@ public:
             s3_storage.set_use_virtual_addressing(use_virtual_addressing_);
             s3_storage.set_ca_cert_path(ca_cert_path_);
             s3_storage.set_ca_cert_dir(ca_cert_dir_);
-            s3_storage.set_https(https_);
             s3_storage.set_ssl(ssl_);
+
+            if(override_https) {
+                s3_storage.set_https(https_);
+            }
 
             util::pack_to_any(s3_storage, *storage.mutable_config());
         }
@@ -162,7 +166,8 @@ public:
         ca_cert_dir_ = ca_cert_dir;
     }
 
-    void modify_storage_config(arcticdb::proto::storage::VariantStorage& storage) const {
+    void modify_storage_config(arcticdb::proto::storage::VariantStorage& storage,
+                                bool override_https ARCTICDB_UNUSED) const {
         if(storage.config().Is<arcticdb::proto::azure_storage::Config>()) {
             arcticdb::proto::azure_storage::Config azure_storage;
             storage.config().UnpackTo(&azure_storage);
@@ -199,7 +204,8 @@ public:
         map_size_ = map_size;
     }
 
-    void modify_storage_config(arcticdb::proto::storage::VariantStorage& storage) const {
+    void modify_storage_config(arcticdb::proto::storage::VariantStorage& storage,
+                                bool override_https ARCTICDB_UNUSED) const {
         if(storage.config().Is<arcticdb::proto::lmdb_storage::Config>()) {
             arcticdb::proto::lmdb_storage::Config lmdb_storage;
             storage.config().UnpackTo(&lmdb_storage);
