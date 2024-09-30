@@ -5,7 +5,10 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+import gc
 import sys
+import time
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -126,36 +129,119 @@ def test_delete_library_tool(version_store_factory, sym):
         assert len(lt.find_keys_for_id(kt, symbol)) == 0
 
 
+def test_prune_previous_memory_usage(lmdb_version_store_very_big_map):
+    """
+Baseline:
+
+ Command being timed: "pytest -vs tests/unit/arcticdb/version_store/test_deletion.py::test_prune_previous_memory_usage"
+        User time (seconds): 65.78
+        System time (seconds): 15.60
+        Percent of CPU this job got: 64%
+        Elapsed (wall clock) time (h:mm:ss or m:ss): 2:05.46
+        Average shared text size (kbytes): 0
+        Average unshared data size (kbytes): 0
+        Average stack size (kbytes): 0
+        Average total size (kbytes): 0
+        Maximum resident set size (kbytes): 1338220
+        Average resident set size (kbytes): 0
+        Major (requiring I/O) page faults: 336
+        Minor (reclaiming a frame) page faults: 6275974
+        Voluntary context switches: 210006
+        Involuntary context switches: 57078
+        Swaps: 0
+        File system inputs: 173144
+        File system outputs: 3713984
+        Socket messages sent: 0
+        Socket messages received: 0
+        Signals delivered: 0
+        Page size (bytes): 4096
+        Exit status: 0
+
+After naive changes:
+
+        Command being timed: "pytest -vs tests/unit/arcticdb/version_store/test_deletion.py::test_prune_previous_memory_usage"
+        User time (seconds): 74.67
+        System time (seconds): 17.44
+        Percent of CPU this job got: 66%
+        Elapsed (wall clock) time (h:mm:ss or m:ss): 2:19.21
+        Average shared text size (kbytes): 0
+        Average unshared data size (kbytes): 0
+        Average stack size (kbytes): 0
+        Average total size (kbytes): 0
+        Maximum resident set size (kbytes): 3222008
+        Average resident set size (kbytes): 0
+        Major (requiring I/O) page faults: 2
+        Minor (reclaiming a frame) page faults: 6751291
+        Voluntary context switches: 203947
+        Involuntary context switches: 59912
+        Swaps: 0
+        File system inputs: 752
+        File system outputs: 3714992
+        Socket messages sent: 0
+        Socket messages received: 0
+        Signals delivered: 0
+        Page size (bytes): 4096
+        Exit status: 0
+
+    :param lmdb_version_store_very_big_map:
+    :return:
+    """
+    lib = lmdb_version_store_very_big_map
+    sym = "test_prune_previous_memory_usage"
+    num_versions = 8000
+    for idx in range(num_versions):
+        lib.append(sym, pd.DataFrame({"col": np.arange(idx, idx+1)}), write_if_missing=True)
+    assert len(lib.list_versions(sym)) == num_versions
+    gc.collect()
+    start = time.time()
+    lib.prune_previous_versions(sym)
+    print(f"Prune took {time.time() - start}s")
+    assert len(lib.list_versions(sym)) == 1
+
+
 def test_delete_snapshot(version_store_factory):
-    lmdb_version_store = version_store_factory(col_per_group=5, row_per_segment=10)
+    lmdb_version_store = version_store_factory(col_per_group=100, row_per_segment=10)
     lt = lmdb_version_store.library_tool()
 
-    symbol = "test_delete_snapshot"
+    symbol = "symbol"
+    other_symbol = "other_symbol"
     snap = "test_delete_snapshot_snap"
 
-    df1 = sample_dataframe(1000)
+    df1 = sample_dataframe(20)
     lmdb_version_store.write(symbol, df1)
+    lmdb_version_store.write(other_symbol, df1)
     lmdb_version_store.snapshot(snap)
 
-    df2 = sample_dataframe(1000)
+    df2 = sample_dataframe(30)
     lmdb_version_store.write(symbol, df2, prune_previous_version=True)
+    lmdb_version_store.write(other_symbol, df2, prune_previous_version=True)
 
     # Should not raise as it exists in a snapshot
     lmdb_version_store.read(symbol, 0)
+    lmdb_version_store.read(other_symbol, 0)
 
     assert_frame_equal(lmdb_version_store.read(symbol, as_of=snap).data, df1)
+    assert_frame_equal(lmdb_version_store.read(other_symbol, as_of=snap).data, df1)
+
+    for s in (symbol, other_symbol):
+        data_keys = lt.find_keys_for_id(KeyType.TABLE_DATA, s)
+        assert len(data_keys) == 5  # 20 rows in df1, 30 rows in df2, 10 rows per segment
 
     lmdb_version_store.delete_snapshot(snap)
     with pytest.raises(NoDataFoundException):
         lmdb_version_store.read(symbol, as_of=snap)
+        lmdb_version_store.read(other_symbol, as_of=snap)
 
-    index_keys = lt.find_keys_for_id(KeyType.TABLE_INDEX, symbol)
-    for k in index_keys:
-        assert k.version_id != 0
+    for s in (symbol, other_symbol):
+        index_keys = lt.find_keys_for_id(KeyType.TABLE_INDEX, s)
+        assert len(index_keys) == 1
+        for k in index_keys:
+            assert k.version_id != 0
 
-    data_keys = lt.find_keys_for_id(KeyType.TABLE_DATA, symbol)
-    for k in data_keys:
-        assert k.version_id != 0
+        data_keys = lt.find_keys_for_id(KeyType.TABLE_DATA, s)
+        assert len(data_keys) == 3  # 30 rows in df2, 10 rows per segment
+        for k in data_keys:
+            assert k.version_id == 1
 
 
 def test_tombstones_deleted_data_keys_prune(lmdb_version_store_prune_previous, sym):
