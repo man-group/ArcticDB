@@ -185,9 +185,17 @@ jobs:
 
       - name: Discover test directory names
         if: inputs.job_type == 'build-python-wheels'
-        # There are so few nonreg tests, run them in the hypothesis runner
-        run: find python/tests/* -maxdepth 0 -type d ! -regex '.*\(__pycache__\|util\|nonreg\|scripts\)' -printf '"%f",' |
+        # We only run the compat tests on for newer python versions.
+        # There are so few nonreg tests, run them in the hypothesis runner.
+        run: |
+          if [ ${{inputs.python3}} -gt 6 ]
+          then
+            find python/tests/* -maxdepth 0 -type d ! -regex '.*\(__pycache__\|util\|nonreg\|scripts\)' -printf '"%f",' |
               sed 's/^/test_dirs=[/ ; s/"hypothesis"/"{hypothesis,nonreg,scripts}"/ ; s/,$/]/' | tee -a $GITHUB_ENV
+          else
+            find python/tests/* -maxdepth 0 -type d ! -regex '.*\(__pycache__\|util\|nonreg\|scripts\|compat\)' -printf '"%f",' |
+              sed 's/^/test_dirs=[/ ; s/"hypothesis"/"{hypothesis,nonreg,scripts}"/ ; s/,$/]/' | tee -a $GITHUB_ENV
+          fi
 
       # ========================= Common =========================
       - name: Disk usage

@@ -138,6 +138,12 @@ def s3_no_ssl_storage_factory():
 
 
 @pytest.fixture(scope="session")
+def s3_ssl_disabled_storage_factory():
+    with MotoS3StorageFixtureFactory(use_ssl=False, ssl_test_support=False, bucket_versioning=False) as f:
+        yield f
+
+
+@pytest.fixture(scope="session")
 def s3_bucket_versioning_storage_factory():
     with MotoS3StorageFixtureFactory(use_ssl=False, ssl_test_support=False, bucket_versioning=True) as f:
         yield f
@@ -164,6 +170,12 @@ def nfs_backed_s3_storage(nfs_backed_s3_storage_factory):
 @pytest.fixture
 def s3_no_ssl_storage(s3_no_ssl_storage_factory):
     with s3_no_ssl_storage_factory.create_fixture() as f:
+        yield f
+
+
+@pytest.fixture
+def s3_ssl_disabled_storage(s3_ssl_disabled_storage_factory):
+    with s3_ssl_disabled_storage_factory.create_fixture() as f:
         yield f
 
 
