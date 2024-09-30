@@ -57,6 +57,36 @@ def test_read_keys(object_and_mem_and_lmdb_version_store):
         assert len(lib_tool.find_keys(key_type)) == 0
 
 
+def test_empty_excluding_key_types(lmdb_version_store_v2):
+    version_store = lmdb_version_store_v2
+    populate_db(version_store)
+    lib_tool = version_store.library_tool()
+    to_remove = (KeyType.VERSION, KeyType.VERSION_REF, KeyType.TABLE_INDEX)
+    for key_type in to_remove:
+        keys = lib_tool.find_keys(key_type)
+        for k in keys:
+            lib_tool.remove(k)
+
+    assert not version_store.version_store.is_empty_excluding_key_types([KeyType.TABLE_DATA])
+    assert not version_store.version_store.is_empty_excluding_key_types([KeyType.VERSION])
+    assert version_store.version_store.is_empty_excluding_key_types([KeyType.TABLE_DATA, KeyType.SYMBOL_LIST,
+                                                                     KeyType.MULTI_KEY, KeyType.SNAPSHOT_REF,
+                                                                     KeyType.SNAPSHOT, KeyType.VERSION])
+
+
+def test_empty_excluding_key_types_empty_lib(lmdb_version_store_v2):
+    version_store = lmdb_version_store_v2
+    version_store.write("test", [1, 2, 3])
+    lib_tool = version_store.library_tool()
+    to_remove = (KeyType.VERSION, KeyType.VERSION_REF, KeyType.TABLE_INDEX, KeyType.TABLE_DATA, KeyType.SYMBOL_LIST)
+    for key_type in to_remove:
+        keys = lib_tool.find_keys(key_type)
+        for k in keys:
+            lib_tool.remove(k)
+
+    assert version_store.version_store.is_empty_excluding_key_types([])
+
+
 def test_write_keys(object_and_mem_and_lmdb_version_store):
     populate_db(object_and_mem_and_lmdb_version_store)
     lib_tool = object_and_mem_and_lmdb_version_store.library_tool()
