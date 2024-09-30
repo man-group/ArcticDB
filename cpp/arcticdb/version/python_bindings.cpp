@@ -601,6 +601,11 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              &PythonVersionStore::clear,
              py::arg("continue_on_error") = true,
              py::call_guard<SingleThreadMutexHolder>(), "Delete everything. Don't use this unless you want to delete everything")
+        .def("empty",
+             &PythonVersionStore::empty,
+             py::call_guard<SingleThreadMutexHolder>(), "Deprecated - prefer is_empty_excluding_key_types. Returns True "
+                                                        "if there are no keys other than those of the excluded types in "
+                                                        "the library, and False otherwise")
         .def("is_empty_excluding_key_types",
              &PythonVersionStore::is_empty_excluding_key_types,
              py::arg("excluded_key_types"),

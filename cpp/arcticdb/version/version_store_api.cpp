@@ -1117,6 +1117,10 @@ void PythonVersionStore::clear(const bool continue_on_error) {
     delete_all(store(), continue_on_error);
 }
 
+bool PythonVersionStore::empty() {
+    return is_empty_excluding_key_types({});
+}
+
 bool PythonVersionStore::is_empty_excluding_key_types(const std::vector<KeyType>& excluded_key_types) {
     // No good way to break out of these iterations, so use exception for flow control
     try {
