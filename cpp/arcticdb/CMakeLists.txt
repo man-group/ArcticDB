@@ -817,7 +817,6 @@ if(${TEST})
             util/test/test_string_utils.cpp
             util/test/test_tracing_allocator.cpp
             version/test/test_append.cpp
-            version/test/test_merge.cpp
             version/test/test_sparse.cpp
             version/test/test_stream_version_data.cpp
             version/test/test_symbol_list.cpp

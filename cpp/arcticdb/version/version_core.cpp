@@ -1243,7 +1243,7 @@ FrameAndDescriptor read_dataframe_impl(
         const auto& query_range = std::get<IndexRange>(read_query.row_filter);
         const auto existing_range = pipeline_context->index_range();
         if(!existing_range.specified_ || query_range.end_ > existing_range.end_)
-            read_incompletes_to_pipeline(store, pipeline_context, read_query, read_options, false, false, false);
+            read_incompletes_to_pipeline(store, pipeline_context, read_query, read_options, false, false, false,  opt_false(read_options.dynamic_schema_));
     }
 
     if(std::holds_alternative<StreamId>(version_info) && !pipeline_context->incompletes_after_) {

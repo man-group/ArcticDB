@@ -597,11 +597,6 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                  return adapt_read_df(v.read_index(sid, version_query));
              },
              py::call_guard<SingleThreadMutexHolder>(), "Read the most recent dataframe from the store")
-        .def("read_latest_dataframe_merged",
-             [&](PythonVersionStore& v, StreamId target_id, std::vector<StreamId> &sids, ReadQuery &query, const ReadOptions read_options){
-                 return adapt_read_df(v.read_dataframe_merged(target_id, sids, VersionQuery{}, query, read_options));
-             },
-             py::call_guard<SingleThreadMutexHolder>(), "Read the most recent dataframe from the store")
          .def("get_update_time",
               &PythonVersionStore::get_update_time,
              py::call_guard<SingleThreadMutexHolder>(), "Get the most recent update time for the stream ids")
