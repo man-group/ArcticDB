@@ -92,6 +92,16 @@ def test_empty_excluding_key_types_empty_lib(lmdb_version_store_v2):
     assert version_store.version_store.empty()
 
 
+def test_empty_excluding_key_types_just_symbol_list(lmdb_version_store_v2):
+    version_store = lmdb_version_store_v2
+
+    version_store.list_symbols()
+
+    assert not version_store.version_store.is_empty_excluding_key_types([])
+    assert version_store.version_store.is_empty_excluding_key_types([KeyType.SYMBOL_LIST])
+    assert version_store.version_store.empty()
+
+
 def test_write_keys(object_and_mem_and_lmdb_version_store):
     populate_db(object_and_mem_and_lmdb_version_store)
     lib_tool = object_and_mem_and_lmdb_version_store.library_tool()
