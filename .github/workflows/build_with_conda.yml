@@ -31,6 +31,9 @@ jobs:
         uses: SimenB/github-actions-cpu-cores@v1.1.0
         id: cpu-cores
 
+      - name: Install valgrind deps
+        run: sudo apt-get install -y libc6-dbg
+
       - name: Install Conda environment from environment_unix.yml
         uses: mamba-org/setup-micromamba@v1.6.0
         with:
@@ -89,7 +92,7 @@ jobs:
         run: |
           cd python
           export ARCTICDB_RAND_SEED=$RANDOM
-          python -m pytest --timeout=3600 -n ${{ steps.cpu-cores.outputs.count }} -v tests
+          valgrind python -m pytest --timeout=3600 -n ${{ steps.cpu-cores.outputs.count }} -v tests
         env:
           ARCTICDB_USING_CONDA: 1
           # Use the Mongo created in the service container above to test against
