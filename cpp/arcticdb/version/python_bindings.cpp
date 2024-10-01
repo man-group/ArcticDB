@@ -550,6 +550,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              py::arg("user_meta") = std::nullopt,
              py::arg("prune_previous_versions") = false,
              py::arg("validate_index") = false,
+             py::arg("delete_staged_data_on_failure") = false,
              py::call_guard<SingleThreadMutexHolder>(), "Compact incomplete segments")
          .def("sort_merge",
              &PythonVersionStore::sort_merge,
@@ -560,6 +561,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              py::arg("via_iteration") = true,
              py::arg("sparsify") = false,
              py::arg("prune_previous_versions") = false,
+             py::arg("delete_staged_data_on_failure") = false,
              py::call_guard<SingleThreadMutexHolder>(), "sort_merge will sort and merge incomplete segments. The segments do not have to be ordered - incomplete segments can contain interleaved time periods but the final result will be fully ordered")
         .def("compact_library",
              &PythonVersionStore::compact_library,

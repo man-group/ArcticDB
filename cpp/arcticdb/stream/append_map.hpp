@@ -74,6 +74,10 @@ void append_incomplete(
 
 std::optional<int64_t> latest_incomplete_timestamp(
     const std::shared_ptr<Store>& store,
-    const StreamId& stream_id
-    );
+    const StreamId& stream_id);
+
+std::vector<VariantKey> read_incomplete_keys_for_symbol(
+    const std::shared_ptr<Store>& store,
+    const StreamId& stream_id,
+    bool via_iteration);
 } //namespace arcticdb
