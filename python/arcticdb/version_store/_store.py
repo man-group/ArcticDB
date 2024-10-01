@@ -1956,6 +1956,7 @@ class NativeVersionStore:
         metadata: Optional[Any] = None,
         prune_previous_version: Optional[bool] = None,
         validate_index: bool = False,
+        delete_staged_data_on_failure: bool = False
     ) -> VersionedItem:
         """
         Compact previously written un-indexed chunks of data, produced by a tick collector or parallel
@@ -1984,6 +1985,15 @@ class NativeVersionStore:
             If True, will verify that the index of the symbol after this operation supports date range searches and
             update operations. This requires that the indexes of the incomplete segments are non-overlapping with each
             other, and, in the case of append=True, fall after the last index value in the previous version.
+        delete_staged_data_on_failure : bool, default=False
+            Determines the handling of staged data when an exception occurs during the execution of the 
+            ``compact_incomplete`` function.
+
+            - If set to True, all staged data for the specified symbol will be deleted if an exception occurs.
+            - If set to False, the staged data will be retained and will be used in subsequent calls to 
+              ``compact_incomplete``.
+
+            To manually delete staged data, use the ``remove_incomplete`` function.
         Returns
         -------
         VersionedItem
@@ -1994,7 +2004,7 @@ class NativeVersionStore:
         )
         udm = normalize_metadata(metadata) if metadata is not None else None
         vit = self.version_store.compact_incomplete(
-            symbol, append, convert_int_to_float, via_iteration, sparsify, udm, prune_previous_version, validate_index
+            symbol, append, convert_int_to_float, via_iteration, sparsify, udm, prune_previous_version, validate_index, delete_staged_data_on_failure
         )
         return self._convert_thin_cxx_item_to_python(vit, metadata)
 

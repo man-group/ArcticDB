@@ -21,7 +21,12 @@ from arcticdb.util.test import (
 )
 from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb_ext.storage import KeyType
+import arcticdb.toolbox.library_tool
 
+def get_append_keys(lib, sym):
+    lib_tool = lib.library_tool()
+    keys = lib_tool.find_keys_for_symbol(arcticdb.toolbox.library_tool.KeyType.APPEND_DATA, sym)
+    return keys
 
 def test_remove_incomplete(basic_store):
     lib = basic_store
@@ -79,6 +84,7 @@ def test_parallel_write(basic_store):
     vit = basic_store.read(sym)
     assert_frame_equal(test, vit.data)
     assert vit.metadata["thing"] == 7
+    assert len(get_append_keys(basic_store, sym)) == 0
 
 
 def test_roundtrip_nan(lmdb_version_store):
@@ -403,9 +409,10 @@ def test_parallel_all_same_index_values(lmdb_version_store, append):
     assert lib.get_info(sym)["sorted"] == "ASCENDING"
 
 
+@pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
 @pytest.mark.parametrize("append", (True, False))
 @pytest.mark.parametrize("validate_index", (True, False, None))
-def test_parallel_overlapping_incomplete_segments(lmdb_version_store, append, validate_index):
+def test_parallel_overlapping_incomplete_segments(lmdb_version_store, append, validate_index, delete_staged_data_on_failure):
     lib = lmdb_version_store
     sym = "test_parallel_overlapping_incomplete_segments"
     if append:
@@ -421,7 +428,9 @@ def test_parallel_overlapping_incomplete_segments(lmdb_version_store, append, va
         lib.write(sym, df_1, parallel=True)
     if validate_index:
         with pytest.raises(SortingException):
-            lib.compact_incomplete(sym, append, False, validate_index=True)
+            lib.compact_incomplete(sym, append, False, validate_index=True, delete_staged_data_on_failure=delete_staged_data_on_failure)
+        expected_key_count = 0 if delete_staged_data_on_failure else 2
+        assert len(get_append_keys(lib, sym)) == expected_key_count
     else:
         if validate_index is None:
             # Test default behaviour when arg isn't provided
@@ -446,10 +455,10 @@ def test_parallel_append_exactly_matches_existing(lmdb_version_store):
     assert_frame_equal(expected, received)
     assert lib.get_info(sym)["sorted"] == "ASCENDING"
 
-
+@pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
 @pytest.mark.parametrize("append", (True, False))
 @pytest.mark.parametrize("validate_index", (True, False, None))
-def test_parallel_all_incomplete_segments_same_index(lmdb_version_store_v1, append, validate_index):
+def test_parallel_all_incomplete_segments_same_index(lmdb_version_store_v1, append, validate_index, delete_staged_data_on_failure):
     lib = lmdb_version_store_v1
     sym = "test_parallel_all_incomplete_segments_same_index"
     if append:
@@ -465,7 +474,9 @@ def test_parallel_all_incomplete_segments_same_index(lmdb_version_store_v1, appe
         lib.write(sym, df_1, parallel=True)
     if validate_index:
         with pytest.raises(SortingException):
-            lib.compact_incomplete(sym, append, False, validate_index=True)
+            lib.compact_incomplete(sym, append, False, validate_index=True, delete_staged_data_on_failure=delete_staged_data_on_failure)
+        expected_key_count = 0 if delete_staged_data_on_failure else 2
+        assert len(get_append_keys(lib, sym)) == expected_key_count
     else:
         if validate_index is None:
             # Test default behaviour when arg isn't provided
@@ -481,8 +492,9 @@ def test_parallel_all_incomplete_segments_same_index(lmdb_version_store_v1, appe
         assert_frame_equal(received, expected)
 
 
+@pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
 @pytest.mark.parametrize("validate_index", (True, False, None))
-def test_parallel_append_overlapping_with_existing(lmdb_version_store, validate_index):
+def test_parallel_append_overlapping_with_existing(lmdb_version_store, validate_index, delete_staged_data_on_failure):
     lib = lmdb_version_store
     sym = "test_parallel_append_overlapping_with_existing"
     df_0 = pd.DataFrame({"col": [1, 2]}, index=[pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")])
@@ -491,7 +503,9 @@ def test_parallel_append_overlapping_with_existing(lmdb_version_store, validate_
     lib.append(sym, df_1, incomplete=True)
     if validate_index:
         with pytest.raises(SortingException):
-            lib.compact_incomplete(sym, True, False, validate_index=validate_index)
+            lib.compact_incomplete(sym, True, False, validate_index=validate_index, delete_staged_data_on_failure=delete_staged_data_on_failure)
+        expected_key_count = 0 if delete_staged_data_on_failure else 1
+        assert len(get_append_keys(lib, sym)) == expected_key_count
     else:
         if validate_index is None:
             # Test default behaviour when arg isn't provided
@@ -502,9 +516,10 @@ def test_parallel_append_overlapping_with_existing(lmdb_version_store, validate_
         assert_frame_equal(received, pd.concat([df_0, df_1]))
 
 
+@pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
 @pytest.mark.parametrize("sortedness", ("DESCENDING", "UNSORTED"))
 @pytest.mark.parametrize("validate_index", (True, False, None))
-def test_parallel_append_existing_data_unsorted(lmdb_version_store, sortedness, validate_index):
+def test_parallel_append_existing_data_unsorted(lmdb_version_store, sortedness, validate_index, delete_staged_data_on_failure):
     lib = lmdb_version_store
     sym = "test_parallel_append_existing_data_unsorted"
     last_index_date = "2024-01-01" if sortedness == "DESCENDING" else "2024-01-03"
@@ -518,7 +533,9 @@ def test_parallel_append_existing_data_unsorted(lmdb_version_store, sortedness, 
     lib.append(sym, df_1, incomplete=True)
     if validate_index:
         with pytest.raises(SortingException):
-            lib.compact_incomplete(sym, True, False, validate_index=True)
+            lib.compact_incomplete(sym, True, False, validate_index=True, delete_staged_data_on_failure=delete_staged_data_on_failure)
+        expected_key_count = 0 if delete_staged_data_on_failure else 1
+        assert len(get_append_keys(lib, sym)) == expected_key_count
     else:
         if validate_index is None:
             # Test the default case with no arg provided
@@ -543,8 +560,9 @@ def test_parallel_no_column_slicing(lmdb_version_store_tiny_segment):
     assert len(lib_tool.find_keys(KeyType.APPEND_DATA)) == 1
 
 
+@pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
 @pytest.mark.parametrize("rows_per_incomplete", (1, 2))
-def test_parallel_write_static_schema_type_changing(lmdb_version_store_tiny_segment, rows_per_incomplete):
+def test_parallel_write_static_schema_type_changing(lmdb_version_store_tiny_segment, rows_per_incomplete, delete_staged_data_on_failure):
     lib = lmdb_version_store_tiny_segment
     sym = "test_parallel_write_static_schema_type_changing"
     lib_tool = lib.library_tool()
@@ -553,7 +571,9 @@ def test_parallel_write_static_schema_type_changing(lmdb_version_store_tiny_segm
     lib.write(sym, df_0, parallel=True)
     lib.write(sym, df_1, parallel=True)
     with pytest.raises(SchemaException):
-        lib.compact_incomplete(sym, False, False)
+        lib.compact_incomplete(sym, False, False, delete_staged_data_on_failure=delete_staged_data_on_failure)
+    expected_key_count = 0 if delete_staged_data_on_failure else 2
+    assert len(get_append_keys(lib, sym)) == expected_key_count
 
 
 @pytest.mark.parametrize("rows_per_incomplete", (1, 2))
@@ -569,8 +589,8 @@ def test_parallel_write_dynamic_schema_type_changing(lmdb_version_store_tiny_seg
     received = lib.read(sym).data
     assert_frame_equal(expected, received)
 
-
-def test_parallel_write_static_schema_missing_column(lmdb_version_store_tiny_segment):
+@pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
+def test_parallel_write_static_schema_missing_column(lmdb_version_store_tiny_segment, delete_staged_data_on_failure):
     lib = lmdb_version_store_tiny_segment
     sym = "test_parallel_write_static_schema_missing_column"
     df_0 = pd.DataFrame({"col_0": [0], "col_1": [0.5]}, index=pd.date_range("2024-01-01", periods=1))
@@ -578,7 +598,9 @@ def test_parallel_write_static_schema_missing_column(lmdb_version_store_tiny_seg
     lib.write(sym, df_0, parallel=True)
     lib.write(sym, df_1, parallel=True)
     with pytest.raises(SchemaException):
-        lib.compact_incomplete(sym, False, False)
+        lib.compact_incomplete(sym, False, False, delete_staged_data_on_failure=delete_staged_data_on_failure)
+    expected_key_count = 0 if delete_staged_data_on_failure else 2
+    assert len(get_append_keys(lib, sym)) == expected_key_count
 
 
 def test_parallel_write_dynamic_schema_missing_column(lmdb_version_store_tiny_segment_dynamic):
@@ -594,30 +616,6 @@ def test_parallel_write_dynamic_schema_missing_column(lmdb_version_store_tiny_se
     assert_frame_equal(expected, received)
 
 
-@pytest.mark.xfail(reason="See https://github.com/man-group/ArcticDB/issues/1466")
-def test_parallel_append_static_schema_type_changing(lmdb_version_store_tiny_segment):
-    lib = lmdb_version_store_tiny_segment
-    sym = "test_parallel_append_static_schema_type_changing"
-    df_0 = pd.DataFrame({"col": np.arange(1, dtype=np.uint8)}, index=pd.date_range("2024-01-01", periods=1))
-    df_1 = pd.DataFrame({"col": np.arange(1, 2, dtype=np.uint16)}, index=pd.date_range("2024-01-02", periods=1))
-    lib.write(sym, df_0)
-    lib.append(sym, df_1, incomplete=True)
-    with pytest.raises(SchemaException):
-        lib.compact_incomplete(sym, True, False)
-
-
-@pytest.mark.xfail(reason="See https://github.com/man-group/ArcticDB/issues/1466")
-def test_parallel_append_static_schema_missing_column(lmdb_version_store_tiny_segment):
-    lib = lmdb_version_store_tiny_segment
-    sym = "test_parallel_append_static_schema_missing_column"
-    df_0 = pd.DataFrame({"col_0": [0], "col_1": [0.5]}, index=pd.date_range("2024-01-01", periods=1))
-    df_1 = pd.DataFrame({"col_0": [1]}, index=pd.date_range("2024-01-02", periods=1))
-    lib.write(sym, df_0)
-    lib.append(sym, df_1, incomplete=True)
-    with pytest.raises(SchemaException):
-        lib.compact_incomplete(sym, True, False)
-
-
 def test_parallel_append_dynamic_schema_missing_column(lmdb_version_store_tiny_segment_dynamic):
     lib = lmdb_version_store_tiny_segment_dynamic
     sym = "test_parallel_append_dynamic_schema_missing_column"
@@ -631,8 +629,9 @@ def test_parallel_append_dynamic_schema_missing_column(lmdb_version_store_tiny_s
     assert_frame_equal(expected, received)
 
 
+@pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
 class TestFinalizeStagedDataStaticSchemaMismatch:
-    def test_append_throws_with_missmatched_column_set(self, lmdb_version_store_v1):
+    def test_append_throws_with_missmatched_column_set(self, lmdb_version_store_v1, delete_staged_data_on_failure):
         lib = lmdb_version_store_v1
 
         initial_df = pd.DataFrame({"col_0": [1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
@@ -641,10 +640,12 @@ class TestFinalizeStagedDataStaticSchemaMismatch:
         appended_df = pd.DataFrame({"col_1": [1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
         lib.write("sym", appended_df, parallel=True)
         with pytest.raises(SchemaException) as exception_info:
-            lib.compact_incomplete("sym", True, False)
+            lib.compact_incomplete("sym", True, False, delete_staged_data_on_failure=delete_staged_data_on_failure)
         assert "col_1" in str(exception_info.value)
+        expected_key_count = 0 if delete_staged_data_on_failure else 1
+        assert len(get_append_keys(lib, "sym")) == expected_key_count
 
-    def test_append_throws_column_subset(self, lmdb_version_store_v1):
+    def test_append_throws_column_subset(self, lmdb_version_store_v1, delete_staged_data_on_failure):
         lib = lmdb_version_store_v1
 
         df1 = pd.DataFrame(
@@ -655,11 +656,13 @@ class TestFinalizeStagedDataStaticSchemaMismatch:
         df2 = pd.DataFrame({"b": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-02")]))
         lib.write("sym", df2, parallel=True)
         with pytest.raises(SchemaException) as exception_info: 
-            lib.compact_incomplete("sym", True, False)
+            lib.compact_incomplete("sym", True, False, delete_staged_data_on_failure=delete_staged_data_on_failure)
         assert "a" in str(exception_info.value)
         assert "b" in str(exception_info.value)
+        expected_key_count = 0 if delete_staged_data_on_failure else 1
+        assert len(get_append_keys(lib, "sym")) == expected_key_count
 
-    def test_append_throws_on_incompatible_dtype(self, lmdb_version_store_v1):
+    def test_append_throws_on_incompatible_dtype(self, lmdb_version_store_v1, delete_staged_data_on_failure):
         lib = lmdb_version_store_v1
 
         initial_df = pd.DataFrame({"col_0": np.array([1], dtype="int64")}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
@@ -668,42 +671,50 @@ class TestFinalizeStagedDataStaticSchemaMismatch:
         appended_df = pd.DataFrame({"col_0": ["asd"]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
         lib.write("sym", appended_df, parallel=True)
         with pytest.raises(SchemaException) as exception_info:
-            lib.compact_incomplete("sym", True, False)
+            lib.compact_incomplete("sym", True, False, delete_staged_data_on_failure=delete_staged_data_on_failure)
         assert "col_0" in str(exception_info.value)
         assert "INT64" in str(exception_info.value)
+        expected_key_count = 0 if delete_staged_data_on_failure else 1
+        assert len(get_append_keys(lib, "sym")) == expected_key_count
 
-    def test_type_mismatch_in_staged_segments_throws(self, lmdb_version_store_v1):
+    def test_type_mismatch_in_staged_segments_throws(self, lmdb_version_store_v1, delete_staged_data_on_failure):
         lib = lmdb_version_store_v1
         lib.write("sym", pd.DataFrame({"col": [1]}, index=pd.DatetimeIndex([np.datetime64('2023-01-01')])), parallel=True)
         lib.write("sym", pd.DataFrame({"col": ["a"]}, index=pd.DatetimeIndex([np.datetime64('2023-01-02')])), parallel=True)
         with pytest.raises(Exception) as exception_info:
-            lib.compact_incomplete("sym", False, False)
+            lib.compact_incomplete("sym", False, False, delete_staged_data_on_failure=delete_staged_data_on_failure)
         assert all(x in str(exception_info.value) for x in ["INT64", "type"])
+        expected_key_count = 0 if delete_staged_data_on_failure else 2
+        assert len(get_append_keys(lib, "sym")) == expected_key_count
 
-    def test_types_cant_be_promoted(self, lmdb_version_store_v1):
+    def test_types_cant_be_promoted(self, lmdb_version_store_v1, delete_staged_data_on_failure):
         lib = lmdb_version_store_v1
         lib.write("sym", pd.DataFrame({"col": np.array([1], dtype="int64")}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)])))
 
         lib.write("sym", pd.DataFrame({"col": np.array([1], dtype="int32")}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)])), parallel=True)
         with pytest.raises(SchemaException) as exception_info:
-            lib.compact_incomplete("sym", True, False)
+            lib.compact_incomplete("sym", True, False, delete_staged_data_on_failure=delete_staged_data_on_failure)
         assert "INT32" in str(exception_info.value)
         assert "INT64" in str(exception_info.value)
+        expected_key_count = 0 if delete_staged_data_on_failure else 1
+        assert len(get_append_keys(lib, "sym")) == expected_key_count
 
-    def test_appending_reordered_column_set_throws(self, lmdb_version_store_v1):
+    def test_appending_reordered_column_set_throws(self, lmdb_version_store_v1, delete_staged_data_on_failure):
         lib = lmdb_version_store_v1
 
         lib.write("sym", pd.DataFrame({"col_0": [1], "col_1": ["test"], "col_2": [1.2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)])))
 
         lib.write("sym", pd.DataFrame({"col_1": ["asd"], "col_2": [2.5], "col_0": [2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)])), parallel=True)
         with pytest.raises(SchemaException) as exception_info:
-            lib.compact_incomplete("sym", True, False)
+            lib.compact_incomplete("sym", True, False, delete_staged_data_on_failure=delete_staged_data_on_failure)
         assert "col_0" in str(exception_info.value)
         assert "col_1" in str(exception_info.value)
         assert "col_2" in str(exception_info.value)
+        expected_key_count = 0 if delete_staged_data_on_failure else 1
+        assert len(get_append_keys(lib, "sym")) == expected_key_count
 
     @pytest.mark.parametrize("mode", [True, False])
-    def test_staged_segments_can_be_reordered(self, lmdb_version_store_v1, mode):
+    def test_staged_segments_can_be_reordered(self, lmdb_version_store_v1, mode, delete_staged_data_on_failure):
         lib = lmdb_version_store_v1
         df1 = pd.DataFrame({"col_0": [1], "col_1": ["test"], "col_2": [1.2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
         df2 = pd.DataFrame({"col_1": ["asd"], "col_2": [2.5], "col_0": [2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
@@ -711,10 +722,12 @@ class TestFinalizeStagedDataStaticSchemaMismatch:
         lib.write("sym", df2, parallel=True)
         expected = pd.concat([df1, df2]).sort_index()
         with pytest.raises(SchemaException) as exception_info:
-            lib.compact_incomplete("sym", mode, False)
+            lib.compact_incomplete("sym", mode, False, delete_staged_data_on_failure=delete_staged_data_on_failure)
         assert "col_0" in str(exception_info.value)
         assert "col_1" in str(exception_info.value)
         assert "col_2" in str(exception_info.value)
+        expected_key_count = 0 if delete_staged_data_on_failure else 2
+        assert len(get_append_keys(lib, "sym")) == expected_key_count
 
 # finalize_method True -> append, finalize_method False -> write
 @pytest.mark.parametrize("finalize_method", (True, False))
@@ -726,7 +739,8 @@ class TestFinalizeWithEmptySegments:
         lib.compact_incomplete("sym", finalize_method, False)
         assert_frame_equal(lib.read("sym").data, pd.DataFrame([], index=pd.DatetimeIndex([])))
 
-    def test_staged_segment_has_empty_df(self, lmdb_version_store_v1, finalize_method):
+    @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
+    def test_staged_segment_has_empty_df(self, lmdb_version_store_v1, finalize_method, delete_staged_data_on_failure):
         lib = lmdb_version_store_v1
         index = pd.DatetimeIndex([pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 3), pd.Timestamp(2024, 1, 4)])
         df1 = pd.DataFrame({"col": [1, 2, 3]}, index=index)
@@ -736,7 +750,9 @@ class TestFinalizeWithEmptySegments:
         lib.write("sym", df2, parallel=True)
         lib.write("sym", df3, parallel=True)
         with pytest.raises(SchemaException):
-            lib.compact_incomplete("sym", finalize_method, False)
+            lib.compact_incomplete("sym", finalize_method, False, delete_staged_data_on_failure=delete_staged_data_on_failure)
+        expected_key_count = 0 if delete_staged_data_on_failure else 3
+        assert len(get_append_keys(lib, "sym")) == expected_key_count
 
     def test_df_without_rows(self, lmdb_version_store_v1, finalize_method):
         lib = lmdb_version_store_v1
@@ -790,8 +806,9 @@ class TestSlicing:
         expected = pd.concat([df_0, pd.DataFrame({"a": staged_values}, index=combined_staged_index)])
         assert_frame_equal(lib.read("sym").data, expected)
 
+    @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
     @pytest.mark.parametrize("mode", [True, False])
-    def test_wide_segment_with_no_prior_slicing(self, lmdb_version_store_tiny_segment, mode):
+    def test_wide_segment_with_no_prior_slicing(self, lmdb_version_store_tiny_segment, mode, delete_staged_data_on_failure):
         lib = lmdb_version_store_tiny_segment
         df_0 = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
         lib.write("sym", df_0, parallel=True)
@@ -806,12 +823,15 @@ class TestSlicing:
         # write is done using sort and finalize
         with pytest.raises(UserInputException) as exception_info:
             lib.write("sym", pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 3)])), parallel=True)
-            lib.compact_incomplete("sym", True, False)
+            lib.compact_incomplete("sym", True, False, delete_staged_data_on_failure=delete_staged_data_on_failure)
         assert "append" in str(exception_info.value).lower()
         assert "column" in str(exception_info.value).lower()
         assert "sliced" in str(exception_info.value).lower()
+        expected_key_count = 0 if delete_staged_data_on_failure else 1
+        assert len(get_append_keys(lib, "sym")) == expected_key_count
 
-    def test_appending_wide_segment_throws_with_prior_slicing(self, lmdb_version_store_tiny_segment, lib_name):
+    @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
+    def test_appending_wide_segment_throws_with_prior_slicing(self, lmdb_version_store_tiny_segment, lib_name, delete_staged_data_on_failure):
         lib = lmdb_version_store_tiny_segment
         df_0 = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
         lib.write("sym", df_0)
@@ -819,10 +839,12 @@ class TestSlicing:
         df_1 = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
         lib.write("sym", df_1, parallel=True)
         with pytest.raises(UserInputException) as exception_info:
-            lib.compact_incomplete("sym", True, True)
+            lib.compact_incomplete("sym", True, True, delete_staged_data_on_failure=delete_staged_data_on_failure)
         assert "append" in str(exception_info.value).lower()
         assert "column" in str(exception_info.value).lower()
         assert "sliced" in str(exception_info.value).lower()
+        expected_key_count = 0 if delete_staged_data_on_failure else 1
+        assert len(get_append_keys(lib, "sym")) == expected_key_count
 
     def test_writing_wide_segment_over_sliced_data(self, lmdb_version_store_tiny_segment):
         lib = lmdb_version_store_tiny_segment
