@@ -1121,7 +1121,7 @@ void PythonVersionStore::clear(const bool continue_on_error) {
 }
 
 bool PythonVersionStore::empty() {
-    return is_empty_excluding_key_types({});
+    return is_empty_excluding_key_types({KeyType::SYMBOL_LIST});
 }
 
 bool PythonVersionStore::is_empty_excluding_key_types(const std::vector<KeyType>& excluded_key_types) {
