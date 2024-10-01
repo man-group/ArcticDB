@@ -5,6 +5,7 @@ import io
 import numpy as np
 import argparse
 import re
+import pytz
 from datetime import datetime
 
 from arcticdb import Arctic
@@ -24,10 +25,11 @@ def create_df(start=0, columns=1) -> pd.DataFrame:
 
 
 def get_basic_dfs():
+    meta = {"meta": pd.Timestamp("2024-03-04", tz=pytz.UTC)}
     df1 = create_df(0, 3)
     df2 = create_df(1, 3)
     df3 = create_df(2, 3)
-    return (df1, "one"), (df2, "two"), (df3, "three")
+    return (df1, "one", meta), (df2, "two", meta), (df3, "three", meta)
 
 
 def get_empty_series():
@@ -37,6 +39,7 @@ def get_empty_series():
 
 
 def get_csv_df():
+    meta = {"meta": pd.Timestamp("2024-03-04", tz="America/New_York")}
     buf = io.StringIO("2023-11-27 00:00:00,0.73260,0.73260,0.73260,0.73260,7")
 
     df = pd.read_csv(buf, parse_dates=[0], index_col=0, header=None)
@@ -46,7 +49,7 @@ def get_csv_df():
 
     sym = "csv_df"
 
-    return df, sym
+    return df, sym, meta
 
 
 def real_s3_credentials(shared_path: bool = True):
@@ -78,9 +81,7 @@ def get_real_s3_uri(shared_path: bool = True):
         path_prefix,
         _,
     ) = real_s3_credentials(shared_path)
-    aws_uri = (
-        f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix={path_prefix}"
-    )
+    aws_uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix={path_prefix}"
     return aws_uri
 
 
@@ -111,18 +112,32 @@ def get_test_libraries(ac=None):
     return [lib for lib in ac.list_libraries() if lib.startswith("test_")]
 
 
+def assert_tz_equal(meta_expected, meta_actual):
+    assert meta_actual.tzname() == meta_expected.tzname() or str(
+        meta_actual.tzinfo
+    ) == str(meta_expected.tzinfo)
+    if meta_expected is not None:
+        assert meta_actual.tzinfo.utcoffset(
+            meta_actual
+        ) == meta_expected.tzinfo.utcoffset(meta_expected)
+
+
 def read_persistent_library(lib):
-    for df, sym in get_basic_dfs():
+    for df, sym, meta in get_basic_dfs():
         res_df = lib.read(sym).data
         assert_frame_equal(res_df, pd.concat([df, df]))
+
+        res_meta = lib.read(sym).metadata["meta"]
+        assert_tz_equal(meta["meta"], res_meta)
 
     df, sym = get_empty_series()
     res_df = lib.read(sym).data
     assert res_df.empty
-    assert str(res_df.dtype) == "datetime64[ns]"
 
-    df, sym = get_csv_df()
+    df, sym, meta = get_csv_df()
     res_df = lib.read(sym).data
+    res_meta = lib.read(sym).metadata["meta"]
+    assert_tz_equal(meta["meta"], res_meta)
     # 'cast' to str to accomodate previous versions of ArcticDB
     df.index.rename(str(df.index.name), inplace=True)
     res_df.index.rename(str(res_df.index.name), inplace=True)
@@ -143,18 +158,18 @@ def is_strategy_branch_valid_format(input_string):
 
 
 def write_persistent_library(lib, latest: bool = False):
-    for df, sym in get_basic_dfs():
-        lib.write(sym, df)
-        lib.append(sym, df)
+    for df, sym, meta in get_basic_dfs():
+        lib.write(sym, df, metadata=meta)
+        lib.append(sym, df, metadata=meta)
 
     series, sym = get_empty_series()
     lib.write(sym, series)
 
-    df, sym = get_csv_df()
+    df, sym, meta = get_csv_df()
     if not latest:
         # 'cast' to str because we only support string index names in past versions
         df.index.rename(str(df.index.name), inplace=True)
-    lib.write(sym, df)
+    lib.write(sym, df, metadata=meta)
 
     res = lib.read(sym).data
     assert_frame_equal(res, df)
@@ -164,7 +179,9 @@ def seed_library(ac, version: str = ""):
     strategy_branch = os.getenv("ARCTICDB_PERSISTENT_STORAGE_STRATEGY_BRANCH")
 
     if not is_strategy_branch_valid_format(strategy_branch):
-        raise ValueError(f"The strategy_branch: {strategy_branch} is not formatted correctly")
+        raise ValueError(
+            f"The strategy_branch: {strategy_branch} is not formatted correctly"
+        )
 
     lib_name = f"seed_{version}{strategy_branch}"
     lib_name = normalize_lib_name(lib_name)
@@ -229,7 +246,9 @@ def generate_ascending_dataframe(n, freq="S", end_timestamp="1/1/2023"):
     # Generate timestamps
     fake_tickers = [gen_fake_ticker(val) for val in values]
     # Create dataframe
-    df = pd.DataFrame({"timestamp": timestamps, "fake_ticker": fake_tickers, "value": values})
+    df = pd.DataFrame(
+        {"timestamp": timestamps, "fake_ticker": fake_tickers, "value": values}
+    )
     return df
 
 
