@@ -25,6 +25,7 @@ from arcticdb_ext.version_store import DataError
 import pandas as pd
 import numpy as np
 import logging
+from arcticdb.version_store._normalization import normalize_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -901,10 +902,26 @@ class Library:
         mode: Optional[StagedDataFinalizeMethod] = StagedDataFinalizeMethod.WRITE,
         prune_previous_versions: bool = False,
         metadata: Any = None,
-        validate_index=True,
-    ):
+        validate_index = True,
+        delete_staged_data_on_failure: bool = False
+    ) -> VersionedItem:
         """
-        Finalizes staged data, making it available for reads.
+        Finalizes staged data, making it available for reads. All staged segments must be ordered and non-overlapping.
+        ``finalize_staged_data`` is less time consuming than ``sort_and_finalize_staged_data``.
+
+        If ``mode`` is ``StagedDataFinalizeMethod.APPEND`` the index of the first row of the new segment must be equal to or greater
+        than the index of the last row in the existing data.
+
+        If ``Static Schema`` is used all staged block must have matching schema (same column names, same dtype, same column ordering)
+        and must match the existing data if mode is ``StagedDataFinalizeMethod.APPEND``. For more information about schema options see
+        documentation for ``arcticdb.LibraryOptions.dynamic_schema``
+
+        If the symbol does not exist both ``StagedDataFinalizeMethod.APPEND`` and ``StagedDataFinalizeMethod.WRITE`` will create it.
+
+        Calling ``finalize_staged_data`` without having staged data for the symbol will throw ``UserInputException``. Use
+        ``get_staged_symbols`` to check if there are staged segments for the symbol.
+
+        Calling ``finalize_staged_data`` if any of the staged segments contains NaT in its index will throw ``SortingException``.
 
         Parameters
         ----------
@@ -923,19 +940,74 @@ class Library:
             supports date range searches and update operations. This requires that the indexes of the staged segments
             are non-overlapping with each other, and, in the case of `StagedDataFinalizeMethod.APPEND`, fall after the
             last index value in the previous version.
+        delete_staged_data_on_failure : bool, default=False
+            Determines the handling of staged data when an exception occurs during the execution of the 
+            ``finalize_staged_data`` function.
+
+            - If set to True, all staged data for the specified symbol will be deleted if an exception occurs.
+            - If set to False, the staged data will be retained and will be used in subsequent calls to 
+              ``finalize_staged_data``.
+
+            To manually delete staged data, use the ``delete_staged_data`` function.
+        Returns
+        -------
+        VersionedItem
+            Structure containing metadata and version number of the written symbol in the store.
+            The data member will be None.
+
+        Raises
+        ------
+        SortingException
+
+            - If any two staged segments for a given symbol have overlapping indexes
+            - If any staged segment for a given symbol is not sorted
+            - If the first index value of the new segment is not greater or equal than the last index value of
+                the existing data when ``StagedDataFinalizeMethod.APPEND`` is used.
+            - If any staged segment contains NaT in the index
+
+        UserInputException
+
+            - If there are no staged segments when ``finalize_staged_data`` is called
+            - If all of the following conditions are met:
+
+                1. Static schema is used.
+                2. The width of the DataFrame exceeds the value of ``LibraryOptions.columns_per_segment``.
+                3. The symbol contains data that was not written by `finalize_staged_data`.
+                4. Finalize mode is append
+
+        SchemaException
+
+            - If static schema is used and not all staged segments have matching schema.
+            - If static schema is used, mode is ``StagedDataFinalizeMethod.APPEND`` and the schema of the new segment
+                is not the same as the schema of the existing data
+            - If dynamic schema is used and different segments have the same column names but their dtypes don't have a
+                common type (e.g string and any numeric type)
 
         See Also
         --------
         write
             Documentation on the ``staged`` parameter explains the concept of staged data in more detail.
+
+        Examples
+        --------
+        >>> lib.write("sym", pd.DataFrame({"col": [3, 4]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 3), pd.Timestamp(2024, 1, 4)])), staged=True)
+        >>> lib.write("sym", pd.DataFrame({"col": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 2)])), staged=True)
+        >>> lib.finalize_staged_data("sym")
+        >>> lib.read("sym").data
+                    col
+        2024-01-01    1
+        2024-01-02    2
+        2024-01-03    3
+        2024-01-04    4
         """
-        self._nvs.compact_incomplete(
+        return self._nvs.compact_incomplete(
             symbol,
             append=mode == StagedDataFinalizeMethod.APPEND,
             convert_int_to_float=False,
             metadata=metadata,
             prune_previous_version=prune_previous_versions,
             validate_index=validate_index,
+            delete_staged_data_on_failure=delete_staged_data_on_failure
         )
 
     def sort_and_finalize_staged_data(
@@ -943,15 +1015,31 @@ class Library:
         symbol: str,
         mode: Optional[StagedDataFinalizeMethod] = StagedDataFinalizeMethod.WRITE,
         prune_previous_versions: bool = False,
-    ):
+        metadata: Any = None,
+        delete_staged_data_on_failure: bool = False
+    ) -> VersionedItem:
         """
-        sort_merge will sort and finalize staged data. This differs from `finalize_staged_data` in that it
-        can support staged segments with interleaved time periods - the end result will be ordered. This requires
-        performing a full sort in memory so can be time consuming.
+        Sorts and merges all staged data, making it available for reads. This differs from `finalize_staged_data` in that it
+        can support staged segments with interleaved time periods and staged segments which are not internally sorted. The
+        end result will be sorted. This requires performing a full sort in memory so can be time consuming.
+
+        If ``mode`` is ``StagedDataFinalizeMethod.APPEND`` the index of the first row of the sorted block must be equal to or greater
+        than the index of the last row in the existing data.
+
+        If ``Static Schema`` is used all staged block must have matching schema (same column names, same dtype, same column ordering)
+        and must match the existing data if mode is ``StagedDataFinalizeMethod.APPEND``. For more information about schema options see
+        documentation for ``arcticdb.LibraryOptions.dynamic_schema``
+
+        If the symbol does not exist both ``StagedDataFinalizeMethod.APPEND`` and ``StagedDataFinalizeMethod.WRITE`` will create it.
+
+        Calling ``sort_and_finalize_staged_data`` without having staged data for the symbol will throw ``UserInputException``. Use 
+        ``get_staged_symbols`` to check if there are staged segments for the symbol.
+
+        Calling ``sort_and_finalize_staged_data`` if any of the staged segments contains NaT in its index will throw ``SortingException``.
 
         Parameters
         ----------
-        symbol : `str`
+        symbol : str
             Symbol to finalize data for.
 
         mode : `StagedDataFinalizeMethod`, default=StagedDataFinalizeMethod.WRITE
@@ -961,18 +1049,75 @@ class Library:
         prune_previous_versions : bool, default=False
             Removes previous (non-snapshotted) versions from the database.
 
+        metadata : Any, default=None
+            Optional metadata to persist along with the symbol.
+
+        delete_staged_data_on_failure : bool, default=False
+            Determines the handling of staged data when an exception occurs during the execution of the 
+            `sort_and_finalize_staged_data` function.
+
+            - If set to True, all staged data for the specified symbol will be deleted if an exception occurs.
+            - If set to False, the staged data will be retained and will be used in subsequent calls to 
+              ``sort_and_finalize_staged_data``.
+
+            To manually delete staged data, use the ``delete_staged_data`` function.
+        Returns
+        -------
+        VersionedItem
+            Structure containing metadata and version number of the written symbol in the store.
+            The data member will be None.
+
+        Raises
+        ------
+        SortingException
+
+            - If the first index value of the sorted block is not greater or equal than the last index value of
+                the existing data when ``StagedDataFinalizeMethod.APPEND`` is used.
+            - If any staged segment contains NaT in the index
+
+        UserInputException
+
+            - If there are no staged segments when ``sort_and_finalize_staged_data`` is called
+            - If all of the following conditions are met:
+
+                1. Static schema is used.
+                2. The width of the DataFrame exceeds the value of ``LibraryOptions.columns_per_segment``.
+                3. The symbol contains data that was not written by `sort_and_finalize_staged_data`.
+                4. Finalize mode is append
+
+        SchemaException
+
+            - If static schema is used and not all staged segments have matching schema.
+            - If static schema is used, mode is ``StagedDataFinalizeMethod.APPEND`` and the schema of the sorted and merged
+                staged segment is not the same as the schema of the existing data
+            - If dynamic schema is used and different segments have the same column names but their dtypes don't have a
+                common type (e.g string and any numeric type)
+
         See Also
         --------
         write
             Documentation on the ``staged`` parameter explains the concept of staged data in more detail.
-        """
 
-        self._nvs.version_store.sort_merge(
+        Examples
+        --------
+        >>> lib.write("sym", pd.DataFrame({"col": [2, 4]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2), pd.Timestamp(2024, 1, 4)])), staged=True)
+        >>> lib.write("sym", pd.DataFrame({"col": [3, 1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 3), pd.Timestamp(2024, 1, 1)])), staged=True)
+        >>> lib.sort_and_finalize_staged_data("sym")
+        >>> lib.read("sym").data
+                    col
+        2024-01-01    1
+        2024-01-02    2
+        2024-01-03    3
+        2024-01-04    4
+        """
+        vit = self._nvs.version_store.sort_merge(
             symbol,
-            None,
+            normalize_metadata(metadata) if metadata is not None else None,
             mode == StagedDataFinalizeMethod.APPEND,
             prune_previous_versions=prune_previous_versions,
+            delete_staged_data_on_failure=delete_staged_data_on_failure
         )
+        return self._nvs._convert_thin_cxx_item_to_python(vit, metadata)
 
     def get_staged_symbols(self) -> List[str]:
         """

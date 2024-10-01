@@ -36,6 +36,7 @@ struct CompactIncompleteOptions {
     bool via_iteration_;
     bool sparsify_;
     bool validate_index_{true}; // Default value as unused in sort_merge
+    bool delete_staged_data_on_failure_{false};
 };
 
 VersionedItem write_dataframe_impl(
@@ -177,7 +178,8 @@ VersionedItem sort_merge_impl(
     const StreamId& stream_id,
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
     const UpdateInfo& update_info,
-    const CompactIncompleteOptions& options);
+    const CompactIncompleteOptions& options,
+    const WriteOptions& write_options);
 
 void modify_descriptor(
     const std::shared_ptr<pipelines::PipelineContext>& pipeline_context,

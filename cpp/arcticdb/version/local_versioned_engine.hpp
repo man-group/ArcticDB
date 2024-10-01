@@ -449,6 +449,7 @@ protected:
 
 private:
     void initialize(const std::shared_ptr<storage::Library>& library);
+    void add_to_symbol_list_on_compaction(const StreamId& stream_id, const CompactIncompleteOptions& options, const UpdateInfo& update_info);
 
     std::shared_ptr<Store> store_;
     arcticdb::proto::storage::VersionStoreConfig cfg_;

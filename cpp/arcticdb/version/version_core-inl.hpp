@@ -79,7 +79,7 @@ void merge_frames_for_keys_impl(
 
     using AggregatorType = Aggregator<IndexType, DynamicSchema, SegmentationPolicy, DensityPolicy>;
     AggregatorType agg{DynamicSchema{index.create_stream_descriptor(target_id, {}), index}, std::move(func), std::move(segmentation_policy)};
-    do_merge<IndexType, StreamMergeWrapper, AggregatorType, decltype(input_streams)>(input_streams, agg, true);
+    do_merge<IndexType, AggregatorType, decltype(input_streams)>(input_streams, agg, true);
 }
 
 template <typename SegmentationPolicy, typename Callable>
@@ -108,7 +108,8 @@ void do_compact(
     std::vector<pipelines::FrameSlice>& slices,
     const std::shared_ptr<Store>& store,
     bool convert_int_to_float,
-    std::optional<size_t> segment_size){
+    std::optional<size_t> segment_size,
+    bool validate_index){
         auto index = stream::index_type_from_descriptor(pipeline_context->descriptor());
         stream::SegmentAggregator<IndexType, SchemaType, SegmentationPolicy, DensityPolicy>
         aggregator{
@@ -127,12 +128,23 @@ void do_compact(
         };
 
         for(auto it = target_start; it != target_end; ++it) {
-            decltype(auto) sk = [&it](){
+            auto sk = [&it](){
                 if constexpr(std::is_same_v<IteratorType, pipelines::PipelineContext::iterator>)
                     return it->slice_and_key();
                 else
                     return *it;
             }();
+            if (sk.slice().rows().diff() == 0) {
+                continue;
+            }
+
+            const auto& segment = sk.segment(store);
+            sorting::check<ErrorCode::E_UNSORTED_DATA>(
+                !validate_index || segment.descriptor().sorted() == SortedValue::ASCENDING ||
+                    segment.descriptor().sorted() == SortedValue::UNKNOWN,
+                "Cannot compact unordered segment."
+            );
+
             aggregator.add_segment(
                 std::move(sk.segment(store)),
                 sk.slice(),

@@ -706,7 +706,8 @@ VersionedItem PythonVersionStore::compact_incomplete(
         bool sparsify /*= false */,
         const std::optional<py::object>& user_meta /* = std::nullopt */,
         bool prune_previous_versions,
-        bool validate_index) {
+        bool validate_index,
+        bool delete_staged_data_on_failure) {
     std::optional<arcticdb::proto::descriptors::UserDefinedMetadata> meta;
     if (user_meta && !user_meta->is_none()) {
         meta = std::make_optional<arcticdb::proto::descriptors::UserDefinedMetadata>();
@@ -718,7 +719,8 @@ VersionedItem PythonVersionStore::compact_incomplete(
         .convert_int_to_float_=convert_int_to_float,
         .via_iteration_=via_iteration,
         .sparsify_=sparsify,
-        .validate_index_=validate_index
+        .validate_index_=validate_index,
+        .delete_staged_data_on_failure_=delete_staged_data_on_failure
     };
     return compact_incomplete_dynamic(stream_id, meta, options);
 }
@@ -730,8 +732,8 @@ VersionedItem PythonVersionStore::sort_merge(
         bool convert_int_to_float,
         bool via_iteration,
         bool sparsify,
-        bool prune_previous_versions
-) {
+        bool prune_previous_versions,
+        bool delete_staged_data_on_failure) {
     std::optional<arcticdb::proto::descriptors::UserDefinedMetadata> meta;
     if (!user_meta.is_none()) {
         meta = std::make_optional<arcticdb::proto::descriptors::UserDefinedMetadata>();
@@ -742,7 +744,8 @@ VersionedItem PythonVersionStore::sort_merge(
         .append_=append,
         .convert_int_to_float_=convert_int_to_float,
         .via_iteration_=via_iteration,
-        .sparsify_=sparsify
+        .sparsify_=sparsify,
+        .delete_staged_data_on_failure_=delete_staged_data_on_failure
     };
     return sort_merge_internal(stream_id, meta, options);
 }
@@ -772,45 +775,6 @@ FrameAndDescriptor create_frame(const StreamId& target_id, SegmentInMemory seg, 
     auto norm_meta = make_timeseries_norm_meta(target_id);
     const auto desc = make_timeseries_descriptor(seg.row_count(), seg.descriptor().clone(), std::move(norm_meta), std::nullopt, std::nullopt, std::nullopt, false);
     return FrameAndDescriptor{std::move(seg), desc, {}, {}};
-}
-
-ReadResult PythonVersionStore::read_dataframe_merged(
-    const StreamId& target_id,
-    const std::vector<StreamId> &stream_ids,
-    const VersionQuery&, // TODO batch_get_specific_version
-    const ReadQuery &query,
-    const ReadOptions& read_options) {
-    if (stream_ids.empty())
-        util::raise_rte("No symbols given");
-
-    auto stream_index_map = batch_get_latest_version(store(), version_map(), stream_ids, false);
-    std::vector<AtomKey> index_keys;
-    std::transform(stream_index_map->begin(), stream_index_map->end(), std::back_inserter(index_keys),
-                   [](auto &stream_key) { return to_atom(stream_key.second); });
-
-    if(stream_index_map->empty())
-        throw NoDataFoundException("No data found for any symbols");
-
-    auto [key, metadata, descriptor] = store()->read_metadata_and_descriptor(stream_index_map->begin()->second).get();
-    auto index = index_type_from_descriptor(descriptor);
-
-    FrameAndDescriptor final_frame;
-    VariantColumnPolicy density_policy = read_options.allow_sparse_ ? VariantColumnPolicy{SparseColumnPolicy{}} : VariantColumnPolicy{DenseColumnPolicy{}};
-
-    merge_frames_for_keys(
-        target_id,
-        std::move(index),
-        NeverSegmentPolicy{},
-        density_policy,
-        index_keys,
-        query,
-        store(),
-        [&final_frame, &target_id, &read_options](auto &&seg) {
-            final_frame = create_frame(target_id, std::forward<decltype(seg)>(seg), read_options);
-        });
-
-    const auto version = VersionedItem{to_atom((*stream_index_map)[stream_ids[0]])};
-    return create_python_read_result(version, std::move(final_frame));
 }
 
 std::vector<std::variant<ReadResult, DataError>> PythonVersionStore::batch_read(

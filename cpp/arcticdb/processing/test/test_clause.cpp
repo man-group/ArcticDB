@@ -371,13 +371,11 @@ TEST(Clause, Merge) {
     const auto num_segs = 4;
     const auto num_rows = 20;
 
-    auto stream_id = StreamId("Merge");
-    StreamDescriptor descriptor{};
-    descriptor.add_field(FieldRef{make_scalar_type(DataType::NANOSECONDS_UTC64),"time"});
-    MergeClause merge_clause{TimeseriesIndex{"time"}, SparseColumnPolicy{}, stream_id, descriptor};
+    const auto stream_id = StreamId("Merge");
+    const auto seg = get_standard_timeseries_segment(std::get<StringId>(stream_id), num_rows);
+    MergeClause merge_clause{TimeseriesIndex{"time"}, SparseColumnPolicy{}, stream_id, seg.descriptor(), false};
     merge_clause.set_component_manager(component_manager);
 
-    auto seg = get_standard_timeseries_segment(std::get<StringId>(stream_id), num_rows);
 
     std::vector<SegmentInMemory> segs;
     for(auto x = 0u; x < num_segs; ++x) {

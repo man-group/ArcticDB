@@ -492,6 +492,7 @@ set(arcticdb_srcs
         util/offset_string.cpp
         util/sparse_utils.cpp
         util/string_utils.cpp
+        util/timer.cpp
         util/trace.cpp
         util/type_handler.cpp
         version/local_versioned_engine.cpp
@@ -816,7 +817,6 @@ if(${TEST})
             util/test/test_string_utils.cpp
             util/test/test_tracing_allocator.cpp
             version/test/test_append.cpp
-            version/test/test_merge.cpp
             version/test/test_sparse.cpp
             version/test/test_stream_version_data.cpp
             version/test/test_symbol_list.cpp

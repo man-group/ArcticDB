@@ -6,15 +6,13 @@
  */
 
 #include <arcticdb/stream/append_map.hpp>
-#include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
 #include <arcticdb/stream/stream_source.hpp>
 #include <arcticdb/stream/index.hpp>
-#include <arcticdb/entity/protobufs.hpp>
-#include <pipeline/query.hpp>
 #include <pipeline/frame_slice.hpp>
 #include <util/key_utils.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
+#include <iterator>
 
 namespace arcticdb {
 
@@ -147,10 +145,9 @@ SegmentInMemory incomplete_segment_from_frame(
     auto index_tensor = std::move(frame->index_tensor);
     const bool has_index = frame->has_index();
     const auto index = std::move(frame->index);
-    SegmentInMemory output;
-    auto field_tensors = std::move(frame->field_tensors);
 
-    std::visit([&](const auto& idx) {
+    auto field_tensors = std::move(frame->field_tensors);
+    auto output = std::visit([&](const auto& idx) {
         using IdxType = std::decay_t<decltype(idx)>;
         using SingleSegmentAggregator = Aggregator<IdxType, FixedSchema, NeverSegmentPolicy>;
         auto copy_prev_key = prev_key;
@@ -158,6 +155,14 @@ SegmentInMemory incomplete_segment_from_frame(
         util::check(!timeseries_desc.fields().empty(), "Expected fields not to be empty in incomplete segment");
         auto norm_meta = timeseries_desc.proto().normalization();
         auto descriptor = timeseries_desc.as_stream_descriptor();
+
+        SegmentInMemory output;
+        if (num_rows == 0) {
+            output = SegmentInMemory(FixedSchema{descriptor, index}.default_descriptor(), 0, false, false);
+            output.set_timeseries_descriptor(pack_timeseries_descriptor(descriptor, existing_rows, std::move(copy_prev_key), std::move(norm_meta)));
+            return output;
+        }
+
         SingleSegmentAggregator agg{FixedSchema{descriptor, index}, [&](auto&& segment) {
             auto tsd = pack_timeseries_descriptor(descriptor, existing_rows + num_rows, std::move(copy_prev_key), std::move(norm_meta));
             segment.set_timeseries_descriptor(tsd);
@@ -194,7 +199,8 @@ SegmentInMemory incomplete_segment_from_frame(
 
         agg.end_block_write(num_rows);
         agg.commit();
-        }, index);
+        return output;
+    }, index);
 
     ARCTICDB_DEBUG(log::version(), "Constructed segment from frame of {} rows and {} columns at offset {}", output.row_count(), output.num_columns(), output.offset());
     return output;
@@ -241,7 +247,6 @@ std::vector<SliceAndKey> get_incomplete(
     bool load_data) {
     using namespace arcticdb::pipelines;
 
-    std::unique_ptr<TimeseriesDescriptor> unused;
     auto entries = get_incomplete_append_slices_for_stream_id(store, stream_id, via_iteration, load_data);
 
     util::variant_match(range,
@@ -444,6 +449,19 @@ std::vector<AppendMapEntry> get_incomplete_append_slices_for_stream_id(
         }
     }
     return entries;
+}
+
+std::vector<VariantKey> read_incomplete_keys_for_symbol(
+    const std::shared_ptr<Store>& store,
+    const StreamId& stream_id,
+    bool via_iteration
+) {
+    const std::vector<AppendMapEntry> entries =
+        get_incomplete_append_slices_for_stream_id(store, stream_id, via_iteration, false);
+    std::vector<VariantKey> slice_and_key;
+    slice_and_key.reserve(entries.size());
+    std::transform(entries.cbegin(), entries.cend(), std::back_inserter(slice_and_key), [](const AppendMapEntry& entry) { return entry.slice_and_key_.key();});
+    return slice_and_key;
 }
 
 std::optional<int64_t> latest_incomplete_timestamp(

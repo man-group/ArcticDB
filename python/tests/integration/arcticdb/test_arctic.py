@@ -19,7 +19,7 @@ from enum import Enum
 from arcticdb_ext.exceptions import InternalException, SortingException, UserInputException
 from arcticdb_ext.storage import NoDataFoundException
 from arcticdb_ext.version_store import SortedValue
-from arcticdb.exceptions import ArcticDbNotYetImplemented, LibraryNotFound, MismatchingLibraryOptions
+from arcticdb.exceptions import ArcticDbNotYetImplemented, LibraryNotFound, MismatchingLibraryOptions, StreamDescriptorMismatch, SchemaException
 from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
 from arcticdb.arctic import Arctic
 from arcticdb.options import LibraryOptions, EnterpriseLibraryOptions
@@ -246,7 +246,12 @@ def test_staged_data(arctic_library, finalize_method):
     lib.write(sym_unfinalized, df_2, staged=True)
 
     metadata = {"hello": "world"}
-    lib.finalize_staged_data(sym_with_metadata, finalize_method, metadata=metadata)
+    finalize_result_meta = lib.finalize_staged_data(sym_with_metadata, finalize_method, metadata=metadata)
+    assert finalize_result_meta.metadata == metadata
+    assert finalize_result_meta.symbol == sym_with_metadata
+    assert finalize_result_meta.library == lib.name
+    assert finalize_result_meta.version == (1 if finalize_method == StagedDataFinalizeMethod.APPEND else 0)
+
     lib.finalize_staged_data(sym_without_metadata, finalize_method)
 
     assert set(lib.list_symbols()) == {sym_with_metadata, sym_without_metadata}
@@ -285,6 +290,40 @@ def test_parallel_writes_and_appends_index_validation(arctic_library, finalize_m
         expected = pd.concat([df_0, df_1, df_2]) if finalize_method == StagedDataFinalizeMethod.APPEND else pd.concat([df_1, df_2])
         assert_frame_equal(received, expected)
 
+@pytest.mark.parametrize("finalize_method", (StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE))
+def test_finalize_without_adding_segments(arctic_library, finalize_method):
+    lib = arctic_library
+    with pytest.raises(UserInputException) as exception_info:
+        lib.finalize_staged_data("sym", mode=finalize_method)
+
+
+class TestAppendStagedData:
+    def test_appended_df_interleaves_with_storage(self, arctic_library):
+        lib = arctic_library
+        initial_df = pd.DataFrame({"col": [1, 3]}, index=pd.DatetimeIndex([np.datetime64('2023-01-01'), np.datetime64('2023-01-03')], dtype="datetime64[ns]"))
+        lib.write("sym", initial_df)
+        df1 = pd.DataFrame({"col": [2]}, index=pd.DatetimeIndex([np.datetime64('2023-01-02')], dtype="datetime64[ns]"))
+        lib.write("sym", df1, staged=True)
+        with pytest.raises(SortingException) as exception_info:
+            lib.finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+        assert "append" in str(exception_info.value)
+
+    def test_appended_df_start_same_as_df_end(self, arctic_library):
+        lib = arctic_library
+        df = pd.DataFrame(
+            {"col": [1, 2, 3]},
+            index=pd.DatetimeIndex([np.datetime64('2023-01-01'), np.datetime64('2023-01-02'), np.datetime64('2023-01-03')], dtype="datetime64[ns]")
+        )
+        lib.write("sym", df)
+        df_to_append = pd.DataFrame(
+            {"col": [4, 5, 6]},
+            index=pd.DatetimeIndex([np.datetime64('2023-01-03'), np.datetime64('2023-01-04'), np.datetime64('2023-01-05')], dtype="datetime64[ns]")
+        )
+        lib.write("sym", df_to_append, staged=True)
+        lib.finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+        res = lib.read("sym").data
+        expected_df = pd.concat([df, df_to_append])
+        assert_frame_equal(lib.read("sym").data, expected_df)
 
 def test_snapshots_and_deletes(arctic_library):
     lib = arctic_library

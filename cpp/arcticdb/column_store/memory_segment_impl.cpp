@@ -9,8 +9,8 @@
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/pipeline/string_pool_utils.hpp>
+#include <arcticdb/util/preconditions.hpp>
 
-#include <google/protobuf/any.h>
 #include <google/protobuf/any.pb.h>
 
 
@@ -671,6 +671,29 @@ bool SegmentInMemoryImpl::has_metadata() const {
 
 const google::protobuf::Any* SegmentInMemoryImpl::metadata() const {
     return metadata_.get();
+}
+
+void SegmentInMemoryImpl::drop_empty_columns() {
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+        row_count() > 0,
+        "Dropping all empty columns from an empty segment would result in removing all columns"
+    );
+    const StreamDescriptor& original = descriptor();
+    StreamDescriptor only_non_empty_cols;
+    only_non_empty_cols.set_id(original.id());
+    only_non_empty_cols.set_index(descriptor().index());
+    size_t field_index = 0;
+    while (field_index < original.index().field_count()) {
+        only_non_empty_cols.add_field(original.field(field_index++));
+    }
+    while (field_index < original.field_count()) {
+        const Column& col = column(field_index);
+        if (col.row_count() > 0) {
+            only_non_empty_cols.add_field(original.field(field_index));
+        }
+        field_index++;
+    }
+    change_schema(std::move(only_non_empty_cols));
 }
 
 }

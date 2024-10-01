@@ -36,21 +36,17 @@ inline std::vector<SliceAndKey> unfiltered_index(const index::IndexSegmentReader
 
 template<typename RowType>
 std::optional<IndexValue> index_value_from_row(const RowType &row, IndexDescriptorImpl::Type index_type, int field_num) {
-    std::optional<IndexValue> index_value;
     switch (index_type) {
     case IndexDescriptorImpl::Type::TIMESTAMP:
-        case IndexDescriptorImpl::Type::ROWCOUNT:
-            index_value = row.template scalar_at<timestamp>(field_num);
-            break;
-            case IndexDescriptorImpl::Type::STRING: {
-                auto opt = row.string_at(field_num);
-                index_value = opt ? std::make_optional<IndexValue>(std::string(opt.value())) : std::nullopt;
-                break;
-            }
-            default:
-                util::raise_rte("Unknown index type {} for column {}", int(index_type), field_num);
+    case IndexDescriptorImpl::Type::ROWCOUNT: return row.template scalar_at<timestamp>(field_num);
+    case IndexDescriptorImpl::Type::STRING: {
+        auto opt = row.string_at(field_num);
+        return opt ? std::make_optional<IndexValue>(std::string(opt.value())) : std::nullopt;
     }
-    return index_value;
+    default:
+        util::raise_rte("Unknown index type {} for column {}", int(index_type), field_num);
+    }
+    return std::nullopt;
 }
 
 template<typename RowType>

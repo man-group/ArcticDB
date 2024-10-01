@@ -427,11 +427,11 @@ struct TypeDescriptor {
     template<typename Callable>
     constexpr auto visit_tag(Callable &&callable) const;
 
-    bool operator==(const TypeDescriptor &o) const {
+    [[nodiscard]] constexpr bool operator==(const TypeDescriptor& o) const {
         return data_type_ == o.data_type_ && dimension_ == o.dimension_;
     }
 
-    bool operator!=(const TypeDescriptor &o) const {
+    [[nodiscard]] constexpr bool operator!=(const TypeDescriptor& o) const {
         return !(*this == o);
     }
 
