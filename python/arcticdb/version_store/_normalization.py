@@ -588,8 +588,8 @@ class _PandasNormalizer(Normalizer):
             names = [_column_name_to_strings(index.names[0])]
             for f in fields:
                 current_index = index.levels[f]
-                if isinstance(current_index, DatetimeIndex) and current_index.tz is not None:
-                    index_norm.timezone[f] = normalize_tz(current_index.tz)
+                if isinstance(current_index, DatetimeIndex) and current_index is not None:
+                    index_norm.timezone[f] = normalize_tz(current_index)
                 else:
                     index_norm.timezone[f] = ""
                 if index.names[f] is None:
