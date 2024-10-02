@@ -193,5 +193,5 @@ When writing data with time zone information to ArcticDB, we preserve the time n
 !!! note
 
     This means that regardles of the timezone types being written in ArcticDB, all time zone types are normalised to `pytz.tzfile`.
-    If you would like a another time-zone type back then string representation can be used to recreate it, e.g. `str(dt.tzname())`:
-    - For `ZoneInfo`, after Python 3.9+, you can use: `ZoneInfo(str(dt.tzname()))`
+    If you would like a another time-zone type back then string representation can be used to recreate it, e.g. `str(dt.tzinfo)`:
+    - For `ZoneInfo`, after Python 3.9+, you can use: `ZoneInfo(str(dt.tzinfo))`

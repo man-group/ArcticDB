@@ -178,7 +178,10 @@ def get_timezone_from_metadata(norm_meta):
 
 
 def normalize_tz(dt):
-    tz = _ensure_str_timezone(get_timezone(dt.tzinfo)) if dt.tzinfo is not None else dt.tzname()
+    if isinstance(dt, DatetimeIndex):
+        tz = _ensure_str_timezone(get_timezone(dt.tzinfo)) if dt.tzinfo is not None else dt.tz
+    else:
+        tz = _ensure_str_timezone(get_timezone(dt.tzinfo)) if dt.tzinfo is not None else dt.tzname()
 
     # workaround to handle the case where the timezone is dateutil
     # then the format is ...zoneinfo/<timezone>
