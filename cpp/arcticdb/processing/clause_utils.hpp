@@ -29,6 +29,10 @@ enum class ProcessingStructure {
     ALL
 };
 
+struct KeepCurrentIndex{};
+struct KeepCurrentTopLevelIndex{};
+using NewIndex = std::string;
+
 // Contains constant data about the clause identifiable at construction time
 struct ClauseInfo {
     // The arrangement of segments this clause needs in order for processing to be done correctly
@@ -40,8 +44,10 @@ struct ClauseInfo {
     // The names of the columns that are needed for this clause to make sense
     // Could either be on disk, or columns created by earlier clauses in the processing pipeline
     std::optional<std::unordered_set<std::string>> input_columns_{std::nullopt};
-    // The name of the index after this clause if it has been modified, std::nullopt otherwise
-    std::optional<std::string> new_index_{std::nullopt};
+    // KeepCurrentIndex if this clause does not modify the index in any way
+    // KeepCurrentTopLevelIndex if this clause requires multi-index levels>0 to be dropped, but otherwise does not modify it
+    // NewIndex if this clause has changed the index to a new (supplied) name
+    std::variant<KeepCurrentIndex, KeepCurrentTopLevelIndex, NewIndex> index_{KeepCurrentIndex()};
     // Whether this clause modifies the output descriptor
     bool modifies_output_descriptor_{false};
 };
