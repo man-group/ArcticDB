@@ -608,12 +608,38 @@ void set_output_descriptors(
         const std::shared_ptr<PipelineContext>& pipeline_context) {
     std::optional<std::string> index_column;
     for (auto clause = clauses.rbegin(); clause != clauses.rend(); ++clause) {
-        if (auto new_index = (*clause)->clause_info().new_index_; new_index.has_value()) {
-            index_column = new_index;
-            auto mutable_index = pipeline_context->norm_meta_->mutable_df()->mutable_common()->mutable_index();
-            mutable_index->set_name(*new_index);
-            mutable_index->clear_fake_name();
-            mutable_index->set_is_physically_stored(true);
+        bool should_break = util::variant_match(
+                (*clause)->clause_info().index_,
+                [](const KeepCurrentIndex&) { return false; },
+                [&](const KeepCurrentTopLevelIndex&) {
+                    if (pipeline_context->norm_meta_->mutable_df()->mutable_common()->has_multi_index()) {
+                        const auto& multi_index = pipeline_context->norm_meta_->mutable_df()->mutable_common()->multi_index();
+                        auto name = multi_index.name();
+                        auto tz = multi_index.tz();
+                        bool fake_name{false};
+                        for (auto pos: multi_index.fake_field_pos()) {
+                            if (pos == 0) {
+                                fake_name = true;
+                                break;
+                            }
+                        }
+                        auto mutable_index = pipeline_context->norm_meta_->mutable_df()->mutable_common()->mutable_index();
+                        mutable_index->set_tz(tz);
+                        mutable_index->set_is_physically_stored(true);
+                        mutable_index->set_name(name);
+                        mutable_index->set_fake_name(fake_name);
+                    }
+                    return true;
+                },
+                [&](const NewIndex& new_index) {
+                    index_column = new_index;
+                    auto mutable_index = pipeline_context->norm_meta_->mutable_df()->mutable_common()->mutable_index();
+                    mutable_index->set_name(new_index);
+                    mutable_index->clear_fake_name();
+                    mutable_index->set_is_physically_stored(true);
+                    return true;
+                });
+        if (should_break) {
             break;
         }
     }
