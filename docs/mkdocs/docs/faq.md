@@ -186,13 +186,12 @@ The handling of `NaN` in ArcticDB depends on the type of the column under consid
 
 ### How does ArcticDB handle `time zone` information?
 
-ArcticDB takes a more strict approach to time zone handling than Pandas. While Pandas support multiple types for storing time zone information, ArcticDB coerces all time zone information to `datetime.timezone`. This way we can ensure that all time zone information is stored in a consistent manner, and that all time zone information is preserved when data is written to and read from ArcticDB.
+ArcticDB takes a more strict approach to time zone handling than Pandas. While Pandas support multiple types for storing time zone information, ArcticDB coerces all time zone information to `pytz.tzfile` as this is the default representation for Pandas as well. This way we can ensure that all time zone information is stored in a consistent manner, and that all time zone information is preserved when data is written to and read from ArcticDB.
 
-When writing data with time zone information to ArcticDB, we preserve the time zone offset and name. When reading data with time zone information from ArcticDB, this data is used to create a `datetime.timezone` object.
+When writing data with time zone information to ArcticDB, we preserve the time name as string (e.g. "Europe/Amsterdam"). When reading data with time zone information from ArcticDB, this data is used to create a `pytz.tzfile` object.
 
 !!! note
 
-    This means that regardles of the timezone types being written in ArcticDB, all time zone types are normalised to `datetime.timezone`.
-    If you would like a another time-zone type back then tzname can be used to recreate it:
-    - For `pytz` you can use: `pytz.gettz(dt.tzname())`
-    - For `ZoneInfo`, after Python 3.9+, you can use: `ZoneInfo(dt.tzname())`
+    This means that regardles of the timezone types being written in ArcticDB, all time zone types are normalised to `pytz.tzfile`.
+    If you would like a another time-zone type back then string representation can be used to recreate it, e.g. `str(dt.tzname())`:
+    - For `ZoneInfo`, after Python 3.9+, you can use: `ZoneInfo(str(dt.tzname()))`
