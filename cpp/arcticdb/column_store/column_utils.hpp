@@ -64,7 +64,8 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
     return visit_field(frame.field(col_pos), [&, frame=frame, col_pos=col_pos] (auto tag) {
         using TypeTag = std::decay_t<decltype(tag)>;
         constexpr auto data_type = TypeTag::DataTypeTag::data_type;
-        const auto& buffer = frame.column(col_pos).data().buffer();
+        const auto& column_data = frame.column(col_pos).data();
+        const auto& buffer = column_data.buffer();
         std::string dtype;
         ssize_t esize = get_type_size(data_type);
         if constexpr (is_sequence_type(data_type)) {
