@@ -41,7 +41,7 @@ class ParsedQuery:
 
     access: Optional[str] = None
     secret: Optional[str] = None
-    aws_auth: Optional[type(AWSAuthMethod.ValueType())] = AWSAuthMethod.DISABLED
+    aws_auth: Optional[type(AWSAuthMethod.DISABLED)] = AWSAuthMethod.DISABLED
     aws_profile: Optional[str] = None
 
     path_prefix: Optional[str] = None
