@@ -227,8 +227,13 @@ auto get_s3_config(const ConfigType& conf) {
     client_configuration.maxConnections = conf.max_connections() == 0 ?
             ConfigsMap::instance()->get_int("VersionStore.NumIOThreads", 16) :
             conf.max_connections();
-    client_configuration.connectTimeoutMs = conf.connect_timeout() == 0 ? 30000 : conf.connect_timeout();
-    client_configuration.requestTimeoutMs = conf.request_timeout() == 0 ? 200000 : conf.request_timeout();
+    client_configuration.connectTimeoutMs = ConfigsMap::instance()->get_int(
+            "S3.ConnectionTimeout",
+            conf.connect_timeout() == 0 ? 30000 : conf.connect_timeout());
+    client_configuration.requestTimeoutMs = ConfigsMap::instance()->get_int(
+            "S3.RequestTimeout",
+            conf.request_timeout() == 0 ? 200000 : conf.request_timeout());
+    client_configuration.lowSpeedLimit = ConfigsMap::instance()->get_int("S3.LowSpeedLimit", 1);
 
     const bool use_win_inet = ConfigsMap::instance()->get_int("S3Storage.UseWinINet", 0);
     if (use_win_inet) {
