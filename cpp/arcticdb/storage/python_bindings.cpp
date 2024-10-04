@@ -33,7 +33,7 @@ std::shared_ptr<LibraryIndex> create_library_index(const std::string &environmen
     return std::make_shared<LibraryIndex>(EnvironmentName{environment_name}, mem_resolver);
 }
 
-void register_bindings(py::module& storage) {
+void register_bindings(py::module& storage, py::exception<arcticdb::ArcticException>& base_exception) {
     storage.attr("CONFIG_LIBRARY_NAME") = py::str(arcticdb::storage::CONFIG_LIBRARY_NAME);
 
     py::enum_<KeyType>(storage, "KeyType")
@@ -68,6 +68,30 @@ void register_bindings(py::module& storage) {
         .value("READ", OpenMode::READ)
         .value("WRITE", OpenMode::WRITE)
         .value("DELETE", OpenMode::DELETE);
+
+    py::enum_<ModifiableLibraryOption>(storage, "ModifiableLibraryOption", R"pbdoc(
+        Library options that can be modified after library creation.
+
+        See also `ModifiableEnterpriseLibraryOption` for enterprise options that can be modified.
+
+        See `LibraryOptions` for a description of each option.
+    )pbdoc")
+            .value("DEDUP", ModifiableLibraryOption::DEDUP)
+            .value("ROWS_PER_SEGMENT", ModifiableLibraryOption::ROWS_PER_SEGMENT)
+            .value("COLUMNS_PER_SEGMENT", ModifiableLibraryOption::COLUMNS_PER_SEGMENT);
+
+    py::enum_<ModifiableEnterpriseLibraryOption>(storage, "ModifiableEnterpriseLibraryOption", R"pbdoc(
+        Enterprise library options that can be modified after library creation.
+
+        See also `ModifiableLibraryOption` for non-enterprise options that can be modified.
+
+        See `EnterpriseLibraryOptions` for a description of each option.
+    )pbdoc")
+            .value("REPLICATION", ModifiableEnterpriseLibraryOption::REPLICATION)
+            .value("BACKGROUND_DELETION", ModifiableEnterpriseLibraryOption::BACKGROUND_DELETION);
+
+    py::register_exception<UnknownLibraryOption>(storage, "UnknownLibraryOption", base_exception.ptr());
+    py::register_exception<UnsupportedLibraryOptionValue>(storage, "UnsupportedLibraryOptionValue", base_exception.ptr());
 
     storage.def("create_library_index", &create_library_index);
 
@@ -148,6 +172,15 @@ void register_bindings(py::module& storage) {
             py::arg("library_path"),
             py::arg("override") = StorageOverride{},
             py::arg("test_only_validation_toggle") = false)
+        .def("modify_library_option", [](const LibraryManager& library_manager, std::string_view library_path,
+                                         std::variant<ModifiableLibraryOption, ModifiableEnterpriseLibraryOption> option,
+                                         std::variant<bool, int64_t> new_value) {
+            LibraryPath lib_path{library_path, '.'};
+            return library_manager.modify_library_option(lib_path, option, new_value);
+        },
+             py::arg("library_path"),
+             py::arg("option"),
+             py::arg("new_value"))
         .def("get_library_config", [](const LibraryManager& library_manager, std::string_view library_path, const StorageOverride& storage_override){
             return library_manager.get_library_config(LibraryPath{library_path, '.'}, storage_override);
         }, py::arg("library_path"), py::arg("override") = StorageOverride{})
