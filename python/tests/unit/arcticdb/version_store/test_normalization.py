@@ -621,6 +621,15 @@ def test_norm_failure_error_message(lmdb_version_store_v1):
     assert all("pickle_on_failure" not in str(e.value) for e in
                [append_exception, batch_append_exception, update_exception])
 
+
+def test_writing_timedelta(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_writing_timedelta"
+    df = pd.DataFrame({"col": [pd.Timedelta(1, unit="day")]})
+    with pytest.raises(ArcticDbNotYetImplemented):
+        lib.write(sym, df)
+
+
 def test_bools_are_pickled(lmdb_version_store_allows_pickling):
     lib = lmdb_version_store_allows_pickling
     sym = "test_bools_are_pickled"
