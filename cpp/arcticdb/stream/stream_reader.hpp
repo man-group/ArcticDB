@@ -37,7 +37,7 @@ class RowsFromSegIterator : public IndexRangeFilter {
         prev_seg_ = std::nullopt;
         while (true) {
             while (!seg_) {
-                auto key_seg = std::move(seg_it_.next(timeout));
+                auto key_seg = seg_it_.next(timeout);
                 if (!key_seg)
                     return std::nullopt;
 
