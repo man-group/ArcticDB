@@ -64,7 +64,8 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
     return visit_field(frame.field(col_pos), [&, frame=frame, col_pos=col_pos] (auto tag) {
         using TypeTag = std::decay_t<decltype(tag)>;
         constexpr auto data_type = TypeTag::DataTypeTag::data_type;
-        const auto& buffer = frame.column(col_pos).data().buffer();
+        auto column_data = frame.column(col_pos).data();
+        const auto& buffer = column_data.buffer();
         std::string dtype;
         ssize_t esize = get_type_size(data_type);
         if constexpr (is_sequence_type(data_type)) {
@@ -112,7 +113,6 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
             // (numpy) array, thus the size of the element is not the size of the raw type, but the size of a pointer.
             // This also affects how we allocate columns. Check cpp/arcticdb/column_store/column.hpp::Column and
             // cpp/arcticdb/pipeline/column_mapping.hpp::external_datatype_size
-            auto column_data = frame.column(col_pos).data();
             auto none = py::none();
             auto &api = py::detail::npy_api::get();
             auto it = column_data.buffer().iterator(sizeof(PyObject*));

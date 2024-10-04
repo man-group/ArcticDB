@@ -71,12 +71,12 @@ struct IClause {
         [[nodiscard]] std::vector<std::vector<size_t>>
         structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys,
                                  size_t start_from) {
-            return std::move(folly::poly_call<0>(*this, ranges_and_keys, start_from));
+            return folly::poly_call<0>(*this, ranges_and_keys, start_from);
         }
 
         [[nodiscard]] std::vector<EntityId>
         process(std::vector<EntityId>&& entity_ids) const {
-            return std::move(folly::poly_call<1>(*this, std::move(entity_ids)));
+            return folly::poly_call<1>(*this, std::move(entity_ids));
         }
 
         [[nodiscard]] std::optional<std::vector<std::vector<EntityId>>> repartition(
