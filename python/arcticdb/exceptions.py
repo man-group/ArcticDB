@@ -8,6 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 from arcticdb_ext.exceptions import *
 from arcticdb_ext.exceptions import ArcticException as ArcticNativeException, DuplicateKeyException, PermissionException
 from arcticdb_ext.storage import NoDataFoundException
+from arcticdb_ext.storage import UnknownLibraryOption, UnsupportedLibraryOptionValue
 from arcticdb_ext.version_store import NoSuchVersionException, StreamDescriptorMismatch
 
 
@@ -24,14 +25,6 @@ class LibraryNotFound(ArcticException):
 
 
 class MismatchingLibraryOptions(ArcticException):
-    pass
-
-
-class UnknownLibraryOption(ArcticException):
-    pass
-
-
-class UnsupportedLibraryOptionValue(ArcticException):
     pass
 
 
