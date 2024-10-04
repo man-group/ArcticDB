@@ -332,7 +332,7 @@ PYBIND11_MODULE(arcticdb_ext, m) {
     auto storage_submodule = m.def_submodule("storage", "Segment storage implementation apis");
     auto no_data_found_exception = py::register_exception<arcticdb::storage::NoDataFoundException>(
             storage_submodule, "NoDataFoundException", base_exception.ptr());
-    arcticdb::storage::apy::register_bindings(storage_submodule);
+    arcticdb::storage::apy::register_bindings(storage_submodule, base_exception);
 
     arcticdb::stream::register_bindings(m);
     arcticdb::toolbox::apy::register_bindings(m);
