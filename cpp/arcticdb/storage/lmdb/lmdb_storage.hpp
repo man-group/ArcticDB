@@ -33,7 +33,7 @@ public:
 private:
     static std::shared_ptr<LmdbInstanceHolder> instance_;
     static std::once_flag init_flag_;
-    ankerl::unordered_dense::map<fs::path, std::shared_ptr<LmdbInstance>> lmdb_instances_;
+    ankerl::unordered_dense::map<std::string, std::shared_ptr<LmdbInstance>> lmdb_instances_;
 };
 
 

@@ -70,12 +70,13 @@ void LmdbInstanceHolder::destroy_instance() {
 }
 
 std::shared_ptr<LmdbInstanceHolder::LmdbInstance> LmdbInstanceHolder::lmdb_instance(const fs::path& lib_dir) {
-    auto it = lmdb_instances_.find(lib_dir);
+    const std::string& path_str = lib_dir.string();
+    auto it = lmdb_instances_.find(path_str);
     if (it != lmdb_instances_.end()) {
         return it->second;
     } else {
         auto new_instance = std::make_shared<LmdbInstance>(LmdbInstance{::lmdb::env::create(), {} });
-        lmdb_instances_.emplace(lib_dir, new_instance);
+        lmdb_instances_.emplace(path_str, new_instance);
         return new_instance;
     }
 }
