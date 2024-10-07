@@ -588,8 +588,10 @@ class SeriesNormalizer(_PandasNormalizer):
             empty_types=empty_types
         )
         norm.series.CopyFrom(norm.df)
-        if item.name:
+        if item.name is not None:
             norm.series.common.name = _column_name_to_strings(item.name)
+            norm.series.common.has_name = True
+        # else protobuf bools default to False
 
         return NormalizedInput(item=df, metadata=norm)
 
@@ -600,10 +602,19 @@ class SeriesNormalizer(_PandasNormalizer):
 
         series = pd.Series() if df.columns.empty else df.iloc[:, 0]
 
-        if norm_meta.common.name:
-            series.name = norm_meta.common.name
+        if hasattr(norm_meta.common, "has_name"):
+            # Series was written by newer client that understands the has_name field
+            if norm_meta.common.has_name:
+                series.name = norm_meta.common.name
+            else:
+                series.name = None
         else:
-            series.name = None
+            # Series was written by an older client. We can't distinguish between None and empty strings as names, so
+            # maintain the old behaviour which converted empty string names to None
+            if norm_meta.common.name:
+                series.name = norm_meta.common.name
+            else:
+                series.name = None
 
         return series
 
