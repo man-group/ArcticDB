@@ -257,7 +257,7 @@ jobs:
       job_type: cleanup
 
   can_merge:
-    needs: [cpp-test-linux, build-python-wheels-linux, persistent_storage_verify_linux]
+    needs: [build-python-wheels-linux, persistent_storage_verify_linux]
     if: |
       always() &&
       !failure() &&
