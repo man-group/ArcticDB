@@ -400,11 +400,19 @@ def real_s3_sts_resources_ready(factory: BaseS3StorageFixtureFactory): # resourc
     )
     for _ in range(20):
         try:
-            sts_client.assume_role(
+            assumed_role = sts_client.assume_role(
                 RoleArn=factory.aws_role_arn,
                 RoleSessionName="TestSession"
             )
             print("Boto3 assume role successful.")
+            s3_client = boto3.client(
+                "s3",
+                aws_access_key_id=assumed_role['Credentials']['AccessKeyId'],
+                aws_secret_access_key=assumed_role['Credentials']['SecretAccessKey'],
+                aws_session_token=assumed_role['Credentials']['SessionToken']
+            )
+            response = s3_client.list_objects_v2(Bucket=factory.default_bucket)
+            print(f"S3 list objects successful: {response['ResponseMetadata']['HTTPStatusCode']}")
             return
         except:
             print(f"Assume role failed. Retrying in 1 second...") # Don't print the exception as it could contain sensitive information, e.g. user id
