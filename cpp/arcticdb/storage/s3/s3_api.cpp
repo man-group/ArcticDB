@@ -47,7 +47,7 @@ S3ApiInstance::~S3ApiInstance() {
     if(log_level_ > Aws::Utils::Logging::LogLevel::Off)
         Aws::Utils::Logging::ShutdownAWSLogging();
 
-    //Aws::ShutdownAPI(options_); This causes a crash on shutdown in Aws::CleanupMonitoring
+    Aws::ShutdownAPI(options_);
 }
 
 void S3ApiInstance::init() {
