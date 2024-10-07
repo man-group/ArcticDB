@@ -14,6 +14,7 @@
 #include <arcticdb/entity/metrics.hpp>
 #include <arcticdb/util/buffer_pool.hpp>
 #include <arcticdb/util/type_handler.hpp>
+#include <arcticdb/storage/lmdb/lmdb_storage.hpp>
 
 #if defined(_MSC_VER) && defined(_DEBUG)
 #include <crtdbg.h>
@@ -33,6 +34,7 @@ ModuleData::~ModuleData() {
     TypeHandlerRegistry::destroy_instance();
     ARCTICDB_DEBUG(log::version(), "Destroying AWS instance");
     storage::s3::S3ApiInstance::destroy_instance();
+    arcticdb::storage::lmdb::LmdbInstanceHolder::destroy_instance();
     log::Loggers::destroy_instance();
 }
 
