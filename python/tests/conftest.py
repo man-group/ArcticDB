@@ -908,7 +908,14 @@ def lmdb_version_store_static_and_dynamic(request):
 @pytest.fixture(
     scope="function",
     params=(
-        pytest.param("real_s3_sts_version_store", marks=REAL_S3_TESTS_MARK),
+        "lmdb_version_store_v1",
+        "lmdb_version_store_v2",
+        "s3_version_store_v1",
+        "s3_version_store_v2",
+        "in_memory_version_store",
+        pytest.param("azure_version_store", marks=AZURE_TESTS_MARK),
+        pytest.param("mongo_version_store", marks=MONGO_TESTS_MARK),
+        pytest.param("real_s3_version_store", marks=REAL_S3_TESTS_MARK),
     ),
 )
 def object_and_mem_and_lmdb_version_store(request):

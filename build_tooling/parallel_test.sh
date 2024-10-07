@@ -22,7 +22,7 @@ export ARCTICDB_AWS_LogLevel_int=6
 $catch python -m pytest --timeout=3600 $PYTEST_XDIST_MODE -v --log-file="$TEST_OUTPUT_DIR/pytest-logger.$group.log" \
     --junitxml="$TEST_OUTPUT_DIR/pytest.$group.xml" \
     --basetemp="$PARALLEL_TEST_ROOT/temp-pytest-output" \
-    "$@"/arcticdb/version_store/test_basic_version_store.py::test_with_prune[real_s3_sts_version_store] 2>&1 | sed -ur "s#^(tests/.*/([^/]+\.py))?#\2#"  || true
+    "$@"/arcticdb/test_arctic.py 2>&1 | sed -ur "s#^(tests/.*/([^/]+\.py))?#\2#"  || true
 
 
 current_dir=$(pwd)
