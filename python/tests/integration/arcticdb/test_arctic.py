@@ -106,6 +106,7 @@ def test_s3_no_ssl_verification(monkeypatch, s3_no_ssl_storage, client_cert_file
     lib.write("sym", pd.DataFrame())
 
 
+@REAL_S3_TESTS_MARK
 def test_s3_sts_auth(real_s3_sts_version_store):
     import os
     if os.path.exists(os.path.expanduser("~/.aws/config")):
