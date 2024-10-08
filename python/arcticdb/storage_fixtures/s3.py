@@ -392,7 +392,7 @@ aws_secret_access_key = {factory.sts_test_key.secret}
         config_file.write(aws_credentials)
 
 
-def real_s3_sts_resources_ready(factory: BaseS3StorageFixtureFactory): # resources created in iam may not be ready immediately in s3
+def real_s3_sts_resources_ready(factory: BaseS3StorageFixtureFactory): 
     sts_client = boto3.client(
         "sts",
         aws_access_key_id=factory.sts_test_key.id,
