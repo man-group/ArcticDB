@@ -127,6 +127,7 @@ class LibraryPathImpl {
             return std::move(a) + delim + fmt::format("{}", b);
         };
 
+        util::check(rg.size() > 0, "Cannot have an empty LibraryPath");
         return std::accumulate(std::next(rg.begin()), rg.end(), fmt::format("{}", rg[0]), delim_fold);
     }
 
@@ -159,7 +160,7 @@ template<class StringViewable=DefaultStringViewable>
 inline bool operator==(const LibraryPathImpl<StringViewable> &l, const LibraryPathImpl<StringViewable> &r) {
     auto l_rg = l.as_range();
     auto r_rg = r.as_range();
-    return l.hash() == r.hash() && std::equal(l_rg.begin(), l_rg.end(), r_rg.begin());
+    return l.hash() == r.hash() && std::equal(l_rg.begin(), l_rg.end(), r_rg.begin(), r_rg.end());
 }
 
 using LibraryPath = LibraryPathImpl<DefaultStringViewable>;
