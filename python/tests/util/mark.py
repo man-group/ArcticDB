@@ -41,8 +41,10 @@ MONGO_TESTS_MARK = pytest.mark.skipif(
 )
 """Mark on tests using the mongo storage fixtures. Currently skips if ARCTICDB_FAST_TESTS_ONLY."""
 
+REAL_S3_TESTS = not FAST_TESTS_ONLY and PERSISTENT_STORAGE_TESTS_ENABLED
+
 REAL_S3_TESTS_MARK = pytest.mark.skipif(
-    FAST_TESTS_ONLY or not PERSISTENT_STORAGE_TESTS_ENABLED,
+    not REAL_S3_TESTS,
     reason="Can be used only when persistent storage is enabled",
 )
 """Mark on tests using the real (i.e. hosted by AWS as opposed to moto) S3.
