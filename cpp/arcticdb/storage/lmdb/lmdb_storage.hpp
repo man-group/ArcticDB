@@ -12,7 +12,6 @@
 #include <arcticdb/storage/lmdb/lmdb.hpp>
 #include <arcticdb/util/composite.hpp>
 #include <arcticdb/storage/lmdb/lmdb_client_wrapper.hpp>
-#include <ankerl/unordered_dense.h>
 
 #include <filesystem>
 
@@ -20,22 +19,10 @@ namespace fs = std::filesystem;
 
 namespace arcticdb::storage::lmdb {
 
-
-class LmdbInstanceHolder {
-public:
-    struct LmdbInstance {
-        ::lmdb::env env_;
-        std::unordered_map<std::string, std::unique_ptr<::lmdb::dbi>> dbi_by_key_type_;
-    };
-    static std::shared_ptr<LmdbInstanceHolder> instance();
-    static void destroy_instance();
-    std::shared_ptr<LmdbInstance> lmdb_instance(const fs::path& lib_dir);
-private:
-    static std::shared_ptr<LmdbInstanceHolder> instance_;
-    static std::once_flag init_flag_;
-    ankerl::unordered_dense::map<std::string, std::shared_ptr<LmdbInstance>> lmdb_instances_;
+struct LmdbInstance {
+    ::lmdb::env env_;
+    std::unordered_map<std::string, std::unique_ptr<::lmdb::dbi>> dbi_by_key_type_;
 };
-
 
 class LmdbStorage final : public Storage {
   public:
@@ -81,7 +68,7 @@ class LmdbStorage final : public Storage {
     void do_write_internal(Composite<KeySegmentPair>&& kvs, ::lmdb::txn& txn);
     std::vector<VariantKey> do_remove_internal(Composite<VariantKey>&& ks, ::lmdb::txn& txn, RemoveOpts opts);
     std::unique_ptr<std::mutex> write_mutex_;
-    std::shared_ptr<LmdbInstanceHolder::LmdbInstance> lmdb_instance_;
+    std::shared_ptr<LmdbInstance> lmdb_instance_;
 
     std::filesystem::path lib_dir_;
 

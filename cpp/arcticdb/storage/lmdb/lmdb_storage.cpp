@@ -57,31 +57,6 @@ static void raise_lmdb_exception(const ::lmdb::error& e, const std::string& obje
     return lmdb_instance_->env_;
 }
 
-std::shared_ptr<LmdbInstanceHolder> LmdbInstanceHolder::instance_;
-std::once_flag LmdbInstanceHolder::init_flag_;
-
-std::shared_ptr<LmdbInstanceHolder> LmdbInstanceHolder::instance() {
-    std::call_once(init_flag_, [&]() {instance_ = std::make_shared<LmdbInstanceHolder>(); });
-    return instance_;
-}
-
-void LmdbInstanceHolder::destroy_instance() {
-    instance_.reset();
-}
-
-std::shared_ptr<LmdbInstanceHolder::LmdbInstance> LmdbInstanceHolder::lmdb_instance(const fs::path& lib_dir) {
-    const std::string& path_str = lib_dir.string();
-    auto it = lmdb_instances_.find(path_str);
-    if (it != lmdb_instances_.end()) {
-        return it->second;
-    } else {
-        auto new_instance = std::make_shared<LmdbInstance>(LmdbInstance{::lmdb::env::create(), {} });
-        lmdb_instances_.emplace(path_str, new_instance);
-        return new_instance;
-    }
-}
-
-
 void LmdbStorage::do_write_internal(Composite<KeySegmentPair>&& kvs, ::lmdb::txn& txn) {
     auto fmt_db = [](auto &&kv) { return kv.key_type(); };
 
@@ -162,8 +137,7 @@ void LmdbStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor
 
                 if (segment.has_value()) {
                     ARCTICDB_SUBSAMPLE(LmdbStorageVisitSegment, 0)
-                    std::any keepalive;
-                    segment->set_keepalive(std::any(std::move(txn)));
+                    segment->set_keepalive(std::pair{ std::move(txn), lmdb_instance_ });
                     ARCTICDB_DEBUG(log::storage(), "Read key {}: {}, with {} bytes of data", variant_key_type(k), variant_key_view(k), segment->size());
                     visitor(k, std::move(*segment));
                 } else {
@@ -376,9 +350,7 @@ LmdbStorage::LmdbStorage(const LibraryPath &library_path, OpenMode mode, const C
     lib_dir_ = root_path / lib_path_str;
 
     write_mutex_ = std::make_unique<std::mutex>();
-    lmdb_instance_ = LmdbInstanceHolder::instance()->lmdb_instance(lib_dir_);
-
-
+    lmdb_instance_ = std::make_shared<LmdbInstance>(LmdbInstance{ ::lmdb::env::create(), {} });
 
     warn_if_lmdb_already_open();
 
@@ -418,7 +390,6 @@ LmdbStorage::LmdbStorage(const LibraryPath &library_path, OpenMode mode, const C
     auto txn = ::lmdb::txn::begin(env());
 
     try {
-
         arcticdb::entity::foreach_key_type([&txn, this](KeyType &&key_type) {
             std::string db_name = fmt::format("{}", key_type);
             ::lmdb::dbi dbi = ::lmdb::dbi::open(txn, db_name.data(), MDB_CREATE);
