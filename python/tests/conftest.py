@@ -227,10 +227,9 @@ def real_s3_sts_test_setup():
 
 
 @pytest.fixture(scope="session")
-@REAL_S3_TESTS_MARK
 def real_s3_sts_storage_factory(real_s3_sts_test_setup):
     f = real_s3_sts_test_setup
-    # check is made here as the temp token generated during assume role, not during config loading
+    # Check is made here as the new user gets authenticated only during being used; the check could be time consuming
     real_s3_sts_resources_ready(f) # resources created in iam may not be ready immediately in s3; Could take 10+ seconds
     yield f
 
