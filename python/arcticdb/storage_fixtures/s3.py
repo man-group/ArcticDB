@@ -32,8 +32,8 @@ _PermissionCapableFactory: Type["MotoS3StorageFixtureFactory"] = None  # To be s
 
 logging.getLogger("botocore").setLevel(logging.INFO)
 
-S3_CONFIG_PATH = os.path.expanduser("~/.aws/config")
-S3_BACKUP_CONFIG_PATH = os.path.expanduser("~/.aws/bk_config")
+S3_CONFIG_PATH = os.path.expanduser(os.path.join("~", ".aws", "config"))
+S3_BACKUP_CONFIG_PATH = os.path.expanduser(os.path.join("~", ".aws", "bk_config"))
 
 
 class Key:
@@ -380,7 +380,6 @@ source_profile = {base_profile_name}
 aws_access_key_id = {factory.sts_test_key.id}
 aws_secret_access_key = {factory.sts_test_key.secret}
 """
-    print(f"S3_CONFIG_PATH:{S3_CONFIG_PATH}")
     aws_dir = os.path.dirname(S3_CONFIG_PATH)
     if not os.path.exists(aws_dir):
         os.makedirs(aws_dir)
@@ -412,7 +411,7 @@ def real_s3_sts_resources_ready(factory: BaseS3StorageFixtureFactory):
                 aws_session_token=assumed_role['Credentials']['SessionToken']
             )
             response = s3_client.list_objects_v2(Bucket=factory.default_bucket)
-            print(f"S3 list objects successful: {response['ResponseMetadata']['HTTPStatusCode']}")
+            print(f"S3 list objects test successful: {response['ResponseMetadata']['HTTPStatusCode']}")
             return
         except:
             print(f"Assume role failed. Retrying in 1 second...") # Don't print the exception as it could contain sensitive information, e.g. user id
@@ -435,7 +434,7 @@ def real_s3_sts_clean_up(factory: BaseS3StorageFixtureFactory, role_name: str, p
         )
         print("Policy deleted successfully.")
     except Exception as e:
-        print(f"Error deleting policy: {e}")
+        print("Error deleting policy")
 
     try:
         if factory.aws_role: # == role_name; It's just a indicator whether role was created or not
@@ -444,7 +443,7 @@ def real_s3_sts_clean_up(factory: BaseS3StorageFixtureFactory, role_name: str, p
             )
             print("Role deleted successfully.")
     except Exception as e:
-        print(f"Error deleting role: {e}")
+        print("Error deleting role")
 
     
     try:
@@ -455,7 +454,7 @@ def real_s3_sts_clean_up(factory: BaseS3StorageFixtureFactory, role_name: str, p
             )
             print("Access key id deleted successfully.")
     except Exception as e:
-        print(f"Error deleting access key id: {e}")
+        print("Error deleting access key id")
 
     try:
         if factory.sts_test_key and factory.sts_test_key.user_name: # == user_name; It's just a indicator whether role was created or not
@@ -471,7 +470,7 @@ def real_s3_sts_clean_up(factory: BaseS3StorageFixtureFactory, role_name: str, p
             )
             print("User deleted successfully.")
     except Exception as e:
-        print(f"Error deleting user: {e}")
+        print("Error deleting user")
 
         
     if os.path.exists(S3_CONFIG_PATH) and os.path.exists(S3_BACKUP_CONFIG_PATH):

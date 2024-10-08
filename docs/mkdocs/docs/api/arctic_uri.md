@@ -22,10 +22,44 @@ Available options for S3:
 | access                | S3 access key                                                                                                                                                   |
 | secret                | S3 secret access key                                                                                                                                            |
 | path_prefix           | Path within S3 bucket to use for data storage                                                                                                                   |
-| aws_auth              | If true, authentication to endpoint will be computed via AWS environment vars/config files. If no options are provided `aws_auth` will be assumed to be true.   |
+| aws_auth              | AWS authentication method. If setting is `1` (or `true` for backward compatibility), authentication to endpoint will be computed via [AWS default credential provider chain](https://docs.aws.amazon.com/sdk-for-cpp/v1/developer-guide/credproviders.html). If setting is `2`, AWS Security Token Service (STS) will be the authentication method used. If no options are provided AWS authentication will be assumed to be not used. More info is provided below |
+| aws_profile           | Only when `aws_auth` is set to be `2`. AWS profile to be used with AWS Security Token Service (STS). More info is provided below |
 
 Note: When connecting to AWS, `region` can be automatically deduced from the endpoint if the given endpoint
 specifies the region and `region` is not set.
+
+### AWS Security Token Service (STS) setup
+
+STS allows users to assume specfic roles in order to gain temporary access to AWS resources. Please refer to [the offical website](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp.html) for more details
+To use it with ArcticDB, please setup the credential in the AWS shared **config** file.
+
+File location:
+
+| Platform              | Location                                                                                                                                                        |
+|-----------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Linux and macOS       | `~/.aws/config`                                                                                                                                                 |
+| Windows               | `%USERPROFILE%\.aws\config`                                                                                                                                     |
+
+Content:
+
+```
+[profile PROFILE]
+role_arn = ROLE_ARN_TO_BE_ASSUMED
+source_profile = BASE_PROFILE
+
+[profile BASE_PROFILE]
+aws_access_key_id = ID
+aws_secret_access_key = KEY
+```
+
+Use the configuration in ArcticDB:
+```
+>>> import arcticdb as adb
+>>> arctic = adb.Arctic('s3://s3.REGION.amazonaws.com:BUCKET?aws_auth=2&aws_profile=PROFILE')
+```
+
+For setting up resources with STS on iam, test function `real_s3_sts_from_environment_variables` in `s3.py` will be a good reference 
+
 
 ## Azure
 
