@@ -52,9 +52,9 @@ static void raise_lmdb_exception(const ::lmdb::error& e, const std::string& obje
 
 ::lmdb::env& LmdbStorage::env() {
 	storage::check<ErrorCode::E_UNEXPECTED_LMDB_ERROR>(
-        lmdb_instance_,
+        lmdb_instance_->env_.has_value(),
         "Unexpected LMDB Error: Invalid operation: LMDB environment has been removed. Possibly because the library has been deleted");
-    return lmdb_instance_->env_;
+    return *(lmdb_instance_->env_);
 }
 
 void LmdbStorage::do_write_internal(Composite<KeySegmentPair>&& kvs, ::lmdb::txn& txn) {
@@ -325,7 +325,7 @@ void remove_db_files(const fs::path& lib_path) {
 }
 
 void LmdbStorage::cleanup() {
-    lmdb_instance_.reset();
+    lmdb_instance_->env_.reset();
     remove_db_files(lib_dir_);
 }
 
@@ -350,7 +350,7 @@ LmdbStorage::LmdbStorage(const LibraryPath &library_path, OpenMode mode, const C
     lib_dir_ = root_path / lib_path_str;
 
     write_mutex_ = std::make_unique<std::mutex>();
-    lmdb_instance_ = std::make_shared<LmdbInstance>(LmdbInstance{ ::lmdb::env::create(), {} });
+    lmdb_instance_ = std::make_shared<LmdbInstance>(LmdbInstance{::lmdb::env::create(conf.flags()), {} });
 
     warn_if_lmdb_already_open();
 

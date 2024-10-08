@@ -278,7 +278,7 @@ TEST_F(LMDBStorageTestBase, MockUnexpectedLMDBErrorException) {
 TEST_F(LMDBStorageTestBase, RemoveLibPath) {
     LMDBStorageFactory factory;
     auto storage = factory.create();
-    auto path = factory.get_lib_path();
+    const auto path = factory.get_lib_path();
 
     storage->cleanup();
     ASSERT_FALSE(fs::exists(path));

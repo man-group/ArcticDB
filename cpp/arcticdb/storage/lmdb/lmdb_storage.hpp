@@ -20,7 +20,7 @@ namespace fs = std::filesystem;
 namespace arcticdb::storage::lmdb {
 
 struct LmdbInstance {
-    ::lmdb::env env_;
+    std::optional<::lmdb::env> env_;
     std::unordered_map<std::string, std::unique_ptr<::lmdb::dbi>> dbi_by_key_type_;
 };
 
