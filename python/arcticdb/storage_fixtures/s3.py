@@ -380,7 +380,7 @@ source_profile = {base_profile_name}
 aws_access_key_id = {factory.sts_test_key.id}
 aws_secret_access_key = {factory.sts_test_key.secret}
 """
-
+    print(f"S3_CONFIG_PATH:{S3_CONFIG_PATH}")
     aws_dir = os.path.dirname(S3_CONFIG_PATH)
     if not os.path.exists(aws_dir):
         os.makedirs(aws_dir)
