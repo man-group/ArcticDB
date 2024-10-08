@@ -19,11 +19,9 @@
 #include <arcticdb/storage/mongo/mongo_storage.hpp>
 #include <arcticdb/storage/mongo/mongo_mock_client.hpp>
 #include <arcticdb/storage/test/common.hpp>
-#include <arcticdb/util/buffer.hpp>
 
 #include <filesystem>
 #include <memory>
-#include <arcticdb/storage/lmdb/lmdb.hpp>
 
 using namespace arcticdb;
 using namespace storage;

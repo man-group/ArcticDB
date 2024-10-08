@@ -20,7 +20,7 @@ namespace fs = std::filesystem;
 namespace arcticdb::storage::lmdb {
 
 struct LmdbInstance {
-    std::shared_ptr<::lmdb::env> env_;
+    ::lmdb::env env_;
     std::unordered_map<std::string, std::unique_ptr<::lmdb::dbi>> dbi_by_key_type_;
 };
 
@@ -59,6 +59,8 @@ class LmdbStorage final : public Storage {
     bool do_is_path_valid(const std::string_view path) const final;
 
     ::lmdb::env& env();
+
+    ::lmdb::dbi& get_dbi(const std::string& db_name);
 
     std::string do_key_path(const VariantKey&) const final { return {}; };
 
