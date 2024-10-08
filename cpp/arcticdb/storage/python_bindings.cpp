@@ -18,6 +18,7 @@
 #include <arcticdb/storage/library_index.hpp>
 #include <arcticdb/storage/config_resolvers.hpp>
 #include <arcticdb/storage/constants.hpp>
+#include <arcticdb/storage/s3/s3_storage.hpp>
 
 namespace py = pybind11;
 
@@ -117,7 +118,22 @@ void register_bindings(py::module& storage) {
         .def_property("ca_cert_path", &S3Override::ca_cert_path, &S3Override::set_ca_cert_path)
         .def_property("ca_cert_dir", &S3Override::ca_cert_dir, &S3Override::set_ca_cert_dir)
         .def_property("https", &S3Override::https, &S3Override::set_https)
-        .def_property("ssl", &S3Override::ssl, &S3Override::set_ssl);
+        .def_property("ssl", &S3Override::ssl, &S3Override::set_ssl)
+        .def_property("aws_auth",
+            // pybind cannot smartly convert AWSAuthMethod defined in proto from C++ layer to Python layer
+            // AWSAuthMethod in python is just a integer but in C++ it is an enum class
+            // so we need to convert it manually
+            [](S3Override &s3_override) {
+                return static_cast<size_t>(s3_override.aws_auth());
+            }, 
+            [](S3Override &s3_override, size_t aws_auth) {
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                    aws_auth <= static_cast<std::underlying_type<arcticdb::proto::storage::AWSAuthMethod>::type>(arcticdb::proto::storage::AWSAuthMethod::STS_PROFILE_CREDENTIALS_PROVIDER),
+                    "Invalid AWSAuthMethod"
+                );
+                s3_override.set_aws_auth(static_cast<arcticdb::proto::storage::AWSAuthMethod>(aws_auth));
+            })
+        .def_property("aws_profile", &S3Override::aws_profile, &S3Override::set_aws_profile);
 
     py::class_<AzureOverride>(storage, "AzureOverride")
         .def(py::init<>())

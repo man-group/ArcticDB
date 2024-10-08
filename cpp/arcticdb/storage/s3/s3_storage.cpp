@@ -9,6 +9,8 @@
 
 #include <locale>
 
+#include <aws/identity-management/auth/STSProfileCredentialsProvider.h>
+
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/storage/s3/s3_api.hpp>
 #include <arcticdb/util/buffer_pool.hpp>
@@ -86,12 +88,16 @@ S3Storage::S3Storage(const LibraryPath &library_path, OpenMode mode, const Confi
     root_folder_(object_store_utils::get_root_folder(library_path)),
     bucket_name_(conf.bucket_name()),
     region_(conf.region()) {
-
+    
     auto creds = get_aws_credentials(conf);
 
     if (conf.use_mock_storage_for_testing()){
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using Mock S3 storage");
         s3_client_ = std::make_unique<MockS3Client>();
+    }
+    else if (conf.aws_auth() == arcticdb::proto::storage::AWSAuthMethod::STS_PROFILE_CREDENTIALS_PROVIDER){
+        auto cred_provider = Aws::MakeShared<Aws::Auth::STSProfileCredentialsProvider>("DefaultAWSCredentialsProviderChain", conf.aws_profile());
+        s3_client_ = std::make_unique<RealS3Client>(cred_provider, get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, conf.use_virtual_addressing());
     }
     else if (creds.GetAWSAccessKeyId() == USE_AWS_CRED_PROVIDERS_TOKEN && creds.GetAWSSecretKey() == USE_AWS_CRED_PROVIDERS_TOKEN){
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using AWS auth mechanisms");
