@@ -910,6 +910,7 @@ if(${TEST})
             processing/test/test_filter_and_project_sparse.cpp
             processing/test/test_has_valid_type_promotion.cpp
             processing/test/test_operation_dispatch.cpp
+            processing/test/test_parallel_processing.cpp
             processing/test/test_resample.cpp
             processing/test/test_set_membership.cpp
             processing/test/test_signed_unsigned_comparison.cpp

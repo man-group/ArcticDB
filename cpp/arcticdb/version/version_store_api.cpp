@@ -769,8 +769,8 @@ std::vector<std::variant<ReadResult, DataError>> PythonVersionStore::batch_read(
     const std::vector<StreamId>& stream_ids,
     const std::vector<VersionQuery>& version_queries,
     std::vector<std::shared_ptr<ReadQuery>>& read_queries,
-    const ReadOptions& read_options) {
-    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data();
+    const ReadOptions& read_options,
+    std::any& handler_data) {
     auto read_versions_or_errors = batch_read_internal(stream_ids, version_queries, read_queries, read_options, handler_data);
     std::vector<std::variant<ReadResult, DataError>> res;
     for (auto&& [idx, read_version_or_error]: folly::enumerate(read_versions_or_errors)) {
@@ -834,7 +834,7 @@ void PythonVersionStore::delete_snapshot_sync(const SnapshotId& snap_name, const
 ReadResult PythonVersionStore::read_dataframe_version(
     const StreamId &stream_id,
     const VersionQuery& version_query,
-    ReadQuery& read_query,
+    const std::shared_ptr<ReadQuery>& read_query,
     const ReadOptions& read_options,
     std::any& handler_data) {
 
@@ -1151,13 +1151,15 @@ void write_dataframe_to_file(
 ReadResult read_dataframe_from_file(
         const StreamId &stream_id,
         const std::string& path,
-        ReadQuery& read_query) {
+        const std::shared_ptr<ReadQuery>& read_query,
+        std::any& handler_data) {
     auto opt_version_and_frame = read_dataframe_from_file_internal(
         stream_id,
         path,
         read_query,
         ReadOptions{},
-        codec::default_lz4_codec());
+        codec::default_lz4_codec(),
+        handler_data);
 
     return create_python_read_result(opt_version_and_frame.versioned_item_, std::move(opt_version_and_frame.frame_and_descriptor_));
 }
