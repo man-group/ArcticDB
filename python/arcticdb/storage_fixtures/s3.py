@@ -245,7 +245,7 @@ def real_s3_from_environment_variables(shared_path: bool):
 
 def real_s3_sts_from_environment_variables(user_name: str, role_name: str, policy_name: str, profile_name: str):
     import datetime
-    print(f"{datetime.now().isoformat()} real_s3_sts_from_environment_variables starts")
+    print(f"{datetime.datetime.now().isoformat()} real_s3_sts_from_environment_variables starts")
     out = real_s3_from_environment_variables(False)
     iam_client = boto3.client("iam", aws_access_key_id=out.default_key.id, aws_secret_access_key=out.default_key.secret)
     # Create IAM user
