@@ -109,6 +109,21 @@ struct RestructuringClause {
     }
 };
 
+folly::Future<std::vector<EntityId>> flatten_entities_2(folly::Future<std::vector<std::vector<EntityId>>>&& entity_ids_vec_fut) {
+    return entity_ids_vec_fut.via(&async::cpu_executor()).thenValue([](std::vector<std::vector<EntityId>>&& entity_ids_vec) {
+        size_t res_size = std::accumulate(entity_ids_vec.cbegin(),
+                                          entity_ids_vec.cend(),
+                                          size_t(0),
+                                          [](size_t acc, const std::vector<EntityId>& vec) { return acc + vec.size(); });
+        std::vector<EntityId> res;
+        res.reserve(res_size);
+        for (const auto& entity_ids: entity_ids_vec) {
+            res.insert(res.end(), entity_ids.begin(), entity_ids.end());
+        }
+        return res;
+    });
+}
+
 folly::Future<std::vector<EntityId>> process_clauses(
         std::shared_ptr<ComponentManager> component_manager,
         std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures,
@@ -196,37 +211,49 @@ folly::Future<std::vector<EntityId>> process_clauses(
                         }));
     }
 
+    auto entity_ids_vec_fut = folly::Future<std::vector<std::vector<EntityId>>>::makeEmpty();
     bool first_clause{true};
-    while (!clauses->empty()) {
-        for (auto&& entity_ids: entity_ids_vec) {
-            if (!first_clause) {
-                futures->emplace_back(
-                        async::submit_cpu_task(
-                                async::MemSegmentProcessingTask(*clauses,
-                                                                std::move(entity_ids))
-                        )
-                );
-            }
+    for (auto i=0; i<2; ++i) {
+        folly::Future<folly::Unit> work_scheduled(folly::Unit{});
+        if (!first_clause) {
+            work_scheduled = entity_ids_vec_fut.via(&async::cpu_executor()).thenValue([futures, clauses](std::vector<std::vector<EntityId>>&& entity_ids_vec) {
+                futures->clear();
+                for (auto&& entity_ids: entity_ids_vec) {
+                    futures->emplace_back(
+                            async::submit_cpu_task(
+                                    async::MemSegmentProcessingTask(*clauses,
+                                                                    std::move(entity_ids))
+                            )
+                    );
+                }
+                return folly::Unit{};
+            });
         }
         first_clause = false;
-        entity_ids_vec = folly::collect(*futures).get();
-        futures->clear();
-        // Erase all the clauses we have already called process on
-        auto it = std::next(clauses->cbegin());
-        while (it != clauses->cend()) {
-            auto prev_it = std::prev(it);
-            if ((*prev_it)->clause_info().output_structure_ == (*it)->clause_info().input_structure_) {
-                ++it;
-            } else {
-                break;
-            }
-        }
-        clauses->erase(clauses->cbegin(), it);
-        if (!clauses->empty()) {
-            entity_ids_vec = clauses->front()->structure_for_processing(std::move(entity_ids_vec));
-        }
+
+        entity_ids_vec_fut = work_scheduled.via(&async::cpu_executor()).thenValue([clauses, futures](auto&&) {
+            return folly::collect(*futures).via(&async::cpu_executor()).thenValue([clauses](std::vector<std::vector<EntityId>>&& entity_ids_vec) {
+                // Erase all the clauses we have already called process on
+                auto it = std::next(clauses->cbegin());
+                while (it != clauses->cend()) {
+                    auto prev_it = std::prev(it);
+                    if ((*prev_it)->clause_info().output_structure_ == (*it)->clause_info().input_structure_) {
+                        ++it;
+                    } else {
+                        break;
+                    }
+                }
+                clauses->erase(clauses->cbegin(), it);
+                if (!clauses->empty()) {
+                    return clauses->front()->structure_for_processing(std::move(entity_ids_vec));
+                } else {
+                    return entity_ids_vec;
+                }
+            });
+        });
+
     }
-    return flatten_entities(std::move(entity_ids_vec));
+    return flatten_entities_2(std::move(entity_ids_vec_fut));
 }
 
 TEST(Clause, ParallelProcessing) {
@@ -249,17 +276,16 @@ TEST(Clause, ParallelProcessing) {
         processing_unit_indexes.emplace_back(std::vector<size_t>{idx});
     }
 
-    // Move this loop after process_clauses call when it is async
+    auto processed_entity_ids_fut = process_clauses(component_manager,
+                                                    std::move(segment_and_slice_futures),
+                                                    std::move(processing_unit_indexes),
+                                                    clauses);
+
     for (size_t idx = 0; idx < segment_and_slice_promises.size(); ++idx) {
         SegmentInMemory segment;
         segment.descriptor().set_id(static_cast<int64_t>(idx));
         segment_and_slice_promises[idx].setValue(SegmentAndSlice(RangesAndKey({idx, idx+1}, {0, 1}, {}), std::move(segment)));
     }
-
-    auto processed_entity_ids_fut = process_clauses(component_manager,
-                                                    std::move(segment_and_slice_futures),
-                                                    std::move(processing_unit_indexes),
-                                                    clauses);
 
     auto processed_entity_ids = std::move(processed_entity_ids_fut).get();
     auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager, std::move(processed_entity_ids));
