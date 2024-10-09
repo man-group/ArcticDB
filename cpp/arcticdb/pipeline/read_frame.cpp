@@ -630,30 +630,42 @@ struct ReduceColumnTask : async::BaseTask {
     }
 };
 
-    void reduce_and_fix_columns(
-        std::shared_ptr<PipelineContext> &context,
-        SegmentInMemory &frame,
-        const ReadOptions& read_options,
-        std::any& handler_data
+folly::Future<folly::Unit> reduce_and_fix_columns(
+    std::shared_ptr<PipelineContext> &context,
+    SegmentInMemory &frame,
+    const ReadOptions& read_options,
+    std::any& handler_data
 ) {
     ARCTICDB_SAMPLE_DEFAULT(ReduceAndFixStringCol)
     ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
     if(frame.empty())
-        return;
+        return folly::Unit{};
 
     bool dynamic_schema = opt_false(read_options.dynamic_schema_);
     auto slice_map = std::make_shared<FrameSliceMap>(context, dynamic_schema);
     DecodePathData shared_data;
 
-    static const auto batch_size = ConfigsMap::instance()->get_int("ReduceColumns.BatchSize", 100);
-    folly::collect(folly::window(frame.descriptor().fields().size(), [&] (size_t field) {
-        return async::submit_cpu_task(ReduceColumnTask(frame, field, slice_map, context, shared_data, handler_data, dynamic_schema));
-    }, batch_size)).via(&async::io_executor()).get();
+    // This logic mimics that in ReduceColumnTask operator() to identify whether the task will actually do any work
+    // This is to avoid scheduling work that is a no-op
+    std::vector<size_t> fields_to_reduce;
+    for (size_t idx=0; idx<frame.descriptor().fields().size(); ++idx) {
+        const auto& frame_field = frame.field(idx);
+        if (dynamic_schema ||
+            (slice_map->columns_.contains(frame_field.name()) && is_sequence_type(frame_field.type().data_type()))) {
+            fields_to_reduce.emplace_back(idx);
+        }
+    }
 
+    static const auto batch_size = ConfigsMap::instance()->get_int("ReduceColumns.BatchSize", 100);
+    return folly::collect(
+            folly::window(std::move(fields_to_reduce),
+                          [context, frame, slice_map, shared_data, dynamic_schema, &handler_data] (size_t field) mutable {
+                              return async::submit_cpu_task(ReduceColumnTask(frame, field, slice_map, context, shared_data, handler_data, dynamic_schema));
+                          }, batch_size)).via(&async::io_executor()).unit();
 }
 
-folly::Future<std::vector<VariantKey>> fetch_data(
-    const SegmentInMemory& frame,
+folly::Future<SegmentInMemory> fetch_data(
+    SegmentInMemory&& frame,
     const std::shared_ptr<PipelineContext> &context,
     const std::shared_ptr<stream::StreamSource>& ssource,
     bool dynamic_schema,
@@ -662,7 +674,7 @@ folly::Future<std::vector<VariantKey>> fetch_data(
     ) {
     ARCTICDB_SAMPLE_DEFAULT(FetchSlices)
     if (frame.empty())
-        return {std::vector<VariantKey>{}};
+        return frame;
 
     std::vector<std::pair<VariantKey, stream::StreamSource::ReadContinuation>> keys_and_continuations;
     keys_and_continuations.reserve(context->slice_and_keys_.size());
@@ -684,7 +696,8 @@ folly::Future<std::vector<VariantKey>> fetch_data(
         }
     }
     ARCTICDB_SUBSAMPLE_DEFAULT(DoBatchReadCompressed)
-    return ssource->batch_read_compressed(std::move(keys_and_continuations), BatchReadArgs{});
+    return ssource->batch_read_compressed(std::move(keys_and_continuations), BatchReadArgs{})
+    .thenValue([frame](auto&&){ return frame; });
 }
 
 } // namespace read

@@ -5,6 +5,7 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
+#include <arcticdb/codec/codec.hpp>
 #include <arcticdb/stream/append_map.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
 #include <arcticdb/stream/stream_source.hpp>
@@ -379,11 +380,13 @@ std::pair<TimeseriesDescriptor, std::optional<SegmentInMemory>> get_descriptor_a
     bool load_data,
     storage::ReadKeyOpts opts = storage::ReadKeyOpts{}) {
     if(load_data) {
-        auto [key, seg] = store->read_sync(k, opts);
+        auto seg = store->read_sync(k, opts).second;
         return std::make_pair(seg.index_descriptor(), std::make_optional<SegmentInMemory>(seg));
     } else {
-        auto [key, tsd] = store->read_timeseries_descriptor_for_incompletes(k, opts).get();
-        return std::make_pair(std::move(tsd), std::nullopt);
+        auto seg_ptr = store->read_compressed_sync(k, opts).segment_ptr();
+        auto tsd = decode_timeseries_descriptor_for_incompletes(*seg_ptr);
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(tsd.has_value(), "Failed to decode timeseries descriptor");
+        return std::make_pair(std::move(*tsd), std::nullopt);
     }
 }
 

@@ -8,6 +8,7 @@
 #pragma once
 
 #include <atomic>
+#include <shared_mutex>
 
 #include <entt/entity/registry.hpp>
 
@@ -35,16 +36,16 @@ public:
     // Add a single entity with the components defined by args
     template<class... Args>
     void add_entity(EntityId id, Args... args) {
-        std::lock_guard<std::mutex> lock(mtx_);
+        std::unique_lock lock(mtx_);
         ([&]{
             registry_.emplace<Args>(id, args);
             // Store the initial entity fetch count component as a "first-class" entity, accessible by
             // registry_.get<EntityFetchCount>(id), as this is external facing (used by resample)
             // The remaining entity fetch count below will be decremented each time an entity is fetched, but is never
-            // accessed externally, so make this a named component.
+            // accessed externally. Stored as an atomic to minimise the requirement to take the shared_mutex with a
+            // unique_lock.
             if constexpr (std::is_same_v<Args, EntityFetchCount>) {
-                auto&& remaining_entity_fetch_count_registry = registry_.storage<EntityFetchCount>(remaining_entity_fetch_count_id);
-                remaining_entity_fetch_count_registry.emplace(id, args);
+                registry_.emplace<std::atomic<EntityFetchCount>>(id, args);
             }
         }(), ...);
     }
@@ -55,7 +56,7 @@ public:
     std::vector<EntityId> add_entities(Args... args) {
         std::vector<EntityId> ids;
         size_t entity_count{0};
-        std::lock_guard<std::mutex> lock(mtx_);
+        std::unique_lock lock(mtx_);
         ([&]{
             if (entity_count == 0) {
                 // Reserve memory for the result on the first pass
@@ -70,8 +71,9 @@ public:
             }
             registry_.insert<typename Args::value_type>(ids.cbegin(), ids.cend(), args.begin());
             if constexpr (std::is_same_v<typename Args::value_type, EntityFetchCount>) {
-                auto&& remaining_entity_fetch_count_registry = registry_.storage<EntityFetchCount>(remaining_entity_fetch_count_id);
-                remaining_entity_fetch_count_registry.insert(ids.cbegin(), ids.cend(), args.begin());
+                for (auto&& [idx, id]: folly::enumerate(ids)) {
+                    registry_.emplace<std::atomic<EntityFetchCount>>(id, args[idx]);
+                }
             }
         }(), ...);
         return ids;
@@ -79,24 +81,23 @@ public:
 
     template<typename T>
     void replace_entities(const std::vector<EntityId>& ids, T value) {
+        std::unique_lock lock(mtx_);
         for (auto id: ids) {
             registry_.replace<T>(id, value);
             if constexpr (std::is_same_v<T, EntityFetchCount>) {
-                auto&& remaining_entity_fetch_count_registry = registry_.storage<EntityFetchCount>(remaining_entity_fetch_count_id);
-                // For some reason named storages don't have a replace API
-                remaining_entity_fetch_count_registry.patch(id, [value](EntityFetchCount& entity_fetch_count){ entity_fetch_count = value; });
+                update_entity_fetch_count(id, value);
             }
         }
     }
 
     template<typename T>
     void replace_entities(const std::vector<EntityId>& ids, const std::vector<T>& values) {
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(ids.size() == values.size(), "Received vectors of differing lengths in ComponentManager::replace_entities");
+        std::unique_lock lock(mtx_);
         for (auto [idx, id]: folly::enumerate(ids)) {
             registry_.replace<T>(id, values[idx]);
             if constexpr (std::is_same_v<T, EntityFetchCount>) {
-                auto&& remaining_entity_fetch_count_registry = registry_.storage<EntityFetchCount>(remaining_entity_fetch_count_id);
-                // For some reason named storages don't have a replace API
-                remaining_entity_fetch_count_registry.patch(id, [&values, idx](EntityFetchCount& entity_fetch_count){ entity_fetch_count = values[idx]; });
+                update_entity_fetch_count(id, values[idx]);
             }
         }
     }
@@ -107,8 +108,7 @@ public:
         std::vector<std::tuple<Args...>> tuple_res;
         tuple_res.reserve(ids.size());
         {
-            std::lock_guard<std::mutex> lock(mtx_);
-            auto&& remaining_entity_fetch_count_registry = registry_.storage<EntityFetchCount>(remaining_entity_fetch_count_id);
+            std::shared_lock lock(mtx_);
             // Using view.get theoretically and empirically faster than registry_.get
             auto view = registry_.view<const Args...>();
             for (auto id: ids) {
@@ -116,11 +116,7 @@ public:
             }
             if (decrement_fetch_count) {
                 for (auto id: ids) {
-                    auto& remaining_entity_fetch_count = remaining_entity_fetch_count_registry.get(id);
-                    // This entity will never be accessed again
-                    if (--remaining_entity_fetch_count == 0) {
-                        erase_entity(id);
-                    }
+                    decrement_entity_fetch_count(id);
                 }
             }
         }
@@ -138,10 +134,11 @@ public:
     }
 
 private:
-    void erase_entity(EntityId id);
+    void decrement_entity_fetch_count(EntityId id);
+    void update_entity_fetch_count(EntityId id, EntityFetchCount count);
 
     entt::registry registry_;
-    std::mutex mtx_;
+    std::shared_mutex mtx_;
 };
 
 } // namespace arcticdb
