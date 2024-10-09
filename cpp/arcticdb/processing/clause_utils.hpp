@@ -12,6 +12,8 @@
 #include <string>
 #include <unordered_set>
 
+#include <folly/futures/FutureSplitter.h>
+
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/processing/component_manager.hpp>
 #include <arcticdb/processing/processing_unit.hpp>
@@ -241,5 +243,12 @@ ProcessingUnit gather_entities(ComponentManager& component_manager, std::vector<
 std::vector<EntityId> push_entities(ComponentManager& component_manager, ProcessingUnit&& proc, EntityFetchCount entity_fetch_count=1);
 
 std::vector<EntityId> flatten_entities(std::vector<std::vector<EntityId>>&& entity_ids_vec);
+
+std::vector<folly::FutureSplitter<pipelines::SegmentAndSlice>> split_futures(
+        std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures);
+
+std::shared_ptr<std::vector<EntityFetchCount>> generate_segment_fetch_counts(
+        const std::vector<std::vector<size_t>>& processing_unit_indexes,
+        size_t num_segments);
 
 }//namespace arcticdb
