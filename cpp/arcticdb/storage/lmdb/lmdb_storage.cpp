@@ -27,11 +27,11 @@ namespace arcticdb::storage::lmdb {
 
 struct LmdbKeepalive {
     std::shared_ptr<LmdbInstance> instance_;
-    ::mdb::txn transaction_;
+    std::shared_ptr<::lmdb::txn> transaction_;
 
     LmdbKeepalive(
         std::shared_ptr<LmdbInstance> instance,
-        ::mdb::txn&& transaction
+        std::shared_ptr<::lmdb::txn> transaction
         ) :
             instance_(std::move(instance)),
             transaction_(std::move(transaction)) {
@@ -158,7 +158,7 @@ void LmdbStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor
 
                 if (segment.has_value()) {
                     ARCTICDB_SUBSAMPLE(LmdbStorageVisitSegment, 0)
-                    segment->set_keepalive(LmdbKeepalive{lmdb_instance_, std::move(txn)});
+                    segment->set_keepalive(std::any{LmdbKeepalive{lmdb_instance_, std::move(txn)}});
                     ARCTICDB_DEBUG(log::storage(), "Read key {}: {}, with {} bytes of data", variant_key_type(k), variant_key_view(k), segment->size());
                     visitor(k, std::move(*segment));
                 } else {
