@@ -45,6 +45,10 @@ namespace arcticdb::storage {
 
         [[nodiscard]] py::object get_library_config(const LibraryPath& path, const StorageOverride& storage_override = StorageOverride{}) const;
 
+        // [get_unaltered_library_config] should be used solely for tests and debugging. Hence, it's separated from [get_library_config] instead of
+        // making the [storage_override] optional.
+        [[nodiscard]] py::object get_unaltered_library_config(const LibraryPath& path) const;
+
         [[nodiscard]] bool is_library_config_ok(const LibraryPath& path, bool throw_on_failure) const;
 
         void remove_library_config(const LibraryPath& path) const;
