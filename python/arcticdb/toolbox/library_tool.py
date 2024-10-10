@@ -55,7 +55,7 @@ class LibraryTool(LibraryToolImpl):
                         int(row.version_id),
                         int(row.creation_ts),
                         int(row.content_hash),
-                        int(index.timestamp()),
+                        index.value,
                         row.end_index.value,
                         key_type,
                     )
