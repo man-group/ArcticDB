@@ -192,6 +192,7 @@ message NormalizationMetadata {
 
         map<string, ColumnName> col_names = 7;
         PandasIndex columns = 8;
+        // Note that 9 is taken above by has_name, so the next added field should be 10
     }
 
     message PandasDataFrame {
