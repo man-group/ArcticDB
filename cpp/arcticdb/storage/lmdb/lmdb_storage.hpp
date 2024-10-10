@@ -8,11 +8,8 @@
 #pragma once
 
 #include <arcticdb/storage/storage.hpp>
-#include <arcticdb/storage/storage_factory.hpp>
-
-#include <arcticdb/entity/protobufs.hpp>
-
-#include <folly/Range.h>
+#include <arcticdb/util/pb_util.hpp>
+#include <arcticdb/storage/lmdb/lmdb.hpp>
 #include <arcticdb/util/composite.hpp>
 #include <arcticdb/storage/lmdb/lmdb_client_wrapper.hpp>
 
@@ -20,12 +17,12 @@
 
 namespace fs = std::filesystem;
 
-namespace lmdb {
-class env;
-class dbi;
-}
-
 namespace arcticdb::storage::lmdb {
+
+struct LmdbInstance {
+    ::lmdb::env env_;
+    std::unordered_map<std::string, std::unique_ptr<::lmdb::dbi>> dbi_by_key_type_;
+};
 
 class LmdbStorage final : public Storage {
   public:
@@ -59,6 +56,8 @@ class LmdbStorage final : public Storage {
 
     ::lmdb::env& env();
 
+    ::lmdb::dbi& get_dbi(const std::string& db_name);
+
     std::string do_key_path(const VariantKey&) const final { return {}; };
 
     void warn_if_lmdb_already_open();
@@ -67,9 +66,7 @@ class LmdbStorage final : public Storage {
     void do_write_internal(Composite<KeySegmentPair>&& kvs, ::lmdb::txn& txn);
     std::vector<VariantKey> do_remove_internal(Composite<VariantKey>&& ks, ::lmdb::txn& txn, RemoveOpts opts);
     std::unique_ptr<std::mutex> write_mutex_;
-    std::unique_ptr<::lmdb::env> env_;
-
-    std::unordered_map<std::string, std::unique_ptr<::lmdb::dbi>> dbi_by_key_type_;
+    std::shared_ptr<LmdbInstance> lmdb_instance_;
 
     std::filesystem::path lib_dir_;
 
