@@ -66,14 +66,14 @@ static void raise_lmdb_exception(const ::lmdb::error& e, const std::string& obje
 
 ::lmdb::env& LmdbStorage::env() {
 	storage::check<ErrorCode::E_UNEXPECTED_LMDB_ERROR>(
-        lmdb_instance_,
+        lmdb_instance_ != nullptr,
         "Unexpected LMDB Error: Invalid operation: LMDB environment has been removed. Possibly because the library has been deleted");
     return lmdb_instance_->env_;
 }
 
 ::lmdb::dbi& LmdbStorage::get_dbi(const std::string& db_name) {
     storage::check<ErrorCode::E_UNEXPECTED_LMDB_ERROR>(
-        lmdb_instance_,
+        lmdb_instance_ != nullptr,
         "Unexpected LMDB Error: Invalid operation: LMDB environment has been removed. Possibly because the library has been deleted");
     return *(lmdb_instance_->dbi_by_key_type_.at(db_name));
 }
