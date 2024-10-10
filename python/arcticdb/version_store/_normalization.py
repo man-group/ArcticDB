@@ -172,6 +172,11 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
             norm_meta.common.categories[arr_name].category.extend(arr.categories)
         return arr.codes
 
+    # This check has to come after the categorical check above, as Categoricals are a Pandas concept, not numpy, which
+    # causes issubdtype to throw if arr.dtype == CategoricalDtype
+    if np.issubdtype(arr.dtype, np.timedelta64):
+        raise ArcticDbNotYetImplemented(f"Failed to normalize column '{arr_name}' with unsupported dtype '{arr.dtype}'")
+
     if np.issubdtype(arr.dtype, np.datetime64):
         # ArcticDB only operates at nanosecond resolution (i.e. `datetime64[ns]`) type because so did Pandas < 2.
         # In Pandas >= 2.0, other resolution are supported (namely `ms`, `s`, and `us`).
