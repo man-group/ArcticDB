@@ -120,5 +120,9 @@ std::optional<std::string> LibraryTool::inspect_env_variable(std::string name){
     return std::string(value);
 }
 
+py::object LibraryTool::read_unaltered_lib_cfg(const storage::LibraryManager& lib_manager, std::string lib_name) {
+    return lib_manager.get_unaltered_library_config(storage::LibraryPath{lib_name, '.'});
+}
+
 
 } // namespace arcticdb::toolbox::apy
