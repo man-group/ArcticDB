@@ -15,6 +15,9 @@ from arcticdb_ext.exceptions import InternalException, SchemaException
 from arcticdb.util.test import assert_frame_equal, generic_aggregation_test, make_dynamic
 
 
+pytestmark = pytest.mark.pipeline
+
+
 def test_group_on_float_column_with_nans(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     symbol = "test_group_on_float_column_with_nans"

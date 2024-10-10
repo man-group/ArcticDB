@@ -109,7 +109,7 @@ std::vector<ProcessingUnit> split_by_row_slice(ProcessingUnit&& proc) {
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(input.segments_.has_value(), "split_by_row_slice needs Segments");
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(input.row_ranges_.has_value(), "split_by_row_slice needs RowRanges");
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(input.col_ranges_.has_value(), "split_by_row_slice needs ColRanges");
-    auto include_expected_get_calls = input.segment_initial_expected_get_calls_.has_value();
+    auto include_entity_fetch_count = input.entity_fetch_count_.has_value();
 
     std::vector<ProcessingUnit> output;
     // Some clauses (e.g. AggregationClause) are lossy about row-ranges. We can assume that if all of the input column
@@ -118,8 +118,8 @@ std::vector<ProcessingUnit> split_by_row_slice(ProcessingUnit&& proc) {
         output.reserve(input.segments_->size());
         for (size_t idx = 0; idx < input.segments_->size(); ++idx) {
             ProcessingUnit proc_tmp(std::move(*input.segments_->at(idx)), std::move(*input.row_ranges_->at(idx)), std::move(*input.col_ranges_->at(idx)));
-            if (include_expected_get_calls) {
-                proc_tmp.set_segment_initial_expected_get_calls({input.segment_initial_expected_get_calls_->at(idx)});
+            if (include_entity_fetch_count) {
+                proc_tmp.set_entity_fetch_count({input.entity_fetch_count_->at(idx)});
             }
             output.emplace_back(std::move(proc_tmp));
         }
@@ -130,16 +130,16 @@ std::vector<ProcessingUnit> split_by_row_slice(ProcessingUnit&& proc) {
                 it->second.segments_->emplace_back(input.segments_->at(idx));
                 it->second.row_ranges_->emplace_back(input.row_ranges_->at(idx));
                 it->second.col_ranges_->emplace_back(input.col_ranges_->at(idx));
-                if (include_expected_get_calls) {
-                    it->second.segment_initial_expected_get_calls_->emplace_back(input.segment_initial_expected_get_calls_->at(idx));
+                if (include_entity_fetch_count) {
+                    it->second.entity_fetch_count_->emplace_back(input.entity_fetch_count_->at(idx));
                 }
             } else {
                 auto [inserted_it, _] = output_map.emplace(*row_range_ptr, ProcessingUnit{});
                 inserted_it->second.segments_.emplace(1, input.segments_->at(idx));
                 inserted_it->second.row_ranges_.emplace(1, input.row_ranges_->at(idx));
                 inserted_it->second.col_ranges_.emplace(1, input.col_ranges_->at(idx));
-                if (include_expected_get_calls) {
-                    inserted_it->second.segment_initial_expected_get_calls_.emplace(1, input.segment_initial_expected_get_calls_->at(idx));
+                if (include_entity_fetch_count) {
+                    inserted_it->second.entity_fetch_count_.emplace(1, input.entity_fetch_count_->at(idx));
                 }
             }
         }
@@ -150,20 +150,20 @@ std::vector<ProcessingUnit> split_by_row_slice(ProcessingUnit&& proc) {
     }
 
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(!output.empty(), "Unexpected empty output in split_by_row_slice");
-    if (include_expected_get_calls) {
+    if (include_entity_fetch_count) {
         // The expected get counts for all segments in a row slice should be the same
         // This should always be 1 or 2 for the first/last row slice, and 1 for all of the others
         for (auto row_slice = output.cbegin(); row_slice != output.cend(); ++row_slice) {
-            auto expected_get_calls = row_slice->segment_initial_expected_get_calls_->front();
-            uint64_t max_expected_get_calls = row_slice == output.cbegin() || row_slice == std::prev(output.cend()) ? 2 : 1;
-            internal::check<ErrorCode::E_ASSERTION_FAILURE>(0 < expected_get_calls && expected_get_calls <= max_expected_get_calls,
-                                                            "expected_get_calls in split_by_row_slice should be 1 or 2, got {}",
-                                                            expected_get_calls);
+            auto entity_fetch_count = row_slice->entity_fetch_count_->front();
+            uint64_t max_entity_fetch_count = row_slice == output.cbegin() || row_slice == std::prev(output.cend()) ? 2 : 1;
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(0 < entity_fetch_count && entity_fetch_count <= max_entity_fetch_count,
+                                                            "entity_fetch_count in split_by_row_slice should be 1 or 2, got {}",
+                                                            entity_fetch_count);
             internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                    std::all_of(row_slice->segment_initial_expected_get_calls_->begin(),
-                                row_slice->segment_initial_expected_get_calls_->end(),
-                                [&expected_get_calls](uint64_t i) { return i == expected_get_calls; }),
-                    "All segments in same row slice should have same expected_get_calls in split_by_row_slice");
+                    std::all_of(row_slice->entity_fetch_count_->begin(),
+                                row_slice->entity_fetch_count_->end(),
+                                [&entity_fetch_count](uint64_t i) { return i == entity_fetch_count; }),
+                    "All segments in same row slice should have same entity_fetch_count in split_by_row_slice");
         }
     }
 
