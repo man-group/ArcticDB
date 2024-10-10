@@ -184,6 +184,12 @@ py::object LibraryManager::get_library_config(const LibraryPath& path, const Sto
     return arcticdb::python_util::pb_to_python(config);
 }
 
+py::object LibraryManager::get_unaltered_library_config(const LibraryPath &path) const {
+    arcticdb::proto::storage::LibraryConfig config = get_config_internal(path, std::nullopt);
+
+    return arcticdb::python_util::pb_to_python(config);
+}
+
 bool LibraryManager::is_library_config_ok(const LibraryPath& path, bool throw_on_failure) const {
     arcticdb::proto::storage::LibraryConfig config = get_config_internal(path, {StorageOverride{}});
     return std::all_of(config.storage_by_id().begin(), config.storage_by_id().end(), [&throw_on_failure](const auto& storage) {
