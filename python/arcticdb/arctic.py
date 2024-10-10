@@ -310,54 +310,16 @@ class Arctic:
         option_value
             The new setting for the library option.
         """
-        def check_bool():
-            if not isinstance(option_value, bool):
-                raise UnsupportedLibraryOptionValue(f"{option} only supports bool values but received {option_value}. "
-                                                    f"Not changing library option.")
 
-        def check_postive_int():
-            if not isinstance(option_value, int):
-                raise UnsupportedLibraryOptionValue(f"{option} only supports positive integer values but received "
-                                                    f"{option_value}. Not changing library option.")
-
-        cfg = library._nvs.lib_cfg()
-        write_options = cfg.lib_desc.version.write_options
-
-        # Core options
-        if option == ModifiableLibraryOption.DEDUP:
-            check_bool()
-            write_options.de_duplication = option_value
-
-        elif option == ModifiableLibraryOption.ROWS_PER_SEGMENT:
-            check_postive_int()
-            write_options.segment_row_size = option_value
-
-        elif option == ModifiableLibraryOption.COLUMNS_PER_SEGMENT:
-            check_postive_int()
-            write_options.column_group_size = option_value
-
-        # Enterprise options
-        elif option == ModifiableEnterpriseLibraryOption.REPLICATION:
-            check_bool()
-            write_options.sync_passive.enabled = option_value
-
-        elif option == ModifiableEnterpriseLibraryOption.BACKGROUND_DELETION:
-            check_bool()
-            write_options.delayed_deletes = option_value
-
-        # Unknown
-        else:
-            raise UnknownLibraryOption(f"Unknown library option {option} cannot be modified. This is a bug "
-                                       f"in ArcticDB. Please raise an issue on github.com/ArcticDB")
-
-        self._library_manager.write_library_config(cfg, library.name, self._library_adapter.get_masking_override())
+        self._library_manager.modify_library_option(library.name, option, option_value)
 
         lib_mgr_name = self._library_adapter.get_name_for_library_manager(library.name)
         storage_override = self._library_adapter.get_storage_override()
+        new_cfg = self._library_manager.get_library_config(lib_mgr_name, storage_override)
         library._nvs._initialize(
             self._library_manager.get_library(lib_mgr_name, storage_override, ignore_cache=True),
             library._nvs.env,
-            cfg,
+            new_cfg,
             library._nvs._custom_normalizer,
             library._nvs._open_mode
         )

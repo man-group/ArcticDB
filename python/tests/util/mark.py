@@ -59,6 +59,11 @@ SSL_TESTS_MARK = pytest.mark.skipif(
     reason="When SSL tests are enabled",
 )
 
+VENV_COMPAT_TESTS_MARK = pytest.mark.skipif(
+    MACOS_CONDA_BUILD,
+    reason="Skipping compatibility tests because macOS conda builds don't have an available PyPi arcticdb version"
+)
+
 
 def _no_op_decorator(fun):
     return fun

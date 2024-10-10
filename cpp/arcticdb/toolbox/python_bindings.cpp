@@ -62,7 +62,8 @@ void register_bindings(py::module &m) {
                  return adapt_read_df(lt.read(key));
              },
              "Read the most recent dataframe from the store")
-             .def("inspect_env_variable", &LibraryTool::inspect_env_variable);
+             .def("inspect_env_variable", &LibraryTool::inspect_env_variable)
+             .def_static("read_unaltered_lib_cfg", &LibraryTool::read_unaltered_lib_cfg);
 
     // S3 Storage tool
     using namespace arcticdb::storage::s3;

@@ -12,6 +12,7 @@
 #include <arcticdb/util/preprocess.hpp>
 
 #include <fmt/compile.h>
+#include <fmt/std.h>
 
 namespace arcticdb {
 
