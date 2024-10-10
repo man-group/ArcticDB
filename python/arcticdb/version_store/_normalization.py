@@ -116,12 +116,19 @@ def _is_nan(element):
     return (isinstance(element, np.floating) or isinstance(element, float)) and math.isnan(element)
 
 
+def _is_nat(element):
+    return isinstance(element, type(pd.NaT)) and pd.isna(element)
+
+
 def get_sample_from_non_empty_arr(arr, arr_name):
     for element in arr:
         if element is None:
             continue
 
         if _is_nan(element):
+            continue
+
+        if _is_nat(element):
             continue
 
         return element
@@ -222,8 +229,16 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
     # This is an expensive loop in python if you have highly sparse data with concrete values coming quite late.
     sample = get_sample_from_non_empty_arr(arr, arr_name)
 
-    if isinstance(sample, Timestamp) or isinstance(sample, type(pd.NaT)):
-        # If we have a NaT or pd.Timestamp as the sample, try and clean up all NaNs inside it.
+    if isinstance(sample, Timestamp):
+        # If we have pd.Timestamp as the sample, then:
+        # - 1: check they all have the same timezone
+        tz_matches = np.vectorize(lambda element: pd.isna(element) or (isinstance(element, pd.Timestamp) and element.tz == sample.tz))
+        if not (tz_matches(arr)).all():
+            raise NormalizationException(f"Failed to normalize column {arr_name}: first non-null element found is a "
+                                         f"Timestamp with timezone '{sample.tz}', but one or more subsequent elements "
+                                         f"are either not Timestamps or have differing timezones, neither of which is "
+                                         f"supported.")
+        # - 2: try and clean up all NaNs inside it.
         log.debug("Removing all NaNs from column: {} of type datetime64", arr_name)
         return arr.astype(DTN64_DTYPE)
     elif _accept_array_string(sample):
