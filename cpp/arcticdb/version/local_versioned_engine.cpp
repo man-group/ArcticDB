@@ -989,8 +989,10 @@ void LocalVersionedEngine::append_incomplete_segment(
 void LocalVersionedEngine::write_parallel_frame(
     const StreamId& stream_id,
     const std::shared_ptr<InputTensorFrame>& frame,
-    bool validate_index) const {
-    write_parallel(store_, stream_id, frame, validate_index);
+    bool validate_index,
+    bool sort_on_index,
+    const std::optional<std::vector<std::string>>& sort_columns) const {
+    write_parallel_impl(store_, stream_id, frame, validate_index, sort_on_index, sort_columns);
 }
 
 void LocalVersionedEngine::add_to_symbol_list_on_compaction(
@@ -1791,7 +1793,6 @@ void LocalVersionedEngine::force_release_lock(const StreamId& name) {
 WriteOptions LocalVersionedEngine::get_write_options() const  {
     return  WriteOptions::from_proto(cfg().write_options());
 }
-
 
 std::shared_ptr<VersionMap> LocalVersionedEngine::_test_get_version_map() {
     return version_map();

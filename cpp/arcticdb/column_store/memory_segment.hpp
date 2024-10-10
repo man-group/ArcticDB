@@ -103,6 +103,10 @@ public:
         return impl_->column_index(name);
     }
 
+    [[nodiscard]] std::optional<std::size_t> column_index_with_name_demangling(std::string_view name) const {
+        return impl_->column_index_with_name_demangling(name);
+    }
+
     [[nodiscard]] const TimeseriesDescriptor& index_descriptor() const {
         return impl_->index_descriptor();
     }
@@ -357,6 +361,14 @@ public:
 
     void sort(const std::string& column) {
         impl_->sort(column);
+    }
+
+    void sort(const std::vector<std::string>& columns) {
+        return impl_->sort(columns);
+    }
+
+    void sort(const std::vector<position_t>& columns) {
+        return impl_->sort(columns);
     }
 
     void sort(position_t column) {

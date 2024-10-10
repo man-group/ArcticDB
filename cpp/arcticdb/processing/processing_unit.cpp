@@ -51,22 +51,10 @@ VariantData ProcessingUnit::get(const VariantNode &name) {
         [&](const ColumnName &column_name) {
         for (const auto& segment: *segments_) {
             segment->init_column_map();
-            if (auto opt_idx = segment->column_index(column_name.value)) {
+            if (auto opt_idx = segment->column_index_with_name_demangling(column_name.value)) {
                 return VariantData(ColumnWithStrings(
                         segment->column_ptr(
                         position_t(position_t(*opt_idx))),
-                        segment->string_pool_ptr(),
-                        column_name.value));
-            }
-        }
-        // Try multi-index column names
-        std::string multi_index_column_name = fmt::format("__idx__{}",
-                                                          column_name.value);
-        for (const auto& segment: *segments_) {
-            if (auto opt_idx = segment->column_index(multi_index_column_name)) {
-                return VariantData(ColumnWithStrings(
-                        segment->column_ptr(
-                        position_t(*opt_idx)),
                         segment->string_pool_ptr(),
                         column_name.value));
             }
