@@ -19,7 +19,7 @@ from arcticdb_ext.version_store import AtomKey, RefKey
 import time
 import pytest
 import pandas as pd
-from datetime import datetime, date, timezone, timedelta
+from datetime import datetime, date, timedelta
 import numpy as np
 from arcticdb.util.test import (
     assert_frame_equal,
@@ -27,12 +27,7 @@ from arcticdb.util.test import (
     random_strings_of_length,
     random_floats,
 )
-from arcticdb.util._versions import IS_PANDAS_TWO
-from arcticdb_ext import set_config_int
-
 import random
-import threading
-import queue
 
 
 from arcticdb.version_store.library import (
@@ -1015,7 +1010,7 @@ def test_get_description_batch_missing_keys(arctic_library):
     assert not isinstance(batch[2], DataError)
     assert batch[2].date_range == (pd.Timestamp(year=2018, month=1, day=1), pd.Timestamp(year=2018, month=1, day=3))
     assert [c[0] for c in batch[2].columns] == ["a"]
-    assert batch[2].index[0] == ["named_index"]
+    assert batch[2].index[0].name == "named_index"
     assert batch[2].index_type == "index"
     assert batch[2].row_count == 3
     assert batch[2].sorted == "ASCENDING"
@@ -1036,7 +1031,7 @@ def test_get_description_batch_symbol_doesnt_exist(arctic_library):
     assert not isinstance(batch[0], DataError)
     assert batch[0].date_range == (pd.Timestamp(year=2018, month=1, day=1), pd.Timestamp(year=2018, month=1, day=4))
     assert [c[0] for c in batch[0].columns] == ["a"]
-    assert batch[0].index[0] == ["named_index"]
+    assert batch[0].index[0].name == "named_index"
     assert batch[0].index_type == "index"
     assert batch[0].row_count == 4
     assert batch[0].sorted == "ASCENDING"
@@ -1068,7 +1063,7 @@ def test_get_description_batch_version_doesnt_exist(arctic_library):
     assert not isinstance(batch[0], DataError)
     assert batch[0].date_range == (pd.Timestamp(year=2018, month=1, day=1), pd.Timestamp(year=2018, month=1, day=4))
     assert [c[0] for c in batch[0].columns] == ["a"]
-    assert batch[0].index[0] == ["named_index"]
+    assert batch[0].index[0].name == "named_index"
     assert batch[0].index_type == "index"
     assert batch[0].row_count == 4
     assert batch[0].sorted == "ASCENDING"
@@ -1198,7 +1193,7 @@ def test_get_description_batch(arctic_library):
     # then
     for info, original_info in list_infos:
         assert [c[0] for c in info.columns] == ["column"]
-        assert info.index[0] == ["named_index"]
+        assert info.index[0].name == "named_index"
         assert info.index_type == "index"
         assert info.row_count == 6
         assert original_info.row_count == 4
@@ -1258,7 +1253,7 @@ def test_get_description_batch_multiple_versions(arctic_library):
     # then
     for info, original_info in list_infos:
         assert [c[0] for c in info.columns] == ["column"]
-        assert info.index[0] == ["named_index"]
+        assert info.index[0].name == "named_index"
         assert info.index_type == "index"
         assert info.row_count == 6
         assert original_info.row_count == 4
@@ -1266,7 +1261,7 @@ def test_get_description_batch_multiple_versions(arctic_library):
         assert original_info.sorted == "ASCENDING"
         assert info.sorted == "ASCENDING"
 
-def test_read_description_batch_high_amount(arctic_library):
+def test_get_description_batch_high_amount(arctic_library):
     lib = arctic_library
     num_symbols = 10
     num_versions = 4
@@ -1305,7 +1300,7 @@ def test_read_description_batch_high_amount(arctic_library):
                 assert tz == pytz.UTC
 
 
-def test_read_description_batch_empty_nat(arctic_library):
+def test_get_description_batch_empty_nat(arctic_library):
     lib = arctic_library
     num_symbols = 10
     for sym in range(num_symbols):
