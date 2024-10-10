@@ -23,12 +23,11 @@ struct RowSliceClause {
     ARCTICDB_MOVE_COPY_DEFAULT(RowSliceClause)
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys) {
-        log::version().warn("RowSliceClause::structure_for_processing v1 called");
         return structure_by_row_slice(ranges_and_keys);
     }
 
     [[nodiscard]] std::vector<std::vector<EntityId>> structure_for_processing(std::vector<std::vector<EntityId>>&& entity_ids_vec) {
-        log::version().warn("RowSliceClause::structure_for_processing v2 called");
+        log::version().warn("RowSliceClause::structure_for_processing called");
         return structure_by_row_slice(*component_manager_, std::move(entity_ids_vec));
     }
 
@@ -71,12 +70,11 @@ struct RestructuringClause {
     ARCTICDB_MOVE_COPY_DEFAULT(RestructuringClause)
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys) {
-        log::version().warn("RestructuringClause::structure_for_processing v1 called");
         return structure_by_row_slice(ranges_and_keys);
     }
 
     [[nodiscard]] std::vector<std::vector<EntityId>> structure_for_processing(std::vector<std::vector<EntityId>>&& entity_ids_vec) {
-        log::version().warn("RestructuringClause::structure_for_processing v2 called");
+        log::version().warn("RestructuringClause::structure_for_processing called");
         return structure_by_row_slice(*component_manager_, std::move(entity_ids_vec));
     }
 
@@ -213,7 +211,18 @@ folly::Future<std::vector<EntityId>> process_clauses(
 
     auto entity_ids_vec_fut = folly::Future<std::vector<std::vector<EntityId>>>::makeEmpty();
     bool first_clause{true};
-    for (auto i=0; i<2; ++i) {
+
+    size_t iterations{1};
+    auto it = std::next(clauses->cbegin());
+    while (it != clauses->cend()) {
+        auto prev_it = std::prev(it);
+        if ((*prev_it)->clause_info().output_structure_ != (*it)->clause_info().input_structure_) {
+            ++iterations;
+        }
+        ++it;
+    }
+
+    for (size_t i=0; i<iterations; ++i) {
         folly::Future<folly::Unit> work_scheduled(folly::Unit{});
         if (!first_clause) {
             work_scheduled = entity_ids_vec_fut.via(&async::cpu_executor()).thenValue([futures, clauses](std::vector<std::vector<EntityId>>&& entity_ids_vec) {
@@ -261,6 +270,10 @@ TEST(Clause, ParallelProcessing) {
     clauses->emplace_back(std::make_shared<Clause>(RowSliceClause()));
     clauses->emplace_back(std::make_shared<Clause>(RestructuringClause()));
     clauses->emplace_back(std::make_shared<Clause>(RowSliceClause()));
+    clauses->emplace_back(std::make_shared<Clause>(RestructuringClause()));
+    clauses->emplace_back(std::make_shared<Clause>(RowSliceClause()));
+    clauses->emplace_back(std::make_shared<Clause>(RestructuringClause()));
+
 
     auto component_manager = std::make_shared<ComponentManager>();
     for (auto& clause: *clauses) {
