@@ -484,11 +484,11 @@ struct MemSegmentProcessingTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(MemSegmentProcessingTask)
 
     std::vector<EntityId> operator()() {
-        std::ranges::reverse_view reversed_clauses{clauses_};
-        for (const auto& clause: reversed_clauses) {
-            entity_ids_ = clause->process(std::move(entity_ids_));
+        for (auto it = clauses_.cbegin(); it != clauses_.cend(); ++it) {
+            entity_ids_ = (*it)->process(std::move(entity_ids_));
 
-            if(clause->clause_info().requires_repartition_)
+            auto next_it = std::next(it);
+            if(next_it != clauses_.cend() && (*it)->clause_info().output_structure_ != (*next_it)->clause_info().input_structure_)
                 break;
         }
         return std::move(entity_ids_);

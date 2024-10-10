@@ -15,6 +15,9 @@ from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.exceptions import InternalException, StorageException, UserInputException
 
 
+pytestmark = pytest.mark.pipeline
+
+
 def test_filter_batch_one_query(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     sym1 = "sym1"

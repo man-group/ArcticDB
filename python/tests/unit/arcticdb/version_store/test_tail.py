@@ -14,6 +14,9 @@ import pytest
 from arcticdb_ext.exceptions import InternalException
 
 
+pytestmark = pytest.mark.pipeline
+
+
 def generic_tail_test(version_store, symbol, df, num_rows):
     version_store.write(symbol, df)
     expected = df.tail(num_rows)

@@ -17,6 +17,8 @@ from arcticdb.util.test import assert_frame_equal
 from packaging.version import Version
 from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION
 
+pytestmark = pytest.mark.pipeline
+
 
 ALL_AGGREGATIONS = ["sum", "mean", "min", "max", "first", "last", "count"]
 
@@ -370,6 +372,36 @@ def test_resampling_empty_bucket_in_range(lmdb_version_store_v1):
             "to_count": ("to_count", "count"),
         }
     )
+
+
+@pytest.mark.parametrize("tz", (None, "Europe/London"))
+@pytest.mark.parametrize("named_levels", (True, False))
+def test_resample_multiindex(lmdb_version_store_v1, tz, named_levels):
+    lib = lmdb_version_store_v1
+    sym = "test_resample_multiindex"
+    multiindex = pd.MultiIndex.from_product([pd.date_range("2024-01-01", freq="h", periods=5, tz=tz), [0, 1], ["hello", "goodbye"]])
+    if named_levels:
+        multiindex.names = ["datetime", "sequence number", "another index level"]
+    df = pd.DataFrame(
+        data={
+            "to_sum": np.arange(len(multiindex)),
+            "to_mean": np.arange(len(multiindex)) * 10,
+        },
+        index=multiindex,
+    )
+    lib.write(sym, df)
+    freq = "2h"
+    aggs = {"to_sum": "sum", "to_mean": "mean"}
+
+    # Pandas doesn't support resampling multiindexed dataframes, but our behaviour is equivalent to there only being a
+    # top-level timeseries index
+    df.index = multiindex.droplevel(2).droplevel(1)
+    expected = df.resample(freq).agg(aggs)
+
+    q = QueryBuilder()
+    q = q.resample(freq).agg(aggs)
+    received = lib.read(sym, query_builder=q).data
+    assert_frame_equal(expected, received, check_dtype=False)
 
 
 @pytest.mark.parametrize("use_date_range", (True, False))

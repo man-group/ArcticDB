@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import pandas as pd
 from hypothesis import assume, given, settings
+import pytest
 
 from arcticdb.util.test import generic_named_aggregation_test
 from arcticdb.util.hypothesis import (
@@ -16,6 +17,9 @@ from arcticdb.util.hypothesis import (
     column_strategy,
     supported_string_dtypes,
 )
+
+
+pytestmark = pytest.mark.pipeline
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
