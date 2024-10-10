@@ -322,7 +322,8 @@ struct formatter<AtomKey> {
     auto format(const arcticdb::entity::AtomKey &key, FormatContext &ctx) const {
         formatter<FormattableRef < arcticdb::entity::AtomKey, DefaultAtomKeyFormat>>
         f;
-        return f.format(formattable(key), ctx);
+        auto formattable = FormattableRef<arcticdb::entity::AtomKey, DefaultAtomKeyFormat>{key};
+        return f.format(formattable, ctx);
     }
 };
 }
