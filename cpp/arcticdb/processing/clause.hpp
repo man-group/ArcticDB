@@ -113,12 +113,35 @@ std::vector<std::vector<size_t>> structure_by_column_slice(std::vector<RangesAnd
 
 std::vector<std::vector<size_t>> structure_all_together(std::vector<RangesAndKey>& ranges_and_keys);
 
-ProcessingUnit gather_entities(std::shared_ptr<ComponentManager> component_manager,
-                               std::vector<EntityId>&& entity_ids,
-                               bool include_atom_keys = false,
-                               bool include_initial_expected_get_calls = false);
+/*
+ * On entry to a clause, construct ProcessingUnits from the input entity IDs. These will either be provided by the
+ * structure_for_processing method for the first clause in the pipeline, or by the previous clause for all subsequent
+ * clauses.
+ */
+template<class... Args>
+ProcessingUnit gather_entities(ComponentManager& component_manager, std::vector<EntityId>&& entity_ids) {
+    ProcessingUnit res;
+    auto components = component_manager.get_entities<Args...>(entity_ids);
+    ([&]{
+        auto component = std::move(std::get<std::vector<Args>>(components));
+        if constexpr (std::is_same_v<Args, std::shared_ptr<SegmentInMemory>>) {
+            res.set_segments(std::move(component));
+        } else if constexpr (std::is_same_v<Args, std::shared_ptr<RowRange>>) {
+            res.set_row_ranges(std::move(component));
+        } else if constexpr (std::is_same_v<Args, std::shared_ptr<ColRange>>) {
+            res.set_col_ranges(std::move(component));
+        } else if constexpr (std::is_same_v<Args, std::shared_ptr<AtomKey>>) {
+            res.set_atom_keys(std::move(component));
+        } else if constexpr (std::is_same_v<Args, EntityFetchCount>) {
+            res.set_entity_fetch_count(std::move(component));
+        } else {
+            static_assert(sizeof(Args) == 0, "Unexpected component type provided in gather_entities");
+        }
+    }(), ...);
+    return res;
+}
 
-std::vector<EntityId> push_entities(std::shared_ptr<ComponentManager> component_manager, ProcessingUnit&& proc);
+std::vector<EntityId> push_entities(ComponentManager& component_manager, ProcessingUnit&& proc, EntityFetchCount entity_fetch_count=1);
 
 std::vector<EntityId> flatten_entities(std::vector<std::vector<EntityId>>&& entity_ids_vec);
 
@@ -271,14 +294,15 @@ struct PartitionClause {
         if (entity_ids.empty()) {
             return {};
         }
-        auto proc = gather_entities(component_manager_, std::move(entity_ids));
+        auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager_, std::move(entity_ids));
         std::vector<ProcessingUnit> partitioned_procs = partition_processing_segment<GrouperType, BucketizerType>(
                 proc,
                 ColumnName(grouping_column_),
                 processing_config_.dynamic_schema_);
         std::vector<EntityId> output;
         for (auto &&partitioned_proc: partitioned_procs) {
-            std::vector<EntityId> proc_entity_ids = push_entities(component_manager_, std::move(partitioned_proc));
+            // EntityFetchCount is 2, once for the repartition, and once for AggregationClause::process
+            std::vector<EntityId> proc_entity_ids = push_entities(*component_manager_, std::move(partitioned_proc), 2);
             output.insert(output.end(), proc_entity_ids.begin(), proc_entity_ids.end());
         }
         return output;
@@ -304,7 +328,7 @@ struct PartitionClause {
         // Experimentation shows flattening the entities into a single vector and a single call to
         // component_manager_->get is faster than not flattening and making multiple calls
         auto entity_ids = flatten_entities(std::move(entity_ids_vec));
-        std::vector<bucket_id> buckets{component_manager_->get<bucket_id>(entity_ids)};
+        auto [buckets] = component_manager_->get_entities<bucket_id>(entity_ids);
         for (auto [idx, entity_id]: folly::enumerate(entity_ids)) {
             res[buckets[idx]].emplace_back(entity_id);
         }

@@ -43,7 +43,7 @@ void time_merge_on_segments(const std::vector<SegmentInMemory> &segments, benchm
     std::vector<EntityId> entity_ids;
     for (auto& segment : segments){
         auto proc_unit = ProcessingUnit{segment.clone()};
-        entity_ids.push_back(push_entities(component_manager, std::move(proc_unit))[0]);
+        entity_ids.push_back(push_entities(*component_manager, std::move(proc_unit))[0]);
     }
 
     auto stream_id = StreamId("Merge");
