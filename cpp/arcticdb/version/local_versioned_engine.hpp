@@ -153,6 +153,7 @@ public:
         const StreamId& stream_id,
         const std::shared_ptr<InputTensorFrame>& frame,
         bool validate_index,
+        bool sort_on_index,
         const std::optional<std::vector<std::string>>& sort_columns) const override;
 
     void delete_tree(

@@ -49,6 +49,7 @@ void write_parallel_impl(
     const StreamId& stream_id,
     const std::shared_ptr<pipelines::InputTensorFrame>& frame,
     bool validate_index,
+    bool sort_on_index,
     const std::optional<std::vector<std::string>>& sort_columns);
 
 void write_head(
@@ -65,7 +66,8 @@ void append_incomplete(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
     const std::shared_ptr<pipelines::InputTensorFrame>& frame,
-    bool validate_index);
+    bool validate_index,
+    bool sort_on_index = false);
 
 std::optional<int64_t> latest_incomplete_timestamp(
     const std::shared_ptr<Store>& store,

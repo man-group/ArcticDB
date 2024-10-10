@@ -137,6 +137,7 @@ class PythonVersionStore : public LocalVersionedEngine {
         const py::tuple& item,
         const py::object& norm,
         bool validate_index,
+        bool sort_on_index,
         std::optional<std::vector<std::string>> sort_columns) const;
 
     VersionedItem write_metadata(

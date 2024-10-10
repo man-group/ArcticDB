@@ -466,6 +466,7 @@ class NativeVersionStore:
             symbol: str,
             data: Any,
             validate_index: bool = False,
+            sort_on_index: bool = False,
             sort_columns: List[str] = None,
             **kwargs):
         norm_failure_options_msg = kwargs.get("norm_failure_options_msg", self.norm_failure_options_msg_write)
@@ -480,7 +481,7 @@ class NativeVersionStore:
             norm_failure_options_msg=norm_failure_options_msg,
         )
         if isinstance(item, NPDDataFrame):
-            self.version_store.write_parallel(symbol, item, norm_meta, validate_index, sort_columns)
+            self.version_store.write_parallel(symbol, item, norm_meta, validate_index, sort_on_index, sort_columns)
 
     def write(
         self,
