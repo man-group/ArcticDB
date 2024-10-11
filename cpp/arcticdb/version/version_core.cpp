@@ -474,21 +474,6 @@ FrameAndDescriptor read_multi_key(
     return {res.frame_, multi_key_desc, keys, std::shared_ptr<BufferHolder>{}};
 }
 
-folly::Future<std::vector<EntityId>> flatten_entities_2(folly::Future<std::vector<std::vector<EntityId>>>&& entity_ids_vec_fut) {
-    return entity_ids_vec_fut.via(&async::cpu_executor()).thenValue([](std::vector<std::vector<EntityId>>&& entity_ids_vec) {
-        size_t res_size = std::accumulate(entity_ids_vec.cbegin(),
-                                          entity_ids_vec.cend(),
-                                          size_t(0),
-                                          [](size_t acc, const std::vector<EntityId>& vec) { return acc + vec.size(); });
-        std::vector<EntityId> res;
-        res.reserve(res_size);
-        for (const auto& entity_ids: entity_ids_vec) {
-            res.insert(res.end(), entity_ids.begin(), entity_ids.end());
-        }
-        return res;
-    });
-}
-
 folly::Future<std::vector<EntityId>> process_clauses(
         std::shared_ptr<ComponentManager> component_manager,
         std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures,
@@ -629,8 +614,9 @@ folly::Future<std::vector<EntityId>> process_clauses(
         });
 
     }
-    return flatten_entities_2(std::move(entity_ids_vec_fut));
-}
+    return entity_ids_vec_fut.via(&async::cpu_executor()).thenValue([](std::vector<std::vector<EntityId>>&& entity_ids_vec) {
+        return flatten_entities(std::move(entity_ids_vec));
+    });}
 
 //std::vector<EntityId> process_clauses(
 //        std::shared_ptr<ComponentManager> component_manager,
