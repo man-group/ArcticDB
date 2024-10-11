@@ -964,7 +964,7 @@ public:
     ChunkedBuffer& get_extra_buffer(size_t offset) {
         util::check(static_cast<bool>(extra_buffers_), "Extra buffer {} requested but pointer is null", offset);
         return extra_buffers_->get_buffer(offset);
-    }
+}
 
     void set_extra_buffer(size_t offset, ChunkedBuffer&& buffer) {
         init_buffer();
@@ -1001,6 +1001,8 @@ private:
 
     std::optional<util::BitMagic> sparse_map_;
     FieldStatsImpl stats_;
+    util::MagicNum<'D', 'C', 'o', 'l'> magic_;
+};
 
     std::unique_ptr<std::once_flag> init_buffer_ = std::make_unique<std::once_flag>();
     struct ExtraBufferContainer {
