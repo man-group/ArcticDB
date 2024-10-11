@@ -5,17 +5,27 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
+
+#include <atomic>
+
 #include <arcticdb/processing/component_manager.hpp>
 
 namespace arcticdb {
 
-void ComponentManager::set_next_entity_id(EntityId id) {
-    next_entity_id_ = id;
+std::vector<EntityId> ComponentManager::get_new_entity_ids(size_t count) {
+    std::vector<EntityId> ids(count);
+    std::lock_guard<std::mutex> lock(mtx_);
+    registry_.create(ids.begin(), ids.end());
+    return ids;
 }
 
-EntityId ComponentManager::entity_id(const std::optional<EntityId>& id) {
-    // Do not use value_or as we do not want the side effect of fetch_add when id was provided by the caller
-    return id.has_value() ? *id : next_entity_id_.fetch_add(1);
+void ComponentManager::erase_entity(EntityId id) {
+    // Ideally would call registry_.destroy(id), or at least registry_.erase<std::shared_ptr<SegmentInMemory>>(id)
+    // at this point. However, they are both slower than this, so just decrement the ref count of the only
+    // sizeable component, so that when the shared pointer goes out of scope in the calling function, the
+    // memory is freed
+    registry_.get<std::shared_ptr<SegmentInMemory>>(id).reset();
 }
+
 
 } // namespace arcticdb

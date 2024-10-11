@@ -639,6 +639,7 @@ if (WIN32)
     )
 endif()
 
+add_compile_definitions(ENTT_ID_TYPE=std::uint64_t)
 
 set (arcticdb_core_libraries
         pybind11::module # Transitively includes Python::Module or Python::Python as appropriate
@@ -657,6 +658,7 @@ set (arcticdb_core_libraries
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
         Azure::azure-identity
         Azure::azure-storage-blobs
+        EnTT::EnTT
 )
 
 if(${ARCTICDB_PYTHON_EXPLICIT_LINK})
