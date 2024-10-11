@@ -936,7 +936,7 @@ private:
 
     std::optional<util::BitMagic> sparse_map_;
     util::MagicNum<'D', 'C', 'o', 'l'> magic_;
-}; //class Column
+};
 
 template <typename T>
 JiveTable create_jive_table(const Column& col) {
