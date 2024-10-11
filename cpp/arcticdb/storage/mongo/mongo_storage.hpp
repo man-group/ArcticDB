@@ -51,7 +51,6 @@ class MongoStorage final : public Storage {
 
     std::string collection_name(KeyType k);
 
-    std::shared_ptr<MongoInstance> instance_;
     std::shared_ptr<MongoClientWrapper> client_;
     std::string db_;
     std::string prefix_;

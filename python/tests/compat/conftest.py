@@ -175,4 +175,7 @@ def arctic_uri(request):
 def old_venv_and_arctic_uri(old_venv, arctic_uri):
     if old_venv.version == "1.6.2" and arctic_uri.startswith("mongo"):
         pytest.skip("Mongo storage backend is not supported on 1.6.2")
+    if old_venv.version == "4.5.0" and arctic_uri.startswith("mongo"):
+        # TODO: Replace 4.5.0 with 4.5.1 when it is released and re-enable mongo.
+        pytest.skip("Mongo storage backend has a desctruction bug present in 4.5.0, which can cause flaky segfaults.")
     return old_venv, arctic_uri
