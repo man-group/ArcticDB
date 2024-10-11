@@ -163,6 +163,8 @@ message NormalizationMetadata {
 
         // Pandas series support arbitrary objects but restricting to a string seems reasonable
         string name = 1;
+        // Backwards-compatible way of treating name as optional
+        bool has_name = 9;
 
         oneof index_type {
             PandasIndex index = 2;
@@ -190,6 +192,7 @@ message NormalizationMetadata {
 
         map<string, ColumnName> col_names = 7;
         PandasIndex columns = 8;
+        // Note that 9 is taken above by has_name, so the next added field should be 10
     }
 
     message PandasDataFrame {
