@@ -120,6 +120,20 @@ size_t generate_scheduling_iterations(const std::vector<std::shared_ptr<Clause>>
     return res;
 }
 
+void remove_processed_clauses(std::vector<std::shared_ptr<Clause>>& clauses) {
+    // Erase all the clauses we have already called process on
+    auto it = std::next(clauses.cbegin());
+    while (it != clauses.cend()) {
+        auto prev_it = std::prev(it);
+        if ((*prev_it)->clause_info().output_structure_ == (*it)->clause_info().input_structure_) {
+            ++it;
+        } else {
+            break;
+        }
+    }
+    clauses.erase(clauses.cbegin(), it);
+}
+
 folly::Future<std::vector<EntityId>> process_clauses(
         std::shared_ptr<ComponentManager> component_manager,
         std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures,
@@ -196,36 +210,23 @@ folly::Future<std::vector<EntityId>> process_clauses(
     }
 
     auto entity_ids_vec_fut = folly::Future<std::vector<std::vector<EntityId>>>::makeEmpty();
-    bool first_clause{true};
     // The number of iterations we need to pass through the following loop to get all the work scheduled
     auto scheduling_iterations = generate_scheduling_iterations(*clauses);
-
-    for (size_t unused=0; unused<scheduling_iterations; ++unused) {
+    for (size_t i=0; i<scheduling_iterations; ++i) {
         folly::Future<folly::Unit> work_scheduled(folly::Unit{});
-        if (!first_clause) {
+        if (i > 0) {
             work_scheduled = entity_ids_vec_fut.via(&async::cpu_executor()).thenValue([futures, clauses](std::vector<std::vector<EntityId>>&& entity_ids_vec) {
                 futures->clear();
                 for (auto&& entity_ids: entity_ids_vec) {
-                    futures->emplace_back(async::submit_cpu_task(async::MemSegmentProcessingTask(*clauses,std::move(entity_ids))));
+                    futures->emplace_back(async::submit_cpu_task(async::MemSegmentProcessingTask(*clauses, std::move(entity_ids))));
                 }
                 return folly::Unit{};
             });
         }
-        first_clause = false;
 
         entity_ids_vec_fut = work_scheduled.via(&async::cpu_executor()).thenValue([clauses, futures](auto&&) {
             return folly::collect(*futures).via(&async::cpu_executor()).thenValue([clauses](std::vector<std::vector<EntityId>>&& entity_ids_vec) {
-                // Erase all the clauses we have already called process on
-                auto it = std::next(clauses->cbegin());
-                while (it != clauses->cend()) {
-                    auto prev_it = std::prev(it);
-                    if ((*prev_it)->clause_info().output_structure_ == (*it)->clause_info().input_structure_) {
-                        ++it;
-                    } else {
-                        break;
-                    }
-                }
-                clauses->erase(clauses->cbegin(), it);
+                remove_processed_clauses(*clauses);
                 if (!clauses->empty()) {
                     return clauses->front()->structure_for_processing(std::move(entity_ids_vec));
                 } else {
