@@ -77,9 +77,33 @@ public:
         return ids;
     }
 
+    template<typename T>
+    void replace_entities(const std::vector<EntityId>& ids, T value) {
+        for (auto id: ids) {
+            registry_.replace<T>(id, value);
+            if constexpr (std::is_same_v<T, EntityFetchCount>) {
+                auto&& remaining_entity_fetch_count_registry = registry_.storage<EntityFetchCount>(remaining_entity_fetch_count_id);
+                // For some reason named storages don't have a replace API
+                remaining_entity_fetch_count_registry.patch(id, [value](EntityFetchCount& entity_fetch_count){ entity_fetch_count = value; });
+            }
+        }
+    }
+
+    template<typename T>
+    void replace_entities(const std::vector<EntityId>& ids, const std::vector<T>& values) {
+        for (auto [idx, id]: folly::enumerate(ids)) {
+            registry_.replace<T>(id, values[idx]);
+            if constexpr (std::is_same_v<T, EntityFetchCount>) {
+                auto&& remaining_entity_fetch_count_registry = registry_.storage<EntityFetchCount>(remaining_entity_fetch_count_id);
+                // For some reason named storages don't have a replace API
+                remaining_entity_fetch_count_registry.patch(id, [&values, idx](EntityFetchCount& entity_fetch_count){ entity_fetch_count = values[idx]; });
+            }
+        }
+    }
+
     // Get a collection of entities. Returns a tuple of vectors, one for each component requested via Args
     template<class... Args>
-    std::tuple<std::vector<Args>...> get_entities(const std::vector<EntityId>& ids) {
+    std::tuple<std::vector<Args>...> get_entities(const std::vector<EntityId>& ids, const bool decrement_fetch_count=true) {
         std::vector<std::tuple<Args...>> tuple_res;
         tuple_res.reserve(ids.size());
         {
@@ -89,10 +113,14 @@ public:
             auto view = registry_.view<const Args...>();
             for (auto id: ids) {
                 tuple_res.emplace_back(std::move(view.get(id)));
-                auto& remaining_entity_fetch_count = remaining_entity_fetch_count_registry.get(id);
-                // This entity will never be accessed again
-                if (--remaining_entity_fetch_count == 0) {
-                    erase_entity(id);
+            }
+            if (decrement_fetch_count) {
+                for (auto id: ids) {
+                    auto& remaining_entity_fetch_count = remaining_entity_fetch_count_registry.get(id);
+                    // This entity will never be accessed again
+                    if (--remaining_entity_fetch_count == 0) {
+                        erase_entity(id);
+                    }
                 }
             }
         }

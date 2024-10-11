@@ -2029,7 +2029,7 @@ class Library:
             If lazy is True, a LazyDataFrame object on which further querying can be performed prior to collect.
         """
         if lazy:
-            q = QueryBuilder()._head(n)
+            q = QueryBuilder().head(n)
             return LazyDataFrame(
                 self,
                 ReadRequest(
@@ -2080,7 +2080,7 @@ class Library:
             If lazy is True, a LazyDataFrame object on which further querying can be performed prior to collect.
         """
         if lazy:
-            q = QueryBuilder()._tail(n)
+            q = QueryBuilder().tail(n)
             return LazyDataFrame(
                 self,
                 ReadRequest(

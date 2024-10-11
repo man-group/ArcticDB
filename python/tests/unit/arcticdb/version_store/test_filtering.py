@@ -35,6 +35,9 @@ from arcticdb.util.test import (
 from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION
 
 
+pytestmark = pytest.mark.pipeline
+
+
 def test_filter_column_not_present(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     df = pd.DataFrame({"a": np.arange(2)}, index=np.arange(2))

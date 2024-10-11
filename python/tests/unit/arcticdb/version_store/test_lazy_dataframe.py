@@ -8,9 +8,13 @@ As of the Change Date specified in that file, in accordance with the Business So
 import numpy as np
 import pandas as pd
 import pickle
+import pytest
 
 from arcticdb import col, LazyDataFrame, LazyDataFrameCollection, QueryBuilder, ReadRequest
 from arcticdb.util.test import assert_frame_equal
+
+
+pytestmark = pytest.mark.pipeline
 
 
 def test_lazy_read(lmdb_library):
