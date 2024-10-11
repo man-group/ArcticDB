@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import datetime
+import itertools
 import sys
 from collections import namedtuple
 from unittest.mock import patch
@@ -148,6 +149,15 @@ def test_write_tz(lmdb_version_store, sym, tz):
     assert isinstance(end_ts, datetime.datetime)
     assert start_ts == index[0]
     assert end_ts == index[-1]
+
+
+@pytest.mark.parametrize("column_data", itertools.permutations([pd.Timestamp(0), pd.NaT, pd.Timestamp(0, tz="Europe/Amsterdam")]))
+def test_write_mixed_tz(lmdb_version_store_v1, column_data):
+    lib = lmdb_version_store_v1
+    sym = "test_write_mixed_tz"
+    df = pd.DataFrame({"col": column_data})
+    with pytest.raises(ArcticException):
+        lib.write(sym, df)
 
 
 def get_multiindex_df_with_tz(tz):
