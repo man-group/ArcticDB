@@ -14,6 +14,9 @@ import pytest
 from arcticdb_ext.exceptions import InternalException
 
 
+pytestmark = pytest.mark.pipeline
+
+
 def generic_head_test(version_store, symbol, df, num_rows):
     version_store.write(symbol, df)
     assert np.array_equal(df.head(num_rows), version_store.head(symbol, num_rows).data)

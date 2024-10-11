@@ -34,7 +34,7 @@ TEST(Resample, StructureForProcessingBasic) {
     std::vector<RangesAndKey> ranges_and_keys{bottom, top};
 
     ResampleClause<ResampleBoundary::LEFT> resample_clause{"dummy", ResampleBoundary::LEFT, generate_bucket_boundaries({1, 500, 1500, 2500, 2999}), 0};
-    auto proc_unit_ids = resample_clause.structure_for_processing(ranges_and_keys, 0);
+    auto proc_unit_ids = resample_clause.structure_for_processing(ranges_and_keys);
     ASSERT_EQ(ranges_and_keys.size(), 2);
     ASSERT_EQ(ranges_and_keys[0], top);
     ASSERT_EQ(ranges_and_keys[1], bottom);
@@ -62,7 +62,7 @@ TEST(Resample, StructureForProcessingColumnSlicing) {
     std::vector<RangesAndKey> ranges_and_keys{top_right, bottom_left, bottom_right, top_left};
 
     ResampleClause<ResampleBoundary::LEFT> resample_clause{"dummy", ResampleBoundary::LEFT, generate_bucket_boundaries({1, 500, 1500, 2500, 2999}), 0};
-    auto proc_unit_ids = resample_clause.structure_for_processing(ranges_and_keys, 0);
+    auto proc_unit_ids = resample_clause.structure_for_processing(ranges_and_keys);
     ASSERT_EQ(ranges_and_keys.size(), 4);
     ASSERT_EQ(ranges_and_keys[0], top_left);
     ASSERT_EQ(ranges_and_keys[1], top_right);
@@ -87,7 +87,7 @@ TEST(Resample, StructureForProcessingOverlap) {
     std::vector<RangesAndKey> ranges_and_keys{bottom, top};
 
     ResampleClause<ResampleBoundary::LEFT> resample_clause{"dummy", ResampleBoundary::LEFT, generate_bucket_boundaries({1, 500, 2500, 2999}), 0};
-    auto proc_unit_ids = resample_clause.structure_for_processing(ranges_and_keys, 0);
+    auto proc_unit_ids = resample_clause.structure_for_processing(ranges_and_keys);
     ASSERT_EQ(ranges_and_keys.size(), 2);
     ASSERT_EQ(ranges_and_keys[0], top);
     ASSERT_EQ(ranges_and_keys[1], bottom);
@@ -114,7 +114,7 @@ TEST(Resample, StructureForProcessingSubsumed) {
     std::vector<RangesAndKey> ranges_and_keys{bottom, middle, top};
 
     ResampleClause<ResampleBoundary::LEFT> resample_clause{"dummy", ResampleBoundary::LEFT, generate_bucket_boundaries({1, 500, 4500}), 0};
-    auto proc_unit_ids = resample_clause.structure_for_processing(ranges_and_keys, 0);
+    auto proc_unit_ids = resample_clause.structure_for_processing(ranges_and_keys);
     ASSERT_EQ(ranges_and_keys.size(), 3);
     ASSERT_EQ(ranges_and_keys[0], top);
     ASSERT_EQ(ranges_and_keys[1], middle);
@@ -139,7 +139,7 @@ TEST(Resample, StructureForProcessingExactBoundary) {
     std::vector<RangesAndKey> ranges_and_keys{bottom, top};
 
     ResampleClause<ResampleBoundary::LEFT> resample_clause_left{"dummy", ResampleBoundary::LEFT, generate_bucket_boundaries({1, 500, 2000, 2500, 2999}), 0};
-    auto proc_unit_ids = resample_clause_left.structure_for_processing(ranges_and_keys, 0);
+    auto proc_unit_ids = resample_clause_left.structure_for_processing(ranges_and_keys);
     ASSERT_EQ(ranges_and_keys.size(), 2);
     ASSERT_EQ(ranges_and_keys[0], top);
     ASSERT_EQ(ranges_and_keys[1], bottom);
@@ -147,7 +147,7 @@ TEST(Resample, StructureForProcessingExactBoundary) {
     ASSERT_EQ(expected_proc_unit_ids_left, proc_unit_ids);
 
     ResampleClause<ResampleBoundary::RIGHT> resample_clause_right{"dummy", ResampleBoundary::LEFT, generate_bucket_boundaries({1, 500, 2000, 2500, 2999}), 0};
-    proc_unit_ids = resample_clause_right.structure_for_processing(ranges_and_keys, 0);
+    proc_unit_ids = resample_clause_right.structure_for_processing(ranges_and_keys);
     ASSERT_EQ(ranges_and_keys.size(), 2);
     ASSERT_EQ(ranges_and_keys[0], top);
     ASSERT_EQ(ranges_and_keys[1], bottom);

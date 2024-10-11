@@ -718,7 +718,6 @@ class QueryBuilder:
                                  agg_1_min  agg_1_max     agg_2
             2024-01-01 00:00:00          1          5      2.75
         """
-        check(not len(self.clauses), "resample only supported as first clause in the pipeline")
         rule = rule.freqstr if isinstance(rule, pd.DateOffset) else rule
         # We use floor and ceiling later to round user-provided date ranges and or start/end index values of the symbol
         # before calling pandas.date_range to generate the bucket boundaries, but floor and ceiling only work with
@@ -756,14 +755,6 @@ class QueryBuilder:
         self._python_clauses = self._python_clauses + [PythonResampleClause(rule=rule, closed=boundary_map[closed], label=boundary_map[label], offset=offset_ns)]
         return self
 
-    def is_resample(self):
-        return len(self.clauses) and isinstance(self.clauses[0], (_ResampleClauseLeftClosed, _ResampleClauseRightClosed))
-
-    def set_date_range(self, date_range:Optional[DateRangeInput]):
-        if self.is_resample() and date_range is not None:
-            start, end = normalize_dt_range_to_ts(date_range)
-            self.clauses[0].set_date_range(start.value, end.value)
-
 
     # TODO: specify type of other must be QueryBuilder with from __future__ import annotations once only Python 3.7+
     # supported
@@ -781,10 +772,6 @@ class QueryBuilder:
         QueryBuilder
             Modified QueryBuilder object.
         """
-        check(
-            not len(other.clauses) or not isinstance(other.clauses[0], (_DateRangeClause, _ResampleClauseLeftClosed, _ResampleClauseRightClosed)),
-            "In QueryBuilder.then: Date range and Resample only supported as first clauses in the pipeline",
-        )
         self.clauses = self.clauses + other.clauses
         self._python_clauses = self._python_clauses + other._python_clauses
         return self
@@ -805,28 +792,61 @@ class QueryBuilder:
         QueryBuilder
             Modified QueryBuilder object.
         """
-        check(
-            not len(self.clauses) or not isinstance(self.clauses[0], (_DateRangeClause, _ResampleClauseLeftClosed, _ResampleClauseRightClosed)),
-            "In QueryBuilder.prepend: Date range and Resample only supported as first clauses in the pipeline",
-            )
         self.clauses = other.clauses + self.clauses
         self._python_clauses = other._python_clauses + self._python_clauses
         return self
 
-    def _head(self, n: int):
-        check(not len(self.clauses), "Head only supported as first clause in the pipeline")
+    def head(self, n: int = 5):
+        """
+        Filter out all but the first n rows of data. If n is negative, return all rows except the last n rows.
+
+        Parameters
+        ----------
+        n : int, default=5
+            Number of rows to select if non-negative, otherwise number of rows to exclude.
+
+        Returns
+        -------
+        QueryBuilder
+            Modified QueryBuilder object.
+        """
         self.clauses = self.clauses + [_RowRangeClause(_RowRangeType.HEAD, n)]
         self._python_clauses = self._python_clauses + [PythonRowRangeClause(row_range_type=_RowRangeType.HEAD, n=n)]
         return self
 
-    def _tail(self, n: int):
-        check(not len(self.clauses), "Tail only supported as first clause in the pipeline")
+    def tail(self, n: int = 5):
+        """
+        Filter out all but the last n rows of data. If n is negative, return all rows except the first n rows.
+
+        Parameters
+        ----------
+        n : int, default=5
+            Number of rows to select if non-negative, otherwise number of rows to exclude.
+
+        Returns
+        -------
+        QueryBuilder
+            Modified QueryBuilder object.
+        """
         self.clauses = self.clauses + [_RowRangeClause(_RowRangeType.TAIL, n)]
         self._python_clauses = self._python_clauses + [PythonRowRangeClause(row_range_type=_RowRangeType.TAIL, n=n)]
         return self
 
-    def _row_range(self, row_range):
-        check(not len(self.clauses), "Row range only supported as first clause in the pipeline")
+    def row_range(self, row_range: Tuple[int, int]):
+        """
+        Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound.
+        Should behave the same as df.iloc[start:end], including in the handling of negative start/end values.
+
+        Parameters
+        ----------
+        row_range : Tuple[int, int]
+            Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound.
+
+        Returns
+        -------
+        QueryBuilder
+            Modified QueryBuilder object.
+        """
         start = row_range[0]
         end = row_range[1]
 
@@ -837,9 +857,9 @@ class QueryBuilder:
     def date_range(self, date_range: DateRangeInput):
         """
         DateRange to read data for.  Applicable only for Pandas data with a DateTime index. Returns only the part
-        of the data that falls within the given range. The returned data object will use less memory than passing
-        date_range directly as an argument to the read method, at the cost of being slightly slower.
-        Must be the first clause in the QueryBuilder object.
+        of the data that falls within the given range. If this is the only processing clause being applied, then the
+        returned data object will use less memory than passing date_range directly as an argument to the read method, at
+         the cost of possibly being slightly slower.
 
         Parameters
         ----------
@@ -856,7 +876,6 @@ class QueryBuilder:
         QueryBuilder
             Modified QueryBuilder object.
         """
-        check(not len(self.clauses), "Date range only supported as first clause in the pipeline")
         start, end = normalize_dt_range_to_ts(date_range)
         self.clauses = self.clauses + [_DateRangeClause(start.value, end.value)]
         self._python_clauses = self._python_clauses + [PythonDateRangeClause(start.value, end.value)]
