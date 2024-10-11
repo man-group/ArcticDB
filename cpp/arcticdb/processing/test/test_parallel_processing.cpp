@@ -107,21 +107,6 @@ struct RestructuringClause {
     }
 };
 
-folly::Future<std::vector<EntityId>> flatten_entities_2(folly::Future<std::vector<std::vector<EntityId>>>&& entity_ids_vec_fut) {
-    return entity_ids_vec_fut.via(&async::cpu_executor()).thenValue([](std::vector<std::vector<EntityId>>&& entity_ids_vec) {
-        size_t res_size = std::accumulate(entity_ids_vec.cbegin(),
-                                          entity_ids_vec.cend(),
-                                          size_t(0),
-                                          [](size_t acc, const std::vector<EntityId>& vec) { return acc + vec.size(); });
-        std::vector<EntityId> res;
-        res.reserve(res_size);
-        for (const auto& entity_ids: entity_ids_vec) {
-            res.insert(res.end(), entity_ids.begin(), entity_ids.end());
-        }
-        return res;
-    });
-}
-
 folly::Future<std::vector<EntityId>> process_clauses(
         std::shared_ptr<ComponentManager> component_manager,
         std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures,
@@ -262,18 +247,24 @@ folly::Future<std::vector<EntityId>> process_clauses(
         });
 
     }
-    return flatten_entities_2(std::move(entity_ids_vec_fut));
+    return entity_ids_vec_fut.via(&async::cpu_executor()).thenValue([](std::vector<std::vector<EntityId>>&& entity_ids_vec) {
+        return flatten_entities(std::move(entity_ids_vec));
+    });
 }
 
 TEST(Clause, ParallelProcessing) {
-    auto clauses = std::make_shared<std::vector<std::shared_ptr<Clause>>>();
-    clauses->emplace_back(std::make_shared<Clause>(RowSliceClause()));
-    clauses->emplace_back(std::make_shared<Clause>(RestructuringClause()));
-    clauses->emplace_back(std::make_shared<Clause>(RowSliceClause()));
-    clauses->emplace_back(std::make_shared<Clause>(RestructuringClause()));
-    clauses->emplace_back(std::make_shared<Clause>(RowSliceClause()));
-    clauses->emplace_back(std::make_shared<Clause>(RestructuringClause()));
+    auto num_clauses = 5;
+    std::mt19937_64 eng{std::random_device{}()};
+    std::uniform_int_distribution<> dist{0, 1};
 
+    auto clauses = std::make_shared<std::vector<std::shared_ptr<Clause>>>();
+    for (auto unused=0; unused<num_clauses; ++unused) {
+        if (dist(eng) == 0) {
+            clauses->emplace_back(std::make_shared<Clause>(RowSliceClause()));
+        } else {
+            clauses->emplace_back(std::make_shared<Clause>(RestructuringClause()));
+        }
+    }
 
     auto component_manager = std::make_shared<ComponentManager>();
     for (auto& clause: *clauses) {
@@ -303,4 +294,9 @@ TEST(Clause, ParallelProcessing) {
     auto processed_entity_ids = std::move(processed_entity_ids_fut).get();
     auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager, std::move(processed_entity_ids));
     ASSERT_EQ(proc.segments_.value().size(), num_segments);
+    NumericId start_id{0};
+    for (const auto& segment: proc.segments_.value()) {
+        auto id = std::get<NumericId>(segment->descriptor().id());
+        ASSERT_EQ(id, start_id++ + num_clauses);
+    }
 }
