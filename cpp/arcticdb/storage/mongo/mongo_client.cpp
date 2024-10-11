@@ -181,9 +181,9 @@ class MongoClientImpl {
         uint64_t max_pool_size,
         uint64_t selection_timeout_ms
         ) :
+        instance_(MongoInstance::instance()),
         connection_string_(get_connection_string(config.uri(), min_pool_size, max_pool_size, selection_timeout_ms)),
-        pool_(mongocxx::uri(connection_string_)){
-}
+        pool_(mongocxx::uri(connection_string_)) {}
 
     bool write_segment(
         const std::string &database_name,
@@ -232,8 +232,6 @@ class MongoClientImpl {
 
   private:
     auto get_client() {
-        auto instance = MongoInstance::instance();
-
         auto try_get = [&]() {
             return pool_.acquire();
         };
@@ -243,6 +241,8 @@ class MongoClientImpl {
         return client;
     }
 
+    // It is important for the MongoInstance to be first so that it gets destructed last.
+    std::shared_ptr<MongoInstance> instance_;
     std::string connection_string_;
     mongocxx::pool pool_;
 };
