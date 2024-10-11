@@ -495,6 +495,25 @@ def test_columns_names_timeframe(lmdb_version_store, sym):
     assert tf == vit.data
 
 
+@pytest.mark.parametrize("name", (None, "", "non_empty"))
+def test_roundtrip_series_name(lmdb_version_store_v1, name):
+    lib = lmdb_version_store_v1
+    sym = "test_roundtrip_series_name"
+    series = pd.Series(np.arange(1), name=name)
+    lib.write(sym, series)
+    assert_series_equal(series, lib.read(sym).data)
+
+
+@pytest.mark.parametrize("name", (None, "", "non_empty"))
+def test_roundtrip_index_name(lmdb_version_store_v1, name):
+    lib = lmdb_version_store_v1
+    sym = "test_roundtrip_index_name"
+    df = pd.DataFrame({"col": [0]}, index=[pd.Timestamp(0)])
+    df.index.name = name
+    lib.write(sym, df)
+    assert_frame_equal(df, lib.read(sym).data)
+
+
 def test_columns_names_series(lmdb_version_store, sym):
     dr = pd.date_range("2020-01-01", "2020-12-31", name="date")
     date_series = pd.Series(dr, index=dr)
