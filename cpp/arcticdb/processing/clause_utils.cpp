@@ -81,4 +81,29 @@ std::vector<EntityId> flatten_entities(std::vector<std::vector<EntityId>>&& enti
     return res;
 }
 
+std::vector<folly::FutureSplitter<pipelines::SegmentAndSlice>> split_futures(
+        std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures) {
+    std::vector<folly::FutureSplitter<pipelines::SegmentAndSlice>> res;
+    res.reserve(segment_and_slice_futures.size());
+    for (auto&& future: segment_and_slice_futures) {
+        res.emplace_back(folly::splitFuture(std::move(future)));
+    }
+    return res;
+}
+
+std::shared_ptr<std::vector<EntityFetchCount>> generate_segment_fetch_counts(
+        const std::vector<std::vector<size_t>>& processing_unit_indexes,
+        size_t num_segments) {
+    auto res = std::make_shared<std::vector<EntityFetchCount>>(num_segments, 0);
+    for (const auto& list: processing_unit_indexes) {
+        for (auto idx: list) {
+            res->at(idx)++;
+        }
+    }
+    debug::check<ErrorCode::E_ASSERTION_FAILURE>(
+            std::all_of(res->begin(), res->end(), [](const size_t& val) { return val != 0; }),
+            "All segments should be needed by at least one ProcessingUnit");
+    return res;
+}
+
 }
