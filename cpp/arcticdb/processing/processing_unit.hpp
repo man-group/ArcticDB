@@ -51,7 +51,7 @@ namespace arcticdb {
         std::optional<std::vector<std::shared_ptr<pipelines::ColRange>>> col_ranges_;
         std::optional<std::vector<std::shared_ptr<AtomKey>>> atom_keys_;
         std::optional<bucket_id> bucket_;
-        std::optional<std::vector<uint64_t>> segment_initial_expected_get_calls_;
+        std::optional<std::vector<uint64_t>> entity_fetch_count_;
 
         std::shared_ptr<ExpressionContext> expression_context_;
         std::unordered_map<std::string, VariantData> computed_data_;
@@ -90,8 +90,8 @@ namespace arcticdb {
             bucket_.emplace(bucket);
         }
 
-        void set_segment_initial_expected_get_calls(std::vector<uint64_t>&& segment_initial_expected_get_calls) {
-            segment_initial_expected_get_calls_.emplace(segment_initial_expected_get_calls);
+        void set_entity_fetch_count(std::vector<uint64_t>&& entity_fetch_count) {
+            entity_fetch_count_.emplace(entity_fetch_count);
         }
 
         void apply_filter(util::BitSet&& bitset, PipelineOptimisation optimisation);

@@ -9,212 +9,111 @@
 
 #include <atomic>
 
+#include <entt/entity/registry.hpp>
+
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/util/constructors.hpp>
 
 namespace arcticdb {
 
 using namespace pipelines;
-using EntityId = size_t;
+using EntityId = entt::entity;
+using EntityFetchCount = uint64_t;
 using bucket_id = uint8_t;
+
+using namespace entt::literals;
+
+constexpr auto remaining_entity_fetch_count_id = "remaining_entity_fetch_count"_hs;
 
 class ComponentManager {
 public:
     ComponentManager() = default;
     ARCTICDB_NO_MOVE_OR_COPY(ComponentManager)
 
-    void set_next_entity_id(EntityId id);
+    std::vector<EntityId> get_new_entity_ids(size_t count);
 
-    template<typename T>
-    std::vector<EntityId> add(std::vector<T>&& components, const std::optional<std::vector<EntityId>>& ids=std::nullopt) {
-        std::vector<EntityId> insertion_ids;
-        if (ids.has_value()) {
-            insertion_ids = *ids;
-        } else {
-            insertion_ids.reserve(components.size());
-            for (size_t idx = 0; idx < components.size(); ++idx) {
-                insertion_ids.emplace_back(next_entity_id_.fetch_add(1));
+    // Add a single entity with the components defined by args
+    template<class... Args>
+    void add_entity(EntityId id, Args... args) {
+        std::lock_guard<std::mutex> lock(mtx_);
+        ([&]{
+            registry_.emplace<Args>(id, args);
+            // Store the initial entity fetch count component as a "first-class" entity, accessible by
+            // registry_.get<EntityFetchCount>(id), as this is external facing (used by resample)
+            // The remaining entity fetch count below will be decremented each time an entity is fetched, but is never
+            // accessed externally, so make this a named component.
+            if constexpr (std::is_same_v<Args, EntityFetchCount>) {
+                auto&& remaining_entity_fetch_count_registry = registry_.storage<EntityFetchCount>(remaining_entity_fetch_count_id);
+                remaining_entity_fetch_count_registry.emplace(id, args);
+            }
+        }(), ...);
+    }
+
+    // Add a collection of entities. Each element of args should be a collection of components, all of which have the
+    // same number of elements
+    template<class... Args>
+    std::vector<EntityId> add_entities(Args... args) {
+        std::vector<EntityId> ids;
+        size_t entity_count{0};
+        std::lock_guard<std::mutex> lock(mtx_);
+        ([&]{
+            if (entity_count == 0) {
+                // Reserve memory for the result on the first pass
+                entity_count = args.size();
+                ids.resize(entity_count);
+                registry_.create(ids.begin(), ids.end());
+            } else {
+                internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                        args.size() == entity_count,
+                        "ComponentManager::add_entities received collections of differing lengths"
+                        );
+            }
+            registry_.insert<typename Args::value_type>(ids.cbegin(), ids.cend(), args.begin());
+            if constexpr (std::is_same_v<typename Args::value_type, EntityFetchCount>) {
+                auto&& remaining_entity_fetch_count_registry = registry_.storage<EntityFetchCount>(remaining_entity_fetch_count_id);
+                remaining_entity_fetch_count_registry.insert(ids.cbegin(), ids.cend(), args.begin());
+            }
+        }(), ...);
+        return ids;
+    }
+
+    // Get a collection of entities. Returns a tuple of vectors, one for each component requested via Args
+    template<class... Args>
+    std::tuple<std::vector<Args>...> get_entities(const std::vector<EntityId>& ids) {
+        std::vector<std::tuple<Args...>> tuple_res;
+        tuple_res.reserve(ids.size());
+        {
+            std::lock_guard<std::mutex> lock(mtx_);
+            auto&& remaining_entity_fetch_count_registry = registry_.storage<EntityFetchCount>(remaining_entity_fetch_count_id);
+            // Using view.get theoretically and empirically faster than registry_.get
+            auto view = registry_.view<const Args...>();
+            for (auto id: ids) {
+                tuple_res.emplace_back(std::move(view.get(id)));
+                auto& remaining_entity_fetch_count = remaining_entity_fetch_count_registry.get(id);
+                // This entity will never be accessed again
+                if (--remaining_entity_fetch_count == 0) {
+                    erase_entity(id);
+                }
             }
         }
-
-        if constexpr(std::is_same_v<T, std::shared_ptr<SegmentInMemory>>) {
-            segment_map_.add(insertion_ids, std::move(components));
-        } else if constexpr(std::is_same_v<T, std::shared_ptr<RowRange>>) {
-            row_range_map_.add(insertion_ids, std::move(components));
-        } else if constexpr(std::is_same_v<T, std::shared_ptr<ColRange>>) {
-            col_range_map_.add(insertion_ids, std::move(components));
-        } else if constexpr(std::is_same_v<T, std::shared_ptr<AtomKey>>) {
-            atom_key_map_.add(insertion_ids, std::move(components));
-        } else if constexpr(std::is_same_v<T, bucket_id>) {
-            bucket_map_.add(insertion_ids, std::move(components));
-        } else {
-            // Hacky workaround for static_assert(false) not being allowed
-            // See https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2022/p2593r0.html
-            static_assert(sizeof(T) == 0, "Unsupported component type passed to ComponentManager::add");
+        // Convert vector of tuples into tuple of vectors
+        std::tuple<std::vector<Args>...> res;
+        ([&]{
+            std::get<std::vector<Args>>(res).reserve(ids.size());
+        }(), ...);
+        for (auto&& tuple: tuple_res) {
+            ([&] {
+                std::get<std::vector<Args>>(res).emplace_back(std::move(std::get<Args>(tuple)));
+            }(), ...);
         }
-        return insertion_ids;
-    }
-
-    template<typename T>
-    EntityId add(T component, std::optional<EntityId> id=std::nullopt, std::optional<uint64_t> expected_get_calls=std::nullopt) {
-        auto insertion_id = entity_id(id);
-        if constexpr(std::is_same_v<T, std::shared_ptr<SegmentInMemory>>) {
-            segment_map_.add(insertion_id, std::move(component), expected_get_calls);
-        } else if constexpr(std::is_same_v<T, std::shared_ptr<RowRange>>) {
-            row_range_map_.add(insertion_id, std::move(component));
-        } else if constexpr(std::is_same_v<T, std::shared_ptr<ColRange>>) {
-            col_range_map_.add(insertion_id, std::move(component));
-        } else if constexpr(std::is_same_v<T, std::shared_ptr<AtomKey>>) {
-            atom_key_map_.add(insertion_id, std::move(component));
-        } else if constexpr(std::is_same_v<T, bucket_id>) {
-            bucket_map_.add(insertion_id, std::move(component));
-        } else {
-            // Hacky workaround for static_assert(false) not being allowed
-            // See https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2022/p2593r0.html
-            static_assert(sizeof(T) == 0, "Unsupported component type passed to ComponentManager::add");
-        }
-        return insertion_id;
-    }
-
-    template<typename T>
-    std::vector<T> get(const std::vector<EntityId>& ids) {
-        if constexpr(std::is_same_v<T, std::shared_ptr<SegmentInMemory>>) {
-            return segment_map_.get(ids);
-        } else if constexpr(std::is_same_v<T, std::shared_ptr<RowRange>>) {
-            return row_range_map_.get(ids);
-        } else if constexpr(std::is_same_v<T, std::shared_ptr<ColRange>>) {
-            return col_range_map_.get(ids);
-        } else if constexpr(std::is_same_v<T, std::shared_ptr<AtomKey>>) {
-            return atom_key_map_.get(ids);
-        } else if constexpr(std::is_same_v<T, bucket_id>) {
-            return bucket_map_.get(ids);
-        } else {
-            // Hacky workaround for static_assert(false) not being allowed
-            // See https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2022/p2593r0.html
-            static_assert(sizeof(T) == 0, "Unsupported component type passed to ComponentManager::get");
-        }
-    }
-
-    template<typename T>
-    uint64_t get_initial_expected_get_calls(EntityId id) {
-        // Only applies to ComponentMaps tracking expected get calls
-        if constexpr(std::is_same_v<T, std::shared_ptr<SegmentInMemory>>) {
-            return segment_map_.get_initial_expected_get_calls(id);
-        } else {
-            // Hacky workaround for static_assert(false) not being allowed
-            // See https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2022/p2593r0.html
-            static_assert(sizeof(T) == 0, "Unsupported component type passed to ComponentManager::get_initial_expected_get_calls");
-        }
+        return res;
     }
 
 private:
-    template<typename T>
-    class ComponentMap {
-    public:
-        explicit ComponentMap(std::string&& entity_type, bool track_expected_gets):
-                entity_type_(std::move(entity_type)),
-                opt_expected_get_calls_map_(track_expected_gets ? std::make_optional<ankerl::unordered_dense::map<EntityId, uint64_t>>() : std::nullopt),
-                opt_expected_get_calls_initial_map_(track_expected_gets ? std::make_optional<ankerl::unordered_dense::map<EntityId, uint64_t>>() : std::nullopt){
-        };
-        ARCTICDB_NO_MOVE_OR_COPY(ComponentMap)
+    void erase_entity(EntityId id);
 
-        void add(const std::vector<EntityId>& ids,
-                 std::vector<T>&& entities) {
-            std::lock_guard <std::mutex> lock(mtx_);
-            for (auto [idx, id]: folly::enumerate(ids)) {
-                ARCTICDB_DEBUG(log::storage(), "Adding {} with id {}", entity_type_, id);
-                internal::check<ErrorCode::E_ASSERTION_FAILURE>(map_.try_emplace(id, std::move(entities[idx])).second,
-                                                                "Failed to insert {} with ID {}, already exists",
-                                                                entity_type_, id);
-                if (opt_expected_get_calls_map_.has_value()) {
-                    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                            opt_expected_get_calls_map_->try_emplace(id, 1).second,
-                            "Failed to insert {} with ID {}, already exists",
-                            entity_type_, id);
-                    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                            opt_expected_get_calls_initial_map_->try_emplace(id, 1).second,
-                            "Failed to insert {} with ID {}, already exists",
-                            entity_type_, id);
-                }
-            }
-        }
-        void add(EntityId id, T&& entity, std::optional<uint64_t> expected_get_calls=std::nullopt) {
-            std::lock_guard <std::mutex> lock(mtx_);
-            ARCTICDB_DEBUG(log::storage(), "Adding {} with id {}", entity_type_, id);
-            internal::check<ErrorCode::E_ASSERTION_FAILURE>(map_.try_emplace(id, std::move(entity)).second,
-                                                            "Failed to insert {} with ID {}, already exists",
-                                                            entity_type_, id);
-            if (opt_expected_get_calls_map_.has_value()) {
-                internal::check<ErrorCode::E_ASSERTION_FAILURE>(expected_get_calls.has_value() && *expected_get_calls > 0,
-                                                                "Failed to insert {} with ID {}, must provide expected gets",
-                                                                entity_type_, id);
-                internal::check<ErrorCode::E_ASSERTION_FAILURE>(opt_expected_get_calls_map_->try_emplace(id, *expected_get_calls).second,
-                                                                "Failed to insert {} with ID {}, already exists",
-                                                                entity_type_, id);
-                internal::check<ErrorCode::E_ASSERTION_FAILURE>(opt_expected_get_calls_initial_map_->try_emplace(id, *expected_get_calls).second,
-                                                                "Failed to insert {} with ID {}, already exists",
-                                                                entity_type_, id);
-            }
-        }
-        std::vector<T> get(const std::vector<EntityId>& ids) {
-            std::vector<T> res;
-            res.reserve(ids.size());
-            std::lock_guard <std::mutex> lock(mtx_);
-            for (auto id: ids) {
-                ARCTICDB_DEBUG(log::storage(), "Getting {} with id {}", entity_type_, id);
-                auto entity_it = map_.find(id);
-                internal::check<ErrorCode::E_ASSERTION_FAILURE>(entity_it != map_.end(),
-                                                                "Requested non-existent {} with ID {}",
-                                                                entity_type_, id);
-                res.emplace_back(entity_it->second);
-                if (opt_expected_get_calls_map_.has_value()) {
-                    auto expected_get_calls_it = opt_expected_get_calls_map_->find(id);
-                    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                            expected_get_calls_it != opt_expected_get_calls_map_->end(),
-                            "Requested non-existent {} with ID {}",
-                            entity_type_, id);
-                    if (--expected_get_calls_it->second == 0) {
-                        ARCTICDB_DEBUG(log::storage(),
-                                       "{} with id {} has been fetched the expected number of times, erasing from component manager",
-                                       entity_type_, id);
-                        map_.erase(entity_it);
-                        opt_expected_get_calls_map_->erase(expected_get_calls_it);
-                    }
-                }
-            }
-            return res;
-        }
-        uint64_t get_initial_expected_get_calls(EntityId id) {
-            std::lock_guard <std::mutex> lock(mtx_);
-            ARCTICDB_DEBUG(log::storage(), "Getting initial expected get calls of {} with id {}", entity_type_, id);
-            internal::check<ErrorCode::E_ASSERTION_FAILURE>(opt_expected_get_calls_initial_map_.has_value(),
-                                                            "Cannot get initial expected get calls for {} as they are not being tracked", entity_type_);
-            auto it = opt_expected_get_calls_initial_map_->find(id);
-            internal::check<ErrorCode::E_ASSERTION_FAILURE>(it != opt_expected_get_calls_initial_map_->end(),
-                                                            "Requested non-existent {} with ID {}",
-                                                            entity_type_, id);
-            return it->second;
-        }
-    private:
-        // Just used for logging/exception messages
-        std::string entity_type_;
-        ankerl::unordered_dense::map<EntityId, T> map_;
-        // If not nullopt, tracks the number of calls to get for each entity id, and erases from maps when it has been
-        // called this many times
-        std::optional<ankerl::unordered_dense::map<EntityId, uint64_t>> opt_expected_get_calls_map_;
-        std::optional<ankerl::unordered_dense::map<EntityId, uint64_t>> opt_expected_get_calls_initial_map_;
-        std::mutex mtx_;
-    };
-
-    ComponentMap<std::shared_ptr<SegmentInMemory>> segment_map_{"segment", true};
-    ComponentMap<std::shared_ptr<RowRange>> row_range_map_{"row range", false};
-    ComponentMap<std::shared_ptr<ColRange>> col_range_map_{"col range", false};
-    ComponentMap<std::shared_ptr<AtomKey>> atom_key_map_{"atom key", false};
-    ComponentMap<bucket_id> bucket_map_{"bucket", false};
-
-    // The next ID to use when inserting elements into any of the maps
-    std::atomic<EntityId> next_entity_id_{0};
-    EntityId entity_id(const std::optional<EntityId>& id=std::nullopt);
+    entt::registry registry_;
+    std::mutex mtx_;
 };
 
 } // namespace arcticdb
