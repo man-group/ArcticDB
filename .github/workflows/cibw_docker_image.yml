@@ -22,7 +22,7 @@ env:
   ARTIFACT_NAME: arcticdb_manylinux
 jobs:
   work:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
     - name: Calculate build script hash
       run: |
