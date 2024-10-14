@@ -43,7 +43,8 @@ RUN rpmkeys --import 'https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x3F
     sed -ir 's/socket_timeout=3/socket_timeout=1/ ; s/maxhostfileage.*/maxhostfileage=1/ ;\
             s/#?exclude.*/exclude=.edu/' /etc/yum/pluginconf.d/fastestmirror.conf
 ADD sccache /usr/local/bin/
-RUN yum update -y && \
+RUN yum-config-manager --disable centos-sclo-rh/x86_64 && \
+    yum update -y && \
     yum install -y zip jq less devtoolset-11-gdb perl-IPC-Cmd \
       openssl-devel cyrus-sasl-devel devtoolset-10-libatomic-devel libcurl-devel python3-devel flex && \
     rpm -Uvh --nodeps \$(repoquery --location mono-{core,web,devel,data,wcf,winfx}) && \
