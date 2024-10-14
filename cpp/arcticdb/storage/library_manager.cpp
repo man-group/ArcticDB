@@ -39,10 +39,9 @@ struct StorageVisitor {
     }
 };
 
-void apply_storage_override(
-        const StorageOverride& storage_override,
-        arcticdb::proto::storage::LibraryConfig& lib_cfg_proto,
-        bool override_https) {
+void apply_storage_override(const StorageOverride& storage_override,
+                                   arcticdb::proto::storage::LibraryConfig& lib_cfg_proto,
+                                   bool override_https) {
     util::variant_match(
             storage_override.variant(),
             StorageVisitor<S3Override>{lib_cfg_proto, override_https},
@@ -80,11 +79,9 @@ bool is_storage_config_ok(const arcticdb::proto::storage::VariantStorage& storag
 } // anonymous namespace
 
 LibraryManager::LibraryManager(const std::shared_ptr<storage::Library>& library) :
-            store_(std::make_shared<async::AsyncStore<util::SysClock>>(
-                library,
-                codec::default_lz4_codec(),
-                encoding_version(library->config()))),
-                open_libraries_(ConfigsMap::instance()->get_int("LibraryManager.CacheSize", 100)) {
+            store_(std::make_shared<async::AsyncStore<util::SysClock>>(library, codec::default_lz4_codec(),
+                    encoding_version(library->config()))),
+                    open_libraries_() {
 }
 
 void LibraryManager::write_library_config(const py::object& lib_cfg, const LibraryPath& path, const StorageOverride& storage_override,
@@ -210,30 +207,34 @@ std::shared_ptr<Library> LibraryManager::get_library(const LibraryPath& path,
     if (!ignore_cache) {
         // Check global cache first, important for LMDB to only open once from a given process
         std::lock_guard<std::mutex> lock{open_libraries_mutex_};
-        if (auto cached = open_libraries_.get(path); cached) {
-            return *cached;
+        if (auto cached = open_libraries_.find(path); cached != open_libraries_.end()) {
+            return cached -> second;
         }
     }
 
     arcticdb::proto::storage::LibraryConfig config = get_config_internal(path, {storage_override});
 
-    std::vector<arcticdb::proto::storage::VariantStorage> storage_configs;
+    std::vector<arcticdb::proto::storage::VariantStorage> st;
     for(const auto& storage: config.storage_by_id()){
-        storage_configs.emplace_back(storage.second);
+        st.emplace_back(storage.second);
     }
+    auto storages = create_storages(path, OpenMode::DELETE, st);
 
-    auto storages = create_storages(path, OpenMode::DELETE, storage_configs);
     auto lib = std::make_shared<Library>(path, std::move(storages), config.lib_desc().version());
-    open_libraries_.put(path, lib);
+
+    {
+        std::lock_guard<std::mutex> lock{open_libraries_mutex_};
+        open_libraries_[path] = lib;
+    }
 
     return lib;
 }
 
 void LibraryManager::cleanup_library_if_open(const LibraryPath &path) {
     std::lock_guard<std::mutex> lock{open_libraries_mutex_};
-    if (auto library = open_libraries_.get(path); library) {
-        library.value()->cleanup();
-        open_libraries_.remove(path);
+    if (auto it = open_libraries_.find(path); it != open_libraries_.end()) {
+        it->second->cleanup();
+        open_libraries_.erase(it);
     }
 }
 
