@@ -84,7 +84,7 @@ jobs:
         
   cleanup:
     if: inputs.job_type == 'cleanup'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     defaults:
       run: {shell: bash}
     steps:
