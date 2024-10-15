@@ -11,6 +11,7 @@ from ..util.mark import (
     MONGO_TESTS_MARK,
     VENV_COMPAT_TESTS_MARK,
 )
+from packaging.version import Version
 
 logger = logging.getLogger("Compatibility tests")
 
@@ -173,9 +174,10 @@ def arctic_uri(request):
 
 @pytest.fixture()
 def old_venv_and_arctic_uri(old_venv, arctic_uri):
-    if old_venv.version == "1.6.2" and arctic_uri.startswith("mongo"):
-        pytest.skip("Mongo storage backend is not supported on 1.6.2")
-    if old_venv.version == "4.5.0" and arctic_uri.startswith("mongo"):
-        # TODO: Replace 4.5.0 with 4.5.1 when it is released and re-enable mongo.
-        pytest.skip("Mongo storage backend has a desctruction bug present in 4.5.0, which can cause flaky segfaults.")
+    # TODO: Replace 4.5.0 with 4.5.1 when it is released to re-enable both mongo and lmdb.
+    if Version(old_venv.version) <= Version("4.5.0") and arctic_uri.startswith("mongo"):
+        pytest.skip("Mongo storage backend has a desctruction bug present until 4.5.0, which can cause flaky segfaults.")
+    if Version(old_venv.version) <= Version("4.5.0") and arctic_uri.startswith("lmdb"):
+        pytest.skip("LMDB storage backend has a desctruction bug present until 4.5.0, which can cause flaky segfaults.")
+
     return old_venv, arctic_uri
