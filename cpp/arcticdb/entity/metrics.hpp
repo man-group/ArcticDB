@@ -134,7 +134,7 @@ public:
         }
 
         family->Remove(metric_to_remove->second);
-        auto removed = metrics.erase({name, labels});
+        metrics.erase({name, labels});
     }
 
     // update pre-registered metrics with optional instance labels.  Each unique set of labels generates a new metric instance
