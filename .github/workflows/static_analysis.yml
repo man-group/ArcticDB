@@ -17,3 +17,4 @@ jobs:
           polaris_assessment_types: "SAST"
           polaris_prComment_enabled: true
           polaris_waitForScan: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
