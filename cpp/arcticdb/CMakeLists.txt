@@ -459,6 +459,7 @@ set(arcticdb_srcs
         storage/config_resolvers.cpp
         storage/failure_simulation.cpp
         storage/library_manager.cpp
+        storage/azure/azure_settings.hpp
         storage/azure/azure_storage.cpp
         storage/azure/azure_real_client.cpp
         storage/azure/azure_mock_client.cpp

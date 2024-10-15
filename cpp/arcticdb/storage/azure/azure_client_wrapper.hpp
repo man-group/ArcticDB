@@ -47,7 +47,6 @@ inline std::string AzureErrorCode_to_string(AzureErrorCode error) {
     // It can be derived as either a real connection to Azure or a mock used for unit tests.
 class AzureClientWrapper {
 public:
-    using Config = arcticdb::proto::azure_storage::Config;
     virtual void write_blob(
             const std::string& blob_name,
             Segment&& segment,

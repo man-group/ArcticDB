@@ -11,11 +11,10 @@
 #include <arcticdb/storage/storage_factory.hpp>
 #include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/storage/azure/azure_client_wrapper.hpp>
+#include <arcticdb/storage/azure/azure_settings.hpp>
 #include <arcticdb/log/log.hpp>
-#include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/composite.hpp>
 #include <arcticdb/util/configs_map.hpp>
-#include <arcticdb/util/pb_util.hpp>
 #include <azure/core.hpp>
 #include <azure/storage/blobs.hpp>
 #include <cstdlib>
@@ -27,10 +26,7 @@ namespace arcticdb::storage::azure {
 
 class AzureStorage final : public Storage {
   public:
-    // friend class AzureTestClientAccessor<AzureStorage>;
-    using Config = arcticdb::proto::azure_storage::Config;
-
-    AzureStorage(const LibraryPath &lib, OpenMode mode, const Config &conf);
+    AzureStorage(const LibraryPath &lib, OpenMode mode, const AzureSettings &conf);
 
     std::string name() const final;
 
@@ -66,30 +62,4 @@ class AzureStorage final : public Storage {
     Azure::Storage::Blobs::UploadBlockBlobFromOptions upload_option_;
     Azure::Storage::Blobs::DownloadBlobToOptions download_option_;
 };
-
-inline arcticdb::proto::storage::VariantStorage pack_config(const std::string &container_name) {
-    arcticdb::proto::storage::VariantStorage output;
-    arcticdb::proto::azure_storage::Config cfg;
-    cfg.set_container_name(container_name);
-    util::pack_to_any(cfg, *output.mutable_config());
-    return output;
-}
-
-inline arcticdb::proto::storage::VariantStorage pack_config(
-        const std::string &container_name,
-        const std::string &endpoint
-        ) {
-    arcticdb::proto::storage::VariantStorage output;
-    arcticdb::proto::azure_storage::Config cfg;
-    cfg.set_container_name(container_name);
-    cfg.set_endpoint(endpoint);
-    util::pack_to_any(cfg, *output.mutable_config());
-    return output;
-}
-
-template<typename ConfigType>
-std::shared_ptr<Azure::Storage::StorageSharedKeyCredential> get_azure_credentials(const ConfigType& conf) {
-    return std::make_shared<Azure::Storage::StorageSharedKeyCredential>(conf.credential_name(), conf.credential_key());
-}
-
 } //namespace arcticdb::azure

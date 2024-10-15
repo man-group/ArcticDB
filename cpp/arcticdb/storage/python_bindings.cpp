@@ -20,6 +20,8 @@
 #include <arcticdb/storage/constants.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
 
+#include <arcticdb/storage/azure/azure_settings.hpp>
+
 namespace py = pybind11;
 
 namespace arcticdb::storage::apy {
@@ -176,6 +178,17 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         .def("set_s3_override", &StorageOverride::set_s3_override)
         .def("set_azure_override", &StorageOverride::set_azure_override)
         .def("set_lmdb_override", &StorageOverride::set_lmdb_override);
+
+    py::class_<AzureSettings>(storage, "AzureSettings")
+        .def(py::init<>())
+        .def_property("container_name", &AzureSettings::container_name, &AzureSettings::set_container_name)
+        .def_property("endpoint", &AzureSettings::endpoint, &AzureSettings::set_endpoint)
+        .def_property("ca_cert_path", &AzureSettings::ca_cert_path, &AzureSettings::set_ca_cert_path)
+        .def_property("ca_cert_dir", &AzureSettings::ca_cert_dir, &AzureSettings::set_ca_cert_dir)
+        .def_property("max_connections", &AzureSettings::max_connections, &AzureSettings::set_max_connections)
+        .def_property("request_timeout", &AzureSettings::request_timeout, &AzureSettings::set_request_timeout)
+        .def_property("prefix", &AzureSettings::prefix, &AzureSettings::set_prefix)
+        .def_property("use_mock_storage_for_testing", &AzureSettings::use_mock_storage_for_testing, &AzureSettings::set_use_mock_storage_for_testing);
 
     py::class_<LibraryManager, std::shared_ptr<LibraryManager>>(storage, "LibraryManager")
         .def(py::init<std::shared_ptr<storage::Library>>())
