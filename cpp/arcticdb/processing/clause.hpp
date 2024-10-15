@@ -36,6 +36,8 @@
 
 namespace arcticdb {
 
+using ResampleOrigin = std::variant<std::string, timestamp>;
+
 using RangesAndKey = pipelines::RangesAndKey;
 using SliceAndKey = pipelines::SliceAndKey;
 
@@ -330,23 +332,17 @@ struct ResampleClause {
     std::vector<SortedAggregatorInterface> aggregators_;
     std::string str_;
     timestamp offset_;
+    ResampleOrigin origin;
 
     ResampleClause() = delete;
 
     ARCTICDB_MOVE_COPY_DEFAULT(ResampleClause)
 
-    ResampleClause(const std::string& rule,
-                   ResampleBoundary label_boundary,
-                   std::function<std::vector<timestamp>(timestamp, timestamp, std::string_view, ResampleBoundary, timestamp)>&& generate_bucket_boundaries,
-                   timestamp offset):
-            rule_(rule),
-            label_boundary_(label_boundary),
-            generate_bucket_boundaries_(std::move(generate_bucket_boundaries)),
-            offset_(offset) {
-        clause_info_.input_structure_ = ProcessingStructure::TIME_BUCKETED;
-        clause_info_.can_combine_with_column_selection_ = false;
-        clause_info_.modifies_output_descriptor_ = true;
-    }
+    ResampleClause(std::string rule,
+        ResampleBoundary label_boundary,
+        std::function<std::vector<timestamp>(timestamp, timestamp, std::string_view, ResampleBoundary, timestamp)>&& generate_bucket_boundaries,
+        timestamp offset,
+        ResampleOrigin origin);
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
             std::vector<RangesAndKey>& ranges_and_keys);
@@ -355,27 +351,19 @@ struct ResampleClause {
 
     [[nodiscard]] std::vector<EntityId> process(std::vector<EntityId>&& entity_ids) const;
 
-    [[nodiscard]] const ClauseInfo& clause_info() const {
-        return clause_info_;
-    }
+    [[nodiscard]] const ClauseInfo& clause_info() const;
 
     void set_processing_config(const ProcessingConfig& processing_config);
 
-    void set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
-        component_manager_ = component_manager;
-    }
+    void set_component_manager(std::shared_ptr<ComponentManager> component_manager);
 
     [[nodiscard]] std::string to_string() const;
 
-    [[nodiscard]] std::string rule() const {
-        return rule_;
-    }
+    [[nodiscard]] std::string rule() const;
 
     void set_aggregations(const std::vector<NamedAggregator>& named_aggregators);
 
-    void set_date_range(timestamp date_range_start, timestamp date_range_end) {
-        date_range_.emplace(date_range_start, date_range_end);
-    }
+    void set_date_range(timestamp date_range_start, timestamp date_range_end);
 
     std::vector<timestamp> generate_bucket_boundaries(timestamp first_ts,
                                                       timestamp last_ts,

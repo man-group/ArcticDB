@@ -425,6 +425,42 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
 }
 
 template<ResampleBoundary closed_boundary>
+ResampleClause<closed_boundary>::ResampleClause(std::string rule,
+    ResampleBoundary label_boundary,
+    std::function<std::vector<timestamp>(timestamp, timestamp, std::string_view, ResampleBoundary, timestamp)>&& generate_bucket_boundaries,
+    timestamp offset,
+    ResampleOrigin origin) :
+    rule_(std::move(rule)),
+    label_boundary_(label_boundary),
+    generate_bucket_boundaries_(std::move(generate_bucket_boundaries)),
+    offset_(offset),
+    origin(std::move(origin)) {
+    clause_info_.input_structure_ = ProcessingStructure::TIME_BUCKETED;
+    clause_info_.can_combine_with_column_selection_ = false;
+    clause_info_.modifies_output_descriptor_ = true;
+}
+
+template<ResampleBoundary closed_boundary>
+const ClauseInfo& ResampleClause<closed_boundary>::clause_info() const {
+    return clause_info_;
+}
+
+template<ResampleBoundary closed_boundary>
+void ResampleClause<closed_boundary>::set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
+    component_manager_ = std::move(component_manager);
+}
+
+template<ResampleBoundary closed_boundary>
+std::string ResampleClause<closed_boundary>::rule() const {
+    return rule_;
+}
+
+template<ResampleBoundary closed_boundary>
+void ResampleClause<closed_boundary>::set_date_range(timestamp date_range_start, timestamp date_range_end) {
+    date_range_.emplace(date_range_start, date_range_end);
+}
+
+template<ResampleBoundary closed_boundary>
 void ResampleClause<closed_boundary>::set_aggregations(const std::vector<NamedAggregator>& named_aggregators) {
     clause_info_.input_columns_ = std::make_optional<std::unordered_set<std::string>>();
     str_ = fmt::format("RESAMPLE({}) | AGGREGATE {{", rule());

@@ -314,6 +314,7 @@ class PythonResampleClause:
     aggregations: Dict[str, Union[str, Tuple[str, str]]] = None
     # In nanosecods
     offset: int = 0
+    origin: Union[str, pd.Timestamp]
 
 
 class QueryBuilder:
@@ -585,6 +586,7 @@ class QueryBuilder:
             closed: Optional[str] = None,
             label: Optional[str] = None,
             offset: Optional[Union[str, pd.Timedelta]] = None
+            origin: Union[str, pd.Timestamp] = 'start_day'
     ):
         """
         Resample a symbol on the index. The symbol must be datetime indexed. Resample operations must be followed by
@@ -631,7 +633,14 @@ class QueryBuilder:
         offset: Optional[Union[str, pd.Timedelta]] default=None
             Offset the start of each bucket. Supported strings are the same as in `pd.Timedelta`. If offset is larger than
             rule then `offset` modulo `rule` is used as an offset.
+        origin: Optional[Union[str, pd.Timestamp]] default='start_day'
+            The timestamp on which to adjust the grouping. Supported string are:
 
+            * epoch: origin is 1970-01-01
+            * start: origin is the first value of the timeseries
+            * start_day: origin is the first day at midnight of the timeseries
+            * end: origin is the last value of the timeseries
+            * end_day: origin is the ceiling midnight of the last day
         Returns
         -------
         QueryBuilder
@@ -749,10 +758,10 @@ class QueryBuilder:
         check(closed in boundary_map.keys(), f"closed kwarg to resample must be `left`, 'right', or None, but received '{closed}'")
         check(label in boundary_map.keys(), f"label kwarg to resample must be `left`, 'right', or None, but received '{closed}'")
         if boundary_map[closed] == _ResampleBoundary.LEFT:
-            self.clauses = self.clauses + [_ResampleClauseLeftClosed(rule, boundary_map[label], offset_ns)]
+            self.clauses = self.clauses + [_ResampleClauseLeftClosed(rule, boundary_map[label], offset_ns, origin)]
         else:
-            self.clauses = self.clauses + [_ResampleClauseRightClosed(rule, boundary_map[label], offset_ns)]
-        self._python_clauses = self._python_clauses + [PythonResampleClause(rule=rule, closed=boundary_map[closed], label=boundary_map[label], offset=offset_ns)]
+            self.clauses = self.clauses + [_ResampleClauseRightClosed(rule, boundary_map[label], offset_ns, origin)]
+        self._python_clauses = self._python_clauses + [PythonResampleClause(rule=rule, closed=boundary_map[closed], label=boundary_map[label], offset=offset_ns, origin=origin)]
         return self
 
 
@@ -930,9 +939,9 @@ class QueryBuilder:
                 self.clauses = self.clauses + [_AggregationClause(self.clauses[-1].grouping_column, python_clause.aggregations)]
             elif isinstance(python_clause, PythonResampleClause):
                 if python_clause.closed == _ResampleBoundary.LEFT:
-                    self.clauses = self.clauses + [_ResampleClauseLeftClosed(python_clause.rule, python_clause.label, python_clause.offset)]
+                    self.clauses = self.clauses + [_ResampleClauseLeftClosed(python_clause.rule, python_clause.label, python_clause.offset, python_clause.origin)]
                 else:
-                    self.clauses = self.clauses + [_ResampleClauseRightClosed(python_clause.rule, python_clause.label, python_clause.offset)]
+                    self.clauses = self.clauses + [_ResampleClauseRightClosed(python_clause.rule, python_clause.label, python_clause.offset, python_clause.origin)]
                 if python_clause.aggregations is not None:
                     self.clauses[-1].set_aggregations(python_clause.aggregations)
             elif isinstance(python_clause, PythonRowRangeClause):

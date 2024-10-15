@@ -5,18 +5,16 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/version/python_bindings.hpp>
+#include <arcticdb/util/error_code.hpp>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
 #include <pybind11/operators.h>
 #include <arcticdb/entity/data_error.hpp>
 #include <arcticdb/version/version_store_api.hpp>
-#include <arcticdb/python/arctic_version.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/query.hpp>
-#include <arcticdb/storage/mongo/mongo_instance.hpp>
 #include <arcticdb/processing/operation_types.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/processing/expression_context.hpp>
@@ -74,16 +72,10 @@ std::vector<timestamp> generate_buckets(
 
 template<ResampleBoundary closed_boundary>
 void declare_resample_clause(py::module& version) {
-    std::string class_name;
-    if constexpr (closed_boundary == ResampleBoundary::LEFT) {
-        class_name = "ResampleClauseLeftClosed";
-    } else {
-        // closed_boundary == ResampleBoundary::RIGHT
-        class_name = "ResampleClauseRightClosed";
-    }
-    py::class_<ResampleClause<closed_boundary>, std::shared_ptr<ResampleClause<closed_boundary>>>(version, class_name.c_str())
-            .def(py::init([](std::string rule, ResampleBoundary label_boundary, timestamp offset){
-                return ResampleClause<closed_boundary>(rule, label_boundary, generate_buckets, offset);
+    const char* class_name = closed_boundary == ResampleBoundary::LEFT ? "ResampleClauseLeftClosed" : "ResampleClauseRightClosed";
+    py::class_<ResampleClause<closed_boundary>, std::shared_ptr<ResampleClause<closed_boundary>>>(version, class_name)
+            .def(py::init([](std::string rule, ResampleBoundary label_boundary, timestamp offset, ResampleOrigin origin){
+                return ResampleClause<closed_boundary>(std::move(rule), label_boundary, generate_buckets, offset, std::move(origin));
             }))
             .def_property_readonly("rule", &ResampleClause<closed_boundary>::rule)
             .def("set_aggregations", [](ResampleClause<closed_boundary>& self,
