@@ -5,18 +5,16 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/version/python_bindings.hpp>
+#include <arcticdb/util/error_code.hpp>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
 #include <pybind11/operators.h>
 #include <arcticdb/entity/data_error.hpp>
 #include <arcticdb/version/version_store_api.hpp>
-#include <arcticdb/python/arctic_version.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/query.hpp>
-#include <arcticdb/storage/mongo/mongo_instance.hpp>
 #include <arcticdb/processing/operation_types.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/processing/expression_context.hpp>
@@ -25,26 +23,87 @@
 #include <arcticdb/python/adapt_read_dataframe.hpp>
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
+#include <boost/date_time/posix_time/posix_time.hpp>
+
 
 namespace arcticdb::version_store {
+
+/// @param ts in nanoseconds
+[[nodiscard]] static std::tm nanoseconds_to_tm(timestamp ts) {
+    // Uses boost to convert to std::tm because STL's functions don't work with pre-epoch timestamps
+    const timestamp seconds = ts / 1'000'000'000;
+    const boost::posix_time::ptime time_point = boost::posix_time::ptime(boost::gregorian::date(1970, 1, 1)) + boost::posix_time::seconds(seconds);
+    return boost::posix_time::to_tm(time_point);
+}
+
+[[nodiscard]] static timestamp tm_to_nanoseconds(const std::tm& tm) {
+    // Uses boost to convert to std::tm because STL's functions don't work with pre-epoch timestamps
+    const boost::posix_time::ptime time_point = boost::posix_time::ptime_from_tm(tm);
+    return boost::posix_time::to_time_t(time_point) * 1'000'000'000;
+}
+
+/// @param ts in nanoseconds
+[[nodiscard]] static timestamp start_of_day_nanoseconds(timestamp ts) {
+    std::tm tm = nanoseconds_to_tm(ts);
+    tm.tm_hour = 0;
+    tm.tm_min = 0;
+    tm.tm_sec = 0;
+    return tm_to_nanoseconds(tm);
+}
+
+[[nodiscard]] static timestamp end_of_day_nanoseconds(timestamp ts) {
+    std::tm tm = nanoseconds_to_tm(ts);
+    tm.tm_hour = 23;
+    tm.tm_min = 59;
+    tm.tm_sec = 59;
+    return tm_to_nanoseconds(tm) + 1'000'000'000;
+}
 
 [[nodiscard]] static std::pair<timestamp, timestamp> compute_first_last_dates(
     timestamp start,
     timestamp end,
     timestamp rule,
     ResampleBoundary closed_boundary_arg,
-    timestamp offset
+    timestamp offset,
+    const ResampleOrigin& origin
 ) {
-    const timestamp ns_to_prev_offset_start = (start - offset) % rule;
-    const timestamp ns_to_prev_offset_end = (end - offset) % rule;
+    // Origin value formula from Pandas:
+    // https://github.com/pandas-dev/pandas/blob/68d9dcab5b543adb3bfe5b83563c61a9b8afae77/pandas/core/resample.py#L2564
+    auto [origin_ns, origin_adjusted_start] = util::variant_match(
+        origin,
+        [start](timestamp o) -> std::pair<timestamp, timestamp> {return {o, start}; },
+        [&](const std::string& o) -> std::pair<timestamp, timestamp> {
+            if (o == "epoch") {
+                return { 0, start };
+            } else if (o == "start") {
+                return { start, start };
+            } else if (o == "start_day") {
+                return { start_of_day_nanoseconds(start), start };
+            } else if (o == "end_day" || o == "end") {
+                const timestamp origin_last = o == "end" ? end: end_of_day_nanoseconds(end);
+                const timestamp bucket_count = (origin_last - start) / rule + (closed_boundary_arg == ResampleBoundary::LEFT);
+                const timestamp origin_ns = origin_last - bucket_count * rule;
+                return { origin_ns, origin_ns };
+            } else {
+                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                    "Invalid origin value {}. Supported values are: \"start\", \"start_day\", \"end\", \"end_day\", \"epoch\" or timestamp in nanoseconds",
+                    o);
+            }
+        }
+    );
+    origin_ns += offset;
+
+    const timestamp ns_to_prev_offset_start = (origin_adjusted_start - origin_ns) % rule;
+    const timestamp ns_to_prev_offset_end = (end - origin_ns) % rule;
+
     if (closed_boundary_arg == ResampleBoundary::RIGHT) {
         return {
-            ns_to_prev_offset_start > 0 ? start - ns_to_prev_offset_start : start - rule,
+            ns_to_prev_offset_start > 0 ? origin_adjusted_start - ns_to_prev_offset_start : origin_adjusted_start - rule,
             ns_to_prev_offset_end > 0 ? end + (rule - ns_to_prev_offset_end) : end
         };
     } else {
         return {
-            ns_to_prev_offset_start > 0 ? start - ns_to_prev_offset_start : start,
+            ns_to_prev_offset_start > 0 ? origin_adjusted_start - ns_to_prev_offset_start : origin_adjusted_start,
             ns_to_prev_offset_end > 0 ? end + (rule - ns_to_prev_offset_end) : end + rule
         };
     }
@@ -55,14 +114,14 @@ std::vector<timestamp> generate_buckets(
     timestamp end,
     std::string_view rule,
     ResampleBoundary closed_boundary_arg,
-    timestamp offset
+    timestamp offset,
+    const ResampleOrigin& origin
 ) {
-    timestamp rule_ns;
-    {
+    const timestamp rule_ns = [](std::string_view rule) {
         py::gil_scoped_acquire acquire_gil;
-        rule_ns = python_util::pd_to_offset(rule);
-    }
-    const auto [start_with_offset, end_with_offset] = compute_first_last_dates(start, end, rule_ns, closed_boundary_arg, offset);
+        return python_util::pd_to_offset(rule);
+    }(rule);
+    const auto [start_with_offset, end_with_offset] = compute_first_last_dates(start, end, rule_ns, closed_boundary_arg, offset, origin);
     const auto bucket_boundary_count = (end_with_offset - start_with_offset) / rule_ns + 1;
     std::vector<timestamp> res;
     res.reserve(bucket_boundary_count);
@@ -74,16 +133,10 @@ std::vector<timestamp> generate_buckets(
 
 template<ResampleBoundary closed_boundary>
 void declare_resample_clause(py::module& version) {
-    std::string class_name;
-    if constexpr (closed_boundary == ResampleBoundary::LEFT) {
-        class_name = "ResampleClauseLeftClosed";
-    } else {
-        // closed_boundary == ResampleBoundary::RIGHT
-        class_name = "ResampleClauseRightClosed";
-    }
-    py::class_<ResampleClause<closed_boundary>, std::shared_ptr<ResampleClause<closed_boundary>>>(version, class_name.c_str())
-            .def(py::init([](std::string rule, ResampleBoundary label_boundary, timestamp offset){
-                return ResampleClause<closed_boundary>(rule, label_boundary, generate_buckets, offset);
+    const char* class_name = closed_boundary == ResampleBoundary::LEFT ? "ResampleClauseLeftClosed" : "ResampleClauseRightClosed";
+    py::class_<ResampleClause<closed_boundary>, std::shared_ptr<ResampleClause<closed_boundary>>>(version, class_name)
+            .def(py::init([](std::string rule, ResampleBoundary label_boundary, timestamp offset, ResampleOrigin origin){
+                return ResampleClause<closed_boundary>(std::move(rule), label_boundary, generate_buckets, offset, std::move(origin));
             }))
             .def_property_readonly("rule", &ResampleClause<closed_boundary>::rule)
             .def("set_aggregations", [](ResampleClause<closed_boundary>& self,

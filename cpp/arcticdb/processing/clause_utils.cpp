@@ -106,4 +106,69 @@ std::shared_ptr<std::vector<EntityFetchCount>> generate_segment_fetch_counts(
     return res;
 }
 
+template<ResampleBoundary closed_boundary, typename T>
+requires std::is_same_v<T, RangesAndKey> || std::is_same_v<T, RangesAndEntity>
+std::vector<std::vector<size_t>> structure_by_time_bucket(
+    std::vector<T>& ranges,
+    const std::vector<timestamp>& bucket_boundaries) {
+    std::erase_if(ranges, [&bucket_boundaries](const T &range) {
+        auto start_index = range.start_time();
+        auto end_index = range.end_time();
+        return index_range_outside_bucket_range<closed_boundary>(start_index, end_index, bucket_boundaries);
+    });
+    auto res = structure_by_row_slice(ranges);
+    // Element i of res also needs the values from element i+1 if there is a bucket which incorporates the last index
+    // value of row-slice i and the first value of row-slice i+1
+    // Element i+1 should be removed if the last bucket involved in element i covers all the index values in element i+1
+    auto bucket_boundaries_it = std::cbegin(bucket_boundaries);
+    // Exit if res_it == std::prev(res.end()) as this implies the last row slice was not incorporated into an earlier processing unit
+    for (auto res_it = res.begin(); res_it != res.end() && res_it != std::prev(res.end());) {
+        auto last_index_value_in_row_slice = ranges[res_it->at(0)].end_time();
+        advance_boundary_past_value<closed_boundary>(bucket_boundaries, bucket_boundaries_it, last_index_value_in_row_slice);
+        // bucket_boundaries_it now contains the end value of the last bucket covering the row-slice in res_it, or an end iterator if the last bucket ends before the end of this row-slice
+        if (bucket_boundaries_it != bucket_boundaries.end()) {
+            Bucket<closed_boundary> current_bucket{ *std::prev(bucket_boundaries_it), *bucket_boundaries_it };
+            auto next_row_slice_it = std::next(res_it);
+            while (next_row_slice_it != res.end()) {
+                // end_index from the key is 1 nanosecond larger than the index value of the last row in the row-slice
+                TimestampRange next_row_slice_timestamp_range{
+                        ranges[next_row_slice_it->at(0)].start_time(),
+                        ranges[next_row_slice_it->at(0)].end_time() };
+                if (current_bucket.contains(next_row_slice_timestamp_range.first)) {
+                    // The last bucket in the current processing unit overlaps with the first index value in the next row slice, so add segments into current processing unit
+                    res_it->insert(res_it->end(), next_row_slice_it->begin(), next_row_slice_it->end());
+                    if (current_bucket.contains(next_row_slice_timestamp_range.second)) {
+                        // The last bucket in the current processing unit wholly contains the next row slice, so remove it from the result
+                        next_row_slice_it = res.erase(next_row_slice_it);
+                    } else {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+            // This is the last bucket, and all the required row-slices have been incorporated into the current processing unit, so erase the rest
+            if (bucket_boundaries_it == std::prev(bucket_boundaries.end())) {
+                res.erase(next_row_slice_it, res.end());
+                break;
+            }
+            res_it = next_row_slice_it;
+        }
+    }
+    return res;
+}
+
+template std::vector<std::vector<size_t>> structure_by_time_bucket<ResampleBoundary::LEFT, RangesAndKey>(
+    std::vector<RangesAndKey>& ranges,
+    const std::vector<timestamp>& bucket_boundaries);
+template std::vector<std::vector<size_t>> structure_by_time_bucket<ResampleBoundary::RIGHT, RangesAndKey>(
+    std::vector<RangesAndKey>& ranges,
+    const std::vector<timestamp>& bucket_boundaries);
+template std::vector<std::vector<size_t>> structure_by_time_bucket<ResampleBoundary::LEFT, RangesAndEntity>(
+    std::vector<RangesAndEntity>& ranges,
+    const std::vector<timestamp>& bucket_boundaries);
+template std::vector<std::vector<size_t>> structure_by_time_bucket<ResampleBoundary::RIGHT, RangesAndEntity>(
+    std::vector<RangesAndEntity>& ranges,
+    const std::vector<timestamp>& bucket_boundaries);
+
 }

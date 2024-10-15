@@ -22,6 +22,9 @@ pytestmark = pytest.mark.pipeline
 
 ALL_AGGREGATIONS = ["sum", "mean", "min", "max", "first", "last", "count"]
 
+def all_aggregations_dict(col):
+    return {f"to_{agg}": (col, agg) for agg in ALL_AGGREGATIONS}
+
 # Pandas recommended way to resample and exclude buckets with no index values, which is our behaviour
 # See https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#sparse-resampling
 def round(t, freq):
@@ -43,18 +46,24 @@ def generic_resample_test_with_empty_buckets(lib, sym, rule, aggregations, date_
 
     assert_frame_equal(expected, received, check_dtype=False)
 
-def generic_resample_test(lib, sym, rule, aggregations, date_range=None, closed=None, label=None, offset=None):
+def generic_resample_test(lib, sym, rule, aggregations, date_range=None, closed=None, label=None, offset=None, origin=None):
     # Pandas doesn't have a good date_range equivalent in resample, so just use read for that
     expected = lib.read(sym, date_range=date_range).data
     # Pandas 1.X needs None as the first argument to agg with named aggregators
     if PANDAS_VERSION >= Version("1.1.0"):
-        expected = expected.resample(rule, closed=closed, label=label, offset=offset).agg(None, **aggregations)
+        if origin:
+            expected = expected.resample(rule, closed=closed, label=label, offset=offset, origin=origin).agg(None, **aggregations)
+        else:
+            expected = expected.resample(rule, closed=closed, label=label, offset=offset).agg(None, **aggregations)
     else:
         expected = expected.resample(rule, closed=closed, label=label).agg(None, **aggregations)
     expected = expected.reindex(columns=sorted(expected.columns))
 
     q = QueryBuilder()
-    q = q.resample(rule, closed=closed, label=label, offset=offset).agg(aggregations)
+    if origin:
+        q = q.resample(rule, closed=closed, label=label, offset=offset, origin=origin).agg(aggregations)
+    else:
+        q = q.resample(rule, closed=closed, label=label, offset=offset).agg(aggregations)
     received = lib.read(sym, date_range=date_range, query_builder=q).data
     received = received.reindex(columns=sorted(received.columns))
 
@@ -548,10 +557,6 @@ def test_resampling_empty_type_column(lmdb_version_store_empty_types_v1):
 @pytest.mark.parametrize("closed", ["left", "right"])
 class TestResamplingOffset:
 
-    @staticmethod
-    def all_aggregations_dict(col):
-        return {f"to_{agg}": (col, agg) for agg in ALL_AGGREGATIONS}
-
     @pytest.mark.parametrize("offset", ("30s", pd.Timedelta(seconds=30)))
     def test_offset_smaller_than_freq(self, lmdb_version_store_v1, closed, offset):
         lib = lmdb_version_store_v1
@@ -564,7 +569,7 @@ class TestResamplingOffset:
             lib,
             sym,
             "2min",
-            self.all_aggregations_dict("col"),
+            all_aggregations_dict("col"),
             closed=closed,
             offset="30s"
         )
@@ -581,7 +586,7 @@ class TestResamplingOffset:
             lib,
             sym,
             "2min",
-            self.all_aggregations_dict("col"),
+            all_aggregations_dict("col"),
             closed=closed,
             offset=offset
         )
@@ -603,7 +608,7 @@ class TestResamplingOffset:
             lib,
             sym,
             "2min",
-            self.all_aggregations_dict("col"),
+            all_aggregations_dict("col"),
             closed=closed,
             offset=offset
         )
@@ -630,8 +635,36 @@ class TestResamplingOffset:
             lib,
             sym,
             "2min",
-            self.all_aggregations_dict("col"),
+            all_aggregations_dict("col"),
             closed=closed,
             offset=offset,
             date_range=date_range
+        )
+
+@pytest.mark.parametrize("closed", ["left", "right"])
+class TestResamplingOrigin:
+
+    # Timestamps: pre start, between start and end, post end
+    @pytest.mark.parametrize(
+        "origin",
+        ["start", "start_day", "end", "end_day", "epoch", pd.Timestamp("2024-01-01"), pd.Timestamp("2025-01-01 15:00:00"), pd.Timestamp("2025-01-03 15:00:00")]
+    )
+    def test_origin(self, closed, origin, lmdb_version_store_v1):
+        lib = lmdb_version_store_v1
+        sym = "test_origin_special_values"
+        # Start and end are picked so that #bins * rule + start != end on purpose to test
+        # the bin generation in case of end and end_day
+        start = pd.Timestamp("2025-01-01 10:00:33")
+        end = pd.Timestamp("2025-01-02 12:00:20")
+        idx = pd.date_range(start, end, freq='10s')
+        rng = np.random.default_rng()
+        df = pd.DataFrame({"col": range(len(idx))}, index=idx)
+        lib.write(sym, df)
+        generic_resample_test(
+            lib,
+            sym,
+            "2min",
+            all_aggregations_dict("col"),
+            closed=closed,
+            origin=origin
         )

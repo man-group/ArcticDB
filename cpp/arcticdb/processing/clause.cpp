@@ -8,8 +8,6 @@
 #include <vector>
 #include <variant>
 
-#include <folly/Poly.h>
-
 #include <arcticdb/processing/processing_unit.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/util/offset_string.hpp>
@@ -432,6 +430,43 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
 }
 
 template<ResampleBoundary closed_boundary>
+ResampleClause<closed_boundary>::ResampleClause(std::string rule,
+    ResampleBoundary label_boundary,
+    BucketGeneratorT&& generate_bucket_boundaries,
+    timestamp offset,
+    ResampleOrigin origin) :
+    rule_(std::move(rule)),
+    label_boundary_(label_boundary),
+    generate_bucket_boundaries_(std::move(generate_bucket_boundaries)),
+    offset_(offset),
+    origin_(std::move(origin)) {
+    clause_info_.input_structure_ = ProcessingStructure::TIME_BUCKETED;
+    clause_info_.can_combine_with_column_selection_ = false;
+    clause_info_.modifies_output_descriptor_ = true;
+    clause_info_.index_ = KeepCurrentTopLevelIndex();
+}
+
+template<ResampleBoundary closed_boundary>
+const ClauseInfo& ResampleClause<closed_boundary>::clause_info() const {
+    return clause_info_;
+}
+
+template<ResampleBoundary closed_boundary>
+void ResampleClause<closed_boundary>::set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
+    component_manager_ = std::move(component_manager);
+}
+
+template<ResampleBoundary closed_boundary>
+std::string ResampleClause<closed_boundary>::rule() const {
+    return rule_;
+}
+
+template<ResampleBoundary closed_boundary>
+void ResampleClause<closed_boundary>::set_date_range(timestamp date_range_start, timestamp date_range_end) {
+    date_range_.emplace(date_range_start, date_range_end);
+}
+
+template<ResampleBoundary closed_boundary>
 void ResampleClause<closed_boundary>::set_aggregations(const std::vector<NamedAggregator>& named_aggregators) {
     clause_info_.input_columns_ = std::make_optional<std::unordered_set<std::string>>();
     str_ = fmt::format("RESAMPLE({}) | AGGREGATE {{", rule());
@@ -492,7 +527,7 @@ std::vector<std::vector<size_t>> ResampleClause<closed_boundary>::structure_for_
         date_range_ = index_range;
     }
 
-    bucket_boundaries_ = generate_bucket_boundaries_(date_range_->first, date_range_->second, rule_, closed_boundary, offset_);
+    bucket_boundaries_ = generate_bucket_boundaries_(date_range_->first, date_range_->second, rule_, closed_boundary, offset_, origin_);
     if (bucket_boundaries_.size() < 2) {
         return {};
     }
@@ -521,8 +556,7 @@ std::vector<std::vector<EntityId>> ResampleClause<closed_boundary>::structure_fo
     }
 
     date_range_ = std::make_optional<TimestampRange>(min_start_ts, max_end_ts);
-
-    bucket_boundaries_ = generate_bucket_boundaries_(date_range_->first, date_range_->second, rule_, closed_boundary, offset_);
+    bucket_boundaries_ = generate_bucket_boundaries_(date_range_->first, date_range_->second, rule_, closed_boundary, offset_, origin_);
     if (bucket_boundaries_.size() < 2) {
         return {};
     }
