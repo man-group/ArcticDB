@@ -3,7 +3,7 @@
   on: [pull_request]
   jobs:
     polaris-scan:
-      runs-on: [ ubuntu-22.04 ]
+      runs-on: [ ubuntu-latest]
       env:
         VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
         VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
@@ -35,7 +35,7 @@
           with:
             cmakeListsTxtPath: ${{github.workspace}}/cpp/CMakeLists.txt
             configurePreset: linux-debug
-            configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build']"
+            configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build', '-DCMAKE_CXX_COMPILER=g++-10', '-DCMAKE_C_COMPILER=gcc-10']"
 
         - name: Polaris PR Scan
           if: ${{ github.event_name == 'pull_request' }}
