@@ -22,7 +22,7 @@ export ARCTICDB_AWS_LogLevel_int=6
 $catch python -m pytest --timeout=3600 -v --log-file="$TEST_OUTPUT_DIR/pytest-logger.$group.log" \
     --junitxml="$TEST_OUTPUT_DIR/pytest.$group.xml" \
     --basetemp="$PARALLEL_TEST_ROOT/temp-pytest-output" \
-    "$@" 2>&1 | sed -ur "s#^(tests/.*/([^/]+\.py))?#\2#"  || true
+    "$@"/arcticdb 2>&1 | sed -ur "s#^(tests/.*/([^/]+\.py))?#\2#"  || true
 
 
 current_dir=$(pwd)

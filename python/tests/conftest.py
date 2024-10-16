@@ -63,19 +63,6 @@ if platform.system() == "Linux":
         pass
 
 
-@pytest.fixture(scope="session", autouse=REAL_S3_TESTS) # Config loaded at the first ArcticDB binary import, so we need to set it up before any tests
-def real_s3_sts_test_setup():
-    username = f"gh_sts_test_user_{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
-    role_name = f"gh_sts_test_role_{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
-    policy_name = f"gh_sts_test_policy_name_{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
-    profile_name = "sts_test_profile"
-    try:
-        f = real_s3_sts_from_environment_variables(username, role_name, policy_name, profile_name)
-        yield f
-    finally:
-        real_s3_sts_clean_up(f, role_name, policy_name, username)
-
-
 @pytest.fixture()
 def sym(request):
     return request.node.name + datetime.utcnow().strftime("%Y-%m-%dT%H_%M_%S_%f")
@@ -236,6 +223,19 @@ def real_s3_storage_without_clean_up(real_s3_shared_path_storage_factory):
 def real_s3_storage(real_s3_storage_factory):
     with real_s3_storage_factory.create_fixture() as f:
         yield f
+
+
+@pytest.fixture(scope="session", autouse=REAL_S3_TESTS) # Config loaded at the first ArcticDB binary import, so we need to set it up before any tests
+def real_s3_sts_test_setup():
+    username = f"gh_sts_test_user_{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
+    role_name = f"gh_sts_test_role_{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
+    policy_name = f"gh_sts_test_policy_name_{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
+    profile_name = "sts_test_profile"
+    try:
+        f = real_s3_sts_from_environment_variables(username, role_name, policy_name, profile_name)
+        yield f
+    finally:
+        real_s3_sts_clean_up(f, role_name, policy_name, username)
 
 
 @pytest.fixture(scope="session")
