@@ -88,22 +88,22 @@ void set_remotery_thread_name(const char* task_name);
 
 #elif defined(ARCTICDB_LOG_PERFORMANCE)
 #define ARCTICDB_SAMPLE(name, flags) \
-arcticdb::ScopedTimer timer{#name, [](auto msg) { \
+arcticdb::ScopedTimer _timer{#name, [](auto msg) { \
     std::cout << msg; \
 }};
 
 #define ARCTICDB_SUBSAMPLE(name, flags) \
-arcticdb::ScopedTimer sub_timer_##name{#name, [](auto msg) { \
+arcticdb::ScopedTimer _sub_timer_##name{#name, [](auto msg) { \
 std::cout << msg; \
 }};
 
 #define ARCTICDB_SAMPLE_DEFAULT(name) \
-arcticdb::ScopedTimer default_timer{#name, [](auto msg) { \
+arcticdb::ScopedTimer _default_timer{#name, [](auto msg) { \
 std::cout << msg; \
 }};
 
 #define ARCTICDB_SUBSAMPLE_DEFAULT(name) \
-arcticdb::ScopedTimer sub_timer_##name{#name, [](auto msg) { \
+arcticdb::ScopedTimer _sub_timer_##name{#name, [](auto msg) { \
 std::cout << msg; \
 }};
 
