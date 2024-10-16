@@ -18,6 +18,9 @@
 #include <arcticdb/storage/library_index.hpp>
 #include <arcticdb/storage/config_resolvers.hpp>
 #include <arcticdb/storage/constants.hpp>
+#include <arcticdb/storage/s3/s3_storage.hpp>
+
+#include <arcticdb/storage/azure/azure_settings.hpp>
 
 namespace py = pybind11;
 
@@ -141,7 +144,22 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         .def_property("ca_cert_path", &S3Override::ca_cert_path, &S3Override::set_ca_cert_path)
         .def_property("ca_cert_dir", &S3Override::ca_cert_dir, &S3Override::set_ca_cert_dir)
         .def_property("https", &S3Override::https, &S3Override::set_https)
-        .def_property("ssl", &S3Override::ssl, &S3Override::set_ssl);
+        .def_property("ssl", &S3Override::ssl, &S3Override::set_ssl)
+        .def_property("aws_auth",
+            // pybind cannot smartly convert AWSAuthMethod defined in proto from C++ layer to Python layer
+            // AWSAuthMethod in python is just a integer but in C++ it is an enum class
+            // so we need to convert it manually
+            [](S3Override &s3_override) {
+                return static_cast<size_t>(s3_override.aws_auth());
+            }, 
+            [](S3Override &s3_override, size_t aws_auth) {
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                    aws_auth <= static_cast<std::underlying_type<arcticdb::proto::storage::AWSAuthMethod>::type>(arcticdb::proto::storage::AWSAuthMethod::STS_PROFILE_CREDENTIALS_PROVIDER),
+                    "Invalid AWSAuthMethod"
+                );
+                s3_override.set_aws_auth(static_cast<arcticdb::proto::storage::AWSAuthMethod>(aws_auth));
+            })
+        .def_property("aws_profile", &S3Override::aws_profile, &S3Override::set_aws_profile);
 
     py::class_<AzureOverride>(storage, "AzureOverride")
         .def(py::init<>())
@@ -160,6 +178,17 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         .def("set_s3_override", &StorageOverride::set_s3_override)
         .def("set_azure_override", &StorageOverride::set_azure_override)
         .def("set_lmdb_override", &StorageOverride::set_lmdb_override);
+
+    py::class_<AzureSettings>(storage, "AzureSettings")
+        .def(py::init<>())
+        .def_property("container_name", &AzureSettings::container_name, &AzureSettings::set_container_name)
+        .def_property("endpoint", &AzureSettings::endpoint, &AzureSettings::set_endpoint)
+        .def_property("ca_cert_path", &AzureSettings::ca_cert_path, &AzureSettings::set_ca_cert_path)
+        .def_property("ca_cert_dir", &AzureSettings::ca_cert_dir, &AzureSettings::set_ca_cert_dir)
+        .def_property("max_connections", &AzureSettings::max_connections, &AzureSettings::set_max_connections)
+        .def_property("request_timeout", &AzureSettings::request_timeout, &AzureSettings::set_request_timeout)
+        .def_property("prefix", &AzureSettings::prefix, &AzureSettings::set_prefix)
+        .def_property("use_mock_storage_for_testing", &AzureSettings::use_mock_storage_for_testing, &AzureSettings::set_use_mock_storage_for_testing);
 
     py::class_<LibraryManager, std::shared_ptr<LibraryManager>>(storage, "LibraryManager")
         .def(py::init<std::shared_ptr<storage::Library>>())

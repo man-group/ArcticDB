@@ -31,6 +31,8 @@ class ArcticUriFields(Enum):
     CA_PATH = "CA_PATH"
     PATH_PREFIX = "PATH_PREFIX"
     SSL = "SSL"
+    AWS_AUTH = "AWS_AUTH"
+    AWS_PROFILE = "AWS_PROFILE"
 
     def __str__(self):
         return self.value

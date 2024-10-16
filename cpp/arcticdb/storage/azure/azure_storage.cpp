@@ -341,7 +341,7 @@ using namespace Azure::Storage;
 using namespace Azure::Storage::Blobs;
 
 
-AzureStorage::AzureStorage(const LibraryPath &library_path, OpenMode mode, const Config &conf) :
+AzureStorage::AzureStorage(const LibraryPath &library_path, OpenMode mode, const AzureSettings &conf) :
     Storage(library_path, mode),
     root_folder_(object_store_utils::get_root_folder(library_path)),
     container_name_(conf.container_name()),

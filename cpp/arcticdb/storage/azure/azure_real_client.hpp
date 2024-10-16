@@ -13,16 +13,17 @@
 
 #include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/storage/azure/azure_client_wrapper.hpp>
+#include <arcticdb/storage/azure/azure_settings.hpp>
 
 namespace arcticdb::storage::azure {
 class RealAzureClient : public AzureClientWrapper {
 private:
     Azure::Storage::Blobs::BlobContainerClient container_client;
 
-    static Azure::Storage::Blobs::BlobClientOptions get_client_options(const Config &conf);
+    static Azure::Storage::Blobs::BlobClientOptions get_client_options(const AzureSettings &conf);
 public:
 
-    explicit RealAzureClient(const Config &conf);
+    explicit RealAzureClient(const AzureSettings &conf);
 
     void write_blob(
             const std::string& blob_name,

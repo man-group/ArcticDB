@@ -12,6 +12,12 @@ package arcticc.pb2.storage_pb2;
 import "google/protobuf/any.proto";
 import "arcticc/pb2/utils.proto";
 
+enum AWSAuthMethod {
+    DISABLED = 0;
+    DEFAULT_CREDENTIALS_PROVIDER_CHAIN = 1;
+    STS_PROFILE_CREDENTIALS_PROVIDER = 2;
+}
+
 message EnvironmentConfigsMap {
     map<string, EnvironmentConfig> env_by_id = 1;
 }

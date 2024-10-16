@@ -45,10 +45,10 @@ std::shared_ptr<Storage> create_storage(
         nfs_backed::NfsBackedStorage::Config nfs_backed_config;
         storage_descriptor.config().UnpackTo(&nfs_backed_config);
         storage = std::make_shared<nfs_backed::NfsBackedStorage>(library_path, mode, nfs_backed_config);
-    } else if (type_name == azure::AzureStorage::Config::descriptor()->full_name()) {
-        azure::AzureStorage::Config azure_config;
+    } else if (type_name == arcticdb::proto::azure_storage::Config::descriptor()->full_name()) {
+        arcticdb::proto::azure_storage::Config azure_config;
         storage_descriptor.config().UnpackTo(&azure_config);
-        storage = std::make_shared<azure::AzureStorage >(library_path, mode, azure_config);
+        storage = std::make_shared<azure::AzureStorage>(library_path, mode, azure_config);
     } else if (type_name == file::MappedFileStorage::Config::descriptor()->full_name()) {
         file::MappedFileStorage::Config mapped_config;
         storage_descriptor.config().UnpackTo(&mapped_config);
