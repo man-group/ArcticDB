@@ -14,6 +14,24 @@
 
 
 namespace arcticdb::storage {
+    enum class ModifiableLibraryOption {
+        DEDUP = 1,
+        ROWS_PER_SEGMENT = 2,
+        COLUMNS_PER_SEGMENT = 3
+    };
+    enum class ModifiableEnterpriseLibraryOption {
+        REPLICATION = 1,
+        BACKGROUND_DELETION = 2
+    };
+    using LibraryOptionValue = std::variant<bool, int64_t>;
+
+    struct UnknownLibraryOption : UserInputException {
+        UnknownLibraryOption(std::string msg) : UserInputException(msg) {}
+    };
+    struct UnsupportedLibraryOptionValue : UserInputException {
+        UnsupportedLibraryOptionValue(std::string msg) : UserInputException(msg) {}
+    };
+
     class LibraryManager {
     public:
         explicit LibraryManager(const std::shared_ptr<storage::Library>& library);
@@ -23,7 +41,13 @@ namespace arcticdb::storage {
         void write_library_config(const py::object& lib_cfg, const LibraryPath& path, const StorageOverride& storage_override,
                                   bool validate) const;
 
+        void modify_library_option(const LibraryPath& path, std::variant<ModifiableLibraryOption, ModifiableEnterpriseLibraryOption> option, LibraryOptionValue new_value) const;
+
         [[nodiscard]] py::object get_library_config(const LibraryPath& path, const StorageOverride& storage_override = StorageOverride{}) const;
+
+        // [get_unaltered_library_config] should be used solely for tests and debugging. Hence, it's separated from [get_library_config] instead of
+        // making the [storage_override] optional.
+        [[nodiscard]] py::object get_unaltered_library_config(const LibraryPath& path) const;
 
         [[nodiscard]] bool is_library_config_ok(const LibraryPath& path, bool throw_on_failure) const;
 
@@ -41,10 +65,51 @@ namespace arcticdb::storage {
         [[nodiscard]] bool has_library(const LibraryPath& path) const;
 
     private:
-        [[nodiscard]] arcticdb::proto::storage::LibraryConfig get_config_internal(const LibraryPath& path, const StorageOverride& storage_override) const;
+        void write_library_config_internal(const arcticdb::proto::storage::LibraryConfig& lib_cfg_proto, const LibraryPath& path, bool validate) const;
+        [[nodiscard]] arcticdb::proto::storage::LibraryConfig get_config_internal(const LibraryPath& path, const std::optional<StorageOverride>& storage_override) const;
 
         std::shared_ptr<Store> store_;
         std::unordered_map<LibraryPath, std::shared_ptr<Library>> open_libraries_;
         std::mutex open_libraries_mutex_;  // for open_libraries_
+    };
+}
+
+namespace fmt {
+    template<>
+    struct formatter<arcticdb::storage::ModifiableLibraryOption> {
+        template<typename ParseContext>
+        constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+        template<typename FormatContext>
+        auto format(arcticdb::storage::ModifiableLibraryOption o, FormatContext &ctx) const {
+            switch (o) {
+                case arcticdb::storage::ModifiableLibraryOption::DEDUP:
+                    return fmt::format_to(ctx.out(), "DEDUP");
+                case arcticdb::storage::ModifiableLibraryOption::ROWS_PER_SEGMENT:
+                    return fmt::format_to(ctx.out(), "ROWS_PER_SEGMENT");
+                case arcticdb::storage::ModifiableLibraryOption::COLUMNS_PER_SEGMENT:
+                    return fmt::format_to(ctx.out(), "COLUMNS_PER_SEGMENT");
+                default:
+                    arcticdb::util::raise_rte("Unrecognized modifiable option {}", int(o));
+            }
+        }
+    };
+
+    template<>
+    struct formatter<arcticdb::storage::ModifiableEnterpriseLibraryOption> {
+        template<typename ParseContext>
+        constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+        template<typename FormatContext>
+        auto format(arcticdb::storage::ModifiableEnterpriseLibraryOption o, FormatContext &ctx) const {
+            switch (o) {
+                case arcticdb::storage::ModifiableEnterpriseLibraryOption::REPLICATION:
+                    return fmt::format_to(ctx.out(), "REPLICATION");
+                case arcticdb::storage::ModifiableEnterpriseLibraryOption::BACKGROUND_DELETION:
+                    return fmt::format_to(ctx.out(), "BACKGROUND_DELETION");
+                default:
+                    arcticdb::util::raise_rte("Unrecognized modifiable option {}", int(o));
+            }
+        }
     };
 }

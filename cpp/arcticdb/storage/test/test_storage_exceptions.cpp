@@ -19,11 +19,9 @@
 #include <arcticdb/storage/mongo/mongo_storage.hpp>
 #include <arcticdb/storage/mongo/mongo_mock_client.hpp>
 #include <arcticdb/storage/test/common.hpp>
-#include <arcticdb/util/buffer.hpp>
 
 #include <filesystem>
 #include <memory>
-#include <arcticdb/storage/lmdb/lmdb.hpp>
 
 using namespace arcticdb;
 using namespace storage;
@@ -278,7 +276,7 @@ TEST_F(LMDBStorageTestBase, MockUnexpectedLMDBErrorException) {
 TEST_F(LMDBStorageTestBase, RemoveLibPath) {
     LMDBStorageFactory factory;
     auto storage = factory.create();
-    auto path = factory.get_lib_path();
+    const auto path = factory.get_lib_path();
 
     storage->cleanup();
     ASSERT_FALSE(fs::exists(path));

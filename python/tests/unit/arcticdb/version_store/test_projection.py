@@ -14,6 +14,9 @@ from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.util.test import assert_frame_equal, make_dynamic, regularize_dataframe
 
 
+pytestmark = pytest.mark.pipeline
+
+
 @pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
 def test_project_empty_dataframe(request, lib_type):
     lib = request.getfixturevalue(lib_type)

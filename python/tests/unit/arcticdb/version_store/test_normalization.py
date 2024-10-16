@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import datetime
+import itertools
 import sys
 from collections import namedtuple
 from unittest.mock import patch
@@ -148,6 +149,15 @@ def test_write_tz(lmdb_version_store, sym, tz):
     assert isinstance(end_ts, datetime.datetime)
     assert start_ts == index[0]
     assert end_ts == index[-1]
+
+
+@pytest.mark.parametrize("column_data", itertools.permutations([pd.Timestamp(0), pd.NaT, pd.Timestamp(0, tz="Europe/Amsterdam")]))
+def test_write_mixed_tz(lmdb_version_store_v1, column_data):
+    lib = lmdb_version_store_v1
+    sym = "test_write_mixed_tz"
+    df = pd.DataFrame({"col": column_data})
+    with pytest.raises(ArcticException):
+        lib.write(sym, df)
 
 
 def get_multiindex_df_with_tz(tz):
@@ -485,6 +495,25 @@ def test_columns_names_timeframe(lmdb_version_store, sym):
     assert tf == vit.data
 
 
+@pytest.mark.parametrize("name", (None, "", "non_empty"))
+def test_roundtrip_series_name(lmdb_version_store_v1, name):
+    lib = lmdb_version_store_v1
+    sym = "test_roundtrip_series_name"
+    series = pd.Series(np.arange(1), name=name)
+    lib.write(sym, series)
+    assert_series_equal(series, lib.read(sym).data)
+
+
+@pytest.mark.parametrize("name", (None, "", "non_empty"))
+def test_roundtrip_index_name(lmdb_version_store_v1, name):
+    lib = lmdb_version_store_v1
+    sym = "test_roundtrip_index_name"
+    df = pd.DataFrame({"col": [0]}, index=[pd.Timestamp(0)])
+    df.index.name = name
+    lib.write(sym, df)
+    assert_frame_equal(df, lib.read(sym).data)
+
+
 def test_columns_names_series(lmdb_version_store, sym):
     dr = pd.date_range("2020-01-01", "2020-12-31", name="date")
     date_series = pd.Series(dr, index=dr)
@@ -620,6 +649,15 @@ def test_norm_failure_error_message(lmdb_version_store_v1):
                [write_exception, batch_write_exception])
     assert all("pickle_on_failure" not in str(e.value) for e in
                [append_exception, batch_append_exception, update_exception])
+
+
+def test_writing_timedelta(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_writing_timedelta"
+    df = pd.DataFrame({"col": [pd.Timedelta(1, unit="day")]})
+    with pytest.raises(ArcticDbNotYetImplemented):
+        lib.write(sym, df)
+
 
 def test_bools_are_pickled(lmdb_version_store_allows_pickling):
     lib = lmdb_version_store_allows_pickling

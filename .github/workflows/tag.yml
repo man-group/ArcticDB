@@ -14,7 +14,7 @@ run-name: Tagging ${{github.ref_name}} as v${{inputs.version}}${{inputs.overwrit
 jobs:
   tag:
     environment: TestPypi  # Enforcing deployment branches permissions
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     permissions:
         checks: read
         contents: write

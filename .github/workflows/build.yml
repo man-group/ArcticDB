@@ -33,7 +33,7 @@ jobs:
 
   common_config:
     needs: [cibw_docker_image]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         include:
@@ -41,7 +41,7 @@ jobs:
           # Please declare any key you added below in build_steps.yaml's dummy matrix as well to aid the linting tools
           - linux_matrix:
               - os: linux
-                distro: ubuntu-latest
+                distro: ubuntu-22.04
                 cmake_preset_prefix: linux
                 cibw_build_suffix: manylinux_x86_64
                 build_dir: /tmp/cpp_build
@@ -275,7 +275,7 @@ jobs:
       always() &&
       !failure() &&
       !cancelled()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - run: echo Dummy job to simplify PR merge checks configuration
       # FUTURE: add some test stats/reporting

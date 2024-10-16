@@ -13,6 +13,7 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/storage/storage.hpp>
+#include <arcticdb/storage/library_manager.hpp>
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/entity/read_result.hpp>
 
@@ -62,6 +63,8 @@ public:
     void clear_ref_keys();
 
     std::optional<std::string> inspect_env_variable(std::string name);
+
+    static py::object read_unaltered_lib_cfg(const storage::LibraryManager& lib_manager, std::string lib_name);
 
 private:
     // TODO: Remove the shared_ptr and just keep the store.

@@ -32,7 +32,13 @@ ReadResult LibraryTool::read(const VariantKey& key) {
     auto segment = read_to_segment(key);
     auto segment_in_memory = decode_segment(std::move(segment));
     auto frame_and_descriptor = frame_and_descriptor_from_segment(std::move(segment_in_memory));
-    return pipelines::read_result_from_single_frame(frame_and_descriptor, to_atom(key));
+    auto atom_key = util::variant_match(
+            key,
+            [](const AtomKey& key){return key;},
+            // We construct a dummy atom key in case of a RefKey to be able to build the read_result
+            [](const RefKey& key){return AtomKeyBuilder().build<KeyType::VERSION_REF>(key.id());},
+            [](const auto&){});
+    return pipelines::read_result_from_single_frame(frame_and_descriptor, atom_key);
 }
 
 Segment LibraryTool::read_to_segment(const VariantKey& key) {
@@ -122,6 +128,10 @@ std::optional<std::string> LibraryTool::inspect_env_variable(std::string name){
     auto value = getenv(name.c_str());
     if (value == nullptr) return std::nullopt;
     return std::string(value);
+}
+
+py::object LibraryTool::read_unaltered_lib_cfg(const storage::LibraryManager& lib_manager, std::string lib_name) {
+    return lib_manager.get_unaltered_library_config(storage::LibraryPath{lib_name, '.'});
 }
 
 

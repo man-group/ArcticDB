@@ -915,7 +915,7 @@ def test_get_description(arctic_library):
     # then
     assert [c[0] for c in info.columns] == ["column"]
     assert info.date_range == (pd.Timestamp(year=2018, month=1, day=1), pd.Timestamp(year=2018, month=1, day=6))
-    assert info.index[0] == ["named_index"]
+    assert info.index[0].name == "named_index"
     assert info.index_type == "index"
     assert info.row_count == 6
     assert original_info.row_count == 4
@@ -923,6 +923,28 @@ def test_get_description(arctic_library):
     assert info.last_update_time.tz == pytz.UTC
     assert original_info.sorted == "ASCENDING"
     assert info.sorted == "ASCENDING"
+
+
+def test_get_description_unnamed_index(lmdb_library):
+    lib = lmdb_library
+    sym = "test_get_description_unnamed_index"
+    df = pd.DataFrame({"col": [0]}, index=[pd.Timestamp(0)])
+    lib.write(sym, df)
+    index_info = lib.get_description(sym).index
+    assert len(index_info) == 1
+    assert index_info[0].name is None
+
+
+@pytest.mark.parametrize("names", (None, ["top-level", "second-level"]))
+def test_get_description_multiindex(lmdb_library, names):
+    lib = lmdb_library
+    sym = "test_get_description_multiindex"
+    df = pd.DataFrame({"col": [0]}, index=pd.MultiIndex.from_arrays([[0], [1]], names=names))
+    lib.write(sym, df)
+    index_info = lib.get_description(sym).index
+    assert len(index_info) == 2
+    assert index_info[0].name == (names[0] if names is not None else None)
+    assert index_info[1].name == (names[1] if names is not None else None)
 
 
 # See test_write_tz in test_normalization.py for the V1 API equivalent

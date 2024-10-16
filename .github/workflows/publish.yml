@@ -12,7 +12,7 @@ jobs:
   # GitHub Composite Actions cannot access secrets and Reusable Workflows cannot return artifacts, so duplicate for now:
   release_notes:
     if: startsWith(github.ref, 'refs/tags/')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     env:
       SYMBOLS_ARTIFACT: /tmp/symbols.tar.zst # Use absolute path to workaround a bug in action-gh-release
     steps:
@@ -92,7 +92,7 @@ jobs:
 
   pypi:
     environment: ${{inputs.environment}}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Gather wheels from run ${{inputs.run_id}}
         if: inputs.run_id > 0

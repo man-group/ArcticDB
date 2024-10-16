@@ -118,7 +118,7 @@ class SymbolDescription(NamedTuple):
     ----------
     columns: Tuple[NameWithDType]
         Columns stored under the symbol.
-    index : NameWithDType
+    index : Tuple[NameWithDType]
         Index of the symbol.
     index_type : str {"NA", "index", "multi_index"}
         Whether the index is a simple index or a multi_index. ``NA`` indicates that the stored data does not have an index.
@@ -144,7 +144,7 @@ class SymbolDescription(NamedTuple):
     """
 
     columns: Tuple[NameWithDType]
-    index: NameWithDType
+    index: Tuple[NameWithDType]
     index_type: str
     row_count: int
     last_update_time: datetime.datetime
@@ -2029,7 +2029,7 @@ class Library:
             If lazy is True, a LazyDataFrame object on which further querying can be performed prior to collect.
         """
         if lazy:
-            q = QueryBuilder()._head(n)
+            q = QueryBuilder().head(n)
             return LazyDataFrame(
                 self,
                 ReadRequest(
@@ -2080,7 +2080,7 @@ class Library:
             If lazy is True, a LazyDataFrame object on which further querying can be performed prior to collect.
         """
         if lazy:
-            q = QueryBuilder()._tail(n)
+            q = QueryBuilder().tail(n)
             return LazyDataFrame(
                 self,
                 ReadRequest(
@@ -2109,7 +2109,7 @@ class Library:
             # We enforce the use of `pytz.UTC` for consistency.
             last_update_time = last_update_time.replace(tzinfo=pytz.UTC)
         columns = tuple(NameWithDType(n, t) for n, t in zip(info["col_names"]["columns"], info["dtype"]))
-        index = NameWithDType(info["col_names"]["index"], info["col_names"]["index_dtype"])
+        index = tuple(NameWithDType(n, t) for n, t in zip(info["col_names"]["index"], info["col_names"]["index_dtype"]))
         return SymbolDescription(
             columns=columns,
             index=index,

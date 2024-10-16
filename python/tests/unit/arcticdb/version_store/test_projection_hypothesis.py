@@ -8,6 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 from hypothesis import assume, given, settings
 import numpy as np
 import pandas as pd
+import pytest
 
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.util.test import assert_frame_equal
@@ -19,6 +20,9 @@ from arcticdb.util.hypothesis import (
     column_strategy,
     numeric_type_strategies,
 )
+
+
+pytestmark = pytest.mark.pipeline
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked

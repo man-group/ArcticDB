@@ -116,12 +116,19 @@ def _is_nan(element):
     return (isinstance(element, np.floating) or isinstance(element, float)) and math.isnan(element)
 
 
+def _is_nat(element):
+    return isinstance(element, type(pd.NaT)) and pd.isna(element)
+
+
 def get_sample_from_non_empty_arr(arr, arr_name):
     for element in arr:
         if element is None:
             continue
 
         if _is_nan(element):
+            continue
+
+        if _is_nat(element):
             continue
 
         return element
@@ -171,6 +178,11 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
         else:
             norm_meta.common.categories[arr_name].category.extend(arr.categories)
         return arr.codes
+
+    # This check has to come after the categorical check above, as Categoricals are a Pandas concept, not numpy, which
+    # causes issubdtype to throw if arr.dtype == CategoricalDtype
+    if np.issubdtype(arr.dtype, np.timedelta64):
+        raise ArcticDbNotYetImplemented(f"Failed to normalize column '{arr_name}' with unsupported dtype '{arr.dtype}'")
 
     if np.issubdtype(arr.dtype, np.datetime64):
         # ArcticDB only operates at nanosecond resolution (i.e. `datetime64[ns]`) type because so did Pandas < 2.
@@ -222,8 +234,16 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
     # This is an expensive loop in python if you have highly sparse data with concrete values coming quite late.
     sample = get_sample_from_non_empty_arr(arr, arr_name)
 
-    if isinstance(sample, Timestamp) or isinstance(sample, type(pd.NaT)):
-        # If we have a NaT or pd.Timestamp as the sample, try and clean up all NaNs inside it.
+    if isinstance(sample, Timestamp):
+        # If we have pd.Timestamp as the sample, then:
+        # - 1: check they all have the same timezone
+        tz_matches = np.vectorize(lambda element: pd.isna(element) or (isinstance(element, pd.Timestamp) and element.tz == sample.tz))
+        if not (tz_matches(arr)).all():
+            raise NormalizationException(f"Failed to normalize column {arr_name}: first non-null element found is a "
+                                         f"Timestamp with timezone '{sample.tz}', but one or more subsequent elements "
+                                         f"are either not Timestamps or have differing timezones, neither of which is "
+                                         f"supported.")
+        # - 2: try and clean up all NaNs inside it.
         log.debug("Removing all NaNs from column: {} of type datetime64", arr_name)
         return arr.astype(DTN64_DTYPE)
     elif _accept_array_string(sample):
@@ -588,8 +608,10 @@ class SeriesNormalizer(_PandasNormalizer):
             empty_types=empty_types
         )
         norm.series.CopyFrom(norm.df)
-        if item.name:
+        if item.name is not None:
             norm.series.common.name = _column_name_to_strings(item.name)
+            norm.series.common.has_name = True
+        # else protobuf bools default to False
 
         return NormalizedInput(item=df, metadata=norm)
 
@@ -600,10 +622,19 @@ class SeriesNormalizer(_PandasNormalizer):
 
         series = pd.Series() if df.columns.empty else df.iloc[:, 0]
 
-        if norm_meta.common.name:
-            series.name = norm_meta.common.name
+        if hasattr(norm_meta.common, "has_name"):
+            # Series was written by newer client that understands the has_name field
+            if norm_meta.common.has_name:
+                series.name = norm_meta.common.name
+            else:
+                series.name = None
         else:
-            series.name = None
+            # Series was written by an older client. We can't distinguish between None and empty strings as names, so
+            # maintain the old behaviour which converted empty string names to None
+            if norm_meta.common.name:
+                series.name = norm_meta.common.name
+            else:
+                series.name = None
 
         return series
 

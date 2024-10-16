@@ -8,7 +8,7 @@ on:
       
 jobs:
   docs_build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     environment: TestPypi
     permissions:
       contents: write
