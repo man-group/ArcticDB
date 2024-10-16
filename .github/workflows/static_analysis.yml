@@ -18,14 +18,14 @@
             sudo apt-get update
             sudo apt-get install -y gcc-10 g++-10 make mono-complete
 
+        - name: Prepare C++ compilation env
+          run: build_tooling/prep_cpp_build.sh
+
         - name: Setup VCPKG cache
           run: |
-            . build_tooling/vcpkg_caching.sh
-            echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
-            VCPKG_ROOT=$PLATFORM_VCPKG_ROOT" | tee -a $GITHUB_ENV
-
-        - name: Prepare C++ compilation env
-          run: . build_tooling/prep_cpp_build.sh
+            build_tooling/vcpkg_caching.sh
+            echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES" | tee -a $GITHUB_ENV
+            echo -e "VCPKG_ROOT=$PLATFORM_VCPKG_ROOT" | tee -a $GITHUB_ENV
 
         - name: Get CMake
           uses: lukka/get-cmake@latest
@@ -35,7 +35,7 @@
           with:
             cmakeListsTxtPath: ${{github.workspace}}/cpp/CMakeLists.txt
             configurePreset: linux-debug
-            configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build', '-DCMAKE_CXX_COMPILER=g++-10', '-DCMAKE_C_COMPILER=gcc-10', '-DVCPKG_INSTALL_OPTIONS=--debug']"
+            configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build', '-DCMAKE_CXX_COMPILER=g++-10', '-DCMAKE_C_COMPILER=gcc-10', '-DVCPKG_INSTALL_OPTIONS=--debug', '-DCMAKE_MODULE_PATH=cpp/CMake']"
 
         - name: Polaris PR Scan
           if: ${{ github.event_name == 'pull_request' }}
