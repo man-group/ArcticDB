@@ -9,6 +9,8 @@
         VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
         VCPKG_MAN_NUGET_USER: ${{secrets.VCPKG_MAN_NUGET_USER}}
         VCPKG_MAN_NUGET_TOKEN: ${{secrets.VCPKG_MAN_NUGET_TOKEN}}
+        CC: 'gcc-10'
+        CXX: 'g++-10'
       steps:
         - name: Checkout Source
           uses: actions/checkout@v4
@@ -18,7 +20,7 @@
         - name: Setup build dependencies
           run: |
             sudo apt-get update
-            sudo apt-get install -y gcc-10 g++10 make mono-complete
+            sudo apt-get install -y gcc-10 g++-10 make mono-complete
 
         - name: Setup VCPKG cache
           run: |
