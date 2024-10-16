@@ -1572,7 +1572,7 @@ VersionedItem sort_merge_impl(
 
     delete_incomplete_keys(*pipeline_context, *store);
     if(delete_keys_on_failure)
-        delete_keys_on_failure->releaase();
+        delete_keys_on_failure->release();
 
     return vit;
 }
@@ -1668,7 +1668,7 @@ VersionedItem compact_incomplete_impl(
 
     delete_incomplete_keys(*pipeline_context, *store);
     if(delete_keys_on_failure)
-        delete_keys_on_failure->releaase();
+        delete_keys_on_failure->release();
 
     return vit;
 }
