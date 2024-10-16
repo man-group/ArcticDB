@@ -9,6 +9,7 @@
 #include <aws/core/utils/memory/stl/AWSString.h>
 #include <aws/core/utils/logging/DefaultLogSystem.h>
 #include <aws/core/utils/logging/AWSLogging.h>
+#include <aws/core/auth/AWSCredentialsProvider.h>
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/storage/s3/ec2_utils.hpp>
@@ -57,6 +58,7 @@ void S3ApiInstance::init() {
 
 std::shared_ptr<S3ApiInstance> S3ApiInstance::instance() {
     std::call_once(S3ApiInstance::init_flag_, &S3ApiInstance::init);
+    Aws::Config::ReloadCachedConfigFile();
     return instance_;
 }
 
