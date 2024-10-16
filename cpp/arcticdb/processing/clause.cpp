@@ -173,7 +173,7 @@ AggregationClause::AggregationClause(const std::string& grouping_column,
         grouping_column_(grouping_column) {
     clause_info_.input_structure_ = ProcessingStructure::HASH_BUCKETED;
     clause_info_.can_combine_with_column_selection_ = false;
-    clause_info_.new_index_ = grouping_column_;
+    clause_info_.index_ = NewIndex(grouping_column_);
     clause_info_.input_columns_ = std::make_optional<std::unordered_set<std::string>>({grouping_column_});
     clause_info_.modifies_output_descriptor_ = true;
     str_ = "AGGREGATE {";
