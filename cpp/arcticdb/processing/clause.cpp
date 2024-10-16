@@ -17,9 +17,9 @@
 
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
-#include <arcticdb/pipeline/value_set.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/stream/segment_aggregator.hpp>
+#include <arcticdb/util/test/random_throw.hpp>
 #include <ankerl/unordered_dense.h>
 
 namespace arcticdb {
@@ -100,6 +100,7 @@ std::vector<EntityId> PassthroughClause::process(std::vector<EntityId>&& entity_
 }
 
 std::vector<EntityId> FilterClause::process(std::vector<EntityId>&& entity_ids) const {
+    ARCTICDB_DEBUG_THROW(5)
     if (entity_ids.empty()) {
         return {};
     }
@@ -133,6 +134,7 @@ std::string FilterClause::to_string() const {
 }
 
 std::vector<EntityId> ProjectClause::process(std::vector<EntityId>&& entity_ids) const {
+    ARCTICDB_DEBUG_THROW(5)
     if (entity_ids.empty()) {
         return {};
     }
@@ -171,6 +173,8 @@ std::vector<EntityId> ProjectClause::process(std::vector<EntityId>&& entity_ids)
 AggregationClause::AggregationClause(const std::string& grouping_column,
                                      const std::vector<NamedAggregator>& named_aggregators):
         grouping_column_(grouping_column) {
+    ARCTICDB_DEBUG_THROW(5)
+
     clause_info_.input_structure_ = ProcessingStructure::HASH_BUCKETED;
     clause_info_.can_combine_with_column_selection_ = false;
     clause_info_.index_ = NewIndex(grouping_column_);
@@ -219,6 +223,7 @@ std::vector<std::vector<EntityId>> AggregationClause::structure_for_processing(s
     for (auto& res_element: res) {
         res_element.reserve(entity_ids_vec.size());
     }
+    ARCTICDB_DEBUG_THROW(5)
     // Experimentation shows flattening the entities into a single vector and a single call to
     // component_manager_->get is faster than not flattening and making multiple calls
     auto entity_ids = flatten_entities(std::move(entity_ids_vec));
@@ -232,6 +237,7 @@ std::vector<std::vector<EntityId>> AggregationClause::structure_for_processing(s
 }
 
 std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_ids) const {
+    ARCTICDB_DEBUG_THROW(5)
     if (entity_ids.empty()) {
         return {};
     }
@@ -589,6 +595,8 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
     seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, index_column_name), output_index_column);
     seg.descriptor().set_index(IndexDescriptorImpl(1, IndexDescriptor::Type::TIMESTAMP));
     auto& string_pool = seg.string_pool();
+
+    ARCTICDB_DEBUG_THROW(5)
     for (const auto& aggregator: aggregators_) {
         std::vector<std::optional<ColumnWithStrings>> input_agg_columns;
         input_agg_columns.reserve(row_slices.size());
@@ -885,7 +893,7 @@ std::vector<std::vector<EntityId>> MergeClause::structure_for_processing(std::ve
     const RowRange row_range{min_start_row, max_end_row};
     const ColRange col_range{min_start_col, max_end_col};
     std::vector<std::vector<EntityId>> ret;
-    std::visit([this, &ret, &input_streams, &comp=compare, stream_id=stream_id_, &row_range, &col_range](auto idx, auto density) {
+    std::visit([this, &ret, &input_streams, stream_id=stream_id_, &row_range, &col_range](auto idx, auto density) {
             if (dynamic_schema_) {
                 merge_impl<decltype(idx), decltype(density), decltype(input_streams), true>(
                     component_manager_,
