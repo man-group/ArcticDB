@@ -7,6 +7,8 @@
       env:
         VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
         VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
+        VCPKG_MAN_NUGET_USER: ${{secrets.VCPKG_MAN_NUGET_USER}} # For forks to download pre-compiled dependencies from the Man repo
+        VCPKG_MAN_NUGET_TOKEN: ${{secrets.VCPKG_MAN_NUGET_TOKEN}}
       steps:
         - name: Checkout Source
           uses: actions/checkout@v4
@@ -22,17 +24,17 @@
             sudo update-alternatives --set g++ /usr/bin/g++-10
             sudo update-alternatives --set gcc /usr/bin/gcc-10
 
-        - name: Prepare C++ compilation env
-          run: build_tooling/prep_cpp_build.sh
-
         - name: Setup VCPKG cache
           run: |
-            build_tooling/vcpkg_caching.sh
-            echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES" | tee -a $GITHUB_ENV
-            echo -e "VCPKG_ROOT=$PLATFORM_VCPKG_ROOT" | tee -a $GITHUB_ENV
+            . build_tooling/vcpkg_caching.sh
+            echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
+            VCPKG_ROOT=$PLATFORM_VCPKG_ROOT" | tee -a $GITHUB_ENV
+
+        - name: Prepare C++ compilation env
+          run: . build_tooling/prep_cpp_build.sh
 
         - name: Get CMake
-          uses: lukka/get-cmake@latest
+          uses: lukka/get-cmake@v3.29.2
 
         - name: CMake configure
           uses: lukka/run-cmake@v10.8
