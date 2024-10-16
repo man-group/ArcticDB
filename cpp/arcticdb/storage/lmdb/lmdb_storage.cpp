@@ -20,6 +20,7 @@
 #include <arcticdb/entity/serialized_key.hpp>
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_options.hpp>
+#include <arcticdb/util/test/random_throw.hpp>
 
 #include <folly/gen/Base.h>
 
@@ -181,7 +182,7 @@ bool LmdbStorage::do_key_exists(const VariantKey&key) {
     ARCTICDB_SAMPLE(LmdbStorageKeyExists, 0)
     auto txn = ::lmdb::txn::begin(env(), nullptr, MDB_RDONLY);
     ARCTICDB_SUBSAMPLE(LmdbStorageInTransaction, 0)
-
+    ARCTICDB_DEBUG_THROW(5)
     auto db_name = fmt::format("{}", variant_key_type(key));
     ARCTICDB_SUBSAMPLE(LmdbStorageOpenDb, 0)
     auto stored_key = to_serialized_key(key);
@@ -201,6 +202,7 @@ std::vector<VariantKey> LmdbStorage::do_remove_internal(Composite<VariantKey>&& 
     auto fmt_db = [](auto &&k) { return variant_key_type(k); };
     std::vector<VariantKey> failed_deletes;
 
+    ARCTICDB_DEBUG_THROW(5)
     (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
         auto db_name = fmt::format("{}", group.key());
         ARCTICDB_SUBSAMPLE(LmdbStorageOpenDb, 0)
