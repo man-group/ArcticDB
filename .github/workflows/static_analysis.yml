@@ -7,10 +7,6 @@
       env:
         VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
         VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
-        VCPKG_MAN_NUGET_USER: ${{secrets.VCPKG_MAN_NUGET_USER}}
-        VCPKG_MAN_NUGET_TOKEN: ${{secrets.VCPKG_MAN_NUGET_TOKEN}}
-        CC: 'gcc-10'
-        CXX: 'g++-10'
       steps:
         - name: Checkout Source
           uses: actions/checkout@v4
