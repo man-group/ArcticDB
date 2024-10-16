@@ -1386,10 +1386,10 @@ VersionedItem collate_and_write(
     });
 }
 
-void delete_incomplete_keys(PipelineContext* pipeline_context, Store* store) {
+void delete_incomplete_keys(PipelineContext& pipeline_context, Store& store) {
     std::vector<entity::VariantKey> keys_to_delete;
-    keys_to_delete.reserve(pipeline_context->slice_and_keys_.size() - pipeline_context->incompletes_after());
-    for (auto sk = pipeline_context->incompletes_begin(); sk != pipeline_context->end(); ++sk) {
+    keys_to_delete.reserve(pipeline_context.slice_and_keys_.size() - pipeline_context.incompletes_after());
+    for (auto sk = pipeline_context.incompletes_begin(); sk != pipeline_context.end(); ++sk) {
         const auto& slice_and_key = sk->slice_and_key();
         if (ARCTICDB_LIKELY(slice_and_key.key().type() == KeyType::APPEND_DATA)) {
             keys_to_delete.emplace_back(slice_and_key.key());
@@ -1401,41 +1401,59 @@ void delete_incomplete_keys(PipelineContext* pipeline_context, Store* store) {
             );
         }
     }
-    store->remove_keys(keys_to_delete).get();
+    store.remove_keys(keys_to_delete).get();
 }
 
-class IncompleteKeysRAII {
+class DeleteIncompleteKeysOnExit {
 public:
-    IncompleteKeysRAII() = default;
-    IncompleteKeysRAII(
+    DeleteIncompleteKeysOnExit(
         std::shared_ptr<PipelineContext> pipeline_context,
         std::shared_ptr<Store> store,
-        const CompactIncompleteOptions* options)
+        bool via_iteration)
             : context_(pipeline_context),
               store_(store),
-              options_(options) {
+              via_iteration_(via_iteration) {
     }
-    ARCTICDB_MOVE_ONLY_DEFAULT(IncompleteKeysRAII)
+    ARCTICDB_NO_MOVE_OR_COPY(DeleteIncompleteKeysOnExit)
 
-    ~IncompleteKeysRAII() {
-        if (context_ && store_) {
+    ~DeleteIncompleteKeysOnExit() {
+        if(released_)
+            return;
+
+        try {
             if (context_->incompletes_after_) {
-                delete_incomplete_keys(context_.get(), store_.get());
+                delete_incomplete_keys(*context_, *store_);
             } else {
                 // If an exception is thrown before read_incompletes_to_pipeline the keys won't be placed inside the
                 // context thus they must be read manually.
-                const std::vector<VariantKey> entries =
-                    read_incomplete_keys_for_symbol(store_, context_->stream_id_, options_->via_iteration_);
+                auto entries = read_incomplete_keys_for_symbol(store_, context_->stream_id_, via_iteration_);
                 store_->remove_keys(entries).get();
             }
+        } catch (...) {
+            // Don't emit exceptions from destructor
         }
     }
 
+    void release() {
+        released_ = true;
+    }
+
 private:
-    std::shared_ptr<PipelineContext> context_ = nullptr;
-    std::shared_ptr<Store> store_ = nullptr;
-    const CompactIncompleteOptions* options_ = nullptr;
+    std::shared_ptr<PipelineContext> context_;
+    std::shared_ptr<Store> store_;
+    bool via_iteration_;
+    bool released_ = false;
 };
+
+std::optional<DeleteIncompleteKeysOnExit> get_delete_keys_on_failure(
+    const std::shared_ptr<PipelineContext>& pipeline_context,
+    const std::shared_ptr<Store>& store,
+    const CompactIncompleteOptions& options) {
+    if(options.delete_staged_data_on_failure_)
+        return std::make_optional<DeleteIncompleteKeysOnExit>(pipeline_context, store, options.via_iteration_);
+    else
+        return std::nullopt;
+}
 
 VersionedItem sort_merge_impl(
     const std::shared_ptr<Store>& store,
@@ -1450,9 +1468,7 @@ VersionedItem sort_merge_impl(
     auto read_query = std::make_shared<ReadQuery>();
 
     std::optional<SortedValue> previous_sorted_value;
-    const IncompleteKeysRAII incomplete_keys_raii = options.delete_staged_data_on_failure_
-        ? IncompleteKeysRAII{pipeline_context, store, &options}
-        : IncompleteKeysRAII{};
+    auto delete_keys_on_failure = get_delete_keys_on_failure(pipeline_context, store, options);
     if(options.append_ && update_info.previous_index_key_.has_value()) {
         read_indexed_keys_to_pipeline(store, pipeline_context, *(update_info.previous_index_key_), *read_query, ReadOptions{});
         if (!write_options.dynamic_schema) {
@@ -1553,9 +1569,11 @@ VersionedItem sort_merge_impl(
         keys,
         pipeline_context->incompletes_after(),
         norm_meta);
-    if (!options.delete_staged_data_on_failure_) {
-        delete_incomplete_keys(pipeline_context.get(), store.get());
-    }
+
+    delete_incomplete_keys(*pipeline_context, *store);
+    if(delete_keys_on_failure)
+        delete_keys_on_failure->releaase();
+
     return vit;
 }
 
@@ -1576,9 +1594,7 @@ VersionedItem compact_incomplete_impl(
 
     std::optional<SegmentInMemory> last_indexed;
     std::optional<SortedValue> previous_sorted_value;
-    const IncompleteKeysRAII incomplete_keys_raii = options.delete_staged_data_on_failure_
-        ? IncompleteKeysRAII{pipeline_context, store, &options}
-        : IncompleteKeysRAII{};
+    auto delete_keys_on_failure = get_delete_keys_on_failure(pipeline_context, store, options);
     if(options.append_ && update_info.previous_index_key_.has_value()) {
         read_indexed_keys_to_pipeline(store, pipeline_context, *(update_info.previous_index_key_), read_query, read_options);
         if (!write_options.dynamic_schema) {
@@ -1648,9 +1664,12 @@ VersionedItem compact_incomplete_impl(
         keys,
         pipeline_context->incompletes_after(),
         user_meta);
-    if (!options.delete_staged_data_on_failure_) {
-        delete_incomplete_keys(pipeline_context.get(), store.get());
-    }
+
+
+    delete_incomplete_keys(*pipeline_context, *store);
+    if(delete_keys_on_failure)
+        delete_keys_on_failure->releaase();
+
     return vit;
 }
 
