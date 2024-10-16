@@ -416,7 +416,17 @@ std::vector<EntityId> process_clauses(
         std::shared_ptr<ComponentManager> component_manager,
         std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures,
         std::vector<std::vector<size_t>>&& processing_unit_indexes,
-        std::vector<std::shared_ptr<Clause>> clauses ) { // pass by copy deliberately as we don't want to modify read_query
+        std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses) {
+    // There are some odd looking choices in this method:
+    // - clauses being shared_ptr<vector<shared_ptr>>
+    // - segment_proc_unit_counts, entity_added_mtx, and entity_added created as shared pointers rather than just on the
+    //   stack
+    // Both are for the same reason. folly::collect short-circuits and throws an exception the first time a task
+    // finishes due to an exception rather than cleanly exiting. However, other tasks that have already been enqueued
+    // continue executing, and so any variables from this scope that they depend on must be kept alive by the tasks
+    // themselves.
+    // It was considered to make the type of ReadQuery::clauses_ std::shared_ptr<std::vector<Clause>>. However, this
+    // makes all the other uses of clauses_ much less clean, so the compromise is an odd function signature here.
     std::vector<folly::FutureSplitter<pipelines::SegmentAndSlice>> segment_and_slice_future_splitters;
     segment_and_slice_future_splitters.reserve(segment_and_slice_futures.size());
     for (auto&& future: segment_and_slice_futures) {
@@ -424,29 +434,29 @@ std::vector<EntityId> process_clauses(
     }
 
     // Map from index in segment_and_slice_future_splitters to the number of processing units that require that segment
-    std::vector<size_t> segment_proc_unit_counts(segment_and_slice_futures.size(), 0);
+    auto segment_proc_unit_counts = std::make_shared<std::vector<size_t>>(segment_and_slice_futures.size(), 0);
     for (const auto& list: processing_unit_indexes) {
         for (auto idx: list) {
             internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                    idx < segment_proc_unit_counts.size(),
-                    "Index {} in processing_unit_indexes out of bounds >{}", idx, segment_proc_unit_counts.size() - 1);
-            segment_proc_unit_counts[idx]++;
+                    idx < segment_proc_unit_counts->size(),
+                    "Index {} in processing_unit_indexes out of bounds >{}", idx, segment_proc_unit_counts->size() - 1);
+            (*segment_proc_unit_counts)[idx]++;
         }
     }
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            std::all_of(segment_proc_unit_counts.begin(), segment_proc_unit_counts.end(), [](const size_t& val) { return val != 0; }),
+            std::all_of(segment_proc_unit_counts->begin(), segment_proc_unit_counts->end(), [](const size_t& val) { return val != 0; }),
             "All segments should be needed by at least one ProcessingUnit");
     // Give this a more descriptive name as we modify it between clauses
     std::vector<std::vector<EntityId>> entity_ids_vec{std::move(processing_unit_indexes)};
 
     // Used to make sure each entity is only added into the component manager once
-    std::vector<std::mutex> entity_added_mtx(segment_and_slice_futures.size());
-    std::vector<bool> entity_added(segment_and_slice_futures.size(), false);
+    auto entity_added_mtx = std::make_shared<std::vector<std::mutex>>(segment_and_slice_futures.size());
+    auto entity_added = std::make_shared<std::vector<bool>>(segment_and_slice_futures.size(), false);
     std::vector<folly::Future<std::vector<EntityId>>> futures;
     bool first_clause{true};
     // Reverse the order of clauses and iterate through them backwards so that the erase is efficient
-    std::reverse(clauses.begin(), clauses.end());
-    while (!clauses.empty()) {
+    std::reverse(clauses->begin(), clauses->end());
+    while (!clauses->empty()) {
         for (auto&& entity_ids: entity_ids_vec) {
             if (first_clause) {
                 std::vector<folly::Future<pipelines::SegmentAndSlice>> local_futs;
@@ -458,18 +468,18 @@ std::vector<EntityId> process_clauses(
                         folly::collect(local_futs)
                         .via(&async::cpu_executor())
                         .thenValue([component_manager,
-                                    &segment_proc_unit_counts,
-                                    &entity_added_mtx,
-                                    &entity_added,
-                                    &clauses,
+                                    segment_proc_unit_counts,
+                                    entity_added_mtx,
+                                    entity_added,
+                                    clauses,
                                     entity_ids = std::move(entity_ids)](std::vector<pipelines::SegmentAndSlice>&& segment_and_slices) mutable {
                             for (auto&& [idx, segment_and_slice]: folly::enumerate(segment_and_slices)) {
                                 auto entity_id = entity_ids[idx];
-                                std::lock_guard<std::mutex> lock(entity_added_mtx[entity_id]);
-                                if (!entity_added[entity_id]) {
+                                std::lock_guard<std::mutex> lock((*entity_added_mtx)[entity_id]);
+                                if (!(*entity_added)[entity_id]) {
                                     component_manager->add(
                                             std::make_shared<SegmentInMemory>(std::move(segment_and_slice.segment_in_memory_)),
-                                            entity_id, segment_proc_unit_counts[entity_id]);
+                                            entity_id, (*segment_proc_unit_counts)[entity_id]);
                                     component_manager->add(
                                             std::make_shared<RowRange>(std::move(segment_and_slice.ranges_and_key_.row_range_)),
                                             entity_id);
@@ -479,15 +489,15 @@ std::vector<EntityId> process_clauses(
                                     component_manager->add(
                                             std::make_shared<AtomKey>(std::move(segment_and_slice.ranges_and_key_.key_)),
                                             entity_id);
-                                    entity_added[entity_id] = true;
+                                    (*entity_added)[entity_id] = true;
                                 }
                             }
-                            return async::MemSegmentProcessingTask(clauses, std::move(entity_ids))();
+                            return async::MemSegmentProcessingTask(*clauses, std::move(entity_ids))();
                         }));
             } else {
                 futures.emplace_back(
                         async::submit_cpu_task(
-                                async::MemSegmentProcessingTask(clauses,
+                                async::MemSegmentProcessingTask(*clauses,
                                                                 std::move(entity_ids))
                         )
                 );
@@ -496,12 +506,12 @@ std::vector<EntityId> process_clauses(
         first_clause = false;
         entity_ids_vec = folly::collect(futures).get();
         futures.clear();
-        while (clauses.size() > 0 && !clauses.back()->clause_info().requires_repartition_) {
-            clauses.erase(clauses.end() - 1);
+        while (clauses->size() > 0 && !clauses->back()->clause_info().requires_repartition_) {
+            clauses->erase(clauses->end() - 1);
         }
-        if (clauses.size() > 0 && clauses.back()->clause_info().requires_repartition_) {
-            entity_ids_vec = clauses.back()->repartition(std::move(entity_ids_vec)).value();
-            clauses.erase(clauses.end() - 1);
+        if (clauses->size() > 0 && clauses->back()->clause_info().requires_repartition_) {
+            entity_ids_vec = clauses->back()->repartition(std::move(entity_ids_vec)).value();
+            clauses->erase(clauses->end() - 1);
         }
     }
     return flatten_entities(std::move(entity_ids_vec));
@@ -643,7 +653,7 @@ std::vector<SliceAndKey> read_and_process(
     auto processed_entity_ids = process_clauses(component_manager,
                                                 std::move(segment_and_slice_futures),
                                                 std::move(processing_unit_indexes),
-                                                read_query.clauses_);
+                                                std::make_shared<std::vector<std::shared_ptr<Clause>>>(read_query.clauses_));
     auto proc = gather_entities(component_manager, std::move(processed_entity_ids));
 
     if (std::any_of(read_query.clauses_.begin(), read_query.clauses_.end(), [](const std::shared_ptr<Clause>& clause) {
