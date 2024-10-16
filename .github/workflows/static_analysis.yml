@@ -37,7 +37,7 @@
           with:
             cmakeListsTxtPath: ${{github.workspace}}/cpp/CMakeLists.txt
             configurePreset: linux-debug
-            configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build', '-DCMAKE_CXX_COMPILER=g++-10', '-DCMAKE_C_COMPILER=gcc-10']"
+            configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build', '-DCMAKE_CXX_COMPILER=g++-10', '-DCMAKE_C_COMPILER=gcc-10', '-DVCPKG_INSTALL_OPTIONS=--debug']"
 
         - name: Polaris PR Scan
           if: ${{ github.event_name == 'pull_request' }}
