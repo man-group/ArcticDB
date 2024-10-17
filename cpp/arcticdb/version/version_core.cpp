@@ -735,7 +735,7 @@ std::vector<RangesAndKey> generate_ranges_and_keys(const std::vector<SliceAndKey
  * segments will be retrieved from storage and decompressed before being passed to a MemSegmentProcessingTask which
  * will process all clauses up until a clause that requires a repartition.
  */
-std::vector<SliceAndKey> read_and_process(
+folly::Future<std::vector<SliceAndKey>> read_and_process(
     const std::shared_ptr<Store>& store,
     const std::shared_ptr<PipelineContext>& pipeline_context,
     const ReadQuery& read_query,
@@ -759,26 +759,30 @@ std::vector<SliceAndKey> read_and_process(
     // Start reading as early as possible
     auto segment_and_slice_futures = store->batch_read_uncompressed(std::move(ranges_and_keys), columns_to_decode(pipeline_context));
 
-    auto processed_entity_ids = schedule_clause_processing(component_manager,
-                                                           std::move(segment_and_slice_futures),
-                                                           std::move(processing_unit_indexes),
-                                                           std::make_shared<std::vector<std::shared_ptr<Clause>>>(
-                                                           read_query.clauses_)).get();
-    auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager, std::move(processed_entity_ids));
+    return schedule_clause_processing(component_manager,
+                                      std::move(segment_and_slice_futures),
+                                      std::move(processing_unit_indexes),
+                                      std::make_shared<std::vector<std::shared_ptr<Clause>>>(
+                                      read_query.clauses_))
+    .via(&async::cpu_executor())
+    // TODO: Make read_query a shared pointer to make this copy cheaper
+    .thenValue([component_manager, read_query, pipeline_context](auto&& processed_entity_ids) {
+        auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager, std::move(processed_entity_ids));
 
-    if (std::any_of(read_query.clauses_.begin(), read_query.clauses_.end(), [](const std::shared_ptr<Clause>& clause) {
-        return clause->clause_info().modifies_output_descriptor_;
-    })) {
-        set_output_descriptors(proc, read_query.clauses_, pipeline_context);
-    }
-    return collect_segments(std::move(proc));
+        if (std::any_of(read_query.clauses_.begin(), read_query.clauses_.end(), [](const std::shared_ptr<Clause>& clause) {
+            return clause->clause_info().modifies_output_descriptor_;
+        })) {
+            set_output_descriptors(proc, read_query.clauses_, pipeline_context);
+        }
+        return collect_segments(std::move(proc));
+    });
 }
 
-SegmentInMemory read_direct(const std::shared_ptr<Store>& store,
-                            const std::shared_ptr<PipelineContext>& pipeline_context,
-                            DecodePathData shared_data,
-                            const ReadOptions& read_options,
-                            std::any& handler_data) {
+folly::Future<SegmentInMemory> read_direct(const std::shared_ptr<Store>& store,
+                                           const std::shared_ptr<PipelineContext>& pipeline_context,
+                                           DecodePathData shared_data,
+                                           const ReadOptions& read_options,
+                                           std::any& handler_data) {
     ARCTICDB_DEBUG(log::version(), "Allocating frame");
     ARCTICDB_SAMPLE_DEFAULT(ReadDirect)
     auto frame = allocate_frame(pipeline_context);
@@ -1287,7 +1291,7 @@ void create_column_stats_impl(
             "Cannot create column stats on pickled data"
             );
 
-    auto segs = read_and_process(store, pipeline_context, read_query, read_options);
+    auto segs = read_and_process(store, pipeline_context, read_query, read_options).get();
     schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(!segs.empty(), "Cannot create column stats for nonexistent columns");
 
     // Convert SliceAndKey vector into SegmentInMemory vector
@@ -1390,19 +1394,21 @@ SegmentInMemory do_direct_read_or_process(
         const std::shared_ptr<PipelineContext>& pipeline_context,
         const DecodePathData& shared_data,
         std::any& handler_data) {
-    SegmentInMemory frame;
     if(!read_query.clauses_.empty()) {
         ARCTICDB_SAMPLE(RunPipelineAndOutput, 0)
         util::check_rte(!pipeline_context->is_pickled(),"Cannot filter pickled data");
-        auto segs = read_and_process(store, pipeline_context, read_query, read_options);
-        frame = prepare_output_frame(std::move(segs), pipeline_context, store, read_options, handler_data);
+        auto segs = read_and_process(store, pipeline_context, read_query, read_options).get();
+        return prepare_output_frame(std::move(segs), pipeline_context, store, read_options, handler_data);
     } else {
         ARCTICDB_SAMPLE(MarkAndReadDirect, 0)
         util::check_rte(!(pipeline_context->is_pickled() && std::holds_alternative<RowRange>(read_query.row_filter)), "Cannot use head/tail/row_range with pickled data, use plain read instead");
         mark_index_slices(pipeline_context, opt_false(read_options.dynamic_schema_), pipeline_context->bucketize_dynamic_);
-        frame = read_direct(store, pipeline_context, shared_data, read_options, handler_data);
+        auto frame = allocate_frame(pipeline_context);
+        util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
+        ARCTICDB_DEBUG(log::version(), "Fetching frame data");
+        return fetch_data(frame, pipeline_context, store, opt_false(read_options.dynamic_schema_), shared_data, handler_data)
+        .thenValue([frame](auto&&){ return frame; }).get();
     }
-    return frame;
 }
 
 VersionedItem collate_and_write(
@@ -1552,7 +1558,7 @@ VersionedItem sort_merge_impl(
                 pipeline_context->descriptor(),
                 write_options.dynamic_schema
             }));
-            auto segments = read_and_process(store, pipeline_context, read_query, ReadOptions{});
+            auto segments = read_and_process(store, pipeline_context, read_query, ReadOptions{}).get();
             if (options.append_ && update_info.previous_index_key_ && !segments.empty()) {
                 const timestamp last_index_on_disc = update_info.previous_index_key_->end_time() - 1;
                 const timestamp incomplete_start =
@@ -1783,7 +1789,7 @@ VersionedItem defragment_symbol_data_impl(
     util::variant_match(std::move(policies), [
         &fut_vec, &slices, &store, &options, &pre_defragmentation_info, segment_size=segment_size] (auto &&idx, auto &&schema) {
         pre_defragmentation_info.read_query.clauses_.emplace_back(std::make_shared<Clause>(RemoveColumnPartitioningClause{pre_defragmentation_info.append_after.value()}));
-        auto segments = read_and_process(store, pre_defragmentation_info.pipeline_context, pre_defragmentation_info.read_query, defragmentation_read_options_generator(options));
+        auto segments = read_and_process(store, pre_defragmentation_info.pipeline_context, pre_defragmentation_info.read_query, defragmentation_read_options_generator(options)).get();
         using IndexType = std::remove_reference_t<decltype(idx)>;
         using SchemaType = std::remove_reference_t<decltype(schema)>;
         do_compact<IndexType, SchemaType, RowCountSegmentPolicy, DenseColumnPolicy>(
