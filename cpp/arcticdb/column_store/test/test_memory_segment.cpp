@@ -321,7 +321,7 @@ TEST(MemSegment, SplitSparseSegment) {
 }
 
 TEST(MemSegment, ShuffleAndSort) {
-    auto segment = get_standard_timeseries_segment("test_clone");
+    auto segment = get_standard_timeseries_segment("test_sort");
     std::random_device rng;
     std::mt19937 urng(rng());
     auto copied = segment.clone();
@@ -333,13 +333,25 @@ TEST(MemSegment, ShuffleAndSort) {
 }
 
 TEST(MemSegment, ShuffleAndSortStress) {
-    auto segment = get_standard_timeseries_segment("test_clone", 100000);
+    auto segment = get_standard_timeseries_segment("test_sort_stress", 100000);
     std::random_device rng;
     std::mt19937 urng(rng());
     auto copied = segment.clone();
     std::shuffle(segment.begin(), segment.end(), urng);
     ASSERT_EQ(segment.is_index_sorted(), false);
     segment.sort("time");
+    bool equal = segment == copied;
+    ASSERT_EQ(equal, true);
+}
+
+TEST(MemSegment, ShuffleAndMultiSort) {
+    auto segment = get_seqnum_timeseries_segment("test_multi_sort", 10000);
+    std::random_device rng;
+    std::mt19937 urng(rng());
+    auto copied = segment.clone();
+    std::shuffle(segment.begin(), segment.end(), urng);
+    ASSERT_EQ(segment.is_index_sorted(), false);
+    segment.sort(std::vector<std::string>{"time", "seqnum"});
     bool equal = segment == copied;
     ASSERT_EQ(equal, true);
 }
