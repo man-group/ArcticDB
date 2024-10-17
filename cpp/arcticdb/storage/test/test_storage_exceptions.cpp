@@ -200,8 +200,8 @@ protected:
 };
 
 TEST_F(LMDBStorageTestBase, WriteMapFullError) {
-    // Create a Storage with 32KB map size
-    LMDBStorageFactory factory(32ULL * (1ULL << 10), false);
+    // Create a Storage with 64KB map size
+    LMDBStorageFactory factory(64ULL * (1ULL << 10), false);
     auto storage = factory.create();
 
     arcticdb::entity::AtomKey k = arcticdb::entity::atom_key_builder().gen_id(0).build<arcticdb::entity::KeyType::VERSION>("sym");

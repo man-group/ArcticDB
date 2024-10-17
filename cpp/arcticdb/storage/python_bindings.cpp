@@ -37,7 +37,6 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
     storage.attr("CONFIG_LIBRARY_NAME") = py::str(arcticdb::storage::CONFIG_LIBRARY_NAME);
 
     py::enum_<KeyType>(storage, "KeyType")
-        .value("STREAM_GROUP", KeyType::STREAM_GROUP)
         .value("VERSION", KeyType::VERSION)
         .value("VERSION_JOURNAL", KeyType::VERSION_JOURNAL)
         .value("GENERATION", KeyType::GENERATION)

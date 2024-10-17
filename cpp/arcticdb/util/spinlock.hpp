@@ -14,7 +14,7 @@ namespace arcticdb {
 #ifdef WIN32
 #define PAUSE _mm_pause()
 #elif defined(__arm__) || defined(__ARM_ARCH)
-#define PAUSE __yield()
+#define PAUSE asm volatile("yield")
 #else
 #define PAUSE __builtin_ia32_pause()
 #endif

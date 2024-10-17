@@ -256,12 +256,6 @@ inline KeyType get_key_type_for_index_stream(const StreamId &) {
     return KeyType::TABLE_INDEX;
 }
 
-template <typename Function>
-auto foreach_key_type(Function&& func) {
-    for(int k = 0; k < int(KeyType::UNDEFINED); ++k) {
-        func(KeyType(k));
-    }
-}
 
 template <typename Function>
 auto foreach_key_type_read_precedence(Function&& func) {
@@ -281,6 +275,13 @@ auto foreach_key_type_write_precedence(Function&& func) {
 inline KeyType key_type_from_int(int type_num) {
     util::check(type_num > 0 && type_num < int(KeyType::UNDEFINED), "Unrecognized key type number {}", type_num);
     return KeyType(type_num);
+}
+
+template <typename Function>
+auto foreach_key_type(Function&& func) {
+    for(int k = 1; k < int(KeyType::UNDEFINED); ++k) {
+        func(key_type_from_int(k));
+    }
 }
 
 } // namespace arcticdb::entity
