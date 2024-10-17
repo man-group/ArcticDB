@@ -11,7 +11,7 @@
 #include <arcticdb/storage/library.hpp>
 #include <arcticdb/storage/library_path.hpp>
 #include <arcticdb/storage/storage_override.hpp>
-
+#include <arcticdb/util/lru_cache.hpp>
 
 namespace arcticdb::storage {
     enum class ModifiableLibraryOption {
@@ -69,7 +69,7 @@ namespace arcticdb::storage {
         [[nodiscard]] arcticdb::proto::storage::LibraryConfig get_config_internal(const LibraryPath& path, const std::optional<StorageOverride>& storage_override) const;
 
         std::shared_ptr<Store> store_;
-        std::unordered_map<LibraryPath, std::shared_ptr<Library>> open_libraries_;
+        LRUCache<LibraryPath, std::shared_ptr<Library>> open_libraries_;
         std::mutex open_libraries_mutex_;  // for open_libraries_
     };
 }
