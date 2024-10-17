@@ -319,6 +319,7 @@ struct AggregationClause {
 
 template<ResampleBoundary closed_boundary>
 struct ResampleClause {
+    using BucketGeneratorT = std::function<std::vector<timestamp>(timestamp, timestamp, std::string_view, ResampleBoundary, timestamp, const ResampleOrigin& origin)>;
     ClauseInfo clause_info_;
     std::shared_ptr<ComponentManager> component_manager_;
     ProcessingConfig processing_config_;
@@ -327,12 +328,12 @@ struct ResampleClause {
     // This will contain the data range specified by the user (if any) intersected with the range of timestamps for the symbol
     std::optional<TimestampRange> date_range_;
     // Inject this as a callback in the ctor to avoid language-specific dependencies this low down in the codebase
-    std::function<std::vector<timestamp>(timestamp, timestamp, std::string_view, ResampleBoundary, timestamp)> generate_bucket_boundaries_;
+    BucketGeneratorT generate_bucket_boundaries_;
     std::vector<timestamp> bucket_boundaries_;
     std::vector<SortedAggregatorInterface> aggregators_;
     std::string str_;
     timestamp offset_;
-    ResampleOrigin origin;
+    ResampleOrigin origin_;
 
     ResampleClause() = delete;
 
@@ -340,7 +341,7 @@ struct ResampleClause {
 
     ResampleClause(std::string rule,
         ResampleBoundary label_boundary,
-        std::function<std::vector<timestamp>(timestamp, timestamp, std::string_view, ResampleBoundary, timestamp)>&& generate_bucket_boundaries,
+        BucketGeneratorT&& generate_bucket_boundaries,
         timestamp offset,
         ResampleOrigin origin);
 
