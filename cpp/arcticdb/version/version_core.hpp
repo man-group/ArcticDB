@@ -168,13 +168,6 @@ folly::Future<version_store::ReadVersionOutput> async_read_direct_impl(
     std::any& handler_data,
     const ReadOptions& read_options);
 
-SegmentInMemory prepare_output_frame(
-    std::vector<SliceAndKey>&& items,
-    const std::shared_ptr<PipelineContext>& pipeline_context,
-    const std::shared_ptr<Store>& store,
-    const ReadOptions& read_options,
-    std::any& handler_data);
-
 SegmentInMemory do_direct_read_or_process(
     const std::shared_ptr<Store>& store,
     ReadQuery& read_query,

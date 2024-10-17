@@ -778,22 +778,6 @@ folly::Future<std::vector<SliceAndKey>> read_and_process(
     });
 }
 
-folly::Future<SegmentInMemory> read_direct(const std::shared_ptr<Store>& store,
-                                           const std::shared_ptr<PipelineContext>& pipeline_context,
-                                           DecodePathData shared_data,
-                                           const ReadOptions& read_options,
-                                           std::any& handler_data) {
-    ARCTICDB_DEBUG(log::version(), "Allocating frame");
-    ARCTICDB_SAMPLE_DEFAULT(ReadDirect)
-    auto frame = allocate_frame(pipeline_context);
-    util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
-
-    ARCTICDB_DEBUG(log::version(), "Fetching frame data");
-    fetch_data(frame, pipeline_context, store, opt_false(read_options.dynamic_schema_), shared_data, handler_data).get();
-    util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
-    return frame;
-}
-
 void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDescriptor& desc) {
     if (read_query.columns.has_value()) {
         auto index_columns = stream::get_index_columns_from_descriptor(desc);
@@ -1140,7 +1124,7 @@ void copy_frame_data_to_buffer(
 
 struct CopyToBufferTask : async::BaseTask {
     SegmentInMemory&& source_segment_;
-    SegmentInMemory& target_segment_;
+    SegmentInMemory target_segment_;
     FrameSlice frame_slice_;
     DecodePathData shared_data_;
     std::any& handler_data_;
@@ -1148,7 +1132,7 @@ struct CopyToBufferTask : async::BaseTask {
 
     CopyToBufferTask(
             SegmentInMemory&& source_segment,
-            SegmentInMemory& target_segment,
+            const SegmentInMemory& target_segment,
             FrameSlice frame_slice,
             DecodePathData shared_data,
             std::any& handler_data,
@@ -1188,10 +1172,10 @@ struct CopyToBufferTask : async::BaseTask {
     }
 };
 
-void copy_segments_to_frame(
+folly::Future<folly::Unit> copy_segments_to_frame(
         const std::shared_ptr<Store>& store,
         const std::shared_ptr<PipelineContext>& pipeline_context,
-        SegmentInMemory& frame,
+        SegmentInMemory frame,
         std::any& handler_data) {
     std::vector<folly::Future<folly::Unit>> copy_tasks;
     DecodePathData shared_data;
@@ -1208,10 +1192,10 @@ void copy_segments_to_frame(
                 handler_data,
                 context_row->fetch_index()}));
     }
-    folly::collect(copy_tasks).get();
+    return folly::collect(copy_tasks).via(&async::cpu_executor()).thenValue([](auto&&){ return folly::Unit{}; });
 }
 
-SegmentInMemory prepare_output_frame(
+folly::Future<SegmentInMemory> prepare_output_frame(
         std::vector<SliceAndKey>&& items,
         const std::shared_ptr<PipelineContext>& pipeline_context,
         const std::shared_ptr<Store>& store,
@@ -1234,9 +1218,7 @@ SegmentInMemory prepare_output_frame(
     }
 
     auto frame = allocate_frame(pipeline_context);
-    copy_segments_to_frame(store, pipeline_context, frame, handler_data);
-
-    return frame;
+    return copy_segments_to_frame(store, pipeline_context, frame, handler_data).thenValue([frame](auto&&){ return frame; });
 }
 
 AtomKey index_key_to_column_stats_key(const IndexTypeKey& index_key) {
@@ -1397,8 +1379,12 @@ SegmentInMemory do_direct_read_or_process(
     if(!read_query.clauses_.empty()) {
         ARCTICDB_SAMPLE(RunPipelineAndOutput, 0)
         util::check_rte(!pipeline_context->is_pickled(),"Cannot filter pickled data");
-        auto segs = read_and_process(store, pipeline_context, read_query, read_options).get();
-        return prepare_output_frame(std::move(segs), pipeline_context, store, read_options, handler_data);
+        return read_and_process(store, pipeline_context, read_query, read_options)
+        // TODO: Make read_options and handler_data shared pointers? handler_data is just a couple of shared pointers though
+        // TODO: Make frame a shared_ptr as well? Would be more explicit about the lifetime guarantees then
+        .thenValue([store, pipeline_context, read_options, &handler_data](auto&& segs) {
+            return prepare_output_frame(std::move(segs), pipeline_context, store, read_options, handler_data);
+        }).get();
     } else {
         ARCTICDB_SAMPLE(MarkAndReadDirect, 0)
         util::check_rte(!(pipeline_context->is_pickled() && std::holds_alternative<RowRange>(read_query.row_filter)), "Cannot use head/tail/row_range with pickled data, use plain read instead");
@@ -1406,6 +1392,7 @@ SegmentInMemory do_direct_read_or_process(
         auto frame = allocate_frame(pipeline_context);
         util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
         ARCTICDB_DEBUG(log::version(), "Fetching frame data");
+        // TODO: Make fetch_data return folly::Future<folly::Unit>
         return fetch_data(frame, pipeline_context, store, opt_false(read_options.dynamic_schema_), shared_data, handler_data)
         .thenValue([frame](auto&&){ return frame; }).get();
     }
