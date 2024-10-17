@@ -482,6 +482,8 @@ class NativeVersionStore:
         )
         if isinstance(item, NPDDataFrame):
             self.version_store.write_parallel(symbol, item, norm_meta, validate_index, sort_on_index, sort_columns)
+        else:
+            log.warning("The data could not be normalized to an ArcticDB format and has not been written")
 
     def write(
         self,
@@ -619,6 +621,8 @@ class NativeVersionStore:
                 )
 
             return self._convert_thin_cxx_item_to_python(vit, metadata)
+        else:
+            log.warning("The data could not be normalized to an ArcticDB format and has not been written")
 
     def _resolve_dynamic_strings(self, kwargs):
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
