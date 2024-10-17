@@ -64,7 +64,8 @@
     "azure-core-cpp",
     "azure-identity-cpp",
     "azure-storage-blobs-cpp",
-    "benchmark"
+    "benchmark",
+    "krb5"
   ],
   "overrides": [
     { "name": "openssl", "version-string": "3.3.0" },
@@ -156,6 +157,7 @@
     { "name": "gflags", "version": "2.2.2#5" },
     { "name": "glog", "version": "0.6.0#2" },
     { "name": "gtest", "version": "1.12.1" },
+    { "name": "krb5", "version": "1.21.3#1" },
     { "name": "libbson", "version": "1.28.0" },
     { "name": "libevent", "version": "2.1.12#7" },
     { "name": "libiconv", "version": "1.17#0" },
