@@ -3,17 +3,19 @@
   on: [pull_request]
   jobs:
     polaris-scan:
-      runs-on: [ ubuntu-latest]
+      name: Polaris Coverity Static Analysis
+      permissions:
+        packages: write
+      runs-on: ubuntu-latest
       env:
         VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
         VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
-        VCPKG_MAN_NUGET_USER: ${{secrets.VCPKG_MAN_NUGET_USER}} # For forks to download pre-compiled dependencies from the Man repo
-        VCPKG_MAN_NUGET_TOKEN: ${{secrets.VCPKG_MAN_NUGET_TOKEN}}
       steps:
         - name: Checkout Source
           uses: actions/checkout@v4
           with:
             submodules: recursive
+            fetch-depth: 0
 
         - name: Setup build dependencies
           run: |
@@ -30,21 +32,17 @@
             echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
             VCPKG_ROOT=$PLATFORM_VCPKG_ROOT" | tee -a $GITHUB_ENV
 
-        - name: Prepare C++ compilation env
-          run: . build_tooling/prep_cpp_build.sh
-
         - name: Get CMake
-          uses: lukka/get-cmake@v3.29.2
+          uses: lukka/get-cmake@latest
 
         - name: CMake configure
           uses: lukka/run-cmake@v10.8
           with:
             cmakeListsTxtPath: ${{github.workspace}}/cpp/CMakeLists.txt
             configurePreset: linux-debug
-            configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build', '-DCMAKE_CXX_COMPILER=g++-10', '-DCMAKE_C_COMPILER=gcc-10', '-DVCPKG_INSTALL_OPTIONS=--debug', '-DCMAKE_MODULE_PATH=cpp/CMake']"
+            configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build']"
 
         - name: Polaris PR Scan
-          if: ${{ github.event_name == 'pull_request' }}
           uses: synopsys-sig/synopsys-action@v1.13.0
           with:
             polaris_server_url: ${{ vars.POLARIS_SERVER_URL }}
