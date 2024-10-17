@@ -1369,7 +1369,7 @@ ColumnStats get_column_stats_info_impl(
     }
 }
 
-SegmentInMemory do_direct_read_or_process(
+folly::Future<SegmentInMemory> do_direct_read_or_process(
         const std::shared_ptr<Store>& store,
         ReadQuery& read_query,
         const ReadOptions& read_options,
@@ -1384,7 +1384,7 @@ SegmentInMemory do_direct_read_or_process(
         // TODO: Make frame a shared_ptr as well? Would be more explicit about the lifetime guarantees then
         .thenValue([store, pipeline_context, read_options, &handler_data](auto&& segs) {
             return prepare_output_frame(std::move(segs), pipeline_context, store, read_options, handler_data);
-        }).get();
+        });
     } else {
         ARCTICDB_SAMPLE(MarkAndReadDirect, 0)
         util::check_rte(!(pipeline_context->is_pickled() && std::holds_alternative<RowRange>(read_query.row_filter)), "Cannot use head/tail/row_range with pickled data, use plain read instead");
@@ -1394,7 +1394,7 @@ SegmentInMemory do_direct_read_or_process(
         ARCTICDB_DEBUG(log::version(), "Fetching frame data");
         // TODO: Make fetch_data return folly::Future<folly::Unit>
         return fetch_data(frame, pipeline_context, store, opt_false(read_options.dynamic_schema_), shared_data, handler_data)
-        .thenValue([frame](auto&&){ return frame; }).get();
+        .thenValue([frame](auto&&){ return frame; });
     }
 }
 
@@ -1855,7 +1855,7 @@ FrameAndDescriptor read_frame_for_version(
     ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
 
     DecodePathData shared_data;
-    auto frame = version_store::do_direct_read_or_process(store, read_query, read_options, pipeline_context, shared_data, handler_data);
+    auto frame = version_store::do_direct_read_or_process(store, read_query, read_options, pipeline_context, shared_data, handler_data).get();
 
     ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
     reduce_and_fix_columns(pipeline_context, frame, read_options, handler_data);

@@ -168,14 +168,6 @@ folly::Future<version_store::ReadVersionOutput> async_read_direct_impl(
     std::any& handler_data,
     const ReadOptions& read_options);
 
-SegmentInMemory do_direct_read_or_process(
-    const std::shared_ptr<Store>& store,
-    ReadQuery& read_query,
-    const ReadOptions& read_options,
-    const std::shared_ptr<PipelineContext>& pipeline_context,
-    const DecodePathData& shared_data,
-    std::any& handler_data);
-
 PredefragmentationInfo get_pre_defragmentation_info(
         const std::shared_ptr<Store>& store,
         const StreamId& stream_id,
