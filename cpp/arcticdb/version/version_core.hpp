@@ -208,7 +208,7 @@ void add_index_columns_to_query(
     const ReadQuery& read_query, 
     const TimeseriesDescriptor& desc);
 
-FrameAndDescriptor read_frame_for_version(
+folly::Future<FrameAndDescriptor> read_frame_for_version(
     const std::shared_ptr<Store>& store,
     const std::variant<VersionedItem, StreamId>& version_info,
     ReadQuery& read_query,

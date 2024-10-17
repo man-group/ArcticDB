@@ -366,7 +366,7 @@ ReadVersionOutput LocalVersionedEngine::read_dataframe_version_internal(
     py::gil_scoped_release release_gil;
     auto version = get_version_to_read(stream_id, version_query);
     const auto identifier = get_version_identifier(stream_id, version_query, read_options, version);
-    auto frame_and_descriptor = read_frame_for_version(store(), identifier, read_query, read_options, handler_data);
+    auto frame_and_descriptor = read_frame_for_version(store(), identifier, read_query, read_options, handler_data).get();
     return ReadVersionOutput{version.value_or(VersionedItem{}), std::move(frame_and_descriptor)};
 }
 

@@ -463,7 +463,8 @@ FrameAndDescriptor read_multi_key(
     AtomKey dup{keys[0]};
     ReadQuery read_query;
     VersionedItem versioned_item{std::move(dup)};
-    auto res = read_frame_for_version(store, versioned_item, read_query, ReadOptions{}, handler_data);
+    // TODO: return future here too
+    auto res = read_frame_for_version(store, versioned_item, read_query, ReadOptions{}, handler_data).get();
     TimeseriesDescriptor multi_key_desc{index_key_seg.index_descriptor()};
     multi_key_desc.mutable_proto().mutable_normalization()->CopyFrom(res.desc_.proto().normalization());
     return {res.frame_, multi_key_desc, keys, std::shared_ptr<BufferHolder>{}};
@@ -1816,7 +1817,7 @@ void set_row_id_if_index_only(
 
 // This is the main user-facing read method that either returns all or
 // part of a dataframe as-is, or transforms it via a processing pipeline
-FrameAndDescriptor read_frame_for_version(
+folly::Future<FrameAndDescriptor> read_frame_for_version(
         const std::shared_ptr<Store>& store,
         const std::variant<VersionedItem, StreamId>& version_info,
         ReadQuery& read_query,
@@ -1867,7 +1868,7 @@ FrameAndDescriptor read_frame_for_version(
                                       {},
                                       shared_data.buffers()};
         });
-    }).get();
+    });
 }
 
 } //namespace arcticdb::version_store
