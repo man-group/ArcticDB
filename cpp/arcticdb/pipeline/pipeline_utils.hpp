@@ -46,7 +46,7 @@ inline ReadResult read_result_from_single_frame(FrameAndDescriptor& frame_and_de
     auto descriptor = std::make_shared<StreamDescriptor>(frame_and_desc.frame_.descriptor());
     pipeline_context->begin()->set_descriptor(std::move(descriptor));
     auto handler_data = TypeHandlerRegistry::instance()->get_handler_data();
-    reduce_and_fix_columns(pipeline_context, frame_and_desc.frame_, ReadOptions{}, handler_data);
+    reduce_and_fix_columns(pipeline_context, frame_and_desc.frame_, ReadOptions{}, handler_data).get();
     apply_type_handlers(frame_and_desc.frame_, handler_data);
     return create_python_read_result(VersionedItem{key}, std::move(frame_and_desc));
 }

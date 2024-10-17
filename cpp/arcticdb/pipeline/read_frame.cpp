@@ -630,26 +630,25 @@ struct ReduceColumnTask : async::BaseTask {
     }
 };
 
-    void reduce_and_fix_columns(
-        std::shared_ptr<PipelineContext> &context,
-        SegmentInMemory &frame,
-        const ReadOptions& read_options,
-        std::any& handler_data
+folly::Future<folly::Unit> reduce_and_fix_columns(
+    std::shared_ptr<PipelineContext> &context,
+    SegmentInMemory &frame,
+    const ReadOptions& read_options,
+    std::any& handler_data
 ) {
     ARCTICDB_SAMPLE_DEFAULT(ReduceAndFixStringCol)
     ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
     if(frame.empty())
-        return;
+        return folly::Unit{};
 
     bool dynamic_schema = opt_false(read_options.dynamic_schema_);
     auto slice_map = std::make_shared<FrameSliceMap>(context, dynamic_schema);
     DecodePathData shared_data;
 
     static const auto batch_size = ConfigsMap::instance()->get_int("ReduceColumns.BatchSize", 100);
-    folly::collect(folly::window(frame.descriptor().fields().size(), [&] (size_t field) {
+    return folly::collect(folly::window(frame.descriptor().fields().size(), [&] (size_t field) {
         return async::submit_cpu_task(ReduceColumnTask(frame, field, slice_map, context, shared_data, handler_data, dynamic_schema));
-    }, batch_size)).via(&async::io_executor()).get();
-
+    }, batch_size)).via(&async::io_executor()).thenValue([](auto&&) { return folly::Unit{}; });
 }
 
 folly::Future<std::vector<VariantKey>> fetch_data(

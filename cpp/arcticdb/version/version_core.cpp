@@ -442,7 +442,7 @@ folly::Future<version_store::ReadVersionOutput> async_read_direct_impl(
 
     return fetch_data(frame, pipeline_context, store, dynamic_schema, shared_data, handler_data).thenValue(
         [pipeline_context, frame, read_options, &handler_data](auto &&) mutable {
-            reduce_and_fix_columns(pipeline_context, frame, read_options, handler_data);
+            return reduce_and_fix_columns(pipeline_context, frame, read_options, handler_data);
         }).thenValue(
         [index_segment_reader, frame, index_key, shared_data, read_query, pipeline_context](auto &&) mutable {
             set_row_id_for_empty_columns_set(*read_query, *pipeline_context, frame, index_segment_reader->tsd().total_rows() - 1);
@@ -1855,12 +1855,19 @@ FrameAndDescriptor read_frame_for_version(
     ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
 
     DecodePathData shared_data;
-    auto frame = version_store::do_direct_read_or_process(store, read_query, read_options, pipeline_context, shared_data, handler_data).get();
-
-    ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
-    reduce_and_fix_columns(pipeline_context, frame, read_options, handler_data);
-    set_row_id_if_index_only(*pipeline_context, frame, read_query);
-    return {frame, timeseries_descriptor_from_pipeline_context(pipeline_context, {}, pipeline_context->bucketize_dynamic_), {}, shared_data.buffers()};
+    return version_store::do_direct_read_or_process(store, read_query, read_options, pipeline_context, shared_data, handler_data)
+    // TODO: Make shared_data shared_ptr?
+    .thenValue([pipeline_context, read_options, &handler_data, read_query, shared_data](auto&& frame) mutable {
+        ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
+        return reduce_and_fix_columns(pipeline_context, frame, read_options, handler_data)
+        .thenValue([pipeline_context, frame, read_query, shared_data](auto&&) mutable {
+            set_row_id_if_index_only(*pipeline_context, frame, read_query);
+            return FrameAndDescriptor{frame,
+                                      timeseries_descriptor_from_pipeline_context(pipeline_context, {}, pipeline_context->bucketize_dynamic_),
+                                      {},
+                                      shared_data.buffers()};
+        });
+    }).get();
 }
 
 } //namespace arcticdb::version_store
