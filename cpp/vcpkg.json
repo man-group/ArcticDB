@@ -65,7 +65,14 @@
     "azure-identity-cpp",
     "azure-storage-blobs-cpp",
     "benchmark",
-    "krb5"
+    {
+      "name": "krb5",
+      "platform": "!windows"
+    },
+    {
+      "name": "cyrus-sasl",
+      "platform": "!windows"
+    }
   ],
   "overrides": [
     { "name": "openssl", "version-string": "3.3.0" },
@@ -151,6 +158,7 @@
     { "name": "boost-vcpkg-helpers", "version": "1.84.0" },
     { "name": "boost-winapi", "version": "1.84.0" },
     { "name": "curl", "version": "8.4.0" },
+    { "name": "cyrus-sasl", "version": "2.1.28#2" },
     { "name": "double-conversion", "version": "3.2.1" },
     { "name": "fmt", "version": "10.2.1" },
     { "name": "folly", "version-string": "2023.09.25.00" },

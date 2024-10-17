@@ -20,11 +20,7 @@
         - name: Setup build dependencies
           run: |
             sudo apt-get update
-            sudo apt-get install -y gcc-10 g++-10 make mono-complete
-            sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-10 100
-            sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-10 100
-            sudo update-alternatives --set g++ /usr/bin/g++-10
-            sudo update-alternatives --set gcc /usr/bin/gcc-10
+            sudo apt-get install -y gcc-10 g++-10 make mono-complete libtool autoconf-archive autoconf
 
         - name: Setup VCPKG cache
           run: |
@@ -40,7 +36,7 @@
           with:
             cmakeListsTxtPath: ${{github.workspace}}/cpp/CMakeLists.txt
             configurePreset: linux-debug
-            configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build']"
+            configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build', '-DCMAKE_C_COMPILER=gcc-10', '-DCMAKE_CXX_COMPILER=g++-10']"
 
         - name: Polaris PR Scan
           uses: synopsys-sig/synopsys-action@v1.13.0
