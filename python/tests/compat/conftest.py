@@ -146,9 +146,10 @@ class VenvLib:
 def old_venv(request):
     version = request.param
     path = os.path.join("venvs", version)
-    # The requirements_file needs to be relative to the [path] we use for the venv.
-    # Absolute paths break some Azure CI runners on conda forge
-    requirements_file = os.path.join("..", "..", "tests", "compat", f"requirements-{version}.txt")
+    # We need to expandvars because on some systems (e.g. Conda Feedstock) abspath uses env variables.
+    requirements_file = os.path.expandvars(
+        os.path.abspath(os.path.join("tests", "compat", f"requirements-{version}.txt"))
+    )
     with Venv(path, requirements_file, version) as old_venv:
         yield old_venv
 
