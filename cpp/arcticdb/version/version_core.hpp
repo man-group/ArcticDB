@@ -130,6 +130,12 @@ FrameAndDescriptor read_multi_key(
     const SegmentInMemory& index_key_seg,
     std::any& handler_data);
 
+folly::Future<std::vector<EntityId>> schedule_clause_processing(
+        std::shared_ptr<ComponentManager> component_manager,
+        std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures,
+        std::vector<std::vector<size_t>>&& processing_unit_indexes,
+        std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses);
+
 FrameAndDescriptor read_segment_impl(
     const std::shared_ptr<Store>& store,
     const VariantKey& key);
