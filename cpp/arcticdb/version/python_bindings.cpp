@@ -53,7 +53,8 @@ std::vector<timestamp> generate_buckets(
     timestamp end,
     std::string_view rule,
     ResampleBoundary closed_boundary_arg,
-    timestamp offset
+    timestamp offset,
+    [[maybe_unused]] timestamp origin
 ) {
     timestamp rule_ns;
     {
