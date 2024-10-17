@@ -1088,8 +1088,8 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::te
     const std::vector<StreamId> &stream_ids,
     const std::vector<VersionQuery> &version_queries,
     std::vector<std::shared_ptr<ReadQuery>> &read_queries,
-    const ReadOptions &read_options) {
-    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data();
+    const ReadOptions &read_options,
+    std::any& handler_data) {
     py::gil_scoped_release release_gil;
 
     auto versions = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
@@ -1117,8 +1117,6 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::te
             })
         );
     }
-    // TODO: https://github.com/man-group/ArcticDB/issues/241
-    // Move everything from here to the end of the function out into batch_read_internal as part of #241
     auto read_versions = folly::collectAll(read_versions_futs).get();
     std::vector<std::variant<ReadVersionOutput, DataError>> read_versions_or_errors;
     read_versions_or_errors.reserve(read_versions.size());
@@ -1156,7 +1154,7 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
     if(std::none_of(std::begin(read_queries), std::end(read_queries), [] (const auto& read_query) {
         return !read_query->clauses_.empty();
     })) {
-        return temp_batch_read_internal_direct(stream_ids, version_queries, read_queries, read_options);
+        return temp_batch_read_internal_direct(stream_ids, version_queries, read_queries, read_options, handler_data);
     }
 
     std::vector<std::variant<ReadVersionOutput, DataError>> read_versions_or_errors;
