@@ -387,6 +387,10 @@ set(arcticdb_srcs
         version/version_store_objects.hpp
         version/version_utils.hpp
         # CPP files
+
+        # TODO: Remove used only to test Coverity PR comments
+        test_coverity_pr_comments.cpp
+
         async/async_store.cpp
         async/bit_rate_stats.cpp
         async/task_scheduler.cpp
@@ -998,9 +1002,6 @@ if(${TEST})
                 GTest::gtest
                 GTest::gmock
                 Python::Python # + pybind11::pybind11 (transitively included) = pybind11::embed, but latter is sometimes not found...
-                curl
-                krb5support
-                k5crypto
                 util # TODO: find out where we lost the transitive link to it
                 )
         if(NOT APPLE)
