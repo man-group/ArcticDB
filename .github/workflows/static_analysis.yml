@@ -24,7 +24,7 @@
         - name: Setup build dependencies
           run: |
             sudo apt-get update
-            sudo apt-get install -y gcc-10 g++-10 make mono-complete libtool autoconf-archive autoconf
+            sudo apt-get install -y gcc-10 g++-10 make mono-complete libkrb5-dev libsasl2-dev
 
         - name: Setup VCPKG cache
           run: |
@@ -54,5 +54,10 @@
             polaris_waitForScan: true
             coverity_build_command: make -j ${{ steps.cpu-cores.outputs.count }}
             coverity_clean_command: make clean
-            github_token: ${{ secrets.GITHUB_TOKEN }}
+            github_token: ${{ secrets.POLARIS_GITHUB_TOKEN }}
             project_directory: ${{github.workspace}}/cpp/out/linux-debug-build
+            include_diagnostics: true
+            polaris_reports_sarif_create: true
+            polaris_reports_sarif_groupSCAIssues: true
+            polaris_upload_sarif_report: true
+            polaris_prComment_severities: "high,critical,medium,low"

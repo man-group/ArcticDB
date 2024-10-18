@@ -64,15 +64,7 @@
     "azure-core-cpp",
     "azure-identity-cpp",
     "azure-storage-blobs-cpp",
-    "benchmark",
-    {
-      "name": "krb5",
-      "platform": "!windows"
-    },
-    {
-      "name": "cyrus-sasl",
-      "platform": "!windows"
-    }
+    "benchmark"
   ],
   "overrides": [
     { "name": "openssl", "version-string": "3.3.0" },
@@ -158,14 +150,12 @@
     { "name": "boost-vcpkg-helpers", "version": "1.84.0" },
     { "name": "boost-winapi", "version": "1.84.0" },
     { "name": "curl", "version": "8.4.0" },
-    { "name": "cyrus-sasl", "version": "2.1.28#2" },
     { "name": "double-conversion", "version": "3.2.1" },
     { "name": "fmt", "version": "10.2.1" },
     { "name": "folly", "version-string": "2023.09.25.00" },
     { "name": "gflags", "version": "2.2.2#5" },
     { "name": "glog", "version": "0.6.0#2" },
     { "name": "gtest", "version": "1.12.1" },
-    { "name": "krb5", "version": "1.21.3#1" },
     { "name": "libbson", "version": "1.28.0" },
     { "name": "libevent", "version": "2.1.12#7" },
     { "name": "libiconv", "version": "1.17#0" },
