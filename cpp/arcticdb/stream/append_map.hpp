@@ -72,6 +72,12 @@ void append_incomplete(
     const std::shared_ptr<pipelines::InputTensorFrame>& frame,
     bool validate_index);
 
+SegmentInMemory incomplete_segment_from_frame(
+    const std::shared_ptr<pipelines::InputTensorFrame>& frame,
+    size_t existing_rows,
+    std::optional<entity::AtomKey>&& prev_key,
+    bool allow_sparse);
+
 std::optional<int64_t> latest_incomplete_timestamp(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id);
