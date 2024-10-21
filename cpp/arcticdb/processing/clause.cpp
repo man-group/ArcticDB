@@ -885,7 +885,7 @@ std::vector<std::vector<EntityId>> MergeClause::structure_for_processing(std::ve
     const RowRange row_range{min_start_row, max_end_row};
     const ColRange col_range{min_start_col, max_end_col};
     std::vector<std::vector<EntityId>> ret;
-    std::visit([this, &ret, &input_streams, &comp=compare, stream_id=stream_id_, &row_range, &col_range](auto idx, auto density) {
+    std::visit([this, &ret, &input_streams, stream_id=stream_id_, &row_range, &col_range](auto idx, auto density) {
             if (dynamic_schema_) {
                 merge_impl<decltype(idx), decltype(density), decltype(input_streams), true>(
                     component_manager_,

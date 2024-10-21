@@ -461,6 +461,30 @@ class NativeVersionStore:
 
         return global_default
 
+    def stage(
+            self,
+            symbol: str,
+            data: Any,
+            validate_index: bool = False,
+            sort_on_index: bool = False,
+            sort_columns: List[str] = None,
+            **kwargs):
+        norm_failure_options_msg = kwargs.get("norm_failure_options_msg", self.norm_failure_options_msg_write)
+        _handle_categorical_columns(symbol, data, True)
+        udm, item, norm_meta = self._try_normalize(
+            symbol,
+            data,
+            None,
+            pickle_on_failure=False,
+            dynamic_strings=True,
+            coerce_columns=None,
+            norm_failure_options_msg=norm_failure_options_msg,
+        )
+        if isinstance(item, NPDDataFrame):
+            self.version_store.write_parallel(symbol, item, norm_meta, validate_index, sort_on_index, sort_columns)
+        else:
+            log.warning("The data could not be normalized to an ArcticDB format and has not been written")
+
     def write(
         self,
         symbol: str,
@@ -586,7 +610,7 @@ class NativeVersionStore:
         # TODO: allow_sparse for write_parallel / recursive normalizers as well.
         if isinstance(item, NPDDataFrame):
             if parallel:
-                self.version_store.write_parallel(symbol, item, norm_meta, udm, validate_index)
+                self.version_store.write_parallel(symbol, item, norm_meta, validate_index, False, None)
                 return None
             elif incomplete:
                 self.version_store.append_incomplete(symbol, item, norm_meta, udm, validate_index)
@@ -597,6 +621,8 @@ class NativeVersionStore:
                 )
 
             return self._convert_thin_cxx_item_to_python(vit, metadata)
+        else:
+            log.warning("The data could not be normalized to an ArcticDB format and has not been written")
 
     def _resolve_dynamic_strings(self, kwargs):
         proto_cfg = self._lib_cfg.lib_desc.version.write_options

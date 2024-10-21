@@ -752,16 +752,13 @@ VersionedItem PythonVersionStore::sort_merge(
 
 void PythonVersionStore::write_parallel(
     const StreamId& stream_id,
-    const py::tuple &item,
-    const py::object &norm,
-    const py::object & user_meta,
-    bool validate_index) const {
-    using namespace arcticdb::entity;
-    using namespace arcticdb::stream;
-    using namespace arcticdb::pipelines;
-
-    auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta, cfg().write_options().empty_types());
-    write_parallel_frame(stream_id, frame, validate_index);
+    const py::tuple& item,
+    const py::object& norm,
+    bool validate_index,
+    bool sort_on_index,
+    std::optional<std::vector<std::string>> sort_columns) const {
+    auto frame = convert::py_ndf_to_frame(stream_id, item, norm, py::none(), cfg().write_options().empty_types());
+    write_parallel_frame(stream_id, frame, validate_index, sort_on_index, sort_columns);
 }
 
 std::unordered_map<VersionId, bool> PythonVersionStore::get_all_tombstoned_versions(const StreamId &stream_id) {
