@@ -25,6 +25,7 @@ from .api import *
 from .utils import get_ephemeral_port, GracefulProcessUtils, wait_for_server_to_come_up, safer_rmtree, get_ca_cert_for_testing
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap, AWSAuthMethod
 from arcticdb.version_store.helper import add_s3_library_to_env
+from arcticdb_ext.storage import EnvironmentNativeVariantStorageMap
 
 # All storage client libraries to be imported on-demand to speed up start-up of ad-hoc test runs
 
@@ -95,6 +96,7 @@ class S3Bucket(StorageFixture):
 
     def create_test_cfg(self, lib_name: str) -> EnvironmentConfigsMap:
         cfg = EnvironmentConfigsMap()
+        native_cfg = EnvironmentNativeVariantStorageMap()
         if self.factory.default_prefix:
             with_prefix = f"{self.factory.default_prefix}/{lib_name}"
         else:
@@ -118,8 +120,9 @@ class S3Bucket(StorageFixture):
             use_raw_prefix=self.factory.use_raw_prefix,
             aws_auth=self.factory.aws_auth,
             aws_profile=self.factory.aws_profile,
+            native_cfg=native_cfg,
         )# client_cert_dir is skipped on purpose; It will be tested manually in other tests
-        return cfg
+        return cfg, native_cfg
 
     def set_permission(self, *, read: bool, write: bool):
         factory = self.factory

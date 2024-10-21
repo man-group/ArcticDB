@@ -60,6 +60,16 @@ std::vector<std::pair<StorageName, arcticdb::proto::storage::VariantStorage>> In
     return output;
 }
 
+std::vector<std::pair<StorageName, arcticdb::storage::NativeVariantStorage>> InMemoryConfigResolver::get_native_storages(const EnvironmentName &environment_name) const {
+    auto config = get_environment(environment_name);
+    std::vector<std::pair<StorageName, arcticdb::storage::NativeVariantStorage>> output;
+
+    for(auto& pair : config->native_storages_)
+        output.emplace_back(pair);
+
+    return output;
+}
+
 void InMemoryConfigResolver::add_library(const EnvironmentName& environment_name, const arcticdb::proto::storage::LibraryDescriptor& library_descriptor) {
     auto& config = get_or_add_environment(environment_name);
     config.libraries_.try_emplace(LibraryPath::from_delim_path(library_descriptor.name()), library_descriptor);
@@ -68,6 +78,11 @@ void InMemoryConfigResolver::add_library(const EnvironmentName& environment_name
 void InMemoryConfigResolver::add_storage(const EnvironmentName& environment_name, const StorageName& storage_name, const arcticdb::proto::storage::VariantStorage& storage) {
     auto& config = get_or_add_environment(environment_name);
     config.storages_.try_emplace(StorageName(storage_name), storage);
+}
+
+void InMemoryConfigResolver::add_native_storage(const EnvironmentName& environment_name, const std::string& storage_name, const arcticdb::storage::NativeVariantStorage& storage) {
+    auto& config = get_or_add_environment(environment_name);
+    config.native_storages_.try_emplace(StorageName(storage_name), storage);
 }
 
 }
