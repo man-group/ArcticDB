@@ -954,7 +954,7 @@ if(${TEST})
             python/python_handlers.cpp
             storage/test/common.hpp
             version/test/test_sort_index.cpp
-    )
+            util/test/random_throw.hpp)
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 

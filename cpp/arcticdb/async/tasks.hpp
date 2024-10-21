@@ -25,6 +25,7 @@
 #include <arcticdb/processing/processing_unit.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/codec/codec.hpp>
+#include <arcticdb/util/test/random_throw.hpp>
 
 #include <type_traits>
 #include <ranges>
@@ -90,6 +91,7 @@ struct EncodeAtomTask : BaseTask {
 
     storage::KeySegmentPair encode() {
         ARCTICDB_DEBUG(log::codec(), "Encoding object with partial key {}", partial_key_);
+        ARCTICDB_DEBUG_THROW(5)
         auto enc_seg = ::arcticdb::encode_dispatch(std::move(segment_), *codec_meta_, encoding_version_);
         auto content_hash = get_segment_hash(enc_seg);
 
@@ -128,6 +130,7 @@ struct EncodeSegmentTask : BaseTask {
 
     storage::KeySegmentPair operator()() {
         ARCTICDB_SAMPLE(EncodeSegmentTask, 0)
+        ARCTICDB_DEBUG_THROW(5)
         return encode();
     }
 };
@@ -507,6 +510,7 @@ struct MemSegmentFunctionTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(MemSegmentFunctionTask)
 
     folly::Unit operator()(std::pair<VariantKey, SegmentInMemory> &&seg_pair) {
+        ARCTICDB_DEBUG_THROW(5)
         func_(std::move(seg_pair.second));
         return folly::Unit{};
     }
@@ -580,6 +584,7 @@ struct DecodeMetadataAndDescriptorTask : BaseTask {
 
     std::tuple<VariantKey, std::optional<google::protobuf::Any>, StreamDescriptor> operator()(storage::KeySegmentPair &&ks) const {
         ARCTICDB_SAMPLE(ReadMetadataAndDescriptorTask, 0)
+        ARCTICDB_DEBUG_THROW(5)
         auto key_seg = std::move(ks);
         ARCTICDB_DEBUG(log::storage(), "DecodeMetadataAndDescriptorTask decoding segment with key {}", variant_key_view(key_seg.variant_key()));
 
