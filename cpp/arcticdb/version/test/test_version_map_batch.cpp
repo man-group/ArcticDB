@@ -69,8 +69,8 @@ TEST_F(VersionMapBatchStore, SimpleVersionIdQueries) {
         auto stream = fmt::format("stream_{}", i);
         for(uint64_t j = 0; j < num_versions_per_stream; j++){
             uint64_t idx = i * num_versions_per_stream + j;
-            ASSERT_EQ(versions[idx]->id(), StreamId{stream});
-            ASSERT_EQ(versions[idx]->version_id(), j);
+            ASSERT_EQ(versions[idx]->key_.id(), StreamId{stream});
+            ASSERT_EQ(versions[idx]->key_.version_id(), j);
         }
     }
 }
@@ -111,7 +111,7 @@ TEST_F(VersionMapBatchStore, SimpleTimestampQueries) {
     for(uint64_t i = 0; i < num_streams; i++){
         for(uint64_t j = 0; j < num_versions_per_stream; j++){
             uint64_t idx = i * num_versions_per_stream + j;
-            version_queries.emplace_back(VersionQuery{TimestampVersionQuery{timestamp(versions[idx]->creation_ts()), false}});
+            version_queries.emplace_back(VersionQuery{TimestampVersionQuery{timestamp(versions[idx]->key_.creation_ts()), false}});
         }
     }
 
@@ -123,9 +123,9 @@ TEST_F(VersionMapBatchStore, SimpleTimestampQueries) {
         auto stream = fmt::format("stream_{}", i);
         for(uint64_t j = 0; j < num_versions_per_stream; j++){
             uint64_t idx = i * num_versions_per_stream + j;
-            ASSERT_EQ(versions_querying_with_timestamp[idx]->id(), StreamId{stream});
-            ASSERT_EQ(versions_querying_with_timestamp[idx]->version_id(), versions[idx]->version_id());
-            ASSERT_EQ(versions_querying_with_timestamp[idx]->creation_ts(), versions[idx]->creation_ts());
+            ASSERT_EQ(versions_querying_with_timestamp[idx]->key_.id(), StreamId{stream});
+            ASSERT_EQ(versions_querying_with_timestamp[idx]->key_.version_id(), versions[idx]->key_.version_id());
+            ASSERT_EQ(versions_querying_with_timestamp[idx]->key_.creation_ts(), versions[idx]->key_.creation_ts());
         }
     }
 }
@@ -157,8 +157,8 @@ TEST_F(VersionMapBatchStore, MultipleVersionsSameSymbolVersionIdQueries) {
     
     // Check results
     for(uint64_t i = 0; i < num_versions; i++){
-        ASSERT_EQ(versions[i]->id(), StreamId{stream});
-        ASSERT_EQ(versions[i]->version_id(), i);
+        ASSERT_EQ(versions[i]->key_.id(), StreamId{stream});
+        ASSERT_EQ(versions[i]->key_.version_id(), i);
     }
 }
 
@@ -191,7 +191,7 @@ TEST_F(VersionMapBatchStore, MultipleVersionsSameSymbolTimestampQueries) {
     //Secondly, once we have the timestamps in hand, we are going to query them
     version_queries.clear();
     for(uint64_t i = 0; i < num_versions; i++){
-        version_queries.emplace_back(VersionQuery{TimestampVersionQuery{timestamp(versions[i]->creation_ts()), false}});
+        version_queries.emplace_back(VersionQuery{TimestampVersionQuery{timestamp(versions[i]->key_.creation_ts()), false}});
     }
 
     // Now we can perform the actual batch query per timestamps
@@ -199,9 +199,9 @@ TEST_F(VersionMapBatchStore, MultipleVersionsSameSymbolTimestampQueries) {
 
     // Do the checks
     for(uint64_t i = 0; i < num_versions; i++){
-        ASSERT_EQ(versions_querying_with_timestamp[i]->id(), StreamId{stream});
-        ASSERT_EQ(versions_querying_with_timestamp[i]->version_id(), versions[i]->version_id());
-        ASSERT_EQ(versions_querying_with_timestamp[i]->creation_ts(), versions[i]->creation_ts());
+        ASSERT_EQ(versions_querying_with_timestamp[i]->key_.id(), StreamId{stream});
+        ASSERT_EQ(versions_querying_with_timestamp[i]->key_.version_id(), versions[i]->key_.version_id());
+        ASSERT_EQ(versions_querying_with_timestamp[i]->key_.creation_ts(), versions[i]->key_.creation_ts());
     }
 }
 
@@ -246,7 +246,7 @@ TEST_F(VersionMapBatchStore, CombinedQueries) {
             stream_ids.emplace_back(stream);
             version_queries.emplace_back(VersionQuery{SpecificVersionQuery{static_cast<SignedVersionId>(j), false}});
             stream_ids.emplace_back(stream);
-            version_queries.emplace_back(VersionQuery{TimestampVersionQuery{timestamp(versions[idx]->creation_ts()), false}});
+            version_queries.emplace_back(VersionQuery{TimestampVersionQuery{timestamp(versions[idx]->key_.creation_ts()), false}});
             stream_ids.emplace_back(stream);
             version_queries.emplace_back(VersionQuery{std::monostate{}});
         }
@@ -260,13 +260,13 @@ TEST_F(VersionMapBatchStore, CombinedQueries) {
         for(uint64_t j = 0; j < num_versions_per_stream; j++){
             uint64_t idx_versions = i * num_versions_per_stream + j;
             uint64_t idx = idx_versions * 3;
-            ASSERT_EQ(versions_querying_with_mix_types[idx]->id(), StreamId{stream});
-            ASSERT_EQ(versions_querying_with_mix_types[idx + 1]->id(), StreamId{stream});
-            ASSERT_EQ(versions_querying_with_mix_types[idx + 2]->id(), StreamId{stream});
-            ASSERT_EQ(versions_querying_with_mix_types[idx]->version_id(), j);
-            ASSERT_EQ(versions_querying_with_mix_types[idx + 1]->version_id(), versions[idx_versions]->version_id());
-            ASSERT_EQ(versions_querying_with_mix_types[idx + 1]->creation_ts(), versions[idx_versions]->creation_ts());
-            ASSERT_EQ(versions_querying_with_mix_types[idx + 2]->version_id(), num_versions_per_stream - 1);
+            ASSERT_EQ(versions_querying_with_mix_types[idx]->key_.id(), StreamId{stream});
+            ASSERT_EQ(versions_querying_with_mix_types[idx + 1]->key_.id(), StreamId{stream});
+            ASSERT_EQ(versions_querying_with_mix_types[idx + 2]->key_.id(), StreamId{stream});
+            ASSERT_EQ(versions_querying_with_mix_types[idx]->key_.version_id(), j);
+            ASSERT_EQ(versions_querying_with_mix_types[idx + 1]->key_.version_id(), versions[idx_versions]->key_.version_id());
+            ASSERT_EQ(versions_querying_with_mix_types[idx + 1]->key_.creation_ts(), versions[idx_versions]->key_.creation_ts());
+            ASSERT_EQ(versions_querying_with_mix_types[idx + 2]->key_.version_id(), num_versions_per_stream - 1);
         }
     }
 }
