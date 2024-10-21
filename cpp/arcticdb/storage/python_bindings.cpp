@@ -157,7 +157,7 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         });
 
 
-    storage.def("create_mem_config_resolver", [](const py::object & env_config_map_py, const EnvironmentNativeVariantStorageMap& native_env_storage_map) -> std::shared_ptr<ConfigResolver> {
+    storage.def("create_mem_config_resolver", [](const py::object & env_config_map_py, const std::optional<EnvironmentNativeVariantStorageMap>& native_env_storage_map) -> std::shared_ptr<ConfigResolver> {
         arcticdb::proto::storage::EnvironmentConfigsMap ecm;
         pb_from_python(env_config_map_py, ecm);
         auto resolver = std::make_shared<storage::details::InMemoryConfigResolver>();
@@ -172,16 +172,18 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
                 resolver->add_library(env_name, lib_desc);
             }
         }
-        for (const auto& [env, native_storage_map] : native_env_storage_map) {
-            EnvironmentName env_name{env};
-            for (const auto& [id, native_storage] : native_storage_map) {
-                resolver->add_native_storage(env_name, id, native_storage);
+        if (native_env_storage_map) {
+            for (const auto& [env, native_storage_map] : native_env_storage_map.value()) {
+                EnvironmentName env_name{env};
+                for (const auto& [id, native_storage] : native_storage_map) {
+                    resolver->add_native_storage(env_name, id, native_storage);
+                }
             }
         }
         return resolver;
     },
     py::arg("env_config_map"),
-    py::arg("native_env_storage_map") = EnvironmentNativeVariantStorageMap());
+    py::arg("native_env_storage_map") = std::nullopt);
 
     py::class_<ConfigResolver, std::shared_ptr<ConfigResolver>>(storage, "ConfigResolver");
 
