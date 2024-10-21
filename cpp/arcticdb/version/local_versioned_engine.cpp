@@ -406,14 +406,14 @@ folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(
 }
 
 folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor_async(
-    folly::Future<std::variant<VersionedItem, StreamId>>&& version_fut,
+    folly::Future<std::optional<VersionedItem>>&& version_fut,
     const StreamId& stream_id,
     const VersionQuery& version_query){
     return std::move(version_fut)
-    .thenValue([this, &stream_id, &version_query](std::variant<VersionedItem, StreamId>&& version){
-        missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(std::holds_alternative<VersionedItem>(version),
+    .thenValue([this, &stream_id, &version_query](std::optional<VersionedItem>&& version){
+        missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(version.has_value(),
         "Unable to retrieve descriptor data. {}@{}: version not found", stream_id, version_query);
-        return get_descriptor(std::move(std::get<VersionedItem>(version).key_));
+        return get_descriptor(std::move(version->key_));
     }).via(&async::cpu_executor());
 }
 
@@ -437,7 +437,7 @@ std::vector<std::variant<DescriptorItem, DataError>> LocalVersionedEngine::batch
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_error_.has_value(),
                                                     "ReadOptions::batch_throw_on_error_ should always be set here");
 
-    auto version_futures = batch_get_versions_async(store(), version_map(), stream_ids, version_queries, read_options);
+    auto version_futures = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<DescriptorItem>> descriptor_futures;
     for (auto&& [idx, version_fut]: folly::enumerate(version_futures)) {
         descriptor_futures.emplace_back(
@@ -1092,14 +1092,32 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::te
     std::any& handler_data) {
     py::gil_scoped_release release_gil;
 
-    auto versions = batch_get_versions_async(store(), version_map(), stream_ids, version_queries, read_options);
+    auto versions = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<ReadVersionOutput>> read_versions_futs;
-    for (auto&& [idx, version] : folly::enumerate(versions)) {
-        read_versions_futs.emplace_back(std::move(version)
+    for (auto&& [idx, version_fut] : folly::enumerate(versions)) {
+        read_versions_futs.emplace_back(std::move(version_fut)
             .thenValue([store = store(),
+                        sid = stream_ids[idx],
+                        vq = version_queries[idx],
                         read_query = read_queries.empty() ? std::make_shared<ReadQuery>(): read_queries[idx],
                         read_options,
-                        &handler_data](auto&& version_info) {
+                        &handler_data](auto&& version) {
+                std::variant<VersionedItem, StreamId> version_info;
+                if (version.has_value()) {
+                    version_info = std::move(*version);
+                } else {
+                    if (opt_false(read_options.incompletes_)) {
+                        log::version().warn("No index: Key not found for {}, will attempt to use incomplete segments.", sid);
+                        version_info = std::move(sid);
+                    } else {
+                        missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(
+                                "batch_read_internal: version matching query '{}' not found for symbol '{}'",
+                                vq,
+                                sid
+                                );
+
+                    }
+                }
                 return read_frame_for_version(store, version_info, *read_query, read_options, handler_data)
                 .thenValue([version_info](auto&& frame) mutable {
                     return ReadVersionOutput{
@@ -1582,15 +1600,15 @@ folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobu
 }
 
 folly::Future<std::pair<VariantKey, std::optional<google::protobuf::Any>>> LocalVersionedEngine::get_metadata_async(
-    folly::Future<std::variant<VersionedItem, StreamId>>&& version_fut,
+    folly::Future<std::optional<VersionedItem>>&& version_fut,
     const StreamId& stream_id,
     const VersionQuery& version_query
     ) {
     return std::move(version_fut)
-    .thenValue([this, &stream_id, &version_query](std::variant<VersionedItem, StreamId>&& version){
-        missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(std::holds_alternative<VersionedItem>(version),
+    .thenValue([this, &stream_id, &version_query](std::optional<VersionedItem>&& version){
+        missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(version.has_value(),
         "Unable to retrieve  metadata. {}@{}: version not found", stream_id, version_query);
-        return get_metadata(std::move(std::get<VersionedItem>(version).key_));
+        return get_metadata(std::move(version->key_));
     })
     .thenValue([](auto&& metadata){
         auto&& [opt_key, meta_proto] = metadata;
@@ -1606,7 +1624,7 @@ std::vector<std::variant<std::pair<VariantKey, std::optional<google::protobuf::A
     // This read option should always be set when calling batch_read_metadata
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_error_.has_value(),
                                                     "ReadOptions::batch_throw_on_error_ should always be set here");
-    auto version_futures = batch_get_versions_async(store(), version_map(), stream_ids, version_queries, read_options);
+    auto version_futures = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<std::pair<VariantKey, std::optional<google::protobuf::Any>>>> metadata_futures;
     for (auto&& [idx, version]: folly::enumerate(version_futures)) {
         metadata_futures.emplace_back(get_metadata_async(std::move(version), stream_ids[idx], version_queries[idx]));

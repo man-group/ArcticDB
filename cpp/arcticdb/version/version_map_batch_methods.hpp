@@ -269,12 +269,11 @@ private:
     void do_react(const pipelines::SnapshotVersionQuery& snapshot_query);
 };
 
-std::vector<folly::Future<std::variant<VersionedItem, StreamId>>> batch_get_versions_async(
+std::vector<folly::Future<std::optional<VersionedItem>>> batch_get_versions_async(
     const std::shared_ptr<Store>& store,
     const std::shared_ptr<VersionMap>& version_map,
     const std::vector<StreamId>& symbols,
-    const std::vector<pipelines::VersionQuery>& version_queries,
-    const ReadOptions& read_options);
+    const std::vector<pipelines::VersionQuery>& version_queries);
 
 
 } //namespace arcticdb

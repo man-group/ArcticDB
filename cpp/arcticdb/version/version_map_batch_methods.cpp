@@ -207,12 +207,11 @@ folly::Future<VersionEntryOrSnapshot> set_up_version_future(
     }
 }
 
-std::vector<folly::Future<std::variant<VersionedItem, StreamId>>> batch_get_versions_async(
+std::vector<folly::Future<std::optional<VersionedItem>>> batch_get_versions_async(
     const std::shared_ptr<Store> &store,
     const std::shared_ptr<VersionMap> &version_map,
     const std::vector<StreamId> &symbols,
-    const std::vector<pipelines::VersionQuery> &version_queries,
-    const ReadOptions &read_options) {
+    const std::vector<pipelines::VersionQuery> &version_queries) {
     ARCTICDB_SAMPLE(BatchGetVersion, 0)
     util::check(symbols.size() == version_queries.size(),
                 "Symbol and version query list mismatch: {} != {}",
@@ -237,7 +236,7 @@ std::vector<folly::Future<std::variant<VersionedItem, StreamId>>> batch_get_vers
     ankerl::unordered_dense::map<StreamId, SplitterType> snapshot_futures;
     ankerl::unordered_dense::map<StreamId, SplitterType> version_futures;
 
-    std::vector<folly::Future<std::variant<VersionedItem, StreamId>>> output;
+    std::vector<folly::Future<std::optional<VersionedItem>>> output;
     output.reserve(symbols.size());
     for (const auto &symbol : folly::enumerate(symbols)) {
         auto version_query = version_queries[symbol.index];
@@ -268,24 +267,17 @@ std::vector<folly::Future<std::variant<VersionedItem, StreamId>>> batch_get_vers
             });
 
         output.push_back(std::move(version_entry_fut)
-             .thenValue([vq = version_query, sid = *symbol, incompletes=opt_false(read_options.incompletes_)](auto version_or_snapshot) {
+             .thenValue([vq = version_query, sid = *symbol](auto version_or_snapshot) {
                  return util::variant_match(version_or_snapshot,
-                    [&vq, &sid, incompletes](const std::shared_ptr<VersionMapEntry> &version_map_entry) -> std::variant<VersionedItem, StreamId> {
+                    [&vq](const std::shared_ptr<VersionMapEntry> &version_map_entry) -> std::optional<VersionedItem> {
                         auto opt_index_key = get_key_for_version_query(version_map_entry, vq);
                         if (opt_index_key) {
                             return {*opt_index_key};
-                        } else if (incompletes) {
-                            log::version().warn("No index: Key not found for {}, will attempt to use incomplete segments.", sid);
-                            return {sid};
                         } else {
-                            missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(
-                                    "batch_get_versions_async: version matching query '{}' not found for symbol '{}'",
-                                    vq,
-                                    sid
-                            );
+                            return std::nullopt;
                         }
                     },
-                    [&vq, &sid, incompletes](std::optional<SnapshotPair> snapshot) -> std::variant<VersionedItem, StreamId> {
+                    [&vq, &sid](std::optional<SnapshotPair> snapshot) -> std::optional<VersionedItem> {
                         missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
                                 snapshot,
                                 "batch_get_versions_async: version matching query '{}' not found for symbol '{}'",
@@ -301,16 +293,8 @@ std::vector<folly::Future<std::variant<VersionedItem, StreamId>>> batch_get_vers
 
                         if (opt_id) {
                             return {read_key_row(snap_segment, static_cast<ssize_t>(*opt_id))};
-                        } else if (incompletes) {
-                            log::version().warn(
-                                    "No index: Key not found for {}, will attempt to use incomplete segments.", sid);
-                            return {sid};
                         } else {
-                            missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(
-                                    "batch_get_versions_async: version matching query '{}' not found for symbol '{}'",
-                                    vq,
-                                    sid
-                            );
+                            return std::nullopt;
                         }
                     });
              }));
