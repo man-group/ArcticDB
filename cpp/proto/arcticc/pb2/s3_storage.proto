@@ -29,6 +29,4 @@ message Config {
     string ca_cert_dir = 15;
     // Whether to leave the prefix unchanged, or to translate the periods in it.
     bool use_raw_prefix = 16;
-    arcticc.pb2.storage_pb2.AWSAuthMethod aws_auth = 17; //default to be 0, DISABLED
-    string aws_profile = 18;
 }

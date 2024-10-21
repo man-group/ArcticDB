@@ -12,7 +12,6 @@ import time
 from typing import Iterable, Dict, Any, Union
 
 from arcticc.pb2.lmdb_storage_pb2 import Config as LmdbConfig
-from arcticc.pb2.s3_storage_pb2 import Config as S3Config
 from arcticc.pb2.azure_storage_pb2 import Config as AzureConfig
 from arcticc.pb2.in_memory_storage_pb2 import Config as MemoryConfig
 from arcticc.pb2.mongo_storage_pb2 import Config as MongoConfig
@@ -32,6 +31,7 @@ from arcticdb.config import _expand_path
 from arcticdb.exceptions import ArcticNativeException, LibraryNotFound, UserInputException
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.authorization.permissions import OpenMode
+from arcticdb_ext.storage import S3Settings, AWSAuthMethod, EnvironmentNativeVariantStorageMap, NativeVariantStorageMap
 
 
 def create_lib_from_config(cfg, env=Defaults.ENV, lib_name=Defaults.LIB):
@@ -105,15 +105,16 @@ class ArcticFileConfig(ArcticConfig):
 
 
 class ArcticMemoryConfig(ArcticConfig):
-    def __init__(self, cfg, env):
+    def __init__(self, cfg, env, native_cfg=None):
         # type: (EnvironmentConfigsMap, Optional[EnvName])->None
         self._cfg = cfg
         self._env = env
+        self._native_cfg = native_cfg
 
     def __getitem__(self, lib_path):
         # type: (LibName)->NativeVersionStore
         lib_cfg = extract_lib_config(self._cfg.env_by_id[self._env], lib_path)
-        return NativeVersionStore.create_store_from_lib_config(lib_cfg, self._env, OpenMode.DELETE)
+        return NativeVersionStore.create_store_from_config(self._cfg, self._env, lib_cfg.lib_desc.name, OpenMode.DELETE, lib_cfg.lib_desc.version.encoding_version, self._native_cfg)
 
     @property
     def cfg(self):
@@ -143,10 +144,22 @@ def get_storage_for_lib_name(lib_name, env):
     return sid, env.storage_by_id[sid]
 
 
+def set_native_storage_and_get_sid(lib_name, env, storage_config):
+    sid = "{}_store".format(lib_name)
+    env[sid] = storage_config
+    return sid
+
+
 def get_secondary_storage_for_lib_name(lib_name, env):
     # type: (LibName, EnvironmentConfigsMap)->(StorageId, VariantStorage)
     sid = "{}_store_2".format(lib_name)
     return sid, env.storage_by_id[sid]
+
+
+def set_secondary_storage_and_get_sid(lib_name, env, storage_config):
+    sid = "{}_store_2".format(lib_name)
+    env[sid] = storage_config
+    return sid
 
 
 def _add_lib_desc_to_env(env, lib_name, sid, description=None):
@@ -236,11 +249,14 @@ def get_s3_proto(
     aws_auth,
     aws_profile,
 ):
-    env = cfg.env_by_id[env_name]
-    if is_nfs_layout:
+    if isinstance(cfg, EnvironmentNativeVariantStorageMap):
+        s3 = S3Settings()
+        env = cfg[env_name]
+    elif isinstance(cfg, EnvironmentConfigsMap):
         s3 = NfsConfig()
+        env = cfg.env_by_id[env_name]
     else:
-        s3 = S3Config()
+        raise ArcticNativeException("Invalid cfg type: {}".format(type(cfg)))
     if bucket_name is not None:
         s3.bucket_name = bucket_name
     if credential_name is not None:
@@ -274,14 +290,21 @@ def get_s3_proto(
         s3.ca_cert_dir = ca_cert_dir
     if ssl is not None:
         s3.ssl = ssl
-    if aws_auth is not None:
-        s3.aws_auth = aws_auth
-    if aws_profile is not None:
-        s3.aws_profile = aws_profile
+    
+    if isinstance(cfg, EnvironmentNativeVariantStorageMap):
+        if aws_auth is not None:
+            s3.aws_auth = AWSAuthMethod(aws_auth)
+        if aws_profile is not None:
+            s3.aws_profile = aws_profile
+    elif aws_auth is not None or aws_profile is not None:
+        raise ArcticNativeException("aws_auth and aws_profile can only be set for S3")
 
-    sid, storage = get_storage_for_lib_name(s3.prefix, env)
-    storage.config.Pack(s3, type_url_prefix="cxx.arctic.org")
-    return sid, storage
+    if isinstance(cfg, EnvironmentConfigsMap):
+        sid, storage = get_storage_for_lib_name(s3.prefix, env)
+        storage.config.Pack(s3, type_url_prefix="cxx.arctic.org")
+    else:
+        sid = set_native_storage_and_get_sid(s3.prefix, env, s3)
+    return sid
 
 
 def add_s3_library_to_env(
@@ -305,6 +328,7 @@ def add_s3_library_to_env(
     use_raw_prefix=False,
     aws_auth=False,
     aws_profile=None,
+    native_cfg=None,
 ):
     env = cfg.env_by_id[env_name]
     if with_prefix and isinstance(with_prefix, str) and (with_prefix.endswith("/") or "//" in with_prefix):
@@ -313,8 +337,8 @@ def add_s3_library_to_env(
             f" [{with_prefix}]"
         )
 
-    sid, _ = get_s3_proto(
-        cfg=cfg,
+    sid = get_s3_proto(
+        cfg=native_cfg if native_cfg else cfg,
         lib_name=lib_name,
         env_name=env_name,
         credential_name=credential_name,

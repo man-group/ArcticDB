@@ -13,7 +13,11 @@
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
+#include <arcticdb/storage/s3/s3_settings.hpp>
 #include <sstream>
+
+#include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
 
 namespace arcticdb::storage {
 
@@ -91,5 +95,13 @@ struct is_key_type<entity::VariantKey> : std::true_type {};
 template <typename T>
 inline constexpr bool is_key_type_v = is_key_type<T>::value;
 
+using NativeVariantStorage = s3::S3Settings;
+using NativeVariantStorageMap = std::map<std::string, NativeVariantStorage>; //key: storage_id
+using EnvironmentNativeVariantStorageMap = std::map<std::string, NativeVariantStorageMap>; // key: env
 }  //namespace arcticdb::storage
+
+// to avoid pybind11 built-in cast as it will copy the containers
+// Below needs to be not within any namespace and before any usage of those
+PYBIND11_MAKE_OPAQUE(arcticdb::storage::NativeVariantStorageMap)
+PYBIND11_MAKE_OPAQUE(arcticdb::storage::EnvironmentNativeVariantStorageMap)
 

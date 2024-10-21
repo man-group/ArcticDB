@@ -300,6 +300,7 @@ set(arcticdb_srcs
         storage/s3/nfs_backed_storage.hpp
         storage/s3/s3_client_wrapper.hpp
         storage/s3/s3_storage_tool.hpp
+        storage/s3/s3_settings.hpp
         storage/storage_factory.hpp
         storage/storage_options.hpp
         storage/storage.hpp

@@ -108,11 +108,6 @@ def test_s3_no_ssl_verification(monkeypatch, s3_no_ssl_storage, client_cert_file
 
 @REAL_S3_TESTS_MARK
 def test_s3_sts_auth(real_s3_sts_version_store):
-    import os
-    if os.path.exists(os.path.expanduser("~/.aws/config")):
-        print("AWS config file exists")
-    else:
-        print("AWS config file does not exist")
     real_s3_sts_version_store.write("sym", 1)
     assert real_s3_sts_version_store.read("sym").data == 1
 

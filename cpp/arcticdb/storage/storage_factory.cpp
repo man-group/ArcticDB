@@ -16,6 +16,13 @@
 #include <arcticdb/util/pb_util.hpp>
 
 namespace arcticdb::storage {
+    
+std::shared_ptr<Storage> create_storage(
+    const LibraryPath &library_path,
+    OpenMode mode,
+    const NativeVariantStorage& storage_descriptor) {
+    return std::make_shared<s3::S3Storage>(library_path, mode, storage_descriptor);
+}
 
 std::shared_ptr<Storage> create_storage(
     const LibraryPath &library_path,
@@ -25,8 +32,8 @@ std::shared_ptr<Storage> create_storage(
     std::shared_ptr<Storage> storage;
     auto type_name = util::get_arcticdb_pb_type_name(storage_descriptor.config());
 
-    if (type_name == s3::S3Storage::Config::descriptor()->full_name()) {
-        s3::S3Storage::Config s3_config;
+    if (type_name == arcticc::pb2::s3_storage_pb2::Config::descriptor()->full_name()) {
+        arcticc::pb2::s3_storage_pb2::Config s3_config;
         storage_descriptor.config().UnpackTo(&s3_config);
         storage = std::make_shared<s3::S3Storage>(library_path, mode, s3_config);
     } else if (type_name == lmdb::LmdbStorage::Config::descriptor()->full_name()) {

@@ -29,7 +29,7 @@ from arcticdb.preconditions import check
 from arcticdb.supported_types import DateRangeInput, ExplicitlySupportedDates
 from arcticdb.toolbox.library_tool import LibraryTool
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb_ext.storage import OpenMode as _OpenMode
+from arcticdb_ext.storage import OpenMode as _OpenMode, EnvironmentNativeVariantStorageMap
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb_ext.storage import (
     create_mem_config_resolver as _create_mem_config_resolver,
@@ -264,10 +264,10 @@ class NativeVersionStore:
 
     @classmethod
     def create_store_from_config(
-        cls, cfg, env, lib_name, open_mode=OpenMode.DELETE, encoding_version=EncodingVersion.V1
+        cls, cfg, env, lib_name, open_mode=OpenMode.DELETE, encoding_version=EncodingVersion.V1, native_cfg=None
     ):
         lib_cfg = NativeVersionStore.create_library_config(cfg, env, lib_name, encoding_version=encoding_version)
-        lib = cls.create_lib_from_lib_config(lib_cfg, env, open_mode)
+        lib = cls.create_lib_from_config(cfg, env, lib_cfg.lib_desc.name, open_mode, native_cfg)
         return cls(library=lib, lib_cfg=lib_cfg, env=env, open_mode=open_mode)
 
     @staticmethod
@@ -278,10 +278,10 @@ class NativeVersionStore:
         return lib_idx.get_library(lib_cfg.lib_desc.name, _OpenMode(open_mode))
 
     @staticmethod
-    def create_lib_from_config(cfg, env, lib_name):
-        cfg_resolver = _create_mem_config_resolver(cfg)
+    def create_lib_from_config(cfg, env, lib_name, open_mode=OpenMode.DELETE, native_cfg=None):
+        cfg_resolver = _create_mem_config_resolver(cfg, native_cfg)
         lib_idx = _LibraryIndex.create_from_resolver(env, cfg_resolver)
-        return lib_idx.get_library(lib_name, _OpenMode(OpenMode.DELETE))
+        return lib_idx.get_library(lib_name, _OpenMode(open_mode))
 
     def __setstate__(self, state):
         lib_cfg = LibraryConfig()
