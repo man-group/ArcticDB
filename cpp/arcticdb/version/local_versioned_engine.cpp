@@ -1048,40 +1048,22 @@ VersionedItem LocalVersionedEngine::defragment_symbol_data(const StreamId& strea
     return versioned_item;
 }
 
-folly::Future<ReadVersionOutput> async_read_direct(
-        const std::shared_ptr<Store>& store,
-        const VariantKey& index_key,
-        SegmentInMemory&& index_segment,
-        const std::shared_ptr<ReadQuery>& read_query,
-        DecodePathData shared_data,
-        std::any& handler_data,
-        const ReadOptions& read_options) {
-    return async_read_direct_impl(store, index_key, std::move(index_segment), read_query, shared_data, handler_data, read_options);
-}
-
 std::vector<ReadVersionOutput> LocalVersionedEngine::batch_read_keys(const std::vector<AtomKey> &keys) {
     auto handler_data = TypeHandlerRegistry::instance()->get_handler_data();
     py::gil_scoped_release release_gil;
-    std::vector<folly::Future<std::pair<entity::VariantKey, SegmentInMemory>>> index_futures;
-    for (auto &index_key: keys) {
-        index_futures.emplace_back(store()->read(index_key));
-    }
-    auto indexes = folly::collect(index_futures).get();
-    std::vector<folly::Future<ReadVersionOutput>> results_fut;
-    auto i = 0u;
-    for (auto&& [index_key, index_segment] : indexes) {
-        DecodePathData shared_data;
-        results_fut.emplace_back(async_read_direct(store(),
-                                                   keys[i],
-                                                   std::move(index_segment),
-                                                   std::make_shared<ReadQuery>(),
-                                                   shared_data,
-                                                   handler_data,
-                                                   ReadOptions{}));
-        ++i;
+    std::vector<folly::Future<ReadVersionOutput>> res;
+    res.reserve(keys.size());
+    ReadQuery read_query;
+    for (const auto& index_key: keys) {
+        res.emplace_back(
+                read_frame_for_version(store(), {index_key}, read_query, ReadOptions{}, handler_data)
+                .thenValue([index_key](auto&& frame) {
+                    return ReadVersionOutput{VersionedItem{index_key}, std::move(frame)};
+                })
+                );
     }
     Allocator::instance()->trim();
-    return folly::collect(results_fut).get();
+    return folly::collect(res).get();
 }
 
 std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::batch_read_internal(

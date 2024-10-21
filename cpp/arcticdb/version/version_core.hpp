@@ -159,15 +159,6 @@ struct PredefragmentationInfo{
     std::optional<size_t> append_after;
 };
 
-folly::Future<version_store::ReadVersionOutput> async_read_direct_impl(
-    const std::shared_ptr<Store>& store,
-    const VariantKey& index_key,
-    SegmentInMemory&& index_segment,
-    const std::shared_ptr<ReadQuery>& read_query,
-    DecodePathData shared_data,
-    std::any& handler_data,
-    const ReadOptions& read_options);
-
 PredefragmentationInfo get_pre_defragmentation_info(
         const std::shared_ptr<Store>& store,
         const StreamId& stream_id,

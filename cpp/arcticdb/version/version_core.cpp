@@ -404,53 +404,6 @@ void set_row_id_for_empty_columns_set(
     }
 }
 
-// This is a parallelizable direct read (no processing pipeline) that is used
-// for things that need to get multiple objects in their entirety, as with
-// recursive normalizers. Outside those specific situtations it's probably
-// not what you want
-folly::Future<version_store::ReadVersionOutput> async_read_direct_impl(
-    const std::shared_ptr<Store>& store,
-    const VariantKey& index_key,
-    SegmentInMemory&& index_segment,
-    const std::shared_ptr<ReadQuery>& read_query,
-    DecodePathData shared_data,
-    std::any& handler_data,
-    const ReadOptions& read_options) {
-    auto index_segment_reader = std::make_shared<index::IndexSegmentReader>(std::move(index_segment));
-    const auto& tsd = index_segment_reader->tsd();
-    check_column_and_date_range_filterable(*index_segment_reader, *read_query);
-    add_index_columns_to_query(*read_query, tsd);
-    read_query->calculate_row_filter(static_cast<int64_t>(tsd.total_rows()));
-
-    auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor{tsd.as_stream_descriptor()});
-    pipeline_context->set_selected_columns(read_query->columns);
-
-    const bool dynamic_schema = opt_false(read_options.dynamic_schema_);
-    const bool bucketize_dynamic = index_segment_reader->bucketize_dynamic();
-
-    auto queries = get_column_bitset_and_query_functions<index::IndexSegmentReader>(
-        *read_query,
-        pipeline_context,
-        dynamic_schema,
-        bucketize_dynamic);
-
-    pipeline_context->slice_and_keys_ = filter_index(*index_segment_reader, combine_filter_functions(queries));
-
-    generate_filtered_field_descriptors(pipeline_context, read_query->columns);
-    mark_index_slices(pipeline_context, dynamic_schema, bucketize_dynamic);
-    auto frame = allocate_frame(pipeline_context);
-
-    return fetch_data(frame, pipeline_context, store, dynamic_schema, shared_data, handler_data).thenValue(
-        [pipeline_context, frame, read_options, &handler_data](auto &&) mutable {
-            return reduce_and_fix_columns(pipeline_context, frame, read_options, handler_data);
-        }).thenValue(
-        [index_segment_reader, frame, index_key, shared_data, read_query, pipeline_context](auto &&) mutable {
-            set_row_id_for_empty_columns_set(*read_query, *pipeline_context, frame, index_segment_reader->tsd().total_rows() - 1);
-            return ReadVersionOutput{VersionedItem{to_atom(index_key)},
-                                     FrameAndDescriptor{frame, std::move(index_segment_reader->mutable_tsd()), {}, shared_data.buffers()}};
-        });
-}
-
 FrameAndDescriptor read_multi_key(
     const std::shared_ptr<Store>& store,
     const SegmentInMemory& index_key_seg,
