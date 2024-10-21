@@ -190,7 +190,7 @@ public:
         std::optional<AtomKey>&& key);
 
     folly::Future<std::pair<VariantKey, std::optional<google::protobuf::Any>>> get_metadata_async(
-        folly::Future<std::optional<AtomKey>>&& version_fut,
+        folly::Future<std::variant<VersionedItem, StreamId>>&& version_fut,
         const StreamId& stream_id,
         const VersionQuery& version_query);
 
@@ -198,7 +198,7 @@ public:
         AtomKey&& key);
 
     folly::Future<DescriptorItem> get_descriptor_async(
-        folly::Future<std::optional<AtomKey>>&& version_fut,
+        folly::Future<std::variant<VersionedItem, StreamId>>&& version_fut,
         const StreamId& stream_id,
         const VersionQuery& version_query);
 

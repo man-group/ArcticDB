@@ -207,11 +207,12 @@ folly::Future<VersionEntryOrSnapshot> set_up_version_future(
     }
 }
 
-std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions_async(
+std::vector<folly::Future<std::variant<VersionedItem, StreamId>>> batch_get_versions_async(
     const std::shared_ptr<Store> &store,
     const std::shared_ptr<VersionMap> &version_map,
     const std::vector<StreamId> &symbols,
-    const std::vector<pipelines::VersionQuery> &version_queries) {
+    const std::vector<pipelines::VersionQuery> &version_queries,
+    const ReadOptions &read_options) {
     ARCTICDB_SAMPLE(BatchGetVersion, 0)
     util::check(symbols.size() == version_queries.size(),
                 "Symbol and version query list mismatch: {} != {}",
@@ -236,7 +237,7 @@ std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions_async(
     ankerl::unordered_dense::map<StreamId, SplitterType> snapshot_futures;
     ankerl::unordered_dense::map<StreamId, SplitterType> version_futures;
 
-    std::vector<folly::Future<std::optional<AtomKey>>> output;
+    std::vector<folly::Future<std::variant<VersionedItem, StreamId>>> output;
     output.reserve(symbols.size());
     for (const auto &symbol : folly::enumerate(symbols)) {
         auto version_query = version_queries[symbol.index];
@@ -267,14 +268,30 @@ std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions_async(
             });
 
         output.push_back(std::move(version_entry_fut)
-             .thenValue([vq = version_query, sid = *symbol](auto version_or_snapshot) {
+             .thenValue([vq = version_query, sid = *symbol, incompletes=opt_false(read_options.incompletes_)](auto version_or_snapshot) {
                  return util::variant_match(version_or_snapshot,
-                    [&vq](const std::shared_ptr<VersionMapEntry> &version_map_entry) {
-                        return get_key_for_version_query(version_map_entry, vq);
+                    [&vq, &sid, incompletes](const std::shared_ptr<VersionMapEntry> &version_map_entry) -> std::variant<VersionedItem, StreamId> {
+                        auto opt_index_key = get_key_for_version_query(version_map_entry, vq);
+                        if (opt_index_key) {
+                            return {*opt_index_key};
+                        } else if (incompletes) {
+                            log::version().warn("No index: Key not found for {}, will attempt to use incomplete segments.", sid);
+                            return {sid};
+                        } else {
+                            missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(
+                                    "batch_get_versions_async: version matching query '{}' not found for symbol '{}'",
+                                    vq,
+                                    sid
+                            );
+                        }
                     },
-                    [&sid](std::optional<SnapshotPair> snapshot) {
-                        if (!snapshot)
-                            return std::make_optional<AtomKey>();
+                    [&vq, &sid, incompletes](std::optional<SnapshotPair> snapshot) -> std::variant<VersionedItem, StreamId> {
+                        missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
+                                snapshot,
+                                "batch_get_versions_async: version matching query '{}' not found for symbol '{}'",
+                                vq,
+                                sid
+                        );
 
                         auto [snap_key, snap_segment] = std::move(*snapshot);
                         auto opt_id = row_id_for_stream_in_snapshot_segment(
@@ -282,9 +299,19 @@ std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions_async(
                             std::holds_alternative<RefKey>(snap_key),
                             sid);
 
-                        return opt_id
-                               ? std::make_optional<AtomKey>(read_key_row(snap_segment, static_cast<ssize_t>(*opt_id)))
-                               : std::nullopt;
+                        if (opt_id) {
+                            return {read_key_row(snap_segment, static_cast<ssize_t>(*opt_id))};
+                        } else if (incompletes) {
+                            log::version().warn(
+                                    "No index: Key not found for {}, will attempt to use incomplete segments.", sid);
+                            return {sid};
+                        } else {
+                            missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(
+                                    "batch_get_versions_async: version matching query '{}' not found for symbol '{}'",
+                                    vq,
+                                    sid
+                            );
+                        }
                     });
              }));
     }
