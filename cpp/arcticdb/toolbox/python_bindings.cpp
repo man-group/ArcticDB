@@ -36,6 +36,7 @@ void register_bindings(py::module &m) {
             }))
             .def("read_to_segment", &LibraryTool::read_to_segment)
             .def("read_metadata", &LibraryTool::read_metadata)
+            .def("key_exists", &LibraryTool::key_exists)
             .def("read_descriptor", &LibraryTool::read_descriptor, R"pbdoc(
                 Gives the <StreamDescriptor> for a Variant key. The Stream Descriptor contains the <FieldRef>s for all fields in
                 the value written for that key.

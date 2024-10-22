@@ -104,7 +104,7 @@ def test_type_promotion_stored_in_index_key(lmdb_version_store_dynamic_schema):
     def get_type_of_column():
         index_key = lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, sym)[-1]
         tsd = lib_tool.read_timeseries_descriptor(index_key)
-        type_desc = [field.type() for field in tsd.fields() if field.name() == col][0]
+        type_desc = [field.type() for field in tsd.fields if field.name() == col][0]
         return type_desc.data_type()
 
     df_write = pd.DataFrame({col: [1, 2]}, dtype="int8", index=pd.date_range("2024-01-01", periods=2))
