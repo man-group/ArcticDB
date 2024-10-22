@@ -11,6 +11,7 @@
 #include <arcticdb/codec/default_codecs.hpp>
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/entity/protobufs.hpp>
+#include <arcticdb/entity/protobuf_mappings.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/pipeline/pipeline_utils.hpp>
 #include <arcticdb/storage/library.hpp>
@@ -45,7 +46,7 @@ ReadResult LibraryTool::read(const VariantKey& key) {
             // We construct a dummy atom key in case of a RefKey to be able to build the read_result
             [](const RefKey& key){return AtomKeyBuilder().build<KeyType::VERSION_REF>(key.id());},
             [](const auto&){});
-    return pipelines::read_result_from_single_frame(frame_and_descriptor, atom_key);
+    return pipelines::make_read_result_from_frame(frame_and_descriptor, atom_key);
 }
 
 Segment LibraryTool::read_to_segment(const VariantKey& key) {
@@ -70,7 +71,7 @@ TimeseriesDescriptor LibraryTool::read_timeseries_descriptor(const VariantKey& k
 
 void LibraryTool::write(VariantKey key, Segment segment) {
     storage::KeySegmentPair kv{std::move(key), std::move(segment)};
-    store()->write_compressed_sync(kv);
+    store()->write_compressed_sync(std::move(kv));
 }
 
 void LibraryTool::overwrite_segment_in_memory(VariantKey key, SegmentInMemory& segment_in_memory) {
@@ -92,7 +93,7 @@ SegmentInMemory LibraryTool::overwrite_append_data(
     const auto& tsd = old_segment_in_memory.index_descriptor();
     std::optional<AtomKey> next_key = std::nullopt;
     if (tsd.proto().has_next_key()){
-        next_key = key_from_proto(tsd.proto().next_key());
+        next_key = decode_key(tsd.proto().next_key());
     }
 
     auto stream_id = util::variant_match(key, [](const auto& key){return key.id();});

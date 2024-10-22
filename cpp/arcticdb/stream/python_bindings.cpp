@@ -101,16 +101,12 @@ void register_types(py::module &m) {
         .def_property_readonly("fields", [](const TimeseriesDescriptor& desc){
             return field_collection_to_ref_vector(desc.fields());
         }).def_property_readonly("normalization", [](const TimeseriesDescriptor& self) {
-            return python_util::pb_to_python(self.normalization());
-        }).def_property_readonly("sorted", [](const TimeseriesDescriptor& self) {
-            return self.sorted();
-        }).def_property_readonly("index", [](const TimeseriesDescriptor& self) {
-            return self.index();
+            return python_util::pb_to_python(self.proto().normalization());
         }).def_property_readonly("total_rows", [](const TimeseriesDescriptor& self) {
-            return self.total_rows();
+            return self.proto().total_rows();
         }).def_property_readonly("next_key", [](const TimeseriesDescriptor& self) -> std::optional<AtomKey> {
             if (self.proto().has_next_key()){
-                return key_from_proto(self.proto().next_key());
+                return decode_key(self.proto().next_key());
             }
             return std::nullopt;
         });
