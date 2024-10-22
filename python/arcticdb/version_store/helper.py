@@ -32,7 +32,7 @@ from arcticdb.config import _expand_path
 from arcticdb.exceptions import ArcticNativeException, LibraryNotFound, UserInputException
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.authorization.permissions import OpenMode
-from arcticdb_ext.storage import S3Settings as NativeS3Settings, AWSAuthMethod, EnvironmentNativeVariantStorageMap
+from arcticdb_ext.storage import S3Settings as NativeS3Settings, AWSAuthMethod
 
 
 def create_lib_from_config(cfg, env=Defaults.ENV, lib_name=Defaults.LIB):
