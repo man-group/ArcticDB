@@ -42,6 +42,10 @@ private:
 public:
     S3Settings() = default;
     S3Settings(const arcticc::pb2::s3_storage_pb2::Config& config){
+        load_from_proto(config);
+    }
+
+    S3Settings load_from_proto(const arcticc::pb2::s3_storage_pb2::Config& config){
         bucket_name_ = config.bucket_name();
         credential_name_ = config.credential_name();
         credential_key_ = config.credential_key();
@@ -58,6 +62,7 @@ public:
         ca_cert_path_ = config.ca_cert_path();
         ca_cert_dir_ = config.ca_cert_dir();
         use_raw_prefix_ = config.use_raw_prefix();
+        return *this;
     }
     arcticc::pb2::s3_storage_pb2::Config to_protobuf() const {
         arcticc::pb2::s3_storage_pb2::Config config;

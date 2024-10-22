@@ -140,7 +140,7 @@ TEST(TestS3Storage, proxy_env_var_parsing) {
 }
 
 TEST_F(ProxyEnvVarSetHttpProxyForHttpsEndpointFixture, test_config_resolution_proxy) {
-    arcticdb::storage::s3::S3Storage::Config s3_config;
+    arcticdb::proto::s3_storage::Config s3_config;
     s3_config.set_endpoint("https://test.endpoint.com");
     s3_config.set_https(true);
     auto ret_cfg = arcticdb::storage::s3::get_s3_config(s3_config);
@@ -150,14 +150,14 @@ TEST_F(ProxyEnvVarSetHttpProxyForHttpsEndpointFixture, test_config_resolution_pr
 }
 
 TEST_F(ProxyEnvVarUpperCaseFixture, test_config_resolution_proxy) {
-    arcticdb::storage::s3::S3Storage::Config s3_config_http;
+    arcticdb::proto::s3_storage::Config s3_config_http;
     s3_config_http.set_endpoint("http://test.endpoint.com");
     auto ret_cfg = arcticdb::storage::s3::get_s3_config(s3_config_http);
     ASSERT_EQ(ret_cfg.proxyHost, "http-proxy-2.com");
     ASSERT_EQ(ret_cfg.proxyPort, 2222);
     ASSERT_EQ(ret_cfg.proxyScheme, Aws::Http::Scheme::HTTP);
 
-    arcticdb::storage::s3::S3Storage::Config s3_config_https;
+    arcticdb::proto::s3_storage::Config s3_config_https;
     s3_config_https.set_endpoint("https://test.endpoint.com");
     s3_config_https.set_https(true);
     ret_cfg = arcticdb::storage::s3::get_s3_config(s3_config_https);
@@ -168,14 +168,14 @@ TEST_F(ProxyEnvVarUpperCaseFixture, test_config_resolution_proxy) {
 
 TEST_F(ProxyEnvVarLowerCasePrecedenceFixture, test_config_resolution_proxy) {
     SKIP_WIN("Env vars are not case-sensitive on Windows");
-    arcticdb::storage::s3::S3Storage::Config s3_config_http;
+    arcticdb::proto::s3_storage::Config s3_config_http;
     s3_config_http.set_endpoint("http://test.endpoint.com");
     auto ret_cfg = arcticdb::storage::s3::get_s3_config(s3_config_http);
     ASSERT_EQ(ret_cfg.proxyHost, "http-proxy-1.com");
     ASSERT_EQ(ret_cfg.proxyPort, 2222);
     ASSERT_EQ(ret_cfg.proxyScheme, Aws::Http::Scheme::HTTP);
 
-    arcticdb::storage::s3::S3Storage::Config s3_config_https;
+    arcticdb::proto::s3_storage::Config s3_config_https;
     s3_config_https.set_endpoint("https://test.endpoint.com");
     s3_config_https.set_https(true);
     ret_cfg = arcticdb::storage::s3::get_s3_config(s3_config_https);
@@ -185,7 +185,7 @@ TEST_F(ProxyEnvVarLowerCasePrecedenceFixture, test_config_resolution_proxy) {
 }
 
 TEST_F(NoProxyEnvVarUpperCaseFixture, test_config_resolution_proxy) {
-    arcticdb::storage::s3::S3Storage::Config s3_config;
+    arcticdb::proto::s3_storage::Config s3_config;
     s3_config.set_endpoint("http://test.endpoint.com");
     auto ret_cfg = arcticdb::storage::s3::get_s3_config(s3_config);
 
@@ -196,7 +196,7 @@ TEST_F(NoProxyEnvVarUpperCaseFixture, test_config_resolution_proxy) {
 
 TEST_F(NoProxyEnvVarLowerCasePrecedenceFixture, test_config_resolution_proxy) {
     SKIP_WIN("Env vars are not case-sensitive on Windows");
-    arcticdb::storage::s3::S3Storage::Config s3_config;
+    arcticdb::proto::s3_storage::Config s3_config;
     s3_config.set_endpoint("http://test.endpoint.com");
     auto ret_cfg = arcticdb::storage::s3::get_s3_config(s3_config);
 

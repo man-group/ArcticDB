@@ -72,27 +72,25 @@ class ConfigCache {
         for (const auto& storage_name : descriptor.storage_ids_) {
             // Otherwise see if we have the storage config.
             arcticdb::proto::storage::VariantStorage storage_conf;
-            bool use_proto_variantstorage = false;
             auto storage_conf_pos = storage_configs_.find(storage_name);
-            if(storage_conf_pos != storage_configs_.end()){
+            if(storage_conf_pos != storage_configs_.end())
                 storage_conf = storage_conf_pos->second;
-                use_proto_variantstorage = true;
-            }
+
             // As a last resort, get the whole environment config from the resolver.
             refresh_config();
             storage_conf_pos = storage_configs_.find(storage_name);
-            if(storage_conf_pos != storage_configs_.end()){
+            if(storage_conf_pos != storage_configs_.end())
                 storage_conf = storage_conf_pos->second;
-                use_proto_variantstorage = true;
-            }
-            
-            if (use_proto_variantstorage) {
-                storages.emplace_back(create_storage(path, mode, storage_conf));
+
+            //it assume that the storage always exists
+            if (auto it = native_storage_configs_.find(storage_name); 
+                storage_conf.config().Is<arcticdb::proto::s3_storage::Config>() && it != native_storage_configs_.end()) {
+                arcticdb::proto::s3_storage::Config s3_storage;
+                storage_conf.config().UnpackTo(&s3_storage);
+                storages.emplace_back(create_storage(path, mode, it->second.load_from_proto(s3_storage)));
             }
             else {
-                auto it = native_storage_configs_.find(storage_name);
-                util::check(it != native_storage_configs_.end(), "Storage config not found in native and s3 configs");
-                storages.emplace_back(create_storage(path, mode, it->second));
+                storages.emplace_back(create_storage(path, mode, storage_conf));
             }
         }
         return std::make_shared<Storages>(std::move(storages), mode);

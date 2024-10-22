@@ -48,9 +48,9 @@ def small_max_delta():
         unset_config_int("SymbolList.MaxDelta")
 
 
-def make_read_only(lib):
-    return NativeVersionStore.create_store_from_lib_config(
-        lib.lib_cfg(), Defaults.ENV, OpenMode.READ
+def make_read_only(lib, native_config):
+    return NativeVersionStore.create_store_from_lib_and_static_config(
+        lib.lib_cfg(), Defaults.ENV, native_config, OpenMode.READ
     )
 
 
@@ -130,11 +130,11 @@ def test_symbol_list_regex(basic_store):
 @pytest.mark.parametrize("compact_first", [True, False])
 # Using S3 because LMDB does not allow OpenMode to be changed
 def test_symbol_list_read_only_compaction_needed(
-    small_max_delta, object_version_store, compact_first
+    small_max_delta, object_version_store, compact_first, environment_native_variant_storage_map
 ):
     lib_write = object_version_store
 
-    lib_read = make_read_only(lib_write)
+    lib_read = make_read_only(lib_write, environment_native_variant_storage_map)
 
     lt = lib_write.library_tool()
     old_compaction = []
@@ -232,7 +232,7 @@ def test_only_latest_compaction_key_is_used(basic_store):
 
 @pytest.mark.parametrize("write_another", [False, True])
 def test_turning_on_symbol_list_after_a_symbol_written(
-    object_store_factory, write_another
+    object_store_factory, write_another, environment_native_variant_storage_map
 ):
     # The if(!maybe_last_compaction) case
     lib: NativeVersionStore = object_store_factory(symbol_list=False)
@@ -251,7 +251,7 @@ def test_turning_on_symbol_list_after_a_symbol_written(
             k.id == CompactionId for k in sl_keys
         ), "Should not have any compaction yet"
 
-    ro = make_read_only(lib)
+    ro = make_read_only(lib, environment_native_variant_storage_map)
     # For some reason, symbol_list=True is not always picked up on the first call, so forcing it:
     symbols = ro.list_symbols(use_symbol_list=True)
     assert set(symbols) == ({"a", "b"} if write_another else {"a"})
@@ -430,9 +430,9 @@ def test_force_compact_symbol_list(lmdb_version_store_v1):
 
 
 # Using S3 because LMDB does not allow OpenMode to be changed
-def test_force_compact_symbol_list_read_only(s3_version_store_v1):
+def test_force_compact_symbol_list_read_only(s3_version_store_v1, environment_native_variant_storage_map):
     lib_write = s3_version_store_v1
-    lib_read_only = make_read_only(lib_write)
+    lib_read_only = make_read_only(lib_write, environment_native_variant_storage_map)
     # No symbol list keys
     with pytest.raises(PermissionException):
         lib_read_only.compact_symbol_list()

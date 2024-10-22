@@ -253,6 +253,14 @@ class NativeVersionStore:
     def create_store_from_lib_config(cls, lib_cfg, env, open_mode=OpenMode.DELETE):
         lib = cls.create_lib_from_lib_config(lib_cfg, env, open_mode)
         return cls(library=lib, lib_cfg=lib_cfg, env=env, open_mode=open_mode)
+    
+
+    @classmethod
+    def create_store_from_lib_and_static_config(cls, lib_cfg, env, native_cfg, open_mode=OpenMode.DELETE):
+        envs_cfg = _env_config_from_lib_config(lib_cfg, env)
+        lib = cls.create_lib_from_config(envs_cfg, env, lib_cfg.lib_desc.name, open_mode, native_cfg)
+        return cls(library=lib, lib_cfg=lib_cfg, env=env, open_mode=open_mode)
+    
 
     @staticmethod
     def create_library_config(cfg, env, lib_name, encoding_version=EncodingVersion.V1):
