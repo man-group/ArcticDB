@@ -366,8 +366,7 @@ ReadVersionOutput LocalVersionedEngine::read_dataframe_version_internal(
     py::gil_scoped_release release_gil;
     auto version = get_version_to_read(stream_id, version_query);
     const auto identifier = get_version_identifier(stream_id, version_query, read_options, version);
-    auto frame_and_descriptor = read_frame_for_version(store(), identifier, read_query, read_options, handler_data).get();
-    return ReadVersionOutput{version.value_or(VersionedItem{}), std::move(frame_and_descriptor)};
+    return read_frame_for_version(store(), identifier, read_query, read_options, handler_data).get();
 }
 
 folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(
@@ -1055,12 +1054,7 @@ std::vector<ReadVersionOutput> LocalVersionedEngine::batch_read_keys(const std::
     res.reserve(keys.size());
     ReadQuery read_query;
     for (const auto& index_key: keys) {
-        res.emplace_back(
-                read_frame_for_version(store(), {index_key}, read_query, ReadOptions{}, handler_data)
-                .thenValue([index_key](auto&& frame) {
-                    return ReadVersionOutput{VersionedItem{index_key}, std::move(frame)};
-                })
-                );
+        res.emplace_back(read_frame_for_version(store(), {index_key}, read_query, ReadOptions{}, handler_data));
     }
     Allocator::instance()->trim();
     return folly::collect(res).get();
@@ -1098,14 +1092,7 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
                                     "batch_read_internal: version matching query '{}' not found for symbol '{}'", vq, sid);
                         }
                     }
-                    return read_frame_for_version(store, version_info, *read_query, read_options, handler_data)
-                            .thenValue([version_info](auto&& frame) mutable {
-                                return ReadVersionOutput{
-                                        std::holds_alternative<VersionedItem>(version_info) ?
-                                                std::move(std::get<VersionedItem>(version_info)) :
-                                                VersionedItem{},
-                                        std::move(frame)};
-                            });
+                    return read_frame_for_version(store, version_info, *read_query, read_options, handler_data);
                 })
         );
     }

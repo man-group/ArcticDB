@@ -125,7 +125,7 @@ ColumnStats get_column_stats_info_impl(
     const std::shared_ptr<Store>& store,
     const VersionedItem& versioned_item);
 
-FrameAndDescriptor read_multi_key(
+ReadVersionOutput read_multi_key(
     const std::shared_ptr<Store>& store,
     const SegmentInMemory& index_key_seg,
     std::any& handler_data);
@@ -199,7 +199,7 @@ void add_index_columns_to_query(
     const ReadQuery& read_query, 
     const TimeseriesDescriptor& desc);
 
-folly::Future<FrameAndDescriptor> read_frame_for_version(
+folly::Future<ReadVersionOutput> read_frame_for_version(
     const std::shared_ptr<Store>& store,
     const std::variant<VersionedItem, StreamId>& version_info,
     ReadQuery& read_query,

@@ -404,7 +404,7 @@ void set_row_id_for_empty_columns_set(
     }
 }
 
-FrameAndDescriptor read_multi_key(
+ReadVersionOutput read_multi_key(
     const std::shared_ptr<Store>& store,
     const SegmentInMemory& index_key_seg,
     std::any& handler_data) {
@@ -419,8 +419,9 @@ FrameAndDescriptor read_multi_key(
     // TODO: return future here too
     auto res = read_frame_for_version(store, versioned_item, read_query, ReadOptions{}, handler_data).get();
     TimeseriesDescriptor multi_key_desc{index_key_seg.index_descriptor()};
-    multi_key_desc.mutable_proto().mutable_normalization()->CopyFrom(res.desc_.proto().normalization());
-    return {res.frame_, multi_key_desc, keys, std::shared_ptr<BufferHolder>{}};
+    multi_key_desc.mutable_proto().mutable_normalization()->CopyFrom(res.frame_and_descriptor_.desc_.proto().normalization());
+    // TODO: Modify existing res instead of creating new one
+    return {std::move(res.versioned_item_), {res.frame_and_descriptor_.frame_, multi_key_desc, keys, std::shared_ptr<BufferHolder>{}}};
 }
 
 size_t generate_scheduling_iterations(const std::vector<std::shared_ptr<Clause>>& clauses) {
@@ -1770,7 +1771,7 @@ void set_row_id_if_index_only(
 
 // This is the main user-facing read method that either returns all or
 // part of a dataframe as-is, or transforms it via a processing pipeline
-folly::Future<FrameAndDescriptor> read_frame_for_version(
+folly::Future<ReadVersionOutput> read_frame_for_version(
         const std::shared_ptr<Store>& store,
         const std::variant<VersionedItem, StreamId>& version_info,
         ReadQuery& read_query,
@@ -1778,12 +1779,14 @@ folly::Future<FrameAndDescriptor> read_frame_for_version(
         std::any& handler_data) {
     using namespace arcticdb::pipelines;
     auto pipeline_context = std::make_shared<PipelineContext>();
+    VersionedItem res_versioned_item;
 
     if(std::holds_alternative<StreamId>(version_info)) {
         pipeline_context->stream_id_ = std::get<StreamId>(version_info);
     } else {
         pipeline_context->stream_id_ = std::get<VersionedItem>(version_info).key_.id();
         read_indexed_keys_to_pipeline(store, pipeline_context, std::get<VersionedItem>(version_info), read_query, read_options);
+        res_versioned_item = std::get<VersionedItem>(version_info);
     }
 
     if(pipeline_context->multi_key_) {
@@ -1811,15 +1814,16 @@ folly::Future<FrameAndDescriptor> read_frame_for_version(
     DecodePathData shared_data;
     return version_store::do_direct_read_or_process(store, read_query, read_options, pipeline_context, shared_data, handler_data)
     // TODO: Make shared_data shared_ptr?
-    .thenValue([pipeline_context, read_options, &handler_data, read_query, shared_data](auto&& frame) mutable {
+    .thenValue([res_versioned_item, pipeline_context, read_options, &handler_data, read_query, shared_data](auto&& frame) mutable {
         ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
         return reduce_and_fix_columns(pipeline_context, frame, read_options, handler_data)
-        .thenValue([pipeline_context, frame, read_query, shared_data](auto&&) mutable {
+        .thenValue([res_versioned_item, pipeline_context, frame, read_query, shared_data](auto&&) mutable {
             set_row_id_if_index_only(*pipeline_context, frame, read_query);
-            return FrameAndDescriptor{frame,
+            return ReadVersionOutput{std::move(res_versioned_item),
+                                     {frame,
                                       timeseries_descriptor_from_pipeline_context(pipeline_context, {}, pipeline_context->bucketize_dynamic_),
                                       {},
-                                      shared_data.buffers()};
+                                      shared_data.buffers()}};
         });
     });
 }
