@@ -13,12 +13,12 @@ import ssl
 import platform
 
 from arcticdb.options import LibraryOptions
-from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap, AWSAuthMethod
+from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 from arcticdb.version_store.helper import add_s3_library_to_env
 from arcticdb.config import _DEFAULT_ENV
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter
-from arcticdb_ext.storage import StorageOverride, S3Override, CONFIG_LIBRARY_NAME
+from arcticdb_ext.storage import StorageOverride, S3Override, CONFIG_LIBRARY_NAME, AWSAuthMethod, EnvironmentNativeVariantStorageMap
 from arcticdb.encoding_version import EncodingVersion
 from collections import namedtuple
 from dataclasses import dataclass, fields
@@ -102,6 +102,8 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
         if "amazonaws" in self._endpoint:
             self._configure_aws()
 
+        self.native_cfg = EnvironmentNativeVariantStorageMap()
+
         super().__init__(uri, self._encoding_version)
 
     def __repr__(self):
@@ -141,10 +143,11 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
             ssl=self._ssl,
             aws_auth=self._query_params.aws_auth,
             aws_profile=self._query_params.aws_profile,
+            native_cfg=self.native_cfg,
         )
 
         lib = NativeVersionStore.create_store_from_config(
-            env_cfg, _DEFAULT_ENV, CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version
+            env_cfg, _DEFAULT_ENV, CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version, native_cfg=self.native_cfg
         )
 
         return lib._library
@@ -215,10 +218,6 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
             s3_override.ca_cert_dir = self._ca_cert_dir
         if self._ssl:
             s3_override.ssl = self._ssl
-        if self._query_params.aws_auth:
-            s3_override.aws_auth = self._query_params.aws_auth
-        if self._query_params.aws_profile:
-            s3_override.aws_profile = self._query_params.aws_profile
 
         s3_override.use_virtual_addressing = self._query_params.use_virtual_addressing
 
@@ -268,6 +267,7 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
             ssl=self._ssl,
             aws_auth=self._query_params.aws_auth,
             aws_profile=self._query_params.aws_profile,
+            native_cfg=self.native_cfg,
         )
 
     def _configure_aws(self):

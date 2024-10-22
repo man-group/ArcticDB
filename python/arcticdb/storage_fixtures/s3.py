@@ -59,10 +59,15 @@ class S3Bucket(StorageFixture):
     key: Key
     _boto_bucket: Any = None
 
-    def __init__(self, factory: "BaseS3StorageFixtureFactory", bucket: str):
+    def __init__(self, 
+                 factory: "BaseS3StorageFixtureFactory", 
+                 bucket: str, 
+                 native_config: Optional[EnvironmentNativeVariantStorageMap] = EnvironmentNativeVariantStorageMap()
+                 ):
         super().__init__()
         self.factory = factory
         self.bucket = bucket
+        self.native_config = native_config
 
         if isinstance(factory, _PermissionCapableFactory) and factory.enforcing_permissions:
             self.key = factory._create_user_get_key(bucket + "_user")
@@ -96,7 +101,6 @@ class S3Bucket(StorageFixture):
 
     def create_test_cfg(self, lib_name: str) -> EnvironmentConfigsMap:
         cfg = EnvironmentConfigsMap()
-        native_cfg = EnvironmentNativeVariantStorageMap()
         if self.factory.default_prefix:
             with_prefix = f"{self.factory.default_prefix}/{lib_name}"
         else:
@@ -120,9 +124,9 @@ class S3Bucket(StorageFixture):
             use_raw_prefix=self.factory.use_raw_prefix,
             aws_auth=self.factory.aws_auth,
             aws_profile=self.factory.aws_profile,
-            native_cfg=native_cfg,
+            native_cfg=self.native_config,
         )# client_cert_dir is skipped on purpose; It will be tested manually in other tests
-        return cfg, native_cfg
+        return cfg, self.native_config
 
     def set_permission(self, *, read: bool, write: bool):
         factory = self.factory
@@ -196,7 +200,7 @@ class BaseS3StorageFixtureFactory(StorageFixtureFactory):
     clean_bucket_on_fixture_exit = True
     use_mock_storage_for_testing = None  # If set to true allows error simulation
 
-    def __init__(self):
+    def __init__(self, native_config: Optional[EnvironmentNativeVariantStorageMap] = None):
         self.client_cert_file = None
         self.client_cert_dir = None
         self.ssl = False
@@ -206,6 +210,7 @@ class BaseS3StorageFixtureFactory(StorageFixtureFactory):
         self.aws_role = None
         self.aws_role_arn = None
         self.sts_test_key = None
+        self.native_config = native_config
 
     def __str__(self):
         return f"{type(self).__name__}[{self.default_bucket or self.endpoint}]"
@@ -222,15 +227,15 @@ class BaseS3StorageFixtureFactory(StorageFixtureFactory):
         )  # verify=False cannot skip verification on buggy boto3 in py3.6
 
     def create_fixture(self) -> S3Bucket:
-        return S3Bucket(self, self.default_bucket)
+        return S3Bucket(self, self.default_bucket, self.native_config)
 
     def cleanup_bucket(self, b: S3Bucket):
         # When dealing with a potentially shared bucket, we only clear our the libs we know about:
         b.slow_cleanup(failure_consequence="We will be charged unless we manually delete it. ")
 
 
-def real_s3_from_environment_variables(shared_path: bool):
-    out = BaseS3StorageFixtureFactory()
+def real_s3_from_environment_variables(shared_path: bool, native_config: Optional[EnvironmentNativeVariantStorageMap] = None):
+    out = BaseS3StorageFixtureFactory(native_config=native_config)
     out.endpoint = os.getenv("ARCTICDB_REAL_S3_ENDPOINT")
     out.region = os.getenv("ARCTICDB_REAL_S3_REGION")
     out.default_bucket = os.getenv("ARCTICDB_REAL_S3_BUCKET")
@@ -246,8 +251,8 @@ def real_s3_from_environment_variables(shared_path: bool):
     return out
 
 
-def real_s3_sts_from_environment_variables(user_name: str, role_name: str, policy_name: str, profile_name: str):
-    out = real_s3_from_environment_variables(False)
+def real_s3_sts_from_environment_variables(user_name: str, role_name: str, policy_name: str, profile_name: str, native_config: EnvironmentNativeVariantStorageMap):
+    out = real_s3_from_environment_variables(False, native_config)
     iam_client = boto3.client("iam", aws_access_key_id=out.default_key.id, aws_secret_access_key=out.default_key.secret)
     # Create IAM user
     try:
@@ -517,8 +522,9 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
                  ssl_test_support: bool,
                  bucket_versioning: bool,
                  default_prefix: str = None,
-                 use_raw_prefix: bool = False):
-        super().__init__()
+                 use_raw_prefix: bool = False,
+                 native_config: Optional[EnvironmentNativeVariantStorageMap] = None):
+        super().__init__(native_config)
         self.http_protocol = "https" if use_ssl else "http"
         self.ssl_test_support = ssl_test_support
         self.bucket_versioning = bucket_versioning
@@ -682,7 +688,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
                 }
             )
 
-        out = S3Bucket(self, bucket)
+        out = S3Bucket(self, bucket, self.native_config)
         self._live_buckets.append(out)
         return out
 

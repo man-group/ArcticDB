@@ -63,7 +63,9 @@ std::vector<std::pair<StorageName, arcticdb::proto::storage::VariantStorage>> In
 std::vector<std::pair<StorageName, arcticdb::storage::NativeVariantStorage>> InMemoryConfigResolver::get_native_storages(const EnvironmentName &environment_name) const {
     auto config = get_environment(environment_name);
     std::vector<std::pair<StorageName, arcticdb::storage::NativeVariantStorage>> output;
-
+    if(!config.has_value()) {
+        return output;
+    }
     for(auto& pair : config->native_storages_)
         output.emplace_back(pair);
 

@@ -104,23 +104,6 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
 
     auto s3settings_def = py::class_<s3::S3Settings>(storage, "S3Settings")
         .def(py::init<>())
-        .def_property("bucket_name", &s3::S3Settings::bucket_name, &s3::S3Settings::set_bucket_name)
-        .def_property("credential_name", &s3::S3Settings::credential_name, &s3::S3Settings::set_credential_name)
-        .def_property("credential_key", &s3::S3Settings::credential_key, &s3::S3Settings::set_credential_key)
-        .def_property("endpoint", &
-                        s3::S3Settings::endpoint, &s3::S3Settings::set_endpoint)
-        .def_property("max_connections", &s3::S3Settings::max_connections, &s3::S3Settings::set_max_connections)
-        .def_property("connect_timeout", &s3::S3Settings::connect_timeout, &s3::S3Settings::set_connect_timeout)
-        .def_property("request_timeout", &s3::S3Settings::request_timeout, &s3::S3Settings::set_request_timeout)
-        .def_property("ssl", &s3::S3Settings::ssl, &s3::S3Settings::set_ssl)
-        .def_property("prefix", &s3::S3Settings::prefix, &s3::S3Settings::set_prefix)
-        .def_property("https", &s3::S3Settings::https, &s3::S3Settings::set_https)
-        .def_property("region", &s3::S3Settings::region, &s3::S3Settings::set_region)
-        .def_property("use_virtual_addressing", &s3::S3Settings::use_virtual_addressing, &s3::S3Settings::set_use_virtual_addressing)
-        .def_property("use_mock_storage_for_testing", &s3::S3Settings::use_mock_storage_for_testing, &s3::S3Settings::set_use_mock_storage_for_testing)
-        .def_property("ca_cert_path", &s3::S3Settings::ca_cert_path, &s3::S3Settings::set_ca_cert_path)
-        .def_property("ca_cert_dir", &s3::S3Settings::ca_cert_dir, &s3::S3Settings::set_ca_cert_dir)
-        .def_property("use_raw_prefix", &s3::S3Settings::use_raw_prefix, &s3::S3Settings::set_use_raw_prefix)
         .def_property("aws_auth", &s3::S3Settings::aws_auth, &s3::S3Settings::set_aws_auth)
         .def_property("aws_profile", &s3::S3Settings::aws_profile, &s3::S3Settings::set_aws_profile);
 
