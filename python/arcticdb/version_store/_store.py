@@ -1835,7 +1835,7 @@ class NativeVersionStore:
             original_data = Flattener().create_original_obj_from_metastruct_new(meta_struct, key_map)
 
             return VersionedItem(
-                symbol=vitem.symbol,
+                symbol=meta_struct["symbol"],
                 library=vitem.library,
                 data=original_data,
                 version=vitem.version,
