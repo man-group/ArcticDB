@@ -125,7 +125,7 @@ ColumnStats get_column_stats_info_impl(
     const std::shared_ptr<Store>& store,
     const VersionedItem& versioned_item);
 
-ReadVersionOutput read_multi_key(
+folly::Future<ReadVersionOutput> read_multi_key(
     const std::shared_ptr<Store>& store,
     const SegmentInMemory& index_key_seg,
     std::any& handler_data);

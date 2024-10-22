@@ -404,7 +404,7 @@ void set_row_id_for_empty_columns_set(
     }
 }
 
-ReadVersionOutput read_multi_key(
+folly::Future<ReadVersionOutput> read_multi_key(
     const std::shared_ptr<Store>& store,
     const SegmentInMemory& index_key_seg,
     std::any& handler_data) {
@@ -416,12 +416,15 @@ ReadVersionOutput read_multi_key(
     AtomKey dup{keys[0]};
     ReadQuery read_query;
     VersionedItem versioned_item{std::move(dup)};
-    // TODO: return future here too
-    auto res = read_frame_for_version(store, versioned_item, read_query, ReadOptions{}, handler_data).get();
     TimeseriesDescriptor multi_key_desc{index_key_seg.index_descriptor()};
-    multi_key_desc.mutable_proto().mutable_normalization()->CopyFrom(res.frame_and_descriptor_.desc_.proto().normalization());
-    // TODO: Modify existing res instead of creating new one
-    return {std::move(res.versioned_item_), {res.frame_and_descriptor_.frame_, multi_key_desc, keys, std::shared_ptr<BufferHolder>{}}};
+    return read_frame_for_version(store, versioned_item, read_query, ReadOptions{}, handler_data)
+    .thenValue([multi_key_desc, keys](auto&& read_version_output) mutable {
+        multi_key_desc.mutable_proto().mutable_normalization()->CopyFrom(read_version_output.frame_and_descriptor_.desc_.proto().normalization());
+        read_version_output.frame_and_descriptor_.desc_ = std::move(multi_key_desc);
+        read_version_output.frame_and_descriptor_.keys_ = std::move(keys);
+        read_version_output.frame_and_descriptor_.buffers_ = std::make_shared<BufferHolder>();
+        return read_version_output;
+    });
 }
 
 size_t generate_scheduling_iterations(const std::vector<std::shared_ptr<Clause>>& clauses) {
