@@ -41,7 +41,7 @@ class ParsedQuery:
 
     access: Optional[str] = None
     secret: Optional[str] = None
-    aws_auth: Optional[type(AWSAuthMethod.DISABLED)] = AWSAuthMethod.DISABLED
+    aws_auth: Optional[str] = None
     aws_profile: Optional[str] = None
 
     path_prefix: Optional[str] = None
@@ -177,11 +177,11 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
             if field_dict[key].type == Optional[bool] and field_dict[key] is not None:
                 parsed_query[key] = bool(strtobool(parsed_query[key][0]))
 
-            if key == "aws_auth" and field_dict[key] is not None:
+            if field_dict[key].type == Optional[str] and field_dict[key] is not None and key == "aws_auth":
                 value = parsed_query[key][0]
-                if strtobool(value):
+                if strtobool(value) or value.lower() == "default":
                     parsed_query[key] = AWSAuthMethod.DEFAULT_CREDENTIALS_PROVIDER_CHAIN
-                elif value == "2":
+                elif value.lower() == "sts":
                     parsed_query[key] = AWSAuthMethod.STS_PROFILE_CREDENTIALS_PROVIDER
                 else:
                     parsed_query[key] = AWSAuthMethod.DISABLED

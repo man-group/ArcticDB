@@ -88,7 +88,6 @@ S3Storage::S3Storage(const LibraryPath &library_path, OpenMode mode, const S3Set
     root_folder_(object_store_utils::get_root_folder(library_path)),
     bucket_name_(conf.bucket_name()),
     region_(conf.region()) {
-    
     auto creds = get_aws_credentials(conf);
 
     if (conf.use_mock_storage_for_testing()){

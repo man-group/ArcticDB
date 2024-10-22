@@ -32,6 +32,7 @@ from arcticdb_ext.storage import EnvironmentNativeVariantStorageMap
 _PermissionCapableFactory: Type["MotoS3StorageFixtureFactory"] = None  # To be set later
 
 logging.getLogger("botocore").setLevel(logging.INFO)
+logger = logging.getLogger("S3 Storage Fixture")
 
 S3_CONFIG_PATH = os.path.expanduser(os.path.join("~", ".aws", "config"))
 S3_BACKUP_CONFIG_PATH = os.path.expanduser(os.path.join("~", ".aws", "bk_config"))
@@ -258,11 +259,11 @@ def real_s3_sts_from_environment_variables(user_name: str, role_name: str, polic
     try:
         iam_client.create_user(UserName=user_name)
         out.sts_test_key = Key(None, None, user_name)
-        print("User created successfully.")
+        logger.info("User created successfully.")
     except iam_client.exceptions.EntityAlreadyExistsException:
-        print("User already exists.")
+        logger.warn("User already exists.")
     except Exception as e:
-        print(f"Error creating user: {e}")
+        logger.error(f"Error creating user: {e}")
         raise e
 
     account_id = boto3.client("sts", aws_access_key_id=out.default_key.id, aws_secret_access_key=out.default_key.secret).get_caller_identity().get("Account")
@@ -287,12 +288,12 @@ def real_s3_sts_from_environment_variables(user_name: str, role_name: str, polic
         )
         out.aws_role_arn = role_response["Role"]["Arn"]
         out.aws_role = role_name
-        print("Role created successfully.")
+        logger.info("Role created successfully.")
     except iam_client.exceptions.EntityAlreadyExistsException:
         out.aws_role_arn = f"arn:aws:iam::{account_id}:role/{role_name}"
-        print("Role already exists.")
+        logger.warn("Role already exists.")
     except Exception as e:
-        print(f"Error creating role: {e}")
+        logger.error(f"Error creating role: {e}")
         raise e
 
     # Create a policy for S3 bucket access
@@ -318,12 +319,12 @@ def real_s3_sts_from_environment_variables(user_name: str, role_name: str, polic
             PolicyDocument=json.dumps(s3_access_policy_document)
         )
         out.aws_policy_name = policy_response["Policy"]["Arn"]
-        print("Policy created successfully.")
+        logger.info("Policy created successfully.")
     except iam_client.exceptions.EntityAlreadyExistsException:
         out.aws_policy_name = f"arn:aws:iam::{account_id}:policy/{policy_name}"
-        print("Policy already exists.")
+        logger.warn("Policy already exists.")
     except Exception as e:
-        print(f"Error creating policy: {e}")
+        logger.error(f"Error creating policy: {e}")
         raise e
 
     # Attach the policy to the role
@@ -332,9 +333,9 @@ def real_s3_sts_from_environment_variables(user_name: str, role_name: str, polic
             RoleName=role_name,
             PolicyArn=out.aws_policy_name
         )
-        print("Policyattached to role successfully.")
+        logger.info("Policy attached to role successfully.")
     except Exception as e:
-        print(f"Error attaching policy to role: {e}")
+        logger.error(f"Error attaching policy to role: {e}")
         raise e
 
     # Create an inline policy for the user to assume the role
@@ -355,20 +356,20 @@ def real_s3_sts_from_environment_variables(user_name: str, role_name: str, polic
             PolicyName="AssumeRolePolicy",
             PolicyDocument=json.dumps(assume_role_user_policy_document)
         )
-        print("Inline policy to assume role attached to user successfully.")
+        logger.info("Inline policy to assume role attached to user successfully.")
     except Exception as e:
-        print(f"Error attaching inline policy to user: {e}")
+        logger.error(f"Error attaching inline policy to user: {e}")
         raise e
 
-    print("User created with role to access bucket.")
+    logger.info("User created with role to access bucket.")
 
     try:
         access_key_response = iam_client.create_access_key(UserName=user_name)
         out.sts_test_key.id = access_key_response["AccessKey"]["AccessKeyId"]
         out.sts_test_key.secret = access_key_response["AccessKey"]["SecretAccessKey"]
-        print("Access key created successfully.")
+        logger.info("Access key created successfully.")
     except Exception as e:
-        print(f"Error creating access key: {e}")
+        logger.error(f"Error creating access key: {e}")
         raise e
     
     out.aws_auth = AWSAuthMethod.STS_PROFILE_CREDENTIALS_PROVIDER
@@ -411,7 +412,7 @@ def real_s3_sts_resources_ready(factory: BaseS3StorageFixtureFactory):
                 RoleArn=factory.aws_role_arn,
                 RoleSessionName="TestSession"
             )
-            print("Boto3 assume role successful.")
+            logger.info("Boto3 assume role successful.")
             s3_client = boto3.client(
                 "s3",
                 aws_access_key_id=assumed_role['Credentials']['AccessKeyId'],
@@ -419,10 +420,10 @@ def real_s3_sts_resources_ready(factory: BaseS3StorageFixtureFactory):
                 aws_session_token=assumed_role['Credentials']['SessionToken']
             )
             response = s3_client.list_objects_v2(Bucket=factory.default_bucket)
-            print(f"S3 list objects test successful: {response['ResponseMetadata']['HTTPStatusCode']}")
+            logger.info(f"S3 list objects test successful: {response['ResponseMetadata']['HTTPStatusCode']}")
             return
         except:
-            print(f"Assume role failed. Retrying in 1 second...") # Don't print the exception as it could contain sensitive information, e.g. user id
+            logger.error(f"Assume role failed. Retrying in 1 second...") # Don't print the exception as it could contain sensitive information, e.g. user id
             time.sleep(1)
 
     raise Exception("iam resources not ready")
@@ -430,7 +431,7 @@ def real_s3_sts_resources_ready(factory: BaseS3StorageFixtureFactory):
 
 def real_s3_sts_clean_up(factory: BaseS3StorageFixtureFactory, role_name: str, policy_name: str, user_name: str):
     iam_client = boto3.client("iam", aws_access_key_id=os.getenv("ARCTICDB_REAL_S3_ACCESS_KEY"), aws_secret_access_key=os.getenv("ARCTICDB_REAL_S3_SECRET_KEY"))
-    print("Starting cleanup process...")
+    logger.info("Starting cleanup process...")
     try:
         if factory.aws_policy_name:
             iam_client.detach_role_policy(
@@ -440,18 +441,18 @@ def real_s3_sts_clean_up(factory: BaseS3StorageFixtureFactory, role_name: str, p
         iam_client.delete_policy(
             PolicyArn=factory.aws_policy_name
         )
-        print("Policy deleted successfully.")
+        logger.info("Policy deleted successfully.")
     except Exception as e:
-        print("Error deleting policy")
+        logger.error("Error deleting policy")
 
     try:
         if factory.aws_role: # == role_name; It's just a indicator whether role was created or not
             iam_client.delete_role(
                 RoleName=role_name
             )
-            print("Role deleted successfully.")
+            logger.info("Role deleted successfully.")
     except Exception as e:
-        print("Error deleting role")
+        logger.error("Error deleting role")
 
     
     try:
@@ -460,9 +461,9 @@ def real_s3_sts_clean_up(factory: BaseS3StorageFixtureFactory, role_name: str, p
                 UserName=user_name,
                 AccessKeyId=factory.sts_test_key.id
             )
-            print("Access key id deleted successfully.")
+            logger.info("Access key id deleted successfully.")
     except Exception as e:
-        print("Error deleting access key id")
+        logger.error("Error deleting access key id")
 
     try:
         if factory.sts_test_key and factory.sts_test_key.user_name: # == user_name; It's just a indicator whether role was created or not
@@ -470,15 +471,15 @@ def real_s3_sts_clean_up(factory: BaseS3StorageFixtureFactory, role_name: str, p
             policies = iam_client.list_user_policies(UserName=user_name)["PolicyNames"]
             for policy_name in policies:
                 iam_client.delete_user_policy(UserName=user_name, PolicyName=policy_name)
-                print("Detached and deleted inline policy from user")
+                logger.info("Detached and deleted inline policy from user")
 
             # Delete the user
             iam_client.delete_user(
                 UserName=user_name
             )
-            print("User deleted successfully.")
+            logger.info("User deleted successfully.")
     except Exception as e:
-        print("Error deleting user")
+        logger.error("Error deleting user")
 
         
     if os.path.exists(S3_CONFIG_PATH) and os.path.exists(S3_BACKUP_CONFIG_PATH):
