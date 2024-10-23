@@ -1786,6 +1786,15 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
 
     if(std::holds_alternative<StreamId>(version_info)) {
         pipeline_context->stream_id_ = std::get<StreamId>(version_info);
+        // This isn't ideal. It would be better if the version() and timestamp() methods on the C++ VersionedItem class
+        // returned optionals, but this change would bubble up to the Python VersionedItem class defined in _store.py.
+        // This class is very hard to change at this point, as users do things like pickling them to pass them around.
+        // This at leasts gets the symbol attribute of VersionedItem correct. The creation timestamp will be zero, which
+        // corresponds to 1970, and so with this obviously ridiculous version ID, it should be clear to users that these
+        // values are meaningless before an indexed version exists.
+        res_versioned_item = VersionedItem(AtomKeyBuilder()
+                                           .version_id(std::numeric_limits<VersionId>::max())
+                                           .build<KeyType::TABLE_INDEX>(std::get<StreamId>(version_info)));
     } else {
         pipeline_context->stream_id_ = std::get<VersionedItem>(version_info).key_.id();
         read_indexed_keys_to_pipeline(store, pipeline_context, std::get<VersionedItem>(version_info), read_query, read_options);
