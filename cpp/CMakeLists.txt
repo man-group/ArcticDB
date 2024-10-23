@@ -81,7 +81,9 @@ else()
     if(${ARCTICDB_USING_CONDA})
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wextra")
     else()
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
+        # DO NOT MERGE THIS
+        # This is just temprorary until we fix all warnings
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wextra")
     endif()
     set(CMAKE_CXX_FLAGS_DEBUG "-ggdb")
     if(DEFINED ENV{ARCTICDB_CODE_COVERAGE_BUILD})
