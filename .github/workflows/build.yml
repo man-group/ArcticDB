@@ -139,19 +139,19 @@ jobs:
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
 
   cpp-test-linux:
-    needs: [cibw_docker_image, common_config]
+    needs: [common_config]
     name: Linux C++ Tests
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
     with:
       job_type: cpp-tests
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
-      cibw_image_tag: ${{needs.cibw_docker_image.outputs.tag}}
+      cibw_image_tag: ghcr.io/man-group/arcticdb-container:20241022-f5ffd9b
       matrix: ${{needs.common_config.outputs.linux_matrix}}
 
   build-python-wheels-linux:
     # Then use the cached compilation artifacts to build other python versions concurrently in cibuildwheels
-    needs: [cibw_docker_image, common_config]
+    needs: [common_config]
     strategy:
       fail-fast: false
       matrix:
@@ -180,7 +180,7 @@ jobs:
     with:
       job_type: build-python-wheels
       python3: ${{matrix.python3}}
-      cibw_image_tag: ${{needs.cibw_docker_image.outputs.tag}}
+      cibw_image_tag: ghcr.io/man-group/arcticdb-container:20241022-f5ffd9b
       cibw_version: "2.12.1"
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
       matrix: ${{toJson(matrix.matrix_override)}}
