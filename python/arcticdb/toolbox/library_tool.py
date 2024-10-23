@@ -13,7 +13,7 @@ from arcticdb_ext.storage import KeyType
 from arcticdb_ext.stream import SegmentInMemory
 from arcticdb_ext.tools import LibraryTool as LibraryToolImpl
 from arcticdb_ext.version_store import AtomKey, PythonOutputFrame, RefKey
-from arcticdb.version_store._normalization import denormalize_dataframe
+from arcticdb.version_store._normalization import denormalize_dataframe, normalize_dataframe
 
 VariantKey = Union[AtomKey, RefKey]
 VersionQueryInput = Union[int, str, ExplicitlySupportedDates, None]
@@ -159,3 +159,32 @@ class LibraryTool(LibraryToolImpl):
         Pandas DataFrame representing the index key in a human-readable format.
         """
         return self._nvs.read_index(symbol, as_of, **kwargs)
+
+    def normalize_dataframe_with_nvs_defaults(self, df : pd.DataFrame):
+        # TODO: Have a unified place where we resolve all the normalization parameters and use that here.
+        # Currently all these parameters are resolved in various places throughout the _store.py. This can result in
+        # different defaults for different operations which is not desirable.
+        write_options = self._nvs._lib_cfg.lib_desc.version.write_options
+        dynamic_schema = self._nvs.resolve_defaults("dynamic_schema", write_options, False)
+        empty_types = self._nvs.resolve_defaults("empty_types", write_options, False)
+        dynamic_strings = self._nvs._resolve_dynamic_strings({})
+        return normalize_dataframe(df, dynamic_schema=dynamic_schema, empty_types=empty_types, dynamic_strings=dynamic_strings)
+
+    def overwrite_append_data_with_dataframe(self, key : VariantKey, df : pd.DataFrame) -> SegmentInMemory:
+        """
+        Overwrites the append data key with the provided dataframe. Use with extreme caution as overwriting with
+        inappropriate data can render the symbol unreadable.
+
+        Returns
+        -------
+        SegmentInMemory backup of what was stored in the key before it was overwritten. Can be used with
+        lib_tool.overwrite_segment_in_memory to back out the change caused by this in case data ends up corrupted.
+        """
+        item, norm_meta = self.normalize_dataframe_with_nvs_defaults(df)
+        return self.overwrite_append_data(key, item, norm_meta, None)
+
+    def update_append_data_column_type(self, key : VariantKey, column : str, to_type : type) -> SegmentInMemory:
+        old_df = self.read_to_dataframe(key)
+        assert column in old_df.columns
+        new_df = old_df.astype({column: to_type})
+        return self.overwrite_append_data_with_dataframe(key, new_df)
