@@ -29,9 +29,7 @@ namespace arcticdb {
     class InMemoryStore : public Store {
 
     public:
-        InMemoryStore() {
-            codec_ = std::make_shared<arcticdb::proto::encoding::VariantCodec>();
-        }
+        InMemoryStore() = default;
 
         folly::Future<folly::Unit> batch_write_compressed(std::vector<storage::KeySegmentPair>) override {
             util::raise_rte("Not implemented");
@@ -225,14 +223,14 @@ namespace arcticdb {
                                            if (it == seg_by_ref_key_.end())
                                                throw storage::KeyNotFoundException(Composite<VariantKey>(ref_key));
                                            ARCTICDB_DEBUG(log::storage(), "Mock store returning compressed ref key {}", ref_key);
-                                           return ::arcticdb::encode_dispatch(it->second->clone(), *codec_, EncodingVersion::V1);
+                                           return ::arcticdb::encode_dispatch(it->second->clone(), codec_, EncodingVersion::V1);
                                        },
                                        [&] (const AtomKey& atom_key) {
                                            auto it = seg_by_atom_key_.find(atom_key);
                                            if (it == seg_by_atom_key_.end())
                                                throw storage::KeyNotFoundException(Composite<VariantKey>(atom_key));
                                            ARCTICDB_DEBUG(log::storage(), "Mock store returning compressed atom key {}", atom_key);
-                                           return ::arcticdb::encode_dispatch(it->second->clone(), *codec_, EncodingVersion::V1);
+                                           return ::arcticdb::encode_dispatch(it->second->clone(), codec_, EncodingVersion::V1);
                                        });
             auto tmp_key = key;
             return storage::KeySegmentPair(std::move(tmp_key), std::move(seg));
@@ -478,7 +476,7 @@ namespace arcticdb {
         std::recursive_mutex mutex_; // Allow iterate_type() to be re-entrant
         std::unordered_map<AtomKey, std::unique_ptr<SegmentInMemory>> seg_by_atom_key_;
         std::unordered_map<RefKey, std::unique_ptr<SegmentInMemory>> seg_by_ref_key_;
-        std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_;
+        arcticdb::proto::encoding::VariantCodec codec_;
     };
 
 } //namespace arcticdb

@@ -1829,6 +1829,7 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
     .thenValue([res_versioned_item, pipeline_context, read_options, &handler_data, read_query, shared_data](auto&& frame) mutable {
         ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
         return reduce_and_fix_columns(pipeline_context, frame, read_options, handler_data)
+        .via(&async::cpu_executor())
         .thenValue([res_versioned_item, pipeline_context, frame, read_query, shared_data](auto&&) mutable {
             set_row_id_if_index_only(*pipeline_context, frame, read_query);
             return ReadVersionOutput{std::move(res_versioned_item),
