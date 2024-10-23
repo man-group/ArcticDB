@@ -45,10 +45,14 @@ jobs:
         commits: ${{ fromJson(needs.get_commits_to_benchmark.outputs.matrix)}}  
     name: Benchmark commit ${{ matrix.commits }}
     uses: ./.github/workflows/benchmark_commits.yml
+    secrets: inherit
     with:
       commit: ${{ matrix.commits }}
       cibw_image_tag: ${{ needs.cibw_docker_image.outputs.tag }}
       run_all_benchmarks: ${{ inputs.run_all_benchmarks || false }}
+      aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
+      aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
+      
 
   publish_benchmark_results_to_gh_pages:  
     name: Publish benchmark results to gh-pages
