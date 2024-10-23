@@ -547,10 +547,10 @@ folly::Future<std::vector<EntityId>> schedule_clause_processing(
         entity_ids_vec_fut = work_scheduled.via(&async::cpu_executor()).thenValue([clauses, futures](auto&&) {
             return folly::collect(*futures).via(&async::cpu_executor()).thenValue([clauses](std::vector<std::vector<EntityId>>&& entity_ids_vec) {
                 remove_processed_clauses(*clauses);
-                if (!clauses->empty()) {
-                    return clauses->front()->structure_for_processing(std::move(entity_ids_vec));
-                } else {
+                if (clauses->empty()) {
                     return entity_ids_vec;
+                } else {
+                    return clauses->front()->structure_for_processing(std::move(entity_ids_vec));
                 }
             });
         });
