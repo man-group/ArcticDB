@@ -24,15 +24,15 @@ concurrency:
   group: ${{github.ref}}
   cancel-in-progress: true
 jobs:
-  # cibw_docker_image:
-  #   uses: ./.github/workflows/cibw_docker_image.yml
-  #   permissions: {packages: write}
-  #   with:
-  #     cibuildwheel_ver: "2.12.1"
-  #     force_update: false
+  cibw_docker_image:
+    uses: ./.github/workflows/cibw_docker_image.yml
+    permissions: {packages: write}
+    with:
+      cibuildwheel_ver: "2.12.1"
+      force_update: false
 
   common_config:
-    # needs: [cibw_docker_image]
+    needs: [cibw_docker_image]
     runs-on: ubuntu-22.04
     strategy:
       matrix:
@@ -52,7 +52,7 @@ jobs:
                   mongodb:
                     image: "mongo:4.4"
                 container:
-                  image: ghcr.io/man-group/arcticdb-container:20241022-f5ffd9b
+                  image: ${{needs.cibw_docker_image.outputs.tag}}
                   volumes:
                     - /:/mnt
             windows_matrix:
@@ -79,7 +79,7 @@ jobs:
         env:
           DEFAULT_PRESET: ${{startsWith(github.repository, 'man-group/ArcticDB') && 'release' || vars.DEFAULT_CMAKE_PRESET_TYPE || 'debug'}}
     outputs:
-      cibuildwheel_ver: "2.12.1"
+      cibuildwheel_ver: ${{needs.cibw_docker_image.outputs.cibuildwheel_ver}}
       publish_env: ${{inputs.publish_env || env.PUBLISH_ENV || ''}}
       pypi_publish: ${{inputs.pypi_publish || env.PYPI_PUBLISH}}
       cmake_preset_type_resolved: ${{inputs.cmake_preset_type != '-' && inputs.cmake_preset_type || env.CMAKE_PRESET_TYPE}}
@@ -139,19 +139,19 @@ jobs:
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
 
   cpp-test-linux:
-    needs: [common_config]
+    needs: [cibw_docker_image, common_config]
     name: Linux C++ Tests
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
     with:
       job_type: cpp-tests
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
-      cibw_image_tag: ghcr.io/man-group/arcticdb-container:20241022-f5ffd9b
+      cibw_image_tag: ${{needs.cibw_docker_image.outputs.tag}}
       matrix: ${{needs.common_config.outputs.linux_matrix}}
 
   build-python-wheels-linux:
     # Then use the cached compilation artifacts to build other python versions concurrently in cibuildwheels
-    needs: [common_config]
+    needs: [cibw_docker_image, common_config]
     strategy:
       fail-fast: false
       matrix:
@@ -180,8 +180,8 @@ jobs:
     with:
       job_type: build-python-wheels
       python3: ${{matrix.python3}}
-      cibw_image_tag: ghcr.io/man-group/arcticdb-container:20241022-f5ffd9b
-      cibw_version: "2.12.1"
+      cibw_image_tag: ${{needs.cibw_docker_image.outputs.tag}}
+      cibw_version: ${{needs.common_config.outputs.cibuildwheel_ver}}
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
@@ -211,7 +211,7 @@ jobs:
     with:
       job_type: build-python-wheels
       python3: ${{matrix.python3}}
-      cibw_version: "2.12.1"
+      cibw_version: ${{needs.common_config.outputs.cibuildwheel_ver}}
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
       matrix: ${{needs.common_config.outputs.windows_matrix}}
       persistent_storage: ${{ inputs.persistent_storage }}
