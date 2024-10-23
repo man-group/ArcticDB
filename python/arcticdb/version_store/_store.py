@@ -93,13 +93,18 @@ class VersionedItem:
         For data retrieval (read) operations, contains the data read.
         For data modification operations, the value might not be populated.
     version: int
-        For data retrieval operations, the version the `as_of` argument resolved to.
+        For data retrieval operations, the version the `as_of` argument resolved to. In the special case where no
+        versions have been written yet, but data is being read exclusively from incomplete segments, this will be
+        2^64-1.
         For data modification operations, the version the data has been written under.
     metadata: Any
         The metadata saved alongside `data`.
         Availability depends on the method used and may be different from that of `data`.
     host: Optional[str]
         Informational / for backwards compatibility.
+    timestamp: Optional[int]
+        The time in nanoseconds since epoch that this version was written. In the special case where no versions have
+        been written yet, but data is being read exclusively from incomplete segments, this will be 0.
     """
 
     symbol: str = attr.ib()
