@@ -1,0 +1,34 @@
+name: Docker Container Build
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    
+jobs:
+  build:
+    permissions:
+      contents: read
+      packages: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3.3.0
+
+      - name: Choose image tag
+        run: |
+          sha=$(git rev-parse --short HEAD)
+          image_ver="$(date '+%Y%m%d')-${sha}"
+          image_name="ghcr.io/man-group/arcticdb-container"
+          echo -e "image_ver=$image_ver\nimage_name=$image_name\noutput_tag=$image_name:$image_ver" | tee -a $GITHUB_ENV
+
+      - name: Build Docker image
+        run: |
+          docker build -t $image_name . -f docker/Dockerfile
+
+      - name: Publish Docker image to GHCR
+        # if: startsWith(github.ref, 'refs/tags') || github.ref == 'refs/heads/master'
+        run: |
+          docker login ghcr.io -u token -p "${{secrets.GITHUB_TOKEN}}"
+          docker tag $image_name $image_name:$image_ver
+          docker push $image_name:$image_ver
