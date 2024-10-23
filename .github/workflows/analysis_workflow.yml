@@ -45,7 +45,6 @@ jobs:
         commits: ${{ fromJson(needs.get_commits_to_benchmark.outputs.matrix)}}  
     name: Benchmark commit ${{ matrix.commits }}
     uses: ./.github/workflows/benchmark_commits.yml
-    secrets: inherit
     with:
       commit: ${{ matrix.commits }}
       cibw_image_tag: ${{ needs.cibw_docker_image.outputs.tag }}
