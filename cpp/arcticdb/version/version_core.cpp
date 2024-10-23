@@ -870,7 +870,7 @@ bool read_incompletes_to_pipeline(
 
     // In order to have the right normalization metadata and descriptor we need to find the first non-empty segment.
     // Picking an empty segment when there are non-empty ones will impact the index type and column namings.
-    // If all segments are empty we will procede as if were appending/writing and empty dataframe.
+    // If all segments are empty we will proceed as if were appending/writing and empty dataframe.
     debug::check<ErrorCode::E_ASSERTION_FAILURE>(!incomplete_segments.empty(), "Incomplete segments must be non-empty");
     const auto first_non_empty_seg = std::find_if(incomplete_segments.begin(), incomplete_segments.end(), [&](auto& slice){
         return slice.segment(store).row_count() > 0;

@@ -20,7 +20,7 @@ namespace arcticdb::pipelines {
 
 void SliceAndKey::ensure_segment(const std::shared_ptr<Store>& store) const {
      if(!segment_)
-         segment_ = store->read(*key_).get().second;
+         segment_ = store->read_sync(*key_).second;
  }
 
  SegmentInMemory& SliceAndKey::segment(const std::shared_ptr<Store>& store) {
