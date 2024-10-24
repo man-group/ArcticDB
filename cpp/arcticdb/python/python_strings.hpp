@@ -16,6 +16,7 @@
 #include <arcticdb/python/gil_lock.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
 #include <arcticdb/python/python_handler_data.hpp>
+#include <util/gil_safe_py_none.hpp>
 
 namespace arcticdb {
 
@@ -77,12 +78,6 @@ private:
         Py_INCREF(obj);
     }
 
-    [[nodiscard]] std::unique_ptr<py::none> get_py_none() {
-        std::lock_guard lock(handler_data_.spin_lock());
-        auto none = std::make_unique<py::none>(py::none{});
-        return none;
-    }
-
     auto get_unique_counts(
         const Column& column
     ) {
@@ -103,7 +98,7 @@ private:
     std::pair<size_t, size_t> write_strings_to_destination(
         size_t num_rows,
         const Column& source_column,
-        std::unique_ptr<py::none>& none,
+        std::shared_ptr<py::none>& none,
         const ankerl::unordered_dense::map<entity::position_t, PyObject*> py_strings,
         const std::optional<util::BitSet>& sparse_map) {
         std::pair<size_t, size_t> counts;
@@ -129,7 +124,7 @@ private:
         auto py_strings = assign_python_strings<StringCreator>(unique_counts, has_type_conversion, string_pool);
 
         ARCTICDB_SUBSAMPLE(WriteStringsToColumn, 0)
-        auto none = get_py_none();
+        auto none = GilSafePyNone::instance();
         auto [none_count, nan_count] = write_strings_to_destination(num_rows, source_column, none, py_strings, sparse_map);
         increment_none_refcount(none_count, none);
         increment_nan_refcount(nan_count);
@@ -182,7 +177,7 @@ private:
                 }
             }
         }
-        auto none = get_py_none();
+        auto none = GilSafePyNone::instance();
         auto [none_count, nan_count] = write_strings_to_destination(num_rows, source_column, none, allocated, source_column.opt_sparse_map());
         increment_none_refcount(none_count, none);
         increment_nan_refcount(nan_count);
@@ -211,27 +206,24 @@ private:
         return py_strings;
     }
 
-    void increment_none_refcount(size_t none_count, py::none& none) {
+    void increment_none_refcount(size_t none_count, std::shared_ptr<py::none>& none) {
+        util::check(none, "Got null pointer to py::none in increment_none_refcount");
         std::lock_guard lock(handler_data_.spin_lock());
-        for(auto i = 0u; i < none_count; ++i)
-            Py_INCREF(none.ptr());
-    }
-
-    void increment_none_refcount(size_t none_count, std::unique_ptr<py::none>& none) {
-        util::check(static_cast<bool>(none), "Got null pointer to py::none in increment_none_refcount");
-        increment_none_refcount(none_count, *none);
+        for(auto i = 0u; i < none_count; ++i) {
+            Py_INCREF(none->ptr());
+        }
     }
 
     void increment_nan_refcount(size_t none_count) {
         std::lock_guard lock(handler_data_.spin_lock());
         for(auto i = 0u; i < none_count; ++i)
-            handler_data_.py_nan_->inc_ref();
+            Py_INCREF(handler_data_.py_nan_->ptr());
     }
 
     std::pair<size_t, size_t> write_strings_to_column_dense(
             size_t ,
             const Column& source_column,
-            const std::unique_ptr<py::none>& none,
+            const std::shared_ptr<py::none>& none,
             const ankerl::unordered_dense::map<entity::position_t, PyObject*>& py_strings) {
         auto data = source_column.data();
         auto src = data.cbegin<ScalarTagType<DataTypeTag<DataType::UINT64>>, IteratorType::REGULAR, IteratorDensity::DENSE>();
@@ -256,7 +248,7 @@ private:
     std::pair<size_t, size_t> write_strings_to_column_sparse(
         size_t num_rows,
         const Column& source_column,
-        const std::unique_ptr<py::none>& none,
+        const std::shared_ptr<py::none>& none,
         const ankerl::unordered_dense::map<entity::position_t, PyObject*>& py_strings,
         const util::BitSet& sparse_map
     ) {
