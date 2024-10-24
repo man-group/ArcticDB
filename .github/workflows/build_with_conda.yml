@@ -8,7 +8,7 @@ on:
   # testing against potential new states which might have
   # been introduced in the target branch last commits.
   # See: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request
-  pull_request:
+  pull_request_target:
 
 jobs:
 
