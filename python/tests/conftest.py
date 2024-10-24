@@ -28,11 +28,15 @@ from arcticdb.storage_fixtures.s3 import (
     MotoNfsBackedS3StorageFixtureFactory,
     real_s3_from_environment_variables,
     mock_s3_with_error_simulation,
+    real_s3_sts_from_environment_variables,
+    real_s3_sts_resources_ready,
+    real_s3_sts_clean_up,
 )
 from arcticdb.storage_fixtures.mongo import auto_detect_server
 from arcticdb.storage_fixtures.in_memory import InMemoryStorageFixture
 from arcticdb.version_store._normalization import MsgPackNormalizer
 from arcticdb.util.test import create_df
+from arcticdb_ext.storage import EnvironmentNativeVariantStorageMap
 from .util.mark import (
     AZURE_TESTS_MARK,
     MONGO_TESTS_MARK,
@@ -99,6 +103,11 @@ def pytest_generate_tests(metafunc):
         metafunc.parametrize("encoding_version", [EncodingVersion.V1] if only_v1 else list(EncodingVersion))
 
 
+@pytest.fixture(scope="session")
+def environment_native_variant_storage_map():
+    return EnvironmentNativeVariantStorageMap()
+
+
 # endregion
 # region ======================================= Storage Fixtures =======================================
 @pytest.fixture
@@ -126,26 +135,46 @@ def lmdb_library_static_dynamic(request):
 
 # ssl is enabled by default to maximize test coverage as ssl is enabled most of the times in real world
 @pytest.fixture(scope="session")
-def s3_storage_factory():
-    with MotoS3StorageFixtureFactory(use_ssl=SSL_TEST_SUPPORTED, ssl_test_support=SSL_TEST_SUPPORTED, bucket_versioning=False) as f:
+def s3_storage_factory(environment_native_variant_storage_map):
+    with MotoS3StorageFixtureFactory(
+        use_ssl=SSL_TEST_SUPPORTED, 
+        ssl_test_support=SSL_TEST_SUPPORTED, 
+        bucket_versioning=False, 
+        native_config=environment_native_variant_storage_map
+    ) as f:
         yield f
 
 
 @pytest.fixture(scope="session")
-def s3_no_ssl_storage_factory():
-    with MotoS3StorageFixtureFactory(use_ssl=False, ssl_test_support=SSL_TEST_SUPPORTED, bucket_versioning=False) as f:
+def s3_no_ssl_storage_factory(environment_native_variant_storage_map):
+    with MotoS3StorageFixtureFactory(
+        use_ssl=False,
+        ssl_test_support=SSL_TEST_SUPPORTED, 
+        bucket_versioning=False,
+        native_config=environment_native_variant_storage_map
+    ) as f:
         yield f
 
 
 @pytest.fixture(scope="session")
-def s3_ssl_disabled_storage_factory():
-    with MotoS3StorageFixtureFactory(use_ssl=False, ssl_test_support=False, bucket_versioning=False) as f:
+def s3_ssl_disabled_storage_factory(environment_native_variant_storage_map):
+    with MotoS3StorageFixtureFactory(
+        use_ssl=False, 
+        ssl_test_support=False, 
+        bucket_versioning=False,
+        native_config=environment_native_variant_storage_map
+    ) as f:
         yield f
 
 
 @pytest.fixture(scope="session")
-def s3_bucket_versioning_storage_factory():
-    with MotoS3StorageFixtureFactory(use_ssl=False, ssl_test_support=False, bucket_versioning=True) as f:
+def s3_bucket_versioning_storage_factory(environment_native_variant_storage_map):
+    with MotoS3StorageFixtureFactory(
+        use_ssl=False,
+        ssl_test_support=False,
+        bucket_versioning=True,
+        native_config=environment_native_variant_storage_map
+    ) as f:
         yield f
 
 
@@ -201,13 +230,13 @@ def mock_s3_storage_with_error_simulation(mock_s3_storage_with_error_simulation_
 
 
 @pytest.fixture(scope="session")
-def real_s3_storage_factory():
-    return real_s3_from_environment_variables(shared_path=False)
+def real_s3_storage_factory(environment_native_variant_storage_map):
+    return real_s3_from_environment_variables(shared_path=False, native_config=environment_native_variant_storage_map)
 
 
 @pytest.fixture(scope="session")
-def real_s3_shared_path_storage_factory():
-    return real_s3_from_environment_variables(shared_path=True)
+def real_s3_shared_path_storage_factory(environment_native_variant_storage_map):
+    return real_s3_from_environment_variables(shared_path=True, native_config=environment_native_variant_storage_map)
 
 
 @pytest.fixture(scope="session")
@@ -219,6 +248,34 @@ def real_s3_storage_without_clean_up(real_s3_shared_path_storage_factory):
 def real_s3_storage(real_s3_storage_factory):
     with real_s3_storage_factory.create_fixture() as f:
         yield f
+
+
+@pytest.fixture(scope="session") # Config loaded at the first ArcticDB binary import, so we need to set it up before any tests
+def real_s3_sts_storage_factory(environment_native_variant_storage_map):
+    username = f"gh_sts_test_user_{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
+    role_name = f"gh_sts_test_role_{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
+    policy_name = f"gh_sts_test_policy_name_{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
+    profile_name = "sts_test_profile"
+    try:
+        f = real_s3_sts_from_environment_variables(
+            user_name=username, 
+            role_name=role_name,
+            policy_name=policy_name, 
+            profile_name=profile_name, 
+            native_config=environment_native_variant_storage_map
+            )
+        # Check is made here as the new user gets authenticated only during being used; the check could be time consuming
+        real_s3_sts_resources_ready(f) # resources created in iam may not be ready immediately in s3; Could take 10+ seconds
+        yield f
+    finally:
+        real_s3_sts_clean_up(f, role_name, policy_name, username)
+
+
+@pytest.fixture
+def real_s3_sts_storage(real_s3_sts_storage_factory):
+    with real_s3_sts_storage_factory.create_fixture() as f:
+        yield f
+
 
 # ssl cannot be ON by default due to azurite performance constraints https://github.com/man-group/ArcticDB/issues/1539
 @pytest.fixture(scope="session")
@@ -366,6 +423,11 @@ def real_s3_store_factory(lib_name, real_s3_storage):
 
 
 @pytest.fixture
+def real_s3_sts_store_factory(lib_name, real_s3_sts_storage):
+    return real_s3_sts_storage.create_version_store_factory(lib_name)
+
+
+@pytest.fixture
 def azure_store_factory(lib_name, azurite_storage):
     return azurite_storage.create_version_store_factory(lib_name)
 
@@ -382,14 +444,19 @@ def in_memory_store_factory(mem_storage, lib_name):
 
 # endregion
 # region ================================ `NativeVersionStore` Fixtures =================================
-@pytest.fixture(scope="function")
+@pytest.fixture
 def real_s3_version_store(real_s3_store_factory):
     return real_s3_store_factory()
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def real_s3_version_store_dynamic_schema(real_s3_store_factory):
     return real_s3_store_factory(dynamic_strings=True, dynamic_schema=True)
+
+
+@pytest.fixture
+def real_s3_sts_version_store(real_s3_sts_store_factory):
+    return real_s3_sts_store_factory()
 
 
 @pytest.fixture

@@ -39,7 +39,7 @@
       "name": "aws-sdk-cpp",
       "$version reason": "Minimum version in the baseline that works with aws-c-io above.",
       "default-features": false,
-      "features": [ "s3" ]
+      "features": [ "s3", "identity-management" ]
     },
     "boost-dynamic-bitset",
     "boost-interprocess",

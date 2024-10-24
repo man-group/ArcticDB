@@ -15,7 +15,10 @@
 
 namespace arcticdb {
     namespace storage {
-
+        std::shared_ptr<Storage> create_storage(
+                const LibraryPath &library_path,
+                OpenMode mode,
+                const NativeVariantStorage& storage_descriptor);
         std::shared_ptr<Storage> create_storage(
                 const LibraryPath& library_path,
                 OpenMode mode,

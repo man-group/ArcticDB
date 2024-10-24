@@ -15,6 +15,7 @@
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/storage/s3/s3_api.hpp>
 #include <arcticdb/storage/s3/s3_client_wrapper.hpp>
+#include <arcticdb/storage/s3/s3_settings.hpp>
 #include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/composite.hpp>
@@ -30,9 +31,8 @@ const std::string USE_AWS_CRED_PROVIDERS_TOKEN = "_RBAC_";
 
 class S3Storage final : public Storage {
   public:
-    using Config = arcticdb::proto::s3_storage::Config;
 
-    S3Storage(const LibraryPath &lib, OpenMode mode, const Config &conf);
+    S3Storage(const LibraryPath &lib, OpenMode mode, const S3Settings &conf);
 
     /**
      * Full object path in S3 bucket.
@@ -77,9 +77,9 @@ class S3Storage final : public Storage {
 
 inline arcticdb::proto::storage::VariantStorage pack_config(const std::string &bucket_name) {
     arcticdb::proto::storage::VariantStorage output;
-    arcticdb::proto::s3_storage::Config cfg;
+    S3Settings cfg;
     cfg.set_bucket_name(bucket_name);
-    util::pack_to_any(cfg, *output.mutable_config());
+    util::pack_to_any(cfg.to_protobuf(), *output.mutable_config());
     return output;
 }
 
@@ -90,12 +90,12 @@ inline arcticdb::proto::storage::VariantStorage pack_config(
         const std::string &endpoint
         ) {
     arcticdb::proto::storage::VariantStorage output;
-    arcticdb::proto::s3_storage::Config cfg;
+    S3Settings cfg;
     cfg.set_bucket_name(bucket_name);
     cfg.set_credential_name(credential_name);
     cfg.set_credential_key(credential_key);
     cfg.set_endpoint(endpoint);
-    util::pack_to_any(cfg, *output.mutable_config());
+    util::pack_to_any(cfg.to_protobuf(), *output.mutable_config());
     return output;
 }
 

@@ -41,20 +41,10 @@ class ConfigCache {
         return descriptor_map_.find(path) != descriptor_map_.end();
     }
 
-    void add_library_config(const LibraryPath &path, const arcticdb::proto::storage::LibraryConfig lib_cfg) {
-        add_library(path, decode_library_descriptor(lib_cfg.lib_desc()));
-        for(const auto& storage: lib_cfg.storage_by_id())
-            add_storage(StorageName{storage.first}, storage.second);
-    }
-
     void add_library(const LibraryPath &path, const LibraryDescriptor &desc) {
         config_resolver_->add_library(environment_name_, encode_library_descriptor(desc));
         std::lock_guard<std::mutex> lock{mutex_};
         descriptor_map_.emplace(path, desc);
-    }
-
-    void add_storage(const StorageName& storage_name, const arcticdb::proto::storage::VariantStorage& storage) {
-        config_resolver_->add_storage(environment_name_, storage_name, storage);
     }
 
     std::vector<LibraryPath> list_libraries(std::string_view prefix) {
@@ -92,7 +82,16 @@ class ConfigCache {
             if(storage_conf_pos != storage_configs_.end())
                 storage_conf = storage_conf_pos->second;
 
-            storages.emplace_back(create_storage(path, mode, storage_conf));
+            //it assume that the storage always exists
+            if (auto it = native_storage_configs_.find(storage_name); 
+                storage_conf.config().Is<arcticdb::proto::s3_storage::Config>() && it != native_storage_configs_.end()) {
+                arcticdb::proto::s3_storage::Config s3_storage;
+                storage_conf.config().UnpackTo(&s3_storage);
+                storages.emplace_back(create_storage(path, mode, it->second.load_from_proto(s3_storage)));
+            }
+            else {
+                storages.emplace_back(create_storage(path, mode, storage_conf));
+            }
         }
         return std::make_shared<Storages>(std::move(storages), mode);
     }
@@ -111,18 +110,16 @@ class ConfigCache {
         for(auto& [storage_name, config] : storages) {
             storage_configs_.try_emplace(StorageName(storage_name), config);
         }
-        auto default_storages = config_resolver_->get_default_storages(environment_name_);
-        for(auto& [storage_name, config] : default_storages) {
-            if (storage_configs_.find(storage_name) == storage_configs_.end()) {
-                config_resolver_->add_storage(environment_name_, storage_name, config);
-                storage_configs_.try_emplace(StorageName(storage_name), config);
-            }
+        auto native_storages = config_resolver_->get_native_storages(environment_name_);
+        for(auto& [storage_name, config] : native_storages) {
+            native_storage_configs_.try_emplace(StorageName(storage_name), config);
         }
     }
 
     EnvironmentName environment_name_;
     std::unordered_map<LibraryPath, LibraryDescriptor> descriptor_map_;
     std::unordered_map<StorageName, arcticdb::proto::storage::VariantStorage> storage_configs_;
+    std::unordered_map<StorageName, NativeVariantStorage> native_storage_configs_;
     std::shared_ptr<ConfigResolver> config_resolver_;
     mutable std::mutex mutex_;
 };

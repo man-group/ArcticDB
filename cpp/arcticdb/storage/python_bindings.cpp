@@ -18,6 +18,8 @@
 #include <arcticdb/storage/library_index.hpp>
 #include <arcticdb/storage/config_resolvers.hpp>
 #include <arcticdb/storage/constants.hpp>
+#include <arcticdb/storage/s3/s3_storage.hpp>
+#include <arcticdb/storage/s3/s3_settings.hpp>
 
 namespace py = pybind11;
 
@@ -95,21 +97,77 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
 
     storage.def("create_library_index", &create_library_index);
 
-    storage.def("create_mem_config_resolver", [](const py::object & env_config_map_py) -> std::shared_ptr<ConfigResolver> {
+    
+    py::enum_<s3::AWSAuthMethod>(storage, "AWSAuthMethod")
+        .value("DISABLED", s3::AWSAuthMethod::DISABLED)
+        .value("DEFAULT_CREDENTIALS_PROVIDER_CHAIN", s3::AWSAuthMethod::DEFAULT_CREDENTIALS_PROVIDER_CHAIN)
+        .value("STS_PROFILE_CREDENTIALS_PROVIDER", s3::AWSAuthMethod::STS_PROFILE_CREDENTIALS_PROVIDER);
+
+    auto s3settings_def = py::class_<s3::S3Settings>(storage, "S3Settings")
+        .def(py::init<>())
+        .def_property("aws_auth", &s3::S3Settings::aws_auth, &s3::S3Settings::set_aws_auth)
+        .def_property("aws_profile", &s3::S3Settings::aws_profile, &s3::S3Settings::set_aws_profile);
+
+    
+    py::class_<NativeVariantStorageMap>(storage, "NativeVariantStorageMap")
+        .def(py::init<>())
+        .def("__getitem__", [](NativeVariantStorageMap &storage_map, const std::string &storage_id)  -> NativeVariantStorage&  {
+            return storage_map[storage_id];
+        }, py::return_value_policy::reference_internal)
+        .def("__setitem__", [](NativeVariantStorageMap &storage_map, const std::string &storage_id, const NativeVariantStorage &storage) {
+            storage_map[storage_id] = storage;
+        })
+        .def("__contains__", [](const NativeVariantStorageMap &storage_map, const std::string &storage_id) {
+            return storage_map.count(storage_id) != 0;
+        })
+        .def("values", [](const NativeVariantStorageMap &storage_map) {
+            std::vector<NativeVariantStorageMap::mapped_type> res;
+            for (const auto & [_, storage] : storage_map) {
+                res.push_back(storage);
+            }
+            return res;
+        });
+
+    py::class_<EnvironmentNativeVariantStorageMap>(storage, "EnvironmentNativeVariantStorageMap")
+        .def(py::init<>())
+        .def("__getitem__", [](EnvironmentNativeVariantStorageMap &env_map, const std::string &env) -> NativeVariantStorageMap& {
+            return env_map[env];
+        }, py::return_value_policy::reference_internal)
+        .def("__setitem__", [](EnvironmentNativeVariantStorageMap &env_map, const std::string &env, const NativeVariantStorageMap &storage_map) {
+            env_map[env] = storage_map;
+        })
+        .def("__contains__", [](const EnvironmentNativeVariantStorageMap &env_map, const std::string &env) {
+            return env_map.count(env) != 0;
+        });
+
+
+    storage.def("create_mem_config_resolver", [](const py::object & env_config_map_py, const std::optional<EnvironmentNativeVariantStorageMap>& native_env_storage_map) -> std::shared_ptr<ConfigResolver> {
         arcticdb::proto::storage::EnvironmentConfigsMap ecm;
         pb_from_python(env_config_map_py, ecm);
         auto resolver = std::make_shared<storage::details::InMemoryConfigResolver>();
         for(auto &[env, cfg] :ecm.env_by_id()){
             EnvironmentName env_name{env};
             for(auto &[id, variant_storage]: cfg.storage_by_id()){
-                resolver->add_storage(env_name, StorageName{id}, variant_storage);
+                if (variant_storage.ByteSizeLong()) {
+                    resolver->add_storage(env_name, StorageName{id}, variant_storage);
+                }
             }
             for(auto &[id, lib_desc]: cfg.lib_by_path()){
                 resolver->add_library(env_name, lib_desc);
             }
         }
+        if (native_env_storage_map) {
+            for (const auto& [env, native_storage_map] : native_env_storage_map.value()) {
+                EnvironmentName env_name{env};
+                for (const auto& [id, native_storage] : native_storage_map) {
+                    resolver->add_native_storage(env_name, id, native_storage);
+                }
+            }
+        }
         return resolver;
-    });
+    },
+    py::arg("env_config_map"),
+    py::arg("native_env_storage_map") = std::nullopt);
 
     py::class_<ConfigResolver, std::shared_ptr<ConfigResolver>>(storage, "ConfigResolver");
 
