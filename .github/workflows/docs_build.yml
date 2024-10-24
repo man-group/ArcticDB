@@ -50,6 +50,13 @@ jobs:
           set -x
           pip3 install mkdocs-material mkdocs-jupyter mkdocstrings[python] black pybind11-stubgen mike ${{inputs.version && format('arcticdb=={0}',inputs.version) || 'arcticdb-*.whl'}}
 
+      - name: Rewrite the template so the links point to the correct version
+        if: ${{!inputs.version}}
+        run: |
+          set -x
+          cd docs/mkdocs
+          sed -i "s/VERSION_PLACEHOLDER/v${{inputs.version}}/g" overrides/main.html
+
       - name: Stubfile generation for arcticdb_ext
         run: |
           set -x
