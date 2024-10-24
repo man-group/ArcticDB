@@ -3,7 +3,7 @@ on:
   push:
     tags: ["v**"]
     branches: ["master"]
-  pull_request_target:
+  pull_request:
     branches: ["**"]
   workflow_dispatch:
     inputs:

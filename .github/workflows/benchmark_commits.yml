@@ -67,14 +67,14 @@ jobs:
           python -m asv machine -v --yes --machine ArcticDB-Medium-Runner
 
       - name: Benchmark given commit
-        if: github.event_name != 'pull_request_target' || inputs.run_all_benchmarks == true
+        if: github.event_name != 'pull_request' || inputs.run_all_benchmarks == true
         shell: bash -el {0}
         run: | 
           git config --global --add safe.directory .
           python -m asv run -v --show-stderr ${{ inputs.commit }}^!
         
       - name: Benchmark against master
-        if: github.event_name == 'pull_request_target' && inputs.run_all_benchmarks == false
+        if: github.event_name == 'pull_request' && inputs.run_all_benchmarks == false
         shell: bash -el {0}
         run: |
           python -m asv continuous -v --show-stderr origin/master HEAD -f 1.15
