@@ -30,6 +30,7 @@
 #include <arcticdb/python/python_handlers.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
 #include <arcticdb/util/storage_lock.hpp>
+#include <util/gil_safe_py_none.hpp>
 
 #include <pybind11/pybind11.h>
 #include <mongocxx/exception/logic_error.hpp>
@@ -213,26 +214,26 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
         try {
             if (p) std::rethrow_exception(p);
         } catch (const mongocxx::v_noabi::logic_error& e){
-            user_input_exception(e.what());
+            py::set_error(user_input_exception, e.what());
         } catch (const UserInputException& e){
-            user_input_exception(e.what());
+            py::set_error(user_input_exception, e.what());
         } catch (const arcticdb::InternalException& e){
-            internal_exception(e.what());
+            py::set_error(internal_exception, e.what());
         } catch (const LMDBMapFullException& e) {
             std::string msg = fmt::format("E5003: LMDB map is full. Close and reopen your LMDB backed Arctic instance with a "
                                           "larger map size. For example to open `/tmp/a/b/` with a map size of 5GB, "
                                           "use `Arctic(\"lmdb:///tmp/a/b?map_size=5GB\")`. Also see the "
                                           "[LMDB documentation](http://www.lmdb.tech/doc/group__mdb.html#gaa2506ec8dab3d969b0e609cd82e619e5). "
                                           "LMDB info: message=[{}]", e.what());
-            lmdb_map_full_exception(msg.c_str());
+            py::set_error(lmdb_map_full_exception, msg.c_str());
         } catch (const StorageException& e) {
-            storage_exception(e.what());
+            py::set_error(storage_exception, e.what());
         } catch (const py::stop_iteration &e){
             // let stop iteration bubble up, since this is how python implements iteration termination
             std::rethrow_exception(p);
         } catch (const std::exception &e) {
             std::string msg = fmt::format("{}({})", arcticdb::get_type_name(typeid(e)), e.what());
-            internal_exception(msg.c_str());
+            py::set_error(internal_exception, msg.c_str());
         }
     });
 
@@ -312,6 +313,7 @@ PYBIND11_MODULE(arcticdb_ext, m) {
     auto programName ="__arcticdb_logger__";
     google::InitGoogleLogging(programName);
     using namespace arcticdb;
+    GilSafePyNone::instance(); // Ensure that the GIL is held when the static py::none gets allocated
 #ifndef WIN32
     // No fork() in Windows, so no need to register the handler
     pthread_atfork(nullptr, nullptr, &SingleThreadMutexHolder::reset_mutex);

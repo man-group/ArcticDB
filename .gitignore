@@ -4,6 +4,7 @@ __pycache__/
 .mypy_cache
 .hypothesis/
 *.egg-info/
+python/venvs/
 
 .vscode/
 .vs/

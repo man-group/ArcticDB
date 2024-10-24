@@ -61,9 +61,11 @@ def assert_equal_value(data, expected):
     expected = expected.reindex(sorted(expected.columns), axis=1)
     assert_frame_equal(received, expected)
 
+
 def assert_equal(received, expected):
     assert_frame_equal(received, expected)
     assert received.equals(expected)
+
 
 def test_simple_flow(basic_store_no_symbol_list, symbol):
     df = sample_dataframe()
@@ -248,7 +250,7 @@ def test_empty_symbol_name_2(object_version_store):
 
 
 @pytest.mark.parametrize(
-    "method", ("write", "append", "update", "write_metadata" ,"batch_write", "batch_append", "batch_write_metadata")
+    "method", ("write", "append", "update", "write_metadata", "batch_write", "batch_append", "batch_write_metadata")
 )
 def test_empty_symbol_name(lmdb_version_store_v1, method):
     first_arg = [""] if method.startswith("batch_") else ""
@@ -1711,7 +1713,7 @@ def test_dataframe_with_NaN_in_timestamp_column(basic_store):
 
 
 def test_dataframe_with_nan_and_nat_in_timestamp_column(basic_store):
-    df_with_NaN_mixed_in_ts = pd.DataFrame({"col": [pd.Timestamp("now"), pd.NaT, np.NaN]})
+    df_with_NaN_mixed_in_ts = pd.DataFrame({"col": [pd.Timestamp("now"), pd.NaT, np.nan]})
     basic_store.write("mixed_nan", df_with_NaN_mixed_in_ts)
     returned_df = basic_store.read("mixed_nan").data
     # NaN will now be converted to NaT
@@ -1719,16 +1721,16 @@ def test_dataframe_with_nan_and_nat_in_timestamp_column(basic_store):
 
 
 def test_dataframe_with_nan_and_nat_only(basic_store):
-    df_with_nan_and_nat_only = pd.DataFrame({"col": [pd.NaT, pd.NaT, np.NaN]})  # Sample will be pd.NaT
+    df_with_nan_and_nat_only = pd.DataFrame({"col": [pd.NaT, pd.NaT, np.nan]})  # Sample will be pd.NaT
     basic_store.write("nan_nat", df_with_nan_and_nat_only)
     assert_equal(basic_store.read("nan_nat").data, pd.DataFrame({"col": [pd.NaT, pd.NaT, pd.NaT]}))
 
 
 def test_coercion_to_float(basic_store):
     lib = basic_store
-    df = pd.DataFrame({"col": [np.NaN, "1", np.NaN]})
+    df = pd.DataFrame({"col": [np.nan, "1", np.nan]})
     # col is now an Object column with all NaNs
-    df["col"][1] = np.NaN
+    df["col"][1] = np.nan
 
     assert df["col"].dtype == np.object_
 
@@ -2350,7 +2352,7 @@ def test_batch_read_row_range(lmdb_version_store_v1, use_row_range_clause):
     for idx, sym in enumerate(result_dict.keys()):
         df = result_dict[sym].data
         row_range = row_ranges[idx]
-        assert_equal(df, dfs[idx].iloc[row_range[0]:row_range[1]])
+        assert_equal(df, dfs[idx].iloc[row_range[0] : row_range[1]])
 
 
 def test_batch_read_columns(basic_store_tombstone_and_sync_passive):
