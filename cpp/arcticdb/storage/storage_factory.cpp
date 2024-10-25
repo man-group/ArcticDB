@@ -20,8 +20,8 @@ namespace arcticdb::storage {
 std::shared_ptr<Storage> create_storage(
     const LibraryPath &library_path,
     OpenMode mode,
-    const NativeVariantStorage& storage_descriptor) {
-    return std::make_shared<s3::S3Storage>(library_path, mode, storage_descriptor);
+    const NativeVariantStorage& storage_config) {
+    return std::make_shared<s3::S3Storage>(library_path, mode, storage_config);
 }
 
 std::shared_ptr<Storage> create_storage(

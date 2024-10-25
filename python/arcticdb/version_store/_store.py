@@ -29,7 +29,7 @@ from arcticdb.preconditions import check
 from arcticdb.supported_types import DateRangeInput, ExplicitlySupportedDates
 from arcticdb.toolbox.library_tool import LibraryTool
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb_ext.storage import OpenMode as _OpenMode, EnvironmentNativeVariantStorageMap
+from arcticdb_ext.storage import OpenMode as _OpenMode, NativeVariantStorageMap
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb_ext.storage import (
     create_mem_config_resolver as _create_mem_config_resolver,
@@ -216,11 +216,11 @@ class NativeVersionStore:
     norm_failure_options_msg_append = "Data must be normalizable to be appended to existing data."
     norm_failure_options_msg_update = "Data must be normalizable to be used to update existing data."
 
-    def __init__(self, library, env, lib_cfg=None, open_mode=OpenMode.DELETE):
+    def __init__(self, library, env, lib_cfg=None, open_mode=OpenMode.DELETE, native_cfg=NativeVariantStorageMap()):
         # type: (_Library, Optional[str], Optional[LibraryConfig], OpenMode)->None
         fail_on_missing = library.config.fail_on_missing_custom_normalizer if library.config is not None else False
         custom_normalizer = get_custom_normalizer(fail_on_missing)
-        self._initialize(library, env, lib_cfg, custom_normalizer, open_mode)
+        self._initialize(library, env, lib_cfg, custom_normalizer, open_mode, native_cfg)
 
     def _init_norm_failure_handler(self):
         # init normalization failure handler
@@ -239,7 +239,7 @@ class NativeVersionStore:
         else:
             raise ArcticDbNotYetImplemented("No other normalization failure handler")
 
-    def _initialize(self, library, env, lib_cfg, custom_normalizer, open_mode):
+    def _initialize(self, library, env, lib_cfg, custom_normalizer, open_mode, native_cfg=NativeVariantStorageMap()):
         self._library = library
         self._cfg = library.config
         self.version_store = _PythonVersionStore(self._library)
@@ -248,6 +248,7 @@ class NativeVersionStore:
         self._custom_normalizer = custom_normalizer
         self._init_norm_failure_handler()
         self._open_mode = open_mode
+        self._native_cfg = native_cfg
 
     @classmethod
     def create_store_from_lib_config(cls, lib_cfg, env, open_mode=OpenMode.DELETE):
@@ -259,7 +260,7 @@ class NativeVersionStore:
     def create_store_from_lib_and_static_config(cls, lib_cfg, env, native_cfg, open_mode=OpenMode.DELETE):
         envs_cfg = _env_config_from_lib_config(lib_cfg, env)
         lib = cls.create_lib_from_config(envs_cfg, env, lib_cfg.lib_desc.name, open_mode, native_cfg)
-        return cls(library=lib, lib_cfg=lib_cfg, env=env, open_mode=open_mode)
+        return cls(library=lib, lib_cfg=lib_cfg, env=env, open_mode=open_mode, native_cfg=native_cfg)
     
 
     @staticmethod
@@ -272,24 +273,24 @@ class NativeVersionStore:
 
     @classmethod
     def create_store_from_config(
-        cls, cfg, env, lib_name, open_mode=OpenMode.DELETE, encoding_version=EncodingVersion.V1, native_cfg=None
+        cls, cfg, env, lib_name, open_mode=OpenMode.DELETE, encoding_version=EncodingVersion.V1, native_cfg=NativeVariantStorageMap()
     ):
         lib_cfg = NativeVersionStore.create_library_config(cfg, env, lib_name, encoding_version=encoding_version)
         lib = cls.create_lib_from_config(cfg, env, lib_cfg.lib_desc.name, open_mode, native_cfg)
-        return cls(library=lib, lib_cfg=lib_cfg, env=env, open_mode=open_mode)
+        return cls(library=lib, lib_cfg=lib_cfg, env=env, open_mode=open_mode, native_cfg=native_cfg)
 
     @staticmethod
-    def create_lib_from_lib_config(lib_cfg, env, open_mode):
+    def create_lib_from_lib_config(lib_cfg, env, open_mode, native_cfg=NativeVariantStorageMap()):
         envs_cfg = _env_config_from_lib_config(lib_cfg, env)
         cfg_resolver = _create_mem_config_resolver(envs_cfg)
         lib_idx = _LibraryIndex.create_from_resolver(env, cfg_resolver)
-        return lib_idx.get_library(lib_cfg.lib_desc.name, _OpenMode(open_mode))
+        return lib_idx.get_library(lib_cfg.lib_desc.name, _OpenMode(open_mode), native_cfg)
 
     @staticmethod
-    def create_lib_from_config(cfg, env, lib_name, open_mode=OpenMode.DELETE, native_cfg=None):
-        cfg_resolver = _create_mem_config_resolver(cfg, native_cfg)
+    def create_lib_from_config(cfg, env, lib_name, open_mode=OpenMode.DELETE, native_cfg=NativeVariantStorageMap()):
+        cfg_resolver = _create_mem_config_resolver(cfg)
         lib_idx = _LibraryIndex.create_from_resolver(env, cfg_resolver)
-        return lib_idx.get_library(lib_name, _OpenMode(open_mode))
+        return lib_idx.get_library(lib_name, _OpenMode(open_mode), native_cfg)
 
     def __setstate__(self, state):
         lib_cfg = LibraryConfig()
@@ -298,12 +299,14 @@ class NativeVersionStore:
         custom_norm.__setstate__(state["custom_norm"])
         env = state["env"]
         open_mode = state["open_mode"]
+        native_cfg = state["native_cfg"]
         self._initialize(
-            library=NativeVersionStore.create_lib_from_lib_config(lib_cfg, env, open_mode),
+            library=NativeVersionStore.create_lib_from_lib_config(lib_cfg, env, open_mode, native_cfg),
             env=env,
             lib_cfg=lib_cfg,
             custom_normalizer=custom_norm,
             open_mode=open_mode,
+            native_cfg=native_cfg,
         )
 
     def __getstate__(self):
@@ -312,6 +315,7 @@ class NativeVersionStore:
             "lib_cfg": self._lib_cfg.SerializeToString(),
             "custom_norm": self._custom_normalizer.__getstate__() if self._custom_normalizer is not None else "",
             "open_mode": self._open_mode,
+            "native_cfg": self._native_cfg,
         }
 
     def __repr__(self):

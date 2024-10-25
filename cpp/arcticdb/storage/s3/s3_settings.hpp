@@ -64,6 +64,7 @@ public:
         use_raw_prefix_ = config.use_raw_prefix();
         return *this;
     }
+    
     arcticc::pb2::s3_storage_pb2::Config to_protobuf() const {
         arcticc::pb2::s3_storage_pb2::Config config;
         config.set_bucket_name(bucket_name_);

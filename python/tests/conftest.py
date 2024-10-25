@@ -36,7 +36,7 @@ from arcticdb.storage_fixtures.mongo import auto_detect_server
 from arcticdb.storage_fixtures.in_memory import InMemoryStorageFixture
 from arcticdb.version_store._normalization import MsgPackNormalizer
 from arcticdb.util.test import create_df
-from arcticdb_ext.storage import EnvironmentNativeVariantStorageMap
+from arcticdb_ext.storage import NativeVariantStorageMap
 from .util.mark import (
     AZURE_TESTS_MARK,
     MONGO_TESTS_MARK,
@@ -104,8 +104,8 @@ def pytest_generate_tests(metafunc):
 
 
 @pytest.fixture(scope="session")
-def environment_native_variant_storage_map():
-    return EnvironmentNativeVariantStorageMap()
+def native_variant_storage_map():
+    return NativeVariantStorageMap()
 
 
 # endregion
@@ -135,45 +135,45 @@ def lmdb_library_static_dynamic(request):
 
 # ssl is enabled by default to maximize test coverage as ssl is enabled most of the times in real world
 @pytest.fixture(scope="session")
-def s3_storage_factory(environment_native_variant_storage_map):
+def s3_storage_factory(native_variant_storage_map):
     with MotoS3StorageFixtureFactory(
         use_ssl=SSL_TEST_SUPPORTED, 
         ssl_test_support=SSL_TEST_SUPPORTED, 
         bucket_versioning=False, 
-        native_config=environment_native_variant_storage_map
+        native_config=native_variant_storage_map
     ) as f:
         yield f
 
 
 @pytest.fixture(scope="session")
-def s3_no_ssl_storage_factory(environment_native_variant_storage_map):
+def s3_no_ssl_storage_factory(native_variant_storage_map):
     with MotoS3StorageFixtureFactory(
         use_ssl=False,
         ssl_test_support=SSL_TEST_SUPPORTED, 
         bucket_versioning=False,
-        native_config=environment_native_variant_storage_map
+        native_config=native_variant_storage_map
     ) as f:
         yield f
 
 
 @pytest.fixture(scope="session")
-def s3_ssl_disabled_storage_factory(environment_native_variant_storage_map):
+def s3_ssl_disabled_storage_factory(native_variant_storage_map):
     with MotoS3StorageFixtureFactory(
         use_ssl=False, 
         ssl_test_support=False, 
         bucket_versioning=False,
-        native_config=environment_native_variant_storage_map
+        native_config=native_variant_storage_map
     ) as f:
         yield f
 
 
 @pytest.fixture(scope="session")
-def s3_bucket_versioning_storage_factory(environment_native_variant_storage_map):
+def s3_bucket_versioning_storage_factory(native_variant_storage_map):
     with MotoS3StorageFixtureFactory(
         use_ssl=False,
         ssl_test_support=False,
         bucket_versioning=True,
-        native_config=environment_native_variant_storage_map
+        native_config=native_variant_storage_map
     ) as f:
         yield f
 
@@ -230,13 +230,13 @@ def mock_s3_storage_with_error_simulation(mock_s3_storage_with_error_simulation_
 
 
 @pytest.fixture(scope="session")
-def real_s3_storage_factory(environment_native_variant_storage_map):
-    return real_s3_from_environment_variables(shared_path=False, native_config=environment_native_variant_storage_map)
+def real_s3_storage_factory(native_variant_storage_map):
+    return real_s3_from_environment_variables(shared_path=False, native_config=native_variant_storage_map)
 
 
 @pytest.fixture(scope="session")
-def real_s3_shared_path_storage_factory(environment_native_variant_storage_map):
-    return real_s3_from_environment_variables(shared_path=True, native_config=environment_native_variant_storage_map)
+def real_s3_shared_path_storage_factory(native_variant_storage_map):
+    return real_s3_from_environment_variables(shared_path=True, native_config=native_variant_storage_map)
 
 
 @pytest.fixture(scope="session")
@@ -251,7 +251,7 @@ def real_s3_storage(real_s3_storage_factory):
 
 
 @pytest.fixture(scope="session") # Config loaded at the first ArcticDB binary import, so we need to set it up before any tests
-def real_s3_sts_storage_factory(environment_native_variant_storage_map):
+def real_s3_sts_storage_factory(native_variant_storage_map):
     username = f"gh_sts_test_user_{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
     role_name = f"gh_sts_test_role_{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
     policy_name = f"gh_sts_test_policy_name_{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
@@ -262,7 +262,7 @@ def real_s3_sts_storage_factory(environment_native_variant_storage_map):
             role_name=role_name,
             policy_name=policy_name, 
             profile_name=profile_name, 
-            native_config=environment_native_variant_storage_map
+            native_config=native_variant_storage_map
             )
         # Check is made here as the new user gets authenticated only during being used; the check could be time consuming
         real_s3_sts_resources_ready(f) # resources created in iam may not be ready immediately in s3; Could take 10+ seconds

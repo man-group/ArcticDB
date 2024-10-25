@@ -32,15 +32,15 @@ from arcticdb.config import _expand_path
 from arcticdb.exceptions import ArcticNativeException, LibraryNotFound, UserInputException
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.authorization.permissions import OpenMode
-from arcticdb_ext.storage import S3Settings as NativeS3Settings, AWSAuthMethod
+from arcticdb_ext.storage import S3Settings as NativeS3Settings, AWSAuthMethod, NativeVariantStorageMap
 
 
 def create_lib_from_config(cfg, env=Defaults.ENV, lib_name=Defaults.LIB):
     return NativeVersionStore.create_lib_from_config(cfg, env, lib_name)
 
 
-def create_lib_from_lib_config(lib_config, env=Defaults.ENV, open_mode=OpenMode.DELETE):
-    return NativeVersionStore.create_lib_from_lib_config(lib_config, env, open_mode)
+def create_lib_from_lib_config(lib_config, env=Defaults.ENV, open_mode=OpenMode.DELETE, native_cfg=NativeVariantStorageMap()):
+    return NativeVersionStore.create_lib_from_lib_config(lib_config, env, open_mode, native_cfg)
 
 
 def extract_lib_config(env_cfg, lib_path):
@@ -147,9 +147,9 @@ def get_storage_for_lib_name(lib_name, env):
     return sid, env.storage_by_id[sid]
 
 
-def set_native_storage(lib_name, env, storage_config):
+def set_native_storage(lib_name, native_cfg, storage_config):
     sid = get_sid(lib_name)
-    env[sid] = storage_config
+    native_cfg[sid] = storage_config
 
 
 def get_secondary_storage_for_lib_name(lib_name, env):
@@ -301,7 +301,7 @@ def get_s3_proto(
             native_s3_settings.aws_auth = AWSAuthMethod(aws_auth)
         if aws_profile is not None:
             native_s3_settings.aws_profile = aws_profile
-        set_native_storage(s3.prefix, native_cfg[env_name], native_s3_settings)
+        set_native_storage(s3.prefix, native_cfg, native_s3_settings)
 
     sid, storage = get_storage_for_lib_name(s3.prefix, env)
     storage.config.Pack(s3, type_url_prefix="cxx.arctic.org")

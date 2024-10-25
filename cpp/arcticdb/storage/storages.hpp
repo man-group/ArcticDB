@@ -174,10 +174,18 @@ class Storages {
     OpenMode mode_;
 };
 
-inline std::shared_ptr<Storages> create_storages(const LibraryPath& library_path, OpenMode mode, const arcticdb::proto::storage::VariantStorage &storage_config) {
+inline std::shared_ptr<Storages> create_storages(const LibraryPath& library_path, OpenMode mode, const decltype(std::declval<arcticc::pb2::storage_pb2::LibraryConfig>().storage_by_id())& storage_configs, const NativeVariantStorageMap& native_storage_map) {
     Storages::StorageVector storages;
-    storages.push_back(create_storage(library_path, mode, storage_config));
-
+    for (const auto& [storage_id, storage_config]: storage_configs) {
+        if (auto it = native_storage_map.find(storage_id); 
+            storage_config.config().Is<arcticdb::proto::s3_storage::Config>() && it != native_storage_map.end()) {
+            arcticdb::proto::s3_storage::Config s3_storage;
+            storage_config.config().UnpackTo(&s3_storage);
+            storages.push_back(create_storage(library_path, mode, s3::S3Settings(it->second).load_from_proto(s3_storage)));
+        } else {
+            storages.push_back(create_storage(library_path, mode, storage_config));
+        }
+    }
     return std::make_shared<Storages>(std::move(storages), mode);
 }
 

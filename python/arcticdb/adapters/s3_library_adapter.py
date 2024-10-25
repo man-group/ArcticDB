@@ -18,7 +18,7 @@ from arcticdb.version_store.helper import add_s3_library_to_env
 from arcticdb.config import _DEFAULT_ENV
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter
-from arcticdb_ext.storage import StorageOverride, S3Override, CONFIG_LIBRARY_NAME, AWSAuthMethod, EnvironmentNativeVariantStorageMap
+from arcticdb_ext.storage import StorageOverride, S3Override, CONFIG_LIBRARY_NAME, AWSAuthMethod
 from arcticdb.encoding_version import EncodingVersion
 from collections import namedtuple
 from dataclasses import dataclass, fields
@@ -102,8 +102,6 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
         if "amazonaws" in self._endpoint:
             self._configure_aws()
 
-        self.native_cfg = EnvironmentNativeVariantStorageMap()
-
         super().__init__(uri, self._encoding_version)
 
     def __repr__(self):
@@ -143,11 +141,11 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
             ssl=self._ssl,
             aws_auth=self._query_params.aws_auth,
             aws_profile=self._query_params.aws_profile,
-            native_cfg=self.native_cfg,
+            native_cfg=self._native_cfg,
         )
 
         lib = NativeVersionStore.create_store_from_config(
-            env_cfg, _DEFAULT_ENV, CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version, native_cfg=self.native_cfg
+            env_cfg, _DEFAULT_ENV, CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version, native_cfg=self._native_cfg
         )
 
         return lib._library
@@ -266,7 +264,7 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
             ssl=self._ssl,
             aws_auth=self._query_params.aws_auth,
             aws_profile=self._query_params.aws_profile,
-            native_cfg=self.native_cfg,
+            native_cfg=self._native_cfg,
         )
 
     def _configure_aws(self):

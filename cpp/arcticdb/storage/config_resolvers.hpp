@@ -24,10 +24,8 @@ class ConfigResolver {
     //virtual std::vector<EnvironmentName> list_environments() const = 0;
     virtual std::vector<std::pair<LibraryPath, arcticdb::proto::storage::LibraryDescriptor>> get_libraries(const EnvironmentName &environment_name) const = 0;
     virtual std::vector<std::pair<StorageName, arcticdb::proto::storage::VariantStorage>> get_storages(const EnvironmentName &environment_name) const = 0;
-    virtual std::vector<std::pair<StorageName, arcticdb::storage::NativeVariantStorage>> get_native_storages(const EnvironmentName &environment_name) const = 0;
     virtual void add_library(const EnvironmentName& environment_name, const arcticdb::proto::storage::LibraryDescriptor& library_descriptor) = 0;
     virtual void add_storage(const EnvironmentName& environment_name, const StorageName& storage_name, const arcticdb::proto::storage::VariantStorage& storage) = 0;
-    virtual void add_native_storage(const EnvironmentName& environment_name, const std::string& storage_name, const arcticdb::storage::NativeVariantStorage& storage) = 0;
     virtual void initialize_environment(const EnvironmentName& environment_name) = 0;
     virtual std::string_view resolver_type() const = 0;
 };
@@ -62,11 +60,9 @@ class InMemoryConfigResolver final : public ConfigResolver {
 
     std::vector<std::pair<LibraryPath, arcticdb::proto::storage::LibraryDescriptor>> get_libraries(const EnvironmentName &environment_name) const override;
     std::vector<std::pair<StorageName, arcticdb::proto::storage::VariantStorage>> get_storages(const EnvironmentName &environment_name) const override;
-    std::vector<std::pair<StorageName, arcticdb::storage::NativeVariantStorage>> get_native_storages(const EnvironmentName &environment_name) const override;
 
     void add_library(const EnvironmentName& environment_name, const arcticdb::proto::storage::LibraryDescriptor& library_descriptor) override;
     void add_storage(const EnvironmentName& environment_name, const StorageName& storage_name, const arcticdb::proto::storage::VariantStorage& storage) override;
-    void add_native_storage(const EnvironmentName& environment_name, const std::string& storage_name, const arcticdb::storage::NativeVariantStorage& storage) override;
 
     void initialize_environment(const EnvironmentName&) override { }
     std::string_view resolver_type()  const override { return "in_mem"; }

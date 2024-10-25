@@ -25,7 +25,7 @@ from .api import *
 from .utils import get_ephemeral_port, GracefulProcessUtils, wait_for_server_to_come_up, safer_rmtree, get_ca_cert_for_testing
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap, AWSAuthMethod
 from arcticdb.version_store.helper import add_s3_library_to_env
-from arcticdb_ext.storage import EnvironmentNativeVariantStorageMap
+from arcticdb_ext.storage import NativeVariantStorageMap
 
 # All storage client libraries to be imported on-demand to speed up start-up of ad-hoc test runs
 
@@ -63,7 +63,7 @@ class S3Bucket(StorageFixture):
     def __init__(self, 
                  factory: "BaseS3StorageFixtureFactory", 
                  bucket: str, 
-                 native_config: Optional[EnvironmentNativeVariantStorageMap] = EnvironmentNativeVariantStorageMap()
+                 native_config: Optional[NativeVariantStorageMap] = NativeVariantStorageMap()
                  ):
         super().__init__()
         self.factory = factory
@@ -201,7 +201,7 @@ class BaseS3StorageFixtureFactory(StorageFixtureFactory):
     clean_bucket_on_fixture_exit = True
     use_mock_storage_for_testing = None  # If set to true allows error simulation
 
-    def __init__(self, native_config: Optional[EnvironmentNativeVariantStorageMap] = None):
+    def __init__(self, native_config: Optional[NativeVariantStorageMap] = None):
         self.client_cert_file = None
         self.client_cert_dir = None
         self.ssl = False
@@ -235,7 +235,7 @@ class BaseS3StorageFixtureFactory(StorageFixtureFactory):
         b.slow_cleanup(failure_consequence="We will be charged unless we manually delete it. ")
 
 
-def real_s3_from_environment_variables(shared_path: bool, native_config: Optional[EnvironmentNativeVariantStorageMap] = None):
+def real_s3_from_environment_variables(shared_path: bool, native_config: Optional[NativeVariantStorageMap] = None):
     out = BaseS3StorageFixtureFactory(native_config=native_config)
     out.endpoint = os.getenv("ARCTICDB_REAL_S3_ENDPOINT")
     out.region = os.getenv("ARCTICDB_REAL_S3_REGION")
@@ -252,7 +252,7 @@ def real_s3_from_environment_variables(shared_path: bool, native_config: Optiona
     return out
 
 
-def real_s3_sts_from_environment_variables(user_name: str, role_name: str, policy_name: str, profile_name: str, native_config: EnvironmentNativeVariantStorageMap):
+def real_s3_sts_from_environment_variables(user_name: str, role_name: str, policy_name: str, profile_name: str, native_config: NativeVariantStorageMap):
     out = real_s3_from_environment_variables(False, native_config)
     iam_client = boto3.client("iam", aws_access_key_id=out.default_key.id, aws_secret_access_key=out.default_key.secret)
     # Create IAM user
@@ -423,7 +423,7 @@ def real_s3_sts_resources_ready(factory: BaseS3StorageFixtureFactory):
             logger.info(f"S3 list objects test successful: {response['ResponseMetadata']['HTTPStatusCode']}")
             return
         except:
-            logger.error(f"Assume role failed. Retrying in 1 second...") # Don't print the exception as it could contain sensitive information, e.g. user id
+            logger.warn(f"Assume role failed. Retrying in 1 second...") # Don't print the exception as it could contain sensitive information, e.g. user id
             time.sleep(1)
 
     raise Exception("iam resources not ready")
@@ -524,7 +524,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
                  bucket_versioning: bool,
                  default_prefix: str = None,
                  use_raw_prefix: bool = False,
-                 native_config: Optional[EnvironmentNativeVariantStorageMap] = None):
+                 native_config: Optional[NativeVariantStorageMap] = None):
         super().__init__(native_config)
         self.http_protocol = "https" if use_ssl else "http"
         self.ssl_test_support = ssl_test_support

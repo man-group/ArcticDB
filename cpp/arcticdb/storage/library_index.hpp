@@ -32,23 +32,23 @@ class LibraryIndex {
         return library_cache_.find(path) != library_cache_.end() || config_cache_.library_exists(path);
     }
 
-    std::shared_ptr<Library> get_library(const LibraryPath &path, OpenMode mode, const UserAuth &) {
+    std::shared_ptr<Library> get_library(const LibraryPath &path, OpenMode mode, const UserAuth &, const NativeVariantStorageMap& native_storage_map) {
         std::lock_guard<std::mutex> lock{mutex_};
         auto res = library_cache_.find(path);
         if (res != library_cache_.end())
             return res->second;
 
-        return get_library_internal(path, mode);
+        return get_library_internal(path, mode, native_storage_map);
     }
 
   private:
-    std::shared_ptr<Library> get_library_internal(const LibraryPath &path, OpenMode mode) {
+    std::shared_ptr<Library> get_library_internal(const LibraryPath &path, OpenMode mode, const NativeVariantStorageMap& native_storage_map) {
         auto desc = config_cache_.get_descriptor(path);
         LibraryDescriptor::VariantStoreConfig cfg;
         if(desc.has_value()){
             cfg = desc->config_;
         }
-        auto lib = std::make_shared<Library>(path, config_cache_.create_storages(path, mode), cfg);
+        auto lib = std::make_shared<Library>(path, config_cache_.create_storages(path, mode, native_storage_map), cfg);
         if (auto &&[it, inserted] = library_cache_.try_emplace(path, lib); !inserted) {
             lib = it->second;
         }
