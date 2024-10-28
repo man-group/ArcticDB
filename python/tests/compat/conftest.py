@@ -23,8 +23,15 @@ def is_running_on_windows():
 
 def run_shell_command(command : List[Union[str, os.PathLike]], cwd : Optional[os.PathLike] = None) -> subprocess.CompletedProcess:
     logger.info(f"Executing command: {command}")
-    # shell=True is required for running the correct python executable on Windows
-    result = subprocess.run(command, cwd=cwd, capture_output=True, shell=is_running_on_windows())
+    result = None
+    if is_running_on_windows():
+        # shell=True is required for running the correct python executable on Windows
+        result = subprocess.run(command, cwd=cwd, capture_output=True, shell=True)
+    else:
+        # On linux we need shell=True for conda feedstock runners (because otherwise they fail to expand path variables)
+        # But to correctly work with shell=True we need a single command string.
+        command_string = ' '.join(command)
+        result = subprocess.run(command_string, cwd=cwd, capture_output=True, shell=True, stdin=subprocess.DEVNULL)
     if result.returncode != 0:
         logger.warning(f"Command failed, stdout: {str(result.stdout)}, stderr: {str(result.stderr)}")
     return result
@@ -146,9 +153,8 @@ class VenvLib:
 def old_venv(request):
     version = request.param
     path = os.path.join("venvs", version)
-    # The requirements_file needs to be relative to the [path] we use for the venv.
-    # Absolute paths break some Azure CI runners on conda forge
-    requirements_file = os.path.join("..", "..", "tests", "compat", f"requirements-{version}.txt")
+    compat_dir = os.path.dirname(os.path.abspath(__file__))
+    requirements_file = os.path.join(compat_dir, f"requirements-{version}.txt")
     with Venv(path, requirements_file, version) as old_venv:
         yield old_venv
 
