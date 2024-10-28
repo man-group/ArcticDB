@@ -69,7 +69,7 @@ namespace arcticdb {
             arcticdb::log::version().info("Prometheus Push created with settings {}", cfg_);
 
         } else if (cfg_.model_ == MetricsConfig::Model::PULL) {
-
+/*
             // create an http server ie "http://hostname:"+port()+"/metrics"
             std::string endpoint = cfg_.host + ":" + cfg_.port;
 
@@ -88,6 +88,7 @@ namespace arcticdb {
             exposer_->RegisterCollectable(registry_, "/metrics");
 
             arcticdb::log::version().info("Prometheus endpoint created on {}/metrics", endpoint);
+            */
         }
         else {
             arcticdb::log::version().info("Prometheus not configured {}", cfg_);

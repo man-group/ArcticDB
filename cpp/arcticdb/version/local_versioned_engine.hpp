@@ -29,8 +29,10 @@ namespace arcticdb::version_store {
  *
  * Requirements for the latter is fluid, so methods here could be lifted.
  */
-using SpecificAndLatestVersionKeys = std::pair<std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>>,
-                                                std::shared_ptr<std::unordered_map<StreamId, AtomKey>>>;
+using SpecificVersionMap = std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>;
+using LatestVersionMap = std::unordered_map<StreamId, AtomKey>;
+using SpecificAndLatestVersionKeys = std::pair<std::shared_ptr<SpecificVersionMap>, std::shared_ptr<LatestVersionMap>>;
+
 struct VersionIdAndDedupMapInfo{
     VersionId version_id;
     std::shared_ptr<DeDupMap> de_dup_map;
@@ -55,20 +57,18 @@ folly::Future<folly::Unit> delete_trees_responsibly(
     const arcticdb::MasterSnapshotMap& snapshot_map,
     const std::optional<SnapshotId>& snapshot_being_deleted = std::nullopt,
     const PreDeleteChecks& check = default_pre_delete_checks,
-    const bool dry_run = false
+    bool dry_run = false
 );
 
 class LocalVersionedEngine : public VersionedEngine {
-
 public:
     LocalVersionedEngine() = default;
 
     template<class ClockType = util::SysClock>
     explicit LocalVersionedEngine(
         const std::shared_ptr<storage::Library>& library,
-        const ClockType& = ClockType{});
-
-
+        const ClockType& = ClockType{},
+        const BlockCodecImpl& codec = codec::default_adaptive_codec());
 
     virtual ~LocalVersionedEngine() = default;
 
@@ -157,7 +157,7 @@ public:
 
     void delete_tree(
         const std::vector<IndexTypeKey>& idx_to_be_deleted,
-        const PreDeleteChecks& checks = default_pre_delete_checks
+        const PreDeleteChecks& checks
     ) override {
         auto snapshot_map = get_master_snapshots_map(store());
         delete_trees_responsibly(store(), version_map(), idx_to_be_deleted, snapshot_map, std::nullopt, checks).get();
@@ -177,8 +177,7 @@ public:
         const StreamId& stream_id,
         const std::shared_ptr<InputTensorFrame>& frame,
         bool prune_previous_versions,
-        bool allow_sparse,
-        bool validate_index
+        bool validate_index = false
     ) override;
 
     VersionedItem write_versioned_metadata_internal(
@@ -322,7 +321,7 @@ public:
     
     StorageLockWrapper get_storage_lock(const StreamId& stream_id) override;
 
-    void delete_storage(const bool continue_on_error = true) override;
+    void delete_storage(const bool continue_on_error) override;
 
     void configure(
         const storage::LibraryDescriptor::VariantStoreConfig & cfg) final;
@@ -390,20 +389,12 @@ public:
         return store()->current_timestamp();
     }
 
-    template<typename ClockType>
-    static LocalVersionedEngine _test_init_from_store(
-        const std::shared_ptr<Store>& store,
-        const ClockType& clock
-    ) {
-        return LocalVersionedEngine(store, clock);
-    }
-
     const arcticdb::proto::storage::VersionStoreConfig& cfg() const override { return cfg_; }
 protected:
-    template<class ClockType=util::SysClock>
-    explicit LocalVersionedEngine(
-        const std::shared_ptr<Store>& store,
-        const ClockType& = ClockType{});
+    const BlockCodecImpl& block_codec() const {
+        return block_codec_;
+    }
+
     VersionedItem compact_incomplete_dynamic(
             const StreamId& stream_id,
             const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
@@ -450,6 +441,7 @@ private:
     std::shared_ptr<VersionMap> version_map_ = std::make_shared<VersionMap>();
     std::shared_ptr<SymbolList> symbol_list_;
     std::optional<std::string> license_key_;
+    BlockCodecImpl block_codec_;
 };
 
 } // arcticdb::version_store
