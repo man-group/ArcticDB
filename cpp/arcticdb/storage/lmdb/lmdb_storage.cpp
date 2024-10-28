@@ -142,7 +142,7 @@ KeySegmentPair LmdbStorage::do_read(VariantKey&& variant_key, ReadKeyOpts) {
     auto stored_key = to_serialized_key(variant_key);
     try {
         auto txn = std::make_shared<::lmdb::txn>(::lmdb::txn::begin(env(), nullptr, MDB_RDONLY));
-        ARCTICDB_SUBSAMPLE(LmdbStorageInTransaction, 0)
+        ARCTICDB_SUBSAMPLE(LmdbStorageInReadTransaction, 0)
         auto segment = lmdb_client_->read(db_name, stored_key, *txn, dbi);
 
         if (segment.has_value()) {

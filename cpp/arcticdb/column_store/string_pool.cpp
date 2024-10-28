@@ -33,12 +33,12 @@ StringBlock StringBlock::clone() const {
     return output;
 }
 
-position_t StringBlock::insert(const char *str, size_t size) {
+InsertResult StringBlock::insert(const char *str, size_t size) {
     auto bytes_required = StringHead::calc_size(size);
     auto ptr = data_.ensure_aligned_bytes(bytes_required);
     reinterpret_cast<StringHead*>(ptr)->copy(str, size);
     data_.commit();
-    return data_.cursor_pos() - bytes_required;
+    return {.pos_=static_cast<position_t>(data_.cursor_pos() - bytes_required), .ptr_=ptr};
 }
 
 std::string_view StringBlock::at(position_t pos) {
@@ -106,10 +106,12 @@ StringPool& StringPool::operator=(StringPool &&that) noexcept {
 
 ColumnData StringPool::column_data() const {
     return {
-        &block_.buffer(),
-        &shapes_.buffer(),
+        &data(),
+        &shapes(),
         string_pool_descriptor().type(),
-        nullptr
+        nullptr,
+        nullptr,
+        size()
     };
 }
 
@@ -145,26 +147,19 @@ OffsetString StringPool::get(std::string_view s, bool deduplicate) {
             return OffsetString(it->second, this);
     }
 
-    OffsetString str(block_.insert(s.data(), s.size()), this);
+    const auto result = block_.insert(s.data(), s.size());
+    OffsetString str(result.pos_, this);
 
-    if(deduplicate)
+    if(deduplicate) {
+        //map_.insert(std::make_pair(StringType(reinterpret_cast<const char *>(result.ptr_), s.size()), str.offset()));
         map_.insert(std::make_pair(block_.at(str.offset()), str.offset()));
-
+    }
     return str;
 }
 
 OffsetString StringPool::get(const char *data, size_t size, bool deduplicate) {
     StringType s(data, size);
-    if(deduplicate) {
-        if (auto it = map_.find(s); it != map_.end())
-            return OffsetString(it->second, this);
-    }
-
-    OffsetString str(block_.insert(s.data(), s.size()), this);
-    if(deduplicate)
-        map_.insert(std::make_pair(StringType(str), str.offset()));
-
-    return str;
+    return get(s, deduplicate);
 }
 
 const ChunkedBuffer& StringPool::data() const {

@@ -15,6 +15,7 @@
 #include <arcticdb/entity/stream_descriptor.hpp>
 #include <arcticdb/codec/encode_common.hpp>
 #include <arcticdb/codec/segment_identifier.hpp>
+#include <arcticdb/codec/compression/encoding_scan_result.hpp>
 
 #include <google/protobuf/io/zero_copy_stream_impl.h>
 #include <arcticdb/codec/encode_common.hpp>
@@ -30,10 +31,11 @@ constexpr TypeDescriptor metadata_type_desc() {
 
 SizeResult max_compressed_size_dispatch(
     const SegmentInMemory& in_mem_seg,
-    const arcticdb::proto::encoding::VariantCodec &codec_opts,
-    EncodingVersion encoding_version) {
+    const BlockCodecImpl& codec_opts,
+    EncodingVersion encoding_version,
+    SegmentScanResults& encodings) {
     if(encoding_version == EncodingVersion::V2) {
-        return max_compressed_size_v2(in_mem_seg, codec_opts);
+        return max_compressed_size_v2(in_mem_seg, codec_opts, encodings);
     } else {
         return max_compressed_size_v1(in_mem_seg, codec_opts);
     }
@@ -41,7 +43,7 @@ SizeResult max_compressed_size_dispatch(
 
 Segment encode_dispatch(
     SegmentInMemory&& in_mem_seg,
-    const arcticdb::proto::encoding::VariantCodec &codec_opts,
+    const BlockCodecImpl& codec_opts,
     EncodingVersion encoding_version) {
     if(encoding_version == EncodingVersion::V2) {
         return encode_v2(std::move(in_mem_seg), codec_opts);
@@ -147,6 +149,7 @@ EncodedFieldCollection decode_encoded_fields(
     util::check(hdr.has_column_fields() && hdr.column_fields().has_ndarray(), "Expected encoded field description to be set in header");
     std::optional<util::BitMagic> bv;
     const auto uncompressed_size = encoding_sizes::uncompressed_size(hdr.column_fields());
+    ARCTICDB_TRACE(log::codec(), "Encoded fields size: {}", uncompressed_size);
     constexpr auto type_desc = encoded_fields_type_desc();
     Column encoded_column(type_desc, uncompressed_size, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
     decode_ndarray(type_desc, hdr.column_fields().ndarray(), data, encoded_column, bv, hdr.encoding_version());
@@ -214,30 +217,6 @@ inline arcticdb::proto::descriptors::FrameMetadata frame_metadata_from_any(const
     any.UnpackTo(&frame_meta);
     return frame_meta;
 }
-}
-
-std::optional<FieldCollection> decode_descriptor_fields(
-    const SegmentHeader& hdr,
-    const uint8_t*& data,
-    const uint8_t* begin ARCTICDB_UNUSED,
-    const uint8_t* end) {
-    if(hdr.has_descriptor_field()) {
-        ARCTICDB_TRACE(log::codec(), "Decoding index fields");
-        util::check(data!=end, "Reached end of input block with descriptor fields to decode");
-        std::optional<util::BitMagic> bv;
-        FieldCollection fields;
-        data += decode_field(FieldCollection::type(),
-                       hdr.descriptor_field(),
-                       data,
-                       fields,
-                       bv,
-                       hdr.encoding_version());
-
-        ARCTICDB_TRACE(log::codec(), "Decoded descriptor fields to position {}", data-begin);
-        return std::make_optional<FieldCollection>(std::move(fields));
-    } else {
-        return std::nullopt;
-    }
 }
 
 TimeseriesDescriptor unpack_timeseries_descriptor_from_proto(
@@ -421,6 +400,8 @@ void decode_v2(const Segment& segment,
            SegmentInMemory& res,
            const StreamDescriptor& desc) {
     ARCTICDB_SAMPLE(DecodeSegment, 0)
+    ARCTICDB_DEBUG(log::codec(), "Decoding segment in memory");
+
     if(segment.buffer().data() == nullptr) {
         ARCTICDB_DEBUG(log::codec(), "Segment contains no data in decode_v2");
         return;
@@ -465,10 +446,8 @@ void decode_v2(const Segment& segment,
             util::check(data!=end, "Reached end of input block with {} fields to decode", fields_size-i);
             if(auto col_index = res.column_index(field_name)) {
                 auto& col = res.column(static_cast<position_t>(*col_index));
-
-                data += decode_field(res.field(*col_index).type(), *encoded_field, data, col, col.opt_sparse_map(), hdr.encoding_version());
                 col.set_statistics(encoded_field->get_statistics());
-
+                data += decode_field(res.field(*col_index).type(), *encoded_field, data, col, col.opt_sparse_map(), hdr.encoding_version());
                 seg_row_count = std::max(seg_row_count, calculate_last_row(col));
             } else {
                 data += encoding_sizes::field_compressed_size(*encoded_field) + sizeof(ColumnMagic);
@@ -635,7 +614,6 @@ void add_bitmagic_compressed_size(
         max_compressed_bytes += stat.max_serialize_mem;
     }
 }
-
 /// @brief Write the sparse map to the out buffer
 /// Bitmagic achieves the theoretical best compression for booleans. Adding additional encoding (lz4, zstd, etc...)
 /// will not improve anything and in fact it might worsen the encoding.
