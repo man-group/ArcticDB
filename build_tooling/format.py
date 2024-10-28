@@ -22,7 +22,7 @@ import subprocess
 
 
 black_version = "24.8.0"
-clang_format_version = "18.1.8"
+clang_format_version = "19.1.2"
 
 
 def install_tools():
