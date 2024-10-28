@@ -9,6 +9,7 @@
 
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/util/offset_string.hpp>
+#include <arcticdb/codec/calculate_stats.hpp>
 
 namespace arcticdb {
 
@@ -75,6 +76,68 @@ void initialise_output_bitset(const util::BitSet& input_bitset, bool sparse_miss
         output_bitset = input_bitset;
         output_bitset.flip();
     }
+}
+
+bool Column::has_statistics() const {
+    return std::holds_alternative<std::monostate>(statistics_);
+}
+
+void Column::populate_statistics() {
+    type().visit_tag([this] (auto tdt) {
+       using TagType = decltype(tdt);
+       using RawType = typename TagType::DataTypeTag::raw_type;
+       constexpr auto data_type = TagType::DataTypeTag::data_type;
+
+       if constexpr(is_integer_type(data_type)) {
+           IntegerStatistics stats;
+           stats.initialize<RawType>();
+           auto column_data = data();
+           auto min = std::numeric_limits<RawType>::max();
+           auto max = std::numeric_limits<RawType>::min();
+           ankerl::unordered_dense::set<RawType> unique;
+           while (auto block = column_data.next<TagType>()) {
+               auto block_max = *std::max_element(block->data(), block->data() + block->row_count());
+               auto block_min = *std::min_element(block->data(), block->data() + block->row_count());
+               max = std::max(max, block_max);
+               min = std::min(min, block_min);
+               for(auto elem : *block)
+                   unique.emplace(elem);
+
+           }
+           stats.set_min<RawType>(&min);
+           stats.set_max<RawType>(&max);
+           stats.set_unique_count(unique.size());
+           statistics_ = std::move(stats);
+       } else if constexpr (is_floating_point_type(data_type)) {
+           FloatingPointStatistics stats;
+           auto column_data = data();
+           auto min = std::numeric_limits<RawType>::max();
+           auto max = std::numeric_limits<RawType>::min();
+           ankerl::unordered_dense::set<RawType> unique;
+           while (auto block = column_data.next<TagType>()) {
+               auto block_max = *std::max_element(block->data(), block->data() + block->row_count());
+               auto block_min = *std::min_element(block->data(), block->data() + block->row_count());
+               max = std::max(max, block_max);
+               min = std::min(min, block_min);
+               for(auto elem : *block)
+                   unique.emplace(elem);
+           }
+           stats.set_min(min);
+           stats.set_max(max);
+           stats.set_unique_count(unique.size());
+           statistics_ = std::move(stats);
+       } else if constexpr(is_sequence_type(data_type)) {
+           StringStatistics stats;
+           ankerl::unordered_dense::set<uint64_t> unique;
+           auto column_data = data();
+           while (auto block = column_data.next<TagType>()) {
+               for (auto elem : *block)
+                   unique.emplace(elem);
+           }
+           stats.set_unique_count(unique.size());
+           statistics_ = std::move(stats);
+       }
+    });
 }
 
 // Column operators

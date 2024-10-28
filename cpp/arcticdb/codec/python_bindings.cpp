@@ -99,7 +99,9 @@ struct FieldEncodingResult {
 Segment encode_segment(SegmentInMemory segment_in_memory, const py::object &opts, EncodingVersion encoding_version) {
     proto::encoding::VariantCodec opts_cpp;
     python_util::pb_from_python(opts, opts_cpp);
-    return encode_dispatch(std::move(segment_in_memory), opts_cpp, encoding_version);
+    BlockCodecImpl block_codec;
+    codec_from_proto(opts_cpp, block_codec);
+    return encode_dispatch(std::move(segment_in_memory), block_codec, encoding_version);
 }
 
 SegmentInMemory decode_python_segment(Segment& segment) {

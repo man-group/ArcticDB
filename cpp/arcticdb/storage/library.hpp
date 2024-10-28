@@ -21,11 +21,8 @@
 #include <arcticdb/util/composite.hpp>
 
 #include <folly/Range.h>
-#include <folly/concurrency/ConcurrentHashMap.h>
 #include <boost/core/noncopyable.hpp>
 #include <filesystem>
-
-
 
 #ifdef _WIN32
 //Windows #defines DELETE in winnt.h which clashes with OpenMode.DELETE

@@ -22,7 +22,7 @@ namespace arcticdb {
 /// @brief This should be the block data type descriptor when the shapes array is encoded as a block
 using ShapesBlockTDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension::Dim0>>;
 
-using ByteArrayTDT = TypeDescriptorTag<DataTypeTag<DataType::UINT8>, DimensionTag<Dimension::Dim1>>;
+using ByteArrayTypeDescriptorTag = TypeDescriptorTag<DataTypeTag<DataType::UINT8>, DimensionTag<Dimension::Dim1>>;
 
 template<template<typename> class TypedBlock, class TD, EncodingVersion encoder_version>
 struct TypedBlockEncoderImpl;
@@ -43,18 +43,17 @@ size_t calc_num_blocks(const ColumnData& column_data) {
 
 template<typename EncodingPolicyType>
 struct BytesEncoder {
-    using Encoder = TypedBlockEncoderImpl<TypedBlockData, ByteArrayTDT, EncodingPolicyType::version>;
-    using BytesBlock = TypedBlockData<ByteArrayTDT>;
+    using Encoder = TypedBlockEncoderImpl<TypedBlockData, ByteArrayTypeDescriptorTag, EncodingPolicyType::version>;
+    using BytesBlock = TypedBlockData<ByteArrayTypeDescriptorTag>;
     using ShapesEncoder = TypedBlockEncoderImpl<TypedBlockData, ShapesBlockTDT, EncodingPolicyType::version>;
 
     template<typename EncodedFieldType>
     static void encode(
         const ChunkedBuffer &data,
-        const arcticdb::proto::encoding::VariantCodec &codec_opts,
+        const BlockCodecImpl& codec_opts,
         Buffer &out_buffer,
         std::ptrdiff_t &pos,
-        EncodedFieldType& encoded_field
-    ) {
+        EncodedFieldType& encoded_field) {
         if constexpr (EncodingPolicyType::version == EncodingVersion::V1) {
             const auto bytes_count = static_cast<shape_t>(data.bytes());
             auto typed_block = BytesBlock(
@@ -88,7 +87,7 @@ struct BytesEncoder {
         }
     }
 
-    static size_t max_compressed_size(const arcticdb::proto::encoding::VariantCodec &codec_opts, shape_t data_size) {
+    static size_t max_compressed_size(const BlockCodecImpl& codec_opts, shape_t data_size) {
         const shape_t shapes_bytes = sizeof(shape_t);
         const auto values_block = BytesBlock(data_size, &data_size);
         if constexpr (EncodingPolicyType::version == EncodingVersion::V1) {
@@ -118,7 +117,7 @@ struct SizeResult {
 template<typename EncodingPolicyType>
 void calc_metadata_size(
         const SegmentInMemory &in_mem_seg,
-        const arcticdb::proto::encoding::VariantCodec &codec_opts,
+        const BlockCodecImpl& codec_opts,
         SizeResult &result) {
     if (in_mem_seg.metadata()) {
         const auto metadata_bytes = static_cast<shape_t>(in_mem_seg.metadata()->ByteSizeLong());
@@ -132,27 +131,22 @@ void calc_metadata_size(
 template<typename EncodingPolicyType>
 void calc_columns_size(
     const SegmentInMemory &in_mem_seg,
-    const arcticdb::proto::encoding::VariantCodec &codec_opts,
+    const BlockCodecImpl& codec_opts,
     SizeResult &result
 ) {
     for (std::size_t c = 0; c < in_mem_seg.num_columns(); ++c) {
         auto column_data = in_mem_seg.column_data(c);
-        const auto [uncompressed, required] = EncodingPolicyType::ColumnEncoder::max_compressed_size(codec_opts,
-                                                                                                     column_data);
+        const auto [uncompressed, required] = EncodingPolicyType::ColumnEncoder::max_compressed_size(codec_opts, column_data);
         result.uncompressed_bytes_ += uncompressed;
         result.max_compressed_bytes_ += required;
-        ARCTICDB_TRACE(log::codec(),
-                       "Column {} requires {} max_compressed_bytes, total {}",
-                       c,
-                       required,
-                       result.max_compressed_bytes_);
+        ARCTICDB_TRACE(log::codec(), "Column {} requires {} max_compressed_bytes, total {}", c, required, result.max_compressed_bytes_);
     }
 }
 
 template<typename EncodingPolicyType>
 void calc_string_pool_size(
     const SegmentInMemory &in_mem_seg,
-    const arcticdb::proto::encoding::VariantCodec &codec_opts,
+    const BlockCodecImpl& codec_opts,
     SizeResult &result
 ) {
     if (in_mem_seg.has_string_pool()) {
@@ -172,7 +166,7 @@ template<typename EncodingPolicyType>
 void encode_metadata(
         const SegmentInMemory& in_mem_seg,
         SegmentHeader& segment_header,
-        const arcticdb::proto::encoding::VariantCodec& codec_opts,
+        const BlockCodecImpl& codec_opts,
         Buffer &out_buffer,
         std::ptrdiff_t& pos) {
     if (in_mem_seg.metadata()) {
@@ -207,7 +201,7 @@ template<typename EncodingPolicyType>
 void encode_string_pool(
     const SegmentInMemory &in_mem_seg,
     SegmentHeader &segment_header,
-    const arcticdb::proto::encoding::VariantCodec &codec_opts,
+    const BlockCodecImpl& codec_opts,
     Buffer &out_buffer,
     std::ptrdiff_t &pos
 ) {
@@ -222,10 +216,10 @@ void encode_string_pool(
 
 [[nodiscard]] SizeResult max_compressed_size_v1(
     const SegmentInMemory &in_mem_seg,
-    const arcticdb::proto::encoding::VariantCodec &codec_opts);
+    const BlockCodecImpl& codec_opts);
 
 [[nodiscard]] SizeResult max_compressed_size_v2(
     const SegmentInMemory &in_mem_seg,
-    const arcticdb::proto::encoding::VariantCodec &codec_opts);
+    const BlockCodecImpl& codec_opts);
 
 } //namespace arcticdb

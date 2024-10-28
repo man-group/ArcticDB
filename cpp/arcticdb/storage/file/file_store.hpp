@@ -26,10 +26,9 @@
 
 namespace arcticdb {
 
-
 size_t max_data_size(
     const std::vector<std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice>>& items,
-    const arcticdb::proto::encoding::VariantCodec& codec_opts,
+    const BlockCodecImpl& codec_opts,
     EncodingVersion encoding_version) {
     auto max_file_size = 0UL;
     for(const auto& item : items) {
@@ -49,7 +48,7 @@ void write_dataframe_to_file_internal(
     const std::shared_ptr<pipelines::InputTensorFrame> &frame,
     const std::string& path,
     const WriteOptions &options,
-    const arcticdb::proto::encoding::VariantCodec &codec_opts,
+    const BlockCodecImpl& codec_opts,
     EncodingVersion encoding_version
 ) {
     ARCTICDB_SAMPLE(WriteDataFrameToFile, 0)
@@ -80,11 +79,11 @@ void write_dataframe_to_file_internal(
 
     auto data_size = max_data_size(segments, codec_opts, encoding_version);
     ARCTICDB_DEBUG(log::version(), "Estimated max data size: {}", data_size);
-    auto config = storage::file::pack_config(path, data_size, segments.size(), stream_id, stream::get_descriptor_from_index(frame->index), encoding_version, codec_opts);
+    auto config = storage::file::pack_config(path, data_size, segments.size(), stream_id, stream::get_descriptor_from_index(frame->index), encoding_version);
 
     storage::LibraryPath lib_path{std::string{"file"}, fmt::format("{}", stream_id)};
     auto library = create_library(lib_path, storage::OpenMode::WRITE, {std::move(config)});
-    auto store = std::make_shared<async::AsyncStore<PilotedClock>>(library, codec_opts, encoding_version);
+    auto store = std::make_shared<async::AsyncStore<PilotedClock>>(library, std::move(codec_opts), encoding_version);
     auto dedup_map = std::make_shared<DeDupMap>();
     size_t batch_size = ConfigsMap::instance()->get_int("FileWrite.BatchSize", 50);
     auto index_fut = folly::collect(folly::window(std::move(segments), [store, dedup_map] (auto key_seg) {
@@ -107,7 +106,7 @@ version_store::ReadVersionOutput read_dataframe_from_file_internal(
         const std::string& path,
         const std::shared_ptr<ReadQuery>& read_query,
         const ReadOptions& read_options,
-        const arcticdb::proto::encoding::VariantCodec &codec_opts,
+        const BlockCodecImpl& codec_opts,
         std::any& handler_data) {
     auto config = storage::file::pack_config(path, codec_opts);
     storage::LibraryPath lib_path{std::string{"file"}, fmt::format("{}", stream_id)};

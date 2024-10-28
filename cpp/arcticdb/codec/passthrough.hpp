@@ -19,7 +19,7 @@ namespace arcticdb::detail {
 
 template<template<typename> class BlockType, class TD>
 struct PassthroughEncoderV1 {
-    using Opts = arcticdb::proto::encoding::VariantCodec::Passthrough;
+    using Opts = PassthroughCodec;
 
     static size_t max_compressed_size(const BlockType<TD> &block ) {
         using Helper = CodecHelper<TD>;
@@ -41,41 +41,40 @@ struct PassthroughEncoderV1 {
             Buffer& out,
             std::ptrdiff_t& pos) {
         using namespace arcticdb::entity;
-        using Helper = CodecHelper<TD>;
-        using T = typename Helper::T;
-        Helper helper;
-        helper.hasher_.reset(helper.seed);
+        using CodecHelperType = CodecHelper<TD>;
+        using T = typename CodecHelperType::T;
+        CodecHelperType helper;
         const T *d = block.data();
         std::size_t block_row_count = block.row_count();
 
-        if constexpr (Helper::dim == entity::Dimension::Dim0) {
+        if constexpr (CodecHelperType::dim == entity::Dimension::Dim0) {
             // Only store data, no shapes since dimension is 0
-            auto scalar_block = Helper::scalar_block(block_row_count);
+            auto scalar_block = CodecHelperType::scalar_block(block_row_count);
             helper.ensure_buffer(out, pos, scalar_block.bytes_);
 
             // doing copy + hash in one pass, this might have a negative effect on perf
             // since the hashing is path dependent. This is a toy example though so not critical
             T *t_out = out.ptr_cast<T>(pos, scalar_block.bytes_);
-            encode_block(d, scalar_block, helper.hasher_, t_out, pos);
+            encode_block(d, scalar_block, helper.hasher(), t_out, pos);
 
             auto *nd_array = field.mutable_ndarray();
             auto total_row_count = nd_array->items_count() + block_row_count;
             nd_array->set_items_count(total_row_count);
             auto values = nd_array->add_values(EncodingVersion::V1);
             (void)values->mutable_codec()->mutable_passthrough();
-            scalar_block.set_block_data(*values, helper.hasher_.digest(), scalar_block.bytes_);
+            scalar_block.set_block_data(*values, helper.hasher().digest(), scalar_block.bytes_);
         } else {
-            auto helper_array_block = Helper::nd_array_block(block_row_count, block.shapes());
+            auto helper_array_block = CodecHelperType::nd_array_block(block_row_count, block.shapes());
             helper.ensure_buffer(out, pos, helper_array_block.shapes_.bytes_ + helper_array_block.values_.bytes_);
 
             // write shapes
             auto s_out = out.ptr_cast<shape_t>(pos, helper_array_block.shapes_.bytes_);
-            encode_block(block.shapes(), helper_array_block.shapes_, helper.hasher_, s_out, pos);
+            encode_block(block.shapes(), helper_array_block.shapes_, helper.hasher(), s_out, pos);
             HashedValue shape_hash = helper.get_digest_and_reset();
 
             // write values
             T *t_out = out.ptr_cast<T>(pos, helper_array_block.values_.bytes_);
-            encode_block(d, helper_array_block.values_, helper.hasher_, t_out, pos);
+            encode_block(d, helper_array_block.values_, helper.hasher(), t_out, pos);
             auto field_nd_array = field.mutable_ndarray();
             // Important: In case V2 EncodedField is used shapes must be added before values.
             auto shapes = field_nd_array->add_shapes();
@@ -90,7 +89,7 @@ struct PassthroughEncoderV1 {
 				values,
 				shape_hash,
 				helper_array_block.shapes_.bytes_,
-				helper.hasher_.digest(),
+				helper.hasher().digest(),
 				helper_array_block.values_.bytes_);
         }
     }
@@ -109,7 +108,7 @@ private:
 /// @see arcticdb::ColumnEncoder2 arcticdb::detail::GenericBlockEncoder2
 template<template<typename> class BlockType, class TD>
 struct PassthroughEncoderV2 {
-    using Opts = arcticdb::proto::encoding::VariantCodec::Passthrough;
+    using Opts = PassthroughCodec;
 
     static size_t max_compressed_size(const BlockType<TD> &block) {
         return block.nbytes();
@@ -123,21 +122,19 @@ struct PassthroughEncoderV2 {
             std::ptrdiff_t &pos,
             EncodedBlockType* encoded_block) {
         using namespace arcticdb::entity;
-        using Helper = CodecHelper<TD>;
-        using T = typename Helper::T;
-        Helper helper;
-        helper.hasher_.reset(helper.seed);
+        using CodecHelperType = CodecHelper<TD>;
+        using T = typename CodecHelperType::T;
+        CodecHelperType helper;
         const T* d = block.data();
         const size_t data_byte_size = block.nbytes();
         helper.ensure_buffer(out, pos, data_byte_size);
 
-        // doing copy + hash in one pass, this might have a negative effect on perf
-        // since the hashing is path dependent. This is a toy example though so not critical
+
         T *t_out = out.ptr_cast<T>(pos, data_byte_size);
-        encode_block(d, data_byte_size, helper.hasher_, t_out, pos);
+        encode_block(d, data_byte_size, helper.hasher(), t_out, pos);
         encoded_block->set_in_bytes(data_byte_size);
         encoded_block->set_out_bytes(data_byte_size);
-        encoded_block->set_hash(helper.hasher_.digest());
+        encoded_block->set_hash(helper.hasher().digest());
         (void)encoded_block->mutable_codec()->mutable_passthrough();
     }
 private:

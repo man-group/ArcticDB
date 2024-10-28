@@ -11,6 +11,7 @@
 #include <arcticdb/column_store/column_data.hpp>
 #include <arcticdb/column_store/statistics.hpp>
 #include <arcticdb/column_store/column_data_random_accessor.hpp>
+#include <arcticdb/column_store/statistics.hpp>
 #include <arcticdb/entity/native_tensor.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/entity/types.hpp>
@@ -919,6 +920,9 @@ public:
         inserter.flush();
     }
 
+    bool has_statistics() const;
+    void populate_statistics();
+
 private:
     position_t last_offset() const;
     void update_offsets(size_t nbytes);
@@ -931,6 +935,7 @@ private:
     size_t num_shapes() const;
     void set_sparse_bit_for_row(size_t sparse_location);
     void regenerate_offsets() const;
+
 
     // Permutes the physical column storage based on the given sorted_pos.
     void physical_sort_external(std::vector<uint32_t> &&sorted_pos);

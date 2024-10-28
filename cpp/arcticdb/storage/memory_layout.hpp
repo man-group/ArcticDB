@@ -28,7 +28,7 @@ constexpr size_t encoding_size = 6;
 enum class Codec : uint16_t {
     UNKNOWN = 0,
     ZSTD,
-    PFOR,
+    ADAPTIVE,
     LZ4,
     PASS,
 };
@@ -61,8 +61,8 @@ struct PassthroughCodec {
     uint16_t padding_ = 0;
 };
 
-struct PforCodec {
-    static constexpr Codec type_ = Codec::PFOR;
+struct AdaptiveCodec {
+    static constexpr Codec type_ = Codec::ADAPTIVE;
 
     uint32_t unused_ = 0;
     uint16_t padding_ = 0;

@@ -184,6 +184,14 @@ set(arcticdb_srcs
         codec/magic_words.hpp
         codec/passthrough.hpp
         codec/protobuf_mappings.hpp
+        codec/frequency_encoding.hpp
+        codec/constant_encoding.hpp
+        codec/calculate_stats.hpp
+        codec/fastlanes_common.hpp
+        codec/delta.hpp codec/ffor.hpp
+        codec/bitpack_fused.hpp
+        codec/adaptive_encoder.hpp
+        codec/adaptive_encoder.hpp
         codec/slice_data_sink.hpp
         codec/segment_header.hpp
         codec/segment_identifier.hpp
@@ -526,7 +534,10 @@ set(arcticdb_srcs
         version/version_core.cpp
         version/version_store_api.cpp
         version/version_utils.cpp
-        version/version_map_batch_methods.cpp)
+        version/symbol_list.cpp
+        version/version_map_batch_methods.cpp
+        storage/s3/ec2_utils.cpp
+        util/buffer_holder.cpp)
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
@@ -668,7 +679,7 @@ set (arcticdb_core_libraries
         arcticdb_proto
         xxHash::xxHash
         prometheus-cpp::push
-        prometheus-cpp::pull
+        #prometheus-cpp::pull
         unordered_dense::unordered_dense
         ${standard_libraries}
         fmt::fmt
@@ -893,6 +904,7 @@ else()
             ${CMAKE_COMMAND} -E copy $<TARGET_FILE:arcticdb_ext> ${CMAKE_INSTALL_PREFIX})
 endif()
 
+
 ## Unit Tests ##
 if(${TEST})
     unset(Python_USE_STATIC_LIBS)
@@ -909,6 +921,12 @@ if(${TEST})
             codec/test/test_encode_field_collection.cpp
             codec/test/test_segment_header.cpp
             codec/test/test_encoded_field.cpp
+            codec/test/test_frequency_encoding.cpp
+            codec/test/test_constant_encoding.cpp
+            codec/test/encoding_test_common.hpp
+            codec/test/test_stats.cpp
+            codec/test/test_ffor.cpp
+            codec/test/test_fused_bitpack.cpp
             column_store/test/ingestion_stress_test.cpp
             column_store/test/test_column.cpp
             column_store/test/test_column_data_random_accessor.cpp
@@ -983,12 +1001,13 @@ if(${TEST})
             version/test/test_version_map_batch.cpp
             version/test/test_version_store.cpp
             version/test/version_map_model.hpp
-            python/python_handlers.cpp)
+            python/python_handlers.cpp
+            storage/test/common.hpp
+            version/test/test_sort_index.cpp)
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 
     add_executable(test_unit_arcticdb ${unit_test_srcs})
-
     install(TARGETS test_unit_arcticdb RUNTIME
                 DESTINATION .
                 PERMISSIONS ${EXECUTABLE_PERMS}
@@ -1074,6 +1093,7 @@ if(${TEST})
             )
 
     set(rapidcheck_srcs
+            codec/test/rapidcheck_frequency_encoding.cpp
             column_store/test/rapidcheck_column_store.cpp
             column_store/test/rapidcheck_chunked_buffer.cpp
             column_store/test/rapidcheck_column.cpp

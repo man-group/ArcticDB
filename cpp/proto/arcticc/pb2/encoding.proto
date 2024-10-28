@@ -90,12 +90,16 @@ message VariantCodec {
         bool mark = 1;
     }
 
+    message Adaptive {
+        bool mark = 1;
+    }
+
     oneof codec {
         Zstd zstd = 16;
-        TurboPfor tp4 = 17;
         Lz4 lz4 = 18;
         Passthrough passthrough = 19;
     }
+    reserved 17;
 }
 
 message Block {
