@@ -151,7 +151,9 @@ public:
             offsets_.ensure((count_ + 1) * sizeof(uint64_t));
             write_offset(count_, pos);
             ++count_;
-            pos += encoded_field_bytes(field);
+            const auto field_bytes = encoded_field_bytes(field);
+            ARCTICDB_TRACE(log::codec(), "Encoded field bytes: {}");
+            pos += field_bytes;
         }
         util::check(pos == data_.bytes(), "Size mismatch in regenerate_offsets, {} != {}", pos, data_.bytes());
     }

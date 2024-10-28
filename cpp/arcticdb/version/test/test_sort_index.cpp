@@ -11,7 +11,8 @@
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/pipeline_common.hpp>
 #include <arcticdb/pipeline/index_writer.hpp>
-#include "storage/test/in_memory_store.hpp"
+#include <arcticdb/storage/test/in_memory_store.hpp>
+#include <arcticdb/util/test/generators.hpp>
 
 TEST(SortIndex, Basic) {
     using namespace arcticdb;
@@ -47,7 +48,7 @@ TEST(SortIndex, Basic) {
     VersionMap version_map;
     version_map.write_version(mock_store, index_key, std::nullopt);
 
-    auto engine = version_store::LocalVersionedEngine::_test_init_from_store(mock_store, util::SysClock{});
+    auto engine = get_test_engine<version_store::PythonVersionStore>();
     auto versioned_item = engine.sort_index(stream_id, false, false);
 
     auto seg = mock_store->read(versioned_item.key_, storage::ReadKeyOpts{}).get();
@@ -90,7 +91,7 @@ TEST(SortIndex, Nonzero) {
     VersionMap version_map;
     version_map.write_version(mock_store, index_key, std::nullopt);
 
-    auto engine = version_store::LocalVersionedEngine::_test_init_from_store(mock_store, util::SysClock{});
+    auto engine = get_test_engine<version_store::PythonVersionStore>();
     auto versioned_item = engine.sort_index(stream_id, false, false);
 
     auto seg = mock_store->read(versioned_item.key_, storage::ReadKeyOpts{}).get();
