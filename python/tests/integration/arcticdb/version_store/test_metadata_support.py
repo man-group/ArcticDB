@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import numpy as np
 import pandas as pd
 from pandas import DataFrame, Timestamp
@@ -219,7 +220,9 @@ def test_rv_contains_metadata_batch_append(lmdb_version_store_v1):
     assert all(vit.metadata is None for vit in vits)
     metadata_0 = {"some": "metadata_0"}
     metadata_2 = {"some": "metadata_2"}
-    vits = lib.batch_append([sym_0, sym_1, sym_2], 3 * [timestamp_indexed_df()], [metadata_0, None, metadata_2], write_if_missing=True)
+    vits = lib.batch_append(
+        [sym_0, sym_1, sym_2], 3 * [timestamp_indexed_df()], [metadata_0, None, metadata_2], write_if_missing=True
+    )
     assert vits[0].metadata == metadata_0
     assert vits[1].metadata is None
     assert vits[2].metadata == metadata_2

@@ -15,6 +15,7 @@ class CurrentVersion:
 
     So we use `with CurrentVersion` construct to ensure we delete all our outstanding references to the library.
     """
+
     def __init__(self, uri, lib_name):
         self.uri = uri
         self.lib_name = lib_name
@@ -28,6 +29,7 @@ class CurrentVersion:
         del self.lib
         del self.ac
 
+
 def test_compat_write_read(old_venv_and_arctic_uri, lib_name):
     old_venv, arctic_uri = old_venv_and_arctic_uri
     sym = "sym"
@@ -39,7 +41,9 @@ def test_compat_write_read(old_venv_and_arctic_uri, lib_name):
     old_lib = old_ac.create_library(lib_name)
 
     # Write to library using current version
-    set_config_int("VersionMap.ReloadInterval", 0) # We disable the cache to be able to read the data written from old_venv
+    set_config_int(
+        "VersionMap.ReloadInterval", 0
+    )  # We disable the cache to be able to read the data written from old_venv
     with CurrentVersion(arctic_uri, lib_name) as curr:
         curr.lib.write(sym, df)
 
@@ -53,6 +57,7 @@ def test_compat_write_read(old_venv_and_arctic_uri, lib_name):
     with CurrentVersion(arctic_uri, lib_name) as curr:
         read_df = curr.lib.read(sym).data
         assert_frame_equal(read_df, df_2)
+
 
 def test_modify_old_library_option_with_current(old_venv_and_arctic_uri, lib_name):
     old_venv, arctic_uri = old_venv_and_arctic_uri
@@ -77,7 +82,7 @@ def test_modify_old_library_option_with_current(old_venv_and_arctic_uri, lib_nam
         curr.ac.modify_library_option(curr.lib, ModifiableEnterpriseLibraryOption.BACKGROUND_DELETION, True)
 
         cfg_after_modification = LibraryTool.read_unaltered_lib_cfg(curr.ac._library_manager, lib_name)
-        assert(cfg_after_modification == expected_cfg)
+        assert cfg_after_modification == expected_cfg
 
     # We should still be able to read and write with the old version
     old_lib.assert_read(sym, df)
@@ -87,4 +92,4 @@ def test_modify_old_library_option_with_current(old_venv_and_arctic_uri, lib_nam
     # We verify that cfg is still what we expect after operations from old_venv
     with CurrentVersion(arctic_uri, lib_name) as curr:
         cfg_after_use = LibraryTool.read_unaltered_lib_cfg(curr.ac._library_manager, lib_name)
-        assert(cfg_after_use == expected_cfg)
+        assert cfg_after_use == expected_cfg

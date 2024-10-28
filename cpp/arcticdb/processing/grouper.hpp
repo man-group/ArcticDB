@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -13,10 +14,10 @@
 namespace arcticdb::grouping {
 
 class HashingGroupers {
-public:
+  public:
     template<typename TDT>
     class Grouper {
-    public:
+      public:
         using GrouperDescriptor = TDT;
         using DataTypeTag = typename GrouperDescriptor::DataTypeTag;
         using RawType = typename DataTypeTag::raw_type;
@@ -31,7 +32,7 @@ public:
                 } else {
                     return std::nullopt;
                 }
-            } else if constexpr(dt == DataType::FLOAT32 || dt == DataType::FLOAT64) {
+            } else if constexpr (dt == DataType::FLOAT32 || dt == DataType::FLOAT64) {
                 if (ARCTICDB_UNLIKELY(std::isnan(key))) {
                     return std::nullopt;
                 } else {
@@ -46,20 +47,15 @@ public:
 
 class ModuloBucketizer {
     uint8_t mod_;
-public:
-    ModuloBucketizer(uint8_t mod) :
-        mod_(mod) {
-    }
+
+  public:
+    ModuloBucketizer(uint8_t mod) : mod_(mod) {}
 
     ARCTICDB_MOVE_COPY_DEFAULT(ModuloBucketizer)
 
-    uint8_t bucket(uint8_t group) const {
-        return group % mod_;
-    }
+    uint8_t bucket(uint8_t group) const { return group % mod_; }
 
-    uint8_t num_buckets() const {
-        return mod_;
-    }
+    uint8_t num_buckets() const { return mod_; }
 };
 
-}
+} // namespace arcticdb::grouping

@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -49,9 +50,7 @@ def small_max_delta():
 
 
 def make_read_only(lib):
-    return NativeVersionStore.create_store_from_lib_config(
-        lib.lib_cfg(), Defaults.ENV, OpenMode.READ
-    )
+    return NativeVersionStore.create_store_from_lib_config(lib.lib_cfg(), Defaults.ENV, OpenMode.READ)
 
 
 def test_with_symbol_list(basic_store):
@@ -129,9 +128,7 @@ def test_symbol_list_regex(basic_store):
 
 @pytest.mark.parametrize("compact_first", [True, False])
 # Using S3 because LMDB does not allow OpenMode to be changed
-def test_symbol_list_read_only_compaction_needed(
-    small_max_delta, object_version_store, compact_first
-):
+def test_symbol_list_read_only_compaction_needed(small_max_delta, object_version_store, compact_first):
     lib_write = object_version_store
 
     lib_read = make_read_only(lib_write)
@@ -231,9 +228,7 @@ def test_only_latest_compaction_key_is_used(basic_store):
 
 
 @pytest.mark.parametrize("write_another", [False, True])
-def test_turning_on_symbol_list_after_a_symbol_written(
-    object_store_factory, write_another
-):
+def test_turning_on_symbol_list_after_a_symbol_written(object_store_factory, write_another):
     # The if(!maybe_last_compaction) case
     lib: NativeVersionStore = object_store_factory(symbol_list=False)
 
@@ -247,9 +242,7 @@ def test_turning_on_symbol_list_after_a_symbol_written(
 
         sl_keys = lt.find_keys(KeyType.SYMBOL_LIST)
         assert sl_keys
-        assert not any(
-            k.id == CompactionId for k in sl_keys
-        ), "Should not have any compaction yet"
+        assert not any(k.id == CompactionId for k in sl_keys), "Should not have any compaction yet"
 
     ro = make_read_only(lib)
     # For some reason, symbol_list=True is not always picked up on the first call, so forcing it:
@@ -292,9 +285,7 @@ def random_strings(count, max_length):
     result = []
     for _ in range(count):
         length = random.randrange(max_length) + 2
-        result.append(
-            "".join(random.choice(string.ascii_letters) for _ in range(length))
-        )
+        result.append("".join(random.choice(string.ascii_letters) for _ in range(length)))
     return result
 
 
@@ -364,17 +355,12 @@ def test_symbol_list_parallel_stress_with_delete(
         frozen_symbols = random_strings(num_symbols, symbol_length)
         symbols = [frozen_symbols for _ in range(num_workers)]
     else:
-        symbols = [
-            random_strings(num_symbols, symbol_length) for _ in range(num_workers)
-        ]
+        symbols = [random_strings(num_symbols, symbol_length) for _ in range(num_workers)]
 
     with Pool(num_workers) as p:
         p.map(
             _perform_actions,
-            [
-                (lib, syms, idx, num_cycles, list_freq, delete_freq, update_freq)
-                for idx, syms in enumerate(symbols)
-            ],
+            [(lib, syms, idx, num_cycles, list_freq, delete_freq, update_freq) for idx, syms in enumerate(symbols)],
         )
 
     p.close()
@@ -389,7 +375,9 @@ def test_symbol_list_parallel_stress_with_delete(
         assert not lib.version_store.indexes_sorted(sym)
 
 
-def test_symbol_list_exception_and_printout(mock_s3_store_with_mock_storage_exception):  # moto is choosen just because it's easy to give storage error
+def test_symbol_list_exception_and_printout(
+    mock_s3_store_with_mock_storage_exception,
+):  # moto is choosen just because it's easy to give storage error
     with pytest.raises(InternalException, match="E_S3_RETRYABLE Retry-able error"):
         mock_s3_store_with_mock_storage_exception.list_symbols()
 
@@ -465,4 +453,3 @@ def test_force_compact_symbol_list_lock_held_past_ttl(lmdb_version_store_v1):
     lock = lib.version_store.get_storage_lock(CompactionLockName)
     lock.lock()
     assert lib.compact_symbol_list() == 0
-

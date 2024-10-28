@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -32,7 +33,7 @@ class S3Storage final : public Storage {
   public:
     using Config = arcticdb::proto::s3_storage::Config;
 
-    S3Storage(const LibraryPath &lib, OpenMode mode, const Config &conf);
+    S3Storage(const LibraryPath& lib, OpenMode mode, const Config& conf);
 
     /**
      * Full object path in S3 bucket.
@@ -50,17 +51,14 @@ class S3Storage final : public Storage {
 
     void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) final;
 
-    bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string &prefix) final;
+    bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix)
+        final;
 
     bool do_key_exists(const VariantKey& key) final;
 
-    bool do_supports_prefix_matching() const final {
-        return true;
-    }
+    bool do_supports_prefix_matching() const final { return true; }
 
-    bool do_fast_delete() final {
-        return false;
-    }
+    bool do_fast_delete() final { return false; }
 
     std::string do_key_path(const VariantKey& key) const final { return get_key_path(key); };
 
@@ -75,7 +73,7 @@ class S3Storage final : public Storage {
     std::string region_;
 };
 
-inline arcticdb::proto::storage::VariantStorage pack_config(const std::string &bucket_name) {
+inline arcticdb::proto::storage::VariantStorage pack_config(const std::string& bucket_name) {
     arcticdb::proto::storage::VariantStorage output;
     arcticdb::proto::s3_storage::Config cfg;
     cfg.set_bucket_name(bucket_name);
@@ -84,11 +82,11 @@ inline arcticdb::proto::storage::VariantStorage pack_config(const std::string &b
 }
 
 inline arcticdb::proto::storage::VariantStorage pack_config(
-        const std::string &bucket_name,
-        const std::string &credential_name,
-        const std::string &credential_key,
-        const std::string &endpoint
-        ) {
+    const std::string& bucket_name,
+    const std::string& credential_name,
+    const std::string& credential_key,
+    const std::string& endpoint
+) {
     arcticdb::proto::storage::VariantStorage output;
     arcticdb::proto::s3_storage::Config cfg;
     cfg.set_bucket_name(bucket_name);
@@ -99,9 +97,11 @@ inline arcticdb::proto::storage::VariantStorage pack_config(
     return output;
 }
 
-inline std::optional<Aws::Client::ClientConfiguration> parse_proxy_env_var(Aws::Http::Scheme endpoint_scheme,
-                                                                           const char* opt_env_var) {
-    if(opt_env_var == nullptr) {
+inline std::optional<Aws::Client::ClientConfiguration> parse_proxy_env_var(
+    Aws::Http::Scheme endpoint_scheme,
+    const char* opt_env_var
+) {
+    if (opt_env_var == nullptr) {
         return std::nullopt;
     }
     auto env_var = std::string_view(opt_env_var);
@@ -115,7 +115,7 @@ inline std::optional<Aws::Client::ClientConfiguration> parse_proxy_env_var(Aws::
     }
     // env_var format: [username[:password]@]hostname[:port]
     auto creds_end_index = env_var.rfind('@');
-    if (creds_end_index != std::string::npos){
+    if (creds_end_index != std::string::npos) {
         auto auth = env_var.substr(0, creds_end_index);
 
         auto user_pass_divider_idx = auth.find(':');
@@ -130,7 +130,7 @@ inline std::optional<Aws::Client::ClientConfiguration> parse_proxy_env_var(Aws::
     // env_var format: hostname[:port]
     auto port_start_idx = env_var.rfind(':');
     uint64_t port;
-    if (port_start_idx == std::string::npos){
+    if (port_start_idx == std::string::npos) {
         port = endpoint_scheme == Aws::Http::Scheme::HTTPS ? 443 : 80;
     } else {
         try {
@@ -140,7 +140,9 @@ inline std::optional<Aws::Client::ClientConfiguration> parse_proxy_env_var(Aws::
             return std::nullopt;
         }
         if (port > std::numeric_limits<uint16_t>::max()) {
-            log::storage().warn("Failed to parse '{}': port {} > {}", env_var, port, std::numeric_limits<uint16_t>::max());
+            log::storage().warn(
+                "Failed to parse '{}': port {} > {}", env_var, port, std::numeric_limits<uint16_t>::max()
+            );
             return std::nullopt;
         }
         env_var = env_var.substr(0, port_start_idx);
@@ -159,12 +161,11 @@ inline std::optional<Aws::Utils::Array<Aws::String>> parse_no_proxy_env_var(cons
     auto env_var = std::stringstream(opt_env_var);
     std::string host;
     std::vector<std::string> hosts;
-    while(std::getline(env_var, host, ','))
-    {
+    while (std::getline(env_var, host, ',')) {
         hosts.push_back(host);
     }
     Aws::Utils::Array<Aws::String> non_proxy_hosts{hosts.size()};
-    for (const auto& tmp: folly::enumerate(hosts)) {
+    for (const auto& tmp : folly::enumerate(hosts)) {
         non_proxy_hosts[tmp.index] = *tmp;
     }
     return non_proxy_hosts;
@@ -182,7 +183,7 @@ inline std::optional<Aws::Utils::Array<Aws::String>> parse_no_proxy_env_var(cons
  * */
 inline Aws::Client::ClientConfiguration get_proxy_config(Aws::Http::Scheme endpoint_scheme) {
     // The ordering in the vectors matter, lowercase should be checked in preference of upper case.
-    const std::unordered_map<Aws::Http::Scheme, std::vector<std::string>> scheme_env_var_names {
+    const std::unordered_map<Aws::Http::Scheme, std::vector<std::string>> scheme_env_var_names{
         {Aws::Http::Scheme::HTTP, {"http_proxy", "HTTP_PROXY"}},
         {Aws::Http::Scheme::HTTPS, {"https_proxy", "HTTPS_PROXY"}}
     };
@@ -195,7 +196,7 @@ inline Aws::Client::ClientConfiguration get_proxy_config(Aws::Http::Scheme endpo
         }
     }
     if (client_configuration.has_value()) {
-        for (const auto& env_var_name: {"no_proxy", "NO_PROXY"}) {
+        for (const auto& env_var_name : {"no_proxy", "NO_PROXY"}) {
             char* opt_env_var = std::getenv(env_var_name);
             auto non_proxy_hosts = parse_no_proxy_env_var(opt_env_var);
             if (non_proxy_hosts) {
@@ -232,16 +233,17 @@ auto get_s3_config(const ConfigType& conf) {
         client_configuration.caFile = conf.ca_cert_path();
         client_configuration.caPath = conf.ca_cert_dir();
     }
-    client_configuration.maxConnections = conf.max_connections() == 0 ?
-            ConfigsMap::instance()->get_int("VersionStore.NumIOThreads", 16) :
-            conf.max_connections();
+    client_configuration.maxConnections = conf.max_connections() == 0
+                                              ? ConfigsMap::instance()->get_int("VersionStore.NumIOThreads", 16)
+                                              : conf.max_connections();
 
-
-    client_configuration.connectTimeoutMs = ConfigsMap::instance()->get_int("S3Storage.ConnectTimeoutMs",
-                                                conf.connect_timeout() == 0 ? 30000 : conf.connect_timeout());
+    client_configuration.connectTimeoutMs = ConfigsMap::instance()->get_int(
+        "S3Storage.ConnectTimeoutMs", conf.connect_timeout() == 0 ? 30000 : conf.connect_timeout()
+    );
     client_configuration.httpRequestTimeoutMs = ConfigsMap::instance()->get_int("S3Storage.HttpRequestTimeoutMs", 0);
-    client_configuration.requestTimeoutMs = ConfigsMap::instance()->get_int("S3Storage.RequestTimeoutMs",
-                                                                            conf.request_timeout() == 0 ? 200000 : conf.request_timeout());
+    client_configuration.requestTimeoutMs = ConfigsMap::instance()->get_int(
+        "S3Storage.RequestTimeoutMs", conf.request_timeout() == 0 ? 200000 : conf.request_timeout()
+    );
     client_configuration.lowSpeedLimit = ConfigsMap::instance()->get_int("S3Storage.LowSpeedLimit", 1);
 
     const bool use_win_inet = ConfigsMap::instance()->get_int("S3Storage.UseWinINet", 0);
@@ -257,4 +259,4 @@ Aws::Auth::AWSCredentials get_aws_credentials(const ConfigType& conf) {
     return Aws::Auth::AWSCredentials(conf.credential_name().c_str(), conf.credential_key().c_str());
 }
 
-} //namespace arcticdb::storage::s3
+} // namespace arcticdb::storage::s3

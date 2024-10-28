@@ -513,7 +513,9 @@ def generic_filter_test_dynamic(lib, symbol, arctic_query, queried_slices):
     arrays_equal = True
     for queried_slice in queried_slices:
         for col_name in queried_slice.columns:
-            if not np.array_equal(queried_slice[col_name], received[col_name].iloc[start_row: start_row + len(queried_slice)]):
+            if not np.array_equal(
+                queried_slice[col_name], received[col_name].iloc[start_row : start_row + len(queried_slice)]
+            ):
                 arrays_equal = False
         start_row += len(queried_slice)
     if not arrays_equal:

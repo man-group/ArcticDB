@@ -15,13 +15,18 @@ from packaging.version import Version
 
 logger = logging.getLogger("Compatibility tests")
 
+
 class ErrorInVenv(Exception):
     """To signal errors occuring from within the venv"""
 
-def is_running_on_windows():
-    return os.name == 'nt'
 
-def run_shell_command(command : List[Union[str, os.PathLike]], cwd : Optional[os.PathLike] = None) -> subprocess.CompletedProcess:
+def is_running_on_windows():
+    return os.name == "nt"
+
+
+def run_shell_command(
+    command: List[Union[str, os.PathLike]], cwd: Optional[os.PathLike] = None
+) -> subprocess.CompletedProcess:
     logger.info(f"Executing command: {command}")
     # shell=True is required for running the correct python executable on Windows
     result = subprocess.run(command, cwd=cwd, capture_output=True, shell=is_running_on_windows())
@@ -29,11 +34,13 @@ def run_shell_command(command : List[Union[str, os.PathLike]], cwd : Optional[os
         logger.warning(f"Command failed, stdout: {str(result.stdout)}, stderr: {str(result.stderr)}")
     return result
 
+
 def get_os_specific_venv_python() -> str:
     if is_running_on_windows():
         return os.path.join("Scripts", "python.exe")
     else:
         return os.path.join("bin", "python")
+
 
 class Venv:
     def __init__(self, venv_path, requirements_file, version):
@@ -56,11 +63,11 @@ class Venv:
     def tear_down_venv(self):
         shutil.rmtree(self.path)
 
-    def execute_python_file(self, python_path : Union[str, os.PathLike]) -> subprocess.CompletedProcess:
+    def execute_python_file(self, python_path: Union[str, os.PathLike]) -> subprocess.CompletedProcess:
         command = [get_os_specific_venv_python(), python_path]
         return run_shell_command(command, self.path)
 
-    def create_arctic(self, uri : str) -> 'VenvArctic':
+    def create_arctic(self, uri: str) -> "VenvArctic":
         return VenvArctic(self, uri)
 
 
@@ -70,7 +77,7 @@ class VenvArctic:
         self.uri = uri
         self.init_storage()
 
-    def execute(self, python_commands : List[str], dfs : Optional[Dict] = None) -> None:
+    def execute(self, python_commands: List[str], dfs: Optional[Dict] = None) -> None:
         """
         Prepares the dataframe parquet files and the python script to be run from within the venv.
         """
@@ -84,12 +91,16 @@ class VenvArctic:
                 df_value.to_parquet(parquet_file)
                 df_load_commands.append(f"{df_name} = pd.read_parquet({repr(parquet_file)})")
 
-            python_commands = [
-                "from arcticdb import Arctic",
-                "import pandas as pd",
-                "import numpy as np",
-                f"ac = Arctic({repr(self.uri)})"
-            ] + df_load_commands + python_commands
+            python_commands = (
+                [
+                    "from arcticdb import Arctic",
+                    "import pandas as pd",
+                    "import numpy as np",
+                    f"ac = Arctic({repr(self.uri)})",
+                ]
+                + df_load_commands
+                + python_commands
+            )
 
             python_path = os.path.join(dir, "run.py")
             with open(python_path, "w") as python_file:
@@ -102,10 +113,10 @@ class VenvArctic:
     def init_storage(self):
         self.execute([])
 
-    def create_library(self, lib_name : str) -> 'VenvLib':
+    def create_library(self, lib_name: str) -> "VenvLib":
         return VenvLib(self, lib_name, create_if_not_exists=True)
 
-    def get_library(self, lib_name : str) -> 'VenvLib':
+    def get_library(self, lib_name: str) -> "VenvLib":
         return VenvLib(self, lib_name, create_if_not_exists=False)
 
 
@@ -119,20 +130,17 @@ class VenvLib:
     def create_lib(self):
         self.arctic.execute([f"ac.create_library('{self.lib_name}')"])
 
-    def execute(self, python_commands : List[str], dfs : Optional[Dict] = None) -> None:
+    def execute(self, python_commands: List[str], dfs: Optional[Dict] = None) -> None:
         python_commands = [
             f"lib = ac.get_library('{self.lib_name}')",
         ] + python_commands
         return self.arctic.execute(python_commands, dfs)
 
-    def write(self, sym : str, df) -> None:
+    def write(self, sym: str, df) -> None:
         return self.execute([f"lib.write('{sym}', df)"], {"df": df})
 
-    def assert_read(self, sym : str, df) -> None:
-        python_commands = [
-            f"read_df = lib.read('{sym}').data",
-            "pd.testing.assert_frame_equal(read_df, expected_df)"
-        ]
+    def assert_read(self, sym: str, df) -> None:
+        python_commands = [f"read_df = lib.read('{sym}').data", "pd.testing.assert_frame_equal(read_df, expected_df)"]
         return self.execute(python_commands, {"expected_df": df})
 
 
@@ -141,7 +149,7 @@ class VenvLib:
     params=[
         pytest.param("1.6.2", marks=VENV_COMPAT_TESTS_MARK),
         pytest.param("4.5.0", marks=VENV_COMPAT_TESTS_MARK),
-    ] # TODO: Extend this list with other old versions
+    ],  # TODO: Extend this list with other old versions
 )
 def old_venv(request):
     version = request.param
@@ -178,7 +186,9 @@ def arctic_uri(request):
 def old_venv_and_arctic_uri(old_venv, arctic_uri):
     # TODO: Replace 4.5.0 with 4.5.1 when it is released to re-enable both mongo and lmdb.
     if Version(old_venv.version) <= Version("4.5.0") and arctic_uri.startswith("mongo"):
-        pytest.skip("Mongo storage backend has a desctruction bug present until 4.5.0, which can cause flaky segfaults.")
+        pytest.skip(
+            "Mongo storage backend has a desctruction bug present until 4.5.0, which can cause flaky segfaults."
+        )
     if Version(old_venv.version) <= Version("4.5.0") and arctic_uri.startswith("lmdb"):
         pytest.skip("LMDB storage backend has a desctruction bug present until 4.5.0, which can cause flaky segfaults.")
 

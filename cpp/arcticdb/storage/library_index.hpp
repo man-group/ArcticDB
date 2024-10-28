@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -18,8 +19,9 @@ namespace arcticdb::storage {
 
 class LibraryIndex {
   public:
-    LibraryIndex(const EnvironmentName &environment_name, const std::shared_ptr<ConfigResolver> &resolver) :
-        library_cache_(), config_cache_(environment_name, resolver) {
+    LibraryIndex(const EnvironmentName& environment_name, const std::shared_ptr<ConfigResolver>& resolver)
+        : library_cache_(),
+          config_cache_(environment_name, resolver) {
         ARCTICDB_DEBUG(log::storage(), "Creating library index with resolver type {}", resolver->resolver_type());
     }
 
@@ -32,7 +34,8 @@ class LibraryIndex {
         return library_cache_.find(path) != library_cache_.end() || config_cache_.library_exists(path);
     }
 
-    std::shared_ptr<Library> add_library_config(const LibraryPath &path, const arcticdb::proto::storage::LibraryConfig &lib_cfg, const UserAuth &) {
+    std::shared_ptr<Library>
+    add_library_config(const LibraryPath& path, const arcticdb::proto::storage::LibraryConfig& lib_cfg, const UserAuth&) {
         std::lock_guard<std::mutex> lock{mutex_};
         if (has_library(path))
             throw std::runtime_error(fmt::format("Can't create library {} when it already exists", path));
@@ -41,7 +44,7 @@ class LibraryIndex {
         return get_library_internal(path, OpenMode::WRITE);
     }
 
-    std::shared_ptr<Library> get_library(const LibraryPath &path, OpenMode mode, const UserAuth &) {
+    std::shared_ptr<Library> get_library(const LibraryPath& path, OpenMode mode, const UserAuth&) {
         std::lock_guard<std::mutex> lock{mutex_};
         auto res = library_cache_.find(path);
         if (res != library_cache_.end())
@@ -55,14 +58,14 @@ class LibraryIndex {
     }
 
   private:
-    std::shared_ptr<Library> get_library_internal(const LibraryPath &path, OpenMode mode) {
+    std::shared_ptr<Library> get_library_internal(const LibraryPath& path, OpenMode mode) {
         auto desc = config_cache_.get_descriptor(path);
         LibraryDescriptor::VariantStoreConfig cfg;
-        if(desc.has_value()){
+        if (desc.has_value()) {
             cfg = desc->config_;
         }
         auto lib = std::make_shared<Library>(path, config_cache_.create_storages(path, mode), cfg);
-        if (auto &&[it, inserted] = library_cache_.try_emplace(path, lib); !inserted) {
+        if (auto&& [it, inserted] = library_cache_.try_emplace(path, lib); !inserted) {
             lib = it->second;
         }
         return lib;
@@ -73,4 +76,4 @@ class LibraryIndex {
     std::mutex mutex_;
 };
 
-}
+} // namespace arcticdb::storage

@@ -3,7 +3,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -53,12 +54,8 @@ class ChunkedBufferImpl {
         size_t type_size_;
         bool end_ = false;
 
-        Iterator(
-            ChunkedBufferImpl* parent,
-            size_t type_size) :
-                parent_(parent),
-                type_size_(type_size) {
-            if(parent_->empty()) {
+        Iterator(ChunkedBufferImpl* parent, size_t type_size) : parent_(parent), type_size_(type_size) {
+            if (parent_->empty()) {
                 end_ = true;
                 return;
             }
@@ -66,19 +63,15 @@ class ChunkedBufferImpl {
             block_ = parent_->blocks_[0];
         }
 
-        [[nodiscard]] bool finished() const {
-            return end_;
-        }
+        [[nodiscard]] bool finished() const { return end_; }
 
-        [[nodiscard]] uint8_t* value() const {
-            return &(*block_)[pos_];
-        }
+        [[nodiscard]] uint8_t* value() const { return &(*block_)[pos_]; }
 
         void next() {
             pos_ += type_size_;
 
-            if(pos_ >= block_->bytes()) {
-                if(block_num_ + 1 >= parent_->blocks_.size()) {
+            if (pos_ >= block_->bytes()) {
+                if (block_num_ + 1 >= parent_->blocks_.size()) {
                     end_ = true;
                     return;
                 }
@@ -91,12 +84,10 @@ class ChunkedBufferImpl {
 
     ChunkedBufferImpl() = default;
 
-    explicit ChunkedBufferImpl(size_t size) {
-        reserve(size);
-    }
+    explicit ChunkedBufferImpl(size_t size) { reserve(size); }
 
     ChunkedBufferImpl(size_t size, entity::AllocationType allocation_type) {
-        if(allocation_type == entity::AllocationType::DETACHABLE) {
+        if (allocation_type == entity::AllocationType::DETACHABLE) {
             add_detachable_block(size);
         } else {
             reserve(size);
@@ -104,7 +95,7 @@ class ChunkedBufferImpl {
     }
 
     void reserve(size_t size) {
-        if(size > 0) {
+        if (size > 0) {
             if (size > DefaultBlockSize) {
                 handle_transition_to_irregular();
             }
@@ -112,7 +103,7 @@ class ChunkedBufferImpl {
         }
     }
 
-    ChunkedBufferImpl &operator=(ChunkedBufferImpl &&other) noexcept {
+    ChunkedBufferImpl& operator=(ChunkedBufferImpl&& other) noexcept {
         using std::swap;
         swap(*this, other);
         other.clear();
@@ -124,7 +115,7 @@ class ChunkedBufferImpl {
         output.bytes_ = bytes_;
         output.regular_sized_until_ = regular_sized_until_;
 
-        for(auto block : blocks_) {
+        for (auto block : blocks_) {
             output.add_block(block->capacity_, block->offset_);
             (*output.blocks_.rbegin())->copy_from(block->data(), block->bytes(), 0);
             (*output.blocks_.rbegin())->resize(block->bytes());
@@ -134,13 +125,9 @@ class ChunkedBufferImpl {
         return output;
     }
 
-    Iterator iterator(size_t size = 1) {
-        return Iterator(this, size);
-    }
+    Iterator iterator(size_t size = 1) { return Iterator(this, size); }
 
-    ChunkedBufferImpl(ChunkedBufferImpl&& other) noexcept {
-        *this = std::move(other);
-    }
+    ChunkedBufferImpl(ChunkedBufferImpl&& other) noexcept { *this = std::move(other); }
 
     static auto presized(size_t size, entity::AllocationType allocation_type) {
         ChunkedBufferImpl output(size, allocation_type);
@@ -151,7 +138,7 @@ class ChunkedBufferImpl {
     static auto presized_in_blocks(size_t size) {
         ChunkedBufferImpl output;
         auto remaining = size;
-        while(remaining != 0) {
+        while (remaining != 0) {
             const auto alloc = std::min(remaining, DefaultBlockSize);
             output.ensure(output.bytes() + alloc);
             remaining -= alloc;
@@ -161,11 +148,9 @@ class ChunkedBufferImpl {
 
     ARCTICDB_NO_COPY(ChunkedBufferImpl)
 
-    ~ChunkedBufferImpl() {
-        clear();
-    }
+    ~ChunkedBufferImpl() { clear(); }
 
-    friend void swap(ChunkedBufferImpl &left, ChunkedBufferImpl &right) noexcept {
+    friend void swap(ChunkedBufferImpl& left, ChunkedBufferImpl& right) noexcept {
         using std::swap;
         swap(left.bytes_, right.bytes_);
         swap(left.regular_sized_until_, right.regular_sized_until_);
@@ -173,7 +158,7 @@ class ChunkedBufferImpl {
         swap(left.block_offsets_, right.block_offsets_);
     }
 
-    [[nodiscard]] const auto &blocks() const { return blocks_; }
+    [[nodiscard]] const auto& blocks() const { return blocks_; }
 
     // If the extra space required does not fit in the current last block, and is <=DefaultBlockSize, then if aligned is
     // set to true, the current last block will be padded with zeros, and a new default sized block added. This allows
@@ -183,7 +168,7 @@ class ChunkedBufferImpl {
         if (requested_size != 0 && requested_size <= bytes_)
             return last_block().end();
 
-        if(requested_size == 0)
+        if (requested_size == 0)
             return nullptr;
 
         uint8_t* res;
@@ -210,8 +195,10 @@ class ChunkedBufferImpl {
             } else {
                 // Already irregular sized
                 size_t last_off = last_offset();
-                util::check(regular_sized_until_ == *block_offsets_.begin(),
-                            "Gap between regular sized blocks and irregular block offsets");
+                util::check(
+                    regular_sized_until_ == *block_offsets_.begin(),
+                    "Gap between regular sized blocks and irregular block offsets"
+                );
                 if (last_block().empty()) {
                     free_last_block();
                 } else {
@@ -234,10 +221,9 @@ class ChunkedBufferImpl {
     // unlocks ColumnDataIterator usage (more performant than repeated calls to Column::push_back). Once the column is
     // created and the number of elements known, use this to drop unneeded blocks.
     void trim(size_t requested_size) {
-        internal::check<ErrorCode::E_ASSERTION_FAILURE>(requested_size <= bytes_,
-                                                        "Cannot trim ChunkedBuffer with {} bytes to {} bytes",
-                                                        bytes_,
-                                                        requested_size);
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            requested_size <= bytes_, "Cannot trim ChunkedBuffer with {} bytes to {} bytes", bytes_, requested_size
+        );
         while (bytes_ - last_block().bytes() >= requested_size) {
             bytes_ -= last_block().bytes();
             free_last_block();
@@ -251,24 +237,25 @@ class ChunkedBufferImpl {
         size_t offset_;
         size_t block_index_;
 
-        BlockAndOffset(MemBlock* block, size_t offset, size_t block_index) :
-            block_(block),
-            offset_(offset),
-            block_index_(block_index){
-        }
+        BlockAndOffset(MemBlock* block, size_t offset, size_t block_index)
+            : block_(block),
+              offset_(offset),
+              block_index_(block_index) {}
     };
 
     [[nodiscard]] BlockAndOffset block_and_offset(size_t pos_bytes) const {
-        if(blocks_.size() == 1u)
+        if (blocks_.size() == 1u)
             return BlockAndOffset(blocks_[0], pos_bytes, 0);
 
         if (is_regular_sized() || pos_bytes < regular_sized_until_) {
             size_t block_offset = pos_bytes / DefaultBlockSize;
-            util::check(block_offset < blocks_.size(),
-                        "Request for out of range block {}, only have {} blocks",
-                        block_offset,
-                        blocks_.size());
-            MemBlock *block = blocks_[block_offset];
+            util::check(
+                block_offset < blocks_.size(),
+                "Request for out of range block {}, only have {} blocks",
+                block_offset,
+                blocks_.size()
+            );
+            MemBlock* block = blocks_[block_offset];
             block->magic_.check();
             return BlockAndOffset(block, pos_bytes % DefaultBlockSize, block_offset);
         }
@@ -284,47 +271,45 @@ class ChunkedBufferImpl {
         return BlockAndOffset(block, pos_bytes - *block_offset, first_irregular_block + irregular_block_num);
     }
 
-    uint8_t &operator[](size_t pos_bytes) {
+    uint8_t& operator[](size_t pos_bytes) {
         auto [block, pos, _] = block_and_offset(pos_bytes);
         return (*block)[pos];
     }
 
-    const uint8_t &operator[](size_t pos_bytes) const {
-        return const_cast<ChunkedBufferImpl *>(this)->operator[](pos_bytes);
+    const uint8_t& operator[](size_t pos_bytes) const {
+        return const_cast<ChunkedBufferImpl*>(this)->operator[](pos_bytes);
     }
 
     template<typename T>
-    T &cast(size_t pos) {
-        return reinterpret_cast<T &>(operator[](pos * sizeof(T)));
+    T& cast(size_t pos) {
+        return reinterpret_cast<T&>(operator[](pos * sizeof(T)));
     }
 
-    [[nodiscard]] size_t num_blocks() const {
-        return blocks_.size();
-    }
+    [[nodiscard]] size_t num_blocks() const { return blocks_.size(); }
 
     [[nodiscard]] const uint8_t* data() const {
         if (blocks_.empty()) {
             return nullptr;
         }
-        internal::check<ErrorCode::E_ASSERTION_FAILURE>(blocks_.size() == 1,
-                                                        "Taking a pointer to the beginning of a non-contiguous buffer");
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            blocks_.size() == 1, "Taking a pointer to the beginning of a non-contiguous buffer"
+        );
         blocks_[0]->magic_.check();
         return blocks_[0]->data();
     }
 
-    [[nodiscard]] uint8_t* data() {
-        return const_cast<uint8_t*>(const_cast<const ChunkedBufferImpl*>(this)->data());
-    }
+    [[nodiscard]] uint8_t* data() { return const_cast<uint8_t*>(const_cast<const ChunkedBufferImpl*>(this)->data()); }
 
     void check_bytes(size_t pos_bytes, size_t required_bytes) const {
         if (pos_bytes + required_bytes > bytes()) {
-            std::string err = fmt::format("Cursor overflow in chunked_buffer ptr_cast, cannot read {} bytes from a buffer of size {} with cursor "
-                                          "at {}, as it would require {} bytes. ",
-                                          required_bytes,
-                                          bytes(),
-                                          pos_bytes,
-                                          pos_bytes + required_bytes
-                                          );
+            std::string err = fmt::format(
+                "Cursor overflow in chunked_buffer ptr_cast, cannot read {} bytes from a buffer of size {} with cursor "
+                "at {}, as it would require {} bytes. ",
+                required_bytes,
+                bytes(),
+                pos_bytes,
+                pos_bytes + required_bytes
+            );
             ARCTICDB_DEBUG(log::storage(), err);
             throw std::invalid_argument(err);
         }
@@ -332,13 +317,13 @@ class ChunkedBufferImpl {
 
     void memset_buffer(size_t offset, size_t bytes, char value) {
         auto [block, pos, block_index] = block_and_offset(offset);
-        while(bytes > 0) {
+        while (bytes > 0) {
             const auto size_to_write = block->bytes() - pos;
             memset(block->data() + pos, size_to_write, value);
             bytes -= size_to_write;
-            if(bytes > 0) {
+            if (bytes > 0) {
                 ++block_index;
-                if(block_index == blocks_.size())
+                if (block_index == blocks_.size())
                     return;
 
                 block = blocks_[block_index];
@@ -348,13 +333,13 @@ class ChunkedBufferImpl {
     }
 
     template<typename T>
-    T *ptr_cast(size_t pos_bytes, size_t required_bytes) {
+    T* ptr_cast(size_t pos_bytes, size_t required_bytes) {
         check_bytes(pos_bytes, required_bytes);
-        return reinterpret_cast<T *>(&operator[](pos_bytes));
+        return reinterpret_cast<T*>(&operator[](pos_bytes));
     }
 
     template<typename T>
-    const T *ptr_cast(size_t pos_bytes, size_t required_bytes) const {
+    const T* ptr_cast(size_t pos_bytes, size_t required_bytes) const {
         return (const_cast<ChunkedBufferImpl*>(this)->ptr_cast<T>(pos_bytes, required_bytes));
     }
 
@@ -367,7 +352,7 @@ class ChunkedBufferImpl {
 
     void add_block(size_t capacity, size_t offset) {
         auto [ptr, ts] = Allocator::aligned_alloc(BlockType::alloc_size(capacity));
-        new(ptr) MemBlock(capacity, offset, ts);
+        new (ptr) MemBlock(capacity, offset, ts);
         blocks_.emplace_back(reinterpret_cast<BlockType*>(ptr));
     }
 
@@ -376,7 +361,7 @@ class ChunkedBufferImpl {
             free_last_block();
 
         auto [ptr, ts] = Allocator::aligned_alloc(sizeof(MemBlock));
-        new(ptr) MemBlock(data, size, offset, ts, false);
+        new (ptr) MemBlock(data, size, offset, ts, false);
         blocks_.emplace_back(reinterpret_cast<BlockType*>(ptr));
         bytes_ += size;
     }
@@ -387,7 +372,7 @@ class ChunkedBufferImpl {
 
         auto [ptr, ts] = Allocator::aligned_alloc(sizeof(MemBlock));
         auto* data = reinterpret_cast<uint8_t*>(malloc(size));
-        new(ptr) MemBlock(data, size, 0UL, ts, true);
+        new (ptr) MemBlock(data, size, 0UL, ts, true);
         blocks_.emplace_back(reinterpret_cast<BlockType*>(ptr));
         bytes_ += size;
     }
@@ -396,7 +381,7 @@ class ChunkedBufferImpl {
 
     void clear() {
         bytes_ = 0;
-        for(auto block : blocks_)
+        for (auto block : blocks_)
             free_block(block);
 
         blocks_.clear();
@@ -409,18 +394,14 @@ class ChunkedBufferImpl {
 
     friend struct BufferView;
 
-    BlockType &last_block() {
+    BlockType& last_block() {
         util::check(!blocks_.empty(), "There should never be no blocks");
         return **blocks_.rbegin();
     }
 
-    [[nodiscard]] size_t free_space() const {
-        return no_blocks() ? 0 : last_block().free_space();
-    }
+    [[nodiscard]] size_t free_space() const { return no_blocks() ? 0 : last_block().free_space(); }
 
-    [[nodiscard]] size_t last_offset() const {
-        return block_offsets_.empty() ? 0 : *block_offsets_.rbegin();
-    }
+    [[nodiscard]] size_t last_offset() const { return block_offsets_.empty() ? 0 : *block_offsets_.rbegin(); }
 
     inline void assert_size(size_t bytes) const {
         util::check(bytes <= bytes_, "Expected allocation size {} smaller than actual allocation {}", bytes, bytes_);
@@ -430,7 +411,7 @@ class ChunkedBufferImpl {
     void free_block(BlockType* block) const {
         ARCTICDB_TRACE(log::storage(), "Freeing block at address {:x}", uintptr_t(block));
         block->magic_.check();
-        Allocator::free(std::make_pair(reinterpret_cast<uint8_t *>(block), block->timestamp_));
+        Allocator::free(std::make_pair(reinterpret_cast<uint8_t*>(block), block->timestamp_));
     }
 
     void free_last_block() {
@@ -461,7 +442,7 @@ class ChunkedBufferImpl {
         }
     }
 
-    [[nodiscard]] const BlockType &last_block() const {
+    [[nodiscard]] const BlockType& last_block() const {
         util::check(!blocks_.empty(), "There should never be no blocks");
         return **blocks_.rbegin();
     }
@@ -471,7 +452,7 @@ class ChunkedBufferImpl {
     size_t bytes_ = 0;
     size_t regular_sized_until_ = 0;
 #ifndef DEBUG_BUILD
-    boost::container::small_vector<BlockType *, 1> blocks_;
+    boost::container::small_vector<BlockType*, 1> blocks_;
     boost::container::small_vector<size_t, 1> block_offsets_;
 #else
     std::vector<BlockType*> blocks_;
@@ -483,16 +464,16 @@ constexpr size_t PageSize = 4096;
 constexpr size_t BufferSize = MemBlock::raw_size(PageSize);
 using ChunkedBuffer = ChunkedBufferImpl<BufferSize>;
 
-template <size_t BlockSize>
+template<size_t BlockSize>
 std::vector<ChunkedBufferImpl<BlockSize>> split(const ChunkedBufferImpl<BlockSize>& input, size_t nbytes);
 
-template <size_t BlockSize>
+template<size_t BlockSize>
 ChunkedBufferImpl<BlockSize> truncate(const ChunkedBufferImpl<BlockSize>& input, size_t start_byte, size_t end_byte);
 
 inline HashedValue hash_buffer(const ChunkedBuffer& buffer, HashAccum& accum) {
-    for(const auto& block : buffer.blocks()) {
+    for (const auto& block : buffer.blocks()) {
         accum(block->data(), block->bytes());
     }
     return accum.digest();
 }
-}
+} // namespace arcticdb

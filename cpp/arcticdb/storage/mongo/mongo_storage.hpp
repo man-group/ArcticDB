@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -24,7 +25,7 @@ class MongoStorage final : public Storage {
   public:
     using Config = arcticdb::proto::mongo_storage::Config;
 
-    MongoStorage(const LibraryPath &lib, OpenMode mode, const Config &conf);
+    MongoStorage(const LibraryPath& lib, OpenMode mode, const Config& conf);
 
     std::string name() const final;
 
@@ -39,13 +40,12 @@ class MongoStorage final : public Storage {
 
     bool do_key_exists(const VariantKey& key) final;
 
-    bool do_supports_prefix_matching() const final {
-        return false;
-    }
+    bool do_supports_prefix_matching() const final { return false; }
 
     inline bool do_fast_delete() final;
 
-    bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string &prefix) final;
+    bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix)
+        final;
 
     std::string do_key_path(const VariantKey&) const final { return {}; };
 
@@ -64,4 +64,4 @@ inline arcticdb::proto::storage::VariantStorage pack_config(InstanceUri uri) {
     return output;
 }
 
-}
+} // namespace arcticdb::storage::mongo

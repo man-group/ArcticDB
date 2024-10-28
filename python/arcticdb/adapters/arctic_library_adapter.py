@@ -18,8 +18,9 @@ from arcticdb_ext.storage import Library, StorageOverride, CONFIG_LIBRARY_NAME
 from arcticdb.encoding_version import EncodingVersion
 
 
-def set_library_options(lib_desc: "LibraryConfig", options: LibraryOptions,
-                        enterprise_library_options: EnterpriseLibraryOptions):
+def set_library_options(
+    lib_desc: "LibraryConfig", options: LibraryOptions, enterprise_library_options: EnterpriseLibraryOptions
+):
     write_options = lib_desc.version.write_options
 
     write_options.dynamic_strings = True
@@ -65,8 +66,9 @@ class ArcticLibraryAdapter(ABC):
     def config_library(self) -> Library:
         raise NotImplementedError
 
-    def get_library_config(self, name: str, library_options: LibraryOptions,
-                           enterprise_library_options: EnterpriseLibraryOptions):
+    def get_library_config(
+        self, name: str, library_options: LibraryOptions, enterprise_library_options: EnterpriseLibraryOptions
+    ):
         env_cfg = EnvironmentConfigsMap()
 
         self.add_library_to_env(env_cfg, name)
@@ -74,8 +76,9 @@ class ArcticLibraryAdapter(ABC):
         library_options.encoding_version = (
             library_options.encoding_version if library_options.encoding_version is not None else self._encoding_version
         )
-        set_library_options(env_cfg.env_by_id[_DEFAULT_ENV].lib_by_path[name], library_options,
-                            enterprise_library_options)
+        set_library_options(
+            env_cfg.env_by_id[_DEFAULT_ENV].lib_by_path[name], library_options, enterprise_library_options
+        )
 
         return NativeVersionStore.create_library_config(
             env_cfg, _DEFAULT_ENV, name, encoding_version=library_options.encoding_version

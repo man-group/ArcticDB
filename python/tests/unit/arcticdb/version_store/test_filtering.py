@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 from datetime import datetime
 from itertools import cycle
 import math
@@ -279,15 +280,24 @@ def test_filter_datetime_timezone_aware(lmdb_version_store_v1):
 def test_df_query_wrong_type(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
 
-    df1 = pd.DataFrame({"col1": [1, 2, 3], "col2": [2, 3, 4], "col3": [4, 5, 6],
-                        "col_str": ["1", "2", "3"], "col_bool": [True, False, True]})
+    df1 = pd.DataFrame(
+        {
+            "col1": [1, 2, 3],
+            "col2": [2, 3, 4],
+            "col3": [4, 5, 6],
+            "col_str": ["1", "2", "3"],
+            "col_bool": [True, False, True],
+        }
+    )
     sym = "symbol"
     lib.write(sym, df1)
 
     str_vals = np.array(["2", "3", "4", "5"])
     q = QueryBuilder()
     q = q[q["col1"].isin(str_vals)]
-    with pytest.raises(UserInputException, match="Cannot check membership 'IS IN' of col1.*type=INT.*in set of.*type=STRING"):
+    with pytest.raises(
+        UserInputException, match="Cannot check membership 'IS IN' of col1.*type=INT.*in set of.*type=STRING"
+    ):
         lib.read(sym, query_builder=q)
 
     q = QueryBuilder()
@@ -297,12 +307,17 @@ def test_df_query_wrong_type(lmdb_version_store_v1):
 
     q = QueryBuilder()
     q = q[q["col1"] / q["col_str"] == 3]
-    with pytest.raises(UserInputException, match="Non-numeric column provided to binary operation: col1.*type=INT.*/.*col_str.*type=STRING"):
+    with pytest.raises(
+        UserInputException,
+        match="Non-numeric column provided to binary operation: col1.*type=INT.*/.*col_str.*type=STRING",
+    ):
         lib.read(sym, query_builder=q)
 
     q = QueryBuilder()
     q = q[q["col1"] + "1" == 3]
-    with pytest.raises(UserInputException, match="Non-numeric type provided to binary operation: col1.*type=INT.*\+ \"1\".*type=STRING"):
+    with pytest.raises(
+        UserInputException, match='Non-numeric type provided to binary operation: col1.*type=INT.*\+ "1".*type=STRING'
+    ):
         lib.read(sym, query_builder=q)
 
     q = QueryBuilder()
@@ -312,13 +327,16 @@ def test_df_query_wrong_type(lmdb_version_store_v1):
 
     q = QueryBuilder()
     q = q[q["col1"] - 1 >= "1"]
-    with pytest.raises(UserInputException, match="Invalid comparison.*col1 - 1.*type=INT.*>=.*\"1\".*type=STRING"):
+    with pytest.raises(UserInputException, match='Invalid comparison.*col1 - 1.*type=INT.*>=.*"1".*type=STRING'):
         lib.read(sym, query_builder=q)
 
     q = QueryBuilder()
     q = q[1 + q["col1"] * q["col2"] - q["col3"] == q["col_str"]]
     # check that ((1 + (col1 * col2)) + col3) is generated as a column name and shown in the error message
-    with pytest.raises(UserInputException, match="Invalid comparison.*\(1 \+ \(col1 \* col2\)\) - col3.*type=INT.*==.*col_str .*type=STRING"):
+    with pytest.raises(
+        UserInputException,
+        match="Invalid comparison.*\(1 \+ \(col1 \* col2\)\) - col3.*type=INT.*==.*col_str .*type=STRING",
+    ):
         lib.read(sym, query_builder=q)
 
 
@@ -854,7 +872,9 @@ def test_filter_null_filtering(lmdb_version_store_v1, method, dtype):
         data = np.arange(num_rows, dtype=dtype)
         null_values = cycle([np.nan])
     elif dtype is np.datetime64:
-        data = np.arange(np.datetime64("2024-01-01"), np.datetime64(f"2024-01-0{num_rows + 1}"), np.timedelta64(1, "D")).astype("datetime64[ns]")
+        data = np.arange(
+            np.datetime64("2024-01-01"), np.datetime64(f"2024-01-0{num_rows + 1}"), np.timedelta64(1, "D")
+        ).astype("datetime64[ns]")
         null_values = cycle([np.datetime64("nat")])
     else:  # str
         data = [str(idx) for idx in range(num_rows)]
@@ -1084,7 +1104,18 @@ def test_float32_binary_comparison(lmdb_version_store_v1):
     )
     lib.write(symbol, df)
     for op in ["<", "<=", ">", ">=", "==", "!="]:
-        for other_col in ["uint8", "uint16", "uint32", "uint64", "int8", "int16", "int32", "int64", "float32", "float64"]:
+        for other_col in [
+            "uint8",
+            "uint16",
+            "uint32",
+            "uint64",
+            "int8",
+            "int16",
+            "int32",
+            "int64",
+            "float32",
+            "float64",
+        ]:
             q = QueryBuilder()
             qb_lhs = q["float32"]
             qb_rhs = q[other_col]
@@ -1251,9 +1282,11 @@ def test_filter_null_filtering_dynamic(lmdb_version_store_dynamic_schema_v1, met
         data = np.arange(num_rows, dtype=dtype)
         null_values = cycle([np.nan])
     elif dtype is np.datetime64:
-        data = np.arange(np.datetime64("2024-01-01"), np.datetime64(f"2024-01-0{num_rows + 1}"), np.timedelta64(1, "D")).astype("datetime64[ns]")
+        data = np.arange(
+            np.datetime64("2024-01-01"), np.datetime64(f"2024-01-0{num_rows + 1}"), np.timedelta64(1, "D")
+        ).astype("datetime64[ns]")
         null_values = cycle([np.datetime64("nat")])
-    else: # str
+    else:  # str
         data = [str(idx) for idx in range(num_rows)]
         null_values = cycle([None, np.nan])
     for idx in range(num_rows):

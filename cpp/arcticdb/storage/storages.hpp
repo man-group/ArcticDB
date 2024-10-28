@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -37,9 +38,7 @@ class Storages {
 
     using StorageVector = std::vector<std::shared_ptr<Storage>>;
 
-    Storages(StorageVector&& storages, OpenMode mode) :
-        storages_(std::move(storages)), mode_(mode) {
-    }
+    Storages(StorageVector&& storages, OpenMode mode) : storages_(std::move(storages)), mode_(mode) {}
 
     void write(Composite<KeySegmentPair>&& kvs) {
         ARCTICDB_SAMPLE(StoragesWrite, 0)
@@ -51,38 +50,28 @@ class Storages {
         primary().update(std::move(kvs), opts);
     }
 
-    bool supports_prefix_matching() const {
-        return primary().supports_prefix_matching();
-    }
+    bool supports_prefix_matching() const { return primary().supports_prefix_matching(); }
 
-    bool fast_delete() {
-        return primary().fast_delete();
-    }
+    bool fast_delete() { return primary().fast_delete(); }
 
-    void cleanup() {
-        primary().cleanup();
-    }
+    void cleanup() { primary().cleanup(); }
 
-    bool key_exists(const VariantKey& key) {
-        return primary().key_exists(key);
-    }
+    bool key_exists(const VariantKey& key) { return primary().key_exists(key); }
 
-    bool is_path_valid(const std::string_view path) const {
-        return primary().is_path_valid(path);
-    }
+    bool is_path_valid(const std::string_view path) const { return primary().is_path_valid(path); }
 
-    auto read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts, bool primary_only=true) {
+    auto read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts, bool primary_only = true) {
         ARCTICDB_RUNTIME_SAMPLE(StoragesRead, 0)
-        if(primary_only)
+        if (primary_only)
             return primary().read(std::move(ks), visitor, opts);
 
-        if(auto rg = ks.as_range(); !std::all_of(std::begin(rg), std::end(rg), [] (const auto& vk) {
-            return variant_key_type(vk) == KeyType::TABLE_DATA;
-        })) {
+        if (auto rg = ks.as_range(); !std::all_of(std::begin(rg), std::end(rg), [](const auto& vk) {
+                return variant_key_type(vk) == KeyType::TABLE_DATA;
+            })) {
             return primary().read(std::move(ks), visitor, opts);
         }
 
-        for(const auto& storage : storages_) {
+        for (const auto& storage : storages_) {
             try {
                 return storage->read(std::move(ks), visitor, opts);
             } catch (typename storage::KeyNotFoundException& ex) {
@@ -93,45 +82,48 @@ class Storages {
         throw storage::KeyNotFoundException(std::move(ks));
     }
 
-    void iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix=std::string{}, bool primary_only=true) {
+    void iterate_type(
+        KeyType key_type,
+        const IterateTypeVisitor& visitor,
+        const std::string& prefix = std::string{},
+        bool primary_only = true
+    ) {
         ARCTICDB_SAMPLE(StoragesIterateType, RMTSF_Aggregate)
-        if(primary_only) {
+        if (primary_only) {
             primary().iterate_type(key_type, visitor, prefix);
         } else {
-            for(const auto& storage : storages_) {
+            for (const auto& storage : storages_) {
                 storage->iterate_type(key_type, visitor, prefix);
             }
         }
     }
 
-    bool scan_for_matching_key(KeyType key_type, const IterateTypePredicate& predicate, bool primary_only=true) {
+    bool scan_for_matching_key(KeyType key_type, const IterateTypePredicate& predicate, bool primary_only = true) {
         if (primary_only) {
             return primary().scan_for_matching_key(key_type, predicate);
         }
 
-        return std::any_of(std::begin(storages_), std::end(storages_),
-            [key_type, &predicate](const auto& storage) {
-               return storage->scan_for_matching_key(key_type, predicate);
-            });
+        return std::any_of(std::begin(storages_), std::end(storages_), [key_type, &predicate](const auto& storage) {
+            return storage->scan_for_matching_key(key_type, predicate);
+        });
     }
 
     /** Calls Storage::do_key_path on the primary storage. Remember to check the open mode. */
-    std::string key_path(const VariantKey& key) const {
-        return primary().key_path(key);
-    }
+    std::string key_path(const VariantKey& key) const { return primary().key_path(key); }
 
-    void remove(Composite<VariantKey>&& ks, storage::RemoveOpts opts) {
-        primary().remove(std::move(ks), opts);
-    }
+    void remove(Composite<VariantKey>&& ks, storage::RemoveOpts opts) { primary().remove(std::move(ks), opts); }
 
     [[nodiscard]] OpenMode open_mode() const { return mode_; }
 
     void move_storage(KeyType key_type, timestamp horizon, size_t storage_index = 0) {
-        util::check(storage_index + 1 < storages_.size(), "Cannot move from storage {} to storage {} as only {} storages defined");
+        util::check(
+            storage_index + 1 < storages_.size(),
+            "Cannot move from storage {} to storage {} as only {} storages defined"
+        );
         auto& source = *storages_[storage_index];
         auto& target = *storages_[storage_index + 1];
 
-        const IterateTypeVisitor& visitor = [&source, &target, horizon] (VariantKey &&vk) {
+        const IterateTypeVisitor& visitor = [&source, &target, horizon](VariantKey&& vk) {
             auto key = std::forward<VariantKey>(vk);
             if (to_atom(key).creation_ts() < horizon) {
                 try {
@@ -147,7 +139,7 @@ class Storages {
         };
 
         source.iterate_type(key_type, visitor);
-   }
+    }
     std::optional<std::shared_ptr<SingleFileStorage>> get_single_file_storage() const {
         if (dynamic_cast<SingleFileStorage*>(storages_[0].get()) != nullptr) {
             return std::dynamic_pointer_cast<SingleFileStorage>(storages_[0]);
@@ -155,9 +147,7 @@ class Storages {
             return std::nullopt;
         }
     }
-    std::string name() const {
-        return primary().name();
-    }
+    std::string name() const { return primary().name(); }
 
   private:
     Storage& primary() {
@@ -174,19 +164,27 @@ class Storages {
     OpenMode mode_;
 };
 
-inline std::shared_ptr<Storages> create_storages(const LibraryPath& library_path, OpenMode mode, const arcticdb::proto::storage::VariantStorage &storage_config) {
+inline std::shared_ptr<Storages> create_storages(
+    const LibraryPath& library_path,
+    OpenMode mode,
+    const arcticdb::proto::storage::VariantStorage& storage_config
+) {
     Storages::StorageVector storages;
     storages.push_back(create_storage(library_path, mode, storage_config));
 
     return std::make_shared<Storages>(std::move(storages), mode);
 }
 
-inline std::shared_ptr<Storages> create_storages(const LibraryPath& library_path, OpenMode mode, const std::vector<arcticdb::proto::storage::VariantStorage> &storage_configs) {
+inline std::shared_ptr<Storages> create_storages(
+    const LibraryPath& library_path,
+    OpenMode mode,
+    const std::vector<arcticdb::proto::storage::VariantStorage>& storage_configs
+) {
     Storages::StorageVector storages;
-    for (const auto& storage_config: storage_configs) {
+    for (const auto& storage_config : storage_configs) {
         storages.push_back(create_storage(library_path, mode, storage_config));
     }
     return std::make_shared<Storages>(std::move(storages), mode);
 }
 
-} //namespace arcticdb::storage
+} // namespace arcticdb::storage

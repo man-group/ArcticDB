@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -32,36 +33,22 @@ struct ReadOptions {
         force_strings_to_object_ = force_strings_to_object;
     }
 
-    void set_incompletes(const std::optional<bool>& incompletes) {
-        incompletes_ = incompletes;
-    }
+    void set_incompletes(const std::optional<bool>& incompletes) { incompletes_ = incompletes; }
 
-    bool get_incompletes() const {
-        return opt_false(incompletes_);
-    }
+    bool get_incompletes() const { return opt_false(incompletes_); }
 
-    void set_dynamic_schema(const std::optional<bool>& dynamic_schema) {
-        dynamic_schema_ = dynamic_schema;
-    }
+    void set_dynamic_schema(const std::optional<bool>& dynamic_schema) { dynamic_schema_ = dynamic_schema; }
 
-    void set_allow_sparse(const std::optional<bool>& allow_sparse) {
-        allow_sparse_ = allow_sparse;
-    }
+    void set_allow_sparse(const std::optional<bool>& allow_sparse) { allow_sparse_ = allow_sparse; }
 
-    void set_set_tz(const std::optional<bool>& set_tz) {
-        set_tz_ = set_tz;
-    }
+    void set_set_tz(const std::optional<bool>& set_tz) { set_tz_ = set_tz; }
 
     void set_optimise_string_memory(const std::optional<bool>& optimise_string_memory) {
         optimise_string_memory_ = optimise_string_memory;
     }
 
-    void set_batch_throw_on_error(bool batch_throw_on_error) {
-        batch_throw_on_error_ = batch_throw_on_error;
-    }
+    void set_batch_throw_on_error(bool batch_throw_on_error) { batch_throw_on_error_ = batch_throw_on_error; }
 
-    void set_output_type(OutputType output_type) {
-        output_type_ = output_type;
-    }
+    void set_output_type(OutputType output_type) { output_type_ = output_type; }
 };
-} //namespace arcticdb
+} // namespace arcticdb

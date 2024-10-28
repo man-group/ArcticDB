@@ -13,23 +13,35 @@ enum NormalizationOperation : uint8_t {
 
 inline std::string_view normalization_operation_str(NormalizationOperation operation) {
     switch (operation) {
-        case APPEND:
-            return "APPEND";
-        case UPDATE:
-            return "UPDATE";
-        default:
-            util::raise_rte("Unknown operation type {}", static_cast<uint8_t>(operation));
+    case APPEND:
+        return "APPEND";
+    case UPDATE:
+        return "UPDATE";
+    default:
+        util::raise_rte("Unknown operation type {}", static_cast<uint8_t>(operation));
     }
 }
 
-
-struct StreamDescriptorMismatch : ArcticSpecificException<ErrorCode::E_DESCRIPTOR_MISMATCH>  {
-    StreamDescriptorMismatch(const char* preamble, const StreamDescriptor& existing, const StreamDescriptor& new_val, NormalizationOperation operation) :
-    ArcticSpecificException(fmt::format("{}: {} \nexisting={}\n new_val={}", preamble, normalization_operation_str(operation),
-                                        existing.fields(), new_val.fields())) {}
+struct StreamDescriptorMismatch : ArcticSpecificException<ErrorCode::E_DESCRIPTOR_MISMATCH> {
+    StreamDescriptorMismatch(
+        const char* preamble,
+        const StreamDescriptor& existing,
+        const StreamDescriptor& new_val,
+        NormalizationOperation operation
+    )
+        : ArcticSpecificException(fmt::format(
+              "{}: {} \nexisting={}\n new_val={}",
+              preamble,
+              normalization_operation_str(operation),
+              existing.fields(),
+              new_val.fields()
+          )) {}
 };
 
-inline IndexDescriptor::Type get_common_index_type(const IndexDescriptor::Type& left, const IndexDescriptor::Type& right) {
+inline IndexDescriptor::Type get_common_index_type(
+    const IndexDescriptor::Type& left,
+    const IndexDescriptor::Type& right
+) {
     if (left == right) {
         return left;
     }
@@ -53,7 +65,8 @@ inline void check_normalization_index_match(
     if (operation == UPDATE) {
         const bool new_is_timeseries = std::holds_alternative<TimeseriesIndex>(frame.index);
         util::check_rte(
-            (old_idx_kind == IndexDescriptor::Type::TIMESTAMP || old_idx_kind == IndexDescriptor::Type::EMPTY) && new_is_timeseries,
+            (old_idx_kind == IndexDescriptor::Type::TIMESTAMP || old_idx_kind == IndexDescriptor::Type::EMPTY) &&
+                new_is_timeseries,
             "Update will not work as expected with a non-timeseries index"
         );
     } else {
@@ -66,18 +79,20 @@ inline void check_normalization_index_match(
                 index_type_to_str(old_idx_kind)
             );
         } else {
-            // (old_idx_kind == IndexDescriptor::Type::TIMESTAMP && new_idx_kind == IndexDescriptor::Type::ROWCOUNT) is left to preserve
-            // pre-empty index behavior with pandas 2, see test_empty_writes.py::test_append_empty_series. Empty pd.Series
-            // have Rowrange index, but due to: https://github.com/man-group/ArcticDB/blob/bd1776291fe402d8b18af9fea865324ebd7705f1/python/arcticdb/version_store/_normalization.py#L545
-            // it gets converted to DatetimeIndex (all empty indexes except categorical and multiindex are converted to datetime index
-            // in pandas 2 if empty index type is disabled), however we still want to be able to append pd.Series to empty pd.Series.
-            // Having this will not allow appending RowCont indexed pd.DataFrames to DateTime indexed pd.DataFrames because they would
-            // have different field size (the rowcount index is not stored as a field). This logic is bug prone and will become better
-            // after we enable the empty index.
+            // (old_idx_kind == IndexDescriptor::Type::TIMESTAMP && new_idx_kind == IndexDescriptor::Type::ROWCOUNT) is
+            // left to preserve pre-empty index behavior with pandas 2, see
+            // test_empty_writes.py::test_append_empty_series. Empty pd.Series have Rowrange index, but due to:
+            // https://github.com/man-group/ArcticDB/blob/bd1776291fe402d8b18af9fea865324ebd7705f1/python/arcticdb/version_store/_normalization.py#L545
+            // it gets converted to DatetimeIndex (all empty indexes except categorical and multiindex are converted to
+            // datetime index in pandas 2 if empty index type is disabled), however we still want to be able to append
+            // pd.Series to empty pd.Series. Having this will not allow appending RowCont indexed pd.DataFrames to
+            // DateTime indexed pd.DataFrames because they would have different field size (the rowcount index is not
+            // stored as a field). This logic is bug prone and will become better after we enable the empty index.
             const bool input_frame_is_series = frame.norm_meta.has_series();
             normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
                 common_index_type != IndexDescriptor::Type::UNKNOWN ||
-                    (input_frame_is_series && old_idx_kind == IndexDescriptor::Type::TIMESTAMP && new_idx_kind == IndexDescriptor::Type::ROWCOUNT),
+                    (input_frame_is_series && old_idx_kind == IndexDescriptor::Type::TIMESTAMP &&
+                     new_idx_kind == IndexDescriptor::Type::ROWCOUNT),
                 "Cannot append {} index to {} index",
                 index_type_to_str(new_idx_kind),
                 index_type_to_str(old_idx_kind)
@@ -86,12 +101,10 @@ inline void check_normalization_index_match(
     }
 }
 
-inline bool columns_match(
-    const StreamDescriptor& df_in_store_descriptor,
-    const StreamDescriptor& new_df_descriptor
-) {
-    const int index_field_size =
-        df_in_store_descriptor.index().type() == IndexDescriptor::Type::EMPTY ? new_df_descriptor.index().field_count() : 0;
+inline bool columns_match(const StreamDescriptor& df_in_store_descriptor, const StreamDescriptor& new_df_descriptor) {
+    const int index_field_size = df_in_store_descriptor.index().type() == IndexDescriptor::Type::EMPTY
+                                     ? new_df_descriptor.index().field_count()
+                                     : 0;
     // The empty index is compatible with all other index types. Differences in the index fields in this case is
     // allowed. The index fields are always the first in the list.
     if (df_in_store_descriptor.fields().size() + index_field_size != new_df_descriptor.fields().size()) {
@@ -116,10 +129,11 @@ inline bool columns_match(
 inline void fix_descriptor_mismatch_or_throw(
     NormalizationOperation operation,
     bool dynamic_schema,
-    const pipelines::index::IndexSegmentReader &existing_isr,
-    const pipelines::InputTensorFrame &new_frame,
-    bool empty_types) {
-    const auto &old_sd = existing_isr.tsd().as_stream_descriptor();
+    const pipelines::index::IndexSegmentReader& existing_isr,
+    const pipelines::InputTensorFrame& new_frame,
+    bool empty_types
+) {
+    const auto& old_sd = existing_isr.tsd().as_stream_descriptor();
     check_normalization_index_match(operation, old_sd, new_frame, empty_types);
 
     fix_normalization_or_throw(operation == APPEND, existing_isr, new_frame);
@@ -129,7 +143,8 @@ inline void fix_descriptor_mismatch_or_throw(
             "The columns (names and types) in the argument are not identical to that of the existing version",
             old_sd,
             new_frame.desc,
-            operation);
+            operation
+        );
     }
 }
 } // namespace arcticdb

@@ -9,5 +9,4 @@ std::shared_ptr<Column> BufferHolder::get_buffer(const TypeDescriptor& td, entit
     columns_.emplace_back(column);
     return column;
 }
-} //namespace arcticdb
-
+} // namespace arcticdb

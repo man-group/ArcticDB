@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -52,27 +53,20 @@ struct ReadQuery {
 
     ReadQuery() = default;
 
-    explicit ReadQuery(std::vector<std::shared_ptr<Clause>>&& clauses):
-            clauses_(std::move(clauses)) {
-    }
+    explicit ReadQuery(std::vector<std::shared_ptr<Clause>>&& clauses) : clauses_(std::move(clauses)) {}
 
-    void add_clauses(std::vector<std::shared_ptr<Clause>>& clauses) {
-        clauses_ = clauses;
-    }
+    void add_clauses(std::vector<std::shared_ptr<Clause>>& clauses) { clauses_ = clauses; }
 
     /*
      * This is used to set the row filter to a row range not to perform a query of the index key
      * to get the total number of rows in the index, preventing the cost of performing an extra request.
      */
-     void calculate_row_filter(int64_t total_rows) {
+    void calculate_row_filter(int64_t total_rows) {
         if (row_range.has_value()) {
-            size_t start = row_range->start_ >= 0 ?
-                           std::min(row_range->start_, total_rows) :
-                           std::max(total_rows + row_range->start_,
-                                    static_cast<int64_t>(0));
-            size_t end = row_range->end_ >= 0 ?
-                         std::min(row_range->end_, total_rows) :
-                         std::max(total_rows + row_range->end_, static_cast<int64_t>(0));
+            size_t start = row_range->start_ >= 0 ? std::min(row_range->start_, total_rows)
+                                                  : std::max(total_rows + row_range->start_, static_cast<int64_t>(0));
+            size_t end = row_range->end_ >= 0 ? std::min(row_range->end_, total_rows)
+                                              : std::max(total_rows + row_range->end_, static_cast<int64_t>(0));
             row_filter = RowRange(start, end);
         }
     }
@@ -93,18 +87,15 @@ struct SpecificVersionQuery {
 };
 
 using VersionQueryType = std::variant<
-        std::monostate, // Represents "latest"
-        SnapshotVersionQuery,
-        TimestampVersionQuery,
-        SpecificVersionQuery
-        >;
+    std::monostate, // Represents "latest"
+    SnapshotVersionQuery,
+    TimestampVersionQuery,
+    SpecificVersionQuery>;
 
 struct VersionQuery {
     VersionQueryType content_;
 
-    void set_snap_name(const std::string& snap_name) {
-        content_ = SnapshotVersionQuery{snap_name};
-    }
+    void set_snap_name(const std::string& snap_name) { content_ = SnapshotVersionQuery{snap_name}; }
 
     void set_timestamp(timestamp ts, bool iterate_snapshots_if_tombstoned) {
         content_ = TimestampVersionQuery{ts, iterate_snapshots_if_tombstoned};
@@ -116,13 +107,16 @@ struct VersionQuery {
 };
 
 template<typename ContainerType>
-using FilterQuery = folly::Function<std::unique_ptr<util::BitSet>(const ContainerType &, std::unique_ptr<util::BitSet>&&)>;
+using FilterQuery =
+    folly::Function<std::unique_ptr<util::BitSet>(const ContainerType&, std::unique_ptr<util::BitSet>&&)>;
 
 template<typename ContainerType>
 using CombinedQuery = folly::Function<std::unique_ptr<util::BitSet>(const ContainerType&)>;
 
-inline FilterQuery<index::IndexSegmentReader> create_static_col_filter(std::shared_ptr<PipelineContext> pipeline_context) {
-    return [pipeline = std::move(pipeline_context)](const index::IndexSegmentReader &isr, std::unique_ptr<util::BitSet>&& input) mutable {
+inline FilterQuery<index::IndexSegmentReader> create_static_col_filter(std::shared_ptr<PipelineContext> pipeline_context
+) {
+    return [pipeline = std::move(pipeline_context
+            )](const index::IndexSegmentReader& isr, std::unique_ptr<util::BitSet>&& input) mutable {
         auto res = std::make_unique<util::BitSet>(static_cast<util::BitSetSizeType>(isr.size()));
         auto start_col = isr.column(index::Fields::start_col).begin<stream::SliceTypeDescriptorTag>();
         auto end_col = isr.column(index::Fields::end_col).begin<stream::SliceTypeDescriptorTag>();
@@ -137,7 +131,8 @@ inline FilterQuery<index::IndexSegmentReader> create_static_col_filter(std::shar
                 pos = *en;
                 std::advance(start_col, dist);
                 std::advance(end_col, dist);
-                (*res)[*en] = only_index_selected || pipeline->overall_column_bitset_->any_range(*start_col, *end_col - 1);
+                (*res)[*en] =
+                    only_index_selected || pipeline->overall_column_bitset_->any_range(*start_col, *end_col - 1);
                 ++en;
             }
 
@@ -156,9 +151,10 @@ inline FilterQuery<index::IndexSegmentReader> create_static_col_filter(std::shar
 inline FilterQuery<index::IndexSegmentReader> create_dynamic_col_filter(
     std::shared_ptr<PipelineContext> pipeline_context
 ) {
-    return [pipeline = std::move(pipeline_context)](const index::IndexSegmentReader& isr, std::unique_ptr<util::BitSet>&& input) mutable {
-        auto res = std::make_unique<util::BitSet>(static_cast<util::BitSetSizeType>(pipeline->overall_column_bitset_->size())
-        );
+    return [pipeline = std::move(pipeline_context
+            )](const index::IndexSegmentReader& isr, std::unique_ptr<util::BitSet>&& input) mutable {
+        auto res =
+            std::make_unique<util::BitSet>(static_cast<util::BitSetSizeType>(pipeline->overall_column_bitset_->size()));
         util::check(isr.bucketize_dynamic(), "Expected column group in index segment reader dynamic column filter");
         auto hash_bucket = isr.column(index::Fields::hash_bucket).begin<stream::SliceTypeDescriptorTag>();
         auto num_buckets = isr.column(index::Fields::num_buckets).begin<stream::SliceTypeDescriptorTag>();
@@ -184,19 +180,19 @@ inline FilterQuery<index::IndexSegmentReader> create_dynamic_col_filter(
                 pos = *en;
                 std::advance(hash_bucket, dist);
                 std::advance(num_buckets, dist);
-                (*res)[*en] = std::find_if(cols_hashes.begin(), cols_hashes.end(),
-                                        [&num_buckets, &hash_bucket](auto col_hash){
-                                            return (col_hash % *num_buckets) == (*hash_bucket);
-                                        }) != cols_hashes.end();
+                (*res)[*en] =
+                    std::find_if(cols_hashes.begin(), cols_hashes.end(), [&num_buckets, &hash_bucket](auto col_hash) {
+                        return (col_hash % *num_buckets) == (*hash_bucket);
+                    }) != cols_hashes.end();
                 ++en;
             }
 
         } else {
             for (std::size_t r = 0, end = isr.size(); r < end; ++r) {
-                (*res)[r] = std::find_if(cols_hashes.begin(), cols_hashes.end(),
-                                      [&num_buckets, &hash_bucket](auto col_hash){
-                                          return (col_hash % *num_buckets) == (*hash_bucket);
-                                      }) != cols_hashes.end();
+                (*res)[r] =
+                    std::find_if(cols_hashes.begin(), cols_hashes.end(), [&num_buckets, &hash_bucket](auto col_hash) {
+                        return (col_hash % *num_buckets) == (*hash_bucket);
+                    }) != cols_hashes.end();
                 ++hash_bucket;
                 ++num_buckets;
             }
@@ -206,25 +202,25 @@ inline FilterQuery<index::IndexSegmentReader> create_dynamic_col_filter(
     };
 }
 
-inline std::size_t start_row(const index::IndexSegmentReader &isr, std::size_t row) {
+inline std::size_t start_row(const index::IndexSegmentReader& isr, std::size_t row) {
     return isr.column(index::Fields::start_row).scalar_at<std::size_t>(row).value();
 }
 
-inline std::size_t start_row(const std::vector<SliceAndKey> &sk, std::size_t row) {
+inline std::size_t start_row(const std::vector<SliceAndKey>& sk, std::size_t row) {
     return sk[row].slice_.row_range.first;
 }
 
-inline std::size_t end_row(const index::IndexSegmentReader &isr, std::size_t row) {
+inline std::size_t end_row(const index::IndexSegmentReader& isr, std::size_t row) {
     return isr.column(index::Fields::end_row).scalar_at<std::size_t>(row).value();
 }
 
-inline std::size_t end_row(const std::vector<SliceAndKey> &sk, std::size_t row) {
+inline std::size_t end_row(const std::vector<SliceAndKey>& sk, std::size_t row) {
     return sk[row].slice_.row_range.second;
 }
 
 template<typename ContainerType>
-inline FilterQuery<ContainerType> create_row_filter(RowRange &&range) {
-    return [rg = std::move(range)](const ContainerType &container, std::unique_ptr<util::BitSet>&& input) mutable {
+inline FilterQuery<ContainerType> create_row_filter(RowRange&& range) {
+    return [rg = std::move(range)](const ContainerType& container, std::unique_ptr<util::BitSet>&& input) mutable {
         auto res = std::make_unique<util::BitSet>(static_cast<util::BitSetSizeType>(container.size()));
         for (std::size_t r = 0, end = container.size(); r < end; ++r) {
             bool included = start_row(container, r) < rg.second && end_row(container, r) > rg.first;
@@ -232,7 +228,7 @@ inline FilterQuery<ContainerType> create_row_filter(RowRange &&range) {
             (*res)[r] = included;
         }
 
-        if(input)
+        if (input)
             *res &= *input;
 
         ARCTICDB_DEBUG(log::version(), "Row filter has {} bits set", res->count());
@@ -240,45 +236,53 @@ inline FilterQuery<ContainerType> create_row_filter(RowRange &&range) {
     };
 }
 
-IndexValue start_index(const std::vector<SliceAndKey> &sk, std::size_t row);
+IndexValue start_index(const std::vector<SliceAndKey>& sk, std::size_t row);
 
-IndexValue start_index(const index::IndexSegmentReader &isr, std::size_t row);
+IndexValue start_index(const index::IndexSegmentReader& isr, std::size_t row);
 
-IndexValue end_index(const index::IndexSegmentReader &isr, std::size_t row);
+IndexValue end_index(const index::IndexSegmentReader& isr, std::size_t row);
 
-IndexValue end_index(const std::vector<SliceAndKey> &sk, std::size_t row);
+IndexValue end_index(const std::vector<SliceAndKey>& sk, std::size_t row);
 
-template <typename RawType>
+template<typename RawType>
 bool range_intersects(RawType a_start, RawType a_end, RawType b_start, RawType b_end) {
     return a_start <= b_end && a_end >= b_start;
 }
 
 template<typename ContainerType, typename IdxType>
 std::unique_ptr<util::BitSet> build_bitset_for_index(
-        const ContainerType& container,
-        IndexRange rg,
-        bool dynamic_schema,
-        bool column_groups,
-        std::unique_ptr<util::BitSet>&& input);
+    const ContainerType& container,
+    IndexRange rg,
+    bool dynamic_schema,
+    bool column_groups,
+    std::unique_ptr<util::BitSet>&& input
+);
 
 template<typename ContainerType>
-inline FilterQuery<ContainerType> create_index_filter(const IndexRange &range, bool dynamic_schema, bool column_groups) {
+inline FilterQuery<ContainerType> create_index_filter(
+    const IndexRange& range,
+    bool dynamic_schema,
+    bool column_groups
+) {
     static_assert(std::is_same_v<ContainerType, index::IndexSegmentReader>);
-    return [rg = range, dynamic_schema, column_groups](const ContainerType &container, std::unique_ptr<util::BitSet>&& input) mutable {
+    return [rg = range,
+            dynamic_schema,
+            column_groups](const ContainerType& container, std::unique_ptr<util::BitSet>&& input) mutable {
         auto maybe_index_type = container.seg().template scalar_at<uint8_t>(0u, int(index::Fields::index_type));
         const auto index_type = IndexDescriptor::Type(maybe_index_type.value());
         switch (index_type) {
         case IndexDescriptorImpl::Type::TIMESTAMP: {
-            return build_bitset_for_index<ContainerType, TimeseriesIndex>(container,
-                                                                          rg,
-                                                                          dynamic_schema,
-                                                                          column_groups,
-                                                                          std::move(input));
+            return build_bitset_for_index<ContainerType, TimeseriesIndex>(
+                container, rg, dynamic_schema, column_groups, std::move(input)
+            );
         }
         case IndexDescriptorImpl::Type::STRING: {
-            return build_bitset_for_index<ContainerType, TableIndex>(container, rg, dynamic_schema, column_groups, std::move(input));
+            return build_bitset_for_index<ContainerType, TableIndex>(
+                container, rg, dynamic_schema, column_groups, std::move(input)
+            );
         }
-        default:util::raise_rte("Unknown index type {} in create_index_filter", uint32_t(index_type));
+        default:
+            util::raise_rte("Unknown index type {} in create_index_filter", uint32_t(index_type));
         }
     };
 }
@@ -288,22 +292,23 @@ inline void build_row_read_query_filters(
     const FilterRange& range,
     bool dynamic_schema,
     bool column_groups,
-    std::vector<FilterQuery<ContainerType>>& queries) {
-    util::variant_match(range,
-                        [&](const RowRange &row_range) {
-                            queries.emplace_back(
-                                    create_row_filter<ContainerType>(RowRange{row_range.first, row_range.second}));
-                        },
-                        [&](const IndexRange &index_range) {
-                            if (index_range.specified_) {
-                                queries.emplace_back(create_index_filter<ContainerType>(index_range, dynamic_schema, column_groups));
-                            }
-                        },
-                        [](const auto &) {}
+    std::vector<FilterQuery<ContainerType>>& queries
+) {
+    util::variant_match(
+        range,
+        [&](const RowRange& row_range) {
+            queries.emplace_back(create_row_filter<ContainerType>(RowRange{row_range.first, row_range.second}));
+        },
+        [&](const IndexRange& index_range) {
+            if (index_range.specified_) {
+                queries.emplace_back(create_index_filter<ContainerType>(index_range, dynamic_schema, column_groups));
+            }
+        },
+        [](const auto&) {}
     );
 }
 
-template <typename ContainerType>
+template<typename ContainerType>
 inline void build_col_read_query_filters(
     std::shared_ptr<PipelineContext> pipeline_context,
     bool dynamic_schema,
@@ -311,7 +316,8 @@ inline void build_col_read_query_filters(
     std::vector<FilterQuery<ContainerType>>& queries
 ) {
     if (pipeline_context->only_index_columns_selected() && pipeline_context->overall_column_bitset_->count() > 0) {
-        auto query = [pipeline = std::move(pipeline_context)](const index::IndexSegmentReader& isr, std::unique_ptr<util::BitSet>&&) mutable {
+        auto query = [pipeline = std::move(pipeline_context
+                      )](const index::IndexSegmentReader& isr, std::unique_ptr<util::BitSet>&&) mutable {
             auto res = std::make_unique<util::BitSet>(static_cast<util::BitSetSizeType>(isr.size()));
             auto start_row = isr.column(index::Fields::start_row).begin<stream::SliceTypeDescriptorTag>();
             auto start_row_end = isr.column(index::Fields::start_row).end<stream::SliceTypeDescriptorTag>();
@@ -342,9 +348,10 @@ inline void build_col_read_query_filters(
 template<typename ContainerType>
 inline std::vector<FilterQuery<ContainerType>> build_read_query_filters(
     const std::shared_ptr<PipelineContext>& pipeline_context,
-    const FilterRange &range,
+    const FilterRange& range,
     bool dynamic_schema,
-    bool column_groups) {
+    bool column_groups
+) {
     using namespace arcticdb::pipelines;
     std::vector<FilterQuery<ContainerType>> queries;
 
@@ -360,94 +367,102 @@ struct UpdateQuery {
 
 template<typename ContainerType>
 inline std::vector<FilterQuery<ContainerType>> build_update_query_filters(
-        const FilterRange &range,
-        const stream::Index& index,
-        const IndexRange& index_range,
-        bool dynamic_schema,
-        bool column_groups
+    const FilterRange& range,
+    const stream::Index& index,
+    const IndexRange& index_range,
+    bool dynamic_schema,
+    bool column_groups
 ) {
     // If a range was supplied, construct a query based on the type of the supplied range, otherwise create a query
-    // based on the index type of the incoming update frame. All three types must match, i.e. the index type of the frame to
-    // be appended to, the type of the frame being appended, and the specified range, if supplied.
+    // based on the index type of the incoming update frame. All three types must match, i.e. the index type of the
+    // frame to be appended to, the type of the frame being appended, and the specified range, if supplied.
     std::vector<FilterQuery<ContainerType>> queries;
-    util::variant_match(range,
-                        [&](const RowRange &row_range) {
-                            util::check(std::holds_alternative<stream::RowCountIndex>(index), "Cannot partition by row count when a timeseries-indexed frame was supplied");
-                            queries.emplace_back(
-                                    create_row_filter<ContainerType>(RowRange{row_range.first, row_range.second}));
-                        },
-                        [&](const IndexRange &index_range) {
-                            util::check(std::holds_alternative<stream::TimeseriesIndex>(index), "Cannot partition by time when a rowcount-indexed frame was supplied");
-                            queries.emplace_back(create_index_filter<ContainerType>(IndexRange{index_range}, dynamic_schema, column_groups));
-                        },
-                        [&](const auto &) {
-                            util::variant_match(index,
-                                                [&](const stream::TimeseriesIndex &) {
-                                                    queries.emplace_back(create_index_filter<ContainerType>(IndexRange{index_range}, dynamic_schema, column_groups));
-                                                },
-                                                [&](const stream::RowCountIndex &) {
-                                                    RowRange row_range{std::get<NumericId>(index_range.start_), std::get<NumericIndex>(index_range.end_)};
-                                                    queries.emplace_back(create_row_filter<ContainerType>(std::move(row_range)));
-                                                },
-                                                [&](const auto &) {
-                                                });
-                        });
+    util::variant_match(
+        range,
+        [&](const RowRange& row_range) {
+            util::check(
+                std::holds_alternative<stream::RowCountIndex>(index),
+                "Cannot partition by row count when a timeseries-indexed frame was supplied"
+            );
+            queries.emplace_back(create_row_filter<ContainerType>(RowRange{row_range.first, row_range.second}));
+        },
+        [&](const IndexRange& index_range) {
+            util::check(
+                std::holds_alternative<stream::TimeseriesIndex>(index),
+                "Cannot partition by time when a rowcount-indexed frame was supplied"
+            );
+            queries.emplace_back(
+                create_index_filter<ContainerType>(IndexRange{index_range}, dynamic_schema, column_groups)
+            );
+        },
+        [&](const auto&) {
+            util::variant_match(
+                index,
+                [&](const stream::TimeseriesIndex&) {
+                    queries.emplace_back(
+                        create_index_filter<ContainerType>(IndexRange{index_range}, dynamic_schema, column_groups)
+                    );
+                },
+                [&](const stream::RowCountIndex&) {
+                    RowRange row_range{
+                        std::get<NumericId>(index_range.start_), std::get<NumericIndex>(index_range.end_)
+                    };
+                    queries.emplace_back(create_row_filter<ContainerType>(std::move(row_range)));
+                },
+                [&](const auto&) {}
+            );
+        }
+    );
 
     return queries;
 }
 
-inline FilterRange get_query_index_range(
-        const stream::Index& index,
-        const IndexRange& index_range) {
-        if(std::holds_alternative<stream::TimeseriesIndex>(index))
-               return index_range;
-        else
-               return RowRange{std::get<NumericIndex>(index_range.start_), std::get<NumericIndex>(index_range.end_)};
+inline FilterRange get_query_index_range(const stream::Index& index, const IndexRange& index_range) {
+    if (std::holds_alternative<stream::TimeseriesIndex>(index))
+        return index_range;
+    else
+        return RowRange{std::get<NumericIndex>(index_range.start_), std::get<NumericIndex>(index_range.end_)};
 }
 
-inline std::vector<SliceAndKey> strictly_before(const FilterRange &range, const std::vector<SliceAndKey> &input) {
+inline std::vector<SliceAndKey> strictly_before(const FilterRange& range, const std::vector<SliceAndKey>& input) {
     std::vector<SliceAndKey> output;
-    util::variant_match(range,
-                        [&](const RowRange &row_range) {
-                            std::copy_if(std::begin(input), std::end(input), std::back_inserter(output),
-                                         [&](const auto &sk) {
-                                             return sk.slice_.row_range.second < row_range.first;
-                                         });
-                        },
-                        [&](const IndexRange &index_range) {
-                            std::copy_if(std::begin(input), std::end(input), std::back_inserter(output),
-                                         [&](const auto &sk) {
-                                             return sk.key().index_range().end_ < index_range.start_;
-                                         });
-                        },
-                        [&](const auto &) {
-                            util::raise_rte("Expected specified range ");
-                        });
+    util::variant_match(
+        range,
+        [&](const RowRange& row_range) {
+            std::copy_if(std::begin(input), std::end(input), std::back_inserter(output), [&](const auto& sk) {
+                return sk.slice_.row_range.second < row_range.first;
+            });
+        },
+        [&](const IndexRange& index_range) {
+            std::copy_if(std::begin(input), std::end(input), std::back_inserter(output), [&](const auto& sk) {
+                return sk.key().index_range().end_ < index_range.start_;
+            });
+        },
+        [&](const auto&) { util::raise_rte("Expected specified range "); }
+    );
     return output;
 }
 
-inline std::vector<SliceAndKey> strictly_after(const FilterRange &range, const std::vector<SliceAndKey> &input) {
+inline std::vector<SliceAndKey> strictly_after(const FilterRange& range, const std::vector<SliceAndKey>& input) {
     std::vector<SliceAndKey> output;
-    util::variant_match(range,
-                        [&input, &output](const RowRange &row_range) {
-                            std::copy_if(std::begin(input), std::end(input), std::back_inserter(output),
-                                         [&](const auto &sk) {
-                                             return sk.slice_.row_range.first > row_range.second;
-                                         });
-                        },
-                        [&input, &output](const IndexRange &index_range) {
-                            std::copy_if(std::begin(input), std::end(input), std::back_inserter(output),
-                                         [&](const auto &sk) {
-                                             return sk.key().index_range().start_ > index_range.end_;
-                                         });
-                        },
-                        [](const auto &) {
-                            util::raise_rte("Expected specified range ");
-                        });
+    util::variant_match(
+        range,
+        [&input, &output](const RowRange& row_range) {
+            std::copy_if(std::begin(input), std::end(input), std::back_inserter(output), [&](const auto& sk) {
+                return sk.slice_.row_range.first > row_range.second;
+            });
+        },
+        [&input, &output](const IndexRange& index_range) {
+            std::copy_if(std::begin(input), std::end(input), std::back_inserter(output), [&](const auto& sk) {
+                return sk.key().index_range().start_ > index_range.end_;
+            });
+        },
+        [](const auto&) { util::raise_rte("Expected specified range "); }
+    );
     return output;
 }
 
-} //namespace arcticdb::pipelines
+} // namespace arcticdb::pipelines
 
 namespace fmt {
 using namespace arcticdb::pipelines;
@@ -455,15 +470,19 @@ using namespace arcticdb::pipelines;
 template<>
 struct formatter<VersionQuery> {
     template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
+    constexpr auto parse(ParseContext& ctx) {
+        return ctx.begin();
+    }
 
     template<typename FormatContext>
     auto format(const VersionQuery& q, FormatContext& ctx) const {
-        return arcticdb::util::variant_match(q.content_,
-                [&ctx](const SpecificVersionQuery& s) { return fmt::format_to(ctx.out(), "version {}", s.version_id_); },
-                [&ctx](const SnapshotVersionQuery& s) { return fmt::format_to(ctx.out(), "snapshot '{}'", s.name_); },
-                [&ctx](const TimestampVersionQuery& t) { return fmt::format_to(ctx.out(), "{}", t.timestamp_); },
-                [&ctx](const std::monostate&) { return fmt::format_to(ctx.out(), "latest"); });
+        return arcticdb::util::variant_match(
+            q.content_,
+            [&ctx](const SpecificVersionQuery& s) { return fmt::format_to(ctx.out(), "version {}", s.version_id_); },
+            [&ctx](const SnapshotVersionQuery& s) { return fmt::format_to(ctx.out(), "snapshot '{}'", s.name_); },
+            [&ctx](const TimestampVersionQuery& t) { return fmt::format_to(ctx.out(), "{}", t.timestamp_); },
+            [&ctx](const std::monostate&) { return fmt::format_to(ctx.out(), "latest"); }
+        );
     }
 };
-}
+} // namespace fmt

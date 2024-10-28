@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <gtest/gtest.h>
@@ -21,26 +22,40 @@ namespace arcticdb {
 
 using ::testing::UnorderedElementsAre;
 
-#define THREE_SIMPLE_KEYS \
-    auto key1 = atom_key_builder().version_id(1).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(3).start_index( \
-        4).end_index(5).build(id, KeyType::TABLE_INDEX); \
-    auto key2 = atom_key_builder().version_id(2).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(4).start_index(  \
-        5).end_index(6).build(id, KeyType::TABLE_INDEX); \
-    auto key3 = atom_key_builder().version_id(3).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(5).start_index(  \
-        6).end_index(7).build(id, KeyType::TABLE_INDEX);
+#define THREE_SIMPLE_KEYS                                                                                              \
+    auto key1 = atom_key_builder()                                                                                     \
+                    .version_id(1)                                                                                     \
+                    .creation_ts(PilotedClock::nanos_since_epoch())                                                    \
+                    .content_hash(3)                                                                                   \
+                    .start_index(4)                                                                                    \
+                    .end_index(5)                                                                                      \
+                    .build(id, KeyType::TABLE_INDEX);                                                                  \
+    auto key2 = atom_key_builder()                                                                                     \
+                    .version_id(2)                                                                                     \
+                    .creation_ts(PilotedClock::nanos_since_epoch())                                                    \
+                    .content_hash(4)                                                                                   \
+                    .start_index(5)                                                                                    \
+                    .end_index(6)                                                                                      \
+                    .build(id, KeyType::TABLE_INDEX);                                                                  \
+    auto key3 = atom_key_builder()                                                                                     \
+                    .version_id(3)                                                                                     \
+                    .creation_ts(PilotedClock::nanos_since_epoch())                                                    \
+                    .content_hash(5)                                                                                   \
+                    .start_index(6)                                                                                    \
+                    .end_index(7)                                                                                      \
+                    .build(id, KeyType::TABLE_INDEX);
 
 struct VersionMapStore : TestStore {
-protected:
-    std::string get_name() override {
-        return "version_map";
-    }
+  protected:
+    std::string get_name() override { return "version_map"; }
 };
 
 TEST(VersionMap, Basic) {
     auto store = std::make_shared<InMemoryStore>();
     StreamId id{"test"};
-    auto key1 = atom_key_builder().version_id(1).creation_ts(2).content_hash(3).start_index(
-        4).end_index(5).build(id, KeyType::TABLE_INDEX);
+    auto key1 = atom_key_builder().version_id(1).creation_ts(2).content_hash(3).start_index(4).end_index(5).build(
+        id, KeyType::TABLE_INDEX
+    );
 
     auto version_map = std::make_shared<VersionMap>();
     version_map->set_validate(true);
@@ -48,7 +63,7 @@ TEST(VersionMap, Basic) {
     ASSERT_EQ(store->num_atom_keys(), 1);
     ASSERT_EQ(store->num_ref_keys(), 1);
 
-    RefKey ref_key{id,  KeyType::VERSION_REF};
+    RefKey ref_key{id, KeyType::VERSION_REF};
     auto ref_fut = store->read(ref_key, storage::ReadKeyOpts{});
     auto [key, seg] = std::move(ref_fut).get();
 
@@ -81,18 +96,22 @@ TEST(VersionMap, WithPredecessors) {
     ASSERT_EQ(latest.value(), key2);
     version_map->write_version(store, key3, key2);
 
-    std::vector<AtomKey> expected{ key3, key2, key1};
+    std::vector<AtomKey> expected{key3, key2, key1};
     auto result = get_all_versions(store, version_map, id);
     ASSERT_EQ(result, expected);
-
 }
 
 TEST(VersionMap, TombstoneDelete) {
     auto store = std::make_shared<InMemoryStore>();
     StreamId id{"test1"};
     THREE_SIMPLE_KEYS
-    auto key4 = atom_key_builder().version_id(4).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(6).start_index(
-        7).end_index(8).build(id, KeyType::TABLE_INDEX);
+    auto key4 = atom_key_builder()
+                    .version_id(4)
+                    .creation_ts(PilotedClock::nanos_since_epoch())
+                    .content_hash(6)
+                    .start_index(7)
+                    .end_index(8)
+                    .build(id, KeyType::TABLE_INDEX);
 
     auto version_map = std::make_shared<VersionMap>();
     version_map->set_validate(true);
@@ -152,24 +171,27 @@ TEST(VersionMap, PingPong) {
 
     ScopedConfig sc("VersionMap.ReloadInterval", 0); // always reload
 
-    auto key1 = atom_key_builder().version_id(1).creation_ts(2).content_hash(3).start_index(
-        4).end_index(5).build(id, KeyType::TABLE_INDEX);
+    auto key1 = atom_key_builder().version_id(1).creation_ts(2).content_hash(3).start_index(4).end_index(5).build(
+        id, KeyType::TABLE_INDEX
+    );
 
     left->write_version(store, key1, std::nullopt);
     auto latest = get_latest_undeleted_version(store, right, id);
     ASSERT_EQ(latest.value(), key1);
 
-    auto key2 = atom_key_builder().version_id(2).creation_ts(3).content_hash(4).start_index(
-        5).end_index(6).build(id, KeyType::TABLE_INDEX);
+    auto key2 = atom_key_builder().version_id(2).creation_ts(3).content_hash(4).start_index(5).end_index(6).build(
+        id, KeyType::TABLE_INDEX
+    );
 
     right->write_version(store, key2, key1);
 
-    auto key3 = atom_key_builder().version_id(3).creation_ts(4).content_hash(5).start_index(
-        6).end_index(7).build(id, KeyType::TABLE_INDEX);
+    auto key3 = atom_key_builder().version_id(3).creation_ts(4).content_hash(5).start_index(6).end_index(7).build(
+        id, KeyType::TABLE_INDEX
+    );
 
     left->write_version(store, key3, key2);
 
-    std::vector<AtomKey> expected{ key3, key2, key1};
+    std::vector<AtomKey> expected{key3, key2, key1};
     auto left_result = get_all_versions(store, left, id);
     ASSERT_EQ(left_result, expected);
     auto right_result = get_all_versions(store, right, id);
@@ -182,21 +204,36 @@ TEST(VersionMap, TestLoadsRefAndIteration) {
     auto version_map = std::make_shared<VersionMap>();
     version_map->set_validate(true);
 
-    auto key1 = atom_key_builder().version_id(1).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(3).start_index( \
-        4).end_index(5).build(id, KeyType::TABLE_INDEX);
+    auto key1 = atom_key_builder()
+                    .version_id(1)
+                    .creation_ts(PilotedClock::nanos_since_epoch())
+                    .content_hash(3)
+                    .start_index(4)
+                    .end_index(5)
+                    .build(id, KeyType::TABLE_INDEX);
     version_map->write_version(store, key1, std::nullopt);
 
-    auto key2 = atom_key_builder().version_id(2).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(4).start_index(  \
-        5).end_index(6).build(id, KeyType::TABLE_INDEX);
+    auto key2 = atom_key_builder()
+                    .version_id(2)
+                    .creation_ts(PilotedClock::nanos_since_epoch())
+                    .content_hash(4)
+                    .start_index(5)
+                    .end_index(6)
+                    .build(id, KeyType::TABLE_INDEX);
     version_map->write_version(store, key2, key1);
 
-    auto key3 = atom_key_builder().version_id(3).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(5).start_index(  \
-        6).end_index(7).build(id, KeyType::TABLE_INDEX);
+    auto key3 = atom_key_builder()
+                    .version_id(3)
+                    .creation_ts(PilotedClock::nanos_since_epoch())
+                    .content_hash(5)
+                    .start_index(6)
+                    .end_index(7)
+                    .build(id, KeyType::TABLE_INDEX);
     version_map->write_version(store, key3, key2);
 
     ScopedConfig reload_interval("VersionMap.ReloadInterval", 0); // always reload
 
-    std::vector<AtomKey> expected{ key3, key2, key1};
+    std::vector<AtomKey> expected{key3, key2, key1};
     auto result = get_all_versions(store, version_map, id);
     ASSERT_EQ(result, expected);
 
@@ -208,9 +245,11 @@ TEST(VersionMap, TestLoadsRefAndIteration) {
 
     ASSERT_EQ(entry_iteration->head_, entry_ref->head_);
     ASSERT_EQ(entry_iteration->keys_.size(), entry_ref->keys_.size());
-    for(size_t idx = 0; idx<entry_iteration->keys_.size(); idx++)
-        if(entry_iteration->keys_[idx] != entry_ref->keys_[idx]) {
-            util::raise_rte("Keys Mismatch on idx {}: {} != {}", idx, entry_iteration->keys_[idx], entry_ref->keys_[idx]);
+    for (size_t idx = 0; idx < entry_iteration->keys_.size(); idx++)
+        if (entry_iteration->keys_[idx] != entry_ref->keys_[idx]) {
+            util::raise_rte(
+                "Keys Mismatch on idx {}: {} != {}", idx, entry_iteration->keys_[idx], entry_ref->keys_[idx]
+            );
         }
     entry_iteration->validate();
     entry_ref->validate();
@@ -234,7 +273,7 @@ TEST(VersionMap, TestCompact) {
     ASSERT_EQ(store->num_atom_keys(), 2);
     ASSERT_EQ(store->num_ref_keys(), 1);
 
-    std::vector<AtomKey> expected{ key3, key2, key1};
+    std::vector<AtomKey> expected{key3, key2, key1};
     auto result = get_all_versions(store, version_map, id);
     ASSERT_EQ(result, expected);
 }
@@ -258,11 +297,10 @@ TEST(VersionMap, TestCompactWithDelete) {
     ASSERT_EQ(store->num_atom_keys(), 2);
     ASSERT_EQ(store->num_ref_keys(), 1);
 
-    std::vector<AtomKey> expected{ key3, key1};
+    std::vector<AtomKey> expected{key3, key1};
     auto result = get_all_versions(store, version_map, id);
     ASSERT_EQ(result, expected);
 }
-
 
 TEST(VersionMap, TestLatestVersionWithDeleteTombstones) {
     auto store = std::make_shared<InMemoryStore>();
@@ -297,7 +335,7 @@ TEST(VersionMap, TestCompactWithDeleteTombstones) {
     ScopedConfig reload_interval("VersionMap.ReloadInterval", 0); // always reload
     version_map->compact(store, id);
 
-    std::vector<AtomKey> expected{ key3, key1};
+    std::vector<AtomKey> expected{key3, key1};
     auto result = get_all_versions(store, version_map, id);
     ASSERT_EQ(result, expected);
 }
@@ -317,14 +355,18 @@ TEST(VersionMap, TombstoneAllTwice) {
     // Don't need a check condition, checking validation
 }
 
-void write_old_style_journal_entry(const AtomKey &key, std::shared_ptr<StreamSink> store) {
-    IndexAggregator<RowCountIndex> journal_agg(key.id(), [&](auto &&segment) {
-        store->write(KeyType::VERSION_JOURNAL,
-                          key.version_id(),
-                          key.id(),
-                          IndexValue(NumericIndex{0}),
-                          IndexValue(NumericIndex{0}),
-                          std::move(segment)).wait();
+void write_old_style_journal_entry(const AtomKey& key, std::shared_ptr<StreamSink> store) {
+    IndexAggregator<RowCountIndex> journal_agg(key.id(), [&](auto&& segment) {
+        store
+            ->write(
+                KeyType::VERSION_JOURNAL,
+                key.version_id(),
+                key.id(),
+                IndexValue(NumericIndex{0}),
+                IndexValue(NumericIndex{0}),
+                std::move(segment)
+            )
+            .wait();
     });
     journal_agg.add_key(key);
     journal_agg.commit();
@@ -368,24 +410,42 @@ TEST(VersionMap, FixRefKey) {
     StreamId id{"test_fix_ref"};
 
     auto version_map = std::make_shared<VersionMap>();
-    auto key1 = atom_key_builder().version_id(1).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(3).start_index( \
-        4).end_index(5).build(id, KeyType::TABLE_INDEX);
+    auto key1 = atom_key_builder()
+                    .version_id(1)
+                    .creation_ts(PilotedClock::nanos_since_epoch())
+                    .content_hash(3)
+                    .start_index(4)
+                    .end_index(5)
+                    .build(id, KeyType::TABLE_INDEX);
     version_map->write_version(store, key1, std::nullopt);
 
-    auto key2 = atom_key_builder().version_id(2).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(4).start_index(  \
-        5).end_index(6).build(id, KeyType::TABLE_INDEX);
+    auto key2 = atom_key_builder()
+                    .version_id(2)
+                    .creation_ts(PilotedClock::nanos_since_epoch())
+                    .content_hash(4)
+                    .start_index(5)
+                    .end_index(6)
+                    .build(id, KeyType::TABLE_INDEX);
     version_map->write_version(store, key2, key1);
 
-    auto key3 = atom_key_builder().version_id(3).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(5).start_index(  \
-        6).end_index(7).build(id, KeyType::TABLE_INDEX);
+    auto key3 = atom_key_builder()
+                    .version_id(3)
+                    .creation_ts(PilotedClock::nanos_since_epoch())
+                    .content_hash(5)
+                    .start_index(6)
+                    .end_index(7)
+                    .build(id, KeyType::TABLE_INDEX);
     version_map->write_version(store, key3, key2);
     ASSERT_TRUE(version_map->check_ref_key(store, id));
 
     auto key4 = key3;
-    EXPECT_THROW({
-        // We should raise if we try to write a non-increasing index key
-        version_map->write_version(store, key4, key3);
-    }, InternalException);
+    EXPECT_THROW(
+        {
+            // We should raise if we try to write a non-increasing index key
+            version_map->write_version(store, key4, key3);
+        },
+        InternalException
+    );
 
     store->remove_key_sync(RefKey{id, KeyType::VERSION_REF}, storage::RemoveOpts{});
     ASSERT_FALSE(version_map->check_ref_key(store, id));
@@ -399,7 +459,13 @@ TEST(VersionMap, FixRefKey) {
 }
 
 AtomKey atom_key_with_version(const StreamId& id, VersionId version_id, timestamp ts) {
-    return atom_key_builder().version_id(version_id).creation_ts(ts).content_hash(3).start_index(4).end_index(5).build(id, KeyType::TABLE_INDEX);
+    return atom_key_builder()
+        .version_id(version_id)
+        .creation_ts(ts)
+        .content_hash(3)
+        .start_index(4)
+        .end_index(5)
+        .build(id, KeyType::TABLE_INDEX);
 }
 
 TEST(VersionMap, FixRefKeyTombstones) {
@@ -412,20 +478,16 @@ TEST(VersionMap, FixRefKeyTombstones) {
     auto key1 = atom_key_with_version(id, 0, 1696590624524585339);
     version_map->write_version(store, key1, std::nullopt);
     auto key2 = atom_key_with_version(id, 0, 1696590624387628801);
-    EXPECT_THROW({
-        version_map->write_version(store, key2, key1);
-    }, InternalException);
+    EXPECT_THROW({ version_map->write_version(store, key2, key1); }, InternalException);
     auto key3 = atom_key_with_version(id, 0, 1696590624532320286);
-    EXPECT_THROW({
-        version_map->write_version(store, key3, key2);
-    }, InternalException);
+    EXPECT_THROW({ version_map->write_version(store, key3, key2); }, InternalException);
     auto key4 = atom_key_with_version(id, 0, 1696590624554476875);
-    EXPECT_THROW({
-        version_map->write_version(store, key4, key3);
-    }, InternalException);
+    EXPECT_THROW({ version_map->write_version(store, key4, key3); }, InternalException);
     auto key5 = atom_key_with_version(id, 1, 1696590624590123209);
     version_map->write_version(store, key5, key4);
-    auto entry = version_map->check_reload(store, id, LoadStrategy{LoadType::LATEST, LoadObjective::INCLUDE_DELETED}, __FUNCTION__);
+    auto entry = version_map->check_reload(
+        store, id, LoadStrategy{LoadType::LATEST, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
+    );
     version_map->journal_single_key(store, key5, entry->head_.value());
 
     auto valid = version_map->check_ref_key(store, id);
@@ -437,16 +499,31 @@ TEST(VersionMap, RewriteVersionKeys) {
     StreamId id{"test_rewrite_version_keys"};
 
     auto version_map = std::make_shared<VersionMap>();
-    auto key1 = atom_key_builder().version_id(1).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(3).start_index( \
-        4).end_index(5).build(id, KeyType::TABLE_INDEX);
+    auto key1 = atom_key_builder()
+                    .version_id(1)
+                    .creation_ts(PilotedClock::nanos_since_epoch())
+                    .content_hash(3)
+                    .start_index(4)
+                    .end_index(5)
+                    .build(id, KeyType::TABLE_INDEX);
     version_map->write_version(store, key1, std::nullopt);
 
-    auto key2 = atom_key_builder().version_id(2).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(4).start_index(  \
-        5).end_index(6).build(id, KeyType::TABLE_INDEX);
+    auto key2 = atom_key_builder()
+                    .version_id(2)
+                    .creation_ts(PilotedClock::nanos_since_epoch())
+                    .content_hash(4)
+                    .start_index(5)
+                    .end_index(6)
+                    .build(id, KeyType::TABLE_INDEX);
     version_map->write_version(store, key2, key1);
 
-    auto key3 = atom_key_builder().version_id(3).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(5).start_index(  \
-        6).end_index(7).build(id, KeyType::TABLE_INDEX);
+    auto key3 = atom_key_builder()
+                    .version_id(3)
+                    .creation_ts(PilotedClock::nanos_since_epoch())
+                    .content_hash(5)
+                    .start_index(6)
+                    .end_index(7)
+                    .build(id, KeyType::TABLE_INDEX);
     version_map->write_version(store, key3, key2);
 
     // the above write_version wont write index keys - only version keys
@@ -505,7 +582,7 @@ TEST(VersionMap, RecoverDeleted) {
     EXPECT_THROW({ get_all_versions(store, version_map, id); }, std::runtime_error);
     version_map->recover_deleted(store, id);
 
-    std::vector<AtomKey> expected{ key3, key2, key1};
+    std::vector<AtomKey> expected{key3, key2, key1};
     auto result = get_all_versions(store, version_map, id);
     ASSERT_EQ(result, expected);
 }
@@ -527,17 +604,15 @@ TEST(VersionMap, StorageLogging) {
 
     std::unordered_set<AtomKey> log_keys;
 
-    store->iterate_type(KeyType::LOG, [&](VariantKey &&vk) {
-        log_keys.emplace(std::get<AtomKey>(vk));
-    }, "");
+    store->iterate_type(KeyType::LOG, [&](VariantKey&& vk) { log_keys.emplace(std::get<AtomKey>(vk)); }, "");
 
     ASSERT_EQ(log_keys.size(), 6u);
     size_t write_keys = 0;
     size_t tomb_keys = 0;
-    for (const auto& key: log_keys) {
+    for (const auto& key : log_keys) {
         if (std::get<StringId>(key.id()) == arcticdb::WriteVersionId) {
             write_keys++;
-        } else if(std::get<StringId>(key.id()) == arcticdb::TombstoneVersionId) {
+        } else if (std::get<StringId>(key.id()) == arcticdb::TombstoneVersionId) {
             tomb_keys++;
         } else {
             FAIL();
@@ -550,12 +625,11 @@ TEST(VersionMap, StorageLogging) {
 std::shared_ptr<VersionMapEntry> write_two_versions(
     std::shared_ptr<InMemoryStore> store,
     std::shared_ptr<VersionMap> version_map,
-    const StreamId& id) {
+    const StreamId& id
+) {
     auto entry = version_map->check_reload(
-            store,
-            id,
-            LoadStrategy{LoadType::NOT_LOADED, LoadObjective::INCLUDE_DELETED},
-            __FUNCTION__);
+        store, id, LoadStrategy{LoadType::NOT_LOADED, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
+    );
 
     auto key1 = atom_key_with_version(id, 0, 0);
     version_map->do_write(store, key1, entry);
@@ -569,12 +643,14 @@ std::shared_ptr<VersionMapEntry> write_two_versions(
 }
 
 // Produces the following version chain: v0 <- tombstone_all <- v1 <- v2 <- tombstone
-void write_alternating_deleted_undeleted(std::shared_ptr<InMemoryStore> store, std::shared_ptr<VersionMap> version_map, StreamId id) {
+void write_alternating_deleted_undeleted(
+    std::shared_ptr<InMemoryStore> store,
+    std::shared_ptr<VersionMap> version_map,
+    StreamId id
+) {
     auto entry = version_map->check_reload(
-            store,
-            id,
-            LoadStrategy{LoadType::NOT_LOADED, LoadObjective::INCLUDE_DELETED},
-            __FUNCTION__);
+        store, id, LoadStrategy{LoadType::NOT_LOADED, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
+    );
 
     auto key1 = atom_key_with_version(id, 0, 0);
     auto key2 = atom_key_with_version(id, 1, 1);
@@ -599,14 +675,14 @@ void write_alternating_deleted_undeleted(std::shared_ptr<InMemoryStore> store, s
     version_map->write_tombstone(store, VersionId{2}, id, entry, timestamp{3});
 }
 
-TEST(VersionMap, FollowingVersionChain){
+TEST(VersionMap, FollowingVersionChain) {
     // Set up the version chain v0(tombstone_all) <- v1 <- v2(tombstoned)
     auto store = std::make_shared<InMemoryStore>();
     auto version_map = std::make_shared<VersionMap>();
     StreamId id{"test"};
     write_alternating_deleted_undeleted(store, version_map, id);
 
-    auto check_strategy_loads_to = [&](LoadStrategy load_strategy, VersionId should_load_to){
+    auto check_strategy_loads_to = [&](LoadStrategy load_strategy, VersionId should_load_to) {
         auto ref_entry = VersionMapEntry{};
         read_symbol_ref(store, id, ref_entry);
         auto follow_result = std::make_shared<VersionMapEntry>();
@@ -615,17 +691,34 @@ TEST(VersionMap, FollowingVersionChain){
         EXPECT_EQ(follow_result->load_progress_.oldest_loaded_index_version_, VersionId{should_load_to});
     };
 
-    check_strategy_loads_to(LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(0)}, 0);
-    check_strategy_loads_to(LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(-2)}, 1);
+    check_strategy_loads_to(
+        LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(0)}, 0
+    );
+    check_strategy_loads_to(
+        LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(-2)}, 1
+    );
     // DOWN_TO will not skip through tombstoned versions even when include_deleted=false
-    check_strategy_loads_to(LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(-1)}, 2);
-    check_strategy_loads_to(LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(0)}, 0);
+    check_strategy_loads_to(
+        LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(-1)}, 2
+    );
+    check_strategy_loads_to(
+        LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(0)}, 0
+    );
 
-    // FROM_TIME when include_deleted=false will skip through deleted versions to go to the latest undeleted version before the timestamp.
-    check_strategy_loads_to(LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(10)}, 1);
-    check_strategy_loads_to(LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(0)}, 0);
-    check_strategy_loads_to(LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(2)}, 2);
-    check_strategy_loads_to(LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(0)}, 0);
+    // FROM_TIME when include_deleted=false will skip through deleted versions to go to the latest undeleted version
+    // before the timestamp.
+    check_strategy_loads_to(
+        LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(10)}, 1
+    );
+    check_strategy_loads_to(
+        LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(0)}, 0
+    );
+    check_strategy_loads_to(
+        LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(2)}, 2
+    );
+    check_strategy_loads_to(
+        LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(0)}, 0
+    );
 
     check_strategy_loads_to(LoadStrategy{LoadType::LATEST, LoadObjective::INCLUDE_DELETED}, 2);
     check_strategy_loads_to(LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY}, 1);
@@ -634,7 +727,7 @@ TEST(VersionMap, FollowingVersionChain){
     check_strategy_loads_to(LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY}, 0);
 }
 
-TEST(VersionMap, FollowingVersionChainWithCaching){
+TEST(VersionMap, FollowingVersionChainWithCaching) {
     ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
     // Set up the version chain v0(tombstone_all) <- v1 <- v2(tombstoned)
     auto store = std::make_shared<InMemoryStore>();
@@ -644,33 +737,42 @@ TEST(VersionMap, FollowingVersionChainWithCaching){
     // We create an empty version map after populating the versions
     version_map = std::make_shared<VersionMap>();
 
-    auto check_loads_versions = [&](LoadStrategy load_strategy, uint32_t should_load_any, uint32_t should_load_undeleted){
+    auto check_loads_versions = [&](LoadStrategy load_strategy, uint32_t should_load_any, uint32_t should_load_undeleted
+                                ) {
         auto loaded = version_map->check_reload(store, id, load_strategy, __FUNCTION__);
         EXPECT_EQ(loaded->get_indexes(true).size(), should_load_any);
         EXPECT_EQ(loaded->get_indexes(false).size(), should_load_undeleted);
     };
 
-    check_loads_versions(LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(-1)}, 1, 0);
-    // FROM_TIME should not be cached by the DOWNTO and should reload from storage up to the latest undeleted version, hence loading 2 versions, 1 of which is undeleted.
-    check_loads_versions(LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(10)}, 2, 1);
+    check_loads_versions(
+        LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(-1)}, 1, 0
+    );
+    // FROM_TIME should not be cached by the DOWNTO and should reload from storage up to the latest undeleted version,
+    // hence loading 2 versions, 1 of which is undeleted.
+    check_loads_versions(
+        LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(10)}, 2, 1
+    );
     // LATEST should be cached by the FROM_TIME, so we still have the same 2 loaded versions
     check_loads_versions(LoadStrategy{LoadType::LATEST, LoadObjective::INCLUDE_DELETED}, 2, 1);
     // This FROM_TIME should still use the cached 2 versions
-    check_loads_versions(LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(1)}, 2, 1);
+    check_loads_versions(
+        LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(1)}, 2, 1
+    );
 
     // We just get the entry to use for the tombstone and the write
     auto entry = version_map->check_reload(
-            store,
-            id,
-            LoadStrategy{LoadType::NOT_LOADED, LoadObjective::INCLUDE_DELETED},
-            __FUNCTION__);
+        store, id, LoadStrategy{LoadType::NOT_LOADED, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
+    );
     // We delete the only undeleted key
     version_map->write_tombstone(store, VersionId{1}, id, entry, timestamp{4});
 
     // LATEST should still be cached, but the cached entry now needs to have no undeleted keys
     check_loads_versions(LoadStrategy{LoadType::LATEST, LoadObjective::INCLUDE_DELETED}, 2, 0);
-    // FROM_TIME UNDELETED_ONLY should no longer be cached even though we used the same request before because the undeleted key it went to got deleted. So it will load the entire version chain
-    check_loads_versions(LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(10)}, 3, 0);
+    // FROM_TIME UNDELETED_ONLY should no longer be cached even though we used the same request before because the
+    // undeleted key it went to got deleted. So it will load the entire version chain
+    check_loads_versions(
+        LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(10)}, 3, 0
+    );
 
     // We add a new undeleted key
     auto key4 = atom_key_with_version(id, 3, 5);
@@ -700,28 +802,26 @@ TEST(VersionMap, FollowingVersionChainEndEarlyOnTombstoneAll) {
     read_symbol_ref(store, id, ref_entry);
     auto follow_result = std::make_shared<VersionMapEntry>();
 
-    for (auto load_strategy: {
-        LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(0)},
-        LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(0)},
-        LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY},
-        LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY}
-    }) {
+    for (auto load_strategy :
+         {LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(0)},
+          LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(0)},
+          LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY},
+          LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY}}) {
         follow_result->clear();
         version_map->follow_version_chain(store, ref_entry, follow_result, load_strategy);
-        // When loading with any of the specified load strategies with include_deleted=false we should end following the version chain early
-        // at version 1 because that's when we encounter the TOMBSTONE_ALL.
+        // When loading with any of the specified load strategies with include_deleted=false we should end following the
+        // version chain early at version 1 because that's when we encounter the TOMBSTONE_ALL.
         EXPECT_EQ(follow_result->load_progress_.oldest_loaded_index_version_, VersionId{1});
     }
 
-    for (auto load_strategy: {
-            LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(0)},
-            LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(0)},
-            LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}
-    }) {
+    for (auto load_strategy :
+         {LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(0)},
+          LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(0)},
+          LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}}) {
         follow_result->clear();
         version_map->follow_version_chain(store, ref_entry, follow_result, load_strategy);
-        // When loading with any of the specified load strategies with include_deleted=true we should continue to the beginning
-        // at version 0 even though it was deleted.
+        // When loading with any of the specified load strategies with include_deleted=true we should continue to the
+        // beginning at version 0 even though it was deleted.
         EXPECT_EQ(follow_result->load_progress_.oldest_loaded_index_version_, VersionId{0});
     }
 }
@@ -734,7 +834,7 @@ TEST(VersionMap, CacheInvalidation) {
     StreamId id{"test"};
     write_alternating_deleted_undeleted(store, version_map, id);
 
-    auto check_caching = [&](LoadStrategy to_load, LoadStrategy to_check_if_cached, bool expected_outcome){
+    auto check_caching = [&](LoadStrategy to_load, LoadStrategy to_check_if_cached, bool expected_outcome) {
         auto clean_version_map = std::make_shared<VersionMap>();
         // Load to_load inside the clean version map cache
         clean_version_map->check_reload(store, id, to_load, __FUNCTION__);
@@ -742,9 +842,11 @@ TEST(VersionMap, CacheInvalidation) {
         EXPECT_EQ(clean_version_map->has_cached_entry(id, to_check_if_cached), expected_outcome);
     };
 
-    auto check_all_caching = [&](const std::vector<LoadStrategy>& to_load, const std::vector<LoadStrategy>& to_check_if_cached, bool expected_result){
+    auto check_all_caching = [&](const std::vector<LoadStrategy>& to_load,
+                                 const std::vector<LoadStrategy>& to_check_if_cached,
+                                 bool expected_result) {
         for (auto to_load_strategy : to_load) {
-            for (auto to_check_if_cached_param : to_check_if_cached){
+            for (auto to_check_if_cached_param : to_check_if_cached) {
                 check_caching(to_load_strategy, to_check_if_cached_param, expected_result);
             }
         }
@@ -769,8 +871,9 @@ TEST(VersionMap, CacheInvalidation) {
             LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(1)},
             LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(-2)},
             LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(1)},
-            LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY,
-                         static_cast<timestamp>(2)}, // when include_deleted=false FROM_TIME searches for an undeleted version
+            LoadStrategy{
+                LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(2)
+            }, // when include_deleted=false FROM_TIME searches for an undeleted version
             LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY},
         },
 
@@ -783,18 +886,19 @@ TEST(VersionMap, CacheInvalidation) {
         }
     };
 
-    for (auto i=0u; i<num_versions; ++i){
-        for (auto j=0u; j<num_versions; ++j){
-            // For every two versions we check that all load params for earlier versions cache load paramse for later versions:
-            check_all_caching(should_load_to_v[i], should_load_to_v[j], i<=j);
+    for (auto i = 0u; i < num_versions; ++i) {
+        for (auto j = 0u; j < num_versions; ++j) {
+            // For every two versions we check that all load params for earlier versions cache load paramse for later
+            // versions:
+            check_all_caching(should_load_to_v[i], should_load_to_v[j], i <= j);
         }
 
-        // ALL and LOAD_UNDELETED because they both load to v0 (UNDELETED_ONLY will load v0 because only there it will load
+        // ALL and LOAD_UNDELETED because they both load to v0 (UNDELETED_ONLY will load v0 because only there it will
+        // load
         check_all_caching({load_all_param, load_all_undeleted_param}, should_load_to_v[i], true);
         check_all_caching(should_load_to_v[i], {load_all_param, load_all_undeleted_param}, false);
     }
 }
-
 
 TEST(VersionMap, CacheInvalidationWithTombstoneAfterLoad) {
     using namespace arcticdb;
@@ -811,26 +915,42 @@ TEST(VersionMap, CacheInvalidationWithTombstoneAfterLoad) {
     version_map = std::make_shared<VersionMap>();
 
     auto entry = version_map->check_reload(
-            store,
-            id,
-            LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(1)},
-            __FUNCTION__);
+        store,
+        id,
+        LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(1)},
+        __FUNCTION__
+    );
 
     ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY}));
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(1)}));
-    ASSERT_FALSE(version_map->has_cached_entry(id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(0)}));
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(-1)}));
-    ASSERT_FALSE(version_map->has_cached_entry(id, LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(-2)}));
+    ASSERT_TRUE(version_map->has_cached_entry(
+        id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(1)}
+    ));
+    ASSERT_FALSE(version_map->has_cached_entry(
+        id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(0)}
+    ));
+    ASSERT_TRUE(version_map->has_cached_entry(
+        id, LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(-1)}
+    ));
+    ASSERT_FALSE(version_map->has_cached_entry(
+        id, LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(-2)}
+    ));
 
     // When - we delete version 1 and reload
     version_map->write_tombstone(store, VersionId{1}, id, entry);
 
-    // Now when the cached version is deleted, we should invalidate the cache for load parameters which look for undeleted.
+    // Now when the cached version is deleted, we should invalidate the cache for load parameters which look for
+    // undeleted.
     ASSERT_FALSE(version_map->has_cached_entry(id, LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY}));
-    ASSERT_FALSE(version_map->has_cached_entry(id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(1)}));
+    ASSERT_FALSE(version_map->has_cached_entry(
+        id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(1)}
+    ));
     ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::LATEST, LoadObjective::INCLUDE_DELETED}));
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(1)}));
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(-1)}));
+    ASSERT_TRUE(version_map->has_cached_entry(
+        id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(1)}
+    ));
+    ASSERT_TRUE(version_map->has_cached_entry(
+        id, LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(-1)}
+    ));
 
     LoadStrategy load_strategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY};
     const auto latest_undeleted_entry = version_map->check_reload(store, id, load_strategy, __FUNCTION__);
@@ -854,32 +974,49 @@ TEST(VersionMap, CacheInvalidationWithTombstoneAllAfterLoad) {
     version_map = std::make_shared<VersionMap>();
 
     auto entry = version_map->check_reload(
-            store,
-            id,
-            LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(0)},
-            __FUNCTION__);
+        store,
+        id,
+        LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(0)},
+        __FUNCTION__
+    );
 
     ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY}));
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(1)}));
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(0)}));
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(-1)}));
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(-2)}));
+    ASSERT_TRUE(version_map->has_cached_entry(
+        id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(1)}
+    ));
+    ASSERT_TRUE(version_map->has_cached_entry(
+        id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(0)}
+    ));
+    ASSERT_TRUE(version_map->has_cached_entry(
+        id, LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(-1)}
+    ));
+    ASSERT_TRUE(version_map->has_cached_entry(
+        id, LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(-2)}
+    ));
 
     // When - we delete version 1
     auto tombstone_key = version_map->write_tombstone(store, VersionId{1}, id, entry);
 
     // We should not invalidate the cache because the version we loaded to is still undeleted
     ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY}));
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(1)}));
-    ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(0)}));
+    ASSERT_TRUE(version_map->has_cached_entry(
+        id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(1)}
+    ));
+    ASSERT_TRUE(version_map->has_cached_entry(
+        id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(0)}
+    ));
 
     // When - we delete all versions without reloading
     version_map->write_tombstone_all_key_internal(store, tombstone_key, entry);
 
     // We should invalidate cached undeleted checks
     ASSERT_FALSE(version_map->has_cached_entry(id, LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY}));
-    ASSERT_FALSE(version_map->has_cached_entry(id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(1)}));
-    ASSERT_FALSE(version_map->has_cached_entry(id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(0)}));
+    ASSERT_FALSE(version_map->has_cached_entry(
+        id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(1)}
+    ));
+    ASSERT_FALSE(version_map->has_cached_entry(
+        id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(0)}
+    ));
 }
 
 TEST(VersionMap, CompactionUpdateCache) {
@@ -891,33 +1028,39 @@ TEST(VersionMap, CompactionUpdateCache) {
     auto version_map = std::make_shared<VersionMap>();
 
     // We load all to keep everything in the cache
-    auto entry = version_map->check_reload(
-            store,
-            id,
-            LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED},
-            __FUNCTION__);
+    auto entry =
+        version_map->check_reload(store, id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__);
 
     // Write 10 versions
-    for (auto i=0; i<10; ++i) {
+    for (auto i = 0; i < 10; ++i) {
         auto key = atom_key_with_version(id, i, i);
         version_map->write_version(store, key, std::nullopt);
     }
 
-    auto assert_keys_in_entry_and_store = [&store](std::shared_ptr<VersionMapEntry> entry, int expected_version_keys, int expected_index_keys, int expected_tombstone_keys){
+    auto assert_keys_in_entry_and_store = [&store](
+                                              std::shared_ptr<VersionMapEntry> entry,
+                                              int expected_version_keys,
+                                              int expected_index_keys,
+                                              int expected_tombstone_keys
+                                          ) {
         int present_version_keys = 0, present_index_keys = 0, present_tombstone_keys = 0;
         auto all_entry_keys = entry->keys_;
-        if (entry->head_) all_entry_keys.push_back(entry->head_.value());
+        if (entry->head_)
+            all_entry_keys.push_back(entry->head_.value());
         for (const auto& key : all_entry_keys) {
-            if (key.type() == KeyType::VERSION) ++present_version_keys;
-            if (key.type() == KeyType::TABLE_INDEX) ++present_index_keys;
-            if (key.type() == KeyType::TOMBSTONE) ++present_tombstone_keys;
+            if (key.type() == KeyType::VERSION)
+                ++present_version_keys;
+            if (key.type() == KeyType::TABLE_INDEX)
+                ++present_index_keys;
+            if (key.type() == KeyType::TOMBSTONE)
+                ++present_tombstone_keys;
         }
         ASSERT_EQ(present_version_keys, expected_version_keys);
         ASSERT_EQ(present_index_keys, expected_index_keys);
         ASSERT_EQ(present_tombstone_keys, expected_tombstone_keys);
 
         int version_keys_in_store = 0;
-        store->iterate_type(KeyType::VERSION, [&](VariantKey &&){++version_keys_in_store;});
+        store->iterate_type(KeyType::VERSION, [&](VariantKey&&) { ++version_keys_in_store; });
         ASSERT_EQ(version_keys_in_store, expected_version_keys);
     };
 
@@ -925,29 +1068,25 @@ TEST(VersionMap, CompactionUpdateCache) {
     version_map->compact(store, id);
     assert_keys_in_entry_and_store(entry, 2, 10, 0);
 
-
     // Write 10 more versions but delete some
-    for (auto i=10; i<20; ++i) {
+    for (auto i = 10; i < 20; ++i) {
         auto key = atom_key_with_version(id, i, i);
         version_map->write_version(store, key, std::nullopt);
-        if (i%3 == 0) {
+        if (i % 3 == 0) {
             version_map->write_tombstone(store, VersionId{static_cast<uint64_t>(i)}, id, entry);
         }
     }
     assert_keys_in_entry_and_store(entry, 15, 20, 3);
     version_map->compact(store, id);
     assert_keys_in_entry_and_store(entry, 2, 20, 3);
-    // TODO: If we ever use compact_and_remove_deleted_indexes fix the below assertions (method is currently unused with TODOs to fix):
-    // version_map->compact_and_remove_deleted_indexes(store, id);
-    // assert_keys_in_entry_and_store(entry, 2, 17, 3);
+    // TODO: If we ever use compact_and_remove_deleted_indexes fix the below assertions (method is currently unused with
+    // TODOs to fix): version_map->compact_and_remove_deleted_indexes(store, id); assert_keys_in_entry_and_store(entry,
+    // 2, 17, 3);
 
     // Flush and reload to see that what we have in storage also matches what we have in the cache.
     version_map->flush();
-    entry = version_map->check_reload(
-            store,
-            id,
-            LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED},
-            __FUNCTION__);
+    entry =
+        version_map->check_reload(store, id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__);
     assert_keys_in_entry_and_store(entry, 2, 20, 3);
 }
 
@@ -964,9 +1103,7 @@ TEST(VersionMap, TombstoneAllFromEntry) {
     auto key2 = atom_key_with_version(id, 1, 1);
     version_map->do_write(store, key2, entry);
 
-    auto dummy_key = atom_key_builder()
-        .version_id(1)
-        .build(id, KeyType::VERSION);
+    auto dummy_key = atom_key_builder().version_id(1).build(id, KeyType::VERSION);
 
     // without cached entry
     // Tombstone all should fail to delete anything since the ref key is not set
@@ -978,9 +1115,8 @@ TEST(VersionMap, TombstoneAllFromEntry) {
     auto version_id = get_next_version_from_key(maybe_prev);
     ASSERT_EQ(version_id, 0);
 
-
-    // With cached entry from the write ops  
-    // Tombstone all should succeed as we are not relying on the ref key      
+    // With cached entry from the write ops
+    // Tombstone all should succeed as we are not relying on the ref key
     version_map->tombstone_from_key_or_all(store, id, dummy_key, entry);
 
     auto [maybe_prev_cached_entry, deleted_cached_entry] = get_latest_version(store, version_map, id);
@@ -998,16 +1134,20 @@ TEST_F(VersionMapStore, StressTestWrite) {
     const size_t num_tests = 999;
     StreamId id{"test"};
     for (auto i = 0ULL; i < num_tests; ++i) {
-        keys.emplace_back(
-                atom_key_builder().version_id(i).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(i).start_index( \
-                4).end_index(5).build(id, KeyType::TABLE_INDEX));
+        keys.emplace_back(atom_key_builder()
+                              .version_id(i)
+                              .creation_ts(PilotedClock::nanos_since_epoch())
+                              .content_hash(i)
+                              .start_index(4)
+                              .end_index(5)
+                              .build(id, KeyType::TABLE_INDEX));
     }
 
     auto version_map = std::make_shared<VersionMap>();
     std::string timer_name("write_stress");
     interval_timer timer(timer_name);
     std::optional<AtomKey> previous_key;
-    for(const auto& key : keys) {
+    for (const auto& key : keys) {
         version_map->write_version(test_store_->_test_get_store(), key, previous_key);
         previous_key = key;
     }

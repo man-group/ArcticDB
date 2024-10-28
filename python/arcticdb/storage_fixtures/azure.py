@@ -12,7 +12,13 @@ from typing import TYPE_CHECKING, Optional
 from tempfile import mkdtemp
 
 from .api import *
-from .utils import get_ephemeral_port, GracefulProcessUtils, wait_for_server_to_come_up, safer_rmtree, get_ca_cert_for_testing
+from .utils import (
+    get_ephemeral_port,
+    GracefulProcessUtils,
+    wait_for_server_to_come_up,
+    safer_rmtree,
+    get_ca_cert_for_testing,
+)
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 from arcticdb.version_store.helper import add_azure_library_to_env
 
@@ -47,7 +53,12 @@ class AzureContainer(StorageFixture):
         # CA_cert_dir is skipped on purpose; It will be tested manually in other tests
 
         # The retry_policy instance will be modified by the pipeline, so cannot be constant
-        policy = {"connection_timeout": 1, "read_timeout": 2, "retry_policy": LinearRetry(retry_total=3, backoff=1), "connection_verify": f.client_cert_file}
+        policy = {
+            "connection_timeout": 1,
+            "read_timeout": 2,
+            "retry_policy": LinearRetry(retry_total=3, backoff=1),
+            "connection_verify": f.client_cert_file,
+        }
         self.client = ContainerClient.from_connection_string(self.arctic_uri, self.container, **policy)
         # add connection_verify=False to bypass ssl checking
 
@@ -147,7 +158,9 @@ class AzuriteStorageFixtureFactory(StorageFixtureFactory):
         args = f"{shutil.which('azurite')} --blobPort {self.port} --blobHost {self.host} --queuePort 0 --tablePort 0"
         if self.ssl_test_support:
             self.client_cert_dir = self.working_dir
-            self.ca, self.key_file, self.cert_file, self.client_cert_file = get_ca_cert_for_testing(self.client_cert_dir)
+            self.ca, self.key_file, self.cert_file, self.client_cert_file = get_ca_cert_for_testing(
+                self.client_cert_dir
+            )
         else:
             self.ca = ""
             self.key_file = ""

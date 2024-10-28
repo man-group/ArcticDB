@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <arcticdb/util/buffer.hpp>
@@ -18,47 +19,54 @@
 #include <gtest/gtest.h>
 
 namespace arcticdb {
-    struct ColumnEncoderV1 {
-        static std::pair<size_t, size_t> max_compressed_size(
-            const arcticdb::proto::encoding::VariantCodec& codec_opts,
-            ColumnData& column_data);
+struct ColumnEncoderV1 {
+    static std::pair<size_t, size_t> max_compressed_size(
+        const arcticdb::proto::encoding::VariantCodec& codec_opts,
+        ColumnData& column_data
+    );
 
-        static void encode(
-            const arcticdb::proto::encoding::VariantCodec &codec_opts,
-            ColumnData& column_data,
-            EncodedFieldImpl& variant_field,
-            Buffer& out,
-            std::ptrdiff_t& pos);
-    };
+    static void encode(
+        const arcticdb::proto::encoding::VariantCodec& codec_opts,
+        ColumnData& column_data,
+        EncodedFieldImpl& variant_field,
+        Buffer& out,
+        std::ptrdiff_t& pos
+    );
+};
 
-    struct ColumnEncoderV2 {
-    public:
-        static void encode(
-            const arcticdb::proto::encoding::VariantCodec &codec_opts,
-            ColumnData& column_data,
-            EncodedFieldImpl& variant_field,
-            Buffer& out,
-            std::ptrdiff_t& pos);
-        static std::pair<size_t, size_t> max_compressed_size(
-            const arcticdb::proto::encoding::VariantCodec& codec_opts,
-            ColumnData& column_data);
-    private:
-        static void encode_shapes(
-            const ColumnData& column_data,
-            EncodedFieldImpl& variant_field,
-            Buffer& out,
-            std::ptrdiff_t& pos_in_buffer);
+struct ColumnEncoderV2 {
+  public:
+    static void encode(
+        const arcticdb::proto::encoding::VariantCodec& codec_opts,
+        ColumnData& column_data,
+        EncodedFieldImpl& variant_field,
+        Buffer& out,
+        std::ptrdiff_t& pos
+    );
+    static std::pair<size_t, size_t> max_compressed_size(
+        const arcticdb::proto::encoding::VariantCodec& codec_opts,
+        ColumnData& column_data
+    );
 
-        static void encode_blocks(
-            const arcticdb::proto::encoding::VariantCodec &codec_opts,
-            ColumnData& column_data,
-            EncodedFieldImpl& variant_field,
-            Buffer& out,
-            std::ptrdiff_t& pos);
-    };
+  private:
+    static void encode_shapes(
+        const ColumnData& column_data,
+        EncodedFieldImpl& variant_field,
+        Buffer& out,
+        std::ptrdiff_t& pos_in_buffer
+    );
 
-    size_t calc_column_blocks_size(const Column& col);
-}
+    static void encode_blocks(
+        const arcticdb::proto::encoding::VariantCodec& codec_opts,
+        ColumnData& column_data,
+        EncodedFieldImpl& variant_field,
+        Buffer& out,
+        std::ptrdiff_t& pos
+    );
+};
+
+size_t calc_column_blocks_size(const Column& col);
+} // namespace arcticdb
 
 using namespace arcticdb;
 
@@ -67,7 +75,7 @@ using EncodingVersions = ::testing::Types<
     std::integral_constant<EncodingVersion, EncodingVersion::V2>>;
 
 class FieldEncoderTestDim0Base : public testing::Test {
-protected:
+  protected:
     using ValuesTypeDescriptorTag = TypeDescriptorTag<DataTypeTag<DataType::FLOAT64>, DimensionTag<Dimension::Dim0>>;
     static constexpr TypeDescriptor type_descriptor = static_cast<TypeDescriptor>(ValuesTypeDescriptorTag());
     static constexpr std::array<double, 3> values = {0.1, 0.2, 0.3};
@@ -78,19 +86,17 @@ protected:
 };
 
 template<typename EncodedFieldType>
-class FieldEncoderTestDim0 : public FieldEncoderTestDim0Base{};
+class FieldEncoderTestDim0 : public FieldEncoderTestDim0Base {};
 
 using EncodedFieldsType = ::testing::Types<EncodedFieldImpl>;
 TYPED_TEST_SUITE(FieldEncoderTestDim0, EncodedFieldsType);
 
 TYPED_TEST(FieldEncoderTestDim0, Passthrough_v1) {
-    using Encoder = TypedBlockEncoderImpl<TypedBlockData, typename TestFixture::ValuesTypeDescriptorTag, EncodingVersion::V1>;
+    using Encoder =
+        TypedBlockEncoderImpl<TypedBlockData, typename TestFixture::ValuesTypeDescriptorTag, EncodingVersion::V1>;
     const TypedBlockData<typename TestFixture::ValuesTypeDescriptorTag> values_block(
-        TestFixture::values.data(),
-        nullptr,
-        TestFixture::values_byte_size,
-        TestFixture::values.size(),
-        nullptr);
+        TestFixture::values.data(), nullptr, TestFixture::values_byte_size, TestFixture::values.size(), nullptr
+    );
     TypeParam encoded_field;
     Buffer out{Encoder::max_compressed_size(TestFixture::passthorugh_encoding_options, values_block)};
     std::ptrdiff_t pos = 0;
@@ -106,13 +112,11 @@ TYPED_TEST(FieldEncoderTestDim0, Passthrough_v1) {
 }
 
 TYPED_TEST(FieldEncoderTestDim0, Passthrough_v2) {
-    using Encoder = TypedBlockEncoderImpl<TypedBlockData, typename TestFixture::ValuesTypeDescriptorTag, EncodingVersion::V2>;
+    using Encoder =
+        TypedBlockEncoderImpl<TypedBlockData, typename TestFixture::ValuesTypeDescriptorTag, EncodingVersion::V2>;
     const TypedBlockData<typename TestFixture::ValuesTypeDescriptorTag> values_block(
-        TestFixture::values.data(),
-        nullptr,
-        TestFixture::values_byte_size,
-        TestFixture::values.size(),
-        nullptr);
+        TestFixture::values.data(), nullptr, TestFixture::values_byte_size, TestFixture::values.size(), nullptr
+    );
     TypeParam encoded_field;
     Buffer out{Encoder::max_compressed_size(TestFixture::passthorugh_encoding_options, values_block)};
     std::ptrdiff_t pos = 0;
@@ -128,13 +132,12 @@ TYPED_TEST(FieldEncoderTestDim0, Passthrough_v2) {
 }
 
 template<typename EncodingVersionConstant>
-class FieldEncoderTestFromColumnDim0 : public FieldEncoderTestDim0Base{};
+class FieldEncoderTestFromColumnDim0 : public FieldEncoderTestDim0Base {};
 
 /// @brief Cartesian product between the type of the encoded field and the encoding version.
 /// (EncodedField, arcticdb::proto::encoding::EncodedField) x (EncodingVersion::V1, EncodingVersion::V2)
-using FieldVersionT = ::testing::Types<
-    std::pair<EncodedFieldImpl, ColumnEncoderV1>,
-	std::pair<EncodedFieldImpl, ColumnEncoderV2>>;
+using FieldVersionT =
+    ::testing::Types<std::pair<EncodedFieldImpl, ColumnEncoderV1>, std::pair<EncodedFieldImpl, ColumnEncoderV2>>;
 TYPED_TEST_SUITE(FieldEncoderTestFromColumnDim0, FieldVersionT);
 
 TYPED_TEST(FieldEncoderTestFromColumnDim0, Passthrough) {
@@ -143,15 +146,17 @@ TYPED_TEST(FieldEncoderTestFromColumnDim0, Passthrough) {
 
     ChunkedBuffer values_buffer;
     values_buffer.ensure(TestFixture::values_byte_size);
-    memcpy(values_buffer.ptr_cast<uint8_t>(0, TestFixture::values_byte_size),
+    memcpy(
+        values_buffer.ptr_cast<uint8_t>(0, TestFixture::values_byte_size),
         TestFixture::values.data(),
-        TestFixture::values_byte_size);
+        TestFixture::values_byte_size
+    );
     Buffer shapes_buffer;
     ColumnData column_data(&values_buffer, &shapes_buffer, TestFixture::type_descriptor, nullptr);
     EncodedFieldType field;
     std::ptrdiff_t pos = 0;
-    const auto [_, max_compressed_size] = ColumnEncoder::max_compressed_size(TestFixture::passthorugh_encoding_options,
-        column_data);
+    const auto [_, max_compressed_size] =
+        ColumnEncoder::max_compressed_size(TestFixture::passthorugh_encoding_options, column_data);
     Buffer out(max_compressed_size);
     column_data.reset();
     ColumnEncoder::encode(TestFixture::passthorugh_encoding_options, column_data, field, out, pos);
@@ -166,7 +171,7 @@ TYPED_TEST(FieldEncoderTestFromColumnDim0, Passthrough) {
 }
 
 class FieldEncoderTestDim1 : public testing::Test {
-protected:
+  protected:
     using ValuesTypeDescriptorTag = TypeDescriptorTag<DataTypeTag<DataType::FLOAT64>, DimensionTag<Dimension::Dim1>>;
     static constexpr std::array<double, 5> values = {0.1, 0.2, 0.3, 0.4, 0.5};
     static constexpr size_t values_byte_size = values.size() * sizeof(decltype(values)::value_type);
@@ -181,16 +186,13 @@ protected:
 TEST_F(FieldEncoderTestDim1, PassthroughV1NativeField) {
     using Encoder = TypedBlockEncoderImpl<TypedBlockData, ValuesTypeDescriptorTag, EncodingVersion::V1>;
     const TypedBlockData<ValuesTypeDescriptorTag> block(
-        values.data(),
-        shapes.data(),
-        values_byte_size,
-        shapes.size(),
-        nullptr);
+        values.data(), shapes.data(), values_byte_size, shapes.size(), nullptr
+    );
 
     // one block for shapes and one for values
     constexpr size_t encoded_field_size = EncodedFieldImpl::Size + 2 * sizeof(EncodedBlock);
     std::array<uint8_t, encoded_field_size> encoded_field_memory;
-    EncodedFieldImpl* field = new(encoded_field_memory.data()) EncodedFieldImpl;
+    EncodedFieldImpl* field = new (encoded_field_memory.data()) EncodedFieldImpl;
 
     Buffer out(Encoder::max_compressed_size(passthorugh_encoding_options, block));
     std::ptrdiff_t pos = 0;
@@ -215,26 +217,19 @@ TEST_F(FieldEncoderTestDim1, PassthroughV2NativeField) {
     using Encoder = TypedBlockEncoderImpl<TypedBlockData, ValuesTypeDescriptorTag, EncodingVersion::V2>;
     using ShapesEncoder = TypedBlockEncoderImpl<TypedBlockData, arcticdb::ShapesBlockTDT, EncodingVersion::V2>;
     const TypedBlockData<ValuesTypeDescriptorTag> values_block(
-        values.data(),
-        shapes.data(),
-        values_byte_size,
-        shapes.size(),
-        nullptr);
+        values.data(), shapes.data(), values_byte_size, shapes.size(), nullptr
+    );
 
-    const TypedBlockData<arcticdb::ShapesBlockTDT> shapes_block(
-        shapes.data(),
-        nullptr,
-        shapes_byte_size,
-        0,
-        nullptr);
+    const TypedBlockData<arcticdb::ShapesBlockTDT> shapes_block(shapes.data(), nullptr, shapes_byte_size, 0, nullptr);
 
     const size_t values_max_compressed_size = Encoder::max_compressed_size(passthorugh_encoding_options, values_block);
-    const size_t shapes_max_compressed_size = ShapesEncoder::max_compressed_size(passthorugh_encoding_options, shapes_block);
+    const size_t shapes_max_compressed_size =
+        ShapesEncoder::max_compressed_size(passthorugh_encoding_options, shapes_block);
     const size_t total_max_compressed_size = values_max_compressed_size + shapes_max_compressed_size;
     // one block for shapes and one for values
     constexpr size_t encoded_field_size = EncodedFieldImpl::Size + 2 * sizeof(EncodedBlock);
     std::array<uint8_t, encoded_field_size> encoded_field_memory;
-    EncodedFieldImpl* field = new(encoded_field_memory.data()) EncodedFieldImpl;
+    EncodedFieldImpl* field = new (encoded_field_memory.data()) EncodedFieldImpl;
     Buffer out(total_max_compressed_size);
     std::ptrdiff_t pos = 0;
     ShapesEncoder::encode_shapes(passthorugh_encoding_options, shapes_block, *field, out, pos);
@@ -256,28 +251,30 @@ TEST_F(FieldEncoderTestDim1, PassthroughV2NativeField) {
 }
 
 class TestMultiblockData_Dim1 : public testing::Test {
-protected:
+  protected:
     void SetUp() override {
         data_buffer.add_block(first_block_data_byte_size, 0);
         data_buffer.blocks()[0]->resize(first_block_data_byte_size);
         data_buffer.add_block(second_block_data_byte_size, first_block_data_byte_size);
         data_buffer.blocks()[1]->resize(second_block_data_byte_size);
         shapes_buffer.ensure(shapes_data_byte_size);
-        data_buffer.blocks()[0]->copy_from(reinterpret_cast<const uint8_t*>(first_block_data.data()),
-            first_block_data_byte_size,
-            0);
-        data_buffer.blocks()[1]->copy_from(reinterpret_cast<const uint8_t*>(second_block_data.data()),
-            second_block_data_byte_size,
-            0);
+        data_buffer.blocks()[0]->copy_from(
+            reinterpret_cast<const uint8_t*>(first_block_data.data()), first_block_data_byte_size, 0
+        );
+        data_buffer.blocks()[1]->copy_from(
+            reinterpret_cast<const uint8_t*>(second_block_data.data()), second_block_data_byte_size, 0
+        );
         memcpy(shapes_buffer.data(), shapes_data.data(), shapes_data_byte_size);
     }
 
     using ValuesTypeDescriptorTag = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension::Dim1>>;
     static constexpr TypeDescriptor type_descriptor = static_cast<TypeDescriptor>(ValuesTypeDescriptorTag());
     static constexpr std::array<int64_t, 8> first_block_data = {1, 2, 3, 4, 5, 6, 7, 8};
-    static constexpr size_t first_block_data_byte_size = sizeof(decltype(first_block_data)::value_type) * first_block_data.size();
+    static constexpr size_t first_block_data_byte_size =
+        sizeof(decltype(first_block_data)::value_type) * first_block_data.size();
     static constexpr std::array<int64_t, 2> second_block_data = {9, 10};
-    static constexpr size_t second_block_data_byte_size = sizeof(decltype(second_block_data)::value_type) * second_block_data.size();
+    static constexpr size_t second_block_data_byte_size =
+        sizeof(decltype(second_block_data)::value_type) * second_block_data.size();
     static constexpr std::array<shape_t, 2> shapes_data = {first_block_data.size(), second_block_data.size()};
     static constexpr size_t shapes_data_byte_size = sizeof(decltype(shapes_data)::value_type) * shapes_data.size();
     arcticdb::proto::encoding::VariantCodec passthorugh_encoding_options;
@@ -288,9 +285,10 @@ protected:
 TEST_F(TestMultiblockData_Dim1, EncodingVersion_2) {
     constexpr size_t encoded_field_size = EncodedFieldImpl::Size + 3 * sizeof(EncodedBlock);
     std::array<uint8_t, encoded_field_size> encoded_field_owner;
-    EncodedFieldImpl* encoded_field = new(encoded_field_owner.data()) EncodedFieldImpl;
+    EncodedFieldImpl* encoded_field = new (encoded_field_owner.data()) EncodedFieldImpl;
     ColumnData column_data(&data_buffer, &shapes_buffer, type_descriptor, nullptr);
-    const auto [_, max_compressed_size] = ColumnEncoderV2::max_compressed_size(passthorugh_encoding_options, column_data);
+    const auto [_, max_compressed_size] =
+        ColumnEncoderV2::max_compressed_size(passthorugh_encoding_options, column_data);
     Buffer out(max_compressed_size);
     ptrdiff_t out_pos = 0;
     column_data.reset();
@@ -302,7 +300,7 @@ TEST_F(TestMultiblockData_Dim1, EncodingVersion_2) {
 }
 
 template<typename EncodedFieldType>
-class SegmentStringEncodingTest : public testing::Test{};
+class SegmentStringEncodingTest : public testing::Test {};
 
 TYPED_TEST_SUITE(SegmentStringEncodingTest, EncodingVersions);
 
@@ -366,22 +364,28 @@ TEST(SegmentEncoderTest, StressTestString) {
     SegmentsSink sink;
     auto index = as::TimeseriesIndex::default_index();
     as::FixedSchema schema{
-        index.create_stream_descriptor(NumericId{123}, {
-            scalar_field(DataType::ASCII_DYNAMIC64, "col_1"),
-            scalar_field(DataType::ASCII_DYNAMIC64, "col_2"),
-            scalar_field(DataType::ASCII_DYNAMIC64, "col_3"),
-            scalar_field(DataType::ASCII_DYNAMIC64, "col_4"),
-            scalar_field(DataType::ASCII_DYNAMIC64, "col_5"),
-            scalar_field(DataType::ASCII_DYNAMIC64, "col_6"),
-        }), index
+        index.create_stream_descriptor(
+            NumericId{123},
+            {
+                scalar_field(DataType::ASCII_DYNAMIC64, "col_1"),
+                scalar_field(DataType::ASCII_DYNAMIC64, "col_2"),
+                scalar_field(DataType::ASCII_DYNAMIC64, "col_3"),
+                scalar_field(DataType::ASCII_DYNAMIC64, "col_4"),
+                scalar_field(DataType::ASCII_DYNAMIC64, "col_5"),
+                scalar_field(DataType::ASCII_DYNAMIC64, "col_6"),
+            }
+        ),
+        index
     };
 
-    TestAggregator agg(std::move(schema), [&](SegmentInMemory &&mem) {
-        sink.segments_.push_back(std::move(mem));
-    }, as::NeverSegmentPolicy{});
+    TestAggregator agg(
+        std::move(schema),
+        [&](SegmentInMemory&& mem) { sink.segments_.push_back(std::move(mem)); },
+        as::NeverSegmentPolicy{}
+    );
 
     for (size_t i = 0; i < NumTests; ++i) {
-        agg.start_row(timestamp(i))([&](auto &rb) {
+        agg.start_row(timestamp(i))([&](auto& rb) {
             for (size_t j = 1; j < NumColumns; ++j)
                 rb.set_string(timestamp(j), strings[(i + j) & (VectorSize - 1)]);
         });
@@ -391,9 +395,7 @@ TEST(SegmentEncoderTest, StressTestString) {
 struct TransactionalThing {
     arcticdb::util::MagicNum<'K', 'e', 'e', 'p'> magic_;
     static bool destroyed;
-    ~TransactionalThing() {
-        TransactionalThing::destroyed = true;
-    }
+    ~TransactionalThing() { TransactionalThing::destroyed = true; }
 };
 
 bool TransactionalThing::destroyed = false;
@@ -416,7 +418,8 @@ TEST(Segment, KeepAlive) {
 }
 
 TEST(Segment, RoundtripTimeseriesDescriptorV1) {
-    const auto stream_desc = stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UINT8, "ints")});
+    const auto stream_desc =
+        stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UINT8, "ints")});
     SegmentInMemory in_mem_seg{stream_desc.clone()};
     in_mem_seg.set_scalar<uint8_t>(0, 23);
     in_mem_seg.end_row();
@@ -433,7 +436,8 @@ TEST(Segment, RoundtripTimeseriesDescriptorV1) {
 }
 
 TEST(Segment, RoundtripTimeseriesDescriptorWriteToBufferV1) {
-    const auto stream_desc = stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UINT8, "ints")});
+    const auto stream_desc =
+        stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UINT8, "ints")});
     SegmentInMemory in_mem_seg{stream_desc.clone()};
     in_mem_seg.set_scalar<uint8_t>(0, 23);
     in_mem_seg.end_row();
@@ -455,7 +459,8 @@ TEST(Segment, RoundtripTimeseriesDescriptorWriteToBufferV1) {
 }
 
 TEST(Segment, RoundtripStringsWriteToBufferV1) {
-    const auto stream_desc = stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UTF_DYNAMIC64, "ints")});
+    const auto stream_desc =
+        stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UTF_DYNAMIC64, "ints")});
     SegmentInMemory in_mem_seg{stream_desc.clone()};
     in_mem_seg.set_string(0, "kismet");
     in_mem_seg.end_row();
@@ -473,7 +478,8 @@ TEST(Segment, RoundtripStringsWriteToBufferV1) {
 }
 
 TEST(Segment, RoundtripTimeseriesDescriptorV2) {
-    const auto stream_desc = stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UINT8, "ints")});
+    const auto stream_desc =
+        stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UINT8, "ints")});
     SegmentInMemory in_mem_seg{stream_desc.clone()};
     in_mem_seg.set_scalar<uint8_t>(0, 23);
     in_mem_seg.end_row();
@@ -490,7 +496,8 @@ TEST(Segment, RoundtripTimeseriesDescriptorV2) {
 }
 
 TEST(Segment, RoundtripTimeseriesDescriptorWriteToBufferV2) {
-    const auto stream_desc = stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UINT8, "ints")});
+    const auto stream_desc =
+        stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UINT8, "ints")});
     SegmentInMemory in_mem_seg{stream_desc.clone()};
     in_mem_seg.set_scalar<uint8_t>(0, 23);
     in_mem_seg.end_row();
@@ -513,13 +520,15 @@ TEST(Segment, RoundtripTimeseriesDescriptorWriteToBufferV2) {
 }
 
 TEST(Segment, ColumnNamesProduceDifferentHashes) {
-    const auto stream_desc_1 = stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {
-        scalar_field(DataType::UINT8, "ints1"),
-        scalar_field(DataType::UINT8, "ints2"),
-        scalar_field(DataType::UINT8, "ints3"),
-        scalar_field(DataType::UINT8, "ints4"),
-        scalar_field(DataType::UINT8, "ints5")
-    });
+    const auto stream_desc_1 = stream_descriptor(
+        StreamId{"thing"},
+        RowCountIndex{},
+        {scalar_field(DataType::UINT8, "ints1"),
+         scalar_field(DataType::UINT8, "ints2"),
+         scalar_field(DataType::UINT8, "ints3"),
+         scalar_field(DataType::UINT8, "ints4"),
+         scalar_field(DataType::UINT8, "ints5")}
+    );
 
     SegmentInMemory in_mem_seg_1{stream_desc_1.clone()};
 
@@ -530,13 +539,15 @@ TEST(Segment, ColumnNamesProduceDifferentHashes) {
     in_mem_seg_1.set_scalar(4, uint8_t(0));
     in_mem_seg_1.end_row();
 
-    const auto stream_desc_2 = stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {
-        scalar_field(DataType::UINT8, "ints6"),
-        scalar_field(DataType::UINT8, "ints7"),
-        scalar_field(DataType::UINT8, "ints8"),
-        scalar_field(DataType::UINT8, "ints9"),
-        scalar_field(DataType::UINT8, "ints10")
-    });
+    const auto stream_desc_2 = stream_descriptor(
+        StreamId{"thing"},
+        RowCountIndex{},
+        {scalar_field(DataType::UINT8, "ints6"),
+         scalar_field(DataType::UINT8, "ints7"),
+         scalar_field(DataType::UINT8, "ints8"),
+         scalar_field(DataType::UINT8, "ints9"),
+         scalar_field(DataType::UINT8, "ints10")}
+    );
 
     SegmentInMemory in_mem_seg_2{stream_desc_2.clone()};
 
@@ -557,23 +568,27 @@ TEST(Segment, ColumnNamesProduceDifferentHashes) {
 }
 
 TEST(Segment, ColumnNamesProduceDifferentHashesEmpty) {
-    const auto stream_desc_1 = stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {
-        scalar_field(DataType::UINT8, "ints1"),
-        scalar_field(DataType::UINT8, "ints2"),
-        scalar_field(DataType::UINT8, "ints3"),
-        scalar_field(DataType::UINT8, "ints4"),
-        scalar_field(DataType::UINT8, "ints5")
-    });
+    const auto stream_desc_1 = stream_descriptor(
+        StreamId{"thing"},
+        RowCountIndex{},
+        {scalar_field(DataType::UINT8, "ints1"),
+         scalar_field(DataType::UINT8, "ints2"),
+         scalar_field(DataType::UINT8, "ints3"),
+         scalar_field(DataType::UINT8, "ints4"),
+         scalar_field(DataType::UINT8, "ints5")}
+    );
 
     SegmentInMemory in_mem_seg_1{stream_desc_1.clone()};
 
-    const auto stream_desc_2 = stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {
-        scalar_field(DataType::UINT8, "ints6"),
-        scalar_field(DataType::UINT8, "ints7"),
-        scalar_field(DataType::UINT8, "ints8"),
-        scalar_field(DataType::UINT8, "ints9"),
-        scalar_field(DataType::UINT8, "ints10")
-    });
+    const auto stream_desc_2 = stream_descriptor(
+        StreamId{"thing"},
+        RowCountIndex{},
+        {scalar_field(DataType::UINT8, "ints6"),
+         scalar_field(DataType::UINT8, "ints7"),
+         scalar_field(DataType::UINT8, "ints8"),
+         scalar_field(DataType::UINT8, "ints9"),
+         scalar_field(DataType::UINT8, "ints10")}
+    );
 
     SegmentInMemory in_mem_seg_2{stream_desc_2.clone()};
 
@@ -586,15 +601,16 @@ TEST(Segment, ColumnNamesProduceDifferentHashesEmpty) {
     ASSERT_NE(hash_1, hash_2);
 }
 
-
 TEST(Segment, ColumnNamesProduceDifferentHashesV2) {
-    const auto stream_desc_1 = stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {
-        scalar_field(DataType::UINT8, "ints1"),
-        scalar_field(DataType::UINT8, "ints2"),
-        scalar_field(DataType::UINT8, "ints3"),
-        scalar_field(DataType::UINT8, "ints4"),
-        scalar_field(DataType::UINT8, "ints5")
-    });
+    const auto stream_desc_1 = stream_descriptor(
+        StreamId{"thing"},
+        RowCountIndex{},
+        {scalar_field(DataType::UINT8, "ints1"),
+         scalar_field(DataType::UINT8, "ints2"),
+         scalar_field(DataType::UINT8, "ints3"),
+         scalar_field(DataType::UINT8, "ints4"),
+         scalar_field(DataType::UINT8, "ints5")}
+    );
 
     SegmentInMemory in_mem_seg_1{stream_desc_1.clone()};
 
@@ -605,13 +621,15 @@ TEST(Segment, ColumnNamesProduceDifferentHashesV2) {
     in_mem_seg_1.set_scalar(4, uint8_t(0));
     in_mem_seg_1.end_row();
 
-    const auto stream_desc_2 = stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {
-        scalar_field(DataType::UINT8, "ints6"),
-        scalar_field(DataType::UINT8, "ints7"),
-        scalar_field(DataType::UINT8, "ints8"),
-        scalar_field(DataType::UINT8, "ints9"),
-        scalar_field(DataType::UINT8, "ints10")
-    });
+    const auto stream_desc_2 = stream_descriptor(
+        StreamId{"thing"},
+        RowCountIndex{},
+        {scalar_field(DataType::UINT8, "ints6"),
+         scalar_field(DataType::UINT8, "ints7"),
+         scalar_field(DataType::UINT8, "ints8"),
+         scalar_field(DataType::UINT8, "ints9"),
+         scalar_field(DataType::UINT8, "ints10")}
+    );
 
     SegmentInMemory in_mem_seg_2{stream_desc_2.clone()};
 
@@ -632,23 +650,27 @@ TEST(Segment, ColumnNamesProduceDifferentHashesV2) {
 }
 
 TEST(Segment, ColumnNamesProduceDifferentHashesEmptyV2) {
-    const auto stream_desc_1 = stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {
-        scalar_field(DataType::UINT8, "ints1"),
-        scalar_field(DataType::UINT8, "ints2"),
-        scalar_field(DataType::UINT8, "ints3"),
-        scalar_field(DataType::UINT8, "ints4"),
-        scalar_field(DataType::UINT8, "ints5")
-    });
+    const auto stream_desc_1 = stream_descriptor(
+        StreamId{"thing"},
+        RowCountIndex{},
+        {scalar_field(DataType::UINT8, "ints1"),
+         scalar_field(DataType::UINT8, "ints2"),
+         scalar_field(DataType::UINT8, "ints3"),
+         scalar_field(DataType::UINT8, "ints4"),
+         scalar_field(DataType::UINT8, "ints5")}
+    );
 
     SegmentInMemory in_mem_seg_1{stream_desc_1.clone()};
 
-    const auto stream_desc_2 = stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {
-        scalar_field(DataType::UINT8, "ints6"),
-        scalar_field(DataType::UINT8, "ints7"),
-        scalar_field(DataType::UINT8, "ints8"),
-        scalar_field(DataType::UINT8, "ints9"),
-        scalar_field(DataType::UINT8, "ints10")
-    });
+    const auto stream_desc_2 = stream_descriptor(
+        StreamId{"thing"},
+        RowCountIndex{},
+        {scalar_field(DataType::UINT8, "ints6"),
+         scalar_field(DataType::UINT8, "ints7"),
+         scalar_field(DataType::UINT8, "ints8"),
+         scalar_field(DataType::UINT8, "ints9"),
+         scalar_field(DataType::UINT8, "ints10")}
+    );
 
     SegmentInMemory in_mem_seg_2{stream_desc_2.clone()};
 
@@ -662,13 +684,15 @@ TEST(Segment, ColumnNamesProduceDifferentHashesEmptyV2) {
 }
 
 TEST(Segment, TestIdenticalProduceSameHashes) {
-    const auto stream_desc_1 = stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {
-        scalar_field(DataType::UINT8, "a"),
-        scalar_field(DataType::UINT8, "b"),
-        scalar_field(DataType::UINT8, "c"),
-        scalar_field(DataType::UINT8, "d"),
-        scalar_field(DataType::UINT8, "e")
-    });
+    const auto stream_desc_1 = stream_descriptor(
+        StreamId{"thing"},
+        RowCountIndex{},
+        {scalar_field(DataType::UINT8, "a"),
+         scalar_field(DataType::UINT8, "b"),
+         scalar_field(DataType::UINT8, "c"),
+         scalar_field(DataType::UINT8, "d"),
+         scalar_field(DataType::UINT8, "e")}
+    );
 
     SegmentInMemory in_mem_seg_1{stream_desc_1.clone()};
 
@@ -698,13 +722,15 @@ TEST(Segment, TestIdenticalProduceSameHashes) {
 }
 
 TEST(Segment, TestIdenticalProduceSameHashesV2) {
-    const auto stream_desc_1 = stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {
-        scalar_field(DataType::UINT8, "a"),
-        scalar_field(DataType::UINT8, "b"),
-        scalar_field(DataType::UINT8, "c"),
-        scalar_field(DataType::UINT8, "d"),
-        scalar_field(DataType::UINT8, "e")
-    });
+    const auto stream_desc_1 = stream_descriptor(
+        StreamId{"thing"},
+        RowCountIndex{},
+        {scalar_field(DataType::UINT8, "a"),
+         scalar_field(DataType::UINT8, "b"),
+         scalar_field(DataType::UINT8, "c"),
+         scalar_field(DataType::UINT8, "d"),
+         scalar_field(DataType::UINT8, "e")}
+    );
 
     SegmentInMemory in_mem_seg_1{stream_desc_1.clone()};
 

@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import sys
 import numpy as np
 import pandas as pd
@@ -80,12 +81,12 @@ def test_delete_version_basic(s3_version_store, idx, sym):
     object_version_store.delete_version(symbol, idx)
 
     with pytest.raises(NoDataFoundException):
-       object_version_store.read(symbol, idx)
+        object_version_store.read(symbol, idx)
     assert len(object_version_store.list_versions(symbol)) == 2
     if idx != 2:
-       assert_frame_equal(object_version_store.read(symbol).data, df3)
+        assert_frame_equal(object_version_store.read(symbol).data, df3)
     else:
-       assert_frame_equal(object_version_store.read(symbol).data, df2)
+        assert_frame_equal(object_version_store.read(symbol).data, df2)
 
     assert_frame_equal(object_version_store.read(symbol, (idx - 1) % 3).data, dfs[(idx - 1) % 3])
     assert_frame_equal(object_version_store.read(symbol, (idx - 2) % 3).data, dfs[(idx - 2) % 3])

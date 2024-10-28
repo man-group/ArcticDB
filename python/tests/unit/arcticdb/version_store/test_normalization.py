@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import datetime
 import itertools
 import sys
@@ -73,9 +74,12 @@ def test_msg_pack_legacy_1():
     # serialised data created with Python 3.6, msgpack 0.6.2, pandas 0.25.3
     # this was before string and bytes types were seperated in msgpack
     norm = test_msgpack_normalizer
-    packed = b'\x82\xa1a\xc7\x0b \x92\xcf\x15\t\x05:\xdfT\xc8\x00\xc0\xa1b\xc7\x1b \x92\xcf\x14\x9e\xc2\x84+~ \x00\xb0America/New_York'
+    packed = b"\x82\xa1a\xc7\x0b \x92\xcf\x15\t\x05:\xdfT\xc8\x00\xc0\xa1b\xc7\x1b \x92\xcf\x14\x9e\xc2\x84+~ \x00\xb0America/New_York"
     data = norm._msgpack_unpackb(packed)
-    assert data == {'a': pd.Timestamp('2018-01-12 09:15:00'), 'b': pd.Timestamp('2017-01-31 00:00:00-0500', tz='America/New_York')}
+    assert data == {
+        "a": pd.Timestamp("2018-01-12 09:15:00"),
+        "b": pd.Timestamp("2017-01-31 00:00:00-0500", tz="America/New_York"),
+    }
 
 
 def test_msg_pack_legacy_2():
@@ -83,7 +87,7 @@ def test_msg_pack_legacy_2():
     # serialised data created with Python 3.6, msgpack 0.6.2, pandas 0.25.3
     # this was before string and bytes types were seperated in msgpack
     norm = test_msgpack_normalizer
-    packed = b'\xc7\x1b!\x92\xcf\x15\x93w\xb1\xd2\xa6\x8f\xe8\xb0America/New_York'
+    packed = b"\xc7\x1b!\x92\xcf\x15\x93w\xb1\xd2\xa6\x8f\xe8\xb0America/New_York"
     dt = datetime.datetime(2019, 4, 8, 10, 5, 2, 1)
     nytz = pytz.timezone("America/New_York")
     loc_dt = nytz.localize(dt)
@@ -135,7 +139,7 @@ def test_empty_df():
 )
 def test_write_tz(lmdb_version_store, sym, tz):
     assert tz is not None
-    index = index=pd.date_range(pd.Timestamp(0), periods=10, tz=tz)
+    index = index = pd.date_range(pd.Timestamp(0), periods=10, tz=tz)
     df = pd.DataFrame(data={"col1": np.arange(10)}, index=index)
     lmdb_version_store.write(sym, df)
     result = lmdb_version_store.read(sym).data
@@ -151,7 +155,9 @@ def test_write_tz(lmdb_version_store, sym, tz):
     assert end_ts == index[-1]
 
 
-@pytest.mark.parametrize("column_data", itertools.permutations([pd.Timestamp(0), pd.NaT, pd.Timestamp(0, tz="Europe/Amsterdam")]))
+@pytest.mark.parametrize(
+    "column_data", itertools.permutations([pd.Timestamp(0), pd.NaT, pd.Timestamp(0, tz="Europe/Amsterdam")])
+)
 def test_write_mixed_tz(lmdb_version_store_v1, column_data):
     lib = lmdb_version_store_v1
     sym = "test_write_mixed_tz"
@@ -624,12 +630,14 @@ def test_norm_failure_error_message(lmdb_version_store_v1):
     with pytest.raises(ArcticDbNotYetImplemented) as update_exception:
         lib.update(sym, df)
 
-    assert all(col_name in str(e.value) for e in
-               [write_exception, batch_write_exception, append_exception, batch_append_exception, update_exception])
-    assert all("pickle_on_failure" in str(e.value) for e in
-               [write_exception, batch_write_exception])
-    assert all("pickle_on_failure" not in str(e.value) for e in
-               [append_exception, batch_append_exception, update_exception])
+    assert all(
+        col_name in str(e.value)
+        for e in [write_exception, batch_write_exception, append_exception, batch_append_exception, update_exception]
+    )
+    assert all("pickle_on_failure" in str(e.value) for e in [write_exception, batch_write_exception])
+    assert all(
+        "pickle_on_failure" not in str(e.value) for e in [append_exception, batch_append_exception, update_exception]
+    )
 
 
 def test_writing_timedelta(lmdb_version_store_v1):
@@ -646,13 +654,14 @@ def test_bools_are_pickled(lmdb_version_store_allows_pickling):
 
     df = pd.DataFrame({"a": [True, False]})
     lib.write(sym, df)
-    lib.get_info(sym)['type'] == 'pickled'
+    lib.get_info(sym)["type"] == "pickled"
     assert_frame_equal(df, lib.read(sym).data)
 
     df = pd.DataFrame({"a": [True, False, np.nan]})
     lib.write(sym, df)
-    lib.get_info(sym)['type'] == 'pickled'
+    lib.get_info(sym)["type"] == "pickled"
     assert_frame_equal(df, lib.read(sym).data)
+
 
 def test_bools_with_nan_throw_without_pickling(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
@@ -662,19 +671,21 @@ def test_bools_with_nan_throw_without_pickling(lmdb_version_store_v1):
     with pytest.raises(Exception):
         lib.write(sym, df)
 
+
 def test_arrays_are_pickled(lmdb_version_store_allows_pickling):
     lib = lmdb_version_store_allows_pickling
     sym = "test_arrays_are_pickled"
 
     df = pd.DataFrame({"a": [np.array([1, 2])]})
     lib.write(sym, df)
-    lib.get_info(sym)['type'] == 'pickled'
+    lib.get_info(sym)["type"] == "pickled"
     assert_frame_equal(df, lib.read(sym).data)
 
     df = pd.DataFrame({"a": [[1, 2]]})
     lib.write(sym, df)
-    lib.get_info(sym)['type'] == 'pickled'
+    lib.get_info(sym)["type"] == "pickled"
     assert_frame_equal(df, lib.read(sym).data)
+
 
 def test_arrays_throw_without_pickling(lmdb_version_store_v1):
     lib = lmdb_version_store_v1

@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -57,9 +58,7 @@ struct ITypeHandler {
             );
         }
 
-        [[nodiscard]] int type_size() const {
-            return folly::poly_call<2>(*this);
-        }
+        [[nodiscard]] int type_size() const { return folly::poly_call<2>(*this); }
 
         void convert_type(
             const Column& source_column,
@@ -70,11 +69,29 @@ struct ITypeHandler {
             TypeDescriptor dest_type_desc,
             const DecodePathData& shared_data,
             std::any& handler_data,
-            const std::shared_ptr<StringPool>& string_pool) {
-            folly::poly_call<1>(*this, source_column, dest_buffer, num_rows, offset_bytes, source_type_desc, dest_type_desc, shared_data, handler_data, string_pool);
+            const std::shared_ptr<StringPool>& string_pool
+        ) {
+            folly::poly_call<1>(
+                *this,
+                source_column,
+                dest_buffer,
+                num_rows,
+                offset_bytes,
+                source_type_desc,
+                dest_type_desc,
+                shared_data,
+                handler_data,
+                string_pool
+            );
         }
 
-        void default_initialize(ChunkedBuffer& buffer, size_t offset, size_t byte_size, const DecodePathData& shared_data, std::any& handler_data) const {
+        void default_initialize(
+            ChunkedBuffer& buffer,
+            size_t offset,
+            size_t byte_size,
+            const DecodePathData& shared_data,
+            std::any& handler_data
+        ) const {
             folly::poly_call<3>(*this, buffer, offset, byte_size, shared_data, handler_data);
         }
     };
@@ -86,7 +103,7 @@ struct ITypeHandler {
 using TypeHandler = folly::Poly<ITypeHandler>;
 
 class TypeHandlerDataFactory {
-public:
+  public:
     virtual std::any get_data() const = 0;
     virtual ~TypeHandlerDataFactory() = default;
 };
@@ -94,7 +111,7 @@ public:
 /// Some types cannot be trivially converted from storage to Python types .This singleton holds a set of type erased
 /// handlers (implementing the handle_type function) which handle the parsing from storage to python.
 class TypeHandlerRegistry {
-public:
+  public:
     static std::shared_ptr<TypeHandlerRegistry> instance_;
     static std::once_flag init_flag_;
 
@@ -105,16 +122,14 @@ public:
     std::shared_ptr<TypeHandler> get_handler(const entity::TypeDescriptor& type_descriptor) const;
     void register_handler(const entity::TypeDescriptor& type_descriptor, TypeHandler&& handler);
 
-    void set_handler_data(std::unique_ptr<TypeHandlerDataFactory>&& data) {
-        handler_data_factory_ = std::move(data);
-    }
+    void set_handler_data(std::unique_ptr<TypeHandlerDataFactory>&& data) { handler_data_factory_ = std::move(data); }
 
     std::any get_handler_data() {
         util::check(static_cast<bool>(handler_data_factory_), "No type handler set");
         return handler_data_factory_->get_data();
     }
 
-private:
+  private:
     std::unique_ptr<TypeHandlerDataFactory> handler_data_factory_;
 
     struct Hasher {
@@ -123,18 +138,14 @@ private:
     std::unordered_map<entity::TypeDescriptor, std::shared_ptr<TypeHandler>, Hasher> handlers_;
 };
 
-
 inline std::shared_ptr<TypeHandler> get_type_handler(TypeDescriptor source, TypeDescriptor target) {
     auto handler = TypeHandlerRegistry::instance()->get_handler(source);
-    if(handler)
+    if (handler)
         return handler;
 
     return TypeHandlerRegistry::instance()->get_handler(target);
 }
 
-inline std::any get_type_handler_data() {
-    return TypeHandlerRegistry::instance()->get_handler_data();
-}
+inline std::any get_type_handler_data() { return TypeHandlerRegistry::instance()->get_handler_data(); }
 
-
-}
+} // namespace arcticdb

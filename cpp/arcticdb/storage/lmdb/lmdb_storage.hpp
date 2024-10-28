@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -29,7 +30,7 @@ class LmdbStorage final : public Storage {
     using Config = arcticdb::proto::lmdb_storage::Config;
     static void reset_warning_counter();
 
-    LmdbStorage(const LibraryPath &lib, OpenMode mode, const Config &conf);
+    LmdbStorage(const LibraryPath& lib, OpenMode mode, const Config& conf);
     LmdbStorage(LmdbStorage&& other) noexcept;
     ~LmdbStorage() override;
 
@@ -44,17 +45,16 @@ class LmdbStorage final : public Storage {
 
     void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) final;
 
-    bool do_supports_prefix_matching() const final {
-        return false;
-    };
+    bool do_supports_prefix_matching() const final { return false; };
 
     inline bool do_fast_delete() final;
 
     void cleanup() override;
 
-    bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string &prefix) final;
+    bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix)
+        final;
 
-    bool do_key_exists(const VariantKey & key) final;
+    bool do_key_exists(const VariantKey& key) final;
 
     bool do_is_path_valid(const std::string_view path) const final;
 
@@ -79,10 +79,7 @@ class LmdbStorage final : public Storage {
     // For log warning only
     // Number of times an LMDB path has been opened. See also reinit_lmdb_warning.
     // Opening an LMDB env over the same path twice in the same process is unsafe, so we warn the user about it.
-    inline static std::unordered_map<
-        std::string,
-        uint64_t
-    > times_path_opened;
+    inline static std::unordered_map<std::string, uint64_t> times_path_opened;
 };
 
 inline arcticdb::proto::storage::VariantStorage pack_config(const std::string& path) {
@@ -93,4 +90,4 @@ inline arcticdb::proto::storage::VariantStorage pack_config(const std::string& p
     return output;
 }
 
-}
+} // namespace arcticdb::storage::lmdb

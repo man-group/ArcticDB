@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 from arcticdb import Arctic
 from arcticdb.version_store.library import WritePayload, ReadRequest
 import pandas as pd
@@ -16,7 +17,7 @@ from .common import *
 WIDE_DF_ROWS = 5_000
 WIDE_DF_COLS = 30_000
 # We use larger dataframes for non-batch methods
-PARAMS = ([1_000_000, 1_500_000])
+PARAMS = [1_000_000, 1_500_000]
 PARAM_NAMES = ["rows"]
 BATCH_PARAMS = ([25_000, 50_000], [500, 1000])
 BATCH_PARAM_NAMES = ["rows", "num_symbols"]
@@ -50,9 +51,7 @@ class BasicFunctions:
         lib = self.ac.create_library(lib_name)
         lib.write(
             "short_wide_sym",
-            generate_random_floats_dataframe(
-                BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS
-            ),
+            generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS),
         )
 
     def teardown(self, rows):
@@ -67,9 +66,7 @@ class BasicFunctions:
         self.ac = Arctic(BasicFunctions.CONNECTION_STRING)
 
         self.df = generate_pseudo_random_dataframe(rows)
-        self.df_short_wide = generate_random_floats_dataframe(
-            BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS
-        )
+        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)
 
         self.lib = self.ac[get_prewritten_lib_name(rows)]
         self.fresh_lib = self.get_fresh_lib()
@@ -134,6 +131,7 @@ class BatchBasicFunctions:
     DATE_RANGE = DATE_RANGE
     params = BATCH_PARAMS
     param_names = BATCH_PARAM_NAMES
+
     def setup_cache(self):
         self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)
         rows_values, num_symbols_values = BatchBasicFunctions.params
@@ -185,43 +183,36 @@ class BatchBasicFunctions:
     def peakmem_read_batch(self, rows, num_symbols):
         read_reqs = [ReadRequest(f"{sym}_sym") for sym in range(num_symbols)]
         self.lib.read_batch(read_reqs)
+
     def time_read_batch_with_columns(self, rows, num_symbols):
         COLS = ["value"]
-        read_reqs = [
-            ReadRequest(f"{sym}_sym", columns=COLS) for sym in range(num_symbols)
-        ]
+        read_reqs = [ReadRequest(f"{sym}_sym", columns=COLS) for sym in range(num_symbols)]
         self.lib.read_batch(read_reqs)
 
     def peakmem_read_batch_with_columns(self, rows, num_symbols):
         COLS = ["value"]
-        read_reqs = [
-            ReadRequest(f"{sym}_sym", columns=COLS) for sym in range(num_symbols)
-        ]
+        read_reqs = [ReadRequest(f"{sym}_sym", columns=COLS) for sym in range(num_symbols)]
         self.lib.read_batch(read_reqs)
 
-
     def time_read_batch_with_date_ranges(self, rows, num_symbols):
-        read_reqs = [
-            ReadRequest(f"{sym}_sym", date_range=BatchBasicFunctions.DATE_RANGE)
-            for sym in range(num_symbols)
-        ]
+        read_reqs = [ReadRequest(f"{sym}_sym", date_range=BatchBasicFunctions.DATE_RANGE) for sym in range(num_symbols)]
         self.lib.read_batch(read_reqs)
 
     def peakmem_read_batch_with_date_ranges(self, rows, num_symbols):
-        read_reqs = [
-            ReadRequest(f"{sym}_sym", date_range=BatchBasicFunctions.DATE_RANGE)
-            for sym in range(num_symbols)
-        ]
+        read_reqs = [ReadRequest(f"{sym}_sym", date_range=BatchBasicFunctions.DATE_RANGE) for sym in range(num_symbols)]
         self.lib.read_batch(read_reqs)
 
 
 from shutil import copytree, rmtree
+
+
 class ModificationFunctions:
     """
     Modification functions (update, append, delete) need a different setup/teardown process, thus we place them in a
     separate group.
     """
-    number = 1 # We do a single run between setup and teardown because we e.g. can't delete a symbol twice
+
+    number = 1  # We do a single run between setup and teardown because we e.g. can't delete a symbol twice
     timeout = 6000
     ARCTIC_DIR = "modification_functions"
     ARCTIC_DIR_ORIGINAL = "modification_functions_original"
@@ -257,15 +248,14 @@ class ModificationFunctions:
         # Then on each teardown we restore the initial state by overwriting the modified with the original.
         copytree(ModificationFunctions.ARCTIC_DIR, ModificationFunctions.ARCTIC_DIR_ORIGINAL)
 
-
     def setup(self, rows):
         def get_time_at_fraction_of_df(fraction, rows=rows):
             end_time = pd.Timestamp("1/1/2023")
-            time_delta = pd.tseries.offsets.DateOffset(seconds=round(rows * (fraction-1)))
+            time_delta = pd.tseries.offsets.DateOffset(seconds=round(rows * (fraction - 1)))
             return end_time + time_delta
 
         self.df_update_single = generate_pseudo_random_dataframe(1, "s", get_time_at_fraction_of_df(0.5))
-        self.df_update_half = generate_pseudo_random_dataframe(rows//2, "s", get_time_at_fraction_of_df(0.75))
+        self.df_update_half = generate_pseudo_random_dataframe(rows // 2, "s", get_time_at_fraction_of_df(0.75))
         self.df_update_upsert = generate_pseudo_random_dataframe(rows, "s", get_time_at_fraction_of_df(1.5))
         self.df_append_single = generate_pseudo_random_dataframe(1, "s", get_time_at_fraction_of_df(1.1))
         self.df_append_large = generate_pseudo_random_dataframe(rows, "s", get_time_at_fraction_of_df(2))
@@ -274,13 +264,15 @@ class ModificationFunctions:
             ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS
         )
         self.df_append_short_wide = generate_random_floats_dataframe_with_index(
-            ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS, "s", get_time_at_fraction_of_df(2, rows=ModificationFunctions.WIDE_DF_ROWS)
+            ModificationFunctions.WIDE_DF_ROWS,
+            ModificationFunctions.WIDE_DF_COLS,
+            "s",
+            get_time_at_fraction_of_df(2, rows=ModificationFunctions.WIDE_DF_ROWS),
         )
 
         self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)
         self.lib = self.ac[get_prewritten_lib_name(rows)]
         self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]
-
 
     def teardown(self, rows):
         # After the modification functions clean up the changes by replacing the modified ARCTIC_DIR with the original ARCTIC_DIR_ORIGINAL
@@ -288,7 +280,6 @@ class ModificationFunctions:
         rmtree(ModificationFunctions.ARCTIC_DIR)
         copytree(ModificationFunctions.ARCTIC_DIR_ORIGINAL, ModificationFunctions.ARCTIC_DIR)
         del self.ac
-
 
     def time_update_single(self, rows):
         self.lib.update(f"sym", self.df_update_single)

@@ -185,5 +185,4 @@ class StorageFixtureFactory(_SaferContextManager):
             self.enforcing_permissions = saved
 
     @abstractmethod
-    def create_fixture(self) -> StorageFixture:
-        ...
+    def create_fixture(self) -> StorageFixture: ...

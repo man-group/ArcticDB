@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import os
 import sys
 import pytest
@@ -61,7 +62,7 @@ SSL_TESTS_MARK = pytest.mark.skipif(
 
 VENV_COMPAT_TESTS_MARK = pytest.mark.skipif(
     MACOS_CONDA_BUILD,
-    reason="Skipping compatibility tests because macOS conda builds don't have an available PyPi arcticdb version"
+    reason="Skipping compatibility tests because macOS conda builds don't have an available PyPi arcticdb version",
 )
 
 

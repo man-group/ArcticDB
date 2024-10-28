@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <arcticdb/storage/s3/s3_storage.hpp>
@@ -34,9 +35,7 @@ namespace s3 {
 
 namespace fg = folly::gen;
 
-std::string S3Storage::name() const {
-    return fmt::format("s3_storage-{}/{}/{}", region_, bucket_name_, root_folder_);
-}
+std::string S3Storage::name() const { return fmt::format("s3_storage-{}/{}/{}", region_, bucket_name_, root_folder_); }
 
 std::string S3Storage::get_key_path(const VariantKey& key) const {
     auto b = FlatBucketizer{};
@@ -62,12 +61,19 @@ void S3Storage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
     detail::do_remove_impl(std::move(ks), root_folder_, bucket_name_, *s3_client_, FlatBucketizer{});
 }
 
-bool S3Storage::do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix) {
-    auto prefix_handler = [] (const std::string& prefix, const std::string& key_type_dir, const KeyDescriptor& key_descriptor, KeyType) {
-        return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
-    };
+bool S3Storage::do_iterate_type_until_match(
+    KeyType key_type,
+    const IterateTypePredicate& visitor,
+    const std::string& prefix
+) {
+    auto prefix_handler =
+        [](const std::string& prefix, const std::string& key_type_dir, const KeyDescriptor& key_descriptor, KeyType) {
+            return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
+        };
 
-    return detail::do_iterate_type_impl(key_type, visitor, root_folder_, bucket_name_, *s3_client_, FlatBucketizer{}, std::move(prefix_handler), prefix);
+    return detail::do_iterate_type_impl(
+        key_type, visitor, root_folder_, bucket_name_, *s3_client_, FlatBucketizer{}, std::move(prefix_handler), prefix
+    );
 }
 
 bool S3Storage::do_key_exists(const VariantKey& key) {
@@ -77,45 +83,53 @@ bool S3Storage::do_key_exists(const VariantKey& key) {
 } // namespace s3
 } // namespace arcticdb::storage
 
-
 namespace arcticdb::storage::s3 {
 
-S3Storage::S3Storage(const LibraryPath &library_path, OpenMode mode, const Config &conf) :
-    Storage(library_path, mode),
-    s3_api_(S3ApiInstance::instance()),  // make sure we have an initialized AWS SDK
-    root_folder_(object_store_utils::get_root_folder(library_path)),
-    bucket_name_(conf.bucket_name()),
-    region_(conf.region()) {
+S3Storage::S3Storage(const LibraryPath& library_path, OpenMode mode, const Config& conf)
+    : Storage(library_path, mode),
+      s3_api_(S3ApiInstance::instance()), // make sure we have an initialized AWS SDK
+      root_folder_(object_store_utils::get_root_folder(library_path)),
+      bucket_name_(conf.bucket_name()),
+      region_(conf.region()) {
 
     auto creds = get_aws_credentials(conf);
 
-    if (conf.use_mock_storage_for_testing()){
+    if (conf.use_mock_storage_for_testing()) {
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using Mock S3 storage");
         s3_client_ = std::make_unique<MockS3Client>();
-    }
-    else if (creds.GetAWSAccessKeyId() == USE_AWS_CRED_PROVIDERS_TOKEN && creds.GetAWSSecretKey() == USE_AWS_CRED_PROVIDERS_TOKEN){
+    } else if (creds.GetAWSAccessKeyId() == USE_AWS_CRED_PROVIDERS_TOKEN &&
+               creds.GetAWSSecretKey() == USE_AWS_CRED_PROVIDERS_TOKEN) {
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using AWS auth mechanisms");
-        s3_client_ = std::make_unique<RealS3Client>(get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, conf.use_virtual_addressing());
+        s3_client_ = std::make_unique<RealS3Client>(
+            get_s3_config(conf),
+            Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
+            conf.use_virtual_addressing()
+        );
     } else {
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using provided auth credentials");
-        s3_client_ = std::make_unique<RealS3Client>(creds, get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, conf.use_virtual_addressing());
+        s3_client_ = std::make_unique<RealS3Client>(
+            creds,
+            get_s3_config(conf),
+            Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
+            conf.use_virtual_addressing()
+        );
     }
 
     if (conf.prefix().empty()) {
         ARCTICDB_DEBUG(log::version(), "prefix not found, will use {}", root_folder_);
     } else if (conf.use_raw_prefix()) {
-            ARCTICDB_DEBUG(log::version(), "raw prefix found, using: {}", conf.prefix());
-            root_folder_ = conf.prefix();
+        ARCTICDB_DEBUG(log::version(), "raw prefix found, using: {}", conf.prefix());
+        root_folder_ = conf.prefix();
     } else {
         auto prefix_path = LibraryPath::from_delim_path(conf.prefix(), '.');
         root_folder_ = object_store_utils::get_root_folder(prefix_path);
         ARCTICDB_DEBUG(log::version(), "parsed prefix found, using: {}", root_folder_);
     }
 
-    // When linking against libraries built with pre-GCC5 compilers, the num_put facet is not initalized on the classic locale
-    // Rather than change the locale globally, which might cause unexpected behaviour in legacy code, just add the required
-    // facet here
-    std::locale locale{ std::locale::classic(), new std::num_put<char>()};
+    // When linking against libraries built with pre-GCC5 compilers, the num_put facet is not initalized on the classic
+    // locale Rather than change the locale globally, which might cause unexpected behaviour in legacy code, just add
+    // the required facet here
+    std::locale locale{std::locale::classic(), new std::num_put<char>()};
     (void)std::locale::global(locale);
     ARCTICDB_DEBUG(log::storage(), "Opened S3 backed storage at {}", root_folder_);
 }

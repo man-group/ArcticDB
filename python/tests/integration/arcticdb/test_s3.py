@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import re
 
 import pytest
@@ -76,11 +77,7 @@ def s3_storage_dots_in_path(request):
     prefix = "some_path/.thing_with_a_dot/even.more.dots/end"
 
     with request.param(
-            use_ssl=False,
-            ssl_test_support=False,
-            bucket_versioning=False,
-            default_prefix=prefix,
-            use_raw_prefix=True
+        use_ssl=False, ssl_test_support=False, bucket_versioning=False, default_prefix=prefix, use_raw_prefix=True
     ) as f:
         with f.create_fixture() as g:
             yield g

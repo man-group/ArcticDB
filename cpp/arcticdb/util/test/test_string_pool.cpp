@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <gtest/gtest.h> // googletest header file
@@ -16,7 +17,6 @@
 using namespace arcticdb;
 #define GTEST_COUT std::cerr << "[          ] [ INFO ]"
 
-
 TEST(StringPool, MultipleReadWrite) {
     StringPool pool;
 
@@ -26,7 +26,7 @@ TEST(StringPool, MultipleReadWrite) {
     using map_t = std::unordered_map<std::string, position_t>;
     map_t positions;
 
-    for (auto &s : strings) {
+    for (auto& s : strings) {
         OffsetString str = pool.get(std::string_view(s));
         map_t::const_iterator it;
         if ((it = positions.find(s)) != positions.end())
@@ -37,7 +37,7 @@ TEST(StringPool, MultipleReadWrite) {
 
     const size_t NumTests = 100;
     for (size_t i = 0; i < NumTests; ++i) {
-        auto &s = strings[random_int() & (VectorSize - 1)];
+        auto& s = strings[random_int() & (VectorSize - 1)];
         StringPool::StringType comp_fs(s.data(), s.size());
         OffsetString str = pool.get(s.data(), s.size());
         ASSERT_EQ(str.offset(), positions[s]);
@@ -57,7 +57,7 @@ TEST(StringPool, StressTest) {
     auto temp = 0;
     std::string timer_name("ingestion_stress");
     interval_timer timer(timer_name);
-    for (auto &s : strings) {
+    for (auto& s : strings) {
         OffsetString str = pool.get(std::string_view(s));
         temp += str.offset();
     }
@@ -66,7 +66,7 @@ TEST(StringPool, StressTest) {
     GTEST_COUT << " " << timer.display_all() << std::endl;
 }
 //
-//TEST(StringPool, BitMagicTest) {
+// TEST(StringPool, BitMagicTest) {
 //    bm::bvector<>   bv;
 //    bv[10] = true;
 //    GTEST_COUT << "done" << std::endl;

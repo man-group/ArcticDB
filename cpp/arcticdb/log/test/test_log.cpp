@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <arcticdb/log/log.hpp>
@@ -13,9 +14,7 @@
 #include <google/protobuf/text_format.h>
 #include <arcticdb/util/format_bytes.hpp>
 
-TEST(TestLog, SmokeTest) {
-    arcticdb::log::root().info("Some msg");
-}
+TEST(TestLog, SmokeTest) { arcticdb::log::root().info("Some msg"); }
 
 TEST(TestLog, ConfigureSingleton) {
     std::string txt_conf = R"pb(

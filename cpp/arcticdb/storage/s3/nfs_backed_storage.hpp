@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -25,14 +26,14 @@
 namespace arcticdb::storage::nfs_backed {
 
 class NfsBackedStorage final : public Storage {
-public:
+  public:
     using Config = arcticdb::proto::nfs_backed_storage::Config;
 
-    NfsBackedStorage(const LibraryPath &lib, OpenMode mode, const Config &conf);
+    NfsBackedStorage(const LibraryPath& lib, OpenMode mode, const Config& conf);
 
     std::string name() const final;
 
-private:
+  private:
     void do_write(Composite<KeySegmentPair>&& kvs) final;
 
     void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) final;
@@ -41,17 +42,14 @@ private:
 
     void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) final;
 
-    bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string &prefix) final;
+    bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix)
+        final;
 
     bool do_key_exists(const VariantKey& key) final;
 
-    bool do_supports_prefix_matching() const final {
-        return true;
-    }
+    bool do_supports_prefix_matching() const final { return true; }
 
-    bool do_fast_delete() final {
-        return false;
-    }
+    bool do_fast_delete() final { return false; }
 
     std::string do_key_path(const VariantKey&) const final { return {}; };
 
@@ -67,7 +65,7 @@ private:
     std::string region_;
 };
 
-inline arcticdb::proto::storage::VariantStorage pack_config(const std::string &bucket_name) {
+inline arcticdb::proto::storage::VariantStorage pack_config(const std::string& bucket_name) {
     arcticdb::proto::storage::VariantStorage output;
     arcticdb::proto::nfs_backed_storage::Config cfg;
     cfg.set_bucket_name(bucket_name);
@@ -76,10 +74,10 @@ inline arcticdb::proto::storage::VariantStorage pack_config(const std::string &b
 }
 
 inline arcticdb::proto::storage::VariantStorage pack_config(
-    const std::string &bucket_name,
-    const std::string &credential_name,
-    const std::string &credential_key,
-    const std::string &endpoint
+    const std::string& bucket_name,
+    const std::string& credential_name,
+    const std::string& credential_key,
+    const std::string& endpoint
 ) {
     arcticdb::proto::storage::VariantStorage output;
     arcticdb::proto::nfs_backed_storage::Config cfg;
@@ -96,5 +94,4 @@ struct NfsBucketizer {
     static size_t bucketize_length(KeyType key_type);
 };
 
-
-} //namespace arcticdb::nfs_backed
+} // namespace arcticdb::storage::nfs_backed

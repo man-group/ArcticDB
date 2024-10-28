@@ -2,13 +2,13 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
 
 #include <arcticdb/entity/index_range.hpp>
-
 
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/stream/index.hpp>
@@ -41,60 +41,59 @@ struct WriteToSegmentTask : public async::BaseTask {
         folly::Function<stream::StreamSink::PartialKey(const FrameSlice&)>&& partial_key_gen,
         size_t slice_num_for_column,
         Index index,
-        bool sparsify_floats);
+        bool sparsify_floats
+    );
 
     std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> operator()();
 };
 
 folly::Future<std::vector<SliceAndKey>> slice_and_write(
-        const std::shared_ptr<InputTensorFrame> &frame,
-        const SlicingPolicy &slicing,
-        IndexPartialKey&& partial_key,
-        const std::shared_ptr<stream::StreamSink> &sink,
-        const std::shared_ptr<DeDupMap>& de_dup_map = std::make_shared<DeDupMap>(),
-        bool allow_sparse = false
+    const std::shared_ptr<InputTensorFrame>& frame,
+    const SlicingPolicy& slicing,
+    IndexPartialKey&& partial_key,
+    const std::shared_ptr<stream::StreamSink>& sink,
+    const std::shared_ptr<DeDupMap>& de_dup_map = std::make_shared<DeDupMap>(),
+    bool allow_sparse = false
 );
 
 folly::Future<std::vector<SliceAndKey>> write_slices(
-        const std::shared_ptr<InputTensorFrame> &frame,
-        std::vector<FrameSlice>&& slices,
-        const SlicingPolicy &slicing,
-        IndexPartialKey&& partial_key,
-        const std::shared_ptr<stream::StreamSink>& sink,
-        const std::shared_ptr<DeDupMap>& de_dup_map,
-        bool sparsify_floats);
+    const std::shared_ptr<InputTensorFrame>& frame,
+    std::vector<FrameSlice>&& slices,
+    const SlicingPolicy& slicing,
+    IndexPartialKey&& partial_key,
+    const std::shared_ptr<stream::StreamSink>& sink,
+    const std::shared_ptr<DeDupMap>& de_dup_map,
+    bool sparsify_floats
+);
 
 folly::Future<entity::AtomKey> write_frame(
-    IndexPartialKey &&key,
+    IndexPartialKey&& key,
     const std::shared_ptr<InputTensorFrame>& frame,
-    const SlicingPolicy &slicing,
-    const std::shared_ptr<Store> &store,
+    const SlicingPolicy& slicing,
+    const std::shared_ptr<Store>& store,
     const std::shared_ptr<DeDupMap>& de_dup_map = std::make_shared<DeDupMap>(),
     bool allow_sparse = false
 );
 
 folly::Future<entity::AtomKey> append_frame(
-        IndexPartialKey&& key,
-        const std::shared_ptr<InputTensorFrame>& frame,
-        const SlicingPolicy& slicing,
-        index::IndexSegmentReader &index_segment_reader,
-        const std::shared_ptr<Store>& store,
-        bool dynamic_schema,
-        bool ignore_sort_order
+    IndexPartialKey&& key,
+    const std::shared_ptr<InputTensorFrame>& frame,
+    const SlicingPolicy& slicing,
+    index::IndexSegmentReader& index_segment_reader,
+    const std::shared_ptr<Store>& store,
+    bool dynamic_schema,
+    bool ignore_sort_order
 );
 
-enum class AffectedSegmentPart {
-    START,
-    END
-};
+enum class AffectedSegmentPart { START, END };
 
 std::optional<SliceAndKey> rewrite_partial_segment(
-        const SliceAndKey& existing,
-        const IndexRange& index_range,
-        VersionId version_id,
-        AffectedSegmentPart affected_part,
-        const std::shared_ptr<Store>& store);
-
+    const SliceAndKey& existing,
+    const IndexRange& index_range,
+    VersionId version_id,
+    AffectedSegmentPart affected_part,
+    const std::shared_ptr<Store>& store
+);
 
 /// Used, when updating a segment, to convert all 5 affected groups into a single list of slices
 /// The 5 groups are:
@@ -112,7 +111,6 @@ std::vector<SliceAndKey> flatten_and_fix_rows(
     size_t& global_count
 );
 
-std::vector<std::pair<FrameSlice, size_t>> get_slice_and_rowcount(
-        const std::vector<FrameSlice>& slices);
+std::vector<std::pair<FrameSlice, size_t>> get_slice_and_rowcount(const std::vector<FrameSlice>& slices);
 
-} //namespace arcticdb::pipelines
+} // namespace arcticdb::pipelines

@@ -2,19 +2,20 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
-#include<optional>
+#include <optional>
 #include <fmt/format.h>
-#include<arcticdb/entity/descriptors.hpp>
+#include <arcticdb/entity/descriptors.hpp>
 #include <arcticdb/entity/types.hpp>
 
 namespace arcticdb {
 
 namespace entity {
-    struct TypeDescriptor;
+struct TypeDescriptor;
 }
 
 /// Two types are trivially compatible if their byte representation is exactly the same i.e. you can memcpy
@@ -42,7 +43,8 @@ namespace entity {
 );
 
 inline std::string get_user_friendly_type_string(const entity::TypeDescriptor& type) {
-    return is_sequence_type(type.data_type()) ? fmt::format("TD<type=STRING, dim={}>", type.dimension_) : fmt::format("{}", type);
+    return is_sequence_type(type.data_type()) ? fmt::format("TD<type=STRING, dim={}>", type.dimension_)
+                                              : fmt::format("{}", type);
 }
 
-}
+} // namespace arcticdb

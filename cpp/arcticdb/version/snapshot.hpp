@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -19,14 +20,13 @@
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/util/variant.hpp>
 
-
 namespace arcticdb {
 
 void write_snapshot_entry(
     std::shared_ptr<stream::StreamSink> store,
-    std::vector<AtomKey> &keys,
-    const SnapshotId &snapshot_id,
-    const py::object &user_meta,
+    std::vector<AtomKey>& keys,
+    const SnapshotId& snapshot_id,
+    const py::object& user_meta,
     bool log_changes,
     KeyType key_type = KeyType::SNAPSHOT_REF
 );
@@ -39,22 +39,24 @@ void tombstone_snapshot(
 );
 
 void tombstone_snapshot(
-        const std::shared_ptr<stream::StreamSink>& store,
-        storage::KeySegmentPair&& key_segment_pair,
-        bool log_changes
-        );
+    const std::shared_ptr<stream::StreamSink>& store,
+    storage::KeySegmentPair&& key_segment_pair,
+    bool log_changes
+);
 
-void iterate_snapshots(const std::shared_ptr<Store>& store, folly::Function<void(entity::VariantKey & )> visitor);
+void iterate_snapshots(const std::shared_ptr<Store>& store, folly::Function<void(entity::VariantKey&)> visitor);
 
 std::optional<size_t> row_id_for_stream_in_snapshot_segment(
-    SegmentInMemory &seg,
+    SegmentInMemory& seg,
     bool using_ref_key,
-    const StreamId& stream_id);
+    const StreamId& stream_id
+);
 
 // Get a set of the index keys of a particular symbol that exist in any snapshot
 std::unordered_set<entity::AtomKey> get_index_keys_in_snapshots(
     const std::shared_ptr<Store>& store,
-    const StreamId &stream_id);
+    const StreamId& stream_id
+);
 
 std::pair<std::vector<AtomKey>, std::unordered_set<AtomKey>> get_index_keys_partitioned_by_inclusion_in_snapshots(
     const std::shared_ptr<Store>& store,
@@ -62,37 +64,31 @@ std::pair<std::vector<AtomKey>, std::unordered_set<AtomKey>> get_index_keys_part
     std::vector<entity::AtomKey>&& all_index_keys
 );
 
-std::vector<AtomKey> get_versions_from_segment(
-    const SegmentInMemory& snapshot_segment
-);
+std::vector<AtomKey> get_versions_from_segment(const SegmentInMemory& snapshot_segment);
 
-std::optional<VariantKey> get_snapshot_key(
-    const std::shared_ptr<Store>& store,
-    const SnapshotId &snap_name);
+std::optional<VariantKey> get_snapshot_key(const std::shared_ptr<Store>& store, const SnapshotId& snap_name);
 
 std::optional<std::pair<VariantKey, SegmentInMemory>> get_snapshot(
     const std::shared_ptr<Store>& store,
-    const SnapshotId &snap_name);
+    const SnapshotId& snap_name
+);
 
-std::set<StreamId> list_streams_in_snapshot(
-    const std::shared_ptr<Store>& store,
-    const SnapshotId& snap_name);
+std::set<StreamId> list_streams_in_snapshot(const std::shared_ptr<Store>& store, const SnapshotId& snap_name);
 
 using SnapshotMap = std::unordered_map<SnapshotId, std::vector<AtomKey>>;
 
-SnapshotMap get_versions_from_snapshots(
-    const std::shared_ptr<Store>& store
-    );
+SnapshotMap get_versions_from_snapshots(const std::shared_ptr<Store>& store);
 
 std::unordered_map<SnapshotId, std::optional<VariantKey>> get_keys_for_snapshots(
     const std::shared_ptr<Store>& store,
-    const std::vector<SnapshotId>& snap_names);
+    const std::vector<SnapshotId>& snap_names
+);
 
 /**
  * Stream id (symbol) -> all index keys in snapshots -> which snapshot contained that key.
  */
 using MasterSnapshotMap =
-        std::unordered_map<StreamId, std::unordered_map<IndexTypeKey, std::unordered_set<SnapshotId>>>;
+    std::unordered_map<StreamId, std::unordered_map<IndexTypeKey, std::unordered_set<SnapshotId>>>;
 
 /**
  * Map the index keys in every snapshot.
@@ -102,6 +98,6 @@ using MasterSnapshotMap =
 MasterSnapshotMap get_master_snapshots_map(
     std::shared_ptr<Store> store,
     const std::optional<const std::tuple<const SnapshotVariantKey&, std::vector<IndexTypeKey>&>>& get_keys_in_snapshot =
-            std::nullopt
+        std::nullopt
 );
-}
+} // namespace arcticdb
