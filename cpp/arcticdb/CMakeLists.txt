@@ -511,7 +511,7 @@ set(arcticdb_srcs
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
         storage/s3/ec2_utils.cpp
-        util/buffer_holder.cpp util/test/rapidcheck_lru_cache.cpp)
+        util/buffer_holder.cpp)
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
@@ -956,8 +956,7 @@ if(${TEST})
             version/test/version_map_model.hpp
             python/python_handlers.cpp
             storage/test/common.hpp
-            version/test/test_sort_index.cpp
-            util/test/rapidcheck_lru_cache.cpp)
+            version/test/test_sort_index.cpp)
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 
@@ -1063,8 +1062,8 @@ if(${TEST})
             util/test/rapidcheck_generators.cpp
             util/test/rapidcheck_string_pool.cpp
             util/test/rapidcheck_main.cpp
-            version/test/rapidcheck_version_map.cpp
-            util/test/rapidcheck_lru_cache.cpp)
+            util/test/rapidcheck_lru_cache.cpp
+            version/test/rapidcheck_version_map.cpp)
 
     add_executable(arcticdb_rapidcheck_tests ${rapidcheck_srcs})
     install(TARGETS arcticdb_rapidcheck_tests RUNTIME
