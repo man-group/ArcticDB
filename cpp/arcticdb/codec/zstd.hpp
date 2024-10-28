@@ -21,7 +21,7 @@ namespace arcticdb::detail {
 
 struct ZstdBlockEncoder {
 
-    using Opts = arcticdb::proto::encoding::VariantCodec::Zstd;
+    using Opts = ZstdCodec;
     static constexpr std::uint32_t VERSION = 1;
 
     static std::size_t max_compressed_size(std::size_t size) {
@@ -29,7 +29,7 @@ struct ZstdBlockEncoder {
     }
 
     static void set_shape_defaults(Opts &opts) {
-        opts.set_level(0);
+        opts.level_ = 0;
     }
 
     template<class T, typename CodecType>
@@ -42,10 +42,10 @@ struct ZstdBlockEncoder {
             std::size_t out_capacity,
             std::ptrdiff_t &pos,
             CodecType& out_codec) {
-        std::size_t compressed_bytes = ZSTD_compress(out, out_capacity, in, block_utils.bytes_, opts.level());
+        std::size_t compressed_bytes = ZSTD_compress(out, out_capacity, in, block_utils.bytes_, opts.level_);
         hasher(in, block_utils.count_);
         pos += compressed_bytes;
-        copy_codec(*out_codec.mutable_zstd(), opts);
+        *out_codec.mutable_zstd() = opts;
 
         return compressed_bytes;
     }
@@ -56,13 +56,12 @@ struct ZstdDecoder {
     /// @param[in] encoder_version Used to support multiple versions but won't be used before we have them
     template <typename T>
     static void decode_block(
-        [[maybe_unused]] std::uint32_t encoder_version,
-        const std::uint8_t* in,
-        std::size_t in_bytes,
-        T* t_out,
-        std::size_t out_bytes
-    ) {
-
+            const EncodedBlock&,
+            [[maybe_unused]] std::uint32_t encoder_version,
+            const std::uint8_t* in,
+            std::size_t in_bytes,
+            T* t_out,
+            std::size_t out_bytes) {
         const std::size_t decomp_size = ZSTD_getFrameContentSize(in, in_bytes);
         codec::check<ErrorCode::E_DECODE_ERROR>(
             decomp_size == out_bytes,

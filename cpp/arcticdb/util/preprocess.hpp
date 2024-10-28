@@ -16,13 +16,18 @@
 
 #define ARCTICDB_LIKELY(condition) __builtin_expect(condition, 1)
 #define ARCTICDB_UNLIKELY(condition) __builtin_expect(condition, 0)
-
+#define ARCTICDB_ALWAYS_INLINE inline __attribute__((__always_inline__))
+#define ARCTICDB_PREFETCH(ptr)  __builtin_prefetch(ptr, 0, 1);
+#define ARCTICDB_PACKED __attribute__((packed))
 #else
 #define ARCTICDB_UNUSED [[maybe_unused]]
 #define ARCTICDB_UNREACHABLE __assume(0);
 #define ARCTICDB_VISIBILITY_HIDDEN
 #define ARCTICDB_VISIBILITY_DEFAULT
+#define ARCTICDB_ALWAYS_INLINE __forceinline
+#define ARCTICDB_PREFETCH
 
+#define ARCTICDB_PACKED __declspec(align(1))
 #define ARCTICDB_LIKELY
 #define ARCTICDB_UNLIKELY
 #endif

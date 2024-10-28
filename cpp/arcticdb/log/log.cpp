@@ -14,7 +14,6 @@
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/rotating_file_sink.h>
 #include <spdlog/details/periodic_worker.h>
-#include <arcticdb/util/configs_map.hpp>
 #include <filesystem>
 
 #include <spdlog/sinks/stdout_color_sinks.h>
