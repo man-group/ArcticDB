@@ -18,7 +18,7 @@ class LRUCache {
     struct Node {
         KeyType key;
         ValueType value;
-        Node(KeyType&& k, ValueType&& v) : key(std::move(k)), value(std::move(v)) {}
+        Node(const KeyType& k, ValueType&& v) : key(k), value(std::move(v)) {}
     };
 
     size_t capacity_;
@@ -60,7 +60,7 @@ public:
         cache_.erase(it);
     }
 
-    void put(KeyType key, ValueType value) {
+    void put(const KeyType& key, ValueType value) {
         std::unique_lock lock(mutex_);
         ARCTICDB_DEBUG(log::inmem(), "Adding key {}", key);
         auto it = cache_.find(key);
@@ -73,7 +73,7 @@ public:
                 cache_.erase(list_.back().key);
                 list_.pop_back();
             }
-            list_.emplace_front(std::move(key), std::move(value));
+            list_.emplace_front(key, std::move(value));
             cache_[list_.front().key] = list_.begin();
         }
     }
