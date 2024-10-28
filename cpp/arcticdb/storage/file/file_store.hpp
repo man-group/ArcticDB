@@ -23,18 +23,22 @@
 #include <arcticdb/stream/piloted_clock.hpp>
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
+#include <arcticdb/codec/scanner.hpp>
 
 namespace arcticdb {
 
-
 size_t max_data_size(
     const std::vector<std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice>>& items,
-    const arcticdb::proto::encoding::VariantCodec& codec_opts,
+    const BlockCodecImpl& codec_opts,
     EncodingVersion encoding_version) {
     auto max_file_size = 0UL;
     for(const auto& item : items) {
         const auto& [pk, seg, slice] = item;
-        auto result = max_compressed_size_dispatch(seg, codec_opts, encoding_version);
+        SegmentScanResults encodings;
+        if(codec_opts.codec_type() == Codec::ADAPTIVE)
+            encodings = get_encodings(seg);
+
+        auto result = max_compressed_size_dispatch(seg, codec_opts, encoding_version, encodings);
         max_file_size += result.max_compressed_bytes_ + result.encoded_blocks_bytes_;
         const auto header_size = SegmentHeader::required_bytes(seg);
         max_file_size += header_size;
@@ -49,13 +53,12 @@ struct FileFooter {
 };
 
 void write_dataframe_to_file_internal(
-    const StreamId &stream_id,
-    const std::shared_ptr<pipelines::InputTensorFrame> &frame,
-    const std::string& path,
-    const WriteOptions &options,
-    const arcticdb::proto::encoding::VariantCodec &codec_opts,
-    EncodingVersion encoding_version
-) {
+        const StreamId &stream_id,
+        const std::shared_ptr<pipelines::InputTensorFrame> &frame,
+        const std::string& path,
+        const WriteOptions &options,
+        const BlockCodecImpl& block_codec,
+        EncodingVersion encoding_version) {
     ARCTICDB_SAMPLE(WriteDataFrameToFile, 0)
     py::gil_scoped_release release_gil;
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write_dataframe_to_file");
@@ -68,8 +71,7 @@ void write_dataframe_to_file_internal(
 
     auto slice_and_rowcount = get_slice_and_rowcount(slices);
     auto key_seg_futs = folly::collect(folly::window(std::move(slice_and_rowcount),
-         [frame, slicing, key = std::move(partial_key),
-             sparsify_floats = options.sparsify_floats](auto &&slice) {
+         [frame, slicing, key = std::move(partial_key), &options, block_codec](auto &&slice) {
              return async::submit_cpu_task(pipelines::WriteToSegmentTask(
                  frame,
                  slice.first,
@@ -77,18 +79,24 @@ void write_dataframe_to_file_internal(
                  get_partial_key_gen(frame, key),
                  slice.second,
                  frame->index,
-                 sparsify_floats));
+                 options,
+                 block_codec
+                 )).thenValueInline([] (auto&& result) {
+                     std::get<1>(result).calculate_statistics();
+                     return result;
+                 });
          },
          write_window_size())).via(&async::io_executor());
+
     auto segments = std::move(key_seg_futs).get();
 
-    auto data_size = max_data_size(segments, codec_opts, encoding_version);
+    auto data_size = max_data_size(segments, block_codec, encoding_version);
     ARCTICDB_DEBUG(log::version(), "Estimated max data size: {}", data_size);
-    auto config = storage::file::pack_config(path, data_size, segments.size(), stream_id, stream::get_descriptor_from_index(frame->index), encoding_version, codec_opts);
+    auto config = storage::file::pack_config(path, data_size, segments.size(), stream_id, stream::get_descriptor_from_index(frame->index), encoding_version);
 
     storage::LibraryPath lib_path{std::string{"file"}, fmt::format("{}", stream_id)};
     auto library = create_library(lib_path, storage::OpenMode::WRITE, {std::move(config)});
-    auto store = std::make_shared<async::AsyncStore<PilotedClock>>(library, codec_opts, encoding_version);
+    auto store = std::make_shared<async::AsyncStore<PilotedClock>>(library, block_codec, encoding_version);
     auto dedup_map = std::make_shared<DeDupMap>();
     size_t batch_size = ConfigsMap::instance()->get_int("FileWrite.BatchSize", 50);
     auto index_fut = folly::collect(folly::window(std::move(segments), [store, dedup_map] (auto key_seg) {
@@ -111,7 +119,7 @@ version_store::ReadVersionOutput read_dataframe_from_file_internal(
         const std::string& path,
         const std::shared_ptr<ReadQuery>& read_query,
         const ReadOptions& read_options,
-        const arcticdb::proto::encoding::VariantCodec &codec_opts,
+        const BlockCodecImpl& codec_opts,
         std::any& handler_data) {
     auto config = storage::file::pack_config(path, codec_opts);
     storage::LibraryPath lib_path{std::string{"file"}, fmt::format("{}", stream_id)};

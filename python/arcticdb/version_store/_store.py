@@ -659,7 +659,7 @@ class NativeVersionStore:
                 return None
             else:
                 vit = self.version_store.write_versioned_dataframe(
-                    symbol, item, norm_meta, udm, prune_previous_version, sparsify_floats, validate_index
+                    symbol, item, norm_meta, udm, prune_previous_version, validate_index, sparsify_floats
                 )
 
             return self._convert_thin_cxx_item_to_python(vit, metadata)

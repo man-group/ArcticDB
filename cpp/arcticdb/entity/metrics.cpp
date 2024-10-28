@@ -61,34 +61,12 @@ namespace arcticdb {
             mongo_instance_ = cfg_.instance;
             labels.try_emplace(MONGO_INSTANCE_LABEL, mongo_instance_);
             labels.try_emplace(PROMETHEUS_ENV_LABEL, cfg_.prometheus_env);
-            gateway_= std::make_shared<prometheus::Gateway>(cfg_.host, cfg_.port, cfg_.job_name, labels);
+            gateway_ = std::make_shared<prometheus::Gateway>(cfg_.host, cfg_.port, cfg_.job_name, labels);
             registry_ = std::make_shared<prometheus::Registry>();
             gateway_->RegisterCollectable(registry_);
 
             arcticdb::log::version().info("Prometheus Push created with settings {}", cfg_);
-
-        } else if (cfg_.model_ == MetricsConfig::Model::PULL) {
-
-            // create an http server ie "http://hostname:"+port()+"/metrics"
-            std::string endpoint = cfg_.host + ":" + cfg_.port;
-
-            if (exposer_.use_count() > 0) {
-                exposer_->RemoveCollectable(registry_, "/metrics");
-                exposer_.reset();
-            }
-
-            // default to 2 threads
-            exposer_ = std::make_shared<prometheus::Exposer>(endpoint, 2);
-
-            // create a metrics registry with component=main labels applied to all its
-            registry_ = std::make_shared<prometheus::Registry>();
-
-            // 2nd arg defaults to /metrics, make explicit or parameterise
-            exposer_->RegisterCollectable(registry_, "/metrics");
-
-            arcticdb::log::version().info("Prometheus endpoint created on {}/metrics", endpoint);
-        }
-        else {
+        } else {
             arcticdb::log::version().info("Prometheus not configured {}", cfg_);
         }
 

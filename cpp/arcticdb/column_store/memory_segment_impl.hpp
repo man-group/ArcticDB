@@ -669,12 +669,7 @@ public:
     void init_column_map() const;
 
     ColumnData string_pool_data() const {
-        return ColumnData{
-            &string_pool_->data(),
-            &string_pool_->shapes(),
-            string_pool_descriptor().type(),
-            nullptr
-        };
+        return string_pool_->column_data();
     }
 
     void compact_blocks() const {

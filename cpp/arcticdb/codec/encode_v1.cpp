@@ -6,6 +6,7 @@
  */
 #include <arcticdb/codec/encode_common.hpp>
 #include <arcticdb/codec/typed_block_encoder_impl.hpp>
+#include <arcticdb/codec/encode_v1.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
 #include <arcticdb/util/configs_map.hpp>
@@ -24,22 +25,8 @@ namespace arcticdb {
         std::ptrdiff_t& pos
     );
 
-    /// @brief Utility class used to encode and compute the max encoding size for regular data columns for V1 encoding
-    struct ColumnEncoderV1 {
-        static std::pair<size_t, size_t> max_compressed_size(
-            const arcticdb::proto::encoding::VariantCodec& codec_opts,
-            ColumnData& column_data);
-
-        static void encode(
-            const arcticdb::proto::encoding::VariantCodec &codec_opts,
-            ColumnData& column_data,
-            EncodedFieldImpl& variant_field,
-            Buffer& out,
-            std::ptrdiff_t& pos);
-    };
-
     std::pair<size_t, size_t> ColumnEncoderV1::max_compressed_size(
-            const arcticdb::proto::encoding::VariantCodec& codec_opts,
+            const BlockCodecImpl& codec_opts,
             ColumnData& column_data) {
         return column_data.type().visit_tag([&codec_opts, &column_data](auto type_desc_tag) {
             size_t max_compressed_bytes = 0;
@@ -64,7 +51,7 @@ namespace arcticdb {
     }
 
     void ColumnEncoderV1::encode(
-            const arcticdb::proto::encoding::VariantCodec& codec_opts,
+            const BlockCodecImpl& codec_opts,
             ColumnData& column_data,
             EncodedFieldImpl& field,
             Buffer& out,
@@ -87,7 +74,7 @@ namespace arcticdb {
 
     [[nodiscard]] SizeResult max_compressed_size_v1(
             const SegmentInMemory& in_mem_seg,
-            const arcticdb::proto::encoding::VariantCodec& codec_opts) {
+            const BlockCodecImpl& codec_opts) {
         ARCTICDB_SAMPLE(GetSegmentCompressedSize, 0)
         SizeResult result{};
         calc_metadata_size<EncodingPolicyV1>(in_mem_seg, codec_opts, result);
@@ -104,7 +91,7 @@ namespace arcticdb {
      * This takes an in memory segment with all the metadata, column tensors etc., loops through each column
      * and based on the type of the column, calls the typed block encoder for that column.
      */
-    [[nodiscard]] Segment encode_v1(SegmentInMemory&& s, const arcticdb::proto::encoding::VariantCodec &codec_opts) {
+    [[nodiscard]] Segment encode_v1(SegmentInMemory&& s, const BlockCodecImpl& codec_opts) {
         ARCTICDB_SAMPLE(EncodeSegment, 0)
         auto in_mem_seg = std::move(s);
         SegmentHeader segment_header{EncodingVersion::V1};

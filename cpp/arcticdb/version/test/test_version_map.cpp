@@ -150,7 +150,7 @@ TEST(VersionMap, PingPong) {
     auto right = std::make_shared<VersionMap>();
     right->set_validate(true);
 
-    ScopedConfig sc("VersionMap.ReloadInterval", 0); // always reload
+    ScopedIntConfig sc("VersionMap.ReloadInterval", 0); // always reload
 
     auto key1 = atom_key_builder().version_id(1).creation_ts(2).content_hash(3).start_index(
         4).end_index(5).build(id, KeyType::TABLE_INDEX);
@@ -194,7 +194,7 @@ TEST(VersionMap, TestLoadsRefAndIteration) {
         6).end_index(7).build(id, KeyType::TABLE_INDEX);
     version_map->write_version(store, key3, key2);
 
-    ScopedConfig reload_interval("VersionMap.ReloadInterval", 0); // always reload
+    ScopedIntConfig reload_interval("VersionMap.ReloadInterval", 0); // always reload
 
     std::vector<AtomKey> expected{ key3, key2, key1};
     auto result = get_all_versions(store, version_map, id);
@@ -227,8 +227,8 @@ TEST(VersionMap, TestCompact) {
     version_map->write_version(store, key2, key1);
     version_map->write_version(store, key3, key2);
 
-    ScopedConfig max_blocks("VersionMap.MaxVersionBlocks", 1);
-    ScopedConfig reload_interval("VersionMap.ReloadInterval", 0); // always reload
+    ScopedIntConfig max_blocks("VersionMap.MaxVersionBlocks", 1);
+    ScopedIntConfig reload_interval("VersionMap.ReloadInterval", 0); // always reload
     version_map->compact(store, id);
 
     ASSERT_EQ(store->num_atom_keys(), 2);
@@ -251,8 +251,8 @@ TEST(VersionMap, TestCompactWithDelete) {
     version_map->write_version(store, key3, key2);
     tombstone_version(store, version_map, id, 2);
 
-    ScopedConfig max_blocks("VersionMap.MaxVersionBlocks", 1);
-    ScopedConfig reload_interval("VersionMap.ReloadInterval", 0); // always reload
+    ScopedIntConfig max_blocks("VersionMap.MaxVersionBlocks", 1);
+    ScopedIntConfig reload_interval("VersionMap.ReloadInterval", 0); // always reload
     version_map->compact(store, id);
 
     ASSERT_EQ(store->num_atom_keys(), 2);
@@ -293,8 +293,8 @@ TEST(VersionMap, TestCompactWithDeleteTombstones) {
     version_map->write_version(store, key3, key2);
     tombstone_version(store, version_map, id, 2);
 
-    ScopedConfig max_blocks("VersionMap.MaxVersionBlocks", 1);
-    ScopedConfig reload_interval("VersionMap.ReloadInterval", 0); // always reload
+    ScopedIntConfig max_blocks("VersionMap.MaxVersionBlocks", 1);
+    ScopedIntConfig reload_interval("VersionMap.ReloadInterval", 0); // always reload
     version_map->compact(store, id);
 
     std::vector<AtomKey> expected{ key3, key1};
@@ -655,7 +655,7 @@ TEST(VersionMap, FollowingVersionChain){
 }
 
 TEST(VersionMap, FollowingVersionChainWithCaching){
-    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
+    ScopedIntConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
     // Set up the version chain v0(tombstone_all) <- v1 <- v2(tombstoned)
     auto store = std::make_shared<InMemoryStore>();
     auto version_map = std::make_shared<VersionMap>();
@@ -753,7 +753,7 @@ TEST(VersionMap, FollowingVersionChainEndEarlyOnTombstoneAll) {
 }
 
 TEST(VersionMap, HasCachedEntry) {
-    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
+    ScopedIntConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
     // Set up the version chain v0 <- v1(tombstone_all) <- v2 <- v3(tombstoned)
     auto store = std::make_shared<InMemoryStore>();
     auto version_map = std::make_shared<VersionMap>();
@@ -834,7 +834,7 @@ TEST(VersionMap, CacheInvalidationWithTombstoneAfterLoad) {
     using namespace arcticdb;
     // Given - symbol with 2 versions - load downto version 1
     // never time-invalidate the cache so we can test our other cache invalidation logic
-    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
+    ScopedIntConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
     auto store = std::make_shared<InMemoryStore>();
 
     auto version_map = std::make_shared<VersionMap>();
@@ -877,7 +877,7 @@ TEST(VersionMap, CacheInvalidationWithTombstoneAllAfterLoad) {
     using namespace arcticdb;
     // Given - symbol with 3 versions - load downto version 1 or 0
     // never time-invalidate the cache so we can test our other cache invalidation logic
-    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
+    ScopedIntConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
     StreamId id{"test"};
     std::shared_ptr<VersionMap> version_map;
     std::shared_ptr<InMemoryStore> store;
@@ -977,7 +977,7 @@ TEST(VersionMap, CacheInvalidationWithTombstoneAllAfterLoad) {
 
 TEST(VersionMap, CompactionUpdateCache) {
     using namespace arcticdb;
-    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
+    ScopedIntConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
     auto store = std::make_shared<InMemoryStore>();
     StreamId id{"test"};
 

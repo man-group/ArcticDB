@@ -10,6 +10,7 @@ import datetime
 import random
 import pytest
 
+import time
 import numpy as np
 import pandas as pd
 
@@ -82,3 +83,34 @@ def test_write_large_df_in_chunks(lmdb_version_store_big_map):
     assert lib.get_num_rows(symbol) == chunk_size * num_chunks
 
     assert_frame_equal(lib.head(symbol).data, all_zeros.head(5))
+
+
+def test_write_read_time_large_df(lmdb_version_store_big_map):
+    symbol = "timeseries_data"
+    lib = lmdb_version_store_big_map
+    #total_rows = 1000000000
+    total_rows = 100000
+    start_dt = pd.Timestamp("2020-01-01")
+    df = pd.DataFrame({
+        "bitpacked": np.random.randint(0, 5, total_rows),
+        "ffor": np.random.randint(100, 105, total_rows)
+    }, index=pd.date_range(start=start_dt, periods=total_rows, freq='S'))
+
+    write_start = time.time()
+    lib.write(symbol, df)
+    write_time = time.time() - write_start
+
+    assert lib.get_num_rows(symbol) == total_rows
+
+    read_start = time.time()
+    df_read = lib.read(symbol)
+    read_time = time.time() - read_start
+    rows_per_second = total_rows / read_time
+
+   # assert_frame_equal(df_read.head(5), df.head(5))
+    #assert df_read.index.is_monotonic_increasing
+
+    print(f"Write time: {write_time:.2f} seconds, Read time: {read_time:.2f} seconds, Rows/Second read: {rows_per_second:.2f}")
+
+
+

@@ -164,6 +164,11 @@ else()
         /wd4250 # Suppress inherits via dominance warning
         /we4189 # Unused local variable is an error
         /we4100 # Unused function parameter is an error
+        /wd4359 # Alignment specifier is less than actual alignment
+        /wd4805
+        /wd4806
+        /wd4334
+        /wd4305
     )
 endif ()
 
@@ -184,6 +189,38 @@ set(arcticdb_srcs
         codec/magic_words.hpp
         codec/passthrough.hpp
         codec/protobuf_mappings.hpp
+        codec/compression/frequency.hpp
+        codec/compression/constant.hpp
+        codec/compression/fastlanes_common.hpp
+        codec/compression/delta.hpp
+        codec/compression/ffor.hpp
+        codec/compression/bitpack_fused.hpp
+        codec/compression/encoding_types.hpp
+        codec/compression/estimators.hpp
+        codec/compression/bitpack_fused.hpp
+        codec/compression/transpose.hpp
+        codec/compression/encoder_data.hpp
+        codec/compression/compressor.hpp
+        codec/compression/encoding_scan_result.hpp
+        codec/compression/contiguous_range_adaptor.hpp
+        codec/compression/bitpack.hpp
+        codec/compression/plain.hpp
+        codec/compression/alp.hpp
+        codec/bitmap_utils.hpp
+        codec/encode_v2.hpp
+        codec/encode_v1.hpp
+        codec/compression/alp_header.hpp
+        codec/compression/compression_utils.hpp
+        codec/compression/frequency.hpp
+        codec/compression/constant.hpp
+        codec/compression/fastlanes_common.hpp
+        codec/compression/delta.hpp
+        codec/compression/ffor.hpp
+        codec/adaptive.hpp
+        codec/adaptive.hpp
+        codec/scanner.hpp
+        codec/adaptive.hpp
+        codec/adaptive.hpp
         codec/slice_data_sink.hpp
         codec/segment_header.hpp
         codec/segment_identifier.hpp
@@ -383,6 +420,7 @@ set(arcticdb_srcs
         util/trace.hpp
         util/lazy.hpp
         util/type_traits.hpp
+        util/value_container.hpp
         util/variant.hpp
         version/de_dup_map.hpp
         version/op_log.hpp
@@ -412,6 +450,7 @@ set(arcticdb_srcs
         codec/encoded_field.cpp
         codec/protobuf_mappings.cpp
         codec/segment.cpp
+        codec/bitmap_utils.cpp
         codec/segment_header.cpp
         column_store/chunked_buffer.cpp
         column_store/column.cpp
@@ -535,7 +574,8 @@ set(arcticdb_srcs
         version/version_utils.cpp
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
-        storage/s3/ec2_utils.cpp)
+        storage/s3/ec2_utils.cpp
+        )
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
@@ -677,7 +717,6 @@ set (arcticdb_core_libraries
         arcticdb_proto
         xxHash::xxHash
         prometheus-cpp::push
-        prometheus-cpp::pull
         unordered_dense::unordered_dense
         ${standard_libraries}
         fmt::fmt
@@ -762,8 +801,8 @@ if (SSL_LINK)
     find_package(OpenSSL REQUIRED)
     list(APPEND arcticdb_core_libraries OpenSSL::SSL)
     if (NOT WIN32)
-        list(APPEND arcticdb_core_libraries ${KERBEROS_LIBRARY})
-        list(APPEND arcticdb_core_includes  ${KERBEROS_INCLUDE_DIR})
+        #list(APPEND arcticdb_core_libraries ${KERBEROS_LIBRARY})
+        #list(APPEND arcticdb_core_includes  ${KERBEROS_INCLUDE_DIR})
     endif()
 endif ()
 target_link_libraries(arcticdb_core_object PUBLIC ${arcticdb_core_libraries})
@@ -901,11 +940,11 @@ else()
             ${CMAKE_COMMAND} -E copy $<TARGET_FILE:arcticdb_ext> ${CMAKE_INSTALL_PREFIX})
 endif()
 
+
 ## Unit Tests ##
 if(${TEST})
     unset(Python_USE_STATIC_LIBS)
     find_package(Python 3 COMPONENTS Interpreter Development REQUIRED)
-    find_package(Arrow REQUIRED)
     find_package(rapidcheck REQUIRED)
     find_package(benchmark REQUIRED)
 
@@ -917,6 +956,12 @@ if(${TEST})
             codec/test/test_encode_field_collection.cpp
             codec/test/test_segment_header.cpp
             codec/test/test_encoded_field.cpp
+            codec/test/test_frequency_encoding.cpp
+            codec/test/test_constant_encoding.cpp
+            codec/test/encoding_test_common.hpp
+            codec/test/test_ffor.cpp
+            codec/test/test_transpose.cpp
+            codec/test/test_fused_bitpack.cpp
             column_store/test/ingestion_stress_test.cpp
             column_store/test/test_column.cpp
             column_store/test/test_column_data_random_accessor.cpp
@@ -999,12 +1044,22 @@ if(${TEST})
             version/test/test_version_store.cpp
             version/test/version_map_model.hpp
             python/python_handlers.cpp
-)
+            storage/test/common.hpp
+            version/test/test_sort_index.cpp
+            codec/test/test_delta.cpp
+            codec/test/test_lz4.cpp
+            codec/test/test_fastlanes.cpp
+            codec/test/test_adaptive_codec.cpp
+            codec/test/test_scanner.cpp
+            codec/test/test_range_adaptor.cpp
+            codec/test/test_bitpack_compress.cpp
+            codec/test/test_alp.cpp
+            codec/test/test_alp_header.cpp
+            codec/test/test_encodings_list.cpp)
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 
     add_executable(test_unit_arcticdb ${unit_test_srcs})
-
     install(TARGETS test_unit_arcticdb RUNTIME
                 DESTINATION .
                 PERMISSIONS ${EXECUTABLE_PERMS}
@@ -1071,7 +1126,6 @@ if(${TEST})
     endif()
 
     gtest_discover_tests(test_unit_arcticdb PROPERTIES DISCOVERY_TIMEOUT 60)
-
     set(benchmark_srcs
             stream/test/stream_test_common.cpp
             column_store/test/benchmark_memory_segment.cpp
@@ -1091,6 +1145,7 @@ if(${TEST})
             )
 
     set(rapidcheck_srcs
+            codec/test/rapidcheck_frequency_encoding.cpp
             column_store/test/rapidcheck_column_store.cpp
             column_store/test/rapidcheck_chunked_buffer.cpp
             column_store/test/rapidcheck_column.cpp
@@ -1099,8 +1154,6 @@ if(${TEST})
             column_store/test/test_chunked_buffer.cpp
             processing/test/rapidcheck_resample.cpp
             stream/test/stream_test_common.cpp
-            util/test/rapidcheck_decimal.cpp
-            util/test/rapidcheck_generators.cpp
             util/test/rapidcheck_string_pool.cpp
             util/test/rapidcheck_main.cpp
             util/test/rapidcheck_lru_cache.cpp
@@ -1114,12 +1167,10 @@ if(${TEST})
 
     if(ARCTICDB_USING_CONDA)
         set(RAPIDCHECK_PRIVATE_LIBRARIES
-            ${AWSSDK_LINK_LIBRARIES}
-            Arrow::arrow_shared)
+            ${AWSSDK_LINK_LIBRARIES})
     else()
         set(RAPIDCHECK_PRIVATE_LIBRARIES
-            ${AWSSDK_LINK_LIBRARIES}
-            "$<IF:$<BOOL:${ARROW_BUILD_STATIC}>,Arrow::arrow_static,Arrow::arrow_shared>")
+            ${AWSSDK_LINK_LIBRARIES})
     endif()
 
     if(WIN32)

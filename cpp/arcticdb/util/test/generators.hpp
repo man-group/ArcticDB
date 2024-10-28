@@ -381,6 +381,15 @@ inline VersionStoreType get_test_engine(storage::LibraryDescriptor::VariantStore
     return VersionStoreType(library);
 }
 
+template<typename VersionStoreType = version_store::LocalVersionedEngine>
+inline VersionStoreType get_local_versioned_engine_adaptive_encoding(storage::LibraryDescriptor::VariantStoreConfig cfg = {}) {
+    auto [path, storages] = get_test_config_data();
+    auto library = std::make_shared<arcticdb::storage::Library>(path, std::move(storages), std::move(cfg));
+    BlockCodecImpl block_codec;
+    (void)block_codec.mutable_adaptive();
+    return version_store::LocalVersionedEngine(library, util::SysClock{});
+}
+
 /**
  * Similar to get_test_engine() but replaces the AsyncStore with InMemoryStore and returns it.
  */

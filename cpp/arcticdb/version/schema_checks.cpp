@@ -116,7 +116,9 @@ bool columns_match(
     // In case the left index is empty index we want to skip name/type checking of the index fields which are always
     // the first fields.
     for (auto i = 0; i < int(df_in_store_descriptor.fields().size()); ++i) {
-        if (df_in_store_descriptor.fields(i).name() != new_df_descriptor.fields(i + index_field_size).name())
+        const auto existing_name = df_in_store_descriptor.fields(i).name();
+        const auto new_name = new_df_descriptor.fields(i + index_field_size).name();
+        if (existing_name != new_name)
             return false;
 
         const TypeDescriptor& left_type = df_in_store_descriptor.fields(i).type();

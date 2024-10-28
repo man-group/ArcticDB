@@ -66,7 +66,7 @@ public:
         }
 
         template <class OtherValue>
-        bool equal(const FieldCollectionIterator<OtherValue>& other) const {
+        [[nodiscard]] bool equal(const FieldCollectionIterator<OtherValue>& other) const {
             return pos_ == other.pos_ && buffer_ == other.buffer_;
         }
 
@@ -176,10 +176,10 @@ public:
     }
 
     [[nodiscard]] ColumnData column_data() const {
-        return {&buffer_.buffer(), &shapes_.buffer(), type_, nullptr};
+        return {&buffer_.buffer(), &shapes_.buffer(), type_, nullptr, nullptr, size()};
     }
 
-    size_t num_blocks() const {
+    [[nodiscard]] size_t num_blocks() const {
         return buffer_.buffer().num_blocks();
     }
 
@@ -187,7 +187,7 @@ public:
         return at(pos);
     }
 
-    const ChunkedBuffer& buffer() const {
+    [[nodiscard]] const ChunkedBuffer& buffer() const {
         return buffer_.buffer();
     }
 

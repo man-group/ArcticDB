@@ -60,7 +60,9 @@ VersionedItem PythonVersionStore::write_dataframe_specific_version(
         store(),
         VersionId(version_id),
         convert::py_ndf_to_frame(stream_id, item, norm, user_meta, cfg().write_options().empty_types()),
-        get_write_options());
+        {},
+        get_write_options(),
+        block_codec());
 
     version_map()->write_version(store(), versioned_item.key_, std::nullopt);
     if(cfg().symbol_list())
@@ -530,9 +532,10 @@ VersionedItem PythonVersionStore::write_partitioned_dataframe(
             store(),
             version_id,
             convert::py_ndf_to_frame(subkeyname, partitioned_dfs[idx], norm_meta, py::none(), cfg().write_options().empty_types()),
-            write_options,
             de_dup_map,
-            false);
+            write_options,
+            block_codec());
+
         index_keys.emplace_back(versioned_item.key_);
     }
 
@@ -609,11 +612,11 @@ VersionedItem PythonVersionStore::write_versioned_dataframe(
     const py::object& norm,
     const py::object& user_meta,
     bool prune_previous_versions,
-    bool sparsify_floats,
-    bool validate_index) {
+    bool validate_index,
+    bool sparsify_floats) {
     ARCTICDB_SAMPLE(WriteVersionedDataframe, 0)
     auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta, cfg().write_options().empty_types());
-    auto versioned_item = write_versioned_dataframe_internal(stream_id, frame, prune_previous_versions, sparsify_floats, validate_index);
+    auto versioned_item = write_versioned_dataframe_internal(stream_id, frame, prune_previous_versions, validate_index, sparsify_floats);
 
     return versioned_item;
 }
@@ -992,7 +995,7 @@ void PythonVersionStore::delete_all_versions(const StreamId& stream_id) {
                        stream_id,
                        all_index_keys.size());
         if (!cfg().write_options().delayed_deletes()) {
-            delete_tree({all_index_keys.begin(), all_index_keys.end()});
+            delete_tree({all_index_keys.begin(), all_index_keys.end()}, default_pre_delete_checks);
         } else {
             ARCTICDB_DEBUG(log::version(), "Not deleting data for {}", stream_id);
         }
@@ -1187,7 +1190,7 @@ void write_dataframe_to_file(
         const py::object& user_meta) {
     ARCTICDB_SAMPLE(WriteDataframeToFile, 0)
     auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta, false);
-    write_dataframe_to_file_internal(stream_id, frame, path, WriteOptions{}, codec::default_lz4_codec(), EncodingVersion::V2);
+    write_dataframe_to_file_internal(stream_id, frame, path, WriteOptions{}, codec::default_adaptive_codec(), EncodingVersion::V2);
 }
 
 ReadResult read_dataframe_from_file(

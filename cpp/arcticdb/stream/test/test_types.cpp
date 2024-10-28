@@ -13,6 +13,8 @@
 #include <fmt/format.h>
 #include <iostream>
 #include <type_traits>
+#include <typeinfo>
+#include <cxxabi.h>
 
 #define GTEST_COUT std::cerr << "[          ] [ INFO ]"
 #define PRINT_TYPE(TYPE) GTEST_COUT << fmt::format("{}: {}", datatype_to_str(DataType::TYPE), static_cast<int>(DataType::TYPE)) << std::endl;
@@ -64,5 +66,19 @@ TEST(DataTypeVisit, VisitTag) {
         ASSERT_TRUE(b);
         ASSERT_TRUE(c);
     });
+}
 
+TEST(VisitTimeType, Basic) {
+    using namespace arcticdb;
+    auto data_type = DataType::NANOSECONDS_UTC64;
+    make_scalar_type(data_type).visit_tag([] (auto tdt) {
+        using RawType = typename decltype(tdt)::DataTypeTag::raw_type;
+        RawType thing{0};
+        std::array<char, 100> name;
+        int status;
+        size_t length = 100;
+        abi::__cxa_demangle(typeid(thing).name(), name.data(), &length, &status);
+
+        log::version().info("things: {}", std::string_view(name.data(), length));
+    });
 }

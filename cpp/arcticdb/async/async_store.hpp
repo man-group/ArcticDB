@@ -42,7 +42,7 @@ auto read_and_continue(const VariantKey& key, std::shared_ptr<storage::Library> 
 }
 
 /*
- * AsyncStore is a wrapper around a Store that provides async methods for writing and reading data.
+ * AsyncStore is an implementation of the Store interface that provides async methods for writing and reading data.
  * It is used by the VersionStore to write data to the Store asynchronously.
  * It also can be used to write data synchronously (using the `*_sync` methods) and
  * to write batch of data (using the `batch_*` methods).
@@ -53,11 +53,11 @@ class AsyncStore : public Store {
 public:
     AsyncStore(
         std::shared_ptr<storage::Library> library,
-        const proto::encoding::VariantCodec &codec,
+        const BlockCodecImpl& codec,
         EncodingVersion encoding_version
     ) :
         library_(std::move(library)),
-        codec_(std::make_shared<proto::encoding::VariantCodec>(codec)),
+        codec_(std::make_shared<BlockCodecImpl>(codec)),
         encoding_version_(encoding_version) {
     }
 
@@ -459,7 +459,7 @@ folly::Future<SliceAndKey> async_write(
 private:
     friend class arcticdb::toolbox::apy::LibraryTool;
     std::shared_ptr<storage::Library> library_;
-    std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_;
+    std::shared_ptr<BlockCodecImpl> codec_;
     const EncodingVersion encoding_version_;
 };
 
