@@ -39,9 +39,9 @@ def lint_python(in_place: bool):
         raise RuntimeError("black not installed. Run this script with --install-tools then try again")
 
     if in_place:
-        return subprocess.run(["black", "python/"]).returncode
+        return subprocess.run(["black", "-l", "120", "python/"]).returncode
     else:
-        return subprocess.run(["black", "--check", "python/"]).returncode
+        return subprocess.run(["black", "-l", "120", "--check", "python/"]).returncode
 
 
 def lint_cpp(in_place: bool):

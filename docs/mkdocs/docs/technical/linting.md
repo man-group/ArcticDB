@@ -2,12 +2,7 @@
 
 We use Black for Python and clang-format for C++.
 
-The `.clang-format` file in the root of this repo is unchanged from the LLVM style,
-except for three things:
-
-- It uses a line length of 88 rather than the default of 80. This is to match Black.
-- It uses PointerAlignment: Left (rather than Right)
-- We use `SortIncludes:    Never` rather than `CaseSensitive` as the change of order breaks compilation
+The `.clang-format` file in the root of this repo is based on LLVM style with some minor tweaks.
 
 ### Running Linters
 
