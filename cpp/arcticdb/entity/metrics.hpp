@@ -133,9 +133,8 @@ public:
             return;
         }
 
-        metrics.erase({name, labels});
-        metrics_family.erase(it);
         family->Remove(metric_to_remove->second);
+        metrics.erase({name, labels});
     }
 
     // update pre-registered metrics with optional instance labels.  Each unique set of labels generates a new metric instance
