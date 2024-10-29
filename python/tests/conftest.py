@@ -100,6 +100,10 @@ def lmdb_storage(tmp_path):
     with LmdbStorageFixture(tmp_path) as f:
         yield f
 
+@pytest.fixture
+def lmdb_library(lmdb_storage, lib_name):
+    return lmdb_storage.create_arctic().create_library(lib_name)
+
 
 @pytest.fixture(scope="session")
 def s3_storage_factory():

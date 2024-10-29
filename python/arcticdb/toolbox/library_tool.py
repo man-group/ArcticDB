@@ -7,14 +7,16 @@ from typing import Optional, Union, List, Dict, Any
 import pandas as pd
 
 from arcticdb.version_store._normalization import FrameData
+from arcticdb.supported_types import ExplicitlySupportedDates
 from arcticdb_ext.codec import decode_segment
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.stream import SegmentInMemory
 from arcticdb_ext.tools import LibraryTool as LibraryToolImpl
 from arcticdb_ext.version_store import AtomKey, PythonOutputFrame, RefKey
-from arcticdb.version_store._normalization import denormalize_dataframe
+from arcticdb.version_store._normalization import denormalize_dataframe, normalize_dataframe
 
 VariantKey = Union[AtomKey, RefKey]
+VersionQueryInput = Union[int, str, ExplicitlySupportedDates, None]
 
 _KEY_PROPERTIES = {
     key_type: {k: v for k, v in vars(key_type).items() if isinstance(v, property)} for key_type in (AtomKey, RefKey)
@@ -31,6 +33,10 @@ def props_dict_to_atom_key(d: Dict[str, Any]) -> AtomKey:
 
 
 class LibraryTool(LibraryToolImpl):
+    def __init__(self, library, nvs):
+        super().__init__(library)
+        self._nvs = nvs
+
     @staticmethod
     def key_types() -> List[KeyType]:
         return list(KeyType.__members__.values())
@@ -49,7 +55,7 @@ class LibraryTool(LibraryToolImpl):
                         int(row.version_id),
                         int(row.creation_ts),
                         int(row.content_hash),
-                        int(index.timestamp()),
+                        index.value,
                         row.end_index.value,
                         key_type,
                     )
@@ -136,3 +142,49 @@ class LibraryTool(LibraryToolImpl):
         """
         df = self.read_to_dataframe(key)
         return self.dataframe_to_keys(df, id if id is not None else key.id, filter_key_type)
+
+    def read_index(self, symbol: str, as_of: Optional[VersionQueryInput] = None, **kwargs) -> pd.DataFrame:
+        """
+        Read the index key for the named symbol.
+
+        Parameters
+        ----------
+        symbol : `str`
+            Symbol name.
+        as_of : `Optional[VersionQueryInput]`, default=None
+            See documentation of `read` method for more details.
+
+        Returns
+        -------
+        Pandas DataFrame representing the index key in a human-readable format.
+        """
+        return self._nvs.read_index(symbol, as_of, **kwargs)
+
+    def normalize_dataframe_with_nvs_defaults(self, df : pd.DataFrame):
+        # TODO: Have a unified place where we resolve all the normalization parameters and use that here.
+        # Currently all these parameters are resolved in various places throughout the _store.py. This can result in
+        # different defaults for different operations which is not desirable.
+        write_options = self._nvs._lib_cfg.lib_desc.version.write_options
+        dynamic_schema = self._nvs.resolve_defaults("dynamic_schema", write_options, False)
+        empty_types = self._nvs.resolve_defaults("empty_types", write_options, False)
+        dynamic_strings = self._nvs._resolve_dynamic_strings({})
+        return normalize_dataframe(df, dynamic_schema=dynamic_schema, empty_types=empty_types, dynamic_strings=dynamic_strings)
+
+    def overwrite_append_data_with_dataframe(self, key : VariantKey, df : pd.DataFrame) -> SegmentInMemory:
+        """
+        Overwrites the append data key with the provided dataframe. Use with extreme caution as overwriting with
+        inappropriate data can render the symbol unreadable.
+
+        Returns
+        -------
+        SegmentInMemory backup of what was stored in the key before it was overwritten. Can be used with
+        lib_tool.overwrite_segment_in_memory to back out the change caused by this in case data ends up corrupted.
+        """
+        item, norm_meta = self.normalize_dataframe_with_nvs_defaults(df)
+        return self.overwrite_append_data(key, item, norm_meta, None)
+
+    def update_append_data_column_type(self, key : VariantKey, column : str, to_type : type) -> SegmentInMemory:
+        old_df = self.read_to_dataframe(key)
+        assert column in old_df.columns
+        new_df = old_df.astype({column: to_type})
+        return self.overwrite_append_data_with_dataframe(key, new_df)
