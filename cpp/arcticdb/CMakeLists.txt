@@ -662,7 +662,6 @@ set (arcticdb_core_libraries
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
         Azure::azure-identity
         Azure::azure-storage-blobs
-        EnTT::EnTT
 )
 
 if(${ARCTICDB_PYTHON_EXPLICIT_LINK})
@@ -680,6 +679,7 @@ if(${ARCTICDB_USING_CONDA})
     list (APPEND arcticdb_core_libraries
         pcre
         msgpack-c
+        EnTT
         ${LMDB_LIBRARIES}
     )
     if(${BUILD_WITH_REMOTERY})
@@ -692,6 +692,7 @@ else()
     list (APPEND arcticdb_core_libraries
         unofficial::pcre::pcre
         msgpackc-cxx
+        EnTT::EnTT
         lmdb
     )
     if(${BUILD_WITH_REMOTERY})
