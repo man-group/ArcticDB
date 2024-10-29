@@ -10,9 +10,11 @@
 #include <arcticdb/column_store/column.hpp>
 #include <ankerl/unordered_dense.h>
 #include <arcticdb/util/configs_map.hpp>
+#include <arcticdb/column_store/memory_segment.hpp>
 
 namespace arcticdb {
-ankerl::unordered_dense::set<entity::position_t> unique_values_for_string_column(const Column &column) {
+
+inline ankerl::unordered_dense::set<entity::position_t> unique_values_for_string_column(const Column &column) {
     ankerl::unordered_dense::set<entity::position_t> output_set;
     // Guessing that unique values is a third of the column length
     static auto map_reserve_ratio = ConfigsMap::instance()->get_int("UniqueColumns.AllocationRatio", 3);

@@ -71,6 +71,8 @@ else()
     find_package(LMDB REQUIRED)
     find_package(LMDBXX REQUIRED)
 
+    find_package(EnTT REQUIRED)
+
     if(${BUILD_WITH_REMOTERY})
         find_package(Remotery REQUIRED)
     endif()
@@ -662,7 +664,6 @@ set (arcticdb_core_libraries
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
         Azure::azure-identity
         Azure::azure-storage-blobs
-        EnTT::EnTT
 )
 
 if(${ARCTICDB_PYTHON_EXPLICIT_LINK})
@@ -692,6 +693,7 @@ else()
     list (APPEND arcticdb_core_libraries
         unofficial::pcre::pcre
         msgpackc-cxx
+        EnTT::EnTT
         lmdb
     )
     if(${BUILD_WITH_REMOTERY})
