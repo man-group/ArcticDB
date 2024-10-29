@@ -71,6 +71,8 @@ else()
     find_package(LMDB REQUIRED)
     find_package(LMDBXX REQUIRED)
 
+    find_package(EnTT REQUIRED)
+
     if(${BUILD_WITH_REMOTERY})
         find_package(Remotery REQUIRED)
     endif()
@@ -679,7 +681,6 @@ if(${ARCTICDB_USING_CONDA})
     list (APPEND arcticdb_core_libraries
         pcre
         msgpack-c
-        EnTT
         ${LMDB_LIBRARIES}
     )
     if(${BUILD_WITH_REMOTERY})
