@@ -24,8 +24,9 @@ jobs:
         image: mongo:4.4
     steps:
       - uses: actions/checkout@v3.3.0
-        with:
-          submodules: recursive
+        # DONT use recursive submodules checkout to simulate conda feedstock build
+        # with:
+        #   submodules: recursive
 
       - name: Get number of CPU cores
         uses: SimenB/github-actions-cpu-cores@v1.1.0
@@ -108,8 +109,9 @@ jobs:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     steps:
       - uses: actions/checkout@v3.3.0
-        with:
-          submodules: recursive
+        # DONT use recursive submodules checkout to simulate conda feedstock build
+        # with:
+        #   submodules: recursive
 
       - name: Get number of CPU cores
         uses: SimenB/github-actions-cpu-cores@v1.1.0
