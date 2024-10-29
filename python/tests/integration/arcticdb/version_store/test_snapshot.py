@@ -601,7 +601,7 @@ def test_delete_snapshot_basic_flow_with_delete_prev_version(basic_store):
 
     assert sorted(lib.list_snapshots()) == [snap1, snap2] 
     # list_versions() return the newest versions first
-    
+    assert [ver["deleted"] for ver in lib.list_versions()] == [False, True]    
     assert_frame_equal(df_combined, lib.read(symbol).data)     
     # we can still read the version as it is pointed in snapshot
     assert_frame_equal(df_0, lib.read(symbol, as_of=snap1).data)     
@@ -802,6 +802,11 @@ def test_delete_snapshot_on_updated_and_appended_dataframe(basic_store_tiny_segm
     df_3 = create_df_index_datetime(10, 20, 30) 
     df_updated = dataframe_update_full(df_1, df_2)
     df_final = pd.concat([df_updated, df_3])
+    print("df_1 \n",df_1.to_csv())
+    print("df_2 \n",df_2.to_csv())
+    print("df_3 \n",df_3.to_csv())
+    print("df_updated \n",df_updated.to_csv())
+    print("df_final \n",df_final.to_csv())
 
     symbol1 = "sym1"
     snap1 = "s1"
@@ -815,34 +820,21 @@ def test_delete_snapshot_on_updated_and_appended_dataframe(basic_store_tiny_segm
     lib.delete_version(symbol1,1)
     lib.delete_version(symbol1,2)
 
+    print("lib.read(symbol1).data \n", lib.read(symbol1).data)
     assert_frame_equal(df_1, lib.read(symbol1).data)      
+    print("lib.read(symbol1, as_of=snap1).data) \n", lib.read(symbol1, as_of=snap1).data)
     assert_frame_equal(df_updated, lib.read(symbol1, as_of=snap1).data)      
+    print("lib.read(symbol1, as_of=snap2).data) \n", lib.read(symbol1, as_of=snap2).data)
     assert_frame_equal(df_final, lib.read(symbol1, as_of=snap2).data)      
     assert [ver["deleted"] for ver in lib.list_versions(symbol1)] == [True, True, False]
 
     lib.delete_snapshot(snap1)
     lib.delete_snapshot(snap2)
 
+    print("lib.read(symbol1).data \n", lib.read(symbol1).data)
     assert_frame_equal(df_1, lib.read(symbol1).data)      
     assert len(lib.list_versions(symbol1)) == 1
     with pytest.raises(NoDataFoundException):
         lib.read(symbol1, as_of=snap1).data
     with pytest.raises(NoDataFoundException):
         lib.read(symbol1, as_of=snap2).data
-
-
-df1 = create_df_index_rownum(2, 0, 2)
-df2 = create_df_index_rownum(2, 2, 4)
-df_full = dataframe_update_full(df1, df2)
-
-print("df1:")
-print(df1)
-print("-" * 20)
-print("df2:")
-print(df2)
-print("-" * 20)
-print("df_full:")
-print(df_full)
-
-
-

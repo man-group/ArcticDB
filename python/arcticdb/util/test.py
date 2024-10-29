@@ -82,7 +82,8 @@ def create_df_index_rownum(num_columns: int, start_index: int, end_index : int) 
     cols = ['COL_%d' % i for i in range(num_columns)]
     df = pd.DataFrame(np.random.randint(start_index, 
                                         end_index, 
-                                        size=(rows, num_columns)), 
+                                        size=(rows, num_columns),
+                                        dtype=np.int64), 
                                         columns=cols)
     df.index = np.arange(start_index, end_index, 1).tolist()
     return df
