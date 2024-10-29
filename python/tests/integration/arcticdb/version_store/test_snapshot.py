@@ -5,7 +5,6 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
-from arcticdb.version_store._store import NativeVersionStore
 import pytest
 import numpy as np
 import pandas as pd
@@ -19,7 +18,8 @@ from arcticdb_ext.exceptions import InternalException
 from arcticdb_ext.version_store import NoSuchVersionException
 from arcticdb_ext.storage import NoDataFoundException
 from arcticdb.util.test import distinct_timestamps
-from tests.integration.utils.dataframe_utils import create_data_frame, create_dataframe_datetime_index, dataframe_update_full
+from arcticdb.version_store._store import NativeVersionStore
+from arcticdb.util.test import assert_frame_equal, create_df_index_rownum, create_df_index_datetime, dataframe_update_full
 from tests.util.storage_test import get_s3_storage_config
 
 
@@ -83,7 +83,7 @@ def test_snapshots_skip_symbol(object_version_store):
 
 
 def test_snapshot_explicit_versions(basic_store):
-    lib : Library = basic_store
+    lib = basic_store
     original_data = [1, 2, 3]
     modified_data = [1, 2, 3, 4]
 
@@ -507,8 +507,8 @@ def test_delete_snapshot_basic_flow(basic_store):
     snap1 = "snap1"
     snap2 = "snap2"
 
-    df_0 = create_data_frame(10, 0, 10)
-    df_1 = create_data_frame(10, 10, 20)
+    df_0 = create_df_index_rownum(10, 0, 10)
+    df_1 = create_df_index_rownum(10, 10, 20)
     df_combined = pd.concat([df_0, df_1])
 
     lib.write(symbol, df_0)
@@ -518,21 +518,21 @@ def test_delete_snapshot_basic_flow(basic_store):
     versions_initial = [v["version"] for v in lib.list_versions()]
 
     assert sorted(lib.list_snapshots()) == [snap1, snap2] 
-    assert df_combined.equals(lib.read(symbol).data)
+    assert_frame_equal(df_combined, lib.read(symbol).data) 
 
     lib.delete_snapshot(snap1)
     versions_current = [v["version"] for v in lib.list_versions()]
     
     assert sorted(lib.list_snapshots()) == [snap2] 
-    assert df_combined.equals(lib.read(symbol).data)
     assert sorted(versions_initial) == sorted(versions_current)
+    assert_frame_equal(df_combined, lib.read(symbol).data) 
 
     lib.delete_snapshot(snap2)
     versions_current = [v["version"] for v in lib.list_versions()]
 
     assert sorted(lib.list_snapshots()) == [] 
-    assert df_combined.equals(lib.read(symbol).data)
     assert sorted(versions_initial) == sorted(versions_current)
+    assert_frame_equal(df_combined, lib.read(symbol).data)     
 
 def test_delete_snapshot_basic_flow_with_delete_last_version(basic_store):
     lib = basic_store
@@ -540,8 +540,8 @@ def test_delete_snapshot_basic_flow_with_delete_last_version(basic_store):
     snap1 = "snap1"
     snap2 = "snap2"
 
-    df_0 = create_data_frame(10, 0, 10)
-    df_1 = create_data_frame(10, 10, 20)
+    df_0 = create_df_index_rownum(10, 0, 10)
+    df_1 = create_df_index_rownum(10, 10, 20)
 
     lib.write(symbol, df_0)
     lib.snapshot(snap1)
@@ -550,7 +550,7 @@ def test_delete_snapshot_basic_flow_with_delete_last_version(basic_store):
     versions_initial = sorted([v["version"] for v in lib.list_versions()])
 
     assert sorted(lib.list_snapshots()) == [snap1, snap2] 
-    assert df_1.equals(lib.read(symbol).data)
+    assert_frame_equal(df_1, lib.read(symbol).data)     
     assert versions_initial == [0, 1]
     assert len([ver for ver in lib.list_versions() if ver["deleted"]]) == 0
 
@@ -558,10 +558,9 @@ def test_delete_snapshot_basic_flow_with_delete_last_version(basic_store):
 
     assert sorted(lib.list_snapshots()) == [snap1, snap2] 
     # Version is still returned, but marked for deletion
-    assert sorted([v["version"] for v in lib.list_versions()]) == [0,1]
-    assert len([ver for ver in lib.list_versions() if ver["deleted"]]) == 1
-    assert len([ver for ver in lib.list_versions() if not ver["deleted"]]) == 1
-    assert df_0.equals(lib.read(symbol).data)
+    # Latest, or ver 1st is delete ver 0 is not
+    assert [ver["deleted"] for ver in lib.list_versions()] == [True, False]
+    assert_frame_equal(df_0, lib.read(symbol).data)     
     # Althought the version is deleted it is not physically deleted
     # It can be read from the snapshot still
     assert df_1.equals(lib.read(symbol, as_of=snap2).data) 
@@ -571,7 +570,7 @@ def test_delete_snapshot_basic_flow_with_delete_last_version(basic_store):
     assert sorted(lib.list_snapshots()) == [snap1] 
     assert sorted([v["version"] for v in lib.list_versions()]) == [0]
     assert len([ver for ver in lib.list_versions() if not ver["deleted"]]) == 1
-    assert df_0.equals(lib.read(symbol).data)
+    assert_frame_equal(df_0, lib.read(symbol).data)     
 
     # Cannot read from deleted snapshot label
     with pytest.raises(Exception):
@@ -584,8 +583,8 @@ def test_delete_snapshot_basic_flow_with_delete_prev_version(basic_store):
     snap1 = "snap1"
     snap2 = "snap2"
 
-    df_0 = create_data_frame(10, 0, 10)
-    df_1 = create_data_frame(10, 10, 20)
+    df_0 = create_df_index_rownum(10, 0, 10)
+    df_1 = create_df_index_rownum(10, 10, 20)
     df_combined = pd.concat([df_0, df_1])
 
     lib.write(symbol, df_0)
@@ -595,37 +594,32 @@ def test_delete_snapshot_basic_flow_with_delete_prev_version(basic_store):
     versions_initial = sorted([v["version"] for v in lib.list_versions()])
 
     assert sorted(lib.list_snapshots()) == [snap1, snap2] 
-    assert df_combined.equals(lib.read(symbol).data)
+    assert_frame_equal(df_combined, lib.read(symbol).data)     
     assert versions_initial == [0, 1]
 
     lib.delete_version(symbol, 0)
 
     assert sorted(lib.list_snapshots()) == [snap1, snap2] 
     # list_versions() return the newest versions first
-    assert lib.list_versions()[0]["version"] == 1
-    assert not lib.list_versions()[0]["deleted"]
-    assert lib.list_versions()[-1]["version"] == 0
-    assert lib.list_versions()[-1]["deleted"]
-    assert df_combined.equals(lib.read(symbol).data)
+    
+    assert_frame_equal(df_combined, lib.read(symbol).data)     
     # we can still read the version as it is pointed in snapshot
-    assert df_0.equals(lib.read(symbol, as_of=snap1).data)
+    assert_frame_equal(df_0, lib.read(symbol, as_of=snap1).data)     
 
     lib.delete_snapshot(snap1)
 
-    assert df_combined.equals(lib.read(symbol).data)
+    assert_frame_equal(df_combined, lib.read(symbol).data)     
     assert sorted(lib.list_snapshots()) == [snap2] 
-    assert len(lib.list_versions()) == 1
-    assert lib.list_versions()[0]["version"] == 1
-    assert not lib.list_versions()[0]["deleted"]
+    assert [ver["deleted"] for ver in lib.list_versions()] == [False]
 
-@pytest.mark.skip(reason = "ArcticDB#1863")    
+@pytest.mark.xfail(reason = "ArcticDB#1863")    
 def test_delete_snapshot_complex_flow_with_delete_multible_smbls(basic_store_tiny_segment_dynamic):
     lib = basic_store_tiny_segment_dynamic
 
     symbol1 = "sym1"
-    df_1_0 = create_data_frame(10, 0, 10)
-    df_1_1 = create_data_frame(10, 10, 200)
-    df_1_2 = create_data_frame(10, 1000, 1300)
+    df_1_0 = create_df_index_rownum(10, 0, 10)
+    df_1_1 = create_df_index_rownum(10, 10, 200)
+    df_1_2 = create_df_index_rownum(10, 1000, 1300)
     df_1_combined_0_1 = pd.concat([df_1_0, df_1_1])
     df_1_combined_0_2 = pd.concat([df_1_0, df_1_2])
     df_1_combined = pd.concat([df_1_0, df_1_1, df_1_2])
@@ -634,15 +628,15 @@ def test_delete_snapshot_complex_flow_with_delete_multible_smbls(basic_store_tin
     lib.append(symbol1, df_1_2)
 
     symbol2 = "sym2"
-    df_2_0 = create_data_frame(10, -100, -90)
-    df_2_1 = create_data_frame(10, -80, -50)
+    df_2_0 = create_df_index_rownum(10, -100, -90)
+    df_2_1 = create_df_index_rownum(10, -80, -50)
     df_2_combined = pd.concat([df_2_0, df_2_1])
     lib.write(symbol2, df_2_0)
     lib.append(symbol2, df_2_1)
 
     symbol3 = "sym3"
-    df_3_0 = create_data_frame(10, 1000, 1010)
-    df_3_1 = create_data_frame(10, 2000, 2210)
+    df_3_0 = create_df_index_rownum(10, 1000, 1010)
+    df_3_1 = create_df_index_rownum(10, 2000, 2210)
     df_3_combined = pd.concat([df_3_0, df_3_1])
     lib.write(symbol3, df_3_0)
     lib.append(symbol3, df_3_1)
@@ -654,9 +648,9 @@ def test_delete_snapshot_complex_flow_with_delete_multible_smbls(basic_store_tin
 
     # verify initial state
     assert sorted(lib.list_snapshots()) == [snap1] 
-    assert df_1_combined.equals(lib.read(symbol1).data)
-    assert df_2_combined.equals(lib.read(symbol2).data)
-    assert df_3_combined.equals(lib.read(symbol3).data)
+    assert_frame_equal(df_1_combined, lib.read(symbol1).data)      
+    assert_frame_equal(df_2_combined, lib.read(symbol2).data)      
+    assert_frame_equal(df_3_combined, lib.read(symbol3).data)      
 
     lib.delete_version(symbol1, 1)
     lib.delete_version(symbol2, 1)
@@ -668,36 +662,31 @@ def test_delete_snapshot_complex_flow_with_delete_multible_smbls(basic_store_tin
     assert df_3_combined.equals(lib.read(symbol3).data)
     # verify sumbol 1
     assert len(lib.list_versions(symbol1)) == 3
-    assert lib.list_versions(symbol1)[-2]["version"] == 1
-    assert lib.list_versions(symbol1)[-2]["deleted"]
-    assert len([ver for ver in lib.list_versions(symbol1) if not ver["deleted"]]) == 2
-    assert df_1_combined_0_1.equals(lib.read(symbol1, as_of=snap1).data) 
-    assert df_1_combined_0_1.equals(lib.read(symbol1, as_of=snap1_vers[symbol1]).data) 
+    assert [ver["deleted"] for ver in lib.list_versions(symbol1)] == [False, True, False]
+    assert_frame_equal(df_1_combined_0_1, lib.read(symbol1, as_of=snap1).data)      
+    assert_frame_equal(df_1_combined_0_1, lib.read(symbol1, as_of=snap1_vers[symbol1]).data)      
     # verify sumbol 2
     assert len(lib.list_versions(symbol2)) == 2
-    assert lib.list_versions(symbol2)[0]["version"] == 1
-    assert lib.list_versions(symbol2)[0]["deleted"]
-    assert df_2_combined.equals(lib.read(symbol2, as_of=snap1).data) 
-    assert df_2_combined.equals(lib.read(symbol2, as_of=snap1_vers[symbol2]).data) 
-    # verify sumbol 2
-    assert len([ver for ver in lib.list_versions(symbol3) if not ver["deleted"]]) == 2
+    assert [ver["deleted"] for ver in lib.list_versions(symbol2)] == [True, False]
+    assert_frame_equal(df_2_combined, lib.read(symbol2, as_of=snap1).data)      
+    assert_frame_equal(df_2_combined, lib.read(symbol2, as_of=snap1_vers[symbol2]).data)      
+    # verify sumbol 3
+    assert [ver["deleted"] for ver in lib.list_versions(symbol3)] == [False, False]
 
     lib.delete_snapshot(snap1)
 
     # confirm afer deletion of versions all is as expected
     # as well as deleting the snapshot wipes the versions effectivly
     assert sorted(lib.list_snapshots()) == [] 
-    assert df_1_combined_0_2.equals(lib.read(symbol1).data)
-    assert df_2_0.equals(lib.read(symbol2).data)
-    assert df_3_combined.equals(lib.read(symbol3).data)
+    assert_frame_equal(df_1_combined_0_2, lib.read(symbol1).data)      
+    assert_frame_equal(df_2_0, lib.read(symbol2).data)      
+    assert_frame_equal(df_3_combined, lib.read(symbol3).data)      
     # verify sumbol 1
-    assert len(lib.list_versions(symbol1)) == 2
-    assert len([ver for ver in lib.list_versions(symbol1) if not ver["deleted"]]) == 2
+    assert [ver["deleted"] for ver in lib.list_versions(symbol1)] == [False, False]
     # verify sumbol 2
-    assert len(lib.list_versions(symbol2)) == 1
-    assert len([ver for ver in lib.list_versions(symbol2) if not ver["deleted"]]) == 1
+    assert [ver["deleted"] for ver in lib.list_versions(symbol2)] == [False]
     # verify sumbol 2
-    assert len([ver for ver in lib.list_versions(symbol3) if not ver["deleted"]]) == 2
+    assert [ver["deleted"] for ver in lib.list_versions(symbol3)] == [False, False]
 
 def test_delete_snapshot_multiple_edge_case(basic_store):
     '''
@@ -711,8 +700,8 @@ def test_delete_snapshot_multiple_edge_case(basic_store):
     lib = basic_store
 
     symbol1 = "sym1"
-    df_1 = create_data_frame(10, 0, 10)
-    df_2 = create_data_frame(10, 20, 30)
+    df_1 = create_df_index_rownum(10, 0, 10)
+    df_2 = create_df_index_rownum(10, 20, 30)
     df_combined = pd.concat([df_1, df_2])
     lib.write(symbol1, df_1)
 
@@ -740,23 +729,23 @@ def test_delete_snapshot_multiple_edge_case(basic_store):
     assert len(lib.list_versions(symbol2)) == 1
     assert len(lib.list_versions(symbol3)) == 2
     assert df_1.equals(lib.read(symbol1).data)
+    assert_frame_equal(df_1, lib.read(symbol1).data)      
     assert df_2.equals(lib.read(symbol2).data)
+    assert_frame_equal(df_1, lib.read(symbol1).data)      
     assert df_combined.equals(lib.read(symbol3).data)
+    assert_frame_equal(df_combined, lib.read(symbol3).data)      
 
     lib.delete_version(symbol1, 0)
     lib.delete_version(symbol2, 0)
     lib.delete_version(symbol3, 0)
 
     assert sorted(lib.list_snapshots()) == [snap1, snap2] 
-    assert len(lib.list_versions(symbol1)) == 1
-    assert lib.list_versions(symbol1)[0]["deleted"]    
-    assert len(lib.list_versions(symbol2)) == 1
-    assert lib.list_versions(symbol2)[0]["deleted"]    
-    assert len(lib.list_versions(symbol3)) == 2
-    assert lib.list_versions(symbol3)[1]["deleted"]  
-    assert df_1.equals(lib.read(symbol1, as_of=snap1).data)
-    assert df_2.equals(lib.read(symbol2, as_of=snap2).data)
-    assert df_combined.equals(lib.read(symbol3).data)
+    assert [ver["deleted"] for ver in lib.list_versions(symbol1)] == [True]
+    assert [ver["deleted"] for ver in lib.list_versions(symbol2)] == [True]
+    assert [ver["deleted"] for ver in lib.list_versions(symbol3)] == [False, True]
+    assert_frame_equal(df_1, lib.read(symbol1, as_of=snap1).data)      
+    assert_frame_equal(df_2, lib.read(symbol2, as_of=snap2).data)      
+    assert_frame_equal(df_combined, lib.read(symbol3).data)      
     with pytest.raises(NoSuchVersionException):
         lib.read(symbol1).data
     with pytest.raises(NoSuchVersionException):
@@ -767,12 +756,10 @@ def test_delete_snapshot_multiple_edge_case(basic_store):
     # version 0 is not deleted from sym1 and sym2
     # although that they do no have any data left in them
     assert sorted(lib.list_snapshots()) == [snap2] 
-    assert len(lib.list_versions(symbol1)) == 1
-    assert lib.list_versions(symbol1)[0]["deleted"]    
-    assert len(lib.list_versions(symbol2)) == 1
-    assert lib.list_versions(symbol2)[0]["deleted"]   
+    assert [ver["deleted"] for ver in lib.list_versions(symbol1)] == [True]
+    assert [ver["deleted"] for ver in lib.list_versions(symbol2)] == [True]
     assert len(lib.list_versions(symbol3)) == 1
-    assert df_combined.equals(lib.read(symbol3).data)
+    assert_frame_equal(df_combined, lib.read(symbol3).data)      
     with pytest.raises(NoSuchVersionException):
         lib.read(symbol1).data
     with pytest.raises(NoSuchVersionException):
@@ -803,16 +790,16 @@ def test_delete_snapshot_multiple_edge_case(basic_store):
     lib.snapshot(snap1)
     lib.delete_snapshot(snap1)
 
-    assert df_1.equals(lib.read(symbol2).data)
-    assert df_1.equals(lib.read(symbol3).data)
-    assert df_1.equals(lib.read(symbol1).data)
+    assert_frame_equal(df_1, lib.read(symbol2).data)      
+    assert_frame_equal(df_1, lib.read(symbol3).data)      
+    assert_frame_equal(df_1, lib.read(symbol1).data)      
 
 def test_delete_snapshot_on_updated_and_appended_dataframe(basic_store_tiny_segment):
     lib = basic_store_tiny_segment
-    df_1 = create_dataframe_datetime_index(10, 3, 10)
+    df_1 = create_df_index_datetime(10, 3, 10)
     # this dataframe has both values before the date and within the dates of df_1
-    df_2 = create_dataframe_datetime_index(10, 1, 5) 
-    df_3 = create_dataframe_datetime_index(10, 20, 30) 
+    df_2 = create_df_index_datetime(10, 1, 5) 
+    df_3 = create_df_index_datetime(10, 20, 30) 
     df_updated = dataframe_update_full(df_1, df_2)
     df_final = pd.concat([df_updated, df_3])
 
@@ -828,19 +815,34 @@ def test_delete_snapshot_on_updated_and_appended_dataframe(basic_store_tiny_segm
     lib.delete_version(symbol1,1)
     lib.delete_version(symbol1,2)
 
-    assert df_1.equals(lib.read(symbol1).data)
-    assert df_updated.equals(lib.read(symbol1, as_of=snap1).data)
-    assert df_final.equals(lib.read(symbol1, as_of=snap2).data)
-    assert lib.list_versions(symbol1)[0]["deleted"]    
-    assert lib.list_versions(symbol1)[1]["deleted"]    
-    assert not lib.list_versions(symbol1)[2]["deleted"]    
+    assert_frame_equal(df_1, lib.read(symbol1).data)      
+    assert_frame_equal(df_updated, lib.read(symbol1, as_of=snap1).data)      
+    assert_frame_equal(df_final, lib.read(symbol1, as_of=snap2).data)      
+    assert [ver["deleted"] for ver in lib.list_versions(symbol1)] == [True, True, False]
 
     lib.delete_snapshot(snap1)
     lib.delete_snapshot(snap2)
 
-    assert df_1.equals(lib.read(symbol1).data)
+    assert_frame_equal(df_1, lib.read(symbol1).data)      
     assert len(lib.list_versions(symbol1)) == 1
     with pytest.raises(NoDataFoundException):
         lib.read(symbol1, as_of=snap1).data
     with pytest.raises(NoDataFoundException):
         lib.read(symbol1, as_of=snap2).data
+
+
+df1 = create_df_index_rownum(2, 0, 2)
+df2 = create_df_index_rownum(2, 2, 4)
+df_full = dataframe_update_full(df1, df2)
+
+print("df1:")
+print(df1)
+print("-" * 20)
+print("df2:")
+print(df2)
+print("-" * 20)
+print("df_full:")
+print(df_full)
+
+
+
