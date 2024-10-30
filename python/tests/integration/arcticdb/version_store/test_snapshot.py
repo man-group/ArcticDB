@@ -612,8 +612,9 @@ def test_delete_snapshot_basic_flow_with_delete_prev_version(basic_store):
     assert sorted(lib.list_snapshots()) == [snap2] 
     assert [ver["deleted"] for ver in lib.list_versions()] == [False]
 
-@pytest.mark.xfail(reason = "ArcticDB#1863")    
-def test_delete_snapshot_complex_flow_with_delete_multible_smbls(basic_store_tiny_segment_dynamic):
+@pytest.mark.xfail(reason = """ArcticDB#1863 or other bug. The fail is in the line lib.
+                   read(symbol1).data after deleting snapshot 1, read operation throws exception""")    
+def test_delete_snapshot_complex_flow_with_delete_multible_symbols(basic_store_tiny_segment_dynamic):
     lib = basic_store_tiny_segment_dynamic
 
     symbol1 = "sym1"
@@ -678,14 +679,14 @@ def test_delete_snapshot_complex_flow_with_delete_multible_smbls(basic_store_tin
     # confirm afer deletion of versions all is as expected
     # as well as deleting the snapshot wipes the versions effectivly
     assert sorted(lib.list_snapshots()) == [] 
-    assert_frame_equal(df_1_combined_0_2, lib.read(symbol1).data)      
+    assert_frame_equal(df_1_combined, lib.read(symbol1).data)      
     assert_frame_equal(df_2_0, lib.read(symbol2).data)      
     assert_frame_equal(df_3_combined, lib.read(symbol3).data)      
     # verify sumbol 1
     assert [ver["deleted"] for ver in lib.list_versions(symbol1)] == [False, False]
     # verify sumbol 2
     assert [ver["deleted"] for ver in lib.list_versions(symbol2)] == [False]
-    # verify sumbol 2
+    # verify sumbol 3
     assert [ver["deleted"] for ver in lib.list_versions(symbol3)] == [False, False]
 
 def test_delete_snapshot_multiple_edge_case(basic_store):
