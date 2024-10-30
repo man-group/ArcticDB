@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import pytest
 import numpy as np
+import pandas as pd
 import re
 
 from arcticdb_ext.exceptions import InternalException
@@ -14,6 +15,7 @@ from arcticdb_ext.version_store import NoSuchVersionException
 from arcticdb_ext.storage import NoDataFoundException
 from arcticdb.util.test import distinct_timestamps
 from tests.util.storage_test import get_s3_storage_config
+from arcticdb_ext.storage import KeyType
 
 
 def test_basic_snapshot_flow(basic_store):
@@ -492,3 +494,26 @@ def test_add_to_snapshot_atomicity(s3_bucket_versioning_storage, lib_name):
 
     lib.remove_from_snapshot("snap", ["s2"], [s2_ver])
     assert_0_delete_marker(lib, storage)
+
+
+def test_snapshot_deletion_multiple_symbols(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    for symbol_idx in range(2):
+        lib.write(f"sym_{symbol_idx}", pd.DataFrame({"col": [1, 2]}))
+        lib.append(f"sym_{symbol_idx}", pd.DataFrame({"col": [3, 4]}))
+
+    lib.snapshot("snap")
+    lib.delete_version("sym_0", 1)
+    lib.delete_version("sym_1", 1)
+
+    lib_tool = lib.library_tool()
+
+    for symbol_idx in range(2):
+        assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, f"sym_{symbol_idx}")) == 2
+        assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, f"sym_{symbol_idx}")) == 2
+
+
+    lib.delete_snapshot("snap")
+    for symbol_idx in range(2):
+        assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, f"sym_{symbol_idx}")) == 1
+        assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, f"sym_{symbol_idx}")) == 1
