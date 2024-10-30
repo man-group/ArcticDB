@@ -10,6 +10,14 @@ on:
   # See: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request
   pull_request:
 
+  workflow_dispatch:
+    inputs:
+      run_on_arm_mac:
+        description: 'Run on arm macos'
+        type: boolean
+        required: false
+        default: false
+
 jobs:
 
   linux:
@@ -104,7 +112,7 @@ jobs:
           - os: macos-12
 
       fail-fast: false
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ inputs.run_on_arm_mac == true && 'macos-13-xlarge' || matrix.os }}
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     steps:
