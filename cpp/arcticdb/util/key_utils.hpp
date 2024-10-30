@@ -155,13 +155,13 @@ inline ankerl::unordered_dense::set<AtomKey> recurse_segment(
 /* Given a container of [multi-]index keys, returns a set containing all the multi-index, index, and data keys
  * referenced by these [multi-]index keys.
  * Note that this differs from recurse_index_key, which includes the passed in key in the returned set. */
-template<typename KeyContainer, typename = std::enable_if<std::is_base_of_v<AtomKey, typename KeyContainer::value_type>>>
+template<typename KeyContainer>
+requires std::is_base_of_v<AtomKey, typename KeyContainer::value_type>
 inline ankerl::unordered_dense::set<AtomKey> recurse_index_keys(
         const std::shared_ptr<stream::StreamSource>& store,
         const KeyContainer& keys,
         storage::ReadKeyOpts opts) {
     ankerl::unordered_dense::set<AtomKey> res;
-    ankerl::unordered_dense::set<AtomKeyPacked> res_packed;
     for (const auto& index_key: keys) {
         try {
             if (index_key.type() == KeyType::MULTI_KEY) {
@@ -176,16 +176,13 @@ inline ankerl::unordered_dense::set<AtomKey> recurse_index_keys(
                 auto data_keys = key_segment.materialise();
                 util::variant_match(
                     data_keys,
-                    [&res, &keys](std::vector<AtomKey> &atom_keys) {
-                        res.reserve(keys.size());
-                        for (auto &&key : atom_keys) {
-                            res.emplace(std::move(key));
-                        }
-                    },
-                    [&res_packed, &keys](std::vector<AtomKeyPacked> &atom_keys_packed) {
-                        res_packed.reserve(keys.size());
-                        for (auto &&key_packed : atom_keys_packed) {
-                            res_packed.emplace(std::move(key_packed));
+                    [&]<typename KeyType>(std::vector<KeyType>&atom_keys) {
+                        for (KeyType& key : atom_keys) {
+                            if constexpr (std::is_same_v<KeyType, AtomKey>) {
+                                res.emplace(std::move(key));
+                            } else if constexpr (std::is_same_v<KeyType, AtomKeyPacked>) {
+                                res.emplace(key.to_atom_key(index_key.id()));
+                            }
                         }
                     }
                 );
@@ -199,15 +196,8 @@ inline ankerl::unordered_dense::set<AtomKey> recurse_index_keys(
             if (opts.ignores_missing_key_) {
                 log::version().info("Missing key while recursing index key {}", e.keys());
             } else {
-                throw storage::KeyNotFoundException(std::move(e.keys()));
+                throw;
             }
-        }
-    }
-    if (!res_packed.empty()) {
-        res.reserve(res_packed.size() + res.size());
-        auto id = keys.begin()->id();
-        for (const auto& key: res_packed) {
-            res.emplace(key.to_atom_key(id));
         }
     }
     return res;
