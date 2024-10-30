@@ -758,7 +758,6 @@ class DataFrameNormalizer(_PandasNormalizer):
         else:
             df = self.df_without_consolidation(columns, item.data[0], item, n_indexes, data)
 
-        print(df)
         if denormed_columns is not None:
             df.columns = denormed_columns
         if norm_meta.common.columns.fake_name is False and len(norm_meta.common.columns.name) > 0:
